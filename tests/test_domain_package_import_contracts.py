@@ -352,11 +352,6 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "build_transport_fp_fortran_reduced_lu_preconditioner",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.parallel.payload",
-        "sfincs_jax.problems.transport_matrix.parallel.payload",
-        "solve_transport_parallel_payload",
-    ),
-    (
         "sfincs_jax.problems.transport_matrix.parallel.policy",
         "sfincs_jax.problems.transport_matrix.parallel.policy",
         "transport_parallel_backend",
@@ -367,23 +362,28 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "merge_transport_parallel_results",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.parallel.pool",
-        "sfincs_jax.problems.transport_matrix.parallel.pool",
+        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "solve_transport_parallel_payload",
+    ),
+    (
+        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "sfincs_jax.problems.transport_matrix.parallel.runtime",
         "TransportParallelPoolCache",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.parallel.execution",
-        "sfincs_jax.problems.transport_matrix.parallel.execution",
+        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "sfincs_jax.problems.transport_matrix.parallel.runtime",
         "run_transport_parallel_payloads",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.parallel.solve",
-        "sfincs_jax.problems.transport_matrix.parallel.solve",
+        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "sfincs_jax.problems.transport_matrix.parallel.runtime",
         "maybe_run_transport_parallel_solve",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.parallel.validation",
-        "sfincs_jax.problems.transport_matrix.parallel.validation",
+        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "sfincs_jax.problems.transport_matrix.parallel.runtime",
         "validate_transport_worker_result_payload",
     ),
     (

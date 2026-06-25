@@ -11,7 +11,7 @@ from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax import cli
 from sfincs_jax import v3_driver
-from sfincs_jax.problems.transport_matrix.parallel import pool as transport_parallel_pool
+from sfincs_jax.problems.transport_matrix.parallel import runtime as transport_parallel_pool
 from sfincs_jax.problems.transport_matrix.parallel import policy as transport_parallel_policy
 from sfincs_jax.v3_driver import solve_v3_transport_matrix_linear_gmres
 

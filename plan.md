@@ -3230,3 +3230,76 @@ Next best steps:
    branch orchestration/finalization rather than moving one-off helpers.
 3. Keep avoiding deleted-module shims; update tests/docs to canonical owners
    instead.
+
+## 2026-06-25 Lane 1 Batch 2 Transport-Parallel Runtime Consolidation
+
+Steps taken:
+
+1. Merged parent-side execution, payload packing, process-pool cache
+   management, parent solve orchestration, and worker-result validation into
+   `sfincs_jax/problems/transport_matrix/parallel/runtime.py`.
+2. Deleted five transport-parallel micro-files:
+   `execution.py`, `payload.py`, `pool.py`, `solve.py`, and `validation.py`.
+3. Updated source, tests, examples, and docs so payload, execution, pool,
+   solve, and validation symbols are imported from the canonical runtime owner.
+4. Preserved `parallel/policy.py` for now because it contains the large
+   parallel scaling/audit policy surface and has direct docs/tests. It remains
+   a planned follow-up before final review if we want exactly three parallel
+   implementation files.
+5. Added public docstrings for the runtime symbols moved into the canonical
+   owner so source-map/docstring gates still enforce maintainability.
+
+Current inventory:
+
+- Package Python files: `212` (down from `217`).
+- Package-root Python files: `85` (unchanged).
+- Package source lines: `163,301` (down from `163,358`).
+- `sfincs_jax/problems/transport_matrix`: `28` Python files.
+- `sfincs_jax/problems/transport_matrix/parallel`: `5` Python files including
+  `__init__.py`; implementation owners are `runtime.py`, `policy.py`,
+  `sharding.py`, and `worker.py`.
+- `sfincs_jax/problems/profile_response/solve.py`: `9,412` lines.
+
+Validation:
+
+- `python -m ruff check` passed for touched runtime/source/test modules.
+- `python -m py_compile` passed for
+  `parallel/runtime.py`, `parallel/worker.py`, and
+  `profile_response/solve.py`.
+- Transport-parallel test battery passed:
+  `python -m pytest
+  tests/test_transport_parallel_execution.py
+  tests/test_transport_parallel_payload.py
+  tests/test_transport_parallel_validation.py
+  tests/test_transport_parallel_solve.py
+  tests/test_transport_parallel_runtime.py
+  tests/test_transport_parallel.py -q --tb=short`
+  with `66 passed in 31.71 s`.
+- Import-contract, docstring, policy, and benchmark-audit coverage passed:
+  `57 passed in 1.07 s`.
+- Transport solve setup/policy coverage passed:
+  `25 passed in 2.31 s`.
+- `python -m sphinx -W -b html docs docs/_build/html` passed.
+- Stale deleted-module import audit found no remaining references to
+  `parallel.execution`, `parallel.payload`, `parallel.pool`,
+  `parallel.solve`, or `parallel.validation`.
+
+Current lane status:
+
+- Lane 1 Batch 2 transport-parallel substep: complete for execution/payload/
+  pool/solve/validation. Remaining transport/output work includes merging or
+  justifying `parallel/policy.py`, collapsing the other transport micro-files,
+  and moving output ownership out of `io.py`.
+- Lane 1 overall: about `63%` of the authoritative consolidation plan.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Either merge `parallel/policy.py` into `parallel/runtime.py` or document why
+   it remains a durable policy owner, then continue transport consolidation
+   with `postsolve_diagnostics.py -> finalize.py` and active/dense policy
+   owner merges.
+2. Start the large Batch 1 profile-response solve cut once the transport
+   micro-file reductions are stable.
+3. Keep the no-shim rule: update imports to canonical owners and delete
+   obsolete files rather than keeping compatibility files alive.

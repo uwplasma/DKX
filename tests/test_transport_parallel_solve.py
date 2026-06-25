@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.problems.transport_matrix.parallel import solve as parallel_solve
+from sfincs_jax.problems.transport_matrix.parallel import runtime as parallel_solve
 
 
 def _runtime(**overrides):

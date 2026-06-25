@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.problems.transport_matrix.parallel.payload import (
+from sfincs_jax.problems.transport_matrix.parallel.runtime import (
     solve_transport_parallel_payload,
     transport_parallel_result_to_npz_arrays,
 )

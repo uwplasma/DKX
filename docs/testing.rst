@@ -455,7 +455,7 @@ merge, output-field propagation, transport-matrix assembly, and progress emissio
 are tested with monkeypatched kernels and worker runtimes.
 ``tests/test_transport_parallel.py`` now targets the transport parallel modules
 directly for the process-pool and XLA-policy seams: persistent pool reuse and
-rebuild monkeypatch ``sfincs_jax.problems.transport_matrix.parallel.pool``, while
+rebuild monkeypatch ``sfincs_jax.problems.transport_matrix.parallel.runtime``, while
 worker-local XLA flag rewriting is checked through
 ``sfincs_jax.problems.transport_matrix.parallel.policy``. Driver aliases are
 kept only where they preserve the public debugging seam.

@@ -1,31 +1,47 @@
+"""Runtime orchestration for transport-matrix parallel worker solves."""
+
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
+import atexit
+import concurrent.futures
+from concurrent.futures.process import BrokenProcessPool
+from dataclasses import dataclass
 import json
+import multiprocessing as mp
 import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+from typing import Any
 
+import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.problems.transport_matrix.parallel.policy import (
-    transport_parallel_gpu_worker_env,
-    transport_parallel_visible_gpu_ids,
-    validate_transport_parallel_worker_count,
+from sfincs_jax.namelist import Namelist
+from sfincs_jax.problems.transport_matrix.diagnostics import (
+    v3_transport_matrix_from_flux_arrays,
+    v3_transport_output_fields_vm_only,
 )
-from sfincs_jax.problems.transport_matrix.parallel.validation import (
-    validate_complete_transport_worker_rhs_coverage,
-    validate_distinct_transport_worker_rhs,
-    validate_gpu_transport_worker_arrays,
-    validate_transport_worker_result_payload,
+from sfincs_jax.problems.transport_matrix.parallel.policy import (
+    rewrite_xla_flags,
+    transport_parallel_gpu_worker_env,
+    transport_parallel_pool_executor_kwargs as _transport_parallel_pool_executor_kwargs,
+    transport_parallel_pool_key,
+    transport_parallel_visible_gpu_ids,
+    transport_parallel_worker_env as _transport_parallel_worker_env,
+    validate_transport_parallel_worker_count,
 )
 from sfincs_jax.problems.transport_matrix.residual_quality import (
     transport_residual_gate_failures_from_arrays,
     transport_residual_gate_thresholds_from_env,
 )
+from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist
+from sfincs_jax.v3_results import V3TransportMatrixSolveResult
+from sfincs_jax.v3_system import V3FullSystemOperator
 
 
 _GPU_WORKER_LOG_MARKERS = (
@@ -133,6 +149,8 @@ def _terminate_pending_workers(
 
 
 def partition_transport_rhs(values: list[int], workers: int) -> list[list[int]]:
+    """Split ``whichRHS`` values into deterministic round-robin worker chunks."""
+
     worker_count = validate_transport_parallel_worker_count(workers)
     chunks: list[list[int]] = [[] for _ in range(worker_count)]
     for i, val in enumerate(values):
@@ -233,6 +251,8 @@ def run_transport_parallel_gpu_subprocesses(
     gpu_worker_env: Callable[..., dict[str, str]],
     emit: Callable[[int, str], None] | None = None,
 ) -> list[dict[str, object]]:
+    """Launch one-GPU-per-worker transport subprocesses and collect payloads."""
+
     requested_workers = validate_transport_parallel_worker_count(
         parallel_workers,
         context="GPU transport",
@@ -446,6 +466,8 @@ def merge_transport_parallel_results(
     results: list[dict[str, object]],
     require_complete_coverage: bool = False,
 ) -> tuple[dict[int, np.ndarray], dict[int, float], dict[int, float], np.ndarray]:
+    """Merge worker result dictionaries into per-``whichRHS`` arrays."""
+
     state_vectors: dict[int, np.ndarray] = {}
     residual_norms: dict[int, float] = {}
     rhs_norms: dict[int, float] = {}
@@ -475,3 +497,644 @@ def merge_transport_parallel_results(
     if require_complete_coverage:
         validate_complete_transport_worker_rhs_coverage(seen_rhs=seen_rhs, n_rhs=int(n_rhs))
     return state_vectors, residual_norms, rhs_norms, elapsed_s
+
+# Consolidated from parallel/validation.py.
+def format_transport_rhs_list(values: Sequence[int]) -> str:
+    """Format ``whichRHS`` values for validation errors."""
+
+    return "[" + ", ".join(str(v) for v in values) + "]"
+
+
+def validate_distinct_transport_worker_rhs(
+    *,
+    rhs_values: Sequence[int],
+    seen_rhs: set[int],
+) -> None:
+    """Reject duplicate ``whichRHS`` values across worker results."""
+
+    duplicate_rhs = [int(rhs) for rhs in rhs_values if int(rhs) in seen_rhs]
+    if duplicate_rhs:
+        raise ValueError(
+            "transport parallel worker results contain duplicate whichRHS values "
+            f"{format_transport_rhs_list(duplicate_rhs)}"
+        )
+
+
+def validate_transport_worker_result_payload(
+    *,
+    rhs_values: Sequence[int],
+    result: Mapping[str, object],
+    n_rhs: int | None,
+) -> None:
+    """Validate one merge-ready worker result payload."""
+
+    rhs_values = [int(rhs) for rhs in rhs_values]
+    if any(rhs < 1 for rhs in rhs_values):
+        invalid = [rhs for rhs in rhs_values if rhs < 1]
+        raise ValueError(
+            "transport parallel worker reported invalid whichRHS values "
+            f"{format_transport_rhs_list(invalid)}"
+        )
+    if n_rhs is not None and any(rhs > int(n_rhs) for rhs in rhs_values):
+        invalid = [rhs for rhs in rhs_values if rhs > int(n_rhs)]
+        raise ValueError(
+            "transport parallel worker reported out-of-range whichRHS values "
+            f"{format_transport_rhs_list(invalid)} for n_rhs={int(n_rhs)}"
+        )
+
+    required_maps = ("state_vectors_by_rhs", "residual_norms_by_rhs", "rhs_norms_by_rhs")
+    for key in required_maps:
+        value = result.get(key, {})
+        if not isinstance(value, dict):
+            raise ValueError(f"transport parallel worker result field {key!r} must be a mapping")
+        present = {int(k) for k in value}
+        missing = [rhs for rhs in rhs_values if rhs not in present]
+        if missing:
+            raise ValueError(
+                "transport parallel worker result is missing "
+                f"{key} entries for whichRHS={format_transport_rhs_list(missing)}"
+            )
+
+
+def validate_complete_transport_worker_rhs_coverage(
+    *,
+    seen_rhs: set[int],
+    n_rhs: int,
+) -> None:
+    """Require worker results to cover every transport right-hand side once."""
+
+    expected = set(range(1, int(n_rhs) + 1))
+    missing = sorted(expected - set(seen_rhs))
+    extra = sorted(set(seen_rhs) - expected)
+    if missing:
+        raise ValueError(
+            "transport parallel worker results are missing whichRHS values "
+            f"{format_transport_rhs_list(missing)}"
+        )
+    if extra:
+        raise ValueError(
+            "transport parallel worker results contain out-of-range whichRHS values "
+            f"{format_transport_rhs_list(extra)} for n_rhs={int(n_rhs)}"
+        )
+
+
+def validate_gpu_transport_worker_arrays(
+    *,
+    requested_rhs_values: Sequence[int],
+    output_rhs_values: Sequence[int],
+    state_vectors: np.ndarray,
+    residual_norms: np.ndarray,
+    rhs_norms: np.ndarray,
+    elapsed_time_s: np.ndarray,
+    gpu_id: str,
+) -> None:
+    """Validate NPZ arrays emitted by a GPU transport worker subprocess."""
+
+    requested_rhs_values = [int(rhs) for rhs in requested_rhs_values]
+    output_rhs_values = [int(rhs) for rhs in output_rhs_values]
+    if output_rhs_values != requested_rhs_values:
+        raise RuntimeError(
+            "GPU transport worker returned unexpected whichRHS coverage "
+            f"(gpu={gpu_id} requested={requested_rhs_values} returned={output_rhs_values})"
+        )
+    expected = len(output_rhs_values)
+    lengths = {
+        "state_vectors": int(state_vectors.shape[0]) if state_vectors.ndim > 0 else 0,
+        "residual_norms": int(residual_norms.shape[0]) if residual_norms.ndim > 0 else 0,
+        "rhs_norms": int(rhs_norms.shape[0]) if rhs_norms.ndim > 0 else 0,
+        "elapsed_time_s": int(elapsed_time_s.shape[0]) if elapsed_time_s.ndim > 0 else 0,
+    }
+    bad_lengths = {key: length for key, length in lengths.items() if length != expected}
+    if bad_lengths:
+        details = ", ".join(f"{key}={length}" for key, length in sorted(bad_lengths.items()))
+        raise RuntimeError(
+            "GPU transport worker returned inconsistent result array lengths "
+            f"(gpu={gpu_id} whichRHS={output_rhs_values} expected={expected}; {details})"
+        )
+
+
+# Consolidated from parallel/payload.py.
+def solve_transport_parallel_payload(
+    payload: dict[str, object],
+    *,
+    read_input: Callable[[Path], object],
+    solve_transport: Callable[..., object],
+    emit: Callable[[int, str], None] | None = None,
+    set_child_environment: bool = True,
+) -> dict[str, object]:
+    """Run one transport worker payload and return the merge-ready result dict."""
+    input_path = Path(str(payload["input_path"]))
+    which_rhs_values = [int(v) for v in payload["which_rhs_values"]]  # type: ignore[assignment]
+    tol = float(payload.get("tol", 1e-10))
+    atol = float(payload.get("atol", 0.0))
+    restart = int(payload.get("restart", 80))
+    maxiter = payload.get("maxiter")
+    solve_method = str(payload.get("solve_method", "auto"))
+    identity_shift = float(payload.get("identity_shift", 0.0))
+    differentiable_payload = payload.get("differentiable", None)
+    if differentiable_payload is not None:
+        differentiable_payload = bool(differentiable_payload)
+    phi1_hat_base = payload.get("phi1_hat_base")
+    if phi1_hat_base is not None:
+        phi1_hat_base = jnp.asarray(phi1_hat_base, dtype=jnp.float64)
+
+    if set_child_environment:
+        # Prevent recursive process/GPU worker launches from inside workers.
+        os.environ["SFINCS_JAX_TRANSPORT_PARALLEL"] = "off"
+        os.environ["SFINCS_JAX_TRANSPORT_PARALLEL_CHILD"] = "1"
+
+    solve_kwargs: dict[str, Any] = {
+        "nml": read_input(input_path),
+        "tol": tol,
+        "atol": atol,
+        "restart": restart,
+        "maxiter": maxiter,
+        "solve_method": solve_method,
+        "identity_shift": identity_shift,
+        "phi1_hat_base": phi1_hat_base,
+        "differentiable": differentiable_payload,
+        "input_namelist": input_path,
+        "which_rhs_values": which_rhs_values,
+        "force_stream_diagnostics": True,
+        "force_store_state": True,
+        "collect_transport_output_fields": False,
+        "parallel_workers": 1,
+    }
+    if emit is not None:
+        solve_kwargs["emit"] = emit
+    result = solve_transport(**solve_kwargs)
+    return pack_transport_parallel_result(which_rhs_values=which_rhs_values, result=result)
+
+
+def pack_transport_parallel_result(
+    *,
+    which_rhs_values: list[int],
+    result: object,
+) -> dict[str, object]:
+    """Convert a transport solve result object to the parent merge payload."""
+    return {
+        "which_rhs_values": [int(v) for v in which_rhs_values],
+        "state_vectors_by_rhs": {
+            int(k): np.asarray(v) for k, v in result.state_vectors_by_rhs.items()
+        },
+        "residual_norms_by_rhs": {
+            int(k): float(np.asarray(v)) for k, v in result.residual_norms_by_rhs.items()
+        },
+        "rhs_norms_by_rhs": {
+            int(k): float(np.asarray(v))
+            for k, v in (getattr(result, "rhs_norms_by_rhs", None) or {}).items()
+        },
+        "elapsed_time_s": np.asarray(result.elapsed_time_s, dtype=np.float64),
+    }
+
+
+def transport_parallel_result_to_npz_arrays(result: dict[str, object]) -> dict[str, np.ndarray]:
+    """Convert a merge-ready worker result into the subprocess NPZ schema."""
+    rhs_values = np.asarray(result.get("which_rhs_values", []), dtype=np.int32)
+    if rhs_values.size == 0:
+        return {
+            "which_rhs_values": rhs_values,
+            "state_vectors": np.zeros((0, 0), dtype=np.float64),
+            "residual_norms": np.zeros((0,), dtype=np.float64),
+            "rhs_norms": np.zeros((0,), dtype=np.float64),
+            "elapsed_time_s": np.zeros((0,), dtype=np.float64),
+        }
+
+    state_vectors_by_rhs = result.get("state_vectors_by_rhs", {})
+    residual_norms_by_rhs = result.get("residual_norms_by_rhs", {})
+    rhs_norms_by_rhs = result.get("rhs_norms_by_rhs", {})
+    state_vectors = np.stack(
+        [np.asarray(state_vectors_by_rhs[int(rhs)], dtype=np.float64) for rhs in rhs_values],
+        axis=0,
+    )
+    residual_norms = np.asarray(
+        [float(np.asarray(residual_norms_by_rhs[int(rhs)], dtype=np.float64)) for rhs in rhs_values],
+        dtype=np.float64,
+    )
+    rhs_norms = np.asarray(
+        [
+            float(np.asarray(rhs_norms_by_rhs.get(int(rhs), np.nan), dtype=np.float64))
+            for rhs in rhs_values
+        ],
+        dtype=np.float64,
+    )
+    elapsed_full = np.asarray(result.get("elapsed_time_s", np.zeros((0,))), dtype=np.float64)
+    if elapsed_full.ndim == 0:
+        elapsed_time_s = np.full((rhs_values.size,), float(elapsed_full), dtype=np.float64)
+    elif elapsed_full.shape[0] == rhs_values.size:
+        elapsed_time_s = elapsed_full.astype(np.float64, copy=False)
+    elif elapsed_full.shape[0] > int(np.max(rhs_values - 1)):
+        elapsed_time_s = elapsed_full[rhs_values - 1].astype(np.float64, copy=False)
+    else:
+        elapsed_time_s = np.zeros((rhs_values.size,), dtype=np.float64)
+        count = min(rhs_values.size, int(elapsed_full.shape[0]))
+        if count > 0:
+            elapsed_time_s[:count] = elapsed_full[:count]
+    return {
+        "which_rhs_values": rhs_values,
+        "state_vectors": state_vectors,
+        "residual_norms": residual_norms,
+        "rhs_norms": rhs_norms,
+        "elapsed_time_s": elapsed_time_s,
+    }
+
+
+# Consolidated from parallel/execution.py.
+def should_run_transport_parallel(
+    *,
+    parallel_child: bool,
+    parallel_workers: int,
+    which_rhs_values: Sequence[int],
+    input_namelist: Path | None,
+) -> bool:
+    """Return whether the parent should launch parallel transport workers."""
+
+    return (
+        (not bool(parallel_child))
+        and int(parallel_workers) > 1
+        and len(which_rhs_values) > 1
+        and (input_namelist is not None)
+    )
+
+
+def build_transport_parallel_payloads(
+    *,
+    chunks: Sequence[Sequence[int]],
+    input_namelist: Path,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    solve_method: str,
+    identity_shift: float,
+    collect_transport_output_fields: bool,
+    phi1_hat_base,
+    differentiable: bool | None,
+) -> list[dict[str, object]]:
+    """Build JSON-like payloads for transport worker chunks."""
+
+    phi1_payload = np.asarray(phi1_hat_base) if phi1_hat_base is not None else None
+    payloads: list[dict[str, object]] = []
+    for chunk in chunks:
+        payloads.append(
+            {
+                "input_path": str(input_namelist),
+                "which_rhs_values": [int(v) for v in chunk],
+                "tol": float(tol),
+                "atol": float(atol),
+                "restart": int(restart),
+                "maxiter": maxiter,
+                "solve_method": str(solve_method),
+                "identity_shift": float(identity_shift),
+                "collect_transport_output_fields": bool(collect_transport_output_fields),
+                "phi1_hat_base": phi1_payload,
+                "differentiable": differentiable,
+            }
+        )
+    return payloads
+
+
+def _collect_pool_results(*, pool, payloads, worker) -> list[dict[str, object]]:
+    future_to_index = {pool.submit(worker, payload): i for i, payload in enumerate(payloads)}
+    results: list[dict[str, object] | None] = [None] * len(future_to_index)
+    for fut in concurrent.futures.as_completed(future_to_index):
+        results[future_to_index[fut]] = fut.result()
+    ordered: list[dict[str, object]] = []
+    for res in results:
+        if res is None:
+            raise RuntimeError("transport parallel worker result was not collected")
+        ordered.append(res)
+    return ordered
+
+
+def run_transport_parallel_payloads(
+    *,
+    payloads: list[dict[str, object]],
+    parallel_workers: int,
+    parallel_backend: str,
+    run_gpu_subprocesses: Callable[..., list[dict[str, object]]],
+    persistent_pool_enabled: bool,
+    get_pool: Callable[..., object],
+    shutdown_pool: Callable[[], None],
+    worker: Callable[[dict[str, object]], dict[str, object]],
+    worker_env: Callable[[int], object],
+    executor_class,
+    executor_kwargs: Callable[..., dict[str, object]],
+    emit: Callable[[int, str], None] | None = None,
+) -> list[dict[str, object]]:
+    """Run transport worker payloads using GPU subprocesses or CPU pools."""
+
+    worker_count = validate_transport_parallel_worker_count(parallel_workers)
+    if str(parallel_backend) == "gpu":
+        return run_gpu_subprocesses(
+            payloads=payloads,
+            parallel_workers=worker_count,
+            emit=emit,
+        )
+
+    if bool(persistent_pool_enabled):
+        try:
+            pool = get_pool(parallel_workers=worker_count, emit=emit)
+            return _collect_pool_results(pool=pool, payloads=payloads, worker=worker)
+        except BrokenProcessPool as exc:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_transport_matrix_linear_gmres: persistent transport pool broke "
+                    f"({type(exc).__name__}: {exc}); restarting pool once",
+                )
+            shutdown_pool()
+            try:
+                pool = get_pool(parallel_workers=worker_count, emit=emit)
+                return _collect_pool_results(pool=pool, payloads=payloads, worker=worker)
+            except Exception as retry_exc:
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_transport_matrix_linear_gmres: persistent transport pool retry failed "
+                        f"({type(retry_exc).__name__}: {retry_exc}); falling back to sequential whichRHS",
+                    )
+                return [worker(payload) for payload in payloads]
+        except (PermissionError, NotImplementedError, OSError) as exc:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_transport_matrix_linear_gmres: process parallelism unavailable "
+                    f"({type(exc).__name__}: {exc}); falling back to sequential whichRHS",
+                )
+            return [worker(payload) for payload in payloads]
+
+    with worker_env(worker_count):
+        try:
+            with executor_class(**executor_kwargs(parallel_workers=worker_count, emit=emit)) as pool:
+                return _collect_pool_results(pool=pool, payloads=payloads, worker=worker)
+        except (PermissionError, NotImplementedError, OSError) as exc:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_transport_matrix_linear_gmres: process parallelism unavailable "
+                    f"({type(exc).__name__}: {exc}); falling back to sequential whichRHS",
+                )
+            return [worker(payload) for payload in payloads]
+
+
+# Consolidated from parallel/pool.py.
+class TransportParallelPoolCache:
+    """Persistent process-pool cache keyed by transport worker configuration."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._pool = None
+        self._key: tuple[object, ...] | None = None
+
+    def shutdown(self) -> None:
+        with self._lock:
+            pool = self._pool
+            self._pool = None
+            self._key = None
+        if pool is not None:
+            pool.shutdown(wait=True, cancel_futures=True)
+
+    def get(
+        self,
+        *,
+        parallel_workers: int,
+        key_fn: Callable[[int], tuple[object, ...]],
+        worker_env: Callable[[int], object],
+        executor_kwargs: Callable[..., dict[str, object]],
+        executor_class: Callable[..., object],
+        emit: Callable[[int, str], None] | None = None,
+    ):
+        key = key_fn(int(parallel_workers))
+        with self._lock:
+            if self._pool is not None and self._key == key:
+                return self._pool
+            old_pool = self._pool
+            self._pool = None
+            self._key = None
+
+        if old_pool is not None:
+            old_pool.shutdown(wait=True, cancel_futures=True)
+
+        with worker_env(int(parallel_workers)):
+            pool = executor_class(**executor_kwargs(parallel_workers=int(parallel_workers), emit=emit))
+
+        with self._lock:
+            self._pool = pool
+            self._key = key
+        return pool
+
+
+_TRANSPORT_PARALLEL_POOL_CACHE = TransportParallelPoolCache()
+
+
+def transport_parallel_worker_env(parallel_workers: int):
+    """Return the process-pool worker environment context for transport solves."""
+    return _transport_parallel_worker_env(
+        parallel_workers=int(parallel_workers),
+        rewrite_xla_flags=rewrite_xla_flags,
+    )
+
+
+def transport_parallel_pool_executor_kwargs(
+    *,
+    parallel_workers: int,
+    emit: Callable[[int, str], None] | None = None,
+) -> dict[str, object]:
+    """Build ``ProcessPoolExecutor`` kwargs for transport worker pools."""
+    return _transport_parallel_pool_executor_kwargs(
+        parallel_workers=int(parallel_workers),
+        get_context=mp.get_context,
+        emit=emit,
+    )
+
+
+def shutdown_transport_parallel_pool() -> None:
+    """Shut down the persistent transport process pool, if one exists."""
+    _TRANSPORT_PARALLEL_POOL_CACHE.shutdown()
+
+
+def get_transport_parallel_pool(
+    *,
+    parallel_workers: int,
+    emit: Callable[[int, str], None] | None = None,
+) -> concurrent.futures.ProcessPoolExecutor:
+    """Return the persistent process pool for CPU transport-worker solves."""
+    return _TRANSPORT_PARALLEL_POOL_CACHE.get(
+        parallel_workers=int(parallel_workers),
+        key_fn=transport_parallel_pool_key,
+        worker_env=transport_parallel_worker_env,
+        executor_kwargs=transport_parallel_pool_executor_kwargs,
+        executor_class=concurrent.futures.ProcessPoolExecutor,
+        emit=emit,
+    )
+
+
+def transport_parallel_process_pool_executor(**kwargs: object) -> concurrent.futures.ProcessPoolExecutor:
+    """Construct the process-pool executor used by one-shot transport workers."""
+    return concurrent.futures.ProcessPoolExecutor(**kwargs)
+
+
+atexit.register(shutdown_transport_parallel_pool)
+
+
+# Consolidated from parallel/solve.py.
+@dataclass(frozen=True)
+class TransportParallelSolveRuntime:
+    """Injected runtime hooks needed to launch and merge transport workers."""
+
+    run_gpu_subprocesses: Callable[..., list[dict[str, object]]]
+    persistent_pool_enabled: bool
+    get_pool: Callable[..., object]
+    shutdown_pool: Callable[[], None]
+    worker: Callable[[dict[str, object]], dict[str, object]]
+    worker_env: Callable[[int], object]
+    executor_class: Any
+    executor_kwargs: Callable[..., dict[str, object]]
+    elapsed_s: Callable[[], float]
+
+
+def maybe_run_transport_parallel_solve(
+    *,
+    nml: Namelist,
+    op0: V3FullSystemOperator,
+    rhs_mode: int,
+    n_rhs: int,
+    which_rhs_values: Sequence[int],
+    parallel_child: bool,
+    parallel_workers: int,
+    parallel_backend: str,
+    input_namelist: Path | None,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    solve_method: str,
+    identity_shift: float,
+    collect_transport_output_fields: bool,
+    phi1_hat_base: jnp.ndarray | None,
+    differentiable: bool | None,
+    runtime: TransportParallelSolveRuntime,
+    emit: Callable[[int, str], None] | None = None,
+) -> V3TransportMatrixSolveResult | None:
+    """Run the parent-side parallel whichRHS branch, or return ``None``.
+
+    The worker payload format and process/GPU execution helpers live in the
+    transport-parallel modules. This function owns the parent orchestration that
+    was historically embedded in ``v3_driver.py``: partitioning, worker launch,
+    result merge, transport diagnostic assembly, and early result construction.
+    """
+
+    if not should_run_transport_parallel(
+        parallel_child=bool(parallel_child),
+        parallel_workers=int(parallel_workers),
+        which_rhs_values=which_rhs_values,
+        input_namelist=input_namelist,
+    ):
+        return None
+
+    if input_namelist is None:
+        raise RuntimeError("parallel transport solve requires input_namelist")
+
+    if emit is not None:
+        emit(
+            0,
+            "solve_v3_transport_matrix_linear_gmres: parallel whichRHS "
+            f"(backend={parallel_backend} workers={int(parallel_workers)} "
+            f"rhs_count={len(which_rhs_values)}/{int(n_rhs)})",
+        )
+
+    chunks = partition_transport_rhs(list(which_rhs_values), int(parallel_workers))
+    payloads = build_transport_parallel_payloads(
+        chunks=chunks,
+        input_namelist=input_namelist,
+        tol=float(tol),
+        atol=float(atol),
+        restart=int(restart),
+        maxiter=maxiter,
+        solve_method=str(solve_method),
+        identity_shift=float(identity_shift),
+        collect_transport_output_fields=bool(collect_transport_output_fields),
+        phi1_hat_base=phi1_hat_base,
+        differentiable=differentiable,
+    )
+
+    results = run_transport_parallel_payloads(
+        payloads=payloads,
+        parallel_workers=int(parallel_workers),
+        parallel_backend=str(parallel_backend),
+        run_gpu_subprocesses=runtime.run_gpu_subprocesses,
+        persistent_pool_enabled=bool(runtime.persistent_pool_enabled),
+        get_pool=runtime.get_pool,
+        shutdown_pool=runtime.shutdown_pool,
+        worker=runtime.worker,
+        worker_env=runtime.worker_env,
+        executor_class=runtime.executor_class,
+        executor_kwargs=runtime.executor_kwargs,
+        emit=emit,
+    )
+
+    state_vectors_np, residual_norms_np, rhs_norms_np, elapsed_s = merge_transport_parallel_results(
+        n_rhs=int(n_rhs),
+        results=results,
+    )
+    state_vectors = {
+        int(k): jnp.asarray(v, dtype=jnp.float64)
+        for k, v in state_vectors_np.items()
+    }
+    residual_norms = {
+        int(k): jnp.asarray(v, dtype=jnp.float64)
+        for k, v in residual_norms_np.items()
+    }
+    rhs_norms = {
+        int(k): jnp.asarray(v, dtype=jnp.float64)
+        for k, v in rhs_norms_np.items()
+    }
+
+    missing_rhs = [which_rhs for which_rhs in range(1, int(n_rhs) + 1) if which_rhs not in state_vectors]
+    if missing_rhs:
+        raise RuntimeError(f"parallel transport solve missing state vectors for whichRHS={missing_rhs}")
+
+    if emit is not None:
+        for which_rhs in range(1, int(n_rhs) + 1):
+            rn = float(np.asarray(residual_norms.get(which_rhs, np.nan), dtype=np.float64))
+            rhsn = float(np.asarray(rhs_norms.get(which_rhs, np.nan), dtype=np.float64))
+            rel = rn / rhsn if np.isfinite(rhsn) and rhsn > 0.0 else float("nan")
+            emit(
+                0,
+                f"whichRHS={which_rhs}: residual_norm={rn:.6e} rhs_norm={rhsn:.6e} "
+                f"relative_residual={rel:.6e} elapsed_s={float(elapsed_s[which_rhs - 1]):.3f}",
+            )
+        emit(0, "solve_v3_transport_matrix_linear_gmres: computing whichRHS diagnostics (batched)")
+
+    transport_fields_full = v3_transport_output_fields_vm_only(
+        op0=op0,
+        state_vectors_by_rhs=state_vectors,
+    )
+    diag_pf = jnp.asarray(transport_fields_full["particleFlux_vm_psiHat"], dtype=jnp.float64)
+    diag_hf = jnp.asarray(transport_fields_full["heatFlux_vm_psiHat"], dtype=jnp.float64)
+    diag_flow = jnp.asarray(transport_fields_full["FSABFlow"], dtype=jnp.float64)
+    geom = geometry_from_namelist(nml=nml, grids=grids_from_namelist(nml))
+    tm = v3_transport_matrix_from_flux_arrays(
+        op=op0,
+        geom=geom,
+        particle_flux_vm_psi_hat=diag_pf,
+        heat_flux_vm_psi_hat=diag_hf,
+        fsab_flow=diag_flow,
+    )
+    transport_output_fields = transport_fields_full if bool(collect_transport_output_fields) else None
+    if emit is not None:
+        emit(0, "solve_v3_transport_matrix_linear_gmres: done")
+        emit(1, f"solve_v3_transport_matrix_linear_gmres: elapsed_s={runtime.elapsed_s():.3f}")
+    return V3TransportMatrixSolveResult(
+        op0=op0,
+        transport_matrix=tm,
+        state_vectors_by_rhs=state_vectors,
+        residual_norms_by_rhs=residual_norms,
+        fsab_flow=diag_flow,
+        particle_flux_vm_psi_hat=diag_pf,
+        heat_flux_vm_psi_hat=diag_hf,
+        elapsed_time_s=jnp.asarray(elapsed_s, dtype=jnp.float64),
+        transport_output_fields=transport_output_fields,
+        rhs_norms_by_rhs=rhs_norms,
+    )

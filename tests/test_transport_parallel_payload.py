@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from sfincs_jax.problems.transport_matrix.parallel.payload import (
+from sfincs_jax.problems.transport_matrix.parallel.runtime import (
     pack_transport_parallel_result,
     solve_transport_parallel_payload,
     transport_parallel_result_to_npz_arrays,

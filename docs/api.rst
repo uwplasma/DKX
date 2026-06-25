@@ -126,9 +126,6 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.problems.transport_matrix.postsolve_diagnostics
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.parallel.solve
-   :members:
-
 .. automodule:: sfincs_jax.preconditioner_setup
    :members:
 
@@ -307,22 +304,10 @@ research workflows.
 .. automodule:: sfincs_jax.problems.transport_matrix.solve
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.parallel.payload
-   :members:
-
 .. automodule:: sfincs_jax.problems.transport_matrix.parallel.policy
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.parallel.runtime
-   :members:
-
-.. automodule:: sfincs_jax.problems.transport_matrix.parallel.execution
-   :members:
-
-.. automodule:: sfincs_jax.problems.transport_matrix.parallel.pool
-   :members:
-
-.. automodule:: sfincs_jax.problems.transport_matrix.parallel.validation
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.parallel.sharding

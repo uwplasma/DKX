@@ -342,13 +342,17 @@ cleanup:
 - Top-level `transport_*` modules: 0 after Lane 1 Iteration 1.
 - Top-level `rhs1_*` modules: 0 after the Lane 1 Iteration 3 ownership move.
   Solver-family implementation now lives under `solvers.preconditioners`.
-- Package total is 217 Python files, 85 package-root files, and 163,358
-  package lines after the first two Batch 0 root cleanups. Those cleanups
+- Package total is 212 Python files, 85 package-root files, and 163,301
+  package lines after the first two Batch 0 root cleanups and the first
+  transport-parallel consolidation. The root cleanups
   deleted the obsolete root modules `solver_runtime.py`,
   `matrix_reductions.py`, `solve_mode_policy.py`,
   `solver_progress_policy.py`, `phase_timing.py`, `linear_algebra.py`,
   `newton_krylov_diagnostics.py`, `phi1_line_search.py`, `sparse.py`, and
   `verbose.py` after moving their tested helpers into canonical owners.
+  The transport-parallel consolidation merged `execution.py`, `payload.py`,
+  `pool.py`, `solve.py`, and `validation.py` into
+  `problems/transport_matrix/parallel/runtime.py`.
 - Current concentration of complexity:
   `problems/profile_response` has 21 files and about 50k lines,
   `problems/transport_matrix` has 33 files and about 15k lines,
@@ -533,10 +537,10 @@ Current inventory from the 2026-06-25 final consolidation review:
 | Area | Current state | Final target for this PR |
 | --- | --- | --- |
 | `sfincs_jax/v3_driver.py` | 47-line compatibility shim | Keep under 80 lines or delete after legacy imports migrate. |
-| Package source files | 217 Python files, 163,358 package lines | At most 200 files, with fewer top-level implementation modules. |
+| Package source files | 212 Python files, 163,301 package lines | At most 200 files, with fewer top-level implementation modules. |
 | Top-level modules | 85 Python files at package root | At most 55 root files; implementation belongs in domain packages. |
 | `problems/profile_response` | 21 files, about 50k lines; `solve.py` is 9,412 lines | At most 16 files; `solve.py` below 3,500 lines. |
-| `problems/transport_matrix` | 33 files, about 15k lines, including 8 parallel micro-files | At most 16 files; parallel subpackage at most 3 implementation files. |
+| `problems/transport_matrix` | 28 files, about 15k lines; parallel has runtime, policy, sharding, and worker owners | At most 16 files; parallel policy should merge or be justified before review. |
 | `solvers/preconditioners` | 50 files, about 37k lines; QI and RHSMode-1 names remain over-fragmented | At most 32 files; no implementation file starts with `rhs1_`. |
 | `io.py` / `outputs` | `io.py` is 4.3k lines; output owners already exist | `io.py` below 800 lines as a shim, or deleted after imports migrate. |
 | Docs/API maps | Docs still mention transient internal names | Docs expose public API and stable owner modules only. |
@@ -597,6 +601,10 @@ Status: active baseline. Completed boundary facts remain valid:
   `problems/profile_response/phi1_newton.py`, and Newton-Krylov KSP replay
   into `problems/profile_response/solver_diagnostics.py`. The old root
   modules were deleted rather than kept as shims.
+- The first transport-parallel consolidation moved parent execution, payload
+  packing, process-pool cache management, parent-side solve orchestration, and
+  worker-result validation into `problems/transport_matrix/parallel/runtime.py`.
+  The old parallel micro-files were deleted rather than kept as shims.
 
 Next actions in this batch:
 
@@ -776,7 +784,7 @@ Tasks:
 Review-ready acceptance gates:
 
 - Package source file count is at most 200.
-- Package source lines are below the current 163,358-line baseline.
+- Package source lines are below the current 163,301-line baseline.
 - Package root has at most 55 Python files.
 - `v3_driver.py` is deleted or below 80 lines.
 - `profile_response/solve.py` is below 3,500 lines.
@@ -1338,15 +1346,17 @@ Deliverables:
 
 Current completion status:
 
-- Lane 1 structural consolidation: about 60 percent. The compatibility-driver
+- Lane 1 structural consolidation: about 63 percent. The compatibility-driver
   boundary is done, the first profile-response ownership checkpoint deleted
   three profile-response files, the current RHSMode-1 preconditioner registry is
   owned by `profile_response/preconditioner_build.py`, sparse env parsing is
   shared through `profile_response/sparse/policy.py`, x-block final payload
   builders live in `profile_response/sparse/xblock.py`, and the two Batch 0
-  root cleanups deleted ten obsolete top-level helper modules. The remaining
-  large blockers are `profile_response/solve.py`, transport/output
-  consolidation, solver/preconditioner naming, and `io.py` ownership.
+  root cleanups deleted ten obsolete top-level helper modules. The first
+  transport-parallel consolidation deleted five transport micro-files. The
+  remaining large blockers are `profile_response/solve.py`, the rest of
+  transport/output consolidation, solver/preconditioner naming, and `io.py`
+  ownership.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.

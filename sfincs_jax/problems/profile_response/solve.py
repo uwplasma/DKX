@@ -721,20 +721,19 @@ from sfincs_jax.problems.transport_matrix.parallel.policy import (
     transport_parallel_start_method as _transport_parallel_start_method,
     transport_parallel_visible_gpu_ids as _transport_parallel_visible_gpu_ids,
 )
-from sfincs_jax.problems.transport_matrix.parallel.payload import solve_transport_parallel_payload as _solve_transport_parallel_payload
 from sfincs_jax.problems.transport_matrix.parallel.runtime import (
-    run_transport_parallel_gpu_subprocesses_with_policy as _run_transport_parallel_gpu_subprocesses,
-)
-from sfincs_jax.problems.transport_matrix.parallel.solve import TransportParallelSolveRuntime, maybe_run_transport_parallel_solve
-from sfincs_jax.problems.transport_matrix.residual_quality import transport_residual_gate_thresholds_from_env
-from sfincs_jax.problems.transport_matrix.parallel.pool import (
+    TransportParallelSolveRuntime,
     get_transport_parallel_pool as _get_transport_parallel_pool,
+    maybe_run_transport_parallel_solve,
+    run_transport_parallel_gpu_subprocesses_with_policy as _run_transport_parallel_gpu_subprocesses,
     shutdown_transport_parallel_pool as _shutdown_transport_parallel_pool,
+    solve_transport_parallel_payload as _solve_transport_parallel_payload,
     transport_parallel_pool_executor_kwargs as _transport_parallel_pool_executor_kwargs,
     transport_parallel_pool_key as _transport_parallel_pool_key,
     transport_parallel_process_pool_executor as _transport_parallel_process_pool_executor,
     transport_parallel_worker_env as _transport_parallel_worker_env,
 )
+from sfincs_jax.problems.transport_matrix.residual_quality import transport_residual_gate_thresholds_from_env
 from sfincs_jax.problems.profile_response.policies import resolve_use_implicit as _resolve_use_implicit_impl
 from sfincs_jax.phi1_newton_policy import (
     phi1_frozen_jacobian_policy,
