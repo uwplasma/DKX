@@ -518,7 +518,10 @@ JAX-native performance patterns used in `sfincs_jax`
   ambipolar Newton steps or optimization workflows. Concrete problem owners can
   pass a fixed-shape ``LinearObservableSystem`` builder so the finite-difference
   gate is generated from the same operator/RHS/observable graph as the
-  implicit derivative.
+  implicit derivative. For small validation decks,
+  ``probe_linear_observable_vector`` can recover the observable vector from an
+  existing linear diagnostic in bounded chunks; production paths should use the
+  pinned analytic weights once validated.
 - **Default to short-recurrence Krylov for transport**: BiCGStab avoids storing a full GMRES basis and
   is therefore far more memory efficient for large RHSMode=2/3 systems. GMRES remains available and is
   used as a fallback when BiCGStab stagnates; transport-matrix solves default to BiCGStab with the
