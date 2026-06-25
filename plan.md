@@ -2091,3 +2091,50 @@ Next best steps:
 3. Prepare a review-readiness checklist for the draft PR: clean worktree,
    no large generated artifacts, current branch pushed, plan statuses aligned,
    and remaining production refresh benchmarks explicitly documented.
+
+## 2026-06-25 Broad Fast Validation After Lane Closures
+
+Steps taken:
+
+1. Ran the broader fast validation slice after closing bounded ambipolar,
+   bounded RHSMode 4/5, and the latest transport projection refactor.
+2. Built the Sphinx docs and checked whitespace.
+3. Probed whole-repo ruff once. It still reports pre-existing broad lint debt
+   outside the touched files, mostly JAX-config import-order patterns,
+   ambiguous `l` loop/index names in older numerical modules, and a repeated
+   dictionary key in `compare.py`. The scoped ruff checks for touched files
+   passed in their tranches, so the broad lint debt is tracked as a separate
+   cleanup item rather than mixed into this refactor/feature closure pass.
+
+Results:
+
+- `JAX_ENABLE_X64=True python -m pytest tests/test_input_compat.py
+  tests/test_ambipolar_problem.py tests/test_sensitivity.py
+  tests/test_constraint_projection.py tests/test_transport_solve_finalization.py
+  tests/test_transport_dense_batch.py tests/test_transport_linear_solve.py
+  tests/test_transport_sparse_direct_solve.py
+  tests/test_transport_preconditioner_dispatch.py
+  tests/test_domain_package_import_contracts.py
+  tests/test_cli_validation_io_fast_coverage.py -q --tb=short` passed with
+  `141 passed in 68.60 s`.
+- `python -m sphinx -b html docs docs/_build/html -q` and `git diff --check`
+  passed.
+- Worktree was clean after the pushed commits.
+
+Current lane status:
+
+- Ambipolar solver lane: 100% closed for the bounded/reference PR scope.
+- RHSMode 4/5 sensitivity lane: 100% closed for the bounded/reference PR scope.
+- Refactor/review-ready PR lane: 93%; remaining work is review-readiness
+  cleanup, not another new physics feature.
+- Overall completion: about 97%.
+
+Next best steps:
+
+1. Commit and push this validation log.
+2. Do the review-readiness checklist: verify no large generated files, summarize
+   remaining deferred release-refresh benchmarks, and identify any final
+   high-value `v3_driver.py` extraction that can be completed without new
+   architectural churn.
+3. Leave whole-repo lint cleanup as a scoped future lane unless the project
+   wants to normalize all JAX-config import-order patterns now.
