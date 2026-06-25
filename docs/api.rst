@@ -72,12 +72,6 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.v3_results
    :members:
 
-.. automodule:: sfincs_jax.solver_runtime
-   :members:
-
-.. automodule:: sfincs_jax.matrix_reductions
-   :members:
-
 .. automodule:: sfincs_jax.linear_algebra
    :members:
 
@@ -287,9 +281,6 @@ research workflows.
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.policy
-   :members:
-
-.. automodule:: sfincs_jax.solve_mode_policy
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.dense_lu
