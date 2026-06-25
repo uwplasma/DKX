@@ -18,6 +18,7 @@ from sfincs_jax.problems.transport_matrix.diagnostics import (
     radial_current_vm_observable_vector,
     radial_current_vm_psi_hat_from_state,
     radial_current_vm_psi_hat_observable_vector,
+    v3_transport_diagnostics_vm_only,
 )
 from sfincs_jax.sensitivity import (
     LinearObservableSystem,
@@ -323,6 +324,33 @@ def test_rhs1_radial_current_jvp_vjp_dot_product_gate() -> None:
 
     assert result.abs_error < 1.0e-10
     np.testing.assert_allclose(result.lhs, result.rhs, rtol=0.0, atol=1.0e-10)
+
+
+def test_rhs1_transport_diagnostic_jvp_vjp_dot_product_gates() -> None:
+    input_path = Path(__file__).parent / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
+    op = full_system_operator_from_namelist(nml=read_sfincs_input(input_path))
+    rng = np.random.default_rng(12)
+    state = jnp.asarray(rng.normal(size=(int(op.total_size),)), dtype=jnp.float64)
+    tangent = jnp.asarray(rng.normal(size=(int(op.total_size),)), dtype=jnp.float64)
+    cotangent = jnp.asarray(0.75, dtype=jnp.float64)
+
+    diagnostic_functions = {
+        "particle_flux_vm_psi_hat": lambda x: v3_transport_diagnostics_vm_only(
+            op, x_full=x
+        ).particle_flux_vm_psi_hat[0],
+        "heat_flux_vm_psi_hat": lambda x: v3_transport_diagnostics_vm_only(
+            op, x_full=x
+        ).heat_flux_vm_psi_hat[0],
+        "fsab_flow": lambda x: v3_transport_diagnostics_vm_only(op, x_full=x).fsab_flow[0],
+        "fsab_jhat": lambda x: jnp.vdot(
+            op.z_s,
+            v3_transport_diagnostics_vm_only(op, x_full=x).fsab_flow,
+        ),
+    }
+
+    for name, diagnostic in diagnostic_functions.items():
+        result = adjoint_dot_product_check(diagnostic, state, tangent, cotangent)
+        assert result.abs_error < 1.0e-10, name
 
 
 def test_implicit_linear_observable_derivative_rejects_incompatible_shapes() -> None:

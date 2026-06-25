@@ -943,7 +943,29 @@ Results:
 
 Next best steps:
 
-1. Extend the dot-product gate to particle flux, heat flux, FSAB flow,
-   radial current, and bootstrap-current diagnostics.
+1. Extend the dot-product gate to Phi1 drift-current, total heat-flux, and
+   intermediate-grid diagnostics.
 2. Add Fortran RHSMode 4/5 small-output fixtures once the diagnostic adjoint
    gates are stable.
+
+## 2026-06-25 Expanded Transport-Diagnostic Adjoint Gates
+
+Steps taken:
+
+1. Extended the real RHSMode 1 diagnostic JVP/VJP dot-product tests to
+   particle flux, heat flux, FSAB flow, and `FSABjHat = sum_s Z_s FSABFlow_s`.
+2. Kept the gate on the tiny PAS deck so the coverage remains fast enough for
+   normal CI while exercising the production diagnostic code path.
+
+Results:
+
+- Expanded diagnostic gate passed:
+  `python -m pytest
+  tests/test_sensitivity.py::test_rhs1_transport_diagnostic_jvp_vjp_dot_product_gates
+  -q --tb=short` with `1 passed`.
+
+Next best steps:
+
+1. Add Phi1 drift-current and total heat-flux diagnostic adjoint gates.
+2. Add small Fortran RHSMode 4/5 fixture parity once the no-Phi1 diagnostic
+   adjoint suite is stable.

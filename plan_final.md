@@ -89,8 +89,9 @@ Implementation progress on 2026-06-23:
   production sparse/matrix-free implementation.
 - `sfincs_jax.sensitivity` now exposes `jvp_flux`, `vjp_flux`, and
   `adjoint_dot_product_check`. The focused tests apply the dot-product identity
-  to a real RHSMode-1 radial-current diagnostic, which is the same consistency
-  gate required before promoting RHSMode 4/5 adjoint outputs.
+  to real RHSMode-1 particle-flux, heat-flux, flow, radial-current, and
+  bootstrap-current diagnostics, which is the same consistency gate required
+  before promoting RHSMode 4/5 adjoint outputs.
 - Derivative-assisted safeguarded Newton/bisection and strict pure-Newton root
   solvers are implemented behind the same ambipolar owner. They accept a
   derivative provider, so finite-difference gates, direct implicit
@@ -958,9 +959,8 @@ Deliverables:
    observable, coordinate conversion, finite-difference derivative contract, and
    Newton root solvers are already in place. Remaining work is production
    operator derivatives plus Phi1 drift-current branches.
-8. Extend the JVP/VJP dot-product gate from radial current to the Fortran
-   RHSMode 4/5 output set: particle flux, heat flux, parallel flow, total heat
-   flux, radial current, and bootstrap current.
+8. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
+   set to Phi1 drift-current, total heat-flux, and intermediate-grid cases.
 9. Wire the exact derivative into safeguarded Newton/bisection and pure Newton
    for Fortran option 1/3 physical parity gates.
 10. Define residual/operator/transpose operator protocol and migrate one
