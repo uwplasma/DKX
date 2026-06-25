@@ -326,7 +326,7 @@ the historical private driver name and test the focused module directly. This ke
   particle/energy source correction basis, applies the roundoff skip gate used
   by transport solves, and returns either the corrected state or the corrected
   residual through an injected operator action for direct numerical tests.
-- ``sfincs_jax/sparse_triangular.py``:
+- ``sfincs_jax/solvers/sparse_triangular.py``:
   JAX-native triangular solves for padded and compact-CSR sparse factor rows,
   plus permutation inversion. These pure kernels are used by sparse
   preconditioner apply paths and are directly tested against dense triangular
@@ -335,7 +335,7 @@ the historical private driver name and test the focused module directly. This ke
   mutable solve-context hints for preconditioner auto-selection, including
   cached operator size, geometry/collision metadata, sparse structural
   tolerance, factor dtype, and solver-JIT admission. The numerical policy lives
-  in ``solver_path_policy.py``; this module owns the runtime state bridge.
+  in ``path_policy.py``; this module owns the runtime state bridge.
 - ``sfincs_jax/preconditioner_operators.py``:
   pure dataclass/JAX transformations that build simplified ``V3FullSystemOperator``
   variants used as point, line, domain-decomposition, and Fortran-reduced
@@ -586,7 +586,7 @@ the historical private driver name and test the focused module directly. This ke
   active-submatrix, coupled-coarse builders, and active residual diagnostic
   summaries; ``v3_driver.py`` imports the historical private names for
   compatibility.
-- ``sfincs_jax/krylov_dispatch.py``:
+- ``sfincs_jax/solvers/krylov_dispatch.py``:
   concrete Krylov solver routing for host-only SciPy methods, JIT/non-JIT JAX
   GMRES, distributed GMRES, diagnostic solver labels, and
   ``SFINCS_JAX_GMRES_DISTRIBUTED`` axis selection. The driver passes its current
@@ -1189,11 +1189,11 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/problems/profile_response/policies.py``:
   RHSMode=1 profile-response admission, post-solve correction, solver-path,
   and implicit/differentiable solve-mode policy.
-- ``sfincs_jax/solver_path_policy.py``:
+- ``sfincs_jax/solvers/path_policy.py``:
   pure solver/preconditioner path policy for JIT admission, RHSMode=1 rescue
   slack, DKES GMRES budget defaults, sparse-PC defaults, preconditioner dtype,
   and backend resource-exhaustion classification.
-- ``sfincs_jax/solver_selection_policy.py``:
+- ``sfincs_jax/solvers/selection_policy.py``:
   measured candidate acceptance gates used by automatic solver/preconditioner
   promotions, including residual/parity checks and paired runtime/memory
   comparisons against an incumbent path.
@@ -1356,7 +1356,7 @@ the historical private driver name and test the focused module directly. This ke
   accepted-iterate update logic and solve orchestration for the Newton path,
   including PETSc-like backtracking, fixed-candidate ``best`` search, and
   finite-state fallback handling.
-- ``sfincs_jax/solver_progress.py``:
+- ``sfincs_jax/solvers/progress.py``:
   user-facing duration formatting, coarse runtime hints, one-shot large RHSMode=1
   progress messages, and transport whichRHS ETA text. This module is intentionally
   lightweight so CLI progress can stay informative without importing heavy solver
@@ -1369,7 +1369,7 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/validation/benchmark_artifacts.py``:
   fast schema, provenance, and release-blocking classification policy for checked-in
   benchmark JSON artifacts.
-- ``sfincs_jax/memory_model.py``:
+- ``sfincs_jax/solvers/memory_model.py``:
   conservative dense/CSR/Krylov/preconditioner memory estimates used by solver
   restart caps, benchmark manifests, and measured solver-candidate gates. This is
   the preflight layer that keeps future memory-saving defaults testable before
@@ -1380,7 +1380,7 @@ the historical private driver name and test the focused module directly. This ke
   sparse-PC auto lanes. These helpers keep solver path promotion rules explicit
   and unit-testable without assembling a kinetic operator.
 
-``sfincs_jax/solver.py`` and ``sfincs_jax/implicit_solve.py``
+``sfincs_jax/solver.py`` and ``sfincs_jax/solvers/implicit.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Linear-algebra infrastructure:

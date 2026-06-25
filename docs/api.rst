@@ -66,7 +66,7 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.validation.artifacts
    :members:
 
-.. automodule:: sfincs_jax.memory_model
+.. automodule:: sfincs_jax.solvers.memory_model
    :members:
 
 .. automodule:: sfincs_jax.v3_results
@@ -75,7 +75,7 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.solver
    :members:
 
-.. automodule:: sfincs_jax.sparse_triangular
+.. automodule:: sfincs_jax.solvers.sparse_triangular
    :members:
 
 .. automodule:: sfincs_jax.preconditioner_context
@@ -135,7 +135,7 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.explicit_sparse_factor_builder
    :members:
 
-.. automodule:: sfincs_jax.krylov_dispatch
+.. automodule:: sfincs_jax.solvers.krylov_dispatch
    :members:
 
 .. automodule:: sfincs_jax.preconditioner_caches
@@ -337,7 +337,7 @@ research workflows.
 .. automodule:: sfincs_jax.explicit_sparse
    :members:
 
-.. automodule:: sfincs_jax.implicit_solve
+.. automodule:: sfincs_jax.solvers.implicit
    :members:
 
 .. automodule:: sfincs_jax.sensitivity

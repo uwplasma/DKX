@@ -650,7 +650,7 @@ Solver-path policy refactor
 
 Current source and tests:
 
-- ``sfincs_jax/solver_path_policy.py``
+- ``sfincs_jax/solvers/path_policy.py``
 - ``tests/test_solver_path_policy.py``
 
 Scope and status:

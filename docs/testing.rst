@@ -351,7 +351,7 @@ solver-hint state, dtype policy, and sparse structural-tolerance handling.
 stable cache-key array hashing, injected matrix-free submatrix probing, and
 RHSMode=1/transport cache-key stability for dtype, Phi1, PAS, and FP
 signatures.
-``krylov_dispatch.py`` adds direct tests
+``solvers/krylov_dispatch.py`` adds direct tests
 for host-only method rejection, JIT/plain/distributed dispatch, diagnostic
 labels, and distributed-axis environment policy. ``preconditioner_caches.py``
 adds direct tests for representative RHSMode=1, transport, sparse-ILU, Schur,
@@ -722,7 +722,7 @@ RHSMode=1 x-block system. They check finite actions, metadata, apply counters,
 coarse-solver routing, and the historical ``v3_driver`` alias imports.
 
 The solver-path refactor continues this policy-first testing style in
-``sfincs_jax/solver_path_policy.py`` and ``tests/test_solver_path_policy.py``.
+``sfincs_jax/solvers/path_policy.py`` and ``tests/test_solver_path_policy.py``.
 The direct tests cover JIT eligibility, preconditioner dtype selection, the narrow
 automatic FP32 PAS geometry-4 preconditioner gate, residual-rescue slack,
 DKES GMRES budget preservation for explicit user budgets, sparse-PC default
