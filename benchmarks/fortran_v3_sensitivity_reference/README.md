@@ -16,6 +16,12 @@ the small ambipolar reference deck:
 - `geometry4_w7x_like_small_rhs4_heat_flux` pins `dHeatFluxdLambda` and
   `dTotalHeatFluxdLambda`, including the Fortran relation
   `dTotalHeatFluxdLambda = sum_s dHeatFluxdLambda_s`.
+- `geometry4_w7x_like_small_rhs4_parallel_bootstrap` pins
+  `dParallelFlowdLambda` and `dBootstrapdLambda`, including the Fortran
+  relation `dBootstrapdLambda = sum_s Z_s dParallelFlowdLambda_s`. The deck
+  also enables particle-flux adjoints because SFINCS Fortran v3 writes
+  `dParallelFlowdLambda` only when `adjointParticleFluxOption` or debug mode is
+  active.
 - `geometry4_w7x_like_small_rhs5_heat_flux` pins the corresponding RHSMode=5
   constant-current heat-flux fields plus `dPhidPsidLambda` after the Fortran
   Brent ambipolar solve.

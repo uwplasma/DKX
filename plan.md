@@ -1676,3 +1676,66 @@ Next best steps:
    top-level files.
 3. Run a broader import/driver slice after the next tranche, not after every
    small wrapper cleanup.
+
+## 2026-06-25 RHSMode-4 Parallel-Flow And Bootstrap Fixture
+
+Steps taken:
+
+1. Built a compact W7-X-like RHSMode=4 fixture with
+   `adjointParallelFlowOption=.true. .true.` and
+   `adjointBootstrapOption=.true.`.
+2. Also enabled `adjointParticleFluxOption=.true. .true.` because SFINCS
+   Fortran v3 writes `dParallelFlowdLambda` only when particle-flux adjoints or
+   debug adjoints are active.
+3. Reran SFINCS Fortran v3 locally and checked in only the compact namelist and
+   JSON summary, not the generated HDF5 file.
+4. Added a regression that validates the namelist/source contract, field names,
+   tensor ranks, wall/RSS budgets, and
+   `dBootstrapdLambda = sum_s Z_s dParallelFlow_s/dLambda`.
+5. Updated the feature matrix, release notes, validation matrix, benchmark
+   README, and `plan_final.md`.
+
+Results:
+
+- Fortran v3 W7-X-like RHSMode=4 parallel/bootstrap fixture completed with
+  wall time `0.27 s`, main solve time `0.046349 s`, four adjoint solves between
+  `0.0018 s` and `0.0046 s`, and peak RSS `125,599,744` bytes.
+- The HDF5 output contained `dParticleFluxdLambda`, `dParallelFlowdLambda`,
+  and `dBootstrapdLambda`.
+- The bootstrap charge-sum identity matched to `3.7e-18` in the scratch HDF5
+  extraction.
+- Narrow fixture gate passed:
+  `JAX_ENABLE_X64=True python -m pytest
+  tests/test_sensitivity.py::test_fortran_v3_rhs4_reference_summary_pins_radial_current_sensitivity
+  tests/test_sensitivity.py::test_fortran_v3_rhs4_reference_summary_pins_heat_flux_sensitivity
+  tests/test_sensitivity.py::test_fortran_v3_rhs4_reference_summary_pins_parallel_flow_and_bootstrap_sensitivity
+  tests/test_sensitivity.py::test_fortran_v3_rhs5_reference_summary_pins_constant_current_heat_sensitivity
+  tests/test_sensitivity.py::test_fortran_v3_adjoint_sensitivity_output_surface_reports_missing_or_misranked_fields
+  -q --tb=short` with `5 passed in 0.47 s`.
+- Broader focused validation passed:
+  `JAX_ENABLE_X64=True python -m pytest tests/test_input_compat.py
+  tests/test_sensitivity.py tests/test_ambipolar_problem.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` with
+  `76 passed in 93.94 s`.
+- `python -m ruff check tests/test_sensitivity.py`, `python -m json.tool
+  benchmarks/fortran_v3_sensitivity_reference/small_rhsmode45_summary_2026-06-25.json`,
+  `git diff --check`, and `python -m sphinx -b html docs docs/_build/html -q`
+  passed.
+
+Current lane status:
+
+- Ambipolar solver lane: 99% bounded; no change in this tranche.
+- RHSMode 4/5 sensitivity lane: 93%; compact RHSMode=4 radial-current,
+  heat-flux, parallel-flow, bootstrap, and RHSMode=5 constant-current heat
+  output families are pinned. Remaining work is debug finite-difference and
+  production-grid parity.
+- Refactor/review-ready PR lane: 89%; no change in this fixture tranche.
+- Overall completion: about 93%.
+
+Next best steps:
+
+1. Commit and push this fixture tranche.
+2. Add a compact debug-adjoint finite-difference fixture only if it remains
+   bounded; otherwise document it as a nightly/prolonged gate.
+3. Continue the review-ready refactor lane by extracting one larger solve-loop
+   seam into existing domain modules.

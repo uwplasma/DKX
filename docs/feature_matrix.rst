@@ -102,8 +102,9 @@ Fortran v3 feature ownership
        derivative, JVP/VJP, dot-product, small RHSMode-1 radial-current gates,
        active Fortran-style option-1 ``dJ_r/dE_r`` replay, Fortran-v3
        RHSMode-4/5 input validators, HDF5 sensitivity field-name/rank gates,
-       and compact Fortran RHSMode-4 radial-current plus heat-flux numerical
-       replay fixtures exist; production grids remain.
+       and compact Fortran RHSMode-4 radial-current, heat-flux,
+       parallel-flow, and bootstrap numerical replay fixtures exist;
+       production grids remain.
    * - RHSMode 5 ambipolar sensitivities
      - ``ambipolarSolver.F90``, ``solver.F90``, ``adjointDiagnostics.F90``
      - Fortran first finds ambipolar ``E_r``, then evaluates derivatives at
