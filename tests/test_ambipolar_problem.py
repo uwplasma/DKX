@@ -267,6 +267,35 @@ def test_new_profile_summaries_preserve_solver_counts_rss_bounds_and_marker_resi
     assert helical_brent["success_markers"]["goodbye"] is False
 
 
+def test_production_option13_summaries_pin_derivative_solve_metadata() -> None:
+    """Production option-1/3 references include one adjoint derivative solve per physical solve."""
+
+    production = json.loads((REFERENCE_ROOT / "production_profile_summary_2026-06-23.json").read_text())
+    option13_cases = [case for case in production["cases"] if str(case["case"]).endswith(("option1", "option3"))]
+    assert len(option13_cases) == 4
+
+    for case in option13_cases:
+        parsed = case["parsed"]
+        solve_count = len(parsed["main_solve_times_s"])
+        assert parsed["solver_packages"] == ["mumps"]
+        assert parsed["success_markers"]["newton_successful"] is True
+        assert parsed["internal_ambipolar_time_s"] > 0.0
+        assert parsed["wall_time_s"] >= parsed["internal_ambipolar_time_s"]
+        assert solve_count >= 4
+        assert len(parsed["adjoint_solve_times_s"]) == solve_count
+        assert len(parsed["jacobian_nnz"]) == solve_count
+        assert len(parsed["preconditioner_nnz"]) == solve_count
+        assert min(parsed["jacobian_nnz"]) > 1_000_000
+        assert min(parsed["preconditioner_nnz"]) > 1_000_000
+        assert parsed["max_ksp_iteration_index"] >= 3
+        assert parsed["petsc_profile_markers"] == {
+            "ksp_view": True,
+            "log_view": True,
+            "pc_view": True,
+        }
+        assert abs(float(parsed["radial_currents"][-1])) <= 7.0e-11
+
+
 def test_brent_failure_returns_nonconverged_unbracketed_certificate() -> None:
     result = brent_ambipolar_root(
         lambda er: 1.0 + 0.01 * er,

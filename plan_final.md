@@ -1076,6 +1076,10 @@ Completed on 2026-06-25:
 - Added a bound RHSMode 2/3 transport linear-solve callback object so the
   per-RHS loop no longer defines local solve wrappers around the transport
   linear-solve context.
+- Closed the bounded/reference ambipolar lane with a production option-1/3
+  metadata gate covering derivative-solve counts, Newton success markers,
+  MUMPS/PETSc provenance, nonzero matrix sizes, timing/RSS provenance, and
+  final radial-current bounds.
 
 Next ordered implementation steps:
 

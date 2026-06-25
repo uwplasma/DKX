@@ -1953,3 +1953,45 @@ Next best steps:
    existing modules rather than adding new namespaced files.
 3. Run a broader smoke slice after the next tranche because the refactor will
    start touching solve-loop finalization and diagnostic output ownership.
+
+## 2026-06-25 Ambipolar Production Metadata Closure Gate
+
+Steps taken:
+
+1. Re-reviewed the checked Fortran-v3 ambipolar small and production summaries
+   against the remaining `plan_final.md` ambipolar lane.
+2. Confirmed that sfincs_jax already has in-process option-1/2/3 root solvers,
+   small real-deck option-1/3 gates, Brent replay gates, fixed-shape setup
+   reuse metadata, and CLI serialization tests.
+3. Added a production option-1/3 metadata gate that pins the derivative-solve
+   coverage from the Fortran-v3 production references: one adjoint derivative
+   solve per physical solve, Newton success markers, MUMPS package provenance,
+   PETSc profile markers, nonzero Jacobian/preconditioner sizes, RSS/timing
+   provenance, and final radial-current bounds.
+
+Results:
+
+- `python -m pytest tests/test_ambipolar_problem.py -q --tb=short` passed with
+  `18 passed in 25.61 s`.
+- `JAX_ENABLE_X64=True python -m pytest tests/test_ambipolar_problem.py
+  tests/test_sensitivity.py tests/test_domain_package_import_contracts.py
+  -q --tb=short` passed with `55 passed in 63.44 s`.
+- `python -m ruff check tests/test_ambipolar_problem.py` and
+  `git diff --check` passed.
+
+Current lane status:
+
+- Ambipolar solver lane: 100% closed for the bounded/reference PR scope.
+  Heavy production reruns remain release-refresh artifacts, not CI gates.
+- RHSMode 4/5 sensitivity lane: 95%; unchanged in this tranche.
+- Refactor/review-ready PR lane: 92%; unchanged in this tranche.
+- Overall completion: about 96%.
+
+Next best steps:
+
+1. Commit and push this ambipolar closure gate.
+2. Move to RHSMode 4/5 sensitivity lane closure by adding one more bounded
+   source/output-surface gate or documenting the production-grid parity gate as
+   an external release-refresh benchmark.
+3. Resume refactor with another high-value owner-boundary extraction after the
+   RHSMode 4/5 lane is updated.
