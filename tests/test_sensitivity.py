@@ -46,6 +46,7 @@ from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.v3_system import apply_v3_full_system_operator_cached, full_system_operator_from_namelist
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+SENSITIVITY_REFERENCE_SUMMARY = "small_rhsmode45_summary_2026-06-25.json"
 
 
 def _linear_system_components():
@@ -183,7 +184,7 @@ def test_fortran_v3_adjoint_output_fields_preserve_parallel_flow_source_gate() -
 def test_fortran_v3_rhs4_reference_summary_pins_radial_current_sensitivity() -> None:
     reference_root = REPO_ROOT / "benchmarks" / "fortran_v3_sensitivity_reference"
     input_path = reference_root / "namelists" / "geometry4_w7x_like_small_rhs4_radial_current.namelist"
-    summary = json.loads((reference_root / "small_rhsmode4_summary_2026-06-25.json").read_text())
+    summary = json.loads((reference_root / SENSITIVITY_REFERENCE_SUMMARY).read_text())
     case = next(item for item in summary["cases"] if item["case"] == "geometry4_w7x_like_small_rhs4_radial_current")
     nml = read_sfincs_input(input_path)
 
@@ -213,7 +214,7 @@ def test_fortran_v3_rhs4_reference_summary_pins_radial_current_sensitivity() -> 
 def test_fortran_v3_rhs4_reference_summary_pins_heat_flux_sensitivity() -> None:
     reference_root = REPO_ROOT / "benchmarks" / "fortran_v3_sensitivity_reference"
     input_path = reference_root / "namelists" / "geometry4_w7x_like_small_rhs4_heat_flux.namelist"
-    summary = json.loads((reference_root / "small_rhsmode4_summary_2026-06-25.json").read_text())
+    summary = json.loads((reference_root / SENSITIVITY_REFERENCE_SUMMARY).read_text())
     case = next(item for item in summary["cases"] if item["case"] == "geometry4_w7x_like_small_rhs4_heat_flux")
     nml = read_sfincs_input(input_path)
 
@@ -235,6 +236,39 @@ def test_fortran_v3_rhs4_reference_summary_pins_heat_flux_sensitivity() -> None:
     heat = np.asarray(case["hdf5_fields"]["dHeatFluxdLambda"]["values"], dtype=np.float64)
     total = np.asarray(case["hdf5_fields"]["dTotalHeatFluxdLambda"]["values"], dtype=np.float64)
     np.testing.assert_allclose(total, heat.sum(axis=2), rtol=0.0, atol=5.0e-18)
+
+
+def test_fortran_v3_rhs5_reference_summary_pins_constant_current_heat_sensitivity() -> None:
+    reference_root = REPO_ROOT / "benchmarks" / "fortran_v3_sensitivity_reference"
+    input_path = reference_root / "namelists" / "geometry4_w7x_like_small_rhs5_heat_flux.namelist"
+    summary = json.loads((reference_root / SENSITIVITY_REFERENCE_SUMMARY).read_text())
+    case = next(item for item in summary["cases"] if item["case"] == "geometry4_w7x_like_small_rhs5_heat_flux")
+    nml = read_sfincs_input(input_path)
+
+    assert validate_fortran_v3_adjoint_sensitivity_constraints(nml) == ()
+    assert fortran_v3_adjoint_sensitivity_output_fields(nml) == (
+        "dHeatFluxdLambda",
+        "dTotalHeatFluxdLambda",
+        "dPhidPsidLambda",
+    )
+    assert dict(fortran_v3_adjoint_sensitivity_output_ranks(nml)) == {
+        "dHeatFluxdLambda": 4,
+        "dTotalHeatFluxdLambda": 3,
+        "dPhidPsidLambda": 3,
+    }
+    assert validate_fortran_v3_adjoint_sensitivity_output_surface(nml, case["hdf5_fields"]) == ()
+    assert case["wall_time_s"] < 1.0
+    assert case["max_rss_bytes"] < 160_000_000
+    assert case["hdf5_fields"]["dHeatFluxdLambda"]["shape"] == [1, 4, 2, 1]
+    assert case["hdf5_fields"]["dTotalHeatFluxdLambda"]["shape"] == [1, 4, 1]
+    assert case["hdf5_fields"]["dPhidPsidLambda"]["shape"] == [1, 4, 1]
+
+    heat = np.asarray(case["hdf5_fields"]["dHeatFluxdLambda"]["values"], dtype=np.float64)
+    total = np.asarray(case["hdf5_fields"]["dTotalHeatFluxdLambda"]["values"], dtype=np.float64)
+    dphi = np.asarray(case["hdf5_fields"]["dPhidPsidLambda"]["values"], dtype=np.float64)
+    np.testing.assert_allclose(total, heat.sum(axis=2), rtol=0.0, atol=5.0e-18)
+    assert np.isfinite(dphi).all()
+    assert float(np.max(np.abs(dphi))) > 1.0
 
 
 def test_fortran_v3_adjoint_sensitivity_output_surface_reports_missing_or_misranked_fields() -> None:

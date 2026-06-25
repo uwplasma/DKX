@@ -1535,7 +1535,7 @@ Results:
 - `python -m ruff check sfincs_jax/sensitivity.py tests/test_sensitivity.py
   tests/test_domain_package_import_contracts.py`, `git diff --check`,
   `python -m json.tool
-  benchmarks/fortran_v3_sensitivity_reference/small_rhsmode4_summary_2026-06-25.json`,
+  benchmarks/fortran_v3_sensitivity_reference/small_rhsmode45_summary_2026-06-25.json`,
   and `python -m sphinx -b html docs docs/_build/html -q` passed.
 
 Current lane status:
@@ -1555,3 +1555,71 @@ Next best steps:
 3. Return to the refactor/review-ready PR lane by moving the next duplicated
    compatibility glue into existing domain modules only when it reduces total
    complexity.
+
+## 2026-06-25 RHSMode-5 Constant-Current Sensitivity Fixture
+
+Steps taken:
+
+1. Reviewed SFINCS Fortran v3 `ambipolarSolver.F90`, `solver.F90`,
+   `adjointDiagnostics.F90`, `validateInput.F90`, and `writeHDF5Output.F90`
+   for the RHSMode=5 path.
+2. Built a small RHSMode=5 W7-X-like heat-flux deck from the checked
+   geometry-4 Brent ambipolar fixture, with `ambipolarSolve=.true.`,
+   `ambipolarSolveOption=2`, `adjointHeatFluxOption=.true. .true.`, and
+   `adjointTotalHeatFluxOption=.true.`.
+3. Confirmed Fortran v3 first finds the ambipolar `E_r` using RHSMode=1, then
+   re-enters RHSMode=5 at that root and writes the constant-current
+   `dPhidPsidLambda` sensitivity output.
+4. Renamed the compact summary file to
+   `benchmarks/fortran_v3_sensitivity_reference/small_rhsmode45_summary_2026-06-25.json`
+   because it now contains both RHSMode=4 and RHSMode=5 fixtures.
+5. Added a regression test that validates the RHSMode=5 namelist/source
+   contract, required output fields/ranks, finite nonzero `dPhidPsidLambda`,
+   wall/RSS budgets, and
+   `dTotalHeatFluxdLambda = sum_s dHeatFluxdLambda_s`.
+
+Results:
+
+- Fortran v3 W7-X-like RHSMode=5 heat-flux fixture completed with wall time
+  `0.18 s`, ambipolar solve time `0.087104 s`, main solve times around
+  `0.026-0.028 s`, three adjoint solves between `0.0012 s` and `0.0019 s`,
+  and peak RSS `138,674,176` bytes.
+- The HDF5 output contained `dHeatFluxdLambda`, `dTotalHeatFluxdLambda`, and
+  `dPhidPsidLambda`; `dPhidPsidLambda` had shape `[1, 4, 1]` and maximum
+  magnitude about `3.77`.
+- Narrow fixture gate passed:
+  `JAX_ENABLE_X64=True python -m pytest
+  tests/test_sensitivity.py::test_fortran_v3_rhs4_reference_summary_pins_radial_current_sensitivity
+  tests/test_sensitivity.py::test_fortran_v3_rhs4_reference_summary_pins_heat_flux_sensitivity
+  tests/test_sensitivity.py::test_fortran_v3_rhs5_reference_summary_pins_constant_current_heat_sensitivity
+  tests/test_sensitivity.py::test_fortran_v3_adjoint_sensitivity_output_surface_reports_missing_or_misranked_fields
+  -q --tb=short` with `4 passed in 0.38 s`.
+- Broader focused validation passed:
+  `JAX_ENABLE_X64=True python -m pytest tests/test_input_compat.py
+  tests/test_sensitivity.py tests/test_ambipolar_problem.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` with
+  `75 passed in 93.49 s`.
+- `python -m ruff check tests/test_sensitivity.py`, `git diff --check`,
+  `python -m json.tool
+  benchmarks/fortran_v3_sensitivity_reference/small_rhsmode45_summary_2026-06-25.json`,
+  and `python -m sphinx -b html docs docs/_build/html -q` passed.
+
+Current lane status:
+
+- Ambipolar solver lane: 99% bounded; production replay remains outside CI.
+- RHSMode 4/5 sensitivity lane: 90%; RHSMode=4 radial-current/heat and
+  RHSMode=5 constant-current heat output families are pinned. Remaining work is
+  bootstrap/flow/debug finite-difference fixtures and production-grid parity.
+- Refactor/review-ready PR lane: 88%; unchanged except for the compact
+  benchmark fixture rename and tests.
+- Overall completion: about 92%.
+
+Next best steps:
+
+1. Run focused sensitivity/import/docs validation and commit/push the RHSMode=5
+   fixture tranche.
+2. Start the refactor/review-ready PR lane by auditing the next large
+   `v3_driver.py` compatibility cluster for removal or domain-package
+   consolidation.
+3. Keep full production RHSMode=4/5 solve parity outside normal CI until the
+   compact source/output fixture layer is complete.
