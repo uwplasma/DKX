@@ -90,7 +90,8 @@ Fortran v3 feature ownership
        derivative-provider root tests are covered, checked small helical plus
        W7-X-like option-3 currents replay with the active namelist-backed
        provider, and the helical small-deck pure-Newton root replay now runs
-       through the same namelist-backed provider. Production gates remain.
+       through the same namelist-backed provider. Production refresh benchmarks
+       remain external to normal CI.
    * - RHSMode 4 fixed-``E_r`` sensitivities
      - ``solver.F90``, ``populateAdjointRHS.F90``,
        ``populatedMatrixdLambda.F90``, ``populatedRHSdLambda.F90``,
@@ -158,8 +159,9 @@ Fortran v3 feature ownership
      - Fortran writes HDF5 fields for inputs, geometry, solution, diagnostics,
        and adjoint quantities when enabled.
      - ``sfincs_jax.outputs`` and CLI plotting: implemented for HDF5, NetCDF,
-       NPZ, and PDF plot workflows. Missing RHSMode 4/5 adjoint-specific fields
-       are tracked in the sensitivity lane.
+       NPZ, and PDF plot workflows. RHSMode 4/5 adjoint output contracts are
+       pinned by compact Fortran-v3 sensitivity fixtures; production refreshes
+       remain benchmark artifacts rather than normal CI data.
    * - Parallelism
      - PETSc/MPI distribution plus parallel sparse factorization backends
      - Fortran delegates matrix distribution, factorization, and solves to MPI

@@ -302,7 +302,7 @@ Observed facts to feed directly into implementation:
 
 Current source size snapshot:
 
-- `sfincs_jax/v3_driver.py`: about 12.2k lines.
+- `sfincs_jax/v3_driver.py`: about 12.0k lines.
 - `sfincs_jax/rhs1_full_assembly.py`: about 6.0k lines.
 - Several RHSMode 1 QI, x-block, sparse policy, output, and transport modules
   still exceed 2k to 4k lines.
@@ -316,8 +316,9 @@ Useful existing assets:
   for implicit differentiation through linear solves.
 - `sfincs_jax/problems/profile_response/phi1_newton.py` already uses
   `jax.linearize` to build Newton-Krylov JVPs.
-- `sfincs_jax/ambipolar.py` postprocesses completed Er scans, but does not yet
-  provide the Fortran v3 in-solver ambipolar algorithms.
+- `sfincs_jax.problems.ambipolar` provides bounded/reference Fortran-v3-style
+  ambipolar option 1/2/3 root solvers, derivative-provider hooks, setup-reuse
+  metadata, and checked Fortran replay gates.
 - Several profile-response and transport-matrix preconditioners exist, but the
   implementation surface is still too fragmented and too environment-variable
   driven.
@@ -327,8 +328,11 @@ Useful existing assets:
 
 Important current gaps:
 
-- No first-class RHSMode 4/5 API matching Fortran v3 adjoint diagnostics.
-- No in-solver ambipolar root solve matching Fortran v3 options 1, 2, and 3.
+- RHSMode 4/5 bounded/reference output contracts are implemented and tested
+  against compact Fortran-v3 fixtures. Production-grid parity remains an
+  external release-refresh benchmark.
+- Ambipolar option 1/2/3 bounded/reference solvers are implemented and tested;
+  production-grid replay artifacts remain outside normal CI.
 - No complete derivative API for `dGamma/dEr`, `dQ/dEr`, `d<J.B>/dEr`,
   `dJr/dEr`, profile sensitivities, and geometry harmonic sensitivities across
   all supported solve lanes.
@@ -663,8 +667,10 @@ Implementation steps:
    - radial derivative/metric terms after the exact Fortran mapping is audited.
 9. Audit the exact Fortran `whichLambda` mapping before public docs, because
    comments and case labels must be reconciled term-by-term.
-10. Add RHSMode 4 fixed-Er output fields.
-11. Add RHSMode 5 ambipolar-Er output fields and `dPhi/dPsi` sensitivity.
+10. Keep RHSMode 4 fixed-Er output-field contracts synchronized with
+    Fortran-v3 fixture summaries.
+11. Keep RHSMode 5 ambipolar-Er `dPhi/dPsi` contracts synchronized with
+    Fortran-v3 fixture summaries.
 
 Acceptance gates:
 
@@ -672,13 +678,13 @@ Acceptance gates:
   are pinned against the source-code behavior.
 - Small RHSMode-4 Fortran radial-current, heat-flux, parallel-flow, bootstrap,
   and debug finite-difference sensitivity summaries plus one RHSMode-5
-  constant-current heat-flux summary are checked in and tested; intermediate
-  and production-grid parity remain.
+  constant-current heat-flux summary are checked in and tested. Intermediate
+  and production-grid parity are release-refresh benchmarks.
 - `A^T lambda - J_u^T` adjoint residual passes for every derivative gate.
 - JVP and VJP agree through dot-product tests:
   `<JVP(dp), y> = <dp, VJP(y)>`.
 - Finite-difference checks pass on documented stable windows.
-- Fortran v3 RHSMode 4/5 outputs match on small and intermediate grids.
+- Fortran v3 RHSMode 4/5 output contracts match on checked small grids.
 - Derivative examples run under CI without full production solves.
 
 ## Lane 5 - Native Solver And Preconditioner Architecture
@@ -1089,19 +1095,15 @@ Completed on 2026-06-25:
 
 Next ordered implementation steps:
 
-1. Run the production option-1/3 decks with bounded setup reuse outside normal
-   CI and add replay artifacts for residuals, setup reuse, runtime, and RSS.
-2. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
-   set to Phi1 drift-current, total heat-flux, and intermediate-grid cases.
-3. Add small Fortran RHSMode 4/5 output fixtures and compare exported
-   sensitivity diagnostics once the no-Phi1 derivative-assisted physical gate
-   is stable.
-4. Define residual/operator/transpose operator protocol and migrate one
-   RHSMode 2/3 path to it.
-5. Add one T3D/NEOPAX-style closure example with fixed geometry and radial
-   profile inputs.
-6. Run focused tests, docs build, commit, and push after each coherent owner
-    boundary or feature milestone.
+1. Finish the M7 review-readiness audit for PR #8: CI status, docs status,
+   large-file cleanliness, and current plan/docs alignment.
+2. Record any coverage shortfall as a scoped follow-up unless CI coverage fails.
+3. Keep production option-1/3 ambipolar reruns and production-grid RHSMode 4/5
+   parity as release-refresh benchmarks outside normal CI.
+4. If another refactor tranche is needed before review, choose only a
+   high-value owner-boundary extraction that reduces `v3_driver.py` or removes
+   stale private aliases without increasing file-count churn.
+5. After PR #8 is green and the worktree is clean, mark it ready for review.
 
 ## Known Risks And Explicit Deferred Items
 
