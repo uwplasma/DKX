@@ -7,6 +7,20 @@ from dataclasses import dataclass, replace
 import os
 from typing import Any
 
+import jax.numpy as jnp
+
+from ...namelist import Namelist
+from ...operators.profile_response.full_system import solve_structured_rhs1_full_csr
+from ...solver import GMRESSolveResult
+from ...v3_results import V3LinearSolveResult
+from ...v3_system import (
+    V3FullSystemOperator,
+    full_system_operator_from_namelist,
+    rhs_v3_full_system,
+    with_transport_rhs_settings,
+)
+from ..transport_matrix.active_dense import transport_active_dof_indices
+
 
 _FALSE_TOKENS = {"0", "false", "no", "off"}
 
@@ -228,6 +242,103 @@ def try_rhs1_auto_host_solve(context: RHS1AutoHostSolveContext) -> Any | None:
     return _try_structured_full_csr_auto(context)
 
 
+def solve_v3_full_system_structured_csr(
+    *,
+    nml: Namelist,
+    which_rhs: int | None = None,
+    op: V3FullSystemOperator | None = None,
+    x0: jnp.ndarray | None = None,
+    tol: float = 1.0e-10,
+    atol: float = 0.0,
+    restart: int = 80,
+    maxiter: int | None = 400,
+    identity_shift: float = 0.0,
+    phi1_hat_base: jnp.ndarray | None = None,
+    max_csr_nbytes: int | None = None,
+    method: str = "gmres",
+    preconditioner: str | None = "auto",
+    preconditioner_max_schur_size: int = 2048,
+    preconditioner_max_block_inverse_nbytes: int = 64 * 1024 * 1024,
+    active_dof: bool = False,
+    emit: Callable[[int, str], None] | None = None,
+) -> V3LinearSolveResult:
+    """Solve a supported RHSMode=1 system with explicit host CSR Krylov."""
+
+    if op is None:
+        op = full_system_operator_from_namelist(
+            nml=nml,
+            identity_shift=identity_shift,
+            phi1_hat_base=phi1_hat_base,
+        )
+    if which_rhs is not None:
+        op = with_transport_rhs_settings(op, which_rhs=int(which_rhs))
+    rhs = rhs_v3_full_system(op)
+    active_indices = transport_active_dof_indices(op) if bool(active_dof) else None
+    if emit is not None:
+        active_msg = (
+            f" active_size={int(active_indices.size)}/{int(op.total_size)}"
+            if active_indices is not None
+            else " full_size"
+        )
+        emit(
+            0,
+            "solve_v3_full_system_structured_csr: assembling no-probe host CSR "
+            f"(size={int(op.total_size)}{active_msg} method={method} preconditioner={preconditioner})",
+        )
+    result = solve_structured_rhs1_full_csr(
+        op,
+        rhs,
+        x0=x0,
+        tol=tol,
+        atol=atol,
+        restart=restart,
+        maxiter=maxiter,
+        method=method,
+        preconditioner=preconditioner,
+        preconditioner_max_schur_size=preconditioner_max_schur_size,
+        preconditioner_max_block_inverse_nbytes=preconditioner_max_block_inverse_nbytes,
+        max_csr_nbytes=max_csr_nbytes,
+        active_indices=active_indices,
+    )
+    if emit is not None:
+        emit(
+            0,
+            "solve_v3_full_system_structured_csr: "
+            f"converged={bool(result.converged)} residual={float(result.residual_norm):.3e} "
+            f"solve_s={float(result.solve_s):.3f}",
+        )
+        pc_summary = dict(result.metadata.get("preconditioner", {}) or {})
+        pc_metadata = dict(pc_summary.get("metadata", {}) or {})
+        factor_nbytes = pc_metadata.get("factor_nbytes_actual")
+        if factor_nbytes is None:
+            factor_nbytes = pc_metadata.get("factor_nbytes_estimate")
+        if pc_summary:
+            emit(
+                0,
+                "solve_v3_full_system_structured_csr: "
+                f"pc_kind={pc_summary.get('kind', 'unknown')} "
+                f"pc_selected={bool(pc_summary.get('selected', False))} "
+                f"pc_reason={pc_summary.get('reason', 'unknown')} "
+                f"pc_setup_s={float(pc_summary.get('setup_s', 0.0) or 0.0):.3f} "
+                f"pc_factor_nbytes={factor_nbytes if factor_nbytes is not None else 'na'} "
+                f"pc_permc={pc_metadata.get('permc_spec', 'na')} "
+                f"pc_superlu_permc={pc_metadata.get('superlu_permc_spec', 'na')}",
+            )
+    return V3LinearSolveResult(
+        op=op,
+        rhs=rhs,
+        gmres=GMRESSolveResult(
+            x=jnp.asarray(result.x, dtype=jnp.float64),
+            residual_norm=jnp.asarray(result.residual_norm, dtype=jnp.float64),
+        ),
+        metadata={
+            "solver_path": "structured_full_csr_host_gmres",
+            "structured_full_csr": result.to_dict(),
+            "active_dof": bool(active_dof),
+        },
+    )
+
+
 def solve_rhs1_structured_full_csr_explicit(context: RHS1StructuredCSRSolveContext) -> Any:
     """Run the explicit host-only structured full-CSR path and normalize metadata."""
 
@@ -433,6 +544,7 @@ __all__ = [
     "RHS1SparseHostSafeSolveContext",
     "RHS1StructuredCSRSolveContext",
     "solve_rhs1_structured_full_csr_explicit",
+    "solve_v3_full_system_structured_csr",
     "try_rhs1_sparse_host_safe_solve",
     "try_rhs1_auto_host_solve",
 ]

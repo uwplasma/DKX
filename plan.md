@@ -2617,3 +2617,65 @@ Next best steps:
    owners, then delete or fold `sparse_pc.py`.
 3. Run the focused RHSMode-1, sparse-PC, QI admission, ambipolar, sensitivity,
    docs, and import-contract gates before starting Tranche C.
+
+## 2026-06-25 Lane 1 Tranche B Solve-Phase Owner Checkpoint
+
+Steps taken:
+
+1. Moved the profile linear-solve routing contracts from
+   `sfincs_jax.problems.profile_response.solve` into the existing dense owner:
+   `ProfileLinearSolveContext`, `solve_profile_linear`,
+   `solve_profile_linear_with_residual`, dense-KSP full/reduced solve
+   contexts, constraintScheme=0 PETSc-compatible sparse-ILU, and host SciPy
+   rescue now live in `sfincs_jax.problems.profile_response.dense`.
+2. Updated `tests/test_profile_response_linear_solve.py` to import from the
+   canonical dense owner instead of the monolithic solve owner.
+3. Moved the explicit host structured-CSR RHSMode-1 solve entry point into
+   `sfincs_jax.problems.profile_response.auto_solve`, beside the auto-routing
+   code that invokes it. `profile_response.solve` imports it only for
+   compatibility and internal dispatch.
+4. Preserved behavior and legacy import compatibility while removing another
+   solve-phase block from `profile_response.solve`.
+
+Current inventory:
+
+- Package Python files: `230`.
+- `problems/profile_response`: `24` Python files.
+- `sfincs_jax/problems/profile_response/solve.py`: `10,400` lines.
+- `sfincs_jax/problems/profile_response/dense.py`: `2,487` lines.
+- `sfincs_jax/problems/profile_response/auto_solve.py`: `550` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `3,761` lines.
+- `sfincs_jax/v3_driver.py`: `47` lines.
+
+Validation:
+
+- Focused profile-response dense/structured/policy/sparse tests passed:
+  `522 passed in 43.29s`.
+- Scoped ruff passed for `profile_response.dense`, `profile_response.auto_solve`,
+  and the moved linear-solve test.
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/auto_solve.py
+  sfincs_jax/problems/profile_response/dense.py` passed.
+- `python -m sphinx -W -b html docs docs/_build/html` passed.
+
+Current lane status:
+
+- Lane 1 Tranche A: `100%`.
+- Lane 1 Tranche B: about `45%`; policy/diagnostics/krylov and dense/
+  structured solve-phase ownership moves are done. Remaining hard gates are
+  `profile_response/solve.py < 3.5k`, `problems/profile_response <= 22` files,
+  and `sparse_pc.py` deleted or moved under the sparse package.
+- Lane 1 Tranche C: `0%`.
+- Lane 1 Tranche D: `0%`.
+- Lane 1 overall: about `60%` of the authoritative consolidation plan.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Finish Tranche B with the largest remaining coherent move: move sparse-PC
+   branch orchestration and final sparse handoff out of `solve.py` into
+   `profile_response.sparse` owners, then delete or rename `sparse_pc.py`.
+2. Move residual/admission and setup/materialization blocks from `solve.py`
+   into `residual.py`, `setup.py`, `handoff.py`, and `solver_diagnostics.py`.
+3. Run the same focused RHSMode-1, sparse-PC, QI admission, ambipolar,
+   sensitivity, docs, and import-contract gates before starting Tranche C.

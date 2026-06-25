@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import jax.numpy as jnp
 
-from sfincs_jax.problems.profile_response.solve import (
+from sfincs_jax.problems.profile_response.dense import (
     ProfileLinearSolveContext,
     RHS1Constraint0PETScCompatSolveContext,
     RHS1DenseKSPFullSolveContext,

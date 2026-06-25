@@ -307,8 +307,8 @@ Current source size snapshot after the 2026-06-25 consolidation checkpoint:
 
 - `sfincs_jax/v3_driver.py`: 47 lines in the current consolidation worktree,
   acting as a compatibility shim for the domain-owned solve modules.
-- `sfincs_jax/problems/profile_response/solve.py`: 11,279 lines after the
-  mechanical `v3_driver.py` solve-entry extraction. This is now the largest
+- `sfincs_jax/problems/profile_response/solve.py`: 10,400 lines after the
+  first Tranche B solve-phase ownership moves. This remains the largest
   structural debt and must be reduced by moving coherent sections into existing
   domain owners, not by adding many new helper files.
 - `sfincs_jax/problems/profile_response/policies.py`: 6,380 lines after
@@ -318,6 +318,11 @@ Current source size snapshot after the 2026-06-25 consolidation checkpoint:
   absorbing sparse-PC Krylov execution helpers. Shared sparse-PC finalization
   remains in `problems/profile_response/sparse/finalization.py` because
   x-block and Fortran-reduced sparse owners both use the same result payloads.
+- `sfincs_jax/problems/profile_response/dense.py`: 2,487 lines after taking
+  ownership of profile linear-solve routing, dense-KSP, constraintScheme=0
+  PETSc-compatible sparse-ILU, and SciPy rescue contracts.
+- `sfincs_jax/problems/profile_response/auto_solve.py`: 550 lines after taking
+  ownership of the explicit host structured-CSR RHSMode-1 solve entry point.
 - `sfincs_jax/problems/transport_matrix/solve.py`: 1,763 lines after the
   RHSMode 2/3 solve-entry extraction.
 - `sfincs_jax/operators/profile_response/full_system.py`: about 6.0k
@@ -511,7 +516,7 @@ Current inventory from the 2026-06-25 consolidation checkpoint:
 | Area | Current state | Consolidation target |
 | --- | --- | --- |
 | `sfincs_jax/v3_driver.py` | 47-line compatibility shim in the current worktree | Keep under 80 lines or delete after imports migrate. |
-| `problems/profile_response` | 24 files, about 50k lines; file-count gate reached but `solve.py` is still 11.3k lines | At most 22 files; `solve.py` below 3.5k lines; sparse handoff and solve-phase orchestration moved into existing owners. |
+| `problems/profile_response` | 24 files, about 50k lines; file-count gate reached but `solve.py` is still 10.4k lines | At most 22 files; `solve.py` below 3.5k lines; sparse handoff and solve-phase orchestration moved into existing owners. |
 | `problems/profile_response/policies.py` | 6.4k lines after six policy shards were merged | Keep as the single policy owner for this pass; reduce duplicated env parsing while preserving behavior. |
 | `problems/profile_response/sparse_pc.py` and `sparse/` | `sparse_pc.py` is 3.8k lines; `sparse/xblock.py` is 4.5k; `sparse/qi.py` is 4.1k | Collapse sparse handoff by role: direct, x-block, QI, policy/finalization; delete or rename the top-level `sparse_pc.py` once callers move. |
 | `problems/transport_matrix` | 33 files, about 15k lines; many sub-700-line helper shards and 10 parallel micro-files | At most 22 files; one solve owner, one policy owner, one diagnostics/finalization owner, one compact parallel owner set. |
@@ -1310,6 +1315,14 @@ Completed on 2026-06-25:
   docs/API references. Focused validation passed with
   `526 passed in 39.20s`, scoped ruff passed, py_compile passed, and
   `python -m sphinx -W -b html docs docs/_build/html` passed.
+- Completed the second Lane 1 Tranche B consolidation checkpoint:
+  profile linear-solve routing, dense-KSP, constraintScheme=0 PETSc-compatible
+  sparse-ILU, and SciPy rescue contracts moved from
+  `profile_response.solve` into `profile_response.dense`; the explicit host
+  structured-CSR RHSMode-1 solve entry point moved into
+  `profile_response.auto_solve`. Focused validation passed with
+  `522 passed in 43.29s`, scoped ruff passed, py_compile passed, and Sphinx
+  `-W` passed.
 
 Next ordered implementation steps:
 
@@ -1317,10 +1330,10 @@ Next ordered implementation steps:
    focused validation gates remain clean. Do not start the next tranche with a
    dirty or failing checkpoint.
 2. Finish Tranche B in one large profile-response solve-phase move:
-   reduce `profile_response/solve.py` below 3.5k lines by moving setup,
-   residual/admission, sparse branch orchestration, final handoff, and
-   diagnostics into the existing owners named above. Delete or fold
-   `sparse_pc.py` after callers are migrated.
+   reduce `profile_response/solve.py` from `10.4k` lines below `3.5k` lines
+   by moving setup, residual/admission, sparse branch orchestration, final
+   handoff, and diagnostics into the existing owners named above. Delete or
+   fold `sparse_pc.py` after callers are migrated.
 3. Execute Tranche C as one transport/output consolidation: reduce
    `problems/transport_matrix` to at most 22 files, collapse the parallel
    subpackage to at most three implementation files, and move `io.py` below
