@@ -654,8 +654,12 @@ the historical private driver name and test the focused module directly. This ke
   PAS-TZ guard metadata, collision fallback admission, and optional BiCGStab
   preconditioner reuse. It also owns RHSMode=1 strong-preconditioner family
   mapping, full/reduced strong fallback builders, PAS-Schur to PAS-hybrid build
-  adjustment, ADI sweep parsing, and x-block TZ low-``l`` controls; the driver
-  injects only the current solve-local dispatch seam.
+  adjustment, ADI sweep parsing, and x-block TZ low-``l`` controls. It is also
+  the canonical owner of the current RHSMode=1 preconditioner registry and
+  legacy binding layer for dispatch, PAS-family builders, Schur binding,
+  transport ``tzfft`` reuse, x-block builders, and strong fallback binding; the
+  solve owner imports these names only as compatibility seams while Tranche 1
+  continues.
 - ``sfincs_jax/problems/profile_response/sparse/handoff.py``:
   RHSMode=1/profile-response sparse-PC handoff layer. It owns the
   driver-facing sparse-PC attempt orchestration that depends on solve-local
