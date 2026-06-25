@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from sfincs_jax.memory_model import (
+from sfincs_jax.solvers.memory_model import (
     bicgstab_work_nbytes,
     csr_matrix_nbytes,
     dense_matrix_nbytes,

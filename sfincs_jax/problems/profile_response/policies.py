@@ -12,10 +12,10 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax import solver_path_policy as _solver_path_policy
+from sfincs_jax.solvers import path_policy as _solver_path_policy
 from ...pas_smoother import pas_fast_accept as _pas_fast_accept_metric
 from sfincs_jax.explicit_sparse import SparseOperatorBundle
-from sfincs_jax.solver_selection_policy import (
+from sfincs_jax.solvers.selection_policy import (
     SolverAcceptanceCriteria,
     SolverCandidateGate,
     SolverCandidateMetrics,

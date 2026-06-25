@@ -15,7 +15,7 @@ import math
 import time
 from typing import Any
 
-from ...solver_selection_policy import (
+from ...solvers.selection_policy import (
     SolverAcceptanceCriteria,
     SolverCandidateMetrics,
     solver_candidate_gate,

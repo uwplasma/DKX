@@ -1,6 +1,6 @@
 """Mutable preconditioner context used by v3 solve auto-selection.
 
-The numerical policy decisions live in :mod:`sfincs_jax.solver_path_policy`.
+The numerical policy decisions live in :mod:`sfincs_jax.solvers.path_policy`.
 This module owns the small amount of runtime state that the v3 driver updates
 while it is building a solve: current operator size, geometry family, collision
 model, RHS mode, and electric-field magnitude. Keeping this state outside the
@@ -12,7 +12,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from . import solver_path_policy
+from .solvers import path_policy as solver_path_policy
 from .v3_system import _THRESHOLD_FOR_INCLUSION
 
 

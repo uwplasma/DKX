@@ -562,9 +562,9 @@ and memory-bounded.
 
 **Implementation.**
 
-- ``sfincs_jax.implicit_solve.linear_custom_solve`` and
+- ``sfincs_jax.solvers.implicit.linear_custom_solve`` and
   ``linear_custom_solve_with_residual``.
-- ``sfincs_jax.implicit_solve.implicit_solve_method_for_custom_linear_solve``
+- ``sfincs_jax.solvers.implicit.implicit_solve_method_for_custom_linear_solve``
   maps host-only CLI Krylov choices such as ``lgmres_scipy`` to traced-safe
   ``incremental`` GMRES before entering ``jax.lax.custom_linear_solve``.
 - Controlled by ``SFINCS_JAX_IMPLICIT_SOLVE``.
@@ -2804,7 +2804,7 @@ allocator settings can change when memory is reserved, but they do not by
 themselves replace dense intermediates, Krylov basis storage, or replicated
 preconditioner state.
 
-``sfincs_jax.memory_model`` provides a small conservative model for the dominant
+``sfincs_jax.solvers.memory_model`` provides a small conservative model for the dominant
 linear-solve terms:
 
 .. math::
@@ -2824,7 +2824,7 @@ where :math:`n` is the active unknown count, :math:`r` is the GMRES restart,
 :math:`M_\mathrm{pc}` / :math:`M_\mathrm{tmp}` are preconditioner and compiled
 temporary estimates when available. The GMRES restart cap in
 ``sfincs_jax.solver`` now uses this shared model, and
-``sfincs_jax.solver_selection_policy`` can compare candidate routes using paired
+``sfincs_jax.solvers.selection_policy`` can compare candidate routes using paired
 memory metrics in priority order: device peak memory, active RSS, compiled
 temporary memory, and finally legacy process peak RSS. This avoids promoting a
 route by comparing GPU device memory against CPU process RSS or by hiding a true

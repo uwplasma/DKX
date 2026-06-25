@@ -39,7 +39,7 @@ from ....problems.profile_response.policies import (
 )
 from sfincs_jax.problems.profile_response.policies import read_bool_env as _rhs1_bool_env
 from sfincs_jax.problems.profile_response.policies import read_float_env as _rhs1_float_env
-from ....sparse_triangular import (
+from sfincs_jax.solvers.sparse_triangular import (
     triangular_solve_lower_csr_rows as _triangular_solve_lower_csr_rows,
     triangular_solve_lower_padded as _triangular_solve_lower_padded,
     triangular_solve_upper_csr_rows as _triangular_solve_upper_csr_rows,

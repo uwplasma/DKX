@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from sfincs_jax import krylov_dispatch as kd
+from sfincs_jax.solvers import krylov_dispatch as kd
 
 
 def test_host_scipy_krylov_requested_and_labels() -> None:

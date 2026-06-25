@@ -10,7 +10,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from sfincs_jax.krylov_dispatch import ksp_iteration_solver_label
+from sfincs_jax.solvers.krylov_dispatch import ksp_iteration_solver_label
 from sfincs_jax.solver import (
     GMRESSolveResult,
     bicgstab_solve_with_history_scipy,

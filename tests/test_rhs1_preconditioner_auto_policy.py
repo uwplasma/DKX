@@ -24,7 +24,7 @@ from sfincs_jax.problems.profile_response.policies import (
     rhs1_pas_weak_auto_override_kind,
     rhs1_sharded_line_override_allowed,
 )
-from sfincs_jax.solver_selection_policy import SolverCandidateMetrics
+from sfincs_jax.solvers.selection_policy import SolverCandidateMetrics
 
 
 def test_canonical_rhs1_preconditioner_kind_preserves_driver_aliases() -> None:

@@ -3072,7 +3072,7 @@ Steps taken:
 4. Moved implicit/differentiable solve-mode selection into
    `sfincs_jax/problems/profile_response/policies.py`.
 5. Merged pure duration/runtime/progress-threshold helpers into
-   `sfincs_jax/solver_progress.py`.
+   `sfincs_jax/solvers/progress.py`.
 6. Moved benchmark/audit phase timing into
    `sfincs_jax/validation_artifacts.py`.
 7. Rewrote source, script, docs, and focused-test imports to use canonical
@@ -3095,7 +3095,7 @@ Validation:
   sfincs_jax/problems/profile_response/solve.py
   sfincs_jax/problems/profile_response/phi1_newton.py
   sfincs_jax/problems/transport_matrix/solve.py
-  sfincs_jax/solver_progress.py
+  sfincs_jax/solvers/progress.py
   sfincs_jax/validation_artifacts.py
   tests/test_solver_runtime.py
   tests/test_matrix_reductions.py
@@ -3110,7 +3110,7 @@ Validation:
   sfincs_jax/problems/profile_response/solve.py
   sfincs_jax/problems/profile_response/phi1_newton.py
   sfincs_jax/problems/transport_matrix/solve.py
-  sfincs_jax/solver_progress.py
+  sfincs_jax/solvers/progress.py
   sfincs_jax/validation_artifacts.py` passed.
 - Focused helper tests passed:
   `python -m pytest
@@ -3427,3 +3427,61 @@ Next best steps:
    move from `io.py` into `outputs`.
 2. After root count is near the `<=55` target, execute Tranche B as the large
    `profile_response/solve.py` cut.
+
+## 2026-06-25 Lane 1 Tranche A Solver-Utility Root Disposition
+
+Steps taken:
+
+1. Moved ten root solver utility modules into `sfincs_jax.solvers` without
+   compatibility shims:
+   `path_policy.py`, `profile_compare.py`, `progress.py`,
+   `selection_policy.py`, `state.py`, `trace.py`, `krylov_dispatch.py`,
+   `implicit.py`, `memory_model.py`, and `sparse_triangular.py`.
+2. Updated source, tests, examples, scripts, docs, and release/validation
+   manifests to canonical `sfincs_jax.solvers.*` imports or source paths.
+3. Patched internal relative imports in IO/output/profile-response/PAS/x-block
+   owners that still referenced the old root modules.
+
+Current inventory:
+
+- Package Python files: `212` (unchanged because files moved, not merged).
+- Package-root Python files: `60` (down from `70`).
+- `sfincs_jax.solvers`: `11` top-level Python files including `__init__.py`,
+  plus preconditioner subpackages.
+
+Validation:
+
+- Scoped `ruff` passed for moved solver modules and touched source owners.
+- `python -m py_compile` passed for moved solver modules and touched source
+  owners.
+- Focused solver/preconditioner tests passed:
+  `python -m pytest tests/test_implicit_linear_solve_grad.py
+  tests/test_sparse_triangular.py tests/test_solver_trace.py
+  tests/test_solver_trace_output_formats.py tests/test_solver_state_history.py
+  tests/test_solver_progress.py tests/test_solver_progress_policy.py
+  tests/test_solver_path_policy.py tests/test_solver_selection_policy.py
+  tests/test_solver_profile_compare.py tests/test_memory_model.py
+  tests/test_krylov_dispatch.py tests/test_runtime_helper_coverage.py
+  tests/test_solver_heavy_helper_coverage.py
+  tests/test_rhs1_preconditioner_auto_policy.py tests/test_rhs1_handoff.py
+  tests/test_io_export_and_h5_coverage.py tests/test_profile_response_sparse_pc.py
+  -q --tb=short`
+  with `515 passed in 8.03 s`.
+- Stale import audit found no remaining imports of the deleted root solver
+  utility modules.
+
+Current lane status:
+
+- Lane 1 Tranche A: root module count is now `60`, five above the `<=55`
+  final target. Remaining root-disposition candidates are output ownership
+  (`io.py` into `outputs`) and heavier solver/preconditioner implementation
+  modules (`explicit_sparse*`, `preconditioner_*`, `native_block_factor.py`).
+- Lane 1 overall: about `69%`.
+
+Next best steps:
+
+1. Finish the root-count target with one more coherent move: either start
+   `io.py -> outputs` ownership or move the remaining solver implementation
+   family into `solvers`.
+2. Once root count reaches `<=55`, start Tranche B and cut
+   `profile_response/solve.py`.

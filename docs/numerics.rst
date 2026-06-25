@@ -192,7 +192,7 @@ The most important numerical modules are:
   rescues, parallel transport execution.
 - ``sfincs_jax/residual.py``: residual and right-hand-side evaluation.
 - ``sfincs_jax/solver.py``: linear-solver wrappers and Krylov helpers.
-- ``sfincs_jax/implicit_solve.py``: differentiable linear solve path.
+- ``sfincs_jax/solvers/implicit.py``: differentiable linear solve path.
 - ``sfincs_jax/collisions.py``: PAS and full FP operator kernels.
 - ``sfincs_jax/grids.py`` and ``sfincs_jax/xgrid.py``: collocation grids, quadrature,
   modal transforms.

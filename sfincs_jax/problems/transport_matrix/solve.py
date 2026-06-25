@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import jax.numpy as jnp
 
-from sfincs_jax.implicit_solve import linear_custom_solve, linear_custom_solve_with_residual
+from sfincs_jax.solvers.implicit import linear_custom_solve, linear_custom_solve_with_residual
 from sfincs_jax.solver import (
     GMRESSolveResult,
     bicgstab_solve_with_residual,
@@ -1740,7 +1740,7 @@ def solve_v3_transport_matrix_linear_gmres(
     transport_output_fields = postsolve_diagnostics.transport_output_fields
     if state_out_env:
         try:
-            from sfincs_jax.solver_state import save_krylov_state  # noqa: PLC0415
+            from sfincs_jax.solvers.state import save_krylov_state  # noqa: PLC0415
 
             save_krylov_state(path=state_out_env, op=op0, x_by_rhs=state_vectors)
         except Exception:

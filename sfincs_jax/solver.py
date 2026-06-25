@@ -35,7 +35,7 @@ from scipy.sparse.linalg import bicgstab as _scipy_bicgstab
 from scipy.sparse.linalg import gcrotmk as _scipy_gcrotmk
 from scipy.sparse.linalg import lgmres as _scipy_lgmres
 
-from .memory_model import gmres_restart_for_budget
+from .solvers.memory_model import gmres_restart_for_budget
 
 
 @jtu.register_pytree_node_class

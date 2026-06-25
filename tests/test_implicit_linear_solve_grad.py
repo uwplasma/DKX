@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.implicit_solve import (
+from sfincs_jax.solvers.implicit import (
     gmres_custom_linear_solve,
     implicit_solve_method_for_custom_linear_solve,
     linear_custom_solve,

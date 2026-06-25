@@ -21,7 +21,7 @@ from ....preconditioner_setup import (
     rhs_mode1_precond_cache_key,
 )
 from ....problems.profile_response.residual import safe_preconditioner
-from ....sparse_triangular import (
+from sfincs_jax.solvers.sparse_triangular import (
     inverse_permutation,
     triangular_solve_lower_padded,
     triangular_solve_upper_padded,

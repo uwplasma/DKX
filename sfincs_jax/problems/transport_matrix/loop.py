@@ -11,7 +11,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from sfincs_jax.solver import recycled_initial_guess
-from sfincs_jax.solver_progress import transport_progress_message
+from sfincs_jax.solvers.progress import transport_progress_message
 from sfincs_jax.problems.transport_matrix.residual_quality import transport_residual_gate_failure
 from sfincs_jax.v3_system import _operator_signature_cached, apply_v3_full_system_operator_cached
 

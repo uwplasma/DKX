@@ -42,7 +42,7 @@ from ..residual import (
     residual_converged as profile_residual_converged,
     safe_ratio as profile_safe_ratio,
 )
-from ....memory_model import (
+from sfincs_jax.solvers.memory_model import (
     bicgstab_work_nbytes,
     gmres_basis_nbytes,
     tfqmr_work_nbytes,

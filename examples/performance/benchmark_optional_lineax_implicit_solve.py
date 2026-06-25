@@ -45,7 +45,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.implicit_solve import linear_custom_solve  # noqa: E402
+from sfincs_jax.solvers.implicit import linear_custom_solve  # noqa: E402
 from sfincs_jax.namelist import read_sfincs_input  # noqa: E402
 from sfincs_jax.petsc_binary import read_petsc_vec  # noqa: E402
 from sfincs_jax.v3_system import (  # noqa: E402

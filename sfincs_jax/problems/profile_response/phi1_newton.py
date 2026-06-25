@@ -20,7 +20,7 @@ from ...host_refinement import (
     host_sparse_direct_polish,
     host_sparse_direct_solve_with_refinement,
 )
-from ...krylov_dispatch import gmres_solve_dispatch
+from ...solvers.krylov_dispatch import gmres_solve_dispatch
 from ...namelist import Namelist
 from ...phi1_newton_linear import (
     build_phi1_newton_preconditioner,

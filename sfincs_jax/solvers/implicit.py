@@ -8,7 +8,7 @@ import jax
 import jax.numpy as jnp
 from jax import tree_util as jtu
 
-from .solver import GMRESSolveResult, bicgstab_solve, bicgstab_solve_jit, gmres_solve, gmres_solve_jit
+from ..solver import GMRESSolveResult, bicgstab_solve, bicgstab_solve_jit, gmres_solve, gmres_solve_jit
 
 
 MatVec = Callable[[jnp.ndarray], jnp.ndarray]

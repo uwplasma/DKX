@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import pytest
 
 import sfincs_jax.solver as solver
-from sfincs_jax.memory_model import gmres_basis_nbytes
+from sfincs_jax.solvers.memory_model import gmres_basis_nbytes
 from sfincs_jax.solver import (
     _distributed_gmres_axis,
     _maybe_limit_restart,

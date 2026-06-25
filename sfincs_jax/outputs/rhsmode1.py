@@ -16,8 +16,8 @@ from typing import Any
 
 import numpy as np
 
-from ..memory_model import estimate_linear_solve_memory
-from ..solver_trace import SolverTrace, write_solver_trace_json
+from ..solvers.memory_model import estimate_linear_solve_memory
+from ..solvers.trace import SolverTrace, write_solver_trace_json
 
 
 def _rhs1_active_size_for_trace(op: Any) -> int | None:

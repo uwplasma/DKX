@@ -13,8 +13,8 @@ import jax.scipy.linalg as jla
 import jax.numpy as jnp
 import numpy as np
 
-from ...implicit_solve import linear_custom_solve, linear_custom_solve_with_residual
-from ...krylov_dispatch import gmres_solve_dispatch, rhs_krylov_method_for_context
+from ...solvers.implicit import linear_custom_solve, linear_custom_solve_with_residual
+from ...solvers.krylov_dispatch import gmres_solve_dispatch, rhs_krylov_method_for_context
 from ...solver import (
     GMRESSolveResult,
     assemble_dense_matrix_from_matvec,

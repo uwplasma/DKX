@@ -342,10 +342,10 @@ and the first transport-parallel consolidation:
 - Top-level `transport_*` modules: 0 after Lane 1 Iteration 1.
 - Top-level `rhs1_*` modules: 0 after the Lane 1 Iteration 3 ownership move.
   Solver-family implementation now lives under `solvers.preconditioners`.
-- Package total is 212 Python files, 70 package-root files, and 163,301
+- Package total is 212 Python files, 60 package-root files, and 163,301
   package lines after the first two root cleanup passes and the first
   transport-parallel consolidation, plus the first Tranche A validation-domain
-  and workflow-domain root-disposition moves. The root cleanups
+  workflow-domain, and solver-utility root-disposition moves. The root cleanups
   deleted the obsolete root modules `solver_runtime.py`,
   `matrix_reductions.py`, `solve_mode_policy.py`,
   `solver_progress_policy.py`, `phase_timing.py`, `linear_algebra.py`,
@@ -360,6 +360,11 @@ and the first transport-parallel consolidation:
   `qi_device_artifact_policy.py` under `sfincs_jax.validation`.
   The workflow-domain move placed `optimization_*`, `mapped_xgrid_*`, and
   `qi_res15_gpu_campaign.py` under `sfincs_jax.workflows`.
+  The solver-utility move placed `solver_path_policy.py`,
+  `solver_profile_compare.py`, `solver_progress.py`,
+  `solver_selection_policy.py`, `solver_state.py`, `solver_trace.py`,
+  `krylov_dispatch.py`, `implicit_solve.py`, `memory_model.py`, and
+  `sparse_triangular.py` under `sfincs_jax.solvers`.
 - Current concentration of complexity:
   `problems/profile_response` has 21 files and about 50k lines,
   `problems/transport_matrix` has 28 files and about 15k lines,
@@ -371,7 +376,7 @@ Useful existing assets:
 
 - JAX-native residual/operator code already exists for large portions of the
   v3 model.
-- `sfincs_jax/implicit_solve.py` already wraps `jax.lax.custom_linear_solve`
+- `sfincs_jax/solvers/implicit.py` already wraps `jax.lax.custom_linear_solve`
   for implicit differentiation through linear solves.
 - `sfincs_jax/problems/profile_response/phi1_newton.py` already uses
   `jax.linearize` to build Newton-Krylov JVPs.
@@ -546,7 +551,7 @@ Current inventory from the 2026-06-25 final consolidation review:
 | --- | --- | --- |
 | `sfincs_jax/v3_driver.py` | 47-line compatibility shim | Keep below 80 lines or delete after legacy imports migrate. |
 | Package source files | 212 Python files, 163,301 package lines | At most 200 files and fewer total source lines. |
-| Package-root modules | 70 Python files at package root | At most 55 root files; implementation belongs in domain packages. |
+| Package-root modules | 60 Python files at package root | At most 55 root files; implementation belongs in domain packages. |
 | `problems/profile_response` | 21 files, about 50k lines; `solve.py` is 9,411 lines | At most 16 files; `solve.py` below 3,500 lines. |
 | `problems/transport_matrix` | 28 files, about 15k lines | At most 16 files; no policy or postsolve micro-files. |
 | `problems/transport_matrix/parallel` | `runtime.py`, `policy.py`, `sharding.py`, `worker.py` plus `__init__.py` | At most 3 implementation files; merge or justify `policy.py`. |
@@ -563,7 +568,7 @@ Final package shape for this pass:
 | `sfincs_jax.geometry`, `sfincs_jax.discretization` | Geometry loading/adapters, grids, radial coordinates, quadrature | `grids.py`, `xgrid.py`, simple geometry adapters if import audits allow | Avoid new wrapper files; do not split stable physics kernels only to reduce line counts. |
 | `sfincs_jax.operators` | Drift-kinetic residual/operator/source/Phi1 blocks | Remaining `v3_system.py`, `v3_fblock.py`, `v3_sparse_pattern.py` implementation details after callers migrate | Keep temporary `v3_*` shims only with deletion notes and import tests. |
 | `sfincs_jax.problems` | Problem orchestration, solver-policy admission, residual certificates, diagnostics contracts | Profile-response and transport phase sequencing only | No low-level sparse factors, output writers, duplicated parser helpers, or campaign scripts. |
-| `sfincs_jax.solvers` | Krylov, direct/native factors, preconditioners, solver state/progress/trace | `explicit_sparse*`, `preconditioner_*`, `native_block_factor.py`, `solver_*`, `krylov_dispatch.py`, `implicit_solve.py`, `sparse_triangular.py` | Root solver modules become shims or disappear. |
+| `sfincs_jax.solvers` | Krylov, direct/native factors, preconditioners, solver state/progress/trace | Remaining root solver implementation modules such as `explicit_sparse*`, `preconditioner_*`, and `native_block_factor.py` | Root solver modules become shims or disappear. |
 | `sfincs_jax.outputs` | HDF5/netCDF/NPZ formats, output caches, plotting payloads, streaming transport output | Most of `io.py` and `problems/transport_matrix/streaming_outputs.py` | `sfincs_jax.io` must be a thin compatibility layer or deleted. |
 | `sfincs_jax.workflows`, `sfincs_jax.validation` | Optimization, radial scans, evidence/figures, benchmark gates, artifact policies | `optimization_*`, `mapped_xgrid_*`, `validation_*`, research-lane policy modules | Delete one-off campaign modules after docs/tests no longer import them. |
 
@@ -695,12 +700,8 @@ Output and root actions:
    `outputs/rhsmode1.py`, `outputs/transport.py`, and `outputs/cache.py`.
 3. Leave `sfincs_jax.io` as a shim below 800 lines only if external callers or
    import-contract tests require it.
-4. Move root solver utilities into `solvers`:
-   `solver_path_policy.py`, `solver_profile_compare.py`,
-   `solver_selection_policy.py`, `solver_state.py`, `solver_trace.py`,
-   `solver_progress.py`, `krylov_dispatch.py`, `implicit_solve.py`,
-   `memory_model.py`, `explicit_sparse*`, `preconditioner_*`,
-   `native_block_factor.py`, and `sparse_triangular.py`.
+4. Move remaining root solver implementation modules into `solvers`:
+   `explicit_sparse*`, `preconditioner_*`, and `native_block_factor.py`.
 5. Move any remaining root workflow/evidence modules into `workflows` or
    `validation`, or
    delete them if current docs artifacts and tests no longer import them:
@@ -1355,10 +1356,12 @@ Current completion status:
   artifact-policy modules into `sfincs_jax.validation`, reducing package-root
   files from 85 to 79. The second Tranche A root-disposition checkpoint moved
   nine optimization, mapped-xgrid, and QI campaign modules into
-  `sfincs_jax.workflows`, reducing package-root files to 70. The remaining
-  large blockers are `profile_response/solve.py`, the rest of transport/output
-  consolidation, solver/preconditioner naming, and `io.py` ownership. The next
-  work follows Lane 1 Tranches A-E only.
+  `sfincs_jax.workflows`, reducing package-root files to 70. The third Tranche
+  A checkpoint moved ten solver utility modules into `sfincs_jax.solvers`,
+  reducing package-root files to 60. The remaining large blockers are
+  `profile_response/solve.py`, the rest of transport/output consolidation,
+  solver/preconditioner naming, and `io.py` ownership. The next work follows
+  Lane 1 Tranches A-E only.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.

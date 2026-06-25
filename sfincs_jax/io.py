@@ -60,8 +60,8 @@ from .outputs.rhsmode1 import (
     _solver_trace_memory_estimate,
     _write_nonconverged_rhsmode1_solver_trace_json,
 )
-from .solver_trace import SolverTrace, write_solver_trace_json
-from .solver_progress import format_duration, runtime_scale_hint
+from .solvers.trace import SolverTrace, write_solver_trace_json
+from .solvers.progress import format_duration, runtime_scale_hint
 from .vmec_wout import _set_scale_factor, psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
 from .v3 import V3Grids, geometry_from_namelist, grids_from_namelist
 

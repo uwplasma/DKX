@@ -70,7 +70,7 @@ from sfincs_jax.solvers.preconditioners.domain_decomposition.line_blocks import 
     _rhs1_dd_coarse_block_sizes,
     _rhs1_dd_coarse_level_count,
 )
-from sfincs_jax.memory_model import estimate_sparse_pc_memory
+from sfincs_jax.solvers.memory_model import estimate_sparse_pc_memory
 from sfincs_jax.solvers.preconditioners.pas.policy import (
     build_pas_tz_memory_fallback,
     estimate_rhs1_pas_tz_build_bytes as _estimate_rhs1_pas_tz_build_bytes,
@@ -630,7 +630,7 @@ from sfincs_jax.problems.profile_response.policies import (
     rhs1_stage2_trigger,
     rhs1_stage2_trigger_decision,
 )
-from sfincs_jax import solver_path_policy as _solver_path_policy
+from sfincs_jax.solvers import path_policy as _solver_path_policy
 from sfincs_jax.problems.profile_response.policies import (
     host_sparse_factor_dtype_current_backend as _host_sparse_factor_dtype,
     host_sparse_direct_refine_steps as _host_sparse_direct_refine_steps_impl,
@@ -746,7 +746,7 @@ from sfincs_jax.phi1_newton_linear import (
     solve_phi1_newton_linear_step,
 )
 from sfincs_jax.problems.profile_response.phi1_newton import advance_phi1_newton_iterate
-from sfincs_jax.solver_progress import (
+from sfincs_jax.solvers.progress import (
     RHS1ProgressNotes,
     rhs1_large_progress_enabled,
 )
@@ -774,7 +774,7 @@ from sfincs_jax.preconditioner_operators import (
     _build_transport_preconditioner_operator_fortran_reduced,
     _build_transport_preconditioner_operator_point,
 )
-from sfincs_jax.sparse_triangular import (
+from sfincs_jax.solvers.sparse_triangular import (
     inverse_permutation as _inverse_permutation,
     triangular_solve_lower_csr_rows as _triangular_solve_lower_csr_rows,
     triangular_solve_lower_padded as _triangular_solve_lower_padded,
@@ -788,7 +788,7 @@ from sfincs_jax.preconditioner_setup import (
     rhs_mode1_structured_fblock_cache_key as _rhs_mode1_structured_fblock_cache_key_impl,
     transport_precond_cache_key as _transport_precond_cache_key_impl,
 )
-from sfincs_jax.krylov_dispatch import (
+from sfincs_jax.solvers.krylov_dispatch import (
     HOST_SCIPY_KRYLOV_METHODS as _HOST_SCIPY_KRYLOV_METHODS,
     gmres_solve_dispatch as _gmres_solve_dispatch_impl,
     gmres_solve_with_residual_dispatch as _gmres_solve_with_residual_dispatch_impl,

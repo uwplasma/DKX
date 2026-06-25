@@ -17,7 +17,7 @@ from pathlib import Path
 import jax
 import jax.numpy as jnp
 
-from sfincs_jax.implicit_solve import gmres_custom_linear_solve
+from sfincs_jax.solvers.implicit import gmres_custom_linear_solve
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.v3_system import (
     apply_v3_full_system_operator,

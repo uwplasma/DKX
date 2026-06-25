@@ -14,8 +14,8 @@ from typing import Any
 
 import jax
 
-from .preconditioner_context import use_solver_jit
-from .solver import (
+from ..preconditioner_context import use_solver_jit
+from ..solver import (
     distributed_gmres_enabled,
     gmres_solve,
     gmres_solve_distributed,
@@ -24,7 +24,7 @@ from .solver import (
     gmres_solve_with_residual_distributed,
     gmres_solve_with_residual_jit,
 )
-from .v3_system import _matvec_shard_axis, sharding_constraints
+from ..v3_system import _matvec_shard_axis, sharding_constraints
 
 
 HOST_SCIPY_KRYLOV_METHODS = frozenset({"lgmres", "lgmres_scipy"})
