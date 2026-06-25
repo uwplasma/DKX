@@ -525,6 +525,11 @@ JAX-native performance patterns used in `sfincs_jax`
   size-limited dense RHSMode-1 builder for validation gates that assembles
   ``A``, ``b``, finite-differences ``A_p`` and ``b_p``, and then reuses the same
   certificate machinery.
+- **Gate JVP/VJP adjoints with dot products**:
+  ``sfincs_jax.sensitivity.adjoint_dot_product_check`` verifies
+  ``<JVP(dp), y> = <dp, VJP(y)>``. The test suite applies this to a real
+  RHSMode-1 radial-current diagnostic, which is the same adjoint identity needed
+  by the RHSMode 4/5 sensitivity lane.
 - **Default to short-recurrence Krylov for transport**: BiCGStab avoids storing a full GMRES basis and
   is therefore far more memory efficient for large RHSMode=2/3 systems. GMRES remains available and is
   used as a fallback when BiCGStab stagnates; transport-matrix solves default to BiCGStab with the
