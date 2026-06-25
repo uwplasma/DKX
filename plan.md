@@ -30,6 +30,11 @@ deferred research lanes.
   4/5 sensitivities, solver backends, geometry/Phi1 compatibility, outputs, and
   parallelism so the refactor PR has a single review anchor for parity and
   deferred functionality.
+- Ambipolar Fortran-v3 profile-summary replay gates now cover option-1
+  safeguarded Newton/bisection and option-3 pure Newton on the small helical
+  sequence, and the production metadata gate checks solver-count proxies,
+  adjoint-solve counts, RSS bounds, PETSc marker provenance, and physical
+  residual/success-marker separation without running Fortran in CI.
 - Major RHSMode=1 preconditioner families now have domain owners:
   - full-CSR Schur preconditioners,
   - Fortran-reduced symbolic sparse factors,

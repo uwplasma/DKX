@@ -949,36 +949,33 @@ Completed on 2026-06-25:
   `docs/feature_matrix.rst`.
 - Added the matching `sfincs_jax` status matrix and linked it from the Sphinx
   index.
+- Added sfincs_jax replay tests for the small helical option-1 and option-3
+  sequences, plus a production metadata test for solver-count proxies, RSS
+  bounds, PETSc marker provenance, adjoint solve counts, and residual/marker
+  separation without running Fortran in CI.
 
 Next ordered implementation steps:
 
-1. Use `small_profile_summary_2026-06-23.json` and
-   `production_profile_summary_2026-06-23.json` as the first implementation
-   gates for the sfincs_jax ambipolar driver. The older 2026-06-22 summaries
-   remain historical hand-normalized probes.
-2. Add sfincs_jax replay tests for the new small helical option-1 and option-3
-   sequences, and add a production metadata test that checks solver counts,
-   RSS bounds, and marker/residual separation without running Fortran in CI.
-3. Extract the public `api` contracts before moving more internals.
-4. Add fixed-shape numerical operator/preconditioner setup reuse behind the real
+1. Extract the public `api` contracts before moving more internals.
+2. Add fixed-shape numerical operator/preconditioner setup reuse behind the real
    in-process RHSMode 1 ambipolar evaluator. Geometry/output caching, Krylov
    state reuse, symbolic field-split ordering reuse, and trace provenance are
    already in place.
-5. Promote the small-deck dense RHSMode-1 derivative gate to a sparse/matrix-free
+3. Promote the small-deck dense RHSMode-1 derivative gate to a sparse/matrix-free
    production builder with analytic or JVP-backed `Er` operator/RHS derivatives.
    The generic certificate, builder bridge, magnetic-drift radial-current
    observable, coordinate conversion, finite-difference derivative contract, and
    Newton root solvers are already in place. Remaining work is production
    operator derivatives plus Phi1 drift-current branches.
-6. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
+4. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
    set to Phi1 drift-current, total heat-flux, and intermediate-grid cases.
-7. Wire the exact derivative into safeguarded Newton/bisection and pure Newton
+5. Wire the exact derivative into safeguarded Newton/bisection and pure Newton
    for Fortran option 1/3 physical parity gates.
-8. Define residual/operator/transpose operator protocol and migrate one
+6. Define residual/operator/transpose operator protocol and migrate one
    RHSMode 2/3 path to it.
-9. Add one T3D/NEOPAX-style closure example with fixed geometry and radial
+7. Add one T3D/NEOPAX-style closure example with fixed geometry and radial
    profile inputs.
-10. Run focused tests, docs build, commit, and push after each coherent owner
+8. Run focused tests, docs build, commit, and push after each coherent owner
     boundary or feature milestone.
 
 ## Known Risks And Explicit Deferred Items

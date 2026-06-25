@@ -193,7 +193,34 @@ def test_new_profile_summary_replays_geometry1_pure_newton_sequence() -> None:
     np.testing.assert_allclose(calls, er_values, rtol=0.0, atol=1.0e-10)
 
 
-def test_new_profile_summaries_preserve_solver_counts_and_marker_residual_split() -> None:
+def test_new_profile_summary_replays_geometry1_safeguarded_newton_sequence() -> None:
+    """The helical option-1 profile pins the safeguarded Newton/bisection owner."""
+
+    case = _profile_case("small_profile_summary_2026-06-23.json", "geometry1_helical_small_option1")
+    er_values, currents = _nonzero_reference_pairs(case)
+    evaluate, calls = _table_evaluator({"er_values": er_values, "radial_currents": currents}, atol=1.0e-10)
+
+    result = safeguarded_newton_ambipolar_root(
+        evaluate,
+        _newton_derivative_replay_provider(er_values, currents),
+        er_min=-20.0,
+        er_max=20.0,
+        er_initial=0.0,
+        max_evaluations=8,
+        current_tolerance=1.0e-7,
+        step_tolerance=1.0e-6,
+    )
+
+    assert result.converged
+    assert result.method == "safeguarded_newton"
+    assert result.metadata["derivative_count"] == 1
+    assert result.metadata["fallback_count"] == 0
+    np.testing.assert_allclose(result.er_values, er_values, rtol=0.0, atol=1.0e-10)
+    np.testing.assert_allclose(result.radial_currents, currents, rtol=0.0, atol=1.0e-18)
+    np.testing.assert_allclose(calls, er_values, rtol=0.0, atol=1.0e-10)
+
+
+def test_new_profile_summaries_preserve_solver_counts_rss_bounds_and_marker_residual_split() -> None:
     """Reference summaries distinguish physical residuals from Fortran success markers."""
 
     small = json.loads((REFERENCE_ROOT / "small_profile_summary_2026-06-23.json").read_text())
@@ -204,10 +231,27 @@ def test_new_profile_summaries_preserve_solver_counts_and_marker_residual_split(
     for payload in (small, production):
         for case in payload["cases"]:
             parsed = case["parsed"]
+            case_name = str(case["case"])
+            expected_solves = len(_nonzero_reference_pairs(parsed)[0])
             assert parsed["solver_packages"] == ["mumps"]
             assert parsed["petsc_profile_markers"]["ksp_view"] is True
+            assert parsed["petsc_profile_markers"]["pc_view"] is True
+            assert isinstance(parsed["petsc_profile_markers"]["log_view"], bool)
             assert parsed["max_rss_bytes"] is not None
+            assert len(parsed["main_solve_times_s"]) == expected_solves
+            assert len(parsed["jacobian_nnz"]) == expected_solves
+            assert len(parsed["preconditioner_nnz"]) == expected_solves
             assert max(parsed["jacobian_nnz"] or [0]) > 0
+            if case_name.endswith("option2"):
+                assert parsed["adjoint_solve_times_s"] == []
+            else:
+                assert len(parsed["adjoint_solve_times_s"]) == expected_solves
+            if payload["tier"] == "small":
+                assert parsed["max_rss_bytes"] < 250_000_000
+            elif "geometry1_helical" in case_name:
+                assert parsed["max_rss_bytes"] < 6_500_000_000
+            else:
+                assert parsed["max_rss_bytes"] < 1_700_000_000
 
     helical_brent = _profile_case(
         "production_profile_summary_2026-06-23.json",
