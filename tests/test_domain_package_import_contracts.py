@@ -42,6 +42,8 @@ ACTIVE_PACKAGE_EXPORTS = {
         "SfincsJaxRadialCurrentEvaluator",
         "brent_ambipolar_root",
         "dense_rhs1_vm_radial_current_linear_observable_system",
+        "dphi_hat_dpsi_hat_er_derivative_from_namelist",
+        "er_operator_tangent_from_dphi_hat_dpsi_hat_derivative",
         "finite_difference_radial_current_derivative",
         "implicit_linear_radial_current_derivative",
         "implicit_linear_radial_current_derivative_from_builder",
