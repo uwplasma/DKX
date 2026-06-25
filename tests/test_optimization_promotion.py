@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from sfincs_jax.io import write_sfincs_h5
-from sfincs_jax.optimization_promotion import evaluate_sfincs_scan_promotion
+from sfincs_jax.workflows.optimization_promotion import evaluate_sfincs_scan_promotion
 
 
 _REPO = Path(__file__).resolve().parents[1]
