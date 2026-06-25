@@ -68,6 +68,13 @@ Unreleased
   keeps zero-field ``E_r`` branches for fixed-shape derivative gates, reuses
   the analytic/JVP operator tangent path, and is covered by a real small-deck
   implicit derivative versus centered finite-difference test.
+- The namelist-backed RHSMode=1 response now uses a Fortran-style active
+  pitch-mode dense validation path for small decks, defaults to the Fortran
+  ambipolar ``particleFlux_vm_rN`` current convention, and infers radial
+  conversion factors from the namelist. A checked
+  ``geometry1_helical_small_option1`` regression now reproduces the Fortran v3
+  option-1 current and Newton ``dJ_r/dE_r`` slope within ``2e-5`` relative
+  tolerance.
 - Moved the first RHSMode=2/3 transport implementation cluster into
   ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old
