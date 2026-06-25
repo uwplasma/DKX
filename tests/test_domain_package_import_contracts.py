@@ -287,8 +287,8 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "resolve_transport_initial_solve_policy",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.linear_solve",
-        "sfincs_jax.problems.transport_matrix.linear_solve",
+        "sfincs_jax.problems.transport_matrix.solve",
+        "sfincs_jax.problems.transport_matrix.solve",
         "solve_transport_linear_with_residual",
     ),
     (

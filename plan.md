@@ -1,4 +1,4 @@
-# SFINCS_JAX Refactor And Release-Readiness Plan
+# SFINCS_JAX Refactor And Release-Readiness Execution Log
 
 Last updated: 2026-06-25 (America/Chicago)
 
@@ -10,6 +10,10 @@ PR state: draft. The active implementation branch has been pushed to the PR
 branch at the latest clean commit. Do not open additional refactor PRs; keep PR
 #8 as the single review surface until this plan reaches the review-ready
 boundary.
+
+Authoritative plan: `plan_final.md`. This file is the execution log and
+historical record only; if this file conflicts with `plan_final.md`, follow
+`plan_final.md`.
 
 ## One-Sentence Plan
 
@@ -2457,3 +2461,87 @@ Next best steps:
 3. After Iteration 4, execute Lane 1 Iteration 5 once: dead-code pruning,
    docs/API cleanup, final count checks, focused physics/refactor tests, docs
    build, and one CI-equivalent local validation pass.
+
+## 2026-06-25 Lane 1 Tranche A Planning And Solve-Entry Extraction Checkpoint
+
+Steps taken:
+
+1. Re-inventoried the package after the driver extraction and confirmed the
+   current structural debt has moved from `v3_driver.py` into larger domain
+   owners rather than disappearing.
+2. Moved the legacy profile-response solve entry point into
+   `sfincs_jax.problems.profile_response.solve`.
+3. Moved the legacy RHSMode 2/3 transport solve entry point into
+   `sfincs_jax.problems.transport_matrix.solve`.
+4. Absorbed the old low-level profile-response and transport
+   `linear_solve.py` implementations into their solve owners and queued those
+   two files for deletion.
+5. Replaced `sfincs_jax.v3_driver` with a small compatibility shim that aliases
+   the profile-response solve owner and injects the transport solve entry
+   points for legacy imports.
+6. Rewrote `plan_final.md` so it is the single authoritative plan. Lane 1 now
+   has four finite consolidation tranches: solve-entry boundary, profile-
+   response collapse, transport/output collapse, and solver/preconditioner
+   review hardening.
+
+Current inventory:
+
+- Package Python files: `239`.
+- Top-level `rhs1_*` files: `0`.
+- Top-level `transport_*` files: `0`.
+- `sfincs_jax/v3_driver.py`: `47` lines.
+- `sfincs_jax/problems/profile_response/solve.py`: `11,279` lines.
+- `sfincs_jax/problems/transport_matrix/solve.py`: `1,763` lines.
+- `problems/profile_response`: `33` Python files and about `50k` lines.
+- `problems/transport_matrix`: `33` Python files and about `15k` lines.
+- `solvers/preconditioners`: `50` Python files and about `37k` lines.
+
+Validation so far:
+
+- `python -m py_compile sfincs_jax/v3_driver.py
+  sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/transport_matrix/solve.py
+  sfincs_jax/problems/profile_response/*.py
+  sfincs_jax/problems/transport_matrix/*.py` passed.
+- Import smoke confirmed `sfincs_jax.v3_driver` resolves to the
+  profile-response solve owner and that the profile-response and transport
+  solve entry points have domain-owned `__module__` values.
+- Focused CLI/import/profile/transport tests passed with
+  `86 passed in 35.14 s`.
+- Focused transport/profile solve tests passed with
+  `71 passed in 22.12 s`.
+- Legacy helper compatibility tests passed with `101 passed in 25.14 s`.
+- Broad RHSMode-1 sparse-pattern sweep passed with
+  `242 passed in 164.52 s`.
+- Sphinx `-W` build passed after documenting `sfincs_jax.v3_driver` as a
+  compatibility shim.
+- `git diff --check` passed.
+- Broad `python -m ruff check sfincs_jax tests` still fails on existing
+  package-wide lint debt outside this extraction; Lane 1 Tranche B/D now
+  explicitly require narrowing or removing temporary broad ignores on extracted
+  modules.
+
+Current lane status:
+
+- Lane 1 Tranche A: about `85%`; implementation and focused validation are
+  done, but final plan/log validation and commit/push remain.
+- Lane 1 Tranche B: `0%`.
+- Lane 1 Tranche C: `0%`.
+- Lane 1 Tranche D: `0%`.
+- Lane 1 overall: about `45%` of the new consolidation plan.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Finish Tranche A by committing the solve-entry extraction and the
+   authoritative `plan_final.md` update.
+2. Execute Tranche B in one large profile-response consolidation: shrink
+   `profile_response/solve.py`, merge policy shards into `policies.py`, merge
+   sparse handoff shards into role owners, and remove temporary broad lint
+   ignores.
+3. Execute Tranche C in one transport/output consolidation: collapse
+   transport-matrix helper shards, compact parallel worker files, and move
+   `io.py` orchestration into `outputs`.
+4. Execute Tranche D in one solver/preconditioner review pass: collapse QI by
+   role, remove or rename remaining `rhs1`-named solver internals, refresh docs
+   and source maps, and bring package file count below `220`.
