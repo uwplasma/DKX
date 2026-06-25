@@ -340,6 +340,44 @@ def test_fortran_v3_rhs4_debug_reference_summary_pins_finite_difference_outputs(
     )
 
 
+def test_fortran_v3_rhs45_reference_summaries_cover_all_public_sensitivity_families() -> None:
+    """The checked fixtures cover every release-facing RHSMode 4/5 output family."""
+
+    reference_root = REPO_ROOT / "benchmarks" / "fortran_v3_sensitivity_reference"
+    summary = json.loads((reference_root / SENSITIVITY_REFERENCE_SUMMARY).read_text())
+    debug = json.loads((reference_root / SENSITIVITY_DEBUG_REFERENCE_SUMMARY).read_text())
+    field_names = {
+        field_name
+        for case in summary["cases"]
+        for field_name in case["hdf5_fields"]
+    }
+    field_names.update(debug["hdf5_fields"])
+
+    expected_release_fields = {
+        "dParticleFluxdLambda",
+        "dParallelFlowdLambda",
+        "dHeatFluxdLambda",
+        "dTotalHeatFluxdLambda",
+        "dRadialCurrentdLambda",
+        "dBootstrapdLambda",
+        "dPhidPsidLambda",
+    }
+    expected_debug_fields = {
+        "dParticleFluxdLambda_finitediff",
+        "dRadialCurrentdLambda_finitediff",
+        "particleFluxPercentError",
+        "radialCurrentPercentError",
+    }
+
+    assert summary["tier"] == "small"
+    assert debug["tier"] == "small"
+    assert len(summary["cases"]) == 4
+    assert expected_release_fields <= field_names
+    assert expected_debug_fields <= field_names
+    assert all(case["wall_time_s"] < 1.0 for case in summary["cases"])
+    assert all(case["max_rss_bytes"] < 160_000_000 for case in summary["cases"])
+
+
 def test_fortran_v3_adjoint_sensitivity_output_surface_reports_missing_or_misranked_fields() -> None:
     config = _adjoint_config(adjointOptions={"adjointTotalHeatFluxOption": True})
 
