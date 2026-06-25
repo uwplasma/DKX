@@ -1,4 +1,4 @@
-"""Host sparse-PC Krylov helpers for RHSMode=1 profile-response solves."""
+"""Sparse-PC handoff helpers for RHSMode=1 profile-response solves."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from .diagnostics import (
+from ..diagnostics import (
     SparsePCFactorPreflightMetadataContext,
     SparsePCGMRESStaticMetadataContext,
     SparsePCPatternMetadataContext,
@@ -39,13 +39,13 @@ from .diagnostics import (
     xblock_sparse_pc_result_diagnostics_from_driver_state,
     xblock_side_probe_diagnostics,
 )
-from .residual import (
+from ..residual import (
     residual_converged as profile_residual_converged,
 )
-from .solver_diagnostics import (
+from ..solver_diagnostics import (
     build_rhs1_xblock_correction_metadata_from_driver_state,
 )
-from .sparse.direct import (
+from .direct import (
     DirectTailCoupledCoarseRescuePolicy,
     DirectTailMaterializationContext,
     DirectTailMaterializationResult,
@@ -110,7 +110,7 @@ from .sparse.direct import (
     sparse_minimum_norm_start_message,
     validate_explicit_sparse_host_request,
 )
-from .sparse.finalization import (
+from .finalization import (
     SparsePCFactorDtypeRetryContext,
     SparsePCFactorDtypeRetryDecision,
     SparsePCFactorDtypeRetryFinalizationContext,
@@ -140,7 +140,7 @@ from .sparse.finalization import (
     sparse_pc_gmres_completion_message,
     sparse_pc_gmres_final_payload_from_driver_state,
 )
-from .sparse.fortran_reduced import (
+from .fortran_reduced import (
     FortranReducedSparsePCBackendSetup,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockFactorBuildResult,
@@ -172,7 +172,7 @@ from .sparse.fortran_reduced import (
     resolve_fortran_reduced_xblock_moment_schur_policy,
     run_fortran_reduced_xblock_krylov_solve,
 )
-from .sparse.policy import (
+from .policy import (
     SparsePCActiveDOFSetup,
     SparsePCAutoPreflightRetryEvaluationContext,
     SparsePCAutoPreflightRetryEvaluationResult,
@@ -206,7 +206,7 @@ from .sparse.policy import (
     resolve_sparse_pc_gmres_control_policy,
     select_sparse_pc_auto_preflight_retry_candidates,
 )
-from .sparse.qi import (
+from .qi import (
     XBlockQICoarseSeedStageContext,
     XBlockQICoarseSeedStageResult,
     XBlockQIDeflatedPolicySetup,
@@ -250,7 +250,7 @@ from .sparse.qi import (
     resolve_xblock_qi_two_level_policy_setup,
     run_xblock_qi_preconditioner_pipeline,
 )
-from .sparse.xblock import (
+from .xblock import (
     XBlockSparsePCFinalCoreState,
     XBlockSparsePCFinalDeviceState,
     XBlockSparsePCFinalPreflightState,

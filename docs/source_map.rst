@@ -643,11 +643,6 @@ the historical private driver name and test the focused module directly. This ke
   transport ``whichRHS`` defaults, assembles the RHS, and returns the RHS norm.
   The driver consumes these typed setup results before entering the numerical
   solve loop.
-- ``sfincs_jax/problems/profile_response/linear_solve.py``:
-  RHSMode=1/profile-response Krylov routing for implicit, JIT, distributed,
-  GMRES, and BiCGStab solve attempts. This mirrors the transport linear-solve
-  module so solver-family selection is directly testable and no longer embedded
-  as a large nested body in ``v3_driver.py``.
 - ``sfincs_jax/problems/profile_response/phi1_newton.py``:
   nonlinear Phi1 Newton-Krylov solve orchestration for RHSMode=1 profile
   response. This module owns the accepted-state history solve used by output
@@ -665,13 +660,12 @@ the historical private driver name and test the focused module directly. This ke
   mapping, full/reduced strong fallback builders, PAS-Schur to PAS-hybrid build
   adjustment, ADI sweep parsing, and x-block TZ low-``l`` controls; the driver
   injects only the current solve-local dispatch seam.
-- ``sfincs_jax/problems/profile_response/sparse_pc.py``:
-  RHSMode=1/profile-response host sparse-PC compatibility layer. During the
-  architecture refactor this file keeps the historical import surface stable
-  for tests, debug scripts, and downstream users while implementation moves
-  into ``sfincs_jax/problems/profile_response/sparse``. It still owns the small
-  amount of driver-facing sparse-PC attempt orchestration that depends on
-  solve-local cache/replay/residual routing. Optional two-level and
+- ``sfincs_jax/problems/profile_response/sparse/handoff.py``:
+  RHSMode=1/profile-response sparse-PC handoff layer. It owns the
+  driver-facing sparse-PC attempt orchestration that depends on solve-local
+  cache/replay/residual routing, generic sparse-PC Krylov execution, final
+  sparse-PC bundle assembly, and the compatibility import surface used by the
+  monolithic solve owner while Tranche B continues. Optional two-level and
   global-coupling stage contexts accept injected builders for tests, but resolve
   the canonical QI builders themselves in production so ``v3_driver.py`` no
   longer re-exports private QI builder aliases.
@@ -685,8 +679,6 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/problems/profile_response/sparse/finalization.py``:
   sparse-PC GMRES result contracts, post-MinRes polish metadata, dtype-retry
   result assembly, completion messages, and final payload construction.
-- ``sfincs_jax/problems/profile_response/sparse/krylov.py``:
-  generic sparse-PC Krylov execution helpers shared by the compatibility layer.
 - ``sfincs_jax/problems/profile_response/sparse/direct.py``:
   explicit sparse operator admission, minimum-norm/direct host shortcuts,
   ILU/direct-tail policy parsing, structured direct-tail materialization, and
@@ -719,9 +711,12 @@ the historical private driver name and test the focused module directly. This ke
   wiring, so ``v3_driver.py`` now injects only solve-local arrays, operators,
   timing, and active-DOF maps rather than importing each QI builder directly.
 - ``sfincs_jax/problems/profile_response/dense.py``:
-  RHSMode=1/profile-response host dense solve helpers. This module owns the
-  reduced row-scaled LU path and the full/reduced least-squares dense fallback
-  used by non-differentiable host shortcut paths.
+  RHSMode=1/profile-response dense and linear-solve helpers. This module owns
+  Krylov routing for implicit, JIT, distributed, GMRES, and BiCGStab solve
+  attempts; dense-KSP full/reduced solves; constraintScheme=0 PETSc-compatible
+  sparse-ILU; host SciPy rescue; the reduced row-scaled LU path; and the
+  full/reduced least-squares dense fallback used by non-differentiable host
+  shortcut paths.
 - ``sfincs_jax/problems/profile_response/qi_device_seed.py``:
   matrix-free QI device seed correction for RHSMode=1 active-DOF solves. The
   driver passes solve-local state through a typed setup/context while the
@@ -736,18 +731,12 @@ the historical private driver name and test the focused module directly. This ke
   metadata key assembly, and KSP replay diagnostic context forwarding. This
   keeps output-visible trace fields independently testable while
   ``v3_driver.py`` continues to own the solve orchestration.
-- ``sfincs_jax/problems/profile_response/finalization.py``:
-  final RHSMode=1/profile-response linear-solve handoff. It applies cleanup
-  projection, emits optional KSP replay diagnostics, writes final residual and
-  elapsed-time progress lines, applies post-xblock acceptance-floor metadata,
-  and wraps the result in ``V3LinearSolveResult``. The driver now passes a typed
-  context into this module instead of assembling final metadata and result
-  objects inline.
-- ``sfincs_jax/rhs1_ksp_diagnostics.py``:
-  bounded RHSMode=1 PETSc-style KSP residual-history replay and iteration-count
-  diagnostics. The driver passes the active matvec, preconditioner, and emit
-  callback into this module so optional diagnostics stay non-fatal and testable
-  without embedding SciPy replay logic in the solve loop.
+- ``sfincs_jax/problems/profile_response/solver_diagnostics.py``:
+  final RHSMode=1/profile-response linear-solve handoff, output-visible solver
+  metadata, bounded PETSc-style KSP residual-history replay, and iteration-count
+  diagnostics. It applies cleanup projection, emits optional replay diagnostics,
+  writes final residual and elapsed-time progress lines, applies post-xblock
+  acceptance-floor metadata, and wraps the result in ``V3LinearSolveResult``.
 - ``sfincs_jax/newton_krylov_diagnostics.py``:
   bounded PETSc-style GMRES history replay for the optional Phi1/Newton-Krylov
   full-system path. This keeps nonlinear-solve logging policy out of the driver

@@ -2679,3 +2679,61 @@ Next best steps:
    into `residual.py`, `setup.py`, `handoff.py`, and `solver_diagnostics.py`.
 3. Run the same focused RHSMode-1, sparse-PC, QI admission, ambipolar,
    sensitivity, docs, and import-contract gates before starting Tranche C.
+
+## 2026-06-25 Lane 1 Tranche B Sparse Handoff Checkpoint
+
+Steps taken:
+
+1. Moved the former top-level
+   `sfincs_jax/problems/profile_response/sparse_pc.py` module into
+   `sfincs_jax/problems/profile_response/sparse/handoff.py`.
+2. Rewrote source and focused tests to import the canonical sparse-package
+   owner.
+3. Exported the handoff owner through
+   `sfincs_jax.problems.profile_response.sparse`.
+4. Updated `docs/api.rst` and `docs/source_map.rst` so docs no longer point at
+   deleted `profile_response/sparse_pc.py`, `profile_response/linear_solve.py`,
+   `profile_response/finalization.py`, or `sparse/krylov.py` owners.
+
+Current inventory:
+
+- Package Python files: `230`.
+- `problems/profile_response`: `24` Python files.
+- `sfincs_jax/problems/profile_response/solve.py`: `10,400` lines.
+- `sfincs_jax/problems/profile_response/sparse/handoff.py`: `3,761` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: deleted.
+- `sfincs_jax/v3_driver.py`: `47` lines.
+
+Validation:
+
+- Focused sparse/RHSMode-1 tests passed: `498 passed in 42.21s`.
+- Scoped ruff passed for `profile_response.sparse.handoff`, sparse exports,
+  `profile_response.solve`, and `tests/test_profile_response_sparse_pc.py`.
+- `python -m py_compile sfincs_jax/problems/profile_response/*.py
+  sfincs_jax/problems/profile_response/sparse/*.py` passed.
+- `python -m sphinx -W -b html docs docs/_build/html` passed.
+- `git diff --check` passed.
+
+Current lane status:
+
+- Lane 1 Tranche A: `100%`.
+- Lane 1 Tranche B: about `50%`; sparse top-level handoff is now under the
+  sparse package. Remaining hard gates are `profile_response/solve.py < 3.5k`,
+  `problems/profile_response <= 22` files, and policy/env parser duplication
+  cleanup.
+- Lane 1 Tranche C: `0%`.
+- Lane 1 Tranche D: `0%`.
+- Lane 1 overall: about `62%` of the authoritative consolidation plan.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Continue Tranche B by moving residual/admission and setup/materialization
+   blocks from `solve.py` into `residual.py`, `setup.py`, `handoff.py`, and
+   `solver_diagnostics.py`.
+2. Fold `profile_response/sparse/handoff.py` further into direct/x-block/QI
+   sparse owners only if it reduces file count without making those owners too
+   large to review.
+3. After `solve.py` is below `3.5k` and profile-response is at or below `22`
+   files, run the focused RHSMode-1, sparse-PC, QI admission, ambipolar,
+   sensitivity, docs, and import-contract gates before starting Tranche C.

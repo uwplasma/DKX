@@ -271,6 +271,9 @@ research workflows.
 .. automodule:: sfincs_jax.problems.profile_response.sparse.fortran_reduced
    :members:
 
+.. automodule:: sfincs_jax.problems.profile_response.sparse.handoff
+   :members:
+
 .. automodule:: sfincs_jax.problems.profile_response.sparse.qi
    :members:
 

@@ -225,7 +225,7 @@ from sfincs_jax.problems.profile_response.diagnostics import (
     SparseRescueTailMetadataContext,
     sparse_rescue_tail_metadata_from_context,
 )
-from sfincs_jax.problems.profile_response.sparse_pc import (
+from sfincs_jax.problems.profile_response.sparse.handoff import (
     DirectTailMaterializationContext,
     DirectTailStructuredAdmissionContext,
     DirectTailStructuredBuildContext,

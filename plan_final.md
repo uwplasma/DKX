@@ -314,10 +314,11 @@ Current source size snapshot after the 2026-06-25 consolidation checkpoint:
 - `sfincs_jax/problems/profile_response/policies.py`: 6,380 lines after
   absorbing six former policy shards. This is intentionally a temporary
   single policy owner during Tranche B; do not split it back into micro-files.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: 3,761 lines after
-  absorbing sparse-PC Krylov execution helpers. Shared sparse-PC finalization
-  remains in `problems/profile_response/sparse/finalization.py` because
-  x-block and Fortran-reduced sparse owners both use the same result payloads.
+- `sfincs_jax/problems/profile_response/sparse/handoff.py`: 3,761 lines after
+  moving the former top-level sparse-PC handoff into the sparse package. Shared
+  sparse-PC finalization remains in
+  `problems/profile_response/sparse/finalization.py` because x-block and
+  Fortran-reduced sparse owners both use the same result payloads.
 - `sfincs_jax/problems/profile_response/dense.py`: 2,487 lines after taking
   ownership of profile linear-solve routing, dense-KSP, constraintScheme=0
   PETSc-compatible sparse-ILU, and SciPy rescue contracts.
@@ -518,7 +519,7 @@ Current inventory from the 2026-06-25 consolidation checkpoint:
 | `sfincs_jax/v3_driver.py` | 47-line compatibility shim in the current worktree | Keep under 80 lines or delete after imports migrate. |
 | `problems/profile_response` | 24 files, about 50k lines; file-count gate reached but `solve.py` is still 10.4k lines | At most 22 files; `solve.py` below 3.5k lines; sparse handoff and solve-phase orchestration moved into existing owners. |
 | `problems/profile_response/policies.py` | 6.4k lines after six policy shards were merged | Keep as the single policy owner for this pass; reduce duplicated env parsing while preserving behavior. |
-| `problems/profile_response/sparse_pc.py` and `sparse/` | `sparse_pc.py` is 3.8k lines; `sparse/xblock.py` is 4.5k; `sparse/qi.py` is 4.1k | Collapse sparse handoff by role: direct, x-block, QI, policy/finalization; delete or rename the top-level `sparse_pc.py` once callers move. |
+| `problems/profile_response/sparse/` | `sparse/handoff.py` is 3.8k lines; `sparse/xblock.py` is 4.5k; `sparse/qi.py` is 4.1k | Collapse sparse handoff by role: direct, x-block, QI, policy/finalization; keep the old top-level `sparse_pc.py` deleted. |
 | `problems/transport_matrix` | 33 files, about 15k lines; many sub-700-line helper shards and 10 parallel micro-files | At most 22 files; one solve owner, one policy owner, one diagnostics/finalization owner, one compact parallel owner set. |
 | `solvers/preconditioners` | 50 files, about 40k lines; QI and RHSMode-1 names over-fragmented | At most 40 files; QI collapsed by role, RHSMode-1 file names renamed or merged into profile-response solver owners. |
 | `operators/profile_response` | 11 files, about 14k lines; `full_system.py` remains 6.0k lines | Keep physics equations grouped by operator block; split only if it improves reviewability without increasing file count. |
@@ -572,7 +573,8 @@ steps:
    `preconditioner_auto_policy.py`, and `solver_policy.py` were merged into
    `policies.py`; top-level `finalization.py` and `ksp_diagnostics.py` were
    merged into `solver_diagnostics.py`; `sparse/krylov.py` was merged into the
-   sparse-PC handoff owner. Do not recreate these files.
+   sparse-PC handoff owner; the former top-level `sparse_pc.py` was moved to
+   `profile_response/sparse/handoff.py`. Do not recreate these files.
 2. Finish the `solve.py` reduction as one solve-phase move, not helper-by-
    helper churn. Move only coherent solve phases into existing owners:
    setup/materialization into `setup.py`, residual/admission checks into
@@ -580,10 +582,13 @@ steps:
    `handoff.py` and `solver_diagnostics.py`, and sparse branch orchestration
    into `sparse/direct.py`, `sparse/xblock.py`, `sparse/qi.py`, and
    `sparse/policy.py`.
-3. Delete or fold the top-level `sparse_pc.py` after its remaining handoff
-   callers move into the sparse package. Keep `sparse/finalization.py` only if
-   direct, x-block, and Fortran-reduced sparse paths continue to share the same
-   result payloads; otherwise merge it into the owner that remains canonical.
+3. Keep the former top-level `sparse_pc.py` code under
+   `profile_response/sparse/handoff.py` while it is the canonical sparse-PC
+   handoff owner. Fold it further into direct, x-block, QI, or policy sparse
+   owners only when that reduces file count without making those owners harder
+   to review. Keep `sparse/finalization.py` only if direct, x-block, and
+   Fortran-reduced sparse paths continue to share the same result payloads;
+   otherwise merge it into the owner that remains canonical.
 4. Reduce duplication inside `policies.py` after the file moves stabilize:
    keep one env-token parser, one bool/int/float parser family, one
    candidate-gate contract, and explicit dataclass policies. This is an
@@ -1323,6 +1328,12 @@ Completed on 2026-06-25:
   `profile_response.auto_solve`. Focused validation passed with
   `522 passed in 43.29s`, scoped ruff passed, py_compile passed, and Sphinx
   `-W` passed.
+- Completed the third Lane 1 Tranche B consolidation checkpoint:
+  the former top-level `profile_response/sparse_pc.py` owner moved to
+  `profile_response/sparse/handoff.py`, imports/tests/docs now use the
+  canonical sparse-package owner, and the old top-level file is deleted.
+  Focused sparse/RHSMode-1 validation passed with `498 passed in 42.21s`,
+  scoped ruff passed, py_compile passed, and Sphinx `-W` passed.
 
 Next ordered implementation steps:
 
@@ -1332,8 +1343,9 @@ Next ordered implementation steps:
 2. Finish Tranche B in one large profile-response solve-phase move:
    reduce `profile_response/solve.py` from `10.4k` lines below `3.5k` lines
    by moving setup, residual/admission, sparse branch orchestration, final
-   handoff, and diagnostics into the existing owners named above. Delete or
-   fold `sparse_pc.py` after callers are migrated.
+   handoff, and diagnostics into the existing owners named above. Further fold
+   `profile_response/sparse/handoff.py` into direct/x-block/QI sparse owners
+   only when that reduces file count without losing reviewability.
 3. Execute Tranche C as one transport/output consolidation: reduce
    `problems/transport_matrix` to at most 22 files, collapse the parallel
    subpackage to at most three implementation files, and move `io.py` below
