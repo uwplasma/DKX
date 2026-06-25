@@ -479,8 +479,8 @@ Current scripts and source anchors:
 
 - ``scripts/run_mapped_xgrid_transport_evidence.py``
 - ``sfincs_jax/adaptive_maps.py``
-- ``sfincs_jax/mapped_xgrid_objectives.py``
-- ``sfincs_jax/mapped_xgrid_transport_evidence.py``
+- ``sfincs_jax/workflows/mapped_xgrid_objectives.py``
+- ``sfincs_jax/workflows/mapped_xgrid_transport_evidence.py``
 - opt-in ``xGridScheme = 50`` construction in ``sfincs_jax/v3.py``
 
 Current bounded artifacts:

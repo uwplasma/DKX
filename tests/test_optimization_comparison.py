@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from sfincs_jax.optimization_comparison import (
+from sfincs_jax.workflows.optimization_comparison import (
     PromotionComparisonTolerances,
     compare_cpu_gpu_promotions,
     compare_fortran_promotion,
