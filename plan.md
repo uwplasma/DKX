@@ -2915,3 +2915,74 @@ Next best steps:
    into `handoff.py` and `solver_diagnostics.py`.
 3. Re-check whether `sparse/finalization.py` can be merged or whether it
    remains a true shared owner after the sparse-PC handoff code moves.
+
+## 2026-06-25 Lane 1 Tranche 1 RHSMode-1 Preconditioner Registry Move
+
+Steps taken:
+
+1. Moved the current RHSMode-1 preconditioner registry and binding layer from
+   `sfincs_jax/problems/profile_response/solve.py` into
+   `sfincs_jax/problems/profile_response/preconditioner_build.py`.
+2. The canonical owner now exposes the dispatch binding, PAS-family
+   compatibility builders, Schur binding, x-block builder aliases,
+   transport `tzfft` reuse, and strong fallback binding.
+3. Updated RHSMode-1 dispatch, strong-fallback, PAS-policy, and Schwarz
+   heuristic tests to patch/call `preconditioner_build.py` rather than the
+   compatibility `v3_driver.py` surface for these internals.
+4. Updated `docs/source_map.rst` and `plan_final.md` so the source map and
+   single authoritative plan match the current owner boundaries.
+
+Current inventory:
+
+- Package Python files: `227`.
+- Package source lines: `163,622`.
+- `problems/profile_response`: `21` Python files and `50,187` lines.
+- `solvers/preconditioners`: `50` Python files and `37,043` lines.
+- `sfincs_jax/problems/profile_response/solve.py`: `9,410` lines.
+- `sfincs_jax/problems/profile_response/preconditioner_build.py`: `2,683`
+  lines.
+- `sfincs_jax/v3_driver.py`: `47` lines.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/preconditioner_build.py` passed.
+- `python -m ruff check
+  sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/preconditioner_build.py` passed.
+- `python -m ruff check
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_strong_fallback_coverage.py
+  tests/test_v3_driver_pas_precond_policy_coverage.py
+  tests/test_rhs1_schwarz_heuristic.py` passed.
+- RHSMode-1 dispatch/policy/Schwarz tests passed:
+  `75 passed in 32.34s`.
+- Preconditioner-build and sparse-PC owner tests passed:
+  `86 passed in 0.50s` and `327 passed in 2.86s`.
+- `python -m sphinx -W -b html docs docs/_build/html` passed.
+- `git diff --check` passed.
+
+Current lane status:
+
+- Lane 1 Tranche 0: `100%`.
+- Lane 1 Tranche 1: about `52%`; sparse-direct setup, current-backend policy
+  wrappers, and RHSMode-1 preconditioner registry ownership have moved, but
+  hard gates remain `profile_response/solve.py < 3.5k` and
+  `problems/profile_response <= 18` files.
+- Lane 1 Tranche 2: `0%`.
+- Lane 1 Tranche 3: `0%`.
+- Lane 1 Tranche 4: `0%`.
+- Lane 1 Tranche 5: `0%`.
+- Lane 1 overall: about `52%` of the authoritative consolidation plan.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Move sparse-PC branch orchestration and final sparse-PC payload assembly
+   from `solve.py` into `sparse/handoff.py`, `sparse/xblock.py`,
+   `sparse/qi.py`, and `sparse/fortran_reduced.py`.
+2. Move final solve result normalization and progress replay from `solve.py`
+   into `handoff.py` and `solver_diagnostics.py`.
+3. Collapse duplicated env-token parsing into one parser family in
+   `policies.py`, then delete local parser duplicates after circular-import
+   checks.

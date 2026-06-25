@@ -14,7 +14,9 @@ from sfincs_jax.problems.profile_response.residual import (
     compose_multilevel_residual_correction_preconditioner,
     compose_residual_correction_preconditioner,
 )
+import sfincs_jax.solvers.preconditioners.pas.policy as pas_policy
 import sfincs_jax.v3_driver as vd
+import sfincs_jax.problems.profile_response.preconditioner_build as pb
 
 
 def test_rhs1_auto_prefers_theta_schwarz_when_sharded(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -42,7 +44,7 @@ def test_rhs1_auto_prefers_theta_schwarz_when_sharded(monkeypatch: pytest.Monkey
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_COLLISION_PRECOND_MIN", "1000000000")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_PATCH_UNKNOWNS", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_INVERSE_ENTRIES", "0")
-    monkeypatch.setattr(vd.jax, "device_count", lambda: 2)
+    monkeypatch.setattr(pb.jax, "device_count", lambda: 2)
 
     res = vd.solve_v3_full_system_linear_gmres(nml=nml, tol=1e-8, emit=emit)
     assert np.isfinite(float(res.residual_norm))
@@ -65,9 +67,9 @@ def test_rhs1_auto_preserves_auto_solver_selection_on_multidevice_sharded_path(
     monkeypatch.setenv("SFINCS_JAX_GMRES_DISTRIBUTED", "theta")
     monkeypatch.setenv("SFINCS_JAX_GMRES_DISTRIBUTED_ALLOW_ACCELERATOR", "1")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND", "0")
-    monkeypatch.setattr(vd.jax, "device_count", lambda: 2)
-    monkeypatch.setattr(vd.jax, "local_device_count", lambda: 2)
-    monkeypatch.setattr(vd.jax, "default_backend", lambda: "gpu")
+    monkeypatch.setattr(pb.jax, "device_count", lambda: 2)
+    monkeypatch.setattr(pb.jax, "local_device_count", lambda: 2)
+    monkeypatch.setattr(pb.jax, "default_backend", lambda: "gpu")
 
     res = vd.solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -144,12 +146,12 @@ def test_pas_tz_builder_falls_back_to_theta_schwarz_when_memory_unsafe(monkeypat
     monkeypatch.setenv("SFINCS_JAX_AUTO_SHARD", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_PATCH_UNKNOWNS", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_INVERSE_ENTRIES", "0")
-    monkeypatch.setattr(vd.jax, "device_count", lambda: 2)
-    monkeypatch.setattr(vd, "_estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
-    monkeypatch.setattr(vd, "_rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
-    monkeypatch.setattr(vd, "_build_rhsmode1_theta_schwarz_preconditioner", lambda **_kwargs: sentinel)
+    monkeypatch.setattr(pb.jax, "device_count", lambda: 2)
+    monkeypatch.setattr(pas_policy, "estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
+    monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
+    monkeypatch.setattr(pb, "_build_rhsmode1_theta_schwarz_preconditioner", lambda **_kwargs: sentinel)
 
-    assert vd._build_rhsmode1_pas_tz_preconditioner(op=_Op()) is sentinel
+    assert pb._build_rhsmode1_pas_tz_preconditioner(op=_Op()) is sentinel
 
 
 def test_rhs1_dd_auto_block_size_spans_more_than_one_local_shard() -> None:

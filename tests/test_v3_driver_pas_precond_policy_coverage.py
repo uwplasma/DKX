@@ -6,6 +6,7 @@ import numpy as np
 
 import sfincs_jax.solvers.preconditioners.pas.policy as pas_policy
 import sfincs_jax.v3_driver as vd
+import sfincs_jax.problems.profile_response.preconditioner_build as pb
 
 
 def _pas_tokamak_like_op(*, n_zeta: int = 3, zeta_varying: bool = False, rhs_mode: int = 1):
@@ -106,9 +107,9 @@ def test_pas_tokamak_theta_preconditioner_applicable_rejects_zeta_variation_and_
 
 def test_pas_tokamak_theta_builder_falls_back_to_block_preconditioner(monkeypatch) -> None:
     sentinel = object()
-    monkeypatch.setattr(vd, "_build_rhsmode1_block_preconditioner", lambda **kwargs: sentinel)
+    monkeypatch.setattr(pb, "_build_rhsmode1_block_preconditioner", lambda **kwargs: sentinel)
     op = _pas_tokamak_like_op(n_zeta=3, zeta_varying=True)
-    assert vd._build_rhsmode1_pas_tokamak_theta_preconditioner(op=op) is sentinel
+    assert pb._build_rhsmode1_pas_tokamak_theta_preconditioner(op=op) is sentinel
 
 
 def test_pas_tz_preconditioner_applicable_positive_and_negative_cases() -> None:
@@ -160,20 +161,20 @@ def test_pas_tz_memory_safe_respects_env_override(monkeypatch) -> None:
 
 def test_pas_tz_builder_falls_back_to_hybrid_when_inapplicable(monkeypatch) -> None:
     sentinel = object()
-    monkeypatch.setattr(vd, "_build_rhsmode1_pas_hybrid_preconditioner", lambda **kwargs: sentinel)
+    monkeypatch.setattr(pb, "_build_rhsmode1_pas_hybrid_preconditioner", lambda **kwargs: sentinel)
     op = _pas_tz_op(rhs_mode=2)
-    assert vd._build_rhsmode1_pas_tz_preconditioner(op=op) is sentinel
+    assert pb._build_rhsmode1_pas_tz_preconditioner(op=op) is sentinel
 
 
 def test_pas_tz_builder_prefers_tzfft_when_memory_unsafe_without_sharding(monkeypatch) -> None:
     sentinel = object()
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", raising=False)
-    monkeypatch.setattr(vd, "_build_rhsmode23_tzfft_preconditioner", lambda **kwargs: sentinel)
+    monkeypatch.setattr(pb, "_build_rhsmode23_tzfft_preconditioner", lambda **kwargs: sentinel)
     monkeypatch.setattr(pas_policy, "estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
     monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
-    monkeypatch.setattr(vd, "_matvec_shard_axis", lambda _op: None)
-    monkeypatch.setattr(vd.jax, "device_count", lambda: 1)
-    assert vd._build_rhsmode1_pas_tz_preconditioner(op=_pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)) is sentinel
+    monkeypatch.setattr(pb, "_matvec_shard_axis", lambda _op: None)
+    monkeypatch.setattr(pb.jax, "device_count", lambda: 1)
+    assert pb._build_rhsmode1_pas_tz_preconditioner(op=_pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)) is sentinel
 
 
 def test_pas_tz_builder_collision_memory_fallback_is_explicit(monkeypatch) -> None:
@@ -183,35 +184,35 @@ def test_pas_tz_builder_collision_memory_fallback_is_explicit(monkeypatch) -> No
         raise AssertionError("explicit collision must not build tzfft")
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", "collision")
-    monkeypatch.setattr(vd, "_build_rhsmode1_collision_preconditioner", lambda **kwargs: sentinel)
-    monkeypatch.setattr(vd, "_build_rhsmode23_tzfft_preconditioner", _fail_tzfft)
+    monkeypatch.setattr(pb, "_build_rhsmode1_collision_preconditioner", lambda **kwargs: sentinel)
+    monkeypatch.setattr(pb, "_build_rhsmode23_tzfft_preconditioner", _fail_tzfft)
     monkeypatch.setattr(pas_policy, "estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
     monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
-    monkeypatch.setattr(vd, "_matvec_shard_axis", lambda _op: None)
-    monkeypatch.setattr(vd.jax, "device_count", lambda: 1)
-    assert vd._build_rhsmode1_pas_tz_preconditioner(op=_pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)) is sentinel
+    monkeypatch.setattr(pb, "_matvec_shard_axis", lambda _op: None)
+    monkeypatch.setattr(pb.jax, "device_count", lambda: 1)
+    assert pb._build_rhsmode1_pas_tz_preconditioner(op=_pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)) is sentinel
 
 
 def test_pas_tz_builder_legacy_hybrid_memory_fallback_is_explicit(monkeypatch) -> None:
     sentinel = object()
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", "hybrid")
-    monkeypatch.setattr(vd, "_build_rhsmode1_pas_hybrid_preconditioner", lambda **kwargs: sentinel)
+    monkeypatch.setattr(pb, "_build_rhsmode1_pas_hybrid_preconditioner", lambda **kwargs: sentinel)
     monkeypatch.setattr(pas_policy, "estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
     monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
-    monkeypatch.setattr(vd, "_matvec_shard_axis", lambda _op: None)
-    monkeypatch.setattr(vd.jax, "device_count", lambda: 1)
-    assert vd._build_rhsmode1_pas_tz_preconditioner(op=_pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)) is sentinel
+    monkeypatch.setattr(pb, "_matvec_shard_axis", lambda _op: None)
+    monkeypatch.setattr(pb.jax, "device_count", lambda: 1)
+    assert pb._build_rhsmode1_pas_tz_preconditioner(op=_pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)) is sentinel
 
 
 def test_pas_tz_builder_tzfft_memory_fallback_is_explicit(monkeypatch) -> None:
     sentinel = object()
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", "tzfft")
-    monkeypatch.setattr(vd, "_build_rhsmode23_tzfft_preconditioner", lambda **kwargs: sentinel)
+    monkeypatch.setattr(pb, "_build_rhsmode23_tzfft_preconditioner", lambda **kwargs: sentinel)
     monkeypatch.setattr(pas_policy, "estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
     monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
-    monkeypatch.setattr(vd, "_matvec_shard_axis", lambda _op: None)
-    monkeypatch.setattr(vd.jax, "device_count", lambda: 1)
-    assert vd._build_rhsmode1_pas_tz_preconditioner(op=_pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)) is sentinel
+    monkeypatch.setattr(pb, "_matvec_shard_axis", lambda _op: None)
+    monkeypatch.setattr(pb.jax, "device_count", lambda: 1)
+    assert pb._build_rhsmode1_pas_tz_preconditioner(op=_pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)) is sentinel
 
 
 def test_pas_tz_builder_falls_back_to_theta_schwarz_when_memory_unsafe_and_theta_sharded(monkeypatch) -> None:
@@ -223,15 +224,15 @@ def test_pas_tz_builder_falls_back_to_theta_schwarz_when_memory_unsafe_and_theta
         seen["overlap"] = kwargs["overlap"]
         return sentinel
 
-    monkeypatch.setattr(vd, "_build_rhsmode1_theta_schwarz_preconditioner", _theta_builder)
+    monkeypatch.setattr(pb, "_build_rhsmode1_theta_schwarz_preconditioner", _theta_builder)
     monkeypatch.setattr(pas_policy, "estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
     monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
-    monkeypatch.setattr(vd, "_matvec_shard_axis", lambda _op: "theta")
-    monkeypatch.setattr(vd.jax, "device_count", lambda: 2)
+    monkeypatch.setattr(pb, "_matvec_shard_axis", lambda _op: "theta")
+    monkeypatch.setattr(pb.jax, "device_count", lambda: 2)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_THETA_DD_BLOCK", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_THETA_DD_OVERLAP", raising=False)
 
-    assert vd._build_rhsmode1_pas_tz_preconditioner(op=_pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)) is sentinel
+    assert pb._build_rhsmode1_pas_tz_preconditioner(op=_pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)) is sentinel
     assert seen == {"block": 64, "overlap": 1}
 
 
@@ -244,15 +245,15 @@ def test_pas_tz_builder_falls_back_to_zeta_schwarz_when_memory_unsafe_and_zeta_s
         seen["overlap"] = kwargs["overlap"]
         return sentinel
 
-    monkeypatch.setattr(vd, "_build_rhsmode1_zeta_schwarz_preconditioner", _zeta_builder)
+    monkeypatch.setattr(pb, "_build_rhsmode1_zeta_schwarz_preconditioner", _zeta_builder)
     monkeypatch.setattr(pas_policy, "estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
     monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_PATCH_UNKNOWNS", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_INVERSE_ENTRIES", "0")
-    monkeypatch.setattr(vd, "_matvec_shard_axis", lambda _op: "zeta")
-    monkeypatch.setattr(vd.jax, "device_count", lambda: 2)
+    monkeypatch.setattr(pb, "_matvec_shard_axis", lambda _op: "zeta")
+    monkeypatch.setattr(pb.jax, "device_count", lambda: 2)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ZETA_DD_BLOCK", "bad")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ZETA_DD_OVERLAP", "bad")
 
-    assert vd._build_rhsmode1_pas_tz_preconditioner(op=_pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)) is sentinel
+    assert pb._build_rhsmode1_pas_tz_preconditioner(op=_pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)) is sentinel
     assert seen == {"block": 64, "overlap": 1}

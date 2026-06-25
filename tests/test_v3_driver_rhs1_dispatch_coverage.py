@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 import sfincs_jax.v3_driver as vd
+import sfincs_jax.problems.profile_response.preconditioner_build as pb
 import sfincs_jax.problems.profile_response.sparse.direct as sparse_direct
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.preconditioner_caches import _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE
@@ -30,9 +31,9 @@ def test_rhs1_dispatch_theta_dd_uses_dd_without_overlap(monkeypatch) -> None:
         seen["block"] = kwargs["block"]
         return sentinel
 
-    monkeypatch.setattr(vd, "_build_rhsmode1_theta_dd_preconditioner", _builder)
+    monkeypatch.setattr(pb, "_build_rhsmode1_theta_dd_preconditioner", _builder)
     assert (
-        vd._build_rhs1_preconditioner_from_kind(
+        pb._build_rhs1_preconditioner_from_kind(
             op=_op(),
             rhs1_precond_kind="theta_dd",
             dd_block_theta=11,
@@ -52,9 +53,9 @@ def test_rhs1_dispatch_theta_dd_uses_schwarz_with_overlap(monkeypatch) -> None:
         seen["overlap"] = kwargs["overlap"]
         return sentinel
 
-    monkeypatch.setattr(vd, "_build_rhsmode1_theta_schwarz_preconditioner", _builder)
+    monkeypatch.setattr(pb, "_build_rhsmode1_theta_schwarz_preconditioner", _builder)
     assert (
-        vd._build_rhs1_preconditioner_from_kind(
+        pb._build_rhs1_preconditioner_from_kind(
             op=_op(),
             rhs1_precond_kind="theta_dd",
             dd_block_theta=13,
@@ -73,9 +74,9 @@ def test_rhs1_dispatch_point_xdiag_forwards_preconditioner_xi(monkeypatch) -> No
         seen["preconditioner_xi"] = kwargs["preconditioner_xi"]
         return sentinel
 
-    monkeypatch.setattr(vd, "_build_rhsmode1_block_preconditioner_xdiag", _builder)
+    monkeypatch.setattr(pb, "_build_rhsmode1_block_preconditioner_xdiag", _builder)
     assert (
-        vd._build_rhs1_preconditioner_from_kind(
+        pb._build_rhs1_preconditioner_from_kind(
             op=_op(),
             rhs1_precond_kind="point_xdiag",
             preconditioner_xi=7,
@@ -93,9 +94,9 @@ def test_rhs1_dispatch_xblock_tz_lmax_forwards_lmax(monkeypatch) -> None:
         seen["lmax"] = kwargs["lmax"]
         return sentinel
 
-    monkeypatch.setattr(vd, "_build_rhsmode1_xblock_tz_lmax_preconditioner", _builder)
+    monkeypatch.setattr(pb, "_build_rhsmode1_xblock_tz_lmax_preconditioner", _builder)
     assert (
-        vd._build_rhs1_preconditioner_from_kind(
+        pb._build_rhs1_preconditioner_from_kind(
             op=_op(),
             rhs1_precond_kind="xblock_tz_lmax",
             rhs1_xblock_tz_lmax=5,
@@ -110,11 +111,11 @@ def test_rhs1_dispatch_theta_line_xdiag_composes_collision_for_pas(monkeypatch) 
     collision = object()
     sentinel = object()
 
-    monkeypatch.setattr(vd, "_build_rhsmode1_theta_line_xdiag_preconditioner", lambda **kwargs: line)
-    monkeypatch.setattr(vd, "_build_rhsmode1_collision_preconditioner", lambda **kwargs: collision)
-    monkeypatch.setattr(vd, "_compose_preconditioners", lambda a, b: sentinel if (a, b) == (collision, line) else None)
+    monkeypatch.setattr(pb, "_build_rhsmode1_theta_line_xdiag_preconditioner", lambda **kwargs: line)
+    monkeypatch.setattr(pb, "_build_rhsmode1_collision_preconditioner", lambda **kwargs: collision)
+    monkeypatch.setattr(pb, "_compose_preconditioners", lambda a, b: sentinel if (a, b) == (collision, line) else None)
 
-    assert vd._build_rhs1_preconditioner_from_kind(op=_op(with_pas=True), rhs1_precond_kind="theta_line_xdiag") is sentinel
+    assert pb._build_rhs1_preconditioner_from_kind(op=_op(with_pas=True), rhs1_precond_kind="theta_line_xdiag") is sentinel
 
 
 def test_rhs1_dispatch_default_falls_back_to_block_preconditioner(monkeypatch) -> None:
@@ -127,9 +128,9 @@ def test_rhs1_dispatch_default_falls_back_to_block_preconditioner(monkeypatch) -
         seen["xi"] = kwargs["preconditioner_xi"]
         return sentinel
 
-    monkeypatch.setattr(vd, "_build_rhsmode1_block_preconditioner", _builder)
+    monkeypatch.setattr(pb, "_build_rhsmode1_block_preconditioner", _builder)
     assert (
-        vd._build_rhs1_preconditioner_from_kind(
+        pb._build_rhs1_preconditioner_from_kind(
             op=_op(),
             rhs1_precond_kind="unknown-kind",
             preconditioner_species=2,
@@ -144,10 +145,10 @@ def test_rhs1_dispatch_default_falls_back_to_block_preconditioner(monkeypatch) -
 def test_rhs1_dispatch_structured_fblock_jacobi_uses_builder(monkeypatch) -> None:
     sentinel = object()
 
-    monkeypatch.setattr(vd, "_build_rhsmode1_structured_fblock_jacobi_preconditioner", lambda **_kwargs: sentinel)
+    monkeypatch.setattr(pb, "_build_rhsmode1_structured_fblock_jacobi_preconditioner", lambda **_kwargs: sentinel)
 
     assert (
-        vd._build_rhs1_preconditioner_from_kind(
+        pb._build_rhs1_preconditioner_from_kind(
             op=_op(with_fp=True),
             rhs1_precond_kind="structured_fblock_jacobi",
         )
@@ -159,13 +160,13 @@ def test_rhs1_dispatch_structured_fblock_angular_jacobi_uses_builder(monkeypatch
     sentinel = object()
 
     monkeypatch.setattr(
-        vd,
+        pb,
         "_build_rhsmode1_structured_fblock_angular_jacobi_preconditioner",
         lambda **_kwargs: sentinel,
     )
 
     assert (
-        vd._build_rhs1_preconditioner_from_kind(
+        pb._build_rhs1_preconditioner_from_kind(
             op=_op(with_fp=True),
             rhs1_precond_kind="structured_fblock_angular_jacobi",
         )
@@ -177,13 +178,13 @@ def test_rhs1_dispatch_structured_fblock_xi_angular_jacobi_uses_builder(monkeypa
     sentinel = object()
 
     monkeypatch.setattr(
-        vd,
+        pb,
         "_build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner",
         lambda **_kwargs: sentinel,
     )
 
     assert (
-        vd._build_rhs1_preconditioner_from_kind(
+        pb._build_rhs1_preconditioner_from_kind(
             op=_op(with_fp=True),
             rhs1_precond_kind="structured_fblock_xi_angular_jacobi",
         )
@@ -195,13 +196,13 @@ def test_rhs1_dispatch_structured_fblock_fp_radial_jacobi_uses_builder(monkeypat
     sentinel = object()
 
     monkeypatch.setattr(
-        vd,
+        pb,
         "_build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner",
         lambda **_kwargs: sentinel,
     )
 
     assert (
-        vd._build_rhs1_preconditioner_from_kind(
+        pb._build_rhs1_preconditioner_from_kind(
             op=_op(with_fp=True),
             rhs1_precond_kind="structured_fblock_fp_radial_jacobi",
         )
@@ -213,13 +214,13 @@ def test_rhs1_dispatch_structured_fblock_fp_lowmode_schur_uses_builder(monkeypat
     sentinel = object()
 
     monkeypatch.setattr(
-        vd,
+        pb,
         "_build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner",
         lambda **_kwargs: sentinel,
     )
 
     assert (
-        vd._build_rhs1_preconditioner_from_kind(
+        pb._build_rhs1_preconditioner_from_kind(
             op=_op(with_fp=True),
             rhs1_precond_kind="structured_fblock_fp_lowmode_schur",
         )
@@ -231,13 +232,13 @@ def test_rhs1_dispatch_structured_fblock_fp_moment_schur_uses_builder(monkeypatc
     sentinel = object()
 
     monkeypatch.setattr(
-        vd,
+        pb,
         "_build_rhsmode1_structured_fblock_fp_moment_schur_preconditioner",
         lambda **_kwargs: sentinel,
     )
 
     assert (
-        vd._build_rhs1_preconditioner_from_kind(
+        pb._build_rhs1_preconditioner_from_kind(
             op=_op(with_fp=True),
             rhs1_precond_kind="structured_fblock_fp_moment_schur",
         )
@@ -249,13 +250,13 @@ def test_rhs1_dispatch_structured_fblock_fp_coupled_moment_schur_uses_builder(mo
     sentinel = object()
 
     monkeypatch.setattr(
-        vd,
+        pb,
         "_build_rhsmode1_structured_fblock_fp_coupled_moment_schur_preconditioner",
         lambda **_kwargs: sentinel,
     )
 
     assert (
-        vd._build_rhs1_preconditioner_from_kind(
+        pb._build_rhs1_preconditioner_from_kind(
             op=_op(with_fp=True),
             rhs1_precond_kind="structured_fblock_fp_coupled_moment_schur",
         )
@@ -267,13 +268,13 @@ def test_rhs1_dispatch_structured_fblock_fp_tail_coupled_schur_uses_builder(monk
     sentinel = object()
 
     monkeypatch.setattr(
-        vd,
+        pb,
         "_build_rhsmode1_structured_fblock_fp_tail_coupled_schur_preconditioner",
         lambda **_kwargs: sentinel,
     )
 
     assert (
-        vd._build_rhs1_preconditioner_from_kind(
+        pb._build_rhs1_preconditioner_from_kind(
             op=_op(with_fp=True),
             rhs1_precond_kind="structured_fblock_fp_tail_coupled_schur",
         )
@@ -284,7 +285,7 @@ def test_rhs1_dispatch_structured_fblock_fp_tail_coupled_schur_uses_builder(monk
 def test_structured_fblock_jacobi_preconditioner_builds_complete_full_vector_action() -> None:
     nml = read_sfincs_input("tests/ref/quick_2species_FPCollisions_noEr.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
-    precond = vd._build_rhsmode1_structured_fblock_jacobi_preconditioner(op=op)
+    precond = pb._build_rhsmode1_structured_fblock_jacobi_preconditioner(op=op)
     metadata = getattr(precond, "_sfincs_jax_structured_fblock_metadata")
 
     assert metadata["selected"] is True
@@ -303,7 +304,7 @@ def test_structured_fblock_jacobi_preconditioner_builds_complete_full_vector_act
 def test_structured_fblock_angular_jacobi_preconditioner_builds_complete_full_vector_action() -> None:
     nml = read_sfincs_input("tests/ref/pas_1species_PAS_noEr_small.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
-    precond = vd._build_rhsmode1_structured_fblock_angular_jacobi_preconditioner(op=op)
+    precond = pb._build_rhsmode1_structured_fblock_angular_jacobi_preconditioner(op=op)
     metadata = getattr(precond, "_sfincs_jax_structured_fblock_metadata")
 
     assert metadata["selected"] is True
@@ -323,7 +324,7 @@ def test_structured_fblock_angular_jacobi_preconditioner_builds_complete_full_ve
 def test_structured_fblock_xi_angular_jacobi_preconditioner_builds_complete_full_vector_action() -> None:
     nml = read_sfincs_input("tests/ref/pas_1species_PAS_noEr_small.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
-    precond = vd._build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner(op=op)
+    precond = pb._build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner(op=op)
     metadata = getattr(precond, "_sfincs_jax_structured_fblock_metadata")
 
     assert metadata["selected"] is True
@@ -346,13 +347,13 @@ def test_structured_fblock_xi_angular_jacobi_preconditioner_respects_block_guard
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_XI_ANGULAR_MAX_BLOCK_SIZE", "1")
 
     with pytest.raises(MemoryError, match="block too large"):
-        vd._build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner(op=op)
+        pb._build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner(op=op)
 
 
 def test_structured_fblock_fp_radial_jacobi_preconditioner_builds_complete_full_vector_action() -> None:
     nml = read_sfincs_input("tests/ref/quick_2species_FPCollisions_noEr.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
-    precond = vd._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
+    precond = pb._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
     metadata = getattr(precond, "_sfincs_jax_structured_fblock_metadata")
 
     assert metadata["selected"] is True
@@ -377,7 +378,7 @@ def test_structured_fblock_fp_radial_jacobi_preconditioner_respects_factor_guard
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_RADIAL_MAX_FACTOR_NBYTES", "1")
 
     with pytest.raises(MemoryError, match="factor too large"):
-        vd._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
+        pb._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
 
 
 def test_structured_fblock_fp_radial_jacobi_requires_fp_term() -> None:
@@ -385,7 +386,7 @@ def test_structured_fblock_fp_radial_jacobi_requires_fp_term() -> None:
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
 
     with pytest.raises(NotImplementedError, match="requires an FP collision term"):
-        vd._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
+        pb._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
 
 
 def test_structured_fblock_fp_lowmode_schur_preconditioner_respects_coarse_guard(monkeypatch) -> None:
@@ -394,7 +395,7 @@ def test_structured_fblock_fp_lowmode_schur_preconditioner_respects_coarse_guard
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_MAX_COARSE", "1")
 
     with pytest.raises(MemoryError, match="coarse space too large"):
-        vd._build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner(op=op)
+        pb._build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner(op=op)
 
 
 def test_structured_fblock_fp_lowmode_schur_truncates_optional_features(monkeypatch) -> None:
@@ -403,7 +404,7 @@ def test_structured_fblock_fp_lowmode_schur_truncates_optional_features(monkeypa
     stride = int(op.n_species) * int(op.n_x) * int(op.n_xi)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_MAX_COARSE", str(4 * stride))
 
-    precond = vd._build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner(op=op)
+    precond = pb._build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner(op=op)
     metadata = getattr(precond, "_sfincs_jax_structured_fblock_metadata")
 
     feature_selection = metadata["coarse_feature_selection"]
@@ -420,8 +421,8 @@ def test_structured_fblock_xi_angular_jacobi_reduces_dke_residual_vs_block() -> 
     rhs = jnp.zeros((op.total_size,), dtype=jnp.float64)
     rhs = rhs.at[: op.f_size].set(jnp.linspace(-0.35, 0.65, op.f_size, dtype=jnp.float64))
 
-    block_precond = vd._build_rhsmode1_structured_fblock_jacobi_preconditioner(op=op)
-    xi_angular_precond = vd._build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner(op=op)
+    block_precond = pb._build_rhsmode1_structured_fblock_jacobi_preconditioner(op=op)
+    xi_angular_precond = pb._build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner(op=op)
 
     def _dke_ratio(precond):
         candidate = precond(rhs)
@@ -442,8 +443,8 @@ def test_structured_fblock_fp_radial_jacobi_reduces_fp_dke_residual_vs_xi_angula
     rhs = jnp.zeros((op.total_size,), dtype=jnp.float64)
     rhs = rhs.at[: op.f_size].set(jnp.linspace(-0.35, 0.65, op.f_size, dtype=jnp.float64))
 
-    xi_angular_precond = vd._build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner(op=op)
-    fp_radial_precond = vd._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
+    xi_angular_precond = pb._build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner(op=op)
+    fp_radial_precond = pb._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
 
     def _dke_ratio(precond):
         candidate = precond(rhs)
@@ -465,8 +466,8 @@ def test_structured_fblock_fp_radial_jacobi_reuses_same_shape_cache() -> None:
     rhs = rhs.at[: op.f_size].set(jnp.linspace(-0.35, 0.65, op.f_size, dtype=jnp.float64))
     _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE.clear()
 
-    first = vd._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
-    second = vd._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
+    first = pb._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
+    second = pb._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
     first_metadata = getattr(first, "_sfincs_jax_structured_fblock_metadata")
     second_metadata = getattr(second, "_sfincs_jax_structured_fblock_metadata")
 
@@ -481,8 +482,8 @@ def test_structured_fblock_fp_lowmode_schur_reduces_fp_dke_residual_vs_radial() 
     rhs = jnp.zeros((op.total_size,), dtype=jnp.float64)
     rhs = rhs.at[: op.f_size].set(jnp.linspace(-0.35, 0.65, op.f_size, dtype=jnp.float64))
 
-    fp_radial_precond = vd._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
-    lowmode_precond = vd._build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner(op=op)
+    fp_radial_precond = pb._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
+    lowmode_precond = pb._build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner(op=op)
     metadata = getattr(lowmode_precond, "_sfincs_jax_structured_fblock_metadata")
 
     assert metadata["line_kind"] == "fp_radial_plus_low_angular_galerkin"
@@ -509,9 +510,9 @@ def test_structured_fblock_fp_moment_schur_is_compact_and_finite() -> None:
     rhs = jnp.zeros((op.total_size,), dtype=jnp.float64)
     rhs = rhs.at[: op.f_size].set(jnp.linspace(-0.35, 0.65, op.f_size, dtype=jnp.float64))
 
-    fp_radial_precond = vd._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
-    lowmode_precond = vd._build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner(op=op)
-    moment_precond = vd._build_rhsmode1_structured_fblock_fp_moment_schur_preconditioner(op=op)
+    fp_radial_precond = pb._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
+    lowmode_precond = pb._build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner(op=op)
+    moment_precond = pb._build_rhsmode1_structured_fblock_fp_moment_schur_preconditioner(op=op)
     moment_metadata = getattr(moment_precond, "_sfincs_jax_structured_fblock_metadata")
     lowmode_metadata = getattr(lowmode_precond, "_sfincs_jax_structured_fblock_metadata")
 
@@ -540,8 +541,8 @@ def test_structured_fblock_fp_coupled_moment_schur_reduces_full_residual() -> No
     rhs = jnp.zeros((op.total_size,), dtype=jnp.float64)
     rhs = rhs.at[: op.f_size].set(jnp.linspace(-0.35, 0.65, op.f_size, dtype=jnp.float64))
 
-    fp_radial_precond = vd._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
-    coupled_precond = vd._build_rhsmode1_structured_fblock_fp_coupled_moment_schur_preconditioner(op=op)
+    fp_radial_precond = pb._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
+    coupled_precond = pb._build_rhsmode1_structured_fblock_fp_coupled_moment_schur_preconditioner(op=op)
     metadata = getattr(coupled_precond, "_sfincs_jax_structured_fblock_metadata")
 
     assert metadata["line_kind"] == "fp_radial_plus_coupled_tail_moment_galerkin"
@@ -571,8 +572,8 @@ def test_structured_fblock_fp_tail_coupled_schur_preserves_f_correction() -> Non
     rhs = jnp.zeros((op.total_size,), dtype=jnp.float64)
     rhs = rhs.at[: op.f_size].set(jnp.linspace(-0.35, 0.65, op.f_size, dtype=jnp.float64))
 
-    fp_radial_precond = vd._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
-    tail_precond = vd._build_rhsmode1_structured_fblock_fp_tail_coupled_schur_preconditioner(op=op)
+    fp_radial_precond = pb._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
+    tail_precond = pb._build_rhsmode1_structured_fblock_fp_tail_coupled_schur_preconditioner(op=op)
     metadata = getattr(tail_precond, "_sfincs_jax_structured_fblock_metadata")
 
     assert metadata["line_kind"] == "fp_radial_plus_tail_coupled_minres"

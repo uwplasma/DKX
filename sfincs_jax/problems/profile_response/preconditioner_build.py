@@ -11,6 +11,64 @@ import os
 import jax
 import jax.numpy as jnp
 
+from sfincs_jax.preconditioner_context import precond_policy_hints
+from sfincs_jax.solvers.preconditioners.dispatch import (
+    RHS1PreconditionerDispatchBuilders,
+    build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,
+)
+from sfincs_jax.solvers.preconditioners.domain_decomposition import (
+    build_rhs1_theta_dd_preconditioner,
+    build_rhs1_theta_line_preconditioner,
+    build_rhs1_theta_line_xdiag_preconditioner,
+    build_rhs1_theta_schwarz_preconditioner,
+    build_rhs1_theta_zeta_preconditioner,
+    build_rhs1_zeta_dd_preconditioner,
+    build_rhs1_zeta_line_preconditioner,
+    build_rhs1_zeta_schwarz_preconditioner,
+)
+from sfincs_jax.solvers.preconditioners.full_fp import (
+    build_rhs1_block_preconditioner,
+    build_rhs1_block_preconditioner_xdiag,
+    build_rhs1_collision_preconditioner,
+    build_rhs1_species_block_preconditioner,
+    build_rhs1_species_xblock_preconditioner,
+    build_rhs1_structured_fblock_angular_jacobi_preconditioner,
+    build_rhs1_structured_fblock_fp_coupled_moment_schur_preconditioner,
+    build_rhs1_structured_fblock_fp_lowmode_schur_preconditioner,
+    build_rhs1_structured_fblock_fp_moment_schur_preconditioner,
+    build_rhs1_structured_fblock_fp_radial_jacobi_preconditioner,
+    build_rhs1_structured_fblock_fp_tail_coupled_schur_preconditioner,
+    build_rhs1_structured_fblock_jacobi_preconditioner,
+    build_rhs1_structured_fblock_xi_angular_jacobi_preconditioner,
+)
+from sfincs_jax.solvers.preconditioners.pas import (
+    RHS1PasFamilyBuilders,
+    compose_preconditioners as _compose_preconditioners,
+)
+from sfincs_jax.solvers.preconditioners.pas.policy import (
+    pas_tokamak_theta_preconditioner_applicable as _pas_tokamak_theta_preconditioner_applicable,
+    pas_tz_preconditioner_applicable as _pas_tz_preconditioner_applicable,
+    pas_tz_preconditioner_memory_safe as _pas_tz_preconditioner_memory_safe,
+)
+from sfincs_jax.solvers.preconditioners.schur import (
+    RHS1SchurPreconditionerBuilders,
+    build_rhs1_schur_preconditioner,
+)
+from sfincs_jax.solvers.preconditioners.transport_matrix import (
+    build_rhsmode23_tzfft_preconditioner,
+)
+from sfincs_jax.solvers.preconditioners.xblock import (
+    build_rhs1_sxblock_tz_preconditioner,
+    build_rhs1_sxblock_tz_sparse_host_preconditioner,
+    build_rhs1_xblock_tz_lmax_preconditioner,
+    build_rhs1_xblock_tz_preconditioner,
+    build_rhs1_xblock_tz_sparse_preconditioner,
+    build_rhs1_xmg_preconditioner,
+    build_rhs1_xupwind_preconditioner,
+    compute_rhs1_sxblock_tz_sparse_host_seed,
+)
+from sfincs_jax.v3_system import V3FullSystemOperator, _matvec_shard_axis
+
 
 
 # From sfincs_jax.problems.profile_response.preconditioner_build
@@ -1783,6 +1841,322 @@ def build_rhs1_strong_preconditioner_full_from_kind(
         adi_sweeps=max(1, _parse_adi_sweeps() if adi_sweeps is None else int(adi_sweeps)),
     )
     return effective_kind, preconditioner
+
+
+_build_rhsmode1_xmg_preconditioner = build_rhs1_xmg_preconditioner
+_build_rhsmode1_xupwind_preconditioner = build_rhs1_xupwind_preconditioner
+_build_rhsmode23_tzfft_preconditioner = build_rhsmode23_tzfft_preconditioner
+
+_build_rhsmode1_collision_preconditioner = build_rhs1_collision_preconditioner
+_build_rhsmode1_block_preconditioner_xdiag = build_rhs1_block_preconditioner_xdiag
+_build_rhsmode1_block_preconditioner = build_rhs1_block_preconditioner
+
+_build_rhsmode1_theta_line_preconditioner = build_rhs1_theta_line_preconditioner
+_build_rhsmode1_theta_dd_preconditioner = build_rhs1_theta_dd_preconditioner
+_build_rhsmode1_zeta_dd_preconditioner = build_rhs1_zeta_dd_preconditioner
+_build_rhsmode1_theta_schwarz_preconditioner = (
+    build_rhs1_theta_schwarz_preconditioner
+)
+_build_rhsmode1_zeta_schwarz_preconditioner = (
+    build_rhs1_zeta_schwarz_preconditioner
+)
+_build_rhsmode23_theta_dd_preconditioner = _build_rhsmode1_theta_dd_preconditioner
+_build_rhsmode23_zeta_dd_preconditioner = _build_rhsmode1_zeta_dd_preconditioner
+_build_rhsmode23_theta_schwarz_preconditioner = _build_rhsmode1_theta_schwarz_preconditioner
+_build_rhsmode23_zeta_schwarz_preconditioner = _build_rhsmode1_zeta_schwarz_preconditioner
+_build_rhsmode1_theta_line_xdiag_preconditioner = (
+    build_rhs1_theta_line_xdiag_preconditioner
+)
+_build_rhsmode1_theta_zeta_preconditioner = build_rhs1_theta_zeta_preconditioner
+_build_rhsmode1_species_block_preconditioner = build_rhs1_species_block_preconditioner
+_build_rhsmode1_species_xblock_preconditioner = (
+    build_rhs1_species_xblock_preconditioner
+)
+_build_rhsmode1_xblock_tz_preconditioner = build_rhs1_xblock_tz_preconditioner
+_build_rhsmode1_xblock_tz_lmax_preconditioner = (
+    build_rhs1_xblock_tz_lmax_preconditioner
+)
+_build_rhsmode1_xblock_tz_sparse_preconditioner = (
+    build_rhs1_xblock_tz_sparse_preconditioner
+)
+_build_rhsmode1_sxblock_tz_sparse_host_preconditioner = (
+    build_rhs1_sxblock_tz_sparse_host_preconditioner
+)
+_compute_rhsmode1_sxblock_tz_sparse_host_seed = (
+    compute_rhs1_sxblock_tz_sparse_host_seed
+)
+_build_rhsmode1_sxblock_tz_preconditioner = build_rhs1_sxblock_tz_preconditioner
+_build_rhsmode1_zeta_line_preconditioner = build_rhs1_zeta_line_preconditioner
+_build_rhsmode1_structured_fblock_jacobi_preconditioner = (
+    build_rhs1_structured_fblock_jacobi_preconditioner
+)
+_build_rhsmode1_structured_fblock_angular_jacobi_preconditioner = (
+    build_rhs1_structured_fblock_angular_jacobi_preconditioner
+)
+_build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner = (
+    build_rhs1_structured_fblock_xi_angular_jacobi_preconditioner
+)
+_build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner = (
+    build_rhs1_structured_fblock_fp_radial_jacobi_preconditioner
+)
+_build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner = (
+    build_rhs1_structured_fblock_fp_lowmode_schur_preconditioner
+)
+_build_rhsmode1_structured_fblock_fp_moment_schur_preconditioner = (
+    build_rhs1_structured_fblock_fp_moment_schur_preconditioner
+)
+_build_rhsmode1_structured_fblock_fp_coupled_moment_schur_preconditioner = (
+    build_rhs1_structured_fblock_fp_coupled_moment_schur_preconditioner
+)
+_build_rhsmode1_structured_fblock_fp_tail_coupled_schur_preconditioner = (
+    build_rhs1_structured_fblock_fp_tail_coupled_schur_preconditioner
+)
+
+
+def _rhs1_pas_family_builders() -> RHS1PasFamilyBuilders:
+    """Bind current PAS-family builders for profile-response solve paths."""
+
+    return RHS1PasFamilyBuilders(
+        pas_tokamak_theta_applicable=_pas_tokamak_theta_preconditioner_applicable,
+        pas_tz_applicable=_pas_tz_preconditioner_applicable,
+        pas_tz_memory_safe=_pas_tz_preconditioner_memory_safe,
+        matvec_shard_axis=_matvec_shard_axis,
+        device_count=jax.device_count,
+        block_preconditioner_builder=_build_rhsmode1_block_preconditioner,
+        theta_schwarz_builder=_build_rhsmode1_theta_schwarz_preconditioner,
+        zeta_schwarz_builder=_build_rhsmode1_zeta_schwarz_preconditioner,
+        theta_line_builder=_build_rhsmode1_theta_line_preconditioner,
+        zeta_line_builder=_build_rhsmode1_zeta_line_preconditioner,
+        xblock_tz_lmax_builder=_build_rhsmode1_xblock_tz_lmax_preconditioner,
+        xmg_builder=_build_rhsmode1_xmg_preconditioner,
+        xupwind_builder=_build_rhsmode1_xupwind_preconditioner,
+        collision_builder=_build_rhsmode1_collision_preconditioner,
+        tzfft_builder=_build_rhsmode23_tzfft_preconditioner,
+        pas_hybrid_builder=_build_rhsmode1_pas_hybrid_preconditioner,
+    )
+
+
+def _rhs1_pas_family_compat_builder(method_name: str, *, accepts_safe: bool) -> Callable[..., Preconditioner]:
+    """Return a legacy-compatible PAS builder backed by the PAS owner."""
+
+    def _build(
+        *,
+        op: V3FullSystemOperator,
+        reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+        expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+        safe: bool = True,
+    ) -> Preconditioner:
+        kwargs: dict[str, Any] = {
+            "op": op,
+            "reduce_full": reduce_full,
+            "expand_reduced": expand_reduced,
+        }
+        if accepts_safe:
+            kwargs["safe"] = safe
+        return getattr(_rhs1_pas_family_builders(), method_name)(**kwargs)
+
+    return _build
+
+
+_build_rhsmode1_pas_tokamak_theta_preconditioner = _rhs1_pas_family_compat_builder(
+    "build_tokamak_theta",
+    accepts_safe=False,
+)
+_build_rhsmode1_pas_tz_preconditioner = _rhs1_pas_family_compat_builder(
+    "build_tz",
+    accepts_safe=False,
+)
+_build_rhsmode1_pas_lite_preconditioner = _rhs1_pas_family_compat_builder(
+    "build_lite",
+    accepts_safe=True,
+)
+_build_rhsmode1_pas_hybrid_preconditioner = _rhs1_pas_family_compat_builder(
+    "build_hybrid",
+    accepts_safe=True,
+)
+_build_rhsmode1_pas_schur_preconditioner = _rhs1_pas_family_compat_builder(
+    "build_schur",
+    accepts_safe=True,
+)
+_build_rhsmode1_pas_xblock_ilu_preconditioner = _rhs1_pas_family_compat_builder(
+    "build_xblock_ilu",
+    accepts_safe=False,
+)
+
+
+def _build_rhsmode1_schur_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Preconditioner:
+    """Build the RHSMode-1 constraint/source Schur preconditioner."""
+
+    builders = RHS1SchurPreconditionerBuilders(
+        pas_tokamak_theta_applicable=_pas_tokamak_theta_preconditioner_applicable,
+        pas_tz_applicable=_pas_tz_preconditioner_applicable,
+        theta_line_builder=_build_rhsmode1_theta_line_preconditioner,
+        theta_dd_builder=_build_rhsmode1_theta_dd_preconditioner,
+        species_block_builder=_build_rhsmode1_species_block_preconditioner,
+        sxblock_tz_builder=_build_rhsmode1_sxblock_tz_preconditioner,
+        xblock_tz_builder=_build_rhsmode1_xblock_tz_preconditioner,
+        xblock_tz_lmax_builder=_build_rhsmode1_xblock_tz_lmax_preconditioner,
+        pas_xblock_ilu_builder=_build_rhsmode1_pas_xblock_ilu_preconditioner,
+        xmg_builder=_build_rhsmode1_xmg_preconditioner,
+        pas_lite_builder=_build_rhsmode1_pas_lite_preconditioner,
+        pas_hybrid_builder=_build_rhsmode1_pas_hybrid_preconditioner,
+        pas_schur_builder=_build_rhsmode1_pas_schur_preconditioner,
+        pas_tokamak_theta_builder=_build_rhsmode1_pas_tokamak_theta_preconditioner,
+        pas_tz_builder=_build_rhsmode1_pas_tz_preconditioner,
+        theta_zeta_builder=_build_rhsmode1_theta_zeta_preconditioner,
+        zeta_line_builder=_build_rhsmode1_zeta_line_preconditioner,
+        zeta_dd_builder=_build_rhsmode1_zeta_dd_preconditioner,
+        block_builder=_build_rhsmode1_block_preconditioner,
+    )
+    return build_rhs1_schur_preconditioner(
+        op=op,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        builders=builders,
+        geom_scheme=int(precond_policy_hints().geom_scheme or 0),
+    )
+
+
+def _build_rhs1_preconditioner_from_kind(
+    *,
+    op: V3FullSystemOperator,
+    rhs1_precond_kind: str | None,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    preconditioner_species: int = 1,
+    preconditioner_x: int = 1,
+    preconditioner_xi: int = 1,
+    rhs1_xblock_tz_lmax: int | None = None,
+    dd_block_theta: int = 8,
+    dd_overlap_theta: int = 1,
+    dd_block_zeta: int = 8,
+    dd_overlap_zeta: int = 1,
+    adi_sweeps: int = 2,
+    emit: Callable[[int, str], None] | None = None,
+) -> Preconditioner:
+    """Resolve an RHSMode-1 preconditioner through the current builder registry."""
+
+    return _dispatch_rhs1_preconditioner_from_kind(
+        op=op,
+        rhs1_precond_kind=rhs1_precond_kind,
+        builders=RHS1PreconditionerDispatchBuilders(
+            theta_line_builder=_build_rhsmode1_theta_line_preconditioner,
+            theta_dd_builder=_build_rhsmode1_theta_dd_preconditioner,
+            theta_schwarz_builder=_build_rhsmode1_theta_schwarz_preconditioner,
+            theta_line_xdiag_builder=_build_rhsmode1_theta_line_xdiag_preconditioner,
+            block_xdiag_builder=_build_rhsmode1_block_preconditioner_xdiag,
+            species_block_builder=_build_rhsmode1_species_block_preconditioner,
+            sxblock_builder=_build_rhsmode1_species_xblock_preconditioner,
+            sxblock_tz_builder=_build_rhsmode1_sxblock_tz_preconditioner,
+            xblock_tz_builder=_build_rhsmode1_xblock_tz_preconditioner,
+            xblock_tz_lmax_builder=_build_rhsmode1_xblock_tz_lmax_preconditioner,
+            theta_zeta_builder=_build_rhsmode1_theta_zeta_preconditioner,
+            xmg_builder=_build_rhsmode1_xmg_preconditioner,
+            pas_lite_builder=_build_rhsmode1_pas_lite_preconditioner,
+            pas_hybrid_builder=_build_rhsmode1_pas_hybrid_preconditioner,
+            pas_schur_builder=_build_rhsmode1_pas_schur_preconditioner,
+            pas_tz_builder=_build_rhsmode1_pas_tz_preconditioner,
+            pas_tzfft_builder=_build_rhsmode23_tzfft_preconditioner,
+            pas_tokamak_theta_builder=_build_rhsmode1_pas_tokamak_theta_preconditioner,
+            pas_ilu_builder=_build_rhsmode1_pas_xblock_ilu_preconditioner,
+            zeta_line_builder=_build_rhsmode1_zeta_line_preconditioner,
+            zeta_dd_builder=_build_rhsmode1_zeta_dd_preconditioner,
+            zeta_schwarz_builder=_build_rhsmode1_zeta_schwarz_preconditioner,
+            schur_builder=_build_rhsmode1_schur_preconditioner,
+            collision_builder=_build_rhsmode1_collision_preconditioner,
+            structured_fblock_jacobi_builder=_build_rhsmode1_structured_fblock_jacobi_preconditioner,
+            structured_fblock_angular_jacobi_builder=_build_rhsmode1_structured_fblock_angular_jacobi_preconditioner,
+            structured_fblock_xi_angular_jacobi_builder=_build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner,
+            structured_fblock_fp_radial_jacobi_builder=_build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner,
+            structured_fblock_fp_lowmode_schur_builder=_build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner,
+            structured_fblock_fp_moment_schur_builder=_build_rhsmode1_structured_fblock_fp_moment_schur_preconditioner,
+            structured_fblock_fp_coupled_moment_schur_builder=_build_rhsmode1_structured_fblock_fp_coupled_moment_schur_preconditioner,
+            structured_fblock_fp_tail_coupled_schur_builder=_build_rhsmode1_structured_fblock_fp_tail_coupled_schur_preconditioner,
+            block_builder=_build_rhsmode1_block_preconditioner,
+            compose_preconditioners=_compose_preconditioners,
+        ),
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        preconditioner_species=preconditioner_species,
+        preconditioner_x=preconditioner_x,
+        preconditioner_xi=preconditioner_xi,
+        rhs1_xblock_tz_lmax=rhs1_xblock_tz_lmax,
+        dd_block_theta=dd_block_theta,
+        dd_overlap_theta=dd_overlap_theta,
+        dd_block_zeta=dd_block_zeta,
+        dd_overlap_zeta=dd_overlap_zeta,
+        adi_sweeps=adi_sweeps,
+        emit=emit,
+    )
+
+
+def _rhs1_strong_preconditioner_family_builders() -> RHS1StrongPreconditionerFamilyBuilders:
+    """Bind the current RHSMode-1 dispatch seam for strong fallback builders."""
+
+    return RHS1StrongPreconditionerFamilyBuilders(
+        dispatch_builder=_build_rhs1_preconditioner_from_kind,
+    )
+
+
+def _build_rhs1_strong_preconditioner_full_from_kind(
+    *,
+    op: V3FullSystemOperator,
+    strong_precond_kind: str | None,
+    rhs1_precond_kind: str | None,
+    residual_norm: float,
+    rhs1_xblock_tz_lmax: int | None = None,
+    dd_block_theta: int = 8,
+    dd_overlap_theta: int = 1,
+    dd_block_zeta: int = 8,
+    dd_overlap_zeta: int = 1,
+    adi_sweeps: int | None = None,
+) -> tuple[str | None, Preconditioner | None]:
+    """Build the full-system strong fallback preconditioner via current dispatch."""
+
+    return _rhs1_strong_preconditioner_family_builders().build_full_from_kind(
+        op=op,
+        strong_precond_kind=strong_precond_kind,
+        base_preconditioner_kind=rhs1_precond_kind,
+        residual_norm=float(residual_norm),
+        rhs1_xblock_tz_lmax=rhs1_xblock_tz_lmax,
+        dd_block_theta=dd_block_theta,
+        dd_overlap_theta=dd_overlap_theta,
+        dd_block_zeta=dd_block_zeta,
+        dd_overlap_zeta=dd_overlap_zeta,
+        adi_sweeps=adi_sweeps,
+    )
+
+
+def _build_rhs1_strong_preconditioner_reduced_from_kind(
+    *,
+    op: V3FullSystemOperator,
+    strong_precond_kind: str | None,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray],
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray],
+    rhs1_xblock_tz_lmax: int | None = None,
+    dd_block_theta: int = 8,
+    dd_overlap_theta: int = 1,
+    dd_block_zeta: int = 8,
+    dd_overlap_zeta: int = 1,
+) -> Preconditioner | None:
+    """Build the reduced active-DOF strong fallback preconditioner via current dispatch."""
+
+    return _rhs1_strong_preconditioner_family_builders().build_reduced_from_kind(
+        op=op,
+        strong_precond_kind=strong_precond_kind,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        rhs1_xblock_tz_lmax=rhs1_xblock_tz_lmax,
+        dd_block_theta=int(dd_block_theta),
+        dd_overlap_theta=int(dd_overlap_theta),
+        dd_block_zeta=int(dd_block_zeta),
+        dd_overlap_zeta=int(dd_overlap_zeta),
+    )
 
 
 def _wrap_if_needed(context: RHS1ReducedPreconditionerBuildContext, precond: Preconditioner) -> Preconditioner:

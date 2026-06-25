@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import sfincs_jax.v3_driver as vd
+import sfincs_jax.problems.profile_response.preconditioner_build as pb
 
 
 def _op(*, with_pas: bool = False):
@@ -21,8 +21,8 @@ def test_build_rhs1_strong_preconditioner_full_from_kind_forwards_dispatch_args(
         seen.update(kwargs)
         return sentinel
 
-    monkeypatch.setattr(vd, "_build_rhs1_preconditioner_from_kind", _dispatch)
-    kind, preconditioner = vd._build_rhs1_strong_preconditioner_full_from_kind(
+    monkeypatch.setattr(pb, "_build_rhs1_preconditioner_from_kind", _dispatch)
+    kind, preconditioner = pb._build_rhs1_strong_preconditioner_full_from_kind(
         op=_op(),
         strong_precond_kind="theta_schwarz",
         rhs1_precond_kind="point",
@@ -52,9 +52,9 @@ def test_build_rhs1_strong_preconditioner_full_from_kind_uses_env_adi_sweeps(mon
         return object()
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "6")
-    monkeypatch.setattr(vd, "_build_rhs1_preconditioner_from_kind", _dispatch)
+    monkeypatch.setattr(pb, "_build_rhs1_preconditioner_from_kind", _dispatch)
 
-    vd._build_rhs1_strong_preconditioner_full_from_kind(
+    pb._build_rhs1_strong_preconditioner_full_from_kind(
         op=_op(),
         strong_precond_kind="adi",
         rhs1_precond_kind="point",
@@ -65,7 +65,7 @@ def test_build_rhs1_strong_preconditioner_full_from_kind_uses_env_adi_sweeps(mon
     assert seen["adi_sweeps"] == 6
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "bad")
-    vd._build_rhs1_strong_preconditioner_full_from_kind(
+    pb._build_rhs1_strong_preconditioner_full_from_kind(
         op=_op(),
         strong_precond_kind="adi",
         rhs1_precond_kind="point",
@@ -82,8 +82,8 @@ def test_build_rhs1_strong_preconditioner_reduced_from_kind_forwards_dispatch_ar
         seen.update(kwargs)
         return sentinel
 
-    monkeypatch.setattr(vd, "_build_rhs1_preconditioner_from_kind", _dispatch)
-    preconditioner = vd._build_rhs1_strong_preconditioner_reduced_from_kind(
+    monkeypatch.setattr(pb, "_build_rhs1_preconditioner_from_kind", _dispatch)
+    preconditioner = pb._build_rhs1_strong_preconditioner_reduced_from_kind(
         op=_op(),
         strong_precond_kind="theta_schwarz",
         reduce_full=lambda x: x,
@@ -111,9 +111,9 @@ def test_build_rhs1_strong_preconditioner_reduced_from_kind_uses_env_controls(mo
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX", "6")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "4")
-    monkeypatch.setattr(vd, "_build_rhs1_preconditioner_from_kind", _dispatch)
+    monkeypatch.setattr(pb, "_build_rhs1_preconditioner_from_kind", _dispatch)
 
-    vd._build_rhs1_strong_preconditioner_reduced_from_kind(
+    pb._build_rhs1_strong_preconditioner_reduced_from_kind(
         op=_op(),
         strong_precond_kind="xblock_tz_lmax",
         reduce_full=lambda x: x,
@@ -133,9 +133,9 @@ def test_build_rhs1_strong_preconditioner_reduced_from_kind_preserves_legacy_adi
         return object()
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "bad")
-    monkeypatch.setattr(vd, "_build_rhs1_preconditioner_from_kind", _dispatch)
+    monkeypatch.setattr(pb, "_build_rhs1_preconditioner_from_kind", _dispatch)
 
-    vd._build_rhs1_strong_preconditioner_reduced_from_kind(
+    pb._build_rhs1_strong_preconditioner_reduced_from_kind(
         op=_op(),
         strong_precond_kind="unknown",
         reduce_full=lambda x: x,
@@ -153,8 +153,8 @@ def test_build_rhs1_strong_preconditioner_full_from_kind_downgrades_pas_schur_to
         seen.update(kwargs)
         return object()
 
-    monkeypatch.setattr(vd, "_build_rhs1_preconditioner_from_kind", _dispatch)
-    kind, _preconditioner = vd._build_rhs1_strong_preconditioner_full_from_kind(
+    monkeypatch.setattr(pb, "_build_rhs1_preconditioner_from_kind", _dispatch)
+    kind, _preconditioner = pb._build_rhs1_strong_preconditioner_full_from_kind(
         op=_op(with_pas=True),
         strong_precond_kind="schur",
         rhs1_precond_kind="pas_lite",
@@ -172,8 +172,8 @@ def test_build_rhs1_strong_preconditioner_full_from_kind_returns_none_when_disab
         called["value"] = True
         return object()
 
-    monkeypatch.setattr(vd, "_build_rhs1_preconditioner_from_kind", _dispatch)
-    kind, preconditioner = vd._build_rhs1_strong_preconditioner_full_from_kind(
+    monkeypatch.setattr(pb, "_build_rhs1_preconditioner_from_kind", _dispatch)
+    kind, preconditioner = pb._build_rhs1_strong_preconditioner_full_from_kind(
         op=_op(),
         strong_precond_kind=None,
         rhs1_precond_kind="point",
