@@ -8,7 +8,7 @@ import pytest
 
 import sfincs_jax
 from sfincs_jax.compare import _as_numpy, _center_fsa, _merge_tolerance_floor
-from sfincs_jax.solver_state import (
+from sfincs_jax.solvers.state import (
     _op_signature,
     operator_shape_signature,
     operator_shape_signature_dict,

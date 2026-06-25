@@ -590,7 +590,7 @@
         },
         {
           "claim": "Solver-selection policy is isolated enough to host future lineax/equinox experiments behind gates.",
-          "path": "sfincs_jax/solver_selection_policy.py"
+          "path": "sfincs_jax/solvers/selection_policy.py"
         },
         {
           "claim": "Lineax benchmark now writes adoption summaries that separate synthetic speedups from real SFINCS solver-error statuses.",

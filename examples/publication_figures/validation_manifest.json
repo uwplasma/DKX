@@ -545,7 +545,7 @@
       "Scheme-4 Boozer harmonic sensitivity maps are generated as publication-ready figures; full VMEC-boundary optimization remains outside this bounded validation claim"
     ],
     "source_code": [
-      "sfincs_jax/implicit_solve.py",
+      "sfincs_jax/solvers/implicit.py",
       "sfincs_jax/geometry.py",
       "sfincs_jax/validation/artifacts.py",
       "examples/publication_figures/generate_autodiff_sensitivity_validation.py"
