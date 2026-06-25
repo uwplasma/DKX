@@ -1225,3 +1225,42 @@ Next best steps:
    intermediate-grid diagnostics.
 3. Add small Fortran RHSMode 4/5 output fixtures once the no-Phi1 physical
    derivative replay is stable.
+
+## 2026-06-25 Active Fortran-Style Option-1 Ambipolar Derivative Replay
+
+Steps taken:
+
+1. Audited Fortran v3 `ambipolarSolver.F90`, `diagnostics.F90`, and
+   `adjointDiagnostics.F90` for the derivative-assisted option-1 current
+   contract.
+2. Found that Fortran's root scalar is
+   `sum_s Z_s particleFlux_vm_rN_s`, and that small collisionless
+   `constraintScheme=1` RHSMode-1 decks must be solved in the active
+   compressed pitch-mode ordering rather than the rectangular storage layout.
+3. Updated the bounded namelist-backed validation backend to assemble and solve
+   the active reduced operator, scatter solutions back to full diagnostic
+   ordering, infer radial-current conversion factors from the namelist, and
+   default the ambipolar helper to the Fortran `rN` current convention.
+4. Added a checked `geometry1_helical_small_option1` regression that replays
+   the Fortran active current and Newton slope.
+
+Results:
+
+- Small Fortran option-1 replay at `Er = [-20, 20, 0, -2.01579684708909]`
+  now matches radial currents with relative errors `2.8e-10`, `4.9e-9`,
+  `6.1e-7`, and `1.9e-6`.
+- The active implicit derivative at `Er=0` is `5.3516725e-7`, matching the
+  Fortran implied Newton slope `5.3516663e-7` within the new `2e-5` gate.
+- Focused gates passed:
+  `JAX_ENABLE_X64=True python -m pytest tests/test_sensitivity.py
+  tests/test_ambipolar_problem.py tests/test_domain_package_import_contracts.py
+  -q --tb=short` with `41 passed in 45.93 s`.
+
+Next best steps:
+
+1. Run the same active namelist-backed provider through the checked option-3
+   small decks and add the physical replay gate if it matches Fortran.
+2. Promote the provider into the in-process ambipolar option-1/3 root driver
+   for bounded small decks, keeping Brent as the robust CLI fallback.
+3. Start the RHSMode 4 fixed-Er output fixture lane using the now-validated
+   active operator/transpose contract.

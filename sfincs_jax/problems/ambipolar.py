@@ -1375,35 +1375,187 @@ def _dense_validation_linear_algebra_for_operator(
     *,
     max_size: int,
     include_jacobian_terms: bool,
-) -> tuple[Callable[[Any], Any], Callable[[Any], Any], Callable[[Any], Any]]:
+) -> tuple[Callable[[Any], Any], Callable[[Any], Any], Callable[[Any], Any], dict[str, Any]]:
     """Return dense solve/transpose closures for small validation operators."""
 
     total_size = int(getattr(op, "total_size"))
-    if total_size > int(max_size):
-        raise ValueError(
-            "bounded dense validation refused RHSMode-1 size "
-            f"{total_size} > max_dense_size {int(max_size)}."
-        )
 
     import jax.numpy as jnp  # noqa: PLC0415
+    import numpy as np  # noqa: PLC0415
 
+    from ..rhs1_compressed_layout import build_rhs1_compressed_pitch_layout  # noqa: PLC0415
     from ..solver import assemble_dense_matrix_from_matvec  # noqa: PLC0415
     from ..v3_system import apply_v3_full_system_operator_cached  # noqa: PLC0415
 
-    matrix = assemble_dense_matrix_from_matvec(
-        matvec=lambda state: apply_v3_full_system_operator_cached(
+    layout = build_rhs1_compressed_pitch_layout(op)
+    active_idx_np = np.asarray(layout.active_full_indices, dtype=np.int32)
+    use_active_dof = bool(active_idx_np.size < total_size)
+    linear_size = int(active_idx_np.size) if use_active_dof else total_size
+    if linear_size > int(max_size):
+        raise ValueError(
+            "bounded dense validation refused RHSMode-1 size "
+            f"{linear_size} > max_dense_size {int(max_size)}."
+        )
+    active_idx = jnp.asarray(active_idx_np, dtype=jnp.int32)
+
+    def reduce_full(vector: Any) -> Any:
+        arr = jnp.asarray(vector, dtype=jnp.float64).reshape((total_size,))
+        return arr[active_idx] if use_active_dof else arr
+
+    def expand_reduced(vector: Any) -> Any:
+        arr = jnp.asarray(vector, dtype=jnp.float64).reshape((linear_size,))
+        if not use_active_dof:
+            return arr
+        out = jnp.zeros((total_size,), dtype=jnp.float64)
+        return out.at[active_idx].set(arr, unique_indices=True)
+
+    def matvec_reduced(state: Any) -> Any:
+        full_state = expand_reduced(state)
+        full_out = apply_v3_full_system_operator_cached(
             op,
-            state,
+            full_state,
             include_jacobian_terms=bool(include_jacobian_terms),
-        ),
-        n=total_size,
+        )
+        return reduce_full(full_out)
+
+    matrix = assemble_dense_matrix_from_matvec(
+        matvec=matvec_reduced,
+        n=linear_size,
         dtype=jnp.float64,
     )
+
+    def solve_dense_system(a: Any, rhs: Any) -> Any:
+        rhs_arr = jnp.asarray(rhs, dtype=jnp.float64).reshape((-1,))
+        x = jnp.linalg.solve(a, rhs_arr)
+        residual = jnp.linalg.norm(a @ x - rhs_arr)
+        rhs_norm = jnp.linalg.norm(rhs_arr)
+        if bool(jnp.all(jnp.isfinite(x))) and float(residual) <= max(1.0e-10, 1.0e-8 * float(rhs_norm)):
+            return x
+        # Some Fortran-compatible derivative-assisted RHSMode=1 decks resolve
+        # to constraintScheme=1 and are intentionally rank deficient. PETSc
+        # handles this through its nullspace-compatible factor/KSP policy; the
+        # bounded validation path uses the minimum-norm least-squares solution.
+        x_np = np.linalg.lstsq(np.asarray(a), np.asarray(rhs_arr), rcond=None)[0]
+        return jnp.asarray(x_np, dtype=jnp.float64)
+
     return (
-        lambda rhs: jnp.linalg.solve(matrix, rhs),
-        lambda rhs: jnp.linalg.solve(matrix.T, rhs),
-        lambda vector: matrix.T @ vector,
+        lambda rhs: expand_reduced(solve_dense_system(matrix, reduce_full(rhs))),
+        lambda rhs: expand_reduced(solve_dense_system(matrix.T, reduce_full(rhs))),
+        lambda vector: expand_reduced(matrix.T @ reduce_full(vector)),
+        {
+            "linear_algebra": (
+                "bounded_dense_active_validation"
+                if use_active_dof
+                else "bounded_dense_validation"
+            ),
+            "active_dof": use_active_dof,
+            "active_size": linear_size,
+            "full_size": total_size,
+            "nxi_for_x": tuple(int(v) for v in np.asarray(layout.nxi_for_x, dtype=np.int64)),
+        },
     )
+
+
+def _radial_current_conversion_kwargs_from_namelist(nml: Any) -> dict[str, float]:
+    """Infer Fortran v3 radial-current conversion factors from a namelist."""
+
+    from ..boozer_bc import read_boozer_bc_header, selected_r_n_from_bc  # noqa: PLC0415
+    from ..input_compat import (  # noqa: PLC0415
+        effective_equilibrium_file,
+        effective_psi_a_hat,
+        effective_psi_n_wish,
+    )
+    from ..paths import resolve_existing_path  # noqa: PLC0415
+    from ..vmec_wout import psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation  # noqa: PLC0415
+
+    def _get_int(group: Mapping[str, Any], key: str, default: int) -> int:
+        value = group.get(key.upper(), default)
+        if isinstance(value, list):
+            value = value[0] if value else default
+        return int(value)
+
+    geom_params = nml.group("geometryParameters")
+    phys_params = nml.group("physicsParameters")
+    geometry_scheme = _get_int(geom_params, "geometryScheme", -1)
+    if geometry_scheme == 1:
+        psi_a_hat = effective_psi_a_hat(geom_params=geom_params, phys_params=phys_params, default=0.15596)
+        a_hat = float(geom_params.get("AHAT", 0.5585))
+        r_n = math.sqrt(
+            effective_psi_n_wish(
+                geom_params=geom_params,
+                default_r_n=0.5,
+                psi_a_hat=psi_a_hat,
+                a_hat=a_hat,
+            )
+        )
+    elif geometry_scheme == 2:
+        a_hat = 0.5585
+        psi_a_hat = (a_hat * a_hat) / 2.0
+        r_n = 0.5
+    elif geometry_scheme == 4:
+        psi_a_hat = -0.384935
+        a_hat = 0.5109
+        r_n = 0.5
+    elif geometry_scheme in {11, 12}:
+        eq = effective_equilibrium_file(geom_params=geom_params)
+        if eq is None:
+            raise ValueError("geometryScheme=11/12 requires equilibriumFile for radial-current conversion.")
+        base_dir = nml.source_path.parent if nml.source_path is not None else None
+        repo_root = Path(__file__).resolve().parents[2]
+        p = resolve_existing_path(
+            str(eq),
+            base_dir=base_dir,
+            extra_search_dirs=(repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria"),
+        ).path
+        header = read_boozer_bc_header(path=str(p), geometry_scheme=int(geometry_scheme))
+        psi_a_hat = float(header.psi_a_hat)
+        a_hat = float(header.a_hat)
+        psi_n_wish = effective_psi_n_wish(geom_params=geom_params, default_r_n=0.5)
+        r_n_wish = math.sqrt(float(psi_n_wish))
+        vmecradial_option = _get_int(
+            geom_params,
+            "VMECRadialOption",
+            _get_int(geom_params, "VMECRADIALOPTION", 1),
+        )
+        r_n = selected_r_n_from_bc(
+            path=str(p),
+            geometry_scheme=int(geometry_scheme),
+            r_n_wish=r_n_wish,
+            vmecradial_option=int(vmecradial_option),
+        )
+    elif geometry_scheme == 5:
+        eq = effective_equilibrium_file(geom_params=geom_params)
+        if eq is None:
+            raise ValueError("geometryScheme=5 requires equilibriumFile for radial-current conversion.")
+        base_dir = nml.source_path.parent if nml.source_path is not None else None
+        repo_root = Path(__file__).resolve().parents[2]
+        p = resolve_existing_path(
+            str(eq),
+            base_dir=base_dir,
+            extra_search_dirs=(repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria"),
+        ).path
+        w = read_vmec_wout(p)
+        psi_a_hat = float(psi_a_hat_from_wout(w))
+        a_hat = float(w.aminor_p)
+        psi_n_wish = effective_psi_n_wish(
+            geom_params=geom_params,
+            default_r_n=0.5,
+            psi_a_hat=psi_a_hat,
+            a_hat=a_hat,
+        )
+        vmecradial_option = _get_int(
+            geom_params,
+            "VMECRadialOption",
+            _get_int(geom_params, "VMECRADIALOPTION", 1),
+        )
+        interp = vmec_interpolation(w=w, psi_n_wish=psi_n_wish, vmec_radial_option=vmecradial_option)
+        r_n = math.sqrt(float(interp.psi_n))
+    else:
+        raise NotImplementedError(
+            "Fortran-compatible radial-current conversion is not implemented for "
+            f"geometryScheme={geometry_scheme}."
+        )
+    return {"psi_a_hat": float(psi_a_hat), "a_hat": float(a_hat), "r_n": float(r_n)}
 
 
 def rhsmode1_radial_current_response_from_namelist(
@@ -1411,7 +1563,7 @@ def rhsmode1_radial_current_response_from_namelist(
     nml: Any,
     derivative_step: float = 1.0e-5,
     finite_difference_step: float | None = None,
-    radial_coordinate: str = "psiHat",
+    radial_coordinate: str = "rN",
     psi_a_hat: float | None = None,
     a_hat: float | None = None,
     r_n: float | None = None,
@@ -1452,6 +1604,14 @@ def rhsmode1_radial_current_response_from_namelist(
         raise ValueError("rhsmode1_radial_current_response_from_namelist requires RHSMode=1.")
     dphi_d_er = dphi_hat_dpsi_hat_er_derivative_from_namelist(nml_base)
     source_path = getattr(nml_base, "source_path", None)
+    coordinate = str(radial_coordinate)
+    if coordinate.strip().lower() not in {"psihat", "psi_hat"} and (
+        psi_a_hat is None or a_hat is None or r_n is None
+    ):
+        inferred_conversion = _radial_current_conversion_kwargs_from_namelist(nml_base)
+        psi_a_hat = inferred_conversion["psi_a_hat"] if psi_a_hat is None else psi_a_hat
+        a_hat = inferred_conversion["a_hat"] if a_hat is None else a_hat
+        r_n = inferred_conversion["r_n"] if r_n is None else r_n
 
     def build_operator(er: float) -> Any:
         return full_system_operator_from_namelist(
@@ -1466,15 +1626,14 @@ def rhsmode1_radial_current_response_from_namelist(
         op_plus = build_operator(er_value + h)
         op_minus = build_operator(er_value - h)
         if linear_algebra_factory is None:
-            solve, transpose_solve, transpose_apply = _dense_validation_linear_algebra_for_operator(
+            solve, transpose_solve, transpose_apply, linear_algebra_metadata = _dense_validation_linear_algebra_for_operator(
                 op,
                 max_size=int(max_dense_size),
                 include_jacobian_terms=bool(include_jacobian_terms),
             )
-            linear_algebra_kind = "bounded_dense_validation"
         else:
             solve, transpose_solve, transpose_apply = linear_algebra_factory(op)
-            linear_algebra_kind = "caller_supplied"
+            linear_algebra_metadata = {"linear_algebra": "caller_supplied"}
         operator_tangent = (
             er_operator_tangent_from_dphi_hat_dpsi_hat_derivative(op, dphi_d_er)
             if bool(use_analytic_er_tangent)
@@ -1502,7 +1661,11 @@ def rhsmode1_radial_current_response_from_namelist(
                 "derivative_step": h,
                 "keep_zero_er_terms": bool(keep_zero_er_terms),
                 "use_analytic_er_tangent": bool(use_analytic_er_tangent),
-                "linear_algebra": linear_algebra_kind,
+                "radial_coordinate": coordinate,
+                "psi_a_hat": None if psi_a_hat is None else float(psi_a_hat),
+                "a_hat": None if a_hat is None else float(a_hat),
+                "r_n": None if r_n is None else float(r_n),
+                **linear_algebra_metadata,
                 **dict(metadata or {}),
             },
         )
@@ -1513,6 +1676,7 @@ def rhsmode1_radial_current_response_from_namelist(
         metadata={
             "response_builder": "rhsmode1_radial_current_response_from_namelist",
             "source_path": None if source_path is None else str(source_path),
+            "radial_coordinate": coordinate,
             **dict(metadata or {}),
         },
     )

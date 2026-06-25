@@ -69,11 +69,12 @@ Fortran v3 feature ownership
      - Safeguarded Newton/bisection uses an adjoint-computed
        ``dRadialCurrentdEr`` and maintains a bracket.
      - ``sfincs_jax.problems.ambipolar`` and ``sfincs_jax.sensitivity``:
-       partial. Root-policy logic, dense certificates, matrix-free/JVP
+       implemented with gates. Root-policy logic, dense certificates, matrix-free/JVP
        derivative-provider gates, analytic existing-branch ``E_r`` tangents,
        opt-in fixed-shape zero-field branch retention, a namelist-backed
-       RHSMode-1 derivative-response helper, and fast option-1-style root
-       tests exist; production physical replay gates remain.
+       RHSMode-1 derivative-response helper, fast option-1-style root tests,
+       and a small Fortran active-operator ``particleFlux_vm_rN`` Newton-slope
+       replay exist; production physical replay gates remain.
    * - Ambipolar root solve option 2
      - ``ambipolarSolver.F90``
      - Brent method evaluates the radial current at bracket endpoints and an
@@ -95,8 +96,9 @@ Fortran v3 feature ownership
        parallel flow, total heat flux, and radial current sensitivities.
      - ``sfincs_jax.sensitivity`` plus diagnostic observable builders:
        partial. Linear implicit derivative, JVP/VJP, dot-product, and small
-       RHSMode-1 radial-current gates exist; Fortran-compatible RHSMode-4 HDF5
-       output fields and production grids remain.
+       RHSMode-1 radial-current gates exist, including active Fortran-style
+       option-1 ``dJ_r/dE_r`` replay; Fortran-compatible RHSMode-4 HDF5 output
+       fields and production grids remain.
    * - RHSMode 5 ambipolar sensitivities
      - ``ambipolarSolver.F90``, ``solver.F90``, ``adjointDiagnostics.F90``
      - Fortran first finds ambipolar ``E_r``, then evaluates derivatives at
@@ -188,11 +190,13 @@ Fortran v3 feature ownership
    * - Ambipolar Newton/bisection and pure Newton options
      - partial
      - Small-deck derivative certificates, the namelist-backed fixed-shape
-       RHSMode-1 radial-current response helper, and radial-current observable
-       gates in ``tests/test_sensitivity.py`` and
+       RHSMode-1 radial-current response helper, active Fortran-style
+       option-1 current/slope replay, and radial-current observable gates in
+       ``tests/test_sensitivity.py`` and
        ``tests/test_ambipolar_problem.py``.
-     - Production sparse/matrix-free ``E_r`` derivatives, in-process RHSMode-1
-       evaluator reuse, and Fortran option-1/3 physical replay gates.
+     - Option-3 physical replay, production sparse/matrix-free ``E_r``
+       derivatives, in-process RHSMode-1 evaluator reuse, and production
+       Fortran option-1/3 physical replay gates.
    * - RHSMode 4 fixed-``E_r`` sensitivities
      - partial
      - ``sfincs_jax.sensitivity`` supports implicit linear observable

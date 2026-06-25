@@ -31,6 +31,7 @@ from sfincs_jax.sensitivity import (
     LinearObservableSystem,
     MatrixFreeLinearObservableSystem,
     adjoint_dot_product_check,
+    evaluate_matrix_free_linear_observable,
     implicit_linear_observable_derivative,
     implicit_linear_observable_derivative_from_builder,
     implicit_matrix_free_linear_observable_derivative_from_builder,
@@ -660,12 +661,52 @@ def test_rhsmode1_namelist_response_uses_fixed_shape_er_derivative_provider() ->
     assert derivative.metadata["response_builder"] == "rhsmode1_radial_current_response_from_namelist"
     assert derivative.metadata["gate"] == "fixed_shape_namelist_response"
     assert derivative.metadata["keep_zero_er_terms"] is True
-    assert derivative.metadata["linear_algebra"] == "bounded_dense_validation"
+    assert derivative.metadata["linear_algebra"] in {
+        "bounded_dense_validation",
+        "bounded_dense_active_validation",
+    }
     assert derivative.metadata["operator_derivative_action"] == "jax_jvp_operator_tangent"
     assert derivative.metadata["rhs_derivative"] == "jax_jvp_operator_tangent"
     assert derivative.metadata["tangent_adjoint_abs_error"] < 1.0e-8
     assert derivative.metadata["finite_difference_abs_error"] < 2.0e-5
     np.testing.assert_allclose(derivative.derivative, centered, rtol=0.0, atol=2.0e-5)
+
+
+def test_rhsmode1_namelist_response_replays_fortran_active_rn_current() -> None:
+    input_path = (
+        Path(__file__).parents[1]
+        / "benchmarks"
+        / "fortran_v3_ambipolar_reference"
+        / "namelists"
+        / "geometry1_helical_small_option1.namelist"
+    )
+    response = rhsmode1_radial_current_response_from_namelist(
+        nml=input_path,
+        derivative_step=1.0e-5,
+        max_dense_size=1000,
+        observable_chunk_size=128,
+        metadata={"gate": "fortran_option1_active_rn_current"},
+    )
+
+    system = response.build_system(0.0)
+    current = evaluate_matrix_free_linear_observable(system)
+    derivative = response.derivative(0.0)
+    fortran_implied_newton_slope = 1.078787197904619e-6 / 2.01579684708909
+
+    assert system.metadata["linear_algebra"] == "bounded_dense_active_validation"
+    assert system.metadata["active_dof"] is True
+    assert system.metadata["active_size"] == 984
+    assert system.metadata["full_size"] == 1474
+    assert system.metadata["radial_coordinate"] == "rN"
+    assert derivative.metadata["tangent_adjoint_abs_error"] < 1.0e-10
+    assert derivative.metadata["finite_difference_abs_error"] < 1.0e-10
+    np.testing.assert_allclose(current, 1.078787197904619e-6, rtol=2.0e-5, atol=0.0)
+    np.testing.assert_allclose(
+        derivative.derivative,
+        fortran_implied_newton_slope,
+        rtol=2.0e-5,
+        atol=0.0,
+    )
 
 
 def test_rhs1_radial_current_jvp_vjp_dot_product_gate() -> None:

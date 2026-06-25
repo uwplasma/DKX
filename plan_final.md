@@ -124,6 +124,12 @@ Implementation progress on 2026-06-23:
   JVP operator tangent, and dense validation closures to compare the implicit
   derivative against centered finite differences without exposing users to
   manual plus/minus operator assembly.
+- The namelist-backed RHSMode-1 response now validates on Fortran-style active
+  pitch-mode DOFs instead of the rectangular inactive-mode storage. It defaults
+  to the Fortran ambipolar `particleFlux_vm_rN` current convention, infers the
+  radial conversion from the namelist, and replays the checked
+  `geometry1_helical_small_option1` Fortran option-1 current and Newton slope
+  within `2e-5` relative tolerance.
 - `sfincs_jax.sensitivity` now exposes `jvp_flux`, `vjp_flux`, and
   `adjoint_dot_product_check`. The focused tests apply the dot-product identity
   to real RHSMode-1 particle-flux, heat-flux, flow, radial-current, and
@@ -139,9 +145,9 @@ Implementation progress on 2026-06-23:
   ambipolar option 1/3, RHSMode 4/5 sensitivities, solver backends, geometry,
   Phi1, outputs, and parallelism.
 - Remaining Lane 3 work is deeper fixed-shape numerical operator/factor and
-  preconditioner setup reuse behind that evaluator, plus Fortran option 1/3
-  physical replay gates that run the namelist-backed derivative provider
-  through real ambipolar root solves.
+  preconditioner setup reuse behind that evaluator, plus the option-3 and
+  larger-deck physical replay gates that run the namelist-backed derivative
+  provider through real ambipolar root solves.
 
 Important Fortran v3 implementation modules:
 
@@ -572,11 +578,16 @@ Acceptance gates:
   `geometry4_w7x_like_small_option{1,2,3}` and
   `geometry1_helical_small_option2`. The Brent option-2 sequence is now covered
   by `tests/test_ambipolar_problem.py`.
+- The checked `geometry1_helical_small_option1` derivative-assisted Newton
+  point is now covered by `tests/test_sensitivity.py` using the active
+  Fortran-style operator, `particleFlux_vm_rN`, and the implicit
+  tangent/adjoint derivative certificate.
 - Production reference target is the checked-in production decks under
   `benchmarks/fortran_v3_ambipolar_reference/namelists`, which must be run
   before public benchmark claims are regenerated. The checked-in production
   Brent summary is now covered by `tests/test_ambipolar_problem.py`.
-- `dJr/dEr` matches finite differences on a stable step window.
+- `dJr/dEr` matches finite differences on a stable step window and matches the
+  checked small Fortran option-1 Newton slope.
 - Brent and Newton return the same root within tolerance when both are valid.
 - CPU/GPU roots and root types match within tolerance for bounded cases.
 - Failed brackets write a useful partial artifact and do not claim success.
@@ -1025,9 +1036,9 @@ Completed on 2026-06-25:
 
 Next ordered implementation steps:
 
-1. Use the namelist-backed fixed-shape analytic/JVP provider in one real
-   RHSMode-1 derivative-assisted ambipolar option-1/3 physical replay gate
-   against the checked Fortran summaries.
+1. Use the active namelist-backed fixed-shape analytic/JVP provider in the
+   option-3 small Fortran physical replay and then in the production option-1/3
+   decks.
 2. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
    set to Phi1 drift-current, total heat-flux, and intermediate-grid cases.
 3. Add small Fortran RHSMode 4/5 output fixtures and compare exported
