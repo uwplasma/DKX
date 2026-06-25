@@ -1441,3 +1441,55 @@ Next best steps:
    pinned.
 3. Continue extracting duplicated policy/config glue into existing domain
    modules only when it reduces driver/module complexity.
+
+## 2026-06-25 First RHSMode-4 Fortran Sensitivity Fixture
+
+Steps taken:
+
+1. Built scratch RHSMode-4 decks from the checked small ambipolar references.
+2. Rejected the helical geometry-1 deck as a fixture because SFINCS Fortran v3
+   reports `Adjoint not compatible with stellarator asymmety`.
+3. Reran the symmetric `geometryScheme=4` W7-X-like analytic deck with
+   `adjointRadialCurrentOption=.true.` and particle-flux adjoint options.
+4. Checked in only a compact namelist and JSON summary under
+   `benchmarks/fortran_v3_sensitivity_reference`, not the generated HDF5 file.
+5. Added a regression that validates the namelist contract, expected HDF5 field
+   names, wall/RSS budget, and
+   `dRadialCurrentdLambda = sum_s Z_s dParticleFlux_s/dLambda`.
+
+Results:
+
+- Fortran v3 W7-X-like RHSMode-4 fixture completed with wall time `0.11 s`,
+  main solve time `0.0355 s`, two adjoint solves of about `0.0019 s` and
+  `0.0012 s`, and peak RSS `122,994,688` bytes.
+- The compact summary pins `dParticleFluxdLambda`, `dParallelFlowdLambda`, and
+  `dRadialCurrentdLambda` shapes and values.
+- Focused fixture gate passed:
+  `JAX_ENABLE_X64=True python -m pytest
+  tests/test_sensitivity.py::test_fortran_v3_adjoint_sensitivity_constraints_and_output_fields
+  tests/test_sensitivity.py::test_fortran_v3_rhs4_reference_summary_pins_radial_current_sensitivity
+  -q --tb=short` with `2 passed in 0.46 s`.
+- Broader focused validation passed:
+  `JAX_ENABLE_X64=True python -m pytest tests/test_input_compat.py
+  tests/test_sensitivity.py tests/test_ambipolar_problem.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` with
+  `72 passed in 65.22 s`.
+- `python -m sphinx -b html docs docs/_build/html -q`, ruff, and
+  `git diff --check` passed.
+
+Current lane status:
+
+- Ambipolar solver lane: 99% bounded; production replay remains outside CI.
+- RHSMode 4/5 sensitivity lane: 82%; first numerical Fortran RHSMode-4 summary
+  is checked in, with more observables/RHSMode-5 still open.
+- Refactor/review-ready PR lane: 87%; unchanged by this fixture except for
+  cleaner reference organization.
+- Overall completion: about 90%.
+
+Next best steps:
+
+1. Add one more RHSMode-4 fixture targeting heat flux or bootstrap current.
+2. Add the first sfincs_jax output-surface scaffolding for RHSMode-4 fields
+   once at least two Fortran summaries are pinned.
+3. Keep production option-1/3 replay and RHSMode-5 constant-current fixtures
+   outside normal CI until the small fixture layer is stable.

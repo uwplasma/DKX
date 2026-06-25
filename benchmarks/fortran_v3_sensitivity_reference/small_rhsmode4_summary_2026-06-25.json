@@ -1,0 +1,160 @@
+{
+  "cases": [
+    {
+      "adjoint_diagnostics_times_s": [
+        0.0029770000001008157,
+        0.002680999999938649,
+        0.0026029999999082065
+      ],
+      "adjoint_solve_times_s": [
+        0.0019219999999222637,
+        0.0011730000001080043
+      ],
+      "case": "geometry4_w7x_like_small_rhs4_radial_current",
+      "hdf5_fields": {
+        "RHSMode": {
+          "shape": [],
+          "values": 4
+        },
+        "adjointParticleFluxOption": {
+          "shape": [
+            2
+          ],
+          "values": [
+            1,
+            1
+          ]
+        },
+        "adjointRadialCurrentOption": {
+          "shape": [],
+          "values": 1
+        },
+        "dParallelFlowdLambda": {
+          "shape": [
+            1,
+            4,
+            2,
+            1
+          ],
+          "values": [
+            [
+              [
+                [
+                  0.0
+                ],
+                [
+                  0.0
+                ]
+              ],
+              [
+                [
+                  0.0
+                ],
+                [
+                  0.0
+                ]
+              ],
+              [
+                [
+                  0.0
+                ],
+                [
+                  0.0
+                ]
+              ],
+              [
+                [
+                  0.0
+                ],
+                [
+                  0.0
+                ]
+              ]
+            ]
+          ]
+        },
+        "dParticleFluxdLambda": {
+          "shape": [
+            1,
+            4,
+            2,
+            1
+          ],
+          "values": [
+            [
+              [
+                [
+                  -2.5419940523818905e-08
+                ],
+                [
+                  -1.6688440185986772e-09
+                ]
+              ],
+              [
+                [
+                  -2.1452517447485144e-09
+                ],
+                [
+                  -1.718232244348001e-10
+                ]
+              ],
+              [
+                [
+                  -3.136924069231282e-09
+                ],
+                [
+                  -1.854722892664832e-10
+                ]
+              ],
+              [
+                [
+                  -4.507267303752549e-08
+                ],
+                [
+                  -2.59255992797443e-09
+                ]
+              ]
+            ]
+          ]
+        },
+        "dRadialCurrentdLambda": {
+          "shape": [
+            1,
+            4,
+            1
+          ],
+          "values": [
+            [
+              [
+                -2.3751096505220246e-08
+              ],
+              [
+                -1.9734285203137135e-09
+              ],
+              [
+                -2.951451779964798e-09
+              ],
+              [
+                -4.248011310955108e-08
+              ]
+            ]
+          ]
+        }
+      },
+      "jacobian_nnz": [
+        19566
+      ],
+      "main_solve_times_s": [
+        0.03550099999984013
+      ],
+      "max_rss_bytes": 122994688,
+      "preconditioner_nnz": [
+        15436
+      ],
+      "wall_time_s": 0.11
+    }
+  ],
+  "fortran_executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+  "kind": "sfincs_fortran_v3_rhsmode45_sensitivity_reference",
+  "tier": "small"
+}

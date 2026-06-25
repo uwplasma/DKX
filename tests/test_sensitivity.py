@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 from pathlib import Path
 
 import jax
@@ -41,6 +42,8 @@ from sfincs_jax.sensitivity import (
 )
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.v3_system import apply_v3_full_system_operator_cached, full_system_operator_from_namelist
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _linear_system_components():
@@ -173,6 +176,30 @@ def test_fortran_v3_adjoint_output_fields_preserve_parallel_flow_source_gate() -
     assert "dPhidPsidLambda" in fields
     assert "dPhidPsiPercentError" in fields
     assert "dPhidPsidLambda_finitediff" in fields
+
+
+def test_fortran_v3_rhs4_reference_summary_pins_radial_current_sensitivity() -> None:
+    reference_root = REPO_ROOT / "benchmarks" / "fortran_v3_sensitivity_reference"
+    input_path = reference_root / "namelists" / "geometry4_w7x_like_small_rhs4_radial_current.namelist"
+    summary = json.loads((reference_root / "small_rhsmode4_summary_2026-06-25.json").read_text())
+    case = summary["cases"][0]
+    nml = read_sfincs_input(input_path)
+
+    assert validate_fortran_v3_adjoint_sensitivity_constraints(nml) == ()
+    assert fortran_v3_adjoint_sensitivity_output_fields(nml) == (
+        "dParticleFluxdLambda",
+        "dParallelFlowdLambda",
+        "dRadialCurrentdLambda",
+    )
+    assert case["wall_time_s"] < 1.0
+    assert case["max_rss_bytes"] < 150_000_000
+    assert case["hdf5_fields"]["dParticleFluxdLambda"]["shape"] == [1, 4, 2, 1]
+    assert case["hdf5_fields"]["dRadialCurrentdLambda"]["shape"] == [1, 4, 1]
+
+    particle = np.asarray(case["hdf5_fields"]["dParticleFluxdLambda"]["values"], dtype=np.float64)
+    radial = np.asarray(case["hdf5_fields"]["dRadialCurrentdLambda"]["values"], dtype=np.float64)
+    expected_radial = particle[:, :, 0, :] - particle[:, :, 1, :]
+    np.testing.assert_allclose(radial, expected_radial, rtol=0.0, atol=5.0e-18)
 
 
 def test_implicit_linear_observable_derivative_matches_tangent_adjoint_and_finite_difference() -> None:
