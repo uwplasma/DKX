@@ -1366,7 +1366,7 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/problems/transport_matrix/parallel/worker.py``
   (legacy executable wrapper: ``sfincs_jax/transport_parallel_worker.py``):
   command-line worker entry point used by GPU transport subprocesses. The old
-  ``python -m sfincs_jax.transport_parallel_worker`` path remains supported and
+  ``python -m sfincs_jax.problems.transport_matrix.parallel.worker`` path remains supported and
   delegates to this implementation.
 - ``sfincs_jax/validation_artifacts.py``:
   lightweight loaders and physics metrics for checked-in publication artifacts. This

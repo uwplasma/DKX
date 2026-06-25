@@ -460,9 +460,8 @@ worker-local XLA flag rewriting is checked through
 ``sfincs_jax.problems.transport_matrix.parallel.policy``. Driver aliases are
 kept only where they preserve the public debugging seam.
 ``tests/test_transport_postsolve_diagnostics.py`` covers
-``sfincs_jax.problems.transport_matrix.postsolve_diagnostics`` through both the
-new package path and the legacy compatibility alias. The extracted post-solve
-diagnostics seam directly: streamed accumulator reuse, output-field propagation,
+``sfincs_jax.problems.transport_matrix.postsolve_diagnostics`` directly:
+streamed accumulator reuse, output-field propagation,
 chunked fixed-operator diagnostic evaluation, and transport-matrix assembly are
 checked with monkeypatched numerical kernels so the behavior is protected without
 adding heavyweight transport solves to CI.
@@ -554,16 +553,14 @@ refinement kernels and sparse-direct GMRES polish helper directly, including
 solver injection and sparse-factor preconditioner application.
 
 The adjacent constraint-scheme-0 sparse-first policy now lives in
-``sfincs_jax.problems.profile_response.policies``. The legacy
-``sfincs_jax/rhs1_constraint0_policy.py`` import is a compatibility alias.
+``sfincs_jax.problems.profile_response.policies``.
 ``tests/test_rhs1_constraint0_policy.py`` checks that the accelerator-default sparse-first lane, explicit
 PETSc-compatible sparse mode, and dense-fallback opt-in preserve the same RHSMode,
 ``Phi1``, full-FP, solve-method, preconditioner, and size guards as the driver
 wrappers in ``tests/test_rhs1_sparse_first_heuristic.py``.
 
 The sparse exact-LU and sparse-over-dense preference decisions now live in
-``sfincs_jax.problems.profile_response.policies``. The legacy
-``sfincs_jax/rhs1_sparse_exact_policy.py`` import is a compatibility alias.
+``sfincs_jax.problems.profile_response.policies``.
 ``tests/test_rhs1_sparse_exact_policy.py`` checks full-x CPU exact-LU routing, accelerator DKES and small-FP exact-LU
 routing, PAS-only full-preconditioner opt-in, explicit enable/disable behavior,
 size caps, dense-method rejection, moderate-FP sparse preference, and the
@@ -659,16 +656,13 @@ covered through the same driver compatibility seam and direct policy gates:
 compact CSR and padded JAX factor application, host-factor caps, lower-fill
 policy, explicit FP x-block assembly admission, skipped-block diagonal
 fallback, and extra-variable Schur solve behavior remain exercised without
-promoting production-grid RHSMode=1 solves into CI. The legacy
-``sfincs_jax.rhs1_xblock_tz_sparse`` import path is now a compatibility alias
-to that implementation module.
+promoting production-grid RHSMode=1 solves into CI.
 The adjacent ``sfincs_jax.solvers.preconditioners.pas.xblock_ilu`` module keeps
 the PAS-only block ILU/LU path under the same solver-path and PAS heuristic
 gates: DKES/tokamak PAS branch selection, SciPy ILU/exact-LU fallback behavior,
 padded triangular apply kernels, cache reuse, and the extra-variable Schur block
 are exercised through the ``v3_driver`` compatibility seam and the PAS-focused
-regression suite. The legacy ``sfincs_jax.rhs1_pas_xblock_ilu`` import path
-remains a compatibility alias.
+regression suite.
 
 The follow-up post-x-block, sparse-polish, and acceptance gates now share the
 same canonical module, ``sfincs_jax.problems.profile_response.policies``.
@@ -743,9 +737,8 @@ rejection, baseline-clean promotion requirements, failed-baseline rescue
 allowances, paired memory metrics, tie-breaking, and missing-measurement guards.
 The adjacent RHSMode=1 handoff seam is covered in ``tests/test_rhs1_handoff.py``.
 The canonical implementation now lives in
-``sfincs_jax.problems.profile_response.handoff`` while the old
-``sfincs_jax.rhs1_handoff`` path remains a compatibility alias. The strict
-finite residual-improvement predicate is tested directly, nonfinite candidates
+``sfincs_jax.problems.profile_response.handoff``. The strict finite
+residual-improvement predicate is tested directly, nonfinite candidates
 are rejected even before measured gates run, finite rescues after a nonfinite
 incumbent are accepted, and measured runtime/memory regressions still block an
 otherwise lower residual when the incumbent is already clean. The docstring
