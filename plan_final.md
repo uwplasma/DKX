@@ -11,7 +11,7 @@ Status: this file is the controlling completion plan. `plan.md` remains the
 execution log and historical record; future work should update this file only
 when the target plan itself changes. The Lane 1 consolidation plan below
 supersedes older iteration notes and is the only refactor plan to follow; avoid
-new one-helper refactor batches.
+new one-helper refactor commits.
 
 ## One-Sentence Goal
 
@@ -304,19 +304,19 @@ Observed facts to feed directly into implementation:
 ### Current sfincs_jax State
 
 Current source size snapshot after the 2026-06-25 consolidation checkpoint,
-the 2026-06-25 final consolidation-plan review, and the first Batch 0 root
-cleanup:
+the 2026-06-25 final consolidation-plan review, the two root cleanup passes,
+and the first transport-parallel consolidation:
 
 - `sfincs_jax/v3_driver.py`: 47 lines in the current consolidation worktree,
   acting as a compatibility shim for the domain-owned solve modules.
-- `sfincs_jax/problems/profile_response/solve.py`: 9,412 lines after the
+- `sfincs_jax/problems/profile_response/solve.py`: 9,411 lines after the
   first profile-response ownership moves. This remains the largest
   structural debt and must be reduced by moving coherent sections into existing
   domain owners, not by adding many new helper files.
 - `sfincs_jax/problems/profile_response/policies.py`: 6,876 lines after
   absorbing six former policy shards and current-backend RHSMode-1 policy
   wrappers. This is intentionally a temporary single policy owner during
-  Lane 1 Batch 1; do not split it back into micro-files.
+  Lane 1 Tranche B; do not split it back into micro-files.
 - `sfincs_jax/problems/profile_response/preconditioner_build.py`: 2,683 lines
   after taking ownership of the current RHSMode-1 preconditioner builder
   registry, PAS-family compatibility bindings, Schur binding, x-block builder
@@ -343,7 +343,7 @@ cleanup:
 - Top-level `rhs1_*` modules: 0 after the Lane 1 Iteration 3 ownership move.
   Solver-family implementation now lives under `solvers.preconditioners`.
 - Package total is 212 Python files, 85 package-root files, and 163,301
-  package lines after the first two Batch 0 root cleanups and the first
+  package lines after the first two root cleanup passes and the first
   transport-parallel consolidation. The root cleanups
   deleted the obsolete root modules `solver_runtime.py`,
   `matrix_reductions.py`, `solve_mode_policy.py`,
@@ -355,7 +355,7 @@ cleanup:
   `problems/transport_matrix/parallel/runtime.py`.
 - Current concentration of complexity:
   `problems/profile_response` has 21 files and about 50k lines,
-  `problems/transport_matrix` has 33 files and about 15k lines,
+  `problems/transport_matrix` has 28 files and about 15k lines,
   `solvers/preconditioners` has 50 files and about 37k lines,
   `operators/profile_response` has 12 files and about 14k lines, and
   `io.py` remains about 4.3k lines.
@@ -526,137 +526,126 @@ Structural rules:
 
 ## Lane 1 - Final Consolidation Pass
 
-Goal: finish the refactor PR with a smaller, clearer codebase without changing
-physics, outputs, tolerances, benchmark claims, or public behavior. This section
-is the only refactor plan to follow. Do not start side plans, do not add
-one-helper modules, and do not make one-function moves unless they fix a failing
-test.
+Goal: finish PR #8 with a smaller, clearer source tree without changing
+physics, outputs, tolerances, benchmark claims, public behavior, or the current
+CPU/GPU parity gates. This section is the only refactor plan to follow. Do not
+start side plans. Do not commit one-helper moves. A refactor batch is valid only
+if it consolidates a whole domain slice, deletes dead code, and leaves focused
+tests passing.
 
 Current inventory from the 2026-06-25 final consolidation review:
 
 | Area | Current state | Final target for this PR |
 | --- | --- | --- |
-| `sfincs_jax/v3_driver.py` | 47-line compatibility shim | Keep under 80 lines or delete after legacy imports migrate. |
-| Package source files | 212 Python files, 163,301 package lines | At most 200 files, with fewer top-level implementation modules. |
-| Top-level modules | 85 Python files at package root | At most 55 root files; implementation belongs in domain packages. |
-| `problems/profile_response` | 21 files, about 50k lines; `solve.py` is 9,412 lines | At most 16 files; `solve.py` below 3,500 lines. |
-| `problems/transport_matrix` | 28 files, about 15k lines; parallel has runtime, policy, sharding, and worker owners | At most 16 files; parallel policy should merge or be justified before review. |
-| `solvers/preconditioners` | 50 files, about 37k lines; QI and RHSMode-1 names remain over-fragmented | At most 32 files; no implementation file starts with `rhs1_`. |
-| `io.py` / `outputs` | `io.py` is 4.3k lines; output owners already exist | `io.py` below 800 lines as a shim, or deleted after imports migrate. |
-| Docs/API maps | Docs still mention transient internal names | Docs expose public API and stable owner modules only. |
-| Tests | 329 test files; many import compatibility or historical owners directly | Tests import canonical owners except focused compatibility-contract tests. |
+| `sfincs_jax/v3_driver.py` | 47-line compatibility shim | Keep below 80 lines or delete after legacy imports migrate. |
+| Package source files | 212 Python files, 163,301 package lines | At most 200 files and fewer total source lines. |
+| Package-root modules | 85 Python files at package root | At most 55 root files; implementation belongs in domain packages. |
+| `problems/profile_response` | 21 files, about 50k lines; `solve.py` is 9,411 lines | At most 16 files; `solve.py` below 3,500 lines. |
+| `problems/transport_matrix` | 28 files, about 15k lines | At most 16 files; no policy or postsolve micro-files. |
+| `problems/transport_matrix/parallel` | `runtime.py`, `policy.py`, `sharding.py`, `worker.py` plus `__init__.py` | At most 3 implementation files; merge or justify `policy.py`. |
+| `solvers/preconditioners` | 50 files, about 37k lines; QI, Schur, symbolic, x-block, PAS families are over-fragmented | At most 32 files; no implementation file starts with `rhs1_` or `transport_`. |
+| `io.py` / `outputs` | `io.py` is 4.3k lines while `outputs/` already owns format-specific modules | `io.py` below 800 lines as a shim, or gone. |
+| Docs/API/tests | Docs and tests still mention transient internal owners | Docs expose public API plus stable owner modules; tests import canonical owners except shim-contract tests. |
 
 Final package shape for this pass:
 
-| Domain | Keep or create | Move into this domain | Delete or shrink |
+| Domain package | Keep as public/stable owner | Move here | Delete or shrink |
 | --- | --- | --- | --- |
-| Public surface | `api.py`, `cli.py`, `__init__.py`, `__main__.py` | High-level solve, plotting, output, ambipolar, derivative calls | No internal sparse/preconditioner imports in examples or docs. |
-| Configuration/input | `input/`, `namelist.py`, `input_compat.py` | Fortran-compatible defaults and validation currently scattered near drivers | Root-level compatibility exports only if tested. |
-| Geometry/discretization | `geometry.py`, `vmec_geometry.py`, `vmec_wout.py`, `jax_geometry_adapters.py`, `discretization/` | `grids.py`, `xgrid.py`, radial-coordinate helpers, simple geometry adapters | Avoid new geometry wrapper files. |
-| Operators | `operators/profile_response/` | Remaining `v3_system.py`, `v3_fblock.py`, `v3_sparse_pattern.py` implementation details after callers migrate | Keep temporary `v3_*` shims only with import-contract tests. |
-| Solvers | `solvers/`, `solvers/preconditioners/` | `explicit_sparse*`, `preconditioner_*`, `native_block_factor.py`, `solver_*`, `sparse*.py`, Krylov state/trace/progress | Root-level solver/preconditioner modules become shims or disappear. |
-| Problems | `problems/profile_response`, `problems/transport_matrix`, `problems/ambipolar.py` | Problem orchestration only: phase sequencing, policy admission, residual certificates | No low-level sparse factors, output writers, or duplicated parser helpers. |
-| Outputs | `outputs/` | HDF5/netCDF/NPZ writers, readers, plotting payloads, output caches, streaming transport output | `io.py` compatibility shim under 800 lines. |
-| Sensitivity/workflows/validation | `sensitivity.py`, `workflows/`, `validation/` | Optimization evidence, mapped-xgrid evidence, research-lane artifact policy where public/reused | Delete one-off campaign modules after docs/tests no longer import them. |
+| `sfincs_jax.api`, `sfincs_jax.cli` | User-facing Python and CLI entry points | Run/plot/profile helpers that users call directly | No examples/docs importing sparse or preconditioner internals. |
+| `sfincs_jax.input` | Namelist/TOML parsing, defaults, Fortran-compatible validation | Root input compatibility and coercion helpers | Root compatibility exports only if tested. |
+| `sfincs_jax.geometry`, `sfincs_jax.discretization` | Geometry loading/adapters, grids, radial coordinates, quadrature | `grids.py`, `xgrid.py`, simple geometry adapters if import audits allow | Avoid new wrapper files; do not split stable physics kernels only to reduce line counts. |
+| `sfincs_jax.operators` | Drift-kinetic residual/operator/source/Phi1 blocks | Remaining `v3_system.py`, `v3_fblock.py`, `v3_sparse_pattern.py` implementation details after callers migrate | Keep temporary `v3_*` shims only with deletion notes and import tests. |
+| `sfincs_jax.problems` | Problem orchestration, solver-policy admission, residual certificates, diagnostics contracts | Profile-response and transport phase sequencing only | No low-level sparse factors, output writers, duplicated parser helpers, or campaign scripts. |
+| `sfincs_jax.solvers` | Krylov, direct/native factors, preconditioners, solver state/progress/trace | `explicit_sparse*`, `preconditioner_*`, `native_block_factor.py`, `solver_*`, `krylov_dispatch.py`, `implicit_solve.py`, `sparse_triangular.py` | Root solver modules become shims or disappear. |
+| `sfincs_jax.outputs` | HDF5/netCDF/NPZ formats, output caches, plotting payloads, streaming transport output | Most of `io.py` and `problems/transport_matrix/streaming_outputs.py` | `sfincs_jax.io` must be a thin compatibility layer or deleted. |
+| `sfincs_jax.workflows`, `sfincs_jax.validation` | Optimization, radial scans, evidence/figures, benchmark gates, artifact policies | `optimization_*`, `mapped_xgrid_*`, `validation_*`, research-lane policy modules | Delete one-off campaign modules after docs/tests no longer import them. |
 
-Consolidation discipline:
+Deletion and consolidation rules:
 
-- Each implementation batch must delete at least five files, or delete at
-  least three files and reduce one large owner by at least 2,000 lines. If a
-  batch cannot meet that threshold, combine it with the next batch instead of
-  committing small churn.
+- Each batch must delete at least five files, or delete at least three files
+  while reducing one large owner by at least 2,000 lines. If a candidate does
+  not meet this threshold, combine it with another candidate before committing.
 - New implementation files are allowed only when the same batch deletes or
-  merges more files than it adds, and the new file has a durable domain name.
-- Compatibility shims are temporary. Every shim needs a focused
-  import-contract test and a deletion condition in this plan.
-- Before deleting code, verify imports with `rg`, run focused owner tests,
-  run scoped `ruff`, run `py_compile`, and keep Sphinx building with `-W`.
-- The review-ready PR must not contain generated HDF5/NPZ/profiler outputs,
-  uncompressed large figures, local absolute-path artifacts, or broad new lint
-  ignores.
+  merges more files than it adds and the new file name is a durable domain
+  name, not an algorithm experiment name.
+- Compatibility shims are temporary. Each shim needs a focused import-contract
+  test and a deletion condition in this plan.
+- Inside-file deletion is required, not optional: remove duplicated
+  environment parsers, duplicated metadata-key collectors, stale debug flags,
+  obsolete local-path helpers, migrated constants, dead QI/profiling campaign
+  branches, and re-export aliases once callers use canonical owners.
+- Before deleting code, audit imports with `rg`, run scoped `ruff`, run
+  `python -m py_compile` on touched packages, run focused tests for the moved
+  owners, and keep Sphinx building with `-W`.
+- The PR must stay light: no generated HDF5/NPZ/profiler outputs, no temporary
+  plots, no local absolute-path artifacts, and no broad new lint ignores.
 
-### Batch 0 - Freeze Boundary And Delete Dead Compatibility
+### Tranche A - Boundary Freeze And Root-Disposition Audit
 
-Status: active baseline. Completed boundary facts remain valid:
+Purpose: stop churn before more moves. This tranche creates the exact deletion
+list for root modules and compatibility shims, then deletes private aliases in
+one pass.
 
-- Top-level `rhs1_*` and `transport_*` implementation files are gone.
-- `v3_driver.py` is a small compatibility shim.
-- `profile_response/linear_solve.py`, `transport_matrix/linear_solve.py`,
-  former profile-response policy shards, top-level profile-response
-  finalization/KSP shards, `sparse/krylov.py`, and top-level
-  `profile_response/sparse_pc.py` are gone.
-- Sparse env parsing is centralized in
-  `problems/profile_response/sparse/policy.py`.
-- X-block sparse-PC final payload builders live in
-  `problems/profile_response/sparse/xblock.py`.
-- The first root cleanup moved GMRES result readiness into `solver.py`,
-  matrix reductions into `preconditioner_operators.py`, implicit solve-mode
-  selection into `problems/profile_response/policies.py`, progress formatting
-  into `solver_progress.py`, and phase timing into `validation_artifacts.py`.
-  The old root modules were deleted rather than kept as shims.
-- The second root cleanup moved small differentiable least-squares and recycled
-  Krylov initial guesses into `solver.py`, CSR matvec into
-  `explicit_sparse.py`, deterministic emit/timer utilities into
-  `profiling.py`, Phi1 accepted-iterate updates into
-  `problems/profile_response/phi1_newton.py`, and Newton-Krylov KSP replay
-  into `problems/profile_response/solver_diagnostics.py`. The old root
-  modules were deleted rather than kept as shims.
-- The first transport-parallel consolidation moved parent execution, payload
-  packing, process-pool cache management, parent-side solve orchestration, and
-  worker-result validation into `problems/transport_matrix/parallel/runtime.py`.
-  The old parallel micro-files were deleted rather than kept as shims.
+Actions:
 
-Next actions in this batch:
-
-1. Run import audits for all compatibility names in `v3_driver.py`,
-   `v3_system.py`, `v3_fblock.py`, `v3_sparse_pattern.py`, `io.py`, and
-   root-level solver/preconditioner modules.
-2. Delete aliases that are private and have no external callers.
-3. Convert surviving public aliases into explicit shim imports with
-   import-contract tests and deletion notes.
-4. Update `docs/source_map.rst` so it names only canonical owners plus the
-   temporary shims that still have tests.
+1. Audit imports for `v3_driver.py`, `v3_system.py`, `v3_fblock.py`,
+   `v3_sparse_pattern.py`, `io.py`, and all root solver/workflow/validation
+   modules with `rg` across `sfincs_jax`, `tests`, `examples`, `scripts`, and
+   `docs`.
+2. Classify every root module into exactly one category:
+   public entry point, physics kernel kept at root, compatibility shim,
+   solver module to move under `solvers`, output module to move under
+   `outputs`, workflow/validation module to move under `workflows` or
+   `validation`, or dead campaign artifact to delete.
+3. Delete private aliases and re-export-only modules that have no external
+   import tests.
+4. Update `docs/source_map.rst` and `docs/api.rst` to list only canonical
+   owners and temporary shims with deletion notes.
 
 Exit gates:
 
-- Branch is clean after the batch.
-- No stale docs/source-map references to already-deleted owner files.
+- Branch is clean before starting Tranche B.
 - Package file count does not increase.
+- No docs/source-map references point to already-deleted files.
+- A checked root-disposition table is present in this plan or in the execution
+  log, with every root module assigned to one destination.
 
-### Batch 1 - Profile-Response Collapse
+### Tranche B - Profile-Response Owner Collapse
 
-Purpose: make RHSMode 1 reviewable without creating more helper files.
+Purpose: make RHSMode 1 reviewable. This is the highest-value code
+simplification because `profile_response/solve.py` is still the main
+monolithic owner.
 
-Keep final profile-response owners:
+Final owners:
 
 - `setup.py`: namelist-to-problem setup and fixed-shape state construction.
-- `solve.py`: public RHSMode-1 entry points, phase sequencing, dependency
-  injection, and compatibility exports only.
-- `policies.py`: profile-response solver admission policy.
-- `preconditioner_build.py`: preconditioner registry and builder binding.
-- `dense.py`: dense, SciPy, and constraintScheme=0 solve/rescue paths.
-- `residual.py`: true residual targets and convergence checks.
-- `diagnostics.py` and `solver_diagnostics.py`: output and solver metadata.
-- `phi1_newton.py`: Phi1 nonlinear solve path.
+- `solve.py`: public RHSMode-1 entry points and phase orchestration only.
+- `policies.py`: automatic solver and fallback admission policy.
+- `preconditioner_build.py`: registry, builder binding, and setup admission.
+- `dense.py`: dense, SciPy, and constraintScheme=0 rescue paths.
+- `residual.py`: true residual targets, convergence checks, and certificates.
+- `diagnostics.py`, `solver_diagnostics.py`: physical output and solver
+  metadata assembly.
+- `phi1_newton.py`: Phi1 nonlinear accepted-iterate and line-search logic.
 - `active_dof.py`: active-index construction.
-- `handoff.py`: high-level problem handoff payloads.
+- `handoff.py`: high-level profile-response handoff payloads.
 - `sparse/{policy,direct,handoff,xblock,qi,fortran_reduced}.py`: sparse-PC
-  policies, direct sparse factors, GMRES handoff/finalization, x-block, QI,
-  and Fortran-reduced paths.
+  policy, sparse/direct factors, handoff/finalization, x-block, QI, and
+  Fortran-reduced paths.
 
-Move/delete actions:
+Actions:
 
-1. Move sparse-PC branch orchestration from `solve.py` into
-   `sparse/handoff.py`, `sparse/xblock.py`, `sparse/qi.py`, and
-   `sparse/fortran_reduced.py` in one batch.
-2. Put all generic sparse-PC finalization in one owner. Preferred final state:
-   `sparse/handoff.py` owns generic handoff/finalization and
-   `sparse/finalization.py` is deleted; keep `sparse/finalization.py` only if
-   two or more sparse owners import it directly after the move.
-3. Move result payload assembly, progress-line replay, and final diagnostic
-   normalization from `solve.py` into `solver_diagnostics.py` and sparse owners.
-4. Delete private compatibility aliases from `solve.py`; if `v3_driver.py`
-   still needs a public name, import it from the canonical owner into the shim.
+1. Move the sparse-PC branch orchestration still embedded in `solve.py` into
+   existing sparse owners in one batch; do not create new helper files.
+2. Delete `sparse/finalization.py` if generic finalization can be owned by
+   `sparse/handoff.py`; keep it only if at least two sparse owners depend on
+   it directly after the move.
+3. Move progress replay, final result payload assembly, solver metadata
+   normalization, and sparse fallback summaries out of `solve.py` into
+   `solver_diagnostics.py`, `diagnostics.py`, and sparse owners.
+4. Delete private compatibility names from `solve.py`; if a public name must
+   survive for `v3_driver.py`, import it into `v3_driver.py` from the canonical
+   owner.
 5. Delete any profile-response file that becomes re-export-only.
 
 Exit gates:
@@ -664,122 +653,123 @@ Exit gates:
 - `problems/profile_response` has at most 16 Python files.
 - `profile_response/solve.py` is below 3,500 lines.
 - Focused tests pass for RHSMode 1 solve routing, dense fallback, sparse-PC
-  handoff, direct-tail policy, host policy, QI admission, ambipolar,
+  handoff, direct-tail policy, host policy, QI admission, Phi1, ambipolar,
   sensitivity, and output diagnostics.
-- `python -m py_compile` passes for `problems/profile_response`,
+- Scoped `ruff` and `py_compile` pass for `problems/profile_response`,
   `operators/profile_response`, and `solvers/preconditioners`.
-- Scoped `ruff` passes for touched modules and tests.
 
-### Batch 2 - Transport, Output, And Top-Level Root Collapse
+### Tranche C - Transport, Outputs, And Package-Root Collapse
 
-Purpose: remove the largest file-count sources outside RHSMode 1 and make
-output ownership unambiguous.
+Purpose: remove the largest remaining file-count sources outside RHSMode 1 and
+make output ownership unambiguous.
 
-Transport move/delete actions:
+Transport actions:
 
-1. Merge `dense_lu.py`, `dense_batch.py`, `host_gmres.py`, `loop.py`,
-   `iteration_stats.py`, `residual_quality.py`, `solve_policy.py`, and
-   `handoff_policy.py` into `transport_matrix/solve.py` or
-   `transport_matrix/policies.py`, based on phase execution versus policy.
-2. Merge `postsolve_diagnostics.py` into `finalize.py`.
-3. Merge `active_factor.py` and `active_dense.py` into one active-system owner.
-4. Move `sparse_direct_solve.py`, `fortran_reduced_lu.py`,
-   `direct_block_schur.py`, `direct_pmat.py`, and
-   `preconditioner_dispatch.py` into `solvers/preconditioners/transport_matrix.py`
-   when they are solver implementation rather than problem orchestration.
-5. Collapse `problems/transport_matrix/parallel` to:
-   `runtime.py` for process/device orchestration,
-   `worker.py` for payload execution,
-   `sharding.py` for array partitioning if independently tested.
-   Delete `execution.py`, `payload.py`, `pool.py`, `policy.py`, `solve.py`,
-   and `validation.py` after callers migrate.
+1. Merge transport solve-loop shards into stable owners:
+   `dense_lu.py`, `dense_batch.py`, `host_gmres.py`, `loop.py`,
+   `iteration_stats.py`, and `residual_quality.py` go into
+   `transport_matrix/solve.py` unless they are pure admission policy.
+2. Merge `solve_policy.py` and `handoff_policy.py` into
+   `transport_matrix/policies.py`.
+3. Merge `postsolve_diagnostics.py` into `finalize.py`.
+4. Merge `active_dense.py` and `active_factor.py` into one active-system owner.
+5. Move solver implementations from `problems/transport_matrix` to
+   `solvers/preconditioners/transport_matrix.py` when they are not problem
+   orchestration: `sparse_direct_solve.py`, `fortran_reduced_lu.py`,
+   `direct_block_schur.py`, `direct_pmat.py`, and `preconditioner_dispatch.py`.
+6. Keep `parallel/runtime.py`, `parallel/worker.py`, and optionally
+   `parallel/sharding.py`. Merge `parallel/policy.py` into `runtime.py` or
+   document why it remains as a stable public-internal owner.
 
-Output and root-module move/delete actions:
+Output and root actions:
 
 1. Move `streaming_outputs.py` into `outputs/transport.py`.
-2. Move `io.py` writer/reader logic into `outputs/formats.py`,
+2. Move `io.py` readers/writers into `outputs/formats.py`,
    `outputs/rhsmode1.py`, `outputs/transport.py`, and `outputs/cache.py`.
-3. Keep `sfincs_jax.io` below 800 lines as a compatibility shim, or delete it
-   after `api` and `outputs` callers migrate.
-4. Move reusable root-level solver modules into `solvers`:
-   `solver_*`, `krylov_dispatch.py`, `linear_algebra.py`,
-   `implicit_solve.py`, `phase_timing.py`, `memory_model.py`,
-   `explicit_sparse*`, `preconditioner_*`, `native_block_factor.py`,
-   `sparse.py`, and `sparse_triangular.py`.
-5. Move one-off evidence/campaign modules into `validation` or `workflows`,
-   or delete them if they are only represented by current docs artifacts.
+3. Leave `sfincs_jax.io` as a shim below 800 lines only if external callers or
+   import-contract tests require it.
+4. Move root solver utilities into `solvers`:
+   `solver_path_policy.py`, `solver_profile_compare.py`,
+   `solver_selection_policy.py`, `solver_state.py`, `solver_trace.py`,
+   `solver_progress.py`, `krylov_dispatch.py`, `implicit_solve.py`,
+   `memory_model.py`, `explicit_sparse*`, `preconditioner_*`,
+   `native_block_factor.py`, and `sparse_triangular.py`.
+5. Move root workflow/evidence modules into `workflows` or `validation`, or
+   delete them if current docs artifacts and tests no longer import them:
+   `optimization_*`, `mapped_xgrid_*`, `qi_*_campaign.py`,
+   `research_lane_policy.py`, `benchmark_artifact_policy.py`,
+   `validation_*`.
 
 Exit gates:
 
 - `problems/transport_matrix` has at most 16 Python files.
 - `problems/transport_matrix/parallel` has at most 3 implementation files.
 - `io.py` is below 800 lines or gone.
-- Package root has at most 65 Python files after this batch, with a later
-  sweep targeting 55.
-- RHSMode 2/3 transport, monoenergetic transport, streaming output, parallel
-  runtime/worker, CLI output, and HDF5/netCDF/NPZ tests pass.
+- Package root has at most 65 Python files after this tranche.
+- RHSMode 2/3 transport, monoenergetic transport, streaming output,
+  parallel runtime/worker, CLI output, and HDF5/netCDF/NPZ tests pass.
 
-### Batch 3 - Solver/Preconditioner Domain Collapse
+### Tranche D - Solver And Preconditioner Domain Collapse
 
-Purpose: replace historical experiment names with stable solver domain names
-and reduce solver file count.
+Purpose: replace historical experiment names with stable solver-domain owners
+and reduce solver/preconditioner file count.
 
-Move/delete actions:
+Actions:
 
-1. Collapse `solvers/preconditioners/schur/rhs1.py`,
-   `rhs1_coarse_basis.py`, `rhs1_coarse_policy.py`, and `rhs1_full_csr.py`
-   into `solvers/preconditioners/schur/profile_response.py`.
-2. Merge `symbolic_sparse/rhs1_fortran_reduced.py` into
-   `symbolic_sparse/profile_response.py` or another existing symbolic-sparse
-   owner; do not keep an RHSMode-prefixed file.
-3. Collapse QI files by role:
-   `basis.py` for active-pattern/coarse/global/phase-space/residual-region
-   basis construction,
-   `corrections.py` for block-Schur/two-level/multilevel/deflation/residual
-   equations,
-   `device.py` for device-compatible setup/probes and former smoother code,
+1. Collapse the Schur RHSMode-1 files into
+   `solvers/preconditioners/schur/profile_response.py`:
+   `rhs1.py`, `rhs1_coarse_basis.py`, `rhs1_coarse_policy.py`, and
+   `rhs1_full_csr.py`.
+2. Merge `symbolic_sparse/rhs1_fortran_reduced.py` into a stable symbolic
+   owner such as `symbolic_sparse/profile_response.py`; do not keep an
+   RHSMode-prefixed implementation file.
+3. Collapse QI into role-based owners:
+   `basis.py` for active-pattern, phase-space, global-moment, and
+   residual-region bases;
+   `corrections.py` for block-Schur, two-level, multilevel, deflation, and
+   residual-Galerkin corrections;
+   `device.py` for GPU/device-compatible setup and former smoother support;
    `policy.py` for admission and promotion.
    Delete `device_smoother.py`, `promotion.py`, and any experiment-history
    file that becomes re-export-only.
-4. Collapse x-block only where it reduces file count without merging
-   independently tested algorithms. Keep PAS separate because it is a distinct
-   physics/preconditioning family.
-5. Move environment-variable solver hooks behind policy objects where an
-   automatic default already exists. Advanced overrides may remain, but user
-   docs should prioritize input-file and Python policy controls.
+4. Keep PAS, full-FP, x-block, and domain-decomposition separate only where
+   they are distinct numerical families with focused tests. Merge files inside
+   each family when names describe implementation detail rather than a stable
+   concept.
+5. Move environment-variable solver hooks behind policy objects when an input
+   or Python API control already exists. Advanced overrides may remain, but
+   public docs must emphasize automatic defaults.
 
 Exit gates:
 
 - `solvers/preconditioners` has at most 32 Python files.
 - No implementation file starts with `rhs1_` or `transport_`.
-- Focused QI, PAS, x-block, Schur, symbolic-sparse, sparse-factor, and solver
-  dispatch tests pass.
+- Focused QI, PAS, x-block, Schur, symbolic-sparse, sparse-factor, full-FP,
+  domain-decomposition, and solver-dispatch tests pass.
 - Docs/API maps no longer document transient QI experiment files or
-  `rhs1`-prefixed implementation modules.
+  RHSMode-prefixed implementation modules.
 
-### Batch 4 - Public API, Docs, Tests, And Review Gate
+### Tranche E - API, Docs, Tests, And Review Gate
 
-Purpose: make the PR review-ready after the source tree stops moving.
+Purpose: make PR #8 review-ready after the source tree stops moving.
 
-Tasks:
+Actions:
 
-1. Keep `sfincs_jax.api` as the public Python surface. Preserve or add stable
-   calls for output read/write, profile response, transport matrix, ambipolar
-   solve, and derivative workflows without exposing internal sparse modules.
+1. Keep `sfincs_jax.api` as the public Python surface for output read/write,
+   profile response, transport matrix, ambipolar solve, derivative workflows,
+   validation helpers, and plotting payloads. Examples must use `api`, `cli`,
+   or documented workflow modules, not internal sparse/preconditioner modules.
 2. Reduce `docs/api.rst` to public API plus stable owner modules.
-3. Refresh `docs/source_map.rst`, README developer notes, and examples so they
-   describe the same package structure and no historical `rhs1_*`,
-   `transport_*`, `linear_solve.py`, or transient `v3_driver.py` internals.
+3. Refresh `docs/source_map.rst`, README developer notes, examples, and
+   benchmark docs so they describe the same package structure and no
+   historical `rhs1_*`, `transport_*`, `linear_solve.py`, or transient
+   `v3_driver.py` internals.
 4. Sweep tests, examples, docs, and benchmark scripts for stale private
    imports. Keep compatibility imports only where a focused shim test exists.
-5. Delete dead code inside large files: duplicated env parsers, duplicated
-   metadata key collectors, unused debug branches, stale local-path helpers,
-   obsolete output key builders, and migrated compatibility constants.
-6. Consolidate duplicate import-contract tests into canonical owner tests while
-   preserving physics, regression, and numerical coverage.
-7. Keep the repository light: no generated HDF5/NPZ/profiler outputs, no large
-   temporary plots, and only compressed docs figures that are part of current
-   documentation.
+5. Consolidate duplicate import-contract tests into canonical owner tests while
+   preserving physics, regression, numerical, output-format, CLI, and docs
+   coverage.
+6. Run repository-size hygiene checks and remove temporary generated outputs.
 
 Review-ready acceptance gates:
 
@@ -1327,7 +1317,7 @@ Exit gate:
 
 Status:
 
-- Not complete. PR #8 stays draft until Lane 1 Batches 0-4 pass, docs/source
+- Not complete. PR #8 stays draft until Lane 1 Tranches A-E pass, docs/source
   maps are refreshed, temporary lint suppressions are removed or narrowed, and
   focused refactor plus representative physics gates pass on the refactor
   branch.
@@ -1351,12 +1341,12 @@ Current completion status:
   three profile-response files, the current RHSMode-1 preconditioner registry is
   owned by `profile_response/preconditioner_build.py`, sparse env parsing is
   shared through `profile_response/sparse/policy.py`, x-block final payload
-  builders live in `profile_response/sparse/xblock.py`, and the two Batch 0
-  root cleanups deleted ten obsolete top-level helper modules. The first
+  builders live in `profile_response/sparse/xblock.py`, and the two root
+  cleanup passes deleted ten obsolete top-level helper modules. The first
   transport-parallel consolidation deleted five transport micro-files. The
   remaining large blockers are `profile_response/solve.py`, the rest of
   transport/output consolidation, solver/preconditioner naming, and `io.py`
-  ownership.
+  ownership. The next work follows Lane 1 Tranches A-E only.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
@@ -1386,27 +1376,27 @@ Completed checkpoints that remain valid:
 
 Next ordered implementation steps:
 
-1. Execute Lane 1 Batch 0. Audit compatibility imports, delete private aliases,
-   convert surviving public aliases into explicit shim imports with focused
-   import-contract tests, and refresh `docs/source_map.rst`.
-2. Execute Lane 1 Batch 1 as one profile-response consolidation. Move sparse
+1. Execute Lane 1 Tranche A. Produce the root-disposition audit, delete private
+   aliases, convert surviving public aliases into explicit shim imports with
+   focused import-contract tests, and refresh `docs/source_map.rst`.
+2. Execute Lane 1 Tranche B as one profile-response consolidation. Move sparse
    branch orchestration, sparse finalization, result payload assembly,
-   progress replay, and diagnostic normalization out of `solve.py`, delete
-   re-export-only profile-response files, and reach
+   progress replay, and diagnostic normalization out of `solve.py`; delete
+   re-export-only profile-response files; and reach
    `profile_response/solve.py < 3.5k` with
    `problems/profile_response <= 16` files.
-3. Execute Lane 1 Batch 2 as one transport/output/root consolidation. Collapse
-   transport solve-loop shards and parallel micro-files, move streaming/output
-   logic into `outputs`, and move reusable root-level solver/preconditioner
-   modules into `solvers`. Targets: `problems/transport_matrix <= 16`,
-   transport `parallel <= 3`, `io.py < 800` or deleted, and package root
-   `<= 65` files.
-4. Execute Lane 1 Batch 3 as one solver/preconditioner domain consolidation.
+3. Execute Lane 1 Tranche C as one transport/output/root consolidation.
+   Collapse transport solve-loop shards, merge or justify parallel policy,
+   move streaming/output logic into `outputs`, and move reusable root-level
+   solver/workflow/validation modules into canonical packages. Targets:
+   `problems/transport_matrix <= 16`, transport `parallel <= 3`,
+   `io.py < 800` or deleted, and package root `<= 65` files.
+4. Execute Lane 1 Tranche D as one solver/preconditioner domain consolidation.
    Collapse Schur `rhs1*`, symbolic-sparse RHSMode-1 names, and QI experiment
    files into role-based owners. Target:
    `solvers/preconditioners <= 32` files and no implementation file starting
    with `rhs1_` or `transport_`.
-5. Execute Lane 1 Batch 4 as the docs/API/tests/review gate. Refresh
+5. Execute Lane 1 Tranche E as the docs/API/tests/review gate. Refresh
    `docs/api.rst`, `docs/source_map.rst`, README/developer docs, examples,
    benchmark scripts, tests, and import contracts so all references use public
    API or canonical owners. Gate: package source files `<= 200`, root files
