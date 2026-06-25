@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.transport_parallel_runtime import (
+from sfincs_jax.problems.transport_matrix.parallel.runtime import (
     merge_transport_parallel_results,
     partition_transport_rhs,
     run_transport_parallel_gpu_subprocesses,
@@ -155,7 +155,7 @@ def test_run_transport_parallel_gpu_subprocesses_collects_completed_workers(
         def communicate(self):
             return "whichRHS=1/3: assembling+solving (rhs_norm=1.000000e+00)\n", ""
 
-    monkeypatch.setattr("sfincs_jax.transport_parallel_runtime.subprocess.Popen", _FakeProc)
+    monkeypatch.setattr("sfincs_jax.problems.transport_matrix.parallel.runtime.subprocess.Popen", _FakeProc)
 
     results = run_transport_parallel_gpu_subprocesses(
         payloads=[{"which_rhs_values": [1, 3]}, {"which_rhs_values": [2]}],
@@ -195,7 +195,7 @@ def test_run_transport_parallel_gpu_subprocesses_rejects_mismatched_worker_rhs(
         def communicate(self):
             return "", ""
 
-    monkeypatch.setattr("sfincs_jax.transport_parallel_runtime.subprocess.Popen", _FakeProc)
+    monkeypatch.setattr("sfincs_jax.problems.transport_matrix.parallel.runtime.subprocess.Popen", _FakeProc)
 
     with pytest.raises(RuntimeError, match=r"unexpected whichRHS coverage .*requested=\[1\] returned=\[2\]"):
         run_transport_parallel_gpu_subprocesses(
@@ -229,7 +229,7 @@ def test_run_transport_parallel_gpu_subprocesses_rejects_short_worker_arrays(
         def communicate(self):
             return "", ""
 
-    monkeypatch.setattr("sfincs_jax.transport_parallel_runtime.subprocess.Popen", _FakeProc)
+    monkeypatch.setattr("sfincs_jax.problems.transport_matrix.parallel.runtime.subprocess.Popen", _FakeProc)
 
     with pytest.raises(RuntimeError, match=r"inconsistent result array lengths .*residual_norms=1"):
         run_transport_parallel_gpu_subprocesses(
@@ -280,7 +280,7 @@ def test_gpu_subprocesses_deduplicates_visible_ids_and_reports_plan_cap(
         def communicate(self):
             return "", ""
 
-    monkeypatch.setattr("sfincs_jax.transport_parallel_runtime.subprocess.Popen", _FakeProc)
+    monkeypatch.setattr("sfincs_jax.problems.transport_matrix.parallel.runtime.subprocess.Popen", _FakeProc)
 
     results = run_transport_parallel_gpu_subprocesses(
         payloads=[{"which_rhs_values": [1]}, {"which_rhs_values": [2]}, {"which_rhs_values": [3]}],
@@ -387,7 +387,7 @@ def test_gpu_subprocesses_abort_pending_workers_on_residual_gate(
 
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_ABORT_MAX_RESIDUAL", "1e-6")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_ABORT_MAX_RELATIVE_RESIDUAL", "1e-6")
-    monkeypatch.setattr("sfincs_jax.transport_parallel_runtime.subprocess.Popen", _FakeProc)
+    monkeypatch.setattr("sfincs_jax.problems.transport_matrix.parallel.runtime.subprocess.Popen", _FakeProc)
 
     try:
         run_transport_parallel_gpu_subprocesses(
@@ -442,7 +442,7 @@ def test_gpu_subprocesses_classify_worker_residual_gate_exit(
         def kill(self):
             self.returncode = -9
 
-    monkeypatch.setattr("sfincs_jax.transport_parallel_runtime.subprocess.Popen", _FakeProc)
+    monkeypatch.setattr("sfincs_jax.problems.transport_matrix.parallel.runtime.subprocess.Popen", _FakeProc)
 
     try:
         run_transport_parallel_gpu_subprocesses(

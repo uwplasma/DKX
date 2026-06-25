@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from sfincs_jax.transport_solve_policy import (
+from sfincs_jax.problems.transport_matrix.solve_policy import (
     build_transport_active_dof_state,
     resolve_transport_active_dof_mode,
     resolve_transport_dense_policy,

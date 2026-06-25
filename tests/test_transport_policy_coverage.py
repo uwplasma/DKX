@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from sfincs_jax.transport_parallel_policy import (
+from sfincs_jax.problems.transport_matrix.parallel.policy import (
     audit_sharded_solve_scaling_summary,
     audit_transport_parallel_scaling_summary,
     rewrite_xla_flags,
@@ -19,7 +19,7 @@ from sfincs_jax.transport_parallel_policy import (
     transport_parallel_visible_gpu_ids,
     transport_parallel_worker_env,
 )
-from sfincs_jax.transport_policy import (
+from sfincs_jax.problems.transport_matrix.policies import (
     TransportRuntimePolicy,
     transport_dense_accelerator_auto_allowed,
     transport_dense_backend_allowed,

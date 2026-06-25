@@ -639,7 +639,7 @@ from .host_refinement import (
     host_sparse_direct_polish as _host_sparse_direct_polish_impl,
     host_sparse_direct_solve_with_refinement as _host_sparse_direct_solve_with_refinement_impl,
 )
-from .transport_policy import (
+from .problems.transport_matrix.policies import (
     transport_host_gmres_accepts_preconditioned_residual as _transport_host_gmres_accepts_preconditioned_residual_impl,
     transport_precondition_side as _transport_precondition_side_impl,
     transport_sparse_direct_needs_float64_retry as _transport_sparse_direct_needs_float64_retry_impl,
@@ -660,52 +660,52 @@ from .problems.transport_matrix.preconditioner_dispatch import (
 )
 from .problems.transport_matrix.direct_block_schur import build_transport_fp_direct_active_block_schur_preconditioner
 from .problems.transport_matrix.fortran_reduced_lu import build_transport_fp_fortran_reduced_lu_preconditioner
-from .transport_solve_policy import resolve_transport_per_rhs_loop_policy, transport_geometry_scheme_from_namelist
-from .transport_solve_setup import (
+from .problems.transport_matrix.solve_policy import resolve_transport_per_rhs_loop_policy, transport_geometry_scheme_from_namelist
+from .problems.transport_matrix.setup import (
     resolve_transport_maxiter_setup,
     resolve_transport_parallel_request,
     resolve_transport_state_setup,
     resolve_transport_which_rhs_setup,
 )
-from .transport_active_dense_setup import (
+from .problems.transport_matrix.active_dense import (
     resolve_transport_active_dense_setup,
     transport_active_dof_indices as _transport_active_dof_indices,
 )
-from .transport_handoff_policy import (
+from .problems.transport_matrix.handoff_policy import (
     transport_candidate_is_better,
     transport_polish_config_from_env,
     transport_residual_value,
     transport_result_needs_retry,
 )
-from .transport_dense_lu import (
+from .problems.transport_matrix.dense_lu import (
     dense_preconditioner_for_matvec as _dense_preconditioner_for_matvec,
     dense_solver_for_matvec as _dense_solver_for_matvec,
 )
-from .transport_dense_batch import (
+from .problems.transport_matrix.dense_batch import (
     TransportDenseBatchContext,
     solve_transport_dense_batch as _solve_transport_dense_batch,
 )
-from .transport_host_gmres import transport_host_gmres_solve as _transport_host_gmres_solve
-from .transport_iteration_stats import emit_transport_ksp_iteration_stats as _emit_transport_ksp_iteration_stats
-from .transport_linear_solve import (
+from .problems.transport_matrix.host_gmres import transport_host_gmres_solve as _transport_host_gmres_solve
+from .problems.transport_matrix.iteration_stats import emit_transport_ksp_iteration_stats as _emit_transport_ksp_iteration_stats
+from .problems.transport_matrix.linear_solve import (
     TransportLinearSolveCallbacks,
     TransportLinearSolveContext,
     transport_restart_for_method as _transport_restart_for_method,
     transport_solver_kind as _transport_solver_kind,
 )
-from .transport_solve_finalization import (
+from .problems.transport_matrix.finalize import (
     TransportConstraintNullspaceProjector,
     TransportRHSFinalizationContext,
     finalize_full_transport_rhs,
     finalize_reduced_transport_rhs,
 )
-from .transport_loop_support import (
+from .problems.transport_matrix.loop import (
     TransportLoopProgress,
     TransportMatvecCache,
     TransportRecycleState,
     resolve_transport_recycle_k,
 )
-from .transport_sparse_direct_solve import (
+from .problems.transport_matrix.sparse_direct_solve import (
     transport_sparse_direct_context_from_env as _transport_sparse_direct_context_from_env,
 )
 from .problems.transport_matrix.parallel.policy import (
@@ -720,7 +720,7 @@ from .problems.transport_matrix.parallel.runtime import (
     run_transport_parallel_gpu_subprocesses_with_policy as _run_transport_parallel_gpu_subprocesses,
 )
 from .problems.transport_matrix.parallel.solve import TransportParallelSolveRuntime, maybe_run_transport_parallel_solve
-from .transport_residual_quality import transport_residual_gate_thresholds_from_env
+from .problems.transport_matrix.residual_quality import transport_residual_gate_thresholds_from_env
 from .problems.transport_matrix.parallel.pool import (
     get_transport_parallel_pool as _get_transport_parallel_pool,
     shutdown_transport_parallel_pool as _shutdown_transport_parallel_pool,
@@ -749,8 +749,8 @@ from .problems.transport_matrix.diagnostics import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
 )
-from .transport_postsolve_diagnostics import compute_transport_postsolve_diagnostics
-from .transport_streaming_outputs import TransportStreamingOutputAccumulator
+from .problems.transport_matrix.postsolve_diagnostics import compute_transport_postsolve_diagnostics
+from .problems.transport_matrix.streaming_outputs import TransportStreamingOutputAccumulator
 from .solver_runtime import (
     block_gmres_result_ready as _block_gmres_result_ready,
     gmres_result_is_finite as _gmres_result_is_finite,

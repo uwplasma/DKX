@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.solver import GMRESSolveResult
-from sfincs_jax.transport_solve_finalization import (
+from sfincs_jax.problems.transport_matrix.finalize import (
     TransportKSPIterationRequest,
     TransportRHSFinalizationContext,
     finalize_full_transport_rhs,

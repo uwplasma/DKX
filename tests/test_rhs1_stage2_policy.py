@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.rhs1_stage2_policy import (
+from sfincs_jax.problems.profile_response.policies import (
     RHS1Stage2AdmissionControls,
     RHS1Stage2RetryControls,
     rhs1_fp_force_stage2,

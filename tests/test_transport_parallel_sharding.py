@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sfincs_jax.transport_parallel_sharding import (
+from sfincs_jax.problems.transport_matrix.parallel.sharding import (
     estimate_sharded_solve_amortization,
     plan_compiled_sharded_operator_reuse,
     plan_sharded_solve_deterministic_output_gate,

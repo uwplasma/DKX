@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from sfincs_jax.rhs1_sparse_exact_policy import (
+from sfincs_jax.problems.profile_response.policies import (
     rhs1_prefer_sparse_over_dense_shortcut,
     rhs1_sparse_exact_lu_requested,
     rhs1_sparse_prefer_skips_stage2,

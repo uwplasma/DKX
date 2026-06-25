@@ -5,7 +5,7 @@ import math
 import jax.numpy as jnp
 import pytest
 
-from sfincs_jax.rhs1_residual import (
+from sfincs_jax.problems.profile_response.residual import (
     apply_damped_preconditioned_residual_polish,
     apply_projected_residual_polish,
     l2_norm_float,

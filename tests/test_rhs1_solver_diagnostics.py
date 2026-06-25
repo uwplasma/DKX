@@ -3,8 +3,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import jax.numpy as jnp
-import sfincs_jax.rhs1_solver_diagnostics as diagnostics
-from sfincs_jax.rhs1_solver_diagnostics import (
+import sfincs_jax.problems.profile_response.solver_diagnostics as diagnostics
+from sfincs_jax.problems.profile_response.solver_diagnostics import (
     RHS1KSPDiagnosticsContext,
     RHS1PostMinresDiagnostics,
     RHS1PreflightDiagnostics,

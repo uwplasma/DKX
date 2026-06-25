@@ -137,25 +137,26 @@ Unreleased
   ``sfincs_jax.problems.transport_matrix.parallel``: worker payloads, process/GPU
   execution, runtime merge/partition helpers, persistent-pool management,
   scaling/sharding policy, validation, and the subprocess worker entry point.
-  The old ``sfincs_jax.transport_parallel_*`` module paths remain compatibility
-  aliases, and ``python -m sfincs_jax.transport_parallel_worker`` still works
-  for GPU worker subprocesses. Focused parallel/import tests passed with
+  The maintained worker entry point is now
+  ``python -m sfincs_jax.problems.transport_matrix.parallel.worker`` for GPU
+  worker subprocesses; top-level ``sfincs_jax.transport_parallel_*`` aliases
+  were removed in the consolidation pass. Focused parallel/import tests passed with
   ``139 passed``, a broader transport/CLI slice passed with ``169 passed``, and
   the post-move local full suite passed with ``2668 passed in 552.24 s``.
 - Moved the RHSMode=2/3 transport preconditioner/direct-operator cluster into
   ``sfincs_jax.problems.transport_matrix``: preconditioner-kind dispatch,
   direct reduced ``Pmat`` emission, direct active block-Schur setup, and
-  Fortran-reduced sparse-factor preconditioning. The old top-level
-  ``sfincs_jax.transport_*`` module paths remain aliases for existing scripts,
-  tests, and monkeypatch/debug workflows. Focused preconditioner/direct tests
-  passed with ``117 passed`` and a broader transport/preconditioner slice passed
-  with ``148 passed``. The post-move local full suite passed with
+  Fortran-reduced sparse-factor preconditioning. Maintained imports now use the
+  ``sfincs_jax.problems.transport_matrix`` package directly; top-level
+  ``sfincs_jax.transport_*`` aliases were removed in the consolidation pass.
+  Focused preconditioner/direct tests passed with ``117 passed`` and a broader
+  transport/preconditioner slice passed with ``148 passed``. The post-move
+  local full suite passed with
   ``2668 passed in 554.82 s``.
 - Moved the RHSMode=1/2/3 transport diagnostics and transport-matrix assembly
   implementation into ``sfincs_jax.problems.transport_matrix.diagnostics``.
-  The public ``sfincs_jax.transport_matrix`` import path remains a compatibility
-  alias for existing notebooks and scripts, while internal transport modules now
-  import the maintained domain module directly.
+  Existing notebooks and scripts should import this maintained domain module
+  directly.
 - Moved RHSMode=1 host sparse ILU/LU matvec assembly, CSR factorization, cached
   dense/JAX triangular-factor materialization, and the full-system
   matrix-free adapter into
@@ -166,17 +167,17 @@ Unreleased
 - Moved RHSMode=1 profile-response support utilities into
   ``sfincs_jax.problems.profile_response``: residual gates, active-DOF
   decisions, active full/reduced projection, accepted-solve handoff, and solver
-  diagnostics. The old ``sfincs_jax.rhs1_residual``,
-  ``sfincs_jax.rhs1_active_dof``, ``sfincs_jax.rhs1_active_projection``,
-  ``sfincs_jax.rhs1_handoff``, and ``sfincs_jax.rhs1_solver_diagnostics``
-  import paths remain compatibility aliases.
+  diagnostics. Maintained imports use the canonical
+  ``sfincs_jax.problems.profile_response`` modules directly; the top-level
+  ``sfincs_jax.rhs1_*`` aliases for these utilities were removed in the
+  consolidation pass.
 - Consolidated RHSMode=1 profile-response solve-routing and strong
   preconditioner controls into
   ``sfincs_jax.problems.profile_response.policies`` and
-  ``sfincs_jax.problems.profile_response.strong_preconditioning``. The ten old
-  ``sfincs_jax.rhs1_*`` policy files remain compatibility aliases, while the
-  maintained source map, API docs, and driver imports now use the domain
-  package. Focused policy/import/driver validation passed with ``282`` tests
+  ``sfincs_jax.problems.profile_response.strong_preconditioning``. The old
+  top-level ``sfincs_jax.rhs1_*`` policy aliases were removed in the
+  consolidation pass; the maintained source map, API docs, and driver imports
+  now use the domain package. Focused policy/import/driver validation passed with ``282`` tests
   and the post-consolidation local full suite passed with
   ``2670 passed in 579.02 s``.
 - Moved the remaining small RHSMode=1 x-block/QI control helpers into
@@ -416,14 +417,15 @@ Unreleased
   ``sfincs_jax.solvers.preconditioners.xblock.tz_sparse``. The module owns
   host/JAX x-block factor setup, compact CSR and padded triangular apply,
   skipped-block diagonal fallback, and extra-variable Schur handling; the old
-  ``sfincs_jax.rhs1_xblock_tz_sparse`` import path remains a compatibility
-  alias.
+  top-level ``sfincs_jax.rhs1_xblock_tz_sparse`` alias was removed in the
+  consolidation pass.
 - Moved the PAS-only RHSMode=1 sparse x-block ILU/LU preconditioner into
   ``sfincs_jax.solvers.preconditioners.pas.xblock_ilu``. The module owns the
   per-``(species,x)`` Legendre/theta/zeta block assembly, PETSc-style
   ILU/exact-LU setup policy, padded triangular-factor apply, threaded factor
   build, cache storage, and extra-variable Schur solve; the old
-  ``sfincs_jax.rhs1_pas_xblock_ilu`` import path remains a compatibility alias.
+  top-level ``sfincs_jax.rhs1_pas_xblock_ilu`` alias was removed in the
+  consolidation pass.
 - Extracted the RHSMode=2/3 post-solve diagnostic assembly into
   ``transport_postsolve_diagnostics.py``. The new module owns streamed versus
   batched diagnostic selection, rematerialization/precompute/chunking policy,

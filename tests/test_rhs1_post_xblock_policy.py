@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from sfincs_jax.rhs1_post_xblock_policy import (
+from sfincs_jax.problems.profile_response.policies import (
     RHS1BiCGStabFallbackControls,
     RHS1BiCGStabFallbackDecision,
     RHS1FastPostXBlockPolishControls,

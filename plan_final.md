@@ -305,13 +305,13 @@ Current source size snapshot:
 
 - `sfincs_jax/v3_driver.py`: 11,992 lines.
 - `sfincs_jax/rhs1_full_assembly.py`: about 6.0k lines.
-- Top-level `transport_*` modules are compatibility aliases and should be
-  deleted in Lane 1 Iteration 1 after import rewrites.
-- Top-level `rhs1_*` modules are mixed: 17 aliases and 47 real files. Real
-  implementation should move into domain packages in Lane 1 Iterations 2-3.
+- Top-level `transport_*` modules: 0 after Lane 1 Iteration 1.
+- Top-level `rhs1_*` modules: 47 real implementation files after Lane 1
+  Iteration 1. These should move into domain packages in Lane 1 Iterations 2-3.
 - Several RHSMode 1 QI, x-block, sparse policy, output, and transport modules
   still exceed 2k to 4k lines.
-- Package total is about 295 Python files. The Lane 1 target is below 240
+- Package total is 247 Python files after Lane 1 Iteration 1. The Lane 1
+  target is below 240
   Python files after deleting shims and consolidating real implementation into
   domain packages.
 
@@ -487,10 +487,9 @@ pass, not an algorithmic rewrite.
 Current inventory from 2026-06-25:
 
 - `sfincs_jax/v3_driver.py`: 11,992 lines.
-- Python source files: 295.
-- Top-level `transport_*` files: 31, all compatibility aliases.
-- Top-level `rhs1_*` files: 64 total, of which 17 are compatibility aliases
-  and 47 contain real implementation.
+- Python source files: 247 after Iteration 1.
+- Top-level `transport_*` files: 0 after Iteration 1.
+- Top-level `rhs1_*` files: 47 real implementation files after Iteration 1.
 - Largest remaining files: `v3_driver.py`, `rhs1_full_assembly.py`,
   `problems/profile_response/sparse/xblock.py`,
   `rhs1_qi_device_preconditioner.py`, `io.py`,
@@ -525,9 +524,10 @@ Iteration 1 - Delete compatibility aliases and normalize imports:
 
 Exit gates for Iteration 1:
 
+- Status: completed on 2026-06-25.
 - Top-level `transport_*` files are gone.
 - Top-level `rhs1_*` alias files are gone.
-- Python file count decreases by about 48 files.
+- Python file count decreased from 295 to 247.
 - Import-contract tests prove the canonical paths and public API paths.
 - Fast focused tests plus docs build pass.
 
@@ -1212,21 +1212,18 @@ Completed on 2026-06-25:
 
 Next ordered implementation steps:
 
-1. Execute Lane 1 Iteration 1 as a single batch: rewrite internal imports to
-   canonical package paths, delete all top-level `transport_*` aliases, delete
-   top-level `rhs1_*` aliases, and add/adjust import-contract tests.
-2. Execute Lane 1 Iteration 2 as a single batch: move real RHSMode-1
+1. Execute Lane 1 Iteration 2 as a single batch: move real RHSMode-1
    orchestration/operator/output modules out of top-level `rhs1_*` names into
    `problems.profile_response`, `operators`, and `outputs`.
-3. Execute Lane 1 Iteration 3 as a single batch: consolidate QI, x-block, PAS,
+2. Execute Lane 1 Iteration 3 as a single batch: consolidate QI, x-block, PAS,
    sparse, and Schur solver/preconditioner families under
    `solvers.preconditioners`, removing stale policy-only fragments.
-4. Execute Lane 1 Iteration 4 as a single batch: move the two large solve entry
+3. Execute Lane 1 Iteration 4 as a single batch: move the two large solve entry
    points out of `v3_driver.py`, leaving a shim under 300 lines or deleting the
    file.
-5. Execute Lane 1 Iteration 5: dead-code pruning, docs/API cleanup, final
+4. Execute Lane 1 Iteration 5: dead-code pruning, docs/API cleanup, final
    counts, focused tests, docs build, and CI-equivalent validation.
-6. Keep production option-1/3 ambipolar reruns and production-grid RHSMode 4/5
+5. Keep production option-1/3 ambipolar reruns and production-grid RHSMode 4/5
    parity as release-refresh benchmarks outside normal CI during this
    consolidation pass.
 

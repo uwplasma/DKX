@@ -7,8 +7,8 @@ import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.petsc_binary import read_petsc_vec
-from sfincs_jax.transport_matrix import v3_transport_output_fields_vm_only
-from sfincs_jax.transport_streaming_outputs import TransportStreamingOutputAccumulator
+from sfincs_jax.problems.transport_matrix.diagnostics import v3_transport_output_fields_vm_only
+from sfincs_jax.problems.transport_matrix.streaming_outputs import TransportStreamingOutputAccumulator
 from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist
 from sfincs_jax.v3_driver import solve_v3_transport_matrix_linear_gmres
 from sfincs_jax.v3_system import full_system_operator_from_namelist

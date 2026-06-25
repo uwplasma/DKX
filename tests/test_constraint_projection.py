@@ -10,7 +10,7 @@ from sfincs_jax.constraint_projection import (
     project_constraint_scheme1_nullspace_solution,
     project_constraint_scheme1_nullspace_solution_with_residual,
 )
-from sfincs_jax.transport_solve_finalization import TransportConstraintNullspaceProjector
+from sfincs_jax.problems.transport_matrix.finalize import TransportConstraintNullspaceProjector
 
 jax_config.update("jax_enable_x64", True)
 

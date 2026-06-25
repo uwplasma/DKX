@@ -19,8 +19,8 @@ SOURCE_MAPPED_CONTROL_MODULES = (
     "sfincs_jax.solvers.preconditioners.schur.rhs1_coarse_basis",
     "sfincs_jax.solvers.preconditioners.schur.rhs1_coarse_policy",
     "sfincs_jax.solvers.preconditioners.xblock.tz_sparse",
-    "sfincs_jax.transport_parallel_solve",
-    "sfincs_jax.transport_postsolve_diagnostics",
+    "sfincs_jax.problems.transport_matrix.parallel.solve",
+    "sfincs_jax.problems.transport_matrix.postsolve_diagnostics",
 )
 
 

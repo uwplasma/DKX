@@ -25,7 +25,7 @@ from sfincs_jax.namelist import Namelist
 from sfincs_jax.paths import _strip_quotes, resolve_existing_path
 from sfincs_jax.profiling import SimpleProfiler, _device_mem_mb, _rss_mb, maybe_profiler
 from sfincs_jax.scans import _er_scan_var_name, _patch_scalar_in_group, linspace_including_endpoints, run_er_scan
-from sfincs_jax.transport_parallel_worker import main as transport_worker_main
+from sfincs_jax.problems.transport_matrix.parallel.worker import main as transport_worker_main
 from sfincs_jax.verbose import Timer, make_emit
 
 
@@ -412,9 +412,9 @@ def test_transport_parallel_worker_writes_npz(tmp_path: Path, monkeypatch: pytes
     }
     payload_path.write_text(json.dumps(payload))
 
-    monkeypatch.setattr("sfincs_jax.transport_parallel_worker.read_sfincs_input", lambda _p: object())
+    monkeypatch.setattr("sfincs_jax.problems.transport_matrix.parallel.worker.read_sfincs_input", lambda _p: object())
     monkeypatch.setattr(
-        "sfincs_jax.transport_parallel_worker.solve_v3_transport_matrix_linear_gmres",
+        "sfincs_jax.problems.transport_matrix.parallel.worker.solve_v3_transport_matrix_linear_gmres",
         lambda **_kwargs: SimpleNamespace(
             state_vectors_by_rhs={1: np.asarray([1.0, 2.0]), 3: np.asarray([3.0, 4.0])},
             residual_norms_by_rhs={1: np.float64(0.25), 3: np.float64(0.75)},

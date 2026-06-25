@@ -7,12 +7,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.transport_parallel_policy import (
+from sfincs_jax.problems.transport_matrix.parallel.policy import (
     audit_parallel_scaling_claim_scope,
     audit_sharded_solve_scaling_summary,
     audit_transport_parallel_scaling_summary,
 )
-from sfincs_jax.transport_parallel_execution import (
+from sfincs_jax.problems.transport_matrix.parallel.execution import (
     build_transport_parallel_payloads,
     run_transport_parallel_payloads,
     should_run_transport_parallel,
@@ -531,7 +531,7 @@ def test_run_transport_parallel_payloads_preserves_payload_order_when_cpu_future
     ]
 
     monkeypatch.setattr(
-        "sfincs_jax.transport_parallel_execution.concurrent.futures.as_completed",
+        "sfincs_jax.problems.transport_matrix.parallel.execution.concurrent.futures.as_completed",
         lambda futures: reversed(list(futures)),
     )
 

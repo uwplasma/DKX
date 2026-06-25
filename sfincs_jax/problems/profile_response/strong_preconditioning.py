@@ -8,7 +8,7 @@ import math
 import os
 from typing import Any
 
-# From sfincs_jax.rhs1_strong_policy
+# From sfincs_jax.problems.profile_response.strong_preconditioning
 _PAS_WEAK_STRONG_SKIP_KINDS = frozenset({"collision", "point", "xmg"})
 _PAS_STRONG_DELAY_BASE_KINDS = frozenset(
     {
@@ -538,7 +538,7 @@ def run_rhs1_post_primary_minres_corrections(
     )
 
 
-# From sfincs_jax.rhs1_strong_control
+# From sfincs_jax.problems.profile_response.strong_preconditioning
 @dataclass(frozen=True)
 class RHS1StrongPreconditionerControl:
     """Resolved strong-preconditioner control state for a solve branch."""
@@ -700,7 +700,7 @@ def rhs1_resolved_strong_preconditioner_control(
     )
 
 
-# From sfincs_jax.rhs1_strong_auto_kind
+# From sfincs_jax.problems.profile_response.strong_preconditioning
 @dataclass(frozen=True)
 class RHS1StrongAutoSelection:
     """Resolved automatic strong-preconditioner choice."""

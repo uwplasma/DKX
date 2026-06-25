@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from sfincs_jax.transport_active_dense_setup import resolve_transport_active_dense_setup
+from sfincs_jax.problems.transport_matrix.active_dense import resolve_transport_active_dense_setup
 
 
 def _op(*, total_size: int = 2000, n_xi: int = 4, nxi_for_x=(4, 2)):

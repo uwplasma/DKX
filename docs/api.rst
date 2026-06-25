@@ -58,8 +58,7 @@ API reference
 .. automodule:: sfincs_jax.problems.transport_matrix.diagnostics
    :members:
 
-``sfincs_jax.transport_matrix`` remains a compatibility alias for existing
-scripts and notebooks.
+Transport-matrix helpers are documented through their maintained domain module.
 
 .. automodule:: sfincs_jax.residual
    :members:

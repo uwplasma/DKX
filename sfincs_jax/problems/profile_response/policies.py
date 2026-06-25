@@ -1753,7 +1753,7 @@ def rhs1_xblock_fallback_initial_guess(
     return original_x0, False, candidate_improved_rhs
 
 
-# From sfincs_jax.rhs1_acceptance_policy
+# From sfincs_jax.problems.profile_response.policies
 def rhs1_pas_fast_accept(
     *,
     op: Any,
@@ -1803,7 +1803,7 @@ def rhs1_host_factor_probe_ok(*, factor: object | None, block_size: int) -> bool
     return np.isfinite(ratio) and ratio <= probe_max
 
 
-# From sfincs_jax.rhs1_constraint0_policy
+# From sfincs_jax.problems.profile_response.policies
 @dataclass(frozen=True)
 class RHS1Constraint0PETScCompatConfig:
     """Host sparse-ILU controls for the constraint-scheme-0 PETSc lane."""
@@ -1933,7 +1933,7 @@ def rhs1_constraint0_petsc_compat_regularization(*, max_abs: float) -> float:
     return max(0.0, float(regularization))
 
 
-# From sfincs_jax.rhs1_post_xblock_policy
+# From sfincs_jax.problems.profile_response.policies
 def _is_explicit_cpu_rhs1_fp_only(*, op: Any, use_implicit: bool, backend: str) -> bool:
     if bool(use_implicit):
         return False
@@ -2558,7 +2558,7 @@ def rhs1_fp_xblock_global_correction_allowed(
     return True
 
 
-# From sfincs_jax.rhs1_sparse_exact_policy
+# From sfincs_jax.problems.profile_response.policies
 def rhs1_sparse_exact_lu_requested(
     *,
     op: Any,
@@ -2643,7 +2643,7 @@ def rhs1_sparse_prefer_skips_stage2(
     )
 
 
-# From sfincs_jax.rhs1_sparse_rescue_policy
+# From sfincs_jax.problems.profile_response.policies
 @dataclass(frozen=True)
 class RHS1SparseRescueOrdering:
     """Resolved sparse-rescue ordering state for one solve branch."""
@@ -3236,7 +3236,7 @@ def rhs1_full_sparse_rescue_setup(
     )
 
 
-# From sfincs_jax.rhs1_sparse_polish_policy
+# From sfincs_jax.problems.profile_response.policies
 def rhs1_polish_enabled(*, env_name: str) -> bool:
     """Return whether a polish stage is enabled by its boolean-like env var."""
     env = os.environ.get(env_name, "").strip().lower()
@@ -3331,7 +3331,7 @@ def rhs1_parse_polish_gmres_config(
     return (max(int(min_restart), int(restart)), max(int(min_maxiter), int(maxiter)))
 
 
-# From sfincs_jax.rhs1_stage2_policy
+# From sfincs_jax.problems.profile_response.policies
 _PAS_STAGE2_SKIP_BASE_KINDS = frozenset(
     {"pas_lite", "pas_hybrid", "pas_tz", "pas_schur", "pas_tokamak_theta"}
 )

@@ -270,7 +270,7 @@ def run_transport_parallel_gpu_subprocesses(
             cmd = [
                 sys.executable,
                 "-m",
-                "sfincs_jax.transport_parallel_worker",
+                "sfincs_jax.problems.transport_matrix.parallel.worker",
                 "--payload",
                 str(payload_path),
                 "--output",

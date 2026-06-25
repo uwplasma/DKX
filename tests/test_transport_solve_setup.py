@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 
-from sfincs_jax.transport_matrix import transport_matrix_size_from_rhs_mode
-from sfincs_jax.transport_solve_setup import (
+from sfincs_jax.problems.transport_matrix.diagnostics import transport_matrix_size_from_rhs_mode
+from sfincs_jax.problems.transport_matrix.setup import (
     resolve_transport_maxiter_setup,
     resolve_transport_parallel_request,
     resolve_transport_state_setup,

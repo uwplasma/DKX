@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.rhs1_sparse_rescue_policy import (
+from sfincs_jax.problems.profile_response.policies import (
     RHS1FullSparseRescueSetupContext,
     rhs1_full_sparse_rescue_setup,
     rhs1_resolved_sparse_rescue_ordering,

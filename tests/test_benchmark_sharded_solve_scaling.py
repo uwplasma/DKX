@@ -20,7 +20,7 @@ from examples.performance.benchmark_sharded_solve_scaling import (
     _run_once_subprocess,
     _timing_semantics,
 )
-from sfincs_jax.transport_parallel_policy import audit_sharded_solve_scaling_summary
+from sfincs_jax.problems.transport_matrix.parallel.policy import audit_sharded_solve_scaling_summary
 
 
 def test_configure_backend_env_cpu() -> None:

@@ -2182,3 +2182,53 @@ Next best steps:
 2. Re-check PR #8 CI after the coverage shards finish.
 3. If CI passes, finish the review-readiness audit; if CI fails, fix the
    failing job directly before doing more refactor work.
+
+## 2026-06-25 Lane 1 Iteration 1 Compatibility Alias Deletion
+
+Steps taken:
+
+1. Rewrote internal, test, script, example, and docs imports from deleted
+   top-level compatibility aliases to their canonical domain owners.
+2. Deleted all 31 top-level `transport_*` compatibility modules.
+3. Deleted all 17 top-level `rhs1_*` compatibility modules that already had
+   canonical owners in `problems.profile_response` or `solvers.preconditioners`.
+4. Updated API/testing/release documentation so it no longer claims the deleted
+   aliases remain available.
+5. Updated `plan_final.md` so Lane 1 Iteration 1 is marked complete and
+   Iteration 2 is the next active consolidation batch.
+
+Results:
+
+- Python source files decreased from `295` to `247`.
+- Top-level `transport_*` files decreased from `31` to `0`.
+- Top-level `rhs1_*` files decreased from `64` to `47`; the remaining files
+  are real RHSMode-1 implementation and are the target of Iteration 2.
+- `v3_driver.py` remains `11,992` lines; the driver-size target is addressed in
+  Lane 1 Iteration 4 after the real RHSMode-1 modules have canonical homes.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/v3_driver.py
+  sfincs_jax/problems/transport_matrix/parallel/runtime.py
+  sfincs_jax/problems/transport_matrix/parallel/worker.py` passed.
+- `python -m pytest tests/test_domain_package_import_contracts.py
+  tests/test_policy_module_docstrings.py tests/test_helper_module_coverage.py
+  -q --tb=short` passed with `20 passed in 1.99 s`.
+- `python -m pytest` over the modified RHSMode-1 policy and transport module
+  tests passed with `420 passed in 13.62 s`.
+- Transport parity smoke and benchmark policy tests passed with
+  `62 passed in 10.98 s`.
+- `python -m sphinx -b html docs docs/_build/html -q`,
+  scoped `ruff`, `git diff --check`, and the deleted-alias import scan passed.
+
+Current lane status:
+
+- Lane 1 Iteration 1: 100%.
+- Lane 1 overall: about 20%; Iterations 2-5 remain.
+- Overall consolidation goal: not complete.
+
+Next best steps:
+
+1. Commit and push Iteration 1.
+2. Start Lane 1 Iteration 2 by moving real top-level RHSMode-1 modules into
+   domain packages in one batch, preserving behavior and public API paths.

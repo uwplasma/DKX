@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.rhs1_strong_auto_kind import (
+from sfincs_jax.problems.profile_response.strong_preconditioning import (
     RHS1StrongPreconditionerControl,
     adjust_rhs1_reduced_auto_kind,
     adjust_rhs1_theta_line_auto_kind,

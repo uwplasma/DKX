@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import jax.numpy as jnp
 
-import sfincs_jax.transport_linear_solve as transport_linear
-from sfincs_jax.transport_linear_solve import (
+import sfincs_jax.problems.transport_matrix.linear_solve as transport_linear
+from sfincs_jax.problems.transport_matrix.linear_solve import (
     TransportLinearSolveCallbacks,
     TransportLinearSolveContext,
     solve_transport_linear,

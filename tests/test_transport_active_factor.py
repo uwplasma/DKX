@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 
-from sfincs_jax.transport_active_factor import (
+from sfincs_jax.problems.transport_matrix.active_factor import (
     admit_active_block_schur_factor,
     build_active_block_ordering,
     build_active_block_schur_factor,
