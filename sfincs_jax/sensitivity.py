@@ -21,6 +21,14 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 
+from .input_compat import (
+    bool_config_values as _bool_values,
+    config_bool as _config_bool,
+    config_float as _config_float,
+    config_int as _config_int,
+    lookup_config_value as _lookup_config_value,
+)
+
 
 Array = Any
 LinearSolver = Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
@@ -51,63 +59,6 @@ _BASE_ADJOINT_DEBUG_FIELDS = (
     "totalHeatFluxPercentError",
     "radialCurrentPercentError",
 )
-
-
-def _lookup_config_value(config: Any, groups: tuple[str, ...], key: str, default: Any = None) -> Any:
-    key_upper = key.upper()
-    for group in groups:
-        group_data: Any
-        if hasattr(config, "group"):
-            group_data = config.group(group)
-        elif isinstance(config, Mapping):
-            group_data = config.get(group, config.get(group.lower(), config.get(group.upper(), {})))
-        else:
-            group_data = {}
-        if isinstance(group_data, Mapping):
-            if key_upper in group_data:
-                return group_data[key_upper]
-            if key in group_data:
-                return group_data[key]
-            lower_map = {str(k).lower(): v for k, v in group_data.items()}
-            if key.lower() in lower_map:
-                return lower_map[key.lower()]
-    if isinstance(config, Mapping):
-        if key_upper in config:
-            return config[key_upper]
-        if key in config:
-            return config[key]
-        lower_map = {str(k).lower(): v for k, v in config.items()}
-        if key.lower() in lower_map:
-            return lower_map[key.lower()]
-    return default
-
-
-def _first_value(value: Any, default: Any = None) -> Any:
-    if value is None:
-        return default
-    if isinstance(value, (list, tuple)):
-        return value[0] if value else default
-    return value
-
-
-def _bool_values(value: Any) -> tuple[bool, ...]:
-    if value is None:
-        return ()
-    if isinstance(value, (list, tuple)):
-        return tuple(bool(item) for item in value)
-    return (bool(value),)
-
-
-def _config_bool(config: Any, groups: tuple[str, ...], key: str, default: bool = False) -> bool:
-    return bool(_first_value(_lookup_config_value(config, groups, key, default), default))
-
-
-def _config_int(config: Any, groups: tuple[str, ...], key: str, default: int = 0) -> int:
-    return int(_first_value(_lookup_config_value(config, groups, key, default), default))
-
-
-def _config_float(config: Any, groups: tuple[str, ...], key: str, default: float = 0.0) -> float:
-    return float(_first_value(_lookup_config_value(config, groups, key, default), default))
 
 
 def fortran_v3_adjoint_sensitivity_output_fields(config: Any) -> tuple[str, ...]:

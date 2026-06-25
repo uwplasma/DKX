@@ -17,6 +17,9 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+from ..input_compat import first_config_value as _first_scalar
+from ..input_compat import lookup_config_value as _lookup_config_value
+
 
 RadialCurrentEvaluator = Callable[[float], float]
 RadialCurrentDerivativeEvaluator = Callable[[float], Any]
@@ -1682,14 +1685,6 @@ def rhsmode1_radial_current_response_from_namelist(
     )
 
 
-def _first_scalar(value: Any, default: Any) -> Any:
-    if value is None:
-        return default
-    if isinstance(value, (list, tuple)):
-        return value[0] if value else default
-    return value
-
-
 def solve_rhsmode1_ambipolar_from_namelist(
     *,
     nml: Any,
@@ -2073,35 +2068,6 @@ def solve_sfincs_jax_ambipolar_brent(
         metadata={"input_namelist": str(Path(input_namelist)), "work_dir": str(Path(work_dir))},
     )
     return result, evaluator
-
-
-def _lookup_config_value(config: Any, groups: tuple[str, ...], key: str, default: Any = None) -> Any:
-    key_upper = key.upper()
-    for group in groups:
-        group_data: Any
-        if hasattr(config, "group"):
-            group_data = config.group(group)
-        elif isinstance(config, Mapping):
-            group_data = config.get(group, config.get(group.lower(), config.get(group.upper(), {})))
-        else:
-            group_data = {}
-        if isinstance(group_data, Mapping):
-            if key_upper in group_data:
-                return group_data[key_upper]
-            if key in group_data:
-                return group_data[key]
-            lower_map = {str(k).lower(): v for k, v in group_data.items()}
-            if key.lower() in lower_map:
-                return lower_map[key.lower()]
-    if isinstance(config, Mapping):
-        if key_upper in config:
-            return config[key_upper]
-        if key in config:
-            return config[key]
-        lower_map = {str(k).lower(): v for k, v in config.items()}
-        if key.lower() in lower_map:
-            return lower_map[key.lower()]
-    return default
 
 
 def validate_fortran_v3_ambipolar_constraints(config: Any, *, option: int | None = None) -> tuple[str, ...]:

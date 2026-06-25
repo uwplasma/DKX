@@ -15,6 +15,74 @@ def _group_get(group: Mapping[str, Any], *keys: str) -> Any | None:
     return None
 
 
+def lookup_config_value(config: Any, groups: tuple[str, ...], key: str, default: Any = None) -> Any:
+    """Read a SFINCS option from either a ``Namelist`` or nested mapping.
+
+    This is intentionally small but shared: problem modules need the same
+    Fortran-style case-insensitive lookup when validating source-compatible
+    ambipolar and adjoint-sensitivity settings.
+    """
+
+    key_upper = key.upper()
+    for group in groups:
+        group_data: Any
+        if hasattr(config, "group"):
+            group_data = config.group(group)
+        elif isinstance(config, Mapping):
+            group_data = config.get(group, config.get(group.lower(), config.get(group.upper(), {})))
+        else:
+            group_data = {}
+        if isinstance(group_data, Mapping):
+            if key_upper in group_data:
+                return group_data[key_upper]
+            if key in group_data:
+                return group_data[key]
+            lower_map = {str(k).lower(): v for k, v in group_data.items()}
+            if key.lower() in lower_map:
+                return lower_map[key.lower()]
+    if isinstance(config, Mapping):
+        if key_upper in config:
+            return config[key_upper]
+        if key in config:
+            return config[key]
+        lower_map = {str(k).lower(): v for k, v in config.items()}
+        if key.lower() in lower_map:
+            return lower_map[key.lower()]
+    return default
+
+
+def first_config_value(value: Any, default: Any = None) -> Any:
+    """Return the first scalar from a namelist value or ``default`` if empty."""
+
+    if value is None:
+        return default
+    if isinstance(value, (list, tuple)):
+        return value[0] if value else default
+    return value
+
+
+def bool_config_values(value: Any) -> tuple[bool, ...]:
+    """Return a tuple of booleans from scalar or vector namelist values."""
+
+    if value is None:
+        return ()
+    if isinstance(value, (list, tuple)):
+        return tuple(bool(item) for item in value)
+    return (bool(value),)
+
+
+def config_bool(config: Any, groups: tuple[str, ...], key: str, default: bool = False) -> bool:
+    return bool(first_config_value(lookup_config_value(config, groups, key, default), default))
+
+
+def config_int(config: Any, groups: tuple[str, ...], key: str, default: int = 0) -> int:
+    return int(first_config_value(lookup_config_value(config, groups, key, default), default))
+
+
+def config_float(config: Any, groups: tuple[str, ...], key: str, default: float = 0.0) -> float:
+    return float(first_config_value(lookup_config_value(config, groups, key, default), default))
+
+
 def effective_equilibrium_file(*, geom_params: Mapping[str, Any]) -> Any | None:
     geometry_scheme = int(_group_get(geom_params, "geometryScheme") or -1)
     equilibrium_file = _group_get(geom_params, "equilibriumFile")

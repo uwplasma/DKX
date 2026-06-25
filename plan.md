@@ -1397,3 +1397,47 @@ Next best steps:
    values are pinned.
 3. Continue the review-ready refactor tranche by moving fixture generation and
    comparison helpers behind compact domain APIs.
+
+## 2026-06-25 Shared Input-Contract Refactor
+
+Steps taken:
+
+1. Moved duplicated case-insensitive namelist/nested-mapping lookup helpers
+   from `sfincs_jax.problems.ambipolar` and `sfincs_jax.sensitivity` into
+   `sfincs_jax.input_compat`.
+2. Rewired the ambipolar and RHSMode 4/5 sensitivity validators to use the
+   shared helpers.
+3. Added direct `input_compat` coverage for scalar defaults, vector boolean
+   coercion, and nested mapping/Namelist lookup.
+
+Results:
+
+- The refactor removes duplicate local helper implementations while preserving
+  the validated ambipolar and RHSMode 4/5 source-contract behavior.
+- Focused refactor tests passed:
+  `JAX_ENABLE_X64=True python -m pytest tests/test_input_compat.py
+  tests/test_sensitivity.py tests/test_ambipolar_problem.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` with
+  `71 passed in 67.78 s`.
+- `python -m ruff check sfincs_jax/input_compat.py sfincs_jax/sensitivity.py
+  sfincs_jax/problems/ambipolar.py tests/test_input_compat.py
+  tests/test_sensitivity.py tests/test_ambipolar_problem.py
+  tests/test_domain_package_import_contracts.py`, `git diff --check`, and
+  `python -m sphinx -b html docs docs/_build/html -q` passed.
+
+Current lane status:
+
+- Ambipolar solver lane: 99% bounded; production replay remains outside CI.
+- RHSMode 4/5 sensitivity lane: 78%; unchanged technically, but the input
+  contract is now shared instead of duplicated.
+- Refactor/review-ready PR lane: 87%; common Fortran-style option lookup now
+  has one owner.
+- Overall completion: about 89%.
+
+Next best steps:
+
+1. Create small RHSMode-4 Fortran fixture namelists/output summaries.
+2. Add numerical output-field comparison scaffolding after those fixtures are
+   pinned.
+3. Continue extracting duplicated policy/config glue into existing domain
+   modules only when it reduces driver/module complexity.
