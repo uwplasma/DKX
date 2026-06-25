@@ -7,8 +7,13 @@ import pytest
 from sfincs_jax.problems.ambipolar import (
     RadialCurrentDerivativeResult,
     implicit_linear_radial_current_derivative,
+    implicit_linear_radial_current_derivative_from_builder,
 )
-from sfincs_jax.sensitivity import implicit_linear_observable_derivative
+from sfincs_jax.sensitivity import (
+    LinearObservableSystem,
+    implicit_linear_observable_derivative,
+    implicit_linear_observable_derivative_from_builder,
+)
 
 
 def _linear_system_components():
@@ -112,6 +117,81 @@ def test_implicit_linear_radial_current_derivative_adapts_to_ambipolar_contract(
         rtol=0.0,
         atol=1.0e-8,
     )
+
+
+def test_implicit_linear_observable_builder_path_matches_direct_path() -> None:
+    a0, ap, b0, bp, c0, cp, offset0, offsetp, p0 = _linear_system_components()
+
+    def build_system(p: float) -> LinearObservableSystem:
+        return LinearObservableSystem(
+            parameter=float(p),
+            matrix=a0 + float(p) * ap,
+            rhs=b0 + float(p) * bp,
+            matrix_derivative=ap,
+            rhs_derivative=bp,
+            observable_vector=c0 + float(p) * cp,
+            observable_vector_derivative=cp,
+            observable_offset=offset0 + float(p) * offsetp,
+            observable_offset_derivative=offsetp,
+            metadata={"builder": "unit_test"},
+        )
+
+    result = implicit_linear_observable_derivative_from_builder(
+        build_system,
+        parameter=p0,
+        finite_difference_step=1.0e-6,
+        metadata={"caller": "ambipolar_lane"},
+    )
+
+    direct = implicit_linear_observable_derivative(
+        matrix=a0 + p0 * ap,
+        rhs=b0 + p0 * bp,
+        matrix_derivative=ap,
+        rhs_derivative=bp,
+        observable_vector=c0 + p0 * cp,
+        observable_vector_derivative=cp,
+        observable_offset=offset0 + p0 * offsetp,
+        observable_offset_derivative=offsetp,
+        parameter=p0,
+        finite_difference_step=None,
+    )
+    assert result.metadata["builder"] == "unit_test"
+    assert result.metadata["caller"] == "ambipolar_lane"
+    np.testing.assert_allclose(result.observable, direct.observable, rtol=0.0, atol=1.0e-12)
+    np.testing.assert_allclose(result.derivative, direct.derivative, rtol=0.0, atol=1.0e-12)
+    assert result.finite_difference_abs_error is not None
+    assert result.finite_difference_abs_error < 1.0e-8
+
+
+def test_implicit_linear_radial_current_builder_adapts_to_ambipolar_contract() -> None:
+    a0, ap, b0, bp, c0, cp, offset0, offsetp, p0 = _linear_system_components()
+
+    def build_system(er: float) -> LinearObservableSystem:
+        return LinearObservableSystem(
+            parameter=float(er),
+            matrix=a0 + float(er) * ap,
+            rhs=b0 + float(er) * bp,
+            matrix_derivative=ap,
+            rhs_derivative=bp,
+            observable_vector=c0 + float(er) * cp,
+            observable_vector_derivative=cp,
+            observable_offset=offset0 + float(er) * offsetp,
+            observable_offset_derivative=offsetp,
+            metadata={"operator_owner": "rhsmode1"},
+        )
+
+    result = implicit_linear_radial_current_derivative_from_builder(
+        build_system,
+        er=p0,
+        finite_difference_step=1.0e-6,
+        metadata={"observable": "caller_metadata_should_not_override"},
+    )
+
+    assert isinstance(result, RadialCurrentDerivativeResult)
+    assert result.scheme == "implicit_linear_adjoint"
+    assert result.metadata["operator_owner"] == "rhsmode1"
+    assert result.metadata["observable"] != "caller_metadata_should_not_override"
+    assert result.metadata["finite_difference_abs_error"] < 1.0e-8
 
 
 def test_implicit_linear_observable_derivative_rejects_incompatible_shapes() -> None:
