@@ -69,9 +69,10 @@ Fortran v3 feature ownership
      - Safeguarded Newton/bisection uses an adjoint-computed
        ``dRadialCurrentdEr`` and maintains a bracket.
      - ``sfincs_jax.problems.ambipolar`` and ``sfincs_jax.sensitivity``:
-       partial. Root-policy logic and small-deck derivative certificates exist;
-       production sparse/matrix-free ``E_r`` operator/RHS derivatives and replay
-       gates remain.
+       partial. Root-policy logic, dense certificates, matrix-free/JVP
+       derivative-provider gates, and fast option-1-style root tests exist;
+       production physical replay gates with concrete ``E_r`` operator/RHS
+       derivatives remain.
    * - Ambipolar root solve option 2
      - ``ambipolarSolver.F90``
      - Brent method evaluates the radial current at bracket endpoints and an
@@ -83,7 +84,8 @@ Fortran v3 feature ownership
      - Pure Newton uses the adjoint-computed ``dRadialCurrentdEr`` and exits if
        a step leaves the allowed ``E_r`` bounds.
      - ``sfincs_jax.problems.ambipolar`` and ``sfincs_jax.sensitivity``:
-       partial for the same reason as option 1.
+       partial for the same reason as option 1; fast option-3-style matrix-free
+       derivative-provider root tests are covered.
    * - RHSMode 4 fixed-``E_r`` sensitivities
      - ``solver.F90``, ``populateAdjointRHS.F90``,
        ``populatedMatrixdLambda.F90``, ``populatedRHSdLambda.F90``,

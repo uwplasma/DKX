@@ -1123,6 +1123,25 @@ def implicit_matrix_free_radial_current_derivative_from_builder(
     return _radial_current_derivative_from_linear_certificate(er=er, result=result)
 
 
+def matrix_free_radial_current_derivative_provider(
+    build_system: Callable[[float], Any],
+    *,
+    finite_difference_step: float | None = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> RadialCurrentDerivativeEvaluator:
+    """Return a root-solver derivative provider backed by matrix-free systems."""
+
+    def evaluate(er: float) -> RadialCurrentDerivativeResult:
+        return implicit_matrix_free_radial_current_derivative_from_builder(
+            build_system,
+            er=float(er),
+            finite_difference_step=finite_difference_step,
+            metadata=metadata,
+        )
+
+    return evaluate
+
+
 def dense_rhs1_vm_radial_current_linear_observable_system(
     *,
     op: Any,
@@ -1577,6 +1596,7 @@ __all__ = [
     "implicit_linear_radial_current_derivative_from_builder",
     "implicit_matrix_free_radial_current_derivative",
     "implicit_matrix_free_radial_current_derivative_from_builder",
+    "matrix_free_radial_current_derivative_provider",
     "matrix_free_rhs1_vm_radial_current_linear_observable_system",
     "newton_ambipolar_root",
     "operator_tangent_from_centered_difference",

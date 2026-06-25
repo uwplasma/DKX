@@ -104,6 +104,11 @@ Implementation progress on 2026-06-23:
   valid pytrees with `float0` tangents for integer/bool leaves, and a real
   electric-field `xDot` operator test verifies the JVP action against centered
   differences.
+- `matrix_free_radial_current_derivative_provider` now bridges matrix-free
+  implicit certificates into safeguarded Newton/bisection and pure Newton
+  ambipolar root solvers. Fast option-1/3-style tests verify root convergence,
+  derivative metadata, tangent/adjoint consistency, and finite-difference
+  agreement through the public solver API.
 - `sfincs_jax.sensitivity` now exposes `jvp_flux`, `vjp_flux`, and
   `adjoint_dot_product_check`. The focused tests apply the dot-product identity
   to real RHSMode-1 particle-flux, heat-flux, flow, radial-current, and
@@ -991,18 +996,22 @@ Completed on 2026-06-25:
 - Added JAX operator-tangent support to that builder and verified the JVP
   derivative action on a real electric-field `xDot` block against centered
   differences.
+- Added the matrix-free derivative-provider bridge and verified that
+  safeguarded Newton/bisection and pure Newton can consume it through the
+  public ambipolar root-solver API.
 
 Next ordered implementation steps:
 
 1. Replace centered-difference operator-tangent construction with analytic `Er`
    tangents from namelist radial-coordinate conversion where possible, then use
-   the matrix-free/JVP derivative provider in derivative-assisted ambipolar
-   option-1/3 physical gates. Phi1 drift-current branches remain the next
-   derivative target after the no-Phi1 gate.
+   the matrix-free/JVP derivative provider in a real RHSMode-1
+   derivative-assisted ambipolar option-1/3 physical gate. Phi1 drift-current
+   branches remain the next derivative target after the no-Phi1 gate.
 2. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
    set to Phi1 drift-current, total heat-flux, and intermediate-grid cases.
-3. Wire the exact derivative into safeguarded Newton/bisection and pure Newton
-   for Fortran option 1/3 physical parity gates.
+3. Add small Fortran RHSMode 4/5 output fixtures and compare exported
+   sensitivity diagnostics once the no-Phi1 derivative-assisted physical gate
+   is stable.
 4. Define residual/operator/transpose operator protocol and migrate one
    RHSMode 2/3 path to it.
 5. Add one T3D/NEOPAX-style closure example with fixed geometry and radial

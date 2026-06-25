@@ -46,6 +46,11 @@ Unreleased
   with ``float0`` tangents for static integer/bool leaves, and tests verify the
   JVP action against centered differences on a real electric-field ``xDot``
   operator block.
+- Added ``matrix_free_radial_current_derivative_provider`` so ambipolar
+  safeguarded Newton/bisection and pure Newton paths can consume matrix-free
+  implicit derivative certificates directly. Fast option-1/3-style tests now
+  verify root convergence, derivative metadata, tangent/adjoint consistency,
+  and finite-difference agreement through the root-solver API.
 - Moved the first RHSMode=2/3 transport implementation cluster into
   ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old

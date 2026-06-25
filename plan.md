@@ -62,6 +62,10 @@ deferred research lanes.
   The helper constructs valid pytrees with `float0` tangents for integer/bool
   leaves, and a real electric-field `xDot` operator test verifies the JVP
   derivative action against centered differences.
+- Matrix-free implicit radial-current derivative providers now plug directly
+  into safeguarded Newton/bisection and pure Newton ambipolar root solvers.
+  Fast option-1/3-style tests verify root convergence and derivative
+  certificate metadata through the public root-solver API.
 - Major RHSMode=1 preconditioner families now have domain owners:
   - full-CSR Schur preconditioners,
   - Fortran-reduced symbolic sparse factors,
@@ -1095,3 +1099,32 @@ Next best steps:
 2. Add a real derivative-assisted ambipolar option-1/3 gate using the
    matrix-free/JVP derivative provider.
 3. Add Phi1 drift-current derivative actions and dot-product gates.
+
+## 2026-06-25 Matrix-Free Provider For Ambipolar Option 1/3 Gates
+
+Steps taken:
+
+1. Added `matrix_free_radial_current_derivative_provider` as a reusable bridge
+   from a matrix-free linear-observable builder to the ambipolar derivative
+   provider contract.
+2. Added a fast nonlinear linear-observable current test where both
+   safeguarded Newton/bisection and pure Newton consume that provider through
+   the public root-solver API.
+3. Updated the feature matrix to distinguish this closed provider gate from the
+   still-open physical Fortran option-1/3 RHSMode-1 replay gates.
+
+Results:
+
+- Combined ambipolar/sensitivity/import gates passed:
+  `python -m pytest tests/test_ambipolar_problem.py tests/test_sensitivity.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` with
+  `37 passed`.
+
+Next best steps:
+
+1. Build analytic `Er` operator tangents from namelist radial-coordinate
+   conversion and compare them to the current centered-difference operator
+   tangent on no-Phi1 decks.
+2. Use the analytic/JVP provider in one real RHSMode-1 option-1/3 physical
+   parity gate against checked Fortran v3 helical summaries.
+3. Extend the same provider path to Phi1 drift-current branches.

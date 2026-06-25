@@ -4,6 +4,7 @@ import json
 import math
 from pathlib import Path
 
+import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.ambipolar import radial_current_from_output
@@ -15,6 +16,7 @@ from sfincs_jax.problems.ambipolar import (
     SfincsJaxRadialCurrentEvaluator,
     brent_ambipolar_root,
     finite_difference_radial_current_derivative,
+    matrix_free_radial_current_derivative_provider,
     newton_ambipolar_root,
     safeguarded_newton_ambipolar_root,
     solve_ambipolar_brent,
@@ -22,6 +24,7 @@ from sfincs_jax.problems.ambipolar import (
     solve_ambipolar_safeguarded_newton,
     validate_fortran_v3_ambipolar_constraints,
 )
+from sfincs_jax.sensitivity import MatrixFreeLinearObservableSystem, evaluate_matrix_free_linear_observable
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -438,6 +441,101 @@ def test_safeguarded_newton_accepts_finite_difference_derivative_provider() -> N
     assert result.converged
     np.testing.assert_allclose(result.root_er, 0.125, rtol=0.0, atol=1.0e-12)
     assert result.metadata["derivative_count"] == 1
+
+
+def test_newton_options_accept_matrix_free_implicit_derivative_provider() -> None:
+    root_er = 0.2
+
+    def raw_current(er: float) -> float:
+        matrix = jnp.asarray(
+            [[2.0 + 0.1 * er, 0.2], [0.1, 1.5 - 0.05 * er]],
+            dtype=jnp.float64,
+        )
+        rhs = jnp.asarray([er + 0.1, 1.0 - 0.2 * er], dtype=jnp.float64)
+        vector = jnp.asarray([1.2, -0.3 + 0.1 * er], dtype=jnp.float64)
+        return float(jnp.vdot(vector, jnp.linalg.solve(matrix, rhs)))
+
+    offset = -raw_current(root_er)
+
+    def build_system(er: float) -> MatrixFreeLinearObservableSystem:
+        matrix = jnp.asarray(
+            [[2.0 + 0.1 * er, 0.2], [0.1, 1.5 - 0.05 * er]],
+            dtype=jnp.float64,
+        )
+        matrix_derivative = jnp.asarray([[0.1, 0.0], [0.0, -0.05]], dtype=jnp.float64)
+        rhs_derivative = jnp.asarray([1.0, -0.2], dtype=jnp.float64)
+        vector_derivative = jnp.asarray([0.0, 0.1], dtype=jnp.float64)
+        return MatrixFreeLinearObservableSystem(
+            parameter=float(er),
+            size=2,
+            rhs=jnp.asarray([er + 0.1, 1.0 - 0.2 * er], dtype=jnp.float64),
+            rhs_derivative=rhs_derivative,
+            apply=lambda state: matrix @ state,
+            transpose_apply=lambda state: matrix.T @ state,
+            derivative_apply=lambda state: matrix_derivative @ state,
+            solve=lambda rhs: jnp.linalg.solve(matrix, rhs),
+            transpose_solve=lambda rhs: jnp.linalg.solve(matrix.T, rhs),
+            observable_vector=jnp.asarray([1.2, -0.3 + 0.1 * er], dtype=jnp.float64),
+            observable_vector_derivative=vector_derivative,
+            observable_offset=offset,
+            metadata={"builder": "matrix_free_option13_unit"},
+        )
+
+    def current(er: float) -> float:
+        return evaluate_matrix_free_linear_observable(build_system(float(er)))
+
+    provider_records: list[RadialCurrentDerivativeResult] = []
+    provider = matrix_free_radial_current_derivative_provider(
+        build_system,
+        finite_difference_step=1.0e-6,
+        metadata={"derivative_provider": "matrix_free_implicit"},
+    )
+
+    def recorded_provider(er: float) -> RadialCurrentDerivativeResult:
+        result = provider(float(er))
+        provider_records.append(result)
+        return result
+
+    safeguarded = safeguarded_newton_ambipolar_root(
+        current,
+        recorded_provider,
+        er_min=-1.0,
+        er_max=1.0,
+        er_initial=0.0,
+        max_evaluations=8,
+        current_tolerance=1.0e-12,
+        step_tolerance=1.0e-12,
+    )
+    assert safeguarded.converged
+    assert safeguarded.method == "safeguarded_newton"
+    np.testing.assert_allclose(safeguarded.root_er, root_er, rtol=0.0, atol=1.0e-10)
+
+    newton_records: list[RadialCurrentDerivativeResult] = []
+
+    def recorded_newton_provider(er: float) -> RadialCurrentDerivativeResult:
+        result = provider(float(er))
+        newton_records.append(result)
+        return result
+
+    strict_newton = newton_ambipolar_root(
+        current,
+        recorded_newton_provider,
+        er_min=-1.0,
+        er_max=1.0,
+        er_initial=0.0,
+        max_evaluations=8,
+        current_tolerance=1.0e-12,
+        step_tolerance=1.0e-12,
+    )
+    assert strict_newton.converged
+    assert strict_newton.method == "newton"
+    np.testing.assert_allclose(strict_newton.root_er, root_er, rtol=0.0, atol=1.0e-10)
+    for result in [*provider_records, *newton_records]:
+        assert result.scheme == "implicit_linear_adjoint"
+        assert result.metadata["builder"] == "matrix_free_option13_unit"
+        assert result.metadata["derivative_provider"] == "matrix_free_implicit"
+        assert result.metadata["system_kind"] == "matrix_free_linear_observable"
+        assert result.metadata["finite_difference_abs_error"] < 1.0e-8
 
 
 def test_safeguarded_newton_falls_back_to_bisection_for_unsafe_derivative() -> None:
