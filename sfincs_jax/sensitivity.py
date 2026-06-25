@@ -61,6 +61,36 @@ _BASE_ADJOINT_DEBUG_FIELDS = (
 )
 
 
+_ADJOINT_SPECIES_FIELD_RANKS = {
+    "dHeatFluxdLambda": 4,
+    "dParticleFluxdLambda": 4,
+    "dParallelFlowdLambda": 4,
+    "dHeatFluxdLambda_finitediff": 4,
+    "dParticleFluxdLambda_finitediff": 4,
+    "dParallelFlowdLambda_finitediff": 4,
+}
+
+_ADJOINT_SURFACE_FIELD_RANKS = {
+    "dTotalHeatFluxdLambda": 3,
+    "dRadialCurrentdLambda": 3,
+    "dBootstrapdLambda": 3,
+    "dPhidPsidLambda": 3,
+    "dTotalHeatFluxdLambda_finitediff": 3,
+    "dRadialCurrentdLambda_finitediff": 3,
+    "dBootstrapdLambda_finitediff": 3,
+    "dPhidPsidLambda_finitediff": 3,
+}
+
+
+def _output_shape(value: Any) -> tuple[int, ...] | None:
+    if isinstance(value, Mapping) and "shape" in value:
+        return tuple(int(item) for item in value["shape"])
+    shape = getattr(value, "shape", None)
+    if shape is None:
+        return None
+    return tuple(int(item) for item in shape)
+
+
 def fortran_v3_adjoint_sensitivity_output_fields(config: Any) -> tuple[str, ...]:
     """Return RHSMode-4/5 sensitivity fields written by SFINCS Fortran v3.
 
@@ -103,6 +133,51 @@ def fortran_v3_adjoint_sensitivity_output_fields(config: Any) -> tuple[str, ...]
         if rhs_mode == 5:
             fields.extend(("dPhidPsiPercentError", "dPhidPsidLambda_finitediff"))
     return tuple(dict.fromkeys(fields))
+
+
+def fortran_v3_adjoint_sensitivity_output_ranks(config: Any) -> Mapping[str, int]:
+    """Return expected tensor ranks for Fortran-v3 RHSMode-4/5 output fields."""
+
+    ranks: dict[str, int] = {}
+    for field_name in fortran_v3_adjoint_sensitivity_output_fields(config):
+        rank = _ADJOINT_SPECIES_FIELD_RANKS.get(field_name)
+        if rank is None:
+            rank = _ADJOINT_SURFACE_FIELD_RANKS.get(field_name)
+        if rank is not None:
+            ranks[field_name] = rank
+    return MappingProxyType(ranks)
+
+
+def validate_fortran_v3_adjoint_sensitivity_output_surface(
+    config: Any,
+    outputs: Mapping[str, Any],
+) -> tuple[str, ...]:
+    """Validate a RHSMode-4/5 sensitivity output surface against v3 fields.
+
+    ``outputs`` can be an HDF5-like mapping of arrays or a lightweight summary
+    mapping whose values contain a ``shape`` entry.  This helper intentionally
+    checks only names and tensor ranks; numerical physics identities are pinned
+    by separate tests because they depend on the selected adjoint options.
+    """
+
+    errors = list(validate_fortran_v3_adjoint_sensitivity_constraints(config))
+    ranks = fortran_v3_adjoint_sensitivity_output_ranks(config)
+    for field_name in fortran_v3_adjoint_sensitivity_output_fields(config):
+        if field_name not in outputs:
+            errors.append(f"Missing Fortran-v3 RHSMode 4/5 sensitivity output field: {field_name}.")
+            continue
+        expected_rank = ranks.get(field_name)
+        if expected_rank is None:
+            continue
+        shape = _output_shape(outputs[field_name])
+        if shape is None:
+            errors.append(f"Cannot determine shape for sensitivity output field: {field_name}.")
+            continue
+        if len(shape) != expected_rank:
+            errors.append(
+                f"Sensitivity output field {field_name} has rank {len(shape)}; expected {expected_rank}."
+            )
+    return tuple(errors)
 
 
 def validate_fortran_v3_adjoint_sensitivity_constraints(config: Any) -> tuple[str, ...]:
@@ -706,6 +781,7 @@ __all__ = (
     "evaluate_linear_observable",
     "evaluate_matrix_free_linear_observable",
     "fortran_v3_adjoint_sensitivity_output_fields",
+    "fortran_v3_adjoint_sensitivity_output_ranks",
     "implicit_linear_observable_derivative",
     "implicit_linear_observable_derivative_from_builder",
     "implicit_matrix_free_linear_observable_derivative",
@@ -713,5 +789,6 @@ __all__ = (
     "jvp_flux",
     "probe_linear_observable_vector",
     "validate_fortran_v3_adjoint_sensitivity_constraints",
+    "validate_fortran_v3_adjoint_sensitivity_output_surface",
     "vjp_flux",
 )

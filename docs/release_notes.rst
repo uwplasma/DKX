@@ -94,6 +94,11 @@ Unreleased
   the output fields and the identity
   ``dRadialCurrentdLambda = sum_s Z_s dParticleFlux_s/dLambda`` without
   checking in the generated HDF5 file.
+- Added a second compact RHSMode=4 sensitivity reference for heat-flux and
+  total-heat-flux adjoints, plus reusable output-surface validation for
+  Fortran-v3 sensitivity field names and tensor ranks. Tests pin
+  ``dTotalHeatFluxdLambda = sum_s dHeatFluxdLambda_s`` without committing the
+  generated HDF5 file.
 - Moved the first RHSMode=2/3 transport implementation cluster into
   ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old

@@ -1493,3 +1493,65 @@ Next best steps:
    once at least two Fortran summaries are pinned.
 3. Keep production option-1/3 replay and RHSMode-5 constant-current fixtures
    outside normal CI until the small fixture layer is stable.
+
+## 2026-06-25 Second RHSMode-4 Fixture And Output-Surface Contract
+
+Steps taken:
+
+1. Reused the checked W7-X-like analytic RHSMode=4 deck and reran SFINCS
+   Fortran v3 with `adjointHeatFluxOption=.true. .true.` and
+   `adjointTotalHeatFluxOption=.true.`.
+2. Checked in only the compact heat-flux namelist and JSON summary under
+   `benchmarks/fortran_v3_sensitivity_reference`; the generated HDF5 file
+   remains a scratch artifact.
+3. Added `fortran_v3_adjoint_sensitivity_output_ranks` and
+   `validate_fortran_v3_adjoint_sensitivity_output_surface` to
+   `sfincs_jax.sensitivity`, so RHSMode=4/5 output field names and tensor
+   ranks can be validated against either HDF5-like arrays or lightweight
+   summaries.
+4. Added tests pinning both compact Fortran RHSMode=4 summaries and the
+   heat-flux identity `dTotalHeatFluxdLambda = sum_s dHeatFluxdLambda_s`.
+5. Updated release notes, validation docs, feature matrix, and
+   `plan_final.md`.
+
+Results:
+
+- Fortran v3 W7-X-like heat-flux RHSMode=4 fixture completed with wall time
+  `0.08 s`, main solve time `0.028633 s`, two adjoint solves of about
+  `0.0018 s` and `0.0011 s`, and peak RSS `125,288,448` bytes.
+- The compact summary pins `dHeatFluxdLambda` and `dTotalHeatFluxdLambda`
+  shapes and values.
+- Narrow fixture gate passed:
+  `JAX_ENABLE_X64=True python -m pytest
+  tests/test_sensitivity.py::test_fortran_v3_rhs4_reference_summary_pins_radial_current_sensitivity
+  tests/test_sensitivity.py::test_fortran_v3_rhs4_reference_summary_pins_heat_flux_sensitivity
+  tests/test_sensitivity.py::test_fortran_v3_adjoint_sensitivity_output_surface_reports_missing_or_misranked_fields
+  -q --tb=short` with `3 passed in 0.29 s`.
+- Broader focused validation passed:
+  `JAX_ENABLE_X64=True python -m pytest tests/test_input_compat.py
+  tests/test_sensitivity.py tests/test_ambipolar_problem.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` with
+  `74 passed in 65.69 s`.
+- `python -m ruff check sfincs_jax/sensitivity.py tests/test_sensitivity.py
+  tests/test_domain_package_import_contracts.py`, `git diff --check`,
+  `python -m json.tool
+  benchmarks/fortran_v3_sensitivity_reference/small_rhsmode4_summary_2026-06-25.json`,
+  and `python -m sphinx -b html docs docs/_build/html -q` passed.
+
+Current lane status:
+
+- Ambipolar solver lane: 99% bounded; production replay remains outside CI.
+- RHSMode 4/5 sensitivity lane: 86%; two RHSMode=4 Fortran numerical output
+  families are pinned and the reusable output-surface contract exists.
+- Refactor/review-ready PR lane: 88%; the sensitivity surface stayed in the
+  existing domain module and did not add a new file.
+- Overall completion: about 91%.
+
+Next best steps:
+
+1. Run the broader ambipolar/sensitivity/import/docs validation slice.
+2. Add a compact RHSMode=5 constant-current fixture once the RHSMode=4 surface
+   remains stable.
+3. Return to the refactor/review-ready PR lane by moving the next duplicated
+   compatibility glue into existing domain modules only when it reduces total
+   complexity.

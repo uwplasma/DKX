@@ -152,6 +152,115 @@
         15436
       ],
       "wall_time_s": 0.11
+    },
+    {
+      "adjoint_diagnostics_times_s": [
+        0.002727000000049884,
+        0.0026719999996203114,
+        0.002662999999756721
+      ],
+      "adjoint_solve_times_s": [
+        0.001787000000149419,
+        0.001146000000062486
+      ],
+      "case": "geometry4_w7x_like_small_rhs4_heat_flux",
+      "hdf5_fields": {
+        "RHSMode": {
+          "shape": [],
+          "values": 4
+        },
+        "adjointHeatFluxOption": {
+          "shape": [
+            2
+          ],
+          "values": [
+            1,
+            1
+          ]
+        },
+        "adjointTotalHeatFluxOption": {
+          "shape": [],
+          "values": 1
+        },
+        "dHeatFluxdLambda": {
+          "shape": [
+            1,
+            4,
+            2,
+            1
+          ],
+          "values": [
+            [
+              [
+                [
+                  -7.104785864400508e-08
+                ],
+                [
+                  -3.1012393376241924e-09
+                ]
+              ],
+              [
+                [
+                  -7.329460681557496e-09
+                ],
+                [
+                  -3.3485540173730997e-10
+                ]
+              ],
+              [
+                [
+                  -7.816151259972246e-09
+                ],
+                [
+                  -3.329944522871874e-10
+                ]
+              ],
+              [
+                [
+                  -1.0785322765689997e-07
+                ],
+                [
+                  -4.425608537044612e-09
+                ]
+              ]
+            ]
+          ]
+        },
+        "dTotalHeatFluxdLambda": {
+          "shape": [
+            1,
+            4,
+            1
+          ],
+          "values": [
+            [
+              [
+                -7.414909798162927e-08
+              ],
+              [
+                -7.6643160832948e-09
+              ],
+              [
+                -8.149145712259431e-09
+              ],
+              [
+                -1.1227883619394461e-07
+              ]
+            ]
+          ]
+        }
+      },
+      "jacobian_nnz": [
+        19566
+      ],
+      "main_solve_times_s": [
+        0.028633000000354514
+      ],
+      "max_rss_bytes": 125288448,
+      "preconditioner_nnz": [
+        15436
+      ],
+      "wall_time_s": 0.08
     }
   ],
   "fortran_executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",

@@ -148,11 +148,12 @@ Implementation progress on 2026-06-23:
   `fortran_v3_adjoint_sensitivity_output_fields` pins the HDF5 sensitivity
   fields written by `writeHDF5Output.F90`, including the source-code
   `dParallelFlowdLambda` gate.
-- `benchmarks/fortran_v3_sensitivity_reference` now contains the first compact
-  numerical RHSMode-4 Fortran summary: a tiny W7-X-like analytic
-  radial-current sensitivity deck. The checked test pins the HDF5 field names,
-  wall/RSS budget, and `dRadialCurrentdLambda = sum_s Z_s
-  dParticleFlux_s/dLambda` without committing the generated HDF5 file.
+- `benchmarks/fortran_v3_sensitivity_reference` now contains compact numerical
+  RHSMode-4 Fortran summaries for tiny W7-X-like analytic radial-current and
+  heat-flux sensitivity decks. Checked tests pin the HDF5 field names, tensor
+  ranks, wall/RSS budgets, `dRadialCurrentdLambda = sum_s Z_s
+  dParticleFlux_s/dLambda`, and `dTotalHeatFluxdLambda = sum_s
+  dHeatFlux_s/dLambda` without committing generated HDF5 files.
 - Derivative-assisted safeguarded Newton/bisection and strict pure-Newton root
   solvers are implemented behind the same ambipolar owner. They accept a
   derivative provider, so finite-difference gates, direct implicit
@@ -666,9 +667,9 @@ Acceptance gates:
 
 - Fortran-v3 RHSMode 4/5 input restrictions and sensitivity HDF5 field names
   are pinned against the source-code behavior.
-- The first small RHSMode-4 Fortran radial-current sensitivity summary is
-  checked in and tested; heat flux, flow, bootstrap, debug finite-difference,
-  and RHSMode-5 constant-current fixtures remain.
+- Small RHSMode-4 Fortran radial-current and heat-flux sensitivity summaries
+  are checked in and tested; flow, bootstrap, debug finite-difference, and
+  RHSMode-5 constant-current fixtures remain.
 - `A^T lambda - J_u^T` adjoint residual passes for every derivative gate.
 - JVP and VJP agree through dot-product tests:
   `<JVP(dp), y> = <dp, VJP(y)>`.
