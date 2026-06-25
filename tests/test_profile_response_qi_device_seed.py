@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import jax.numpy as jnp
 
-from sfincs_jax.problems.profile_response.qi_device_seed import (
+from sfincs_jax.problems.profile_response.sparse.qi import (
     MatrixFreeQIDeviceSeedContext,
     attempt_matrixfree_qi_device_seed,
     attempt_matrixfree_qi_device_seed_if_requested,

@@ -14,7 +14,7 @@ SOURCE_MAPPED_CONTROL_MODULES = (
     "sfincs_jax.profiling",
     "sfincs_jax.problems.profile_response.handoff",
     "sfincs_jax.problems.profile_response.policies",
-    "sfincs_jax.problems.profile_response.strong_preconditioning",
+    "sfincs_jax.problems.profile_response.preconditioner_build",
     "sfincs_jax.solvers.preconditioners.pas.xblock_ilu",
     "sfincs_jax.solvers.preconditioners.schur.rhs1_coarse_basis",
     "sfincs_jax.solvers.preconditioners.schur.rhs1_coarse_policy",

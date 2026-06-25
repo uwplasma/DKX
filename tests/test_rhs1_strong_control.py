@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.problems.profile_response.strong_preconditioning import (
+from sfincs_jax.problems.profile_response.preconditioner_build import (
     RHS1FPStrongSizeGuard,
     RHS1StrongRetryControls,
     RHS1StrongTriggerControls,

@@ -19,7 +19,7 @@ from sfincs_jax.problems.profile_response.sparse import (
 from sfincs_jax.problems.profile_response.sparse import policy as sparse_policy_module
 from sfincs_jax.problems.profile_response.sparse import qi as sparse_qi_module
 from sfincs_jax.problems.profile_response.sparse import xblock as sparse_xblock_module
-from sfincs_jax.problems.profile_response.active_projection import (
+from sfincs_jax.problems.profile_response.active_dof import (
     expand_reduced_with_map,
     reduce_full_with_indices,
 )

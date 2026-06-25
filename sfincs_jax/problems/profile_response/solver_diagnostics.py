@@ -18,7 +18,7 @@ from sfincs_jax.solver import (
     lgmres_solve_with_history_scipy,
 )
 from sfincs_jax.v3_results import V3LinearSolveResult
-from .active_projection import finalize_rhs1_linear_solution_cleanup
+from .active_dof import finalize_rhs1_linear_solution_cleanup
 from .policies import (
     rhs1_scipy_rescue_abs_floor_after_xblock,
 )

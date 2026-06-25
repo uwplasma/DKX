@@ -717,7 +717,7 @@ the historical private driver name and test the focused module directly. This ke
   sparse-ILU; host SciPy rescue; the reduced row-scaled LU path; and the
   full/reduced least-squares dense fallback used by non-differentiable host
   shortcut paths.
-- ``sfincs_jax/problems/profile_response/qi_device_seed.py``:
+- ``sfincs_jax/problems/profile_response/sparse/qi.py``:
   matrix-free QI device seed correction for RHSMode=1 active-DOF solves. The
   driver passes solve-local state through a typed setup/context while the
   module owns env-gate resolution for early and pre-sparse seed hooks, QI
@@ -753,17 +753,15 @@ the historical private driver name and test the focused module directly. This ke
   independent of the full operator so multi-device preconditioner policy can be
   tested without launching a solve.
 - ``sfincs_jax/problems/profile_response/active_dof.py``
-  (legacy alias: ``sfincs_jax/rhs1_active_dof.py``):
+  (legacy aliases: ``sfincs_jax/rhs1_active_dof.py`` and
+  ``sfincs_jax/rhs1_active_projection.py``):
   RHSMode=1 active-degree-of-freedom routing and reduced-index-map
   construction for truncated pitch grids, x-block active-DOF opt-ins, and PAS
-  constraint-projection solves. This makes the active/full-system selection
-  policy independently testable before deeper residual/operator extraction.
-- ``sfincs_jax/problems/profile_response/active_projection.py``
-  (legacy alias: ``sfincs_jax/rhs1_active_projection.py``):
-  reusable JAX primitives for full-to-reduced gathers, reduced-to-full
-  one-based scatters, and PAS ``l=0`` flux-surface-average projection. These
-  primitives are shared by RHSMode=1 sparse-PC, x-block active-DOF, and
-  PAS-projected reduced residual paths.
+  constraint-projection solves. The same owner now holds the reusable JAX
+  primitives for full-to-reduced gathers, reduced-to-full one-based scatters,
+  and PAS ``l=0`` flux-surface-average projection. These primitives are shared
+  by RHSMode=1 sparse-PC, x-block active-DOF, and PAS-projected reduced
+  residual paths.
 - ``sfincs_jax/problems/profile_response/residual.py``
   (legacy alias: ``sfincs_jax/rhs1_residual.py``):
   small residual target, ratio, convergence, and host-scalar norm helpers used
@@ -1144,7 +1142,7 @@ the historical private driver name and test the focused module directly. This ke
   structured-level parsing, QI device extra-coarse environment controls,
   QI probe minres-step selection, and safe x-block fallback initial-guess
   admission.
-- ``sfincs_jax/problems/profile_response/strong_preconditioning.py``
+- ``sfincs_jax/problems/profile_response/preconditioner_build.py``
   (legacy aliases: ``sfincs_jax/rhs1_strong_policy.py``,
   ``sfincs_jax/rhs1_strong_control.py``, and
   ``sfincs_jax/rhs1_strong_auto_kind.py``):

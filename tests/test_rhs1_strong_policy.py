@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sfincs_jax.problems.profile_response.strong_preconditioning import (
+from sfincs_jax.problems.profile_response.preconditioner_build import (
     RHS1MinresCorrectionControls,
     RHS1PostPrimaryMinresCorrectionContext,
     adjust_rhs1_pas_schur_strong_kind_from_env,

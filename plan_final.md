@@ -1313,9 +1313,11 @@ Deliverables:
 
 Current completion status:
 
-- Lane 1 structural consolidation: about 35 percent. The compatibility-driver
-  boundary is done, but the large profile-response, transport/output, and
-  solver/preconditioner consolidation phases remain.
+- Lane 1 structural consolidation: about 42 percent. The compatibility-driver
+  boundary is done and the first Phase 1 ownership batch deleted three
+  profile-response files; the remaining large blockers are
+  `profile_response/solve.py`, transport/output consolidation, and
+  solver/preconditioner naming.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
@@ -1337,17 +1339,21 @@ Completed checkpoints that remain valid:
 - Profile-response policy shards, old low-level linear-solve files, old
   finalization/KSP shards, and top-level sparse-PC handoff have been removed or
   moved into domain owners.
-- The latest clean checkpoint, `eb8307a`, passed focused sparse/RHSMode-1
-  validation with `498 passed in 42.21s`, scoped ruff, py_compile, Sphinx
-  `-W`, and `git diff --check`.
+- The latest committed clean checkpoint, `1cd0617`, is the authoritative
+  Phase 1-5 consolidation plan. The current Phase 1 working batch folds
+  `active_projection.py`, `qi_device_seed.py`, and
+  `strong_preconditioning.py` into canonical owners and has passed focused
+  owner tests, scoped ruff, py_compile, the broader sparse/RHSMode-1 test
+  batch (`498 passed in 42.12s`), and `git diff --check`.
 
 Next ordered implementation steps:
 
-1. Execute Lane 1 Phase 1 as one large profile-response consolidation. The
-   concrete first commit should merge `active_projection.py` into
-   `active_dof.py`, merge `qi_device_seed.py` into `sparse/qi.py`, merge or
-   delete `strong_preconditioning.py`, and move remaining sparse/policy/final
-   handoff code out of `solve.py` into existing owners. Target:
+1. Finish Lane 1 Phase 1. The first ownership batch merged
+   `active_projection.py` into `active_dof.py`, `qi_device_seed.py` into
+   `sparse/qi.py`, and `strong_preconditioning.py` into
+   `preconditioner_build.py`, reducing `problems/profile_response` from 24 to
+   21 files. The remaining Phase 1 work is to move sparse/policy/final handoff
+   code out of `solve.py` into existing owners and reach
    `profile_response/solve.py < 3.5k` lines and
    `problems/profile_response <= 20` files.
 2. Execute Lane 1 Phase 2 as one transport/output consolidation. Collapse

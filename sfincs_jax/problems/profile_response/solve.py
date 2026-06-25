@@ -217,7 +217,7 @@ from sfincs_jax.problems.profile_response.preconditioner_build import (
     run_rhs1_reduced_strong_retry_stage,
     setup_rhs1_full_base_preconditioner,
 )
-from sfincs_jax.problems.profile_response.qi_device_seed import (
+from sfincs_jax.problems.profile_response.sparse.qi import (
     attempt_matrixfree_qi_device_seed_if_requested,
     build_matrixfree_qi_device_seed_setup,
 )
@@ -344,7 +344,7 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     solve_explicit_sparse_host_direct_branch,
     finalize_xblock_assembled_operator_metadata,
 )
-from sfincs_jax.problems.profile_response.strong_preconditioning import (
+from sfincs_jax.problems.profile_response.preconditioner_build import (
     RHS1PostPrimaryMinresCorrectionContext,
     rhs1_collision_retry_allowed,
     rhs1_pas_force_strong_ratio_from_env,
@@ -520,7 +520,7 @@ from sfincs_jax.problems.profile_response.solver_diagnostics import (
 from sfincs_jax.problems.profile_response.active_dof import (
     build_rhs1_active_dof_state as _build_rhs1_active_dof_state_compat,
 )
-from sfincs_jax.problems.profile_response.active_projection import (
+from sfincs_jax.problems.profile_response.active_dof import (
     expand_reduced_with_map,
     fp_pitch_mode_active_indices,
     project_pas_constraint_f,

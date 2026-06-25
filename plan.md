@@ -2737,3 +2737,62 @@ Next best steps:
 3. After `solve.py` is below `3.5k` and profile-response is at or below `22`
    files, run the focused RHSMode-1, sparse-PC, QI admission, ambipolar,
    sensitivity, docs, and import-contract gates before starting Tranche C.
+
+## 2026-06-25 Lane 1 Phase 1 Ownership Batch
+
+Steps taken:
+
+1. Merged `sfincs_jax/problems/profile_response/active_projection.py` into
+   `sfincs_jax/problems/profile_response/active_dof.py`.
+2. Merged `sfincs_jax/problems/profile_response/qi_device_seed.py` into
+   `sfincs_jax/problems/profile_response/sparse/qi.py`.
+3. Merged `sfincs_jax/problems/profile_response/strong_preconditioning.py`
+   into `sfincs_jax/problems/profile_response/preconditioner_build.py`.
+4. Rewrote source, tests, and docs to import the canonical owners.
+5. Updated `docs/source_map.rst` and `docs/api.rst` so the merged owners are
+   documented once.
+
+Current inventory:
+
+- Package Python files: `227`.
+- `problems/profile_response`: `21` Python files.
+- `sfincs_jax/problems/profile_response/solve.py`: `10,400` lines.
+- `sfincs_jax/problems/profile_response/active_projection.py`: deleted.
+- `sfincs_jax/problems/profile_response/qi_device_seed.py`: deleted.
+- `sfincs_jax/problems/profile_response/strong_preconditioning.py`: deleted.
+- `sfincs_jax/v3_driver.py`: `47` lines.
+
+Validation:
+
+- Focused owner tests passed:
+  `63 passed in 1.68s`.
+- Broader sparse/RHSMode-1 tests passed:
+  `498 passed in 42.12s`.
+- Scoped ruff passed for touched profile-response source and tests.
+- `python -m py_compile sfincs_jax/problems/profile_response/*.py
+  sfincs_jax/problems/profile_response/sparse/*.py` passed.
+- `git diff --check` passed.
+
+Current lane status:
+
+- Lane 1 Phase 0: `100%`.
+- Lane 1 Phase 1: about `35%`; three small owners are merged, but the hard
+  gates remain `profile_response/solve.py < 3.5k` and
+  `problems/profile_response <= 20` files.
+- Lane 1 Phase 2: `0%`.
+- Lane 1 Phase 3: `0%`.
+- Lane 1 Phase 4: `0%`.
+- Lane 1 Phase 5: `0%`.
+- Lane 1 overall: about `42%` of the authoritative consolidation plan.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Continue Phase 1 by moving sparse pattern/materialization and host sparse
+   direct setup helpers out of `profile_response/solve.py` into
+   `profile_response/sparse/direct.py` and `profile_response/sparse/policy.py`.
+2. Move final payload/progress replay code from `solve.py` into
+   `handoff.py` and `solver_diagnostics.py`.
+3. Re-evaluate whether `sparse/finalization.py` can be merged after sparse
+   handoff cycles are reduced; it is currently shared by `handoff.py`,
+   `xblock.py`, and `fortran_reduced.py`, so it was not merged in this batch.
