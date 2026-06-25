@@ -12,6 +12,7 @@ from sfincs_jax.problems.ambipolar import (
     dense_rhs1_vm_radial_current_linear_observable_system,
     implicit_linear_radial_current_derivative,
     implicit_linear_radial_current_derivative_from_builder,
+    implicit_matrix_free_radial_current_derivative_from_builder,
 )
 from sfincs_jax.problems.transport_matrix.diagnostics import (
     radial_current_vm_from_state,
@@ -22,9 +23,11 @@ from sfincs_jax.problems.transport_matrix.diagnostics import (
 )
 from sfincs_jax.sensitivity import (
     LinearObservableSystem,
+    MatrixFreeLinearObservableSystem,
     adjoint_dot_product_check,
     implicit_linear_observable_derivative,
     implicit_linear_observable_derivative_from_builder,
+    implicit_matrix_free_linear_observable_derivative_from_builder,
     probe_linear_observable_vector,
 )
 from sfincs_jax.namelist import read_sfincs_input
@@ -207,6 +210,111 @@ def test_implicit_linear_radial_current_builder_adapts_to_ambipolar_contract() -
     assert result.metadata["operator_owner"] == "rhsmode1"
     assert result.metadata["observable"] != "caller_metadata_should_not_override"
     assert result.metadata["finite_difference_abs_error"] < 1.0e-8
+
+
+def test_matrix_free_linear_observable_builder_matches_dense_certificate() -> None:
+    a0, ap, b0, bp, c0, cp, offset0, offsetp, p0 = _linear_system_components()
+
+    def build_system(p: float) -> MatrixFreeLinearObservableSystem:
+        a = a0 + float(p) * ap
+        return MatrixFreeLinearObservableSystem(
+            parameter=float(p),
+            size=int(a.shape[0]),
+            rhs=b0 + float(p) * bp,
+            rhs_derivative=bp,
+            apply=lambda x: a @ x,
+            transpose_apply=lambda x: a.T @ x,
+            derivative_apply=lambda x: ap @ x,
+            solve=lambda rhs: jnp.linalg.solve(a, rhs),
+            transpose_solve=lambda rhs: jnp.linalg.solve(a.T, rhs),
+            observable_vector=c0 + float(p) * cp,
+            observable_vector_derivative=cp,
+            observable_offset=offset0 + float(p) * offsetp,
+            observable_offset_derivative=offsetp,
+            metadata={"builder": "matrix_free_unit_test"},
+        )
+
+    matrix_free = implicit_matrix_free_linear_observable_derivative_from_builder(
+        build_system,
+        parameter=p0,
+        finite_difference_step=1.0e-6,
+        metadata={"caller": "production_contract"},
+    )
+    dense = implicit_linear_observable_derivative(
+        matrix=a0 + p0 * ap,
+        rhs=b0 + p0 * bp,
+        matrix_derivative=ap,
+        rhs_derivative=bp,
+        observable_vector=c0 + p0 * cp,
+        observable_vector_derivative=cp,
+        observable_offset=offset0 + p0 * offsetp,
+        observable_offset_derivative=offsetp,
+        parameter=p0,
+        finite_difference_observable=lambda p: jnp.vdot(
+            c0 + float(p) * cp,
+            jnp.linalg.solve(a0 + float(p) * ap, b0 + float(p) * bp),
+        )
+        + offset0
+        + float(p) * offsetp,
+        finite_difference_step=1.0e-6,
+    )
+
+    assert matrix_free.metadata["builder"] == "matrix_free_unit_test"
+    assert matrix_free.metadata["caller"] == "production_contract"
+    assert matrix_free.metadata["system_kind"] == "matrix_free_linear_observable"
+    np.testing.assert_allclose(matrix_free.observable, dense.observable, rtol=0.0, atol=1.0e-12)
+    np.testing.assert_allclose(matrix_free.derivative, dense.derivative, rtol=0.0, atol=1.0e-12)
+    np.testing.assert_allclose(
+        matrix_free.finite_difference_derivative,
+        dense.finite_difference_derivative,
+        rtol=0.0,
+        atol=1.0e-8,
+    )
+    assert matrix_free.primal_residual_norm < 1.0e-12
+    assert matrix_free.tangent_residual_norm < 1.0e-12
+    assert matrix_free.adjoint_residual_norm < 1.0e-12
+    assert matrix_free.tangent_adjoint_abs_error < 1.0e-12
+    assert matrix_free.finite_difference_abs_error is not None
+    assert matrix_free.finite_difference_abs_error < 1.0e-8
+
+
+def test_matrix_free_radial_current_builder_adapts_to_ambipolar_contract() -> None:
+    a0, ap, b0, bp, c0, cp, offset0, offsetp, p0 = _linear_system_components()
+
+    def build_system(er: float) -> MatrixFreeLinearObservableSystem:
+        a = a0 + float(er) * ap
+        return MatrixFreeLinearObservableSystem(
+            parameter=float(er),
+            size=int(a.shape[0]),
+            rhs=b0 + float(er) * bp,
+            rhs_derivative=bp,
+            apply=lambda x: a @ x,
+            transpose_apply=lambda x: a.T @ x,
+            derivative_apply=lambda x: ap @ x,
+            solve=lambda rhs: jnp.linalg.solve(a, rhs),
+            transpose_solve=lambda rhs: jnp.linalg.solve(a.T, rhs),
+            observable_vector=c0 + float(er) * cp,
+            observable_vector_derivative=cp,
+            observable_offset=offset0 + float(er) * offsetp,
+            observable_offset_derivative=offsetp,
+            metadata={"operator_owner": "matrix_free_rhsmode1"},
+        )
+
+    result = implicit_matrix_free_radial_current_derivative_from_builder(
+        build_system,
+        er=p0,
+        finite_difference_step=1.0e-6,
+        metadata={"gate": "ambipolar_option13"},
+    )
+
+    assert isinstance(result, RadialCurrentDerivativeResult)
+    assert result.scheme == "implicit_linear_adjoint"
+    assert result.step == 1.0e-6
+    assert result.metadata["operator_owner"] == "matrix_free_rhsmode1"
+    assert result.metadata["gate"] == "ambipolar_option13"
+    assert result.metadata["system_kind"] == "matrix_free_linear_observable"
+    assert result.metadata["finite_difference_abs_error"] < 1.0e-8
+    assert result.metadata["tangent_adjoint_abs_error"] < 1.0e-12
 
 
 def test_probe_linear_observable_vector_recovers_chunked_weights_and_offset() -> None:
