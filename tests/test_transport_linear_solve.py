@@ -6,6 +6,7 @@ import jax.numpy as jnp
 
 import sfincs_jax.transport_linear_solve as transport_linear
 from sfincs_jax.transport_linear_solve import (
+    TransportLinearSolveCallbacks,
     TransportLinearSolveContext,
     solve_transport_linear,
     solve_transport_linear_with_residual,
@@ -63,6 +64,34 @@ def test_solve_transport_linear_uses_nonjit_or_jit_gmres(monkeypatch) -> None:
     assert solve_transport_linear(context=_context(use_solver_jit=False), **args) == "plain"
     assert solve_transport_linear(context=_context(use_solver_jit=True), **args) == "jit"
     assert calls == ["gmres:incremental", "jit:incremental"]
+
+
+def test_transport_linear_solve_callbacks_bind_context(monkeypatch) -> None:
+    captured = {}
+
+    def fake_gmres(**kwargs):
+        captured.update(kwargs)
+        return "bound"
+
+    monkeypatch.setattr(transport_linear, "gmres_solve", fake_gmres)
+    callbacks = TransportLinearSolveCallbacks(context=_context(use_solver_jit=False))
+
+    result = callbacks.solve(
+        matvec_fn=lambda x: x,
+        b_vec=jnp.ones((2,)),
+        x0_vec=None,
+        tol_val=1e-8,
+        atol_val=1e-12,
+        restart_val=10,
+        maxiter_val=20,
+        solve_method_val="incremental",
+        preconditioner_val=None,
+        precondition_side_val="right",
+    )
+
+    assert result == "bound"
+    assert captured["solve_method"] == "incremental"
+    assert captured["precondition_side"] == "right"
 
 
 def test_solve_transport_linear_implicit_routes_to_custom_solve(monkeypatch) -> None:

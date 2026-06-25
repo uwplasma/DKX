@@ -1073,6 +1073,9 @@ Completed on 2026-06-25:
 - Moved RHSMode 2/3 transport sparse-direct context setup and sparse-drop env
   parsing out of `v3_driver.py` into the sparse-direct transport module, with
   a focused fresh-cache/env-policy test.
+- Added a bound RHSMode 2/3 transport linear-solve callback object so the
+  per-RHS loop no longer defines local solve wrappers around the transport
+  linear-solve context.
 
 Next ordered implementation steps:
 

@@ -1902,3 +1902,54 @@ Next best steps:
    `transport_linear_solve` or `transport_solve_finalization` domain modules.
 3. Continue avoiding new micro-files; consolidate around owner modules already
    present in the transport package.
+
+## 2026-06-25 Transport Linear-Solve Callback Refactor
+
+Steps taken:
+
+1. Reviewed the per-RHS RHSMode=2/3 transport loop and identified the local
+   `_solve_linear` and `_solve_linear_with_residual` wrappers as driver glue
+   over `TransportLinearSolveContext`.
+2. Added `TransportLinearSolveCallbacks` to
+   `sfincs_jax/problems/transport_matrix/linear_solve.py`, binding the context
+   once and exposing `solve` and `solve_with_residual` callbacks.
+3. Replaced the two local wrapper functions in `v3_driver.py` with the bound
+   callback methods.
+4. Added a focused unit test proving the callback object preserves context
+   routing and preconditioner-side forwarding.
+
+Results:
+
+- `v3_driver.py` dropped from `12,097` to `12,046` lines in this tranche.
+- `python -m pytest tests/test_transport_linear_solve.py -q --tb=short`
+  passed with `5 passed in 0.63 s`.
+- `python -m pytest tests/test_transport_linear_solve.py
+  tests/test_transport_sparse_direct_solve.py
+  tests/test_transport_preconditioner_dispatch.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_pas_precond_policy_coverage.py -q --tb=short` passed
+  with `90 passed in 28.34 s`.
+- `JAX_ENABLE_X64=True python -m pytest
+  tests/test_transport_parallel.py::test_transport_theta_dd_preconditioner_matches_default
+  tests/test_transport_parallel.py::test_transport_theta_schwarz_preconditioner_matches_default
+  -q --tb=short` passed with `2 passed in 12.32 s`.
+- `python -m ruff check
+  sfincs_jax/problems/transport_matrix/linear_solve.py sfincs_jax/v3_driver.py
+  tests/test_transport_linear_solve.py` and `git diff --check` passed.
+
+Current lane status:
+
+- Ambipolar solver lane: 99% bounded; no change in this tranche.
+- RHSMode 4/5 sensitivity lane: 95%; no change in this tranche.
+- Refactor/review-ready PR lane: 92%; transport preconditioner cache,
+  sparse-direct setup, and linear-solve callbacks are now domain-owned and
+  tested.
+- Overall completion: about 95%.
+
+Next best steps:
+
+1. Commit and push this linear-solve refactor tranche.
+2. Extract dense-batch setup or transport RHS finalization setup next, using
+   existing modules rather than adding new namespaced files.
+3. Run a broader smoke slice after the next tranche because the refactor will
+   start touching solve-loop finalization and diagnostic output ownership.

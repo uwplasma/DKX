@@ -32,6 +32,69 @@ class TransportLinearSolveContext:
     distributed_axis: str | None
 
 
+@dataclass(frozen=True)
+class TransportLinearSolveCallbacks:
+    """Bound solve callbacks used by the transport per-RHS loop."""
+
+    context: TransportLinearSolveContext
+
+    def solve(
+        self,
+        *,
+        matvec_fn: Callable[[jnp.ndarray], jnp.ndarray],
+        b_vec: jnp.ndarray,
+        x0_vec: jnp.ndarray | None,
+        tol_val: float,
+        atol_val: float,
+        restart_val: int,
+        maxiter_val: int | None,
+        solve_method_val: str,
+        preconditioner_val: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+        precondition_side_val: str = "left",
+    ):
+        return solve_transport_linear(
+            context=self.context,
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
+            x0_vec=x0_vec,
+            tol_val=tol_val,
+            atol_val=atol_val,
+            restart_val=restart_val,
+            maxiter_val=maxiter_val,
+            solve_method_val=solve_method_val,
+            preconditioner_val=preconditioner_val,
+            precondition_side_val=precondition_side_val,
+        )
+
+    def solve_with_residual(
+        self,
+        *,
+        matvec_fn: Callable[[jnp.ndarray], jnp.ndarray],
+        b_vec: jnp.ndarray,
+        x0_vec: jnp.ndarray | None,
+        tol_val: float,
+        atol_val: float,
+        restart_val: int,
+        maxiter_val: int | None,
+        solve_method_val: str,
+        preconditioner_val: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+        precondition_side_val: str = "left",
+    ) -> tuple[GMRESSolveResult, jnp.ndarray]:
+        return solve_transport_linear_with_residual(
+            context=self.context,
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
+            x0_vec=x0_vec,
+            tol_val=tol_val,
+            atol_val=atol_val,
+            restart_val=restart_val,
+            maxiter_val=maxiter_val,
+            solve_method_val=solve_method_val,
+            preconditioner_val=preconditioner_val,
+            precondition_side_val=precondition_side_val,
+        )
+
+
 def transport_solver_kind(method: str, *, rhs_mode: int) -> tuple[str, str]:
     """Map transport solve-method tokens to a concrete Krylov solver."""
     method_l = str(method).strip().lower()
@@ -191,6 +254,7 @@ def solve_transport_linear_with_residual(
 
 
 __all__ = [
+    "TransportLinearSolveCallbacks",
     "TransportLinearSolveContext",
     "solve_transport_linear",
     "solve_transport_linear_with_residual",

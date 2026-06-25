@@ -691,9 +691,8 @@ from .transport_dense_batch import (
 from .transport_host_gmres import transport_host_gmres_solve as _transport_host_gmres_solve
 from .transport_iteration_stats import emit_transport_ksp_iteration_stats as _emit_transport_ksp_iteration_stats
 from .transport_linear_solve import (
+    TransportLinearSolveCallbacks,
     TransportLinearSolveContext,
-    solve_transport_linear as _solve_transport_linear,
-    solve_transport_linear_with_residual as _solve_transport_linear_with_residual,
     transport_restart_for_method as _transport_restart_for_method,
     transport_solver_kind as _transport_solver_kind,
 )
@@ -10687,6 +10686,7 @@ def solve_v3_transport_matrix_linear_gmres(
         use_solver_jit=bool(use_solver_jit),
         distributed_axis=distributed_axis,
     )
+    transport_linear_callbacks = TransportLinearSolveCallbacks(context=transport_linear_context)
 
     def _dense_dtype(dtype_in: jnp.dtype) -> jnp.dtype:
         return jnp.float32 if dense_use_mixed else dtype_in
@@ -10702,59 +10702,8 @@ def solve_v3_transport_matrix_linear_gmres(
             restart=int(restart),
         )
 
-    def _solve_linear(
-        *,
-        matvec_fn,
-        b_vec: jnp.ndarray,
-        x0_vec: jnp.ndarray | None,
-        tol_val: float,
-        atol_val: float,
-        restart_val: int,
-        maxiter_val: int | None,
-        solve_method_val: str,
-        preconditioner_val=None,
-        precondition_side_val: str = "left",
-    ):
-        return _solve_transport_linear(
-            context=transport_linear_context,
-            matvec_fn=matvec_fn,
-            b_vec=b_vec,
-            x0_vec=x0_vec,
-            tol_val=tol_val,
-            atol_val=atol_val,
-            restart_val=restart_val,
-            maxiter_val=maxiter_val,
-            solve_method_val=solve_method_val,
-            preconditioner_val=preconditioner_val,
-            precondition_side_val=precondition_side_val,
-        )
-
-    def _solve_linear_with_residual(
-        *,
-        matvec_fn,
-        b_vec: jnp.ndarray,
-        x0_vec: jnp.ndarray | None,
-        tol_val: float,
-        atol_val: float,
-        restart_val: int,
-        maxiter_val: int | None,
-        solve_method_val: str,
-        preconditioner_val=None,
-        precondition_side_val: str = "left",
-    ) -> tuple[GMRESSolveResult, jnp.ndarray]:
-        return _solve_transport_linear_with_residual(
-            context=transport_linear_context,
-            matvec_fn=matvec_fn,
-            b_vec=b_vec,
-            x0_vec=x0_vec,
-            tol_val=tol_val,
-            atol_val=atol_val,
-            restart_val=restart_val,
-            maxiter_val=maxiter_val,
-            solve_method_val=solve_method_val,
-            preconditioner_val=preconditioner_val,
-            precondition_side_val=precondition_side_val,
-        )
+    _solve_linear = transport_linear_callbacks.solve
+    _solve_linear_with_residual = transport_linear_callbacks.solve_with_residual
 
     if emit is not None:
         for level, message in (*active_dense_setup.active_notes, *active_dense_setup.dense_notes):
