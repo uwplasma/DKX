@@ -151,7 +151,9 @@ Transport-matrix helpers are documented through their maintained domain module.
    :members:
 
 .. automodule:: sfincs_jax.v3_driver
-   :members:
+
+   Compatibility shim for historical imports. New code should import solve
+   entry points from the domain owners documented below.
 
 Refactored solve-policy modules
 -------------------------------
@@ -341,7 +343,7 @@ research workflows.
 .. automodule:: sfincs_jax.problems.transport_matrix.iteration_stats
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.linear_solve
+.. automodule:: sfincs_jax.problems.transport_matrix.solve
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.parallel.payload
