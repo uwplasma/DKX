@@ -81,6 +81,25 @@ JAX at module import. Facade functions import the heavy solve/output modules
 inside the function body, so solver-specific JAX pytrees remain in the numerical
 modules that need JAX transformations.
 
+``sfincs_jax/sensitivity.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Differentiation contracts for optimization and validation workflows:
+
+- JVP/VJP wrappers and dot-product consistency checks for JAX-transformable
+  flux and diagnostic functions,
+- dense implicit linear-observable certificates for small validation decks,
+- matrix-free implicit linear-observable certificates for production-size
+  owners that can provide operator, transpose, derivative-action, solve, and
+  transpose-solve closures,
+- finite-difference comparison hooks used as promotion gates before derivative
+  paths are used in ambipolar Newton solves or RHSMode=4/5-style adjoint
+  diagnostics.
+
+This module is intentionally problem-agnostic. Problem packages such as
+``sfincs_jax.problems.ambipolar`` adapt these certificates to physical
+observables including radial-current derivatives.
+
 ``sfincs_jax/cli.py``
 ^^^^^^^^^^^^^^^^^^^^^
 
