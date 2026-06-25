@@ -189,13 +189,19 @@ ACTIVE_PACKAGE_EXPORTS = {
 
 ACTIVE_MODULE_EXPORTS = {
     "sfincs_jax.sensitivity": (
+        "FluxFn",
+        "JvpVjpDotProductResult",
         "LinearObservableBuilder",
         "LinearObservableDerivativeResult",
         "LinearObservableSystem",
+        "StateObservableFn",
+        "adjoint_dot_product_check",
         "evaluate_linear_observable",
         "implicit_linear_observable_derivative",
         "implicit_linear_observable_derivative_from_builder",
+        "jvp_flux",
         "probe_linear_observable_vector",
+        "vjp_flux",
     ),
 }
 

@@ -21,6 +21,7 @@ from sfincs_jax.problems.transport_matrix.diagnostics import (
 )
 from sfincs_jax.sensitivity import (
     LinearObservableSystem,
+    adjoint_dot_product_check,
     implicit_linear_observable_derivative,
     implicit_linear_observable_derivative_from_builder,
     probe_linear_observable_vector,
@@ -296,6 +297,32 @@ def test_dense_rhs1_radial_current_linear_observable_system_matches_finite_diffe
     assert result.tangent_adjoint_abs_error < 1.0e-6
     assert result.finite_difference_abs_error is not None
     assert result.finite_difference_abs_error < 1.0e-4
+
+
+def test_rhs1_radial_current_jvp_vjp_dot_product_gate() -> None:
+    input_path = Path(__file__).parent / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
+    op = full_system_operator_from_namelist(nml=read_sfincs_input(input_path))
+    rng = np.random.default_rng(11)
+    state = jnp.asarray(rng.normal(size=(int(op.total_size),)), dtype=jnp.float64)
+    tangent = jnp.asarray(rng.normal(size=(int(op.total_size),)), dtype=jnp.float64)
+    cotangent = jnp.asarray(1.25, dtype=jnp.float64)
+
+    result = adjoint_dot_product_check(
+        lambda x: radial_current_vm_from_state(
+            op,
+            x_full=x,
+            radial_coordinate="rHat",
+            psi_a_hat=-0.384935,
+            a_hat=0.5109,
+            r_n=0.5,
+        ),
+        state,
+        tangent,
+        cotangent,
+    )
+
+    assert result.abs_error < 1.0e-10
+    np.testing.assert_allclose(result.lhs, result.rhs, rtol=0.0, atol=1.0e-10)
 
 
 def test_implicit_linear_observable_derivative_rejects_incompatible_shapes() -> None:

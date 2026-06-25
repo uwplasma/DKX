@@ -921,3 +921,29 @@ Next best steps:
    the collisionless electric-field blocks or by a checked JVP path.
 3. Wire the resulting derivative provider into safeguarded Newton and pure
    Newton ambipolar solves for Fortran option-1/3 parity gates.
+
+## 2026-06-25 JVP/VJP Adjoint Dot-Product Gate
+
+Steps taken:
+
+1. Added `jvp_flux`, `vjp_flux`, and `adjoint_dot_product_check` to
+   `sfincs_jax.sensitivity`.
+2. Added a real RHSMode 1 radial-current diagnostic test for
+   `<JVP(dp), y> = <dp, VJP(y)>`.
+3. Updated docs to describe the dot-product gate as the first reusable
+   consistency check for RHSMode 4/5 adjoint sensitivity outputs.
+
+Results:
+
+- Focused dot-product and import-contract tests passed:
+  `python -m pytest
+  tests/test_sensitivity.py::test_rhs1_radial_current_jvp_vjp_dot_product_gate
+  tests/test_domain_package_import_contracts.py::test_active_modules_are_importable_with_expected_exports
+  -q --tb=short` with `2 passed`.
+
+Next best steps:
+
+1. Extend the dot-product gate to particle flux, heat flux, FSAB flow,
+   radial current, and bootstrap-current diagnostics.
+2. Add Fortran RHSMode 4/5 small-output fixtures once the diagnostic adjoint
+   gates are stable.

@@ -27,6 +27,7 @@ LinearSolver = Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
 ObservableFn = Callable[[float], float]
 LinearObservableBuilder = Callable[[float], "LinearObservableSystem"]
 StateObservableFn = Callable[[jnp.ndarray], Any]
+FluxFn = Callable[[Any], Any]
 
 
 def _immutable_mapping(value: Mapping[str, Any] | None) -> Mapping[str, Any]:
@@ -113,6 +114,24 @@ class LinearObservableDerivativeResult:
         object.__setattr__(self, "metadata", _immutable_mapping(self.metadata))
 
 
+@dataclass(frozen=True, slots=True)
+class JvpVjpDotProductResult:
+    """Adjoint consistency certificate for one JVP/VJP pair."""
+
+    primal_value: Any
+    tangent_value: Any
+    cotangent_value: Any
+    vjp_value: Any
+    lhs: float
+    rhs: float
+    abs_error: float
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "lhs", float(self.lhs))
+        object.__setattr__(self, "rhs", float(self.rhs))
+        object.__setattr__(self, "abs_error", float(self.abs_error))
+
+
 def _as_vector(name: str, value: Array) -> jnp.ndarray:
     array = jnp.asarray(value, dtype=jnp.float64)
     if array.ndim != 1:
@@ -129,6 +148,51 @@ def _as_matrix(name: str, value: Array) -> jnp.ndarray:
 
 def _default_solve(matrix: jnp.ndarray, rhs: jnp.ndarray) -> jnp.ndarray:
     return jnp.linalg.solve(matrix, rhs)
+
+
+def jvp_flux(
+    flux: FluxFn,
+    parameters: Any,
+    tangent: Any,
+) -> tuple[Any, Any]:
+    """Return ``flux(parameters)`` and its Jacobian-vector product."""
+
+    return jax.jvp(flux, (parameters,), (tangent,))
+
+
+def vjp_flux(
+    flux: FluxFn,
+    parameters: Any,
+    cotangent: Any,
+) -> tuple[Any, Any]:
+    """Return ``flux(parameters)`` and the vector-Jacobian product."""
+
+    value, pullback = jax.vjp(flux, parameters)
+    return value, pullback(cotangent)[0]
+
+
+def adjoint_dot_product_check(
+    flux: FluxFn,
+    parameters: Any,
+    tangent: Any,
+    cotangent: Any,
+) -> JvpVjpDotProductResult:
+    """Check ``<JVP(dp), y> = <dp, VJP(y)>`` for one flux diagnostic."""
+
+    primal, tangent_value = jvp_flux(flux, parameters, tangent)
+    primal_vjp, vjp_value = vjp_flux(flux, parameters, cotangent)
+    del primal_vjp
+    lhs = jnp.vdot(jnp.ravel(jnp.asarray(tangent_value)), jnp.ravel(jnp.asarray(cotangent)))
+    rhs = jnp.vdot(jnp.ravel(jnp.asarray(tangent)), jnp.ravel(jnp.asarray(vjp_value)))
+    return JvpVjpDotProductResult(
+        primal_value=primal,
+        tangent_value=tangent_value,
+        cotangent_value=cotangent,
+        vjp_value=vjp_value,
+        lhs=float(lhs),
+        rhs=float(rhs),
+        abs_error=abs(float(lhs) - float(rhs)),
+    )
 
 
 def evaluate_linear_observable(
@@ -333,11 +397,17 @@ def implicit_linear_observable_derivative(
 
 
 __all__ = (
+    "FluxFn",
+    "JvpVjpDotProductResult",
     "LinearObservableBuilder",
     "LinearObservableDerivativeResult",
     "LinearObservableSystem",
+    "StateObservableFn",
+    "adjoint_dot_product_check",
     "evaluate_linear_observable",
     "implicit_linear_observable_derivative",
     "implicit_linear_observable_derivative_from_builder",
+    "jvp_flux",
     "probe_linear_observable_vector",
+    "vjp_flux",
 )
