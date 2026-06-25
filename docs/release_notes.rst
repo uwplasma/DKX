@@ -34,6 +34,12 @@ Unreleased
   without assembling dense matrices, while tests compare the matrix-free
   tangent/adjoint certificate against the dense certificate and centered finite
   differences.
+- Added ``matrix_free_rhs1_vm_radial_current_linear_observable_system`` as the
+  first RHSMode=1 production-facing radial-current derivative builder. It uses
+  real full-system matrix-free operator actions, caller-supplied transpose and
+  solve closures, finite-difference derivative actions, and the existing
+  radial-current observable weights without dense matrix assembly inside the
+  builder.
 - Moved the first RHSMode=2/3 transport implementation cluster into
   ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old
