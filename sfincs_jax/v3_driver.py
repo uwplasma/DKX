@@ -1772,75 +1772,6 @@ _build_rhsmode1_collision_preconditioner = build_rhs1_collision_preconditioner
 _build_rhsmode1_block_preconditioner_xdiag = build_rhs1_block_preconditioner_xdiag
 _build_rhsmode1_block_preconditioner = build_rhs1_block_preconditioner
 
-
-def _build_rhsmode23_theta_dd_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    block: int,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Domain-decomposition theta-block preconditioner for RHSMode=2/3 transport solves."""
-    return _build_rhsmode1_theta_dd_preconditioner(
-        op=op,
-        block=int(block),
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode23_zeta_dd_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    block: int,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Domain-decomposition zeta-block preconditioner for RHSMode=2/3 transport solves."""
-    return _build_rhsmode1_zeta_dd_preconditioner(
-        op=op,
-        block=int(block),
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode23_theta_schwarz_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    block: int,
-    overlap: int,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Restricted additive Schwarz theta-line preconditioner for transport solves."""
-    return _build_rhsmode1_theta_schwarz_preconditioner(
-        op=op,
-        block=int(block),
-        overlap=int(overlap),
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode23_zeta_schwarz_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    block: int,
-    overlap: int,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Restricted additive Schwarz zeta-line preconditioner for transport solves."""
-    return _build_rhsmode1_zeta_schwarz_preconditioner(
-        op=op,
-        block=int(block),
-        overlap=int(overlap),
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
 _build_rhsmode23_block_preconditioner = build_rhsmode23_block_preconditioner
 
 
@@ -1953,6 +1884,14 @@ _build_rhsmode1_theta_schwarz_preconditioner = (
 _build_rhsmode1_zeta_schwarz_preconditioner = (
     build_rhs1_zeta_schwarz_preconditioner
 )
+
+# Transport RHSMode=2/3 uses the same line/block preconditioner kernels as
+# RHSMode=1; keep the legacy driver names as aliases for monkeypatch/debug code.
+_build_rhsmode23_theta_dd_preconditioner = _build_rhsmode1_theta_dd_preconditioner
+_build_rhsmode23_zeta_dd_preconditioner = _build_rhsmode1_zeta_dd_preconditioner
+_build_rhsmode23_theta_schwarz_preconditioner = _build_rhsmode1_theta_schwarz_preconditioner
+_build_rhsmode23_zeta_schwarz_preconditioner = _build_rhsmode1_zeta_schwarz_preconditioner
+
 _build_rhsmode1_theta_line_xdiag_preconditioner = (
     build_rhs1_theta_line_xdiag_preconditioner
 )
@@ -1982,85 +1921,46 @@ def _rhs1_pas_family_builders() -> RHS1PasFamilyBuilders:
     )
 
 
-def _build_rhsmode1_pas_tokamak_theta_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the PAS tokamak theta/L builder."""
+def _rhs1_pas_family_compat_builder(method_name: str, *, accepts_safe: bool) -> Callable[..., Callable]:
+    def _build(
+        *,
+        op: V3FullSystemOperator,
+        reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+        expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+        safe: bool = True,
+    ) -> Callable[[jnp.ndarray], jnp.ndarray]:
+        kwargs: dict[str, Any] = {
+            "op": op,
+            "reduce_full": reduce_full,
+            "expand_reduced": expand_reduced,
+        }
+        if accepts_safe:
+            kwargs["safe"] = safe
+        return getattr(_rhs1_pas_family_builders(), method_name)(**kwargs)
 
-    return _rhs1_pas_family_builders().build_tokamak_theta(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_pas_tz_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the PAS theta-zeta/L builder."""
-
-    return _rhs1_pas_family_builders().build_tz(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
+    return _build
 
 
-def _build_rhsmode1_pas_lite_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    safe: bool = True,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical PAS-lite composite builder."""
-
-    return _rhs1_pas_family_builders().build_lite(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-        safe=safe,
-    )
-
-
-def _build_rhsmode1_pas_hybrid_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    safe: bool = True,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical PAS-hybrid composite builder."""
-
-    return _rhs1_pas_family_builders().build_hybrid(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-        safe=safe,
-    )
-
-
-def _build_rhsmode1_pas_schur_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    safe: bool = True,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical PAS-Schur composite builder."""
-
-    return _rhs1_pas_family_builders().build_schur(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-        safe=safe,
-    )
+_build_rhsmode1_pas_tokamak_theta_preconditioner = _rhs1_pas_family_compat_builder(
+    "build_tokamak_theta",
+    accepts_safe=False,
+)
+_build_rhsmode1_pas_tz_preconditioner = _rhs1_pas_family_compat_builder(
+    "build_tz",
+    accepts_safe=False,
+)
+_build_rhsmode1_pas_lite_preconditioner = _rhs1_pas_family_compat_builder(
+    "build_lite",
+    accepts_safe=True,
+)
+_build_rhsmode1_pas_hybrid_preconditioner = _rhs1_pas_family_compat_builder(
+    "build_hybrid",
+    accepts_safe=True,
+)
+_build_rhsmode1_pas_schur_preconditioner = _rhs1_pas_family_compat_builder(
+    "build_schur",
+    accepts_safe=True,
+)
 
 
 _build_rhsmode1_species_block_preconditioner = build_rhs1_species_block_preconditioner
@@ -2081,19 +1981,10 @@ _compute_rhsmode1_sxblock_tz_sparse_host_seed = (
     compute_rhs1_sxblock_tz_sparse_host_seed
 )
 _build_rhsmode1_sxblock_tz_preconditioner = build_rhs1_sxblock_tz_preconditioner
-
-
-def _build_rhsmode1_pas_xblock_ilu_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    return _rhs1_pas_family_builders().build_xblock_ilu(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
+_build_rhsmode1_pas_xblock_ilu_preconditioner = _rhs1_pas_family_compat_builder(
+    "build_xblock_ilu",
+    accepts_safe=False,
+)
 
 
 _build_rhsmode1_zeta_line_preconditioner = build_rhs1_zeta_line_preconditioner

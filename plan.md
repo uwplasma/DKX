@@ -1623,3 +1623,56 @@ Next best steps:
    consolidation.
 3. Keep full production RHSMode=4/5 solve parity outside normal CI until the
    compact source/output fixture layer is complete.
+
+## 2026-06-25 Refactor Tranche: Preconditioner Compatibility Wrappers
+
+Steps taken:
+
+1. Audited the remaining `v3_driver.py` helper surface after the RHSMode=4/5
+   fixture work. The file was still `12,242` lines and dominated by two large
+   solve functions plus compatibility glue.
+2. Removed four RHSMode=2/3 transport domain-decomposition wrapper bodies and
+   replaced them with aliases to the equivalent RHSMode=1 line/block builder
+   kernels. This preserves the legacy monkeypatch/debug names while eliminating
+   duplicate code.
+3. Replaced six repeated PAS-family compatibility wrappers with one small
+   `_rhs1_pas_family_compat_builder` factory and named compatibility exports.
+   No new files were added.
+
+Results:
+
+- `v3_driver.py` decreased from `12,242` to `12,133` lines in this tranche.
+- The diff is a net simplification of one file:
+  `sfincs_jax/v3_driver.py | 207 ++++++++++++------------------------------------`.
+- `python -m py_compile sfincs_jax/v3_driver.py` passed.
+- Focused dispatch/PAS validation passed:
+  `python -m pytest tests/test_transport_preconditioner_dispatch.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_pas_precond_policy_coverage.py -q --tb=short`
+  with `80 passed in 39.89 s`.
+- Transport alias parity validation passed:
+  `JAX_ENABLE_X64=True python -m pytest
+  tests/test_transport_parallel.py::test_transport_theta_dd_preconditioner_matches_default
+  tests/test_transport_parallel.py::test_transport_theta_schwarz_preconditioner_matches_default
+  -q --tb=short` with `2 passed in 18.26 s`.
+- `python -m ruff check sfincs_jax/v3_driver.py` and `git diff --check`
+  passed.
+
+Current lane status:
+
+- Ambipolar solver lane: 99% bounded; no change in this tranche.
+- RHSMode 4/5 sensitivity lane: 90%; no change after the RHSMode=5 fixture
+  commit.
+- Refactor/review-ready PR lane: 89%; one more compatibility cluster was
+  simplified without increasing file count.
+- Overall completion: about 92%.
+
+Next best steps:
+
+1. Commit and push this refactor tranche.
+2. Continue the refactor/review lane with a larger audit of the two monolithic
+   solve functions, identifying seams that can be moved into existing
+   `profile_response` or `transport_matrix` domain modules without adding new
+   top-level files.
+3. Run a broader import/driver slice after the next tranche, not after every
+   small wrapper cleanup.
