@@ -89,6 +89,11 @@ Unreleased
   adjoint namelist restrictions and return the sensitivity HDF5 fields written
   by ``writeHDF5Output.F90``, including the documented source-code gate for
   ``dParallelFlowdLambda``.
+- Added the first compact SFINCS Fortran v3 RHSMode=4 sensitivity reference
+  summary: a tiny W7-X-like analytic radial-current sensitivity deck. Tests pin
+  the output fields and the identity
+  ``dRadialCurrentdLambda = sum_s Z_s dParticleFlux_s/dLambda`` without
+  checking in the generated HDF5 file.
 - Moved the first RHSMode=2/3 transport implementation cluster into
   ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old
