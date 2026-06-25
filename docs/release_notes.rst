@@ -174,7 +174,7 @@ Unreleased
 - Consolidated RHSMode=1 profile-response solve-routing and strong
   preconditioner controls into
   ``sfincs_jax.problems.profile_response.policies`` and
-  ``sfincs_jax.problems.profile_response.strong_preconditioning``. The old
+  ``sfincs_jax.problems.profile_response.preconditioner_build``. The old
   top-level ``sfincs_jax.rhs1_*`` policy aliases were removed in the
   consolidation pass; the maintained source map, API docs, and driver imports
   now use the domain package. Focused policy/import/driver validation passed with ``282`` tests

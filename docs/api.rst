@@ -175,7 +175,7 @@ research workflows.
 .. automodule:: sfincs_jax.problems.profile_response.phi1_newton
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.strong_preconditioning
+.. automodule:: sfincs_jax.problems.profile_response.preconditioner_build
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.coarse
@@ -185,9 +185,6 @@ research workflows.
    :members:
 
 .. automodule:: sfincs_jax.problems.profile_response.active_dof
-   :members:
-
-.. automodule:: sfincs_jax.problems.profile_response.active_projection
    :members:
 
 .. automodule:: sfincs_jax.operators.profile_response.sources
@@ -287,9 +284,6 @@ research workflows.
    :members:
 
 .. automodule:: sfincs_jax.newton_krylov_diagnostics
-   :members:
-
-.. automodule:: sfincs_jax.problems.profile_response.preconditioner_build
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.policy
