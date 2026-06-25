@@ -5,14 +5,20 @@ from pathlib import Path
 import numpy as np
 
 from sfincs_jax.input_compat import (
+    bool_config_values,
     canonical_equilibrium_override,
+    config_bool,
+    config_float,
+    config_int,
     effective_equilibrium_file,
     effective_psi_n_wish,
     effective_r_n_wish,
     effective_use_iterative_linear_solver,
+    first_config_value,
     infer_phi_input_radial_coordinate_for_gradients,
     infer_input_radial_coordinate_for_gradients,
     infer_species_input_radial_coordinate_for_gradients,
+    lookup_config_value,
     with_equilibrium_override,
 )
 from sfincs_jax.io import _resolve_equilibrium_file_from_namelist, localize_equilibrium_file_in_place, sfincs_jax_output_dict
@@ -20,6 +26,24 @@ from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.v3 import grids_from_namelist
 from sfincs_jax.v3_fblock import _dphi_hat_dpsi_hat_from_er
 from sfincs_jax.v3_system import full_system_operator_from_namelist
+
+
+def test_shared_config_lookup_handles_namelists_and_nested_mappings() -> None:
+    input_path = Path(__file__).parent / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
+    nml = read_sfincs_input(input_path)
+    nested = {
+        "general": {"rhsmode": 4},
+        "physicsParameters": {"includePhi1": False, "EParallelHat": 1.25},
+        "adjointOptions": {"adjointParticleFluxOption": [True, False]},
+    }
+
+    assert lookup_config_value(nml, ("general",), "RHSMode", 1) == 1
+    assert lookup_config_value(nested, ("general",), "RHSMode") == 4
+    assert first_config_value([3, 4], default=0) == 3
+    assert bool_config_values([1, 0, True]) == (True, False, True)
+    assert config_int(nested, ("general",), "RHSMode") == 4
+    assert config_bool(nested, ("physicsParameters",), "includePhi1", True) is False
+    assert config_float(nested, ("physicsParameters",), "EParallelHat") == 1.25
 
 
 def test_infer_input_radial_coordinate_for_gradients_legacy_multispecies_psin() -> None:
