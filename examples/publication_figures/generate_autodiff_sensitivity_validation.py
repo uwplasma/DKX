@@ -27,7 +27,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.geometry import boozer_geometry_scheme4
-from sfincs_jax.implicit_solve import linear_custom_solve
+from sfincs_jax.solvers.implicit import linear_custom_solve
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.artifacts import (
     PAUL_2019_ADJOINT_URL,
