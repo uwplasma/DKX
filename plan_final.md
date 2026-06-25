@@ -544,6 +544,23 @@ Iteration 2 - Move real RHSMode-1 implementation into domain packages:
    `kinetic_operator`, `field_equations`, `diagnostics`, and `solve`, not
    `rhs1_*`.
 
+Concrete Iteration 2 move map:
+
+| Current files | Canonical destination | Consolidation rule |
+| --- | --- | --- |
+| `rhs1_block_operator.py`, `rhs1_compressed_layout.py` | `sfincs_jax.operators.profile_response.layout` | Merge layout, active ordering, block-operator metadata, and block-COO primitives behind one layout/operator vocabulary. |
+| `rhs1_collision_stencils.py`, `rhs1_collisionless_stencils.py`, `rhs1_fblock_assembly.py` | `sfincs_jax.operators.profile_response.kinetic` | Keep kinetic f-block assembly in one physics operator owner; retain separate internal functions for collision and drift terms, not separate files. |
+| `rhs1_constraint_sources.py` | `sfincs_jax.operators.profile_response.sources` | Own constraint/source moment formulas here, with tests anchored to constraintScheme 1/2 identities. |
+| `rhs1_device_operator.py`, `rhs1_structured_full_csr.py` | `sfincs_jax.operators.profile_response.sparse_runtime` | Own materialized CSR/device CSR contracts and structured full-system bundle creation. |
+| `rhs1_full_assembly.py`, `rhs1_fortran_reduced_direct_tail.py`, `rhs1_true_operator_rescue.py` | `sfincs_jax.operators.profile_response.full_system` plus, if needed, `full_system_rescue` | Move first without rewriting formulas. Split only if the file remains unreviewable after direct import migration. |
+| `rhs1_ksp_diagnostics.py` | `sfincs_jax.problems.profile_response.solver_diagnostics` | Merge optional KSP replay/history controls into the existing diagnostics owner. |
+| `rhs1_host_policy.py`, `rhs1_large_cpu_policy.py`, `rhs1_solver_policy.py`, `rhs1_preconditioner_auto_policy.py`, `rhs1_active_preconditioner_policy.py`, `rhs1_direct_tail_policy.py` | `sfincs_jax.problems.profile_response.policies` or `sfincs_jax.solvers.preconditioners.policy` | Consolidate environment parsing and automatic branch decisions; remove duplicate `_env_*` helpers where behavior is identical. |
+| `rhs1_strong_fallback.py` | delete after rewriting imports to `sfincs_jax.problems.profile_response.preconditioner_build` | This is still a compatibility facade and should not survive Iteration 2. |
+
+Iteration 2 should not move the QI family or detailed PAS/x-block solver
+families yet unless required by imports. Those belong to Iteration 3 so the
+operator/problem split can be validated independently.
+
 Exit gates for Iteration 2:
 
 - No real top-level `rhs1_*` implementation files remain.
@@ -563,6 +580,25 @@ Iteration 3 - Consolidate solver/preconditioner families:
    no longer have tests, docs, or production use.
 4. Keep advanced solver selection behind automatic policy objects with optional
    expert overrides, not scattered module-level branches.
+
+Concrete Iteration 3 move map:
+
+| Current files | Canonical destination | Consolidation rule |
+| --- | --- | --- |
+| `rhs1_pas_policy.py`, `rhs1_pas_matrixfree.py` | `sfincs_jax.solvers.preconditioners.pas.policy` and `pas.matrix_free` | Keep PAS runtime chunking and PAS solver admission together; delete duplicate policy parsing. |
+| `rhs1_xblock_policy.py`, `rhs1_xblock_sparse_host_policy.py`, `rhs1_lowmode_coarse.py`, `rhs1_domain_decomposition.py`, `rhs1_full_csr_kinetic_pc.py` | `sfincs_jax.solvers.preconditioners.xblock.policy`, `xblock.coarse`, `domain_decomposition`, and `full_fp.kinetic_blocks` | Use existing solver-family packages; avoid new top-level names. |
+| `rhs1_fortran_reduced_factor_policy.py`, `rhs1_reduced_pmat_plan.py`, `rhs1_symbolic_frontal_policy.py`, `rhs1_symbolic_sparse_policy.py` | `sfincs_jax.solvers.preconditioners.symbolic_sparse` | Keep reduced-Pmat symbolic ordering, frontal/Schur policy, and factor metadata in one solver-family package. |
+| `rhs1_schur_policy.py` | `sfincs_jax.solvers.preconditioners.schur.policy` | Merge with existing RHSMode-1 Schur coarse-basis policy files if the combined file stays reviewable. |
+| `rhs1_preconditioner_dispatch.py` | `sfincs_jax.solvers.preconditioners.dispatch` | One dispatch entry point for automatic solver selection. |
+| `rhs1_qi_*.py` | `sfincs_jax.solvers.preconditioners.qi` | Rename by algorithm role: `coarse`, `device`, `deflation`, `galerkin`, `global_moments`, `multilevel`, `phase_space`, `promotion`, and `two_level`. Merge tiny policy files into the nearest algorithm owner. |
+
+Delete candidates during Iteration 3:
+
+- QI policy fragments that only parse candidate lists and are used by one owner.
+- Duplicate residual-probe selection helpers once the canonical QI owner exposes
+  a single admission API.
+- Environment-variable-only branches with no test, docs mention, benchmark
+  provenance, or current auto-policy use.
 
 Exit gates for Iteration 3:
 

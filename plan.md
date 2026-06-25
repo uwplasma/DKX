@@ -2232,3 +2232,41 @@ Next best steps:
 1. Commit and push Iteration 1.
 2. Start Lane 1 Iteration 2 by moving real top-level RHSMode-1 modules into
    domain packages in one batch, preserving behavior and public API paths.
+
+## 2026-06-25 Lane 1 Concrete Consolidation Map
+
+Steps taken:
+
+1. Reviewed all 47 remaining real top-level `rhs1_*` files after deleting the
+   compatibility aliases.
+2. Grouped the remaining files into five actual ownership domains instead of
+   treating them as independent modules: profile-response operators, profile
+   policy/diagnostics, PAS/x-block/sparse solver policy, QI preconditioners,
+   and removable facades.
+3. Updated `plan_final.md` with an explicit Iteration 2 and Iteration 3 move
+   map so the next implementation batches can be mechanical and bounded.
+
+Results:
+
+- Iteration 2 will move operator/layout/source/CSR/KSP/profile policy files
+  into `operators.profile_response` and `problems.profile_response`.
+- Iteration 3 will move PAS, x-block, symbolic sparse, Schur, dispatch, and QI
+  solver families into `solvers.preconditioners`.
+- `rhs1_strong_fallback.py` is identified as a delete candidate once imports
+  point at `problems.profile_response.preconditioner_build`.
+
+Current lane status:
+
+- Lane 1 Iteration 1: committed and pushed as `d432600`.
+- Lane 1 Iteration 2: planned with concrete file destinations; implementation
+  is the next active step.
+- Lane 1 overall: about 25%.
+
+Next best steps:
+
+1. Execute Iteration 2 as one bounded batch: move operator/layout/source/CSR
+   modules and profile-response diagnostics/policy owners, then rewrite imports.
+2. Run focused RHSMode-1 operator/profile-response tests, import-contract
+   tests, docs build, and whitespace checks.
+3. Commit and push the Iteration 2 checkpoint before starting the QI/PAS/x-block
+   solver-family consolidation in Iteration 3.
