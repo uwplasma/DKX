@@ -510,6 +510,12 @@ JAX-native performance patterns used in `sfincs_jax`
 - **Use implicit differentiation for solve gradients**: for objectives that depend on the solution `x(p)` of
   a linear system `A(p) x = b(p)`, prefer `jax.lax.custom_linear_solve` (adjoint solve) over
   differentiating through Krylov iterations.
+- **Use derivative certificates for scalar transport observables**:
+  ``sfincs_jax.sensitivity.implicit_linear_observable_derivative`` evaluates
+  both the tangent equation ``A x_p = b_p - A_p x`` and the adjoint equation
+  ``A^T lambda = c`` for ``J = c^T x``. The two derivatives and an optional
+  centered finite-difference check must agree before the derivative is used by
+  ambipolar Newton steps or optimization workflows.
 - **Default to short-recurrence Krylov for transport**: BiCGStab avoids storing a full GMRES basis and
   is therefore far more memory efficient for large RHSMode=2/3 systems. GMRES remains available and is
   used as a fallback when BiCGStab stagnates; transport-matrix solves default to BiCGStab with the
