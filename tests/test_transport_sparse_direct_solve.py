@@ -131,6 +131,21 @@ def test_transport_sparse_direct_pattern_for_solve_uses_cache_and_emits(monkeypa
     assert any("transport sparse pattern selected" in message for message in emitted)
 
 
+def test_transport_sparse_direct_context_pattern_method_uses_owner_policy(monkeypatch) -> None:
+    pattern = SimpleNamespace(nnz=2)
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_PATTERN", "1")
+    monkeypatch.setattr(sparse_direct, "v3_full_system_conservative_sparsity_pattern", lambda _op: pattern)
+    monkeypatch.setattr(
+        sparse_direct,
+        "summarize_v3_sparse_pattern",
+        lambda _op, _pattern: SimpleNamespace(shape=(2, 2), nnz=2, avg_row_nnz=1.0, max_row_nnz=1),
+    )
+    monkeypatch.setattr(sparse_direct, "estimate_csr_nbytes", lambda _shape, _nnz: 16)
+    context = _context()
+
+    assert context.pattern_for_solve(n=2, active_indices_np=None) is pattern
+
+
 def test_transport_sparse_direct_solve_uses_sparse_ilu_refinement_path(monkeypatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_PATTERN", "0")
     context = _context()
@@ -143,6 +158,29 @@ def test_transport_sparse_direct_solve_uses_sparse_ilu_refinement_path(monkeypat
         n=2,
         dtype=jnp.float64,
         cache_key=("unit",),
+        active_indices_np=None,
+        tol_val=1e-10,
+        atol_val=1e-12,
+        restart_val=10,
+        maxiter_val=20,
+        precondition_side_val="left",
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), np.asarray(rhs), rtol=1e-12, atol=1e-12)
+    assert float(result.residual_norm) == 0.0
+
+
+def test_transport_sparse_direct_context_solve_method_uses_true_residual_gate(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_PATTERN", "0")
+    context = _context()
+    rhs = jnp.asarray([0.5, -0.25], dtype=jnp.float64)
+
+    result = context.solve(
+        matvec_fn=lambda x: x,
+        b_vec=rhs,
+        n=2,
+        dtype=jnp.float64,
+        cache_key=("unit-method",),
         active_indices_np=None,
         tol_val=1e-10,
         atol_val=1e-12,

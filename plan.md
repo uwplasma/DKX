@@ -2138,3 +2138,47 @@ Next best steps:
    architectural churn.
 3. Leave whole-repo lint cleanup as a scoped future lane unless the project
    wants to normalize all JAX-config import-order patterns now.
+
+## 2026-06-25 Transport Sparse-Direct Owner Boundary
+
+Steps taken:
+
+1. Moved the RHSMode=2/3 sparse-direct sparse-pattern and solve adapters onto
+   `TransportSparseDirectContext`.
+2. Rewired `v3_driver.py` to call `transport_sparse_direct_context.solve(...)`
+   directly instead of keeping local wrapper closures in the monolithic solve
+   loop.
+3. Added method-level tests so the sparse-direct owner boundary is pinned
+   without relying only on the legacy driver path.
+
+Results:
+
+- `v3_driver.py` dropped from `12,030` to `11,992` lines in this tranche.
+- `python -m pytest tests/test_transport_sparse_direct_solve.py -q
+  --tb=short` passed with `5 passed in 0.21 s`.
+- `python -m pytest tests/test_transport_sparse_direct_solve.py
+  tests/test_transport_linear_solve.py tests/test_transport_dense_batch.py
+  tests/test_transport_preconditioner_dispatch.py
+  tests/test_transport_solve_finalization.py tests/test_constraint_projection.py
+  -q --tb=short` passed with `52 passed in 1.82 s`.
+- `python -m ruff check
+  sfincs_jax/problems/transport_matrix/sparse_direct_solve.py
+  sfincs_jax/v3_driver.py tests/test_transport_sparse_direct_solve.py`,
+  `python -m py_compile sfincs_jax/v3_driver.py
+  sfincs_jax/problems/transport_matrix/sparse_direct_solve.py`, and
+  `git diff --check` passed.
+
+Current lane status:
+
+- Ambipolar solver lane: 100% closed for the bounded/reference PR scope.
+- RHSMode 4/5 sensitivity lane: 100% closed for the bounded/reference PR scope.
+- Refactor/review-ready PR lane: 94%; the remaining blocker is final PR #8
+  CI/coverage status plus any concrete failures it exposes.
+- Overall completion: about 98%.
+
+Next best steps:
+
+1. Commit and push this sparse-direct owner-boundary tranche.
+2. Re-check PR #8 CI after the coverage shards finish.
+3. If CI passes, finish the review-readiness audit; if CI fails, fix the
+   failing job directly before doing more refactor work.

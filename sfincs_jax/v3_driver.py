@@ -707,8 +707,6 @@ from .transport_loop_support import (
 )
 from .transport_sparse_direct_solve import (
     transport_sparse_direct_context_from_env as _transport_sparse_direct_context_from_env,
-    transport_sparse_direct_pattern_for_solve as _transport_sparse_direct_pattern_for_context,
-    transport_sparse_direct_solve as _transport_sparse_direct_solve_with_context,
 )
 from .problems.transport_matrix.parallel.policy import (
     transport_parallel_backend as _transport_parallel_backend,
@@ -10878,42 +10876,6 @@ def solve_v3_transport_matrix_linear_gmres(
         sparse_direct_needs_float64_retry=_transport_sparse_direct_needs_float64_retry,
     )
 
-    def _transport_sparse_direct_pattern_for_solve(*, n: int, active_indices_np: np.ndarray | None):
-        return _transport_sparse_direct_pattern_for_context(
-            context=transport_sparse_direct_context,
-            n=int(n),
-            active_indices_np=active_indices_np,
-        )
-
-    def _transport_sparse_direct_solve(
-        *,
-        matvec_fn,
-        b_vec: jnp.ndarray,
-        n: int,
-        dtype: jnp.dtype,
-        cache_key: tuple[object, ...],
-        active_indices_np: np.ndarray | None,
-        tol_val: float,
-        atol_val: float,
-        restart_val: int,
-        maxiter_val: int | None,
-        precondition_side_val: str,
-    ) -> GMRESSolveResult:
-        return _transport_sparse_direct_solve_with_context(
-            context=transport_sparse_direct_context,
-            matvec_fn=matvec_fn,
-            b_vec=b_vec,
-            n=int(n),
-            dtype=dtype,
-            cache_key=cache_key,
-            active_indices_np=active_indices_np,
-            tol_val=float(tol_val),
-            atol_val=float(atol_val),
-            restart_val=int(restart_val),
-            maxiter_val=maxiter_val,
-            precondition_side_val=str(precondition_side_val),
-        )
-
     # Geometry scalars needed for the transport-matrix formulas.
     grids = grids_from_namelist(nml)
     geom = geometry_from_namelist(nml=nml, grids=grids)
@@ -11221,7 +11183,7 @@ def solve_v3_transport_matrix_linear_gmres(
                         )
                     try:
                         sig = _operator_signature_cached(op_matvec)
-                        res_reduced = _transport_sparse_direct_solve(
+                        res_reduced = transport_sparse_direct_context.solve(
                             matvec_fn=mv_reduced,
                             b_vec=rhs_reduced,
                             n=int(active_size),
@@ -11378,7 +11340,7 @@ def solve_v3_transport_matrix_linear_gmres(
                         )
                     try:
                         sig = _operator_signature_cached(op_matvec)
-                        res_sparse = _transport_sparse_direct_solve(
+                        res_sparse = transport_sparse_direct_context.solve(
                             matvec_fn=mv_reduced,
                             b_vec=rhs_reduced,
                             n=int(active_size),
@@ -11680,7 +11642,7 @@ def solve_v3_transport_matrix_linear_gmres(
                         )
                     try:
                         sig = _operator_signature_cached(op_matvec)
-                        res = _transport_sparse_direct_solve(
+                        res = transport_sparse_direct_context.solve(
                             matvec_fn=mv,
                             b_vec=rhs,
                             n=int(op0.total_size),
@@ -11840,7 +11802,7 @@ def solve_v3_transport_matrix_linear_gmres(
                         )
                     try:
                         sig = _operator_signature_cached(op_matvec)
-                        res_sparse = _transport_sparse_direct_solve(
+                        res_sparse = transport_sparse_direct_context.solve(
                             matvec_fn=mv,
                             b_vec=rhs,
                             n=int(op0.total_size),

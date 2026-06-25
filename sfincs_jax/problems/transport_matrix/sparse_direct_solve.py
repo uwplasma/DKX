@@ -45,6 +45,50 @@ class TransportSparseDirectContext:
     sparse_direct_use_explicit_helper: Callable[..., bool]
     sparse_direct_needs_float64_retry: Callable[..., bool]
 
+    def pattern_for_solve(
+        self,
+        *,
+        n: int,
+        active_indices_np: np.ndarray | None,
+    ) -> object | None:
+        """Return the conservative sparse pattern admitted by this context."""
+        return transport_sparse_direct_pattern_for_solve(
+            context=self,
+            n=int(n),
+            active_indices_np=active_indices_np,
+        )
+
+    def solve(
+        self,
+        *,
+        matvec_fn: Callable[[jnp.ndarray], jnp.ndarray],
+        b_vec: jnp.ndarray,
+        n: int,
+        dtype: jnp.dtype,
+        cache_key: tuple[object, ...],
+        active_indices_np: np.ndarray | None,
+        tol_val: float,
+        atol_val: float,
+        restart_val: int,
+        maxiter_val: int | None,
+        precondition_side_val: str,
+    ) -> GMRESSolveResult:
+        """Run this context's sparse-direct rescue path."""
+        return transport_sparse_direct_solve(
+            context=self,
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
+            n=int(n),
+            dtype=dtype,
+            cache_key=cache_key,
+            active_indices_np=active_indices_np,
+            tol_val=float(tol_val),
+            atol_val=float(atol_val),
+            restart_val=int(restart_val),
+            maxiter_val=maxiter_val,
+            precondition_side_val=str(precondition_side_val),
+        )
+
 
 def transport_sparse_direct_context_from_env(
     *,
