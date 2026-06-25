@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from scripts.check_research_lanes import main as check_research_lanes_main
-from sfincs_jax.research_lane_policy import research_lane_completion_errors
+from sfincs_jax.validation.research_lanes import research_lane_completion_errors
 
 
 def _repo_root() -> Path:

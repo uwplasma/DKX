@@ -69,7 +69,7 @@ the checked-in scientific artifact rather than a single function. The key files 
 - ``examples/publication_figures/artifacts/*.json``
 - ``examples/publication_figures/generate_validation_dashboard.py``
 - ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``
-- ``sfincs_jax/validation_artifacts.py``
+- ``sfincs_jax/validation/artifacts.py``
 
 The dashboard tests are intentionally cheap enough for CI. They do not rerun the full
 collisionality or electric-field scans; instead, they check the frozen artifacts for
@@ -541,7 +541,7 @@ tests protect user-facing runtime-estimate behavior and cross-run Krylov reuse
 while keeping CI cost below one second for the new file.
 
 The latest driver split also extracts RHSMode=1 host dense/sparse-direct policy into
-``sfincs_jax/rhs1_host_policy.py``. ``tests/test_rhs1_host_policy.py`` covers the
+``sfincs_jax/problems/profile_response/policies.py``. ``tests/test_rhs1_host_policy.py`` covers the
 backend/env rules for host dense fallback, small accelerator dense shortcuts,
 host sparse-direct enablement, sparse-preconditioned GMRES rescue, sparse factor
 dtype selection, iterative-refinement step parsing, explicit sparse-helper
@@ -1418,7 +1418,7 @@ It intentionally does not close the full analytic-limit reproduction, because th
 current audited collisionality scans stop near ``nu'=10``.
 
 The deferred Simakov-Helander panel-data scaffold is also executable in
-``sfincs_jax.validation_figures`` and guarded by
+``sfincs_jax.validation.figures`` and guarded by
 ``tests/test_validation_figures.py``. It consumes a compact payload of
 ``nuprime``, computed value, and analytic-limit rows, then records:
 

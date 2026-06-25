@@ -1167,9 +1167,10 @@ the historical private driver name and test the focused module directly. This ke
   density/pressure moments, source-basis injection with ``pointAtX0`` handling,
   and the constraintScheme=1 moment-Schur wrapper used by x-block
   preconditioners.
-- ``sfincs_jax/rhs1_host_policy.py``:
+- ``sfincs_jax/problems/profile_response/policies.py``:
   RHSMode=1 host dense fallback, host sparse-direct, sparse-preconditioned
-  GMRES rescue, factor-dtype, and explicit sparse-helper policy.
+  GMRES rescue, factor-dtype, explicit sparse-helper policy, and automatic
+  solver/fallback admission.
 - ``sfincs_jax/host_refinement.py``:
   host direct-solve refinement and sparse-direct GMRES polish helpers. The
   monotone refinement loops are NumPy-only, while the polish helper accepts the
@@ -1311,11 +1312,6 @@ the historical private driver name and test the focused module directly. This ke
   collection, recycle-basis updates, and optional KSP iteration-stat dispatch.
   Dense fallback accepted-state overrides are explicit so the refactor preserves
   the established active-DOF branch behavior.
-- ``sfincs_jax/problems/transport_matrix/parallel/payload.py``
-  (legacy alias: ``sfincs_jax/transport_parallel_payload.py``):
-  injected-dependency payload normalization, child-worker guard setup, transport solve
-  call construction, merge-ready result packing, and GPU-worker NPZ array conversion
-  shared by CPU process workers and GPU subprocess workers.
 - ``sfincs_jax/problems/transport_matrix/parallel/policy.py``
   (legacy alias: ``sfincs_jax/transport_parallel_policy.py``):
   pure transport process-parallel backend selection, worker-count validation,
@@ -1323,28 +1319,13 @@ the historical private driver name and test the focused module directly. This ke
   isolation, XLA worker flag rewriting, and multiprocessing fallback policy.
 - ``sfincs_jax/problems/transport_matrix/parallel/runtime.py``
   (legacy alias: ``sfincs_jax/transport_parallel_runtime.py``):
-  transport parallel RHS partitioning, GPU worker subprocess launch, and parent-side
-  merge of per-worker state/residual/elapsed-time results. The policy-backed
-  GPU subprocess wrapper lives here so ``v3_driver.py`` no longer owns GPU
-  worker environment selection.
-- ``sfincs_jax/problems/transport_matrix/parallel/pool.py``
-  (legacy alias: ``sfincs_jax/transport_parallel_pool.py``):
-  persistent transport process-pool caching, worker-environment setup, executor
-  keyword construction, rebuild, and shutdown behavior used by the CPU
-  process-parallel transport lane. ``v3_driver.py`` keeps only the worker
-  function that injects the current namelist reader and transport solve
-  implementation.
-- ``sfincs_jax/problems/transport_matrix/parallel/execution.py``
-  (legacy alias: ``sfincs_jax/transport_parallel_execution.py``):
-  top-level transport process-parallel execution control, including run/no-run gating,
-  per-worker payload construction, backend-specific execution, retry, and sequential
-  fallback.
-- ``sfincs_jax/problems/transport_matrix/parallel/solve.py``
-  (legacy alias: ``sfincs_jax/transport_parallel_solve.py``):
-  parent-side RHSMode=2/3 parallel-solve orchestration. It owns the early
-  parallel branch that partitions ``whichRHS`` values, launches CPU/GPU workers
-  through injected runtime hooks, merges state/residual/timing payloads, builds
-  final transport diagnostics, and returns the transport-matrix solve result.
+  transport parallel RHS partitioning, injected-dependency payload
+  normalization, child-worker guard setup, merge-ready result packing, GPU
+  worker NPZ conversion, persistent process-pool caching, worker-environment
+  setup, backend-specific execution/retry/fallback, GPU subprocess launch, and
+  parent-side merge of per-worker state/residual/elapsed-time results. This
+  module absorbed the old payload, pool, execution, solve, and validation
+  micro-files.
 - ``sfincs_jax/problems/transport_matrix/parallel/sharding.py``
   (legacy alias: ``sfincs_jax/transport_parallel_sharding.py``):
   pure single-case sharded-solve planning metadata. It caps requested device
@@ -1357,7 +1338,7 @@ the historical private driver name and test the focused module directly. This ke
   command-line worker entry point used by GPU transport subprocesses. The old
   ``python -m sfincs_jax.problems.transport_matrix.parallel.worker`` path remains supported and
   delegates to this implementation.
-- ``sfincs_jax/validation_artifacts.py``:
+- ``sfincs_jax/validation/artifacts.py``:
   lightweight loaders and physics metrics for checked-in publication artifacts. This
   module is independent of the heavy solver path, so documentation and CI can verify
   collisionality, high-collisionality trend, trajectory-sweep, and dashboard artifacts
@@ -1385,7 +1366,7 @@ the historical private driver name and test the focused module directly. This ke
   opt-in coarse solver/output profiling behind ``SFINCS_JAX_PROFILE``. It owns
   phase-level timing, RSS high-water sampling, optional JAX device-memory polling,
   and the ``profile_entries`` payload written into solver traces and output metadata.
-- ``sfincs_jax/benchmark_artifact_policy.py``:
+- ``sfincs_jax/validation/benchmark_artifacts.py``:
   fast schema, provenance, and release-blocking classification policy for checked-in
   benchmark JSON artifacts.
 - ``sfincs_jax/memory_model.py``:
@@ -1393,7 +1374,7 @@ the historical private driver name and test the focused module directly. This ke
   restart caps, benchmark manifests, and measured solver-candidate gates. This is
   the preflight layer that keeps future memory-saving defaults testable before
   expensive operators or preconditioners are materialized.
-- ``sfincs_jax/rhs1_host_policy.py``:
+- ``sfincs_jax/problems/profile_response/policies.py``:
   tested admission gates for RHSMode=1 host dense, sparse-host, constrained-PAS
   sparse-PC, CPU 3D full-FP sparse-PC, and GPU tokamak full-FP no-Er/Er
   sparse-PC auto lanes. These helpers keep solver path promotion rules explicit
