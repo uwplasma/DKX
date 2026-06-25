@@ -175,9 +175,6 @@ research workflows.
 .. automodule:: sfincs_jax.problems.profile_response.phi1_newton
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.finalization
-   :members:
-
 .. automodule:: sfincs_jax.problems.profile_response.strong_preconditioning
    :members:
 
@@ -199,12 +196,6 @@ research workflows.
 .. automodule:: sfincs_jax.operators.profile_response.device_sparse
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.host_policy
-   :members:
-
-.. automodule:: sfincs_jax.problems.profile_response.direct_tail_policy
-   :members:
-
 .. automodule:: sfincs_jax.operators.profile_response.reduced_tail
    :members:
 
@@ -217,16 +208,10 @@ research workflows.
 .. automodule:: sfincs_jax.host_refinement
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.large_cpu_policy
-   :members:
-
 .. automodule:: sfincs_jax.solvers.preconditioners.pas.matrix_free
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioners.pas.policy
-   :members:
-
-.. automodule:: sfincs_jax.problems.profile_response.preconditioner_auto_policy
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioners.dispatch
@@ -286,9 +271,6 @@ research workflows.
 .. automodule:: sfincs_jax.problems.profile_response.sparse.fortran_reduced
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.sparse.krylov
-   :members:
-
 .. automodule:: sfincs_jax.problems.profile_response.sparse.qi
    :members:
 
@@ -301,13 +283,7 @@ research workflows.
 .. automodule:: sfincs_jax.problems.profile_response.solver_diagnostics
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.ksp_diagnostics
-   :members:
-
 .. automodule:: sfincs_jax.newton_krylov_diagnostics
-   :members:
-
-.. automodule:: sfincs_jax.problems.profile_response.solver_policy
    :members:
 
 .. automodule:: sfincs_jax.problems.profile_response.preconditioner_build
