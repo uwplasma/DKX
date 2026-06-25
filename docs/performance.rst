@@ -530,6 +530,13 @@ JAX-native performance patterns used in `sfincs_jax`
   ``<JVP(dp), y> = <dp, VJP(y)>``. The test suite applies this to a real
   RHSMode-1 radial-current diagnostic, which is the same adjoint identity needed
   by the RHSMode 4/5 sensitivity lane.
+- **Keep RHSMode 4/5 parity gates source-grounded**:
+  ``sfincs_jax.sensitivity.validate_fortran_v3_adjoint_sensitivity_constraints``
+  mirrors the Fortran-v3 source restrictions for adjoint sensitivity decks, and
+  ``sfincs_jax.sensitivity.fortran_v3_adjoint_sensitivity_output_fields`` pins
+  the HDF5 field names emitted by ``writeHDF5Output.F90``. These are lightweight
+  gates for input/output compatibility; numerical RHSMode 4/5 replay against
+  Fortran output files remains a separate production validation step.
 - **Default to short-recurrence Krylov for transport**: BiCGStab avoids storing a full GMRES basis and
   is therefore far more memory efficient for large RHSMode=2/3 systems. GMRES remains available and is
   used as a fallback when BiCGStab stagnates; transport-matrix solves default to BiCGStab with the
