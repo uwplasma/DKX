@@ -1190,3 +1190,38 @@ Next best steps:
 2. Add an API-level helper that builds the derivative provider from a namelist
    without requiring users to manually assemble plus/minus operators.
 3. Extend the same fixed-shape approach to Phi1 drift-current derivatives.
+
+## 2026-06-25 Namelist-Backed RHSMode 1 Er Derivative Response
+
+Steps taken:
+
+1. Added `RHSMode1RadialCurrentResponse` and
+   `rhsmode1_radial_current_response_from_namelist` to the ambipolar problem
+   owner and package exports.
+2. The helper builds fixed-shape RHSMode-1 operators directly from a namelist,
+   preserves zero-valued `Er` branches for derivative gates, supplies the
+   analytic/JVP `Er` operator tangent, and accepts caller-supplied production
+   solve/transpose-solve closures while defaulting to bounded dense validation
+   on small decks.
+3. Added a real small-deck gate showing the implicit derivative agrees with a
+   centered radial-current finite difference through the new public helper.
+4. Updated the feature matrix, release notes, and final plan so the remaining
+   Lane 3 item is now the Fortran option-1/3 physical replay, not manual
+   provider assembly.
+
+Results:
+
+- Focused helper validation passed:
+  `python -m pytest
+  tests/test_sensitivity.py::test_rhsmode1_namelist_response_uses_fixed_shape_er_derivative_provider
+  -q --tb=short` with `1 passed`.
+
+Next best steps:
+
+1. Use the namelist-backed provider in one real derivative-assisted
+   ambipolar option-1/3 physical replay gate against the checked Fortran
+   summaries.
+2. Extend JVP/VJP dot-product gates to Phi1 drift-current, total heat-flux, and
+   intermediate-grid diagnostics.
+3. Add small Fortran RHSMode 4/5 output fixtures once the no-Phi1 physical
+   derivative replay is stable.

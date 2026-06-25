@@ -18,6 +18,7 @@ from sfincs_jax.problems.ambipolar import (
     implicit_matrix_free_radial_current_derivative_from_builder,
     matrix_free_rhs1_vm_radial_current_linear_observable_system,
     operator_tangent_from_centered_difference,
+    rhsmode1_radial_current_response_from_namelist,
 )
 from sfincs_jax.problems.transport_matrix.diagnostics import (
     radial_current_vm_from_state,
@@ -636,6 +637,35 @@ def test_zero_er_fixed_shape_branch_tangent_matches_centered_er_difference() -> 
 
     assert float(jnp.linalg.norm(centered_action)) > 0.0
     np.testing.assert_allclose(analytic_action, centered_action, rtol=0.0, atol=1.0e-9)
+
+
+def test_rhsmode1_namelist_response_uses_fixed_shape_er_derivative_provider() -> None:
+    input_path = Path(__file__).parent / "ref" / "pas_1species_PAS_noEr_tiny_scheme1.input.namelist"
+    step = 1.0e-5
+    response = rhsmode1_radial_current_response_from_namelist(
+        nml=input_path,
+        derivative_step=step,
+        finite_difference_step=step,
+        keep_zero_er_terms=True,
+        max_dense_size=150,
+        observable_chunk_size=17,
+        metadata={"gate": "fixed_shape_namelist_response"},
+    )
+
+    derivative = response.derivative(0.0)
+    centered = (response.radial_current(step) - response.radial_current(-step)) / (2.0 * step)
+
+    assert derivative.scheme == "implicit_linear_adjoint"
+    assert derivative.metadata["builder"] == "rhsmode1_radial_current_response_from_namelist"
+    assert derivative.metadata["response_builder"] == "rhsmode1_radial_current_response_from_namelist"
+    assert derivative.metadata["gate"] == "fixed_shape_namelist_response"
+    assert derivative.metadata["keep_zero_er_terms"] is True
+    assert derivative.metadata["linear_algebra"] == "bounded_dense_validation"
+    assert derivative.metadata["operator_derivative_action"] == "jax_jvp_operator_tangent"
+    assert derivative.metadata["rhs_derivative"] == "jax_jvp_operator_tangent"
+    assert derivative.metadata["tangent_adjoint_abs_error"] < 1.0e-8
+    assert derivative.metadata["finite_difference_abs_error"] < 2.0e-5
+    np.testing.assert_allclose(derivative.derivative, centered, rtol=0.0, atol=2.0e-5)
 
 
 def test_rhs1_radial_current_jvp_vjp_dot_product_gate() -> None:

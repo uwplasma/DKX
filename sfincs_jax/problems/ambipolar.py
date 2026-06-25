@@ -193,6 +193,40 @@ class RadialCurrentDerivativeResult:
         object.__setattr__(self, "metadata", _immutable_mapping(self.metadata))
 
 
+@dataclass(frozen=True, slots=True)
+class RHSMode1RadialCurrentResponse:
+    """Namelist-backed radial-current response and derivative provider."""
+
+    build_system: Callable[[float], Any]
+    finite_difference_step: float | None = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.finite_difference_step is not None:
+            step = float(self.finite_difference_step)
+            if step <= 0.0:
+                raise ValueError("finite_difference_step must be positive.")
+            object.__setattr__(self, "finite_difference_step", step)
+        object.__setattr__(self, "metadata", _immutable_mapping(self.metadata))
+
+    def radial_current(self, er: float) -> float:
+        """Evaluate the matrix-free radial-current observable at ``Er``."""
+
+        from ..sensitivity import evaluate_matrix_free_linear_observable  # noqa: PLC0415
+
+        return evaluate_matrix_free_linear_observable(self.build_system(float(er)))
+
+    def derivative(self, er: float) -> RadialCurrentDerivativeResult:
+        """Evaluate ``dJr/dEr`` through the matrix-free implicit certificate."""
+
+        return implicit_matrix_free_radial_current_derivative_from_builder(
+            self.build_system,
+            er=float(er),
+            finite_difference_step=self.finite_difference_step,
+            metadata=self.metadata,
+        )
+
+
 @contextmanager
 def _temporary_env(overrides: Mapping[str, str | None]):
     previous = {key: os.environ.get(key) for key in overrides}
@@ -1316,6 +1350,174 @@ def er_operator_tangent_from_dphi_hat_dpsi_hat_derivative(
     return replace(tangent, fblock=fblock, dphi_hat_dpsi_hat=derivative)
 
 
+def _namelist_with_er(nml: Any, er: float) -> Any:
+    """Return a shallow namelist copy with ``physicsParameters/ER`` updated."""
+
+    from ..namelist import Namelist  # noqa: PLC0415
+
+    groups = {group: dict(values) for group, values in nml.groups.items()}
+    indexed = {
+        group: {key: dict(values) for key, values in group_values.items()}
+        for group, group_values in nml.indexed.items()
+    }
+    physics = groups.setdefault("physicsparameters", {})
+    physics["ER"] = float(er)
+    return Namelist(
+        groups=groups,
+        indexed=indexed,
+        source_path=nml.source_path,
+        source_text=nml.source_text,
+    )
+
+
+def _dense_validation_linear_algebra_for_operator(
+    op: Any,
+    *,
+    max_size: int,
+    include_jacobian_terms: bool,
+) -> tuple[Callable[[Any], Any], Callable[[Any], Any], Callable[[Any], Any]]:
+    """Return dense solve/transpose closures for small validation operators."""
+
+    total_size = int(getattr(op, "total_size"))
+    if total_size > int(max_size):
+        raise ValueError(
+            "bounded dense validation refused RHSMode-1 size "
+            f"{total_size} > max_dense_size {int(max_size)}."
+        )
+
+    import jax.numpy as jnp  # noqa: PLC0415
+
+    from ..solver import assemble_dense_matrix_from_matvec  # noqa: PLC0415
+    from ..v3_system import apply_v3_full_system_operator_cached  # noqa: PLC0415
+
+    matrix = assemble_dense_matrix_from_matvec(
+        matvec=lambda state: apply_v3_full_system_operator_cached(
+            op,
+            state,
+            include_jacobian_terms=bool(include_jacobian_terms),
+        ),
+        n=total_size,
+        dtype=jnp.float64,
+    )
+    return (
+        lambda rhs: jnp.linalg.solve(matrix, rhs),
+        lambda rhs: jnp.linalg.solve(matrix.T, rhs),
+        lambda vector: matrix.T @ vector,
+    )
+
+
+def rhsmode1_radial_current_response_from_namelist(
+    *,
+    nml: Any,
+    derivative_step: float = 1.0e-5,
+    finite_difference_step: float | None = None,
+    radial_coordinate: str = "psiHat",
+    psi_a_hat: float | None = None,
+    a_hat: float | None = None,
+    r_n: float | None = None,
+    identity_shift: float = 0.0,
+    keep_zero_er_terms: bool = True,
+    max_dense_size: int = 512,
+    observable_chunk_size: int = 128,
+    include_jacobian_terms: bool = True,
+    use_analytic_er_tangent: bool = True,
+    linear_algebra_factory: Callable[
+        [Any],
+        tuple[Callable[[Any], Any], Callable[[Any], Any], Callable[[Any], Any]],
+    ]
+    | None = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> RHSMode1RadialCurrentResponse:
+    """Build a namelist-backed RHSMode-1 radial-current response.
+
+    The default backend uses bounded dense factors only for small validation
+    decks. Production callers should provide ``linear_algebra_factory`` that
+    returns solve, transpose-solve, and transpose-action closures for the
+    selected sparse or matrix-free solver path.
+    """
+
+    h = float(derivative_step)
+    if h <= 0.0:
+        raise ValueError("derivative_step must be positive.")
+    fd_step = h if finite_difference_step is None else float(finite_difference_step)
+    if fd_step <= 0.0:
+        raise ValueError("finite_difference_step must be positive.")
+
+    from ..namelist import read_sfincs_input  # noqa: PLC0415
+    from ..v3_system import full_system_operator_from_namelist  # noqa: PLC0415
+
+    nml_base = read_sfincs_input(nml) if isinstance(nml, (str, Path)) else nml
+    rhs_mode = int(nml_base.group("general").get("RHSMODE", 1))
+    if rhs_mode != 1:
+        raise ValueError("rhsmode1_radial_current_response_from_namelist requires RHSMode=1.")
+    dphi_d_er = dphi_hat_dpsi_hat_er_derivative_from_namelist(nml_base)
+    source_path = getattr(nml_base, "source_path", None)
+
+    def build_operator(er: float) -> Any:
+        return full_system_operator_from_namelist(
+            nml=_namelist_with_er(nml_base, float(er)),
+            identity_shift=identity_shift,
+            keep_zero_er_terms=bool(keep_zero_er_terms),
+        )
+
+    def build_system(er: float) -> Any:
+        er_value = float(er)
+        op = build_operator(er_value)
+        op_plus = build_operator(er_value + h)
+        op_minus = build_operator(er_value - h)
+        if linear_algebra_factory is None:
+            solve, transpose_solve, transpose_apply = _dense_validation_linear_algebra_for_operator(
+                op,
+                max_size=int(max_dense_size),
+                include_jacobian_terms=bool(include_jacobian_terms),
+            )
+            linear_algebra_kind = "bounded_dense_validation"
+        else:
+            solve, transpose_solve, transpose_apply = linear_algebra_factory(op)
+            linear_algebra_kind = "caller_supplied"
+        operator_tangent = (
+            er_operator_tangent_from_dphi_hat_dpsi_hat_derivative(op, dphi_d_er)
+            if bool(use_analytic_er_tangent)
+            else None
+        )
+        return matrix_free_rhs1_vm_radial_current_linear_observable_system(
+            op=op,
+            op_plus=op_plus,
+            op_minus=op_minus,
+            parameter=er_value,
+            derivative_step=h,
+            solve=solve,
+            transpose_solve=transpose_solve,
+            transpose_apply=transpose_apply,
+            operator_tangent=operator_tangent,
+            radial_coordinate=radial_coordinate,
+            psi_a_hat=psi_a_hat,
+            a_hat=a_hat,
+            r_n=r_n,
+            observable_chunk_size=int(observable_chunk_size),
+            include_jacobian_terms=bool(include_jacobian_terms),
+            metadata={
+                "builder": "rhsmode1_radial_current_response_from_namelist",
+                "source_path": None if source_path is None else str(source_path),
+                "derivative_step": h,
+                "keep_zero_er_terms": bool(keep_zero_er_terms),
+                "use_analytic_er_tangent": bool(use_analytic_er_tangent),
+                "linear_algebra": linear_algebra_kind,
+                **dict(metadata or {}),
+            },
+        )
+
+    return RHSMode1RadialCurrentResponse(
+        build_system=build_system,
+        finite_difference_step=fd_step,
+        metadata={
+            "response_builder": "rhsmode1_radial_current_response_from_namelist",
+            "source_path": None if source_path is None else str(source_path),
+            **dict(metadata or {}),
+        },
+    )
+
+
 def matrix_free_rhs1_vm_radial_current_linear_observable_system(
     *,
     op: Any,
@@ -1633,6 +1835,7 @@ __all__ = [
     "RadialCurrentDerivativeEvaluator",
     "RadialCurrentEvaluator",
     "RadialCurrentDerivativeResult",
+    "RHSMode1RadialCurrentResponse",
     "SfincsJaxEvaluationRecord",
     "SfincsJaxRadialCurrentEvaluator",
     "brent_ambipolar_root",
@@ -1648,6 +1851,7 @@ __all__ = [
     "matrix_free_rhs1_vm_radial_current_linear_observable_system",
     "newton_ambipolar_root",
     "operator_tangent_from_centered_difference",
+    "rhsmode1_radial_current_response_from_namelist",
     "safeguarded_newton_ambipolar_root",
     "solve_ambipolar_brent",
     "solve_ambipolar_newton",

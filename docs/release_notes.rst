@@ -63,6 +63,11 @@ Unreleased
   while derivative/ambipolar gates can retain zero-valued ExB and ``E_r``
   suboperators at ``E_r=0`` so JVP tangents see the same fixed-shape operator
   family used at nearby nonzero fields.
+- Added ``rhsmode1_radial_current_response_from_namelist`` as the first
+  namelist-backed RHSMode=1 radial-current response/derivative provider. It
+  keeps zero-field ``E_r`` branches for fixed-shape derivative gates, reuses
+  the analytic/JVP operator tangent path, and is covered by a real small-deck
+  implicit derivative versus centered finite-difference test.
 - Moved the first RHSMode=2/3 transport implementation cluster into
   ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old

@@ -118,6 +118,12 @@ Implementation progress on 2026-06-23:
   `xDot` fixture verifies that the opt-in zero-`Er` operator is numerically
   identical to the default operator, while its analytic JVP tangent matches
   nearby nonzero centered differences.
+- `rhsmode1_radial_current_response_from_namelist` now provides the first
+  namelist-backed RHSMode-1 radial-current response and derivative provider.
+  A bounded real-deck gate uses fixed-shape zero-`Er` branches, the analytic
+  JVP operator tangent, and dense validation closures to compare the implicit
+  derivative against centered finite differences without exposing users to
+  manual plus/minus operator assembly.
 - `sfincs_jax.sensitivity` now exposes `jvp_flux`, `vjp_flux`, and
   `adjoint_dot_product_check`. The focused tests apply the dot-product identity
   to real RHSMode-1 particle-flux, heat-flux, flow, radial-current, and
@@ -133,9 +139,9 @@ Implementation progress on 2026-06-23:
   ambipolar option 1/3, RHSMode 4/5 sensitivities, solver backends, geometry,
   Phi1, outputs, and parallelism.
 - Remaining Lane 3 work is deeper fixed-shape numerical operator/factor and
-  preconditioner setup reuse behind that evaluator, concrete RHSMode-1
-  radial-current operator derivative wiring, and Fortran option 1/3 physical
-  parity gates.
+  preconditioner setup reuse behind that evaluator, plus Fortran option 1/3
+  physical replay gates that run the namelist-backed derivative provider
+  through real ambipolar root solves.
 
 Important Fortran v3 implementation modules:
 
@@ -1012,12 +1018,16 @@ Completed on 2026-06-25:
   the JVP action against centered operator differences on a real `xDot` deck.
 - Added opt-in fixed-shape zero-`Er` branch retention for f-block and
   full-system operators, with a real-deck JVP gate.
+- Added the first namelist-backed RHSMode-1 radial-current response helper.
+  It builds fixed-shape `Er` operators from an input namelist, supplies the
+  analytic/JVP `Er` tangent to the matrix-free implicit certificate, and has a
+  real small-deck centered-finite-difference gate.
 
 Next ordered implementation steps:
 
-1. Use `keep_zero_er_terms=True` plus the analytic/JVP provider in one real
-   RHSMode-1 derivative-assisted ambipolar option-1/3 physical parity gate, and
-   add an API-level helper that builds that provider from a namelist.
+1. Use the namelist-backed fixed-shape analytic/JVP provider in one real
+   RHSMode-1 derivative-assisted ambipolar option-1/3 physical replay gate
+   against the checked Fortran summaries.
 2. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
    set to Phi1 drift-current, total heat-flux, and intermediate-grid cases.
 3. Add small Fortran RHSMode 4/5 output fixtures and compare exported
