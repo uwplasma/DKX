@@ -2722,7 +2722,10 @@ Current completion status:
   Transport parallel runtime has bounded gates for GPU worker planning,
   worker-result validation, residual-log summarization, persistent-pool
   fallback, pool-cache reuse/replacement, and parent missing-RHS fail-fast
-  behavior. Benchmark-artifact promotion policy also has fast gates for
+  behavior. The transport worker subprocess entrypoint has direct CLI and
+  ``python -m`` tests for payload normalization, NPZ schema, output-directory
+  creation, and ``rhs_norms`` preservation. Benchmark-artifact promotion policy
+  also has fast gates for
   default-promotion evidence and canonical runtime/memory ordering. The next
   coverage work must focus on
   profile/transport solve owners, sparse-pattern emission, Schur/profile
