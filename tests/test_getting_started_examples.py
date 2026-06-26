@@ -46,6 +46,16 @@ def test_getting_started_multiformat_output_example(tmp_path: Path) -> None:
     assert (tmp_path / "sfincsOutput_getting_started_summary.pdf").exists()
 
 
+def test_tutorial_quick_output_and_plot_script(tmp_path: Path) -> None:
+    repo = Path(__file__).resolve().parents[1]
+    script = repo / "examples" / "tutorials" / "run_quick_output_and_plot.py"
+    _run_script(script, "--out-dir", str(tmp_path))
+    assert (tmp_path / "sfincsOutput_tutorial.h5").exists()
+    assert (tmp_path / "sfincsOutput_tutorial.nc").exists()
+    assert (tmp_path / "sfincsOutput_tutorial.npz").exists()
+    assert (tmp_path / "sfincsOutput_tutorial_summary.pdf").exists()
+
+
 def test_output_format_benchmark_example(tmp_path: Path) -> None:
     repo = Path(__file__).resolve().parents[1]
     script = repo / "examples" / "performance" / "benchmark_output_formats.py"
