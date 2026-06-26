@@ -2740,6 +2740,10 @@ Current completion status:
   explicit sparse minimum-norm, and sparse-host direct branches, with context
   assertions that lock solver-method propagation and prevent accidental slow
   setup before branch admission.
+  X-block TZ sparse-host coverage now includes reduced-vector application,
+  block-factor failure fallback, invalid environment parsing, one-shot seed
+  reduced projection, and seed failure fallback while preserving source/tail
+  solves and dropping temporary factors.
   Benchmark-artifact promotion policy
   also has fast gates for
   default-promotion evidence and canonical runtime/memory ordering. The next

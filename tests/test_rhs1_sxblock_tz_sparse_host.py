@@ -78,6 +78,66 @@ def test_sxblock_sparse_host_builder_solves_active_l_blocks_and_extra(monkeypatc
     assert np.allclose(np.asarray(result), np.asarray([1.0, 1.0, 1.0, 160.0, 1.0]))
 
 
+def test_sxblock_sparse_host_builder_supports_reduced_vectors(monkeypatch) -> None:
+    op = _op()
+    _patch_sparse_host(monkeypatch, {0: 2.0, 1: 4.0, 2: 8.0, 3: 16.0, 4: 20.0})
+    active = jnp.asarray([0, 2, 4], dtype=jnp.int32)
+
+    def reduce_full(candidate: jnp.ndarray) -> jnp.ndarray:
+        return candidate[active]
+
+    def expand_reduced(candidate: jnp.ndarray) -> jnp.ndarray:
+        expanded = jnp.zeros((op.total_size,), dtype=jnp.float64)
+        return expanded.at[active].set(candidate)
+
+    full_precond = tz_sparse.build_rhs1_sxblock_tz_sparse_host_preconditioner(
+        op=op,
+        drop_tol=0.0,
+        drop_rel=0.0,
+        ilu_drop_tol=0.0,
+        fill_factor=1.0,
+    )
+    reduced_precond = tz_sparse.build_rhs1_sxblock_tz_sparse_host_preconditioner(
+        op=op,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        drop_tol=0.0,
+        drop_rel=0.0,
+        ilu_drop_tol=0.0,
+        fill_factor=1.0,
+    )
+    rhs_reduced = reduce_full(jnp.asarray([2.0, 4.0, 8.0, 160.0, 20.0]))
+
+    expected = reduce_full(full_precond(expand_reduced(rhs_reduced)))
+    np.testing.assert_allclose(np.asarray(reduced_precond(rhs_reduced)), np.asarray(expected))
+
+
+def test_sxblock_sparse_host_builder_fails_closed_when_block_factors_fail(monkeypatch) -> None:
+    op = _op()
+    _patch_sparse_host(monkeypatch, {0: 2.0, 1: 4.0, 2: 8.0, 3: 16.0, 4: 20.0})
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PRECOND_REG", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SXBLOCK_SPARSE_LU_MAX", "bad")
+
+    def _raise_factorization(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("synthetic block failure")
+
+    messages: list[str] = []
+    monkeypatch.setattr(tz_sparse, "factorize_sparse_matrix_csr_host", _raise_factorization)
+    precond = tz_sparse.build_rhs1_sxblock_tz_sparse_host_preconditioner(
+        op=op,
+        drop_tol=0.0,
+        drop_rel=0.0,
+        ilu_drop_tol=0.0,
+        fill_factor=1.0,
+        emit=lambda _level, message: messages.append(str(message)),
+    )
+    result = precond(jnp.asarray([2.0, 4.0, 8.0, 160.0, 20.0]))
+
+    np.testing.assert_allclose(np.asarray(result), np.asarray([2.0, 4.0, 8.0, 160.0, 1.0]))
+    assert any("factorization failed" in message for message in messages)
+
+
 def test_sxblock_sparse_host_seed_drops_one_shot_factors(monkeypatch) -> None:
     op = _op()
     _patch_sparse_host(monkeypatch, {0: 2.0, 1: 4.0, 2: 8.0, 3: 16.0, 4: 20.0})
@@ -92,4 +152,41 @@ def test_sxblock_sparse_host_seed_drops_one_shot_factors(monkeypatch) -> None:
     )
 
     assert np.allclose(np.asarray(seed), np.asarray([1.0, 1.0, 1.0, 160.0, 1.0]))
+    assert tz_sparse._RHSMODE1_SPARSE_ILU_CACHE == {}
+
+
+def test_sxblock_sparse_host_seed_fails_closed_and_supports_reduced_vectors(monkeypatch) -> None:
+    op = _op()
+    _patch_sparse_host(monkeypatch, {0: 2.0, 1: 4.0, 2: 8.0, 3: 16.0, 4: 20.0})
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SXBLOCK_CHUNK_COLS", "bad")
+
+    def _raise_factorization(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("synthetic seed failure")
+
+    active = jnp.asarray([0, 2, 4], dtype=jnp.int32)
+
+    def reduce_full(candidate: jnp.ndarray) -> jnp.ndarray:
+        return candidate[active]
+
+    def expand_reduced(candidate: jnp.ndarray) -> jnp.ndarray:
+        expanded = jnp.zeros((op.total_size,), dtype=jnp.float64)
+        return expanded.at[active].set(candidate)
+
+    messages: list[str] = []
+    monkeypatch.setattr(tz_sparse, "factorize_sparse_matrix_csr_host", _raise_factorization)
+    seed = tz_sparse.compute_rhs1_sxblock_tz_sparse_host_seed(
+        op=op,
+        rhs_reduced=reduce_full(jnp.asarray([2.0, 4.0, 8.0, 160.0, 20.0])),
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        drop_tol=0.0,
+        drop_rel=0.0,
+        ilu_drop_tol=0.0,
+        fill_factor=1.0,
+        emit=lambda _level, message: messages.append(str(message)),
+    )
+
+    np.testing.assert_allclose(np.asarray(seed), np.asarray([2.0, 8.0, 1.0]))
+    assert any("block solve failed" in message for message in messages)
     assert tz_sparse._RHSMODE1_SPARSE_ILU_CACHE == {}
