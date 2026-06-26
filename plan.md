@@ -3752,3 +3752,63 @@ Next best steps:
    `solver_diagnostics.py`, or existing sparse owners.
 3. Continue Pass 3 after the next Pass 1 checkpoint by collapsing
    symbolic-sparse and QI experiment-history files into role-based owners.
+
+## 2026-06-25 Lane 1 Pass 1 Reduced Sparse Retry Extraction
+
+Steps taken:
+
+1. Generalized `run_rhs1_full_sparse_retry_stage` so it covers both full-space
+   and reduced active-DOF sparse retry paths with explicit scope, size,
+   residual-vector, and operator-PC controls.
+2. Replaced the reduced sparse-JAX and host sparse LU/ILU retry implementation
+   in `profile_response/solve.py` with a call to the sparse handoff owner.
+3. Converted the sparse retry unit test into a parametrized full/reduced
+   contract, proving the measured-candidate gate receives the correct
+   `sparse_jax_full` and `sparse_jax_reduced` labels and residual-vector
+   behavior.
+4. Updated `plan_final.md` with current counts.
+
+Results:
+
+- `profile_response/solve.py` decreased from `8,558` lines to `8,453` lines.
+- `profile_response/sparse/handoff.py` increased from `4,976` lines to
+  `5,007` lines because one stage now owns both full and reduced sparse retry
+  routing.
+- Package file count stayed at `209`; package-root file count stayed at `52`.
+- Package lines decreased from `163,724` to `163,650` for this checkpoint.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py
+  tests/test_profile_response_sparse_pc.py` passed.
+- `python -m pytest
+  tests/test_profile_response_sparse_pc.py::test_rhs1_sparse_retry_stage_uses_measured_sparse_jax_path
+  -q --tb=short` passed with `2 passed`.
+- `python -m pytest tests/test_profile_response_sparse_pc.py
+  tests/test_rhs1_handoff.py -q --tb=short` passed with `394 passed`.
+- `python -m pytest tests/test_domain_package_import_contracts.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py -q --tb=short` passed with
+  `45 passed`.
+- `git diff --check` passed.
+
+Completion:
+
+- Lane 1 Pass 1: about `30%`; sparse retry routing is now behavior-owned, but
+  generic sparse-PC/factor-preflight and final result/progress normalization
+  still need extraction.
+- Lane 1 overall: about `77%`.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Extract sparse result/progress metadata normalization from
+   `profile_response/solve.py` into `diagnostics.py` and
+   `solver_diagnostics.py`, which should reduce solve size without growing
+   sparse handoff further.
+2. Then move the remaining generic sparse-PC/factor-preflight branch into
+   existing sparse owners as one larger checkpoint.
+3. Continue Pass 3 solver-family consolidation only after the next Pass 1
+   diagnostic/metadata checkpoint is committed.

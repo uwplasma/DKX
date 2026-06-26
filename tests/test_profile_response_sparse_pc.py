@@ -12592,7 +12592,17 @@ def test_xblock_sparse_pc_final_payload_from_driver_state_sets_gate_and_expands(
     assert payload.metadata == {"core": 1, "correction": 2}
 
 
-def test_rhs1_full_sparse_retry_stage_uses_measured_sparse_jax_path() -> None:
+@pytest.mark.parametrize(
+    ("scope", "returns_residual_vec"),
+    [
+        ("full", True),
+        ("reduced", False),
+    ],
+)
+def test_rhs1_sparse_retry_stage_uses_measured_sparse_jax_path(
+    scope: str,
+    returns_residual_vec: bool,
+) -> None:
     calls: dict[str, object] = {}
     current = GMRESSolveResult(x=jnp.asarray([1.0, 0.0]), residual_norm=4.0)
     candidate = GMRESSolveResult(x=jnp.asarray([0.5, 0.0]), residual_norm=0.25)
@@ -12607,13 +12617,15 @@ def test_rhs1_full_sparse_retry_stage_uses_measured_sparse_jax_path() -> None:
     def solve_linear(**kwargs):
         calls["solve_method"] = kwargs["solve_method_val"]
         calls["x0"] = np.asarray(kwargs["x0_vec"])
-        return candidate, candidate_residual_vec
+        if returns_residual_vec:
+            return candidate, candidate_residual_vec
+        return candidate
 
     def measured_candidate(**kwargs):
         calls["candidate_name"] = kwargs["candidate_name"]
         calls["baseline_name"] = kwargs["baseline_name"]
         calls["returns_residual_vec"] = kwargs["returns_residual_vec"]
-        result, residual = kwargs["solve_linear"](
+        candidate_output = kwargs["solve_linear"](
             matvec_fn=kwargs["matvec_fn"],
             b_vec=kwargs["b_vec"],
             precond_fn=kwargs["precond_fn"],
@@ -12625,6 +12637,11 @@ def test_rhs1_full_sparse_retry_stage_uses_measured_sparse_jax_path() -> None:
             solve_method_val=kwargs["solve_method"],
             precond_side=kwargs["precond_side"],
         )
+        if kwargs["returns_residual_vec"]:
+            result, residual = candidate_output
+        else:
+            result = candidate_output
+            residual = residual_vec
         return result, residual, True, 0.01
 
     stage = run_rhs1_full_sparse_retry_stage(
@@ -12685,11 +12702,18 @@ def test_rhs1_full_sparse_retry_stage_uses_measured_sparse_jax_path() -> None:
             solver_kind="gmres",
             peak_rss_mb=lambda: 12.5,
             sparse_ilu_cache={},
+            problem_size=2 if scope == "reduced" else None,
+            cache_active_size=2 if scope == "reduced" else None,
+            scope=scope,
+            use_active_dof_mode=scope == "reduced",
+            enable_operator_preconditioned_rescue=scope == "full",
+            measured_returns_residual_vec=returns_residual_vec,
         )
     )
 
     assert stage.result is candidate
-    assert stage.residual_vec is candidate_residual_vec
+    expected_residual_vec = candidate_residual_vec if returns_residual_vec else residual_vec
+    assert stage.residual_vec is expected_residual_vec
     assert stage.dense_matrix_cache is None
     assert not stage.host_sparse_direct_used
     np.testing.assert_allclose(calls.pop("x0"), np.asarray([1.0, 0.0]))
@@ -12697,8 +12721,8 @@ def test_rhs1_full_sparse_retry_stage_uses_measured_sparse_jax_path() -> None:
         "marks": ["rhs1_sparse_precond_build_start", "rhs1_sparse_precond_build_done"],
         "builder_kind": "sparse_jax",
         "builder_n": 2,
-        "candidate_name": "sparse_jax_full",
-        "baseline_name": "current_full",
-        "returns_residual_vec": True,
+        "candidate_name": f"sparse_jax_{scope}",
+        "baseline_name": f"current_{scope}",
+        "returns_residual_vec": returns_residual_vec,
         "solve_method": "incremental",
     }

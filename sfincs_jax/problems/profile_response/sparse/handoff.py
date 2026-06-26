@@ -562,6 +562,17 @@ class RHS1FullSparseRetryStageContext:
     solver_kind: str
     peak_rss_mb: Callable[[], float | None]
     sparse_ilu_cache: Mapping[object, Any]
+    problem_size: int | None = None
+    cache_active_size: int | None = None
+    scope: str = "full"
+    use_active_dof_mode: bool = False
+    force_host_sparse_direct: bool = False
+    enable_operator_preconditioned_rescue: bool = True
+    require_lower_diag: bool = True
+    measured_returns_residual_vec: bool = True
+    implicit_solver_returns_residual_vec: bool = True
+    accept_candidate_residual_vec: bool = True
+    compute_scipy_residual_vec: bool = True
 
 
 @dataclass(frozen=True)
@@ -589,6 +600,17 @@ def run_rhs1_full_sparse_retry_stage(
     residual_vec = context.residual_vec
     dense_matrix_cache: np.ndarray | None = None
     host_sparse_direct_used = False
+    problem_size = (
+        int(context.problem_size)
+        if context.problem_size is not None
+        else int(context.op.total_size)
+    )
+    cache_active_size = (
+        int(context.cache_active_size)
+        if context.cache_active_size is not None
+        else int(problem_size)
+    )
+    scope = str(context.scope)
 
     if float(result.residual_norm) <= float(context.target):
         return RHS1FullSparseRetryStageResult(
@@ -604,8 +626,8 @@ def run_rhs1_full_sparse_retry_stage(
             cache_key = context.cache_key_builder(
                 context.op,
                 kind="sparse_jax",
-                active_size=int(context.op.total_size),
-                use_active_dof_mode=False,
+                active_size=int(cache_active_size),
+                use_active_dof_mode=bool(context.use_active_dof_mode),
                 use_pas_projection=bool(context.use_pas_projection),
                 drop_tol=float(context.sparse_drop_tol),
                 drop_rel=float(context.sparse_drop_rel),
@@ -615,8 +637,8 @@ def run_rhs1_full_sparse_retry_stage(
             precond_sparse = build_sparse_jax_retry_preconditioner(
                 SparseJAXRetryPreconditionerBuildContext(
                     matvec=context.matvec,
-                    n=int(context.op.total_size),
-                    dtype=context.precond_dtype(int(context.op.total_size)),
+                    n=int(problem_size),
+                    dtype=context.precond_dtype(int(problem_size)),
                     cache_key=cache_key,
                     drop_tol=float(context.sparse_drop_tol),
                     drop_rel=float(context.sparse_drop_rel),
@@ -644,11 +666,11 @@ def run_rhs1_full_sparse_retry_stage(
                     precond_side=context.precondition_side,
                     solve_linear=context.solve_linear_with_residual,
                     solver_kind=context.solver_kind,
-                    candidate_name="sparse_jax_full",
-                    baseline_name="current_full",
+                    candidate_name=f"sparse_jax_{scope}",
+                    baseline_name=f"current_{scope}",
                     target_value=float(context.target),
                     peak_rss_mb=context.peak_rss_mb(),
-                    returns_residual_vec=True,
+                    returns_residual_vec=bool(context.measured_returns_residual_vec),
                 )
             )
         except Exception as exc:  # noqa: BLE001
@@ -666,8 +688,8 @@ def run_rhs1_full_sparse_retry_stage(
         cache_key = context.cache_key_builder(
             context.op,
             kind="sparse_lu" if bool(context.sparse_exact_lu) else "sparse_ilu",
-            active_size=int(context.op.total_size),
-            use_active_dof_mode=False,
+            active_size=int(cache_active_size),
+            use_active_dof_mode=bool(context.use_active_dof_mode),
             use_pas_projection=bool(context.use_pas_projection),
             drop_tol=float(context.sparse_drop_tol),
             drop_rel=float(context.sparse_drop_rel),
@@ -680,10 +702,12 @@ def run_rhs1_full_sparse_retry_stage(
         )
         if bool(context.large_cpu_sparse_rescue) and bool(context.sparse_exact_lu):
             host_sparse_direct_wanted = True
-        sparse_operator_pc = context.sparse_operator_preconditioned_rescue_allowed(
-            op=context.op,
-            sparse_exact_lu=bool(context.sparse_exact_lu),
-            host_sparse_direct_wanted=bool(host_sparse_direct_wanted),
+        sparse_operator_pc = bool(context.enable_operator_preconditioned_rescue) and (
+            context.sparse_operator_preconditioned_rescue_allowed(
+                op=context.op,
+                sparse_exact_lu=bool(context.sparse_exact_lu),
+                host_sparse_direct_wanted=bool(host_sparse_direct_wanted),
+            )
         )
         sparse_factor_matvec = context.matvec
         if bool(sparse_operator_pc):
@@ -698,7 +722,7 @@ def run_rhs1_full_sparse_retry_stage(
                 context.op,
                 kind="sparse_lu_pc_point",
                 active_size=int(context.active_size),
-                use_active_dof_mode=False,
+                use_active_dof_mode=bool(context.use_active_dof_mode),
                 use_pas_projection=bool(context.use_pas_projection),
                 drop_tol=float(context.sparse_drop_tol),
                 drop_rel=float(context.sparse_drop_rel),
@@ -706,11 +730,11 @@ def run_rhs1_full_sparse_retry_stage(
                 fill_factor=float(context.sparse_ilu_fill),
             )
         sparse_factor_controls = resolve_sparse_host_or_ilu_factor_controls(
-            n=int(context.op.total_size),
+            n=int(problem_size),
             cache_key=cache_key_for_factor,
             sparse_exact_lu=bool(context.sparse_exact_lu),
             use_implicit=bool(context.use_implicit),
-            force_host_sparse_direct=False,
+            force_host_sparse_direct=bool(context.force_host_sparse_direct),
             sparse_ilu_dense_max=int(context.sparse_ilu_dense_max),
             sparse_dense_cache_max=int(context.sparse_dense_cache_max),
             host_sparse_direct_wanted=bool(host_sparse_direct_wanted),
@@ -728,7 +752,7 @@ def run_rhs1_full_sparse_retry_stage(
         sparse_factor_build = build_sparse_host_or_ilu_factor(
             SparseHostOrILUFactorBuildContext(
                 matvec=sparse_factor_matvec,
-                n=int(context.op.total_size),
+                n=int(problem_size),
                 dtype=context.rhs.dtype,
                 cache_key=sparse_factor_controls.cache_key_use,
                 factor_dtype=sparse_factor_controls.factor_dtype,
@@ -764,7 +788,7 @@ def run_rhs1_full_sparse_retry_stage(
             )
 
         def run_full_implicit_sparse(precond_sparse):
-            return context.solve_linear_with_residual(
+            implicit_result = context.solve_linear_with_residual(
                 matvec_fn=context.matvec,
                 b_vec=context.rhs,
                 precond_fn=precond_sparse,
@@ -776,6 +800,9 @@ def run_rhs1_full_sparse_retry_stage(
                 solve_method_val="incremental",
                 precond_side=context.precondition_side,
             )
+            if bool(context.implicit_solver_returns_residual_vec):
+                return implicit_result
+            return implicit_result, None
 
         sparse_retry_candidate = run_sparse_host_retry_candidate(
             SparseHostRetryCandidateContext(
@@ -802,7 +829,7 @@ def run_rhs1_full_sparse_retry_stage(
                 sparse_use_matvec=bool(context.sparse_use_matvec),
                 sparse_exact_lu=bool(context.sparse_exact_lu),
                 cache_entry=context.sparse_ilu_cache.get(cache_key),
-                require_lower_diag=True,
+                require_lower_diag=bool(context.require_lower_diag),
                 polish_enabled=bool(context.rhs1_polish_enabled),
                 parse_polish_gmres_config=context.parse_polish_gmres_config,
                 direct_solve_with_refinement=context.direct_solve_with_refinement,
@@ -812,7 +839,7 @@ def run_rhs1_full_sparse_retry_stage(
                 implicit_solver=run_full_implicit_sparse,
                 operator_pc_restart=sparse_pc_restart,
                 operator_pc_maxiter=sparse_pc_maxiter,
-                compute_scipy_residual_vec=True,
+                compute_scipy_residual_vec=bool(context.compute_scipy_residual_vec),
             )
         )
         if sparse_retry_candidate.result is not None:
@@ -825,7 +852,11 @@ def run_rhs1_full_sparse_retry_stage(
                 current_result=result,
                 candidate_result=sparse_retry_candidate.result,
                 current_residual_vec=residual_vec,
-                candidate_residual_vec=sparse_retry_candidate.residual_vec,
+                candidate_residual_vec=(
+                    sparse_retry_candidate.residual_vec
+                    if bool(context.accept_candidate_residual_vec)
+                    else None
+                ),
                 matvec_fn=sparse_retry_candidate.matvec,
                 b_vec=context.rhs,
                 precond_fn=sparse_retry_candidate.preconditioner,
@@ -834,7 +865,7 @@ def run_rhs1_full_sparse_retry_stage(
                 precond_side=context.precondition_side,
                 solver_kind=context.solver_kind,
                 candidate_family="sparse",
-                scope="full",
+                scope=scope,
                 target_value=float(context.target),
                 solve_s=sparse_retry_candidate.solve_s,
                 peak_rss_mb=context.peak_rss_mb(),

@@ -6995,210 +6995,105 @@ def solve_v3_full_system_linear_gmres(
                 res_reduced = sxblock_rescue.result
             if (
                 float(res_reduced.residual_norm) > target_reduced
-                and sparse_kind_use == "jax"
                 and (not skip_global_sparse_after_xblock)
             ):
-                # This routing stays in the driver because it owns the local
-                # cache key, KSP replay state, and residual-vector handoff. The
-                # reusable sparse-JAX build and measured-retry mechanics live in
-                # profile-response helpers.
-                try:
-                    _mark("rhs1_sparse_precond_build_start")
-                    cache_key = _rhsmode1_sparse_cache_key(
-                        op,
-                        kind="sparse_jax",
-                        active_size=int(active_size),
-                        use_active_dof_mode=True,
-                        use_pas_projection=use_pas_projection,
-                        drop_tol=sparse_drop_tol,
-                        drop_rel=sparse_drop_rel,
-                        ilu_drop_tol=sparse_ilu_drop_tol,
-                        fill_factor=sparse_ilu_fill,
-                    )
-                    precond_dtype = _precond_dtype(int(active_size))
-                    precond_sparse = build_sparse_jax_retry_preconditioner(
-                        SparseJAXRetryPreconditionerBuildContext(
-                            matvec=mv_reduced,
-                            n=int(active_size),
-                            dtype=precond_dtype,
-                            cache_key=cache_key,
-                            drop_tol=sparse_drop_tol,
-                            drop_rel=sparse_drop_rel,
-                            reg=sparse_jax_config.reg,
-                            omega=sparse_jax_config.omega,
-                            sweeps=sparse_jax_config.sweeps,
-                            emit=emit,
-                            builder=_build_sparse_jax_preconditioner_from_matvec,
-                        )
-                    )
-                    _mark("rhs1_sparse_precond_build_done")
-                    res_reduced, residual_vec, _accepted, _elapsed = (
-                        rhs1_run_measured_linear_candidate_and_update_replay(
-                            replay_state=ksp_replay,
-                            current_result=res_reduced,
-                            current_residual_vec=residual_vec,
-                            matvec_fn=mv_reduced,
-                            b_vec=rhs_reduced,
-                            precond_fn=precond_sparse,
-                            tol=tol,
-                            atol=atol,
-                            restart=restart,
-                            maxiter=maxiter,
-                            solve_method="incremental",
-                            precond_side=gmres_precond_side,
-                            solve_linear=_solve_linear,
-                            solver_kind=_solver_kind("incremental")[0],
-                            candidate_name="sparse_jax_reduced",
-                            baseline_name="current_reduced",
-                            target_value=target_reduced,
-                            peak_rss_mb=_rss_mb(),
-                        )
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    if emit is not None:
-                        emit(1, f"sparse_jax: failed ({type(exc).__name__}: {exc})")
-            elif float(res_reduced.residual_norm) > target_reduced and (not skip_global_sparse_after_xblock):
-                # Same boundary as the sparse-JAX retry above: host sparse
-                # routing coordinates driver-owned caches, dense fallback
-                # state, and replay acceptance, while the factor/solve
-                # algorithms remain tested profile-response helpers.
-                try:
-                    _mark("rhs1_sparse_precond_build_start")
-                    cache_key = _rhsmode1_sparse_cache_key(
-                        op,
-                        kind="sparse_lu" if sparse_exact_lu else "sparse_ilu",
-                        active_size=int(active_size),
-                        use_active_dof_mode=True,
-                        use_pas_projection=use_pas_projection,
-                        drop_tol=sparse_drop_tol,
-                        drop_rel=sparse_drop_rel,
-                        ilu_drop_tol=sparse_ilu_drop_tol,
-                        fill_factor=sparse_ilu_fill,
-                    )
-                    sparse_factor_controls = resolve_sparse_host_or_ilu_factor_controls(
-                        n=int(active_size),
-                        cache_key=cache_key,
+                reduced_sparse_retry = run_rhs1_full_sparse_retry_stage(
+                    RHS1FullSparseRetryStageContext(
+                        op=op,
+                        result=res_reduced,
+                        residual_vec=residual_vec,
+                        rhs=rhs_reduced,
+                        matvec=mv_reduced,
+                        target=float(target_reduced),
+                        tol=float(tol),
+                        atol=float(atol),
+                        restart=int(restart),
+                        maxiter=maxiter,
+                        precondition_side=gmres_precond_side,
+                        sparse_kind_use=sparse_kind_use,
                         sparse_exact_lu=bool(sparse_exact_lu),
-                        use_implicit=bool(use_implicit),
-                        force_host_sparse_direct=bool(large_cpu_sparse_rescue_active),
+                        sparse_drop_tol=float(sparse_drop_tol),
+                        sparse_drop_rel=float(sparse_drop_rel),
+                        sparse_ilu_drop_tol=float(sparse_ilu_drop_tol),
+                        sparse_ilu_fill=float(sparse_ilu_fill),
                         sparse_ilu_dense_max=int(sparse_ilu_dense_max),
                         sparse_dense_cache_max=int(sparse_dense_cache_max),
+                        sparse_use_matvec=bool(sparse_use_matvec),
+                        sparse_jax_reg=float(sparse_jax_config.reg),
+                        sparse_jax_omega=float(sparse_jax_config.omega),
+                        sparse_jax_sweeps=int(sparse_jax_config.sweeps),
+                        use_implicit=bool(use_implicit),
+                        use_pas_projection=bool(use_pas_projection),
+                        active_size=int(active_size),
+                        large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue_active),
+                        rhs1_polish_enabled=bool(rhs1_polish_enabled),
+                        emit=emit,
+                        mark=_mark,
+                        cache_key_builder=_rhsmode1_sparse_cache_key,
+                        precond_dtype=_precond_dtype,
+                        build_sparse_jax_preconditioner_from_matvec=(
+                            _build_sparse_jax_preconditioner_from_matvec
+                        ),
                         host_sparse_direct_allowed=_rhsmode1_host_sparse_direct_allowed,
+                        sparse_operator_preconditioned_rescue_allowed=(
+                            _rhsmode1_sparse_operator_preconditioned_rescue_allowed
+                        ),
+                        build_point_preconditioner_operator=(
+                            _build_rhsmode1_preconditioner_operator_point
+                        ),
+                        apply_cached_operator=apply_v3_full_system_operator_cached,
                         host_sparse_factor_dtype=_host_sparse_factor_dtype,
                         sparse_factor_cache_key=_sparse_factor_cache_key,
-                        explicit_sparse_host_direct_allowed=_rhsmode1_explicit_sparse_host_direct_allowed,
+                        explicit_sparse_host_direct_allowed=(
+                            _rhsmode1_explicit_sparse_host_direct_allowed
+                        ),
+                        maybe_full_sparse_pattern=_maybe_rhsmode1_full_sparse_pattern,
+                        build_host_sparse_direct_factor_from_matvec=(
+                            _build_host_sparse_direct_factor_from_matvec
+                        ),
+                        build_sparse_ilu_from_matvec=_build_sparse_ilu_from_matvec,
+                        host_sparse_direct_refine_steps=_host_sparse_direct_refine_steps,
+                        direct_solve_with_refinement=(
+                            _host_direct_solve_with_refinement
+                        ),
+                        ilu_solve_with_refinement=(
+                            _host_sparse_direct_solve_with_refinement
+                        ),
+                        host_sparse_direct_polish=_host_sparse_direct_polish,
+                        parse_polish_gmres_config=rhs1_parse_polish_gmres_config,
+                        gmres_solver=gmres_solve_with_history_scipy,
+                        solve_linear_with_residual=_solve_linear,
+                        run_measured_linear_candidate=(
+                            rhs1_run_measured_linear_candidate_and_update_replay
+                        ),
+                        accept_sparse_retry_candidate=(
+                            rhs1_accept_sparse_retry_candidate_and_update_replay
+                        ),
+                        replay_state=ksp_replay,
+                        solver_kind=_solver_kind("incremental")[0],
+                        peak_rss_mb=_rss_mb,
+                        sparse_ilu_cache=_RHSMODE1_SPARSE_ILU_CACHE,
+                        problem_size=int(active_size),
+                        cache_active_size=int(active_size),
+                        scope="reduced",
+                        use_active_dof_mode=True,
+                        force_host_sparse_direct=bool(large_cpu_sparse_rescue_active),
+                        enable_operator_preconditioned_rescue=False,
+                        require_lower_diag=False,
+                        measured_returns_residual_vec=False,
+                        implicit_solver_returns_residual_vec=False,
+                        accept_candidate_residual_vec=False,
+                        compute_scipy_residual_vec=False,
                     )
-                    host_sparse_direct_wanted = sparse_factor_controls.host_sparse_direct_wanted
-                    factor_dtype = sparse_factor_controls.factor_dtype
-                    sparse_factor_build = build_sparse_host_or_ilu_factor(
-                        SparseHostOrILUFactorBuildContext(
-                            matvec=mv_reduced,
-                            n=int(active_size),
-                            dtype=rhs_reduced.dtype,
-                            cache_key=sparse_factor_controls.cache_key_use,
-                            factor_dtype=sparse_factor_controls.factor_dtype,
-                            drop_tol=sparse_drop_tol,
-                            drop_rel=sparse_drop_rel,
-                            ilu_drop_tol=sparse_ilu_drop_tol,
-                            fill_factor=sparse_ilu_fill,
-                            build_dense_factors=sparse_factor_controls.build_dense_factors,
-                            build_jax_factors=sparse_factor_controls.build_jax_factors,
-                            store_dense=sparse_factor_controls.store_dense,
-                            factorization="lu" if sparse_exact_lu else "ilu",
-                            emit=emit,
-                            host_sparse_direct_wanted=sparse_factor_controls.host_sparse_direct_wanted,
-                            explicit_sparse_allowed=sparse_factor_controls.explicit_sparse_allowed,
-                            build_host_sparse_direct_factor_from_matvec=_build_host_sparse_direct_factor_from_matvec,
-                            build_sparse_ilu_from_matvec=_build_sparse_ilu_from_matvec,
-                        )
-                    )
-                    dense_matrix_cache = sparse_factor_build.a_dense_cache
-                    _mark("rhs1_sparse_precond_build_done")
-
-                    def _run_reduced_implicit_sparse(precond_sparse):
-                        return (
-                            _solve_linear(
-                                matvec_fn=mv_reduced,
-                                b_vec=rhs_reduced,
-                                precond_fn=precond_sparse,
-                                x0_vec=res_reduced.x,
-                                tol_val=tol,
-                                atol_val=atol,
-                                restart_val=restart,
-                                maxiter_val=maxiter,
-                                solve_method_val="incremental",
-                                precond_side=gmres_precond_side,
-                            ),
-                            None,
-                        )
-
-                    sparse_retry_candidate = run_sparse_host_retry_candidate(
-                        SparseHostRetryCandidateContext(
-                            factor_build=sparse_factor_build,
-                            host_sparse_direct=bool(host_sparse_direct_wanted),
-                            host_direct_operator_pc=False,
-                            use_implicit=bool(use_implicit),
-                            matvec=mv_reduced,
-                            rhs=rhs_reduced,
-                            x0=res_reduced.x,
-                            factor_dtype=factor_dtype,
-                            refine_steps=_host_sparse_direct_refine_steps(
-                                "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
-                                default=2,
-                            ),
-                            target=float(target_reduced),
-                            tol=tol,
-                            atol=atol,
-                            restart=restart,
-                            maxiter=maxiter,
-                            precondition_side=gmres_precond_side,
-                            emit=emit,
-                            backend_name=jax.default_backend(),
-                            sparse_use_matvec=bool(sparse_use_matvec),
-                            sparse_exact_lu=bool(sparse_exact_lu),
-                            cache_entry=_RHSMODE1_SPARSE_ILU_CACHE.get(cache_key),
-                            require_lower_diag=False,
-                            polish_enabled=rhs1_polish_enabled,
-                            parse_polish_gmres_config=rhs1_parse_polish_gmres_config,
-                            direct_solve_with_refinement=_host_direct_solve_with_refinement,
-                            ilu_solve_with_refinement=_host_sparse_direct_solve_with_refinement,
-                            host_sparse_direct_polish=_host_sparse_direct_polish,
-                            gmres_solver=gmres_solve_with_history_scipy,
-                            implicit_solver=_run_reduced_implicit_sparse,
-                            compute_scipy_residual_vec=False,
-                        )
-                    )
-                    if sparse_retry_candidate.result is not None:
-                        host_sparse_direct_used = (
-                            host_sparse_direct_used
-                            or sparse_retry_candidate.host_sparse_direct_used
-                        )
-                        res_reduced, residual_vec, _accepted = rhs1_accept_sparse_retry_candidate_and_update_replay(
-                            replay_state=ksp_replay,
-                            current_result=res_reduced,
-                            candidate_result=sparse_retry_candidate.result,
-                            current_residual_vec=residual_vec,
-                            candidate_residual_vec=None,
-                            matvec_fn=sparse_retry_candidate.matvec,
-                            b_vec=rhs_reduced,
-                            precond_fn=sparse_retry_candidate.preconditioner,
-                            restart=restart,
-                            maxiter=maxiter,
-                            precond_side=gmres_precond_side,
-                            solver_kind=_solver_kind("incremental")[0],
-                            candidate_family="sparse",
-                            scope="reduced",
-                            target_value=target_reduced,
-                            solve_s=sparse_retry_candidate.solve_s,
-                            peak_rss_mb=_rss_mb(),
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    if emit is not None:
-                        emit(
-                            1,
-                            f"{'sparse_lu' if sparse_exact_lu else 'sparse_ilu'}: "
-                            f"failed ({type(exc).__name__}: {exc})",
-                        )
+                )
+                res_reduced = reduced_sparse_retry.result
+                residual_vec = reduced_sparse_retry.residual_vec
+                if reduced_sparse_retry.dense_matrix_cache is not None:
+                    dense_matrix_cache = reduced_sparse_retry.dense_matrix_cache
+                host_sparse_direct_used = (
+                    host_sparse_direct_used
+                    or reduced_sparse_retry.host_sparse_direct_used
+                )
         residual_vec, residual_norm_true, residual_norm_check = (
             rhs1_replay_left_preconditioned_residual_norms(
                 result=res_reduced,
