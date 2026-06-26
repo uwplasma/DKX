@@ -37,7 +37,7 @@ where = ["."]
 include = ["sfincs_jax*"]
 
 [tool.setuptools.package-data]
-sfincs_jax = ["data/**"]
+sfincs_jax = ["validation/*.json"]
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=prepend"]
