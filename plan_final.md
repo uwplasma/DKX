@@ -220,6 +220,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   constraint-scheme sizes, and unsupported constraint-scheme rejection. These
   protect matrix-free operator metadata and JAX-transform compatibility without
   constructing production matrices.
+- The twenty-third post-audit coverage tranche added Phi1 output-policy tests
+  for sparse-direct rejection, incremental fallback, dense-auto admission,
+  dense-auto skip messages, sparse-direct environment overrides, and frozen
+  nonlinear-history trimming. These protect CLI/output behavior for nonlinear
+  Phi1 runs without launching Newton solves.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.

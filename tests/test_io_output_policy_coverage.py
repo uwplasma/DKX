@@ -163,6 +163,68 @@ def test_select_phi1_newton_linear_solve_method_env_override_wins() -> None:
     assert method == "batched"
 
 
+def test_select_phi1_newton_linear_solve_method_prefers_incremental_when_sparse_direct_not_allowed() -> None:
+    messages: list[str] = []
+    method = _select_phi1_newton_linear_solve_method(
+        active_total_size=25000,
+        dense_cutoff=5000,
+        default_method="batched",
+        fast_explicit=True,
+        dense_auto_ok=False,
+        dense_auto_backend="tpu",
+        env_override="",
+        emit=lambda _level, message: messages.append(str(message)),
+    )
+
+    assert method == "incremental"
+    assert any("preferring incremental Newton step" in message for message in messages)
+
+
+def test_select_phi1_newton_linear_solve_method_dense_auto_branches() -> None:
+    dense_messages: list[str] = []
+    dense_method = _select_phi1_newton_linear_solve_method(
+        active_total_size=128,
+        dense_cutoff=512,
+        default_method="incremental",
+        fast_explicit=False,
+        dense_auto_ok=True,
+        dense_auto_backend="cpu",
+        env_override="",
+        emit=lambda _level, message: dense_messages.append(str(message)),
+    )
+    assert dense_method == "dense"
+    assert any("using dense Newton step" in message for message in dense_messages)
+
+    skip_messages: list[str] = []
+    skipped_method = _select_phi1_newton_linear_solve_method(
+        active_total_size=128,
+        dense_cutoff=512,
+        default_method="incremental",
+        fast_explicit=False,
+        dense_auto_ok=False,
+        dense_auto_backend="gpu",
+        env_override="",
+        emit=lambda _level, message: skip_messages.append(str(message)),
+    )
+    assert skipped_method == "incremental"
+    assert any("skipping dense auto mode" in message for message in skip_messages)
+
+
+def test_select_phi1_newton_linear_solve_method_sparse_direct_env_override() -> None:
+    method = _select_phi1_newton_linear_solve_method(
+        active_total_size=128,
+        dense_cutoff=512,
+        default_method="dense",
+        fast_explicit=False,
+        dense_auto_ok=True,
+        dense_auto_backend="cpu",
+        env_override="sparse_direct",
+        emit=None,
+    )
+
+    assert method == "sparse_direct"
+
+
 def test_phi1_fast_explicit_gmres_restart_default_targets_production_size() -> None:
     assert _phi1_fast_explicit_gmres_restart_default(7999) == 80
     assert _phi1_fast_explicit_gmres_restart_default(8000) == 120
@@ -196,6 +258,23 @@ def test_phi1_history_alignment_preserves_accepted_iterates() -> None:
     assert len(padded) == 4
     for item in padded:
         np.testing.assert_allclose(item, np.asarray([3.0]))
+
+
+def test_phi1_history_alignment_trims_frozen_initial_guess_before_output() -> None:
+    from sfincs_jax.outputs.writer import _align_phi1_history_for_output
+
+    aligned = _align_phi1_history_for_output(
+        history=[np.asarray([1.0]), np.asarray([2.0]), np.asarray([3.0])],
+        result_x=np.asarray([4.0]),
+        x0_state=np.asarray([0.0]),
+        use_frozen_linearization=True,
+        min_iters=0,
+        n_newton=2,
+    )
+
+    assert len(aligned) == 2
+    np.testing.assert_allclose(aligned[0], np.asarray([2.0]))
+    np.testing.assert_allclose(aligned[1], np.asarray([3.0]))
 
 
 def test_geometry_scheme4_radial_helpers_match_v3_conventions() -> None:
