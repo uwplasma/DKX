@@ -56,17 +56,8 @@
     "workflows"
   ],
   "temporary_nested_packages": [
-    "solvers/preconditioners",
-    "solvers/preconditioners/domain_decomposition",
-    "solvers/preconditioners/full_fp",
-    "solvers/preconditioners/pas",
-    "solvers/preconditioners/qi",
-    "solvers/preconditioners/schur",
-    "solvers/preconditioners/symbolic_sparse",
-    "solvers/preconditioners/xblock"
   ],
   "temporary_init_only_packages": [
-    "solvers/preconditioners/domain_decomposition"
   ],
-  "final_depth_policy": "One package level below sfincs_jax is the target. Entries in temporary_nested_packages are explicit refactor debt and should shrink, not grow."
+  "final_depth_policy": "One package level below sfincs_jax is the target. temporary_nested_packages must remain empty unless a justified exception is documented."
 }
