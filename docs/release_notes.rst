@@ -396,24 +396,13 @@ Unreleased
   domain-decomposition, and Fortran-reduced operator builders are now pure
   dataclass/JAX transformations outside the solve driver, with the existing
   driver private names preserved as import aliases.
-- Extracted RHSMode=2/3 full-FP direct reduced-``Pmat`` and exact active
-  transport-operator sparse emission into ``transport_direct_pmat.py``. The
-  driver now imports the historical private helper names while retaining
-  admission/factor/fallback orchestration; focused tests verify the emitted CSR
-  matrices against the matrix-free active operator and verify the physics
-  coarse-basis source/constraint columns.
-- Extracted the RHSMode=2/3 direct active block-Schur full-FP transport
-  preconditioner into ``transport_direct_block_schur.py``. The driver keeps a
-  thin compatibility wrapper only to inject the current fallback
-  preconditioner and cache-key policy; setup admission, residual-coarse rescue,
-  cache storage, and host callback application now live with the direct
-  transport factor path.
-- Extracted the RHSMode=2/3 full-FP Fortran-reduced LU transport
-  preconditioner into ``transport_fortran_reduced_lu.py``. The new module owns
-  reduced-``Pmat`` setup, symbolic/BLR/ND/native factor controls, direct
-  admission, exact-LU rescue, physics coarse correction, and host-factor
-  callback application; the driver keeps a compatibility wrapper only for
-  fallback/cache-key/sparse-builder/host-memory injection.
+- Consolidated RHSMode=2/3 active-system, direct reduced-``Pmat``, exact active
+  transport-operator sparse emission, direct block-Schur setup, and full-FP
+  Fortran-reduced LU preconditioner code into
+  ``sfincs_jax.problems.transport_matrix.linear_system``. Focused tests verify
+  the emitted CSR matrices against the matrix-free active operator, physics
+  coarse-basis source/constraint columns, direct block-Schur callback path, and
+  Fortran-reduced LU symbolic/BLR/ND metadata.
 - Moved the RHSMode=1 full-FP sparse x-block/TZ preconditioner into
   ``sfincs_jax.solvers.preconditioners.xblock.tz_sparse``. The module owns
   host/JAX x-block factor setup, compact CSR and padded triangular apply,
@@ -474,11 +463,10 @@ Unreleased
   Krylov state checkpoint loading, ``whichRHS`` subset normalization, and
   CPU/GPU process-parallel worker request resolution to focused helpers with
   direct unit coverage.
-- Extracted RHSMode=2/3 active-DOF and dense-path setup into
-  ``transport_active_dense_setup.py``. The helper now owns the initial
-  output/restart policy, active-index compaction state, dense fallback and dense
-  preconditioner admission, and ordered user-facing notes before preconditioner
-  setup and the transport loop.
+- The transport linear-system owner also owns RHSMode=2/3 active-DOF and
+  dense-path setup: initial output/restart policy, active-index compaction
+  state, dense fallback and dense preconditioner admission, and ordered
+  user-facing notes before preconditioner setup and the transport loop.
 - The post-extraction strict docs build passed, the repo-size audit now has no
   reviewed files above 2 MiB after ``v3_driver.py`` dropped below the threshold,
   and the latest local full suite after the active/dense setup extraction passed

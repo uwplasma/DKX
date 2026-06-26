@@ -441,17 +441,17 @@ from sfincs_jax.problems.transport_matrix.policies import (
     transport_sparse_direct_rescue_first as _transport_sparse_direct_rescue_first_impl,
     transport_tzfft_first_attempt_budget as _transport_tzfft_first_attempt_budget_impl,
 )
-from sfincs_jax.problems.transport_matrix.direct_block_schur import (
+from sfincs_jax.problems.transport_matrix.linear_system import (
     build_transport_fp_direct_active_block_schur_preconditioner,
 )
-from sfincs_jax.problems.transport_matrix.fortran_reduced_lu import (
+from sfincs_jax.problems.transport_matrix.linear_system import (
     build_transport_fp_fortran_reduced_lu_preconditioner,
 )
 from sfincs_jax.problems.transport_matrix.setup import (
     resolve_transport_maxiter_setup, resolve_transport_parallel_request, resolve_transport_state_setup,
     resolve_transport_which_rhs_setup,
 )
-from sfincs_jax.problems.transport_matrix.active_dense import (
+from sfincs_jax.problems.transport_matrix.linear_system import (
     resolve_transport_active_dense_setup, transport_active_dof_indices as _transport_active_dof_indices,
 )
 from sfincs_jax.problems.transport_matrix.finalize import (
@@ -564,7 +564,7 @@ from sfincs_jax.solvers.preconditioners.symbolic_sparse import (
     build_sparse_ilu_from_matvec as _build_sparse_ilu_from_matvec,
     factorize_sparse_matrix_csr_host as _factorize_sparse_matrix_csr_host,
 )
-from sfincs_jax.problems.transport_matrix.direct_pmat import (
+from sfincs_jax.problems.transport_matrix.linear_system import (
     _build_rhsmode23_direct_pmat_physics_coarse_basis, _try_build_rhsmode23_fp_direct_active_operator_bundle,
     _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle,
 )

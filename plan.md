@@ -36,15 +36,19 @@ Latest execution checkpoint:
   `solvers/preconditioners/domain_decomposition/__init__.py`; the old
   `line_blocks.py` implementation file was deleted and imports now target the
   package owner.
-- Current counts after this checkpoint: 182 package Python files, 43 package
-  root files, 18 `problems/profile_response` files including `sparse`, 16
+- Current counts after Batch A and Batch B: 178 package Python files, 43 package
+  root files, 18 `problems/profile_response` files including `sparse`, 12
   `problems/transport_matrix` files including `parallel`, 35
   `solvers/preconditioners` files, 5 QI preconditioner files, `v3_driver.py` at
   47 lines, `io.py` at 64 lines, `profile_response/solve.py` at 5,420 lines,
-  `profile_response/sparse/handoff.py` at 5,500 lines, and 166,045 package
+  `profile_response/sparse/handoff.py` at 5,500 lines, and 165,992 package
   Python lines. Batch A restored the reopened `profile_response/solve.py
   <=5,500` gate, documented the sparse handoff waiver, and kept the
-  `handoff.py`, `v3_driver.py`, and `io.py` gates locked.
+  `handoff.py`, `v3_driver.py`, and `io.py` gates locked. Batch B consolidated
+  RHSMode=2/3 active dense setup, active factors, direct reduced-``Pmat``
+  emission, direct block-Schur setup, and Fortran-reduced LU setup into
+  `sfincs_jax.problems.transport_matrix.linear_system`, deleting five old
+  implementation files.
 - Validation passed:
   `python -m pytest tests/test_rhs1_qi_*.py
   tests/test_rhs1_device_operator_unit.py tests/test_profile_response_sparse_pc.py
@@ -57,9 +61,8 @@ Latest execution checkpoint:
 
 Next ordered implementation sequence:
 
-1. Batch B-C: consolidate transport active/direct/factor files into one
-   linear-system owner, then collapse internal transport-parallel helpers into
-   runtime ownership if imports allow.
+1. Batch C: collapse internal transport-parallel helpers into runtime
+   ownership if imports allow.
 2. Batch D-E: consolidate solver-core support files by durable owner, then
    classify or migrate root workflow/public-surface modules without creating
    shims.
@@ -86,6 +89,33 @@ Batch A validation evidence:
   tests/test_write_output_return_results.py tests/test_api_contracts.py
   -q --tb=short` passed with `14 passed in 0.95s`.
 - `git diff --check` passed.
+
+Batch B validation evidence:
+
+- `python -m py_compile sfincs_jax/problems/transport_matrix/linear_system.py
+  sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/dense.py
+  tests/test_domain_package_import_contracts.py
+  tests/test_transport_active_dense_setup.py tests/test_transport_active_factor.py
+  tests/test_fortran_reduced_preconditioner.py` passed.
+- `python -m ruff check sfincs_jax/problems/transport_matrix/linear_system.py
+  sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/dense.py
+  tests/test_domain_package_import_contracts.py
+  tests/test_transport_active_dense_setup.py tests/test_transport_active_factor.py
+  tests/test_fortran_reduced_preconditioner.py` passed.
+- `python -m pytest tests/test_domain_package_import_contracts.py
+  tests/test_transport_active_dense_setup.py tests/test_transport_active_factor.py
+  tests/test_transport_preconditioner_dispatch.py -q --tb=short` passed with
+  `47 passed in 0.72s`.
+- `python -m pytest tests/test_fortran_reduced_preconditioner.py
+  tests/test_transport_sparse_direct.py -q --tb=short` passed with
+  `80 passed in 21.42s`.
+- `python -m pytest tests/test_transport_sparse_direct_solve.py
+  tests/test_transport_dense_batch.py tests/test_transport_loop_support.py
+  -q --tb=short` passed with `14 passed in 1.82s`.
+- `python -m pytest tests/test_transport_*.py -q --tb=short` passed with
+  `273 passed in 45.99s`.
 
 
 ## One-Sentence Plan

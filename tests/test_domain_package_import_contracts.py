@@ -259,8 +259,8 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "resolve_transport_which_rhs_setup",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.active_dense",
-        "sfincs_jax.problems.transport_matrix.active_dense",
+        "sfincs_jax.problems.transport_matrix.linear_system",
+        "sfincs_jax.problems.transport_matrix.linear_system",
         "resolve_transport_active_dense_setup",
     ),
     (
@@ -334,8 +334,8 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "solve_transport_dense_batch",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.active_factor",
-        "sfincs_jax.problems.transport_matrix.active_factor",
+        "sfincs_jax.problems.transport_matrix.linear_system",
+        "sfincs_jax.problems.transport_matrix.linear_system",
         "build_active_block_schur_factor",
     ),
     (
@@ -349,18 +349,18 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "build_transport_preconditioner_from_kind",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.direct_pmat",
-        "sfincs_jax.problems.transport_matrix.direct_pmat",
+        "sfincs_jax.problems.transport_matrix.linear_system",
+        "sfincs_jax.problems.transport_matrix.linear_system",
         "_try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.direct_block_schur",
-        "sfincs_jax.problems.transport_matrix.direct_block_schur",
+        "sfincs_jax.problems.transport_matrix.linear_system",
+        "sfincs_jax.problems.transport_matrix.linear_system",
         "build_transport_fp_direct_active_block_schur_preconditioner",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.fortran_reduced_lu",
-        "sfincs_jax.problems.transport_matrix.fortran_reduced_lu",
+        "sfincs_jax.problems.transport_matrix.linear_system",
+        "sfincs_jax.problems.transport_matrix.linear_system",
         "build_transport_fp_fortran_reduced_lu_preconditioner",
     ),
     (
