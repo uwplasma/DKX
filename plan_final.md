@@ -138,8 +138,11 @@ Root modules to keep:
 - `solver.py`: high-level solve orchestration and public solver result types.
 - `ambipolar.py`: public ambipolar convenience API.
 - `sensitivity.py`: public JVP/VJP/implicit sensitivity API.
-- `plotting.py`, `compare.py`, `io.py`, `namelist.py`, `paths.py`: user-facing
-  I/O, comparison, plotting, and path utilities.
+- `plotting.py`, `compare.py`, `io.py`, `namelist.py`, `input_compat.py`, and
+  `paths.py`: user-facing I/O, input compatibility, comparison, plotting, and
+  path utilities.
+- `diagnostics.py`, `grids.py`, and `profiling.py`: stable scientific/support
+  APIs used directly by examples, docs, tests, and benchmark tooling.
 - `__init__.py`: exports only stable public contracts and compatibility aliases.
 
 Domain folders to keep:
@@ -230,10 +233,12 @@ Tranche 2: remove empty packages and root shims.
 
 - Delete or absorb `benchmarks`, `compat`, `input`, `parallel`, and empty
   preconditioner subpackages.
-- Move root helpers that are not public entry points into their domain owners:
-  `grids.py` into `discretization/`, `input_compat.py` into `namelist.py` or
-  `discretization/`, and non-public `solver.py` helpers into `solvers/`.
-- Keep root shim aliases only where documented as stable public API.
+- Move root helpers only when the move deletes a compatibility surface rather
+  than adding another shim. `diagnostics.py`, `grids.py`, `input_compat.py`, and
+  `profiling.py` are stable root support APIs for this PR; keep them documented
+  and covered by source-tree tests.
+- Keep root shim aliases only where documented as stable public API. The only
+  remaining root compatibility debt is `v3_driver.py`.
 - Acceptance: source-tree test passes; import-contract tests verify old public
   imports; package root has at most the public modules listed above.
 

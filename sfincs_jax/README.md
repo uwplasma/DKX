@@ -18,20 +18,15 @@ discretization, operators, solvers, outputs, validation, and research workflows.
 - `plotting.py`: output plotting utilities used by `sfincs_jax --plot`.
 - `compare.py`: comparison utilities for frozen SFINCS Fortran v3 references,
   regression fixtures, and benchmark summaries.
-- `io.py`, `namelist.py`, and `paths.py`: file I/O, input parsing, and cache or
-  data-path helpers.
+- `io.py`, `namelist.py`, `input_compat.py`, and `paths.py`: file I/O, input
+  parsing, input compatibility, and cache or data-path helpers.
+- `diagnostics.py` and `grids.py`: stable scientific helper APIs for
+  flux-surface averages, `uHat`, and Fortran-v3 grid/stencil construction.
+- `profiling.py`: lightweight timers and memory probes used by CLI, examples,
+  and benchmark paths.
 
-Transitional root modules remain only where they are still documented or used by
-compatibility tests:
+Only compatibility shims should remain transitional:
 
-- `diagnostics.py`: public flux-surface averages and `uHat` diagnostics used by
-  output writers and API docs.
-- `grids.py`: public grid helper retained while callers migrate to
-  `discretization/`.
-- `input_compat.py`: input-normalization helpers retained while namelist parsing
-  and geometry defaults are consolidated.
-- `profiling.py`: lightweight timers and memory probes used by CLI and
-  benchmark paths.
 - `v3_driver.py`: compatibility shim for former monolithic imports; it should
   stay small and contain no physics or solver implementation.
 
@@ -68,7 +63,9 @@ inside domain folders are for contributors and advanced research workflows.
 ## Design Rules
 
 - Keep root modules user-facing. New implementation code should go into a
-  domain folder, not the package root.
+  domain folder, not the package root. Root support modules are acceptable only
+  when they are documented stable APIs such as `diagnostics.py`, `grids.py`, or
+  `profiling.py`.
 - Keep package depth shallow. The consolidation target is one folder below
   `sfincs_jax/`; deeper folders must be explicitly justified in
   `plan_final.md` and covered by import-structure tests.
