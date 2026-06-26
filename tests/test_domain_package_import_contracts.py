@@ -35,6 +35,7 @@ DOMAIN_PACKAGES = (
 
 ACTIVE_PACKAGE_EXPORTS = {
     "sfincs_jax.workflows": (
+        "mapped_xgrid",
         "optimization",
     ),
     "sfincs_jax.geometry": (
