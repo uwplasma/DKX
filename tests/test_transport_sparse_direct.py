@@ -6,7 +6,7 @@ import numpy as np
 import jax.numpy as jnp
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3_driver import (
+from sfincs_jax.problems.transport_solve import (
     _build_rhsmode23_fp_local_geom_line_preconditioner,
     _build_rhsmode23_fp_structured_fblock_lu_preconditioner,
     _build_rhsmode23_fp_fortran_reduced_lu_preconditioner,
@@ -63,7 +63,7 @@ def test_transport_sparse_direct_rescue_enabled_for_cpu_fp_transport(monkeypatch
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_MAX", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_RATIO", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert _transport_sparse_direct_rescue_allowed(
         op=_op(rhs_mode=2),
         size=16382,
@@ -76,7 +76,7 @@ def test_transport_sparse_direct_rescue_enabled_for_cpu_fp_transport(monkeypatch
 def test_transport_sparse_direct_rescue_enabled_for_cpu_collisionless_mono_medium_size(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_MAX", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert _transport_sparse_direct_rescue_allowed(
         op=_op(rhs_mode=3, has_fp=False, n_x=1),
         size=54811,
@@ -88,7 +88,7 @@ def test_transport_sparse_direct_rescue_enabled_for_cpu_collisionless_mono_mediu
 
 def test_transport_sparse_direct_rescue_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert not _transport_sparse_direct_rescue_allowed(
         op=_op(rhs_mode=1),
         size=16382,
@@ -121,7 +121,7 @@ def test_transport_sparse_direct_rescue_respects_guards(monkeypatch) -> None:
 
 def test_transport_sparse_direct_rescue_can_be_disabled(monkeypatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", "0")
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert not _transport_sparse_direct_rescue_allowed(
         op=_op(rhs_mode=2),
         size=16382,
@@ -134,7 +134,7 @@ def test_transport_sparse_direct_rescue_can_be_disabled(monkeypatch) -> None:
 def test_transport_sparse_direct_rescue_respects_env_max(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_MAX", "12000")
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert not _transport_sparse_direct_rescue_allowed(
         op=_op(rhs_mode=2),
         size=12001,
@@ -146,7 +146,7 @@ def test_transport_sparse_direct_rescue_respects_env_max(monkeypatch) -> None:
 
 def test_transport_sparse_direct_rescue_enabled_for_gpu_explicit_transport(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     assert _transport_sparse_direct_rescue_allowed(
         op=_op(rhs_mode=2),
         size=16382,
@@ -158,7 +158,7 @@ def test_transport_sparse_direct_rescue_enabled_for_gpu_explicit_transport(monke
 
 def test_transport_sparse_direct_rescue_enabled_for_gpu_collisionless_transport(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     assert _transport_sparse_direct_rescue_allowed(
         op=_op(rhs_mode=3, has_fp=False, n_x=1),
         size=5383,
@@ -170,7 +170,7 @@ def test_transport_sparse_direct_rescue_enabled_for_gpu_collisionless_transport(
 
 def test_transport_sparse_direct_rescue_enabled_for_nonfinite_residual(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     assert _transport_sparse_direct_rescue_allowed(
         op=_op(rhs_mode=3, has_fp=False, n_x=1),
         size=5383,
@@ -183,7 +183,7 @@ def test_transport_sparse_direct_rescue_enabled_for_nonfinite_residual(monkeypat
 def test_transport_sparse_direct_first_attempt_allowed_for_gpu_explicit_transport(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_MAX", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     assert _transport_sparse_direct_first_attempt_allowed(
         op=_op(rhs_mode=3, has_fp=False, n_x=1),
         size=5383,
@@ -197,7 +197,7 @@ def test_transport_sparse_direct_first_attempt_defers_to_structured_tzfft_on_gpu
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_TZFFT_ACCELERATOR_AUTO_MAX", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_TZFFT_FIRST", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_TZFFT_FIRST_MAX", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     op = SimpleNamespace(
         rhs_mode=3,
         include_phi1=False,
@@ -225,7 +225,7 @@ def test_transport_structured_tzfft_first_attempt_guards_and_budget(monkeypatch)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_TZFFT_FIRST_MAX", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_TZFFT_FIRST_RESTART", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_TZFFT_FIRST_MAXITER", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     op = SimpleNamespace(
         rhs_mode=3,
         include_phi1=False,
@@ -279,7 +279,7 @@ def test_transport_structured_tzfft_first_attempt_guards_and_budget(monkeypatch)
         use_implicit=False,
     )
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_TZFFT_FIRST", "1")
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert _transport_tzfft_structured_first_attempt_allowed(
         op,
         size=127501,
@@ -297,7 +297,7 @@ def test_transport_structured_tzfft_first_attempt_guards_and_budget(monkeypatch)
 def test_transport_sparse_direct_first_attempt_keeps_generic_large_gpu_transport_bounded(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_MAX", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     assert not _transport_sparse_direct_first_attempt_allowed(
         op=_op(rhs_mode=2, has_fp=True, n_x=4),
         size=127501,
@@ -505,7 +505,7 @@ def test_transport_fp_tzfft_line_schur_reduces_line_tail_residual(monkeypatch) -
 def test_transport_sparse_direct_first_attempt_disabled_for_gpu_tzfft_auto_case(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_TZFFT_ACCELERATOR_AUTO_MAX", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     op = SimpleNamespace(
         rhs_mode=3,
         include_phi1=False,
@@ -525,7 +525,7 @@ def test_transport_sparse_direct_first_attempt_disabled_for_gpu_tzfft_auto_case(
 def test_transport_sparse_direct_first_attempt_disabled_for_cpu_collisionless_mono_medium_size(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_FIRST_CPU_MIN", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert not _transport_sparse_direct_first_attempt_allowed(
         op=_op(rhs_mode=3, has_fp=False, n_x=1),
         size=54811,
@@ -536,7 +536,7 @@ def test_transport_sparse_direct_first_attempt_disabled_for_cpu_collisionless_mo
 def test_transport_sparse_direct_first_attempt_enabled_for_cpu_transport_fast_path(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_FIRST_CPU_MIN", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert _transport_sparse_direct_first_attempt_allowed(
         op=_op(rhs_mode=2),
         size=16382,
@@ -547,13 +547,13 @@ def test_transport_sparse_direct_first_attempt_enabled_for_cpu_transport_fast_pa
 def test_transport_sparse_direct_first_attempt_disabled_for_small_cpu_or_implicit(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_FIRST_CPU_MIN", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert not _transport_sparse_direct_first_attempt_allowed(
         op=_op(rhs_mode=2),
         size=8000,
         use_implicit=False,
     )
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     assert not _transport_sparse_direct_first_attempt_allowed(
         op=_op(rhs_mode=2),
         size=16382,
@@ -564,15 +564,15 @@ def test_transport_sparse_direct_first_attempt_disabled_for_small_cpu_or_implici
 def test_transport_sparse_direct_helper_auto_prefers_gpu_and_large_cpu(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_HELPER", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_CPU_MIN", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     assert _transport_sparse_direct_use_explicit_helper(size=2048)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert _transport_sparse_direct_use_explicit_helper(size=12000)
     assert not _transport_sparse_direct_use_explicit_helper(size=8000)
 
 
 def test_transport_sparse_direct_helper_env_overrides(monkeypatch) -> None:
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_HELPER", "0")
     assert not _transport_sparse_direct_use_explicit_helper(size=50000)
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_HELPER", "1")
@@ -582,7 +582,7 @@ def test_transport_sparse_direct_helper_env_overrides(monkeypatch) -> None:
 def test_host_sparse_factor_dtype_defaults_to_float32_for_large_explicit_cpu_lu(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_HOST_SPARSE_FACTOR_DTYPE", raising=False)
     monkeypatch.delenv("SFINCS_JAX_HOST_SPARSE_FACTOR_FLOAT32_MIN", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert _host_sparse_factor_dtype(size=16382, factorization="lu", use_implicit=False).name == "float32"
     assert _host_sparse_factor_dtype(size=8000, factorization="lu", use_implicit=False).name == "float64"
     assert _host_sparse_factor_dtype(size=16382, factorization="ilu", use_implicit=False).name == "float64"
@@ -594,14 +594,14 @@ def test_transport_sparse_factor_dtype_defaults_to_float64_for_large_cpu_transpo
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_FLOAT64_MIN", raising=False)
     monkeypatch.delenv("SFINCS_JAX_HOST_SPARSE_FACTOR_DTYPE", raising=False)
     monkeypatch.delenv("SFINCS_JAX_HOST_SPARSE_FACTOR_FLOAT32_MIN", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert _transport_sparse_factor_dtype(size=35063, use_implicit=False).name == "float64"
     assert _transport_sparse_factor_dtype(size=16382, use_implicit=False).name == "float32"
 
 
 def test_transport_host_gmres_first_attempt_enabled_for_cpu_collisionless_mono_medium_size(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert _transport_host_gmres_first_attempt_allowed(
         op=_op(rhs_mode=3, has_fp=False, n_x=1),
         size=54811,
@@ -611,7 +611,7 @@ def test_transport_host_gmres_first_attempt_enabled_for_cpu_collisionless_mono_m
 
 def test_transport_host_gmres_first_attempt_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert not _transport_host_gmres_first_attempt_allowed(
         op=_op(rhs_mode=2),
         size=16382,
@@ -627,7 +627,7 @@ def test_transport_host_gmres_first_attempt_respects_guards(monkeypatch) -> None
         size=54811,
         use_implicit=False,
     )
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     assert not _transport_host_gmres_first_attempt_allowed(
         op=_op(rhs_mode=3, has_fp=False, n_x=1),
         size=54811,
@@ -646,7 +646,7 @@ def test_transport_host_gmres_accepts_preconditioned_residual_for_moderate_true_
 
 def test_transport_precondition_side_defaults_to_left(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_PRECONDITION_SIDE", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert _transport_precondition_side(
         op=_op(rhs_mode=3, has_fp=False, n_x=1, constraint_scheme=2),
         use_implicit=False,
@@ -655,7 +655,7 @@ def test_transport_precondition_side_defaults_to_left(monkeypatch) -> None:
 
 def test_transport_precondition_side_defaults_to_left_otherwise(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_PRECONDITION_SIDE", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert _transport_precondition_side(
         op=_op(rhs_mode=2, has_fp=False, n_x=1, constraint_scheme=1),
         use_implicit=False,
@@ -668,7 +668,7 @@ def test_transport_precondition_side_defaults_to_left_otherwise(monkeypatch) -> 
 
 def test_transport_precondition_side_respects_env_override(monkeypatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PRECONDITION_SIDE", "right")
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert _transport_precondition_side(
         op=_op(rhs_mode=3, has_fp=False, n_x=1, constraint_scheme=2),
         use_implicit=False,
@@ -677,7 +677,7 @@ def test_transport_precondition_side_respects_env_override(monkeypatch) -> None:
 
 def test_transport_disable_auto_recycle_defaults_on_for_explicit_cpu_mono_pas(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_DISABLE_AUTO_RECYCLE", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert _transport_disable_auto_recycle(
         op=_op(rhs_mode=3, has_fp=False, n_x=1, constraint_scheme=2),
         use_implicit=False,
@@ -686,7 +686,7 @@ def test_transport_disable_auto_recycle_defaults_on_for_explicit_cpu_mono_pas(mo
 
 def test_transport_disable_auto_recycle_respects_guards_and_env(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_DISABLE_AUTO_RECYCLE", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert not _transport_disable_auto_recycle(
         op=_op(rhs_mode=2, has_fp=False, n_x=1, constraint_scheme=2),
         use_implicit=False,
@@ -773,7 +773,7 @@ def test_transport_host_gmres_rejects_preconditioned_residual_for_large_true_gap
 def test_transport_sparse_direct_rescue_waits_longer_for_branch_sensitive_mono_cpu_gap(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_RATIO", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert not _transport_sparse_direct_rescue_allowed(
         op=_op(rhs_mode=3, has_fp=False, n_x=1),
         size=54811,
@@ -785,7 +785,7 @@ def test_transport_sparse_direct_rescue_waits_longer_for_branch_sensitive_mono_c
 
 def test_transport_sparse_direct_float64_retry_only_triggers_for_large_float32_gap(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_FLOAT64_RETRY_RATIO", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert _transport_sparse_direct_needs_float64_retry(
         factor_dtype=_host_sparse_factor_dtype(size=16382, factorization="lu", use_implicit=False),
         residual_norm=2.0e-5,
@@ -805,22 +805,22 @@ def test_transport_sparse_direct_float64_retry_only_triggers_for_large_float32_g
 
 def test_transport_dense_backend_allowed_defaults_to_cpu(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_DENSE_ALLOW_ACCELERATOR", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert _transport_dense_backend_allowed()
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     assert not _transport_dense_backend_allowed()
 
 
 def test_transport_tzfft_backend_allowed_defaults_to_cpu(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_TZFFT_ALLOW_ACCELERATOR", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "cpu")
     assert _transport_tzfft_backend_allowed()
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     assert not _transport_tzfft_backend_allowed()
 
 
 def test_transport_dense_backend_allowed_respects_env(monkeypatch) -> None:
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_DENSE_ALLOW_ACCELERATOR", "1")
     assert _transport_dense_backend_allowed()
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_DENSE_ALLOW_ACCELERATOR", "0")
@@ -832,7 +832,7 @@ def test_transport_dense_accelerator_auto_allowed_for_bounded_mono_case(monkeypa
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO_GEOMETRIES", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO_MAX", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     op = SimpleNamespace(
         rhs_mode=3,
         include_phi1=False,
@@ -857,7 +857,7 @@ def test_transport_dense_accelerator_auto_allowed_for_bounded_mono_case(monkeypa
 
 
 def test_transport_tzfft_backend_allowed_respects_env(monkeypatch) -> None:
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_TZFFT_ALLOW_ACCELERATOR", "1")
     assert _transport_tzfft_backend_allowed()
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_TZFFT_ALLOW_ACCELERATOR", "0")
@@ -866,7 +866,7 @@ def test_transport_tzfft_backend_allowed_respects_env(monkeypatch) -> None:
 
 def test_transport_tzfft_accelerator_auto_allowed_for_bounded_collisionless_gpu_case(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_TZFFT_ACCELERATOR_AUTO_MAX", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     op = SimpleNamespace(
         rhs_mode=3,
         include_phi1=False,
@@ -881,7 +881,7 @@ def test_transport_tzfft_accelerator_auto_allowed_for_bounded_collisionless_gpu_
 
 def test_transport_tzfft_accelerator_auto_rejects_large_or_fp_gpu_case(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_TZFFT_ACCELERATOR_AUTO_MAX", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.transport_solve.jax.default_backend", lambda: "gpu")
     large_op = SimpleNamespace(
         rhs_mode=3,
         include_phi1=False,

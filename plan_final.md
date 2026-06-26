@@ -2828,6 +2828,10 @@ Current completion status:
   structured-CSR documentation checks now use `problems.profile_solve` for the
   canonical solve-method set, and the RHSMode=1 XMG/Er-xdot transpose-safety
   tests now use the solver-owned x-grid/xblock preconditioner modules directly.
+- The transport sparse-direct policy and preconditioner suite now imports from
+  `problems.transport_solve` and monkeypatches the transport module backend
+  directly, removing another large set of test-only `v3_driver` references while
+  preserving the exact solver-policy assertions.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
