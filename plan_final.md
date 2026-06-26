@@ -277,6 +277,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   extended `tests/test_examples_tree_contract.py` so first-pass example
   navigation cannot reintroduce those phrases. The examples/tutorial contract
   reports `9 passed` and Ruff passes for the guard file.
+- The forty-seventh post-audit coverage tranche added public-solver numerical
+  and policy tests for distributed Krylov preference, iteration-aware
+  preconditioner detection, dense matrix assembly block/JIT controls, SciPy
+  LGMRES/GCROT right-preconditioned physical initial guesses, and explicit-left
+  GMRES zero-preconditioned-RHS handling. The solver-focused suite reports
+  `61 passed` in `23.5 s` and Ruff passes for the touched test file.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
