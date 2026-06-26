@@ -27,7 +27,6 @@ ALLOWED_EXAMPLE_FOLDERS = {
 }
 
 FOLDERS_REQUIRING_README = ALLOWED_EXAMPLE_FOLDERS - {
-    "additional_examples",
     "data",
     "utils",
 }

@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (benchmark-promotion policy coverage guard pass)
+Last updated: 2026-06-26 (examples reference-input navigation guard pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -315,6 +315,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   benchmark-policy/doc suite reports `44 passed` in `0.13 s` and Ruff passes
   for the touched file. These tests prevent incomplete production benchmark
   evidence from being promoted into README/docs plots.
+- The fifty-second post-audit examples tranche added
+  `examples/additional_examples/README.md` and made the examples-tree contract
+  require it. The retained `additional_examples` folder is still needed as a
+  named QI/VMEC benchmark case by suite drivers and checked validation
+  artifacts, but it is no longer an undocumented top-level folder. The
+  examples/tutorial contract reports `9 passed` and Ruff passes for the touched
+  guard file.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
@@ -2501,8 +2508,9 @@ Current completion status:
   maps, import contracts, README/docs, artifact metadata, Sphinx, source Ruff,
   and CI pass for the consolidated layout in focused checks; the examples
   landing page and Fortran-example status page now keep first-pass navigation
-  separate from release-audit runbooks. Rerun the review-lock bundle after this
-  plan refresh.
+  separate from release-audit runbooks, and every retained non-data top-level
+  examples folder has README navigation. Rerun the review-lock bundle after
+  this plan refresh.
 
 Next ordered implementation steps:
 
