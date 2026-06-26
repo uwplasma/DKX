@@ -57,7 +57,9 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   source-tree guard keeps `temporary_nested_packages` empty.
 - `sfincs_jax/README.md` documents the one-level source layout, stable public
   root modules, temporary compatibility roots, release-data manifest policy,
-  and contributor move rules. `tests/test_source_tree_consolidation.py`
+  and contributor move rules. The tiny release-data manifest lives under
+  `validation/`, so there is no separate `data/` source folder.
+  `tests/test_source_tree_consolidation.py`
   verifies that this README mentions every allowed root package and module.
 - `examples/tutorials/` is the first learning surface. It contains three
   output-free notebooks plus a fast script that writes HDF5/NetCDF/NPZ output
@@ -151,8 +153,8 @@ Domain folders to keep:
   preconditioner implementations.
 - `outputs/`: HDF5/NetCDF/NPZ writer, output schemas, and post-solve diagnostics.
 - `physics/`: collision, classical, bootstrap, and normalization formulas.
-- `validation/`: frozen references, parity summaries, release-data fetching,
-  and figure-generation helpers.
+- `validation/`: frozen references, parity summaries, the release-data
+  manifest/fetcher, and figure-generation helpers.
 - `workflows/`: optional research workflows that call the public API and are
   not required by the CLI.
 

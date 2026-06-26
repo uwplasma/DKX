@@ -11,7 +11,7 @@ import tempfile
 from urllib.request import urlopen
 
 
-_MANIFEST_PATH = Path(__file__).resolve().parents[1] / "data" / "equilibria_manifest.json"
+_MANIFEST_PATH = Path(__file__).with_name("equilibria_manifest.json")
 
 
 def _load_manifest() -> dict:

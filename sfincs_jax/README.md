@@ -40,9 +40,6 @@ inside domain folders are for contributors and advanced research workflows.
 
 ## Domain Folders
 
-- `data/`: tiny manifest files for release-hosted equilibrium assets. Large
-  `.bc`, `.nc`, and benchmark data are fetched on demand rather than stored in
-  the git clone or wheel.
 - `discretization/`: grids, differentiation stencils, active indices, and
   coordinate maps.
 - `geometry/`: analytic magnetic geometries, VMEC `wout` loading, Boozer data,
@@ -63,8 +60,8 @@ inside domain folders are for contributors and advanced research workflows.
   implementation folder.
 - `outputs/`: HDF5/NetCDF/NPZ schemas, writer logic, and post-solve
   diagnostics.
-- `validation/`: frozen-reference loading, parity checks, release-data fetching,
-  and validation-figure helpers.
+- `validation/`: frozen-reference loading, parity checks, the release-data
+  manifest/fetcher, and validation-figure helpers.
 - `workflows/`: optional research workflows that combine public APIs into
   scans, optimization tasks, and promotion campaigns.
 
@@ -83,7 +80,9 @@ inside domain folders are for contributors and advanced research workflows.
   is consolidated.
 - Keep large validation data out of the git clone and wheel. Small frozen
   references can live in `tests/fixtures`; large equilibria or benchmark outputs
-  should be fetched through `validation.data_fetch` from release assets.
+  should be fetched through `validation.data_fetch` from release assets. The
+  embedded manifest lives in `validation/equilibria_manifest.json`; the large
+  files named by that manifest remain release-hosted.
 
 ## Contributor Workflow
 
