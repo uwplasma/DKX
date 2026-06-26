@@ -1190,7 +1190,7 @@ the historical private driver name and test the focused module directly. This ke
   opt-in coarse solver/output profiling behind ``SFINCS_JAX_PROFILE``. It owns
   phase-level timing, RSS high-water sampling, optional JAX device-memory polling,
   and the ``profile_entries`` payload written into solver traces and output metadata.
-- ``sfincs_jax/validation/benchmark_artifacts.py``:
+- ``sfincs_jax/validation/artifacts.py``:
   fast schema, provenance, and release-blocking classification policy for checked-in
   benchmark JSON artifacts.
 - ``sfincs_jax/solvers/memory_model.py``:
