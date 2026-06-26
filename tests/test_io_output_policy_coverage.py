@@ -26,6 +26,7 @@ from sfincs_jax.io import (
     _set_input_radial_coordinate_wish,
     _should_precompile_v3_full_system,
     read_sfincs_h5,
+    _resolve_equilibrium_file_from_namelist,
     write_sfincs_h5,
 )
 from sfincs_jax.geometry.boozer import BoozerBCHeader, BoozerBCSurface
@@ -570,6 +571,73 @@ def test_localize_equilibrium_file_copies_boozer_alias_and_patches_input(tmp_pat
     assert localized == run_dir / "toy.bc"
     assert localized.read_text() == "toy boozer content\n"
     assert "fort996boozer_file = 'toy.bc'" in input_path.read_text()
+
+
+def test_resolve_equilibrium_file_contracts_cover_missing_vmec_fallback_and_nonvmec_ascii(
+    tmp_path: Path,
+) -> None:
+    missing_input = tmp_path / "missing_input.namelist"
+    missing_input.write_text("&geometryParameters\n  geometryScheme = 5\n/\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Missing geometryParameters.equilibriumFile"):
+        _resolve_equilibrium_file_from_namelist(nml=read_sfincs_input(missing_input))
+
+    vmec_ascii = tmp_path / "vmec_ascii.txt"
+    vmec_ascii.write_text("ascii vmec placeholder\n", encoding="utf-8")
+    vmec_input = tmp_path / "vmec_input.namelist"
+    vmec_input.write_text(
+        "&geometryParameters\n"
+        "  geometryScheme = 5\n"
+        '  equilibriumFile = "vmec_ascii.txt"\n'
+        "/\n",
+        encoding="utf-8",
+    )
+    assert _resolve_equilibrium_file_from_namelist(nml=read_sfincs_input(vmec_input)) == vmec_ascii.resolve()
+
+    boozer_ascii = tmp_path / "boozer_ascii.txt"
+    boozer_netcdf_sibling = tmp_path / "boozer_ascii.nc"
+    boozer_ascii.write_text("boozer ascii placeholder\n", encoding="utf-8")
+    boozer_netcdf_sibling.write_text("not the requested boozer path\n", encoding="utf-8")
+    boozer_input = tmp_path / "boozer_input.namelist"
+    boozer_input.write_text(
+        "&geometryParameters\n"
+        "  geometryScheme = 11\n"
+        '  equilibriumFile = "boozer_ascii.txt"\n'
+        "/\n",
+        encoding="utf-8",
+    )
+    assert _resolve_equilibrium_file_from_namelist(nml=read_sfincs_input(boozer_input)) == boozer_ascii.resolve()
+
+
+def test_localize_equilibrium_file_overwrite_flag_controls_existing_local_copy(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    run_dir = tmp_path / "run"
+    source_dir.mkdir()
+    run_dir.mkdir()
+    source = source_dir / "toy.bc"
+    source.write_text("fresh source\n", encoding="utf-8")
+    local_copy = run_dir / "toy.bc"
+    local_copy.write_text("existing local copy\n", encoding="utf-8")
+    input_path = run_dir / "input.namelist"
+    input_text = (
+        "&geometryParameters\n"
+        "  geometryScheme = 11\n"
+        "  JGboozer_file = '../source/toy.bc'\n"
+        "/\n"
+    )
+    input_path.write_text(input_text, encoding="utf-8")
+
+    localized = localize_equilibrium_file_in_place(input_namelist=input_path, overwrite=False)
+
+    assert localized == local_copy
+    assert local_copy.read_text(encoding="utf-8") == "existing local copy\n"
+    assert "JGboozer_file = 'toy.bc'" in input_path.read_text(encoding="utf-8")
+
+    input_path.write_text(input_text, encoding="utf-8")
+    localized_overwrite = localize_equilibrium_file_in_place(input_namelist=input_path, overwrite=True)
+
+    assert localized_overwrite == local_copy
+    assert local_copy.read_text(encoding="utf-8") == "fresh source\n"
+    assert "JGboozer_file = 'toy.bc'" in input_path.read_text(encoding="utf-8")
 
 
 def test_bc_metric_output_branch_matches_positive_boozer_surface_metric(

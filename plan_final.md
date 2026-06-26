@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (canonical examples catalog pass)
+Last updated: 2026-06-26 (output equilibrium-path coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -380,6 +380,15 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   focused examples contract reports `6 passed` in `0.04 s`, Ruff passes for
   the guard file, and the scoped README/docs stale-wording scan reports no
   matches.
+- The fifty-ninth post-audit coverage tranche added output-writer/input-path
+  tests for missing-equilibrium errors, VMEC ASCII fallback when no NetCDF
+  sibling exists, non-VMEC ASCII path preservation when a NetCDF sibling is
+  present, and `localize_equilibrium_file_in_place` overwrite semantics for
+  existing run-local equilibrium copies. These tests protect CLI/Python
+  geometry-path behavior, including user-supplied `wout_path` workflows, without
+  adding large fixtures or running solves. The focused output/input/write-output
+  suite reports `67 passed` in `4.21 s`, and Ruff passes for the touched test
+  file.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
