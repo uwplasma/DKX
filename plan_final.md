@@ -1452,7 +1452,9 @@ Current completion status:
   owned by `profile_response/dense.py`, reducing `profile_response/solve.py`
   to 8,328 lines. The fortran-reduced x-block sparse-PC backend is now owned
   by `profile_response/sparse/handoff.py`, reducing
-  `profile_response/solve.py` to 8,104 lines. The remaining large blockers are
+  `profile_response/solve.py` to 8,104 lines. The generic sparse-PC setup
+  stage is also now owned by `profile_response/sparse/handoff.py`, reducing
+  `profile_response/solve.py` to 8,057 lines. The remaining large blockers are
   the generic sparse-PC/factor-preflight branch, final result/progress
   normalization, the rest of transport/output consolidation,
   solver/preconditioner naming, and `io.py` ownership. The next work follows

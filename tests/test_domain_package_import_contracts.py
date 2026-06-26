@@ -548,6 +548,16 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
     (
         "sfincs_jax.problems.profile_response.sparse.handoff",
         "sfincs_jax.problems.profile_response.sparse.handoff",
+        "SparsePCGenericBranchSetupContext",
+    ),
+    (
+        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "build_sparse_pc_generic_branch_setup",
+    ),
+    (
+        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "sfincs_jax.problems.profile_response.sparse.handoff",
         "solve_fortran_reduced_xblock_backend",
     ),
 )

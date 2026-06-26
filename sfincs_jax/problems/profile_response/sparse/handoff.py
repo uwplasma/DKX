@@ -1397,6 +1397,189 @@ def sparse_pc_gmres_finalization_bundle_from_driver_result(
 
 
 @dataclass(frozen=True)
+class SparsePCGenericBranchSetupContext:
+    """Dependencies for the generic RHSMode-1 sparse-PC setup stage."""
+
+    op: object
+    rhs: jnp.ndarray
+    sparse_pc_use_active_dof: bool
+    active_dof_indices: Callable[[object], np.ndarray]
+    reduce_full_with_indices: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
+    expand_reduced_with_map: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
+    fortran_reduced_sparse_pc: bool
+    preconditioner_x: int
+    preconditioner_x_min_l: int
+    preconditioner_xi: int
+    preconditioner_species: int
+    sparse_pc_fp_dense_velocity_block: object
+    constrained_pas_pc: bool
+    tokamak_pas_er_pc: bool
+    tokamak_fp_pc: bool
+    pc_maxiter: int
+    pc_restart: int
+    host_sparse_factor_dtype: object
+    sparse_timer: object
+    emit: EmitFn | None
+    env: Mapping[str, str] | None
+    default_permc_spec: Callable[..., str]
+    build_fortran_reduced_operator: Callable[..., object]
+    build_point_operator: Callable[..., object]
+    fortran_reduced_pattern_for_indices: Callable[..., object]
+    fortran_reduced_pattern: Callable[..., object]
+    conservative_pattern_for_indices: Callable[..., object]
+    conservative_pattern: Callable[..., object]
+    summarize_pattern: Callable[..., object]
+    estimate_sparse_pc_memory: Callable[..., object]
+    device_count: int
+
+
+@dataclass(frozen=True)
+class SparsePCGenericBranchSetupResult:
+    """Resolved generic sparse-PC setup state used by later factor stages."""
+
+    active_idx_np: np.ndarray | None
+    active_idx_jnp: jnp.ndarray | None
+    full_to_active_jnp: jnp.ndarray | None
+    rhs: jnp.ndarray
+    linear_size: int
+    reduce_full: ArrayFn
+    expand_reduced: ArrayFn
+    op_pc: object
+    pattern_source_op: object
+    preconditioner_operator: str
+    fortran_reduced_xblock_min_size: int
+    fortran_reduced_sparse_pc_backend: str
+    fortran_reduced_sparse_pc_backend_reason: str
+    pattern: object
+    sparse_pattern_scope: str
+    pattern_build_s: float
+    summary: object
+    factor_policy: SparsePCFactorPolicySetup
+
+
+def build_sparse_pc_generic_branch_setup(
+    context: SparsePCGenericBranchSetupContext,
+) -> SparsePCGenericBranchSetupResult:
+    """Resolve active maps, operator policy, pattern, factor policy, and budget."""
+
+    active_setup = build_sparse_pc_active_dof_setup(
+        op=context.op,
+        rhs=context.rhs,
+        sparse_pc_use_active_dof=bool(context.sparse_pc_use_active_dof),
+        active_dof_indices=context.active_dof_indices,
+        reduce_full_with_indices=context.reduce_full_with_indices,
+        expand_reduced_with_map=context.expand_reduced_with_map,
+    )
+    if context.emit is not None:
+        for level, message in active_setup.messages:
+            context.emit(level, message)
+
+    if context.fortran_reduced_sparse_pc:
+        op_pc = context.build_fortran_reduced_operator(
+            context.op,
+            preconditioner_x=int(context.preconditioner_x),
+            preconditioner_xi=int(context.preconditioner_xi),
+            preconditioner_species=int(context.preconditioner_species),
+            preconditioner_x_min_l=int(context.preconditioner_x_min_l),
+        )
+        preconditioner_operator = "fortran_reduced_global"
+        pattern_source_op = op_pc
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres "
+                "using global angular-coupled RHSMode=1 preconditioner operator "
+                f"(preconditioner_x={int(context.preconditioner_x)} "
+                f"preconditioner_x_min_L={int(context.preconditioner_x_min_l)} "
+                f"preconditioner_xi={int(context.preconditioner_xi)} "
+                f"preconditioner_species={int(context.preconditioner_species)})",
+            )
+    else:
+        op_pc = context.build_point_operator(context.op)
+        preconditioner_operator = "point"
+        pattern_source_op = context.op
+
+    backend_setup = resolve_fortran_reduced_sparse_pc_backend(
+        op=context.op,
+        env=context.env,
+        fortran_reduced_sparse_pc=bool(context.fortran_reduced_sparse_pc),
+        sparse_pc_linear_size=int(active_setup.linear_size),
+    )
+    if context.emit is not None:
+        for level, message in backend_setup.messages:
+            context.emit(level, message)
+
+    pattern_setup = build_sparse_pc_pattern_setup(
+        SparsePCPatternSetupContext(
+            op=context.op,
+            pattern_source_op=pattern_source_op,
+            fortran_reduced_sparse_pc=bool(context.fortran_reduced_sparse_pc),
+            sparse_pc_use_active_dof=bool(context.sparse_pc_use_active_dof),
+            active_idx_np=active_setup.active_idx_np,
+            preconditioner_x=int(context.preconditioner_x),
+            preconditioner_xi=int(context.preconditioner_xi),
+            preconditioner_species=int(context.preconditioner_species),
+            preconditioner_x_min_l=int(context.preconditioner_x_min_l),
+            fp_dense_velocity_block=context.sparse_pc_fp_dense_velocity_block,
+            elapsed_s=context.sparse_timer.elapsed_s,
+            emit=context.emit,
+            fortran_reduced_pattern_for_indices=(
+                context.fortran_reduced_pattern_for_indices
+            ),
+            fortran_reduced_pattern=context.fortran_reduced_pattern,
+            conservative_pattern_for_indices=context.conservative_pattern_for_indices,
+            conservative_pattern=context.conservative_pattern,
+            summarize_pattern=context.summarize_pattern,
+        )
+    )
+    factor_policy = resolve_sparse_pc_factor_policy(
+        env=context.env,
+        constrained_pas_pc=bool(context.constrained_pas_pc),
+        tokamak_fp_pc=bool(context.tokamak_fp_pc),
+        fortran_reduced_sparse_pc=bool(context.fortran_reduced_sparse_pc),
+        sparse_pc_linear_size=int(active_setup.linear_size),
+        pc_maxiter=int(context.pc_maxiter),
+        default_permc_spec=context.default_permc_spec(
+            constrained_pas_pc=bool(context.constrained_pas_pc),
+            tokamak_pas_er_pc=bool(context.tokamak_pas_er_pc),
+            n_species=int(context.op.n_species),
+        ),
+        host_sparse_factor_dtype=context.host_sparse_factor_dtype,
+    )
+    enforce_sparse_pc_memory_budget(
+        SparsePCMemoryBudgetPreflightContext(
+            env=context.env,
+            unknowns=int(active_setup.linear_size),
+            gmres_restart=int(context.pc_restart),
+            csr_nnz=int(pattern_setup.summary.nnz),
+            dtype=np.dtype(factor_policy.factor_dtype_initial),
+            device_count=max(1, int(context.device_count)),
+            estimate_sparse_pc_memory=context.estimate_sparse_pc_memory,
+        )
+    )
+    return SparsePCGenericBranchSetupResult(
+        active_idx_np=active_setup.active_idx_np,
+        active_idx_jnp=active_setup.active_idx_jnp,
+        full_to_active_jnp=active_setup.full_to_active_jnp,
+        rhs=active_setup.rhs,
+        linear_size=int(active_setup.linear_size),
+        reduce_full=active_setup.reduce_full,
+        expand_reduced=active_setup.expand_reduced,
+        op_pc=op_pc,
+        pattern_source_op=pattern_source_op,
+        preconditioner_operator=preconditioner_operator,
+        fortran_reduced_xblock_min_size=int(backend_setup.xblock_min_size),
+        fortran_reduced_sparse_pc_backend=str(backend_setup.backend),
+        fortran_reduced_sparse_pc_backend_reason=str(backend_setup.reason),
+        pattern=pattern_setup.pattern,
+        sparse_pattern_scope=str(pattern_setup.scope),
+        pattern_build_s=float(pattern_setup.build_s),
+        summary=pattern_setup.summary,
+        factor_policy=factor_policy,
+    )
+
+
+@dataclass(frozen=True)
 class FortranReducedXBlockBackendContext:
     """State needed to run the fortran-reduced x-block sparse-PC backend."""
 
@@ -4987,6 +5170,8 @@ __all__ = [
     "SparsePCFactorPreflightPolicy",
     "SparsePCFactorPreflightEvaluationContext",
     "SparsePCFactorPreflightEvaluationResult",
+    "SparsePCGenericBranchSetupContext",
+    "SparsePCGenericBranchSetupResult",
     "SparsePCResidualCandidateAcceptanceContext",
     "SparsePCResidualCandidateAcceptanceResult",
     "SparsePCAutoPreflightRetrySelectionContext",
@@ -5181,6 +5366,7 @@ __all__ = [
     "run_xblock_qi_preconditioner_pipeline",
     "resolve_xblock_krylov_control_setup",
     "build_sparse_pc_active_dof_setup",
+    "build_sparse_pc_generic_branch_setup",
     "build_sparse_pc_pattern_setup",
     "build_direct_tail_materialization_setup",
     "build_direct_tail_structured_preconditioner_setup",

@@ -254,13 +254,12 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     DirectTailStructuredBuildContext,
     DirectTailSupportModePreflightContext,
     FortranReducedXBlockBackendContext,
-    SparsePCMemoryBudgetPreflightContext,
+    SparsePCGenericBranchSetupContext,
     SparsePCFactorPreflightPolicyContext,
     SparsePCFactorPreflightEvaluationContext,
     SparsePCResidualCandidateAcceptanceContext,
     SparsePCAutoPreflightRetrySelectionContext,
     SparsePCAutoPreflightRetryEvaluationContext,
-    SparsePCPatternSetupContext,
     ExplicitSparseMinimumNormBranchContext,
     ExplicitSparseHostDirectBranchContext,
     RHS1FullSparseRetryStageContext,
@@ -291,11 +290,10 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     apply_xblock_side_probe_stage,
     apply_xblock_two_level_stage,
     build_xblock_local_preconditioner,
-    build_sparse_pc_pattern_setup,
     build_xblock_krylov_matvec_setup,
     build_direct_tail_structured_preconditioner_setup,
     build_xblock_assembled_operator_if_requested,
-    build_sparse_pc_active_dof_setup,
+    build_sparse_pc_generic_branch_setup,
     build_direct_tail_materialization_setup,
     build_xblock_krylov_progress_callbacks,
     build_xblock_qi_stage_pipeline_context,
@@ -306,16 +304,13 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     evaluate_sparse_pc_auto_preflight_retry,
     complete_xblock_post_krylov_stage,
     resolve_sparse_pc_gmres_control_policy,
-    enforce_sparse_pc_memory_budget,
     prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
-    resolve_sparse_pc_factor_policy,
     resolve_sparse_pc_factor_preflight_policy,
     resolve_direct_tail_structured_admission,
     resolve_direct_tail_residual_rescue_policy,
     resolve_direct_tail_true_active_rescue_policy,
     resolve_direct_tail_coupled_coarse_rescue_policy,
-    resolve_fortran_reduced_sparse_pc_backend,
     run_direct_tail_support_mode_preflight,
     resolve_fortran_reduced_xblock_factor_policy,
     prepare_xblock_augmented_krylov_basis,
@@ -1618,64 +1613,69 @@ def solve_v3_full_system_linear_gmres(
                 )
             )
 
-        sparse_pc_active_setup = build_sparse_pc_active_dof_setup(
-            op=op,
-            rhs=rhs,
-            sparse_pc_use_active_dof=bool(sparse_pc_use_active_dof),
-            active_dof_indices=_transport_active_dof_indices,
-            reduce_full_with_indices=reduce_full_with_indices,
-            expand_reduced_with_map=expand_reduced_with_map,
-        )
-        sparse_pc_active_idx_np = sparse_pc_active_setup.active_idx_np
-        sparse_pc_active_idx_jnp = sparse_pc_active_setup.active_idx_jnp
-        sparse_pc_full_to_active_jnp = sparse_pc_active_setup.full_to_active_jnp
-        sparse_pc_rhs = sparse_pc_active_setup.rhs
-        sparse_pc_linear_size = int(sparse_pc_active_setup.linear_size)
-        _sparse_pc_reduce_full = sparse_pc_active_setup.reduce_full
-        _sparse_pc_expand_reduced = sparse_pc_active_setup.expand_reduced
-        if emit is not None:
-            for level, message in sparse_pc_active_setup.messages:
-                emit(level, message)
-
-        if fortran_reduced_sparse_pc:
-            op_pc = _build_rhsmode1_preconditioner_operator_fortran_reduced(
-                op,
-                preconditioner_x=preconditioner_x,
-                preconditioner_xi=preconditioner_xi,
-                preconditioner_species=preconditioner_species,
-                preconditioner_x_min_l=preconditioner_x_min_l,
+        sparse_pc_branch_setup = build_sparse_pc_generic_branch_setup(
+            SparsePCGenericBranchSetupContext(
+                op=op,
+                rhs=rhs,
+                sparse_pc_use_active_dof=bool(sparse_pc_use_active_dof),
+                active_dof_indices=_transport_active_dof_indices,
+                reduce_full_with_indices=reduce_full_with_indices,
+                expand_reduced_with_map=expand_reduced_with_map,
+                fortran_reduced_sparse_pc=bool(fortran_reduced_sparse_pc),
+                preconditioner_x=int(preconditioner_x),
+                preconditioner_x_min_l=int(preconditioner_x_min_l),
+                preconditioner_xi=int(preconditioner_xi),
+                preconditioner_species=int(preconditioner_species),
+                sparse_pc_fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+                constrained_pas_pc=bool(constrained_pas_pc),
+                tokamak_pas_er_pc=bool(tokamak_pas_er_pc),
+                tokamak_fp_pc=bool(tokamak_fp_pc),
+                pc_maxiter=int(pc_maxiter),
+                pc_restart=int(pc_restart),
+                host_sparse_factor_dtype=_host_sparse_factor_dtype,
+                sparse_timer=sparse_timer,
+                emit=emit,
+                env=os.environ,
+                default_permc_spec=_rhsmode1_sparse_pc_default_permc_spec,
+                build_fortran_reduced_operator=(
+                    _build_rhsmode1_preconditioner_operator_fortran_reduced
+                ),
+                build_point_operator=_build_rhsmode1_preconditioner_operator_point,
+                fortran_reduced_pattern_for_indices=(
+                    v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices
+                ),
+                fortran_reduced_pattern=(
+                    v3_full_system_fortran_reduced_preconditioner_sparsity_pattern
+                ),
+                conservative_pattern_for_indices=(
+                    v3_full_system_conservative_sparsity_pattern_for_indices
+                ),
+                conservative_pattern=v3_full_system_conservative_sparsity_pattern,
+                summarize_pattern=summarize_v3_sparse_pattern,
+                estimate_sparse_pc_memory=estimate_sparse_pc_memory,
+                device_count=int(jax.device_count()),
             )
-            sparse_pc_preconditioner_operator = "fortran_reduced_global"
-            pattern_source_op = op_pc
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres "
-                    "using global angular-coupled RHSMode=1 preconditioner operator "
-                    f"(preconditioner_x={int(preconditioner_x)} "
-                    f"preconditioner_x_min_L={int(preconditioner_x_min_l)} "
-                    f"preconditioner_xi={int(preconditioner_xi)} "
-                    f"preconditioner_species={int(preconditioner_species)})",
-                )
-        else:
-            op_pc = _build_rhsmode1_preconditioner_operator_point(op)
-            sparse_pc_preconditioner_operator = "point"
-            pattern_source_op = op
-
-        fortran_reduced_backend_setup = resolve_fortran_reduced_sparse_pc_backend(
-            op=op,
-            env=os.environ,
-            fortran_reduced_sparse_pc=bool(fortran_reduced_sparse_pc),
-            sparse_pc_linear_size=int(sparse_pc_linear_size),
+        )
+        sparse_pc_active_idx_np = sparse_pc_branch_setup.active_idx_np
+        sparse_pc_active_idx_jnp = sparse_pc_branch_setup.active_idx_jnp
+        sparse_pc_full_to_active_jnp = sparse_pc_branch_setup.full_to_active_jnp
+        sparse_pc_rhs = sparse_pc_branch_setup.rhs
+        sparse_pc_linear_size = int(sparse_pc_branch_setup.linear_size)
+        _sparse_pc_reduce_full = sparse_pc_branch_setup.reduce_full
+        _sparse_pc_expand_reduced = sparse_pc_branch_setup.expand_reduced
+        op_pc = sparse_pc_branch_setup.op_pc
+        sparse_pc_preconditioner_operator = (
+            sparse_pc_branch_setup.preconditioner_operator
         )
         fortran_reduced_xblock_min_size = (
-            fortran_reduced_backend_setup.xblock_min_size
+            sparse_pc_branch_setup.fortran_reduced_xblock_min_size
         )
-        fortran_reduced_sparse_pc_backend = fortran_reduced_backend_setup.backend
-        fortran_reduced_sparse_pc_backend_reason = fortran_reduced_backend_setup.reason
-        if emit is not None:
-            for level, message in fortran_reduced_backend_setup.messages:
-                emit(level, message)
+        fortran_reduced_sparse_pc_backend = (
+            sparse_pc_branch_setup.fortran_reduced_sparse_pc_backend
+        )
+        fortran_reduced_sparse_pc_backend_reason = (
+            sparse_pc_branch_setup.fortran_reduced_sparse_pc_backend_reason
+        )
 
         if bool(fortran_reduced_sparse_pc) and str(fortran_reduced_sparse_pc_backend) == "xblock":
             fortran_reduced_xblock_payload = solve_fortran_reduced_xblock_backend(
@@ -1727,47 +1727,11 @@ def solve_v3_full_system_linear_gmres(
                 payload=fortran_reduced_xblock_payload,
             )
 
-        sparse_pc_pattern_setup = build_sparse_pc_pattern_setup(
-            SparsePCPatternSetupContext(
-                op=op,
-                pattern_source_op=pattern_source_op,
-                fortran_reduced_sparse_pc=bool(fortran_reduced_sparse_pc),
-                sparse_pc_use_active_dof=bool(sparse_pc_use_active_dof),
-                active_idx_np=sparse_pc_active_idx_np,
-                preconditioner_x=int(preconditioner_x),
-                preconditioner_xi=int(preconditioner_xi),
-                preconditioner_species=int(preconditioner_species),
-                preconditioner_x_min_l=int(preconditioner_x_min_l),
-                fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
-                elapsed_s=sparse_timer.elapsed_s,
-                emit=emit,
-                fortran_reduced_pattern_for_indices=(
-                    v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices
-                ),
-                fortran_reduced_pattern=v3_full_system_fortran_reduced_preconditioner_sparsity_pattern,
-                conservative_pattern_for_indices=v3_full_system_conservative_sparsity_pattern_for_indices,
-                conservative_pattern=v3_full_system_conservative_sparsity_pattern,
-                summarize_pattern=summarize_v3_sparse_pattern,
-            )
-        )
-        pattern = sparse_pc_pattern_setup.pattern
-        sparse_pattern_scope = str(sparse_pc_pattern_setup.scope)
-        pattern_build_s = float(sparse_pc_pattern_setup.build_s)
-        summary = sparse_pc_pattern_setup.summary
-        sparse_pc_factor_policy = resolve_sparse_pc_factor_policy(
-            env=os.environ,
-            constrained_pas_pc=bool(constrained_pas_pc),
-            tokamak_fp_pc=bool(tokamak_fp_pc),
-            fortran_reduced_sparse_pc=bool(fortran_reduced_sparse_pc),
-            sparse_pc_linear_size=int(sparse_pc_linear_size),
-            pc_maxiter=int(pc_maxiter),
-            default_permc_spec=_rhsmode1_sparse_pc_default_permc_spec(
-                constrained_pas_pc=bool(constrained_pas_pc),
-                tokamak_pas_er_pc=bool(tokamak_pas_er_pc),
-                n_species=int(op.n_species),
-            ),
-            host_sparse_factor_dtype=_host_sparse_factor_dtype,
-        )
+        pattern = sparse_pc_branch_setup.pattern
+        sparse_pattern_scope = str(sparse_pc_branch_setup.sparse_pattern_scope)
+        pattern_build_s = float(sparse_pc_branch_setup.pattern_build_s)
+        summary = sparse_pc_branch_setup.summary
+        sparse_pc_factor_policy = sparse_pc_branch_setup.factor_policy
         pc_shift = float(sparse_pc_factor_policy.pc_shift)
         sparse_pc_factorization = str(sparse_pc_factor_policy.factorization)
         sparse_pc_default_factor_kind = str(sparse_pc_factor_policy.default_factor_kind)
@@ -1781,17 +1745,6 @@ def solve_v3_full_system_linear_gmres(
         sparse_pc_permc_spec = str(sparse_pc_factor_policy.permc_spec)
         fp32_probe_maxiter = int(sparse_pc_factor_policy.fp32_probe_maxiter)
         sparse_pc_first_attempt_maxiter = int(sparse_pc_factor_policy.first_attempt_maxiter)
-        enforce_sparse_pc_memory_budget(
-            SparsePCMemoryBudgetPreflightContext(
-                env=os.environ,
-                unknowns=int(sparse_pc_linear_size),
-                gmres_restart=int(pc_restart),
-                csr_nnz=int(summary.nnz),
-                dtype=sparse_pc_factor_dtype_initial,
-                device_count=max(1, int(jax.device_count())),
-                estimate_sparse_pc_memory=estimate_sparse_pc_memory,
-            )
-        )
 
         def _sparse_pc_factor_mv(x_np: np.ndarray) -> jnp.ndarray:
             x_jnp = _sparse_pc_expand_reduced(jnp.asarray(x_np, dtype=rhs.dtype))
