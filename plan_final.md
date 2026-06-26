@@ -103,6 +103,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   reference-reader tests, upstream-postprocessing wrapper tests, and active
   RHSMode=1 full-FP kinetic block-preconditioner tests. It also fixed short-file
   PETSc reader errors so malformed references fail with deterministic messages.
+- The sixth post-audit coverage tranche added explicit-sparse admission tests
+  for CSR matvec validation, forced storage paths, SuperLU storage accounting,
+  deterministic probe edge cases, and sparse-factor setup rejection modes. It
+  also added profile-system support tests for sharding policy, JAX-transform
+  cacheability, full-vector padding/unpadding, analytic source moments, and
+  RHSMode 2/3 transport-drive updates.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
