@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import h5py
 import numpy as np
@@ -16,6 +17,7 @@ from sfincs_jax.io import (
     _get_float,
     _get_int,
     _legendre_matrix,
+    localize_equilibrium_file_in_place,
     _phi1_fast_explicit_gmres_restart_default,
     _scheme4_radial_constants,
     _select_phi1_use_frozen_linearization,
@@ -26,7 +28,7 @@ from sfincs_jax.io import (
     read_sfincs_h5,
     write_sfincs_h5,
 )
-from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax.namelist import Namelist, read_sfincs_input
 from sfincs_jax.outputs.cache import output_cache_dir, output_cache_path
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 
@@ -321,6 +323,110 @@ def test_export_f_config_rejects_invalid_options() -> None:
         _export_f_config(nml=nml, grids=grids, geom=geom)
 
 
+def _toy_export_namelist(export_f: dict[str, object]) -> Namelist:
+    return Namelist(
+        groups={
+            "export_f": {
+                "EXPORT_FULL_F": True,
+                "EXPORT_DELTA_F": False,
+                **export_f,
+            },
+            "othernumericalparameters": {"XGRIDSCHEME": 5, "XGRID_K": 0.0},
+        },
+        indexed={},
+    )
+
+
+def _toy_export_grid_and_geometry() -> tuple[SimpleNamespace, SimpleNamespace]:
+    grids = SimpleNamespace(
+        theta=np.asarray([0.0, 0.5 * np.pi, np.pi, 1.5 * np.pi], dtype=np.float64),
+        zeta=np.asarray([0.0, 0.25 * np.pi, 0.5 * np.pi, 0.75 * np.pi], dtype=np.float64),
+        x=np.asarray([0.5, 1.5, 2.5], dtype=np.float64),
+        n_xi=3,
+    )
+    geom = SimpleNamespace(n_periods=2)
+    return grids, geom
+
+
+def test_export_f_config_option_zero_exports_native_grid() -> None:
+    grids, geom = _toy_export_grid_and_geometry()
+    cfg = _export_f_config(
+        nml=_toy_export_namelist(
+            {
+                "EXPORT_F_THETA_OPTION": 0,
+                "EXPORT_F_ZETA_OPTION": 0,
+                "EXPORT_F_X_OPTION": 0,
+                "EXPORT_F_XI_OPTION": 0,
+            }
+        ),
+        grids=grids,
+        geom=geom,
+    )
+
+    assert cfg is not None
+    np.testing.assert_allclose(cfg.export_theta, grids.theta)
+    np.testing.assert_allclose(cfg.export_zeta, grids.zeta)
+    np.testing.assert_allclose(cfg.export_x, grids.x)
+    assert cfg.export_xi is None
+    np.testing.assert_allclose(cfg.map_theta, np.eye(grids.theta.size))
+    np.testing.assert_allclose(cfg.map_zeta, np.eye(grids.zeta.size))
+    np.testing.assert_allclose(cfg.map_x, np.eye(grids.x.size))
+    np.testing.assert_allclose(cfg.map_xi, np.eye(grids.n_xi))
+
+
+def test_export_f_config_option_two_snaps_to_nearest_native_points() -> None:
+    grids, geom = _toy_export_grid_and_geometry()
+    cfg = _export_f_config(
+        nml=_toy_export_namelist(
+            {
+                "EXPORT_F_THETA_OPTION": 2,
+                "EXPORT_F_ZETA_OPTION": 2,
+                "EXPORT_F_X_OPTION": 2,
+                "EXPORT_F_XI_OPTION": 1,
+                "EXPORT_F_THETA": [0.1, 3.1],
+                "EXPORT_F_ZETA": [0.2, 1.7],
+                "EXPORT_F_X": [0.6, 2.4],
+                "EXPORT_F_XI": [-1.0, 0.0, 1.0],
+            }
+        ),
+        grids=grids,
+        geom=geom,
+    )
+
+    assert cfg is not None
+    np.testing.assert_allclose(cfg.export_theta, grids.theta[[0, 2]])
+    np.testing.assert_allclose(cfg.export_zeta, grids.zeta[[0, 2]])
+    np.testing.assert_allclose(cfg.export_x, grids.x[[0, 2]])
+    np.testing.assert_allclose(np.sum(cfg.map_theta, axis=1), 1.0)
+    np.testing.assert_allclose(np.sum(cfg.map_zeta, axis=1), 1.0)
+    np.testing.assert_allclose(np.sum(cfg.map_x, axis=1), 1.0)
+    np.testing.assert_allclose(cfg.map_xi[:, 0], 1.0)
+
+
+@pytest.mark.parametrize(
+    ("updates", "message"),
+    [
+        ({"EXPORT_F_ZETA_OPTION": 9}, "zeta_option"),
+        ({"EXPORT_F_X_OPTION": 9}, "x_option"),
+        ({"EXPORT_F_XI_OPTION": 9}, "xi_option"),
+    ],
+)
+def test_export_f_config_rejects_invalid_zeta_x_and_xi_options(
+    updates: dict[str, object],
+    message: str,
+) -> None:
+    grids, geom = _toy_export_grid_and_geometry()
+    base = {
+        "EXPORT_F_THETA_OPTION": 0,
+        "EXPORT_F_ZETA_OPTION": 0,
+        "EXPORT_F_X_OPTION": 0,
+        "EXPORT_F_XI_OPTION": 0,
+    }
+    base.update(updates)
+    with pytest.raises(ValueError, match=message):
+        _export_f_config(nml=_toy_export_namelist(base), grids=grids, geom=geom)
+
+
 def test_apply_export_f_maps_identity_preserves_distribution() -> None:
     class _Cfg:
         map_x = np.eye(2)
@@ -331,3 +437,55 @@ def test_apply_export_f_maps_identity_preserves_distribution() -> None:
     f = np.arange(1 * 2 * 3 * 2 * 2, dtype=np.float64).reshape(1, 2, 3, 2, 2)
     mapped = _apply_export_f_maps(f, _Cfg())
     np.testing.assert_allclose(mapped, f)
+
+
+def test_apply_export_f_maps_contracts_each_export_axis() -> None:
+    class _Cfg:
+        map_x = np.asarray([[0.25, 0.75]], dtype=np.float64)
+        map_xi = np.asarray([[1.0, 0.0], [0.0, 1.0]], dtype=np.float64)
+        map_theta = np.asarray([[0.5, 0.5]], dtype=np.float64)
+        map_zeta = np.asarray([[1.0, 0.0], [0.0, 1.0]], dtype=np.float64)
+
+    f = np.arange(1 * 2 * 2 * 2 * 2, dtype=np.float64).reshape(1, 2, 2, 2, 2)
+    mapped = _apply_export_f_maps(f, _Cfg())
+    expected = np.einsum(
+        "dz,ct,bl,ax,sxltz->sabcd",
+        _Cfg.map_zeta,
+        _Cfg.map_theta,
+        _Cfg.map_xi,
+        _Cfg.map_x,
+        f,
+        optimize=True,
+    )
+
+    assert mapped.shape == (1, 1, 2, 1, 2)
+    np.testing.assert_allclose(mapped, expected)
+
+
+def test_localize_equilibrium_file_returns_none_without_equilibrium(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text("&geometryParameters\n  geometryScheme = 1\n/\n")
+
+    assert localize_equilibrium_file_in_place(input_namelist=input_path) is None
+
+
+def test_localize_equilibrium_file_copies_boozer_alias_and_patches_input(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    run_dir = tmp_path / "run"
+    source_dir.mkdir()
+    run_dir.mkdir()
+    source = source_dir / "toy.bc"
+    source.write_text("toy boozer content\n")
+    input_path = run_dir / "input.namelist"
+    input_path.write_text(
+        "&geometryParameters\n"
+        "  geometryScheme = 10\n"
+        "  fort996boozer_file = '../source/toy.bc'\n"
+        "/\n"
+    )
+
+    localized = localize_equilibrium_file_in_place(input_namelist=input_path)
+
+    assert localized == run_dir / "toy.bc"
+    assert localized.read_text() == "toy boozer content\n"
+    assert "fort996boozer_file = 'toy.bc'" in input_path.read_text()

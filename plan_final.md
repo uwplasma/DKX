@@ -188,6 +188,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   messages, ADI sweep composition, named family routing, and default block
   dimension forwarding. These protect automatic solver-policy behavior in the
   extracted one-level solver modules without launching production solves.
+- The twentieth post-audit coverage tranche added output/export policy tests
+  for native-grid export, nearest-point export, invalid zeta/x/xi export
+  guards, nontrivial distribution-map contractions, no-equilibrium localization,
+  and Boozer-alias equilibrium localization/namelist patching. These are fast
+  Fortran-v3 output-contract tests for `outputs/writer.py` that keep generated
+  data out of the repository.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
