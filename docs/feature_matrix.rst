@@ -53,7 +53,8 @@ Fortran v3 feature ownership
      - Fortran performs a nonlinear or linear profile-response solve, then
        writes particle fluxes, heat fluxes, flows, currents, Phi1 fields, and
        convergence diagnostics.
-     - ``sfincs_jax.problems.profile_response`` plus legacy driver shims:
+     - ``sfincs_jax.problems.profile_solve`` plus flat ``profile_*`` problem
+       owners and legacy driver shims:
        implemented with gates. QA/QH production-grid convergence is supported
        with documented solver-policy limits; lower-memory replacement remains a
        performance lane, not a correctness blocker.
