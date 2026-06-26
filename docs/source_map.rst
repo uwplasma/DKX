@@ -1226,19 +1226,22 @@ the historical private driver name and test the focused module directly. This ke
   loop builds matvecs or preconditioners. It also owns the active full-vector
   DOF index helper used when the driver needs to mirror Fortran's reduced
   active transport unknown layout.
-- ``sfincs_jax/problems/transport_matrix/streaming_outputs.py``
+- ``sfincs_jax/outputs/transport.py``
   (legacy alias: ``sfincs_jax/transport_streaming_outputs.py``):
-  host-side streaming accumulator for RHSMode=2/3 transport diagnostics. It owns the
-  per-``whichRHS`` NumPy buffers, NTV/source handling, and final output-field
-  dictionary assembly used by low-memory transport solves, keeping HDF5-layout details
-  out of the solver loop.
-- ``sfincs_jax/problems/transport_matrix/postsolve_diagnostics.py``
-  (legacy alias: ``sfincs_jax/transport_postsolve_diagnostics.py``):
-  post-solve RHSMode=2/3 transport diagnostics orchestration. It chooses streamed
-  versus batched diagnostics, applies the rematerialization/precompute/chunking
-  environment policy, assembles species-by-``whichRHS`` flux arrays, and returns
-  the transport matrix plus optional output fields. This keeps diagnostic memory
-  policy out of the main Krylov solve loop.
+  RHSMode=2/3 transport output-schema helpers, host-side streaming
+  accumulators, and streaming HDF5 writes. It owns the per-``whichRHS`` NumPy
+  buffers, NTV/source handling, final output-field dictionary assembly, solver
+  diagnostic arrays, derivative conversion factors, and low-memory HDF5 output
+  path.
+- ``sfincs_jax/problems/transport_matrix/finalize.py``
+  (legacy aliases: ``sfincs_jax/transport_finalization.py`` and
+  ``sfincs_jax/transport_postsolve_diagnostics.py``):
+  final RHSMode=2/3 transport solve bookkeeping and post-solve diagnostics. It
+  recovers accepted full-space states, applies optional constraint projection,
+  stores residual/KSP diagnostics, chooses streamed versus batched diagnostics,
+  applies rematerialization/precompute/chunking policy, assembles
+  species-by-``whichRHS`` flux arrays, and returns the transport matrix plus
+  optional output fields.
 - ``sfincs_jax/problems/transport_matrix/diagnostics.py``
   (legacy alias: ``sfincs_jax/transport_matrix.py``):
   JAX formulas for RHSMode=1 output moments, RHSMode=2/3 transport diagnostics,
