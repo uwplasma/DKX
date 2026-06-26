@@ -10,9 +10,9 @@ import pytest
 from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax import cli
-from sfincs_jax import v3_driver
+import sfincs_jax.problems.transport_solve as transport_solve
 import sfincs_jax.problems.transport_parallel_runtime as transport_parallel_pool
-from sfincs_jax.v3_driver import solve_v3_transport_matrix_linear_gmres
+from sfincs_jax.problems.transport_solve import solve_v3_transport_matrix_linear_gmres
 
 
 def test_transport_parallel_worker_preserves_differentiable_payload(
@@ -23,7 +23,7 @@ def test_transport_parallel_worker_preserves_differentiable_payload(
     input_path.write_text("&general\n/\n")
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(v3_driver, "read_sfincs_input", lambda _path: object())
+    monkeypatch.setattr(transport_solve, "read_sfincs_input", lambda _path: object())
 
     def _fake_solve(**kwargs):
         captured.update(kwargs)
@@ -33,9 +33,9 @@ def test_transport_parallel_worker_preserves_differentiable_payload(
             elapsed_time_s=np.asarray([0.5]),
         )
 
-    monkeypatch.setattr(v3_driver, "solve_v3_transport_matrix_linear_gmres", _fake_solve)
+    monkeypatch.setattr(transport_solve, "solve_v3_transport_matrix_linear_gmres", _fake_solve)
 
-    result = v3_driver._transport_parallel_worker(
+    result = transport_solve._transport_parallel_worker(
         {
             "input_path": str(input_path),
             "which_rhs_values": [1],
@@ -146,9 +146,9 @@ def test_transport_parallel_gpu_backend_merges_subset_elapsed(monkeypatch: pytes
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL", "process")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "gpu")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS", "2")
-    monkeypatch.setattr(v3_driver, "_transport_parallel_backend", lambda: "gpu")
-    monkeypatch.setattr(v3_driver, "_transport_parallel_visible_gpu_ids", lambda _workers: ["0", "1"])
-    monkeypatch.setattr(v3_driver, "_run_transport_parallel_gpu_subprocesses", lambda **_kwargs: fake_results)
+    monkeypatch.setattr(transport_solve, "_transport_parallel_backend", lambda: "gpu")
+    monkeypatch.setattr(transport_solve, "_transport_parallel_visible_gpu_ids", lambda _workers: ["0", "1"])
+    monkeypatch.setattr(transport_solve, "_run_transport_parallel_gpu_subprocesses", lambda **_kwargs: fake_results)
 
     par = solve_v3_transport_matrix_linear_gmres(
         nml=nml,
@@ -227,7 +227,7 @@ def test_transport_scheme1_monoenergetic_gpu_heuristic_regression(tmp_path, monk
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL", "off")
     monkeypatch.setenv("SFINCS_JAX_FORTRAN_STDOUT", "0")
     monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "0")
-    monkeypatch.setattr(v3_driver.jax, "default_backend", lambda: "gpu")
+    monkeypatch.setattr(transport_solve.jax, "default_backend", lambda: "gpu")
 
     out_path = tmp_path / "mono_scheme1_gpu.h5"
     write_sfincs_jax_output_h5(
@@ -428,14 +428,14 @@ def test_transport_parallel_pool_reuses_workers(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(transport_parallel_pool.concurrent.futures, "ProcessPoolExecutor", _DummyPool)
     monkeypatch.setattr(transport_parallel_pool.mp, "get_context", lambda _name: object())
 
-    v3_driver._shutdown_transport_parallel_pool()
+    transport_solve._shutdown_transport_parallel_pool()
     try:
-        pool_1 = v3_driver._get_transport_parallel_pool(parallel_workers=2)
-        pool_2 = v3_driver._get_transport_parallel_pool(parallel_workers=2)
+        pool_1 = transport_solve._get_transport_parallel_pool(parallel_workers=2)
+        pool_2 = transport_solve._get_transport_parallel_pool(parallel_workers=2)
         assert pool_1 is pool_2
         assert _DummyPool.init_calls == 1
     finally:
-        v3_driver._shutdown_transport_parallel_pool()
+        transport_solve._shutdown_transport_parallel_pool()
     assert _DummyPool.shutdown_calls == 1
 
 
@@ -461,31 +461,31 @@ def test_transport_parallel_pool_rebuilds_on_worker_change(monkeypatch: pytest.M
     monkeypatch.setattr(transport_parallel_pool.concurrent.futures, "ProcessPoolExecutor", _DummyPool)
     monkeypatch.setattr(transport_parallel_pool.mp, "get_context", lambda _name: object())
 
-    v3_driver._shutdown_transport_parallel_pool()
+    transport_solve._shutdown_transport_parallel_pool()
     try:
-        pool_1 = v3_driver._get_transport_parallel_pool(parallel_workers=2)
-        pool_2 = v3_driver._get_transport_parallel_pool(parallel_workers=3)
+        pool_1 = transport_solve._get_transport_parallel_pool(parallel_workers=2)
+        pool_2 = transport_solve._get_transport_parallel_pool(parallel_workers=3)
         assert pool_1 is not pool_2
         assert _DummyPool.init_calls == 2
         # First pool should be shut down on key change.
         assert _DummyPool.shutdown_calls == 1
     finally:
-        v3_driver._shutdown_transport_parallel_pool()
+        transport_solve._shutdown_transport_parallel_pool()
     assert _DummyPool.shutdown_calls == 2
 
 
 def test_transport_parallel_backend_gpu_visible_ids(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "gpu")
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3,5,3,,5")
-    assert v3_driver._transport_parallel_backend() == "gpu"
-    assert v3_driver._transport_parallel_visible_gpu_ids(4) == ["3", "5"]
+    assert transport_solve._transport_parallel_backend() == "gpu"
+    assert transport_solve._transport_parallel_visible_gpu_ids(4) == ["3", "5"]
 
 
 def test_transport_parallel_pool_key_tracks_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "cpu")
-    key_cpu = v3_driver._transport_parallel_pool_key(2)
+    key_cpu = transport_solve._transport_parallel_pool_key(2)
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "gpu")
-    key_gpu = v3_driver._transport_parallel_pool_key(2)
+    key_gpu = transport_solve._transport_parallel_pool_key(2)
     assert key_cpu != key_gpu
 
 

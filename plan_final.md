@@ -2791,6 +2791,18 @@ Current completion status:
   flux-function fallback, and transport-matrix branch errors. These tests pin
   the diagnostic algebra used by frozen Fortran parity fixtures without adding
   new production solves or large HDF5 files.
+- Source-layout hygiene was rechecked after the diagnostic tranche: the package
+  has no nested implementation directories, no init-only package debt, no
+  top-level `rhs1_*` or `transport_*` implementation files, no public
+  docs/examples imports of `v3_driver`, and only tests import the 47-line
+  compatibility facade. The remaining simplification work is therefore in
+  reducing large domain-owner modules such as `profile_solve.py`,
+  `transport_solve.py`, and `profile_sparse_qi.py`, not more folder movement.
+- Non-facade transport tests were migrated from `sfincs_jax.v3_driver` to the
+  canonical `sfincs_jax.problems.transport_solve` imports. The compatibility
+  facade remains tested where monkeypatch/backward-import behavior is the
+  subject, but ordinary transport tests no longer depend on it as an
+  implementation owner.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.

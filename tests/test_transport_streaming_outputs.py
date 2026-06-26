@@ -10,7 +10,7 @@ from sfincs_jax.validation.petsc_binary import read_petsc_vec
 from sfincs_jax.problems.transport_diagnostics import v3_transport_output_fields_vm_only
 from sfincs_jax.outputs.transport import TransportStreamingOutputAccumulator
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
-from sfincs_jax.v3_driver import solve_v3_transport_matrix_linear_gmres
+from sfincs_jax.problems.transport_solve import solve_v3_transport_matrix_linear_gmres
 from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
 
 
