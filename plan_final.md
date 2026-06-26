@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (Phi1 Newton policy coverage pass)
+Last updated: 2026-06-26 (transport parallel planning coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -493,6 +493,17 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   non-differentiable Phi1 solve policy seams without launching a nonlinear
   production solve. The focused Phi1 suite reports `13 passed` in `0.63 s`, and
   the compact recent-lane review bundle reports `107 passed` in `24.89 s`.
+- The seventy-fourth post-audit coverage tranche added transport parallel
+  planning and admission gates. `tests/test_transport_parallel_sharding.py` now
+  covers shard-axis capping, malformed device metadata, invalid backend
+  metadata, compile-in-timed-region rejection, unsupported warm-operator timing
+  semantics, deterministic output-gate non-finite residuals, incomplete digest
+  pairs, single-device amortization rejection, invalid communication units, and
+  operator/coarse reuse blockers for disabled reuse, insufficient speedup, and
+  peak-memory growth. These tests keep the experimental single-case multi-device
+  and compiled-reuse paths fail-closed unless a measured residual/runtime/memory
+  artifact supports promotion. The focused transport parallel suite reports
+  `33 passed` in `0.57 s`, and Ruff passes on the changed test module.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
@@ -771,7 +782,10 @@ Tranche 5: examples redesign.
 
 Tranche 6: coverage ramp to 95%.
 
-- Status: exact package coverage is `85.003%` after the latest local audit.
+- Status: the latest full local xdist coverage audit measured `84%` package
+  coverage (`3615 passed, 163 skipped in 258.23 s`). The exact post-tranche
+  percentage should be refreshed with the next bounded full coverage audit; do
+  not advertise the older `85.003%` figure from a prior intermediate run.
   The next increment should target large user-risk modules rather than helper
   edges: `problems/profile_solve.py`, `problems/transport_solve.py`,
   `operators/profile_system.py`, `outputs/writer.py`,
