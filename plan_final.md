@@ -120,6 +120,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   dtype injection, Schur builder wiring, transport FP preconditioner wiring, and
   dense fallback delegation. These protect the extracted owner modules without
   running slow RHSMode=1 production solves.
+- The eighth post-audit coverage tranche expanded public grid tests for SFINCS
+  v3 `uniformDiffMatrices` branches: include-xmax periodic schemes, aperiodic
+  one-sided schemes, grid-placement/quadrature conventions, and finite-size
+  guards. These are fast numerical tests anchored in the v3 finite-difference
+  stencil definitions and do not add solve time to CI.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.

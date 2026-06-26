@@ -14,11 +14,17 @@ from sfincs_jax.grids import uniform_diff_matrices
         (50, 4, {4: 1.5, 3: -2.0, 2: 0.5}),
         (60, 1, {1: -1.5, 2: 2.0, 3: -0.5}),
         (80, 0, {1: 1.0 / 3.0, 0: 0.5, 5: -1.0, 4: 1.0 / 6.0}),
+        (81, 0, {1: 1.0 / 3.0, 0: 0.5, 5: -1.0, 4: 1.0 / 6.0}),
         (90, 0, {5: -1.0 / 3.0, 0: -0.5, 1: 1.0, 2: -1.0 / 6.0}),
+        (91, 0, {5: -1.0 / 3.0, 0: -0.5, 1: 1.0, 2: -1.0 / 6.0}),
         (100, 0, {1: 0.25, 0: 5.0 / 6.0, 5: -1.5, 4: 0.5, 3: -1.0 / 12.0}),
+        (101, 0, {1: 0.25, 0: 5.0 / 6.0, 5: -1.5, 4: 0.5, 3: -1.0 / 12.0}),
         (110, 0, {5: -0.25, 0: -5.0 / 6.0, 1: 1.5, 2: -0.5, 3: 1.0 / 12.0}),
+        (111, 0, {5: -0.25, 0: -5.0 / 6.0, 1: 1.5, 2: -0.5, 3: 1.0 / 12.0}),
         (120, 0, {2: -1.0 / 20.0, 1: 0.5, 0: 1.0 / 3.0, 5: -1.0, 4: 0.25, 3: -1.0 / 30.0}),
+        (121, 0, {2: -1.0 / 20.0, 1: 0.5, 0: 1.0 / 3.0, 5: -1.0, 4: 0.25, 3: -1.0 / 30.0}),
         (130, 0, {4: 1.0 / 20.0, 5: -0.5, 0: -1.0 / 3.0, 1: 1.0, 2: -0.25, 3: 1.0 / 30.0}),
+        (131, 0, {4: 1.0 / 20.0, 5: -0.5, 0: -1.0 / 3.0, 1: 1.0, 2: -0.25, 3: 1.0 / 30.0}),
     ],
 )
 def test_uniform_diff_matrices_stencil_schemes_have_expected_rows(
@@ -30,6 +36,46 @@ def test_uniform_diff_matrices_stencil_schemes_have_expected_rows(
     row_vals = np.asarray(ddx)[row]
     for col, coeff in entries.items():
         assert row_vals[col] == pytest.approx(coeff)
+
+
+@pytest.mark.parametrize(
+    ("scheme", "row", "entries"),
+    [
+        (82, 2, {3: 1.0 / 3.0, 2: 0.5, 1: -1.0, 0: 1.0 / 6.0}),
+        (92, 2, {1: -1.0 / 3.0, 2: -0.5, 3: 1.0, 4: -1.0 / 6.0}),
+        (102, 3, {4: 0.25, 3: 5.0 / 6.0, 2: -1.5, 1: 0.5, 0: -1.0 / 12.0}),
+        (112, 1, {0: -0.25, 1: -5.0 / 6.0, 2: 1.5, 3: -0.5, 4: 1.0 / 12.0}),
+    ],
+)
+def test_uniform_diff_matrices_aperiodic_one_sided_rows(
+    scheme: int,
+    row: int,
+    entries: dict[int, float],
+) -> None:
+    _, _, ddx, _ = uniform_diff_matrices(n=6, x_min=0.0, x_max=5.0, scheme=scheme)
+    row_vals = np.asarray(ddx)[row]
+    for col, coeff in entries.items():
+        assert row_vals[col] == pytest.approx(coeff)
+
+
+@pytest.mark.parametrize(
+    ("scheme", "expected_x"),
+    [
+        (80, np.arange(6.0)),
+        (81, np.arange(1.0, 7.0)),
+        (82, np.linspace(0.0, 5.0, 6)),
+    ],
+)
+def test_uniform_diff_matrices_grid_placement_matches_v3_radial_conventions(
+    scheme: int,
+    expected_x: np.ndarray,
+) -> None:
+    x, weights, _, _ = uniform_diff_matrices(n=6, x_min=0.0, x_max=6.0 if scheme != 82 else 5.0, scheme=scheme)
+    np.testing.assert_allclose(np.asarray(x), expected_x)
+    if scheme == 82:
+        np.testing.assert_allclose(np.asarray(weights), np.asarray([0.5, 1.0, 1.0, 1.0, 1.0, 0.5]))
+    else:
+        np.testing.assert_allclose(np.asarray(weights), np.ones(6))
 
 
 def test_uniform_diff_matrices_odd_periodic_spectral_exactness() -> None:
@@ -103,10 +149,9 @@ def test_uniform_diff_matrices_scheme3_matches_expected_low_order_exactness() ->
 
 
 def test_uniform_diff_matrices_minimum_n_guards_for_one_sided_five_point_schemes() -> None:
-    with pytest.raises(ValueError, match="scheme 102"):
-        uniform_diff_matrices(n=4, x_min=0.0, x_max=1.0, scheme=102)
-    with pytest.raises(ValueError, match="scheme 112"):
-        uniform_diff_matrices(n=4, x_min=0.0, x_max=1.0, scheme=112)
+    for scheme in (82, 92, 100, 101, 102, 110, 111, 112, 120, 121, 130, 131):
+        with pytest.raises(ValueError, match="scheme|4 point stencil"):
+            uniform_diff_matrices(n=4, x_min=0.0, x_max=1.0, scheme=scheme)
 
 
 def test_uniform_diff_matrices_notimplemented_branches_raise() -> None:
