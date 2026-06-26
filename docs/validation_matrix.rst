@@ -16,7 +16,7 @@ The corresponding machine-readable manifest lives in:
 
 - ``examples/publication_figures/validation_manifest.json``
 
-That file is intended to become the stable spine for:
+That file is the stable spine for:
 
 - future manuscript figure generation,
 - reproducible benchmark reruns,
@@ -47,7 +47,7 @@ Every manifest record has a ``release_gate`` block checked by
 ``scripts/check_release_gates.py`` and ``tests/test_release_gate_metadata.py``.
 The allowed ``claim_status`` values are:
 
-- ``release_ready``: checked-in artifacts support the documented current-release
+- ``release_ready``: checked-in artifacts support the documented release-scope
   claim, and the listed tests are the fast gate for that claim.
 - ``regression_scaffold``: checked-in bounded artifacts are useful for CI,
   branch validation, or manuscript layout, but a broader/full-resolution claim is
@@ -55,24 +55,25 @@ The allowed ``claim_status`` values are:
 - ``bounded_proxy``: checked-in artifacts support a narrower proxy or
   normalization claim, while the corresponding full literature reproduction stays
   closed until its promotion gate is met.
-- ``closed_deferred``: the lane is explicitly closed for the current release as
+- ``closed_deferred``: the lane is explicitly closed for the tagged release as
   post-release or nightly research work.
 
-No current manifest lane may set ``blocks_current_release=true``. A future lane
-that is not ready must therefore be either absent from the release manifest or
-recorded as ``closed_deferred`` with a concrete reason and promotion gate. This
-prevents scaffold scripts, run plans, or proxy figures from being mistaken for
-closed publication evidence.
+No manifest lane may set ``blocks_current_release=true`` unless the release
+process intentionally stops on that lane. A lane that is not ready must
+therefore be either absent from the release manifest or recorded as
+``closed_deferred`` with a concrete reason and promotion gate. This prevents
+scaffold scripts, run plans, or proxy figures from being mistaken for closed
+publication evidence.
 
-Current release decision
-------------------------
+Release decision
+----------------
 
-The current release candidate is shippable only for the documented release-ready
-and bounded-proxy claims. Production-resolution QI CPU/GPU seed ladders, true
-differentiable device-QI closure, and single-case multi-device strong scaling are
-not release blockers because they are explicitly scoped as bounded or deferred
-research lanes. They should be promoted only after checked artifacts satisfy the
-listed residual, output, trace, parity, and scaling gates.
+The release is shippable only for the documented release-ready and bounded-proxy
+claims. Production-resolution QI CPU/GPU seed ladders, true differentiable
+device-QI closure, and single-case multi-device strong scaling are not release
+blockers because they are explicitly scoped as bounded or deferred research
+lanes. They should be promoted only after checked artifacts satisfy the listed
+residual, output, trace, parity, and scaling gates.
 
 Implemented literature reproductions
 ------------------------------------
@@ -87,11 +88,11 @@ Literature anchor:
 - `Landreman et al. 2014 <https://doi.org/10.1063/1.4870077>`_
 - `Open PDF mirror <https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf>`_
 
-Current script:
+Script:
 
 - ``examples/publication_figures/generate_validation_dashboard.py``
 
-Current artifacts:
+Artifacts:
 
 - ``examples/publication_figures/artifacts/sfincs_jax_publication_validation_dashboard_summary.json``
 - ``docs/_static/figures/paper/sfincs_jax_publication_validation_dashboard.png``
@@ -117,11 +118,11 @@ Literature and reference anchors:
 - `Open PDF mirror <https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf>`_
 - `SFINCS Fortran repository <https://github.com/landreman/sfincs>`_
 
-Current script:
+Script:
 
 - ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``
 
-Current artifacts:
+Artifacts:
 
 - ``examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json``
 - ``docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png``
@@ -135,8 +136,8 @@ Current artifacts:
    plotted bars show wall-clock runtime and active solver memory for SFINCS
    Fortran v3, ``sfincs_jax`` CPU cold/warm, and ``sfincs_jax`` GPU cold/warm
    across the reference-runtime-window rows whose Fortran v3 reference runtime
-   is at least ``10 s``. The summary JSON records which previous frozen rows still
-   need full production-resolution reruns. JAX active memory subtracts the fixed Python/JAX/XLA runtime
+   is at least ``10 s``. The summary JSON records which frozen rows are excluded
+   from public performance claims until production-resolution reruns exist. JAX active memory subtracts the fixed Python/JAX/XLA runtime
    baseline using profiler RSS deltas while preserving full process RSS in the
    JSON audit fields. Cases are ordered by best warm ``sfincs_jax`` speedup over the
    Fortran v3 runtime. The acceptance tests require all 39 audited cases to remain
