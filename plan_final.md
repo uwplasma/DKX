@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (examples and procedural-doc navigation pass)
+Last updated: 2026-06-26 (fresh full coverage audit pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -84,7 +84,7 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   folders) were removed; ignored benchmark input caches remain local-only and
   are not part of a user clone or wheel.
 - A fresh xdist coverage audit on this branch completed successfully:
-  `3615 passed, 163 skipped in 258.23 s` with `84%` package coverage. The CI floor remains
+  `3620 passed, 168 skipped in 255.85 s` with `84%` package coverage. The CI floor remains
   `80%` until the branch has enough measured margin to raise it safely, but the
   target remains `95%` meaningful package coverage with GitHub Actions under
   `10 min`. The gap must be closed with bounded unit, numerical,
@@ -817,9 +817,9 @@ Tranche 5: examples redesign.
 Tranche 6: coverage ramp to 95%.
 
 - Status: the latest full local xdist coverage audit measured `84%` package
-  coverage (`3615 passed, 163 skipped in 258.23 s`). The exact post-tranche
-  percentage should be refreshed with the next bounded full coverage audit; do
-  not advertise the older `85.003%` figure from a prior intermediate run.
+  coverage (`3620 passed, 168 skipped in 255.85 s`). The exact percentage
+  remains below the `95%` target; do not advertise the older `85.003%` figure
+  from a prior intermediate run.
   The next increment should target large user-risk modules rather than helper
   edges: `problems/profile_solve.py`, `problems/transport_solve.py`,
   `operators/profile_system.py`, `outputs/writer.py`,
@@ -2704,7 +2704,7 @@ Current completion status:
   only remaining refactor work is the retained-boundary audit for the large
   profile/transport solve owners and final PR-body documentation.
 - Coverage and future-proof validation: the latest full local xdist coverage
-  audit completed `3615` tests with `163` skips in `258.23 s` and measured
+  audit completed `3620` tests with `168` skips in `255.85 s` and measured
   `84%` package coverage. The newest tests cover output streaming, periodic
   stencils, release-data fetching, PETSc reference readers, upstream wrapper
   behavior, active full-FP kinetic block preconditioners, sparse-pattern
