@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (transport active-block admission coverage pass)
+Last updated: 2026-06-26 (sparse-pattern active-branch coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -438,6 +438,15 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   are production-solver safeguards for the lower-memory RHSMode=2/3
   preconditioner path, exercised on tiny matrices rather than slow full solves.
   The focused active-factor suite reports `9 passed` in `0.29 s`.
+- The sixty-eighth post-audit coverage tranche added sparse-pattern active
+  branch gates. `tests/test_v3_sparse_pattern.py` now covers empty systems,
+  invalid active-index rejection, Phi1-in-kinetic angular columns,
+  constraintScheme=2 `pointAtX0` source rows, and partial-angular active sets
+  that must fall back from the optimized structured emitter to the general
+  active-index pattern builder. These protect production active-DOF operator
+  admission and Fortran-reduced preconditioner patterns without adding new
+  reference files. The focused sparse-pattern suite reports `138 passed` in
+  `106.37 s`.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.

@@ -57,6 +57,60 @@ def _assert_pattern_covers_matrix(pattern: sp.spmatrix, matrix: sp.spmatrix) -> 
     assert missing.nnz == 0
 
 
+def _synthetic_sparse_pattern_op(
+    *,
+    n_species: int = 1,
+    n_x: int = 2,
+    n_xi: int = 2,
+    n_theta: int = 2,
+    n_zeta: int = 2,
+    include_phi1: bool = False,
+    include_phi1_in_kinetic: bool = False,
+    constraint_scheme: int = 0,
+    point_at_x0: bool = False,
+    fp: object | None = None,
+    pas: object | None = None,
+    er_xdot: object | None = None,
+    magdrift_xidot: object | None = None,
+) -> SimpleNamespace:
+    f_size = int(n_species * n_x * n_xi * n_theta * n_zeta)
+    phi1_size = int(n_theta * n_zeta + 1) if include_phi1 else 0
+    if int(constraint_scheme) == 2:
+        extra_size = int(n_species * n_x)
+    elif int(constraint_scheme) in {1, 3, 4}:
+        extra_size = int(2 * n_species)
+    else:
+        extra_size = 0
+    ddtheta = np.eye(int(n_theta), dtype=np.float64)
+    if int(n_theta) > 1:
+        ddtheta[0, 1] = 0.25
+    ddzeta = np.eye(int(n_zeta), dtype=np.float64)
+    if int(n_zeta) > 1:
+        ddzeta[0, 1] = -0.5
+    return SimpleNamespace(
+        n_species=int(n_species),
+        n_x=int(n_x),
+        n_xi=int(n_xi),
+        n_theta=int(n_theta),
+        n_zeta=int(n_zeta),
+        f_size=f_size,
+        phi1_size=phi1_size,
+        total_size=int(f_size + phi1_size + extra_size),
+        include_phi1=bool(include_phi1),
+        include_phi1_in_kinetic=bool(include_phi1_in_kinetic),
+        constraint_scheme=int(constraint_scheme),
+        point_at_x0=bool(point_at_x0),
+        fblock=SimpleNamespace(
+            collisionless=SimpleNamespace(ddtheta=ddtheta, ddzeta=ddzeta),
+            fp=fp,
+            fp_phi1=None,
+            pas=pas,
+            er_xdot=er_xdot,
+            magdrift_xidot=magdrift_xidot,
+        ),
+    )
+
+
 def _fast_device_krylov_result(**kwargs):
     """Return a converged device-Krylov result for solver-path metadata tests."""
 
@@ -1130,6 +1184,103 @@ def test_sparse_pattern_summary_dict_preserves_operator_metadata() -> None:
         "has_fp": True,
         "has_pas": False,
     }
+
+
+def test_sparse_pattern_empty_and_invalid_active_sets_fail_closed() -> None:
+    empty = _synthetic_sparse_pattern_op(n_x=0, n_xi=0, n_theta=0, n_zeta=0)
+    estimate = estimate_v3_full_system_conservative_sparsity_summary(empty)
+    assert estimate.shape == (0, 0)
+    assert estimate.nnz == 0
+    assert v3_full_system_conservative_sparsity_pattern(empty).shape == (0, 0)
+    assert sparse_pattern_module.v3_full_system_conservative_sparsity_pattern_for_indices(
+        empty,
+        np.asarray([], dtype=np.int32),
+    ).shape == (0, 0)
+
+    op = _synthetic_sparse_pattern_op()
+    bad_active = np.asarray([0, op.total_size], dtype=np.int32)
+    with pytest.raises(ValueError, match="outside the full-system vector"):
+        sparse_pattern_module.v3_full_system_conservative_sparsity_pattern_for_indices(op, bad_active)
+    with pytest.raises(ValueError, match="outside the full-system vector"):
+        sparse_pattern_module.v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices(
+            op,
+            bad_active,
+        )
+
+
+def test_sparse_pattern_phi1_in_kinetic_adds_local_angular_phi1_columns() -> None:
+    op = _synthetic_sparse_pattern_op(
+        n_x=1,
+        n_xi=2,
+        include_phi1=True,
+        include_phi1_in_kinetic=True,
+    )
+    pattern = v3_full_system_conservative_sparsity_pattern(op)
+    row = sparse_pattern_module._f_index(op, 0, 0, 0, 0, 0)
+    cols = set(pattern.getrow(row).indices.tolist())
+
+    assert sparse_pattern_module._phi1_index(op, 0, 0) in cols
+    assert sparse_pattern_module._phi1_index(op, 1, 0) in cols
+    assert sparse_pattern_module._phi1_index(op, 0, 1) in cols
+
+
+def test_sparse_pattern_constraint_scheme2_point_at_x0_matches_fortran_source_rows() -> None:
+    op = _synthetic_sparse_pattern_op(
+        n_x=2,
+        n_xi=1,
+        n_theta=1,
+        n_zeta=1,
+        constraint_scheme=2,
+        point_at_x0=True,
+    )
+    pattern = v3_full_system_conservative_sparsity_pattern(op)
+    f_x0 = sparse_pattern_module._f_index(op, 0, 0, 0, 0, 0)
+    f_x1 = sparse_pattern_module._f_index(op, 0, 1, 0, 0, 0)
+    source_x0 = sparse_pattern_module._extra_index(op, 0)
+    source_x1 = sparse_pattern_module._extra_index(op, 1)
+
+    assert source_x0 not in set(pattern.getrow(f_x0).indices.tolist())
+    assert source_x1 in set(pattern.getrow(f_x1).indices.tolist())
+    assert f_x0 in set(pattern.getrow(source_x0).indices.tolist())
+    assert source_x0 in set(pattern.getrow(source_x0).indices.tolist())
+
+
+def test_active_sparse_pattern_fallback_matches_full_slice_for_partial_angular_set() -> None:
+    op = _synthetic_sparse_pattern_op(
+        n_x=2,
+        n_xi=2,
+        include_phi1=True,
+        include_phi1_in_kinetic=True,
+        constraint_scheme=2,
+        point_at_x0=True,
+        fp=object(),
+        er_xdot=object(),
+    )
+    active = np.asarray(
+        [
+            sparse_pattern_module._f_index(op, 0, 0, 0, 0, 0),
+            sparse_pattern_module._f_index(op, 0, 1, 0, 0, 0),
+            sparse_pattern_module._phi1_index(op, 0, 0),
+            sparse_pattern_module._extra_index(op, 0),
+            sparse_pattern_module._extra_index(op, 1),
+        ],
+        dtype=np.int32,
+    )
+
+    full = v3_full_system_conservative_sparsity_pattern(op)[active, :][:, active].tocsr()
+    active_pattern = sparse_pattern_module.v3_full_system_conservative_sparsity_pattern_for_indices(op, active)
+    reduced = sparse_pattern_module.v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices(
+        op,
+        active,
+        preconditioner_x=1,
+        preconditioner_xi=1,
+        preconditioner_species=1,
+        preconditioner_x_min_l=0,
+    )
+
+    assert (active_pattern != full).nnz == 0
+    assert reduced.shape == active_pattern.shape
+    assert reduced.nnz <= active_pattern.nnz
 
 
 def test_conservative_sparse_pattern_covers_pas_fortran_matrix() -> None:
