@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import importlib
 from pathlib import Path
@@ -91,6 +92,27 @@ def test_package_readme_describes_current_source_layout() -> None:
         assert f"`{module}`" in text or f"`{module.removesuffix('.py')}`" in text
     for module in sorted(set(expected["allowed_root_modules"]) - set(expected["target_root_modules"])):
         assert f"`{module}`" in text
+
+
+def test_package_sources_do_not_import_v3_driver_internally() -> None:
+    """Keep ``v3_driver.py`` as a user-compatibility shim, not an internal owner."""
+
+    offenders: list[str] = []
+    for path in sorted(PACKAGE_ROOT.rglob("*.py")):
+        if path.name == "v3_driver.py" or "__pycache__" in path.parts:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "sfincs_jax.v3_driver":
+                        offenders.append(path.relative_to(REPO_ROOT).as_posix())
+            elif isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if module in {"sfincs_jax.v3_driver", "v3_driver"}:
+                    offenders.append(path.relative_to(REPO_ROOT).as_posix())
+
+    assert offenders == []
 
 
 def test_flattened_operator_legacy_imports_resolve_to_canonical_modules() -> None:
