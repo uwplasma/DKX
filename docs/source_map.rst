@@ -38,9 +38,10 @@ skeleton packages are:
   bootstrap-current problem orchestration. ``profile_response.py`` is a
   compatibility shim for the former nested import path, not an implementation
   folder.
-- ``sfincs_jax/problems/transport_matrix`` for RHSMode=2/3 transport-matrix and
+- ``sfincs_jax/problems/transport_*.py`` for RHSMode=2/3 transport-matrix and
   monoenergetic-response orchestration, diagnostics, output-field assembly, and
-  compatibility shims for historical flat transport modules.
+  parallel transport workers. ``transport_matrix.py`` is a compatibility shim
+  for the former nested import path, not an implementation folder.
 - ``sfincs_jax/solvers`` and ``sfincs_jax/solvers/preconditioners`` for reusable
   Krylov, sparse/direct, residual-gate, implicit-differentiation, and
   preconditioning machinery.
@@ -524,7 +525,7 @@ pieces are assembled before being fed to the solve stack.
 
 Compatibility shim for the former monolithic driver. It imports
 ``sfincs_jax.problems.profile_solve`` and
-``sfincs_jax.problems.transport_matrix.solve``, exposes moved public and
+``sfincs_jax.problems.transport_solve``, exposes moved public and
 legacy-private names for existing users, and aliases ``import
 sfincs_jax.v3_driver`` to the profile-response solve owner so old monkeypatch
 tests still mutate the globals used by moved functions. It intentionally
@@ -533,14 +534,14 @@ preconditioner setup logic.
 
 When a solve behaves differently on CPU and GPU, inspect the problem owner
 first: ``sfincs_jax.problems.profile_solve`` for RHSMode 1 and
-``sfincs_jax.problems.transport_matrix.solve`` for RHSMode 2/3. The current
+``sfincs_jax.problems.transport_solve`` for RHSMode 2/3. The current
 domain owners replacing the old monolith are:
 
 - ``sfincs_jax/problems/profile_solver_diagnostics.py``:
   RHSMode=1 linear-solve and Newton-Krylov result dataclasses, final
   profile-response result wrapping, output-visible solver metadata, and bounded
   PETSc-style KSP residual-history replay.
-- ``sfincs_jax/problems/transport_matrix/finalize.py``:
+- ``sfincs_jax/problems/transport_finalize.py``:
   RHSMode=2/3 transport-matrix result dataclass plus per-RHS finalization,
   constraint projection, residual bookkeeping, and KSP replay request contracts.
 - ``sfincs_jax/solver.py``:
@@ -681,7 +682,7 @@ domain owners replacing the old monolith are:
   regularized diagonal inversion. The package-level
   ``sfincs_jax.solvers.preconditioners.schur`` import re-exports this stable
   owner; the historical ``rhs1*`` Schur implementation files were removed.
-- ``sfincs_jax/problems/transport_matrix/linear_system.py``:
+- ``sfincs_jax/problems/transport_linear_system.py``:
   RHSMode=2/3 transport active-system owner. It owns active-DOF and dense-path
   setup, active block ordering, bounded block-Schur factors, residual-coarse
   admission, direct reduced-``Pmat`` and exact active-operator emission,
@@ -1100,7 +1101,7 @@ domain owners replacing the old monolith are:
   measured candidate acceptance gates used by automatic solver/preconditioner
   promotions, including residual/parity checks and paired runtime/memory
   comparisons against an incumbent path.
-- ``sfincs_jax/problems/transport_matrix/policies.py``
+- ``sfincs_jax/problems/transport_policies.py``
   (historical location: ``sfincs_jax/transport_policy.py``):
   pure transport backend, sparse-direct, host-GMRES, dtype, recycle, polish,
   residual-abort threshold parsing and failure-message formatting,
@@ -1113,7 +1114,7 @@ domain owners replacing the old monolith are:
   ``residual_quality.py``, ``preconditioner_dispatch.py``, and
   ``solve_policy.py`` relays have been deleted; tests import this owner
   directly.
-- ``sfincs_jax/problems/transport_matrix/setup.py``
+- ``sfincs_jax/problems/transport_setup.py``
   (historical location: ``sfincs_jax/transport_solve_setup.py``):
   side-effect-light RHSMode=2/3 setup resolution for transport max-iteration
   overrides, optional Krylov state-file loading/merging, ``whichRHS`` subset
@@ -1127,7 +1128,7 @@ domain owners replacing the old monolith are:
   buffers, NTV/source handling, final output-field dictionary assembly, solver
   diagnostic arrays, derivative conversion factors, and low-memory HDF5 output
   path.
-- ``sfincs_jax/problems/transport_matrix/finalize.py``
+- ``sfincs_jax/problems/transport_finalize.py``
   (historical locations: ``sfincs_jax/transport_finalization.py`` and
   ``sfincs_jax/transport_postsolve_diagnostics.py``):
   final RHSMode=2/3 transport solve bookkeeping and post-solve diagnostics. It
@@ -1136,12 +1137,12 @@ domain owners replacing the old monolith are:
   applies rematerialization/precompute/chunking policy, assembles
   species-by-``whichRHS`` flux arrays, and returns the transport matrix plus
   optional output fields.
-- ``sfincs_jax/problems/transport_matrix/diagnostics.py``
+- ``sfincs_jax/problems/transport_diagnostics.py``
   (historical location: ``sfincs_jax/transport_matrix.py``):
   JAX formulas for RHSMode=1 output moments, RHSMode=2/3 transport diagnostics,
   transport-matrix assembly, strict Fortran-order reductions, and cached
   geometry/species diagnostic precomputes.
-- ``sfincs_jax/problems/transport_matrix/solve.py``:
+- ``sfincs_jax/problems/transport_solve.py``:
   public RHSMode=2/3 transport solve orchestration, transport-specific Krylov
   dispatch, dense-LU solver/preconditioner construction for bounded fallback
   paths, host SciPy GMRES first-attempt/rescue solves, and optional small-system
@@ -1155,7 +1156,7 @@ domain owners replacing the old monolith are:
   ``host_gmres.py``, ``iteration_stats.py``, ``loop.py``,
   ``sparse_direct_solve.py``, and stale ``linear_solve.py`` entries have been
   absorbed here; focused tests import this owner directly.
-- ``sfincs_jax/problems/transport_matrix/finalize.py``
+- ``sfincs_jax/problems/transport_finalize.py``
   (historical location: ``sfincs_jax/transport_solve_finalization.py``):
   sequential RHSMode=2/3 per-``whichRHS`` finalization after a solver branch has
   accepted a candidate. It owns reduced/full state bookkeeping, optional
@@ -1163,7 +1164,7 @@ domain owners replacing the old monolith are:
   collection, recycle-basis updates, and optional KSP iteration-stat dispatch.
   Dense fallback accepted-state overrides are explicit so the refactor preserves
   the established active-DOF branch behavior.
-- ``sfincs_jax/problems/transport_matrix/parallel/runtime.py``
+- ``sfincs_jax/problems/transport_parallel_runtime.py``
   (historical location: ``sfincs_jax/transport_parallel_runtime.py``):
   transport parallel backend policy, benchmark scaling audits, worker-count
   validation, XLA worker flag rewriting, RHS partitioning, injected-dependency
@@ -1174,10 +1175,10 @@ domain owners replacing the old monolith are:
   single-case sharded-solve planning metadata. This module absorbed the old
   policy, sharding, payload, pool, execution, solve, and validation micro-files
   so transport parallelism has one canonical runtime owner.
-- ``sfincs_jax/problems/transport_matrix/parallel/worker.py``
+- ``sfincs_jax/problems/transport_parallel_worker.py``
   (historical executable wrapper: ``sfincs_jax/transport_parallel_worker.py``):
   command-line worker entry point used by GPU transport subprocesses. The old
-  ``python -m sfincs_jax.problems.transport_matrix.parallel.worker`` path remains supported and
+  ``python -m sfincs_jax.problems.transport_parallel_worker`` path remains supported and
   delegates to this implementation.
 - ``sfincs_jax/validation/artifacts.py``:
   lightweight loaders and physics metrics for checked-in publication artifacts. This
@@ -1233,7 +1234,7 @@ Linear-algebra infrastructure:
 - augmented FGMRES hooks that reuse a checked coarse basis and stored operator
   action ``(U, A U)`` without assembling a dense global operator.
 
-``sfincs_jax/problems/transport_matrix/diagnostics.py``
+``sfincs_jax/problems/transport_diagnostics.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 RHSMode=2/3 postprocessing and transport-matrix assembly.
@@ -1259,7 +1260,7 @@ The conceptual mapping is:
   :doc:`geometry`
 - solve stack:
   ``sfincs_jax/problems/profile_solve.py``,
-  ``sfincs_jax/problems/transport_matrix/solve.py``,
+  ``sfincs_jax/problems/transport_solve.py``,
   ``sfincs_jax/solvers``, and ``sfincs_jax/solvers/preconditioners``
 - outputs and diagnostics:
   :doc:`outputs`, ``sfincs_jax/io.py``, ``sfincs_jax/diagnostics.py``

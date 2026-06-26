@@ -68,7 +68,7 @@ preserving differentiability:
    in parallel across CPU processes or GPU devices.
 
    Implementation: `solve_v3_transport_matrix_linear_gmres` in
-   `sfincs_jax.problems.transport_matrix.solve`.
+   `sfincs_jax.problems.transport_solve`.
 
 2. **Parallel cases / scan points**
 
@@ -143,9 +143,9 @@ path; outputs are merged deterministically by column.
 
 **Relevant code paths**
 
-- `sfincs_jax.problems.transport_matrix.solve.solve_v3_transport_matrix_linear_gmres`
-- `sfincs_jax.problems.transport_matrix.parallel.runtime`
-- `sfincs_jax.problems.transport_matrix.parallel.worker`
+- `sfincs_jax.problems.transport_solve.solve_v3_transport_matrix_linear_gmres`
+- `sfincs_jax.problems.transport_parallel_runtime`
+- `sfincs_jax.problems.transport_parallel_worker`
 
 **How it works**
 
@@ -218,7 +218,7 @@ Transport-worker scaling audit
 
 Saved transport-worker benchmark summaries can be checked with the pure
 CI-fast policy helper
-``sfincs_jax.problems.transport_matrix.parallel.runtime.audit_transport_parallel_scaling_summary``.
+``sfincs_jax.problems.transport_parallel_runtime.audit_transport_parallel_scaling_summary``.
 The helper does not launch workers, inspect hardware, or rerun solves. It only
 audits the saved payload:
 
@@ -707,14 +707,14 @@ The sharded-solve benchmark JSON is intentionally marked as
 ``benchmark_kind="single_case_sharded_solve"``,
 ``experimental_single_case_scaling=true``, and
 ``release_scaling_claim=false``. The corresponding pure helper,
-``sfincs_jax.problems.transport_matrix.parallel.runtime.audit_sharded_solve_scaling_summary``,
+``sfincs_jax.problems.transport_parallel_runtime.audit_sharded_solve_scaling_summary``,
 checks that the artifact is schema-valid and honestly marked as experimental;
 it does not convert a single-case sharded timing into a release transport
 throughput claim.
 
 The plan JSON also records
 ``operator_coarse_reuse_plan`` from
-``sfincs_jax.problems.transport_matrix.parallel.runtime.plan_single_case_operator_coarse_reuse``.
+``sfincs_jax.problems.transport_parallel_runtime.plan_single_case_operator_coarse_reuse``.
 This is the executable target for the next single-case scaling push: build the
 RHSMode=1 full-system operator once per child process, compile the sharded
 matvec/local-preconditioner/coarse-correction apply, keep the projected coarse
@@ -1284,5 +1284,5 @@ iterations, not another solver-label toggle.
 See also:
 
 - `docs/performance_techniques.rst`
-- `sfincs_jax.problems.transport_matrix.solve`
+- `sfincs_jax.problems.transport_solve`
 - `sfincs_jax.operators.profile_system`

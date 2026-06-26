@@ -326,11 +326,11 @@
         },
         {
           "claim": "Runtime policy module owns worker-count and backend decisions.",
-          "path": "sfincs_jax/problems/transport_matrix/parallel/runtime.py"
+          "path": "sfincs_jax/problems/transport_parallel_runtime.py"
         },
         {
           "claim": "Pure multi-GPU case-throughput audit rejects cold/mixed timing, non-GPU payloads, release overclaims, and sub-unity speedups.",
-          "path": "sfincs_jax/problems/transport_matrix/parallel/runtime.py"
+          "path": "sfincs_jax/problems/transport_parallel_runtime.py"
         },
         {
           "claim": "Fresh office two-GPU case-throughput artifact completed under timeout guards but failed the speedup gate at 0.337x, so it is blocker evidence rather than a release claim.",
@@ -342,7 +342,7 @@
         },
         {
           "claim": "Pure scaling audit fails explicit release claims that omit compile-amortization evidence and preserves explicit non-release status.",
-          "path": "sfincs_jax/problems/transport_matrix/parallel/runtime.py"
+          "path": "sfincs_jax/problems/transport_parallel_runtime.py"
         },
         {
           "claim": "Release-facing GPU transport-worker artifact records a measured two-worker speedup above one worker for independent transport tasks.",
@@ -354,7 +354,7 @@
         },
         {
           "claim": "Pure parallel claim-scope audit now separates independent whichRHS throughput, independent case throughput, and experimental single-case sharded solves before speedup claims are inspected.",
-          "path": "sfincs_jax/problems/transport_matrix/parallel/runtime.py"
+          "path": "sfincs_jax/problems/transport_parallel_runtime.py"
         },
         {
           "claim": "Transport and sharded benchmark plans now write parallel_claim_scope metadata so single-case sharding cannot be mistaken for release-grade strong scaling.",
@@ -362,11 +362,11 @@
         },
         {
           "claim": "Single-case sharded solve and matvec plans now record compiled operator-reuse gates, persistent compile-cache metadata, warm-run amortization semantics, and fail-closed deterministic residual/output gates before scaling claims can pass.",
-          "path": "sfincs_jax/problems/transport_matrix/parallel/runtime.py"
+          "path": "sfincs_jax/problems/transport_parallel_runtime.py"
         },
         {
           "claim": "Parallel scaling audits now fail CI-gate when single-case sharded solve artifacts omit compiled operator-reuse metadata or deterministic residual/output gate schema.",
-          "path": "sfincs_jax/problems/transport_matrix/parallel/runtime.py"
+          "path": "sfincs_jax/problems/transport_parallel_runtime.py"
         },
         {
           "claim": "Single-case sharded solve benchmark can now run a deterministic 1-vs-N output probe that writes solution-vector digests, relative L2 difference, evidence source, and vector paths before any scaling promotion.",
