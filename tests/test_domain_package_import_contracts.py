@@ -546,6 +546,16 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "v3_linear_solve_result_from_payload",
     ),
     (
+        "sfincs_jax.operators.profile_response.sparse_pattern",
+        "sfincs_jax.operators.profile_response.sparse_pattern",
+        "v3_full_system_conservative_sparsity_pattern",
+    ),
+    (
+        "sfincs_jax.operators.profile_response.sparse_pattern",
+        "sfincs_jax.operators.profile_response.sparse_pattern",
+        "v3_full_system_fortran_reduced_preconditioner_sparsity_pattern",
+    ),
+    (
         "sfincs_jax.problems.profile_response.preconditioner_build",
         "sfincs_jax.problems.profile_response.preconditioner_build",
         "auto_rhs1_full_strong_kind",

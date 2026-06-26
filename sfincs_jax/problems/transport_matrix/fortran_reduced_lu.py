@@ -27,7 +27,7 @@ from sfincs_jax.problems.transport_matrix.direct_pmat import (
     _build_rhsmode23_direct_pmat_physics_coarse_basis,
     _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle,
 )
-from sfincs_jax.v3_sparse_pattern import (
+from sfincs_jax.operators.profile_response.sparse_pattern import (
     summarize_v3_sparse_pattern,
     v3_full_system_fortran_reduced_preconditioner_sparsity_pattern,
     v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices,

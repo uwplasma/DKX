@@ -89,7 +89,7 @@ from sfincs_jax.solvers.preconditioners.xblock.low_l_schur import (
     build_xblock_tz_low_l_schur_preconditioner as _build_xblock_tz_low_l_schur_preconditioner,
     xblock_tz_low_l_indices as _xblock_tz_low_l_indices,
 )
-from sfincs_jax.v3_sparse_pattern import estimate_v3_full_system_conservative_sparsity_summary
+from sfincs_jax.operators.profile_response.sparse_pattern import estimate_v3_full_system_conservative_sparsity_summary
 
 _STRUCTURED_FULL_CSR_OBJECT_CACHE: dict[tuple[object, ...], tuple[Any, dict[str, object]]] = {}
 _active_fortran_v3_reduced_permc_candidates = active_fortran_v3_reduced_permc_candidates

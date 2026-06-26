@@ -667,6 +667,11 @@ the historical private driver name and test the focused module directly. This ke
   Fortran-reduced sparse owners. This module is intentionally independent of
   x-block assembled-operator and QI-device setup so it can stay reusable and
   easy to test.
+- ``sfincs_jax/operators/profile_response/sparse_pattern.py``:
+  conservative and Fortran-reduced sparse structural patterns for
+  profile-response full-system operators, including active-index restricted
+  patterns, sparse-pattern summaries, and memory-preflight estimates. This
+  replaces the historical root ``sfincs_jax/v3_sparse_pattern.py`` owner.
 - ``sfincs_jax/problems/profile_response/sparse/finalization.py``:
   sparse-PC GMRES result contracts, post-MinRes polish metadata, dtype-retry
   result assembly, completion messages, and final payload construction.

@@ -891,7 +891,7 @@ from sfincs_jax.problems.profile_response.solver_diagnostics import (
 from sfincs_jax.problems.transport_matrix.finalize import (
     V3TransportMatrixSolveResult,
 )
-from sfincs_jax.v3_sparse_pattern import (
+from sfincs_jax.operators.profile_response.sparse_pattern import (
     estimate_v3_full_system_conservative_sparsity_summary,
     summarize_v3_sparse_pattern,
     v3_full_system_conservative_sparsity_pattern,

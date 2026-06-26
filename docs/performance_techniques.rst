@@ -367,7 +367,7 @@ structural sparse pattern:
 4. Drop structural zeros, factor the resulting CSR matrix with host sparse LU,
    and apply iterative refinement against the true sparse operator.
 
-The implementation lives in ``sfincs_jax.v3_sparse_pattern`` and
+The implementation lives in ``sfincs_jax.operators.profile_response.sparse_pattern`` and
 ``sfincs_jax.solvers.explicit_sparse.build_operator_from_pattern``. Tests verify that the
 conservative pattern covers frozen Fortran PETSc matrices for PAS, FP, and Phi1
 tiny systems, and that colored probing reconstructs the PAS tiny matrix to

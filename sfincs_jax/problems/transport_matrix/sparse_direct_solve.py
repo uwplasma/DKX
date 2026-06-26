@@ -13,7 +13,7 @@ import numpy as np
 
 from sfincs_jax.solvers.explicit_sparse import build_operator_from_matvec, estimate_csr_nbytes, factorize_host_sparse_operator
 from sfincs_jax.solver import GMRESSolveResult
-from sfincs_jax.v3_sparse_pattern import (
+from sfincs_jax.operators.profile_response.sparse_pattern import (
     summarize_v3_sparse_pattern,
     v3_full_system_conservative_sparsity_pattern,
     v3_full_system_conservative_sparsity_pattern_for_indices,

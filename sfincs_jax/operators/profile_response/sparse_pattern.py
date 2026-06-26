@@ -1,3 +1,5 @@
+"""Sparse structural patterns for profile-response full-system operators."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

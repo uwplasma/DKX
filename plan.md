@@ -4528,3 +4528,84 @@ Next best steps:
 3. After remaining root kernels are routed, resume Sweep 1 and collapse the
    remaining factor-preflight/residual-correction/final sparse payload code out
    of `profile_response/solve.py`.
+
+## 2026-06-26 Sweep 0 Sparse-Pattern Root Routing
+
+Steps taken:
+
+1. Moved conservative and Fortran-reduced sparse structural patterns from the
+   historical root module `sfincs_jax/v3_sparse_pattern.py` into the
+   operator-domain owner
+   `sfincs_jax/operators/profile_response/sparse_pattern.py`.
+2. Removed the historical root file instead of keeping a compatibility facade,
+   because package-internal imports, docs, examples, scripts, and tests no
+   longer import `sfincs_jax.v3_sparse_pattern`.
+3. Rewired sparse-pattern imports in profile-response full-system operators,
+   sparse direct/preconditioner paths, transport-matrix sparse/direct helpers,
+   and focused tests to use the operator-domain owner.
+4. Updated `docs/source_map.rst`, `docs/api.rst`,
+   `docs/performance_techniques.rst`, and
+   `tests/test_domain_package_import_contracts.py` so the sparse-pattern
+   ownership is explicit and import-contract tested.
+5. Fixed a real setup inefficiency exposed by the x-block backend regression:
+   `fortran_reduced_pc_gmres` with backend `xblock` now returns before
+   building the monolithic Fortran-reduced sparse pattern. The generic branch
+   setup records a deferred x-block pattern scope with zero monolithic pattern
+   build time, and `solve.py` continues to dispatch directly to the x-block
+   backend.
+
+Results:
+
+- Package-internal imports from `sfincs_jax.v3_sparse_pattern`: `0`.
+- `sfincs_jax/v3_sparse_pattern.py` was removed from the package root.
+- Package file count remains `209`; package-root file count decreases from
+  `48` to `47`.
+- Package source lines are `164,891`. This is temporarily above the
+  `164,865` consolidation baseline because the x-block guard added explicit
+  admission metadata; the review-ready target remains net source-line
+  reduction below the baseline after later deletion/merge sweeps.
+- `operators/profile_response` now owns `12` files and `15,268` lines,
+  including the sparse-pattern owner.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/sparse/handoff.py
+  sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/operators/profile_response/sparse_pattern.py
+  tests/test_v3_sparse_pattern.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/sparse/handoff.py
+  sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/operators/profile_response/sparse_pattern.py
+  tests/test_v3_sparse_pattern.py` passed.
+- `python -m pytest
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_solves_tiny_rhs1_system
+  -q --tb=short` passed with `1 passed`.
+- `python -m pytest tests/test_transport_sparse_direct_solve.py
+  tests/test_v3_driver_sparse_helper_coverage.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` passed with
+  `28 passed`.
+- `python -m pytest tests/test_v3_sparse_pattern.py
+  tests/test_rhs1_device_operator.py -q --tb=short` passed with `135 passed`.
+
+Progress:
+
+- Lane 1 structural consolidation: about `86%`.
+- Sweep 0 freeze/delete/route: about `30%`; result contracts and sparse
+  structural patterns are routed, while `v3_fblock.py`, `v3_system.py`, and
+  possible `v3.py` compatibility disposition remain.
+- Sweep 1 profile-response collapse: about `44%`.
+- Sweep 2 transport/output/root cleanup: about `20%`.
+- Sweep 3 solver/preconditioner family consolidation: about `25%`.
+- Sweep 4 public API/docs/tests/review gate: about `23%`.
+
+Next best steps:
+
+1. Continue Sweep 0 with `v3_fblock.py`, because it should become a
+   profile-response operator-domain owner and is the next historical root
+   implementation module after sparse patterns.
+2. Then route `v3_system.py` behind an operator/problem-domain owner and decide
+   whether `v3.py` remains a documented public compatibility facade.
+3. Resume Sweep 1 only after the remaining root-kernel routing is finished:
+   move sparse finalization/progress normalization, factor-preflight execution,
+   and residual-correction execution out of `profile_response/solve.py`
+   without adding helper-only files.

@@ -24,7 +24,7 @@ from sfincs_jax.problems.profile_response.residual import (
 from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
 from sfincs_jax.solvers.preconditioners.xblock.policy import resolve_rhs1_xblock_sparse_pc_policy
 from sfincs_jax.solver import FlexibleGMRESSolveResult
-from sfincs_jax.v3_sparse_pattern import (
+from sfincs_jax.operators.profile_response.sparse_pattern import (
     estimate_v3_full_system_conservative_sparsity_summary,
     summarize_v3_sparse_pattern,
     v3_full_system_conservative_sparsity_pattern,

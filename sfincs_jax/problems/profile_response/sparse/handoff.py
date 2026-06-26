@@ -1450,11 +1450,11 @@ class SparsePCGenericBranchSetupResult:
     fortran_reduced_xblock_min_size: int
     fortran_reduced_sparse_pc_backend: str
     fortran_reduced_sparse_pc_backend_reason: str
-    pattern: object
+    pattern: object | None
     sparse_pattern_scope: str
     pattern_build_s: float
-    summary: object
-    factor_policy: SparsePCFactorPolicySetup
+    summary: object | None
+    factor_policy: SparsePCFactorPolicySetup | None
 
 
 @dataclass(frozen=True)
@@ -2069,6 +2069,34 @@ def build_sparse_pc_generic_branch_setup(
     if context.emit is not None:
         for level, message in backend_setup.messages:
             context.emit(level, message)
+
+    if bool(context.fortran_reduced_sparse_pc) and str(backend_setup.backend) == "xblock":
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres "
+                "skipping monolithic sparse pattern for x-block backend",
+            )
+        return SparsePCGenericBranchSetupResult(
+            active_idx_np=active_setup.active_idx_np,
+            active_idx_jnp=active_setup.active_idx_jnp,
+            full_to_active_jnp=active_setup.full_to_active_jnp,
+            rhs=active_setup.rhs,
+            linear_size=int(active_setup.linear_size),
+            reduce_full=active_setup.reduce_full,
+            expand_reduced=active_setup.expand_reduced,
+            op_pc=op_pc,
+            pattern_source_op=pattern_source_op,
+            preconditioner_operator=preconditioner_operator,
+            fortran_reduced_xblock_min_size=int(backend_setup.xblock_min_size),
+            fortran_reduced_sparse_pc_backend=str(backend_setup.backend),
+            fortran_reduced_sparse_pc_backend_reason=str(backend_setup.reason),
+            pattern=None,
+            sparse_pattern_scope="fortran_reduced_xblock_deferred",
+            pattern_build_s=0.0,
+            summary=None,
+            factor_policy=None,
+        )
 
     pattern_setup = build_sparse_pc_pattern_setup(
         SparsePCPatternSetupContext(
