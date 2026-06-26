@@ -46,7 +46,7 @@ API reference
 .. automodule:: sfincs_jax.operators.profile_response.magnetic_drifts
    :members:
 
-.. automodule:: sfincs_jax.collisions
+.. automodule:: sfincs_jax.physics.collisions
    :members:
 
 .. automodule:: sfincs_jax.operators.profile_response.fblock

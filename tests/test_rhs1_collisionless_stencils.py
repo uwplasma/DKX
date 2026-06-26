@@ -10,7 +10,7 @@ import pytest
 from sfincs_jax.operators.profile_response.collisionless import CollisionlessV3Operator, apply_collisionless_v3
 from sfincs_jax.operators.profile_response.electric_field import apply_er_xdot_v3, apply_er_xidot_v3
 from sfincs_jax.operators.profile_response.exb import ExBThetaV3Operator, ExBZetaV3Operator, apply_exb_theta_v3, apply_exb_zeta_v3
-from sfincs_jax.collisions import apply_pitch_angle_scattering_v3, make_pitch_angle_scattering_v3_operator
+from sfincs_jax.physics.collisions import apply_pitch_angle_scattering_v3, make_pitch_angle_scattering_v3_operator
 from sfincs_jax.operators.profile_response.magnetic_drifts import (
     apply_magnetic_drift_theta_v3,
     apply_magnetic_drift_xidot_v3,

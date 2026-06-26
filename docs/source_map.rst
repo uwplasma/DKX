@@ -72,6 +72,10 @@ field terms, ExB terms, magnetic drifts, and matrix-free linear-system
 residual wrappers. These are imported through the operator package, not through
 root compatibility shims.
 
+``sfincs_jax/physics`` now owns the former flat collision and classical
+transport physics kernels. Operator assembly imports the physics package for
+PAS/full-FP/classical formulas instead of using root compatibility shims.
+
 Root public surface classification
 ----------------------------------
 
@@ -121,12 +125,6 @@ facades.
    * - ``sensitivity.py``
      - public differentiation API
      - JVP/VJP, implicit, and adjoint certificates used by optimization workflows.
-   * - ``classical_transport.py``
-     - stable physics kernel
-     - Classical transport formulas and validation gates.
-   * - ``collisions.py``
-     - stable physics kernel
-     - Collision-operator formulas shared by profile-response and transport solves.
    * - ``constrained_pas_branch.py``
      - stable solver-policy kernel
      - Constraint-aware PAS branch policy guarded by focused tests.
@@ -213,12 +211,6 @@ tests.
    * - ``sensitivity.py``
      - package root differentiation API
      - keep at root
-   * - ``classical_transport.py``
-     - physics classical transport owner
-     - move only with physics API export tests
-   * - ``collisions.py``
-     - physics/operators collision owner
-     - move only with collision API export tests
    * - ``constrained_pas_branch.py``
      - solvers/preconditioners PAS policy owner
      - move in solver-policy group if no public shim is needed
@@ -513,8 +505,8 @@ supported.
 Magnetic-drift coefficient construction, angular advection terms, upwinding masks, and
 associated :math:`\partial_\xi` couplings.
 
-``sfincs_jax/collisions.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+``sfincs_jax/physics/collisions.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Collision models:
 

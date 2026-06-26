@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.collisions import (
+from sfincs_jax.physics.collisions import (
     _V3_SQRTPI,
     _psi_chandra,
     apply_pitch_angle_scattering_v3,

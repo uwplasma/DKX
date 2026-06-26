@@ -256,6 +256,15 @@ RESERVED_MODULE_NAMES_UNTIL_MIGRATION = (
 )
 
 MOVED_ROOT_MODULE_OWNERS = {
+    "sfincs_jax.physics.classical_transport": (
+        "classical_flux_v3",
+    ),
+    "sfincs_jax.physics.collisions": (
+        "FokkerPlanckV3Operator",
+        "FokkerPlanckV3Phi1Operator",
+        "PitchAngleScatteringV3Operator",
+        "apply_pitch_angle_scattering_v3",
+    ),
     "sfincs_jax.operators.profile_response.collisionless": (
         "CollisionlessV3Operator",
         "apply_collisionless_v3",
@@ -357,6 +366,8 @@ DELETED_ROOT_ALIASES = (
     "sfincs_jax.collisionless_exb",
     "sfincs_jax.magnetic_drifts",
     "sfincs_jax.residual",
+    "sfincs_jax.classical_transport",
+    "sfincs_jax.collisions",
 )
 
 ROOT_MODULE_CLASSIFICATIONS = {
@@ -364,9 +375,7 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "__main__.py": "public entry point",
     "ambipolar.py": "public physics API",
     "api.py": "public API",
-    "classical_transport.py": "stable physics kernel",
     "cli.py": "public entry point",
-    "collisions.py": "stable physics kernel",
     "compare.py": "public validation API",
     "constrained_pas_branch.py": "stable solver-policy kernel",
     "constraint_projection.py": "stable numerical kernel",
@@ -392,9 +401,7 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "__main__.py": ("package root CLI entry point", "keep at root"),
     "ambipolar.py": ("problems.ambipolar via public API facade", "keep root shim until public docs/examples migrate"),
     "api.py": ("package root public API", "keep at root"),
-    "classical_transport.py": ("physics classical transport owner", "move only with physics API export tests"),
     "cli.py": ("package root CLI entry point", "keep at root"),
-    "collisions.py": ("physics/operators collision owner", "move only with collision API export tests"),
     "compare.py": ("validation comparison API", "move only after examples/scripts use validation owner"),
     "constrained_pas_branch.py": ("solvers/preconditioners PAS policy owner", "move in solver-policy group if no public shim is needed"),
     "constraint_projection.py": ("solvers constraint-projection owner", "move only after transport/profile imports use solver owner"),

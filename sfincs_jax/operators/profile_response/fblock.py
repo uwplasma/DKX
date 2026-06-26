@@ -26,7 +26,7 @@ from sfincs_jax.geometry.boozer import read_boozer_bc_header, selected_r_n_from_
 from sfincs_jax.operators.profile_response.collisionless import CollisionlessV3Operator, apply_collisionless_v3
 from sfincs_jax.operators.profile_response.electric_field import ErXDotV3Operator, ErXiDotV3Operator, apply_er_xdot_v3, apply_er_xidot_v3
 from sfincs_jax.operators.profile_response.exb import ExBThetaV3Operator, ExBZetaV3Operator, apply_exb_theta_v3, apply_exb_zeta_v3
-from sfincs_jax.collisions import (
+from sfincs_jax.physics.collisions import (
     FokkerPlanckV3Operator,
     FokkerPlanckV3Phi1Operator,
     PitchAngleScatteringV3Operator,

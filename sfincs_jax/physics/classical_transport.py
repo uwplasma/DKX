@@ -1,3 +1,5 @@
+"""Classical transport formulas and validation helpers."""
+
 from __future__ import annotations
 
 from jax import config as _jax_config
@@ -121,4 +123,3 @@ def classical_flux_v3(
     hf_a = -z_s * (delta**2) * nu_n * jnp.sqrt(m_hat) * hf_a / (4.0 * jnp.sqrt(t_hat))
     hf_a = hf_a + 1.25 * t_hat * pf_a
     return pf_a, hf_a
-

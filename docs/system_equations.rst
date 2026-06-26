@@ -159,4 +159,5 @@ Implementation note
 Not every optional Phi1 coupling that appears in the extended literature is active in
 every public workflow. The supported scope is documented in :doc:`inputs`,
 :doc:`outputs`, and :doc:`fortran_comparison`, and the code paths that construct these
-blocks live primarily in ``sfincs_jax/operators/profile_response/system.py`` and ``sfincs_jax/collisions.py``.
+blocks live primarily in ``sfincs_jax/operators/profile_response/system.py`` and
+``sfincs_jax/physics/collisions.py``.

@@ -73,7 +73,7 @@ Pitch-angle scattering collisions (``collisionOperator = 1`` without Phi1):
 
 .. code-block:: python
 
-   from sfincs_jax.collisions import make_pitch_angle_scattering_v3_operator, apply_pitch_angle_scattering_v3
+   from sfincs_jax.physics.collisions import make_pitch_angle_scattering_v3_operator, apply_pitch_angle_scattering_v3
 
    z_s = jnp.asarray(np.atleast_1d(np.asarray(species["ZS"], dtype=float)))
    n_hats = jnp.asarray(np.atleast_1d(np.asarray(species["NHATS"], dtype=float)))

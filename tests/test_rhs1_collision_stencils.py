@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.collisions import (
+from sfincs_jax.physics.collisions import (
     apply_fokker_planck_v3,
     apply_fokker_planck_v3_phi1,
     apply_pitch_angle_scattering_v3,

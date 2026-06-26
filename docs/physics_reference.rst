@@ -124,7 +124,7 @@ linearized collision operator
 with test-particle and field-particle pieces that couple the Legendre modes across
 species. This coupling is what makes the Fokker–Planck operator dense in speed space.
 `sfincs_jax` mirrors the v3 block structure in
-``sfincs_jax/collisions.py`` and assembles multi-species blocks in
+``sfincs_jax/physics/collisions.py`` and assembles multi-species blocks in
 ``sfincs_jax/operators/profile_response/system.py``.
 
 Numerical implications:
@@ -201,11 +201,11 @@ The single- and multi-species notes emphasize that the linearized operator must 
 particles, momentum, and energy. In practice this means the field-particle terms are
 constructed to exactly cancel the moment losses of the test-particle operator, which is
 why the FP block is dense in :math:`x`. `sfincs_jax` mirrors the v3 moment conservation
-strategy in ``sfincs_jax/collisions.py`` (see the field-particle assembly helpers).
+strategy in ``sfincs_jax/physics/collisions.py`` (see the field-particle assembly helpers).
 
 Code links:
 ``sfincs_jax/grids.py`` (polynomial grids and quadrature),
-``sfincs_jax/collisions.py`` (PAS and FP operators),
+``sfincs_jax/physics/collisions.py`` (PAS and FP operators),
 ``sfincs_jax/discretization/xgrid.py`` (collocation-to-modal transforms).
 
 Phi1 and quasineutrality
@@ -239,7 +239,7 @@ Numerical challenges include:
 Code links:
 ``sfincs_jax/operators/profile_response/system.py`` (Phi1 block),
 ``sfincs_jax/io.py`` (Phi1 input handling),
-``sfincs_jax/collisions.py`` (Phi1-in-collisions),
+``sfincs_jax/physics/collisions.py`` (Phi1-in-collisions),
 ``sfincs_jax/diagnostics.py`` (Phi1 output fields).
 
 Phi1 impact on flux definitions (20150325-01)
@@ -374,7 +374,7 @@ with :math:`\mathbf{R}_a` and :math:`\mathbf{G}_a` the friction and energy-weigh
 friction forces defined from :math:`C[f_a]`.
 
 Code links:
-``sfincs_jax/classical_transport.py``.
+``sfincs_jax/physics/classical_transport.py``.
 
 DKES compatibility notes
 ------------------------
@@ -409,7 +409,7 @@ The table below summarizes where each term in the v3 drift-kinetic equation is i
   ``sfincs_jax/operators/profile_response/collisionless.py`` and
   ``sfincs_jax/operators/profile_response/electric_field.py``.
 - Collision operators (PAS and full FP):
-  ``sfincs_jax/collisions.py`` with modal transforms in ``sfincs_jax/discretization/xgrid.py``.
+  ``sfincs_jax/physics/collisions.py`` with modal transforms in ``sfincs_jax/discretization/xgrid.py``.
 - Constraint rows/columns and Phi1 blocks:
   ``sfincs_jax/operators/profile_response/system.py`` and ``sfincs_jax/v3_driver.py``.
 - Diagnostics and flux assembly:

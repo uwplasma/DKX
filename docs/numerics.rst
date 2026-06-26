@@ -194,7 +194,7 @@ The most important numerical modules are:
   right-hand-side evaluation.
 - ``sfincs_jax/solver.py``: linear-solver wrappers and Krylov helpers.
 - ``sfincs_jax/solvers/implicit.py``: differentiable linear solve path.
-- ``sfincs_jax/collisions.py``: PAS and full FP operator kernels.
+- ``sfincs_jax/physics/collisions.py``: PAS and full FP operator kernels.
 - ``sfincs_jax/grids.py`` and ``sfincs_jax/discretization/xgrid.py``: collocation grids, quadrature,
   modal transforms.
 
