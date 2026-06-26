@@ -2832,6 +2832,10 @@ Current completion status:
   `problems.transport_solve` and monkeypatches the transport module backend
   directly, removing another large set of test-only `v3_driver` references while
   preserving the exact solver-policy assertions.
+- The RHSMode=1 full-assembly/structured-CSR suite now imports its remaining
+  solve-orchestration namespace from `problems.profile_solve`; this keeps the
+  large structured operator, active-factor, and guarded production-path tests on
+  the domain owner rather than the compatibility shim.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
