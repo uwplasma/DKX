@@ -151,6 +151,10 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   refinement, and GMRES-polish callback wiring. These protect the native sparse
   factor infrastructure used by production preconditioners without running a
   full production solve.
+- The fourteenth post-audit coverage tranche added transport linear-solve
+  routing tests for implicit residual solves, plain/JIT GMRES residual routes,
+  distributed-axis dispatch, and callback binding. These keep RHSMode=2/3
+  solver orchestration covered without launching expensive transport examples.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
