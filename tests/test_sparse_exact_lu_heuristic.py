@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from sfincs_jax.v3_driver import _rhsmode1_sparse_exact_lu_requested
+from sfincs_jax.problems.profile_policies import (
+    rhsmode1_sparse_exact_lu_requested_current_backend as _rhsmode1_sparse_exact_lu_requested,
+)
 
 
 def _op(*, has_fp: bool = True, has_pas: bool = False, has_phi1: bool = False, rhs_mode: int = 1):
@@ -18,7 +20,7 @@ def _op(*, has_fp: bool = True, has_pas: bool = False, has_phi1: bool = False, r
 
 def test_sparse_exact_lu_enabled_for_full_x_coupling(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert _rhsmode1_sparse_exact_lu_requested(
         op=_op(),
         solve_method_kind="incremental",
@@ -32,7 +34,7 @@ def test_sparse_exact_lu_enabled_for_full_x_coupling(monkeypatch) -> None:
 
 def test_sparse_exact_lu_enabled_for_gpu_dkes(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert _rhsmode1_sparse_exact_lu_requested(
         op=_op(),
         solve_method_kind="incremental",
@@ -46,7 +48,7 @@ def test_sparse_exact_lu_enabled_for_gpu_dkes(monkeypatch) -> None:
 
 def test_sparse_exact_lu_enabled_for_small_full_preconditioner_pas(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert _rhsmode1_sparse_exact_lu_requested(
         op=_op(has_fp=False, has_pas=True),
         solve_method_kind="incremental",
@@ -60,7 +62,7 @@ def test_sparse_exact_lu_enabled_for_small_full_preconditioner_pas(monkeypatch) 
 
 def test_sparse_exact_lu_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert not _rhsmode1_sparse_exact_lu_requested(
         op=_op(has_fp=False),
         solve_method_kind="incremental",
@@ -100,7 +102,7 @@ def test_sparse_exact_lu_respects_guards(monkeypatch) -> None:
 
 
 def test_sparse_exact_lu_can_be_forced_or_disabled(monkeypatch) -> None:
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU", "0")
     assert not _rhsmode1_sparse_exact_lu_requested(
         op=_op(),

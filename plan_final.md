@@ -2803,6 +2803,13 @@ Current completion status:
   facade remains tested where monkeypatch/backward-import behavior is the
   subject, but ordinary transport tests no longer depend on it as an
   implementation owner.
+- Additional non-facade solver/operator tests were migrated to canonical owners:
+  Krylov dispatch tests import `sfincs_jax.solvers.krylov_dispatch`,
+  full-system solve tests import `sfincs_jax.problems.profile_solve`,
+  operator build tests import `sfincs_jax.operators.profile_system`, and
+  sparse-exact-LU policy tests import `sfincs_jax.problems.profile_policies`.
+  This leaves `v3_driver` usage increasingly concentrated in explicit
+  compatibility tests and reduces accidental reliance on the facade.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.

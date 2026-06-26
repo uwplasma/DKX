@@ -9,7 +9,7 @@ import jax.numpy as jnp
 import pytest
 
 import sfincs_jax.solver as solver_module
-from sfincs_jax.v3_driver import _rhs_krylov_method_for_context
+from sfincs_jax.solvers.krylov_dispatch import rhs_krylov_method_for_context as _rhs_krylov_method_for_context
 from sfincs_jax.solver import (
     _materialize_distributed_input,
     _distributed_solver_kind,
