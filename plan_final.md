@@ -636,41 +636,89 @@ Locked checkpoints:
 
 ### Final Consolidation Execution Plan
 
-The completed Batch A-G record below is historical evidence, not the next work
-queue. The remaining consolidation work must follow the closure plan in this
-section and must land as a few owner-level passes, not many one-helper commits.
+This is the single authoritative consolidation plan for PR #8. The completed
+Batch A-G and Closure Phase records below are historical logs only; do not use
+them as an active work queue. The active work must land as a few owner-level
+passes that delete files, merge historical names into domain owners, or simplify
+large repeated policy blocks without changing physics, outputs, default solver
+behavior, differentiable Python paths, non-autodiff CLI fast paths, or current
+CPU/GPU parity gates.
 
-### Consolidation Closure Execution Plan
-
-The file audit on 2026-06-26 shows that `v3_driver.py` is no longer the main
-problem. The remaining complexity is concentrated in package-root modules,
-profile-response sparse/preconditioner ownership, large output/schema writers,
-duplicated scripts/examples, and scattered owner tests. The goal of the closure
-pass is to reduce the number of files and mental entry points while preserving
-the current CPU/GPU behavior, differentiable Python paths, non-autodiff CLI
-fast paths, and Fortran-v3 parity gates.
-
-Closure baseline:
+Current audit baseline:
 
 | Area | Current audited state | Closure target |
 | --- | --- | --- |
-| Whole package | 168 Python files, 165,803 package lines | Keep `<=175` files unless a later merge demonstrably improves clarity; further file-count reductions must come from true file merges/deletions, not shims. |
-| Package root | 23 Python files | `<=32` root files after geometry/workflow/kernel moves. Gate met; do not add new root modules. |
+| Whole package | 168 Python files, 165,803 package lines | Keep `<=175` files; stretch target `<=162` only if the private-root merge pass completes without new files. Do not increase file count. |
+| Package root | 23 Python files | Gate met. Stretch target `<=17` by deleting the remaining private root files; public roots stay unless a documented replacement already exists. |
 | `v3_driver.py` / `io.py` | 47-line and 64-line shims | Delete if all public imports migrate; otherwise keep below 80 lines each with deletion conditions. |
-| Geometry and input support | VMEC/Boozer/JAX-geometry helpers now live in `sfincs_jax.geometry`; discretization kernels now live in `sfincs_jax.discretization`. | Keep these package boundaries documented and forbid duplicate root implementation modules. |
-| Profile response | 18 files including `sparse/`, 52,546 lines | `<=14` files if sparse owners can merge cleanly; otherwise keep 18 but reduce duplicated policy/residual payload code by at least 2,000 lines. |
-| Solver preconditioners | 35 files, 37,496 lines | `<=28` files if x-block/QI/PAS/symbolic owners merge without cycles; otherwise keep current count and document why each family boundary is needed. |
-| Outputs | 6 files, writer at 4,268 lines | Keep output files count stable; reduce writer duplication through schema tables and helpers inside existing files only. |
-| Examples/scripts | 123 examples and 46 scripts | Keep canonical user examples; move benchmark/regeneration utilities behind `validation` or `workflows`; delete duplicated obsolete scripts after docs point to owners. |
-| Tests | 330 test files | Keep physics/regression/numerical coverage; consolidate duplicated import-contract and path-policy scaffolds into owner tests. |
+| Private root candidates | `constrained_pas_branch.py`, `constraint_projection.py`, `host_refinement.py`, `pas_smoother.py`, `phi1_newton_linear.py`, `phi1_newton_policy.py` | Merge into existing domain owners in one pass, with no compatibility shims, if focused tests pass. |
+| Public root files | `api.py`, `cli.py`, `ambipolar.py`, `compare.py`, `diagnostics.py`, `grids.py`, `input_compat.py`, `io.py`, `namelist.py`, `paths.py`, `plotting.py`, `profiling.py`, `sensitivity.py`, `solver.py`, `v3_driver.py`, entry-point files | Keep for this PR unless the public API has already migrated and docs/tests prove deletion is safe. |
+| Profile response | 18 files including `sparse/`; largest owners are `sparse/xblock.py`, `policies.py`, `sparse/handoff.py`, `solve.py`, `sparse/qi.py`, and `sparse/direct.py`. | Do not add files. Delete `sparse/handoff.py` or smaller sparse relays only if code can move into existing owners without breaching review gates or creating a new monolith. |
+| Operators | 19 profile-response operator files, 20,533 lines; small term owners are now domain-named and tests import the package owners. | Stop moving operators unless a correctness bug appears. Do not split `full_system.py` in this PR. |
+| Solvers/preconditioners | 35 files, 37,495 lines; QI, PAS, x-block, full-FP, Schur, symbolic-sparse, and transport-matrix families are explicit. | Compress only family-local shards when one commit can delete at least three files and keeps the family name clearer. Otherwise document retained boundaries and stop. |
+| Outputs | 6 files, 6,663 lines; writer owns HDF5/netCDF/NPZ orchestration. | Keep file count stable. Use table-driven internal cleanup only; no new output helper files. |
+| Examples/scripts/tests/docs | Public examples and docs still reference some private names such as `v3_driver`; tests contain owner-level private imports. | Public-facing examples/docs should use `api`, `cli`, `outputs`, `validation`, or `workflows`. Owner tests may keep private imports. |
 
-The closure pass is split into four implementation phases. Each phase must
-modify a coherent owner boundary, delete or merge files, update docs/source
-maps, and run the listed gates before commit. If a phase fails because public
-compatibility or import cycles make the target worse, write that decision into
-this file and stop that phase instead of doing incremental churn.
+Active consolidation passes:
 
-#### Closure Phase 1 - Import Graph And Deletion Manifest
+1. **Private-root deletion pass.** Merge the remaining six private root modules
+   into existing owners, not new files:
+   `constrained_pas_branch.py` and `pas_smoother.py` into
+   `solvers/preconditioners/pas/*`; `constraint_projection.py` into the
+   transport-matrix finalization/solver owner that uses it;
+   `host_refinement.py` into the explicit-sparse or profile-response sparse
+   direct owner; and `phi1_newton_linear.py` plus `phi1_newton_policy.py` into
+   `problems/profile_response/phi1_newton.py`. Update imports, source maps, and
+   import-contract deletion guards in the same commit. Exit target: package
+   root `<=17`, package files `<=162`, no new compatibility shims, and focused
+   PAS, constraint-projection, host-refinement, Phi1 Newton, profile-response,
+   transport-finalization, docs, and import-contract tests pass.
+2. **Sparse/problem owner compression pass.** Inspect
+   `problems/profile_response/sparse/{handoff,xblock,qi,direct,finalization,policy,fortran_reduced}.py`
+   and `problems/profile_response/{solve,policies,preconditioner_build}.py`.
+   Delete historical names only when functions can move into existing durable
+   owners and reduce mental entry points. Do not create a replacement shard.
+   Preferred deletions, if safe, are tiny relay files or historical
+   `handoff`/`fortran_reduced` naming. Exit target: no new files,
+   `solve.py <=5,500`, no file other than a documented mathematical owner grows
+   past its current review gate, and RHSMode 1/QI/x-block/sparse-PC/Phi1 tests
+   pass.
+3. **Preconditioner-family compression pass.** Within `solvers/preconditioners`,
+   test whether PAS and x-block detail files can merge into existing family
+   owners without hiding independent mathematical kernels. Keep QI as
+   `basis.py`, `corrections.py`, `device.py`, and `policy.py`; do not churn QI
+   filenames again. Exit target: `solvers/preconditioners <=30` only if the
+   merge improves clarity; otherwise record the retained family boundaries and
+   stop the pass.
+4. **Public surface and docs pass.** Replace public docs/examples that import
+   `sfincs_jax.v3_driver` or private sparse/preconditioner modules with public
+   APIs or documented workflow/validation owners. Keep owner tests private where
+   appropriate. Refresh `docs/source_map.rst`, API docs, developer docs, README
+   developer notes, and release notes to the final package layout.
+5. **Review-lock pass.** Run the review-ready focused suite, Sphinx with
+   warnings as errors, `git diff --check`, repository-size hygiene, stale-import
+   scans for deleted modules, and a lightweight CLI/API behavior gate. If these
+   pass, stop refactoring and make PR #8 ready for review. Do not start another
+   solver research or file-movement lane inside this PR.
+
+Stop conditions:
+
+- If a proposed move needs a compatibility shim, a new helper-only file, or a
+  broad import cycle workaround, do not do the move; record the reason here and
+  proceed to the next pass.
+- If a pass cannot delete files or remove a repeated internal section, skip it.
+  Cosmetic line movement does not count as progress.
+- If a correctness, parity, differentiability, CPU/GPU, or output-regression
+  test fails, fix that before further consolidation.
+- Once the review-lock pass is green, merge preparation replaces refactoring as
+  the active task.
+
+Historical records below explain previous decisions and validation evidence.
+They are not an active execution plan.
+
+### Historical Consolidation Closure Log
+
+#### Historical Closure Phase 1 - Import Graph And Deletion Manifest
 
 Purpose: prevent churn by proving which files are public, private, dead, or
 compatibility-only before moving code.
@@ -724,7 +772,7 @@ Phase 1 root-module move/delete manifest:
 | `solver.py` | solvers public contracts owner | keep root shim until solvers exports cover public contracts |
 | `v3_driver.py` | compatibility shim to problem owners | delete after tests/examples stop importing sfincs_jax.v3_driver |
 
-#### Closure Phase 2 - Root-To-Domain Package Move
+#### Historical Closure Phase 2 - Root-To-Domain Package Move
 
 Purpose: reduce root-level clutter by moving coherent domains, not helpers.
 
@@ -791,7 +839,7 @@ Status on 2026-06-26:
   as `grids.py`, `namelist.py`, `plotting.py`, `sensitivity.py`, `solver.py`,
   and `io.py` should stay unless their public API replacement is documented.
 
-#### Closure Phase 3 - Problem/Solver/Output Owner Compression
+#### Historical Closure Phase 3 - Problem/Solver/Output Owner Compression
 
 Purpose: remove the remaining internal implementation fragmentation without
 creating another monolith.
@@ -826,7 +874,7 @@ Exit gates:
 - RHSMode 1, transport matrix RHSMode 2/3, sparse-PC, QI, PAS, x-block,
   Phi1, output-format, ambipolar, and sensitivity gates pass.
 
-#### Closure Phase 4 - Docs, Examples, Tests, And Review Lock
+#### Historical Closure Phase 4 - Docs, Examples, Tests, And Review Lock
 
 Purpose: make the PR reviewable and stop the refactor.
 
@@ -1049,7 +1097,7 @@ Status on 2026-06-26:
   the stale live-import audit found no references to deleted diagnostics
   modules; and `git diff --check` passed.
 
-#### Batch E - Root/Public Surface And Workflow Classification
+#### Historical Batch E - Root/Public Surface And Workflow Classification
 
 Purpose: reduce root-package ambiguity without breaking documented user imports.
 
@@ -1096,7 +1144,7 @@ Status on 2026-06-26:
   `profile_response/sparse/handoff.py` at `5,500` lines, `v3_driver.py` at
   `47` lines, and `io.py` at `64` lines.
 
-#### Batch F - Profile-Response Internal Line Paydown
+#### Historical Batch F - Profile-Response Internal Line Paydown
 
 Purpose: lower complexity in the largest remaining profile-response owners
 without creating more files.
@@ -1156,7 +1204,7 @@ Exit gates:
 - Focused RHSMode 1, QI, x-block, sparse-PC, Phi1, ambipolar, sensitivity, and
   output-diagnostic tests pass.
 
-#### Batch G - Docs, Tests, Source Map, And Review Gate
+#### Historical Batch G - Docs, Tests, Source Map, And Review Gate
 
 Purpose: stop moving names, make the PR reviewable, and prove that the refactor
 did not change physics or user behavior.
