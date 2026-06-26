@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from sfincs_jax.constrained_pas_branch import (
+from sfincs_jax.solvers.preconditioners.pas.policy import (
     ConstrainedPASBranchRecord,
     summarize_constrained_pas_branches,
 )

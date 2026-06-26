@@ -519,7 +519,7 @@ def write_transport_h5_streaming(
     emit: "Callable[[int, str], None] | None" = None,
 ) -> Path:
     """Stream RHSMode=2/3 transport diagnostics directly to H5 to reduce memory."""
-    from ..classical_transport import classical_flux_v3  # noqa: PLC0415
+    from ..physics.classical_transport import classical_flux_v3  # noqa: PLC0415
 
     op0 = result.op0
     n_rhs = transport_matrix_size_from_rhs_mode(int(op0.rhs_mode))

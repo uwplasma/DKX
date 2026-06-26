@@ -37,7 +37,7 @@ from sfincs_jax.solver import (
     recycled_initial_guess as _recycled_initial_guess, small_regularized_lstsq as _small_regularized_lstsq,
 )
 from sfincs_jax.discretization.structured_velocity import factor_block_tridiagonal
-from sfincs_jax.pas_smoother import adaptive_pas_smoother
+from sfincs_jax.solvers.preconditioners.pas.policy import adaptive_pas_smoother
 from sfincs_jax.solvers.explicit_sparse import (
     SparseDecision, SparseOperatorBundle, admit_sparse_factor_against_operator, analyze_sparse_symbolic_structure,
     build_operator_from_pattern, estimate_csr_nbytes, estimate_dense_nbytes, estimate_multifrontal_direct_lu_nbytes,
@@ -424,7 +424,7 @@ from sfincs_jax.problems.profile_response.policies import (
     rhsmode1_host_dense_shortcut_allowed_current_backend as _rhsmode1_host_dense_shortcut_allowed,
     rhsmode1_sparse_operator_preconditioned_rescue_allowed_current_backend as _rhsmode1_sparse_operator_preconditioned_rescue_allowed,
 )
-from sfincs_jax.host_refinement import (
+from sfincs_jax.solvers.explicit_sparse import (
     host_direct_solve_with_refinement as _host_direct_solve_with_refinement_impl,
     host_sparse_direct_solve_with_refinement as _host_sparse_direct_solve_with_refinement_impl,
 )
@@ -479,10 +479,10 @@ from sfincs_jax.problems.transport_matrix.parallel.runtime import (
 from sfincs_jax.problems.profile_response.policies import (
     resolve_use_implicit as _resolve_use_implicit_impl,
 )
-from sfincs_jax.phi1_newton_policy import (
+from sfincs_jax.problems.profile_response.phi1_newton import (
     phi1_frozen_jacobian_policy, phi1_gmres_restart, phi1_line_search_policy, phi1_use_active_dof_mode,
 )
-from sfincs_jax.phi1_newton_linear import (
+from sfincs_jax.problems.profile_response.phi1_newton import (
     build_phi1_newton_preconditioner, solve_phi1_newton_linear_step,
 )
 from sfincs_jax.problems.profile_response.phi1_newton import advance_phi1_newton_iterate

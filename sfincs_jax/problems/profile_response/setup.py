@@ -17,7 +17,7 @@ import os
 import jax.numpy as jnp
 import numpy as np
 
-from ...constraint_projection import (
+from ...solvers.preconditioning import (
     project_constraint_scheme1_nullspace_solution_with_residual,
 )
 from ...solver import GMRESSolveResult

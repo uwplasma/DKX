@@ -223,7 +223,7 @@ pass then targeted the sparse/circulant derivative layer and the PAS residual-ga
 metrics directly. That batch pushed ``periodic_stencil.py`` from about ``57%`` to
 about ``67%`` by checking circulant/Fourier-mode exactness, sparse-row extraction
 bounds, and the documented sharded-halo fallback behavior; it also pushed
-``pas_smoother.py`` from about ``59%`` to about ``62%`` by checking
+``solvers/preconditioners/pas/policy.py`` by checking
 target/upward/plateau gate logic and bounded stationary-smoother convergence on
 tiny analytic systems. These tests are anchored in standard numerical-analysis
 invariants: Fourier modes as eigenvectors of circulant derivative operators, and
@@ -495,12 +495,12 @@ basis trimming, small recycled initial guesses, elapsed-time recording, residual
 abort gates, and ETA progress messages. These tests protect the stateful
 bookkeeping that the heavier RHSMode=2/3 parity tests then exercise through the
 public solve path.
-``tests/test_constraint_projection.py`` covers the extracted
-constraintScheme=1 nullspace projection used by both RHSMode=1 and transport
-solves: ineligible systems reuse supplied residuals, disabled projection is a
-true no-op, transport roundoff residuals skip the correction, source-row
-residuals are reduced by the small least-squares correction, and the
-``v3_driver`` private compatibility alias remains intact.
+``tests/test_constraint_projection.py`` covers the constraintScheme=1
+nullspace projection in ``sfincs_jax.solvers.preconditioning`` used by both
+RHSMode=1 and transport solves: ineligible systems reuse supplied residuals,
+disabled projection is a true no-op, transport roundoff residuals skip the
+correction, and source-row residuals are reduced by the small least-squares
+correction.
 ``tests/test_transport_solve_finalization.py`` covers
 ``sfincs_jax.problems.transport_matrix.finalize``, the sequential RHSMode=2/3
 finalization seam: full-space residual-vector reuse, projection-time
@@ -549,8 +549,9 @@ bounds, and the FP/PAS dense-fallback active-size ceiling.  The public driver
 wrappers remain tested separately, so this is a
 behavior-preserving refactor with a smaller directly testable policy surface.
 The adjacent ``tests/test_host_refinement.py`` covers the host direct
-refinement kernels and sparse-direct GMRES polish helper directly, including
-solver injection and sparse-factor preconditioner application.
+refinement kernels and sparse-direct GMRES polish helper in
+``sfincs_jax.solvers.explicit_sparse`` directly, including solver injection and
+sparse-factor preconditioner application.
 
 The adjacent constraint-scheme-0 sparse-first policy now lives in
 ``sfincs_jax.problems.profile_response.policies``.
@@ -680,8 +681,8 @@ environment variables. ``tests/test_rhs1_acceptance_policy.py`` checks the
 large-PAS fast-accept environment parsing and backend/implicit/Phi1/PAS guards,
 plus the host x-block factor probe for exceptions, shape mismatches, nonfinite
 solves, and excessive amplification. The PAS residual formula itself is shared
-with ``sfincs_jax/pas_smoother.py`` so the acceptance threshold is not
-duplicated.
+with ``sfincs_jax.solvers.preconditioners.pas.policy`` so the acceptance
+threshold is not duplicated.
 
 The PAS adaptive-smoother gate and implicit-solve mode resolver also have direct
 coverage in ``tests/test_rhs1_pas_policy.py`` and ``tests/test_solve_mode_policy.py``.

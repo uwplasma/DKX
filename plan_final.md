@@ -304,28 +304,30 @@ Observed facts to feed directly into implementation:
 
 ### Current sfincs_jax State
 
-Current source size snapshot after the 2026-06-26 final consolidation audit and
-completed Batch A-D owner moves:
+Current source size snapshot after the 2026-06-26 final consolidation audit,
+completed owner moves, and private-root deletion pass:
 
-- Whole package: 168 Python files after the completed profile-response
+- Whole package: 162 Python files after the completed profile-response
   solve-sequencer/handoff compression, output-writer move, transport/output
   payback, solver/preconditioner family compression, Batch A gate repair, Batch
   B transport linear-system consolidation, Batch C transport-parallel runtime
   consolidation, and Batch D solver-core consolidation. The historical
   symbolic-sparse `rhs1_*` filename has been removed, QI has durable owner
   modules, and the preconditioner file-count gate is met. Package source lines
-  are 165,803 after the Phase 2 workflow/data, geometry, discretization
-  kernel, operator-kernel, and physics-kernel moves; this is
+  are 165,641 after the Phase 2 workflow/data, geometry, discretization
+  kernel, operator-kernel, physics-kernel, and private-root moves; this is
   above the previous line-count checkpoint but is
   justified by replacing many implementation shards with durable owner modules
   while preserving production behavior.
-- Package root: 23 Python files. No top-level `rhs1_*` or `transport_*`
+- Package root: 17 Python files. No top-level `rhs1_*` or `transport_*`
   implementation files remain.
 - `sfincs_jax/v3_driver.py`: 47-line compatibility shim. It must not regain
   implementation logic.
 - Historical roots deleted and routed to owners:
   `v3_results.py`, `v3_sparse_pattern.py`, `v3_fblock.py`, `v3_system.py`,
-  and `v3.py`.
+  `v3.py`, `constrained_pas_branch.py`, `constraint_projection.py`,
+  `host_refinement.py`, `pas_smoother.py`, `phi1_newton_linear.py`, and
+  `phi1_newton_policy.py`.
 - `sfincs_jax/problems/profile_response`: 18 files including `sparse/`, about
   52.7k lines. The largest files are `sparse/xblock.py` 7,689 lines,
   `policies.py` 7,369 lines, `solve.py` 5,420 lines,
@@ -648,10 +650,10 @@ Current audit baseline:
 
 | Area | Current audited state | Closure target |
 | --- | --- | --- |
-| Whole package | 168 Python files, 165,803 package lines | Keep `<=175` files; stretch target `<=162` only if the private-root merge pass completes without new files. Do not increase file count. |
-| Package root | 23 Python files | Gate met. Stretch target `<=17` by deleting the remaining private root files; public roots stay unless a documented replacement already exists. |
+| Whole package | 162 Python files, 165,641 package lines | Keep `<=175` files; stretch target `<=162` is met after the private-root deletion pass. Do not increase file count. |
+| Package root | 17 Python files | Gate and stretch target met. Public roots stay unless a documented replacement already exists. |
 | `v3_driver.py` / `io.py` | 47-line and 64-line shims | Delete if all public imports migrate; otherwise keep below 80 lines each with deletion conditions. |
-| Private root candidates | `constrained_pas_branch.py`, `constraint_projection.py`, `host_refinement.py`, `pas_smoother.py`, `phi1_newton_linear.py`, `phi1_newton_policy.py` | Merge into existing domain owners in one pass, with no compatibility shims, if focused tests pass. |
+| Private root candidates | Completed. `constrained_pas_branch.py`, `constraint_projection.py`, `host_refinement.py`, `pas_smoother.py`, `phi1_newton_linear.py`, and `phi1_newton_policy.py` were deleted. | Owners are `solvers.preconditioners.pas.policy`, `solvers.preconditioning`, `solvers.explicit_sparse`, and `problems.profile_response.phi1_newton`; no compatibility shims were added. |
 | Public root files | `api.py`, `cli.py`, `ambipolar.py`, `compare.py`, `diagnostics.py`, `grids.py`, `input_compat.py`, `io.py`, `namelist.py`, `paths.py`, `plotting.py`, `profiling.py`, `sensitivity.py`, `solver.py`, `v3_driver.py`, entry-point files | Keep for this PR unless the public API has already migrated and docs/tests prove deletion is safe. |
 | Profile response | 18 files including `sparse/`; largest owners are `sparse/xblock.py`, `policies.py`, `sparse/handoff.py`, `solve.py`, `sparse/qi.py`, and `sparse/direct.py`. | Do not add files. Delete `sparse/handoff.py` or smaller sparse relays only if code can move into existing owners without breaching review gates or creating a new monolith. |
 | Operators | 19 profile-response operator files, 20,533 lines; small term owners are now domain-named and tests import the package owners. | Stop moving operators unless a correctness bug appears. Do not split `full_system.py` in this PR. |
@@ -661,7 +663,7 @@ Current audit baseline:
 
 Active consolidation passes:
 
-1. **Private-root deletion pass.** Merge the remaining six private root modules
+1. **Private-root deletion pass - complete.** Merged the remaining six private root modules
    into existing owners, not new files:
    `constrained_pas_branch.py` and `pas_smoother.py` into
    `solvers/preconditioners/pas/*`; `constraint_projection.py` into the
@@ -672,7 +674,9 @@ Active consolidation passes:
    import-contract deletion guards in the same commit. Exit target: package
    root `<=17`, package files `<=162`, no new compatibility shims, and focused
    PAS, constraint-projection, host-refinement, Phi1 Newton, profile-response,
-   transport-finalization, docs, and import-contract tests pass.
+   transport-finalization, docs, and import-contract tests pass. Status:
+   package root is 17 files, package total is 162 files, and focused import/
+   owner tests passed with 46 tests.
 2. **Sparse/problem owner compression pass.** Inspect
    `problems/profile_response/sparse/{handoff,xblock,qi,direct,finalization,policy,fortran_reduced}.py`
    and `problems/profile_response/{solve,policies,preconditioner_build}.py`.
@@ -829,15 +833,20 @@ Status on 2026-06-26:
   `collisions.py` and `classical_transport.py` moved to `sfincs_jax.physics`
   owners with collision/classical physics gates importing the package owners
   directly.
-- Package-root Python files drop from 43 to 23 after the workflow/data,
-  geometry, discretization-kernel, operator-kernel, and physics-kernel moves.
-  Whole-package file count stays flat because these are ownership cleanups, not
-  new helper extractions.
-- The remaining Phase 2 candidates are smaller and higher risk:
-  `constraint_projection.py`, `host_refinement.py`, and `pas_smoother.py` can
-  move only with solver/preconditioner import-cycle checks; public roots such
-  as `grids.py`, `namelist.py`, `plotting.py`, `sensitivity.py`, `solver.py`,
-  and `io.py` should stay unless their public API replacement is documented.
+- Sixth Phase 2 move complete. The private root solver helpers
+  `constrained_pas_branch.py`, `constraint_projection.py`,
+  `host_refinement.py`, `pas_smoother.py`, `phi1_newton_linear.py`, and
+  `phi1_newton_policy.py` moved into existing owners
+  `sfincs_jax.solvers.preconditioners.pas.policy`,
+  `sfincs_jax.solvers.preconditioning`, `sfincs_jax.solvers.explicit_sparse`,
+  and `sfincs_jax.problems.profile_response.phi1_newton`. No compatibility
+  shims or helper-only files were added.
+- Package-root Python files drop from 43 to 17 after the workflow/data,
+  geometry, discretization-kernel, operator-kernel, physics-kernel, and
+  private-root moves. Whole-package file count is now 162.
+- The remaining root files are public API/CLI/input/output/diagnostic/support
+  facades or compatibility shims. They should stay unless their public API
+  replacement is documented and tests prove deletion is safe.
 
 #### Historical Closure Phase 3 - Problem/Solver/Output Owner Compression
 

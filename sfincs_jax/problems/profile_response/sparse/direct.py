@@ -17,15 +17,13 @@ from sfincs_jax.solvers.explicit_sparse import (
     build_operator_from_matvec,
     build_operator_from_pattern,
     factorize_host_sparse_operator,
+    host_sparse_direct_polish as _host_sparse_direct_polish_impl,
 )
 from sfincs_jax.solvers.explicit_sparse import (
     build_host_sparse_direct_factor_from_matvec as _build_host_sparse_direct_factor_from_matvec_impl,
 )
 from sfincs_jax.solvers.explicit_sparse import (
     explicit_sparse_monolithic_max_size as _explicit_sparse_monolithic_max_size,
-)
-from sfincs_jax.host_refinement import (
-    host_sparse_direct_polish as _host_sparse_direct_polish_impl,
 )
 from sfincs_jax.solvers.preconditioning import (
     _RHSMODE1_SPARSE_JAX_CACHE,

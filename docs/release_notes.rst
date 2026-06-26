@@ -280,12 +280,11 @@ Unreleased
   dense-reference agreement, near-rank-deficient systems, empty coarse bases,
   and finite autodiff through the helper. The
   post-extraction local full suite passed with ``2558 passed in 542.63 s``.
-- Moved host sparse-direct GMRES polish into ``host_refinement.py`` next to the
-  existing host direct-refinement kernels. ``v3_driver.py`` keeps a wrapper that
-  injects the monkeypatchable driver GMRES solver, while direct tests now cover
-  the extracted polish helper with an injected solver and sparse-factor
-  preconditioner. The post-extraction local full suite passed with
-  ``2559 passed in 543.75 s``.
+- Moved host sparse-direct GMRES polish next to the explicit host-sparse solver
+  owner; it now lives in ``sfincs_jax.solvers.explicit_sparse`` with the
+  existing host direct-refinement kernels. Direct tests cover the polish helper
+  with an injected solver and sparse-factor preconditioner. The post-extraction
+  local full suite passed with ``2559 passed in 543.75 s``.
 - Moved transport-worker XLA flag rewriting into the consolidated
   ``problems.transport_matrix.parallel.runtime`` owner next to the backend,
   environment, sharding, and process-pool policy helpers. The driver now
@@ -454,11 +453,11 @@ Unreleased
   recomputation, streamed-output collection, recycle-basis updates, solver-method
   recording, and KSP iteration-stat dispatch, with direct unit coverage for dense
   fallback accepted-state overrides.
-- Extracted the constraintScheme=1 nullspace/source-row projection into
-  ``constraint_projection.py``. RHSMode=1 and RHSMode=2/3 solve paths keep the
-  historical private driver helper names as compatibility aliases, while direct
-  tests now cover no-op admission, environment disablement, transport roundoff
-  skip behavior, source-row residual reduction, and the driver alias contract.
+- Extracted the constraintScheme=1 nullspace/source-row projection; it now
+  lives in ``sfincs_jax.solvers.preconditioning`` so RHSMode=1 and RHSMode=2/3
+  solve paths share the same owner. Direct tests cover no-op admission,
+  environment disablement, transport roundoff skip behavior, and source-row
+  residual reduction.
 - Extracted RHSMode=2/3 entry setup into ``transport_solve_setup.py``. The
   driver now delegates transport max-iteration environment overrides, optional
   Krylov state checkpoint loading, ``whichRHS`` subset normalization, and

@@ -9,29 +9,19 @@ differentiable Python workflows.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import os
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ...host_refinement import (
+from ...solvers.explicit_sparse import (
     host_sparse_direct_polish,
     host_sparse_direct_solve_with_refinement,
 )
 from ...solvers.krylov_dispatch import gmres_solve_dispatch
 from ...namelist import Namelist
-from ...phi1_newton_linear import (
-    build_phi1_newton_preconditioner,
-    solve_phi1_newton_linear_step,
-)
-from ...phi1_newton_policy import (
-    phi1_frozen_jacobian_policy,
-    phi1_gmres_restart,
-    phi1_line_search_policy,
-    phi1_use_active_dof_mode,
-)
 from ...solvers.preconditioning import (
     set_precond_policy_hints,
     set_precond_size_hint,
@@ -84,6 +74,335 @@ def _dispatch_gmres(**kwargs):
         use_solver_jit_fn=use_solver_jit,
         **kwargs,
     )
+
+
+def phi1_use_active_dof_mode(
+    *,
+    rhs_mode: int,
+    include_phi1: bool,
+    has_reduced_modes: bool,
+    env_value: str,
+) -> bool:
+    """Return whether Phi1 solves should compact to active DOFs."""
+    env = str(env_value).strip().lower()
+    if env in {"1", "true", "yes", "on"}:
+        return True
+    if env in {"0", "false", "no", "off"}:
+        return False
+    return bool(int(rhs_mode) == 1 and bool(include_phi1) and bool(has_reduced_modes))
+
+
+def phi1_gmres_restart(active_size: int, gmres_restart: int) -> int:
+    """Cap GMRES restart for small Phi1 active systems."""
+    restart = int(gmres_restart)
+    if int(active_size) <= 1000:
+        restart = min(restart, 200)
+    return max(1, restart)
+
+
+@dataclass(frozen=True)
+class Phi1FrozenJacobianPolicy:
+    """Resolved frozen-Jacobian cache policy for the nonlinear Phi1 path."""
+
+    mode: str
+    use_cache: bool
+    every: int
+
+
+def phi1_frozen_jacobian_policy(
+    *,
+    include_phi1: bool,
+) -> Phi1FrozenJacobianPolicy:
+    """Resolve the frozen-Jacobian mode and cache cadence from env settings."""
+    jac_mode = os.environ.get("SFINCS_JAX_PHI1_FROZEN_JAC_MODE", "").strip().lower()
+    if jac_mode not in {"frozen", "frozen_rhs", "frozen_op"}:
+        jac_mode = "frozen" if bool(include_phi1) else "frozen_rhs"
+
+    cache_env = os.environ.get("SFINCS_JAX_PHI1_FROZEN_JAC_CACHE", "").strip().lower()
+    if cache_env in {"0", "false", "no", "off"}:
+        use_cache = False
+    elif cache_env in {"1", "true", "yes", "on"}:
+        use_cache = True
+    else:
+        use_cache = True
+
+    every_env = os.environ.get("SFINCS_JAX_PHI1_FROZEN_JAC_CACHE_EVERY", "").strip()
+    try:
+        every = int(every_env) if every_env else 1
+    except ValueError:
+        every = 1
+    return Phi1FrozenJacobianPolicy(mode=jac_mode, use_cache=use_cache, every=max(1, int(every)))
+
+
+@dataclass(frozen=True)
+class Phi1LineSearchPolicy:
+    """Resolved nonlinear Phi1 line-search constants and mode."""
+
+    step_scale: float
+    factor: float | None
+    c1: float
+    mode: str
+    maxiter: int
+
+
+def phi1_line_search_policy(
+    *,
+    use_frozen_linearization: bool,
+    include_phi1: bool,
+) -> Phi1LineSearchPolicy:
+    """Resolve the Phi1 line-search mode, constants, and iteration cap."""
+    step_scale_env = os.environ.get("SFINCS_JAX_PHI1_STEP_SCALE", "").strip()
+    try:
+        step_scale = float(step_scale_env) if step_scale_env else 1.0
+    except ValueError:
+        step_scale = 1.0
+
+    ls_factor_env = os.environ.get("SFINCS_JAX_PHI1_LINESEARCH_FACTOR", "").strip()
+    ls_c1_env = os.environ.get("SFINCS_JAX_PHI1_LINESEARCH_C1", "").strip()
+    try:
+        ls_factor = float(ls_factor_env) if ls_factor_env else None
+    except ValueError:
+        ls_factor = None
+    try:
+        ls_c1 = float(ls_c1_env) if ls_c1_env else 1.0e-4
+    except ValueError:
+        ls_c1 = 1.0e-4
+
+    ls_mode_env = os.environ.get("SFINCS_JAX_PHI1_LINESEARCH_MODE", "").strip().lower()
+    if ls_mode_env:
+        ls_mode = ls_mode_env
+    else:
+        ls_mode = "petsc" if (bool(use_frozen_linearization) and bool(include_phi1)) else "best"
+
+    max_ls_env = os.environ.get("SFINCS_JAX_PHI1_LINESEARCH_MAXITER", "").strip()
+    try:
+        max_ls = int(max_ls_env) if max_ls_env else (40 if ls_mode == "petsc" else 12)
+    except ValueError:
+        max_ls = 40 if ls_mode == "petsc" else 12
+
+    return Phi1LineSearchPolicy(
+        step_scale=float(step_scale),
+        factor=ls_factor,
+        c1=float(ls_c1),
+        mode=str(ls_mode),
+        maxiter=int(max_ls),
+    )
+
+
+def solve_phi1_newton_linear_step(
+    *,
+    use_active_dof_mode: bool,
+    solve_method_linear: str,
+    matvec,
+    residual_vec: jnp.ndarray,
+    preconditioner,
+    gmres_tol: float,
+    gmres_restart: int,
+    gmres_maxiter: int | None,
+    sparse_direct_solve: Callable[..., GMRESSolveResult],
+    gmres_dispatch: Callable[..., GMRESSolveResult],
+    gmres_result_is_finite: Callable[[GMRESSolveResult], bool],
+    emit_ksp_history: Callable[..., None],
+    emit: Callable[[int, str], None] | None,
+    newton_iter: int,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    active_size: int | None = None,
+    total_size: int | None = None,
+) -> tuple[GMRESSolveResult, jnp.ndarray, jnp.ndarray]:
+    """Solve one Newton linearization step for the Phi1 nonlinear path."""
+    if use_active_dof_mode:
+        assert reduce_full is not None
+        assert expand_reduced is not None
+        assert active_size is not None
+        rhs_reduced = reduce_full(-residual_vec)
+
+        def matvec_reduced(dx_reduced: jnp.ndarray) -> jnp.ndarray:
+            return reduce_full(matvec(expand_reduced(dx_reduced)))
+
+        if solve_method_linear == "sparse_direct":
+            lin = sparse_direct_solve(
+                matvec_fn=matvec_reduced,
+                b_vec=rhs_reduced,
+                n=int(active_size),
+                cache_tag=("reduced", int(newton_iter), int(active_size)),
+                tol_val=float(gmres_tol),
+                atol_val=0.0,
+                restart_val=int(gmres_restart),
+                maxiter_val=gmres_maxiter,
+            )
+        else:
+            lin = gmres_dispatch(
+                matvec=matvec_reduced,
+                b=rhs_reduced,
+                preconditioner=preconditioner,
+                tol=float(gmres_tol),
+                restart=int(gmres_restart),
+                maxiter=gmres_maxiter,
+                solve_method=solve_method_linear,
+            )
+            emit_ksp_history(
+                matvec_fn=matvec_reduced,
+                b_vec=rhs_reduced,
+                precond_fn=preconditioner,
+                x0_vec=None,
+                tol_val=float(gmres_tol),
+                atol_val=0.0,
+                restart_val=int(gmres_restart),
+                maxiter_val=gmres_maxiter,
+                precond_side="left",
+            )
+            if preconditioner is not None and (not gmres_result_is_finite(lin)):
+                if emit is not None:
+                    emit(
+                        0,
+                        "newton_iter="
+                        f"{newton_iter}: preconditioned GMRES returned non-finite result; retrying without preconditioner",
+                    )
+                lin = gmres_dispatch(
+                    matvec=matvec_reduced,
+                    b=rhs_reduced,
+                    preconditioner=None,
+                    tol=float(gmres_tol),
+                    restart=int(gmres_restart),
+                    maxiter=gmres_maxiter,
+                    solve_method=solve_method_linear,
+                )
+                emit_ksp_history(
+                    matvec_fn=matvec_reduced,
+                    b_vec=rhs_reduced,
+                    precond_fn=None,
+                    x0_vec=None,
+                    tol_val=float(gmres_tol),
+                    atol_val=0.0,
+                    restart_val=int(gmres_restart),
+                    maxiter_val=gmres_maxiter,
+                    precond_side="left",
+                )
+        step_vec = expand_reduced(lin.x)
+        linear_residual_norm = jnp.linalg.norm(matvec(step_vec) + residual_vec)
+        return lin, step_vec, linear_residual_norm
+
+    assert total_size is not None
+    if solve_method_linear == "sparse_direct":
+        lin = sparse_direct_solve(
+            matvec_fn=matvec,
+            b_vec=-residual_vec,
+            n=int(total_size),
+            cache_tag=("full", int(newton_iter), int(total_size)),
+            tol_val=float(gmres_tol),
+            atol_val=0.0,
+            restart_val=int(gmres_restart),
+            maxiter_val=gmres_maxiter,
+        )
+    else:
+        lin = gmres_dispatch(
+            matvec=matvec,
+            b=-residual_vec,
+            preconditioner=preconditioner,
+            tol=float(gmres_tol),
+            restart=int(gmres_restart),
+            maxiter=gmres_maxiter,
+            solve_method=solve_method_linear,
+        )
+        emit_ksp_history(
+            matvec_fn=matvec,
+            b_vec=-residual_vec,
+            precond_fn=preconditioner,
+            x0_vec=None,
+            tol_val=float(gmres_tol),
+            atol_val=0.0,
+            restart_val=int(gmres_restart),
+            maxiter_val=gmres_maxiter,
+            precond_side="left",
+        )
+        if preconditioner is not None and (not gmres_result_is_finite(lin)):
+            if emit is not None:
+                emit(
+                    0,
+                    "newton_iter="
+                    f"{newton_iter}: preconditioned GMRES returned non-finite result; retrying without preconditioner",
+                )
+            lin = gmres_dispatch(
+                matvec=matvec,
+                b=-residual_vec,
+                preconditioner=None,
+                tol=float(gmres_tol),
+                restart=int(gmres_restart),
+                maxiter=gmres_maxiter,
+                solve_method=solve_method_linear,
+            )
+            emit_ksp_history(
+                matvec_fn=matvec,
+                b_vec=-residual_vec,
+                precond_fn=None,
+                x0_vec=None,
+                tol_val=float(gmres_tol),
+                atol_val=0.0,
+                restart_val=int(gmres_restart),
+                maxiter_val=gmres_maxiter,
+                precond_side="left",
+            )
+    return lin, lin.x, lin.residual_norm
+
+
+def build_phi1_newton_preconditioner(
+    *,
+    use_preconditioner: bool,
+    use_frozen_linearization: bool,
+    rhs_mode: int,
+    include_phi1: bool,
+    use_active_dof_mode: bool,
+    op,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None,
+    preconditioner_options: dict[str, object],
+    collision_builder: Callable[..., object],
+    block_builder: Callable[..., object],
+    emit: Callable[[int, str], None] | None = None,
+) -> object | None:
+    """Build the bounded Newton preconditioner used by Phi1 solves."""
+
+    def _opt_int(key: str, default: int) -> int:
+        val = preconditioner_options.get(key, None)
+        if val is None:
+            return default
+        try:
+            return int(val)
+        except (TypeError, ValueError):
+            return default
+
+    if not (use_preconditioner and use_frozen_linearization and int(rhs_mode) == 1):
+        return None
+
+    precond_kind_env = os.environ.get("SFINCS_JAX_PHI1_PRECOND_KIND", "").strip().lower()
+    if not precond_kind_env:
+        precond_kind = "collision" if bool(include_phi1) else "block"
+    elif precond_kind_env in {"collision", "diag"}:
+        precond_kind = "collision"
+    elif precond_kind_env in {"block", "block_jacobi", "point"}:
+        precond_kind = "block"
+    else:
+        precond_kind = "block"
+
+    if emit is not None:
+        emit(1, f"solve_v3_full_system_newton_krylov_history: preconditioner={precond_kind}")
+
+    if precond_kind == "collision":
+        if use_active_dof_mode:
+            return collision_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+        return collision_builder(op=op)
+
+    kwargs = {
+        "op": op,
+        "preconditioner_species": _opt_int("PRECONDITIONER_SPECIES", 1),
+        "preconditioner_x": _opt_int("PRECONDITIONER_X", 1),
+        "preconditioner_xi": _opt_int("PRECONDITIONER_XI", 1),
+    }
+    if use_active_dof_mode:
+        kwargs["reduce_full"] = reduce_full
+        kwargs["expand_reduced"] = expand_reduced
+    return block_builder(**kwargs)
 
 
 def _phi1_host_sparse_factor_dtype(*, size: int) -> np.dtype:

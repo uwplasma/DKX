@@ -6,7 +6,7 @@ from jax import config as jax_config
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.constraint_projection import (
+from sfincs_jax.solvers.preconditioning import (
     project_constraint_scheme1_nullspace_solution,
     project_constraint_scheme1_nullspace_solution_with_residual,
 )

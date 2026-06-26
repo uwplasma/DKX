@@ -13,7 +13,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.solvers import path_policy as _solver_path_policy
-from ...pas_smoother import pas_fast_accept as _pas_fast_accept_metric
+from ...solvers.preconditioners.pas.policy import pas_fast_accept as _pas_fast_accept_metric
 from sfincs_jax.solvers.explicit_sparse import SparseOperatorBundle
 from sfincs_jax.solvers.selection_policy import (
     SolverAcceptanceCriteria,

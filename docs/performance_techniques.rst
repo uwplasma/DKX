@@ -496,7 +496,8 @@ where :math:`P^{-1}` is the already-built PAS preconditioner application and
 
 **Implementation.**
 
-- Smoother kernel: ``sfincs_jax.pas_smoother.adaptive_pas_smoother``.
+- Smoother kernel:
+  ``sfincs_jax.solvers.preconditioners.pas.policy.adaptive_pas_smoother``.
 - Driver gate: ``sfincs_jax.v3_driver._rhsmode1_pas_adaptive_smoother_allowed``.
 - Current integration point: immediately after the base PAS solve and before the
   strong-preconditioner tail in the linear RHSMode=1 driver.
@@ -1406,7 +1407,8 @@ improving and stops when either the single-step ratio or trailing log-slope
 crosses the configured worsening threshold. This provides a deterministic gate
 for the later PAS driver integration without hard-coding case-specific logic.
 
-Implementation: ``sfincs_jax.pas_smoother`` (``append_residual``,
+Implementation: ``sfincs_jax.solvers.preconditioners.pas.policy``
+(``append_residual``,
 ``summarize_residual_history``, ``decide_pas_smoother_action``,
 ``advance_pas_smoother``, ``adaptive_pas_smoother_allowed``, and
 ``adaptive_pas_smoother``). The returned metadata includes the residual

@@ -9,14 +9,14 @@ dispatch paths without duplicating logic.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 import math
 import os
 
+from jax import tree_util as jtu
+import jax.numpy as jnp
 import numpy as np
-
-from sfincs_jax.pas_smoother import adaptive_pas_smoother_allowed
 
 _FALSE_VALUES = {"0", "false", "no", "off"}
 _RHS1_PAS_PROBE_HEAVY_PRECONDITIONERS = frozenset(
@@ -33,6 +33,533 @@ _RHS1_PAS_PROBE_HEAVY_PRECONDITIONERS = frozenset(
         "pas_hybrid",
     }
 )
+
+
+@dataclass(frozen=True)
+class ConstrainedPASBranchRecord:
+    """One solver/reference branch for a constrained-PAS diagnostic."""
+
+    label: str
+    observable: float
+    residual_norm: float | None = None
+    residual_target: float | None = None
+    criterion: str = "unknown"
+    accepted: bool = True
+
+    @property
+    def residual_ratio(self) -> float:
+        """Return ``residual_norm / residual_target`` when both are meaningful."""
+        if self.residual_norm is None or self.residual_target is None:
+            return math.inf
+        target = float(self.residual_target)
+        if not math.isfinite(target) or target <= 0.0:
+            return math.inf
+        residual = float(self.residual_norm)
+        if not math.isfinite(residual):
+            return math.inf
+        return residual / target
+
+    def true_residual_converged(self, *, slack: float = 1.0) -> bool:
+        """Return whether the branch satisfies its true-residual target."""
+        return self.residual_ratio <= float(slack)
+
+
+@dataclass(frozen=True)
+class ConstrainedPASBranchSummary:
+    """Compact classification of branch spread and reference quality."""
+
+    reference_label: str | None
+    branch_sensitive: bool
+    max_relative_spread: float
+    weak_reference_labels: tuple[str, ...]
+    recommendation: str
+
+    @property
+    def has_reference_quality_blocker(self) -> bool:
+        """Return whether a weak true-residual reference affects the comparison."""
+        return bool(self.weak_reference_labels)
+
+
+def summarize_constrained_pas_branches(
+    records: Iterable[ConstrainedPASBranchRecord],
+    *,
+    residual_slack: float = 1.0,
+    weak_residual_ratio: float = 10.0,
+    branch_relative_gate: float = 1.0e-3,
+) -> ConstrainedPASBranchSummary:
+    """Classify constrained-PAS branch spread from solver/reference records."""
+    rows = tuple(records)
+    if not rows:
+        return ConstrainedPASBranchSummary(
+            reference_label=None,
+            branch_sensitive=False,
+            max_relative_spread=0.0,
+            weak_reference_labels=(),
+            recommendation="no_branch_records",
+        )
+
+    accepted_rows = tuple(row for row in rows if row.accepted)
+    converged_rows = tuple(row for row in accepted_rows if row.true_residual_converged(slack=residual_slack))
+    candidate_rows = converged_rows or accepted_rows or rows
+    reference = min(candidate_rows, key=lambda row: row.residual_ratio)
+
+    scale = max(abs(float(reference.observable)), 1.0e-300)
+    spreads = [abs(float(row.observable) - float(reference.observable)) / scale for row in rows]
+    max_spread = max(spreads, default=0.0)
+    weak = tuple(row.label for row in rows if row.residual_ratio > float(weak_residual_ratio))
+    branch_sensitive = max_spread > float(branch_relative_gate)
+
+    if not converged_rows:
+        recommendation = "needs_true_residual_reference"
+    elif branch_sensitive and weak:
+        recommendation = "pin_gauge_before_parity_claim"
+    elif branch_sensitive:
+        recommendation = "branch_sensitive_even_with_converged_records"
+    else:
+        recommendation = "converged_branch_consistent"
+
+    return ConstrainedPASBranchSummary(
+        reference_label=reference.label,
+        branch_sensitive=bool(branch_sensitive),
+        max_relative_spread=float(max_spread),
+        weak_reference_labels=weak,
+        recommendation=recommendation,
+    )
+
+
+def pas_fast_accept(
+    *,
+    active_size: int,
+    residual_norm: float,
+    target: float,
+    min_size: int,
+    ratio: float,
+    abs_floor: float,
+) -> bool:
+    """Return whether a large PAS solve is already good enough to skip retries."""
+    if int(active_size) < max(1, int(min_size)):
+        return False
+    if not np.isfinite(float(residual_norm)):
+        return False
+    accept_thresh = max(float(target) * max(1.0, float(ratio)), max(0.0, float(abs_floor)))
+    return float(residual_norm) <= float(accept_thresh)
+
+
+def should_stop_adaptive_smoother(
+    residual_history: Sequence[float],
+    *,
+    target: float,
+    target_ratio: float,
+    abs_floor: float,
+    upward_ratio: float,
+    patience: int,
+    min_steps: int,
+) -> tuple[bool, str]:
+    """Return whether the PAS stationary smoother should stop."""
+    history = [float(v) for v in residual_history if np.isfinite(float(v))]
+    if not history:
+        return True, "empty"
+    if len(history) != len(residual_history):
+        return True, "nonfinite"
+    threshold = max(float(target) * max(1.0, float(target_ratio)), max(0.0, float(abs_floor)))
+    if history[-1] <= threshold:
+        return True, "target"
+    patience_use = max(1, int(patience))
+    min_steps_use = max(1, int(min_steps))
+    if len(history) < max(2, min_steps_use + 1):
+        return False, "continue"
+    best = min(history[:-1])
+    if history[-1] <= best:
+        return False, "continue"
+    tail = history[-patience_use:]
+    if all(val >= best * max(1.0, float(upward_ratio)) for val in tail):
+        return True, "upward"
+    return False, "continue"
+
+
+@jtu.register_pytree_node_class
+@dataclass(frozen=True)
+class AdaptiveStationaryResult:
+    """Result from the bounded host/JAX stationary residual smoother."""
+
+    x_best: jnp.ndarray
+    best_residual_norm: float
+    residual_history: tuple[float, ...]
+    steps_completed: int
+    stop_reason: str
+    improved: bool
+
+    def tree_flatten(self):
+        children = (
+            self.x_best,
+            jnp.asarray(self.best_residual_norm, dtype=jnp.float64),
+            jnp.asarray(self.residual_history, dtype=jnp.float64),
+        )
+        aux = (self.steps_completed, self.stop_reason, self.improved)
+        return children, aux
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        steps_completed, stop_reason, improved = aux
+        x_best, best_residual_norm, residual_history = children
+        return cls(
+            x_best=x_best,
+            best_residual_norm=float(best_residual_norm),
+            residual_history=tuple(float(v) for v in np.asarray(residual_history, dtype=np.float64)),
+            steps_completed=steps_completed,
+            stop_reason=stop_reason,
+            improved=improved,
+        )
+
+
+@dataclass(frozen=True)
+class PasSmootherConfig:
+    """Residual-history controls for the adaptive PAS smoother."""
+
+    window: int = 3
+    accept_ratio: float = 1.0
+    worsen_ratio: float = 1.05
+    stagnation_ratio: float = 0.995
+    max_consecutive_increases: int = 1
+
+    def __post_init__(self) -> None:
+        if int(self.window) < 1:
+            raise ValueError("window must be >= 1")
+        if not math.isfinite(float(self.accept_ratio)) or float(self.accept_ratio) <= 0.0:
+            raise ValueError("accept_ratio must be finite and > 0")
+        if not math.isfinite(float(self.worsen_ratio)) or float(self.worsen_ratio) <= 0.0:
+            raise ValueError("worsen_ratio must be finite and > 0")
+        if float(self.accept_ratio) > float(self.worsen_ratio):
+            raise ValueError("accept_ratio must not exceed worsen_ratio")
+        if not math.isfinite(float(self.stagnation_ratio)) or float(self.stagnation_ratio) <= 0.0:
+            raise ValueError("stagnation_ratio must be finite and > 0")
+        if int(self.max_consecutive_increases) < 1:
+            raise ValueError("max_consecutive_increases must be >= 1")
+
+
+@dataclass(frozen=True)
+class PasResidualTrend:
+    """Summary of PAS residual history used for bounded smoother decisions."""
+
+    history: tuple[float, ...]
+    latest: float
+    previous: float | None
+    best_so_far: float
+    best_before_latest: float | None
+    worst_so_far: float
+    latest_ratio: float | None
+    best_before_latest_ratio: float | None
+    window_reference: float | None
+    window_ratio: float | None
+    window_log_slope: float | None
+    consecutive_increases: int
+    has_nonfinite: bool
+
+
+@dataclass(frozen=True)
+class PasSmootherDecision:
+    """Accept/stop decision for one adaptive PAS smoother step."""
+
+    accept: bool
+    stop: bool
+    reason: str
+    trend: PasResidualTrend
+
+
+def append_residual(history: Sequence[float], residual: float) -> tuple[float, ...]:
+    """Append a residual value using immutable tuple semantics."""
+    return tuple(float(value) for value in history) + (float(residual),)
+
+
+def _safe_ratio(numerator: float, denominator: float) -> float:
+    if not math.isfinite(numerator) or not math.isfinite(denominator):
+        return math.inf
+    if denominator == 0.0:
+        if numerator == 0.0:
+            return 1.0
+        return math.inf
+    return float(numerator) / float(denominator)
+
+
+def _count_consecutive_increases(history: tuple[float, ...]) -> int:
+    if len(history) < 2:
+        return 0
+    count = 0
+    for idx in range(len(history) - 1, 0, -1):
+        prev = history[idx - 1]
+        curr = history[idx]
+        if not (math.isfinite(prev) and math.isfinite(curr)):
+            break
+        if curr > prev:
+            count += 1
+            continue
+        break
+    return count
+
+
+def summarize_residual_history(
+    history: Sequence[float],
+    *,
+    window: int = 3,
+) -> PasResidualTrend:
+    """Summarize residual history for adaptive PAS smoother decisions."""
+    values = tuple(float(value) for value in history)
+    if not values:
+        raise ValueError("history must contain at least one residual")
+    if int(window) < 1:
+        raise ValueError("window must be >= 1")
+
+    latest = values[-1]
+    previous = values[-2] if len(values) >= 2 else None
+    has_nonfinite = any(not math.isfinite(value) for value in values)
+    finite_values = tuple(value for value in values if math.isfinite(value))
+    if finite_values:
+        best_so_far = min(finite_values)
+        worst_so_far = max(finite_values)
+        best_before_latest = (
+            min(value for value in values[:-1] if math.isfinite(value))
+            if len(values) >= 2 and any(math.isfinite(value) for value in values[:-1])
+            else None
+        )
+    else:
+        best_so_far = math.nan
+        worst_so_far = math.nan
+        best_before_latest = None
+    latest_ratio = _safe_ratio(latest, previous) if previous is not None else None
+    best_before_latest_ratio = _safe_ratio(latest, best_before_latest) if best_before_latest is not None else None
+
+    pair_count = min(int(window), max(0, len(values) - 1))
+    window_reference = None
+    window_ratio = None
+    window_log_slope = None
+    if pair_count > 0:
+        window_start = len(values) - pair_count - 1
+        if window_start >= 0:
+            window_reference = values[window_start]
+            window_ratio = _safe_ratio(latest, window_reference)
+        pairwise_logs: list[float] = []
+        for idx in range(len(values) - pair_count, len(values)):
+            prev = values[idx - 1]
+            curr = values[idx]
+            ratio = _safe_ratio(curr, prev)
+            if not math.isfinite(ratio) or ratio <= 0.0:
+                pairwise_logs = []
+                break
+            pairwise_logs.append(math.log(ratio))
+        if pairwise_logs:
+            window_log_slope = float(sum(pairwise_logs)) / float(len(pairwise_logs))
+
+    return PasResidualTrend(
+        history=values,
+        latest=latest,
+        previous=previous,
+        best_so_far=best_so_far,
+        best_before_latest=best_before_latest,
+        worst_so_far=worst_so_far,
+        latest_ratio=latest_ratio,
+        best_before_latest_ratio=best_before_latest_ratio,
+        window_reference=window_reference,
+        window_ratio=window_ratio,
+        window_log_slope=window_log_slope,
+        consecutive_increases=_count_consecutive_increases(values),
+        has_nonfinite=has_nonfinite,
+    )
+
+
+def decide_pas_smoother_action(
+    history: Sequence[float],
+    *,
+    config: PasSmootherConfig = PasSmootherConfig(),
+) -> PasSmootherDecision:
+    """Decide whether the current adaptive PAS smoother iterate is acceptable."""
+    trend = summarize_residual_history(history, window=config.window)
+    if trend.has_nonfinite:
+        return PasSmootherDecision(accept=False, stop=True, reason="nonfinite-residual", trend=trend)
+    if len(trend.history) == 1:
+        return PasSmootherDecision(accept=True, stop=False, reason="seed-history", trend=trend)
+    if trend.latest == 0.0:
+        return PasSmootherDecision(accept=True, stop=True, reason="zero-residual", trend=trend)
+    if trend.latest_ratio is not None and trend.latest_ratio > config.worsen_ratio:
+        return PasSmootherDecision(accept=False, stop=True, reason="single-step-worsened", trend=trend)
+    if trend.window_log_slope is not None and trend.window_log_slope > math.log(config.worsen_ratio):
+        return PasSmootherDecision(accept=False, stop=True, reason="window-trend-worsened", trend=trend)
+    if trend.consecutive_increases >= config.max_consecutive_increases:
+        return PasSmootherDecision(accept=False, stop=True, reason="consecutive-increases", trend=trend)
+    if trend.window_ratio is not None and trend.window_ratio >= config.stagnation_ratio:
+        return PasSmootherDecision(accept=True, stop=True, reason="window-stagnation", trend=trend)
+    if trend.best_before_latest_ratio is not None and trend.best_before_latest_ratio <= config.accept_ratio:
+        return PasSmootherDecision(accept=True, stop=False, reason="improved", trend=trend)
+    if trend.latest_ratio is not None and trend.latest_ratio <= config.accept_ratio:
+        return PasSmootherDecision(accept=True, stop=False, reason="improved", trend=trend)
+    return PasSmootherDecision(accept=False, stop=True, reason="not-improving", trend=trend)
+
+
+def advance_pas_smoother(
+    history: Sequence[float],
+    residual: float,
+    *,
+    config: PasSmootherConfig = PasSmootherConfig(),
+) -> PasSmootherDecision:
+    """Append one residual and decide the next adaptive PAS smoother action."""
+    return decide_pas_smoother_action(append_residual(history, residual), config=config)
+
+
+def run_adaptive_stationary_smoother(
+    *,
+    matvec_fn: Callable[[jnp.ndarray], jnp.ndarray],
+    rhs_vec: jnp.ndarray,
+    x0_vec: jnp.ndarray,
+    smoother_fn: Callable[[jnp.ndarray], jnp.ndarray],
+    target: float,
+    max_steps: int,
+    omega: float,
+    upward_ratio: float,
+    patience: int,
+    min_steps: int,
+    target_ratio: float,
+    abs_floor: float,
+) -> AdaptiveStationaryResult:
+    """Run a bounded stationary smoother and retain the best residual iterate."""
+    x_curr = jnp.asarray(x0_vec, dtype=jnp.float64)
+    x_best = x_curr
+    history: list[float] = []
+    best_residual = float("inf")
+    stop_reason = "max_steps"
+    max_steps_use = max(1, int(max_steps))
+    omega_use = float(omega)
+
+    for step in range(max_steps_use + 1):
+        residual_vec = rhs_vec - matvec_fn(x_curr)
+        residual_norm = float(jnp.linalg.norm(residual_vec))
+        history.append(residual_norm)
+        if np.isfinite(residual_norm) and residual_norm < best_residual:
+            best_residual = residual_norm
+            x_best = x_curr
+        stop, reason = should_stop_adaptive_smoother(
+            history,
+            target=float(target),
+            target_ratio=float(target_ratio),
+            abs_floor=float(abs_floor),
+            upward_ratio=float(upward_ratio),
+            patience=int(patience),
+            min_steps=int(min_steps),
+        )
+        if stop:
+            stop_reason = reason
+            break
+        if step >= max_steps_use:
+            break
+        delta = smoother_fn(jnp.asarray(residual_vec, dtype=jnp.float64))
+        if not bool(jnp.all(jnp.isfinite(delta))):
+            stop_reason = "nonfinite_update"
+            break
+        x_curr = x_curr + omega_use * jnp.asarray(delta, dtype=jnp.float64)
+
+    initial = history[0] if history else float("inf")
+    return AdaptiveStationaryResult(
+        x_best=jnp.asarray(x_best, dtype=jnp.float64),
+        best_residual_norm=float(best_residual),
+        residual_history=tuple(float(v) for v in history),
+        steps_completed=max(0, len(history) - 1),
+        stop_reason=stop_reason,
+        improved=np.isfinite(float(best_residual)) and float(best_residual) < float(initial),
+    )
+
+
+def adaptive_pas_smoother_allowed(
+    *,
+    enabled: bool,
+    use_implicit: bool,
+    has_pas: bool,
+    include_phi1: bool,
+    residual_norm: float,
+    target: float,
+    active_size: int,
+    min_size: int,
+) -> bool:
+    """Return whether the bounded adaptive PAS smoother is admissible."""
+    if not bool(enabled):
+        return False
+    if bool(use_implicit) or (not bool(has_pas)) or bool(include_phi1):
+        return False
+    if int(active_size) < max(1, int(min_size)):
+        return False
+    if not np.isfinite(float(residual_norm)):
+        return False
+    return float(residual_norm) > float(target)
+
+
+@jtu.register_pytree_node_class
+@dataclass(frozen=True)
+class AdaptivePassSmootherResult:
+    """Pytree result for an adaptive PAS smoothing pass."""
+
+    x: jnp.ndarray
+    residual_norm: jnp.ndarray
+    history: jnp.ndarray
+    accepted_sweeps: int
+    stop_reason: str
+
+    def tree_flatten(self):
+        children = (self.x, self.residual_norm, self.history)
+        aux = (self.accepted_sweeps, self.stop_reason)
+        return children, aux
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        accepted_sweeps, stop_reason = aux
+        x, residual_norm, history = children
+        return cls(
+            x=x,
+            residual_norm=residual_norm,
+            history=history,
+            accepted_sweeps=accepted_sweeps,
+            stop_reason=stop_reason,
+        )
+
+
+def adaptive_pas_smoother(
+    *,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    rhs: jnp.ndarray,
+    preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    x0: jnp.ndarray,
+    target: float,
+    omega: float = 1.0,
+    max_sweeps: int = 3,
+    min_rel_improvement: float = 2.5e-2,
+    worsen_factor: float = 1.05,
+    plateau_patience: int = 1,
+) -> AdaptivePassSmootherResult:
+    """Apply bounded adaptive PAS smoothing and return the best iterate."""
+    result = run_adaptive_stationary_smoother(
+        matvec_fn=matvec,
+        rhs_vec=jnp.asarray(rhs, dtype=jnp.float64),
+        x0_vec=jnp.asarray(x0, dtype=jnp.float64),
+        smoother_fn=preconditioner,
+        target=float(target),
+        max_steps=int(max_sweeps),
+        omega=float(omega),
+        upward_ratio=float(worsen_factor),
+        patience=max(1, int(plateau_patience)),
+        min_steps=1,
+        target_ratio=1.0,
+        abs_floor=max(0.0, float(target)) * max(0.0, float(min_rel_improvement)),
+    )
+    initial = float(result.residual_history[0]) if result.residual_history else float("inf")
+    accepted = 0
+    prev = initial
+    for val in result.residual_history[1:]:
+        if float(val) < float(prev):
+            accepted += 1
+            prev = float(val)
+    return AdaptivePassSmootherResult(
+        x=jnp.asarray(result.x_best, dtype=jnp.float64),
+        residual_norm=jnp.asarray(result.best_residual_norm, dtype=jnp.float64),
+        history=jnp.asarray(result.residual_history, dtype=jnp.float64),
+        accepted_sweeps=int(accepted),
+        stop_reason=result.stop_reason,
+    )
 
 
 @dataclass(frozen=True)

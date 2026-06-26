@@ -462,7 +462,7 @@ def _export_f_config(*, nml: Namelist, grids: V3Grids, geom: Any) -> ExportFConf
         export_x = x.copy()
         map_x = np.eye(n_x, dtype=np.float64)
     elif x_option == 1:
-        from ..collisions import polynomial_interpolation_matrix_np  # noqa: PLC0415
+        from ..physics.collisions import polynomial_interpolation_matrix_np  # noqa: PLC0415
 
         other = nml.group("otherNumericalParameters")
         x_grid_scheme = _get_int(other, "XGRIDSCHEME", _get_int(other, "xGridScheme", 5))
@@ -1634,7 +1634,7 @@ def sfincs_jax_output_dict(
     # computed during diagnostics; when includePhi1 is false, they match the NoPhi1 values.
     import jax.numpy as jnp  # noqa: PLC0415
 
-    from ..classical_transport import classical_flux_v3  # noqa: PLC0415
+    from ..physics.classical_transport import classical_flux_v3  # noqa: PLC0415
 
     cached_pf0 = output_cache_payload.get("classicalParticleFluxNoPhi1_psiHat") if output_cache_payload is not None else None
     cached_hf0 = output_cache_payload.get("classicalHeatFluxNoPhi1_psiHat") if output_cache_payload is not None else None
@@ -3260,7 +3260,7 @@ def write_sfincs_jax_output_h5(
             _store_flux_variants_NS(base, np.transpose(diag_arrays[base], (1, 0)))
 
         # Classical fluxes (v3 `classicalTransport.F90:calculateClassicalFlux`) written per-iteration.
-        from ..classical_transport import classical_flux_v3  # noqa: PLC0415
+        from ..physics.classical_transport import classical_flux_v3  # noqa: PLC0415
 
         theta_w = jnp.asarray(result.op.theta_weights, dtype=jnp.float64)
         zeta_w = jnp.asarray(result.op.zeta_weights, dtype=jnp.float64)
@@ -3953,7 +3953,7 @@ def write_sfincs_jax_output_h5(
 
             # Classical fluxes (v3 `classicalTransport.F90`) depend on the imposed gradients
             # and therefore must be computed separately for each whichRHS in RHSMode=2/3 runs.
-            from ..classical_transport import classical_flux_v3  # noqa: PLC0415
+            from ..physics.classical_transport import classical_flux_v3  # noqa: PLC0415
             from sfincs_jax.operators.profile_response.system import with_transport_rhs_settings  # noqa: PLC0415
 
             theta_w = jnp.asarray(op0.theta_weights, dtype=jnp.float64)

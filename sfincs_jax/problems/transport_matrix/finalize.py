@@ -18,7 +18,6 @@ from jax import tree_util as jtu
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.constraint_projection import project_constraint_scheme1_nullspace_solution
 from sfincs_jax.operators.profile_response.system import V3FullSystemOperator
 from sfincs_jax.problems.transport_matrix.diagnostics import (
     v3_transport_diagnostics_vm_only_batch_jit,
@@ -31,6 +30,7 @@ from sfincs_jax.problems.transport_matrix.diagnostics import (
     v3_transport_matrix_from_flux_arrays,
 )
 from sfincs_jax.outputs.transport import TransportStreamingOutputAccumulator
+from sfincs_jax.solvers.preconditioning import project_constraint_scheme1_nullspace_solution
 
 
 EmitFn = Callable[[int, str], None]

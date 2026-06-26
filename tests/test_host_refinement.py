@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from scipy import sparse
 
-from sfincs_jax.host_refinement import (
+from sfincs_jax.solvers.explicit_sparse import (
     host_direct_solve_with_refinement,
     host_sparse_direct_polish,
     host_sparse_direct_solve_with_refinement,

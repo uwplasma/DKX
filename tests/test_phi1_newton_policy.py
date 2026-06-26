@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.phi1_newton_policy import (
+from sfincs_jax.problems.profile_response.phi1_newton import (
     phi1_frozen_jacobian_policy,
     phi1_gmres_restart,
     phi1_line_search_policy,
