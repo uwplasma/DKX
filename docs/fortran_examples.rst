@@ -5,20 +5,21 @@ This page tracks the vendored upstream example suite
 (``examples/sfincs_examples``) from the perspective of **exact-input frozen-fixture
 validation**.
 
-For the current release-facing status on ``main`` use the full scaled example-suite audit instead:
+For release-facing runtime, memory, and parity claims, use the full scaled
+example-suite audit instead:
 
 - ``tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak``
 - ``tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas``
 
-That audit is the one reflected in ``README.md`` and the release-facing parity claims. This page is
-still useful because it answers a different question: whether a vendored upstream input has an
-exact content match to a frozen in-repo Fortran fixture.
+That audit is the one reflected in ``README.md`` and the release-facing parity
+claims. This page answers a narrower question: whether a vendored upstream input
+has an exact content match to a frozen in-repo Fortran fixture.
 
 For each upstream example input we report:
 
 1. whether ``sfincs_jax`` successfully writes ``sfincsOutput.h5`` for that exact input,
 2. whether that exact input has a frozen Fortran output fixture in-repo and matches it,
-3. and the reason when exact-input frozen-fixture parity is not currently verified.
+3. and the reason when exact-input frozen-fixture parity is not verified.
 
 How this table is generated
 ---------------------------
@@ -39,9 +40,9 @@ Generation logic:
 
 .. note::
 
-   ``unverified`` on this page does not mean the example fails in the current release. It only
+   ``unverified`` on this page does not mean the example fails. It only
    means there is no exact content-matched frozen Fortran ``sfincsOutput.h5`` fixture for that
-   specific vendored input file. The release-facing scaled suite on ``main`` runs all vendored
+   specific vendored input file. The release-facing scaled suite runs all vendored
    examples plus ``additional_examples`` cleanly on CPU and GPU.
 
 Output parity table
@@ -65,8 +66,7 @@ Archived reduced-suite artifacts
 --------------------------------
 
 The reduced-suite runner is still kept for faster local debugging, solver triage, and
-historical milestone comparison. It is no longer the release-facing status page for
-``main``.
+historical milestone comparison. It is not the release-facing status page.
 
 Regenerate the archived note and file list with:
 
@@ -92,11 +92,11 @@ This workflow is still useful for fast local debugging and solver triage:
 2. halves resolution axes adaptively until both Fortran and ``sfincs_jax`` runs are under 30s,
 3. compares resulting ``sfincsOutput.h5`` files.
 
-The latest generated practical table (with per-case tolerance overrides) is:
+The practical table with per-case tolerance overrides is:
 
 .. include:: _generated/reduced_upstream_suite_status.rst
 
-The latest generated strict table (all tolerance overrides ignored) is:
+The strict table with tolerance overrides ignored is:
 
 .. include:: _generated/reduced_upstream_suite_status_strict.rst
 
@@ -108,7 +108,7 @@ To isolate solver-branch vs operator-assembly differences, we also run
 ``saveMatricesAndVectorsInBinary=.true.`` enabled. This compares Fortran PETSc
 matrix action directly against the JAX matrix-free operator action.
 
-Current audited subset:
+Audited subset:
 
 - ``tests/reduced_inputs/geometryScheme4_2species_noEr.input.namelist``
 - ``tests/reduced_inputs/HSX_FPCollisions_DKESTrajectories.input.namelist``
@@ -131,7 +131,7 @@ Whenever a case reaches ``parity_ok`` in the reduced runner, its adapted input i
 
 ``tests/reduced_inputs/<case>.input.namelist``
 
-Current promoted fixtures:
+Promoted fixtures:
 
 - ``tests/reduced_inputs/HSX_FPCollisions_DKESTrajectories.input.namelist``
 - ``tests/reduced_inputs/filteredW7XNetCDF_2species_magneticDrifts_noEr.input.namelist``
