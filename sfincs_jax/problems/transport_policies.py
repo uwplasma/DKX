@@ -1061,6 +1061,7 @@ def resolve_transport_initial_solve_policy(
         elif (
             int(rhs_mode) == 2
             and (not force_krylov)
+            and dense_backend_allowed
             and str(solve_method_use).lower() in {"auto", "default", "batched", "incremental"}
             and int(op.total_size) <= 1500
             and (not dense_mem_block)
@@ -1076,6 +1077,7 @@ def resolve_transport_initial_solve_policy(
         elif (
             dense_fallback
             and (not force_krylov)
+            and dense_backend_allowed
             and int(op.total_size) <= int(dense_fallback_max)
             and str(solve_method_use).lower() in {"auto", "default", "batched", "incremental"}
             and (not dense_mem_block)
@@ -1280,6 +1282,7 @@ def resolve_transport_dense_policy(
         int(rhs_mode) == 2
         and (not force_krylov)
         and (not force_dense_out)
+        and dense_backend_allowed
         and str(solve_method_out).lower() in {"auto", "default", "batched", "incremental"}
     ):
         auto_dense_limit = 1500

@@ -115,3 +115,124 @@ def test_active_dense_setup_reports_dense_preconditioner_memory_guard(monkeypatc
     assert setup.solve_method_use == "incremental"
     assert not setup.dense_precond_enabled
     assert any("dense preconditioner disabled" in message for _, message in setup.dense_notes)
+
+
+def test_active_dense_setup_builds_one_based_noncontiguous_active_map(monkeypatch) -> None:
+    _clear_env(monkeypatch)
+    active = np.asarray([2, 5, 9], dtype=np.int32)
+    setup = resolve_transport_active_dense_setup(
+        op=_op(total_size=12, nxi_for_x=(4, 4)),
+        rhs_mode=3,
+        n_rhs=1,
+        solve_method="incremental",
+        restart=50,
+        maxiter=25,
+        backend="cpu",
+        geometry_scheme=1,
+        dense_accelerator_auto_allowed=False,
+        dense_backend_policy_allowed=True,
+        state_out_requested=True,
+        force_stream_diagnostics=None,
+        force_store_state=None,
+        subset_mode=False,
+        active_dof_indices=lambda _op: active,
+        active_dof_env="1",
+    )
+
+    assert setup.use_active_dof_mode
+    assert setup.active_size == 3
+    assert setup.store_state_vectors
+    np.testing.assert_array_equal(setup.active_idx_np, active)
+    full_to_active = np.asarray(setup.full_to_active_jnp)
+    np.testing.assert_array_equal(full_to_active[active], np.asarray([1, 2, 3], dtype=np.int32))
+    assert np.count_nonzero(full_to_active) == active.size
+    assert setup.active_dof_decision.reason == "env"
+
+
+def test_active_dense_setup_disables_dense_path_on_disallowed_backend(monkeypatch) -> None:
+    _clear_env(monkeypatch)
+    setup = resolve_transport_active_dense_setup(
+        op=_op(total_size=120, nxi_for_x=(4, 4)),
+        rhs_mode=2,
+        n_rhs=2,
+        solve_method="dense",
+        restart=60,
+        maxiter=None,
+        backend="gpu",
+        geometry_scheme=1,
+        dense_accelerator_auto_allowed=False,
+        dense_backend_policy_allowed=False,
+        state_out_requested=False,
+        force_stream_diagnostics=None,
+        force_store_state=None,
+        subset_mode=False,
+        active_dof_indices=lambda _op: np.arange(120, dtype=np.int32),
+        active_dof_env="0",
+    )
+
+    assert setup.solve_method_use == "incremental"
+    assert not setup.force_dense
+    assert setup.dense_retry_max == 0
+    assert not setup.dense_backend_allowed
+    assert any("dense transport path disabled on backend=gpu" in message for _, message in setup.initial_notes)
+
+
+def test_active_dense_setup_uses_float32_dense_fallback_when_only_float64_exceeds_cap(monkeypatch) -> None:
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_DENSE_MAX_MB", "150")
+
+    setup = resolve_transport_active_dense_setup(
+        op=_op(total_size=5000, nxi_for_x=(4, 4)),
+        rhs_mode=3,
+        n_rhs=3,
+        solve_method="auto",
+        restart=60,
+        maxiter=None,
+        backend="cpu",
+        geometry_scheme=1,
+        dense_accelerator_auto_allowed=False,
+        dense_backend_policy_allowed=True,
+        state_out_requested=False,
+        force_stream_diagnostics=None,
+        force_store_state=None,
+        subset_mode=False,
+        active_dof_indices=lambda _op: np.arange(5000, dtype=np.int32),
+        active_dof_env="0",
+    )
+
+    assert setup.dense_use_mixed
+    assert not setup.dense_mem_block
+    assert setup.solve_method_use == "dense"
+    assert any("dense fallback using float32" in message for _, message in setup.initial_notes)
+
+
+def test_active_dense_setup_large_outputs_force_krylov_streaming_without_dense_retry(monkeypatch) -> None:
+    _clear_env(monkeypatch)
+    setup = resolve_transport_active_dense_setup(
+        op=_op(total_size=100_001, nxi_for_x=(4, 4)),
+        rhs_mode=3,
+        n_rhs=2,
+        solve_method="auto",
+        restart=60,
+        maxiter=None,
+        backend="cpu",
+        geometry_scheme=1,
+        dense_accelerator_auto_allowed=False,
+        dense_backend_policy_allowed=True,
+        state_out_requested=False,
+        force_stream_diagnostics=None,
+        force_store_state=None,
+        subset_mode=False,
+        active_dof_indices=lambda _op: np.arange(100_001, dtype=np.int32),
+        active_dof_env="0",
+    )
+
+    assert setup.low_memory_outputs
+    assert setup.stream_diagnostics
+    assert not setup.store_state_vectors
+    assert setup.force_krylov
+    assert not setup.force_dense
+    assert not setup.dense_fallback
+    assert setup.dense_retry_max == 0
+    assert setup.maxiter == 800
+    assert setup.gmres_restart == 80

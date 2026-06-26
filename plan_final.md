@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (ambipolar utility/admission coverage pass)
+Last updated: 2026-06-26 (transport dense-admission coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -472,6 +472,17 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   strengthens option-1/2/3 ambipolar reliability without adding slow transport
   solves to CI. The focused ambipolar suite reports `24 passed` in `23.25 s`;
   the compact review-lock bundle reports `55 passed` in `25.47 s`.
+- The seventy-second post-audit coverage tranche added active transport
+  dense-admission gates and fixed one policy bug. `tests/test_transport_active_dense_setup.py`
+  now covers noncontiguous active-DOF compaction, backend-disallowed dense
+  fallback on accelerators, float32 dense fallback when only float64 exceeds the
+  memory cap, and large-output streaming/Krylov defaults. The tests exposed
+  that RHSMode=2 auto-dense selection could re-promote `dense` after the
+  backend policy had disabled it; `resolve_transport_initial_solve_policy` and
+  `resolve_transport_dense_policy` now both gate auto/fallback dense promotion
+  on `dense_backend_allowed`. The focused active/dense setup suite reports
+  `7 passed` in `0.31 s`, and the bounded transport/API/source review bundle
+  reports `94 passed` in `25.38 s`.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
