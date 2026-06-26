@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
+import re
 from types import ModuleType
 
 
@@ -246,6 +247,52 @@ RESERVED_MODULE_NAMES_UNTIL_MIGRATION = (
     "sfincs_jax.geometry",
     "sfincs_jax.io",
 )
+
+ROOT_MODULE_CLASSIFICATIONS = {
+    "__init__.py": "public package facade",
+    "__main__.py": "public entry point",
+    "adaptive_maps.py": "stable numerical kernel",
+    "ambipolar.py": "public physics API",
+    "api.py": "public API",
+    "boozer_bc.py": "stable geometry kernel",
+    "classical_transport.py": "stable physics kernel",
+    "cli.py": "public entry point",
+    "collisionless.py": "stable operator kernel",
+    "collisionless_er.py": "stable operator kernel",
+    "collisionless_exb.py": "stable operator kernel",
+    "collisions.py": "stable physics kernel",
+    "compare.py": "public validation API",
+    "constrained_pas_branch.py": "stable solver-policy kernel",
+    "constraint_projection.py": "stable numerical kernel",
+    "data_fetch.py": "public support workflow",
+    "diagnostics.py": "stable physics kernel",
+    "geometry.py": "public geometry API",
+    "grids.py": "public discretization API",
+    "host_refinement.py": "stable solver-policy kernel",
+    "indices.py": "stable discretization kernel",
+    "input_compat.py": "public compatibility API",
+    "io.py": "compatibility facade",
+    "jax_geometry_adapters.py": "public geometry workflow API",
+    "magnetic_drifts.py": "stable operator kernel",
+    "namelist.py": "public input API",
+    "pas_smoother.py": "stable preconditioner kernel",
+    "paths.py": "stable support utility",
+    "periodic_stencil.py": "stable numerical kernel",
+    "phi1_newton_linear.py": "stable solver kernel",
+    "phi1_newton_policy.py": "stable solver-policy kernel",
+    "plotting.py": "public plotting API",
+    "postprocess_upstream.py": "public support workflow",
+    "profiling.py": "stable support utility",
+    "residual.py": "stable operator kernel",
+    "scans.py": "public workflow API",
+    "sensitivity.py": "public differentiation API",
+    "solver.py": "stable solver kernel",
+    "structured_velocity.py": "stable numerical kernel",
+    "v3_driver.py": "compatibility shim",
+    "vmec_geometry.py": "stable geometry kernel",
+    "vmec_wout.py": "stable geometry kernel",
+    "xgrid.py": "stable discretization kernel",
+}
 
 TRANSPORT_COMPATIBILITY_IMPORTS = (
     (
@@ -713,6 +760,56 @@ def test_module_names_reserved_for_later_package_migration_still_load_as_modules
         assert not hasattr(module, "__path__"), module_name
         assert module.__file__ is not None
         assert module.__file__.endswith(".py"), module.__file__
+
+
+def test_root_modules_are_explicitly_classified() -> None:
+    """Batch E requires every remaining package-root module to have an owner class."""
+
+    root = Path(__file__).resolve().parents[1] / "sfincs_jax"
+    actual = {path.name for path in root.glob("*.py")}
+    expected = set(ROOT_MODULE_CLASSIFICATIONS)
+    assert actual == expected
+    allowed_classes = {
+        "compatibility facade",
+        "compatibility shim",
+        "public API",
+        "public compatibility API",
+        "public differentiation API",
+        "public discretization API",
+        "public entry point",
+        "public geometry API",
+        "public geometry workflow API",
+        "public input API",
+        "public package facade",
+        "public physics API",
+        "public plotting API",
+        "public support workflow",
+        "public validation API",
+        "public workflow API",
+        "stable discretization kernel",
+        "stable geometry kernel",
+        "stable numerical kernel",
+        "stable operator kernel",
+        "stable physics kernel",
+        "stable preconditioner kernel",
+        "stable solver kernel",
+        "stable solver-policy kernel",
+        "stable support utility",
+    }
+    assert set(ROOT_MODULE_CLASSIFICATIONS.values()) <= allowed_classes
+
+
+def test_source_map_does_not_advertise_deleted_flat_aliases() -> None:
+    """Deleted flat rhs1/transport modules must appear only as historical notes."""
+
+    repo_root = Path(__file__).resolve().parents[1]
+    source_map = (repo_root / "docs" / "source_map.rst").read_text(encoding="utf-8")
+    assert "legacy alias" not in source_map
+    assert "The legacy ``sfincs_jax/transport_matrix.py`` path remains" not in source_map
+    live_deleted_root_owner = re.compile(
+        r"(?m)^- ``sfincs_jax/(?:rhs1|transport)[^`]*\.py``:"
+    )
+    assert live_deleted_root_owner.search(source_map) is None
 
 
 def test_transport_matrix_package_moves_preserve_legacy_imports() -> None:
