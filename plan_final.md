@@ -356,6 +356,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   reran the README/source-layout/examples documentation guards. The public
   README, package source README, and examples README no longer match the
   explicitly flagged branch-history phrases.
+- The post-forty-fourth review-lock validation pass ran the bounded source
+  layout, examples, docs-claim, CLI/output, RHSMode=1 profile solve/system,
+  true-operator rescue, Schur/coarse, RHSMode=2/3 sparse transport, ambipolar,
+  and sensitivity bundle: `253 passed in 67.46 s`. Source Ruff, `compileall`,
+  and `git diff --check` also passed, and local caches were removed after the
+  run.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
