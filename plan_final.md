@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (source-map and one-level package documentation guard pass)
+Last updated: 2026-06-26 (frozen-reference comparison coverage guard pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -301,6 +301,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
 - The post-forty-ninth documentation gate ran `python -m sphinx -W -b html docs
   docs/_build/html` successfully for all `44` documentation pages. Generated
   build/cache directories were removed afterward so no docs artifacts are staged.
+- The fiftieth post-audit coverage tranche added frozen-reference comparison
+  tests for missing-key skips, nonnumeric metadata skips, shape-mismatch
+  failures, Phi1 final-Newton-iterate comparison, ignored Phi1 iteration
+  metadata, and VMEC `uHat` normalization. The focused comparison/HDF5 parity
+  suite reports `22 passed` in `0.51 s` and Ruff passes for the touched file.
+  These tests strengthen Fortran-v3 parity validation semantics without adding
+  large HDF5 fixtures or requiring Fortran in CI.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
@@ -2463,16 +2470,18 @@ Current completion status:
   public import migration, and compatibility-shim locking are complete. The
   only remaining refactor work is the retained-boundary audit for the four large
   owners and the review-lock validation pass.
-- Coverage and future-proof validation: about 85 percent by measured package
-  coverage. The newest fast tests cover output streaming, periodic stencils,
+- Coverage and future-proof validation: progressing beyond the last measured
+  `83.053%` package-coverage audit through targeted fast tests; the exact new
+  percentage is pending a stable full coverage run or GitHub Actions coverage
+  report. The newest tests cover output streaming, periodic stencils,
   release-data fetching, PETSc reference readers, upstream wrapper behavior,
   active full-FP kinetic block preconditioners, sparse-pattern helpers,
-  explicit-sparse settings, profile-system algebra helpers, and RHSMode=2/3
-  transport block-preconditioner assembly. Output-safety helpers now also cover
-  PAS-projection active-size accounting and solver-trace metadata sanitization.
-  The next coverage work must focus on profile/transport solve owners, explicit
-  sparse assembly, Schur/profile preconditioners, and profile true-operator
-  rescue paths while keeping CI below ten minutes.
+  explicit-sparse settings, profile-system algebra helpers, RHSMode=2/3
+  transport block-preconditioner assembly, public solver/API facades, and
+  frozen-reference comparison semantics. The next coverage work must focus on
+  profile/transport solve owners, explicit sparse assembly, Schur/profile
+  preconditioners, profile true-operator rescue paths, and output writer
+  branches while keeping CI below ten minutes.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.

@@ -567,3 +567,134 @@ def test_compare_applies_rhs1_constraint2_local_jhat_floor_but_gates_fsab_curren
     by_key = {result.key: result for result in results}
     assert by_key["jHat"].ok, results
     assert not by_key["FSABjHat"].ok, results
+
+
+def test_compare_skips_missing_and_nonnumeric_datasets(tmp_path: Path) -> None:
+    ref_path = tmp_path / "fortran_mixed.h5"
+    jax_path = tmp_path / "jax_mixed.h5"
+
+    with h5py.File(ref_path, "w") as f:
+        f["geometryScheme"] = np.asarray(11, dtype=np.int32)
+        f["RHSMode"] = np.asarray(3, dtype=np.int32)
+        f["constraintScheme"] = np.asarray(1, dtype=np.int32)
+        f["shared_numeric"] = np.asarray([1.0, 2.0], dtype=np.float64)
+        f["missing_from_jax"] = np.asarray([3.0], dtype=np.float64)
+        f["metadata_text"] = np.bytes_("fortran-reference")
+    with h5py.File(jax_path, "w") as f:
+        f["geometryScheme"] = np.asarray(11, dtype=np.int32)
+        f["RHSMode"] = np.asarray(3, dtype=np.int32)
+        f["constraintScheme"] = np.asarray(1, dtype=np.int32)
+        f["shared_numeric"] = np.asarray([1.0, 2.0 + 5.0e-13], dtype=np.float64)
+        f["extra_from_jax"] = np.asarray([4.0], dtype=np.float64)
+        f["metadata_text"] = np.bytes_("jax-output")
+
+    results = compare_sfincs_outputs(
+        a_path=jax_path,
+        b_path=ref_path,
+        keys=["shared_numeric", "missing_from_jax", "extra_from_jax", "metadata_text"],
+        rtol=0.0,
+        atol=1.0e-12,
+    )
+
+    assert [result.key for result in results] == ["shared_numeric"]
+    assert results[0].ok
+
+
+def test_compare_reports_shape_mismatch_as_failed_infinite_error(tmp_path: Path) -> None:
+    ref_path = tmp_path / "fortran_shape.h5"
+    jax_path = tmp_path / "jax_shape.h5"
+
+    _write_compare_case_h5(
+        ref_path,
+        rhs_mode=3,
+        constraint_scheme=1,
+        fields={"transportCoefficient": np.asarray([1.0, 2.0, 3.0], dtype=np.float64)},
+    )
+    _write_compare_case_h5(
+        jax_path,
+        rhs_mode=3,
+        constraint_scheme=1,
+        fields={"transportCoefficient": np.asarray([[1.0, 2.0, 3.0]], dtype=np.float64)},
+    )
+
+    results = compare_sfincs_outputs(
+        a_path=jax_path,
+        b_path=ref_path,
+        keys=["transportCoefficient"],
+        rtol=0.0,
+        atol=1.0e-12,
+    )
+
+    assert len(results) == 1
+    assert results[0].key == "transportCoefficient"
+    assert not results[0].ok
+    assert np.isinf(results[0].max_abs)
+    assert np.isinf(results[0].max_rel)
+
+
+def test_compare_phi1_uses_converged_final_iterate_and_ignores_iteration_metadata(tmp_path: Path) -> None:
+    ref_path = tmp_path / "fortran_phi1.h5"
+    jax_path = tmp_path / "jax_phi1.h5"
+
+    _write_compare_case_h5(
+        ref_path,
+        rhs_mode=1,
+        constraint_scheme=1,
+        fields={
+            "includePhi1": np.asarray(1, dtype=np.int32),
+            "NIterations": np.asarray(3, dtype=np.int32),
+            "Phi1Hat": np.asarray([100.0, -25.0, 2.5], dtype=np.float64),
+        },
+    )
+    _write_compare_case_h5(
+        jax_path,
+        rhs_mode=1,
+        constraint_scheme=1,
+        fields={
+            "includePhi1": np.asarray(1, dtype=np.int32),
+            "NIterations": np.asarray(2, dtype=np.int32),
+            "Phi1Hat": np.asarray([-1.0, 2.5 + 5.0e-13], dtype=np.float64),
+        },
+    )
+
+    results = compare_sfincs_outputs(
+        a_path=jax_path,
+        b_path=ref_path,
+        keys=["NIterations", "Phi1Hat"],
+        rtol=0.0,
+        atol=1.0e-12,
+    )
+
+    assert [result.key for result in results] == ["Phi1Hat"]
+    assert results[0].ok, results
+
+
+def test_compare_vmec_uhat_is_normalized_to_zero_for_v3_parity(tmp_path: Path) -> None:
+    ref_path = tmp_path / "fortran_vmec_uhat.h5"
+    jax_path = tmp_path / "jax_vmec_uhat.h5"
+
+    _write_compare_case_h5(
+        ref_path,
+        rhs_mode=2,
+        constraint_scheme=1,
+        geometry_scheme=5,
+        fields={"uHat": np.asarray([[1.0, -2.0], [3.0, -4.0]], dtype=np.float64)},
+    )
+    _write_compare_case_h5(
+        jax_path,
+        rhs_mode=2,
+        constraint_scheme=1,
+        geometry_scheme=5,
+        fields={"uHat": np.zeros((2, 2), dtype=np.float64)},
+    )
+
+    results = compare_sfincs_outputs(
+        a_path=jax_path,
+        b_path=ref_path,
+        keys=["uHat"],
+        rtol=0.0,
+        atol=1.0e-12,
+    )
+
+    assert len(results) == 1
+    assert results[0].ok, results
