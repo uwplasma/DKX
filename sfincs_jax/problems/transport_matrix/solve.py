@@ -308,11 +308,11 @@ _transport_restart_for_method = transport_restart_for_method
 
 from importlib import import_module as _import_module
 
-_PROFILE_SOLVE = _import_module("sfincs_jax.problems.profile_response.solve")
+_PROFILE_SOLVE = _import_module("sfincs_jax.problems.profile_solve")
 for _name, _value in vars(_PROFILE_SOLVE).items():
     if not _name.startswith("__"):
         globals()[_name] = _value
-from sfincs_jax.problems.profile_response.preconditioner_build import (
+from sfincs_jax.problems.profile_preconditioner_build import (
     _build_rhsmode23_theta_dd_preconditioner,
     _build_rhsmode23_theta_schwarz_preconditioner,
     _build_rhsmode23_zeta_dd_preconditioner,

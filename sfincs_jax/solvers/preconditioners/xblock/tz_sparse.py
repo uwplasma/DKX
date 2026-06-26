@@ -30,15 +30,15 @@ from sfincs_jax.solvers.preconditioning import (
     precond_chunk_cols,
     rhs_mode1_precond_cache_key,
 )
-from ....problems.profile_response.residual import safe_preconditioner
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_residual import safe_preconditioner
+from sfincs_jax.problems.profile_policies import (
     rhs1_fp_xblock_assembled_host_allowed as _rhs1_fp_xblock_assembled_host_allowed,
 )
-from ....problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     rhs1_host_factor_probe_ok as _rhs1_host_factor_probe_ok,
 )
-from sfincs_jax.problems.profile_response.policies import read_bool_env as _rhs1_bool_env
-from sfincs_jax.problems.profile_response.policies import read_float_env as _rhs1_float_env
+from sfincs_jax.problems.profile_policies import read_bool_env as _rhs1_bool_env
+from sfincs_jax.problems.profile_policies import read_float_env as _rhs1_float_env
 from sfincs_jax.solvers.sparse_triangular import (
     triangular_solve_lower_csr_rows as _triangular_solve_lower_csr_rows,
     triangular_solve_lower_padded as _triangular_solve_lower_padded,

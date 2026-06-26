@@ -9,7 +9,7 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 
-from ..setup import (
+from .profile_setup import (
     SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS,
     SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS,
 )

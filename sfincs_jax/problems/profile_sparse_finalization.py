@@ -10,7 +10,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ..diagnostics import (
+from .profile_diagnostics import (
     SparsePCFactorPreflightMetadataContext,
     SparsePCGMRESStaticMetadataContext,
     SparsePCPatternMetadataContext,
@@ -23,11 +23,11 @@ from ..diagnostics import (
     sparse_pc_pattern_result_metadata,
     sparse_pc_pattern_result_metadata_from_context,
 )
-from ..residual import (
+from .profile_residual import (
     residual_converged as profile_residual_converged,
     residual_target as profile_residual_target,
 )
-from .direct import (
+from .profile_sparse_direct import (
     SparsePCDirectTailFinalMetadataContext,
     sparse_pc_direct_tail_final_metadata,
 )

@@ -425,7 +425,7 @@ injected initial problem materialization stage that builds or accepts the
 operator, emits VMEC/RHS progress lines, installs preconditioner hints, applies
 transport ``whichRHS`` defaults, assembles the RHS, and reports the RHS norm.
 The subspace residual-correction tests now import
-``sfincs_jax.problems.profile_response.residual`` directly for the host and
+``sfincs_jax.problems.profile_residual`` directly for the host and
 device residual-equation correction kernels, with driver-alias checks retained
 only as compatibility guards. The same module also owns the x-block
 post-coarse direction-builder tests for flux-surface-averaged and
@@ -433,7 +433,7 @@ residual-weighted angular correction bases, plus the residual-correction
 preconditioner composition, safe preconditioner wrapping, and scalar
 preconditioned-minres polish tests.
 ``tests/test_profile_response_finalization.py`` covers
-``sfincs_jax.problems.profile_response.solver_diagnostics``, including the
+``sfincs_jax.problems.profile_solver_diagnostics``, including the
 final RHSMode=1 linear-solve handoff extracted from ``v3_driver.py``. It checks
 RHSMode gating for post-xblock acceptance floors, final progress-line
 formatting, metadata merging, accepted-residual-floor branch certificates, and
@@ -541,7 +541,7 @@ tests protect user-facing runtime-estimate behavior and cross-run Krylov reuse
 while keeping CI cost below one second for the new file.
 
 The latest driver split also extracts RHSMode=1 host dense/sparse-direct policy into
-``sfincs_jax/problems/profile_response/policies.py``. ``tests/test_rhs1_host_policy.py`` covers the
+``sfincs_jax/problems/profile_policies.py``. ``tests/test_rhs1_host_policy.py`` covers the
 backend/env rules for host dense fallback, small accelerator dense shortcuts,
 host sparse-direct enablement, sparse-preconditioned GMRES rescue, sparse factor
 dtype selection, iterative-refinement step parsing, explicit sparse-helper
@@ -554,14 +554,14 @@ refinement kernels and sparse-direct GMRES polish helper in
 sparse-factor preconditioner application.
 
 The adjacent constraint-scheme-0 sparse-first policy now lives in
-``sfincs_jax.problems.profile_response.policies``.
+``sfincs_jax.problems.profile_policies``.
 ``tests/test_rhs1_constraint0_policy.py`` checks that the accelerator-default sparse-first lane, explicit
 PETSc-compatible sparse mode, and dense-fallback opt-in preserve the same RHSMode,
 ``Phi1``, full-FP, solve-method, preconditioner, and size guards as the driver
 wrappers in ``tests/test_rhs1_sparse_first_heuristic.py``.
 
 The sparse exact-LU and sparse-over-dense preference decisions now live in
-``sfincs_jax.problems.profile_response.policies``.
+``sfincs_jax.problems.profile_policies``.
 ``tests/test_rhs1_sparse_exact_policy.py`` checks full-x CPU exact-LU routing, accelerator DKES and small-FP exact-LU
 routing, PAS-only full-preconditioner opt-in, explicit enable/disable behavior,
 size caps, dense-method rejection, moderate-FP sparse preference, and the
@@ -667,7 +667,7 @@ are exercised through the ``v3_driver`` compatibility seam and the PAS-focused
 regression suite.
 
 The follow-up post-x-block, sparse-polish, and acceptance gates now share the
-same canonical module, ``sfincs_jax.problems.profile_response.policies``.
+same canonical module, ``sfincs_jax.problems.profile_policies``.
 ``tests/test_rhs1_post_xblock_policy.py`` checks the residual and active-size
 gates for fast post-x-block polish, targeted FP polish, and explicit
 disable/override behavior for skip-global-sparse-after-xblock routing after a
@@ -740,7 +740,7 @@ allowances, paired memory metrics, tie-breaking, and missing-measurement guards.
 The adjacent RHSMode=1 candidate-replay seam is covered in
 ``tests/test_rhs1_handoff.py``.
 The canonical implementation now lives in
-``sfincs_jax.problems.profile_response.solver_diagnostics``. The strict finite
+``sfincs_jax.problems.profile_solver_diagnostics``. The strict finite
 residual-improvement predicate is tested directly, nonfinite candidates
 are rejected even before measured gates run, finite rescues after a nonfinite
 incumbent are accepted, and measured runtime/memory regressions still block an
@@ -749,7 +749,7 @@ audit in ``tests/test_policy_module_docstrings.py`` now also covers this
 source-mapped non-policy control module so the replay contract remains
 discoverable while ``v3_driver.py`` is split further.
 The nonlinear Phi1 Newton-Krylov stage now lives in
-``sfincs_jax.problems.profile_response.phi1_newton``. It is covered by
+``sfincs_jax.problems.profile_phi1_newton``. It is covered by
 ``tests/test_full_system_newton_krylov.py`` and the adjacent Phi1 policy,
 linear-step, and line-search tests. The fixture test imports the new owner
 directly, verifies the historical ``v3_driver`` name is a facade, and checks

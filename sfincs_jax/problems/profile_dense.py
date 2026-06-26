@@ -13,11 +13,11 @@ import jax.scipy.linalg as jla
 import jax.numpy as jnp
 import numpy as np
 
-from ...namelist import Namelist
-from ...operators.profile_full_system import solve_structured_rhs1_full_csr
-from ...solvers.implicit import linear_custom_solve, linear_custom_solve_with_residual
-from ...solvers.krylov_dispatch import gmres_solve_dispatch, rhs_krylov_method_for_context
-from ...solver import (
+from ..namelist import Namelist
+from ..operators.profile_full_system import solve_structured_rhs1_full_csr
+from ..solvers.implicit import linear_custom_solve, linear_custom_solve_with_residual
+from ..solvers.krylov_dispatch import gmres_solve_dispatch, rhs_krylov_method_for_context
+from ..solver import (
     GMRESSolveResult,
     assemble_dense_matrix_from_matvec,
     bicgstab_solve_with_history_scipy,
@@ -39,14 +39,14 @@ from sfincs_jax.operators.profile_system import (
     sharding_constraints,
     with_transport_rhs_settings,
 )
-from ..transport_matrix.linear_system import transport_active_dof_indices
-from .policies import (
+from .transport_matrix.linear_system import transport_active_dof_indices
+from .profile_policies import (
     rhsmode1_scipy_rescue_abs_floor_after_xblock_current_backend,
     rhsmode1_scipy_rescue_active_size_allowed_current_backend,
     rhs1_scipy_rescue_controls_from_env,
 )
-from .residual import result_with_true_residual, true_residual_norm_or_inf
-from .solver_diagnostics import V3LinearSolveResult
+from .profile_residual import result_with_true_residual, true_residual_norm_or_inf
+from .profile_solver_diagnostics import V3LinearSolveResult
 
 
 @dataclass(frozen=True)

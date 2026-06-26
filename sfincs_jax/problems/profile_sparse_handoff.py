@@ -17,7 +17,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ..diagnostics import (
+from .profile_diagnostics import (
     XBlockAssembledOperatorDiagnosticsContext,
     XBlockSparsePCCoreDiagnosticsContext,
     XBlockSideProbeDiagnosticsContext,
@@ -35,7 +35,7 @@ from ..diagnostics import (
     xblock_sparse_pc_result_diagnostics_from_driver_state,
     xblock_side_probe_diagnostics,
 )
-from .direct import (
+from .profile_sparse_direct import (
     DirectTailCoupledCoarseRescuePolicy,
     DirectTailMaterializationContext,
     DirectTailMaterializationResult,
@@ -100,8 +100,8 @@ from .direct import (
     sparse_minimum_norm_start_message,
     validate_explicit_sparse_host_request,
 )
-from .direct import __all__ as _direct_all
-from .finalization import (
+from .profile_sparse_direct import __all__ as _direct_all
+from .profile_sparse_finalization import (
     SparsePCFactorDtypeRetryContext,
     SparsePCFactorDtypeRetryDecision,
     SparsePCFactorDtypeRetryFinalizationContext,
@@ -143,8 +143,8 @@ from .finalization import (
     sparse_pc_gmres_finalization_state_from_context,
     sparse_pc_gmres_finalization_state_from_driver_scope,
 )
-from .finalization import __all__ as _finalization_all
-from .fortran_reduced import (
+from .profile_sparse_finalization import __all__ as _finalization_all
+from .profile_sparse_fortran_reduced import (
     FortranReducedSparsePCBackendSetup,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockFactorBuildResult,
@@ -176,8 +176,8 @@ from .fortran_reduced import (
     resolve_fortran_reduced_xblock_moment_schur_policy,
     run_fortran_reduced_xblock_krylov_solve,
 )
-from .fortran_reduced import __all__ as _fortran_reduced_all
-from .policy import (
+from .profile_sparse_fortran_reduced import __all__ as _fortran_reduced_all
+from .profile_sparse_policy import (
     SparsePCActiveDOFSetup,
     SparsePCAutoPreflightRetryEvaluationContext,
     SparsePCAutoPreflightRetryEvaluationResult,
@@ -210,8 +210,8 @@ from .policy import (
     resolve_sparse_pc_gmres_control_policy,
     select_sparse_pc_auto_preflight_retry_candidates,
 )
-from .policy import __all__ as _policy_all
-from .qi import (
+from .profile_sparse_policy import __all__ as _policy_all
+from .profile_sparse_qi import (
     XBlockQICoarseSeedStageContext,
     XBlockQICoarseSeedStageResult,
     XBlockQIDeflatedPolicySetup,
@@ -255,8 +255,8 @@ from .qi import (
     resolve_xblock_qi_two_level_policy_setup,
     run_xblock_qi_preconditioner_pipeline,
 )
-from .qi import __all__ as _qi_all
-from .xblock import (
+from .profile_sparse_qi import __all__ as _qi_all
+from .profile_sparse_xblock import (
     XBlockSparsePCSetup as XBlockSparsePCSetup,
     XBlockSparsePCSidePolicySetup as XBlockSparsePCSidePolicySetup,
     XBlockSparsePCBranchSetup,
@@ -407,7 +407,7 @@ from .xblock import (
     run_sparse_sxblock_rescue_stage,
     run_sparse_xblock_rescue_solve_stage,
 )
-from .xblock import __all__ as _xblock_all
+from .profile_sparse_xblock import __all__ as _xblock_all
 
 # Consolidated sparse-PC Krylov execution helpers
 

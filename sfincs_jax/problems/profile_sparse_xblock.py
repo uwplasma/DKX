@@ -12,7 +12,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ..diagnostics import (
+from .profile_diagnostics import (
     XBlockAssembledOperatorDiagnosticsContext,
     XBlockSideProbeDiagnosticsContext,
     xblock_assembled_operator_diagnostics,
@@ -23,27 +23,27 @@ from ..diagnostics import (
     xblock_sparse_pc_result_diagnostics_from_driver_state,
     xblock_side_probe_diagnostics,
 )
-from ..policies import (
+from .profile_policies import (
     rhs1_parse_accept_ratio,
     rhs1_parse_polish_gmres_config,
     rhs1_polish_enabled,
 )
-from ..solver_diagnostics import (
+from .profile_solver_diagnostics import (
     build_rhs1_xblock_correction_metadata_from_driver_state,
     prepare_cached_qi_correction_basis,
 )
-from .finalization import (
+from .profile_sparse_finalization import (
     SparsePCGMRESFinalPayload,
     SparsePCPostMinresUpdateContext,
     apply_sparse_pc_post_minres_if_needed,
 )
-from .policy import _env_bool, _env_float, _env_int, _env_value
-from .qi import (
+from .profile_sparse_policy import _env_bool, _env_float, _env_int, _env_value
+from .profile_sparse_qi import (
     build_xblock_qi_stage_pipeline_context,
     resolve_xblock_qi_device_operator_reuse_setup,
     run_xblock_qi_preconditioner_pipeline,
 )
-from ..residual import (
+from .profile_residual import (
     l2_norm_float as profile_l2_norm_float,
     residual_converged as profile_residual_converged,
     safe_ratio as profile_safe_ratio,
@@ -53,7 +53,7 @@ from sfincs_jax.solvers.memory_model import (
     gmres_basis_nbytes,
     tfqmr_work_nbytes,
 )
-from ....solver import GMRESSolveResult
+from ..solver import GMRESSolveResult
 
 
 ArrayFn = Callable[[jnp.ndarray], jnp.ndarray]

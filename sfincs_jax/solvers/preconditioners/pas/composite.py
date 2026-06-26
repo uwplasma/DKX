@@ -9,7 +9,7 @@ import os
 import jax.numpy as jnp
 import numpy as np
 
-from ....problems.profile_response.residual import safe_preconditioner
+from sfincs_jax.problems.profile_residual import safe_preconditioner
 from sfincs_jax.operators.profile_system import V3FullSystemOperator
 
 Preconditioner = Callable[[jnp.ndarray], jnp.ndarray]

@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 
 import sfincs_jax.v3_driver as vd
-import sfincs_jax.problems.profile_response.preconditioner_build as pb
-import sfincs_jax.problems.profile_response.sparse.direct as sparse_direct
+import sfincs_jax.problems.profile_preconditioner_build as pb
+import sfincs_jax.problems.profile_sparse_direct as sparse_direct
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.solvers.preconditioning import _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE
 from sfincs_jax.operators.profile_system import apply_v3_full_system_operator, full_system_operator_from_namelist

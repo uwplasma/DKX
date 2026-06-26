@@ -71,7 +71,7 @@ from sfincs_jax.operators.profile_system import V3FullSystemOperator, _matvec_sh
 
 
 
-# From sfincs_jax.problems.profile_response.preconditioner_build
+# From sfincs_jax.problems.profile_preconditioner_build
 _PAS_WEAK_STRONG_SKIP_KINDS = frozenset({"collision", "point", "xmg"})
 _PAS_STRONG_DELAY_BASE_KINDS = frozenset(
     {
@@ -601,7 +601,7 @@ def run_rhs1_post_primary_minres_corrections(
     )
 
 
-# From sfincs_jax.problems.profile_response.preconditioner_build
+# From sfincs_jax.problems.profile_preconditioner_build
 @dataclass(frozen=True)
 class RHS1StrongPreconditionerControl:
     """Resolved strong-preconditioner control state for a solve branch."""
@@ -763,7 +763,7 @@ def rhs1_resolved_strong_preconditioner_control(
     )
 
 
-# From sfincs_jax.problems.profile_response.preconditioner_build
+# From sfincs_jax.problems.profile_preconditioner_build
 @dataclass(frozen=True)
 class RHS1StrongAutoSelection:
     """Resolved automatic strong-preconditioner choice."""

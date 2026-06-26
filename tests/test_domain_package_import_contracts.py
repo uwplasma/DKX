@@ -12,7 +12,6 @@ DOMAIN_PACKAGES = (
     "sfincs_jax.geometry",
     "sfincs_jax.operators",
     "sfincs_jax.problems",
-    "sfincs_jax.problems.profile_response",
     "sfincs_jax.problems.transport_matrix",
     "sfincs_jax.problems.transport_matrix.parallel",
     "sfincs_jax.solvers",
@@ -265,7 +264,7 @@ MOVED_ROOT_MODULE_OWNERS = {
         "PitchAngleScatteringV3Operator",
         "apply_pitch_angle_scattering_v3",
     ),
-    "sfincs_jax.problems.profile_response.phi1_newton": (
+    "sfincs_jax.problems.profile_phi1_newton": (
         "build_phi1_newton_preconditioner",
         "phi1_frozen_jacobian_policy",
         "phi1_gmres_restart",
@@ -680,77 +679,77 @@ PRECONDITIONER_IMPLEMENTATION_IMPORTS = (
 PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
     (
         "sfincs_jax.problems.profile_response.policies",
-        "sfincs_jax.problems.profile_response.policies",
+        "sfincs_jax.problems.profile_policies",
         "rhs1_pas_fast_accept",
     ),
     (
         "sfincs_jax.problems.profile_response.setup",
-        "sfincs_jax.problems.profile_response.setup",
+        "sfincs_jax.problems.profile_setup",
         "resolve_rhs1_active_dof_mode",
     ),
     (
         "sfincs_jax.problems.profile_response.setup",
-        "sfincs_jax.problems.profile_response.setup",
+        "sfincs_jax.problems.profile_setup",
         "reduce_full_with_indices",
     ),
     (
         "sfincs_jax.problems.profile_response.policies",
-        "sfincs_jax.problems.profile_response.policies",
+        "sfincs_jax.problems.profile_policies",
         "rhs1_constraint0_sparse_first",
     ),
     (
         "sfincs_jax.problems.profile_response.solver_diagnostics",
-        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "sfincs_jax.problems.profile_solver_diagnostics",
         "rhs1_accept_candidate",
     ),
     (
         "sfincs_jax.problems.profile_response.policies",
-        "sfincs_jax.problems.profile_response.policies",
+        "sfincs_jax.problems.profile_policies",
         "rhs1_fast_post_xblock_polish_allowed",
     ),
     (
         "sfincs_jax.problems.profile_response.residual",
-        "sfincs_jax.problems.profile_response.residual",
+        "sfincs_jax.problems.profile_residual",
         "residual_target",
     ),
     (
         "sfincs_jax.problems.profile_response.policies",
-        "sfincs_jax.problems.profile_response.policies",
+        "sfincs_jax.problems.profile_policies",
         "rhs1_sparse_exact_lu_requested",
     ),
     (
         "sfincs_jax.problems.profile_response.policies",
-        "sfincs_jax.problems.profile_response.policies",
+        "sfincs_jax.problems.profile_policies",
         "rhs1_polish_enabled",
     ),
     (
         "sfincs_jax.problems.profile_response.policies",
-        "sfincs_jax.problems.profile_response.policies",
+        "sfincs_jax.problems.profile_policies",
         "rhs1_sparse_kind_use",
     ),
     (
         "sfincs_jax.problems.profile_response.policies",
-        "sfincs_jax.problems.profile_response.policies",
+        "sfincs_jax.problems.profile_policies",
         "rhs1_stage2_trigger",
     ),
     (
         "sfincs_jax.problems.profile_response.solver_diagnostics",
-        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "sfincs_jax.problems.profile_solver_diagnostics",
         "build_rhs1_xblock_correction_metadata",
     ),
     (
         "sfincs_jax.problems.profile_response.solver_diagnostics",
-        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "sfincs_jax.problems.profile_solver_diagnostics",
         "V3LinearSolveResult",
     ),
     (
         "sfincs_jax.problems.profile_response.solver_diagnostics",
-        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "sfincs_jax.problems.profile_solver_diagnostics",
         "V3NewtonKrylovResult",
     ),
     (
         "sfincs_jax.problems.profile_response.solver_diagnostics",
-        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "sfincs_jax.problems.profile_solver_diagnostics",
         "v3_linear_solve_result_from_payload",
     ),
     (
@@ -809,58 +808,58 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "geometry_from_namelist",
     ),
     (
-        "sfincs_jax.problems.profile_response.preconditioner_build",
-        "sfincs_jax.problems.profile_response.preconditioner_build",
+        "sfincs_jax.problems.profile_preconditioner_build",
+        "sfincs_jax.problems.profile_preconditioner_build",
         "auto_rhs1_full_strong_kind",
     ),
     (
-        "sfincs_jax.problems.profile_response.preconditioner_build",
-        "sfincs_jax.problems.profile_response.preconditioner_build",
+        "sfincs_jax.problems.profile_preconditioner_build",
+        "sfincs_jax.problems.profile_preconditioner_build",
         "rhs1_resolved_strong_preconditioner_control",
     ),
     (
-        "sfincs_jax.problems.profile_response.preconditioner_build",
-        "sfincs_jax.problems.profile_response.preconditioner_build",
+        "sfincs_jax.problems.profile_preconditioner_build",
+        "sfincs_jax.problems.profile_preconditioner_build",
         "requested_rhs1_strong_preconditioner_kind",
     ),
     (
-        "sfincs_jax.problems.profile_response.sparse.handoff",
-        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "sfincs_jax.problems.profile_sparse_handoff",
+        "sfincs_jax.problems.profile_sparse_handoff",
         "FortranReducedXBlockBackendContext",
     ),
     (
-        "sfincs_jax.problems.profile_response.sparse.handoff",
-        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "sfincs_jax.problems.profile_sparse_handoff",
+        "sfincs_jax.problems.profile_sparse_handoff",
         "SparsePCDirectTailFactorSetupContext",
     ),
     (
-        "sfincs_jax.problems.profile_response.sparse.handoff",
-        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "sfincs_jax.problems.profile_sparse_handoff",
+        "sfincs_jax.problems.profile_sparse_handoff",
         "SparsePCDirectTailRescuePolicySetupContext",
     ),
     (
-        "sfincs_jax.problems.profile_response.sparse.handoff",
-        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "sfincs_jax.problems.profile_sparse_handoff",
+        "sfincs_jax.problems.profile_sparse_handoff",
         "SparsePCGenericBranchSetupContext",
     ),
     (
-        "sfincs_jax.problems.profile_response.sparse.handoff",
-        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "sfincs_jax.problems.profile_sparse_handoff",
+        "sfincs_jax.problems.profile_sparse_handoff",
         "build_sparse_pc_direct_tail_factor_setup",
     ),
     (
-        "sfincs_jax.problems.profile_response.sparse.handoff",
-        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "sfincs_jax.problems.profile_sparse_handoff",
+        "sfincs_jax.problems.profile_sparse_handoff",
         "build_sparse_pc_direct_tail_rescue_policy_setup",
     ),
     (
-        "sfincs_jax.problems.profile_response.sparse.handoff",
-        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "sfincs_jax.problems.profile_sparse_handoff",
+        "sfincs_jax.problems.profile_sparse_handoff",
         "build_sparse_pc_generic_branch_setup",
     ),
     (
-        "sfincs_jax.problems.profile_response.sparse.handoff",
-        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "sfincs_jax.problems.profile_sparse_handoff",
+        "sfincs_jax.problems.profile_sparse_handoff",
         "solve_fortran_reduced_xblock_backend",
     ),
 )
@@ -903,7 +902,7 @@ def test_existing_legacy_modules_keep_their_import_paths() -> None:
     for module_name in LEGACY_MODULES_THAT_KEEP_THEIR_IMPORT_PATHS:
         module = _import_module(module_name)
         if module_name == "sfincs_jax.v3_driver":
-            assert module.__name__ == "sfincs_jax.problems.profile_response.solve"
+            assert module.__name__ == "sfincs_jax.problems.profile_solve"
             continue
         assert module.__name__ == module_name
 
@@ -1058,7 +1057,7 @@ def test_profile_response_package_moves_preserve_legacy_imports() -> None:
 def test_sparse_handoff_compatibility_waiver_is_documented() -> None:
     """The sparse handoff lint waiver must remain a documented compatibility seam."""
 
-    source = Path("sfincs_jax/problems/profile_response/sparse/handoff.py").read_text()
+    source = Path("sfincs_jax/problems/profile_sparse_handoff.py").read_text()
     assert "# ruff: noqa: F401,F811" in source
     assert "dynamic re-export surface" in source
     assert "Delete this waiver" in source

@@ -12,9 +12,9 @@ POLICY_MODULES = tuple(
 )
 SOURCE_MAPPED_CONTROL_MODULES = (
     "sfincs_jax.profiling",
-    "sfincs_jax.problems.profile_response.solver_diagnostics",
-    "sfincs_jax.problems.profile_response.policies",
-    "sfincs_jax.problems.profile_response.preconditioner_build",
+    "sfincs_jax.problems.profile_solver_diagnostics",
+    "sfincs_jax.problems.profile_policies",
+    "sfincs_jax.problems.profile_preconditioner_build",
     "sfincs_jax.solvers.preconditioners.pas.xblock_ilu",
     "sfincs_jax.solvers.preconditioners.schur.profile_response",
     "sfincs_jax.solvers.preconditioners.schur.profile_response",

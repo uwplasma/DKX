@@ -38,17 +38,17 @@ from sfincs_jax.operators.profile_sparse_pattern import (
     v3_full_system_conservative_sparsity_pattern,
 )
 from sfincs_jax.operators.profile_system import apply_v3_full_system_operator
-from ..diagnostics import (
+from .profile_diagnostics import (
     SparsePCDirectTailMetadataContext,
     sparse_pc_direct_tail_result_metadata_from_context,
 )
-from ..residual import (
+from .profile_residual import (
     residual_converged as profile_residual_converged,
     residual_target as profile_residual_target,
 )
-from ..setup import SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS
-from .policy import _env_bool, _env_float, _env_int, _env_value
-from ....solver import (
+from .profile_setup import SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS
+from .profile_sparse_policy import _env_bool, _env_float, _env_int, _env_value
+from ..solver import (
     GMRESSolveResult,
     assemble_dense_matrix_from_matvec,
     gmres_solve_with_history_scipy,

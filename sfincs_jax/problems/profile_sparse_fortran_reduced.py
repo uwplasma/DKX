@@ -8,20 +8,20 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ..diagnostics import fortran_reduced_xblock_result_metadata
-from ..residual import (
+from .profile_diagnostics import fortran_reduced_xblock_result_metadata
+from .profile_residual import (
     residual_converged as profile_residual_converged,
     residual_target as profile_residual_target,
 )
-from .finalization import SparsePCGMRESFinalPayload, SparsePCGMRESResult
-from .xblock import (
+from .profile_sparse_finalization import SparsePCGMRESFinalPayload, SparsePCGMRESResult
+from .profile_sparse_xblock import (
     MatvecCounter,
     XBlockGlobalCouplingPolicySetup,
     XBlockInitialGuessSetup,
     XBlockMomentSchurPolicySetup,
     build_xblock_krylov_matvec_setup,
 )
-from .policy import _env_bool, _env_float, _env_int, _env_value
+from .profile_sparse_policy import _env_bool, _env_float, _env_int, _env_value
 
 
 ArrayFn = Callable[[jnp.ndarray], jnp.ndarray]

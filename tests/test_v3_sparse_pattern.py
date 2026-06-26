@@ -17,7 +17,7 @@ from sfincs_jax.solvers.explicit_sparse import SparseDecision, SparseOperatorBun
 from sfincs_jax.io import write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.petsc_binary import read_petsc_mat_aij
-from sfincs_jax.problems.profile_response.residual import (
+from sfincs_jax.problems.profile_residual import (
     apply_device_subspace_residual_equation_correction,
     build_rhs1_xblock_post_coarse_directions,
 )

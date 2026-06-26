@@ -27,7 +27,7 @@ from sfincs_jax.solvers.explicit_sparse import (
 from sfincs_jax.operators.profile_layout import RHS1ActiveBlockLayout, RHS1BlockLayout
 from sfincs_jax.operators.profile_sources import constraint_scheme1_inject_source as _constraint_scheme1_inject_source
 from sfincs_jax.operators.profile_kinetic import select_structured_rhs1_fblock_operator
-from sfincs_jax.problems.profile_response.policies import read_bool_env, read_int_env
+from sfincs_jax.problems.profile_policies import read_bool_env, read_int_env
 from sfincs_jax.operators.profile_system import _fs_average_factor, apply_v3_full_system_operator_cached
 
 if TYPE_CHECKING:

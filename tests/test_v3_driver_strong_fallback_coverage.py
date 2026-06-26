@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import sfincs_jax.problems.profile_response.preconditioner_build as pb
+import sfincs_jax.problems.profile_preconditioner_build as pb
 
 
 def _op(*, with_pas: bool = False):

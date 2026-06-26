@@ -5,7 +5,7 @@ import jax.numpy as jnp
 
 from sfincs_jax.solver import GMRESSolveResult
 import sfincs_jax.v3_driver as vd
-from sfincs_jax.problems.profile_response.residual import (
+from sfincs_jax.problems.profile_residual import (
     compose_multilevel_residual_correction_preconditioner,
     safe_preconditioner,
 )

@@ -56,8 +56,6 @@
     "workflows"
   ],
   "temporary_nested_packages": [
-    "problems/profile_response",
-    "problems/profile_response/sparse",
     "problems/transport_matrix",
     "problems/transport_matrix/parallel",
     "solvers/preconditioners",

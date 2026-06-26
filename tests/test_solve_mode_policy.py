@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.problems.profile_response.policies import resolve_use_implicit
+from sfincs_jax.problems.profile_policies import resolve_use_implicit
 
 
 def test_resolve_use_implicit_honors_explicit_differentiable_flag(monkeypatch) -> None:

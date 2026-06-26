@@ -11,7 +11,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ...solver import GMRESSolveResult
+from ..solver import GMRESSolveResult
 from sfincs_jax.operators.profile_system import _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1
 
 

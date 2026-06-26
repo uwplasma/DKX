@@ -31,7 +31,7 @@ from sfincs_jax.operators.profile_kinetic import (
     clear_structured_rhs1_fblock_csr_cache,
     select_structured_rhs1_fblock_csr_operator,
 )
-from sfincs_jax.problems.profile_response.policies import resolve_active_projected_preconditioner_auto_policy
+from sfincs_jax.problems.profile_policies import resolve_active_projected_preconditioner_auto_policy
 from sfincs_jax.solvers.preconditioners.symbolic_sparse.policy import (
     active_fortran_v3_reduced_permc_candidates,
 )

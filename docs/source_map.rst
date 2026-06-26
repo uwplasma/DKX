@@ -34,8 +34,10 @@ skeleton packages are:
 - ``sfincs_jax/operators`` for matrix-free and assembled DKE operators,
   residual/source assembly, sparse patterns, and SFINCS Fortran-v3 convention
   translation.
-- ``sfincs_jax/problems/profile_response`` for RHSMode=1 profile-current and
-  bootstrap-current problem orchestration.
+- ``sfincs_jax/problems/profile_*.py`` for RHSMode=1 profile-current and
+  bootstrap-current problem orchestration. ``profile_response.py`` is a
+  compatibility shim for the former nested import path, not an implementation
+  folder.
 - ``sfincs_jax/problems/transport_matrix`` for RHSMode=2/3 transport-matrix and
   monoenergetic-response orchestration, diagnostics, output-field assembly, and
   compatibility shims for historical flat transport modules.
@@ -521,7 +523,7 @@ pieces are assembled before being fed to the solve stack.
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Compatibility shim for the former monolithic driver. It imports
-``sfincs_jax.problems.profile_response.solve`` and
+``sfincs_jax.problems.profile_solve`` and
 ``sfincs_jax.problems.transport_matrix.solve``, exposes moved public and
 legacy-private names for existing users, and aliases ``import
 sfincs_jax.v3_driver`` to the profile-response solve owner so old monkeypatch
@@ -530,11 +532,11 @@ contains no physics equations, solver algorithms, output assembly, or
 preconditioner setup logic.
 
 When a solve behaves differently on CPU and GPU, inspect the problem owner
-first: ``sfincs_jax.problems.profile_response.solve`` for RHSMode 1 and
+first: ``sfincs_jax.problems.profile_solve`` for RHSMode 1 and
 ``sfincs_jax.problems.transport_matrix.solve`` for RHSMode 2/3. The current
 domain owners replacing the old monolith are:
 
-- ``sfincs_jax/problems/profile_response/solver_diagnostics.py``:
+- ``sfincs_jax/problems/profile_solver_diagnostics.py``:
   RHSMode=1 linear-solve and Newton-Krylov result dataclasses, final
   profile-response result wrapping, output-visible solver metadata, and bounded
   PETSc-style KSP residual-history replay.
@@ -722,7 +724,7 @@ domain owners replacing the old monolith are:
   kinetic couplings. These are host-side, non-differentiable preconditioner
   setup routines for explicit CSR solves; candidate dispatch lives in the
   profile-response sparse/solve owners.
-- ``sfincs_jax/problems/profile_response/policies.py``
+- ``sfincs_jax/problems/profile_policies.py``
   (historical location: ``sfincs_jax/rhs1_direct_tail_policy.py``):
   RHSMode=1 direct-tail structured-preconditioner adapter, direct reduced-Pmat
   aliases, stable cache-key hashing, cache-hit metadata tagging, and adaptive
@@ -736,7 +738,7 @@ domain owners replacing the old monolith are:
   materialization. The module emits source/tail columns and moment rows from the
   same formulas used by the matrix-free v3 operator, while structured full-CSR
   builder callbacks are supplied by the profile-response solve/operator owners.
-- ``sfincs_jax/problems/profile_response/policies.py``
+- ``sfincs_jax/problems/profile_policies.py``
   (historical location: ``sfincs_jax/rhs1_active_preconditioner_policy.py``):
   active-projected RHSMode=1 full-CSR preconditioner auto-policy. The module
   owns environment parsing for the candidate ladder, large-system fallback
@@ -808,14 +810,14 @@ domain owners replacing the old monolith are:
   byte-budget preflights, and ``PasRuntimeChunkPlan`` metadata for keeping
   PAS-heavy residual/correction reductions inside configured memory budgets
   before a matvec is launched.
-- ``sfincs_jax/problems/profile_response/policies.py``:
+- ``sfincs_jax/problems/profile_policies.py``:
   typed RHSMode=1 solve-routing policy parsing for x-block probe-coarse,
   post-minres, post-coarse, post-residual-equation, bounded sparse-polish,
   host x-block factorization, current-backend dense/sparse admission wrappers,
   override semantics, and fail-closed high-resolution behavior. This keeps
   environment parsing and correction-policy defaults out of ``v3_driver.py``
   and out of the solve entry point.
-- ``sfincs_jax/problems/profile_response/setup.py``:
+- ``sfincs_jax/problems/profile_setup.py``:
   pure setup helpers for RHSMode=1/profile-response solves: GMRES restart and
   max-iteration environment overrides, geometry/equilibrium progress hints,
   FP/PAS tolerance tightening, physics-flag normalization, solve-method lane
@@ -826,7 +828,7 @@ domain owners replacing the old monolith are:
   transport ``whichRHS`` defaults, assembles the RHS, and returns the RHS norm.
   The driver consumes these typed setup results before entering the numerical
   solve loop.
-- ``sfincs_jax/problems/profile_response/phi1_newton.py``:
+- ``sfincs_jax/problems/profile_phi1_newton.py``:
   nonlinear Phi1 Newton-Krylov solve orchestration for RHSMode=1 profile
   response. This module owns the accepted-state history solve used by output
   writing, the small Newton-Krylov parity fixture path, active-DOF compaction,
@@ -834,7 +836,7 @@ domain owners replacing the old monolith are:
   runs, KSP-history replay wiring, and line-search advancement. Historical
   public names from this module remain reachable through the driver
   compatibility shim.
-- ``sfincs_jax/problems/profile_response/preconditioner_build.py``:
+- ``sfincs_jax/problems/profile_preconditioner_build.py``:
   RHSMode=1/profile-response full and reduced preconditioner build
   orchestration. The driver passes solve-local builders and projection
   functions through typed contexts, and the helper returns explicit state for
@@ -847,7 +849,7 @@ domain owners replacing the old monolith are:
   transport ``tzfft`` reuse, x-block builders, and strong fallback binding; the
   solve owner imports these names only as compatibility seams while Tranche 1
   continues.
-- ``sfincs_jax/problems/profile_response/sparse/handoff.py``:
+- ``sfincs_jax/problems/profile_sparse_handoff.py``:
   RHSMode=1/profile-response sparse-PC handoff layer. It owns the
   driver-facing sparse-PC attempt orchestration that depends on solve-local
   cache/replay/residual routing, generic sparse-PC retry execution, direct-tail
@@ -860,7 +862,7 @@ domain owners replacing the old monolith are:
   ``__all__`` lists from sparse owner modules and carries a few shadowed
   compatibility aliases. Delete the waiver only after ``solve.py`` and owner
   tests import the concrete sparse owners directly.
-- ``sfincs_jax/problems/profile_response/sparse/policy.py``:
+- ``sfincs_jax/problems/profile_sparse_policy.py``:
   generic sparse-PC policy and admission helpers: active-DOF map construction,
   entry classification, sparse factor policy, conservative-pattern setup,
   memory-budget preflight, factor residual-preflight gates, rescue-candidate
@@ -879,16 +881,16 @@ domain owners replacing the old monolith are:
   profile-response solves, including collisionless streaming, ExB, magnetic
   drift, Er, PAS, and Fokker-Planck terms. This replaces the historical root
   ``sfincs_jax/v3_fblock.py`` owner.
-- ``sfincs_jax/problems/profile_response/sparse/finalization.py``:
+- ``sfincs_jax/problems/profile_sparse_finalization.py``:
   sparse-PC GMRES result contracts, post-MinRes polish metadata, dtype-retry
   result assembly, completion messages, and final payload construction.
-- ``sfincs_jax/problems/profile_response/sparse/direct.py``:
+- ``sfincs_jax/problems/profile_sparse_direct.py``:
   explicit sparse operator admission, minimum-norm/direct host shortcuts,
   sparse-factor cache keys, host-memory probing, sparse-JAX preconditioner
   materialization, conservative full-pattern probing, ILU/direct-tail policy
   parsing through the shared sparse policy parser, structured direct-tail
   materialization, and final direct-tail metadata assembly.
-- ``sfincs_jax/problems/profile_response/sparse/xblock.py``:
+- ``sfincs_jax/problems/profile_sparse_xblock.py``:
   x-block and sxblock rescue/correction helpers, shared x-block Krylov matvec
   and initial-guess policy dataclasses, x-block sparse-PC setup/side-policy
   resolution, assembled-operator setup and preflight, local factor setup,
@@ -899,12 +901,12 @@ domain owners replacing the old monolith are:
   x-block branch orchestration, and final x-block sparse-PC diagnostic metadata
   assembly. This module owns generic x-block stage mechanics; QI-specific
   coarse-basis choices remain in ``sparse/qi.py``.
-- ``sfincs_jax/problems/profile_response/sparse/fortran_reduced.py``:
+- ``sfincs_jax/problems/profile_sparse_fortran_reduced.py``:
   Fortran-reduced x-block backend policy, factor-build, Krylov setup/solve,
   optional moment/global coarse stages, and final payload construction. The
   optional global-coupling stage uses the canonical QI host builder by default
   when no test builder is injected.
-- ``sfincs_jax/problems/profile_response/sparse/qi.py``:
+- ``sfincs_jax/problems/profile_sparse_qi.py``:
   QI-specific x-block device/operator-reuse policy, coarse-seed, Galerkin,
   two-level, QI-device admission/build/probe/install, and residual-deflated
   stages. It also owns ``run_xblock_qi_preconditioner_pipeline()``, the
@@ -915,14 +917,14 @@ domain owners replacing the old monolith are:
   ``build_xblock_qi_stage_pipeline_context()`` owns production default-builder
   wiring, while the profile-response solve owner supplies solve-local arrays,
   operators, timing, and active-DOF maps.
-- ``sfincs_jax/problems/profile_response/dense.py``:
+- ``sfincs_jax/problems/profile_dense.py``:
   RHSMode=1/profile-response dense and linear-solve helpers. This module owns
   Krylov routing for implicit, JIT, distributed, GMRES, and BiCGStab solve
   attempts; dense-KSP full/reduced solves; constraintScheme=0 PETSc-compatible
   sparse-ILU; host SciPy rescue; the reduced row-scaled LU path; and the
   full/reduced least-squares dense fallback used by non-differentiable host
   shortcut paths.
-- ``sfincs_jax/problems/profile_response/sparse/qi.py``:
+- ``sfincs_jax/problems/profile_sparse_qi.py``:
   matrix-free QI device seed correction for RHSMode=1 active-DOF solves. The
   driver passes solve-local state through a typed setup/context while the
   module owns env-gate resolution for early and pre-sparse seed hooks, QI
@@ -930,13 +932,13 @@ domain owners replacing the old monolith are:
   fail-closed diagnostics. The returned attempt object reports whether a hook
   was attempted and whether it improved the residual so the driver only updates
   replay state when the domain helper accepts a better seed.
-- ``sfincs_jax/problems/profile_response/solver_diagnostics.py``
+- ``sfincs_jax/problems/profile_solver_diagnostics.py``
   (historical location: ``sfincs_jax/rhs1_solver_diagnostics.py``):
   typed RHSMode=1 x-block correction diagnostic records, historical solver
   metadata key assembly, and KSP replay diagnostic context forwarding. This
   keeps output-visible trace fields independently testable outside the driver
   compatibility shim.
-- ``sfincs_jax/problems/profile_response/solver_diagnostics.py``:
+- ``sfincs_jax/problems/profile_solver_diagnostics.py``:
   final RHSMode=1/profile-response linear-solve handoff, output-visible solver
   metadata, bounded PETSc-style KSP residual-history replay, and iteration-count
   diagnostics. It applies cleanup projection, emits optional replay diagnostics,
@@ -957,7 +959,7 @@ domain owners replacing the old monolith are:
   sizing, and two-level Schwarz coarse-block heuristics. These rules are kept
   independent of the full operator so multi-device preconditioner policy can be
   tested without launching a solve.
-- ``sfincs_jax/problems/profile_response/setup.py``:
+- ``sfincs_jax/problems/profile_setup.py``:
   RHSMode=1 setup decisions, including active-degree-of-freedom routing and
   reduced-index-map construction for truncated pitch grids, x-block active-DOF
   opt-ins, and PAS constraint-projection solves. The same owner holds the
@@ -966,7 +968,7 @@ domain owners replacing the old monolith are:
   RHSMode=1 cleanup. These primitives are shared by RHSMode=1 sparse-PC,
   x-block active-DOF, PAS-projected reduced residual paths, and final linear
   solve normalization.
-- ``sfincs_jax/problems/profile_response/residual.py``
+- ``sfincs_jax/problems/profile_residual.py``
   (historical location: ``sfincs_jax/rhs1_residual.py``):
   small residual target, ratio, convergence, and host-scalar norm helpers used
   by RHSMode=1 sparse-PC and x-block diagnostics, plus the physics-aware
@@ -1007,10 +1009,10 @@ domain owners replacing the old monolith are:
   requires complete seed/backend coverage, convergence, output and trace
   provenance, residual/observable bounds, and no host fallback before a true
   device-QI claim can be promoted.
-- ``sfincs_jax/problems/profile_response/setup.py``
+- ``sfincs_jax/problems/profile_setup.py``
   (historical location: ``sfincs_jax/rhs1_preconditioner_dispatch.py``):
   shared RHSMode=1 preconditioner-kind dispatch.
-- ``sfincs_jax/problems/profile_response/policies.py``
+- ``sfincs_jax/problems/profile_policies.py``
   (historical location: ``sfincs_jax/rhs1_preconditioner_auto_policy.py``):
   RHSMode=1 preconditioner environment alias normalization plus bounded
   automatic preconditioner policy predicates for PAS, DKES, tokamak, GPU sparse
@@ -1020,7 +1022,7 @@ domain owners replacing the old monolith are:
   (historical location: ``sfincs_jax/rhs1_schur_policy.py``):
   RHSMode=1 Schur base-preconditioner alias normalization and automatic
   geometry/PAS/DKES routing policy.
-- ``sfincs_jax/problems/profile_response/policies.py``
+- ``sfincs_jax/problems/profile_policies.py``
   (historical locations: ``sfincs_jax/rhs1_acceptance_policy.py``,
   ``sfincs_jax/rhs1_constraint0_policy.py``,
   ``sfincs_jax/rhs1_post_xblock_policy.py``,
@@ -1037,18 +1039,18 @@ domain owners replacing the old monolith are:
   structured-level parsing, QI device extra-coarse environment controls,
   QI probe minres-step selection, and safe x-block fallback initial-guess
   admission.
-- ``sfincs_jax/problems/profile_response/preconditioner_build.py``
+- ``sfincs_jax/problems/profile_preconditioner_build.py``
   (historical locations: ``sfincs_jax/rhs1_strong_policy.py``,
   ``sfincs_jax/rhs1_strong_control.py``, and
   ``sfincs_jax/rhs1_strong_auto_kind.py``):
   strong-preconditioner request mapping, enable/disable control, automatic
   strong-kind selection, and post-selection adjustment policy.
-- ``sfincs_jax/problems/profile_response/preconditioner_build.py``
+- ``sfincs_jax/problems/profile_preconditioner_build.py``
   (historical location: ``sfincs_jax/rhs1_strong_fallback.py``):
   compatibility facade for historical RHSMode=1 strong-preconditioner fallback
   imports. The implementation owner is now
-  ``sfincs_jax/problems/profile_response/preconditioner_build.py``.
-- ``sfincs_jax/problems/profile_response/solver_diagnostics.py``
+  ``sfincs_jax/problems/profile_preconditioner_build.py``.
+- ``sfincs_jax/problems/profile_solver_diagnostics.py``
   (absorbed owner for former ``profile_response/handoff.py``):
   accepted-candidate replay, Krylov replay-state updates, final RHSMode=1
   solver diagnostics, and final linear-solve metadata. This is the
@@ -1064,7 +1066,7 @@ domain owners replacing the old monolith are:
   density/pressure moments, source-basis injection with ``pointAtX0`` handling,
   and the constraintScheme=1 moment-Schur wrapper used by x-block
   preconditioners.
-- ``sfincs_jax/problems/profile_response/policies.py``:
+- ``sfincs_jax/problems/profile_policies.py``:
   RHSMode=1 host dense fallback, host sparse-direct, sparse-preconditioned
   GMRES rescue, factor-dtype, explicit sparse-helper policy, and automatic
   solver/fallback admission.
@@ -1074,7 +1076,7 @@ domain owners replacing the old monolith are:
   refinement loops are NumPy-only, while the polish helper accepts the JAX
   matvec and a host sparse factor so residual-polish behavior can be tested
   without importing the full driver.
-- ``sfincs_jax/problems/profile_response/policies.py``
+- ``sfincs_jax/problems/profile_policies.py``
   (historical location: ``sfincs_jax/rhs1_large_cpu_policy.py``):
   large explicit full-FP CPU sparse rescue, x-block seed, exact-LU promotion,
   host x-block assembly, and species-x-block rescue policy.
@@ -1087,7 +1089,7 @@ domain owners replacing the old monolith are:
   (historical location: ``sfincs_jax/rhs1_xblock_sparse_host_policy.py``):
   host sparse x-block rescue policy and metadata normalization for the
   non-autodiff large-system fallback path.
-- ``sfincs_jax/problems/profile_response/policies.py``:
+- ``sfincs_jax/problems/profile_policies.py``:
   RHSMode=1 profile-response admission, post-solve correction, solver-path,
   and implicit/differentiable solve-mode policy.
 - ``sfincs_jax/solvers/path_policy.py``:
@@ -1185,7 +1187,7 @@ domain owners replacing the old monolith are:
   or example-suite audits. It also owns the fail-closed schema validator for the
   Fortran-v3 vs SFINCS-JAX runtime/memory benchmark summary consumed by README/docs
   plots.
-- ``sfincs_jax/problems/profile_response/phi1_newton.py``:
+- ``sfincs_jax/problems/profile_phi1_newton.py``:
   Phi1 Newton policy, bounded nonlinear linear-step orchestration, accepted-
   iterate update logic, and solve orchestration for the Newton path, including
   active-DOF mode selection, restart sizing, frozen-Jacobian cache policy,
@@ -1211,7 +1213,7 @@ domain owners replacing the old monolith are:
   restart caps, benchmark manifests, and measured solver-candidate gates. This is
   the preflight layer that keeps future memory-saving defaults testable before
   expensive operators or preconditioners are materialized.
-- ``sfincs_jax/problems/profile_response/policies.py``:
+- ``sfincs_jax/problems/profile_policies.py``:
   tested admission gates for RHSMode=1 host dense, sparse-host, constrained-PAS
   sparse-PC, CPU 3D full-FP sparse-PC, and GPU tokamak full-FP no-Er/Er
   sparse-PC auto lanes. These helpers keep solver path promotion rules explicit
@@ -1256,7 +1258,7 @@ The conceptual mapping is:
 - geometry coefficients:
   :doc:`geometry`
 - solve stack:
-  ``sfincs_jax/problems/profile_response/solve.py``,
+  ``sfincs_jax/problems/profile_solve.py``,
   ``sfincs_jax/problems/transport_matrix/solve.py``,
   ``sfincs_jax/solvers``, and ``sfincs_jax/solvers/preconditioners``
 - outputs and diagnostics:

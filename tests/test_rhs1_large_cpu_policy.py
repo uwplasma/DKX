@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     rhs1_fp_xblock_assembled_host_allowed,
     rhs1_large_cpu_sparse_exact_lu_allowed,
     rhs1_large_cpu_sparse_exact_lu_xblock_allowed,

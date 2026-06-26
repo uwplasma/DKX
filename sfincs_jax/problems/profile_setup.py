@@ -17,11 +17,11 @@ import os
 import jax.numpy as jnp
 import numpy as np
 
-from ...solvers.preconditioning import (
+from ..solvers.preconditioning import (
     project_constraint_scheme1_nullspace_solution_with_residual,
 )
-from ...solver import GMRESSolveResult
-from .policies import rhs1_pas_source_zero_tolerance_from_env
+from ..solver import GMRESSolveResult
+from .profile_policies import rhs1_pas_source_zero_tolerance_from_env
 
 
 SPARSE_HOST_DIRECT_SOLVE_METHODS = frozenset(

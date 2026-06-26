@@ -16,41 +16,41 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ...solvers.explicit_sparse import (
+from ..solvers.explicit_sparse import (
     host_sparse_direct_polish,
     host_sparse_direct_solve_with_refinement,
 )
-from ...solvers.krylov_dispatch import gmres_solve_dispatch
-from ...namelist import Namelist
-from ...solvers.preconditioning import (
+from ..solvers.krylov_dispatch import gmres_solve_dispatch
+from ..namelist import Namelist
+from ..solvers.preconditioning import (
     set_precond_policy_hints,
     set_precond_size_hint,
     use_solver_jit,
 )
 from sfincs_jax.operators.profile_compressed_layout import build_rhs1_compressed_pitch_layout
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     host_sparse_direct_refine_steps,
     host_sparse_factor_dtype,
 )
-from sfincs_jax.problems.profile_response.solver_diagnostics import (
+from sfincs_jax.problems.profile_solver_diagnostics import (
     V3NewtonKrylovResult,
     emit_newton_krylov_ksp_history,
     rhs1_fortran_stdout_from_env,
     rhs1_ksp_history_limits_from_env,
 )
-from ...solver import (
+from ..solver import (
     GMRESSolveResult,
     distributed_gmres_enabled,
     gmres_solve,
     gmres_solve_distributed,
     gmres_solve_jit,
 )
-from ...solver import gmres_result_is_finite
-from ...solvers.preconditioners.full_fp.kinetic_blocks import (
+from ..solver import gmres_result_is_finite
+from ..solvers.preconditioners.full_fp.kinetic_blocks import (
     build_rhs1_block_preconditioner,
     build_rhs1_collision_preconditioner,
 )
-from ...solvers.preconditioners.symbolic_sparse import build_sparse_ilu_from_matvec
+from ..solvers.preconditioners.symbolic_sparse import build_sparse_ilu_from_matvec
 from sfincs_jax.operators.profile_system import (
     V3FullSystemOperator,
     apply_v3_full_system_jacobian_jit,

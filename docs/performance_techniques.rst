@@ -534,7 +534,7 @@ heavier preconditioner build.
 **Implementation.**
 
 - RHSMode=1 solve-loop dispatch in
-  ``sfincs_jax.problems.profile_response.solve`` and shared Krylov dispatch in
+  ``sfincs_jax.problems.profile_solve`` and shared Krylov dispatch in
   ``sfincs_jax.solvers.krylov_dispatch``.
 - Fallback controlled by ``SFINCS_JAX_BICGSTAB_FALLBACK``.
 
@@ -1386,7 +1386,7 @@ as diagnostics. This stabilizes PAS tokamak-like cases and pairs with the
 ``xblock_tz`` preconditioner default.
 
 Implementation: the RHSMode=1 solve loop in
-``sfincs_jax.problems.profile_response.solve`` (``use_pas_projection`` and
+``sfincs_jax.problems.profile_solve`` (``use_pas_projection`` and
 ``_project_pas_f``). Control: ``SFINCS_JAX_PAS_PROJECT_CONSTRAINTS`` (auto on for
 ``N_\zeta=1`` tokamak-like runs **except** ``geometryScheme=1`` analytic tokamak
 cases).
@@ -1480,7 +1480,7 @@ column‑by‑column. This significantly reduces Schur setup time in tokamak‑l
 with many :math:`x` points.
 
 Implementation: ``sfincs_jax.solvers.preconditioners.schur.profile_response``
-with integration in ``sfincs_jax.problems.profile_response.preconditioner_build``.
+with integration in ``sfincs_jax.problems.profile_preconditioner_build``.
 Controls: ``SFINCS_JAX_RHSMODE1_SCHUR_MODE`` and
 ``SFINCS_JAX_RHSMODE1_SCHUR_FULL_MAX``. The base preconditioner used inside the
 Schur construction can be selected with ``SFINCS_JAX_RHSMODE1_SCHUR_BASE``; the
@@ -1586,7 +1586,7 @@ apply SciPy’s sparse ILU and optionally use the sparse operator for matvecs.
 References: GMRES [#saad86]_, ILU/Preconditioning surveys [#benzi02]_.
 
 Implementation: ``sfincs_jax.solvers.explicit_sparse`` and
-``sfincs_jax.problems.profile_response.sparse.handoff``. Controls:
+``sfincs_jax.problems.profile_sparse_handoff``. Controls:
 
 - ``SFINCS_JAX_RHSMODE1_SPARSE_PRECOND`` (auto/on/off/jax/scipy)
 - ``SFINCS_JAX_RHSMODE1_SPARSE_OPERATOR`` (optional sparse matvec path)

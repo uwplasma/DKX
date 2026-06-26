@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import jax.numpy as jnp
 
-from sfincs_jax.problems.profile_response.dense import (
+from sfincs_jax.problems.profile_dense import (
     HostDenseFullSolveContext,
     HostDenseReducedSolveContext,
     RHS1DenseFallbackThresholds,
@@ -765,7 +765,7 @@ def test_host_dense_full_lstsq_handles_rectangular_operator(monkeypatch) -> None
         return jnp.asarray(a_np)
 
     monkeypatch.setattr(
-        "sfincs_jax.problems.profile_response.dense.assemble_dense_matrix_from_matvec",
+        "sfincs_jax.problems.profile_dense.assemble_dense_matrix_from_matvec",
         fake_assemble_dense_matrix_from_matvec,
     )
     result, residual = solve_host_dense_full(
@@ -1169,7 +1169,7 @@ def test_rhs1_reduced_dense_fallback_stage_runs_candidate_and_accepts(monkeypatc
         return candidate, 0.25
 
     monkeypatch.setattr(
-        "sfincs_jax.problems.profile_response.dense.solve_rhs1_reduced_dense_fallback_candidate",
+        "sfincs_jax.problems.profile_dense.solve_rhs1_reduced_dense_fallback_candidate",
         fake_candidate,
     )
 
@@ -1234,7 +1234,7 @@ def test_rhs1_reduced_dense_fallback_stage_reports_failure(monkeypatch) -> None:
         raise RuntimeError("reduced dense failed")
 
     monkeypatch.setattr(
-        "sfincs_jax.problems.profile_response.dense.solve_rhs1_reduced_dense_fallback_candidate",
+        "sfincs_jax.problems.profile_dense.solve_rhs1_reduced_dense_fallback_candidate",
         fail_candidate,
     )
 
@@ -1291,7 +1291,7 @@ def test_rhs1_reduced_dense_fallback_admission_stage_skips_when_rejected(
         raise AssertionError("reduced dense stage should not run")
 
     monkeypatch.setattr(
-        "sfincs_jax.problems.profile_response.dense.run_rhs1_reduced_dense_fallback_stage",
+        "sfincs_jax.problems.profile_dense.run_rhs1_reduced_dense_fallback_stage",
         fail_stage,
     )
 
@@ -1363,7 +1363,7 @@ def test_rhs1_reduced_dense_fallback_admission_stage_runs_when_admitted(
         return candidate, current_residual, True
 
     monkeypatch.setattr(
-        "sfincs_jax.problems.profile_response.dense.run_rhs1_reduced_dense_fallback_stage",
+        "sfincs_jax.problems.profile_dense.run_rhs1_reduced_dense_fallback_stage",
         fake_stage,
     )
 
@@ -1500,7 +1500,7 @@ def test_rhs1_full_dense_fallback_candidate_uses_explicit_dense_krylov(monkeypat
         return candidate, candidate_residual
 
     monkeypatch.setattr(
-        "sfincs_jax.problems.profile_response.dense.dense_krylov_solve_from_matrix_with_residual",
+        "sfincs_jax.problems.profile_dense.dense_krylov_solve_from_matrix_with_residual",
         fake_dense_krylov_solve_from_matrix_with_residual,
     )
 
@@ -1606,7 +1606,7 @@ def test_rhs1_full_dense_fallback_stage_skips_when_admission_rejects(
         raise AssertionError("candidate should not run")
 
     monkeypatch.setattr(
-        "sfincs_jax.problems.profile_response.dense.run_rhs1_full_dense_fallback_candidate",
+        "sfincs_jax.problems.profile_dense.run_rhs1_full_dense_fallback_candidate",
         fail_candidate,
     )
 
@@ -1671,7 +1671,7 @@ def test_rhs1_full_dense_fallback_stage_runs_candidate_when_admitted(
         return candidate, current_residual, True
 
     monkeypatch.setattr(
-        "sfincs_jax.problems.profile_response.dense.run_rhs1_full_dense_fallback_candidate",
+        "sfincs_jax.problems.profile_dense.run_rhs1_full_dense_fallback_candidate",
         fake_candidate,
     )
 

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 import jax.numpy as jnp
 
-from sfincs_jax.problems.profile_response.diagnostics import (
+from sfincs_jax.problems.profile_diagnostics import (
     SparsePCDirectTailMetadataContext,
     SparsePCFactorPreflightMetadataContext,
     SparsePCPatternMetadataContext,
@@ -42,7 +42,7 @@ from sfincs_jax.problems.profile_response.diagnostics import (
     xblock_sparse_pc_core_diagnostics,
     xblock_side_probe_diagnostics,
 )
-from sfincs_jax.problems.profile_response.solver_diagnostics import (
+from sfincs_jax.problems.profile_solver_diagnostics import (
     RHS1CachedQICorrectionBasis,
     prepare_cached_qi_correction_basis,
 )

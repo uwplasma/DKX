@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     rhs1_constraint0_dense_fallback_allowed,
     rhs1_constraint0_petsc_compat,
     rhs1_constraint0_petsc_compat_config_from_env,

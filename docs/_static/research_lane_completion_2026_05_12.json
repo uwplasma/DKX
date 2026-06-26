@@ -444,7 +444,7 @@
         },
         {
           "claim": "Bounded 3D full-FP x-block sparse-PC auto policy is now isolated in a pure helper with direct tests instead of hidden driver branching.",
-          "path": "sfincs_jax/problems/profile_response/policies.py"
+          "path": "sfincs_jax/problems/profile_policies.py"
         },
         {
           "claim": "Focused policy tests cover the QI x-block sparse-PC auto window and its backend, size, species, Phi1/PAS, and differentiability guards.",
@@ -472,7 +472,7 @@
         },
         {
           "claim": "RHSMode=1 handoff residual-improvement logic is split into a source-mapped helper with direct finite/nonfinite boundary tests, reducing driver acceptance-branch surface without launching solves.",
-          "path": "sfincs_jax/problems/profile_response/sparse/handoff.py"
+          "path": "sfincs_jax/problems/profile_sparse_handoff.py"
         },
         {
           "claim": "CI coverage collection now runs in three parallel shards and combines artifacts in a report job, preserving the fail-under gate without a single long-running coverage runner.",

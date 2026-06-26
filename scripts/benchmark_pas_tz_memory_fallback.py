@@ -460,7 +460,7 @@ def _child_payload(args: argparse.Namespace) -> dict[str, Any]:
 
     from sfincs_jax.namelist import read_sfincs_input
     from sfincs_jax.profiling import _resource_maxrss_to_mb
-    from sfincs_jax.problems.profile_response.solve import solve_v3_full_system_linear_gmres
+    from sfincs_jax.problems.profile_solve import solve_v3_full_system_linear_gmres
 
     messages: list[str] = []
 

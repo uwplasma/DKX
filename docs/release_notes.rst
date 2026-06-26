@@ -165,24 +165,23 @@ Unreleased
   historical ``v3_driver`` private helper names remain compatibility aliases,
   while the non-differentiable host-factor path now lives in the solver-domain
   package.
-- Moved RHSMode=1 profile-response support utilities into
-  ``sfincs_jax.problems.profile_response``: residual gates, active-DOF
+- Moved RHSMode=1 profile-response support utilities into flat
+  ``sfincs_jax.problems.profile_*`` modules: residual gates, active-DOF
   decisions, active full/reduced projection, accepted-solve handoff, and solver
-  diagnostics. Maintained imports use the canonical
-  ``sfincs_jax.problems.profile_response`` modules directly; the top-level
-  ``sfincs_jax.rhs1_*`` aliases for these utilities were removed in the
-  consolidation pass.
+  diagnostics. Maintained imports use the canonical flat modules directly; the
+  top-level ``sfincs_jax.rhs1_*`` aliases for these utilities were removed in
+  the consolidation pass.
 - Consolidated RHSMode=1 profile-response solve-routing and strong
   preconditioner controls into
-  ``sfincs_jax.problems.profile_response.policies`` and
-  ``sfincs_jax.problems.profile_response.preconditioner_build``. The old
+  ``sfincs_jax.problems.profile_policies`` and
+  ``sfincs_jax.problems.profile_preconditioner_build``. The old
   top-level ``sfincs_jax.rhs1_*`` policy aliases were removed in the
   consolidation pass; the maintained source map, API docs, and driver imports
   now use the domain package. Focused policy/import/driver validation passed with ``282`` tests
   and the post-consolidation local full suite passed with
   ``2670 passed in 579.02 s``.
 - Moved the remaining small RHSMode=1 x-block/QI control helpers into
-  ``sfincs_jax.problems.profile_response.policies``: guarded PAS-TZ structured
+  ``sfincs_jax.problems.profile_policies``: guarded PAS-TZ structured
   levels, QI device extra-coarse controls, QI minres-step probe selection, and
   safe x-block fallback initial-guess admission. ``v3_driver.py`` keeps the old
   private names as imported aliases, and focused policy/driver validation
@@ -191,16 +190,16 @@ Unreleased
 - Moved the constraintScheme=1 x-block moment-Schur wrapper into
   ``sfincs_jax.operators.profile_sources`` and the bounded host/device subspace
   residual-equation corrections into
-  ``sfincs_jax.problems.profile_response.residual``. The driver now imports
+  ``sfincs_jax.problems.profile_residual``. The driver now imports
   the historical private names as aliases, while direct algebraic tests cover
   the canonical helper modules.
 - Moved the physics-aware x-block post-coarse direction builder into
-  ``sfincs_jax.problems.profile_response.residual`` next to the correction
+  ``sfincs_jax.problems.profile_residual`` next to the correction
   kernels that consume it. The driver keeps the historical private alias, and
   the sparse-pattern tests now validate the canonical helper path directly.
 - Moved residual-correction preconditioner composition, the safe
   non-finite/clipped preconditioner wrapper, and scalar preconditioned-minres
-  polish into ``sfincs_jax.problems.profile_response.residual``. The driver
+  polish into ``sfincs_jax.problems.profile_residual``. The driver
   retains the historical private aliases while direct tests exercise the
   canonical helpers.
 - Moved the operator-derived x-block QI coarse-basis and block-metadata helpers

@@ -35,11 +35,14 @@ navigational surface, not create another layer of wrappers.
 ### Current Audit Snapshot
 
 Checked on 2026-06-26 from
-`refactor/rhs1-full-assembly-preconditioners` at `a775be0d`.
+`refactor/rhs1-full-assembly-preconditioners` after the profile-response
+problem-owner flattening tranche.
 
-- `sfincs_jax/` contains about `155` Python files after adding the one-file
-  `operators/profile_response.py` compatibility shim and flattening the former
-  nested operator modules into `operators/profile_*.py`.
+- `sfincs_jax/` contains `150` Python files after adding one-file
+  compatibility shims for `operators/profile_response.py` and
+  `problems/profile_response.py`, flattening the former nested operator modules
+  into `operators/profile_*.py`, and flattening the RHSMode=1 problem modules
+  into `problems/profile_*.py`.
 - Largest source domains by line count are `problems` (`69k` lines), `solvers`
   (`47k`), and `operators` (`21k`).
 - Empty root packages `sfincs_jax/benchmarks`, `sfincs_jax/compat`,
@@ -47,8 +50,7 @@ Checked on 2026-06-26 from
   consolidation tranche. The empty nested
   `sfincs_jax/solvers/preconditioners/coarse_space` directory was also removed
   from the working tree.
-- Deep paths remain in `sfincs_jax/problems/profile_response/sparse`,
-  `sfincs_jax/problems/transport_matrix/parallel`, and
+- Deep paths remain in `sfincs_jax/problems/transport_matrix/parallel` and
   `sfincs_jax/solvers/preconditioners/*`.
 - `examples/` has many user-facing folders plus untracked `__pycache__`
   directories and tracked benchmark-summary JSON files under pedagogic example
@@ -105,8 +107,10 @@ Folders to remove or absorb:
   parallel code is still being flattened.
 - Remove empty `solvers/preconditioners/coarse_space`.
 - Flatten `operators/profile_response/*` into `operators/profile_*.py` files.
+  This is complete; `operators/profile_response.py` is a compatibility shim.
 - Flatten `problems/profile_response/*` and
   `problems/profile_response/sparse/*` into `problems/profile_*.py` files.
+  This is complete; `problems/profile_response.py` is a compatibility shim.
 - Flatten `problems/transport_matrix/*` and its `parallel/` subfolder into
   `problems/transport_*.py` files.
 - Flatten `solvers/preconditioners/*` into one-level solver files such as
@@ -172,10 +176,11 @@ Tranche 2: remove empty packages and root shims.
 Tranche 3: flatten operators and problems.
 
 - Move `operators/profile_response/*` into one-level `operators/profile_*.py`
-  modules.
-- Move `problems/profile_response/*`,
-  `problems/profile_response/sparse/*`, and `problems/transport_matrix/*`
-  into one-level `problems/profile_*.py` and `problems/transport_*.py`
+  modules. Complete.
+- Move `problems/profile_response/*` and
+  `problems/profile_response/sparse/*` into one-level `problems/profile_*.py`
+  modules. Complete.
+- Move `problems/transport_matrix/*` into one-level `problems/transport_*.py`
   modules.
 - Rename only when the new name is more domain-descriptive; avoid broad
   `rhs1_*` names except inside compatibility aliases.
@@ -567,11 +572,13 @@ completed owner moves, and private-root deletion pass:
   `v3.py`, `constrained_pas_branch.py`, `constraint_projection.py`,
   `host_refinement.py`, `pas_smoother.py`, `phi1_newton_linear.py`, and
   `phi1_newton_policy.py`.
-- `sfincs_jax/problems/profile_response`: 18 files including `sparse/`, about
-  52.9k lines. The largest files are `sparse/xblock.py` 7,689 lines,
-  `policies.py` 7,369 lines, `solve.py` 5,420 lines,
-  `sparse/handoff.py` 5,500 lines, `sparse/qi.py` 4,873 lines,
-  `sparse/direct.py` 3,567 lines, `dense.py` 3,287 lines, and
+- `sfincs_jax/problems/profile_*.py`: 17 flat implementation files plus the
+  one-file `problems/profile_response.py` compatibility shim, about 52.9k
+  lines. The largest files are `profile_sparse_xblock.py` 7,689 lines,
+  `profile_policies.py` 7,369 lines, `profile_solve.py` 5,420 lines,
+  `profile_sparse_handoff.py` 5,500 lines, `profile_sparse_qi.py` 4,873
+  lines, `profile_sparse_direct.py` 3,567 lines, `profile_dense.py` 3,287
+  lines, and
   `preconditioner_build.py` 2,683 lines. The `solve.py <=5,500` and
   `handoff.py <=5,500` review gates are restored.
 - `sfincs_jax/problems/transport_matrix`: 10 files including `parallel/`.
@@ -615,7 +622,7 @@ Useful existing assets:
   v3 model.
 - `sfincs_jax/solvers/implicit.py` already wraps `jax.lax.custom_linear_solve`
   for implicit differentiation through linear solves.
-- `sfincs_jax/problems/profile_response/phi1_newton.py` already uses
+- `sfincs_jax/problems/profile_phi1_newton.py` already uses
   `jax.linearize` to build Newton-Krylov JVPs.
 - `sfincs_jax.problems.ambipolar` provides bounded/reference Fortran-v3-style
   ambipolar option 1/2/3 root solvers, derivative-provider hooks, setup-reuse
@@ -635,7 +642,7 @@ Important current gaps:
 - Ambipolar option 1/2/3 bounded/reference solvers are implemented and tested;
   production-grid replay artifacts remain outside normal CI.
 - The largest active refactor gap is now review locking after the driver move:
-  `profile_response/solve.py` is a stable problem owner, `v3_driver.py` is a
+  `profile_solve.py` is a stable problem owner, `v3_driver.py` is a
   tiny compatibility shim, public examples/scripts no longer need private
   driver imports, and remaining historical names should be treated as
   compatibility aliases or documentation/source-map entries rather than active
@@ -812,10 +819,10 @@ Current source inventory from the 2026-06-26 consolidation audit:
 
 | Area | Current state | Review-ready target |
 | --- | --- | --- |
-| Whole package | 154 Python files, 165,532 package lines | Keep `<=154` files unless a new durable owner deletes at least two old files in the same commit. Review target is no package-file increase and no line-count increase unless the change deletes files and simplifies ownership. |
+| Whole package | 150 Python files, about 165,600 package lines | Keep `<=150` files unless a new durable owner deletes at least two old files in the same commit. Review target is no package-file increase and no line-count increase unless the change deletes files and simplifies ownership. |
 | Package root | 17 Python files | Root gate is met. Root files now remain only when they are public API, CLI, compatibility, plotting/profiling helpers, or stable user-facing facades. |
 | `v3_driver.py` / `io.py` | 47-line and 64-line compatibility shims | Keep below 80 lines. Do not put implementation logic back into either file. Delete only after public docs, examples, scripts, and compatibility tests no longer need the shim. |
-| `problems/profile_response` | 18 files including `sparse/`; largest owners are `sparse/xblock.py`, `policies.py`, `sparse/handoff.py`, `solve.py`, `sparse/qi.py`, and `sparse/direct.py`. | Do not add profile-response files. Reduce complexity only by deleting duplicate policy branches or moving historical names into existing owners without creating a new monolith. |
+| `problems/profile_*.py` | 17 flat implementation files plus `profile_response.py` compatibility shim; largest owners are `profile_sparse_xblock.py`, `profile_policies.py`, `profile_sparse_handoff.py`, `profile_solve.py`, `profile_sparse_qi.py`, and `profile_sparse_direct.py`. | Do not add profile-response files. Reduce complexity only by deleting duplicate policy branches or moving historical names into existing owners without creating a new monolith. |
 | `problems/transport_matrix` | 10 files including `parallel/`; direct reduced-`Pmat`, active factors, and block-Schur setup live in `linear_system.py`; parallel policy/sharding lives in `parallel/runtime.py`. | Keep `parallel/worker.py` only as the subprocess entry point. Do not grow `solve.py` into another monolith. |
 | `solvers/preconditioners` | 35 files, 37,495 lines; QI, PAS, x-block, full-FP, Schur, symbolic-sparse, and transport-matrix owners are explicit. | Keep mathematical family names. Merge only if one commit deletes at least three files and keeps ownership clearer. |
 | `workflows` / `validation` | 16 files total. `validation.benchmark_artifacts` was merged into `validation.artifacts`; `validation.fortran_profile` was merged into `validation.fortran`; six `optimization_*` workflow implementation files were merged into `workflows.optimization`; and two mapped-x-grid files were merged into `workflows.mapped_xgrid`. Old workflow module imports are package-level compatibility aliases. | Further consolidation only when import graphs show this can delete files without file-level shims and without obscuring public workflow concepts. |
@@ -828,8 +835,8 @@ Locked checkpoints:
   `v3_fblock.py`, `v3_system.py`, and `v3.py` are gone or routed to owners.
 - `sfincs_jax.v3_driver` is only a compatibility shim and must not regain
   implementation logic.
-- `profile_response/solve.py <=5,500`,
-  `profile_response/sparse/handoff.py <=5,500`, `v3_driver.py <=80`, and
+- `profile_solve.py <=5,500`,
+  `profile_sparse_handoff.py <=5,500`, `v3_driver.py <=80`, and
   `io.py <=800` are met. Keep them locked while later batches move owners.
 - Package root is solved for this PR. Do not spend more time moving root files
   unless a public facade is already demonstrably dead.
@@ -866,7 +873,7 @@ Locked checkpoints:
   count. A new owner is allowed only if the same commit deletes at least two
   old files and the new name is a durable domain name.
 - Prefer registry/data-structure simplification inside existing owners for
-  oversized files such as `profile_response/solve.py`, `policies.py`,
+  oversized files such as `profile_solve.py`, `policies.py`,
   `sparse/xblock.py`, and `sparse/handoff.py`.
 - Each remaining code tranche must be large enough to matter: delete at least
   two files, remove a repeated internal section of at least about 300 lines, or
@@ -921,9 +928,9 @@ Active consolidation passes:
    validation, docs, examples, and import-contract tests.
 3. **Large-owner retained-boundary audit: one bounded pass, then stop.** The
    only large-owner candidates are
-   `problems/profile_response/policies.py`,
-   `problems/profile_response/sparse/xblock.py`,
-   `problems/profile_response/sparse/handoff.py`, and
+   `problems/profile_policies.py`,
+   `problems/profile_sparse_xblock.py`,
+   `problems/profile_sparse_handoff.py`, and
    `solvers/preconditioners/qi/device.py`. The audit found real domain
    ownership in all four: policy/env resolution, x-block stage setup, sparse-PC
    orchestration, and device-compatible QI preconditioning. Edit them only if a
@@ -1011,8 +1018,8 @@ Phase 1 root-module move/delete manifest:
 | `host_refinement.py` | solvers refinement policy owner | move in solver-policy group if profile-response imports migrate |
 | `pas_smoother.py` | solvers/preconditioners PAS smoother owner | move in solver-preconditioner group |
 | `paths.py` | package root path support utility | keep at root unless a support package is introduced with broad import rewrite |
-| `phi1_newton_linear.py` | problems.profile_response Phi1 Newton owner | move if it deletes root file without adding shim |
-| `phi1_newton_policy.py` | problems.profile_response Phi1 policy owner | move if it deletes root file without adding shim |
+| `phi1_newton_linear.py` | `problems.profile_phi1_newton` owner | move if it deletes root file without adding shim |
+| `phi1_newton_policy.py` | `problems.profile_phi1_newton` owner | move if it deletes root file without adding shim |
 | `profiling.py` | solvers/validation profiling support | defer until profiling API boundary is explicit |
 | `solver.py` | solvers public contracts owner | keep root shim until solvers exports cover public contracts |
 | `v3_driver.py` | compatibility shim to problem owners | keep below 80 lines until the compatibility deprecation window closes; public examples/scripts should not import it |
@@ -1081,7 +1088,7 @@ Status on 2026-06-26:
   `phi1_newton_policy.py` moved into existing owners
   `sfincs_jax.solvers.preconditioners.pas.policy`,
   `sfincs_jax.solvers.preconditioning`, `sfincs_jax.solvers.explicit_sparse`,
-  and `sfincs_jax.problems.profile_response.phi1_newton`. No compatibility
+  and `sfincs_jax.problems.profile_phi1_newton`. No compatibility
   shims or helper-only files were added.
 - Package-root Python files drop from 43 to 17 after the workflow/data,
   geometry, discretization-kernel, operator-kernel, physics-kernel, and
@@ -1116,8 +1123,8 @@ Actions:
 
 Exit gates:
 
-- `profile_response/solve.py <=5,500` and
-  `profile_response/sparse/handoff.py <=5,500` remain locked.
+- `profile_solve.py <=5,500` and
+  `profile_sparse_handoff.py <=5,500` remain locked.
 - `solvers/preconditioners <=28` if achievable without worse names; otherwise
   each retained family file has an owner note in the source map.
 - No `rhs1_*`, `transport_*`, `v3_*`, `*_handoff`, or campaign-specific
@@ -1169,20 +1176,20 @@ surface before further movement.
 
 Actions:
 
-1. Restore `profile_response/solve.py <=5,500` without creating files. Prefer
+1. Restore `profile_solve.py <=5,500` without creating files. Prefer
    compacting compatibility imports/re-export plumbing or deleting duplicated
    branch payload code; do not move one helper into a new module.
-2. Audit `profile_response/sparse/handoff.py` without its local
+2. Audit `profile_sparse_handoff.py` without its local
    `F401,F811` waiver. If Ruff reports only intentional dynamic re-export and
    driver-scope shadowing errors, keep the waiver but document it in the file,
    `docs/source_map.rst`, and import-contract tests with a deletion condition.
-3. Verify `profile_response/sparse/handoff.py <=5,500`, `v3_driver.py <=80`,
+3. Verify `profile_sparse_handoff.py <=5,500`, `v3_driver.py <=80`,
    and `io.py <=800`.
 
 Exit gates:
 
-- `profile_response/solve.py <=5,500`.
-- `profile_response/sparse/handoff.py <=5,500`.
+- `profile_solve.py <=5,500`.
+- `profile_sparse_handoff.py <=5,500`.
 - `v3_driver.py <=80` and remains implementation-free.
 - `io.py <=800` and remains a compatibility facade.
 - Focused profile-response sparse-PC, active projection, QI admission, direct
@@ -1202,7 +1209,7 @@ Actions:
    `active_dense.py`, `active_factor.py`, `direct_block_schur.py`,
    `direct_pmat.py`, and `fortran_reduced_lu.py` into that owner.
 3. Delete those five old files in the same commit and update imports from
-   `profile_response/solve.py`, transport tests, docs, and source maps.
+   `profile_solve.py`, transport tests, docs, and source maps.
 4. Keep tests named for behavior, not old filenames. Owner tests should check
    active dense setup, active factorization, direct block-Schur/direct-Pmat
    paths, and Fortran-reduced LU behavior through the new owner.
@@ -1295,8 +1302,8 @@ Status on 2026-06-26:
   source imports now target the consolidated owner.
 - Current metrics after this substep: `174` package Python files, `43`
   package-root files, `165,929` package source lines, `17` solver-root files,
-  and `35` preconditioner files. `profile_response/solve.py` remains `5,420`
-  lines, `profile_response/sparse/handoff.py` remains exactly `5,500` lines,
+  and `35` preconditioner files. `profile_solve.py` remains `5,420`
+  lines, `profile_sparse_handoff.py` remains exactly `5,500` lines,
   `v3_driver.py` remains `47` lines, and `io.py` remains `64` lines.
 - Validation: scoped py_compile and Ruff passed; explicit-sparse, sparse-helper,
   and matrix-reduction tests passed with `29 passed`; preconditioner policy and
@@ -1316,8 +1323,8 @@ Status on 2026-06-26:
 - Current metrics after this substep: `171` package Python files, `43`
   package-root files, `165,865` package source lines, `14` solver-root files,
   `35` preconditioner files, and `preconditioning.py` at `1,173` lines.
-  `profile_response/solve.py` remains `5,420` lines,
-  `profile_response/sparse/handoff.py` remains exactly `5,500` lines,
+  `profile_solve.py` remains `5,420` lines,
+  `profile_sparse_handoff.py` remains exactly `5,500` lines,
   `v3_driver.py` remains `47` lines, and `io.py` remains `64` lines.
 - Additional validation: scoped py_compile and Ruff passed; preconditioning
   setup/cache/context/matrix-reduction/Fortran-reduced/driver-dispatch tests
@@ -1336,8 +1343,8 @@ Status on 2026-06-26:
 - Current metrics after completed Batch D: `168` package Python files, `43`
   package-root files, `165,862` package source lines, `11` solver-root files,
   `35` preconditioner files, and `diagnostics.py` at `609` lines.
-  `profile_response/solve.py` remains `5,420` lines,
-  `profile_response/sparse/handoff.py` remains exactly `5,500` lines,
+  `profile_solve.py` remains `5,420` lines,
+  `profile_sparse_handoff.py` remains exactly `5,500` lines,
   `v3_driver.py` remains `47` lines, and `io.py` remains `64` lines.
 - Validation: scoped py_compile and Ruff passed for `diagnostics.py`, output
   writers/formats, ambipolar trace readers, transport/profile-response import
@@ -1391,8 +1398,8 @@ Status on 2026-06-26:
   `39 passed`; scoped py_compile and Ruff passed for touched workflow/root
   classification files; Sphinx `-W` passed; Batch E metrics were `168`
   package Python files, `43` package-root files, `165,862` package source
-  lines, `profile_response/solve.py` at `5,420` lines,
-  `profile_response/sparse/handoff.py` at `5,500` lines, `v3_driver.py` at
+  lines, `profile_solve.py` at `5,420` lines,
+  `profile_sparse_handoff.py` at `5,500` lines, `v3_driver.py` at
   `47` lines, and `io.py` at `64` lines.
 
 #### Historical Batch F - Profile-Response Internal Line Paydown
@@ -1447,8 +1454,8 @@ Actions:
 
 Exit gates:
 
-- `profile_response/solve.py <=5,500` remains true.
-- `profile_response/sparse/handoff.py <=5,500` remains true.
+- `profile_solve.py <=5,500` remains true.
+- `profile_sparse_handoff.py <=5,500` remains true.
 - No new profile-response files are created.
 - Package source lines trend downward from 166,045, or any remaining increase
   is justified by deleted files and clearer owner boundaries.
@@ -1482,8 +1489,8 @@ Review-ready acceptance gates:
 - Package root has `<=40` files preferred, `<=44` allowed only with explicit
   public/shim labels.
 - `v3_driver.py` is deleted or below 80 lines.
-- `profile_response/solve.py <=5,500`.
-- `profile_response/sparse/handoff.py <=5,500`.
+- `profile_solve.py <=5,500`.
+- `profile_sparse_handoff.py <=5,500`.
 - `io.py <=800` or deleted.
 - `problems/profile_response` plus `sparse` has `<=18` files.
 - `problems/transport_matrix` plus `parallel` has `<=18` files.
@@ -1491,7 +1498,7 @@ Review-ready acceptance gates:
 - No top-level `rhs1_*` or `transport_*` implementation files exist.
 - No broad package-level lint ignores exist; the only allowed exception is a
   documented, file-local compatibility re-export waiver in
-  `profile_response/sparse/handoff.py`.
+  `profile_sparse_handoff.py`.
 - Focused tests pass for profile response RHSMode 1, transport matrix RHSMode
   2/3, ambipolar options 1/2/3, RHSMode 4/5 sensitivity contracts, sparse-PC,
   QI admission, output formats, CLI, public API imports, docs, representative
@@ -1509,8 +1516,8 @@ Status on 2026-06-26:
 - Batch G stale-owner repairs are complete. The remaining stale imports found
   by fail-fast validation were corrected to their current owners:
   `sfincs_jax.validation.fortran`, `sfincs_jax.solvers.diagnostics`,
-  `sfincs_jax.problems.profile_response.policies`, and
-  `sfincs_jax.problems.profile_response.preconditioner_build`.
+  `sfincs_jax.problems.profile_policies`, and
+  `sfincs_jax.problems.profile_preconditioner_build`.
 - Deterministic benchmark-summary metadata now uses repository-relative source
   report paths from `sfincs_jax.validation.artifacts`, avoiding local absolute
   paths in regenerated release artifacts.
@@ -1518,7 +1525,7 @@ Status on 2026-06-26:
   parallel, and sparse handoff owners:
   `solvers/preconditioners/qi/{basis,corrections,device}.py`,
   `problems/transport_matrix/parallel/runtime.py`, and
-  `problems/profile_response/sparse/handoff.py`.
+  `problems/profile_sparse_handoff.py`.
 - Validation passed with the review-ready focused bundle:
   `191 passed in 32.86s`; targeted benchmark-summary and research-lane gates
   passed; scoped Ruff and py_compile passed; Sphinx `-W` passed; and
@@ -1530,8 +1537,8 @@ Status on 2026-06-26:
 - Current structural counts satisfy the Batch G hard gates:
   154 package Python files, 17 package-root Python files,
   165,532 package Python lines, `v3_driver.py` at 47 lines, `io.py` at
-  64 lines, `profile_response/solve.py` at 5,420 lines,
-  `profile_response/sparse/handoff.py` at 5,500 lines, and no top-level
+  64 lines, `profile_solve.py` at 5,420 lines,
+  `profile_sparse_handoff.py` at 5,500 lines, and no top-level
   `rhs1_*` or `transport_*` implementation files.
 
 ## Lane 2 - Full Fortran v3 Functionality Matrix

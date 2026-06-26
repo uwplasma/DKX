@@ -7,7 +7,7 @@ import pytest
 import jax.numpy as jnp
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.problems.profile_response.residual import (
+from sfincs_jax.problems.profile_residual import (
     apply_preconditioned_minres_correction,
     apply_subspace_minres_correction,
     compose_multilevel_minres_correction_preconditioner,
@@ -16,7 +16,7 @@ from sfincs_jax.problems.profile_response.residual import (
 )
 import sfincs_jax.solvers.preconditioners.pas.policy as pas_policy
 import sfincs_jax.v3_driver as vd
-import sfincs_jax.problems.profile_response.preconditioner_build as pb
+import sfincs_jax.problems.profile_preconditioner_build as pb
 
 
 def test_rhs1_auto_prefers_theta_schwarz_when_sharded(monkeypatch: pytest.MonkeyPatch) -> None:

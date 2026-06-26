@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from sfincs_jax.problems.profile_response.setup import (
+from sfincs_jax.problems.profile_setup import (
     ProfileResponseLinearProblemSetupContext,
     SPARSE_HOST_SAFE_SOLVE_METHODS,
     equilibrium_name_hint_from_namelist,

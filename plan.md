@@ -28,7 +28,7 @@ instructions to follow.
 Latest execution checkpoint:
 
 - Lane 1 Batches A-E have met their structural gates. Batch A restored the
-  `profile_response/solve.py <=5,500` and sparse-handoff line gates. Batch B
+  `profile_solve.py <=5,500` and sparse-handoff line gates. Batch B
   consolidated RHSMode=2/3 active dense setup, active factors, direct
   reduced-``Pmat`` emission, direct block-Schur setup, and Fortran-reduced LU
   setup into `sfincs_jax.problems.transport_matrix.linear_system`, deleting
@@ -51,11 +51,11 @@ Latest execution checkpoint:
   `problems/transport_matrix` files including `parallel`, 11 solver-root files,
   35 `solvers/preconditioners` files, 5 QI preconditioner files,
   `v3_driver.py` at 47 lines, `io.py` at 64 lines,
-  `profile_response/solve.py` at 5,420 lines,
-  `profile_response/sparse/handoff.py` at 5,500 lines,
-  `profile_response/policies.py` at 7,369 lines,
-  `profile_response/sparse/xblock.py` at 7,689 lines,
-  `profile_response/sparse/qi.py` at 4,873 lines, and 165,758 package Python
+  `profile_solve.py` at 5,420 lines,
+  `profile_sparse_handoff.py` at 5,500 lines,
+  `profile_policies.py` at 7,369 lines,
+  `profile_sparse_xblock.py` at 7,689 lines,
+  `profile_sparse_qi.py` at 4,873 lines, and 165,758 package Python
   lines.
 - Batch F first policy-table substep is complete. `policies.py` now uses
   grouped requested-control metadata tables and a table-driven QI-device
@@ -124,11 +124,11 @@ Next ordered implementation sequence:
 
 Batch A validation evidence:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py
   tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py
+- `python -m ruff check sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py
   tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_domain_package_import_contracts.py
   tests/test_profile_response_sparse_pc.py tests/test_profile_response_dense.py
@@ -146,14 +146,14 @@ Batch A validation evidence:
 Batch B validation evidence:
 
 - `python -m py_compile sfincs_jax/problems/transport_matrix/linear_system.py
-  sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/dense.py
+  sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_dense.py
   tests/test_domain_package_import_contracts.py
   tests/test_transport_active_dense_setup.py tests/test_transport_active_factor.py
   tests/test_fortran_reduced_preconditioner.py` passed.
 - `python -m ruff check sfincs_jax/problems/transport_matrix/linear_system.py
-  sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/dense.py
+  sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_dense.py
   tests/test_domain_package_import_contracts.py
   tests/test_transport_active_dense_setup.py tests/test_transport_active_factor.py
   tests/test_fortran_reduced_preconditioner.py` passed.
@@ -243,7 +243,7 @@ deferred research lanes.
   - active sparse-factor preconditioners.
 - Flat output file-format helpers moved to `sfincs_jax.outputs.formats`.
 - Nonlinear Phi1 Newton-Krylov profile-response solve logic moved to
-  `sfincs_jax.problems.profile_response.phi1_newton`.
+  `sfincs_jax.problems.profile_phi1_newton`.
 - Transport-parallel runtime glue moved out of `v3_driver.py` into
   `sfincs_jax.problems.transport_matrix.parallel`, and the active transport
   DOF index helper moved into `sfincs_jax.problems.transport_matrix.active_dense`
@@ -251,19 +251,19 @@ deferred research lanes.
 - Final RHSMode=1/profile-response linear-solve handoff moved into
   `sfincs_jax.problems.profile_response.finalization` in commit `e1c6fa4`.
 - Initial operator/RHS problem materialization moved into
-  `sfincs_jax.problems.profile_response.setup` in commit `611e283`.
+  `sfincs_jax.problems.profile_setup` in commit `611e283`.
 - QI-device admission/build/probe/install logic moved out of `v3_driver.py`
-  into `sfincs_jax.problems.profile_response.sparse.qi`; `v3_driver.py` now
+  into `sfincs_jax.problems.profile_sparse_qi`; `v3_driver.py` now
   passes solve-local arrays/operators/timing into the domain-owned QI pipeline
   context for the tested fail-closed research lane.
 - Stale private `v3_driver.py` QI policy aliases are being deleted when their
-  canonical owner is now `sfincs_jax.problems.profile_response.policies`; tests
+  canonical owner is now `sfincs_jax.problems.profile_policies`; tests
   now enforce that ownership boundary instead of preserving aliases only for
   historical convenience.
 - QI seed/Galerkin/two-level/device/deflated stage orchestration no longer
   lives inline in `v3_driver.py`; the driver now calls
   `run_xblock_qi_preconditioner_pipeline()` from
-  `sfincs_jax.problems.profile_response.sparse.qi`, while QI builder wiring
+  `sfincs_jax.problems.profile_sparse_qi`, while QI builder wiring
   and metadata construction stay in the profile-response sparse package.
 - Final stale `v3_driver.py` QI coarse-basis/block-metadata aliases were
   removed. The extracted QI pipeline now obtains canonical coarse-basis and
@@ -276,7 +276,7 @@ deferred research lanes.
   for compatibility-sensitive tests and debug workflows.
 - RHSMode=1 strong-preconditioner family build mapping moved from flat
   `rhs1_strong_fallback.py`/driver imports into
-  `sfincs_jax.problems.profile_response.preconditioner_build.RHS1StrongPreconditionerFamilyBuilders`.
+  `sfincs_jax.problems.profile_preconditioner_build.RHS1StrongPreconditionerFamilyBuilders`.
   `rhs1_strong_fallback.py` is now only a compatibility facade for historical
   imports.
 - RHSMode=1 production-output refusal gates, residual/target extraction,
@@ -308,7 +308,7 @@ deferred research lanes.
   pipeline and augmented-Krylov path; metadata-only relay locals made obsolete
   by the sparse-PC finalization handoff were deleted.
 - QI default-builder wiring moved into
-  `sfincs_jax.problems.profile_response.sparse.qi.build_xblock_qi_stage_pipeline_context()`.
+  `sfincs_jax.problems.profile_sparse_qi.build_xblock_qi_stage_pipeline_context()`.
   `v3_driver.py` now passes only solve-local arrays/operators/timing into the
   QI pipeline instead of importing every coarse/Galerkin/two-level/device/
   deflated helper directly. Tests patch the canonical QI device-preconditioner
@@ -2610,7 +2610,7 @@ Next best steps:
 1. Commit and push the Iteration 3 count-consolidation batch.
 2. Execute Lane 1 Iteration 4 in one coarse move: relocate
    `solve_v3_full_system_linear_gmres` to
-   `sfincs_jax.problems.profile_response.solve` and
+   `sfincs_jax.problems.profile_solve` and
    `solve_v3_transport_matrix_linear_gmres` to
    `sfincs_jax.problems.transport_matrix.solve`, leaving `v3_driver.py` as a
    thin compatibility shim.
@@ -2626,7 +2626,7 @@ Steps taken:
    current structural debt has moved from `v3_driver.py` into larger domain
    owners rather than disappearing.
 2. Moved the legacy profile-response solve entry point into
-   `sfincs_jax.problems.profile_response.solve`.
+   `sfincs_jax.problems.profile_solve`.
 3. Moved the legacy RHSMode 2/3 transport solve entry point into
    `sfincs_jax.problems.transport_matrix.solve`.
 4. Absorbed the old low-level profile-response and transport
@@ -2646,7 +2646,7 @@ Current inventory:
 - Top-level `rhs1_*` files: `0`.
 - Top-level `transport_*` files: `0`.
 - `sfincs_jax/v3_driver.py`: `47` lines.
-- `sfincs_jax/problems/profile_response/solve.py`: `11,279` lines.
+- `sfincs_jax/problems/profile_solve.py`: `11,279` lines.
 - `sfincs_jax/problems/transport_matrix/solve.py`: `1,763` lines.
 - `problems/profile_response`: `33` Python files and about `50k` lines.
 - `problems/transport_matrix`: `33` Python files and about `15k` lines.
@@ -2655,7 +2655,7 @@ Current inventory:
 Validation so far:
 
 - `python -m py_compile sfincs_jax/v3_driver.py
-  sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_solve.py
   sfincs_jax/problems/transport_matrix/solve.py
   sfincs_jax/problems/profile_response/*.py
   sfincs_jax/problems/transport_matrix/*.py` passed.
@@ -2692,7 +2692,7 @@ Next best steps:
 1. Finish Tranche A by committing the solve-entry extraction and the
    authoritative `plan_final.md` update.
 2. Execute Tranche B in one large profile-response consolidation: shrink
-   `profile_response/solve.py`, merge policy shards into `policies.py`, merge
+   `profile_solve.py`, merge policy shards into `policies.py`, merge
    sparse handoff shards into role owners, and remove temporary broad lint
    ignores.
 3. Execute Tranche C in one transport/output consolidation: collapse
@@ -2707,18 +2707,18 @@ Next best steps:
 Steps taken:
 
 1. Consolidated six profile-response policy shards into
-   `sfincs_jax.problems.profile_response.policies`:
+   `sfincs_jax.problems.profile_policies`:
    `active_preconditioner_policy.py`, `direct_tail_policy.py`,
    `host_policy.py`, `large_cpu_policy.py`,
    `preconditioner_auto_policy.py`, and `solver_policy.py` were deleted.
 2. Consolidated top-level profile-response finalization and KSP replay
-   diagnostics into `sfincs_jax.problems.profile_response.solver_diagnostics`;
+   diagnostics into `sfincs_jax.problems.profile_solver_diagnostics`;
    `finalization.py` and `ksp_diagnostics.py` were deleted.
 3. Moved sparse-PC Krylov execution helpers from
    `sfincs_jax.problems.profile_response.sparse.krylov` into
    `sfincs_jax.problems.profile_response.sparse_pc`; `sparse/krylov.py` was
    deleted. Shared sparse-PC finalization remains in
-   `profile_response/sparse/finalization.py` because direct/x-block/
+   `profile_sparse_finalization.py` because direct/x-block/
    Fortran-reduced sparse paths share the same payload contracts.
 4. Rewrote internal imports and tests to use canonical owners, and removed
    deleted modules from `docs/api.rst` and `docs/testing.rst`.
@@ -2733,10 +2733,10 @@ Current inventory:
 
 - Package Python files: `230`.
 - `problems/profile_response`: `24` Python files and about `50k` lines.
-- `sfincs_jax/problems/profile_response/solve.py`: `11,279` lines.
-- `sfincs_jax/problems/profile_response/policies.py`: `6,380` lines.
+- `sfincs_jax/problems/profile_solve.py`: `11,279` lines.
+- `sfincs_jax/problems/profile_policies.py`: `6,380` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `3,761` lines.
-- `sfincs_jax/problems/profile_response/solver_diagnostics.py`: `812` lines.
+- `sfincs_jax/problems/profile_solver_diagnostics.py`: `812` lines.
 - `sfincs_jax/problems/transport_matrix`: `33` Python files.
 - `sfincs_jax/solvers/preconditioners`: `50` Python files.
 
@@ -2756,7 +2756,7 @@ Current lane status:
   checkpoint commit.
 - Lane 1 Tranche B: about `35%`; policy/diagnostics/krylov shards are
   consolidated and the old 24-file intermediate count is reached, but the
-  final 22-file target remains open, `profile_response/solve.py` still must be
+  final 22-file target remains open, `profile_solve.py` still must be
   reduced below `3.5k` lines, and `sparse_pc.py` must be deleted or moved under
   the sparse package.
 - Lane 1 Tranche C: `0%`.
@@ -2769,7 +2769,7 @@ Next best steps:
 1. Commit and push this Tranche B checkpoint after `git diff --check` passes.
 2. Finish Tranche B in one large solve-phase move: move setup/materialization,
    residual/admission, sparse branch orchestration, final handoff, and
-   diagnostics from `profile_response/solve.py` into existing profile-response
+   diagnostics from `profile_solve.py` into existing profile-response
    owners, then delete or fold `sparse_pc.py`.
 3. Run the focused RHSMode-1, sparse-PC, QI admission, ambipolar, sensitivity,
    docs, and import-contract gates before starting Tranche C.
@@ -2779,15 +2779,15 @@ Next best steps:
 Steps taken:
 
 1. Moved the profile linear-solve routing contracts from
-   `sfincs_jax.problems.profile_response.solve` into the existing dense owner:
+   `sfincs_jax.problems.profile_solve` into the existing dense owner:
    `ProfileLinearSolveContext`, `solve_profile_linear`,
    `solve_profile_linear_with_residual`, dense-KSP full/reduced solve
    contexts, constraintScheme=0 PETSc-compatible sparse-ILU, and host SciPy
-   rescue now live in `sfincs_jax.problems.profile_response.dense`.
+   rescue now live in `sfincs_jax.problems.profile_dense`.
 2. Updated `tests/test_profile_response_linear_solve.py` to import from the
    canonical dense owner instead of the monolithic solve owner.
 3. Moved the explicit host structured-CSR RHSMode-1 solve entry point into
-   `sfincs_jax.problems.profile_response.dense`, beside the auto-routing
+   `sfincs_jax.problems.profile_dense`, beside the auto-routing
    code that invokes it. `profile_response.solve` imports it only for
    compatibility and internal dispatch.
 4. Preserved behavior and legacy import compatibility while removing another
@@ -2797,8 +2797,8 @@ Current inventory:
 
 - Package Python files: `230`.
 - `problems/profile_response`: `24` Python files.
-- `sfincs_jax/problems/profile_response/solve.py`: `10,400` lines.
-- `sfincs_jax/problems/profile_response/dense.py`: `2,487` lines.
+- `sfincs_jax/problems/profile_solve.py`: `10,400` lines.
+- `sfincs_jax/problems/profile_dense.py`: `2,487` lines.
 - `sfincs_jax/problems/profile_response/auto_solve.py`: `550` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `3,761` lines.
 - `sfincs_jax/v3_driver.py`: `47` lines.
@@ -2809,9 +2809,9 @@ Validation:
   `522 passed in 43.29s`.
 - Scoped ruff passed for `profile_response.dense`, `profile_response.auto_solve`,
   and the moved linear-solve test.
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
   sfincs_jax/problems/profile_response/auto_solve.py
-  sfincs_jax/problems/profile_response/dense.py` passed.
+  sfincs_jax/problems/profile_dense.py` passed.
 - `python -m sphinx -W -b html docs docs/_build/html` passed.
 
 Current lane status:
@@ -2819,7 +2819,7 @@ Current lane status:
 - Lane 1 Tranche A: `100%`.
 - Lane 1 Tranche B: about `45%`; policy/diagnostics/krylov and dense/
   structured solve-phase ownership moves are done. Remaining hard gates are
-  `profile_response/solve.py < 3.5k`, `problems/profile_response <= 22` files,
+  `profile_solve.py < 3.5k`, `problems/profile_response <= 22` files,
   and `sparse_pc.py` deleted or moved under the sparse package.
 - Lane 1 Tranche C: `0%`.
 - Lane 1 Tranche D: `0%`.
@@ -2842,7 +2842,7 @@ Steps taken:
 
 1. Moved the former top-level
    `sfincs_jax/problems/profile_response/sparse_pc.py` module into
-   `sfincs_jax/problems/profile_response/sparse/handoff.py`.
+   `sfincs_jax/problems/profile_sparse_handoff.py`.
 2. Rewrote source and focused tests to import the canonical sparse-package
    owner.
 3. Exported the handoff owner through
@@ -2855,8 +2855,8 @@ Current inventory:
 
 - Package Python files: `230`.
 - `problems/profile_response`: `24` Python files.
-- `sfincs_jax/problems/profile_response/solve.py`: `10,400` lines.
-- `sfincs_jax/problems/profile_response/sparse/handoff.py`: `3,761` lines.
+- `sfincs_jax/problems/profile_solve.py`: `10,400` lines.
+- `sfincs_jax/problems/profile_sparse_handoff.py`: `3,761` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: deleted.
 - `sfincs_jax/v3_driver.py`: `47` lines.
 
@@ -2874,7 +2874,7 @@ Current lane status:
 
 - Lane 1 Tranche A: `100%`.
 - Lane 1 Tranche B: about `50%`; sparse top-level handoff is now under the
-  sparse package. Remaining hard gates are `profile_response/solve.py < 3.5k`,
+  sparse package. Remaining hard gates are `profile_solve.py < 3.5k`,
   `problems/profile_response <= 22` files, and policy/env parser duplication
   cleanup.
 - Lane 1 Tranche C: `0%`.
@@ -2887,7 +2887,7 @@ Next best steps:
 1. Continue Tranche B by moving residual/admission and setup/materialization
    blocks from `solve.py` into `residual.py`, `setup.py`, `handoff.py`, and
    `solver_diagnostics.py`.
-2. Fold `profile_response/sparse/handoff.py` further into direct/x-block/QI
+2. Fold `profile_sparse_handoff.py` further into direct/x-block/QI
    sparse owners only if it reduces file count without making those owners too
    large to review.
 3. After `solve.py` is below `3.5k` and profile-response is at or below `22`
@@ -2901,9 +2901,9 @@ Steps taken:
 1. Merged `sfincs_jax/problems/profile_response/active_projection.py` into
    `sfincs_jax/problems/profile_response/active_dof.py`.
 2. Merged `sfincs_jax/problems/profile_response/qi_device_seed.py` into
-   `sfincs_jax/problems/profile_response/sparse/qi.py`.
+   `sfincs_jax/problems/profile_sparse_qi.py`.
 3. Merged `sfincs_jax/problems/profile_response/strong_preconditioning.py`
-   into `sfincs_jax/problems/profile_response/preconditioner_build.py`.
+   into `sfincs_jax/problems/profile_preconditioner_build.py`.
 4. Rewrote source, tests, and docs to import the canonical owners.
 5. Updated `docs/source_map.rst` and `docs/api.rst` so the merged owners are
    documented once.
@@ -2912,7 +2912,7 @@ Current inventory:
 
 - Package Python files: `227`.
 - `problems/profile_response`: `21` Python files.
-- `sfincs_jax/problems/profile_response/solve.py`: `10,400` lines.
+- `sfincs_jax/problems/profile_solve.py`: `10,400` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: deleted.
 - `sfincs_jax/problems/profile_response/qi_device_seed.py`: deleted.
 - `sfincs_jax/problems/profile_response/strong_preconditioning.py`: deleted.
@@ -2933,7 +2933,7 @@ Current lane status:
 
 - Lane 1 Phase 0: `100%`.
 - Lane 1 Phase 1: about `35%`; three small owners are merged, but the hard
-  gates remain `profile_response/solve.py < 3.5k` and
+  gates remain `profile_solve.py < 3.5k` and
   `problems/profile_response <= 20` files.
 - Lane 1 Phase 2: `0%`.
 - Lane 1 Phase 3: `0%`.
@@ -2945,8 +2945,8 @@ Current lane status:
 Next best steps:
 
 1. Continue Phase 1 by moving sparse pattern/materialization and host sparse
-   direct setup helpers out of `profile_response/solve.py` into
-   `profile_response/sparse/direct.py` and `profile_response/sparse/policy.py`.
+   direct setup helpers out of `profile_solve.py` into
+   `profile_sparse_direct.py` and `profile_sparse_policy.py`.
 2. Move final payload/progress replay code from `solve.py` into
    `handoff.py` and `solver_diagnostics.py`.
 3. Re-evaluate whether `sparse/finalization.py` can be merged after sparse
@@ -2961,8 +2961,8 @@ Steps taken:
    RHSMode-1 explicit sparse-pattern probing, sparse-JAX preconditioner
    materialization, host sparse direct factor-builder callback injection, host
    sparse direct polish, and unsharded submatrix probing from
-   `sfincs_jax/problems/profile_response/solve.py` into
-   `sfincs_jax/problems/profile_response/sparse/direct.py`.
+   `sfincs_jax/problems/profile_solve.py` into
+   `sfincs_jax/problems/profile_sparse_direct.py`.
 2. Kept the historical private names visible through `solve.py` imports so
    existing solve-path calls and `sfincs_jax.v3_driver` compatibility imports
    still resolve.
@@ -2976,14 +2976,14 @@ Current inventory:
 
 - Package Python files: `227`.
 - `problems/profile_response`: `21` Python files.
-- `sfincs_jax/problems/profile_response/solve.py`: `10,175` lines.
-- `sfincs_jax/problems/profile_response/sparse/direct.py`: `3,616` lines.
+- `sfincs_jax/problems/profile_solve.py`: `10,175` lines.
+- `sfincs_jax/problems/profile_sparse_direct.py`: `3,616` lines.
 - `sfincs_jax/v3_driver.py`: `47` lines.
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/direct.py
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_direct.py
   sfincs_jax/problems/transport_matrix/solve.py` passed.
 - Scoped ruff passed for touched source and tests.
 - Sparse-helper canonical-owner coverage passed:
@@ -2995,7 +2995,7 @@ Current lane status:
 
 - Lane 1 Tranche 0: `100%`.
 - Lane 1 Tranche 1: about `40%`; sparse-direct materialization ownership is
-  moved, but the hard gates remain `profile_response/solve.py < 3.5k` and
+  moved, but the hard gates remain `profile_solve.py < 3.5k` and
   `problems/profile_response <= 18` files.
 - Lane 1 Tranche 2: `0%`.
 - Lane 1 Tranche 3: `0%`.
@@ -3020,8 +3020,8 @@ Next best steps:
 Steps taken:
 
 1. Moved the remaining current-backend RHSMode-1 dense/sparse/PAS/x-block
-   admission wrappers from `sfincs_jax/problems/profile_response/solve.py` into
-   `sfincs_jax/problems/profile_response/policies.py`.
+   admission wrappers from `sfincs_jax/problems/profile_solve.py` into
+   `sfincs_jax/problems/profile_policies.py`.
 2. Kept the historical private names visible through `solve.py` imports so
    existing solve-path calls and `sfincs_jax.v3_driver` compatibility imports
    still resolve.
@@ -3034,14 +3034,14 @@ Current inventory:
 
 - Package Python files: `227`.
 - `problems/profile_response`: `21` Python files.
-- `sfincs_jax/problems/profile_response/solve.py`: `9,730` lines.
-- `sfincs_jax/problems/profile_response/policies.py`: `6,876` lines.
+- `sfincs_jax/problems/profile_solve.py`: `9,730` lines.
+- `sfincs_jax/problems/profile_policies.py`: `6,876` lines.
 - `sfincs_jax/v3_driver.py`: `47` lines.
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/policies.py` passed.
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_policies.py` passed.
 - Scoped ruff passed for touched source.
 - Policy and heuristic coverage passed:
   `147 passed in 25.46s`.
@@ -3053,7 +3053,7 @@ Current lane status:
 - Lane 1 Tranche 0: `100%`.
 - Lane 1 Tranche 1: about `45%`; sparse-direct materialization and
   current-backend policy ownership have moved, but hard gates remain
-  `profile_response/solve.py < 3.5k` and `problems/profile_response <= 18`
+  `profile_solve.py < 3.5k` and `problems/profile_response <= 18`
   files.
 - Lane 1 Tranche 2: `0%`.
 - Lane 1 Tranche 3: `0%`.
@@ -3077,8 +3077,8 @@ Next best steps:
 Steps taken:
 
 1. Moved the current RHSMode-1 preconditioner registry and binding layer from
-   `sfincs_jax/problems/profile_response/solve.py` into
-   `sfincs_jax/problems/profile_response/preconditioner_build.py`.
+   `sfincs_jax/problems/profile_solve.py` into
+   `sfincs_jax/problems/profile_preconditioner_build.py`.
 2. The canonical owner now exposes the dispatch binding, PAS-family
    compatibility builders, Schur binding, x-block builder aliases,
    transport `tzfft` reuse, and strong fallback binding.
@@ -3094,18 +3094,18 @@ Current inventory:
 - Package source lines: `163,622`.
 - `problems/profile_response`: `21` Python files and `50,187` lines.
 - `solvers/preconditioners`: `50` Python files and `37,043` lines.
-- `sfincs_jax/problems/profile_response/solve.py`: `9,410` lines.
-- `sfincs_jax/problems/profile_response/preconditioner_build.py`: `2,683`
+- `sfincs_jax/problems/profile_solve.py`: `9,410` lines.
+- `sfincs_jax/problems/profile_preconditioner_build.py`: `2,683`
   lines.
 - `sfincs_jax/v3_driver.py`: `47` lines.
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/preconditioner_build.py` passed.
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_preconditioner_build.py` passed.
 - `python -m ruff check
-  sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/preconditioner_build.py` passed.
+  sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_preconditioner_build.py` passed.
 - `python -m ruff check
   tests/test_v3_driver_rhs1_dispatch_coverage.py
   tests/test_v3_driver_strong_fallback_coverage.py
@@ -3123,7 +3123,7 @@ Current lane status:
 - Lane 1 Tranche 0: `100%`.
 - Lane 1 Tranche 1: about `52%`; sparse-direct setup, current-backend policy
   wrappers, and RHSMode-1 preconditioner registry ownership have moved, but
-  hard gates remain `profile_response/solve.py < 3.5k` and
+  hard gates remain `profile_solve.py < 3.5k` and
   `problems/profile_response <= 18` files.
 - Lane 1 Tranche 2: `0%`.
 - Lane 1 Tranche 3: `0%`.
@@ -3148,8 +3148,8 @@ Next best steps:
 Steps taken:
 
 1. Moved x-block sparse-PC final metadata/payload builders from
-   `sfincs_jax/problems/profile_response/sparse/handoff.py` into the canonical
-   x-block owner, `sfincs_jax/problems/profile_response/sparse/xblock.py`.
+   `sfincs_jax/problems/profile_sparse_handoff.py` into the canonical
+   x-block owner, `sfincs_jax/problems/profile_sparse_xblock.py`.
    `handoff.py` now re-exports those names only for compatibility.
 2. Updated `solve.py` to import the moved x-block final payload helpers from
    `sparse.xblock` rather than from the handoff compatibility surface.
@@ -3166,21 +3166,21 @@ Current inventory:
 
 - Package Python files: `227`.
 - Package source lines: `163,474`.
-- `sfincs_jax/problems/profile_response/solve.py`: `9,412` lines.
-- `sfincs_jax/problems/profile_response/sparse/direct.py`: `3,569` lines.
-- `sfincs_jax/problems/profile_response/sparse/handoff.py`: `3,649` lines.
-- `sfincs_jax/problems/profile_response/sparse/xblock.py`: `4,572` lines.
-- `sfincs_jax/problems/profile_response/sparse/qi.py`: `4,885` lines.
-- `sfincs_jax/problems/profile_response/sparse/fortran_reduced.py`: `1,335`
+- `sfincs_jax/problems/profile_solve.py`: `9,412` lines.
+- `sfincs_jax/problems/profile_sparse_direct.py`: `3,569` lines.
+- `sfincs_jax/problems/profile_sparse_handoff.py`: `3,649` lines.
+- `sfincs_jax/problems/profile_sparse_xblock.py`: `4,572` lines.
+- `sfincs_jax/problems/profile_sparse_qi.py`: `4,885` lines.
+- `sfincs_jax/problems/profile_sparse_fortran_reduced.py`: `1,335`
   lines.
-- `sfincs_jax/problems/profile_response/sparse/policy.py`: `1,133` lines.
+- `sfincs_jax/problems/profile_sparse_policy.py`: `1,133` lines.
 
 Validation:
 
 - `python -m ruff check sfincs_jax/problems/profile_response/sparse` passed.
 - `python -m py_compile
   sfincs_jax/problems/profile_response/sparse/*.py
-  sfincs_jax/problems/profile_response/solve.py` passed.
+  sfincs_jax/problems/profile_solve.py` passed.
 - Sparse parser audit shows only `sparse/policy.py` owns the bool/int/float
   parser family under `problems/profile_response/sparse`; the remaining
   `fortran_reduced._env_float_first` is a different multi-key helper.
@@ -3194,7 +3194,7 @@ Current lane status:
 - Lane 1 Tranche 0: `100%`.
 - Lane 1 Tranche 1: about `55%`; sparse parser duplication is closed and
   x-block final payload ownership is moved, but hard gates remain
-  `profile_response/solve.py < 3.5k` and `problems/profile_response <= 18`
+  `profile_solve.py < 3.5k` and `problems/profile_response <= 18`
   files.
 - Lane 1 overall: about `55%` of the authoritative consolidation plan.
 - Overall refactor/review-ready PR goal: not complete.
@@ -3226,7 +3226,7 @@ Steps taken:
    `sfincs_jax/solvers/preconditioner_operators.py`, where simplified
    preconditioner-operator shaping already lives.
 4. Moved implicit/differentiable solve-mode selection into
-   `sfincs_jax/problems/profile_response/policies.py`.
+   `sfincs_jax/problems/profile_policies.py`.
 5. Merged pure duration/runtime/progress-threshold helpers into
    `sfincs_jax/solvers/progress.py`.
 6. Moved benchmark/audit phase timing into
@@ -3240,16 +3240,16 @@ Current inventory:
 - Package-root Python files: `90` (down from `95`).
 - Package source lines: `163,423` (down from `163,474`).
 - `sfincs_jax/v3_driver.py`: `47` lines.
-- `sfincs_jax/problems/profile_response/solve.py`: `9,412` lines.
+- `sfincs_jax/problems/profile_solve.py`: `9,412` lines.
 
 Validation:
 
 - `python -m ruff check
   sfincs_jax/solver.py
   sfincs_jax/solvers/preconditioner_operators.py
-  sfincs_jax/problems/profile_response/policies.py
-  sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/phi1_newton.py
+  sfincs_jax/problems/profile_policies.py
+  sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_phi1_newton.py
   sfincs_jax/problems/transport_matrix/solve.py
   sfincs_jax/solvers/progress.py
   sfincs_jax/validation_artifacts.py
@@ -3262,9 +3262,9 @@ Validation:
 - `python -m py_compile
   sfincs_jax/solver.py
   sfincs_jax/solvers/preconditioner_operators.py
-  sfincs_jax/problems/profile_response/policies.py
-  sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/phi1_newton.py
+  sfincs_jax/problems/profile_policies.py
+  sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_phi1_newton.py
   sfincs_jax/problems/transport_matrix/solve.py
   sfincs_jax/solvers/progress.py
   sfincs_jax/validation_artifacts.py` passed.
@@ -3291,7 +3291,7 @@ Validation:
   tests/test_transport_parallel.py -q --tb=short`
   with `34 passed in 40.46 s`. This caught one missed transport
   domain-decomposition builder import, which was fixed by importing the
-  canonical RHSMode-2/3 aliases from `profile_response/preconditioner_build.py`.
+  canonical RHSMode-2/3 aliases from `profile_preconditioner_build.py`.
 - `python -m sphinx -W -b html docs docs/_build/html` passed.
 - Stale deleted-module import audit found no source imports; the only hit is a
   retained test filename mention in `docs/testing.rst`.
@@ -3302,7 +3302,7 @@ Current lane status:
 - Lane 1 Batch 0: helper cleanup checkpoint complete; broader compatibility
   import audits for `v3_*`, `io.py`, and root-level solver/preconditioner
   modules remain.
-- Lane 1 Batch 1: not complete; `profile_response/solve.py` remains the main
+- Lane 1 Batch 1: not complete; `profile_solve.py` remains the main
   structural blocker at `9,412` lines.
 - Lane 1 overall: about `58%` of the authoritative consolidation plan.
 - Overall refactor/review-ready PR goal: not complete.
@@ -3312,9 +3312,9 @@ Next best steps:
 1. Run Sphinx `-W` and focused RHSMode-1 import/dispatch tests for the root
    helper cleanup.
 2. Continue Batch 1 by moving sparse-PC branch orchestration and final payload
-   assembly from `profile_response/solve.py` into the existing sparse owners.
+   assembly from `profile_solve.py` into the existing sparse owners.
 3. Avoid any new helper-only files; the next implementation batch should either
-   delete more files or reduce `profile_response/solve.py` materially.
+   delete more files or reduce `profile_solve.py` materially.
 
 ## 2026-06-25 Lane 1 Batch 0 Small Root Owner Cleanup
 
@@ -3332,9 +3332,9 @@ Steps taken:
 4. Moved deterministic `make_emit` and `Timer` utilities into
    `sfincs_jax/profiling.py`.
 5. Moved Phi1 accepted-iterate line-search/update logic into
-   `sfincs_jax/problems/profile_response/phi1_newton.py`.
+   `sfincs_jax/problems/profile_phi1_newton.py`.
 6. Moved optional Newton-Krylov PETSc-style KSP history replay into
-   `sfincs_jax/problems/profile_response/solver_diagnostics.py`.
+   `sfincs_jax/problems/profile_solver_diagnostics.py`.
 7. Rewrote source, example, test, and API docs imports to use the canonical
    owners; no compatibility shims were kept for the deleted modules.
 
@@ -3344,7 +3344,7 @@ Current inventory:
 - Package-root Python files: `85` (down from `90`).
 - Package source lines: `163,358` (down from `163,423`).
 - `sfincs_jax/v3_driver.py`: `47` lines.
-- `sfincs_jax/problems/profile_response/solve.py`: `9,412` lines.
+- `sfincs_jax/problems/profile_solve.py`: `9,412` lines.
 
 Validation:
 
@@ -3414,14 +3414,14 @@ Current inventory:
 - `sfincs_jax/problems/transport_matrix/parallel`: `5` Python files including
   `__init__.py`; implementation owners are `runtime.py`, `policy.py`,
   `sharding.py`, and `worker.py`.
-- `sfincs_jax/problems/profile_response/solve.py`: `9,412` lines.
+- `sfincs_jax/problems/profile_solve.py`: `9,412` lines.
 
 Validation:
 
 - `python -m ruff check` passed for touched runtime/source/test modules.
 - `python -m py_compile` passed for
   `parallel/runtime.py`, `parallel/worker.py`, and
-  `profile_response/solve.py`.
+  `profile_solve.py`.
 - Transport-parallel test battery passed:
   `python -m pytest
   tests/test_transport_parallel_execution.py
@@ -3521,7 +3521,7 @@ Next best steps:
    utility modules (`solver_*`, `explicit_sparse*`, `preconditioner_*`) as one
    coherent family move.
 2. After Tranche A root disposition is complete, execute Tranche B to cut
-   `profile_response/solve.py` below the target instead of doing more helper
+   `profile_solve.py` below the target instead of doing more helper
    churn.
 
 ## 2026-06-25 Lane 1 Tranche A Workflow-Domain Root Disposition
@@ -3582,7 +3582,7 @@ Next best steps:
    `native_block_factor.py`, `sparse_triangular.py`) or the output ownership
    move from `io.py` into `outputs`.
 2. After root count is near the `<=55` target, execute Tranche B as the large
-   `profile_response/solve.py` cut.
+   `profile_solve.py` cut.
 
 ## 2026-06-25 Lane 1 Tranche A Solver-Utility Root Disposition
 
@@ -3640,7 +3640,7 @@ Next best steps:
    `io.py -> outputs` ownership or move the remaining solver implementation
    family into `solvers`.
 2. Once root count reaches `<=55`, start Tranche B and cut
-   `profile_response/solve.py`.
+   `profile_solve.py`.
 
 ## 2026-06-25 Lane 1 Tranche A Solver/Preconditioner Implementation Root Disposition
 
@@ -3709,9 +3709,9 @@ Next best steps:
 
 1. Start Tranche B as the next large refactor: move sparse branch
    orchestration, sparse finalization, result payload assembly, progress replay,
-   and diagnostic normalization out of `profile_response/solve.py`.
+   and diagnostic normalization out of `profile_solve.py`.
 2. Do not add helper-only files; each Tranche B checkpoint should materially
-   reduce `profile_response/solve.py` or delete re-export-only owners.
+   reduce `profile_solve.py` or delete re-export-only owners.
 3. After Tranche B, execute transport/output consolidation and solver-domain
    collapse, then run the final docs/API/tests review gate.
 
@@ -3720,8 +3720,8 @@ Next best steps:
 Steps taken:
 
 1. Moved the driver-facing RHSMode=1 x-block sparse-PC GMRES branch from
-   `sfincs_jax/problems/profile_response/solve.py` into the existing
-   `sfincs_jax/problems/profile_response/sparse/handoff.py` owner.
+   `sfincs_jax/problems/profile_solve.py` into the existing
+   `sfincs_jax/problems/profile_sparse_handoff.py` owner.
 2. Added `XBlockSparsePCBranchContext` and `run_xblock_sparse_pc_branch()` so
    the solve entry point passes solve-local state and callbacks explicitly.
    The numerical x-block stage kernels and final payload builders remain in
@@ -3739,18 +3739,18 @@ Current inventory:
 - Package Python files: `212`.
 - Package-root Python files: `52`.
 - Package source lines: `163,535`.
-- `sfincs_jax/problems/profile_response/solve.py`: `8,671` lines, down from
+- `sfincs_jax/problems/profile_solve.py`: `8,671` lines, down from
   `9,411` in the previous checkpoint.
-- `sfincs_jax/problems/profile_response/sparse/handoff.py`: `4,623` lines
+- `sfincs_jax/problems/profile_sparse_handoff.py`: `4,623` lines
   after taking the x-block sparse-PC branch orchestration.
 - `problems/profile_response`: `13` package files.
 
 Validation:
 
-- Scoped `ruff` passed for `profile_response/solve.py`,
-  `profile_response/sparse/handoff.py`, and the focused sparse/x-block tests.
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- Scoped `ruff` passed for `profile_solve.py`,
+  `profile_sparse_handoff.py`, and the focused sparse/x-block tests.
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py` passed.
 - Targeted x-block/export tests passed with `5 passed in 11.14 s`.
 - Broader sparse/profile-response regression passed:
   `python -m pytest tests/test_profile_response_sparse_pc.py
@@ -3804,7 +3804,7 @@ Results:
   `__init__.py` and `profile_response.py`.
 - No deleted Schur module paths remain in source, tests, docs, examples, or
   scripts outside generated docs build artifacts.
-- `profile_response/solve.py` is `8,729` lines after the compatibility wrapper;
+- `profile_solve.py` is `8,729` lines after the compatibility wrapper;
   the next large reduction still needs the generic sparse-PC/factor-preflight
   branch extraction from Lane 1 Pass 1.
 
@@ -3834,7 +3834,7 @@ Completion:
 Next best steps:
 
 1. Return to Lane 1 Pass 1 and extract the generic sparse-PC/factor-preflight
-   branch or result/progress normalization from `profile_response/solve.py`.
+   branch or result/progress normalization from `profile_solve.py`.
 2. Continue Pass 3 afterward by collapsing symbolic-sparse RHSMode-1 naming and
    QI experiment-history files into role-based owners.
 3. Keep running focused owner tests plus import-contract and Sphinx checks after
@@ -3845,8 +3845,8 @@ Next best steps:
 Steps taken:
 
 1. Moved the full-space sparse retry stage from
-   `sfincs_jax/problems/profile_response/solve.py` into the existing sparse
-   handoff owner, `sfincs_jax/problems/profile_response/sparse/handoff.py`.
+   `sfincs_jax/problems/profile_solve.py` into the existing sparse
+   handoff owner, `sfincs_jax/problems/profile_sparse_handoff.py`.
 2. Added `RHS1FullSparseRetryStageContext`,
    `RHS1FullSparseRetryStageResult`, and
    `run_rhs1_full_sparse_retry_stage` so the solve entry point now delegates
@@ -3859,8 +3859,8 @@ Steps taken:
 
 Results:
 
-- `profile_response/solve.py` decreased from `8,729` lines to `8,558` lines.
-- `profile_response/sparse/handoff.py` increased from `4,623` lines to
+- `profile_solve.py` decreased from `8,729` lines to `8,558` lines.
+- `profile_sparse_handoff.py` increased from `4,623` lines to
   `4,976` lines because it now owns the explicit sparse retry context and
   execution phase.
 - Package file count stayed at `209`; package-root file count stayed at `52`.
@@ -3869,10 +3869,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py
   tests/test_profile_response_sparse_pc.py` passed.
 - `python -m pytest
   tests/test_profile_response_sparse_pc.py::test_rhs1_full_sparse_retry_stage_uses_measured_sparse_jax_path
@@ -3898,7 +3898,7 @@ Next best steps:
    pattern, then collapse duplicated full/reduced sparse retry context fields
    if doing so reduces code rather than adding abstraction.
 2. Move result payload assembly, progress replay, and sparse fallback summaries
-   from `profile_response/solve.py` into `diagnostics.py`,
+   from `profile_solve.py` into `diagnostics.py`,
    `solver_diagnostics.py`, or existing sparse owners.
 3. Continue Pass 3 after the next Pass 1 checkpoint by collapsing
    symbolic-sparse and QI experiment-history files into role-based owners.
@@ -3911,7 +3911,7 @@ Steps taken:
    and reduced active-DOF sparse retry paths with explicit scope, size,
    residual-vector, and operator-PC controls.
 2. Replaced the reduced sparse-JAX and host sparse LU/ILU retry implementation
-   in `profile_response/solve.py` with a call to the sparse handoff owner.
+   in `profile_solve.py` with a call to the sparse handoff owner.
 3. Converted the sparse retry unit test into a parametrized full/reduced
    contract, proving the measured-candidate gate receives the correct
    `sparse_jax_full` and `sparse_jax_reduced` labels and residual-vector
@@ -3920,8 +3920,8 @@ Steps taken:
 
 Results:
 
-- `profile_response/solve.py` decreased from `8,558` lines to `8,453` lines.
-- `profile_response/sparse/handoff.py` increased from `4,976` lines to
+- `profile_solve.py` decreased from `8,558` lines to `8,453` lines.
+- `profile_sparse_handoff.py` increased from `4,976` lines to
   `5,007` lines because one stage now owns both full and reduced sparse retry
   routing.
 - Package file count stayed at `209`; package-root file count stayed at `52`.
@@ -3929,10 +3929,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py
   tests/test_profile_response_sparse_pc.py` passed.
 - `python -m pytest
   tests/test_profile_response_sparse_pc.py::test_rhs1_sparse_retry_stage_uses_measured_sparse_jax_path
@@ -3955,7 +3955,7 @@ Completion:
 Next best steps:
 
 1. Extract sparse result/progress metadata normalization from
-   `profile_response/solve.py` into `diagnostics.py` and
+   `profile_solve.py` into `diagnostics.py` and
    `solver_diagnostics.py`, which should reduce solve size without growing
    sparse handoff further.
 2. Then move the remaining generic sparse-PC/factor-preflight branch into
@@ -3969,10 +3969,10 @@ Steps taken:
 
 1. Added `RHS1ScipyRescueStageContext`,
    `RHS1ScipyRescueStageResult`, and `run_rhs1_scipy_rescue_stage` to
-   `sfincs_jax/problems/profile_response/dense.py`.
+   `sfincs_jax/problems/profile_dense.py`.
 2. Moved the CPU-only SciPy rescue admission, active-size-cap metadata,
    x-block skip message, rescue execution, improvement gate, and failure
-   metadata out of `profile_response/solve.py`.
+   metadata out of `profile_solve.py`.
 3. Replaced the old inlined rescue block with one dense-stage call and removed
    stale SciPy rescue policy imports from `solve.py`.
 4. Added direct stage tests for a real improving SciPy rescue and for the
@@ -3981,8 +3981,8 @@ Steps taken:
 
 Results:
 
-- `profile_response/solve.py` decreased from `8,453` lines to `8,328` lines.
-- `profile_response/dense.py` increased from `2,487` lines to `2,751` lines
+- `profile_solve.py` decreased from `8,453` lines to `8,328` lines.
+- `profile_dense.py` increased from `2,487` lines to `2,751` lines
   because it now owns the dense SciPy rescue stage as well as the low-level
   SciPy rescue solve.
 - Package file count stayed at `209`; package-root file count stayed at `52`.
@@ -3991,10 +3991,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/dense.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/dense.py
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_dense.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_dense.py
   tests/test_profile_response_linear_solve.py` passed.
 - `python -m pytest
   tests/test_profile_response_linear_solve.py::test_run_rhs1_scipy_rescue_stage_accepts_improving_cpu_rescue
@@ -4022,7 +4022,7 @@ Next best steps:
    `solver_diagnostics.py` or `diagnostics.py` if it can reduce
    `solve.py` without duplicating finalization logic.
 2. Move the remaining generic sparse-PC/factor-preflight branch from
-   `profile_response/solve.py` into existing sparse owners as the next large
+   `profile_solve.py` into existing sparse owners as the next large
    Pass 1 checkpoint.
 3. Then resume Pass 3 solver-family consolidation for symbolic sparse and QI.
 
@@ -4033,7 +4033,7 @@ Steps taken:
 1. Audited the current refactor branch against `plan_final.md` Batch A.
    Current hard counts before this checkpoint were: 209 package Python files,
    52 package-root Python files, `v3_driver.py` at 47 lines,
-   `profile_response/solve.py` at 8,328 lines, and `io.py` at 4,263 lines.
+   `profile_solve.py` at 8,328 lines, and `io.py` at 4,263 lines.
 2. Confirmed that there are no top-level `rhs1_*.py` or `transport_*.py`
    implementation/alias modules left in `sfincs_jax`.
 3. Built an AST-backed root import inventory. The safe root cleanup target was
@@ -4149,7 +4149,7 @@ Next best steps:
    ownership batch without adding compatibility shims.
 3. Resume Batch B by moving final result/progress metadata normalization and
    then the generic sparse-PC/factor-preflight branch out of
-   `profile_response/solve.py`.
+   `profile_solve.py`.
 
 ## 2026-06-25 Lane 1 Batch A PETSc Binary Reader Root Cleanup
 
@@ -4226,8 +4226,8 @@ Steps taken:
    `problems/transport_matrix` including `parallel`: `28`;
    `solvers/preconditioners`: `47`.
 3. Identified the current large-file pressure points:
-   `profile_response/solve.py` at `8,328` lines,
-   `profile_response/policies.py` at `6,885` lines,
+   `profile_solve.py` at `8,328` lines,
+   `profile_policies.py` at `6,885` lines,
    `io.py` at `4,263` lines,
    sparse profile-response owners between about `1.1k` and `5.0k` lines,
    and fragmented transport/QI/symbolic/x-block owners.
@@ -4239,7 +4239,7 @@ Steps taken:
    and Batch E docs/API/tests/review readiness.
 5. Explicitly recorded that more root-file churn is not the priority because
    the root count is already at the `<=48` gate. The next implementation
-   checkpoint should materially shrink `profile_response/solve.py` without
+   checkpoint should materially shrink `profile_solve.py` without
    adding a new helper-only file.
 
 Results:
@@ -4249,7 +4249,7 @@ Results:
   merges a larger owner.
 - Batch A is effectively closed except for source-map/API cleanup.
 - The next concrete target is the generic sparse-PC/factor-preflight branch in
-  `profile_response/solve.py`, using existing sparse/diagnostics owners.
+  `profile_solve.py`, using existing sparse/diagnostics owners.
 
 Progress:
 
@@ -4276,8 +4276,8 @@ Next best steps:
 Steps taken:
 
 1. Moved the fortran-reduced x-block sparse-PC backend implementation out of
-   `sfincs_jax/problems/profile_response/solve.py` and into the existing
-   sparse owner `sfincs_jax/problems/profile_response/sparse/handoff.py`.
+   `sfincs_jax/problems/profile_solve.py` and into the existing
+   sparse owner `sfincs_jax/problems/profile_sparse_handoff.py`.
 2. Added `FortranReducedXBlockBackendContext` and
    `solve_fortran_reduced_xblock_backend` so the driver passes a typed context
    and receives the same linear-solve payload as before.
@@ -4289,18 +4289,18 @@ Steps taken:
 
 Results:
 
-- `profile_response/solve.py` decreased from `8,328` lines to `8,104` lines.
+- `profile_solve.py` decreased from `8,328` lines to `8,104` lines.
 - No new implementation file was created.
-- `profile_response/sparse/handoff.py` is larger, but it is the existing owner
+- `profile_sparse_handoff.py` is larger, but it is the existing owner
   for sparse branch handoff and backend orchestration.
 - Package source-file count remains `209`.
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py` passed.
 - `python -m pytest tests/test_profile_response_sparse_pc.py
   tests/test_rhs1_handoff.py tests/test_domain_package_import_contracts.py -q
   --tb=short` passed with `402 passed`.
@@ -4347,7 +4347,7 @@ Steps taken:
 2. Moved generic sparse-PC active-DOF setup, preconditioner-operator
    selection, fortran-reduced backend selection, sparse-pattern setup,
    factor-policy resolution, and memory-budget admission out of
-   `profile_response/solve.py`.
+   `profile_solve.py`.
 3. Updated `solve.py` so the driver calls the typed setup stage, then routes to
    the x-block backend or continues to factor/rescue phases.
 4. Exported the new setup context/helper from `sparse/handoff.py` and pinned
@@ -4356,7 +4356,7 @@ Steps taken:
 
 Results:
 
-- `profile_response/solve.py` decreased from `8,104` lines to `8,057` lines.
+- `profile_solve.py` decreased from `8,104` lines to `8,057` lines.
 - The combined 2026-06-26 Batch B sparse-owner work reduced `solve.py` from
   `8,328` to `8,057` lines.
 - No new implementation file was created.
@@ -4364,11 +4364,11 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py
   tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py
+- `python -m ruff check sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py
   tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_domain_package_import_contracts.py
   tests/test_profile_response_sparse_pc.py tests/test_rhs1_handoff.py -q
@@ -4414,7 +4414,7 @@ Steps taken:
    owner.
 2. Moved direct-tail materialization, structured-PC admission/build, direct
    reduced-Pmat setup metadata, structured-cache handoff, host-factor fallback,
-   and direct-tail setup timing out of `profile_response/solve.py`.
+   and direct-tail setup timing out of `profile_solve.py`.
 3. Updated `solve.py` so the driver calls the typed direct-tail setup stage and
    receives the same variables needed by later sparse-PC finalization.
 4. Exported the new setup context/helper from `sparse/handoff.py` and pinned
@@ -4427,7 +4427,7 @@ Steps taken:
 
 Results:
 
-- `profile_response/solve.py` decreased from `8,057` lines to `7,930` lines.
+- `profile_solve.py` decreased from `8,057` lines to `7,930` lines.
 - The combined 2026-06-26 Batch B sparse-owner work reduced `solve.py` from
   `8,328` to `7,930` lines.
 - No new implementation file was created.
@@ -4437,11 +4437,11 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py
   tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py
+- `python -m ruff check sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py
   tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_domain_package_import_contracts.py
   tests/test_profile_response_sparse_pc.py tests/test_rhs1_handoff.py -q
@@ -4489,7 +4489,7 @@ Steps taken:
    handoff owner.
 2. Moved direct-tail support-mode preflight, factor-preflight policy setup, and
    residual/window/active/coupled-coarse rescue-policy state construction out
-   of `profile_response/solve.py`.
+   of `profile_solve.py`.
 3. Kept the later residual-correction code behavior-preserving by exposing an
    ordered driver-state tuple from the sparse owner; this avoids unsafe dynamic
    `locals()` mutation while keeping the current driver variables intact.
@@ -4501,7 +4501,7 @@ Steps taken:
 
 Results:
 
-- `profile_response/solve.py` decreased from `7,930` lines to `7,834` lines.
+- `profile_solve.py` decreased from `7,930` lines to `7,834` lines.
 - The combined 2026-06-26 Batch B sparse-owner work reduced `solve.py` from
   `8,328` to `7,834` lines.
 - No new implementation file was created.
@@ -4512,11 +4512,11 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py
   tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py
+- `python -m ruff check sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py
   tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_domain_package_import_contracts.py
   tests/test_profile_response_sparse_pc.py tests/test_rhs1_handoff.py -q
@@ -4557,7 +4557,7 @@ Steps taken:
 
 1. Re-audited the current source tree before any further code movement:
    `209` Python package files, `164,865` package lines, `48` package-root
-   Python files, `profile_response/solve.py` at `7,834` lines,
+   Python files, `profile_solve.py` at `7,834` lines,
    `profile_response` plus `sparse` at `21` files and `51,776` lines,
    `transport_matrix` plus `parallel` at `28` files and `15,026` lines, and
    `solvers/preconditioners` at `47` files and `36,992` lines.
@@ -4566,7 +4566,7 @@ Steps taken:
    current `plan_final.md` Batch A-E plan and remains only as historical
    execution-log provenance.
 3. Added concrete file-level consolidation targets for historical root kernels,
-   `profile_response/solve.py`, `profile_response/sparse`, transport
+   `profile_solve.py`, `profile_response/sparse`, transport
    micro-files, `io.py`, QI preconditioner files, symbolic sparse
    `rhs1_fortran_reduced.py`, and public API/docs/tests cleanup.
 4. At that time, tightened review gates to emphasize fewer durable domain
@@ -4604,7 +4604,7 @@ Next best steps:
    `docs/source_map.rst`, `docs/api.rst`, and import-contract tests.
 2. Execute Sweep 1: move factor-preflight execution, residual-correction
    execution, sparse retry bookkeeping, progress replay, and final sparse
-   payload normalization out of `profile_response/solve.py` without adding a
+   payload normalization out of `profile_solve.py` without adding a
    helper-only file.
 3. Run focused compile, ruff, RHSMode-1 sparse/dense/Phi1/ambipolar/sensitivity
    tests, and `git diff --check` after each coherent sweep checkpoint.
@@ -4615,7 +4615,7 @@ Steps taken:
 
 1. Moved RHSMode=1 result contracts (`V3LinearSolveResult`,
    `V3NewtonKrylovResult`, and `v3_linear_solve_result_from_payload`) into the
-   existing `sfincs_jax.problems.profile_response.solver_diagnostics` owner.
+   existing `sfincs_jax.problems.profile_solver_diagnostics` owner.
 2. Moved `V3TransportMatrixSolveResult` into the existing
    `sfincs_jax.problems.transport_matrix.finalize` owner.
 3. Replaced `sfincs_jax/v3_results.py` with a 13-line compatibility facade for
@@ -4678,7 +4678,7 @@ Next best steps:
    migrated.
 3. After remaining root kernels are routed, resume Sweep 1 and collapse the
    remaining factor-preflight/residual-correction/final sparse payload code out
-   of `profile_response/solve.py`.
+   of `profile_solve.py`.
 
 ## 2026-06-26 Sweep 0 Sparse-Pattern Root Routing
 
@@ -4720,12 +4720,12 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/sparse/handoff.py
-  sfincs_jax/problems/profile_response/solve.py
+- `python -m py_compile sfincs_jax/problems/profile_sparse_handoff.py
+  sfincs_jax/problems/profile_solve.py
   sfincs_jax/operators/profile_sparse_pattern.py
   tests/test_v3_sparse_pattern.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/sparse/handoff.py
-  sfincs_jax/problems/profile_response/solve.py
+- `python -m ruff check sfincs_jax/problems/profile_sparse_handoff.py
+  sfincs_jax/problems/profile_solve.py
   sfincs_jax/operators/profile_sparse_pattern.py
   tests/test_v3_sparse_pattern.py` passed.
 - `python -m pytest
@@ -4758,7 +4758,7 @@ Next best steps:
    whether `v3.py` remains a documented public compatibility facade.
 3. Resume Sweep 1 only after the remaining root-kernel routing is finished:
    move sparse finalization/progress normalization, factor-preflight execution,
-   and residual-correction execution out of `profile_response/solve.py`
+   and residual-correction execution out of `profile_solve.py`
    without adding helper-only files.
 
 ## 2026-06-26 Sweep 0 F-Block Root Routing
@@ -4838,7 +4838,7 @@ Next best steps:
    split into geometry/grid owners without breaking documented public usage.
 3. Resume Sweep 1 only after root-kernel routing is complete: move sparse
    finalization/progress normalization, factor-preflight execution, and
-   residual-correction execution out of `profile_response/solve.py` without
+   residual-correction execution out of `profile_solve.py` without
    adding helper-only files.
 
 ## 2026-06-26 Sweep 0 Full-System Root Routing
@@ -4875,13 +4875,13 @@ Validation:
 
 - `python -m py_compile sfincs_jax/operators/profile_system.py
   sfincs_jax/residual.py sfincs_jax/constraint_projection.py
-  sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_solve.py
   sfincs_jax/problems/transport_matrix/solve.py
   tests/test_full_system_operator_jit.py tests/test_v3_system_cached_matvec.py`
   passed.
 - `python -m ruff check sfincs_jax/operators/profile_system.py
   sfincs_jax/residual.py sfincs_jax/constraint_projection.py
-  sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_solve.py
   sfincs_jax/problems/transport_matrix/solve.py
   tests/test_full_system_operator_jit.py tests/test_v3_system_cached_matvec.py`
   passed.
@@ -4922,7 +4922,7 @@ Next best steps:
    compatibility facade with deletion conditions and import-contract coverage.
 3. Resume Sweep 1 after that: move sparse finalization/progress normalization,
    factor-preflight execution, and residual-correction execution out of
-   `profile_response/solve.py` without adding helper-only files.
+   `profile_solve.py` without adding helper-only files.
 
 ## 2026-06-26 Sweep 0 V3 Grid/Geometry Root Deletion
 
@@ -4964,13 +4964,13 @@ Validation:
   sfincs_jax/diagnostics.py sfincs_jax/io.py
   sfincs_jax/operators/profile_fblock.py
   sfincs_jax/operators/profile_system.py
-  sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_solve.py
   tests/test_domain_package_import_contracts.py` passed.
 - `python -m ruff check sfincs_jax/discretization/v3.py
   sfincs_jax/diagnostics.py sfincs_jax/io.py
   sfincs_jax/operators/profile_fblock.py
   sfincs_jax/operators/profile_system.py
-  sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_solve.py
   tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_domain_package_import_contracts.py
   tests/test_mapped_xgrid_v3.py tests/test_v3_geometry_scheme4.py
@@ -4995,7 +4995,7 @@ Next best steps:
 
 1. Start Sweep 1: move sparse finalization/progress normalization,
    factor-preflight execution, and residual-correction execution out of
-   `profile_response/solve.py` into existing sparse, diagnostics, and
+   `profile_solve.py` into existing sparse, diagnostics, and
    solver-diagnostics owners.
 2. Do not add helper-only files. Each Sweep 1 checkpoint should remove a
    coherent solve-phase section from `solve.py` or merge/delete existing sparse
@@ -5025,9 +5025,9 @@ Results:
 - Current package inventory: `209` Python files, `44` package-root Python
   files, and `164,911` package source lines.
 - Largest remaining owners:
-  `profile_response/solve.py` (`7,836` lines),
-  `profile_response/policies.py` (`6,885` lines),
-  `profile_response/sparse/handoff.py` (`6,605` lines),
+  `profile_solve.py` (`7,836` lines),
+  `profile_policies.py` (`6,885` lines),
+  `profile_sparse_handoff.py` (`6,605` lines),
   `operators/profile_response/full_system.py` (`5,978` lines), and
   the QI/x-block/symbolic sparse preconditioner families.
 - Active Lane 1 plan is now:
@@ -5049,7 +5049,7 @@ Progress:
 Next best steps:
 
 1. Start Batch A with factor-preflight execution and progress reporting, moving
-   it from `profile_response/solve.py` into the existing sparse owner without
+   it from `profile_solve.py` into the existing sparse owner without
    adding a helper-only file.
 2. Continue Batch A by moving residual-correction execution, retry
    bookkeeping, final sparse payload normalization, and solver-trace result
@@ -5064,11 +5064,11 @@ Steps taken:
 
 1. Added `SparsePCFactorPreflightRunContext`,
    `SparsePCFactorPreflightRunResult`, and `run_sparse_pc_factor_preflight()`
-   to `sfincs_jax.problems.profile_response.sparse.handoff`, keeping the
+   to `sfincs_jax.problems.profile_sparse_handoff`, keeping the
    factor-preflight evaluator and progress messages inside the existing sparse
    owner instead of adding another helper file.
 2. Replaced the inline factor-preflight execution block in
-   `profile_response/solve.py` with a single sparse-owner call and local state
+   `profile_solve.py` with a single sparse-owner call and local state
    assignment.
 3. Removed the direct `evaluate_sparse_pc_factor_preflight`/
    `SparsePCFactorPreflightEvaluationContext` dependency from `solve.py`.
@@ -5077,8 +5077,8 @@ Steps taken:
 
 Results:
 
-- `profile_response/solve.py` decreased from `7,836` to `7,781` lines.
-- `profile_response/sparse/handoff.py` increased from `6,605` to `6,720`
+- `profile_solve.py` decreased from `7,836` to `7,781` lines.
+- `profile_sparse_handoff.py` increased from `6,605` to `6,720`
   lines because it now owns the execution/progress wrapper.
 - Package file count stayed at `209`; package-root file count stayed at `44`.
 - Package source lines are now about `164,971`; later Batch B/C file merges
@@ -5087,10 +5087,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py` passed.
 - `python -m pytest
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_solves_tiny_rhs1_system
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_structured_pc_preflight_can_fail_fast
@@ -5113,7 +5113,7 @@ Progress:
 Next best steps:
 
 1. Continue Batch A by moving residual-correction execution and retry
-   bookkeeping out of `profile_response/solve.py` into existing sparse owners.
+   bookkeeping out of `profile_solve.py` into existing sparse owners.
 2. Move final sparse payload normalization and solver-trace result
    normalization into `solver_diagnostics.py`, `diagnostics.py`, or
    `sparse/finalization.py`.
@@ -5132,7 +5132,7 @@ Steps taken:
 2. Moved the direct-tail structured-PC auto preflight retry candidate
    selection, retry preconditioner build, residual check, acceptance policy,
    progress messages, and retry metadata update out of
-   `profile_response/solve.py`.
+   `profile_solve.py`.
 3. Kept builder injection explicit: `solve.py` still passes the current
    active-projected structured preconditioner builder and structured factor
    bundle adapter into the sparse stage, preserving monkeypatch/debug behavior
@@ -5143,8 +5143,8 @@ Steps taken:
 
 Results:
 
-- `profile_response/solve.py` decreased from `7,781` to `7,657` lines.
-- `profile_response/sparse/handoff.py` increased from `6,720` to `7,029`
+- `profile_solve.py` decreased from `7,781` to `7,657` lines.
+- `profile_sparse_handoff.py` increased from `6,720` to `7,029`
   lines because it now owns direct-tail auto retry execution.
 - Package file count stayed at `209`; package-root file count stayed at `44`.
 - Package source lines are now about `165,156`; source-line reduction remains a
@@ -5152,10 +5152,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py` passed.
 - `python -m pytest
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_solves_tiny_rhs1_system
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_structured_pc_preflight_can_fail_fast
@@ -5200,7 +5200,7 @@ Steps taken:
    `profile_response.sparse.handoff` owner.
 2. Moved the true-operator coupled coarse auto-selection, builder invocation,
    residual recomputation, acceptance policy, progress messages, and state
-   updates out of `profile_response/solve.py`.
+   updates out of `profile_solve.py`.
 3. Kept the actual true-operator builder and additive-memory estimator injected
    from `solve.py`, so this move does not introduce a new import cycle and
    still preserves monkeypatch/debug behavior for the current tests.
@@ -5210,8 +5210,8 @@ Steps taken:
 
 Results:
 
-- `profile_response/solve.py` decreased from `7,657` to `7,567` lines.
-- `profile_response/sparse/handoff.py` increased from `7,029` to `7,309`
+- `profile_solve.py` decreased from `7,657` to `7,567` lines.
+- `profile_sparse_handoff.py` increased from `7,029` to `7,309`
   lines because it now owns true-coupled coarse execution.
 - Package file count stayed at `209`; package-root file count stayed at `44`.
 - Package source lines are now about `165,346`; `profile_response` source
@@ -5220,10 +5220,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py` passed.
 - `python -m pytest
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_true_coupled_coarse_records_bounded_metadata
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_true_coupled_coarse_auto_promotes_active_lu
@@ -5269,15 +5269,15 @@ Steps taken:
    prepares the next larger stage extraction.
 4. Removed direct imports of `SparsePCResidualCandidateAcceptanceContext` and
    `evaluate_sparse_pc_residual_candidate_acceptance` from
-   `profile_response/solve.py`; residual admission is now consumed through the
+   `profile_solve.py`; residual admission is now consumed through the
    sparse owner.
 5. Updated `plan_final.md` so the controlling Batch A plan marks the shared
    residual-candidate accept/update extraction as complete.
 
 Results:
 
-- `profile_response/solve.py` decreased from `7,567` to `7,539` lines.
-- `profile_response/sparse/handoff.py` increased from `7,309` to `7,479`
+- `profile_solve.py` decreased from `7,567` to `7,539` lines.
+- `profile_sparse_handoff.py` increased from `7,309` to `7,479`
   lines because it now owns shared residual-candidate state updates.
 - Package file count stayed at `209`; package-root file count stayed at `44`.
 - Package source lines are now about `165,488`; this helper extraction is a
@@ -5286,10 +5286,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py` passed.
 - `python -m pytest
   tests/test_profile_response_sparse_pc.py::test_sparse_pc_residual_candidate_acceptance_base_improvement_override_sets_passed
   tests/test_v3_sparse_pattern.py::test_true_operator_residual_window_lsq_reduces_global_residual
@@ -5357,8 +5357,8 @@ Steps taken:
 
 1. Reviewed the dirty local worktree from the interrupted consolidation pass.
    The branch had a newly added sparse-owned residual-correction stage in
-   `problems/profile_response/sparse/handoff.py`, but
-   `problems/profile_response/solve.py` still carried the old inline
+   `problems/profile_sparse_handoff.py`, but
+   `problems/profile_solve.py` still carried the old inline
    true-active/true-window/residual-window candidate branches.
 2. Replaced the remaining inline residual-correction family in `solve.py` with
    one call to `run_sparse_pc_residual_correction_stage(...)`.
@@ -5368,8 +5368,8 @@ Steps taken:
 4. Audited the current package topology and large files before revising the
    authoritative plan:
    `208` package Python files, `43` package-root Python files,
-   `v3_driver.py` `47` lines, `profile_response/solve.py` `7,014` lines,
-   `profile_response/sparse/handoff.py` `8,231` lines, `io.py` `4,264` lines,
+   `v3_driver.py` `47` lines, `profile_solve.py` `7,014` lines,
+   `profile_sparse_handoff.py` `8,231` lines, `io.py` `4,264` lines,
    `problems/transport_matrix` `28` files, and
    `solvers/preconditioners` `47` files.
 5. Updated `plan_final.md` so it is the single authoritative consolidation
@@ -5381,8 +5381,8 @@ Steps taken:
 
 Results:
 
-- `profile_response/solve.py` decreased from `7,539` to `7,014` lines.
-- `profile_response/sparse/handoff.py` increased from `7,479` to `8,231`
+- `profile_solve.py` decreased from `7,539` to `7,014` lines.
+- `profile_sparse_handoff.py` increased from `7,479` to `8,231`
   lines, so Batch A now includes an explicit handoff-owner reduction gate.
 - Package file count stayed at `208`; package-root file count stayed at `43`.
 - The true-active, true-window, residual-coarse, and residual-window
@@ -5390,10 +5390,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m py_compile sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_solve.py
+  sfincs_jax/problems/profile_sparse_handoff.py` passed.
 - `git diff --check` passed.
 - `python -m pytest
   tests/test_profile_response_sparse_pc.py::test_sparse_pc_residual_candidate_acceptance_base_improvement_override_sets_passed
@@ -5431,8 +5431,8 @@ Steps taken:
 1. Moved sparse-PC GMRES attempt helpers, stagnation/progress callback logic,
    typed finalization state builders, finalization bundle construction, and
    final GMRES payload construction from
-   `sfincs_jax/problems/profile_response/sparse/handoff.py` to the existing
-   `sfincs_jax/problems/profile_response/sparse/finalization.py` owner.
+   `sfincs_jax/problems/profile_sparse_handoff.py` to the existing
+   `sfincs_jax/problems/profile_sparse_finalization.py` owner.
 2. Kept the legacy sparse handoff import surface stable by importing and
    re-exporting the moved names from the compatibility layer.
 3. Updated sparse-PC import-contract tests so the canonical owner is now
@@ -5444,11 +5444,11 @@ Steps taken:
 
 Results:
 
-- `profile_response/sparse/handoff.py` decreased from `8,231` to `7,577`
+- `profile_sparse_handoff.py` decreased from `8,231` to `7,577`
   lines.
-- `profile_response/sparse/finalization.py` increased to `1,551` lines and is
+- `profile_sparse_finalization.py` increased to `1,551` lines and is
   now the documented sparse-PC final-payload owner.
-- `profile_response/solve.py` remains `7,014` lines.
+- `profile_solve.py` remains `7,014` lines.
 - Package file count remains `208`; package-root file count remains `43`;
   package source lines are `165,674`.
 - Batch A now has one less blocker: sparse GMRES/finalization ownership is
@@ -5457,8 +5457,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/sparse/finalization.py sfincs_jax/problems/profile_response/sparse/handoff.py sfincs_jax/problems/profile_response/solve.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/sparse/finalization.py sfincs_jax/problems/profile_response/sparse/handoff.py sfincs_jax/problems/profile_response/solve.py tests/test_profile_response_sparse_pc.py` passed.
+- `python -m py_compile sfincs_jax/problems/profile_sparse_finalization.py sfincs_jax/problems/profile_sparse_handoff.py sfincs_jax/problems/profile_solve.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_sparse_finalization.py sfincs_jax/problems/profile_sparse_handoff.py sfincs_jax/problems/profile_solve.py tests/test_profile_response_sparse_pc.py` passed.
 - `python -m pytest tests/test_profile_response_sparse_pc.py -q --tb=short`
   passed with `329 passed in 3.09s`.
 - `python -m pytest
@@ -5497,8 +5497,8 @@ Next best steps:
 Steps taken:
 
 1. Moved the x-block branch/setup/stage cluster from
-   `sfincs_jax/problems/profile_response/sparse/handoff.py` to the existing
-   `sfincs_jax/problems/profile_response/sparse/xblock.py` owner. This moved
+   `sfincs_jax/problems/profile_sparse_handoff.py` to the existing
+   `sfincs_jax/problems/profile_sparse_xblock.py` owner. This moved
    x-block sparse-PC setup policy, side-policy setup, assembled-operator
    setup/preflight/device/matvec helpers, local preconditioner setup,
    moment-Schur/two-level/global-coupling stage helpers, seed policy setup,
@@ -5515,19 +5515,19 @@ Steps taken:
 
 Results:
 
-- `profile_response/sparse/handoff.py` decreased from `7,577` to `4,438`
+- `profile_sparse_handoff.py` decreased from `7,577` to `4,438`
   lines, passing the `<=5,500` Batch A handoff gate.
-- `profile_response/sparse/xblock.py` increased to `7,725` lines and is now
+- `profile_sparse_xblock.py` increased to `7,725` lines and is now
   the single x-block setup/orchestration owner for this PR.
-- `profile_response/solve.py` remains `7,014` lines.
+- `profile_solve.py` remains `7,014` lines.
 - `problems/profile_response` remains `21` files and is now `52,672` lines.
 - At that checkpoint, package file count remained `208`, package-root file
   count remained `43`, and package source lines were `165,688`.
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/sparse/xblock.py sfincs_jax/problems/profile_response/sparse/handoff.py sfincs_jax/problems/profile_response/solve.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/sparse/xblock.py sfincs_jax/problems/profile_response/sparse/handoff.py sfincs_jax/problems/profile_response/solve.py tests/test_profile_response_sparse_pc.py` passed.
+- `python -m py_compile sfincs_jax/problems/profile_sparse_xblock.py sfincs_jax/problems/profile_sparse_handoff.py sfincs_jax/problems/profile_solve.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_sparse_xblock.py sfincs_jax/problems/profile_sparse_handoff.py sfincs_jax/problems/profile_solve.py tests/test_profile_response_sparse_pc.py` passed.
 - `python -m pytest tests/test_profile_response_sparse_pc.py -q --tb=short`
   passed with `329 passed in 2.66s`.
 - `python -m pytest tests/test_domain_package_import_contracts.py tests/test_profile_response_sparse_pc.py::test_sparse_xblock_module_reexports_match_compat_layer -q --tb=short`
@@ -5575,9 +5575,9 @@ Steps taken:
    review-ready gates from stretch cleanup targets so the PR can become
    reviewable without unsafe line-count churn.
 4. Recorded explicit cut/defer decisions:
-   `active_dof.py` should merge into `profile_response/setup.py`;
+   `active_dof.py` should merge into `profile_setup.py`;
    `sparse/policy.py` should not be quick-merged because its `_env_*` helper
-   signatures conflict with `profile_response/policies.py`;
+   signatures conflict with `profile_policies.py`;
    `sparse/finalization.py` stays until import-cycle risk is eliminated; and
    no new helper/handoff/campaign files should be created.
 
@@ -5585,11 +5585,11 @@ Results:
 
 - `plan_final.md` is now the single authoritative refactor plan.
 - The required review-ready gates are: package files `<=190`, root files
-  `<=44`, `profile_response/solve.py <=5,500` lines,
+  `<=44`, `profile_solve.py <=5,500` lines,
   `profile_response` plus `sparse <=18` files, transport matrix plus parallel
   `<=18` files, preconditioners `<=35` files, and `io.py <=1,200` lines.
 - The stricter targets remain as stretch goals: package files `<=175`,
-  `profile_response/solve.py <=3,500` lines, profile-response `<=15` files,
+  `profile_solve.py <=3,500` lines, profile-response `<=15` files,
   transport matrix `<=14` files, preconditioners `<=30` files, and
   `io.py <=800` lines or deletion.
 
@@ -5609,12 +5609,12 @@ Next best steps:
 Steps taken:
 
 1. Merged `sfincs_jax/problems/profile_response/active_dof.py` into the
-   existing `sfincs_jax/problems/profile_response/setup.py` owner. Active-DOF
+   existing `sfincs_jax/problems/profile_setup.py` owner. Active-DOF
    decisions, active index maps, full/reduced JAX gather/scatter primitives,
    PAS constraint projection, FP pitch-mode active-index selection, and final
    RHSMode-1 cleanup now live with the setup/finalization contracts that use
    them.
-2. Rewired `profile_response/solve.py`, `solver_diagnostics.py`, focused
+2. Rewired `profile_solve.py`, `solver_diagnostics.py`, focused
    tests, import-contract tests, API docs, and the source map to import from
    `profile_response.setup`.
 3. Deleted the standalone `active_dof.py` file instead of leaving another
@@ -5628,13 +5628,13 @@ Results:
 - `problems/profile_response` files including `sparse/` decreased from `19`
   to `18`, meeting the Batch A review-ready file-count gate.
 - Package source lines decreased from `165,631` to `165,586`.
-- `profile_response/solve.py` is now `7,008` lines; the remaining Batch A
+- `profile_solve.py` is now `7,008` lines; the remaining Batch A
   blocker is the `<=5,500` review-ready solve-sequencer gate.
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/setup.py sfincs_jax/problems/profile_response/solve.py sfincs_jax/problems/profile_response/solver_diagnostics.py tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_profile_response_active_projection.py tests/test_profile_response_sparse_pc.py tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/setup.py sfincs_jax/problems/profile_response/solve.py sfincs_jax/problems/profile_response/solver_diagnostics.py tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_profile_response_active_projection.py tests/test_profile_response_sparse_pc.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m py_compile sfincs_jax/problems/profile_setup.py sfincs_jax/problems/profile_solve.py sfincs_jax/problems/profile_solver_diagnostics.py tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_profile_response_active_projection.py tests/test_profile_response_sparse_pc.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_setup.py sfincs_jax/problems/profile_solve.py sfincs_jax/problems/profile_solver_diagnostics.py tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_profile_response_active_projection.py tests/test_profile_response_sparse_pc.py tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_profile_response_active_projection.py tests/test_profile_response_setup.py tests/test_domain_package_import_contracts.py -q --tb=short` passed with `39 passed`.
 - `python -m pytest tests/test_profile_response_sparse_pc.py -q --tb=short`
   passed with `329 passed`.
@@ -5645,7 +5645,7 @@ Next best steps:
 
 1. Continue Batch A by moving final sparse-result normalization, progress
    replay, retry bookkeeping, and fallback summaries out of
-   `profile_response/solve.py` into existing `solver_diagnostics.py`,
+   `profile_solve.py` into existing `solver_diagnostics.py`,
    `sparse/finalization.py`, `sparse/direct.py`, `sparse/xblock.py`,
    `sparse/qi.py`, or `dense.py`.
 2. Once `solve.py <=5,500` lines, switch to Batch B transport/output/root
@@ -5658,7 +5658,7 @@ Steps taken:
 1. Merged the transport retry/residual polish relay
    `sfincs_jax/problems/transport_matrix/handoff_policy.py` into the durable
    transport policy owner `sfincs_jax/problems/transport_matrix/policies.py`.
-2. Rewired `profile_response/solve.py`, focused handoff-policy tests, import
+2. Rewired `profile_solve.py`, focused handoff-policy tests, import
    contract tests, API docs, and the source map to import the policy owner
    directly.
 3. Deleted `handoff_policy.py` instead of leaving a compatibility shim.
@@ -5679,8 +5679,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/profile_response/solve.py tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/profile_response/solve.py tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m py_compile sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/profile_solve.py tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/profile_solve.py tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py tests/test_transport_solve_policy.py -q --tb=short` passed with `26 passed`.
 - `sphinx-build -W -b html docs docs/_build/html` passed.
 
@@ -5694,7 +5694,7 @@ Next best steps:
    `host_gmres.py`, `loop.py`, `iteration_stats.py`, `residual_quality.py`,
    and `sparse_direct_solve.py`) into `solve.py` or one active-system owner.
 3. After Batch B reaches the transport file-count gate, return to Batch A's
-   remaining `profile_response/solve.py <=5,500` review-ready gate.
+   remaining `profile_solve.py <=5,500` review-ready gate.
 
 ## 2026-06-26 Batch B Transport Policy/Dispatch Owner Merge
 
@@ -5710,7 +5710,7 @@ Steps taken:
    transport preconditioner selection, DD/sparse-JAX environment parsing,
    reduced/full builder dispatch, and strong-preconditioner caching now live
    with the transport policy they serve.
-3. Rewired `profile_response/solve.py`, `transport_matrix/active_dense.py`,
+3. Rewired `profile_solve.py`, `transport_matrix/active_dense.py`,
    focused transport policy/preconditioner tests, import-contract tests, API
    docs, testing docs, release notes, and the source map to import
    `transport_matrix.policies` directly.
@@ -5732,8 +5732,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/active_dense.py sfincs_jax/problems/profile_response/solve.py tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/active_dense.py sfincs_jax/problems/profile_response/solve.py tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m py_compile sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/active_dense.py sfincs_jax/problems/profile_solve.py tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/active_dense.py sfincs_jax/problems/profile_solve.py tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_transport_active_dense_setup.py tests/test_domain_package_import_contracts.py -q --tb=short` passed with `54 passed`.
 - `python -m pytest tests/test_transport_*.py -q --tb=short` passed with
   `273 passed`.
@@ -5750,7 +5750,7 @@ Next best steps:
    `streaming_outputs.py` into `outputs/transport.py` to reduce output
    ownership complexity.
 3. After transport reaches `<=18` files, return to Batch A's
-   `profile_response/solve.py <=5,500` line gate and then Batch C
+   `profile_solve.py <=5,500` line gate and then Batch C
    preconditioner-family compression.
 
 ## 2026-06-26 Batch B Transport Solve-Helper Owner Merge
@@ -5773,7 +5773,7 @@ Steps taken:
    parsing and diagnostic formatting now live with policy, and both sequential
    and parallel transport paths import that owner.
 5. Rewired focused tests, import-contract tests, source-map docs, API docs,
-   testing docs, release notes, `profile_response/solve.py`, `loop.py`, and
+   testing docs, release notes, `profile_solve.py`, `loop.py`, and
    `parallel/runtime.py` to the new owners.
 6. Deleted the four absorbed modules.
 
@@ -5792,8 +5792,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/loop.py sfincs_jax/problems/transport_matrix/parallel/runtime.py sfincs_jax/problems/profile_response/solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/loop.py sfincs_jax/problems/transport_matrix/parallel/runtime.py sfincs_jax/problems/profile_response/solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m py_compile sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/loop.py sfincs_jax/problems/transport_matrix/parallel/runtime.py sfincs_jax/problems/profile_solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/loop.py sfincs_jax/problems/transport_matrix/parallel/runtime.py sfincs_jax/problems/profile_solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_transport_loop_support.py tests/test_transport_parallel_runtime.py tests/test_domain_package_import_contracts.py -q --tb=short` passed with `44 passed`.
 - `python -m pytest tests/test_transport_*.py -q --tb=short` passed with
   `273 passed`.
@@ -5811,7 +5811,7 @@ Next best steps:
    `streaming_outputs.py` into `outputs/transport.py`, or
    `dense_batch.py` and `loop.py` into `transport_matrix/solve.py`.
 3. Once `transport_matrix` reaches `<=18` files, return to Batch A's
-   `profile_response/solve.py <=5,500` line gate.
+   `profile_solve.py <=5,500` line gate.
 
 ## 2026-06-26 Batch B Transport Solve Owner Gate Merge
 
@@ -5831,7 +5831,7 @@ Steps taken:
    active FP operator factor reuse, explicit sparse helper materialization,
    fallback sparse-ILU setup, host iterative refinement, float32 polish, and
    float64 retry now live with the solve branches that invoke them.
-4. Rewired `profile_response/solve.py`, focused dense-batch/loop/sparse-direct
+4. Rewired `profile_solve.py`, focused dense-batch/loop/sparse-direct
    tests, import-contract tests, API docs, source map, testing docs, and release
    notes to the `transport_matrix.solve` owner.
 5. Deleted the three absorbed modules.
@@ -5848,8 +5848,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/profile_response/solve.py tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/profile_response/solve.py tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m py_compile sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/profile_solve.py tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/profile_solve.py tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py -q --tb=short` passed with `36 passed`.
 - `python -m pytest tests/test_transport_*.py -q --tb=short` passed with
   `273 passed`.
@@ -5863,7 +5863,7 @@ Next best steps:
    `finalize.py`, `streaming_outputs.py` into `outputs/transport.py`, and
    possibly `parallel/policy.py` into `parallel/runtime.py` if review still
    favors fewer files.
-2. Return to Batch A next: reduce `profile_response/solve.py` from `7,008`
+2. Return to Batch A next: reduce `profile_solve.py` from `7,008`
    lines to `<=5,500` by moving progress replay, retry bookkeeping, final
    sparse-result normalization, and fallback summaries into existing sparse,
    dense, or diagnostic owners.
@@ -5876,13 +5876,13 @@ Steps taken:
 
 1. Moved the full explicitly requested `sparse_pc_gmres` /
    `xblock_sparse_pc_gmres` branch out of
-   `sfincs_jax/problems/profile_response/solve.py` into the existing
-   `sfincs_jax/problems/profile_response/sparse/handoff.py` sparse owner.
+   `sfincs_jax/problems/profile_solve.py` into the existing
+   `sfincs_jax/problems/profile_sparse_handoff.py` sparse owner.
    The solve entry point now delegates through
    `try_run_requested_sparse_pc_gmres_branch(...)`.
 2. Moved the large default RHSMode-1 preconditioner selection policy block out
-   of `profile_response/solve.py` into
-   `sfincs_jax/problems/profile_response/policies.py` as
+   of `profile_solve.py` into
+   `sfincs_jax/problems/profile_policies.py` as
    `resolve_rhs1_default_preconditioner_selection(...)`.
 3. Kept behavior stable by passing the existing driver scope into the moved
    owner functions and by updating only the values that the moved policy branch
@@ -5894,23 +5894,23 @@ Steps taken:
 
 Results:
 
-- `profile_response/solve.py` decreased from `6,985` to `5,358` lines,
+- `profile_solve.py` decreased from `6,985` to `5,358` lines,
   meeting the `<=5,500` Batch A review-ready solve-sequencer gate.
 - Package Python files remain `195`.
 - Package source lines increased from `165,398` to `165,653` because the
   mechanical context wrappers added overhead. This must be paid down before
   the final review gate.
-- `profile_response/sparse/handoff.py` increased from `4,438` to `5,780`
+- `profile_sparse_handoff.py` increased from `4,438` to `5,780`
   lines. The handoff review target is therefore open again by about `280`
   lines, and the next owner move should relocate direct-tail/generic setup
   support into existing sparse policy/direct owners.
-- `profile_response/policies.py` increased to `7,425` lines and now owns the
+- `profile_policies.py` increased to `7,425` lines and now owns the
   default RHSMode-1 preconditioner policy block.
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_response/solve.py sfincs_jax/problems/profile_response/sparse/handoff.py sfincs_jax/problems/profile_response/policies.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/solve.py sfincs_jax/problems/profile_response/sparse/handoff.py sfincs_jax/problems/profile_response/policies.py` passed.
+- `python -m py_compile sfincs_jax/problems/profile_solve.py sfincs_jax/problems/profile_sparse_handoff.py sfincs_jax/problems/profile_policies.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_solve.py sfincs_jax/problems/profile_sparse_handoff.py sfincs_jax/problems/profile_policies.py` passed.
 - `python -m pytest tests/test_profile_response_sparse_pc.py tests/test_profile_response_dense.py tests/test_rhs1_solver_policy.py tests/test_v3_sparse_pattern.py -q --tb=short` passed with `510 passed in 103.18s`.
 - `python -m pytest tests/test_domain_package_import_contracts.py tests/test_profile_response_finalization.py tests/test_profile_response_linear_solve.py tests/test_profile_response_auto_solve.py -q --tb=short` passed with `29 passed in 1.68s`.
 - `git diff --check` passed.
@@ -5932,7 +5932,7 @@ Next best steps:
    `SparsePCGenericBranchSetup*` and/or direct-tail setup support from
    `sparse/handoff.py` into existing sparse policy/direct owners without
    adding a new file.
-2. Keep `profile_response/solve.py` below `5,500` while reducing package lines
+2. Keep `profile_solve.py` below `5,500` while reducing package lines
    back below the pre-Batch-A `165,398` checkpoint before review.
 3. Then proceed to Batch B output/root compression and Batch C
    preconditioner-family compression.
@@ -5942,7 +5942,7 @@ Next best steps:
 Steps taken:
 
 1. Kept the large sparse-PC branch in the existing
-   `sfincs_jax/problems/profile_response/sparse/handoff.py` owner, but
+   `sfincs_jax/problems/profile_sparse_handoff.py` owner, but
    replaced its duplicated 364-entry literal re-export list with owner-module
    export composition plus explicit local and diagnostics compatibility
    exports.
@@ -5954,15 +5954,15 @@ Steps taken:
    shadowing behavior in that file and is tracked in `plan_final.md` for
    Batch E review.
 4. Refreshed `plan_final.md` so Batch A now records both review-ready gates:
-   `profile_response/solve.py <=5,500` and
-   `profile_response/sparse/handoff.py <=5,500`.
+   `profile_solve.py <=5,500` and
+   `profile_sparse_handoff.py <=5,500`.
 
 Results:
 
-- `profile_response/sparse/handoff.py` decreased from `5,780` lines after the
+- `profile_sparse_handoff.py` decreased from `5,780` lines after the
   previous solve-sequencer move to `5,498` lines, meeting the Batch A handoff
   review gate.
-- `profile_response/solve.py` remains `5,358` lines, still under the Batch A
+- `profile_solve.py` remains `5,358` lines, still under the Batch A
   solve-sequencer gate.
 - Package Python files remain `195`.
 - Package source lines decreased from `165,653` to `165,371`, back below the
@@ -5973,8 +5973,8 @@ Validation:
 
 - Exact handoff export-set comparison against `HEAD` passed with no missing or
   extra symbols.
-- `python -m py_compile sfincs_jax/problems/profile_response/sparse/handoff.py sfincs_jax/problems/profile_response/solve.py sfincs_jax/problems/profile_response/policies.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_response/sparse/handoff.py sfincs_jax/problems/profile_response/solve.py sfincs_jax/problems/profile_response/policies.py` passed.
+- `python -m py_compile sfincs_jax/problems/profile_sparse_handoff.py sfincs_jax/problems/profile_solve.py sfincs_jax/problems/profile_policies.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_sparse_handoff.py sfincs_jax/problems/profile_solve.py sfincs_jax/problems/profile_policies.py` passed.
 - `python -m pytest tests/test_profile_response_sparse_pc.py tests/test_profile_response_dense.py tests/test_rhs1_solver_policy.py tests/test_v3_sparse_pattern.py -q --tb=short` passed with `510 passed in 103.81s`.
 - `python -m pytest tests/test_domain_package_import_contracts.py tests/test_profile_response_finalization.py tests/test_profile_response_linear_solve.py tests/test_profile_response_auto_solve.py -q --tb=short` passed with `29 passed in 1.98s`.
 
@@ -6083,8 +6083,8 @@ Results:
 - Solver-root Python files: `14`.
 - Preconditioner Python files: `35`.
 - `sfincs_jax/solvers/preconditioning.py`: `1,173` lines.
-- `profile_response/solve.py`: `5,420` lines.
-- `profile_response/sparse/handoff.py`: `5,500` lines.
+- `profile_solve.py`: `5,420` lines.
+- `profile_sparse_handoff.py`: `5,500` lines.
 - `v3_driver.py`: `47` lines.
 - `io.py`: `64` lines.
 
@@ -6146,8 +6146,8 @@ Results:
 - Solver-root Python files: `17`.
 - Preconditioner Python files: `35`.
 - `sfincs_jax/solvers/explicit_sparse.py`: `4,952` lines.
-- `profile_response/solve.py`: `5,420` lines.
-- `profile_response/sparse/handoff.py`: `5,500` lines.
+- `profile_solve.py`: `5,420` lines.
+- `profile_sparse_handoff.py`: `5,500` lines.
 - `v3_driver.py`: `47` lines.
 - `io.py`: `64` lines.
 
@@ -6209,8 +6209,8 @@ Results:
   `parallel`.
 - `sfincs_jax/problems/transport_matrix/parallel`: `3` Python files:
   `__init__.py`, `runtime.py`, and `worker.py`.
-- `profile_response/solve.py`: `5,420` lines.
-- `profile_response/sparse/handoff.py`: `5,500` lines.
+- `profile_solve.py`: `5,420` lines.
+- `profile_sparse_handoff.py`: `5,500` lines.
 - `transport_matrix/linear_system.py`: `3,122` lines.
 - `transport_matrix/parallel/runtime.py`: `3,463` lines.
 - `v3_driver.py`: `47` lines.
@@ -6277,11 +6277,11 @@ Results:
 - Package source lines: `165,758`.
 - `sfincs_jax/v3_driver.py`: `47` lines.
 - `sfincs_jax/io.py`: `64` lines.
-- `sfincs_jax/problems/profile_response/solve.py`: `5,420` lines.
-- `sfincs_jax/problems/profile_response/sparse/handoff.py`: `5,500` lines.
-- `sfincs_jax/problems/profile_response/policies.py`: `7,369` lines.
-- `sfincs_jax/problems/profile_response/sparse/xblock.py`: `7,689` lines.
-- `sfincs_jax/problems/profile_response/sparse/qi.py`: `4,873` lines.
+- `sfincs_jax/problems/profile_solve.py`: `5,420` lines.
+- `sfincs_jax/problems/profile_sparse_handoff.py`: `5,500` lines.
+- `sfincs_jax/problems/profile_policies.py`: `7,369` lines.
+- `sfincs_jax/problems/profile_sparse_xblock.py`: `7,689` lines.
+- `sfincs_jax/problems/profile_sparse_qi.py`: `4,873` lines.
 
 Validation:
 

@@ -6,7 +6,7 @@ import numpy as np
 
 import sfincs_jax.solvers.preconditioners.pas.policy as pas_policy
 import sfincs_jax.v3_driver as vd
-import sfincs_jax.problems.profile_response.preconditioner_build as pb
+import sfincs_jax.problems.profile_preconditioner_build as pb
 
 
 def _pas_tokamak_like_op(*, n_zeta: int = 3, zeta_varying: bool = False, rhs_mode: int = 1):

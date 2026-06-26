@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from sfincs_jax.problems.profile_response.dense import (
+from sfincs_jax.problems.profile_dense import (
     RHS1AutoHostSolveContext,
     RHS1SparseHostSafeSolveContext,
     RHS1StructuredCSRSolveContext,

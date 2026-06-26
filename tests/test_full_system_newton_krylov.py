@@ -6,7 +6,7 @@ import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.petsc_binary import read_petsc_vec
-from sfincs_jax.problems.profile_response import phi1_newton
+import sfincs_jax.problems.profile_phi1_newton as phi1_newton
 from sfincs_jax.v3_driver import solve_v3_full_system_newton_krylov
 
 

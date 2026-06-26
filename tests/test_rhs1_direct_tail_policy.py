@@ -7,7 +7,7 @@ import pytest
 from scipy import sparse
 
 from sfincs_jax.operators.profile_layout import RHS1BlockLayout
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     _StructuredHostSparsePreconditionerBundle,
     _direct_tail_structured_pc_cache_key,
     _direct_tail_structured_pc_with_cache_metadata,

@@ -1,7 +1,7 @@
 """Compatibility shim for the former monolithic v3 driver module.
 
 The RHSMode-1 solve entry points now live in
-``sfincs_jax.problems.profile_response.solve`` and the RHSMode-2/3 transport
+``sfincs_jax.problems.profile_solve`` and the RHSMode-2/3 transport
 entry point lives in ``sfincs_jax.problems.transport_matrix.solve``.  This
 module intentionally contains no physics equations or solver algorithms; it
 only preserves historical imports while the refactor PR migrates tests,
@@ -14,7 +14,7 @@ from importlib import import_module as _import_module
 import sys
 from typing import Any
 
-_PROFILE_SOLVE = _import_module("sfincs_jax.problems.profile_response.solve")
+_PROFILE_SOLVE = _import_module("sfincs_jax.problems.profile_solve")
 _TRANSPORT_SOLVE = _import_module("sfincs_jax.problems.transport_matrix.solve")
 
 

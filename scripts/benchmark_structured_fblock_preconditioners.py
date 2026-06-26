@@ -166,7 +166,7 @@ def _median(values: list[float]) -> float | None:
 
 
 def _build_preconditioner(op, preconditioner: str):
-    from sfincs_jax.problems.profile_response import preconditioner_build as pb
+    import sfincs_jax.problems.profile_preconditioner_build as pb
 
     if preconditioner == "fp_radial":
         return pb._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
@@ -187,7 +187,7 @@ def run_child_payload(args: argparse.Namespace) -> dict[str, Any]:
 
     from sfincs_jax.namelist import read_sfincs_input
     from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
-    from sfincs_jax.problems.profile_response.solve import solve_v3_full_system_linear_gmres
+    from sfincs_jax.problems.profile_solve import solve_v3_full_system_linear_gmres
 
     case = str(args.case)
     preconditioner = str(args.preconditioner)

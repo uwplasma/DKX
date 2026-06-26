@@ -25,11 +25,11 @@ from sfincs_jax.solver import (
     gmres_solve_with_history_scipy,
     lgmres_solve_with_history_scipy,
 )
-from .policies import (
+from .profile_policies import (
     rhs1_scipy_rescue_abs_floor_after_xblock,
 )
-from .setup import finalize_rhs1_linear_solution_cleanup
-from .residual import l2_norm_float, residual_converged, residual_target
+from .profile_setup import finalize_rhs1_linear_solution_cleanup
+from .profile_residual import l2_norm_float, residual_converged, residual_target
 
 
 EmitFn = Callable[[int, str], None]

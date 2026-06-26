@@ -29,7 +29,7 @@ from sfincs_jax.solvers.preconditioning import (
     precond_chunk_cols,
     rhs_mode1_precond_cache_key,
 )
-from ....problems.profile_response.residual import (
+from sfincs_jax.problems.profile_residual import (
     compose_multilevel_residual_correction_preconditioner,
     safe_preconditioner,
 )

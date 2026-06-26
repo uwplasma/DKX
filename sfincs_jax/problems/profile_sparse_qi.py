@@ -10,11 +10,11 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 
-from ..residual import (
+from .profile_residual import (
     l2_norm_float as profile_l2_norm_float,
     safe_ratio as profile_safe_ratio,
 )
-from ..policies import (
+from .profile_policies import (
     rhs1_qi_device_coupled_install_on_reject_requested,
     rhs1_qi_device_extra_coarse_controls,
     rhs1_qi_device_extra_coarse_metadata,
@@ -46,7 +46,7 @@ from sfincs_jax.solvers.preconditioners.qi.corrections import (
     RHS1QIGalerkinProbeCandidate,
     select_rhs1_qi_galerkin_probe_candidate,
 )
-from .policy import _env_bool, _env_float, _env_int, _env_value
+from .profile_sparse_policy import _env_bool, _env_float, _env_int, _env_value
 
 _rhs1_qi_device_extra_coarse_controls = rhs1_qi_device_extra_coarse_controls
 _rhs1_qi_device_extra_coarse_metadata = rhs1_qi_device_extra_coarse_metadata

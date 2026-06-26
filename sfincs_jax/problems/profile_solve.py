@@ -21,7 +21,7 @@ import jax
 import jax.numpy as jnp
 
 from sfincs_jax.namelist import Namelist, read_sfincs_input
-from sfincs_jax.problems.profile_response.solver_diagnostics import (
+from sfincs_jax.problems.profile_solver_diagnostics import (
     emit_newton_krylov_ksp_history as _emit_newton_krylov_ksp_history,
 )
 from sfincs_jax.solver import (
@@ -83,7 +83,7 @@ from sfincs_jax.operators.profile_full_system import (
 from sfincs_jax.operators.profile_structured_csr import (
     _try_build_structured_rhs1_full_csr_operator_bundle,
 )
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     RHS1DefaultPreconditionerSelectionContext,
     canonical_rhs1_preconditioner_kind as _canonical_rhs1_preconditioner_kind,
     pas_auto_skip_strong_retry as _pas_auto_skip_strong_retry,
@@ -104,13 +104,13 @@ from sfincs_jax.problems.profile_response.policies import (
     rhs1_sharded_line_override_allowed as _rhs1_sharded_line_override_allowed,
     resolve_rhs1_default_preconditioner_selection,
 )
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     rhs1_gpu_sparse_fallback_skip_allowed_current_backend as _rhs1_gpu_sparse_fallback_skip_allowed,
 )
 from sfincs_jax.solvers.preconditioners.schur.profile_response import (
     resolve_rhs1_schur_base_kind,
 )
-from sfincs_jax.problems.profile_response.solver_diagnostics import (
+from sfincs_jax.problems.profile_solver_diagnostics import (
     RHS1KSPReplayState, RHS1SkipPrimaryKrylovSeedContext, rhs1_accept_candidate_and_update_replay,
     rhs1_accept_measured_candidate_and_update_replay, rhs1_accept_sparse_retry_candidate_and_update_replay,
     rhs1_accept_smoother_candidate_and_update_replay, rhs1_record_ksp_replay_problem,
@@ -121,7 +121,7 @@ from sfincs_jax.problems.profile_response.solver_diagnostics import (
     rhs1_run_primary_krylov_and_update_replay, rhs1_run_stage2_retry_if_allowed,
     rhs1_seed_skip_primary_krylov_and_update_replay, rhs1_skip_primary_krylov_reason,
 )
-from sfincs_jax.problems.profile_response.dense import (
+from sfincs_jax.problems.profile_dense import (
     HostDenseFullSolveContext, HostDenseReducedSolveContext, ProfileLinearSolveContext, RHS1AutoHostSolveContext,
     RHS1Constraint0PETScCompatSolveContext, RHS1DenseKSPFullSolveContext, RHS1DenseKSPReducedSolveContext,
     RHS1FullDenseFallbackContext, RHS1FullDenseFallbackStageContext, RHS1FullHostDenseShortcutContext,
@@ -137,10 +137,10 @@ from sfincs_jax.problems.profile_response.dense import (
     run_rhs1_dense_probe_stage, run_rhs1_full_dense_fallback_stage, run_rhs1_full_host_dense_shortcut_stage,
     run_rhs1_reduced_dense_fallback_admission_stage, run_rhs1_reduced_host_dense_shortcut_stage,
 )
-from sfincs_jax.problems.profile_response.phi1_newton import (
+from sfincs_jax.problems.profile_phi1_newton import (
     solve_v3_full_system_newton_krylov, solve_v3_full_system_newton_krylov_history,
 )
-from sfincs_jax.problems.profile_response.preconditioner_build import (
+from sfincs_jax.problems.profile_preconditioner_build import (
     RHS1FullBasePreconditionerSetupContext, RHS1FullPreconditionerBuildContext, RHS1FullStrongRetryStageContext,
     RHS1ReducedPreconditionerBuildContext, RHS1ReducedStrongRetryStageContext, _build_rhsmode1_block_preconditioner,
     _build_rhs1_preconditioner_from_kind, _build_rhs1_strong_preconditioner_full_from_kind,
@@ -158,10 +158,10 @@ from sfincs_jax.problems.profile_response.preconditioner_build import (
     build_rhs1_reduced_preconditioner_with_fallback, run_rhs1_full_strong_retry_stage,
     run_rhs1_reduced_strong_retry_stage, setup_rhs1_full_base_preconditioner,
 )
-from sfincs_jax.problems.profile_response.sparse.qi import (
+from sfincs_jax.problems.profile_sparse_qi import (
     attempt_matrixfree_qi_device_seed_if_requested, build_matrixfree_qi_device_seed_setup,
 )
-from sfincs_jax.problems.profile_response.sparse.direct import (
+from sfincs_jax.problems.profile_sparse_direct import (
     build_host_sparse_direct_factor_from_matvec as _build_host_sparse_direct_factor_from_matvec,
     build_sparse_jax_preconditioner_from_matvec as _build_sparse_jax_preconditioner_from_matvec,
     host_physical_memory_mb as _host_physical_memory_mb, host_sparse_direct_polish as _host_sparse_direct_polish,
@@ -169,10 +169,10 @@ from sfincs_jax.problems.profile_response.sparse.direct import (
     rhsmode1_explicit_sparse_pattern_probe_enabled as _rhsmode1_explicit_sparse_pattern_probe_enabled,
     rhsmode1_sparse_cache_key as _rhsmode1_sparse_cache_key, sparse_factor_cache_key as _sparse_factor_cache_key,
 )
-from sfincs_jax.problems.profile_response.diagnostics import (
+from sfincs_jax.problems.profile_diagnostics import (
     SparseRescueTailMetadataContext, sparse_rescue_tail_metadata_from_context,
 )
-from sfincs_jax.problems.profile_response.sparse.handoff import (
+from sfincs_jax.problems.profile_sparse_handoff import (
     FortranReducedXBlockBackendContext, RequestedSparsePCGMRESBranchContext, SparsePCDirectTailFactorSetupContext,
     SparsePCDirectTailRescuePolicySetupContext, SparsePCGenericBranchSetupContext, SparsePCFactorPreflightRunContext,
     SparsePCResidualCorrectionStageContext, SparsePCAutoPreflightRetryStageContext,
@@ -210,10 +210,10 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     solve_explicit_sparse_minimum_norm_branch, solve_explicit_sparse_host_direct_branch,
     finalize_xblock_assembled_operator_metadata,
 )
-from sfincs_jax.problems.profile_response.sparse.xblock import (
+from sfincs_jax.problems.profile_sparse_xblock import (
     xblock_sparse_pc_final_metadata_state_from_driver_scope, xblock_sparse_pc_final_payload_from_driver_state,
 )
-from sfincs_jax.problems.profile_response.preconditioner_build import (
+from sfincs_jax.problems.profile_preconditioner_build import (
     RHS1PostPrimaryMinresCorrectionContext, rhs1_collision_retry_allowed, rhs1_pas_force_strong_ratio_from_env,
     rhs1_pas_tz_guarded_minres_controls_from_env, rhs1_pas_weak_minres_controls_from_env, rhs1_pas_weak_minres_steps,
     rhs1_reduced_strong_selection_skip_messages, rhs1_resolved_strong_preconditioner_control,
@@ -221,7 +221,7 @@ from sfincs_jax.problems.profile_response.preconditioner_build import (
     rhs1_strong_preconditioner_control_messages, rhs1_strong_trigger_controls_from_env,
     run_rhs1_post_primary_minres_corrections,
 )
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     RHS1FullSparseRescueSetupContext,
     parse_rhs1_pas_tz_guarded_structured_levels as _rhs1_pas_tz_guarded_structured_levels,
     rhs1_full_sparse_rescue_setup, rhs1_sparse_jax_config_from_env, rhs1_sparse_operator_admission,
@@ -231,7 +231,7 @@ from sfincs_jax.problems.profile_response.policies import (
     rhsmode1_sparse_pc_default_restart as _rhsmode1_sparse_pc_default_restart,
 )
 
-from sfincs_jax.problems.profile_response.setup import (
+from sfincs_jax.problems.profile_setup import (
     SPARSE_HOST_DIRECT_SOLVE_METHODS as _SPARSE_HOST_DIRECT_SOLVE_METHODS,
     SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS as _SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS,
     SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS as _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS,
@@ -299,15 +299,15 @@ from sfincs_jax.solvers.preconditioners.domain_decomposition import (
     build_rhs1_theta_line_xdiag_preconditioner, build_rhs1_theta_zeta_preconditioner,
     build_rhs1_zeta_dd_preconditioner, build_rhs1_zeta_line_preconditioner, build_rhs1_zeta_schwarz_preconditioner,
 )
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     rhs1_parse_accept_ratio, rhs1_parse_polish_gmres_config, rhs1_polish_enabled,
 )
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     read_bool_env as _rhs1_bool_env, read_float_env as _rhs1_float_env, read_int_env as _rhs1_int_env,
     read_post_solve_correction_policy as _read_rhs1_post_solve_correction_policy,
     read_probe_coarse_policy as _read_rhs1_probe_coarse_policy,
 )
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     _DIRECT_TAIL_STRUCTURED_PC_CACHE, _StructuredHostSparsePreconditionerBundle, _direct_tail_structured_pc_cache_key,
     _direct_tail_structured_pc_with_cache_metadata, _hash_numpy_array_for_cache, _is_direct_reduced_pmat_pc_kind,
     _rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb,
@@ -328,13 +328,13 @@ from sfincs_jax.operators.profile_true_operator_rescue import (
     _try_build_true_operator_residual_window_lsq_preconditioner,
     _try_build_residual_coarse_host_sparse_preconditioner, _try_build_residual_window_host_sparse_preconditioner,
 )
-from sfincs_jax.problems.profile_response.solver_diagnostics import (
+from sfincs_jax.problems.profile_solver_diagnostics import (
     rhs1_fortran_stdout_from_env, rhs1_ksp_diagnostics_controls_from_env, rhs1_ksp_history_limits_from_env,
 )
-from sfincs_jax.problems.profile_response.solver_diagnostics import (
+from sfincs_jax.problems.profile_solver_diagnostics import (
     RHS1KSPDiagnosticsContext,
 )
-from sfincs_jax.problems.profile_response.solver_diagnostics import (
+from sfincs_jax.problems.profile_solver_diagnostics import (
     ProfileResponseLinearFinalizationContext, finalize_profile_response_linear_solve,
 )
 from sfincs_jax.operators.profile_layout import (
@@ -344,7 +344,7 @@ from sfincs_jax.solvers.preconditioners.xblock.coarse import (
     _rhs1_cap_lowmode_features, _rhs1_low_legendre_index_features, _rhs1_lowmode_angular_features,
     _rhs1_polynomial_moment_features,
 )
-from sfincs_jax.problems.profile_response.residual import (
+from sfincs_jax.problems.profile_residual import (
     apply_damped_preconditioned_residual_polish as _apply_damped_preconditioned_residual_polish,
     apply_device_subspace_residual_equation_correction as _apply_device_subspace_residual_equation_correction,
     apply_preconditioned_minres_correction as _apply_preconditioned_minres_correction,
@@ -360,7 +360,7 @@ from sfincs_jax.problems.profile_response.residual import (
     result_with_true_residual as rhs1_result_with_true_residual, safe_preconditioner as _safe_preconditioner,
     safe_ratio as rhs1_safe_ratio, true_residual_norm_or_inf as rhs1_true_residual_norm_or_inf,
 )
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     rhs1_constraint0_dense_fallback_allowed as _rhs1_constraint0_dense_fallback_allowed_impl,
     rhs1_constraint0_petsc_compat as _rhs1_constraint0_petsc_compat_impl,
     rhs1_constraint0_petsc_compat_config_from_env, rhs1_constraint0_petsc_compat_regularization,
@@ -373,12 +373,12 @@ from sfincs_jax.operators.profile_sources import (
     constraint_scheme2_inject_source as _constraint_scheme2_inject_source,
     constraint_scheme2_source_from_f as _constraint_scheme2_source_from_f,
 )
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     rhs1_prefer_sparse_over_dense_shortcut as _rhs1_prefer_sparse_over_dense_shortcut_impl,
     rhs1_sparse_prefer_skips_stage2 as _rhs1_sparse_prefer_skips_stage2_impl,
     rhsmode1_sparse_exact_lu_requested_current_backend as _rhsmode1_sparse_exact_lu_requested,
 )
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     rhs1_large_cpu_sparse_exact_lu_allowed as _rhs1_large_cpu_sparse_exact_lu_allowed_impl,
     rhs1_large_cpu_sparse_rescue_first as _rhs1_large_cpu_sparse_rescue_first_impl,
     rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed_current_backend as _rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed,
@@ -388,7 +388,7 @@ from sfincs_jax.problems.profile_response.policies import (
     rhsmode1_sparse_sxblock_rescue_allowed_current_backend as _rhsmode1_sparse_sxblock_rescue_allowed,
     rhsmode1_sparse_xblock_rescue_allowed_current_backend as _rhsmode1_sparse_xblock_rescue_allowed,
 )
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     rhs1_bicgstab_fallback_controls_from_env, rhs1_bicgstab_fallback_decision, rhs1_bicgstab_fallback_target_from_env,
     rhs1_fast_post_xblock_polish_controls_from_env, rhs1_fp_bicgstab_polish_controls_from_env,
     rhs1_fp_global_low_l_polish_controls_from_env, rhs1_fp_l1_polish_controls_from_env,
@@ -400,15 +400,15 @@ from sfincs_jax.problems.profile_response.policies import (
     rhsmode1_fp_xblock_global_correction_allowed_current_backend as _rhsmode1_fp_xblock_global_correction_allowed,
     rhsmode1_skip_global_sparse_after_xblock_allowed_current_backend as _rhsmode1_skip_global_sparse_after_xblock_allowed,
 )
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     rhsmode1_pas_fast_accept_current_backend as _rhsmode1_pas_fast_accept,
 )
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     rhs1_pas_tz_guarded_stage2_retry, rhs1_stage2_admission_controls_from_env, rhs1_stage2_retry_admission_decision,
     rhs1_stage2_retry_controls_from_env, rhs1_stage2_trigger, rhs1_stage2_trigger_decision,
 )
 from sfincs_jax.solvers import path_policy as _solver_path_policy
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     host_sparse_factor_dtype_current_backend as _host_sparse_factor_dtype,
     host_sparse_direct_refine_steps as _host_sparse_direct_refine_steps_impl,
     rhs1_dense_auto_fp_allowed as _rhs1_dense_auto_fp_allowed_impl,
@@ -476,16 +476,16 @@ from sfincs_jax.problems.transport_matrix.parallel.runtime import (
     transport_parallel_process_pool_executor as _transport_parallel_process_pool_executor,
     transport_parallel_worker_env as _transport_parallel_worker_env,
 )
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     resolve_use_implicit as _resolve_use_implicit_impl,
 )
-from sfincs_jax.problems.profile_response.phi1_newton import (
+from sfincs_jax.problems.profile_phi1_newton import (
     phi1_frozen_jacobian_policy, phi1_gmres_restart, phi1_line_search_policy, phi1_use_active_dof_mode,
 )
-from sfincs_jax.problems.profile_response.phi1_newton import (
+from sfincs_jax.problems.profile_phi1_newton import (
     build_phi1_newton_preconditioner, solve_phi1_newton_linear_step,
 )
-from sfincs_jax.problems.profile_response.phi1_newton import advance_phi1_newton_iterate
+from sfincs_jax.problems.profile_phi1_newton import advance_phi1_newton_iterate
 from sfincs_jax.solvers.diagnostics import (
     RHS1ProgressNotes, rhs1_large_progress_enabled,
 )
@@ -579,7 +579,7 @@ from sfincs_jax.operators.profile_system import (
     full_system_operator_from_namelist, residual_v3_full_system, rhs_v3_full_system, rhs_v3_full_system_jit,
     with_transport_rhs_settings,
 )
-from sfincs_jax.problems.profile_response.solver_diagnostics import (
+from sfincs_jax.problems.profile_solver_diagnostics import (
     V3LinearSolveResult, V3NewtonKrylovResult, v3_linear_solve_result_from_payload,
 )
 from sfincs_jax.problems.transport_matrix.finalize import (

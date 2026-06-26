@@ -4,13 +4,13 @@ from types import SimpleNamespace
 
 import jax.numpy as jnp
 
-from sfincs_jax.problems.profile_response.solver_diagnostics import (
+from sfincs_jax.problems.profile_solver_diagnostics import (
     ProfileResponseLinearFinalizationContext,
     V3LinearSolveResult,
     finalize_profile_response_linear_solve,
     profile_response_post_xblock_accept_floor,
 )
-from sfincs_jax.problems.profile_response.solver_diagnostics import RHS1KSPDiagnosticsContext
+from sfincs_jax.problems.profile_solver_diagnostics import RHS1KSPDiagnosticsContext
 from sfincs_jax.solver import GMRESSolveResult
 
 

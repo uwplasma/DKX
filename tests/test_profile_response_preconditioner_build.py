@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import jax.numpy as jnp
 
-from sfincs_jax.problems.profile_response import preconditioner_build as pb
+import sfincs_jax.problems.profile_preconditioner_build as pb
 
 
 @dataclass(frozen=True)

@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from sfincs_jax import v3_driver as vd
-from sfincs_jax.problems.profile_response.policies import (
+from sfincs_jax.problems.profile_policies import (
     parse_rhs1_pas_tz_guarded_structured_levels,
     rhs1_qi_device_extra_coarse_controls,
     rhs1_qi_device_extra_coarse_metadata,

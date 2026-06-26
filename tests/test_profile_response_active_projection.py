@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import jax.numpy as jnp
 
-from sfincs_jax.problems.profile_response.setup import (
+from sfincs_jax.problems.profile_setup import (
     expand_reduced_with_map,
     finalize_rhs1_linear_solution_cleanup,
     reduce_full_with_indices,

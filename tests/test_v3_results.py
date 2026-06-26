@@ -7,7 +7,7 @@ from jax import tree_util as jtu
 import numpy as np
 
 from sfincs_jax.solver import GMRESSolveResult
-from sfincs_jax.problems.profile_response.solver_diagnostics import (
+from sfincs_jax.problems.profile_solver_diagnostics import (
     V3LinearSolveResult,
     V3NewtonKrylovResult,
     v3_linear_solve_result_from_payload,
@@ -18,8 +18,8 @@ from sfincs_jax.problems.transport_matrix.finalize import (
 
 
 def test_domain_result_contracts_are_importable_from_problem_owners() -> None:
-    assert V3LinearSolveResult.__module__ == "sfincs_jax.problems.profile_response.solver_diagnostics"
-    assert V3NewtonKrylovResult.__module__ == "sfincs_jax.problems.profile_response.solver_diagnostics"
+    assert V3LinearSolveResult.__module__ == "sfincs_jax.problems.profile_solver_diagnostics"
+    assert V3NewtonKrylovResult.__module__ == "sfincs_jax.problems.profile_solver_diagnostics"
     assert V3TransportMatrixSolveResult.__module__ == "sfincs_jax.problems.transport_matrix.finalize"
 
 

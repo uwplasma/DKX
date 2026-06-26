@@ -3,7 +3,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.problems.profile_response.phi1_newton import (
+from sfincs_jax.problems.profile_phi1_newton import (
     build_phi1_newton_preconditioner,
     solve_phi1_newton_linear_step,
 )

@@ -8,22 +8,18 @@ import pytest
 import jax.numpy as jnp
 from scipy import sparse as scipy_sparse
 
-import sfincs_jax.problems.profile_response.sparse.handoff as sparse_pc_module
-from sfincs_jax.problems.profile_response.sparse import direct as sparse_direct_module
-from sfincs_jax.problems.profile_response.sparse import (
-    finalization as sparse_finalization_module,
-)
-from sfincs_jax.problems.profile_response.sparse import (
-    fortran_reduced as sparse_fortran_reduced_module,
-)
-from sfincs_jax.problems.profile_response.sparse import policy as sparse_policy_module
-from sfincs_jax.problems.profile_response.sparse import qi as sparse_qi_module
-from sfincs_jax.problems.profile_response.sparse import xblock as sparse_xblock_module
-from sfincs_jax.problems.profile_response.setup import (
+import sfincs_jax.problems.profile_sparse_handoff as sparse_pc_module
+import sfincs_jax.problems.profile_sparse_direct as sparse_direct_module
+import sfincs_jax.problems.profile_sparse_finalization as sparse_finalization_module
+import sfincs_jax.problems.profile_sparse_fortran_reduced as sparse_fortran_reduced_module
+import sfincs_jax.problems.profile_sparse_policy as sparse_policy_module
+import sfincs_jax.problems.profile_sparse_qi as sparse_qi_module
+import sfincs_jax.problems.profile_sparse_xblock as sparse_xblock_module
+from sfincs_jax.problems.profile_setup import (
     expand_reduced_with_map,
     reduce_full_with_indices,
 )
-from sfincs_jax.problems.profile_response.diagnostics import (
+from sfincs_jax.problems.profile_diagnostics import (
     SparsePCFactorPreflightMetadataContext,
     SparsePCGMRESStaticMetadataContext,
     SparsePCPatternMetadataContext,
@@ -39,7 +35,7 @@ from sfincs_jax.solvers.preconditioners.qi.device import (
     setup_rhs1_qi_device_preconditioner,
 )
 from sfincs_jax.solver import GMRESSolveResult
-from sfincs_jax.problems.profile_response.sparse.handoff import (
+from sfincs_jax.problems.profile_sparse_handoff import (
     DirectTailMaterializationContext,
     DirectTailMaterializationResult,
     DirectTailStructuredAdmissionContext,
