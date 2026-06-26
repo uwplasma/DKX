@@ -195,8 +195,8 @@ python examples/optimization/screen_qi_electron_root_nfp.py --steps 70
 ![QI electron-root NFP screening proxy](docs/_static/figures/optimization/qi_electron_root_nfp_screen.png)
 
 The checked screen recommends QI `nfp=2` as the first fallback target, because
-QA has only low/mid-resolution positive-root evidence so far and QI electron-root
-promotion includes a bounded kinetic artifact. Both scripts write JSON
+QA positive-root evidence is limited to low/mid-resolution scans while QI
+electron-root promotion includes a bounded kinetic artifact. Both scripts write JSON
 provenance plus PNG/PDF plots. The proxy layer is differentiable and
 finite-difference checked; this does not make the promoted kinetic scan
 differentiable. Accepted designs still need completed `sfincs_jax scan-er`
