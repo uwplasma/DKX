@@ -8,8 +8,13 @@ import numpy as np
 import sfincs_jax.problems.transport_solve as sparse_direct
 from sfincs_jax.problems.transport_solve import (
     TransportSparseDirectContext,
+    _build_explicit_helper_factor,
+    _build_pattern_factor,
+    _direct_active_factor_options,
     _maybe_build_direct_active_true_factor,
     _maybe_polish_float32_factor,
+    _read_float_env,
+    _read_int_env,
     transport_sparse_direct_context_from_env,
     transport_sparse_direct_pattern_for_solve,
     transport_sparse_direct_solve,
@@ -131,6 +136,29 @@ def test_transport_sparse_direct_pattern_for_solve_uses_cache_and_emits(monkeypa
     assert second is pattern
     assert len(context.pattern_cache) == 1
     assert any("transport sparse pattern selected" in message for message in emitted)
+
+
+def test_transport_sparse_direct_pattern_rejects_disabled_and_ineligible_cases(monkeypatch) -> None:
+    pattern = SimpleNamespace(nnz=1)
+    monkeypatch.setattr(sparse_direct, "v3_full_system_conservative_sparsity_pattern", lambda _op: pattern)
+    context = _context(op=_op(total_size=3, rhs_mode=2))
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_PATTERN", "off")
+    assert transport_sparse_direct_pattern_for_solve(context=context, n=3, active_indices_np=None) is None
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_PATTERN", "")
+    assert transport_sparse_direct_pattern_for_solve(context=context, n=3, active_indices_np=None) is None
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_PATTERN", "1")
+    assert transport_sparse_direct_pattern_for_solve(context=context, n=2, active_indices_np=None) is None
+    assert (
+        transport_sparse_direct_pattern_for_solve(
+            context=context,
+            n=3,
+            active_indices_np=np.asarray([0, 2], dtype=np.int64),
+        )
+        is None
+    )
 
 
 def test_transport_sparse_direct_context_pattern_method_uses_owner_policy(monkeypatch) -> None:
@@ -279,6 +307,150 @@ def test_direct_active_true_factor_rejects_ineligible_shapes(monkeypatch) -> Non
         cache_key=("direct",),
         factor_dtype_use=np.dtype(np.float64),
     ) == (False, None, None)
+
+    context.op.include_phi1 = False
+    context.op.rhs_mode = 1
+    assert _maybe_build_direct_active_true_factor(
+        context=context,
+        active_indices_np=np.asarray([0, 1], dtype=np.int64),
+        n=2,
+        cache_key=("direct",),
+        factor_dtype_use=np.dtype(np.float64),
+    ) == (False, None, None)
+
+    context.op.rhs_mode = 2
+    context.op.fblock = SimpleNamespace(fp=None)
+    assert _maybe_build_direct_active_true_factor(
+        context=context,
+        active_indices_np=np.asarray([0, 1], dtype=np.int64),
+        n=2,
+        cache_key=("direct",),
+        factor_dtype_use=np.dtype(np.float64),
+    ) == (False, None, None)
+
+    context.op.fblock = SimpleNamespace(fp=object())
+    assert _maybe_build_direct_active_true_factor(
+        context=context,
+        active_indices_np=np.asarray([0, 1], dtype=np.int64),
+        n=3,
+        cache_key=("direct",),
+        factor_dtype_use=np.dtype(np.float64),
+    ) == (False, None, None)
+
+
+def test_transport_sparse_env_readers_and_direct_factor_options_parse_fail_closed(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_UNIT_INT", "bad")
+    monkeypatch.setenv("SFINCS_JAX_UNIT_FLOAT", "bad")
+    assert _read_int_env("SFINCS_JAX_UNIT_INT", default=7) == 7
+    assert _read_float_env("SFINCS_JAX_UNIT_FLOAT", default=2.5) == 2.5
+
+    monkeypatch.setenv("SFINCS_JAX_UNIT_INT", "11")
+    monkeypatch.setenv("SFINCS_JAX_UNIT_FLOAT", "1.25")
+    assert _read_int_env("SFINCS_JAX_UNIT_INT", default=7) == 11
+    assert _read_float_env("SFINCS_JAX_UNIT_FLOAT", default=2.5) == 1.25
+
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_FACTOR", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_ILU_FILL", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_ILU_DROP_TOL", raising=False)
+    assert _direct_active_factor_options(n=50_000) == ("lu", 6.0, 1.0e-4)
+    assert _direct_active_factor_options(n=50_001) == ("ilu", 6.0, 1.0e-4)
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_FACTOR", "spilu")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_ILU_FILL", "bad")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_ILU_DROP_TOL", "bad")
+    assert _direct_active_factor_options(n=2) == ("ilu", 6.0, 1.0e-4)
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_FACTOR", "exact")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_ILU_FILL", "3.5")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_ILU_DROP_TOL", "2e-3")
+    assert _direct_active_factor_options(n=100_000) == ("lu", 3.5, 2.0e-3)
+
+
+def test_build_pattern_factor_uses_color_batch_and_factor_cache(monkeypatch) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_builder(**kwargs):
+        calls.append(dict(kwargs))
+        return _fake_operator_bundle(), _fake_factor_bundle()
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_PATTERN_COLOR_BATCH", "bad")
+    context = _context(build_host_sparse_direct_factor_from_matvec=fake_builder)
+    pattern = SimpleNamespace(nnz=5)
+
+    first_matrix, first_factor = _build_pattern_factor(
+        context=context,
+        matvec_fn=lambda x: x,
+        n=2,
+        dtype=jnp.float64,
+        cache_key=("pattern",),
+        factor_dtype_use=np.dtype(np.float64),
+        pattern=pattern,
+    )
+    second_matrix, second_factor = _build_pattern_factor(
+        context=context,
+        matvec_fn=lambda x: x,
+        n=2,
+        dtype=jnp.float64,
+        cache_key=("pattern",),
+        factor_dtype_use=np.dtype(np.float64),
+        pattern=pattern,
+    )
+
+    assert calls[0]["default_pattern_color_batch"] == 8
+    assert calls[0]["default_factor_kind"] == "lu"
+    np.testing.assert_allclose(first_matrix, np.eye(2))
+    np.testing.assert_allclose(second_matrix, np.eye(2))
+    assert first_factor is second_factor
+    assert len(calls) == 1
+
+
+def test_build_explicit_helper_factor_uses_policy_and_factor_cache(monkeypatch) -> None:
+    calls = {"operator": 0, "factor": 0}
+    operator_bundle = _fake_operator_bundle()
+    factor_bundle = _fake_factor_bundle()
+
+    def fake_build_operator(_matvec_host, **kwargs):
+        calls["operator"] += 1
+        assert kwargs["block_cols"] == 4
+        assert kwargs["dense_max_mb"] == 12.5
+        assert kwargs["csr_max_mb"] == 24.5
+        assert kwargs["allow_operator_only"] is False
+        return operator_bundle
+
+    def fake_factorize(bundle, **kwargs):
+        calls["factor"] += 1
+        assert bundle is operator_bundle
+        assert kwargs["kind"] == "lu"
+        return factor_bundle
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_BLOCK_COLS", "4")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_DENSE_MAX_MB", "12.5")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_CSR_MAX_MB", "24.5")
+    monkeypatch.setattr(sparse_direct, "build_operator_from_matvec", fake_build_operator)
+    monkeypatch.setattr(sparse_direct, "factorize_host_sparse_operator", fake_factorize)
+    context = _context()
+
+    first_matrix, first_factor = _build_explicit_helper_factor(
+        context=context,
+        matvec_fn=lambda x: x,
+        n=2,
+        dtype=jnp.float64,
+        cache_key=("explicit",),
+        factor_dtype_use=np.dtype(np.float64),
+    )
+    second_matrix, second_factor = _build_explicit_helper_factor(
+        context=context,
+        matvec_fn=lambda x: x,
+        n=2,
+        dtype=jnp.float64,
+        cache_key=("explicit",),
+        factor_dtype_use=np.dtype(np.float64),
+    )
+
+    np.testing.assert_allclose(first_matrix, np.eye(2))
+    np.testing.assert_allclose(second_matrix, np.eye(2))
+    assert first_factor is second_factor
+    assert calls == {"operator": 1, "factor": 1}
 
 
 def test_maybe_polish_float32_factor_respects_policy_and_true_residual(monkeypatch) -> None:

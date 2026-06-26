@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (standalone-docs and optional-profile-physics coverage pass)
+Last updated: 2026-06-26 (transport sparse-direct policy coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -352,6 +352,14 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   focused profile-system and benchmark-doc suite reports `27 passed` in
   `8.10 s`, Ruff passes for the touched tests, and the scoped README/docs
   stale-wording scan reports no matches.
+- The fifty-sixth post-audit coverage tranche added transport sparse-direct
+  policy tests for disabled/ineligible sparse-pattern admission, direct-active
+  FP operator eligibility, fail-closed integer/float environment parsing,
+  direct-active LU/ILU option selection, sparse-pattern factor caching, and
+  explicit-helper factor caching. These tests protect production RHSMode=2/3
+  sparse-direct defaults and cache reuse without constructing a production
+  transport operator. The focused transport sparse-direct/policy suite reports
+  `27 passed` in `0.69 s`, and Ruff passes for the touched test file.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
