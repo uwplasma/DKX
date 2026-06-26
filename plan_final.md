@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (public-doc stale-fragment guard pass)
+Last updated: 2026-06-26 (explicit-sparse materialization guard pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -426,6 +426,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   vendored upstream material. The focused benchmark-doc guard reports
   `6 passed` in `0.06 s`, and a direct ripgrep scan finds no rejected fragments
   in the public docs tree.
+- The sixty-fifth post-audit coverage tranche added explicit-sparse
+  materialization guards. `tests/test_explicit_sparse.py` now checks that dense
+  matrices and block inputs must be two-dimensional, and that pattern-probed
+  `matvec`/`matmat` callbacks must return exactly the declared operator shape.
+  These fail-fast checks prevent corrupt sparse operators or preconditioners
+  from being admitted during production RHSMode 1/2/3 assembly. The focused
+  explicit-sparse suite reports `82 passed` in `0.78 s`.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.

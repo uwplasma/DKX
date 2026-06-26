@@ -298,6 +298,31 @@ def test_build_operator_from_blocks_assembles_sparse_matrix() -> None:
     np.testing.assert_allclose(bundle.matrix.toarray(), np.array([[1.0, 2.0, 5.0], [3.0, 4.0, 6.0], [0.0, 0.0, 7.0]]))
 
 
+def test_explicit_sparse_operator_builders_reject_bad_shapes() -> None:
+    with pytest.raises(ValueError, match="expected a 2D matrix"):
+        build_operator_from_dense(np.ones(3))
+
+    with pytest.raises(ValueError, match="expected a 2D block"):
+        build_operator_from_blocks([[np.ones(3)]])
+
+    pattern = sp.eye(3, format="csr")
+    with pytest.raises(ValueError, match="matvec returned shape"):
+        build_operator_from_pattern(
+            lambda _x: np.ones(2),
+            pattern=pattern,
+            backend="cpu",
+        )
+
+    with pytest.raises(ValueError, match="matmat returned shape"):
+        build_operator_from_pattern(
+            lambda _x: np.ones(3),
+            pattern=pattern,
+            backend="cpu",
+            color_batch=2,
+            matmat=lambda x: np.ones((2, x.shape[1])),
+        )
+
+
 def test_build_operator_from_matvec_falls_back_to_operator_only_when_dense_budget_tiny() -> None:
     a = np.array([[4.0, 1.0], [2.0, 3.0]])
 
