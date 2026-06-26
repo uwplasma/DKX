@@ -18,6 +18,10 @@ scripts and explains the physics and diagnostics in a notebook format.
 3. `03_bootstrap_redl_and_optimization.ipynb`
    Compare kinetic bootstrap current against the Redl fit and see how
    neoclassical objectives enter a QA optimization loop.
+4. `04_geometry_validation_and_performance.ipynb`
+   Choose analytic, Boozer, or VMEC geometry workflows; connect outputs to
+   validation/parity checks; and find CPU/GPU performance and parallelism
+   examples without launching long runs from the notebook.
 
 ## Runnable Script
 

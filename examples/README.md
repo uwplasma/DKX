@@ -14,9 +14,10 @@ references or optional local Fortran only when explicitly requested.
 | 1 | Run the CLI, write output files, and plot diagnostics | `tutorials/01_cli_outputs_and_plots.ipynb`, `tutorials/run_quick_output_and_plot.py` |
 | 2 | Compute transport matrices and see autodiff | `tutorials/02_transport_and_autodiff.ipynb` |
 | 3 | Compare bootstrap current with Redl and see optimization hooks | `tutorials/03_bootstrap_redl_and_optimization.ipynb` |
-| 4 | Understand grids, geometry, and one operator action | `getting_started/build_grids_and_geometry.py`, `getting_started/apply_collisionless_operator.py` |
-| 5 | Compare outputs with frozen SFINCS Fortran v3 references | `parity/output_parity_vs_fortran_fixture.py` |
-| 6 | Profile CPU/GPU, JIT, output formats, and parallelism | `performance/benchmark_sharded_solve_scaling.py`, `performance/benchmark_output_formats.py` |
+| 4 | Choose geometry, validation, and performance workflows | `tutorials/04_geometry_validation_and_performance.ipynb` |
+| 5 | Understand grids, geometry, and one operator action | `getting_started/build_grids_and_geometry.py`, `getting_started/apply_collisionless_operator.py` |
+| 6 | Compare outputs with frozen SFINCS Fortran v3 references | `parity/output_parity_vs_fortran_fixture.py` |
+| 7 | Profile CPU/GPU, JIT, output formats, and parallelism | `performance/benchmark_sharded_solve_scaling.py`, `performance/benchmark_output_formats.py` |
 
 ### Choose By Task
 
@@ -28,6 +29,7 @@ references or optional local Fortran only when explicitly requested.
 | differentiate a solve or residual | `tutorials/02_transport_and_autodiff.ipynb` | `autodiff/implicit_diff_through_gmres_solve_scheme5.py` |
 | compute bootstrap current and compare Redl | `tutorials/03_bootstrap_redl_and_optimization.ipynb` | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` |
 | add neoclassical objectives to optimization | `optimization/qa_nfp2_sfincs_jax_objectives.py` | `optimization/QA_optimization_bootstrap_current.py` |
+| choose geometry, validate outputs, and benchmark CPU/GPU | `tutorials/04_geometry_validation_and_performance.ipynb` | `getting_started/write_sfincs_output_vmec.py`, `performance/benchmark_transport_parallel_scaling.py` |
 | check CPU/GPU performance or output formats | `performance/benchmark_output_formats.py` | `performance/benchmark_sharded_solve_scaling.py` |
 | validate against frozen SFINCS Fortran v3 data | `parity/output_parity_vs_fortran_fixture.py` | `publication_figures/` and `sfincs_examples/` |
 

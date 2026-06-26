@@ -250,6 +250,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   identity action, then verify bounded coarse-space construction, restriction
   mode selection, kinetic residual-error columns, cache behavior, and finite
   application without launching full transport solves.
+- The twenty-eighth post-audit examples tranche added
+  `examples/tutorials/04_geometry_validation_and_performance.ipynb` and linked it
+  from both examples README files. The notebook gives a no-output, classroom-safe
+  guide to analytic/Boozer/VMEC geometry choices, `wout_path`, validation against
+  frozen SFINCS Fortran v3 evidence, solver metadata checks, CPU/GPU performance
+  scripts, and parallelism entry points. The examples contract now requires this
+  notebook and checks that it stays pedagogic, topic-complete, and output-free.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
