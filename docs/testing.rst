@@ -184,7 +184,7 @@ Coverage audits use the full test suite with package instrumentation:
 The exact collected-test count changes as targeted regression tests are added, so
 release notes cite a dated local/CI artifact rather than hard-code a permanent
 number here. The audited coverage artifact associated with this refactor records
-``74.23%`` line coverage. The research-grade target is ``95%`` meaningful package
+``82.76%`` line coverage. The research-grade target is ``95%`` meaningful package
 coverage with CI wall time below ten minutes.
 
 The coverage gap is concentrated in large, risk-bearing owners rather than in
@@ -203,6 +203,11 @@ Coverage tests must still be scientific tests. A new branch test is acceptable
 when it verifies residual admission, output-key completeness, normalization,
 fixture checksum handling, solver-policy invariants, or a known bug boundary. A
 test that only calls a function to cover a line is not acceptable.
+
+QI device artifacts are route-level evidence, not production claims unless the
+same run satisfies the documented residual, output, runtime, and provenance
+gates. A residual-improving device run is not true-device-QI promotion until
+those gates pass.
 
 The documentation build is part of the release discipline, not a separate
 afterthought. If a docs change breaks Sphinx or leaves pages internally
@@ -244,10 +249,11 @@ The staged path is:
    output writing, release-data lookup, or geometry loading gets a regression
    test at the smallest level that reproduces it, plus a higher-level test only
    when the bug was caused by orchestration.
-6. **Raise CI thresholds in steps.** Move the fail-under gate only after each
-   extraction batch makes the denominator meaningful: ``43 -> 60 -> 75 -> 85 ->
-   90 -> 95``. Each increase requires full CI, strict docs, release-data smoke,
-   and the fast release gates to pass within the target wall-time budget.
+6. **Raise CI thresholds in steps.** The CI fail-under gate is ``75%``. Move the
+   gate only after each extraction/test batch makes the denominator meaningful:
+   ``75 -> 85 -> 90 -> 95``. Each increase requires full CI, strict docs,
+   release-data smoke, and the fast release gates to pass within the target
+   wall-time budget.
 7. **Keep size and runtime bounded.** New tests should use generated synthetic
    fixtures, release-hosted data, or compact JSON artifacts. Do not add
    multi-megabyte tracked fixtures to increase coverage; the repo-size gate and
