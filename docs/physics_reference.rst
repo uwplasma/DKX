@@ -62,7 +62,7 @@ and uses the standard :math:`E\times B` drift
 
 Code links:
 ``sfincs_jax/operators/profile_response/system.py`` (operator assembly),
-``sfincs_jax/residual.py`` (source terms and residuals),
+``sfincs_jax/operators/profile_response/linear_systems.py`` (source terms and residuals),
 ``sfincs_jax/problems/transport_matrix/diagnostics.py`` (RHSMode=2/3 forcing).
 
 Single-species baseline (20131220-04)
@@ -107,7 +107,7 @@ The same note writes the thermodynamic drive in the compact form
 
 with additional :math:`\Phi_1`-dependent pieces if flux-surface variation is enabled.
 In `sfincs_jax`, these drive terms are assembled in
-``sfincs_jax/residual.py`` and combined with the transport-matrix forcing in
+``sfincs_jax/operators/profile_response/linear_systems.py`` and combined with the transport-matrix forcing in
 ``sfincs_jax/problems/transport_matrix/diagnostics.py``.
 
 Multi-species extension (20131219-01)
@@ -163,12 +163,12 @@ technical note (magnetic drift option ``\sigma_{\mathrm{mdo}}`` in
 
 Numerically, `sfincs_jax` uses the same coefficient forms as v3 for
 ``magneticDriftScheme=1`` and builds the corresponding angular derivative operators in
-``sfincs_jax/magnetic_drifts.py``.
+``sfincs_jax/operators/profile_response/magnetic_drifts.py``.
 
 Code links:
-``sfincs_jax/magnetic_drifts.py``,
-``sfincs_jax/collisionless.py``,
-``sfincs_jax/collisionless_exb.py``.
+``sfincs_jax/operators/profile_response/magnetic_drifts.py``,
+``sfincs_jax/operators/profile_response/collisionless.py``,
+``sfincs_jax/operators/profile_response/exb.py``.
 
 Collision operators (PAS and full Fokker–Planck)
 ------------------------------------------------
@@ -399,13 +399,15 @@ Equation-to-code map
 The table below summarizes where each term in the v3 drift-kinetic equation is implemented:
 
 - Parallel streaming :math:`v_\parallel \mathbf{b}\cdot\nabla f_{s1}`:
-  ``sfincs_jax/collisionless.py``.
+  ``sfincs_jax/operators/profile_response/collisionless.py``.
 - :math:`E\times B` advection and associated drive terms:
-  ``sfincs_jax/collisionless_exb.py`` and ``sfincs_jax/collisionless_er.py``.
+  ``sfincs_jax/operators/profile_response/exb.py`` and
+  ``sfincs_jax/operators/profile_response/electric_field.py``.
 - Magnetic drifts (:math:`\mathbf{v}_m` terms and derivative couplings):
-  ``sfincs_jax/magnetic_drifts.py``.
+  ``sfincs_jax/operators/profile_response/magnetic_drifts.py``.
 - Pitch-angle and speed derivatives (:math:`\partial_\xi f`, :math:`\partial_x f`):
-  ``sfincs_jax/collisionless.py`` and ``sfincs_jax/collisionless_er.py``.
+  ``sfincs_jax/operators/profile_response/collisionless.py`` and
+  ``sfincs_jax/operators/profile_response/electric_field.py``.
 - Collision operators (PAS and full FP):
   ``sfincs_jax/collisions.py`` with modal transforms in ``sfincs_jax/discretization/xgrid.py``.
 - Constraint rows/columns and Phi1 blocks:

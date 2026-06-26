@@ -190,7 +190,8 @@ The most important numerical modules are:
 - ``sfincs_jax/operators/profile_response/system.py``: system definition, cached operators, block structure.
 - ``sfincs_jax/v3_driver.py``: solve orchestration, solver/preconditioner selection,
   rescues, parallel transport execution.
-- ``sfincs_jax/residual.py``: residual and right-hand-side evaluation.
+- ``sfincs_jax/operators/profile_response/linear_systems.py``: residual and
+  right-hand-side evaluation.
 - ``sfincs_jax/solver.py``: linear-solver wrappers and Krylov helpers.
 - ``sfincs_jax/solvers/implicit.py``: differentiable linear solve path.
 - ``sfincs_jax/collisions.py``: PAS and full FP operator kernels.
