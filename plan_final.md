@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (examples reference-input navigation guard pass)
+Last updated: 2026-06-26 (lint-retained-owner cleanup pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -330,6 +330,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   transport dense/sparse paths, ambipolar workflows, and sensitivity contracts.
   `ruff check sfincs_jax ...`, `compileall -q sfincs_jax`, `git diff --check`,
   and the public README/docs stale-fragment scan also passed.
+- The fifty-third post-audit refactor-readiness tranche removed stale Ruff
+  ignore entries for the `v3_driver.py` compatibility shim and the deleted
+  `v3_system.py` module. `v3_driver.py` passes isolated Ruff, and the remaining
+  package Ruff exceptions are limited to the two retained large solve owners
+  (`problems/profile_solve.py` and `problems/transport_solve.py`) pending the
+  retained-owner audit. Package Ruff, compileall, and `git diff --check` pass.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
@@ -2487,11 +2493,11 @@ Deliverables:
 
 Current completion status:
 
-- Lane 1 structural consolidation: about 97 percent. The original driver split,
+- Lane 1 structural consolidation: about 98 percent. The original driver split,
   root cleanup, workflow/validation consolidation, mapped-x-grid consolidation,
   public import migration, and compatibility-shim locking are complete. The
-  only remaining refactor work is the retained-boundary audit for the four large
-  owners and the review-lock validation pass.
+  only remaining refactor work is the retained-boundary audit for the large
+  profile/transport solve owners and final PR-body documentation.
 - Coverage and future-proof validation: progressing beyond the last measured
   `83.053%` package-coverage audit through targeted fast tests; the exact new
   percentage is pending a stable full coverage run or GitHub Actions coverage
