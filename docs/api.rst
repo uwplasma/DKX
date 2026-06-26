@@ -120,9 +120,6 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.problems.transport_matrix.loop
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.finalize
-   :members:
-
 .. automodule:: sfincs_jax.problems.transport_matrix.postsolve_diagnostics
    :members:
 
@@ -153,9 +150,6 @@ These modules hold small, directly tested policy and dispatch decisions that use
 to live inside the large driver. They are included here because they are part of
 the maintainable public source structure for debugging, testing, and downstream
 research workflows.
-
-.. automodule:: sfincs_jax.problems.profile_response.handoff
-   :members:
 
 .. automodule:: sfincs_jax.problems.profile_response.policies
    :members:
@@ -269,9 +263,6 @@ research workflows.
    :members:
 
 .. automodule:: sfincs_jax.problems.profile_response.sparse.xblock
-   :members:
-
-.. automodule:: sfincs_jax.problems.profile_response.solver_diagnostics
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.policy
