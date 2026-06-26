@@ -753,16 +753,15 @@ the historical private driver name and test the focused module directly. This ke
   sizing, and two-level Schwarz coarse-block heuristics. These rules are kept
   independent of the full operator so multi-device preconditioner policy can be
   tested without launching a solve.
-- ``sfincs_jax/problems/profile_response/active_dof.py``
-  (legacy aliases: ``sfincs_jax/rhs1_active_dof.py`` and
-  ``sfincs_jax/rhs1_active_projection.py``):
-  RHSMode=1 active-degree-of-freedom routing and reduced-index-map
-  construction for truncated pitch grids, x-block active-DOF opt-ins, and PAS
-  constraint-projection solves. The same owner now holds the reusable JAX
-  primitives for full-to-reduced gathers, reduced-to-full one-based scatters,
-  and PAS ``l=0`` flux-surface-average projection. These primitives are shared
-  by RHSMode=1 sparse-PC, x-block active-DOF, and PAS-projected reduced
-  residual paths.
+- ``sfincs_jax/problems/profile_response/setup.py``:
+  RHSMode=1 setup decisions, including active-degree-of-freedom routing and
+  reduced-index-map construction for truncated pitch grids, x-block active-DOF
+  opt-ins, and PAS constraint-projection solves. The same owner holds the
+  reusable JAX primitives for full-to-reduced gathers, reduced-to-full
+  one-based scatters, PAS ``l=0`` flux-surface-average projection, and final
+  RHSMode=1 cleanup. These primitives are shared by RHSMode=1 sparse-PC,
+  x-block active-DOF, PAS-projected reduced residual paths, and final linear
+  solve normalization.
 - ``sfincs_jax/problems/profile_response/residual.py``
   (legacy alias: ``sfincs_jax/rhs1_residual.py``):
   small residual target, ratio, convergence, and host-scalar norm helpers used

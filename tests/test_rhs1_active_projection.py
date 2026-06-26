@@ -3,7 +3,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.problems.profile_response.active_dof import (
+from sfincs_jax.problems.profile_response.setup import (
     expand_reduced_with_map,
     fp_pitch_mode_active_indices,
     project_pas_constraint_f,

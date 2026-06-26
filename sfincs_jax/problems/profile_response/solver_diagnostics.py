@@ -25,10 +25,10 @@ from sfincs_jax.solver import (
     gmres_solve_with_history_scipy,
     lgmres_solve_with_history_scipy,
 )
-from .active_dof import finalize_rhs1_linear_solution_cleanup
 from .policies import (
     rhs1_scipy_rescue_abs_floor_after_xblock,
 )
+from .setup import finalize_rhs1_linear_solution_cleanup
 from .residual import l2_norm_float, residual_converged, residual_target
 
 

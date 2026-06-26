@@ -381,7 +381,12 @@ from sfincs_jax.problems.profile_response.setup import (
     SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS as _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS,
     STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS as _STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS,
     ProfileResponseLinearProblemSetupContext,
+    build_rhs1_active_dof_state as _build_rhs1_active_dof_state_compat,
+    expand_reduced_with_map,
+    fp_pitch_mode_active_indices,
     materialize_profile_response_linear_problem,
+    project_pas_constraint_f,
+    reduce_full_with_indices,
     resolve_rhs1_active_problem_setup,
     resolve_rhs1_domain_decomposition_setup,
     resolve_rhs1_initial_route_setup,
@@ -516,15 +521,6 @@ from sfincs_jax.problems.profile_response.solver_diagnostics import (
 from sfincs_jax.problems.profile_response.solver_diagnostics import (
     ProfileResponseLinearFinalizationContext,
     finalize_profile_response_linear_solve,
-)
-from sfincs_jax.problems.profile_response.active_dof import (
-    build_rhs1_active_dof_state as _build_rhs1_active_dof_state_compat,
-)
-from sfincs_jax.problems.profile_response.active_dof import (
-    expand_reduced_with_map,
-    fp_pitch_mode_active_indices,
-    project_pas_constraint_f,
-    reduce_full_with_indices,
 )
 from sfincs_jax.operators.profile_response.layout import (
     RHS1ActiveBlockLayout,

@@ -36,12 +36,13 @@ Latest execution checkpoint:
 - `sfincs_jax/problems/profile_response/solve.py`, focused tests, source maps,
   and docs now import the canonical `solver_diagnostics.py` and `dense.py`
   owners for those helpers.
-- Current counts after this checkpoint: 206 package Python files, 43 package
-  root files, 19 `problems/profile_response` files including `sparse`,
-  `profile_response/solve.py` at 7,012 lines,
+- Current counts after this checkpoint: 205 package Python files, 43 package
+  root files, 18 `problems/profile_response` files including `sparse`,
+  `profile_response/solve.py` at 7,008 lines,
+  `profile_response/setup.py` at 1,558 lines,
   `profile_response/dense.py` at 3,287 lines,
   `profile_response/solver_diagnostics.py` at 2,114 lines,
-  `profile_response/sparse/handoff.py` at 4,438 lines, and 165,631 package
+  `profile_response/sparse/handoff.py` at 4,438 lines, and 165,586 package
   Python lines.
 
 ## One-Sentence Plan
@@ -5468,11 +5469,58 @@ Results:
 
 Next best steps:
 
-1. Execute Batch A without more one-helper churn: merge `active_dof.py` into
-   `setup.py`, then move remaining result/retry/progress relays from
-   `solve.py` into existing dense/sparse/diagnostic owners.
+1. Continue Batch A without more one-helper churn: move remaining
+   result/retry/progress relays from `solve.py` into existing
+   dense/sparse/diagnostic owners.
 2. Execute Batch B as a transport/output/root compression pass, deleting
    transport micro-files and moving implementation from `io.py` to
    `outputs/`.
 3. Execute Batch C as a solver/preconditioner family compression pass, with QI
    and symbolic-sparse filenames as the first targets.
+
+## 2026-06-26 Batch A Active-DOF Owner Merge
+
+Steps taken:
+
+1. Merged `sfincs_jax/problems/profile_response/active_dof.py` into the
+   existing `sfincs_jax/problems/profile_response/setup.py` owner. Active-DOF
+   decisions, active index maps, full/reduced JAX gather/scatter primitives,
+   PAS constraint projection, FP pitch-mode active-index selection, and final
+   RHSMode-1 cleanup now live with the setup/finalization contracts that use
+   them.
+2. Rewired `profile_response/solve.py`, `solver_diagnostics.py`, focused
+   tests, import-contract tests, API docs, and the source map to import from
+   `profile_response.setup`.
+3. Deleted the standalone `active_dof.py` file instead of leaving another
+   compatibility shim.
+4. Updated `plan_final.md` metrics and Batch A status. The
+   profile-response file-count review-ready gate is now met.
+
+Results:
+
+- Package Python files decreased from `206` to `205`.
+- `problems/profile_response` files including `sparse/` decreased from `19`
+  to `18`, meeting the Batch A review-ready file-count gate.
+- Package source lines decreased from `165,631` to `165,586`.
+- `profile_response/solve.py` is now `7,008` lines; the remaining Batch A
+  blocker is the `<=5,500` review-ready solve-sequencer gate.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/setup.py sfincs_jax/problems/profile_response/solve.py sfincs_jax/problems/profile_response/solver_diagnostics.py tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_profile_response_active_projection.py tests/test_profile_response_sparse_pc.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/setup.py sfincs_jax/problems/profile_response/solve.py sfincs_jax/problems/profile_response/solver_diagnostics.py tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_profile_response_active_projection.py tests/test_profile_response_sparse_pc.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m pytest tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_profile_response_active_projection.py tests/test_profile_response_setup.py tests/test_domain_package_import_contracts.py -q --tb=short` passed with `39 passed`.
+- `python -m pytest tests/test_profile_response_sparse_pc.py -q --tb=short`
+  passed with `329 passed`.
+- `python -m pytest tests/test_profile_response_finalization.py tests/test_profile_response_auto_solve.py tests/test_profile_response_linear_solve.py -q --tb=short`
+  passed with `21 passed`.
+
+Next best steps:
+
+1. Continue Batch A by moving final sparse-result normalization, progress
+   replay, retry bookkeeping, and fallback summaries out of
+   `profile_response/solve.py` into existing `solver_diagnostics.py`,
+   `sparse/finalization.py`, `sparse/direct.py`, `sparse/xblock.py`,
+   `sparse/qi.py`, or `dense.py`.
+2. Once `solve.py <=5,500` lines, switch to Batch B transport/output/root
+   compression.
