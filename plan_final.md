@@ -283,6 +283,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   LGMRES/GCROT right-preconditioned physical initial guesses, and explicit-left
   GMRES zero-preconditioned-RHS handling. The solver-focused suite reports
   `61 passed` in `23.5 s` and Ruff passes for the touched test file.
+- The forty-eighth post-audit API/facade tranche added public API failure and
+  precedence tests for missing solve paths, explicit keyword override behavior,
+  differentiable ambipolar override behavior, and `sfincs_jax.io` private-name
+  forwarding/error semantics. The API/output-format suite reports `18 passed`
+  in `0.37 s` and Ruff passes for the touched files.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.

@@ -143,6 +143,42 @@ def test_public_write_output_facade_routes_solve_inputs(monkeypatch: pytest.Monk
     ]
 
 
+def test_public_write_output_requires_input_and_output_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_write_sfincs_jax_output_h5(**_kwargs):
+        raise AssertionError("writer should not be called for invalid API requests")
+
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", fake_write_sfincs_jax_output_h5)
+
+    with pytest.raises(ValueError, match="input_path is required"):
+        write_output(SolveInputs(output_path="sfincsOutput.h5"))
+
+    with pytest.raises(ValueError, match="output_path is required"):
+        write_output(SolveInputs(input_path="input.namelist"))
+
+
+def test_public_write_output_explicit_kwargs_override_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict] = []
+
+    def fake_write_sfincs_jax_output_h5(**kwargs):
+        calls.append(kwargs)
+        return Path(kwargs["output_path"])
+
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", fake_write_sfincs_jax_output_h5)
+
+    request = SolveInputs(
+        input_path="input.namelist",
+        output_path="sfincsOutput.h5",
+        requires_autodiff=True,
+        options={"solve_method": "auto", "compute_solution": True, "differentiable": False},
+    )
+    result = write_output(request, solve_method="structured_csr")
+
+    assert result == Path("sfincsOutput.h5")
+    assert calls[0]["solve_method"] == "structured_csr"
+    assert calls[0]["compute_solution"] is True
+    assert calls[0]["differentiable"] is True
+
+
 def test_public_read_output_facade_routes_output_reader(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[Path] = []
 
@@ -194,3 +230,30 @@ def test_public_ambipolar_facade_routes_brent_solver(monkeypatch: pytest.MonkeyP
             "emit": None,
         }
     ]
+
+
+def test_public_ambipolar_facade_honors_explicit_differentiable_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict] = []
+
+    def fake_solve_sfincs_jax_ambipolar_brent(**kwargs):
+        calls.append(kwargs)
+        return "ambipolar-result"
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.ambipolar.solve_sfincs_jax_ambipolar_brent",
+        fake_solve_sfincs_jax_ambipolar_brent,
+    )
+
+    request = SolveInputs(input_path="input.namelist", requires_autodiff=True, options={"extra": 3})
+    assert run_ambipolar_brent(
+        request,
+        work_dir="ambipolar-work",
+        er_min=-1.0,
+        er_max=1.0,
+        differentiable=False,
+    ) == "ambipolar-result"
+
+    assert calls[0]["differentiable"] is False
+    assert calls[0]["extra"] == 3
