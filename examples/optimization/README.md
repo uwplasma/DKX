@@ -21,14 +21,14 @@ Examples:
   designs still need real `sfincs_jax scan-er` outputs before kinetic
   validation or publication claims.
 - `qa_nfp2_bootstrap_current_comparison.py` — focused teaching and README
-  figure generated from the real `vmec_jax` `QA_optimization.py` output. It
+  figure generated from the real VMEC-JAX QA optimization output. It
   plots the VMEC QA nfp=2 LCFS, `|B|`, finite-iota profile, and VMEC
   `J.B/sqrt(B.B)` current diagnostic, with an optional overlay from a second
   `vmec_jax` result directory. The current panel is an equilibrium diagnostic
   until promoted with completed `sfincs_jax scan-er` outputs.
 - `QA_optimization_bootstrap_current.py` — editable `vmec_jax`-style QA
   optimization script with all knobs at the top. It is intentionally close to
-  `vmec_jax/examples/optimization/QA_optimization.py`, uses `MAX_MODE=3` for
+  the VMEC-JAX QA optimization example, uses `MAX_MODE=3` for
   faster iteration, and adds an optional `JDotB` current objective controlled by
   `INCLUDE_BOOTSTRAP_CURRENT_OBJECTIVE`.
 - `screen_qi_electron_root_nfp.py` — fast QA/QI screening lane for electron-root
@@ -49,11 +49,11 @@ Examples:
   two-species QI `nfp=2` input derived from
   `examples/additional_examples/input.namelist` plus JSON provenance. This is
   only a kinetic promotion candidate; electron-root claims require completed
-  CPU/GPU/Fortran scan and comparison gates. The checked docs now contain the
-  first low-resolution CPU/GPU/Fortran artifact plus a refined `9 x 9 x 11 x 4`
-  rung and a second `11 x 11 x 13 x 4` CPU/GPU/Fortran rung after the bounded
-  RHSMode=1 dense-policy fix; the remaining root drift keeps the
-  production-resolution ladder open.
+  CPU/GPU/Fortran scan and comparison gates. The documentation records the
+  low-resolution CPU/GPU/Fortran artifact, the refined `9 x 9 x 11 x 4` rung,
+  and the `11 x 11 x 13 x 4` CPU/GPU/Fortran rung as evidence tiers; any
+  unresolved root drift keeps the production-resolution ladder in validation
+  status rather than promotion status.
 - `compare_sfincs_jax_promotion_runs.py` — compares CPU/GPU promotion summaries
   and optional Fortran-v3 promotion summaries, writing JSON plus PNG/PDF
   comparison reports for selected ambipolar root, bootstrap objective, and flux
