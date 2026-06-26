@@ -343,7 +343,9 @@ or block preconditioning to solve robustly.
 
 Code links:
 ``sfincs_jax/operators/profile_system.py`` (constraint rows/columns),
-``sfincs_jax/v3_driver.py`` (constraint projections and preconditioners),
+``sfincs_jax/problems/profile_solve.py`` and
+``sfincs_jax/problems/profile_preconditioner_build.py`` (constraint projections
+and preconditioners),
 ``sfincs_jax/solver.py`` (nullspace-aware diagnostics).
 
 Classical radial fluxes
@@ -411,7 +413,8 @@ The table below summarizes where each term in the v3 drift-kinetic equation is i
 - Collision operators (PAS and full FP):
   ``sfincs_jax/physics/collisions.py`` with modal transforms in ``sfincs_jax/discretization/xgrid.py``.
 - Constraint rows/columns and Phi1 blocks:
-  ``sfincs_jax/operators/profile_system.py`` and ``sfincs_jax/v3_driver.py``.
+  ``sfincs_jax/operators/profile_system.py`` and
+  ``sfincs_jax/problems/profile_phi1_newton.py``.
 - Diagnostics and flux assembly:
   ``sfincs_jax/diagnostics.py`` and
   ``sfincs_jax/problems/transport_diagnostics.py``.
@@ -431,8 +434,9 @@ In `sfincs_jax`, the main numerical strategies are:
 
 Additional implementation details relevant to stability and performance:
 
-- Angular derivatives are discretized with centered finite-difference stencils in
-  ``sfincs_jax/derivative_matrix.py`` and assembled into sparse operators.
+- Angular derivatives are discretized with centered finite-difference stencils
+  from ``sfincs_jax/discretization/periodic_stencil.py`` and assembled into
+  profile-response operators.
 - Pitch-angle dependence uses Legendre modes with sparse :math:`\Delta L=\pm 1, \pm 2`
   coupling, while the full FP operator introduces dense coupling in the speed grid.
 - Constraint schemes introduce near-nullspaces; the code therefore applies explicit
@@ -445,7 +449,10 @@ preconditioning survey: Benzi 2002). See :doc:`references` for the citation list
 
 Code links:
 ``sfincs_jax/solver.py`` (Krylov wrappers),
-``sfincs_jax/v3_driver.py`` (preconditioners and projections).
+``sfincs_jax/problems/profile_solve.py`` (RHSMode-1 solve orchestration),
+``sfincs_jax/problems/profile_preconditioner_build.py`` and
+``sfincs_jax/solvers/preconditioner_dispatch.py`` (preconditioners and
+projections).
 
 References (vendored)
 ---------------------
