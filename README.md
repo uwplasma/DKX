@@ -12,35 +12,13 @@ drift-kinetic calculations in stellarator and tokamak geometry. It combines
 high-fidelity kinetic models, CPU/GPU execution, modern matrix-free numerics,
 parallel workflows, and optional differentiable solve paths in one codebase.
 
-On the current `main` branch, the audited 39-case example suite runs cleanly on
-CPU and GPU. Release-facing runtime/memory plots use the canonical
-reference-runtime-window rows from that suite, while research-scale performance
-claims use the separate production-resolution benchmark tier; larger
-finite-beta/profile-current cases remain tracked separately from fast smoke and
-parity checks. The default CLI path is tuned for robust explicit solves and
-practical throughput, while the Python API can opt into differentiable solve
-paths when gradients matter.
-
-Current release claims intentionally exclude production-resolution QI CPU/GPU
-seed ladders, true differentiable device-QI closure, and single-case multi-GPU
-strong scaling; those remain bounded or deferred research lanes until their
-promotion artifacts pass.
-
-The lower-memory native sparse-factor/preconditioner work for the largest
-geometry-rich RHSMode=2/3 and full-grid QA/QH RHSMode=1 cases is also deferred
-as an optimization lane. Current defaults prioritize residual-clean, auditable
-solves and Fortran-v3 parity; the experimental BLR/HSS and nested-dissection
-factor routes remain available only as opt-in research controls until they pass
-the same true-residual and setup-time gates as the promoted paths.
-
-The only README figures that are not yet production-quality claims are labeled
-as such in place: the QA/QH bootstrap-current profiles use a same-resolution
-`13 x 13 x 21 x 5` documentation grid with `15 x 15 x 21 x 5` real-space and
-`13 x 13 x 25 x 6` velocity-space refinement bars, while the full
-`25 x 39 x 60 x 7` QA/QH RHSMode=1 production-grid convergence and the
-true-device QI/GPU lanes remain explicit validation targets. These reduced-grid
-figures are useful workflow and normalization checks, not replacements for the
-production-resolution gates.
+The default CLI path is tuned for robust residual-clean solves and practical
+throughput. The Python API exposes differentiable residuals, fluxes,
+ambipolar-root workflows, and optimization-oriented sensitivity checks when
+gradients matter. Runtime and memory plots in this README use benchmark rows
+with matching SFINCS Fortran v3 references and clearly stated grid sizes; larger
+research campaigns and opt-in experimental solvers are documented in the
+performance and validation pages.
 
 It is designed for:
 
@@ -126,16 +104,11 @@ default `auto` policy can select the Fortran-reduced sparse-PC GMRES route. This
 uses a simplified global preconditioner matrix, keeps the true residual gate on
 the full operator, and avoids the slower structured-CSR research path unless the
 user explicitly asks for it.
-The production benchmark manifest now enforces large research-scale floors:
-`25 x 51 x 4 x 100` (`Ntheta x Nzeta x Nx x Nxi`) for 3D cases and
-`33 x 1 x 12 x 140` for tokamak cases, with the calibrated RHSMode=1
-PAS/no-`E_r` tokamak floor raised further to `89 x 1 x 24 x 300`. Public
-production timing rows target SFINCS Fortran v3 runtimes of at least `10 s`;
-earlier `17 x 21 x 5 x 12` finite-beta/profile-current timings were
-lower-resolution bring-up checks for this solver lane, not public production
-baselines. The plotting scripts still filter by the measured Fortran runtime,
-so any generated row that remains below `10 s` is validation evidence, not a
-public performance row.
+
+Production benchmark inputs use research-scale grids and are managed separately
+from quick-start examples. The public runtime figure below filters to rows with
+matching SFINCS Fortran v3 references and a measured Fortran runtime of at least
+`10 s`; smaller rows remain useful for CI, regression, and parity checks.
 
 ## Runtime and Memory Summary
 
@@ -144,19 +117,19 @@ public performance row.
 The release benchmark above compares SFINCS Fortran v3, `sfincs_jax` CPU cold,
 `sfincs_jax` CPU warm, `sfincs_jax` GPU cold, and `sfincs_jax` GPU warm only for
 reference-runtime-window rows whose Fortran v3 reference runtime is at least
-`10 s`; the summary JSON records which previous frozen rows still need a full
-production-resolution rerun.
+`10 s`; rows below that floor are kept as CI or regression evidence rather than
+public performance claims.
 The left panel shows wall-clock runtime and the right panel shows active solver
 memory, both on log axes. Fortran memory is process maximum RSS; JAX memory uses
 profiler RSS deltas over the fixed Python/JAX/XLA runtime baseline, while the
 full process peak remains in the JSON reports as `jax_max_rss_mb`. Cold is the
 first external suite command. Warm runtime
 uses `jax_runtime_s_warm` when reports were generated with `--jax-repeats >= 2`;
-for the current frozen release reports, it falls back to the CLI
-`jax_logged_elapsed_s` field. Cases are ordered by best warm `sfincs_jax` speedup
-over the Fortran v3 runtime, so the strongest JAX wins appear first. The plot
-and README runtime/memory table are checked against the same canonical filtered
-rows emitted by the benchmark-summary generator. Regenerate the plot with
+otherwise it falls back to the CLI `jax_logged_elapsed_s` field. Cases are
+ordered by best warm `sfincs_jax` speedup over the Fortran v3 runtime, so the
+strongest JAX wins appear first. The plot and README runtime/memory table are
+checked against the same canonical filtered rows emitted by the benchmark-summary
+generator. Regenerate the plot with
 `python examples/publication_figures/generate_fortran_suite_benchmark_summary.py`.
 
 Scope note: the full 39-case frozen suite remains the parity and CI smoke audit,
@@ -172,18 +145,11 @@ without running expensive solves; full CPU/GPU/Fortran runtime and memory sweeps
 should be launched on local, `office`, or cluster hardware with explicit
 resource budgets.
 
-Latest floor calibration: the checked-in production manifest uses
-`89 x 1 x 24 x 300` for RHSMode=1 PAS/no-`E_r` tokamak rows after the smaller
-`53 x 1 x 16 x 190` calibration proved too short for public GPU-host benchmark
-comparisons. Local CPU/GPU calibration runs were strict- or practical-parity
-clean at the new floor for the one-species PAS/no-`E_r` rows, and the bounded
-PAS/with-`E_r` office GPU shard was strict-clean at `33 x 1 x 12 x 140`. The
-refreshed 3D monoenergetic geometry-11 production row was strict-clean at the
-`25 x 51 x 4 x 100` manifest floor using the structured `tzfft` transport
-preconditioner before sparse-direct rescue. The current README plot/table have
-been regenerated from the canonical checked reports; future production-floor
-CPU/GPU sweeps should replace them only when every promoted row passes parity,
-runtime-budget, and memory-budget gates.
+Calibration policy: RHSMode=1 PAS/no-`E_r` tokamak benchmark rows use
+`89 x 1 x 24 x 300`; standard tokamak rows use `33 x 1 x 12 x 140`; 3D rows use
+`25 x 51 x 4 x 100`. Regenerated public plots should replace the checked-in
+figures only when each promoted row passes parity, runtime-budget, and
+memory-budget gates on the same inputs used for the table.
 
 ## Optimization Lane
 
@@ -230,7 +196,7 @@ python examples/optimization/screen_qi_electron_root_nfp.py --steps 70
 
 The checked screen recommends QI `nfp=2` as the first fallback target, because
 QA has only low/mid-resolution positive-root evidence so far and QI electron-root
-promotion now has a first bounded kinetic artifact. Both scripts write JSON
+promotion includes a bounded kinetic artifact. Both scripts write JSON
 provenance plus PNG/PDF plots. The proxy layer is differentiable and
 finite-difference checked; this does not make the promoted kinetic scan
 differentiable. Accepted designs still need completed `sfincs_jax scan-er`
@@ -296,7 +262,7 @@ low-resolution finite-beta QA positive-electron-root comparison. The finite-beta
 artifact demonstrates the full promotion workflow on a VMEC finite-beta QA
 geometry; production-resolution radial/profile convergence remains a separate
 claim-specific validation step.
-It also now includes a first bounded QI `nfp=2` kinetic electron-root promotion
+It also includes a bounded QI `nfp=2` kinetic electron-root promotion
 artifact from a two-species VMEC scan at `7 x 7 x 7 x 4`. CPU and GPU pass
 strict agreement for the positive ambipolar root at `E_r = 2.4386009865`; the
 SFINCS Fortran v3 reference agrees within the documented low-resolution
@@ -314,7 +280,7 @@ persistence evidence, not a convergence claim.
 
 ![QI nfp=2 first refined CPU/GPU/Fortran electron-root comparison](docs/_static/figures/optimization/qi_nfp2_electron_root_res9_reference_tolerance_comparison.png)
 
-A second bounded rung at `11 x 11 x 13 x 4` now checks the same CPU/GPU/Fortran
+A second bounded rung at `11 x 11 x 13 x 4` checks the same CPU/GPU/Fortran
 contract after fixing a mid-size RHSMode=1 solver-policy cliff. The default
 dense full-FP lane covers active sizes up to `8000`; this reduced the checked
 `11 x 11 x 13 x 4` CPU scan from about `326 s` to about `23 s`, and the office
@@ -331,13 +297,13 @@ artifact and a `15 x 15 x 17 x 4` CPU/Fortran rung. The `15x` rung selects
 `E_r = 2.2132389239` on CPU and agrees with SFINCS Fortran v3 to `9.2e-7`
 relative on the selected root, with all residual gates passing. GPU promotion at
 this resolution is intentionally not claimed yet: the next route is the new
-matrix-free QI-device operator-reuse path, which now exists behind explicit
+matrix-free QI-device operator-reuse path, available behind explicit
 advanced controls. A bounded one-GPU rerun verifies route activation and local
 x-block factor skipping, but it remains fail-closed because the residual misses
 the requested target; it is infrastructure evidence, not a public performance
 claim.
 
-A checked no-solve rollup now records the QI `nfp=2` electron-root ladder from
+A checked no-solve rollup records the QI `nfp=2` electron-root ladder from
 `7x` through `15x`. The latest root drift is `0.00210`, but the rollup remains
 `deferred` because the `15x` GPU rung and the full `25 x 51 x 100 x 4`
 production floor are still open.
@@ -355,7 +321,7 @@ and matched the written Fortran-v3 output to better than `2.7e-6` relative on
 the same observables. A newer no-probe structured full-CSR RHSMode=1 route can
 also solve the active projected transport system directly on the host, avoiding
 the matrix-free pattern probe that made some finite-beta QA/QH runs stall. In
-the QS-paper comparison script, the bounded runtime/non-autodiff lane now uses
+the QS-paper comparison script, the bounded runtime/non-autodiff lane uses
 the `fortran_reduced_pc_gmres` host route with a guarded native-stack attempt
 and robust active-LU fallback. On a QH `13 x 13 x 21 x 5` diagnostic grid this
 route completes
@@ -443,7 +409,7 @@ Use `--verbose-sfincs` or set `SFINCS_JAX_EXAMPLE_VERBOSE=1` for production-grid
 runs; the script then forwards SFINCS_JAX phase, preconditioner, and Krylov
 progress messages instead of appearing silent during long setup phases.
 
-The current apples-to-apples QA/QH check reruns SFINCS Fortran v3 at the same
+The apples-to-apples QA/QH check reruns SFINCS Fortran v3 at the same
 `13 x 13 x 21 x 5` grid used by the fast JAX documentation solve on 11
 surfaces, `s = 0.10, 0.15, 0.25, 0.30, 0.45, 0.50, 0.60, 0.70, 0.75, 0.85,
 0.90`. JAX refinement bars come from independent `15 x 15 x 21 x 5`
@@ -459,7 +425,7 @@ convergence stress test rather than a production-resolution claim.
 ![SFINCS_JAX / SFINCS Fortran v3 / Redl same-resolution QH comparison](docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_same_resolution_11surface.png)
 
 For larger RHSMode=1 reruns, keep `--solve-method auto` first. Eligible
-non-autodiff finite-beta/full-FP cases now select the residual-clean
+non-autodiff finite-beta/full-FP cases select the residual-clean
 `fortran_reduced_pc_gmres` host route automatically. Structured-CSR and
 preconditioner research paths remain forceable for debugging, but they are not
 the recommended user-facing path unless the JSON/HDF5 diagnostics show that
@@ -467,7 +433,7 @@ their true-residual and convergence gates pass for the case being run.
 The combined `active_multiline_field_split_sparse_coarse` residual preconditioner
 is implemented and test-covered as an opt-in research path, but real QA/QH
 surface probes did not pass the strict true-residual gate, so it is not the
-default for these public figures. The direct-tail active-auto ladder now tries
+default for these public figures. The direct-tail active-auto ladder tries
 the lower-memory `active_fortran_v3_reduced_native_stack` candidate first, then
 falls back to the robust `active_fortran_v3_reduced_lu` reference route when the
 native stack fails its true-residual preflight. On the full archived
@@ -525,7 +491,7 @@ versus Redl and `18.77%` versus SFINCS Fortran v3. The JAX whole-radius scan
 completed in `261.1 s` versus `655.5 s` from the archived Fortran v3 logs, with
 the same `109 MB` JAX solver-memory estimate versus `12.80 GB` Fortran MUMPS
 effective total factor memory. This keeps the QH finite-beta
-production-resolution convergence lane open; current term-level audits point
+production-resolution convergence lane open; term-level audits point
 away from a simple stale-radius geometry, radial-gradient conversion, or
 current-assembly normalization bug, but the production-resolution convergence
 gate remains the acceptance criterion.
@@ -665,7 +631,7 @@ For large RHSMode=1 full-FP host production solves, `auto` may instead choose
 strategy used by SFINCS Fortran v3 while preserving SFINCS-JAX's true-residual
 acceptance check.
 For full-grid finite-beta QA/QH bootstrap-current diagnostics at
-`25 x 39 x 60 x 7`, `auto` now reaches the Fortran-reduced direct-tail path
+`25 x 39 x 60 x 7`, `auto` reaches the Fortran-reduced direct-tail path
 without user environment variables. It tests the lower-memory
 `active_fortran_v3_reduced_native_stack` candidate under the same true-residual
 gate and falls back to the high-memory active LU reference route when that gate
@@ -676,7 +642,7 @@ factor. A stricter guarded rerun with `tol=1e-10` converged to `7.27e-16` in
 `354.6 s`. Native true-coupled, BLR/HSS, and nested-dissection rescue paths
 remain opt-in because the measured full-grid probes reduce some setup residuals
 but do not yet produce residual-clean production Krylov solves within the setup
-budget. This is now deferred optimization work, not a blocker for the current
+budget. This remains deferred optimization work, not a blocker for the
 parity/release scope.
 
 ```bash
@@ -697,7 +663,7 @@ output vector. For Krylov experiments, `SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER`
 `SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB`, and
 `SFINCS_JAX_RHS1_FULL_CSR_XBLOCK_LMAX` still control the x-block/coarse residual
 preconditioner candidates, but the residual-clean finite-beta QA/QH diagnostic
-path is currently the active projected direct solve above. Physical RHSMode=1
+path is the active projected direct solve above. Physical RHSMode=1
 `host_structured_csr` output defaults to this route; shifted operator benchmarks
 default to Krylov unless `SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=direct` is set.
 To evaluate a lower-memory iterative alternative, set
@@ -726,8 +692,8 @@ promotion path. Generic
 `SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER=active_ilu` is also available and tuned with
 `SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ILU_DROP_TOL` and
 `SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ILU_FILL_FACTOR`. Treat this as a benchmark
-candidate for now: physical finite-beta bootstrap-current outputs should stay on
-the active direct route unless the iterative active low-L/Schwarz/xblock/coarse/ILU
+candidate: physical finite-beta bootstrap-current outputs should stay on the
+active direct route unless the iterative active low-L/Schwarz/xblock/coarse/ILU
 residual gate passes for the case being run.
 
 Repository examples that map directly onto common first tasks:
@@ -743,7 +709,7 @@ Repository examples that map directly onto common first tasks:
 - run the optional VMEC/Boozer differentiable geometry handoff: `python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --wout /path/to/wout.nc`
 - benchmark CPU/GPU parallel solves: `python examples/performance/benchmark_sharded_solve_scaling.py --backend cpu --devices 1 2 --inner-warmup-solves 1 --sample-timeout-s 300 ...`
 
-Parallel CLI controls are now first-class:
+Parallel CLI controls are first-class:
 
 ```bash
 # Multi-core CPU host sharding on one node
@@ -770,7 +736,7 @@ python examples/publication_figures/generate_sfincs_paper_figs.py \
   --max-transport-relative-residual 1e-6 \
   --scan-only
 
-# The current office dual-GPU LHD pilot for that point is residual-clean in
+# The office dual-GPU LHD pilot for that point is residual-clean in
 # ~262 s, compared with ~345 s on one GPU and ~569 s on the older implicit path.
 # For the first W7-X FP high-nu point, use the bounded one-worker sparse-LU lane
 # below: it closes all three RHS residual gates in ~9.7 min on one office GPU
@@ -811,9 +777,9 @@ python examples/performance/benchmark_w7x_high_nu_preconditioners.py \
 
 The W7-X high-nu figure is generated by
 `python examples/publication_figures/generate_w7x_high_nu_performance.py`.
-The checked run preserves the previous residual-clean transport matrix exactly,
-reduces the full one-point wall time from about `2028 s` to `582 s`, and lowers
-measured peak RSS from about `19.9 GB` to `15.3 GB`.
+The checked run preserves the residual-clean transport matrix, reduces the full
+one-point wall time from about `2028 s` to `582 s`, and lowers measured peak RSS
+from about `19.9 GB` to `15.3 GB`.
 
 ```bash
 # One-node multi-GPU sharded solve (experimental for very large single-RHS cases)
@@ -837,12 +803,12 @@ Use `-v` to have the executable print the active parallel runtime summary
 (cores, shard axis, transport workers, distributed Krylov mode, and multi-host
 bootstrap fields) before the solve starts.
 
-Current recommendation:
+Recommended parallel usage:
 
 - CPU host sharding is supported and deterministic, but the measured speedup is
   still case-dependent.
-- The current sharded RHSMode=1 CPU path uses a wider Schwarz patch rule plus a
-  bounded multilevel residual correction to avoid the worst 4/8-device
+- The sharded RHSMode=1 CPU path uses a wider Schwarz patch rule plus a bounded
+  multilevel residual correction to avoid the worst 4/8-device
   fragmentation failures seen in earlier releases.
 - Use one GPU per case or scan point for production throughput today.
 - Multi-GPU single-case sharding is available for benchmarking and very large
@@ -912,9 +878,9 @@ The main documentation entry points are:
 - examples, applications, and testing: `docs/examples.rst`, `docs/applications.rst`, `docs/testing.rst`
 - external trust-building comparisons: `docs/fortran_comparison.rst`
 
-## Current Example-Suite Audit
+## Example-Suite Audit
 
-Regenerate this block from the current `main` working tree with:
+Regenerate this audit block from the working tree being prepared for release:
 
 ```bash
 python scripts/run_scaled_example_suite.py \
@@ -935,7 +901,7 @@ python scripts/generate_readme_fast_branch_audit.py \
   --min-fortran-runtime-s 10
 ```
 
-The benchmark policy on `main` is:
+The benchmark policy is:
 
 - start from the original Fortran v3 example resolution,
 - only downscale when a case is too expensive for a practical suite run,
@@ -962,8 +928,8 @@ production input tree, pass `--production-inputs` so the runner uses the
 manifest decks exactly and does not substitute or promote reduced CI fixtures.
 
 <!-- BEGIN FAST_BRANCH_AUDIT -->
-Current `main` CPU audit comes from `tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak`.
-Matching `main` GPU audit comes from `tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas`.
+CPU audit source: `tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak`.
+GPU audit source: `tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas`.
 
 - Recorded cases: `39/39`
 - Practical status counts: `parity_ok=39`
@@ -977,13 +943,15 @@ Matching `main` GPU audit comes from `tests/scaled_example_suite_gpu_bounded_def
 - Remaining cases: none
 - Additional example: `parity_ok` on CPU and `parity_ok` on GPU
 
-Current mismatches:
+Mismatches:
 - CPU practical mismatches: none
 - CPU strict mismatches: none
 - GPU practical/strict mismatches: none
 
 Runtime columns match the summary plot: cold is `jax_runtime_s`; warm/logged is `jax_runtime_s_warm` when available, otherwise `jax_logged_elapsed_s`. The JAX memory columns match the plot and use profiler active RSS deltas (`jax_incremental_max_rss_mb`) when present; full process peak RSS remains available as `jax_max_rss_mb` in the merged JSON reports.
-The benchmark summary JSON records production-resolution floor violations for legacy frozen rows, so the table should be read as a reference-runtime-window comparison until every row has been rerun at the current production floor.
+The benchmark summary JSON records production-resolution floor violations for
+legacy frozen rows, so the table should be read as a reference-runtime-window
+comparison until every row has been rerun at the production floor.
 README-facing runtime/memory rows are restricted to cases where the SFINCS Fortran v3 reference runtime is at least `10 s`. Excluded lower-resolution CI parity/smoke rows: `HSX_PASCollisions_DKESTrajectories` (0.994s), `HSX_PASCollisions_fullTrajectories` (2.510s), `geometryScheme4_1species_PAS_withEr_DKESTrajectories` (1.365s), `geometryScheme4_2species_PAS_noEr` (0.953s), `monoenergetic_geometryScheme1` (0.795s), `monoenergetic_geometryScheme11` (0.861s), `monoenergetic_geometryScheme5_ASCII` (1.052s), `monoenergetic_geometryScheme5_netCDF` (1.029s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` (1.104s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (1.706s), `tokamak_1species_FPCollisions_noEr` (7.897s), `tokamak_1species_FPCollisions_withEr_DKESTrajectories` (6.958s), `tokamak_1species_FPCollisions_withEr_fullTrajectories` (6.736s), `transportMatrix_geometryScheme11` (0.025s), `transportMatrix_geometryScheme2` (0.031s).
 
 Full per-case runtime / memory table:
