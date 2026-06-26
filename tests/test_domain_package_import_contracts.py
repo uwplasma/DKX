@@ -20,7 +20,6 @@ DOMAIN_PACKAGES = (
     "sfincs_jax.solvers.preconditioners.qi",
     "sfincs_jax.solvers.preconditioners.schur",
     "sfincs_jax.solvers.preconditioners.domain_decomposition",
-    "sfincs_jax.solvers.preconditioners.coarse_space",
     "sfincs_jax.solvers.preconditioners.xblock",
     "sfincs_jax.solvers.preconditioners.symbolic_sparse",
     "sfincs_jax.parallel",

@@ -774,7 +774,7 @@ preconditioner setup/apply behavior without launching a full transport solve.
 The adjacent Fortran-v3-style reduced active sparse-factor extraction is covered
 by ``tests/test_rhs1_fortran_reduced_symbolic_sparse.py``. These tests exercise
 the new
-``sfincs_jax.solvers.preconditioners.symbolic_sparse.rhs1_fortran_reduced``
+``sfincs_jax.solvers.preconditioners.symbolic_sparse.profile_response``
 owner directly: package-facade exports, legacy ``rhs1_full_assembly`` alias
 compatibility, support-mode parsing and rejection of invalid tokens, default
 Fortran-reduced support dropping, and exact LU application when the support is
