@@ -461,8 +461,9 @@ Current open lane board
   but single-case multi-device strong scaling remains experimental until a warm,
   compile-amortized, device-covered artifact shows a real speedup.
 - Coverage/refactor: policy seams and solver helpers have focused tests, but the
-  deferred package-wide ``95%`` target still requires more ``v3_driver.py``
-  decomposition and a JAX-safe coverage environment.
+  package-wide ``95%`` target still requires more owner-module tests for
+  profile solves, transport solves, operator assembly, output writing, and a
+  JAX-safe coverage environment.
 - VMEC/Boozer workflow: current checks cover workflow provenance, optional
   ecosystem gates, and proxy-gradient consistency. Full VMEC-boundary-to-SFINCS
   kinetic transport gradients remain deferred.

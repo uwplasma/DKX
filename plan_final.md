@@ -275,7 +275,10 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   pages to point at the canonical profile/transport solve, preconditioner, and
   device-sparse owners instead of stale `v3_driver.py` or former `rhs1_*` module
   names. Historical source-map and roadmap references remain only where they
-  document compatibility history.
+  document compatibility history. A follow-up validation-matrix wording pass now
+  describes the remaining `95%` coverage work as owner-module coverage for
+  profile solves, transport solves, operator assembly, and output writing rather
+  than further `v3_driver.py` decomposition.
 - The thirty-second post-audit coverage tranche added explicit-sparse settings
   tests for factor-kind aliases, monolithic guard parsing, LU/ILU size caps,
   bounded integer/float environment parsing, symbolic nested-dissection/BLR
