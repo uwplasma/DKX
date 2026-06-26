@@ -13,7 +13,7 @@ import os
 from typing import Any
 import jax.numpy as jnp
 import numpy as np
-from sfincs_jax.operators.profile_response.compressed_layout import build_rhs1_compressed_pitch_layout
+from sfincs_jax.operators.profile_compressed_layout import build_rhs1_compressed_pitch_layout
 from sfincs_jax.problems.transport_matrix.policies import (
     TransportActiveDOFDecision,
     TransportActiveDOFState,
@@ -26,8 +26,8 @@ from sfincs_jax.problems.transport_matrix.policies import (
 )
 import jax
 from sfincs_jax.solvers.explicit_sparse import SparseDecision, SparseOperatorBundle, estimate_csr_nbytes, estimate_dense_nbytes
-from sfincs_jax.operators.profile_response.kinetic import select_structured_rhs1_fblock_operator
-from sfincs_jax.operators.profile_response.system import V3FullSystemOperator, _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1
+from sfincs_jax.operators.profile_kinetic import select_structured_rhs1_fblock_operator
+from sfincs_jax.operators.profile_system import V3FullSystemOperator, _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1
 from sfincs_jax.profiling import Timer
 from sfincs_jax.solvers.preconditioning import (
     _TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_PRECOND_CACHE,
@@ -46,12 +46,12 @@ from sfincs_jax.solvers.preconditioning import (
     _TransportFpFortranReducedLuPrecondCache,
 )
 from sfincs_jax.solvers.preconditioning import _build_transport_preconditioner_operator_fortran_reduced
-from sfincs_jax.operators.profile_response.sparse_pattern import (
+from sfincs_jax.operators.profile_sparse_pattern import (
     summarize_v3_sparse_pattern,
     v3_full_system_fortran_reduced_preconditioner_sparsity_pattern,
     v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices,
 )
-from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator_cached
+from sfincs_jax.operators.profile_system import apply_v3_full_system_operator_cached
 
 __all__ = (
     "TransportActiveDenseSetup",

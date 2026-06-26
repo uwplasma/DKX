@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 import scipy.sparse as sp
 
-import sfincs_jax.operators.profile_response.full_system as rfa
+import sfincs_jax.operators.profile_full_system as rfa
 import sfincs_jax.v3_driver as vd
 from sfincs_jax.solvers.preconditioners.symbolic_sparse import profile_response as rfr
 from sfincs_jax.namelist import read_sfincs_input
@@ -23,7 +23,7 @@ from sfincs_jax.solvers.preconditioners.symbolic_sparse.policy import (
     resolve_active_symbolic_block_schur_policy,
     resolve_active_symbolic_superblock_policy,
 )
-from sfincs_jax.operators.profile_response.full_system import (
+from sfincs_jax.operators.profile_full_system import (
     build_direct_active_fortran_v3_reduced_pmat_preconditioner,
     build_active_projected_rhs1_full_csr_preconditioner,
     build_structured_rhs1_full_csr_preconditioner,
@@ -32,13 +32,13 @@ from sfincs_jax.operators.profile_response.full_system import (
     select_structured_rhs1_full_csr_operator,
     solve_structured_rhs1_full_csr,
 )
-from sfincs_jax.operators.profile_response.layout import (
+from sfincs_jax.operators.profile_layout import (
     RHS1ActiveFieldSplitOrdering,
     RHS1BlockLayout,
     clear_rhs1_active_field_split_ordering_cache,
 )
 from sfincs_jax.solvers.preconditioners.full_fp.full_csr_kinetic import rhs1_full_csr_x_ell_block_indices
-from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator, full_system_operator_from_namelist, rhs_v3_full_system
+from sfincs_jax.operators.profile_system import apply_v3_full_system_operator, full_system_operator_from_namelist, rhs_v3_full_system
 
 
 REF = Path(__file__).parent / "ref"

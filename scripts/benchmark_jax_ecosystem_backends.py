@@ -18,13 +18,13 @@ import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
-from sfincs_jax.operators.profile_response.full_system import (
+from sfincs_jax.operators.profile_layout import RHS1BlockLayout
+from sfincs_jax.operators.profile_full_system import (
     build_structured_rhs1_full_csr_preconditioner,
     clear_structured_rhs1_full_csr_cache,
     select_structured_rhs1_full_csr_operator,
 )
-from sfincs_jax.operators.profile_response.system import full_system_operator_from_namelist, rhs_v3_full_system
+from sfincs_jax.operators.profile_system import full_system_operator_from_namelist, rhs_v3_full_system
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]

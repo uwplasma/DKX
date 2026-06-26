@@ -14,13 +14,13 @@ from sfincs_jax.physics.collisions import (
     make_pitch_angle_scattering_v3_operator,
 )
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
-from sfincs_jax.operators.profile_response.collisions import (
+from sfincs_jax.operators.profile_layout import RHS1BlockLayout
+from sfincs_jax.operators.profile_collisions import (
     build_fokker_planck_collision_f_block_operator,
     build_fokker_planck_phi1_collision_f_block_operator,
     build_pas_collision_f_block_operator,
 )
-from sfincs_jax.operators.profile_response.fblock import fblock_operator_from_namelist
+from sfincs_jax.operators.profile_fblock import fblock_operator_from_namelist
 
 
 def _layout(*, n_species: int = 1, n_x: int = 2, n_xi: int = 4, n_theta: int = 3, n_zeta: int = 2) -> RHS1BlockLayout:

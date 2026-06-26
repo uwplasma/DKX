@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+# ruff: noqa: E402, E741
+
 from dataclasses import dataclass
 
 from jax import config as _jax_config

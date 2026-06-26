@@ -143,7 +143,7 @@ def _preconditioner_env(preconditioner: str) -> dict[str, str]:
 def _residual_ratios(op, rhs_full, candidate_full) -> tuple[float, float]:
     import jax.numpy as jnp
 
-    from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator
+    from sfincs_jax.operators.profile_system import apply_v3_full_system_operator
 
     rhs_full = jnp.asarray(rhs_full, dtype=jnp.float64)
     candidate_full = jnp.asarray(candidate_full, dtype=jnp.float64)
@@ -186,7 +186,7 @@ def run_child_payload(args: argparse.Namespace) -> dict[str, Any]:
     import jax.numpy as jnp
 
     from sfincs_jax.namelist import read_sfincs_input
-    from sfincs_jax.operators.profile_response.system import full_system_operator_from_namelist
+    from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
     from sfincs_jax.problems.profile_response.solve import solve_v3_full_system_linear_gmres
 
     case = str(args.case)

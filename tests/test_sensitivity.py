@@ -43,7 +43,7 @@ from sfincs_jax.sensitivity import (
     validate_fortran_v3_adjoint_sensitivity_output_surface,
 )
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator_cached, full_system_operator_from_namelist
+from sfincs_jax.operators.profile_system import apply_v3_full_system_operator_cached, full_system_operator_from_namelist
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SENSITIVITY_REFERENCE_SUMMARY = "small_rhsmode45_summary_2026-06-25.json"

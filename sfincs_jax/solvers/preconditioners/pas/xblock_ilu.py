@@ -26,7 +26,7 @@ from sfincs_jax.solvers.sparse_triangular import (
     triangular_solve_lower_padded,
     triangular_solve_upper_padded,
 )
-from sfincs_jax.operators.profile_response.system import V3FullSystemOperator
+from sfincs_jax.operators.profile_system import V3FullSystemOperator
 
 __all__ = [
     "build_rhs1_pas_xblock_ilu_preconditioner",

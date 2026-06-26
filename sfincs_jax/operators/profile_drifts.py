@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 
-from sfincs_jax.operators.profile_response.layout import RHS1BlockCOOBuilder, RHS1BlockCOOOperator, RHS1BlockLayout
+from sfincs_jax.operators.profile_layout import RHS1BlockCOOBuilder, RHS1BlockCOOOperator, RHS1BlockLayout
 
 
 def _validate_common_f_layout(layout: RHS1BlockLayout) -> tuple[int, int, int, int, int]:

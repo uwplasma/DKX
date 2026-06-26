@@ -37,7 +37,9 @@ navigational surface, not create another layer of wrappers.
 Checked on 2026-06-26 from
 `refactor/rhs1-full-assembly-preconditioners` at `a775be0d`.
 
-- `sfincs_jax/` contains `154` Python files and `17` root-level Python modules.
+- `sfincs_jax/` contains about `155` Python files after adding the one-file
+  `operators/profile_response.py` compatibility shim and flattening the former
+  nested operator modules into `operators/profile_*.py`.
 - Largest source domains by line count are `problems` (`69k` lines), `solvers`
   (`47k`), and `operators` (`21k`).
 - Empty root packages `sfincs_jax/benchmarks`, `sfincs_jax/compat`,
@@ -45,8 +47,7 @@ Checked on 2026-06-26 from
   consolidation tranche. The empty nested
   `sfincs_jax/solvers/preconditioners/coarse_space` directory was also removed
   from the working tree.
-- Deep paths remain in `sfincs_jax/operators/profile_response`,
-  `sfincs_jax/problems/profile_response/sparse`,
+- Deep paths remain in `sfincs_jax/problems/profile_response/sparse`,
   `sfincs_jax/problems/transport_matrix/parallel`, and
   `sfincs_jax/solvers/preconditioners/*`.
 - `examples/` has many user-facing folders plus untracked `__pycache__`
@@ -592,9 +593,10 @@ completed owner moves, and private-root deletion pass:
   `rhs1_fortran_reduced.py` file was renamed to
   `symbolic_sparse/profile_response.py`, and the domain-decomposition line/block
   implementation was merged into its package owner.
-- `sfincs_jax/operators/profile_response`: 19 files, about 20.6k lines.
-  `full_system.py` is 5,978 lines. This package is large but domain coherent;
-  do not split it in this PR unless a correctness bug requires it.
+- `sfincs_jax/operators/profile_*.py`: 19 flattened profile-response operator
+  files, about 20.6k lines, plus a one-file `profile_response.py`
+  compatibility shim. `profile_full_system.py` is the largest owner. This
+  domain remains large but no longer contributes a nested package.
 - `sfincs_jax/io.py`: 64-line compatibility facade. The concrete writer now
   lives in `sfincs_jax/outputs/writer.py` at 4,268 lines and is exported from
   `sfincs_jax.outputs`. `outputs/transport.py` now owns both streaming
@@ -1064,10 +1066,11 @@ Status on 2026-06-26:
   package owners directly.
 - Fourth Phase 2 move complete. The former root profile-response operator
   kernels `collisionless.py`, `collisionless_er.py`, `collisionless_exb.py`,
-  `magnetic_drifts.py`, and `residual.py` moved to
-  `sfincs_jax.operators.profile_response` owners without root compatibility
-  shims. Operator parity, sparse derivative, residual-JVP, docs, examples, and
-  import-contract gates import the package owners directly.
+  `magnetic_drifts.py`, and `residual.py` moved into flat
+  `sfincs_jax.operators.profile_*` owners. A one-file
+  `sfincs_jax.operators.profile_response` shim preserves old imports without a
+  nested source folder. Operator parity, sparse derivative, residual-JVP, docs,
+  examples, and import-contract gates import the canonical flat owners directly.
 - Fifth Phase 2 move complete. The former root physics kernels
   `collisions.py` and `classical_transport.py` moved to `sfincs_jax.physics`
   owners with collision/classical physics gates importing the package owners

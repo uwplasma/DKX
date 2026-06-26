@@ -34,7 +34,7 @@ from sfincs_jax.problems.transport_matrix.policies import (
 )
 from sfincs_jax.problems.transport_matrix.finalize import V3TransportMatrixSolveResult
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
-from sfincs_jax.operators.profile_response.system import V3FullSystemOperator
+from sfincs_jax.operators.profile_system import V3FullSystemOperator
 
 # --- Parallel policy, scaling audits, and worker environments ---
 

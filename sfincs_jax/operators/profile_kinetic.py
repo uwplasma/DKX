@@ -17,13 +17,13 @@ import time
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.operators.profile_response.layout import RHS1BlockCOOBuilder, RHS1BlockCOOOperator, RHS1BlockLayout, RHS1BlockLinearOperator
-from sfincs_jax.operators.profile_response.collisions import (
+from sfincs_jax.operators.profile_layout import RHS1BlockCOOBuilder, RHS1BlockCOOOperator, RHS1BlockLayout, RHS1BlockLinearOperator
+from sfincs_jax.operators.profile_collisions import (
     build_fokker_planck_collision_f_block_operator,
     build_fokker_planck_phi1_collision_f_block_operator,
     build_pas_collision_f_block_operator,
 )
-from sfincs_jax.operators.profile_response.drifts import (
+from sfincs_jax.operators.profile_drifts import (
     build_collisionless_f_block_operator,
     build_er_xdot_f_block_operator,
     build_er_xidot_f_block_operator,

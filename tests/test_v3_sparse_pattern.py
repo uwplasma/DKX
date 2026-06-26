@@ -21,10 +21,10 @@ from sfincs_jax.problems.profile_response.residual import (
     apply_device_subspace_residual_equation_correction,
     build_rhs1_xblock_post_coarse_directions,
 )
-from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
+from sfincs_jax.operators.profile_layout import RHS1BlockLayout
 from sfincs_jax.solvers.preconditioners.xblock.policy import resolve_rhs1_xblock_sparse_pc_policy
 from sfincs_jax.solver import FlexibleGMRESSolveResult
-from sfincs_jax.operators.profile_response.sparse_pattern import (
+from sfincs_jax.operators.profile_sparse_pattern import (
     estimate_v3_full_system_conservative_sparsity_summary,
     summarize_v3_sparse_pattern,
     v3_full_system_conservative_sparsity_pattern,
@@ -39,7 +39,7 @@ from sfincs_jax.v3_driver import (
     _triangular_solve_upper_csr_rows,
     solve_v3_full_system_linear_gmres,
 )
-from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator, full_system_operator_from_namelist
+from sfincs_jax.operators.profile_system import apply_v3_full_system_operator, full_system_operator_from_namelist
 
 
 def _csr_from_petsc(path: Path) -> sp.csr_matrix:

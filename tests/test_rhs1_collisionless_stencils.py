@@ -7,18 +7,18 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.operators.profile_response.collisionless import CollisionlessV3Operator, apply_collisionless_v3
-from sfincs_jax.operators.profile_response.electric_field import apply_er_xdot_v3, apply_er_xidot_v3
-from sfincs_jax.operators.profile_response.exb import ExBThetaV3Operator, ExBZetaV3Operator, apply_exb_theta_v3, apply_exb_zeta_v3
+from sfincs_jax.operators.profile_collisionless import CollisionlessV3Operator, apply_collisionless_v3
+from sfincs_jax.operators.profile_electric_field import apply_er_xdot_v3, apply_er_xidot_v3
+from sfincs_jax.operators.profile_exb import ExBThetaV3Operator, ExBZetaV3Operator, apply_exb_theta_v3, apply_exb_zeta_v3
 from sfincs_jax.physics.collisions import apply_pitch_angle_scattering_v3, make_pitch_angle_scattering_v3_operator
-from sfincs_jax.operators.profile_response.magnetic_drifts import (
+from sfincs_jax.operators.profile_magnetic_drifts import (
     apply_magnetic_drift_theta_v3,
     apply_magnetic_drift_xidot_v3,
     apply_magnetic_drift_zeta_v3,
 )
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
-from sfincs_jax.operators.profile_response.drifts import (
+from sfincs_jax.operators.profile_layout import RHS1BlockLayout
+from sfincs_jax.operators.profile_drifts import (
     build_collisionless_f_block_operator,
     build_er_xdot_f_block_operator,
     build_er_xidot_f_block_operator,
@@ -28,8 +28,8 @@ from sfincs_jax.operators.profile_response.drifts import (
     build_magnetic_drift_xidot_f_block_operator,
     build_magnetic_drift_zeta_f_block_operator,
 )
-from sfincs_jax.operators.profile_response.collisions import build_pas_collision_f_block_operator
-from sfincs_jax.operators.profile_response.fblock import fblock_operator_from_namelist
+from sfincs_jax.operators.profile_collisions import build_pas_collision_f_block_operator
+from sfincs_jax.operators.profile_fblock import fblock_operator_from_namelist
 
 
 def _layout(

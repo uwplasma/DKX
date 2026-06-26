@@ -1,6 +1,6 @@
 """Structured host-CSR assembly for RHSMode=1 full-system operators.
 
-The f-block stencil assembly lives in :mod:`sfincs_jax.operators.profile_response.kinetic`.
+The f-block stencil assembly lives in :mod:`sfincs_jax.operators.profile_kinetic`.
 This module adds the small global couplings around that block: Phi1/QN rows
 when they are linear, and the source/constraint rows used by SFINCS v3.  The
 result is an exact sparse matrix for supported RHSMode=1 cases without dense
@@ -24,9 +24,9 @@ import time
 import numpy as np
 import scipy.sparse as sp
 
-from sfincs_jax.operators.profile_response.layout import RHS1ActiveFieldSplitOrdering, RHS1BlockLayout
-from sfincs_jax.operators.profile_response.compressed_layout import infer_rhs1_compressed_pitch_layout_from_active_indices
-from sfincs_jax.operators.profile_response.kinetic import (
+from sfincs_jax.operators.profile_layout import RHS1ActiveFieldSplitOrdering, RHS1BlockLayout
+from sfincs_jax.operators.profile_compressed_layout import infer_rhs1_compressed_pitch_layout_from_active_indices
+from sfincs_jax.operators.profile_kinetic import (
     RHS1StructuredFBlockCSRSelection,
     clear_structured_rhs1_fblock_csr_cache,
     select_structured_rhs1_fblock_csr_operator,
@@ -89,7 +89,7 @@ from sfincs_jax.solvers.preconditioners.xblock.low_l_schur import (
     build_xblock_tz_low_l_schur_preconditioner as _build_xblock_tz_low_l_schur_preconditioner,
     xblock_tz_low_l_indices as _xblock_tz_low_l_indices,
 )
-from sfincs_jax.operators.profile_response.sparse_pattern import estimate_v3_full_system_conservative_sparsity_summary
+from sfincs_jax.operators.profile_sparse_pattern import estimate_v3_full_system_conservative_sparsity_summary
 
 _STRUCTURED_FULL_CSR_OBJECT_CACHE: dict[tuple[object, ...], tuple[Any, dict[str, object]]] = {}
 _active_fortran_v3_reduced_permc_candidates = active_fortran_v3_reduced_permc_candidates

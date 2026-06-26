@@ -24,7 +24,7 @@ from ..solver import (
     gmres_solve_with_residual_distributed,
     gmres_solve_with_residual_jit,
 )
-from sfincs_jax.operators.profile_response.system import _matvec_shard_axis, sharding_constraints
+from sfincs_jax.operators.profile_system import _matvec_shard_axis, sharding_constraints
 
 
 HOST_SCIPY_KRYLOV_METHODS = frozenset({"lgmres", "lgmres_scipy"})

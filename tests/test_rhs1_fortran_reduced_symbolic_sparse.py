@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 
-import sfincs_jax.operators.profile_response.full_system as rfa
-from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
+import sfincs_jax.operators.profile_full_system as rfa
+from sfincs_jax.operators.profile_layout import RHS1BlockLayout
 from sfincs_jax.solvers.preconditioners import symbolic_sparse
 from sfincs_jax.solvers.preconditioners.symbolic_sparse import profile_response as rfr
 

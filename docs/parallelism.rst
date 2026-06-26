@@ -84,7 +84,7 @@ preserving differentiability:
    state vector across multiple devices along :math:`\theta` or :math:`\zeta`.
 
    Implementation: `apply_v3_full_system_operator_cached` in
-   `sfincs_jax.operators.profile_response.system` with explicit ``jax.jit`` sharding plus
+   `sfincs_jax.operators.profile_system` with explicit ``jax.jit`` sharding plus
    `with_sharding_constraint`.
 
    **Host‑device setup (CPU).** To emulate MPI‑style domain decomposition on a
@@ -1285,4 +1285,4 @@ See also:
 
 - `docs/performance_techniques.rst`
 - `sfincs_jax.problems.transport_matrix.solve`
-- `sfincs_jax.operators.profile_response.system`
+- `sfincs_jax.operators.profile_system`

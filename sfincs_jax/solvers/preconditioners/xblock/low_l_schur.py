@@ -14,7 +14,7 @@ import time
 import numpy as np
 import scipy.sparse as sp
 
-from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
+from sfincs_jax.operators.profile_layout import RHS1BlockLayout
 from sfincs_jax.solvers.preconditioners.full_fp.full_csr_kinetic import build_rhs1_full_csr_kinetic_preconditioner
 from ..schur.profile_response import build_coarse_residual_basis_csc, coarse_surface_modes
 from ..schur.profile_response import RHS1StructuredFullCSRPreconditioner, safe_inverse_diagonal

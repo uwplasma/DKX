@@ -18,8 +18,8 @@ import time
 import numpy as np
 import scipy.sparse as sp
 
-from sfincs_jax.operators.profile_response.layout import RHS1ActiveBlockLayout, RHS1BlockLayout
-from sfincs_jax.operators.profile_response.compressed_layout import (
+from sfincs_jax.operators.profile_layout import RHS1ActiveBlockLayout, RHS1BlockLayout
+from sfincs_jax.operators.profile_compressed_layout import (
     RHS1CompressedPitchLayout,
     build_rhs1_compressed_pitch_layout,
     infer_rhs1_compressed_pitch_layout_from_active_indices,

@@ -11,7 +11,7 @@ import sfincs_jax.problems.profile_response.preconditioner_build as pb
 import sfincs_jax.problems.profile_response.sparse.direct as sparse_direct
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.solvers.preconditioning import _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE
-from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator, full_system_operator_from_namelist
+from sfincs_jax.operators.profile_system import apply_v3_full_system_operator, full_system_operator_from_namelist
 
 
 def _op(*, with_pas: bool = False, with_fp: bool = False):

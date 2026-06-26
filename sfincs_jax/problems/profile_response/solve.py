@@ -43,7 +43,7 @@ from sfincs_jax.solvers.explicit_sparse import (
     build_operator_from_pattern, estimate_csr_nbytes, estimate_dense_nbytes, estimate_multifrontal_direct_lu_nbytes,
     wrap_sparse_factor_with_coarse_correction,
 )
-from sfincs_jax.operators.profile_response.device_sparse import (
+from sfincs_jax.operators.profile_device_sparse import (
     device_csr_from_matrix, validate_device_csr_matvec,
 )
 from sfincs_jax.solvers.preconditioners.domain_decomposition import (  # compatibility exports for legacy tests/debug scripts
@@ -73,14 +73,14 @@ from sfincs_jax.solvers.preconditioners.pas.policy import (
 from sfincs_jax.solvers.preconditioners.dispatch import (
     build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,
 )
-from sfincs_jax.operators.profile_response.kinetic import (
+from sfincs_jax.operators.profile_kinetic import (
     select_structured_rhs1_fblock_csr_operator, select_structured_rhs1_fblock_operator,
 )
-from sfincs_jax.operators.profile_response.full_system import (
+from sfincs_jax.operators.profile_full_system import (
     build_active_projected_rhs1_full_csr_preconditioner, build_direct_active_fortran_v3_reduced_pmat_preconditioner,
     select_active_fortran_v3_reduced_support_mode_preconditioner, solve_structured_rhs1_full_csr,
 )
-from sfincs_jax.operators.profile_response.structured_csr import (
+from sfincs_jax.operators.profile_structured_csr import (
     _try_build_structured_rhs1_full_csr_operator_bundle,
 )
 from sfincs_jax.problems.profile_response.policies import (
@@ -312,10 +312,10 @@ from sfincs_jax.problems.profile_response.policies import (
     _direct_tail_structured_pc_with_cache_metadata, _hash_numpy_array_for_cache, _is_direct_reduced_pmat_pc_kind,
     _rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb,
 )
-from sfincs_jax.operators.profile_response.reduced_tail import (
+from sfincs_jax.operators.profile_reduced_tail import (
     _try_build_fortran_reduced_constraint1_direct_tail_bundle,
 )
-from sfincs_jax.operators.profile_response.true_operator_rescue import (
+from sfincs_jax.operators.profile_true_operator_rescue import (
     _ResidualCoarseHostSparsePreconditionerBundle, _ResidualWindowHostSparsePreconditionerBundle,
     _ReusableTrueActionColumnCache, _TrueOperatorActiveSubmatrixPreconditionerBundle,
     _TrueOperatorCoupledCoarseLSQPreconditionerBundle, _TrueOperatorWindowLSQPreconditionerBundle,
@@ -337,7 +337,7 @@ from sfincs_jax.problems.profile_response.solver_diagnostics import (
 from sfincs_jax.problems.profile_response.solver_diagnostics import (
     ProfileResponseLinearFinalizationContext, finalize_profile_response_linear_solve,
 )
-from sfincs_jax.operators.profile_response.layout import (
+from sfincs_jax.operators.profile_layout import (
     RHS1ActiveBlockLayout, RHS1ActiveFieldSplitOrdering, RHS1BlockLayout,
 )
 from sfincs_jax.solvers.preconditioners.xblock.coarse import (
@@ -366,7 +366,7 @@ from sfincs_jax.problems.profile_response.policies import (
     rhs1_constraint0_petsc_compat_config_from_env, rhs1_constraint0_petsc_compat_regularization,
     rhsmode1_constraint0_sparse_first_current_backend as _rhsmode1_constraint0_sparse_first,
 )
-from sfincs_jax.operators.profile_response.sources import (
+from sfincs_jax.operators.profile_sources import (
     build_rhs1_xblock_constraint1_moment_schur_preconditioner as _build_rhs1_xblock_constraint1_moment_schur_preconditioner,
     constraint_scheme1_inject_source as _constraint_scheme1_inject_source,
     constraint_scheme1_moments_from_f as _constraint_scheme1_moments_from_f,
@@ -568,12 +568,12 @@ from sfincs_jax.problems.transport_matrix.linear_system import (
     _build_rhsmode23_direct_pmat_physics_coarse_basis, _try_build_rhsmode23_fp_direct_active_operator_bundle,
     _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle,
 )
-from sfincs_jax.operators.profile_response.system import (
+from sfincs_jax.operators.profile_system import (
     _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1, _matvec_shard_axis, sharding_constraints,
 )
 from sfincs_jax.profiling import Timer
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
-from sfincs_jax.operators.profile_response.system import (
+from sfincs_jax.operators.profile_system import (
     V3FullSystemOperator, _THRESHOLD_FOR_INCLUSION, _operator_signature_cached, apply_v3_full_system_jacobian,
     apply_v3_full_system_jacobian_jit, apply_v3_full_system_operator, apply_v3_full_system_operator_cached,
     full_system_operator_from_namelist, residual_v3_full_system, rhs_v3_full_system, rhs_v3_full_system_jit,
@@ -585,7 +585,7 @@ from sfincs_jax.problems.profile_response.solver_diagnostics import (
 from sfincs_jax.problems.transport_matrix.finalize import (
     V3TransportMatrixSolveResult,
 )
-from sfincs_jax.operators.profile_response.sparse_pattern import (
+from sfincs_jax.operators.profile_sparse_pattern import (
     estimate_v3_full_system_conservative_sparsity_summary, summarize_v3_sparse_pattern,
     v3_full_system_conservative_sparsity_pattern, v3_full_system_conservative_sparsity_pattern_for_indices,
     v3_full_system_fortran_reduced_preconditioner_sparsity_pattern,

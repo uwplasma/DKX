@@ -7,10 +7,10 @@ import numpy as np
 import pytest
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_response.full_system import _source_basis_constraint_scheme1_np
+from sfincs_jax.operators.profile_full_system import _source_basis_constraint_scheme1_np
 from sfincs_jax.problems.transport_matrix.diagnostics import f0_l0_v3_from_operator
-from sfincs_jax.operators.profile_response.system import full_system_operator_from_namelist
-from sfincs_jax.operators.profile_response.system import _source_basis_constraint_scheme_1
+from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
+from sfincs_jax.operators.profile_system import _source_basis_constraint_scheme_1
 from sfincs_jax.discretization.xgrid import make_x_grid
 
 

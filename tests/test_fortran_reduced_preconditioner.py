@@ -12,7 +12,7 @@ from sfincs_jax.solvers.explicit_sparse import factorize_host_sparse_operator
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.solvers import preconditioning as po
 import sfincs_jax.problems.profile_response.sparse.direct as sparse_direct
-from sfincs_jax.operators.profile_response.system import full_system_operator_from_namelist
+from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
 import sfincs_jax.v3_driver as vd
 
 

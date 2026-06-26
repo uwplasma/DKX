@@ -14,11 +14,11 @@ import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_response.kinetic import (
+from sfincs_jax.operators.profile_kinetic import (
     clear_structured_rhs1_fblock_csr_cache,
     select_structured_rhs1_fblock_csr_operator,
 )
-from sfincs_jax.operators.profile_response.fblock import apply_v3_fblock_operator, fblock_operator_from_namelist
+from sfincs_jax.operators.profile_fblock import apply_v3_fblock_operator, fblock_operator_from_namelist
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]

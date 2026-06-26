@@ -6,7 +6,7 @@ import numpy as np
 import jax.numpy as jnp
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_response.fblock import (
+from sfincs_jax.operators.profile_fblock import (
     fblock_operator_from_namelist,
     matvec_v3_fblock_flat,
     solve_v3_fblock_gmres,

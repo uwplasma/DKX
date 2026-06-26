@@ -15,13 +15,13 @@ import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_response.full_system import (
+from sfincs_jax.operators.profile_full_system import (
     clear_structured_rhs1_full_csr_cache,
     select_structured_rhs1_full_csr_operator,
     solve_structured_rhs1_full_csr,
 )
 from sfincs_jax.problems.transport_matrix.linear_system import transport_active_dof_indices as _transport_active_dof_indices
-from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator, full_system_operator_from_namelist, rhs_v3_full_system
+from sfincs_jax.operators.profile_system import apply_v3_full_system_operator, full_system_operator_from_namelist, rhs_v3_full_system
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]

@@ -2466,7 +2466,7 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/operators/profile_response/*.py
+- `python -m py_compile sfincs_jax/operators/profile_*.py
   sfincs_jax/problems/profile_response/*.py sfincs_jax/v3_driver.py
   sfincs_jax/io.py` passed.
 - Focused moved RHSMode-1 module tests passed with
@@ -2586,7 +2586,7 @@ Results:
 Validation:
 
 - `python -m py_compile sfincs_jax/solvers/preconditioners/**/*.py
-  sfincs_jax/v3_driver.py sfincs_jax/operators/profile_response/*.py
+  sfincs_jax/v3_driver.py sfincs_jax/operators/profile_*.py
   sfincs_jax/problems/profile_response/*.py
   sfincs_jax/problems/profile_response/sparse/*.py` passed.
 - Focused merged-policy/profile-response tests passed with
@@ -4687,7 +4687,7 @@ Steps taken:
 1. Moved conservative and Fortran-reduced sparse structural patterns from the
    historical root module `sfincs_jax/v3_sparse_pattern.py` into the
    operator-domain owner
-   `sfincs_jax/operators/profile_response/sparse_pattern.py`.
+   `sfincs_jax/operators/profile_sparse_pattern.py`.
 2. Removed the historical root file instead of keeping a compatibility facade,
    because package-internal imports, docs, examples, scripts, and tests no
    longer import `sfincs_jax.v3_sparse_pattern`.
@@ -4722,11 +4722,11 @@ Validation:
 
 - `python -m py_compile sfincs_jax/problems/profile_response/sparse/handoff.py
   sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/operators/profile_response/sparse_pattern.py
+  sfincs_jax/operators/profile_sparse_pattern.py
   tests/test_v3_sparse_pattern.py` passed.
 - `python -m ruff check sfincs_jax/problems/profile_response/sparse/handoff.py
   sfincs_jax/problems/profile_response/solve.py
-  sfincs_jax/operators/profile_response/sparse_pattern.py
+  sfincs_jax/operators/profile_sparse_pattern.py
   tests/test_v3_sparse_pattern.py` passed.
 - `python -m pytest
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_solves_tiny_rhs1_system
@@ -4767,10 +4767,10 @@ Steps taken:
 
 1. Moved the RHSMode-1 matrix-free kinetic f-block implementation from the
    historical root module `sfincs_jax/v3_fblock.py` into the operator-domain
-   owner `sfincs_jax/operators/profile_response/fblock.py`.
+   owner `sfincs_jax/operators/profile_fblock.py`.
 2. Removed the historical root file instead of keeping a compatibility facade,
    because package-internal imports, docs, examples, scripts, and focused
-   tests now import `sfincs_jax.operators.profile_response.fblock`.
+   tests now import `sfincs_jax.operators.profile_fblock`.
 3. Rewired direct imports in `v3_system.py`, `residual.py`, ambipolar helpers,
    examples, scripts, f-block tests, and residual/JVP tests to the new owner.
 4. Updated `docs/source_map.rst`, `docs/api.rst`,
@@ -4796,12 +4796,12 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/operators/profile_response/fblock.py
+- `python -m py_compile sfincs_jax/operators/profile_fblock.py
   sfincs_jax/v3_system.py sfincs_jax/residual.py
   sfincs_jax/problems/ambipolar.py tests/test_v3_fblock_smoke.py
   tests/test_rhs1_fblock_assembly.py tests/test_domain_package_import_contracts.py`
   passed.
-- `python -m ruff check sfincs_jax/operators/profile_response/fblock.py
+- `python -m ruff check sfincs_jax/operators/profile_fblock.py
   sfincs_jax/v3_system.py sfincs_jax/residual.py
   sfincs_jax/problems/ambipolar.py tests/test_v3_fblock_smoke.py
   tests/test_rhs1_fblock_assembly.py tests/test_domain_package_import_contracts.py`
@@ -4815,7 +4815,7 @@ Validation:
   tests/test_fblock_fused_matvec.py tests/test_rhs1_fblock_assembly.py
   -q --tb=short` passed with `45 passed`.
 - A direct import check confirmed
-  `sfincs_jax.operators.profile_response.fblock.V3FBlockOperator.__module__`
+  `sfincs_jax.operators.profile_fblock.V3FBlockOperator.__module__`
   is the new owner and `sfincs_jax.v3_fblock` is no longer importable.
 
 Progress:
@@ -4847,10 +4847,10 @@ Steps taken:
 
 1. Moved the matrix-free full-system profile-response operator from the
    historical root module `sfincs_jax/v3_system.py` into the operator-domain
-   owner `sfincs_jax/operators/profile_response/system.py`.
+   owner `sfincs_jax/operators/profile_system.py`.
 2. Removed the historical root file instead of keeping a compatibility facade,
    because package-internal imports, docs, examples, scripts, and focused
-   tests now import `sfincs_jax.operators.profile_response.system`.
+   tests now import `sfincs_jax.operators.profile_system`.
 3. Rewired imports across profile-response, transport-matrix, preconditioner,
    residual, output, examples, scripts, and tests to the new owner.
 4. Updated docs and import contracts so `operators.profile_response.system`
@@ -4873,13 +4873,13 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/operators/profile_response/system.py
+- `python -m py_compile sfincs_jax/operators/profile_system.py
   sfincs_jax/residual.py sfincs_jax/constraint_projection.py
   sfincs_jax/problems/profile_response/solve.py
   sfincs_jax/problems/transport_matrix/solve.py
   tests/test_full_system_operator_jit.py tests/test_v3_system_cached_matvec.py`
   passed.
-- `python -m ruff check sfincs_jax/operators/profile_response/system.py
+- `python -m ruff check sfincs_jax/operators/profile_system.py
   sfincs_jax/residual.py sfincs_jax/constraint_projection.py
   sfincs_jax/problems/profile_response/solve.py
   sfincs_jax/problems/transport_matrix/solve.py
@@ -4962,14 +4962,14 @@ Validation:
 
 - `python -m py_compile sfincs_jax/discretization/v3.py
   sfincs_jax/diagnostics.py sfincs_jax/io.py
-  sfincs_jax/operators/profile_response/fblock.py
-  sfincs_jax/operators/profile_response/system.py
+  sfincs_jax/operators/profile_fblock.py
+  sfincs_jax/operators/profile_system.py
   sfincs_jax/problems/profile_response/solve.py
   tests/test_domain_package_import_contracts.py` passed.
 - `python -m ruff check sfincs_jax/discretization/v3.py
   sfincs_jax/diagnostics.py sfincs_jax/io.py
-  sfincs_jax/operators/profile_response/fblock.py
-  sfincs_jax/operators/profile_response/system.py
+  sfincs_jax/operators/profile_fblock.py
+  sfincs_jax/operators/profile_system.py
   sfincs_jax/problems/profile_response/solve.py
   tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_domain_package_import_contracts.py

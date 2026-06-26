@@ -31,7 +31,9 @@ inside domain folders are for contributors and advanced research workflows.
 - `geometry/`: analytic magnetic geometries, VMEC `wout` loading, Boozer data,
   and JAX geometry adapters.
 - `operators/`: drift-kinetic operator terms, matrix-free actions, sparse
-  operator helpers, and profile-response operator assembly.
+  operator helpers, and profile-response operator assembly. Profile-response
+  owners use flat `profile_*.py` names; `profile_response.py` is only a
+  compatibility shim for the former nested import path.
 - `physics/`: collision, classical-transport, bootstrap-current, and
   normalization formulas.
 - `problems/`: physical problem owners, including RHSMode-1 profile response,

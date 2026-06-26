@@ -52,14 +52,14 @@ from sfincs_jax.solvers.preconditioning import (
     transport_precond_cache_key as _transport_precond_cache_key_impl,
 )
 from sfincs_jax.problems.transport_matrix.diagnostics import transport_matrix_size_from_rhs_mode
-from sfincs_jax.operators.profile_response.kinetic import select_structured_rhs1_fblock_csr_operator
+from sfincs_jax.operators.profile_kinetic import select_structured_rhs1_fblock_csr_operator
 from sfincs_jax.solvers.preconditioners.xblock import (
     assemble_rhsmode1_fp_xblock_tz_sparse_matrix as _assemble_rhsmode1_fp_xblock_tz_sparse_matrix,
     get_rhsmode1_fp_xblock_assembled_host_cache as _get_rhsmode1_fp_xblock_assembled_host_cache,
     rhsmode1_fp_xblock_tz_sparse_diagonal as _rhsmode1_fp_xblock_tz_sparse_diagonal,
     safe_inverse_diagonal_np as _safe_inverse_diagonal_np,
 )
-from sfincs_jax.operators.profile_response.system import (
+from sfincs_jax.operators.profile_system import (
     V3FullSystemOperator,
     _fs_average_factor,
     _ix_min,

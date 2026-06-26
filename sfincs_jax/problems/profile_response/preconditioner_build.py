@@ -67,7 +67,7 @@ from sfincs_jax.solvers.preconditioners.xblock import (
     build_rhs1_xupwind_preconditioner,
     compute_rhs1_sxblock_tz_sparse_host_seed,
 )
-from sfincs_jax.operators.profile_response.system import V3FullSystemOperator, _matvec_shard_axis
+from sfincs_jax.operators.profile_system import V3FullSystemOperator, _matvec_shard_axis
 
 
 

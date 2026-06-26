@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 import jax.numpy as jnp
 import numpy as np
-from sfincs_jax.operators.profile_response.system import (
+from sfincs_jax.operators.profile_system import (
     _ix_min,
     _source_basis_constraint_scheme_1,
 )

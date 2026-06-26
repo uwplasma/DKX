@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from sfincs_jax.operators.profile_response.compressed_layout import (
+from sfincs_jax.operators.profile_compressed_layout import (
     build_rhs1_compressed_pitch_layout,
     infer_rhs1_compressed_pitch_layout_from_active_indices,
 )

@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import jax.numpy as jnp
 
-from sfincs_jax.operators.profile_response.fblock import apply_v3_fblock_operator, fblock_operator_from_namelist
+from sfincs_jax.operators.profile_fblock import apply_v3_fblock_operator, fblock_operator_from_namelist
 from sfincs_jax.namelist import read_sfincs_input
 
 

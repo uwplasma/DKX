@@ -33,7 +33,7 @@ from ....problems.profile_response.residual import (
     compose_multilevel_residual_correction_preconditioner,
     safe_preconditioner,
 )
-from sfincs_jax.operators.profile_response.system import (
+from sfincs_jax.operators.profile_system import (
     V3FullSystemOperator,
     _matvec_shard_axis,
     apply_v3_full_system_operator_cached,

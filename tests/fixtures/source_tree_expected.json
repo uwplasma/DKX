@@ -56,7 +56,6 @@
     "workflows"
   ],
   "temporary_nested_packages": [
-    "operators/profile_response",
     "problems/profile_response",
     "problems/profile_response/sparse",
     "problems/transport_matrix",
@@ -71,7 +70,6 @@
     "solvers/preconditioners/xblock"
   ],
   "temporary_init_only_packages": [
-    "operators",
     "solvers/preconditioners/domain_decomposition"
   ],
   "final_depth_policy": "One package level below sfincs_jax is the target. Entries in temporary_nested_packages are explicit refactor debt and should shrink, not grow."

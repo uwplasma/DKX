@@ -552,7 +552,7 @@ def _get_int(group: dict, key: str, default: int) -> int:
 def _dphi_hat_dpsi_hat_from_er_geometry_scheme4(er: float) -> float:
     """Compute dPhiHat/dpsiHat from Er for geometryScheme=4 (v3 defaults).
 
-    Matches `sfincs_jax.operators.profile_response.fblock._dphi_hat_dpsi_hat_from_er`,
+    Matches `sfincs_jax.operators.profile_fblock._dphi_hat_dpsi_hat_from_er`,
     and v3's defaults:
     `inputRadialCoordinateForGradients=4` with rN forced to 0.5.
     """
@@ -2016,7 +2016,7 @@ def write_sfincs_jax_output_h5(
             solve_v3_full_system_linear_gmres,
             solve_v3_full_system_newton_krylov_history,
         )
-        from sfincs_jax.operators.profile_response.system import full_system_operator_from_namelist, precompile_v3_full_system
+        from sfincs_jax.operators.profile_system import full_system_operator_from_namelist, precompile_v3_full_system
 
         if emit is not None:
             species_params = nml.group("speciesParameters")
@@ -2817,7 +2817,7 @@ def write_sfincs_jax_output_h5(
             density_factor = 4.0 * np.pi * t_hat * sqrt_t / (m_hat * sqrt_m)
             pressure_factor = 8.0 * np.pi * (t_hat * t_hat) * sqrt_t / (3.0 * m_hat * sqrt_m)
 
-            from sfincs_jax.operators.profile_response.system import _source_basis_constraint_scheme_1  # noqa: PLC0415
+            from sfincs_jax.operators.profile_system import _source_basis_constraint_scheme_1  # noqa: PLC0415
 
             xpart1, xpart2 = _source_basis_constraint_scheme_1(op_use.x)
             xpart1 = np.asarray(xpart1, dtype=np.float64)
@@ -3888,7 +3888,7 @@ def write_sfincs_jax_output_h5(
 
                 for which_rhs, x_full in result.state_vectors_by_rhs.items():
                     j = int(which_rhs) - 1
-                    from sfincs_jax.operators.profile_response.system import with_transport_rhs_settings  # noqa: PLC0415
+                    from sfincs_jax.operators.profile_system import with_transport_rhs_settings  # noqa: PLC0415
 
                     op_rhs = with_transport_rhs_settings(op0, which_rhs=int(which_rhs))
                     d = v3_rhsmode1_output_fields_vm_only_jit(op_rhs, x_full=x_full)
@@ -3954,7 +3954,7 @@ def write_sfincs_jax_output_h5(
             # Classical fluxes (v3 `classicalTransport.F90`) depend on the imposed gradients
             # and therefore must be computed separately for each whichRHS in RHSMode=2/3 runs.
             from ..physics.classical_transport import classical_flux_v3  # noqa: PLC0415
-            from sfincs_jax.operators.profile_response.system import with_transport_rhs_settings  # noqa: PLC0415
+            from sfincs_jax.operators.profile_system import with_transport_rhs_settings  # noqa: PLC0415
 
             theta_w = jnp.asarray(op0.theta_weights, dtype=jnp.float64)
             zeta_w = jnp.asarray(op0.zeta_weights, dtype=jnp.float64)

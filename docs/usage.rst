@@ -46,7 +46,7 @@ Collisionless v3 operator slice (streaming + mirror):
    import jax.numpy as jnp
    import numpy as np
 
-   from sfincs_jax.operators.profile_response.collisionless import CollisionlessV3Operator, apply_collisionless_v3
+   from sfincs_jax.operators.profile_collisionless import CollisionlessV3Operator, apply_collisionless_v3
 
    species = nml.group("speciesParameters")
    t_hats = jnp.asarray(np.atleast_1d(np.asarray(species["THATS"], dtype=float)))

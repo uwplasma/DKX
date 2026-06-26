@@ -7,14 +7,14 @@ import numpy as np
 import pytest
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_response.kinetic import (
+from sfincs_jax.operators.profile_kinetic import (
     assemble_partial_rhs1_fblock_operator,
     clear_structured_rhs1_fblock_csr_cache,
     select_structured_rhs1_fblock_csr_operator,
     select_structured_rhs1_fblock_operator,
 )
-from sfincs_jax.operators.profile_response.fblock import apply_v3_fblock_operator, fblock_operator_from_namelist
-from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator, full_system_operator_from_namelist
+from sfincs_jax.operators.profile_fblock import apply_v3_fblock_operator, fblock_operator_from_namelist
+from sfincs_jax.operators.profile_system import apply_v3_full_system_operator, full_system_operator_from_namelist
 
 
 def test_partial_fblock_assembly_matches_complete_pas_er_operator(tmp_path: Path) -> None:

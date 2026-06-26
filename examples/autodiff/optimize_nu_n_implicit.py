@@ -19,7 +19,7 @@ import jax.numpy as jnp
 
 from sfincs_jax.solvers.implicit import gmres_custom_linear_solve
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_response.system import (
+from sfincs_jax.operators.profile_system import (
     apply_v3_full_system_operator,
     full_system_operator_from_namelist,
     rhs_v3_full_system,

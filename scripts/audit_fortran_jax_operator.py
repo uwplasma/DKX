@@ -13,7 +13,7 @@ import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_response.system import (
+from sfincs_jax.operators.profile_system import (
     apply_v3_full_system_operator_cached,
     full_system_operator_from_namelist,
     rhs_v3_full_system,

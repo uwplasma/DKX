@@ -14,8 +14,8 @@ import jax
 import jax.numpy as jnp
 from jax import tree_util as jtu
 
-from sfincs_jax.operators.profile_response.fblock import V3FBlockOperator, matvec_v3_fblock_flat
-from sfincs_jax.operators.profile_response.system import V3FullSystemOperator, apply_v3_full_system_operator_cached
+from sfincs_jax.operators.profile_fblock import V3FBlockOperator, matvec_v3_fblock_flat
+from sfincs_jax.operators.profile_system import V3FullSystemOperator, apply_v3_full_system_operator_cached
 
 
 @jtu.register_pytree_node_class
@@ -28,7 +28,7 @@ class V3FBlockLinearSystem:
       r(x) = A x - b
 
     where A is represented matrix-free by
-    :class:`sfincs_jax.operators.profile_response.fblock.V3FBlockOperator`.
+    :class:`sfincs_jax.operators.profile_fblock.V3FBlockOperator`.
     """
 
     op: V3FBlockOperator
@@ -75,13 +75,13 @@ jacobian_matvec_v3_fblock_jit = jax.jit(lambda sys, v: sys.jacobian_matvec(v), s
 @jtu.register_pytree_node_class
 @dataclass(frozen=True)
 class V3FullLinearSystem:
-    """Linear system for the v3 full operator currently supported by :class:`sfincs_jax.operators.profile_response.system.V3FullSystemOperator`.
+    """Linear system for the v3 full operator currently supported by :class:`sfincs_jax.operators.profile_system.V3FullSystemOperator`.
 
     The residual is:
 
       r(x) = A x - b
 
-    where A is represented matrix-free by :class:`sfincs_jax.operators.profile_response.system.V3FullSystemOperator`.
+    where A is represented matrix-free by :class:`sfincs_jax.operators.profile_system.V3FullSystemOperator`.
     """
 
     op: V3FullSystemOperator

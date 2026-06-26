@@ -88,7 +88,7 @@ operators directly on the state vector.
 
 **Implementation.**
 
-- Core operator apply: ``sfincs_jax.operators.profile_response.system.apply_v3_full_system_operator_cached``.
+- Core operator apply: ``sfincs_jax.operators.profile_system.apply_v3_full_system_operator_cached``.
 - Per-operator **signature cache** prevents re-JITing the matvec when the operator
   shape and static fields are unchanged. See ``_operator_signature_cached``.
 
@@ -368,7 +368,7 @@ structural sparse pattern:
 4. Drop structural zeros, factor the resulting CSR matrix with host sparse LU,
    and apply iterative refinement against the true sparse operator.
 
-The implementation lives in ``sfincs_jax.operators.profile_response.sparse_pattern`` and
+The implementation lives in ``sfincs_jax.operators.profile_sparse_pattern`` and
 ``sfincs_jax.solvers.explicit_sparse.build_operator_from_pattern``. Tests verify that the
 conservative pattern covers frozen Fortran PETSc matrices for PAS, FP, and Phi1
 tiny systems, and that colored probing reconstructs the PAS tiny matrix to
@@ -1850,7 +1850,7 @@ while keeping the matvec control‑flow free (required for JAX GMRES/BiCGStab).
 **Implementation.**
 
 - ``SFINCS_JAX_FUSED_MATVEC`` (default enabled) in
-  ``sfincs_jax.operators.profile_response.fblock``.
+  ``sfincs_jax.operators.profile_fblock``.
 
 **Notes.** Avoid ``lax.scan``/``lax.fori_loop`` inside the matvec used by JAX
 iterative solvers: they assert on control‑flow. The collision operators (PAS/FP)
@@ -1886,9 +1886,9 @@ schemes used in reduced-suite inputs).
   ``sfincs_jax.discretization.periodic_stencil.extract_sparse_row_stencil`` and
   ``sfincs_jax.discretization.periodic_stencil.apply_sparse_row_stencil_gather``.
 - Collisionless operator fast path:
-  ``sfincs_jax.operators.profile_response.collisionless.apply_collisionless_v3``.
+  ``sfincs_jax.operators.profile_collisionless.apply_collisionless_v3``.
 - Operator build wiring:
-  ``sfincs_jax.operators.profile_response.fblock.collisionless_operator_from_namelist``.
+  ``sfincs_jax.operators.profile_fblock.collisionless_operator_from_namelist``.
 
 **Periodic circulant optimization.** For periodic circulant derivative matrices,
 an additional compact roll-based kernel is available and enabled on single-device
@@ -3058,7 +3058,7 @@ Controls:
 - ``SFINCS_JAX_FBLOCK_CACHE`` (default: enabled)
 - ``SFINCS_JAX_FBLOCK_CACHE_MAX`` (max cached entries; default: ``8``)
 
-Implementation: ``sfincs_jax.operators.profile_response.fblock``.
+Implementation: ``sfincs_jax.operators.profile_fblock``.
 
 Performance deltas (where measured)
 -----------------------------------
@@ -3085,7 +3085,7 @@ Key modules and functions referenced above:
 
 - **Operator apply + caching**:
 
-  - ``sfincs_jax/operators/profile_response/system.py``: ``apply_v3_full_system_operator_cached``,
+  - ``sfincs_jax/operators/profile_system.py``: ``apply_v3_full_system_operator_cached``,
     ``_operator_signature_cached``.
 
 - **Transport solver + preconditioners**:

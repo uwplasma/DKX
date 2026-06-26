@@ -25,7 +25,7 @@ from sfincs_jax.problems.transport_matrix.parallel.runtime import (
     plan_single_case_operator_coarse_reuse,
 )
 from sfincs_jax.problems.profile_response.solve import solve_v3_full_system_linear_gmres
-from sfincs_jax.operators.profile_response.system import full_system_operator_from_namelist
+from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
 
 
 def _normalized_backend(backend: str) -> str:

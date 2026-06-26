@@ -27,7 +27,7 @@ import jax.numpy as jnp
 import jax
 import numpy as np
 
-from sfincs_jax.operators.profile_response.device_sparse import DeviceCSR
+from sfincs_jax.operators.profile_device_sparse import DeviceCSR
 from sfincs_jax.solvers.preconditioners.qi.basis import (
     RHS1QICoarseBasis,
     RHS1QICoarseBasisMetadata,

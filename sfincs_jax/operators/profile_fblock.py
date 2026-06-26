@@ -23,9 +23,9 @@ import numpy as np
 from jax import tree_util as jtu
 
 from sfincs_jax.geometry.boozer import read_boozer_bc_header, selected_r_n_from_bc
-from sfincs_jax.operators.profile_response.collisionless import CollisionlessV3Operator, apply_collisionless_v3
-from sfincs_jax.operators.profile_response.electric_field import ErXDotV3Operator, ErXiDotV3Operator, apply_er_xdot_v3, apply_er_xidot_v3
-from sfincs_jax.operators.profile_response.exb import ExBThetaV3Operator, ExBZetaV3Operator, apply_exb_theta_v3, apply_exb_zeta_v3
+from sfincs_jax.operators.profile_collisionless import CollisionlessV3Operator, apply_collisionless_v3
+from sfincs_jax.operators.profile_electric_field import ErXDotV3Operator, ErXiDotV3Operator, apply_er_xdot_v3, apply_er_xidot_v3
+from sfincs_jax.operators.profile_exb import ExBThetaV3Operator, ExBZetaV3Operator, apply_exb_theta_v3, apply_exb_zeta_v3
 from sfincs_jax.physics.collisions import (
     FokkerPlanckV3Operator,
     FokkerPlanckV3Phi1Operator,
@@ -42,7 +42,7 @@ from sfincs_jax.diagnostics import fsab_hat2 as fsab_hat2_jax
 from sfincs_jax.diagnostics import g_hat_i_hat as g_hat_i_hat_jax
 from sfincs_jax.geometry import BoozerGeometry
 from sfincs_jax.input_compat import effective_equilibrium_file, effective_psi_a_hat, effective_psi_n_wish
-from sfincs_jax.operators.profile_response.magnetic_drifts import (
+from sfincs_jax.operators.profile_magnetic_drifts import (
     MagneticDriftThetaV3Operator,
     MagneticDriftXiDotV3Operator,
     MagneticDriftZetaV3Operator,
@@ -233,7 +233,7 @@ def _dphi_hat_dpsi_hat_from_er(*, nml: Namelist, er: float) -> float:
         if eq is None:
             raise ValueError("geometryScheme=11/12 requires equilibriumFile in geometryParameters.")
         base_dir = nml.source_path.parent if nml.source_path is not None else None
-        repo_root = Path(__file__).resolve().parents[3]
+        repo_root = Path(__file__).resolve().parents[2]
         extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
         p = resolve_existing_path(str(eq), base_dir=base_dir, extra_search_dirs=extra).path
 
@@ -254,7 +254,7 @@ def _dphi_hat_dpsi_hat_from_er(*, nml: Namelist, er: float) -> float:
         if eq is None:
             raise ValueError("geometryScheme=5 requires equilibriumFile in geometryParameters.")
         base_dir = nml.source_path.parent if nml.source_path is not None else None
-        repo_root = Path(__file__).resolve().parents[3]
+        repo_root = Path(__file__).resolve().parents[2]
         extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
         p = resolve_existing_path(str(eq), base_dir=base_dir, extra_search_dirs=extra).path
 

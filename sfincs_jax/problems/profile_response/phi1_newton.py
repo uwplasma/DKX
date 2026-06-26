@@ -27,7 +27,7 @@ from ...solvers.preconditioning import (
     set_precond_size_hint,
     use_solver_jit,
 )
-from sfincs_jax.operators.profile_response.compressed_layout import build_rhs1_compressed_pitch_layout
+from sfincs_jax.operators.profile_compressed_layout import build_rhs1_compressed_pitch_layout
 from sfincs_jax.problems.profile_response.policies import (
     host_sparse_direct_refine_steps,
     host_sparse_factor_dtype,
@@ -51,7 +51,7 @@ from ...solvers.preconditioners.full_fp.kinetic_blocks import (
     build_rhs1_collision_preconditioner,
 )
 from ...solvers.preconditioners.symbolic_sparse import build_sparse_ilu_from_matvec
-from sfincs_jax.operators.profile_response.system import (
+from sfincs_jax.operators.profile_system import (
     V3FullSystemOperator,
     apply_v3_full_system_jacobian_jit,
     apply_v3_full_system_operator_cached,

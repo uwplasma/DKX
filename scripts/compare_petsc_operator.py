@@ -11,7 +11,7 @@ from sfincs_jax.discretization.indices import V3Indexing
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.petsc_binary import read_petsc_mat_aij, read_petsc_vec
 from sfincs_jax.problems.transport_matrix.linear_system import transport_active_dof_indices as _transport_active_dof_indices
-from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator, full_system_operator_from_namelist
+from sfincs_jax.operators.profile_system import apply_v3_full_system_operator, full_system_operator_from_namelist
 
 
 def _csr_matvec(row_ptr: np.ndarray, col_ind: np.ndarray, data: np.ndarray, x: np.ndarray) -> np.ndarray:

@@ -24,9 +24,9 @@ from jax.sharding import Mesh, PartitionSpec
 _spmd_jit = jax.jit
 
 from sfincs_jax.geometry.boozer import read_boozer_bc_header, selected_r_n_from_bc
-from sfincs_jax.operators.profile_response.collisionless import CollisionlessV3Operator
-from sfincs_jax.operators.profile_response.electric_field import ErXiDotV3Operator, ErXDotV3Operator
-from sfincs_jax.operators.profile_response.exb import ExBThetaV3Operator, ExBZetaV3Operator
+from sfincs_jax.operators.profile_collisionless import CollisionlessV3Operator
+from sfincs_jax.operators.profile_electric_field import ErXiDotV3Operator, ErXDotV3Operator
+from sfincs_jax.operators.profile_exb import ExBThetaV3Operator, ExBZetaV3Operator
 from sfincs_jax.physics.collisions import (
     PitchAngleScatteringV3Operator,
     FokkerPlanckV3Operator,
@@ -43,13 +43,13 @@ from sfincs_jax.input_compat import (
     infer_phi_input_radial_coordinate_for_gradients,
     infer_species_input_radial_coordinate_for_gradients,
 )
-from sfincs_jax.operators.profile_response.magnetic_drifts import (
+from sfincs_jax.operators.profile_magnetic_drifts import (
     MagneticDriftThetaV3Operator,
     MagneticDriftZetaV3Operator,
     MagneticDriftXiDotV3Operator,
 )
 from sfincs_jax.namelist import Namelist
-from sfincs_jax.operators.profile_response.fblock import (
+from sfincs_jax.operators.profile_fblock import (
     V3FBlockOperator,
     apply_v3_fblock_operator,
     fblock_operator_from_namelist,
@@ -1941,7 +1941,7 @@ def full_system_operator_from_namelist(
         if eq is None:
             raise ValueError("geometryScheme=11/12 requires equilibriumFile in geometryParameters.")
         base_dir = nml.source_path.parent if nml.source_path is not None else None
-        repo_root = Path(__file__).resolve().parents[3]
+        repo_root = Path(__file__).resolve().parents[2]
         extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
         p = resolve_existing_path(str(eq), base_dir=base_dir, extra_search_dirs=extra).path
         header = read_boozer_bc_header(path=str(p), geometry_scheme=int(geometry_scheme))
@@ -1961,7 +1961,7 @@ def full_system_operator_from_namelist(
         if eq is None:
             raise ValueError("geometryScheme=5 requires equilibriumFile in geometryParameters.")
         base_dir = nml.source_path.parent if nml.source_path is not None else None
-        repo_root = Path(__file__).resolve().parents[3]
+        repo_root = Path(__file__).resolve().parents[2]
         extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
         # Allow `.txt -> .nc` fallback for VMEC wout files.
         try:

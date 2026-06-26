@@ -14,7 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from ...namelist import Namelist
-from ...operators.profile_response.full_system import solve_structured_rhs1_full_csr
+from ...operators.profile_full_system import solve_structured_rhs1_full_csr
 from ...solvers.implicit import linear_custom_solve, linear_custom_solve_with_residual
 from ...solvers.krylov_dispatch import gmres_solve_dispatch, rhs_krylov_method_for_context
 from ...solver import (
@@ -32,7 +32,7 @@ from ...solver import (
     gmres_solve_with_residual_distributed,
     gmres_solve_with_residual_jit,
 )
-from sfincs_jax.operators.profile_response.system import (
+from sfincs_jax.operators.profile_system import (
     V3FullSystemOperator,
     full_system_operator_from_namelist,
     rhs_v3_full_system,
