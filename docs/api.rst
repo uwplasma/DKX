@@ -169,9 +169,6 @@ research workflows.
 .. automodule:: sfincs_jax.solvers.preconditioners.domain_decomposition
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.active_dof
-   :members:
-
 .. automodule:: sfincs_jax.operators.profile_response.sources
    :members:
 
