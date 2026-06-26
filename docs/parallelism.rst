@@ -68,7 +68,7 @@ preserving differentiability:
    in parallel across CPU processes or GPU devices.
 
    Implementation: `solve_v3_transport_matrix_linear_gmres` in
-   `sfincs_jax.v3_driver`.
+   `sfincs_jax.problems.transport_matrix.solve`.
 
 2. **Parallel cases / scan points**
 
@@ -143,8 +143,9 @@ path; outputs are merged deterministically by column.
 
 **Relevant code paths**
 
-- `sfincs_jax.v3_driver.solve_v3_transport_matrix_linear_gmres`
-- `sfincs_jax.v3_driver._transport_parallel_worker`
+- `sfincs_jax.problems.transport_matrix.solve.solve_v3_transport_matrix_linear_gmres`
+- `sfincs_jax.problems.transport_matrix.parallel.runtime`
+- `sfincs_jax.problems.transport_matrix.parallel.worker`
 
 **How it works**
 
@@ -1283,5 +1284,5 @@ iterations, not another solver-label toggle.
 See also:
 
 - `docs/performance_techniques.rst`
-- `sfincs_jax.v3_driver`
+- `sfincs_jax.problems.transport_matrix.solve`
 - `sfincs_jax.operators.profile_response.system`

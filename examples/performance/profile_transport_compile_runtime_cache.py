@@ -53,7 +53,7 @@ def _run_worker(*, script_path: Path, input_path: Path, cache_dir: Path, repeats
 
 def _worker_main(*, input_path: Path, repeats: int) -> int:
     from sfincs_jax.namelist import read_sfincs_input
-    from sfincs_jax.v3_driver import solve_v3_transport_matrix_linear_gmres
+    from sfincs_jax.problems.transport_matrix.solve import solve_v3_transport_matrix_linear_gmres
 
     nml = read_sfincs_input(input_path)
     first_t0 = time.perf_counter()

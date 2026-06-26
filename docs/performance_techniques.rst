@@ -279,7 +279,8 @@ construct a reduced system that contains only active degrees of freedom.
 
 **Implementation.**
 
-- Transport solves: ``_transport_active_dof_indices`` in ``sfincs_jax.v3_driver``.
+- Transport solves: ``transport_active_dof_indices`` in
+  ``sfincs_jax.problems.transport_matrix.linear_system``.
 - RHSMode=1: similar logic for active DOFs to reduce matrix-free work.
 
 **Mathematics.**
@@ -498,7 +499,8 @@ where :math:`P^{-1}` is the already-built PAS preconditioner application and
 
 - Smoother kernel:
   ``sfincs_jax.solvers.preconditioners.pas.policy.adaptive_pas_smoother``.
-- Driver gate: ``sfincs_jax.v3_driver._rhsmode1_pas_adaptive_smoother_allowed``.
+- Driver gate:
+  ``sfincs_jax.solvers.preconditioners.pas.policy.adaptive_pas_smoother_allowed``.
 - Current integration point: immediately after the base PAS solve and before the
   strong-preconditioner tail in the linear RHSMode=1 driver.
 
@@ -531,7 +533,9 @@ heavier preconditioner build.
 
 **Implementation.**
 
-- ``_solve_linear`` and ``_solve_linear_with_residual`` in ``sfincs_jax.v3_driver``.
+- RHSMode=1 solve-loop dispatch in
+  ``sfincs_jax.problems.profile_response.solve`` and shared Krylov dispatch in
+  ``sfincs_jax.solvers.krylov_dispatch``.
 - Fallback controlled by ``SFINCS_JAX_BICGSTAB_FALLBACK``.
 
 **Compared to Fortran.**
@@ -1277,7 +1281,7 @@ Implementation:
   ``sfincs_jax.solvers.explicit_sparse.build_operator_from_matvec`` and
   ``factorize_host_sparse_operator``;
 - RHSMode=2/3 sparse-direct reuse:
-  ``sfincs_jax.v3_driver.solve_v3_transport_matrix_linear_gmres``.
+  ``sfincs_jax.problems.transport_matrix.solve.solve_v3_transport_matrix_linear_gmres``.
 
 Controls:
 
@@ -1335,12 +1339,10 @@ Measured production-floor evidence:
 
 **Implementation.**
 
-- ``_build_rhsmode23_sxblock_preconditioner`` in ``sfincs_jax.v3_driver``.
-- ``_build_rhsmode23_theta_dd_preconditioner`` / ``_build_rhsmode23_zeta_dd_preconditioner``
-  in ``sfincs_jax.v3_driver``.
-- ``_build_rhsmode23_theta_schwarz_preconditioner`` /
-  ``_build_rhsmode23_zeta_schwarz_preconditioner`` in ``sfincs_jax.v3_driver``.
-- ``_build_rhsmode23_fp_tzfft_preconditioner`` in ``sfincs_jax.v3_driver``.
+- RHSMode=2/3 transport preconditioner builders in
+  ``sfincs_jax.solvers.preconditioners.transport_matrix``.
+- Transport preconditioner selection and gating in
+  ``sfincs_jax.problems.transport_matrix.policies``.
 - Controlled by ``SFINCS_JAX_TRANSPORT_PRECOND`` (``auto``, ``sxblock``, ``collision``, etc.).
   ``auto`` picks the collision-diagonal preconditioner for the default BiCGStab transport
   solver and upgrades to species×x blocks for modest FP systems when GMRES is selected.
@@ -1383,7 +1385,8 @@ applied per species and :math:`x` using the same :math:`(\theta,\zeta)` weights
 as diagnostics. This stabilizes PAS tokamak-like cases and pairs with the
 ``xblock_tz`` preconditioner default.
 
-Implementation: ``sfincs_jax.v3_driver`` (``use_pas_projection`` and
+Implementation: the RHSMode=1 solve loop in
+``sfincs_jax.problems.profile_response.solve`` (``use_pas_projection`` and
 ``_project_pas_f``). Control: ``SFINCS_JAX_PAS_PROJECT_CONSTRAINTS`` (auto on for
 ``N_\zeta=1`` tokamak-like runs **except** ``geometryScheme=1`` analytic tokamak
 cases).
@@ -1476,7 +1479,8 @@ by recovering the diagonal Schur entries with a **single** base‑preconditioner
 column‑by‑column. This significantly reduces Schur setup time in tokamak‑like PAS runs
 with many :math:`x` points.
 
-Implementation: ``sfincs_jax.v3_driver`` (``_build_rhsmode1_schur_*``).
+Implementation: ``sfincs_jax.solvers.preconditioners.schur.profile_response``
+with integration in ``sfincs_jax.problems.profile_response.preconditioner_build``.
 Controls: ``SFINCS_JAX_RHSMODE1_SCHUR_MODE`` and
 ``SFINCS_JAX_RHSMODE1_SCHUR_FULL_MAX``. The base preconditioner used inside the
 Schur construction can be selected with ``SFINCS_JAX_RHSMODE1_SCHUR_BASE``; the
@@ -1581,8 +1585,8 @@ as a differentiable approximation to :math:`\tilde{A}^{-1}`. Explicit solves can
 apply SciPy’s sparse ILU and optionally use the sparse operator for matvecs.
 References: GMRES [#saad86]_, ILU/Preconditioning surveys [#benzi02]_.
 
-Implementation: ``sfincs_jax.v3_driver`` (``_build_sparse_ilu_from_matvec`` and
-the RHSMode=1 sparse fallback). Controls:
+Implementation: ``sfincs_jax.solvers.explicit_sparse`` and
+``sfincs_jax.problems.profile_response.sparse.handoff``. Controls:
 
 - ``SFINCS_JAX_RHSMODE1_SPARSE_PRECOND`` (auto/on/off/jax/scipy)
 - ``SFINCS_JAX_RHSMODE1_SPARSE_OPERATOR`` (optional sparse matvec path)
@@ -1604,7 +1608,7 @@ forming the full species block, and it is selected automatically when
 :math:`L \times N_\theta \times N_\zeta` stays below
 ``SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX``.
 
-Implementation: ``sfincs_jax.v3_driver`` (``_build_rhsmode1_xblock_tz_preconditioner``).
+Implementation: ``sfincs_jax.solvers.preconditioners.xblock``.
 
 These are cached to avoid recomputation. RHS-only gradients are excluded from the cache key
 so scan points can reuse the same preconditioner blocks. Controls:
@@ -1752,7 +1756,7 @@ medium DKES PAS systems, the default now prefers dense ``xblock_tz`` blocks when
 estimated dense memory stays within the configured cap, since that path is typically
 more robust and faster in practice.
 
-Implementation: ``sfincs_jax.v3_driver`` (``_build_rhsmode1_pas_xblock_ilu_preconditioner``).
+Implementation: ``sfincs_jax.solvers.preconditioners.pas.xblock_ilu``.
 Key controls:
 
 - ``SFINCS_JAX_RHSMODE1_SCHUR_BASE=pas_ilu`` (force as Schur base for constraintScheme=2)
@@ -1784,7 +1788,7 @@ JAX. This avoids the expensive dense-matvec assembly that ``xblock_tz`` uses and
 reduces preconditioner build time and peak memory on 3D PAS cases with large
 angular blocks.
 
-Implementation: ``sfincs_jax.v3_driver`` (``_build_rhsmode1_pas_tz_preconditioner``).
+Implementation: ``sfincs_jax.solvers.preconditioners.pas.angular``.
 
 Auto selection: for 3D PAS-only cases, ``auto`` selects ``pas_tz`` as the Schur
 base when :math:`L_{\max} N_\theta N_\zeta` exceeds ``SFINCS_JAX_RHSMODE1_PAS_TZ_MIN``
@@ -1978,7 +1982,8 @@ where :math:`U` contains recent solution vectors.
 
 **Implementation.**
 
-- ``SFINCS_JAX_TRANSPORT_RECYCLE_K`` in ``sfincs_jax.v3_driver``.
+- ``SFINCS_JAX_TRANSPORT_RECYCLE_K`` in
+  ``sfincs_jax.problems.transport_matrix.solve``.
 - ``SFINCS_JAX_STATE_IN``/``SFINCS_JAX_STATE_OUT`` (cross-run recycling).
 - ``SFINCS_JAX_SCAN_RECYCLE`` (auto-wires state files between scan points).
 - ``SFINCS_JAX_RHSMODE1_RECYCLE_K`` (RHSMode=1 scan reuse with least-squares deflation).

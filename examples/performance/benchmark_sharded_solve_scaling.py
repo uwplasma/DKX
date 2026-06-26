@@ -24,7 +24,7 @@ from sfincs_jax.problems.transport_matrix.parallel.runtime import (
     plan_single_case_sharded_solve,
     plan_single_case_operator_coarse_reuse,
 )
-from sfincs_jax.v3_driver import solve_v3_full_system_linear_gmres
+from sfincs_jax.problems.profile_response.solve import solve_v3_full_system_linear_gmres
 from sfincs_jax.operators.profile_response.system import full_system_operator_from_namelist
 
 

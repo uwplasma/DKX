@@ -11,7 +11,7 @@ from sfincs_jax.problems.transport_matrix.parallel.runtime import (
     solve_transport_parallel_payload,
     transport_parallel_result_to_npz_arrays,
 )
-from sfincs_jax.v3_driver import solve_v3_transport_matrix_linear_gmres
+from sfincs_jax.problems.transport_matrix.solve import solve_v3_transport_matrix_linear_gmres
 
 
 def main() -> int:

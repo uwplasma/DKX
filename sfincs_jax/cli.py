@@ -249,7 +249,7 @@ def _add_parallel_cli_args(parser: argparse.ArgumentParser) -> None:
 
 def _cmd_solve_v3(args: argparse.Namespace) -> int:
     t0 = _now()
-    from .v3_driver import solve_v3_full_system_linear_gmres  # noqa: PLC0415
+    from .problems.profile_response.solve import solve_v3_full_system_linear_gmres  # noqa: PLC0415
 
     nml = _nml_with_cli_equilibrium_override(read_sfincs_input(Path(args.input)), args)
     _emit("################################################################", level=0, args=args)
@@ -346,7 +346,7 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
 
 def _cmd_transport_matrix_v3(args: argparse.Namespace) -> int:
     t0 = _now()
-    from .v3_driver import solve_v3_transport_matrix_linear_gmres  # noqa: PLC0415
+    from .problems.transport_matrix.solve import solve_v3_transport_matrix_linear_gmres  # noqa: PLC0415
 
     nml = _nml_with_cli_equilibrium_override(read_sfincs_input(Path(args.input)), args)
     _emit("################################################################", level=0, args=args)

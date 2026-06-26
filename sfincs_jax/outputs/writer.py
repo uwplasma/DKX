@@ -3641,12 +3641,12 @@ def write_sfincs_jax_output_h5(
             import jax.numpy as jnp
 
             # Import lazily to keep geometry-only use-cases lightweight.
-            from ..v3_driver import solve_v3_transport_matrix_linear_gmres
             from ..problems.transport_matrix.diagnostics import (
                 transport_matrix_size_from_rhs_mode,
                 v3_rhsmode1_output_fields_vm_only_jit,
                 v3_transport_output_fields_vm_only,
             )
+            from ..problems.transport_matrix.solve import solve_v3_transport_matrix_linear_gmres
 
             n_rhs = transport_matrix_size_from_rhs_mode(int(rhs_mode))
             n_species = int(np.asarray(nml.group("speciesParameters").get("ZS", [])).size)

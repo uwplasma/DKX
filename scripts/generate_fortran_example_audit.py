@@ -97,7 +97,7 @@ def classify_support(input_path: Path, *, try_transport_solves: bool = False) ->
         tm_support = "declared"
         if try_transport_solves:
             try:
-                from sfincs_jax.v3_driver import solve_v3_transport_matrix_linear_gmres
+                from sfincs_jax.problems.transport_matrix.solve import solve_v3_transport_matrix_linear_gmres
 
                 res = nml.group("resolutionParameters")
                 solver_tol = float(res.get("SOLVERTOLERANCE", 1e-10))

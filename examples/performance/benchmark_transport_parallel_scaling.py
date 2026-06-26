@@ -17,7 +17,7 @@ from sfincs_jax.problems.transport_matrix.parallel.runtime import (
     audit_transport_parallel_scaling_summary,
 )
 from sfincs_jax.problems.transport_matrix.parallel.runtime import partition_transport_rhs
-from sfincs_jax.v3_driver import solve_v3_transport_matrix_linear_gmres
+from sfincs_jax.problems.transport_matrix.solve import solve_v3_transport_matrix_linear_gmres
 
 
 def _configure_backend_env(*, workers: int, backend: str) -> None:

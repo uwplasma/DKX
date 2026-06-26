@@ -6,7 +6,7 @@ overwrites (dnHatdpsiHats, dTHatdpsiHats, EParallelHat) internally before constr
 
 In `sfincs_jax`, the same behavior is exposed via:
   - `sfincs_jax.operators.profile_response.system.with_transport_rhs_settings` (low-level operator manipulation), and
-  - `sfincs_jax.v3_driver.solve_v3_full_system_linear_gmres(..., which_rhs=...)` (convenience driver),
+  - `sfincs_jax.problems.profile_response.solve.solve_v3_full_system_linear_gmres(..., which_rhs=...)`,
   - `sfincs_jax solve-v3 --which-rhs ...` (CLI).
 
 This example uses the tiny monoenergetic parity fixture shipped in `tests/ref/` so it runs quickly
@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3_driver import solve_v3_full_system_linear_gmres
+from sfincs_jax.problems.profile_response.solve import solve_v3_full_system_linear_gmres
 
 
 def main() -> None:
@@ -42,4 +42,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

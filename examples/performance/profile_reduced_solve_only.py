@@ -13,7 +13,7 @@ import jax
 
 from sfincs_jax.io import localize_equilibrium_file_in_place
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3_driver import solve_v3_full_system_linear_gmres
+from sfincs_jax.problems.profile_response.solve import solve_v3_full_system_linear_gmres
 
 
 _ROOT = Path(__file__).resolve().parents[2]

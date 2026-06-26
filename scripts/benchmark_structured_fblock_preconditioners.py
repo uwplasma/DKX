@@ -187,7 +187,7 @@ def run_child_payload(args: argparse.Namespace) -> dict[str, Any]:
 
     from sfincs_jax.namelist import read_sfincs_input
     from sfincs_jax.operators.profile_response.system import full_system_operator_from_namelist
-    from sfincs_jax.v3_driver import solve_v3_full_system_linear_gmres
+    from sfincs_jax.problems.profile_response.solve import solve_v3_full_system_linear_gmres
 
     case = str(args.case)
     preconditioner = str(args.preconditioner)
