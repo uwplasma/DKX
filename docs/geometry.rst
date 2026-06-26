@@ -369,10 +369,10 @@ The main geometry-related modules are:
   VMEC-file, VMEC Fourier-sum, and JAX-native geometry adapter owners.
 - ``sfincs_jax/input_compat.py``: equilibrium-file resolution and namelist overrides.
 - ``sfincs_jax/diagnostics.py``: geometry-derived scalar diagnostics and moments.
-- ``sfincs_jax/operators/profile_response/system.py``: insertion of geometry coefficients into the kinetic
+- ``sfincs_jax/operators/profile_system.py``: insertion of geometry coefficients into the kinetic
   operator.
-- ``sfincs_jax/operators/profile_response/magnetic_drifts.py`` and
-  ``sfincs_jax/operators/profile_response/exb.py``:
+- ``sfincs_jax/operators/profile_magnetic_drifts.py`` and
+  ``sfincs_jax/operators/profile_exb.py``:
   construction of drift coefficients from the geometry arrays.
 
 The operator does not carry an opaque geometry object around. Instead, the solve path

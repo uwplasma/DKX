@@ -290,27 +290,27 @@ MOVED_ROOT_MODULE_OWNERS = {
         "adaptive_pas_smoother_allowed",
         "summarize_constrained_pas_branches",
     ),
-    "sfincs_jax.operators.profile_response.collisionless": (
+    "sfincs_jax.operators.profile_collisionless": (
         "CollisionlessV3Operator",
         "apply_collisionless_v3",
     ),
-    "sfincs_jax.operators.profile_response.electric_field": (
+    "sfincs_jax.operators.profile_electric_field": (
         "ErXiDotV3Operator",
         "ErXDotV3Operator",
         "apply_er_xidot_v3",
         "apply_er_xdot_v3",
     ),
-    "sfincs_jax.operators.profile_response.exb": (
+    "sfincs_jax.operators.profile_exb": (
         "ExBThetaV3Operator",
         "ExBZetaV3Operator",
         "apply_exb_theta_v3",
         "apply_exb_zeta_v3",
     ),
-    "sfincs_jax.operators.profile_response.linear_systems": (
+    "sfincs_jax.operators.profile_linear_systems": (
         "V3FBlockLinearSystem",
         "V3FullLinearSystem",
     ),
-    "sfincs_jax.operators.profile_response.magnetic_drifts": (
+    "sfincs_jax.operators.profile_magnetic_drifts": (
         "MagneticDriftThetaV3Operator",
         "MagneticDriftXiDotV3Operator",
         "MagneticDriftZetaV3Operator",
@@ -754,43 +754,43 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "v3_linear_solve_result_from_payload",
     ),
     (
-        "sfincs_jax.operators.profile_response.sparse_pattern",
-        "sfincs_jax.operators.profile_response.sparse_pattern",
+        "sfincs_jax.operators.profile_sparse_pattern",
+        "sfincs_jax.operators.profile_sparse_pattern",
         "v3_full_system_conservative_sparsity_pattern",
     ),
     (
-        "sfincs_jax.operators.profile_response.sparse_pattern",
-        "sfincs_jax.operators.profile_response.sparse_pattern",
+        "sfincs_jax.operators.profile_sparse_pattern",
+        "sfincs_jax.operators.profile_sparse_pattern",
         "v3_full_system_fortran_reduced_preconditioner_sparsity_pattern",
     ),
     (
-        "sfincs_jax.operators.profile_response.fblock",
-        "sfincs_jax.operators.profile_response.fblock",
+        "sfincs_jax.operators.profile_fblock",
+        "sfincs_jax.operators.profile_fblock",
         "V3FBlockOperator",
     ),
     (
-        "sfincs_jax.operators.profile_response.fblock",
-        "sfincs_jax.operators.profile_response.fblock",
+        "sfincs_jax.operators.profile_fblock",
+        "sfincs_jax.operators.profile_fblock",
         "fblock_operator_from_namelist",
     ),
     (
-        "sfincs_jax.operators.profile_response.fblock",
-        "sfincs_jax.operators.profile_response.fblock",
+        "sfincs_jax.operators.profile_fblock",
+        "sfincs_jax.operators.profile_fblock",
         "matvec_v3_fblock_flat",
     ),
     (
-        "sfincs_jax.operators.profile_response.system",
-        "sfincs_jax.operators.profile_response.system",
+        "sfincs_jax.operators.profile_system",
+        "sfincs_jax.operators.profile_system",
         "V3FullSystemOperator",
     ),
     (
-        "sfincs_jax.operators.profile_response.system",
-        "sfincs_jax.operators.profile_response.system",
+        "sfincs_jax.operators.profile_system",
+        "sfincs_jax.operators.profile_system",
         "full_system_operator_from_namelist",
     ),
     (
-        "sfincs_jax.operators.profile_response.system",
-        "sfincs_jax.operators.profile_response.system",
+        "sfincs_jax.operators.profile_system",
+        "sfincs_jax.operators.profile_system",
         "apply_v3_full_system_operator_cached",
     ),
     (

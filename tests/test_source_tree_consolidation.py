@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 from pathlib import Path
 
 
@@ -75,3 +76,12 @@ def test_source_tree_consolidation_target_is_stricter_than_current_tree() -> Non
     assert set(expected["target_root_modules"]) < set(expected["allowed_root_modules"])
     assert set(expected["target_root_packages"]) < set(expected["allowed_root_packages"])
     assert expected["temporary_nested_packages"], "temporary nested packages should be reduced by later tranches"
+
+
+def test_flattened_operator_legacy_imports_resolve_to_canonical_modules() -> None:
+    assert not (PACKAGE_ROOT / "operators" / "profile_response").exists()
+
+    for name in ("collisionless", "fblock", "full_system", "layout", "system"):
+        legacy = importlib.import_module(f"sfincs_jax.operators.profile_response.{name}")
+        canonical = importlib.import_module(f"sfincs_jax.operators.profile_{name}")
+        assert legacy is canonical

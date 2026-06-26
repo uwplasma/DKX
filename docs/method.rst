@@ -183,7 +183,7 @@ To stabilize the drift advection, v3 supports upwinded angular derivative matric
 
    \mathrm{use\_plus}(\theta,\zeta) = \big(g_1\,\hat D(1,1)/Z\big) > 0.
 
-This upwind selection is implemented in `sfincs_jax.operators.profile_response.magnetic_drifts` and parity-tested against
+This upwind selection is implemented in `sfincs_jax.operators.profile_magnetic_drifts` and parity-tested against
 frozen PETSc binaries for a `geometryScheme=11` fixture.
 
 Collision operators (PAS and FP)
@@ -264,11 +264,11 @@ function rather than an assembled sparse matrix. For the linear kinetic block th
 
 where :math:`A` is represented by a matrix-free matvec and :math:`b` is a right-hand side.
 
-In `sfincs_jax`, the residual interface lives in `sfincs_jax.operators.profile_response.linear_systems`:
+In `sfincs_jax`, the residual interface lives in `sfincs_jax.operators.profile_linear_systems`:
 
-- :class:`sfincs_jax.operators.profile_response.linear_systems.V3FBlockLinearSystem` computes ``residual(x)`` and
+- :class:`sfincs_jax.operators.profile_linear_systems.V3FBlockLinearSystem` computes ``residual(x)`` and
   provides a matrix-free Jacobian matvec ``jacobian_matvec(v)``.
-- :class:`sfincs_jax.operators.profile_response.linear_systems.V3FullLinearSystem` provides the same interface for the
+- :class:`sfincs_jax.operators.profile_linear_systems.V3FullLinearSystem` provides the same interface for the
   (currently supported subset of the) full v3 linear system operator.
 - For linear operators, the Jacobian matvec is identical to the operator matvec; for nonlinear
   residuals later in the port, `jax.jvp` provides an efficient Jacobian-vector product (JVP)
