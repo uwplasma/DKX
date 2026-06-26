@@ -244,6 +244,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   review-blocked progress phrases; remaining chronological/status wording is
   kept in release notes, roadmaps, research-lane pages, or implementation-detail
   docs where chronology and claim boundaries are the point.
+- The twenty-seventh post-audit coverage tranche added enabled RHSMode=2/3 FP
+  Schur-coarse tests for the Fourier-line and x-block angular LU transport
+  preconditioners. The tests monkeypatch the true operator to a deterministic
+  identity action, then verify bounded coarse-space construction, restriction
+  mode selection, kinetic residual-error columns, cache behavior, and finite
+  application without launching full transport solves.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.

@@ -13,6 +13,7 @@ from sfincs_jax.solvers.preconditioning import (
     _TRANSPORT_FP_TZFFT_LINE_SCHUR_PRECOND_CACHE,
     _TRANSPORT_FP_TZFFT_PRECOND_CACHE,
     _TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE,
+    _TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_PRECOND_CACHE,
     _TRANSPORT_PRECOND_CACHE,
     _TRANSPORT_SXBLOCK_LR_PRECOND_CACHE,
     _TRANSPORT_SXBLOCK_PRECOND_CACHE,
@@ -136,6 +137,7 @@ def _clear_transport_caches() -> None:
     _TRANSPORT_FP_TZFFT_LINE_SCHUR_PRECOND_CACHE.clear()
     _TRANSPORT_FP_LOCAL_GEOM_LINE_PRECOND_CACHE.clear()
     _TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE.clear()
+    _TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_PRECOND_CACHE.clear()
     _TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE.clear()
 
 
@@ -354,6 +356,53 @@ def test_transport_fp_schur_wrappers_disable_cleanly_and_support_reduced_view(mo
     expected_xblock = reduce_full(base_xblock(expand_reduced(rhs_reduced)))
     np.testing.assert_allclose(np.asarray(xblock_schur_reduced(rhs_reduced)), np.asarray(expected_xblock))
     assert len(_TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE) == 0
+
+
+def test_transport_fp_tzfft_line_schur_builds_true_action_coarse_space(monkeypatch) -> None:
+    op = _transport_operator()
+    vector = _vector(op)
+
+    monkeypatch.setattr(tm, "apply_v3_full_system_operator_cached", lambda _op, x: jnp.asarray(x, dtype=jnp.float64))
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_MAX_COLS", "6")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_RESTRICTION", "tail_galerkin")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_DTYPE", "float32")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_REG", "bad")
+    _clear_transport_caches()
+
+    schur = tm.build_rhsmode23_fp_tzfft_line_schur_preconditioner(op=op)
+    result = schur(vector)
+
+    assert result.shape == vector.shape
+    assert bool(jnp.all(jnp.isfinite(result)))
+    cache = next(iter(_TRANSPORT_FP_TZFFT_LINE_SCHUR_PRECOND_CACHE.values()))
+    assert 0 < cache.n_columns <= 6
+    assert cache.restriction_kind == "tail_galerkin"
+    assert cache.restrict_basis is not None
+    assert any(label.startswith("tail_") or "constraint1" in label for label in cache.basis_labels)
+
+
+def test_transport_fp_xblock_tz_lu_schur_builds_kinetic_error_columns(monkeypatch) -> None:
+    op = _transport_operator()
+    op.point_at_x0 = True
+    vector = _vector(op)
+
+    monkeypatch.setattr(tm, "apply_v3_full_system_operator_cached", lambda _op, x: jnp.asarray(x, dtype=jnp.float64))
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_FACTOR_MAX_MB", "64")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_MAX_COLS", "8")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_RESTRICTION", "tail_galerkin")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_KINETIC_RESIDUAL", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_RHS_RESIDUAL", "0")
+    _clear_transport_caches()
+
+    schur = tm.build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner(op=op)
+    result = schur(vector)
+
+    assert result.shape == vector.shape
+    assert bool(jnp.all(jnp.isfinite(result)))
+    cache = next(iter(_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_PRECOND_CACHE.values()))
+    assert 0 < cache.n_columns <= 8
+    assert cache.restriction_kind == "tail_galerkin"
+    assert any(label.endswith("_xblock_residual_error") for label in cache.basis_labels)
 
 
 def test_transport_structured_fblock_lu_uses_factor_metadata_and_memory_fallback(monkeypatch) -> None:
