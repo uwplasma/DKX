@@ -14,13 +14,13 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.workflows.optimization_evidence import (  # noqa: E402
+from sfincs_jax.workflows.optimization import (  # noqa: E402
     PromotionEvidenceLane,
     build_promotion_evidence_plan,
     run_fortran_er_scan,
     write_promotion_evidence_plan,
 )
-from sfincs_jax.workflows.optimization_workflow import er_values_from_bounds  # noqa: E402
+from sfincs_jax.workflows.optimization import er_values_from_bounds  # noqa: E402
 
 
 def _build_parser() -> argparse.ArgumentParser:

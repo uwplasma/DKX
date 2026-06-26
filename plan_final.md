@@ -568,13 +568,13 @@ Current source inventory from the 2026-06-26 consolidation audit:
 
 | Area | Current state | Review-ready target |
 | --- | --- | --- |
-| Whole package | 160 Python files, 165,630 package lines | Keep `<=160` files unless a new durable owner deletes at least two old files in the same commit. Review target is no package-file increase and no line-count increase unless the change deletes files and simplifies ownership. |
+| Whole package | 155 Python files, 165,544 package lines | Keep `<=155` files unless a new durable owner deletes at least two old files in the same commit. Review target is no package-file increase and no line-count increase unless the change deletes files and simplifies ownership. |
 | Package root | 17 Python files | Root gate is met. Root files now remain only when they are public API, CLI, compatibility, plotting/profiling helpers, or stable user-facing facades. |
 | `v3_driver.py` / `io.py` | 47-line and 64-line compatibility shims | Keep below 80 lines. Do not put implementation logic back into either file. Delete only after public docs, examples, scripts, and compatibility tests no longer need the shim. |
 | `problems/profile_response` | 18 files including `sparse/`; largest owners are `sparse/xblock.py`, `policies.py`, `sparse/handoff.py`, `solve.py`, `sparse/qi.py`, and `sparse/direct.py`. | Do not add profile-response files. Reduce complexity only by deleting duplicate policy branches or moving historical names into existing owners without creating a new monolith. |
 | `problems/transport_matrix` | 10 files including `parallel/`; direct reduced-`Pmat`, active factors, and block-Schur setup live in `linear_system.py`; parallel policy/sharding lives in `parallel/runtime.py`. | Keep `parallel/worker.py` only as the subprocess entry point. Do not grow `solve.py` into another monolith. |
 | `solvers/preconditioners` | 35 files, 37,495 lines; QI, PAS, x-block, full-FP, Schur, symbolic-sparse, and transport-matrix owners are explicit. | Keep mathematical family names. Merge only if one commit deletes at least three files and keeps ownership clearer. |
-| `workflows` / `validation` | 22 files total. `validation.benchmark_artifacts` was merged into `validation.artifacts`, and `validation.fortran_profile` was merged into `validation.fortran`. Several workflow files remain public example/doc entry points. | Consolidate only when import graphs show this can delete files without adding shims. Public optimization/mapped-x-grid workflow modules stay until a package-level replacement is documented and tested. |
+| `workflows` / `validation` | 17 files total. `validation.benchmark_artifacts` was merged into `validation.artifacts`; `validation.fortran_profile` was merged into `validation.fortran`; and six `optimization_*` workflow implementation files were merged into `workflows.optimization` with package-level compatibility aliases. | Consolidate only when import graphs show this can delete files without file-level shims. Public mapped-x-grid workflow modules stay until a package-level replacement is documented and tested. |
 | Docs/tests/examples/scripts | Public examples/scripts are being migrated off `sfincs_jax.v3_driver`; tests still intentionally cover compatibility imports. | Public-facing material uses `api`, `cli`, `outputs`, `validation`, `workflows`, or problem owners. Owner tests may keep private imports. |
 
 Locked checkpoints:
@@ -672,12 +672,17 @@ Active consolidation passes:
    validation-owner deletion pass merged `validation/benchmark_artifacts.py`
    into `validation/artifacts.py` and `validation/fortran_profile.py` into
    `validation/fortran.py`, removed both old files, updated scripts/tests/docs,
-   and passed the focused validation/import-contract suite. Next, audit public
-   workflow imports before any optimization or mapped-x-grid file movement.
-   Do not delete documented workflow modules unless package-level imports,
-   examples, docs, and tests prove the replacement. Exit target for any further
-   workflow tranche: delete at least two files, do not increase package lines,
-   and pass workflow, validation, docs, examples, and import-contract tests.
+   and passed the focused validation/import-contract suite. The optimization
+   workflow deletion pass then merged `optimization_objectives.py`,
+   `optimization_promotion.py`, `optimization_workflow.py`,
+   `optimization_evidence.py`, `optimization_comparison.py`, and
+   `optimization_ladder.py` into `workflows/optimization.py`, kept old module
+   imports working through package-level aliases, updated public imports in
+   examples/docs/tests, and passed optimization behavior/docs/lint gates. Next,
+   audit mapped-x-grid workflow imports before any remaining workflow movement.
+   Exit target for any further workflow tranche: delete at least two files, do
+   not increase package lines, and pass workflow, validation, docs, examples,
+   and import-contract tests.
 3. **Large-owner internal simplification.** Do not create files. In
    `problems/profile_response/policies.py`,
    `problems/profile_response/sparse/xblock.py`,
