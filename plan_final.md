@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (sparse-pattern active-branch coverage pass)
+Last updated: 2026-06-26 (transport diagnostics algebra coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -447,6 +447,15 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   admission and Fortran-reduced preconditioner patterns without adding new
   reference files. The focused sparse-pattern suite reports `138 passed` in
   `106.37 s`.
+- The sixty-ninth post-audit coverage tranche added transport-diagnostics
+  algebra gates. `tests/test_transport_diagnostics_coverage.py` now covers JAX
+  pytree round-trips for diagnostic containers, Fortran-order weighted-sum
+  branches and shape validation, Maxwellian/Phi1 `f0` formulas, full
+  distribution layout insertion, and radial-current coordinate conversion
+  errors. These are lightweight physics/normalization contracts for RHSMode=2/3
+  and RHSMode=1 output reductions. The focused diagnostics file reports
+  `4 passed` in `0.91 s`, and the nearby transport diagnostics/output subset
+  reports `27 passed` in `7.48 s`.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
