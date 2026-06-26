@@ -26,7 +26,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.residual import V3FBlockLinearSystem
+from sfincs_jax.operators.profile_response.linear_systems import V3FBlockLinearSystem
 from sfincs_jax.operators.profile_response.fblock import fblock_operator_from_namelist
 from sfincs_jax.operators.profile_response.fblock import matvec_v3_fblock_flat
 
