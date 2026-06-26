@@ -11,6 +11,7 @@ import scipy.sparse as sp
 from scipy.sparse.linalg import aslinearoperator
 
 import sfincs_jax.io as io_module
+import sfincs_jax.operators.profile_sparse_pattern as sparse_pattern_module
 import sfincs_jax.solvers.preconditioner_qi_device as rhs1_qi_device_preconditioner_module
 import sfincs_jax.v3_driver as v3_driver_module
 from sfincs_jax.solvers.explicit_sparse import SparseDecision, SparseOperatorBundle, build_operator_from_pattern
@@ -1010,6 +1011,125 @@ def test_compact_csr_triangular_solves_match_dense_reference() -> None:
     upper = np.array([[4.0, -0.25, 0.5], [0.0, -3.0, 1.5], [0.0, 0.0, 2.0]])
     expected = np.linalg.solve(upper, np.linalg.solve(lower, np.asarray(rhs)))
     np.testing.assert_allclose(np.asarray(z), expected, rtol=1.0e-12, atol=1.0e-12)
+
+
+def test_sparse_pattern_support_helpers_encode_fortran_style_reduced_blocks() -> None:
+    op = SimpleNamespace(
+        n_species=2,
+        n_x=4,
+        n_xi=5,
+        n_theta=3,
+        n_zeta=2,
+        f_size=2 * 4 * 5 * 3 * 2,
+        phi1_size=3 * 2,
+        constraint_scheme=2,
+        include_phi1=True,
+        fblock=SimpleNamespace(fp=object(), pas=object()),
+    )
+
+    assert sparse_pattern_module._f_index(op, 1, 2, 3, 1, 0) == (((1 * 4 + 2) * 5 + 3) * 3 + 1) * 2
+    assert sparse_pattern_module._phi1_index(op, 2, 1) == op.f_size + 5
+    assert sparse_pattern_module._lambda_index(op) == op.f_size + op.n_theta * op.n_zeta
+    assert sparse_pattern_module._extra_index(op, 3) == op.f_size + op.phi1_size + 3
+
+    supports = sparse_pattern_module._matrix_row_supports(
+        np.asarray([[0.0, 1.0e-13, 0.0], [-2.0, 0.0, 3.0]]),
+        threshold=1.0e-14,
+    )
+    np.testing.assert_array_equal(supports[0], np.asarray([1], dtype=np.int32))
+    np.testing.assert_array_equal(supports[1], np.asarray([0, 2], dtype=np.int32))
+    with pytest.raises(ValueError, match="2D derivative matrix"):
+        sparse_pattern_module._matrix_row_supports(np.ones(3))
+
+    assert list(sparse_pattern_module._nearby_l(0, 5, radius=2)) == [0, 1, 2]
+    assert list(sparse_pattern_module._nearby_l(4, 5, radius=2)) == [2, 3, 4]
+
+    assert [list(r) for r in sparse_pattern_module._x_supports(op, dense=True)] == [list(range(4))] * 4
+    assert [list(r) for r in sparse_pattern_module._x_supports(op, dense=False)] == [[0], [1], [2], [3]]
+
+    assert [list(r) for r in sparse_pattern_module._fortran_reduced_x_supports(op, preconditioner_x=0)] == [
+        [0, 1, 2, 3],
+        [0, 1, 2, 3],
+        [0, 1, 2, 3],
+        [0, 1, 2, 3],
+    ]
+    assert [list(r) for r in sparse_pattern_module._fortran_reduced_x_supports(op, preconditioner_x=1)] == [
+        [0],
+        [1],
+        [2],
+        [3],
+    ]
+    assert [list(r) for r in sparse_pattern_module._fortran_reduced_x_supports(op, preconditioner_x=2)] == [
+        [0, 1, 2, 3],
+        [1, 2, 3],
+        [2, 3],
+        [3],
+    ]
+    assert [list(r) for r in sparse_pattern_module._fortran_reduced_x_supports(op, preconditioner_x=3)] == [
+        [0, 1],
+        [0, 1, 2],
+        [1, 2, 3],
+        [2, 3],
+    ]
+    assert [list(r) for r in sparse_pattern_module._fortran_reduced_x_supports(op, preconditioner_x=4)] == [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3],
+    ]
+    assert [list(r) for r in sparse_pattern_module._fortran_reduced_x_supports(op, preconditioner_x=99)] == [
+        [0],
+        [1],
+        [2],
+        [3],
+    ]
+
+    low_l_supports = sparse_pattern_module._fortran_reduced_x_supports_for_l(
+        op,
+        ell=1,
+        preconditioner_x=1,
+        preconditioner_x_min_l=2,
+    )
+    high_l_supports = sparse_pattern_module._fortran_reduced_x_supports_for_l(
+        op,
+        ell=2,
+        preconditioner_x=1,
+        preconditioner_x_min_l=2,
+    )
+    assert [list(r) for r in low_l_supports] == [list(range(4))] * 4
+    assert [list(r) for r in high_l_supports] == [[0], [1], [2], [3]]
+    assert list(sparse_pattern_module._fortran_reduced_l_supports(2, 5, preconditioner_xi=0)) == [0, 1, 2, 3, 4]
+    assert list(sparse_pattern_module._fortran_reduced_l_supports(2, 5, preconditioner_xi=1)) == [1, 2, 3]
+
+
+def test_sparse_pattern_summary_dict_preserves_operator_metadata() -> None:
+    op = SimpleNamespace(
+        include_phi1=True,
+        constraint_scheme=2,
+        fblock=SimpleNamespace(fp=object(), pas=None),
+    )
+    pattern = sp.csr_matrix(np.asarray([[1.0, 0.0, 2.0], [0.0, 0.0, 0.0], [3.0, 4.0, 0.0]]))
+
+    summary = sparse_pattern_module.summarize_v3_sparse_pattern(op, pattern)
+
+    assert summary.shape == (3, 3)
+    assert summary.nnz == 4
+    assert summary.avg_row_nnz == pytest.approx(4.0 / 3.0)
+    assert summary.max_row_nnz == 2
+    assert summary.include_phi1 is True
+    assert summary.constraint_scheme == 2
+    assert summary.has_fp is True
+    assert summary.has_pas is False
+    assert summary.to_dict() == {
+        "shape": (3, 3),
+        "nnz": 4,
+        "avg_row_nnz": pytest.approx(4.0 / 3.0),
+        "max_row_nnz": 2,
+        "include_phi1": True,
+        "constraint_scheme": 2,
+        "has_fp": True,
+        "has_pas": False,
+    }
 
 
 def test_conservative_sparse_pattern_covers_pas_fortran_matrix() -> None:

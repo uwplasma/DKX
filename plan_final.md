@@ -257,6 +257,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   frozen SFINCS Fortran v3 evidence, solver metadata checks, CPU/GPU performance
   scripts, and parallelism entry points. The examples contract now requires this
   notebook and checks that it stays pedagogic, topic-complete, and output-free.
+- The twenty-ninth post-audit coverage tranche added sparse-pattern helper tests
+  for Fortran-style active index conventions, derivative-matrix support
+  extraction, reduced x/ell support policies, and summary metadata
+  serialization. These protect the native reduced-Pmat and sparse-pattern
+  infrastructure without materializing production operators or adding slow
+  solves to CI.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
