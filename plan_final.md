@@ -2703,9 +2703,11 @@ Current completion status:
   public import migration, and compatibility-shim locking are complete. The
   only remaining refactor work is the retained-boundary audit for the large
   profile/transport solve owners and final PR-body documentation.
-- Coverage and future-proof validation: the latest full local xdist coverage
-  audit completed `3632` tests with `168` skips in `258.88 s` and measured
-  `84%` package coverage. The newest tests cover output streaming, periodic
+- Coverage and future-proof validation: the latest full local coverage
+  audit completed `3814` tests in `838.53 s` and measured
+  `87%` package coverage. The local command was intentionally unsharded for a
+  clean measurement; CI must continue using bounded shards so GitHub runtime
+  stays below ten minutes. The newest tests cover output streaming, periodic
   stencils, release-data fetching, PETSc reference readers, upstream wrapper
   behavior, active full-FP kinetic block preconditioners, sparse-pattern
   helpers, explicit-sparse settings/materialization guards, profile-system
@@ -2741,10 +2743,15 @@ Current completion status:
   Benchmark-artifact promotion policy
   also has fast gates for
   default-promotion evidence and canonical runtime/memory ordering. The next
-  coverage work must focus on
-  profile/transport solve owners, sparse-pattern emission, Schur/profile
-  preconditioners, profile true-operator rescue paths, output writer branches,
-  and ambipolar derivative/root edge cases while keeping CI below ten minutes.
+  coverage work must focus on the measured low files from this audit:
+  `problems/profile_solve.py` (`58%`), `problems/transport_solve.py` (`72%`),
+  `solvers/preconditioner_schur_profile.py` (`75%`),
+  `solvers/preconditioner_pas_angular.py` (`76%`),
+  `solvers/preconditioner_xblock_tz_sparse.py` (`74%`),
+  `problems/transport_linear_system.py` (`78%`), and
+  `problems/transport_diagnostics.py` (`79%`). These tests should continue to
+  use bounded manufactured operators, frozen-reference data, and branch-policy
+  checks rather than slow production solves.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
