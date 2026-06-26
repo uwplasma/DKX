@@ -307,16 +307,16 @@ Observed facts to feed directly into implementation:
 Current source size snapshot after the 2026-06-26 final consolidation audit,
 completed owner moves, and private-root deletion pass:
 
-- Whole package: 162 Python files after the completed profile-response
+- Whole package: 154 Python files after the completed profile-response
   solve-sequencer/handoff compression, output-writer move, transport/output
   payback, solver/preconditioner family compression, Batch A gate repair, Batch
   B transport linear-system consolidation, Batch C transport-parallel runtime
-  consolidation, and Batch D solver-core consolidation. The historical
-  symbolic-sparse `rhs1_*` filename has been removed, QI has durable owner
+  consolidation, Batch D solver-core consolidation, workflow/validation
+  consolidation, and mapped-x-grid consolidation. The historical
+  symbolic-sparse `rhs1_*` filename and all top-level `rhs1_*` /
+  `transport_*` implementation files have been removed, QI has durable owner
   modules, and the preconditioner file-count gate is met. Package source lines
-  are 165,641 after the Phase 2 workflow/data, geometry, discretization
-  kernel, operator-kernel, physics-kernel, and private-root moves; this is
-  above the previous line-count checkpoint but is
+  are 165,532. This is above the original line-count checkpoint but is
   justified by replacing many implementation shards with durable owner modules
   while preserving production behavior.
 - Package root: 17 Python files. No top-level `rhs1_*` or `transport_*`
@@ -329,10 +329,10 @@ completed owner moves, and private-root deletion pass:
   `host_refinement.py`, `pas_smoother.py`, `phi1_newton_linear.py`, and
   `phi1_newton_policy.py`.
 - `sfincs_jax/problems/profile_response`: 18 files including `sparse/`, about
-  52.7k lines. The largest files are `sparse/xblock.py` 7,689 lines,
+  52.9k lines. The largest files are `sparse/xblock.py` 7,689 lines,
   `policies.py` 7,369 lines, `solve.py` 5,420 lines,
   `sparse/handoff.py` 5,500 lines, `sparse/qi.py` 4,873 lines,
-  `sparse/direct.py` 3,569 lines, `dense.py` 3,287 lines, and
+  `sparse/direct.py` 3,567 lines, `dense.py` 3,287 lines, and
   `preconditioner_build.py` 2,683 lines. The `solve.py <=5,500` and
   `handoff.py <=5,500` review gates are restored.
 - `sfincs_jax/problems/transport_matrix`: 10 files including `parallel/`.
@@ -347,24 +347,27 @@ completed owner moves, and private-root deletion pass:
   shaping now lives in `preconditioning.py`; progress, Krylov state,
   solver-trace records, and compact Fortran/JAX solver-profile comparisons now
   live in `diagnostics.py`.
-- `sfincs_jax/solvers/preconditioners`: 35 files. QI now has five durable
+- `sfincs_jax/solvers/preconditioners`: 35 files, about 38.1k lines. QI now has five durable
   owner files: `basis.py`, `corrections.py`, `device.py`, `policy.py`, and
   `__init__.py`. The empty `coarse_space` package was deleted, the QI device
   smoother was merged into `qi/device.py`, the historical symbolic-sparse
   `rhs1_fortran_reduced.py` file was renamed to
   `symbolic_sparse/profile_response.py`, and the domain-decomposition line/block
   implementation was merged into its package owner.
-- `sfincs_jax/operators/profile_response`: 14 files, about 18.4k lines.
+- `sfincs_jax/operators/profile_response`: 19 files, about 20.6k lines.
   `full_system.py` is 5,978 lines. This package is large but domain coherent;
   do not split it in this PR unless a correctness bug requires it.
 - `sfincs_jax/io.py`: 64-line compatibility facade. The concrete writer now
-  lives in `sfincs_jax/outputs/writer.py` at 4,264 lines and is exported from
+  lives in `sfincs_jax/outputs/writer.py` at 4,268 lines and is exported from
   `sfincs_jax.outputs`. `outputs/transport.py` now owns both streaming
   transport-output accumulation and streaming HDF5 writes.
 
-The remaining consolidation pass must reduce concentrated owners in a few large
-batches. It must not add more one-off helper files, and it must not turn the
-current 168-file tree into a larger but more fragmented tree.
+The remaining consolidation pass must not add more one-off helper files or turn
+the current 154-file tree into a larger but more fragmented tree. The final
+action is a bounded retained-boundary audit plus review locking: only delete or
+merge code if the same commit removes a repeated internal section or multiple
+files and keeps names clearer. Otherwise, record the retained boundary and stop
+the refactor.
 
 Useful existing assets:
 
@@ -391,11 +394,12 @@ Important current gaps:
   external release-refresh benchmark.
 - Ambipolar option 1/2/3 bounded/reference solvers are implemented and tested;
   production-grid replay artifacts remain outside normal CI.
-- The largest active gap is now structural complexity after the driver move:
-  `profile_response/solve.py` is a mechanical owner, transport and
-  preconditioner helper shards are over-split, and docs still mention
-  historical `rhs1_*`, `transport_*`, `linear_solve.py`, and `v3_driver.py`
-  internals.
+- The largest active refactor gap is now review locking after the driver move:
+  `profile_response/solve.py` is a stable problem owner, `v3_driver.py` is a
+  tiny compatibility shim, public examples/scripts no longer need private
+  driver imports, and remaining historical names should be treated as
+  compatibility aliases or documentation/source-map entries rather than active
+  implementation modules.
 - No complete derivative API for `dGamma/dEr`, `dQ/dEr`, `d<J.B>/dEr`,
   `dJr/dEr`, profile sensitivities, and geometry harmonic sensitivities across
   all supported solve lanes.
@@ -658,58 +662,49 @@ CPU/GPU parity gates.
 
 Active consolidation passes:
 
-1. **Public-surface lock and compatibility boundary.** Finish the current
-   in-flight migration of public scripts/examples/CLI/output paths away from
-   `sfincs_jax.v3_driver` and toward problem owners or public APIs. Keep
-   compatibility tests that import `v3_driver`; they prove the shim still works.
-   Refresh docs that currently cite private implementation names so user-facing
-   text points to `api`, `cli`, `outputs`, `workflows`, `validation`, or the
-   two problem owners. Exit target: no public example or script imports
-   `sfincs_jax.v3_driver`; `v3_driver.py` remains a tiny compatibility shim;
-   CLI, output-writing, transport-parallel, docs, and import-contract tests
-   pass.
-2. **Workflow/validation package consolidation.** Partially complete. The safe
-   validation-owner deletion pass merged `validation/benchmark_artifacts.py`
-   into `validation/artifacts.py` and `validation/fortran_profile.py` into
-   `validation/fortran.py`, removed both old files, updated scripts/tests/docs,
-   and passed the focused validation/import-contract suite. The optimization
-   workflow deletion pass then merged `optimization_objectives.py`,
-   `optimization_promotion.py`, `optimization_workflow.py`,
-   `optimization_evidence.py`, `optimization_comparison.py`, and
-   `optimization_ladder.py` into `workflows/optimization.py`, kept old module
-   imports working through package-level aliases, updated public imports in
-   examples/docs/tests, and passed optimization behavior/docs/lint gates. Next,
-   the mapped-x-grid workflow pass merged `mapped_xgrid_objectives.py` and
-   `mapped_xgrid_transport_evidence.py` into `workflows/mapped_xgrid.py`,
-   updated scripts/docs/tests, and kept old imports working through package-level
-   aliases. Exit target for any further workflow tranche: delete at least two
-   files, do not increase package lines, and pass workflow, validation, docs,
-   examples, and import-contract tests.
-3. **Large-owner internal simplification.** Do not create files. In
+1. **Public-surface lock and compatibility boundary: complete, verify only.**
+   Public examples, scripts, CLI, output paths, workflow examples, and docs must
+   import public APIs, problem owners, output owners, workflow owners, or
+   validation owners rather than `sfincs_jax.v3_driver`. Keep compatibility
+   tests that import `v3_driver`; they prove the 47-line shim remains safe for
+   existing users. Exit target: stale-import scans find no public example/script
+   driver imports, `v3_driver.py` stays below 80 lines, and CLI/output/import
+   tests pass.
+2. **Workflow/validation package consolidation: complete, verify only.** The
+   completed passes merged validation benchmark/profiling artifacts into
+   `validation.artifacts` and `validation.fortran`, merged six optimization
+   implementation files into `workflows.optimization`, and merged mapped-x-grid
+   evidence/objective files into `workflows.mapped_xgrid`. Old workflow module
+   imports are package-level compatibility aliases, not file shims. Further
+   workflow or validation consolidation is forbidden unless one commit deletes
+   at least two files, avoids package-line growth, and passes workflow,
+   validation, docs, examples, and import-contract tests.
+3. **Large-owner retained-boundary audit: one bounded pass, then stop.** The
+   only large-owner candidates are
    `problems/profile_response/policies.py`,
    `problems/profile_response/sparse/xblock.py`,
    `problems/profile_response/sparse/handoff.py`, and
-   `solvers/preconditioners/qi/device.py`, remove duplicated branch tables,
-   repeated environment parsing, or dead compatibility aliases only when the
-   change deletes a repeated internal section and keeps behavior covered by
-   existing RHSMode 1, QI, x-block, sparse-PC, Phi1, and solver-policy tests.
-   Exit target: smaller files or explicit retained-boundary notes; no import
-   churn and no new helpers.
-4. **Preconditioner-family compression gate.** Audit PAS, x-block, full-FP,
-   symbolic-sparse, and transport-matrix preconditioner families. Merge family
-   detail files only if a single commit can delete at least three files and the
-   resulting owner names remain mathematical, not historical. QI filenames are
-   locked as `basis.py`, `corrections.py`, `device.py`, and `policy.py` unless a
-   correctness bug requires movement. Exit target: either a real deletion pass
-   with focused solver tests, or a recorded decision to retain the current
-   family boundaries and stop moving solver files.
-5. **Review-lock pass.** Update `docs/source_map.rst`, API docs, developer
-   docs, README developer notes, release notes, and tests to the final layout.
-   Run stale-import scans for deleted modules, the focused review suite, Sphinx
-   with warnings as errors, `ruff` on touched files, `git diff --check`,
-   repository-size hygiene, and lightweight CLI/API behavior gates. If these
-   pass, stop refactoring and make PR #8 ready for review. Do not start another
-   solver research or file-movement lane inside this PR.
+   `solvers/preconditioners/qi/device.py`. The audit found real domain
+   ownership in all four: policy/env resolution, x-block stage setup, sparse-PC
+   orchestration, and device-compatible QI preconditioning. Edit them only if a
+   single patch removes a repeated internal section of roughly 300 lines or more
+   without adding files or changing public behavior. Otherwise record the
+   retained boundary and do not churn.
+4. **Preconditioner-family compression gate: retained unless a major deletion
+   appears.** PAS, x-block, full-FP, symbolic-sparse, Schur, QI, and
+   transport-matrix preconditioners now use mathematical family names. Merge
+   family files only if a single commit deletes at least three implementation
+   files and the resulting owner is clearer than the current family layout. QI
+   filenames are locked as `basis.py`, `corrections.py`, `device.py`, and
+   `policy.py` unless a correctness bug requires movement.
+5. **Review-lock pass: next executable step.** Update `docs/source_map.rst`,
+   API docs, developer docs, release notes, and tests only where stale paths are
+   still present. Run stale-import scans for deleted modules, the focused
+   review suite, Sphinx with warnings as errors, `ruff` on touched files,
+   `git diff --check`, repository-size hygiene, and lightweight CLI/API
+   behavior gates. If these pass, stop refactoring and make PR #8 review-ready.
+   Do not start another solver research, performance tuning, or file-movement
+   lane inside this PR.
 
 Stop conditions:
 
@@ -1292,8 +1287,8 @@ Status on 2026-06-26:
   above. The second run repeated already-clean sections and was stopped after
   `486 passed`; no new failure was observed before interruption.
 - Current structural counts satisfy the Batch G hard gates:
-  168 package Python files, 23 package-root Python files,
-  165,803 package Python lines, `v3_driver.py` at 47 lines, `io.py` at
+  154 package Python files, 17 package-root Python files,
+  165,532 package Python lines, `v3_driver.py` at 47 lines, `io.py` at
   64 lines, `profile_response/solve.py` at 5,420 lines,
   `profile_response/sparse/handoff.py` at 5,500 lines, and no top-level
   `rhs1_*` or `transport_*` implementation files.
@@ -1819,10 +1814,10 @@ Exit gate:
 
 Status:
 
-- In progress. PR #8 is green for the current branch head, but the final
-  review-ready state waits on Closure Phases 1-4 or an explicit decision to
-  defer part of that simplification with source-map notes, tests, and PR-body
-  documentation.
+- In progress. PR #8 is structurally close to review-ready; the final
+  review-ready state waits on the retained-boundary audit, stale-import/layout
+  scans, the focused review-lock validation bundle, and PR-body documentation
+  of retained large owners and deferred performance/research lanes.
 
 ### M8 - Release
 
@@ -1838,33 +1833,43 @@ Deliverables:
 
 Current completion status:
 
-- Lane 1 structural consolidation: about 90 percent after the closure-plan
-  reset. The original driver split is complete and CI is green, but the final
-  source-tree simplification is not complete until Closure Phases 1-4 are
-  executed or explicitly deferred.
+- Lane 1 structural consolidation: about 97 percent. The original driver split,
+  root cleanup, workflow/validation consolidation, mapped-x-grid consolidation,
+  public import migration, and compatibility-shim locking are complete. The
+  only remaining refactor work is the retained-boundary audit for the four large
+  owners and the review-lock validation pass.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
 - RHSMode 4/5 sensitivity contracts: about 75 percent. Small fixture contracts
   and derivative identities are implemented; production-grid parity refresh
   remains a release benchmark.
-- Public docs/API stabilization for the refactor PR: about 95 percent. Source
+- Public docs/API stabilization for the refactor PR: about 98 percent. Source
   maps, import contracts, README/docs, artifact metadata, Sphinx, and CI pass
-  for the current layout, but they must be refreshed again after the closure
-  moves.
+  for the consolidated layout in recent focused checks; rerun the review-lock
+  bundle after this plan refresh.
 
 Next ordered implementation steps:
 
-1. Execute Closure Phase 1: build the import graph and write the root-module
-   move/delete manifest into this file and `docs/source_map.rst`.
-2. Execute Closure Phase 2 only for move groups that delete root files without
-   adding worse compatibility shims: geometry support first, then public
-   workflow/data-fetch modules, then internal kinetic/discretization kernels.
-3. Execute Closure Phase 3 only for owner boundaries that delete duplicated
-   profile-response, preconditioner, or output-writer code. Do not tune
-   solvers or add helper shards during this pass.
-4. Execute Closure Phase 4: refresh docs/examples/tests, run local review-ready
-   validation, push, check CI once, update PR #8, and stop the refactor.
+1. Finish the retained-boundary audit: inspect
+   `policies.py`, `sparse/xblock.py`, `sparse/handoff.py`, and
+   `qi/device.py`; delete code only if a single patch removes a repeated
+   internal section of roughly 300 lines or more without adding files. If not,
+   keep the retained-boundary notes above as the decision record.
+2. Run the stale-import and layout scans: no top-level `rhs1_*` or
+   `transport_*` files, no public example/script imports of `v3_driver`, no
+   imports of deleted validation/workflow modules except compatibility aliases,
+   and no tracked generated outputs or large temporary artifacts.
+3. Run the review-lock validation bundle: import-contract tests, CLI/output
+   tests, workflow/validation behavior tests, representative RHSMode 1/2/3,
+   ambipolar, RHSMode 4/5 sensitivity, sparse-PC, QI, and differentiable
+   linear-solve tests, plus Sphinx `-W`, touched-file Ruff, py_compile, and
+   `git diff --check`.
+4. Fix only real regressions found by the review-lock bundle. Do not start
+   another performance or file-movement lane in this PR.
+5. Commit and push the final plan refresh plus any regression fixes to the PR
+   branch, update the PR body with the retained boundaries and validation
+   evidence, then mark PR #8 ready for review.
 
 Completion definition for this plan:
 
