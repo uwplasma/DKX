@@ -10,6 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = REPO_ROOT / "sfincs_jax"
 EXPECTED_TREE = REPO_ROOT / "tests" / "fixtures" / "source_tree_expected.json"
 PACKAGE_README = PACKAGE_ROOT / "README.md"
+SOURCE_MAP_DOC = REPO_ROOT / "docs" / "source_map.rst"
 
 
 def _expected_tree() -> dict[str, list[str]]:
@@ -92,6 +93,30 @@ def test_package_readme_describes_current_source_layout() -> None:
         assert f"`{module}`" in text or f"`{module.removesuffix('.py')}`" in text
     for module in sorted(set(expected["allowed_root_modules"]) - set(expected["target_root_modules"])):
         assert f"`{module}`" in text
+
+
+def test_source_map_doc_describes_current_one_level_layout() -> None:
+    """Keep contributor docs synchronized with the flattened package tree."""
+
+    expected = _expected_tree()
+    text = SOURCE_MAP_DOC.read_text(encoding="utf-8")
+
+    assert "one level of domain folders" in text
+    for package in expected["allowed_root_packages"]:
+        assert f"``sfincs_jax/{package}``" in text
+
+    removed_packages = {
+        "benchmarks",
+        "compat",
+        "input",
+        "parallel",
+    }
+    offenders = [
+        package
+        for package in sorted(removed_packages)
+        if f"``sfincs_jax/{package}``" in text or f"`sfincs_jax/{package}`" in text
+    ]
+    assert offenders == []
 
 
 def test_package_sources_do_not_import_v3_driver_internally() -> None:
