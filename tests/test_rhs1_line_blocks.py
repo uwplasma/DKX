@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.solvers.preconditioners.domain_decomposition import line_blocks
+import sfincs_jax.solvers.preconditioners.domain_decomposition as line_blocks
 
 
 def _op() -> SimpleNamespace:
@@ -30,11 +30,29 @@ def _patch_line_block_probe(monkeypatch) -> None:
     line_blocks._RHSMODE1_SCHWARZ_PRECOND_CACHE.clear()
     line_blocks._RHSMODE1_THETA_LINE_DIAGX_CACHE.clear()
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PRECOND_REG", "0")
-    monkeypatch.setattr(line_blocks, "_cache_key", lambda _op, kind: ("unit", kind, id(_op)))
-    monkeypatch.setattr(line_blocks, "_build_rhsmode1_preconditioner_operator_zeta_line", lambda _op: _op)
-    monkeypatch.setattr(line_blocks, "_build_rhsmode1_preconditioner_operator_theta_line", lambda _op: _op)
-    monkeypatch.setattr(line_blocks, "_build_rhsmode1_preconditioner_operator_zeta_dd", lambda _op, block: _op)
-    monkeypatch.setattr(line_blocks, "_build_rhsmode1_preconditioner_operator_theta_dd", lambda _op, block: _op)
+    monkeypatch.setattr(
+        line_blocks, "_cache_key", lambda _op, kind: ("unit", kind, id(_op))
+    )
+    monkeypatch.setattr(
+        line_blocks,
+        "_build_rhsmode1_preconditioner_operator_zeta_line",
+        lambda _op: _op,
+    )
+    monkeypatch.setattr(
+        line_blocks,
+        "_build_rhsmode1_preconditioner_operator_theta_line",
+        lambda _op: _op,
+    )
+    monkeypatch.setattr(
+        line_blocks,
+        "_build_rhsmode1_preconditioner_operator_zeta_dd",
+        lambda _op, block: _op,
+    )
+    monkeypatch.setattr(
+        line_blocks,
+        "_build_rhsmode1_preconditioner_operator_theta_dd",
+        lambda _op, block: _op,
+    )
 
     def _probe(_op, *, col_idx, row_idx, total_size, chunk_cols):
         col_idx = np.asarray(col_idx, dtype=np.int32)
@@ -76,22 +94,34 @@ def test_domain_decomposition_builders_use_axis_specific_blocks(monkeypatch) -> 
     theta = line_blocks.build_rhs1_theta_dd_preconditioner(op=op, block=1)
     zeta = line_blocks.build_rhs1_zeta_dd_preconditioner(op=op, block=1)
 
-    assert np.allclose(np.asarray(theta(jnp.asarray([2.0, 3.0, 4.0, 5.0]))), np.ones((4,)))
-    assert np.allclose(np.asarray(zeta(jnp.asarray([2.0, 3.0, 4.0, 5.0]))), np.ones((4,)))
+    assert np.allclose(
+        np.asarray(theta(jnp.asarray([2.0, 3.0, 4.0, 5.0]))), np.ones((4,))
+    )
+    assert np.allclose(
+        np.asarray(zeta(jnp.asarray([2.0, 3.0, 4.0, 5.0]))), np.ones((4,))
+    )
 
 
 def test_schwarz_builders_apply_restricted_patch_inverse(monkeypatch) -> None:
     op = _op()
     _patch_line_block_probe(monkeypatch)
 
-    theta = line_blocks.build_rhs1_theta_schwarz_preconditioner(op=op, block=1, overlap=0)
+    theta = line_blocks.build_rhs1_theta_schwarz_preconditioner(
+        op=op, block=1, overlap=0
+    )
     zeta = line_blocks.build_rhs1_zeta_schwarz_preconditioner(op=op, block=1, overlap=0)
 
-    assert np.allclose(np.asarray(theta(jnp.asarray([2.0, 3.0, 4.0, 5.0]))), np.ones((4,)))
-    assert np.allclose(np.asarray(zeta(jnp.asarray([2.0, 3.0, 4.0, 5.0]))), np.ones((4,)))
+    assert np.allclose(
+        np.asarray(theta(jnp.asarray([2.0, 3.0, 4.0, 5.0]))), np.ones((4,))
+    )
+    assert np.allclose(
+        np.asarray(zeta(jnp.asarray([2.0, 3.0, 4.0, 5.0]))), np.ones((4,))
+    )
 
 
-def test_theta_line_xdiag_builder_inverts_each_species_x_l_zeta_line(monkeypatch) -> None:
+def test_theta_line_xdiag_builder_inverts_each_species_x_l_zeta_line(
+    monkeypatch,
+) -> None:
     op = _op()
     _patch_line_block_probe(monkeypatch)
 

@@ -17,12 +17,16 @@ import os
 import jax.numpy as jnp
 import numpy as np
 
-from ...constraint_projection import project_constraint_scheme1_nullspace_solution_with_residual
+from ...constraint_projection import (
+    project_constraint_scheme1_nullspace_solution_with_residual,
+)
 from ...solver import GMRESSolveResult
 from .policies import rhs1_pas_source_zero_tolerance_from_env
 
 
-SPARSE_HOST_DIRECT_SOLVE_METHODS = frozenset({"sparse_host", "host_sparse", "sparse_host_lu"})
+SPARSE_HOST_DIRECT_SOLVE_METHODS = frozenset(
+    {"sparse_host", "host_sparse", "sparse_host_lu"}
+)
 SPARSE_HOST_SAFE_SOLVE_METHODS = frozenset(
     {
         "sparse_host_safe",
@@ -352,7 +356,9 @@ def _read_int(env: Mapping[str, str] | None, key: str, default: int) -> int:
         return int(default)
 
 
-def _nml_get(group: Mapping[str, object], key: str, default: object | None = None) -> object | None:
+def _nml_get(
+    group: Mapping[str, object], key: str, default: object | None = None
+) -> object | None:
     if key in group:
         return group[key]
     key_upper = key.upper()
@@ -386,7 +392,9 @@ def _nml_abs_float(group: Mapping[str, object], key: str) -> float:
         return 0.0
 
 
-def _preconditioner_option_int(options: Mapping[str, object], key: str, default: int) -> int:
+def _preconditioner_option_int(
+    options: Mapping[str, object], key: str, default: int
+) -> int:
     value = options.get(key, None)
     if value is None:
         return int(default)
@@ -479,7 +487,9 @@ def materialize_profile_response_linear_problem(
             )
 
     if context.emit is not None:
-        context.emit(1, f"solve_v3_full_system_linear_gmres: total_size={int(op.total_size)}")
+        context.emit(
+            1, f"solve_v3_full_system_linear_gmres: total_size={int(op.total_size)}"
+        )
         context.emit(1, "solve_v3_full_system_linear_gmres: assembling RHS")
     rhs = context.rhs_builder(op)
     context.mark("rhs_assembled")
@@ -642,7 +652,9 @@ def resolve_rhs1_physics_flag_setup(nml: Any) -> RHS1PhysicsFlagSetup:
         )
     )
     include_xdot = _nml_bool(_nml_get(phys_params, "includeXDotTerm", None))
-    include_electric_field_xi = _nml_bool(_nml_get(phys_params, "includeElectricFieldTermInXiDot", None))
+    include_electric_field_xi = _nml_bool(
+        _nml_get(phys_params, "includeElectricFieldTermInXiDot", None)
+    )
     er_abs = max(
         _nml_abs_float(phys_params, "Er"),
         _nml_abs_float(phys_params, "dPhiHatdpsiHat"),
@@ -698,12 +710,14 @@ def resolve_rhs1_dkes_adjustment_setup(
             )
 
     if op.fblock.pas is not None and bool(use_dkes):
-        restart_use, maxiter_use, restart_defaulted, maxiter_defaulted = dkes_gmres_budget(
-            restart=int(restart_use),
-            maxiter=maxiter_use,
-            restart_forced=bool(restart_env_forced),
-            maxiter_forced=bool(maxiter_env_forced),
-            restart_cap_env=_env_value(env, "SFINCS_JAX_RHSMODE1_DKES_RESTART_CAP"),
+        restart_use, maxiter_use, restart_defaulted, maxiter_defaulted = (
+            dkes_gmres_budget(
+                restart=int(restart_use),
+                maxiter=maxiter_use,
+                restart_forced=bool(restart_env_forced),
+                maxiter_forced=bool(maxiter_env_forced),
+                restart_cap_env=_env_value(env, "SFINCS_JAX_RHSMODE1_DKES_RESTART_CAP"),
+            )
         )
         if bool(restart_env_forced) or bool(maxiter_env_forced):
             messages.append(
@@ -754,7 +768,9 @@ def resolve_rhs1_post_active_solve_policy_setup(
     messages: list[tuple[int, str]] = []
 
     pas_full_gmres_max = _read_int(env, "SFINCS_JAX_PAS_FULL_GMRES_MAX", 1200)
-    if op.fblock.pas is not None and int(active_size) <= max(0, int(pas_full_gmres_max)):
+    if op.fblock.pas is not None and int(active_size) <= max(
+        0, int(pas_full_gmres_max)
+    ):
         restart_use = max(int(restart_use), int(active_size))
         if maxiter_use is None or int(maxiter_use) < int(active_size):
             maxiter_use = int(active_size)
@@ -767,8 +783,12 @@ def resolve_rhs1_post_active_solve_policy_setup(
     else:
         full_precond_mode = "auto"
 
-    full_precond_dense_max = _read_int(env, "SFINCS_JAX_RHSMODE1_FULL_PRECOND_DENSE_MAX", 2500)
-    full_precond_size = int(active_size) if bool(use_active_dof_mode) else int(op.total_size)
+    full_precond_dense_max = _read_int(
+        env, "SFINCS_JAX_RHSMODE1_FULL_PRECOND_DENSE_MAX", 2500
+    )
+    full_precond_size = (
+        int(active_size) if bool(use_active_dof_mode) else int(op.total_size)
+    )
     method_auto = str(solve_method_use).strip().lower() in {"auto", "default"}
     auto_dense_full_precond = bool(
         full_precond_mode == "auto"
@@ -790,7 +810,11 @@ def resolve_rhs1_post_active_solve_policy_setup(
         and int(full_precond_size) <= int(full_precond_dense_max)
         and method_auto
     ):
-        solve_method_use = "dense" if (full_precond_mode != "dense_ksp" or bool(use_active_dof_mode)) else "dense_ksp"
+        solve_method_use = (
+            "dense"
+            if (full_precond_mode != "dense_ksp" or bool(use_active_dof_mode))
+            else "dense_ksp"
+        )
         messages.append(
             (
                 0,
@@ -823,9 +847,15 @@ def resolve_rhs1_post_active_solve_policy_setup(
         and (not bool(op.include_phi1))
         and (int(geom_scheme) == 1 or int(op.n_zeta) <= 5)
     )
-    pas_large_fastpath_env = _env_value(env, "SFINCS_JAX_PAS_LARGE_BICGSTAB_FASTPATH").lower()
-    pas_large_fastpath_min = max(1, _read_int(env, "SFINCS_JAX_PAS_LARGE_BICGSTAB_FASTPATH_MIN", 80000))
-    pas_large_fastpath_max = _read_int(env, "SFINCS_JAX_PAS_LARGE_BICGSTAB_FASTPATH_MAX", 300000)
+    pas_large_fastpath_env = _env_value(
+        env, "SFINCS_JAX_PAS_LARGE_BICGSTAB_FASTPATH"
+    ).lower()
+    pas_large_fastpath_min = max(
+        1, _read_int(env, "SFINCS_JAX_PAS_LARGE_BICGSTAB_FASTPATH_MIN", 80000)
+    )
+    pas_large_fastpath_max = _read_int(
+        env, "SFINCS_JAX_PAS_LARGE_BICGSTAB_FASTPATH_MAX", 300000
+    )
     pas_large_fastpath_auto = pas_large_fastpath_env in {"", "auto"}
     pas_large_fastpath_on = pas_large_fastpath_env in {"1", "true", "yes", "on"}
     pas_large_fastpath_off = pas_large_fastpath_env in {"0", "false", "no", "off"}
@@ -837,11 +867,19 @@ def resolve_rhs1_post_active_solve_policy_setup(
         and int(op.n_species) == 1
         and int(op.n_zeta) == 1
         and int(active_size) >= int(pas_large_fastpath_min)
-        and (int(pas_large_fastpath_max) <= 0 or int(active_size) <= int(pas_large_fastpath_max))
+        and (
+            int(pas_large_fastpath_max) <= 0
+            or int(active_size) <= int(pas_large_fastpath_max)
+        )
     )
 
-    if int(op.rhs_mode) == 1 and str(solve_method_use).strip().lower() in {"auto", "default"}:
-        sharded_multidevice_hint = sharded_axis_hint in {"theta", "zeta"} and int(device_count) > 1
+    if int(op.rhs_mode) == 1 and str(solve_method_use).strip().lower() in {
+        "auto",
+        "default",
+    }:
+        sharded_multidevice_hint = (
+            sharded_axis_hint in {"theta", "zeta"} and int(device_count) > 1
+        )
         if pas_large_bicgstab_fastpath:
             solve_method_use = "bicgstab"
             messages.append(
@@ -891,7 +929,8 @@ def resolve_solve_method_request_flags(
     sparse_host_requested = kind in SPARSE_HOST_DIRECT_SOLVE_METHODS
     sparse_host_safe_requested = kind in SPARSE_HOST_SAFE_SOLVE_METHODS
     sparse_pc_gmres_requested = (
-        kind in SPARSE_HOST_PC_GMRES_SOLVE_METHODS or kind in SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS
+        kind in SPARSE_HOST_PC_GMRES_SOLVE_METHODS
+        or kind in SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS
     )
     sparse_minimum_norm_requested = kind in SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS
     sparse_host_like_requested = bool(
@@ -913,7 +952,9 @@ def resolve_solve_method_request_flags(
         sparse_minimum_norm_requested=bool(sparse_minimum_norm_requested),
         sparse_host_like_requested=bool(sparse_host_like_requested),
         xblock_active_dof_requested=bool(xblock_active_dof_requested),
-        structured_full_csr_explicit_requested=bool(kind in STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS),
+        structured_full_csr_explicit_requested=bool(
+            kind in STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS
+        ),
     )
 
 
@@ -1053,10 +1094,7 @@ def resolve_rhs1_active_dof_mode(
 
     use_active_dof_mode = bool(
         has_reduced_modes
-        and (
-            int(rhs_mode) in {2, 3}
-            or (int(rhs_mode) == 1 and not bool(include_phi1))
-        )
+        and (int(rhs_mode) in {2, 3} or (int(rhs_mode) == 1 and not bool(include_phi1)))
     )
     reason = "auto" if use_active_dof_mode else None
     if sparse_host_like_requested and not bool(xblock_active_dof_requested):
@@ -1125,13 +1163,17 @@ _FALSE_TOKENS = {"0", "false", "no", "off"}
 _TRUE_TOKENS = {"1", "true", "yes", "on"}
 
 
-def reduce_full_with_indices(v_full: jnp.ndarray, active_idx: jnp.ndarray) -> jnp.ndarray:
+def reduce_full_with_indices(
+    v_full: jnp.ndarray, active_idx: jnp.ndarray
+) -> jnp.ndarray:
     """Gather the active entries from a full vector."""
 
     return jnp.asarray(v_full)[jnp.asarray(active_idx, dtype=jnp.int32)]
 
 
-def expand_reduced_with_map(v_reduced: jnp.ndarray, full_to_active: jnp.ndarray) -> jnp.ndarray:
+def expand_reduced_with_map(
+    v_reduced: jnp.ndarray, full_to_active: jnp.ndarray
+) -> jnp.ndarray:
     """Scatter a reduced vector into full ordering using a one-based index map."""
 
     v_reduced = jnp.asarray(v_reduced)
@@ -1174,9 +1216,7 @@ def fp_pitch_mode_active_indices(
 
     nxi_for_x_np = np.asarray(nxi_for_x, dtype=np.int32)
     full_to_active_np = (
-        None
-        if full_to_active is None
-        else np.asarray(full_to_active, dtype=np.int32)
+        None if full_to_active is None else np.asarray(full_to_active, dtype=np.int32)
     )
     l_min_use = max(0, int(l_min))
     l_max_use = min(max(l_min_use, int(l_max)), int(n_xi) - 1)
@@ -1261,14 +1301,20 @@ def finalize_rhs1_linear_solution_cleanup(
             extra = result_use.x[-int(op.extra_size) :]
             max_abs = jnp.max(jnp.abs(extra))
             extra = jnp.where(max_abs <= zero_tol, jnp.zeros_like(extra), extra)
-            x_new = jnp.concatenate([result_use.x[: -int(op.extra_size)], extra], axis=0)
-            result_use = GMRESSolveResult(x=x_new, residual_norm=result_use.residual_norm)
+            x_new = jnp.concatenate(
+                [result_use.x[: -int(op.extra_size)], extra], axis=0
+            )
+            result_use = GMRESSolveResult(
+                x=x_new, residual_norm=result_use.residual_norm
+            )
 
     return result_use
 
 
 def _rhs1_project_nullspace_enabled(op: Any) -> bool:
-    project_env = os.environ.get("SFINCS_JAX_RHSMODE1_PROJECT_NULLSPACE", "").strip().lower()
+    project_env = (
+        os.environ.get("SFINCS_JAX_RHSMODE1_PROJECT_NULLSPACE", "").strip().lower()
+    )
     if project_env in _FALSE_TOKENS:
         return False
     if project_env in _TRUE_TOKENS:
@@ -1345,7 +1391,9 @@ def resolve_rhs1_active_problem_setup(
         messages=tuple(dkes.messages),
         use_dkes=bool(physics.use_dkes),
         include_xdot_sparse_pc=bool(physics.include_xdot_sparse_pc),
-        include_electric_field_xi_sparse_pc=bool(physics.include_electric_field_xi_sparse_pc),
+        include_electric_field_xi_sparse_pc=bool(
+            physics.include_electric_field_xi_sparse_pc
+        ),
         er_abs_sparse_pc=float(physics.er_abs_sparse_pc),
         preconditioner_species=int(precond.preconditioner_species),
         preconditioner_x=int(precond.preconditioner_x),
@@ -1386,7 +1434,9 @@ def resolve_rhs1_domain_decomposition_setup(
 ) -> RHS1DomainDecompositionSetup:
     """Resolve RHSMode=1 domain-decomposition block and overlap settings."""
 
-    from sfincs_jax.solvers.preconditioners.domain_decomposition.line_blocks import _rhs1_dd_auto_block_size
+    from sfincs_jax.solvers.preconditioners.domain_decomposition import (
+        _rhs1_dd_auto_block_size,
+    )
 
     dist = str(distributed_env or "").strip().lower()
     if dist in {"0", "false", "no", "off"} or int(device_count) <= 1:
@@ -1417,12 +1467,17 @@ def resolve_rhs1_domain_decomposition_setup(
     block_theta = _block("theta", raw=theta_block_env, n=int(n_theta))
     block_zeta = _block("zeta", raw=zeta_block_env, n=int(n_zeta))
 
-    def _overlap(axis_name: str, *, raw_axis: str, raw_generic: str, block: int) -> int | None:
+    def _overlap(
+        axis_name: str, *, raw_axis: str, raw_generic: str, block: int
+    ) -> int | None:
         raw = str(raw_axis or "").strip() or str(raw_generic or "").strip()
         overlap = _read_int_value(raw, -1)
         if overlap < 0 and axis == axis_name:
             overlap = 2 if int(block) >= 4 else 1
-            while overlap > 1 and int(block + 2 * overlap) * sum_nxi_use > patch_dof_target:
+            while (
+                overlap > 1
+                and int(block + 2 * overlap) * sum_nxi_use > patch_dof_target
+            ):
                 overlap -= 1
             return max(1, int(overlap))
         if overlap < 0:
@@ -1435,8 +1490,15 @@ def resolve_rhs1_domain_decomposition_setup(
         sum_nxi=int(sum_nxi_use),
         block_theta=int(block_theta),
         block_zeta=int(block_zeta),
-        overlap_theta=_overlap("theta", raw_axis=theta_overlap_env, raw_generic=overlap_env, block=block_theta),
-        overlap_zeta=_overlap("zeta", raw_axis=zeta_overlap_env, raw_generic=overlap_env, block=block_zeta),
+        overlap_theta=_overlap(
+            "theta",
+            raw_axis=theta_overlap_env,
+            raw_generic=overlap_env,
+            block=block_theta,
+        ),
+        overlap_zeta=_overlap(
+            "zeta", raw_axis=zeta_overlap_env, raw_generic=overlap_env, block=block_zeta
+        ),
         n_theta=int(n_theta),
         n_zeta=int(n_zeta),
     )
@@ -1457,9 +1519,13 @@ def resolve_rhs1_preconditioner_option_setup(
     """
 
     precond_opts = nml.group("preconditionerOptions")
-    preconditioner_species = _preconditioner_option_int(precond_opts, "PRECONDITIONER_SPECIES", 1)
+    preconditioner_species = _preconditioner_option_int(
+        precond_opts, "PRECONDITIONER_SPECIES", 1
+    )
     preconditioner_x = _preconditioner_option_int(precond_opts, "PRECONDITIONER_X", 1)
-    preconditioner_x_min_l = _preconditioner_option_int(precond_opts, "PRECONDITIONER_X_MIN_L", 0)
+    preconditioner_x_min_l = _preconditioner_option_int(
+        precond_opts, "PRECONDITIONER_X_MIN_L", 0
+    )
     preconditioner_xi = _preconditioner_option_int(precond_opts, "PRECONDITIONER_XI", 1)
     full_precond_requested = bool(
         preconditioner_species == 0 and preconditioner_x == 0 and preconditioner_xi == 0

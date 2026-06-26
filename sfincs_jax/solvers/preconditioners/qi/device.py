@@ -28,35 +28,35 @@ import jax
 import numpy as np
 
 from sfincs_jax.operators.profile_response.device_sparse import DeviceCSR
-from sfincs_jax.solvers.preconditioners.qi.coarse import (
+from sfincs_jax.solvers.preconditioners.qi.basis import (
     RHS1QICoarseBasis,
     RHS1QICoarseBasisMetadata,
     RHS1QICoarseBlockLayout,
     orthonormalize_rhs1_qi_coarse_basis,
 )
-from sfincs_jax.solvers.preconditioners.qi.coupled_residual import (
+from sfincs_jax.solvers.preconditioners.qi.corrections import (
     RHS1QICoupledResidualEquationConfig,
     setup_rhs1_qi_coupled_residual_equation,
 )
-from sfincs_jax.solvers.preconditioners.qi.multilevel import (
+from sfincs_jax.solvers.preconditioners.qi.corrections import (
     RHS1QIMultilevelCoarseConfig,
     build_rhs1_qi_multilevel_coarse_basis,
     build_rhs1_qi_multilevel_coarse_candidates,
     build_rhs1_qi_multilevel_residual_level_bases,
 )
-from sfincs_jax.solvers.preconditioners.qi.active_pattern import (
+from sfincs_jax.solvers.preconditioners.qi.basis import (
     RHS1QIActivePatternCoarseConfig,
     build_rhs1_qi_active_pattern_coarse_basis,
 )
-from sfincs_jax.solvers.preconditioners.qi.phase_space import (
+from sfincs_jax.solvers.preconditioners.qi.basis import (
     RHS1QIPhaseSpaceCoarseConfig,
     build_rhs1_qi_phase_space_coarse_basis,
 )
-from sfincs_jax.solvers.preconditioners.qi.residual_galerkin import (
+from sfincs_jax.solvers.preconditioners.qi.corrections import (
     RHS1QIResidualGalerkinConfig,
     setup_rhs1_qi_residual_galerkin,
 )
-from sfincs_jax.solvers.preconditioners.qi.residual_regions import (
+from sfincs_jax.solvers.preconditioners.qi.basis import (
     RHS1QIResidualRegionCoarseConfig,
     build_rhs1_qi_residual_region_coarse_basis,
 )
@@ -124,7 +124,9 @@ class RHS1QIDeviceJacobiSmoother:
     def apply(self, residual: ArrayLike) -> ArrayLike:
         """Apply bounded Jacobi sweeps to ``A correction = residual``."""
 
-        residual_vec = jnp.asarray(residual, dtype=self.operator.data.dtype).reshape((-1,))
+        residual_vec = jnp.asarray(residual, dtype=self.operator.data.dtype).reshape(
+            (-1,)
+        )
         if int(residual_vec.shape[0]) != int(self.operator.shape[0]):
             raise ValueError(
                 f"residual length {residual_vec.shape[0]} does not match "
@@ -133,7 +135,9 @@ class RHS1QIDeviceJacobiSmoother:
 
         correction = jnp.zeros_like(residual_vec)
         remaining = residual_vec
-        fixed_damping = jnp.asarray(float(self.metadata.damping), dtype=residual_vec.dtype)
+        fixed_damping = jnp.asarray(
+            float(self.metadata.damping), dtype=residual_vec.dtype
+        )
         inverse_diagonal = jnp.asarray(self.inverse_diagonal, dtype=residual_vec.dtype)
         for _ in range(max(1, int(self.metadata.sweeps))):
             raw_step = inverse_diagonal * remaining
@@ -151,7 +155,9 @@ class RHS1QIDeviceJacobiSmoother:
                 step = fixed_damping * raw_step
                 action = self.operator.matvec(step)
             else:
-                raise ValueError(f"unsupported device smoother step policy {self.metadata.step_policy!r}")
+                raise ValueError(
+                    f"unsupported device smoother step policy {self.metadata.step_policy!r}"
+                )
             correction = correction + step
             remaining = remaining - action
         return correction
@@ -181,7 +187,9 @@ class RHS1QIDeviceSmootherProbe:
             "reason": self.reason,
             "residual_before_norm": float(self.residual_before_norm),
             "residual_after_norm": float(self.residual_after_norm),
-            "improvement_ratio": None if self.improvement_ratio is None else float(self.improvement_ratio),
+            "improvement_ratio": None
+            if self.improvement_ratio is None
+            else float(self.improvement_ratio),
             "metadata": self.metadata.to_dict(),
         }
 
@@ -230,7 +238,9 @@ def _residual_minimizing_step_scale(
     return jnp.minimum(safe_scale, cap)
 
 
-def extract_device_csr_diagonal(device_operator: DeviceCSR) -> tuple[ArrayLike, ArrayLike]:
+def extract_device_csr_diagonal(
+    device_operator: DeviceCSR,
+) -> tuple[ArrayLike, ArrayLike]:
     """Return ``(diagonal, hit_count)`` from a square device CSR operator."""
 
     if int(device_operator.shape[0]) != int(device_operator.shape[1]):
@@ -292,8 +302,12 @@ def _diagonal_metadata(
         )
 
     finite_present_abs = diagonal_abs[present & finite]
-    diagonal_min_abs = float(np.min(finite_present_abs)) if finite_present_abs.size else 0.0
-    diagonal_max_abs = float(np.max(finite_present_abs)) if finite_present_abs.size else 0.0
+    diagonal_min_abs = (
+        float(np.min(finite_present_abs)) if finite_present_abs.size else 0.0
+    )
+    diagonal_max_abs = (
+        float(np.max(finite_present_abs)) if finite_present_abs.size else 0.0
+    )
     if valid_count == int(device_operator.shape[0]):
         reason = "built"
     elif valid_count > 0:
@@ -340,7 +354,9 @@ def build_rhs1_qi_device_jacobi_smoother(
     if not np.isfinite(damping_use) or damping_use <= 0.0:
         raise ValueError("damping must be finite and positive")
     step_policy_use = _normalize_step_policy(step_policy)
-    max_step_damping_use = damping_use if max_step_damping is None else float(max_step_damping)
+    max_step_damping_use = (
+        damping_use if max_step_damping is None else float(max_step_damping)
+    )
     if not np.isfinite(max_step_damping_use) or max_step_damping_use <= 0.0:
         raise ValueError("max_step_damping must be finite and positive")
     min_step_denominator_use = max(0.0, float(min_step_denominator))
@@ -389,7 +405,9 @@ def probe_rhs1_qi_device_smoother_correction(
     if rhs_vec.shape != x_initial.shape:
         raise ValueError("rhs and x0 must have the same shape")
 
-    residual_before = rhs_vec - jnp.asarray(matvec(x_initial), dtype=rhs_vec.dtype).reshape((-1,))
+    residual_before = rhs_vec - jnp.asarray(
+        matvec(x_initial), dtype=rhs_vec.dtype
+    ).reshape((-1,))
     residual_before_norm = float(jnp.linalg.norm(residual_before))
     if residual_before_norm == 0.0:
         probe = RHS1QIDeviceSmootherProbe(
@@ -402,17 +420,25 @@ def probe_rhs1_qi_device_smoother_correction(
         )
         return x_initial, probe
 
-    dx = jnp.asarray(smoother.apply(residual_before), dtype=rhs_vec.dtype).reshape((-1,))
+    dx = jnp.asarray(smoother.apply(residual_before), dtype=rhs_vec.dtype).reshape(
+        (-1,)
+    )
     x_candidate = x_initial + dx
-    residual_after = rhs_vec - jnp.asarray(matvec(x_candidate), dtype=rhs_vec.dtype).reshape((-1,))
+    residual_after = rhs_vec - jnp.asarray(
+        matvec(x_candidate), dtype=rhs_vec.dtype
+    ).reshape((-1,))
     residual_after_norm_measured = float(jnp.linalg.norm(residual_after))
     finite = bool(np.isfinite(residual_after_norm_measured))
-    improvement_ratio = residual_after_norm_measured / residual_before_norm if finite else None
+    improvement_ratio = (
+        residual_after_norm_measured / residual_before_norm if finite else None
+    )
     required_drop = max(
         float(acceptance_atol),
         residual_before_norm * max(0.0, float(min_relative_improvement)),
     )
-    accepted = finite and residual_after_norm_measured < residual_before_norm - required_drop
+    accepted = (
+        finite and residual_after_norm_measured < residual_before_norm - required_drop
+    )
     if accepted:
         reason = "residual_reduced"
         residual_after_norm = residual_after_norm_measured
@@ -740,8 +766,12 @@ class RHS1QIDevicePreconditionerMetadata:
 
         payload = asdict(self)
         payload["shape"] = tuple(int(v) for v in self.shape)
-        payload["coarse_operator_shape"] = tuple(int(v) for v in self.coarse_operator_shape)
-        payload["operator_on_basis_shape"] = tuple(int(v) for v in self.operator_on_basis_shape)
+        payload["coarse_operator_shape"] = tuple(
+            int(v) for v in self.coarse_operator_shape
+        )
+        payload["operator_on_basis_shape"] = tuple(
+            int(v) for v in self.operator_on_basis_shape
+        )
         return payload
 
 
@@ -799,7 +829,9 @@ class RHS1QIDevicePreconditionerState:
         if self.local_smoother is None:
             local = jnp.zeros_like(residual_vec)
         else:
-            local = jnp.asarray(self.local_smoother.apply(residual_vec), dtype=residual_vec.dtype).reshape((-1,))
+            local = jnp.asarray(
+                self.local_smoother.apply(residual_vec), dtype=residual_vec.dtype
+            ).reshape((-1,))
         residual_equation_rank = (
             int(self.metadata.multilevel_residual_equation_rank)
             + int(self.metadata.global_moment_residual_equation_rank)
@@ -814,8 +846,13 @@ class RHS1QIDevicePreconditionerState:
         if int(self.metadata.rank) <= 0 and residual_equation_rank <= 0:
             return float(self.metadata.damping) * local
 
-        if self.metadata.composition == "multiplicative" and self.local_smoother is not None:
-            coarse_input = residual_vec - jnp.asarray(self.operator_matvec(local), dtype=residual_vec.dtype).reshape((-1,))
+        if (
+            self.metadata.composition == "multiplicative"
+            and self.local_smoother is not None
+        ):
+            coarse_input = residual_vec - jnp.asarray(
+                self.operator_matvec(local), dtype=residual_vec.dtype
+            ).reshape((-1,))
         else:
             coarse_input = residual_vec
         if (
@@ -832,7 +869,9 @@ class RHS1QIDevicePreconditionerState:
             coarse = self.solve_coarse_residual_equation(coarse_input)
         else:
             coefficients = self.solve_coarse(coarse_input)
-            coarse = jnp.asarray(self.basis.vectors, dtype=residual_vec.dtype) @ coefficients
+            coarse = (
+                jnp.asarray(self.basis.vectors, dtype=residual_vec.dtype) @ coefficients
+            )
         return float(self.metadata.damping) * (local + coarse)
 
     def solve_coarse_residual_equation(self, residual: ArrayLike) -> ArrayLike:
@@ -859,7 +898,10 @@ class RHS1QIDevicePreconditionerState:
             if solver == "galerkin":
                 coefficients = _regularized_projected_solve(
                     coarse_operator,
-                    jnp.conjugate(jnp.asarray(basis.vectors, dtype=residual_vec.dtype)).T @ remaining,
+                    jnp.conjugate(
+                        jnp.asarray(basis.vectors, dtype=residual_vec.dtype)
+                    ).T
+                    @ remaining,
                     rcond=float(self.metadata.regularization_rcond),
                 )
             else:
@@ -868,31 +910,42 @@ class RHS1QIDevicePreconditionerState:
                     remaining,
                     rcond=float(self.metadata.regularization_rcond),
                 )
-            stage_update = jnp.asarray(basis.vectors, dtype=residual_vec.dtype) @ coefficients
+            stage_update = (
+                jnp.asarray(basis.vectors, dtype=residual_vec.dtype) @ coefficients
+            )
             correction = correction + stage_update
-            remaining = remaining - jnp.asarray(action, dtype=residual_vec.dtype) @ coefficients
+            remaining = (
+                remaining - jnp.asarray(action, dtype=residual_vec.dtype) @ coefficients
+            )
         include_flat_coarse = (
-            bool(self.metadata.multilevel_residual_equation_enabled)
-            and bool(self.metadata.multilevel_residual_equation_include_global)
-        ) or (
-            bool(self.metadata.global_moment_residual_equation_enabled)
-        ) or (
-            bool(self.metadata.residual_galerkin_equation_enabled)
-        ) or (
-            bool(self.metadata.phase_space_residual_equation_enabled)
-            and bool(self.metadata.phase_space_residual_equation_include_global)
-        ) or (
-            bool(self.metadata.residual_region_bounce_coarse_enabled)
-            and bool(self.metadata.residual_region_bounce_coarse_include_global)
-        ) or (
-            bool(self.metadata.active_pattern_coarse_enabled)
-            and bool(self.metadata.active_pattern_coarse_include_global)
-        ) or (
-            bool(self.metadata.block_schur_residual_equation_enabled)
-            and bool(self.metadata.block_schur_residual_equation_include_global)
-        ) or (
-            bool(self.metadata.residual_snapshot_residual_equation_enabled)
-            and bool(self.metadata.residual_snapshot_residual_equation_include_global)
+            (
+                bool(self.metadata.multilevel_residual_equation_enabled)
+                and bool(self.metadata.multilevel_residual_equation_include_global)
+            )
+            or (bool(self.metadata.global_moment_residual_equation_enabled))
+            or (bool(self.metadata.residual_galerkin_equation_enabled))
+            or (
+                bool(self.metadata.phase_space_residual_equation_enabled)
+                and bool(self.metadata.phase_space_residual_equation_include_global)
+            )
+            or (
+                bool(self.metadata.residual_region_bounce_coarse_enabled)
+                and bool(self.metadata.residual_region_bounce_coarse_include_global)
+            )
+            or (
+                bool(self.metadata.active_pattern_coarse_enabled)
+                and bool(self.metadata.active_pattern_coarse_include_global)
+            )
+            or (
+                bool(self.metadata.block_schur_residual_equation_enabled)
+                and bool(self.metadata.block_schur_residual_equation_include_global)
+            )
+            or (
+                bool(self.metadata.residual_snapshot_residual_equation_enabled)
+                and bool(
+                    self.metadata.residual_snapshot_residual_equation_include_global
+                )
+            )
         )
         if include_flat_coarse and int(self.metadata.rank) > 0:
             if (
@@ -902,11 +955,13 @@ class RHS1QIDevicePreconditionerState:
                 )
                 or (
                     bool(self.metadata.global_moment_residual_equation_enabled)
-                    and self.metadata.global_moment_residual_equation_solver == "galerkin"
+                    and self.metadata.global_moment_residual_equation_solver
+                    == "galerkin"
                 )
                 or (
                     bool(self.metadata.residual_snapshot_residual_equation_enabled)
-                    and self.metadata.residual_snapshot_residual_equation_solver == "galerkin"
+                    and self.metadata.residual_snapshot_residual_equation_solver
+                    == "galerkin"
                 )
                 or (
                     bool(self.metadata.phase_space_residual_equation_enabled)
@@ -923,12 +978,19 @@ class RHS1QIDevicePreconditionerState:
             ):
                 coefficients = _regularized_projected_solve(
                     self.coarse_operator,
-                    jnp.conjugate(jnp.asarray(self.basis.vectors, dtype=residual_vec.dtype)).T @ remaining,
+                    jnp.conjugate(
+                        jnp.asarray(self.basis.vectors, dtype=residual_vec.dtype)
+                    ).T
+                    @ remaining,
                     rcond=float(self.metadata.regularization_rcond),
                 )
             else:
                 coefficients = self.solve_coarse(remaining)
-            correction = correction + jnp.asarray(self.basis.vectors, dtype=residual_vec.dtype) @ coefficients
+            correction = (
+                correction
+                + jnp.asarray(self.basis.vectors, dtype=residual_vec.dtype)
+                @ coefficients
+            )
         return correction
 
     def as_preconditioner(self):
@@ -959,7 +1021,9 @@ class RHS1QIDevicePreconditionerProbe:
             "reason": self.reason,
             "residual_before_norm": float(self.residual_before_norm),
             "residual_after_norm": float(self.residual_after_norm),
-            "improvement_ratio": None if self.improvement_ratio is None else float(self.improvement_ratio),
+            "improvement_ratio": None
+            if self.improvement_ratio is None
+            else float(self.improvement_ratio),
             "metadata": self.metadata.to_dict(),
             "cycles": int(self.cycles),
             "residual_history": tuple(float(value) for value in self.residual_history),
@@ -988,7 +1052,9 @@ class RHS1QIDeviceAugmentedSeedProbe:
             "reason": self.reason,
             "accepted_labels": tuple(str(label) for label in self.accepted_labels),
             "projection_residual_norm": (
-                None if self.projection_residual_norm is None else float(self.projection_residual_norm)
+                None
+                if self.projection_residual_norm is None
+                else float(self.projection_residual_norm)
             ),
             "probe": self.probe.to_dict(),
         }
@@ -1049,11 +1115,17 @@ class RHS1QIMatrixFreeResidualSmoother:
         correction = jnp.zeros_like(residual_vec)
         remaining = residual_vec
         damping = jnp.asarray(float(self.metadata.damping), dtype=residual_vec.dtype)
-        min_denominator = jnp.asarray(max(0.0, float(self.metadata.min_denominator)), dtype=residual_vec.dtype)
-        alpha_clip = jnp.asarray(max(0.0, float(self.metadata.alpha_clip)), dtype=residual_vec.dtype)
+        min_denominator = jnp.asarray(
+            max(0.0, float(self.metadata.min_denominator)), dtype=residual_vec.dtype
+        )
+        alpha_clip = jnp.asarray(
+            max(0.0, float(self.metadata.alpha_clip)), dtype=residual_vec.dtype
+        )
         for _ in range(max(1, int(self.metadata.sweeps))):
             direction = remaining
-            action = jnp.asarray(self.operator_matvec(direction), dtype=residual_vec.dtype).reshape((-1,))
+            action = jnp.asarray(
+                self.operator_matvec(direction), dtype=residual_vec.dtype
+            ).reshape((-1,))
             if self.metadata.step_policy == "residual_minimizing":
                 numerator = jnp.real(jnp.vdot(action, remaining))
                 denominator = jnp.real(jnp.vdot(action, action))
@@ -1062,14 +1134,22 @@ class RHS1QIMatrixFreeResidualSmoother:
                     & jnp.isfinite(denominator)
                     & (denominator > min_denominator)
                 )
-                raw_alpha = numerator / jnp.where(valid, denominator, jnp.asarray(1.0, dtype=denominator.dtype))
+                raw_alpha = numerator / jnp.where(
+                    valid, denominator, jnp.asarray(1.0, dtype=denominator.dtype)
+                )
                 if float(self.metadata.alpha_clip) > 0.0:
                     raw_alpha = jnp.clip(raw_alpha, -alpha_clip, alpha_clip)
-                alpha = jnp.where(valid & jnp.isfinite(raw_alpha), raw_alpha, jnp.asarray(0.0, dtype=raw_alpha.dtype))
+                alpha = jnp.where(
+                    valid & jnp.isfinite(raw_alpha),
+                    raw_alpha,
+                    jnp.asarray(0.0, dtype=raw_alpha.dtype),
+                )
             elif self.metadata.step_policy == "stationary":
                 alpha = jnp.asarray(1.0, dtype=residual_vec.dtype)
             else:
-                raise ValueError(f"unsupported matrix-free smoother step policy {self.metadata.step_policy!r}")
+                raise ValueError(
+                    f"unsupported matrix-free smoother step policy {self.metadata.step_policy!r}"
+                )
             step_scale = damping * alpha
             correction = correction + step_scale * direction
             remaining = remaining - step_scale * action
@@ -1105,7 +1185,9 @@ class RHS1QIMatrixFreeProjectedResidualSmootherMetadata:
 
         return {
             "shape": tuple(int(v) for v in self.shape),
-            "group_slices": tuple((int(start), int(stop)) for start, stop in self.group_slices),
+            "group_slices": tuple(
+                (int(start), int(stop)) for start, stop in self.group_slices
+            ),
             "group_partitions": tuple(
                 tuple((int(start), int(stop)) for start, stop in partition)
                 for partition in self.group_partitions
@@ -1236,7 +1318,9 @@ def _normalize_matrix_free_smoother_step_policy(value: str) -> str:
         "residual_reducing": "residual_minimizing",
     }
     if normalized not in aliases:
-        raise ValueError("matrix_free_smoother_step_policy must be 'stationary' or 'residual_minimizing'")
+        raise ValueError(
+            "matrix_free_smoother_step_policy must be 'stationary' or 'residual_minimizing'"
+        )
     return aliases[normalized]
 
 
@@ -1290,12 +1374,16 @@ def _normalize_adjoint_krylov_transpose_source(value: str) -> str:
     return aliases[normalized]
 
 
-def _metadata_int_tuple(metadata: Mapping[str, object] | None, key: str) -> tuple[int, ...]:
+def _metadata_int_tuple(
+    metadata: Mapping[str, object] | None, key: str
+) -> tuple[int, ...]:
     if metadata is None or key not in metadata:
         return ()
     value = metadata[key]
     if isinstance(value, str):
-        raw_values: Sequence[object] = tuple(part for part in value.replace(",", " ").split() if part)
+        raw_values: Sequence[object] = tuple(
+            part for part in value.replace(",", " ").split() if part
+        )
     elif isinstance(value, Sequence):
         raw_values = value
     else:
@@ -1309,7 +1397,9 @@ def _metadata_int_tuple(metadata: Mapping[str, object] | None, key: str) -> tupl
     return tuple(result)
 
 
-def _metadata_int_value(metadata: Mapping[str, object] | None, key: str, default: int) -> int:
+def _metadata_int_value(
+    metadata: Mapping[str, object] | None, key: str, default: int
+) -> int:
     if metadata is None or key not in metadata:
         return int(default)
     value = metadata[key]
@@ -1326,7 +1416,9 @@ def _multilevel_layout_from_metadata(
 ) -> RHS1QICoarseBlockLayout:
     block_sizes = list(_metadata_int_tuple(geometry_metadata, "qi_block_sizes"))
     if not block_sizes:
-        raise ValueError("multilevel_coarse requires geometry_metadata['qi_block_sizes']")
+        raise ValueError(
+            "multilevel_coarse requires geometry_metadata['qi_block_sizes']"
+        )
     block_x = list(_metadata_int_tuple(geometry_metadata, "qi_block_x"))
     block_species = list(_metadata_int_tuple(geometry_metadata, "qi_block_species"))
     covered_size = int(sum(block_sizes))
@@ -1335,7 +1427,10 @@ def _multilevel_layout_from_metadata(
         "qi_block_tail_size",
         max(0, int(total_size) - int(covered_size)),
     )
-    if covered_size < int(total_size) and int(tail_size) == int(total_size) - covered_size:
+    if (
+        covered_size < int(total_size)
+        and int(tail_size) == int(total_size) - covered_size
+    ):
         block_sizes.append(int(tail_size))
         if block_x:
             block_x.append(-1)
@@ -1363,7 +1458,9 @@ def _build_multilevel_coarse_basis_from_metadata(
     dtype: Any,
     config: RHS1QIDevicePreconditionerConfig,
 ) -> tuple[RHS1QICoarseBasis, int, int]:
-    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    layout = _multilevel_layout_from_metadata(
+        geometry_metadata=geometry_metadata, total_size=total_size
+    )
     max_rank = config.multilevel_max_rank
     if max_rank is None:
         max_rank = config.max_rank if config.max_rank is not None else 48
@@ -1378,14 +1475,18 @@ def _build_multilevel_coarse_basis_from_metadata(
         include_species_current_moments=bool(config.multilevel_species_current_moments),
         include_radial_current_moments=bool(config.multilevel_radial_current_moments),
         include_tail_constraint_moments=bool(config.multilevel_tail_constraint_moments),
-        max_current_pitch_degree=max(0, int(config.multilevel_current_max_pitch_degree)),
+        max_current_pitch_degree=max(
+            0, int(config.multilevel_current_max_pitch_degree)
+        ),
         rtol=float(config.basis_rtol),
         atol=float(config.basis_atol),
         regularization_rcond=float(config.regularization_rcond),
         damping=float(config.damping),
         dtype=dtype,
     )
-    basis, levels = build_rhs1_qi_multilevel_coarse_basis(layout, config=multilevel_config)
+    basis, levels = build_rhs1_qi_multilevel_coarse_basis(
+        layout, config=multilevel_config
+    )
     return basis, len(levels), int(basis.metadata.candidate_count)
 
 
@@ -1395,7 +1496,9 @@ def _normalize_multilevel_residual_equation_order(value: str) -> str:
         return "coarse_to_fine"
     if order in {"fine_to_coarse", "fine", "fine_first"}:
         return "fine_to_coarse"
-    raise ValueError("multilevel_residual_equation_order must be 'coarse_to_fine' or 'fine_to_coarse'")
+    raise ValueError(
+        "multilevel_residual_equation_order must be 'coarse_to_fine' or 'fine_to_coarse'"
+    )
 
 
 def _normalize_multilevel_residual_equation_solver(value: str) -> str:
@@ -1413,7 +1516,9 @@ def _normalize_multilevel_residual_equation_solver(value: str) -> str:
         "coarse_grid": "galerkin",
     }
     if solver not in aliases:
-        raise ValueError("multilevel_residual_equation_solver must be 'action_lstsq' or 'galerkin'")
+        raise ValueError(
+            "multilevel_residual_equation_solver must be 'action_lstsq' or 'galerkin'"
+        )
     return aliases[solver]
 
 
@@ -1426,7 +1531,9 @@ def _build_multilevel_residual_equation_bases_from_metadata(
 ) -> tuple[tuple[RHS1QICoarseBasis, ...], int, int, tuple[int, ...]]:
     """Build separate coarse-grid bases for the nested residual equation."""
 
-    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    layout = _multilevel_layout_from_metadata(
+        geometry_metadata=geometry_metadata, total_size=total_size
+    )
     max_rank = max(1, int(config.multilevel_residual_equation_max_level_rank))
     multilevel_config = RHS1QIMultilevelCoarseConfig(
         max_levels=max(1, int(config.multilevel_max_levels)),
@@ -1439,7 +1546,9 @@ def _build_multilevel_residual_equation_bases_from_metadata(
         include_species_current_moments=bool(config.multilevel_species_current_moments),
         include_radial_current_moments=bool(config.multilevel_radial_current_moments),
         include_tail_constraint_moments=bool(config.multilevel_tail_constraint_moments),
-        max_current_pitch_degree=max(0, int(config.multilevel_current_max_pitch_degree)),
+        max_current_pitch_degree=max(
+            0, int(config.multilevel_current_max_pitch_degree)
+        ),
         nested_residual_correction=True,
         nested_level_max_rank=max_rank,
         nested_order=_normalize_multilevel_residual_equation_order(
@@ -1448,7 +1557,9 @@ def _build_multilevel_residual_equation_bases_from_metadata(
         nested_include_global=bool(config.multilevel_residual_equation_include_global),
         dtype=dtype,
     )
-    bases, _levels = build_rhs1_qi_multilevel_residual_level_bases(layout, config=multilevel_config)
+    bases, _levels = build_rhs1_qi_multilevel_residual_level_bases(
+        layout, config=multilevel_config
+    )
     stage_ranks = tuple(int(basis.metadata.rank) for basis in bases)
     return bases, len(bases), sum(stage_ranks), stage_ranks
 
@@ -1474,10 +1585,14 @@ def _build_global_moment_residual_equation_bases_from_metadata(
 
     if int(shape[0]) != int(shape[1]):
         raise ValueError("global moment residual equation requires a square operator")
-    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    layout = _multilevel_layout_from_metadata(
+        geometry_metadata=geometry_metadata, total_size=total_size
+    )
     residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
     if int(residual.shape[0]) != int(total_size):
-        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+        raise ValueError(
+            f"residual_seed length {residual.shape[0]} does not match operator size {total_size}"
+        )
 
     solver = _normalize_multilevel_residual_equation_solver(
         config.global_moment_residual_equation_solver
@@ -1490,18 +1605,26 @@ def _build_global_moment_residual_equation_bases_from_metadata(
         max_angular_mode=0,
         max_radial_degree=max(0, int(config.multilevel_max_radial_degree)),
         max_pitch_degree=0,
-        include_level_aggregates=bool(config.global_moment_residual_equation_include_profile),
+        include_level_aggregates=bool(
+            config.global_moment_residual_equation_include_profile
+        ),
         include_angular=False,
         include_radial=bool(config.global_moment_residual_equation_include_profile),
         include_radial_angular=False,
         include_pitch=False,
         include_radial_pitch=False,
-        include_current_moments=bool(config.global_moment_residual_equation_include_current),
+        include_current_moments=bool(
+            config.global_moment_residual_equation_include_current
+        ),
         include_species_current_moments=bool(config.multilevel_species_current_moments),
         include_radial_current_moments=bool(config.multilevel_radial_current_moments),
-        include_tail_constraint_moments=bool(config.global_moment_residual_equation_include_tail),
+        include_tail_constraint_moments=bool(
+            config.global_moment_residual_equation_include_tail
+        ),
         include_finest_blocks=False,
-        max_current_pitch_degree=max(1, int(config.multilevel_current_max_pitch_degree)),
+        max_current_pitch_degree=max(
+            1, int(config.multilevel_current_max_pitch_degree)
+        ),
         rtol=float(config.basis_rtol),
         atol=float(config.basis_atol),
         regularization_rcond=float(config.regularization_rcond),
@@ -1517,7 +1640,10 @@ def _build_global_moment_residual_equation_bases_from_metadata(
     for index, label in enumerate(labels):
         label_text = str(label)
         include = (
-            (bool(config.global_moment_residual_equation_include_current) and label_text.startswith("current:"))
+            (
+                bool(config.global_moment_residual_equation_include_current)
+                and label_text.startswith("current:")
+            )
             or (
                 bool(config.global_moment_residual_equation_include_tail)
                 and label_text.startswith("constraint_tail:")
@@ -1528,7 +1654,9 @@ def _build_global_moment_residual_equation_bases_from_metadata(
             )
         )
         if include:
-            selected_columns.append(jnp.asarray(candidates[:, int(index)], dtype=dtype).reshape((-1,)))
+            selected_columns.append(
+                jnp.asarray(candidates[:, int(index)], dtype=dtype).reshape((-1,))
+            )
             selected_labels.append(f"global_moment:{label_text}")
     if not selected_columns:
         return (), 0, (), 0, float("inf")
@@ -1564,8 +1692,12 @@ def _build_global_moment_residual_equation_bases_from_metadata(
     next_residual = residual - action @ coefficients
     residual_norm = float(jnp.linalg.norm(residual))
     next_norm = float(jnp.linalg.norm(next_residual))
-    threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_norm))
-    singular_values = np.asarray(jnp.linalg.svd(condition_matrix, compute_uv=False), dtype=np.float64)
+    threshold = max(
+        float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_norm)
+    )
+    singular_values = np.asarray(
+        jnp.linalg.svd(condition_matrix, compute_uv=False), dtype=np.float64
+    )
     positive = singular_values[singular_values > threshold]
     if positive.size == 0:
         condition_estimate = float("inf")
@@ -1573,7 +1705,13 @@ def _build_global_moment_residual_equation_bases_from_metadata(
         condition_estimate = float(np.max(singular_values) / np.min(positive))
     if (not np.isfinite(next_norm)) or next_norm >= residual_norm - threshold:
         return (), int(basis.metadata.candidate_count), (), 0, condition_estimate
-    return (basis,), int(basis.metadata.candidate_count), (rank,), rank, condition_estimate
+    return (
+        (basis,),
+        int(basis.metadata.candidate_count),
+        (rank,),
+        rank,
+        condition_estimate,
+    )
 
 
 def _basis_from_residual_galerkin_state(
@@ -1588,7 +1726,9 @@ def _basis_from_residual_galerkin_state(
     if q.ndim != 2:
         raise ValueError("residual Galerkin basis must be two-dimensional")
     accepted_labels = tuple(f"residual_galerkin:{label}" for label in labels)
-    norms = tuple(float(jnp.linalg.norm(q[:, index])) for index in range(int(q.shape[1])))
+    norms = tuple(
+        float(jnp.linalg.norm(q[:, index])) for index in range(int(q.shape[1]))
+    )
     return RHS1QICoarseBasis(
         vectors=q,
         metadata=RHS1QICoarseBasisMetadata(
@@ -1596,7 +1736,9 @@ def _basis_from_residual_galerkin_state(
             candidate_count=int(candidate_count),
             rank=int(q.shape[1]),
             discarded_count=max(0, int(candidate_count) - int(q.shape[1])),
-            candidate_labels=tuple(f"residual_galerkin:{label}" for label in candidate_labels),
+            candidate_labels=tuple(
+                f"residual_galerkin:{label}" for label in candidate_labels
+            ),
             accepted_labels=accepted_labels,
             candidate_norms=norms,
             accepted_norms=norms,
@@ -1614,13 +1756,19 @@ def _build_residual_galerkin_equation_basis_from_metadata(
     total_size: int,
     dtype: Any,
     config: RHS1QIDevicePreconditionerConfig,
-) -> tuple[tuple[RHS1QICoarseBasis, ...], int, int, tuple[int, ...], int, float, float, float]:
+) -> tuple[
+    tuple[RHS1QICoarseBasis, ...], int, int, tuple[int, ...], int, float, float, float
+]:
     """Build a residual-derived Galerkin stage from actual block residuals."""
 
-    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    layout = _multilevel_layout_from_metadata(
+        geometry_metadata=geometry_metadata, total_size=total_size
+    )
     residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
     if int(residual.shape[0]) != int(total_size):
-        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+        raise ValueError(
+            f"residual_seed length {residual.shape[0]} does not match operator size {total_size}"
+        )
     solver = _normalize_multilevel_residual_equation_solver(
         config.residual_galerkin_equation_solver
     )
@@ -1630,7 +1778,9 @@ def _build_residual_galerkin_equation_basis_from_metadata(
         block_sizes=tuple(int(value) for value in layout.block_sizes),
         config=RHS1QIResidualGalerkinConfig(
             max_stages=max(1, int(config.residual_galerkin_equation_max_stages)),
-            max_stage_rank=max(1, int(config.residual_galerkin_equation_max_stage_rank)),
+            max_stage_rank=max(
+                1, int(config.residual_galerkin_equation_max_stage_rank)
+            ),
             max_rank=max(1, int(config.residual_galerkin_equation_max_rank)),
             rank_rtol=float(config.basis_rtol),
             rank_atol=float(config.basis_atol),
@@ -1684,7 +1834,9 @@ def _build_residual_galerkin_equation_basis_from_metadata(
 
 
 def _condition_estimate(matrix: ArrayLike, *, threshold: float) -> float:
-    singular_values = np.asarray(jnp.linalg.svd(matrix, compute_uv=False), dtype=np.float64)
+    singular_values = np.asarray(
+        jnp.linalg.svd(matrix, compute_uv=False), dtype=np.float64
+    )
     positive = singular_values[singular_values > float(threshold)]
     if positive.size == 0:
         return float("inf")
@@ -1700,22 +1852,30 @@ def _build_phase_space_residual_equation_bases_from_metadata(
     total_size: int,
     dtype: Any,
     config: RHS1QIDevicePreconditionerConfig,
-) -> tuple[tuple[RHS1QICoarseBasis, ...], int, tuple[int, ...], int, float, float, float]:
+) -> tuple[
+    tuple[RHS1QICoarseBasis, ...], int, tuple[int, ...], int, float, float, float
+]:
     """Build a fail-closed trapped/passing phase-space residual equation."""
 
     if int(shape[0]) != int(shape[1]):
         raise ValueError("phase-space residual equation requires a square operator")
-    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    layout = _multilevel_layout_from_metadata(
+        geometry_metadata=geometry_metadata, total_size=total_size
+    )
     residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
     if int(residual.shape[0]) != int(total_size):
-        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+        raise ValueError(
+            f"residual_seed length {residual.shape[0]} does not match operator size {total_size}"
+        )
 
     solver = _normalize_multilevel_residual_equation_solver(
         config.phase_space_residual_equation_solver
     )
     phase_config = RHS1QIPhaseSpaceCoarseConfig(
         max_rank=max(1, int(config.phase_space_residual_equation_max_rank)),
-        trapped_boundary_fraction=float(config.phase_space_residual_equation_trapped_boundary_fraction),
+        trapped_boundary_fraction=float(
+            config.phase_space_residual_equation_trapped_boundary_fraction
+        ),
         include_trapped=bool(config.phase_space_residual_equation_include_trapped),
         include_passing=bool(config.phase_space_residual_equation_include_passing),
         include_boundary=bool(config.phase_space_residual_equation_include_boundary),
@@ -1737,7 +1897,9 @@ def _build_phase_space_residual_equation_bases_from_metadata(
     q = jnp.asarray(basis.vectors, dtype=dtype)
     action = _operator_on_basis(operator_matvec, q, shape=shape, dtype=dtype)
     coarse_operator = jnp.conjugate(q).T @ action
-    threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_before))
+    threshold = max(
+        float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_before)
+    )
     if solver == "galerkin":
         coefficients = _regularized_projected_solve(
             coarse_operator,
@@ -1755,9 +1917,27 @@ def _build_phase_space_residual_equation_bases_from_metadata(
     next_residual = residual - action @ coefficients
     residual_after = float(jnp.linalg.norm(next_residual))
     condition_estimate = _condition_estimate(condition_matrix, threshold=threshold)
-    if (not np.isfinite(residual_after)) or residual_after >= residual_before - threshold:
-        return (), candidate_count, (), 0, condition_estimate, residual_before, residual_after
-    return (basis,), candidate_count, (rank,), rank, condition_estimate, residual_before, residual_after
+    if (
+        not np.isfinite(residual_after)
+    ) or residual_after >= residual_before - threshold:
+        return (
+            (),
+            candidate_count,
+            (),
+            0,
+            condition_estimate,
+            residual_before,
+            residual_after,
+        )
+    return (
+        (basis,),
+        candidate_count,
+        (rank,),
+        rank,
+        condition_estimate,
+        residual_before,
+        residual_after,
+    )
 
 
 def _build_residual_region_bounce_coarse_bases_from_metadata(
@@ -1769,15 +1949,21 @@ def _build_residual_region_bounce_coarse_bases_from_metadata(
     total_size: int,
     dtype: Any,
     config: RHS1QIDevicePreconditionerConfig,
-) -> tuple[tuple[RHS1QICoarseBasis, ...], int, tuple[int, ...], int, float, float, float]:
+) -> tuple[
+    tuple[RHS1QICoarseBasis, ...], int, tuple[int, ...], int, float, float, float
+]:
     """Build a fail-closed residual-localized bounce-region coarse equation."""
 
     if int(shape[0]) != int(shape[1]):
         raise ValueError("residual-region bounce coarse requires a square operator")
-    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    layout = _multilevel_layout_from_metadata(
+        geometry_metadata=geometry_metadata, total_size=total_size
+    )
     residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
     if int(residual.shape[0]) != int(total_size):
-        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+        raise ValueError(
+            f"residual_seed length {residual.shape[0]} does not match operator size {total_size}"
+        )
 
     solver = _normalize_multilevel_residual_equation_solver(
         config.residual_region_bounce_coarse_solver
@@ -1785,16 +1971,30 @@ def _build_residual_region_bounce_coarse_bases_from_metadata(
     region_config = RHS1QIResidualRegionCoarseConfig(
         max_rank=max(1, int(config.residual_region_bounce_coarse_max_rank)),
         max_candidates=max(1, int(config.residual_region_bounce_coarse_max_candidates)),
-        trapped_boundary_fraction=float(config.residual_region_bounce_coarse_trapped_boundary_fraction),
-        min_region_energy_fraction=float(config.residual_region_bounce_coarse_min_region_energy_fraction),
-        include_global_active_region=bool(config.residual_region_bounce_coarse_include_global),
+        trapped_boundary_fraction=float(
+            config.residual_region_bounce_coarse_trapped_boundary_fraction
+        ),
+        min_region_energy_fraction=float(
+            config.residual_region_bounce_coarse_min_region_energy_fraction
+        ),
+        include_global_active_region=bool(
+            config.residual_region_bounce_coarse_include_global
+        ),
         include_block_regions=True,
         include_block_bounce_regions=True,
         include_pitch_regions=True,
-        include_radial_regions=bool(config.residual_region_bounce_coarse_include_radial),
-        include_radial_bounce_regions=bool(config.residual_region_bounce_coarse_include_radial),
-        include_species_regions=bool(config.residual_region_bounce_coarse_include_species),
-        include_species_bounce_regions=bool(config.residual_region_bounce_coarse_include_species),
+        include_radial_regions=bool(
+            config.residual_region_bounce_coarse_include_radial
+        ),
+        include_radial_bounce_regions=bool(
+            config.residual_region_bounce_coarse_include_radial
+        ),
+        include_species_regions=bool(
+            config.residual_region_bounce_coarse_include_species
+        ),
+        include_species_bounce_regions=bool(
+            config.residual_region_bounce_coarse_include_species
+        ),
         region_bands=str(config.residual_region_bounce_coarse_region_bands),
         rtol=float(config.basis_rtol),
         atol=float(config.basis_atol),
@@ -1814,7 +2014,9 @@ def _build_residual_region_bounce_coarse_bases_from_metadata(
     q = jnp.asarray(basis.vectors, dtype=dtype)
     action = _operator_on_basis(operator_matvec, q, shape=shape, dtype=dtype)
     coarse_operator = jnp.conjugate(q).T @ action
-    threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_before))
+    threshold = max(
+        float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_before)
+    )
     if solver == "galerkin":
         coefficients = _regularized_projected_solve(
             coarse_operator,
@@ -1832,9 +2034,27 @@ def _build_residual_region_bounce_coarse_bases_from_metadata(
     next_residual = residual - action @ coefficients
     residual_after = float(jnp.linalg.norm(next_residual))
     condition_estimate = _condition_estimate(condition_matrix, threshold=threshold)
-    if (not np.isfinite(residual_after)) or residual_after >= residual_before - threshold:
-        return (), candidate_count, (), 0, condition_estimate, residual_before, residual_after
-    return (basis,), candidate_count, (rank,), rank, condition_estimate, residual_before, residual_after
+    if (
+        not np.isfinite(residual_after)
+    ) or residual_after >= residual_before - threshold:
+        return (
+            (),
+            candidate_count,
+            (),
+            0,
+            condition_estimate,
+            residual_before,
+            residual_after,
+        )
+    return (
+        (basis,),
+        candidate_count,
+        (rank,),
+        rank,
+        condition_estimate,
+        residual_before,
+        residual_after,
+    )
 
 
 def _build_active_pattern_coarse_bases_from_metadata(
@@ -1846,7 +2066,9 @@ def _build_active_pattern_coarse_bases_from_metadata(
     total_size: int,
     dtype: Any,
     config: RHS1QIDevicePreconditionerConfig,
-) -> tuple[tuple[RHS1QICoarseBasis, ...], int, tuple[int, ...], int, float, float, float]:
+) -> tuple[
+    tuple[RHS1QICoarseBasis, ...], int, tuple[int, ...], int, float, float, float
+]:
     """Build a residual active-pattern coarse equation.
 
     The candidate directions are selected from actual high-energy residual
@@ -1858,20 +2080,36 @@ def _build_active_pattern_coarse_bases_from_metadata(
 
     if int(shape[0]) != int(shape[1]):
         raise ValueError("active-pattern coarse requires a square operator")
-    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    layout = _multilevel_layout_from_metadata(
+        geometry_metadata=geometry_metadata, total_size=total_size
+    )
     residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
     if int(residual.shape[0]) != int(total_size):
-        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+        raise ValueError(
+            f"residual_seed length {residual.shape[0]} does not match operator size {total_size}"
+        )
 
-    solver = _normalize_multilevel_residual_equation_solver(config.active_pattern_coarse_solver)
+    solver = _normalize_multilevel_residual_equation_solver(
+        config.active_pattern_coarse_solver
+    )
     active_config = RHS1QIActivePatternCoarseConfig(
         max_rank=max(1, int(config.active_pattern_coarse_max_rank)),
         max_candidates=max(1, int(config.active_pattern_coarse_max_candidates)),
-        min_chunk_energy_fraction=float(config.active_pattern_coarse_min_chunk_energy_fraction),
-        include_block_pitch_chunks=bool(config.active_pattern_coarse_include_block_pitch),
-        include_block_angular_chunks=bool(config.active_pattern_coarse_include_block_angular),
-        include_radial_pitch_chunks=bool(config.active_pattern_coarse_include_radial_pitch),
-        include_radial_angular_chunks=bool(config.active_pattern_coarse_include_radial_angular),
+        min_chunk_energy_fraction=float(
+            config.active_pattern_coarse_min_chunk_energy_fraction
+        ),
+        include_block_pitch_chunks=bool(
+            config.active_pattern_coarse_include_block_pitch
+        ),
+        include_block_angular_chunks=bool(
+            config.active_pattern_coarse_include_block_angular
+        ),
+        include_radial_pitch_chunks=bool(
+            config.active_pattern_coarse_include_radial_pitch
+        ),
+        include_radial_angular_chunks=bool(
+            config.active_pattern_coarse_include_radial_angular
+        ),
         include_block_chunks=bool(config.active_pattern_coarse_include_block),
         include_radial_chunks=bool(config.active_pattern_coarse_include_radial),
         include_species_chunks=bool(config.active_pattern_coarse_include_species),
@@ -1893,7 +2131,9 @@ def _build_active_pattern_coarse_bases_from_metadata(
     q = jnp.asarray(basis.vectors, dtype=dtype)
     action = _operator_on_basis(operator_matvec, q, shape=shape, dtype=dtype)
     coarse_operator = jnp.conjugate(q).T @ action
-    threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_before))
+    threshold = max(
+        float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_before)
+    )
     if solver == "galerkin":
         coefficients = _regularized_projected_solve(
             coarse_operator,
@@ -1911,12 +2151,32 @@ def _build_active_pattern_coarse_bases_from_metadata(
     next_residual = residual - action @ coefficients
     residual_after = float(jnp.linalg.norm(next_residual))
     condition_estimate = _condition_estimate(condition_matrix, threshold=threshold)
-    if (not np.isfinite(residual_after)) or residual_after >= residual_before - threshold:
-        return (), candidate_count, (), 0, condition_estimate, residual_before, residual_after
-    return (basis,), candidate_count, (rank,), rank, condition_estimate, residual_before, residual_after
+    if (
+        not np.isfinite(residual_after)
+    ) or residual_after >= residual_before - threshold:
+        return (
+            (),
+            candidate_count,
+            (),
+            0,
+            condition_estimate,
+            residual_before,
+            residual_after,
+        )
+    return (
+        (basis,),
+        candidate_count,
+        (rank,),
+        rank,
+        condition_estimate,
+        residual_before,
+        residual_after,
+    )
 
 
-def _unique_snapshot_groups(groups: Sequence[Sequence[int]]) -> tuple[tuple[int, ...], ...]:
+def _unique_snapshot_groups(
+    groups: Sequence[Sequence[int]],
+) -> tuple[tuple[int, ...], ...]:
     unique: list[tuple[int, ...]] = []
     seen: set[tuple[int, ...]] = set()
     for group in groups:
@@ -1960,9 +2220,15 @@ def _block_schur_residual_groups(
     snapshot_config = RHS1QIDevicePreconditionerConfig(
         multilevel_max_levels=int(config.multilevel_max_levels),
         multilevel_aggregate_factor=int(config.multilevel_aggregate_factor),
-        residual_snapshot_include_global=bool(config.block_schur_residual_include_global),
-        residual_snapshot_include_blocks=bool(config.block_schur_residual_include_blocks),
-        residual_snapshot_include_aggregates=bool(config.block_schur_residual_include_aggregates),
+        residual_snapshot_include_global=bool(
+            config.block_schur_residual_include_global
+        ),
+        residual_snapshot_include_blocks=bool(
+            config.block_schur_residual_include_blocks
+        ),
+        residual_snapshot_include_aggregates=bool(
+            config.block_schur_residual_include_aggregates
+        ),
     )
     return _residual_snapshot_groups(layout, config=snapshot_config)
 
@@ -2018,10 +2284,14 @@ def _build_residual_snapshot_basis_from_metadata(
     applies a cached ``A Q`` coarse solve rather than doing additional smoothing.
     """
 
-    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    layout = _multilevel_layout_from_metadata(
+        geometry_metadata=geometry_metadata, total_size=total_size
+    )
     residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
     if int(residual.shape[0]) != int(total_size):
-        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+        raise ValueError(
+            f"residual_seed length {residual.shape[0]} does not match operator size {total_size}"
+        )
 
     offsets = tuple(int(value) for value in layout.block_offsets)
     columns: list[ArrayLike] = []
@@ -2097,19 +2367,27 @@ def _build_residual_snapshot_residual_equation_bases_from_metadata(
     ``A Q_l`` action for pure-JAX apply-time reuse.
     """
 
-    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    layout = _multilevel_layout_from_metadata(
+        geometry_metadata=geometry_metadata, total_size=total_size
+    )
     residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
     if int(residual.shape[0]) != int(total_size):
-        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+        raise ValueError(
+            f"residual_seed length {residual.shape[0]} does not match operator size {total_size}"
+        )
 
     offsets = tuple(int(value) for value in layout.block_offsets)
     groups = _residual_snapshot_groups(layout, config=config)
     if not groups:
-        raise ValueError("residual-snapshot residual equation requires at least one QI block group")
+        raise ValueError(
+            "residual-snapshot residual equation requires at least one QI block group"
+        )
 
     max_rank = max(1, int(config.residual_snapshot_residual_equation_max_rank))
     residual_norm = float(jnp.linalg.norm(residual))
-    threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_norm))
+    threshold = max(
+        float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_norm)
+    )
     solver = _normalize_multilevel_residual_equation_solver(
         config.residual_snapshot_residual_equation_solver
     )
@@ -2143,7 +2421,10 @@ def _build_residual_snapshot_residual_equation_bases_from_metadata(
             if primal is not None:
                 group_columns.append(primal)
                 group_labels.append(f"residual_snapshot_equation_primal:{group_label}")
-        if bool(config.residual_snapshot_use_adjoint) and used_rank + len(group_columns) < max_rank:
+        if (
+            bool(config.residual_snapshot_use_adjoint)
+            and used_rank + len(group_columns) < max_rank
+        ):
             adjoint_candidate = _autodiff_transpose_matvec(
                 operator_matvec,
                 masked_residual,
@@ -2173,7 +2454,9 @@ def _build_residual_snapshot_residual_equation_bases_from_metadata(
         if int(stage_basis.metadata.rank) <= 0:
             continue
         stage_q = jnp.asarray(stage_basis.vectors, dtype=dtype)
-        stage_action = _operator_on_basis(operator_matvec, stage_q, shape=shape, dtype=dtype)
+        stage_action = _operator_on_basis(
+            operator_matvec, stage_q, shape=shape, dtype=dtype
+        )
         if solver == "galerkin":
             coefficients = _regularized_projected_solve(
                 jnp.conjugate(stage_q).T @ stage_action,
@@ -2187,7 +2470,10 @@ def _build_residual_snapshot_residual_equation_bases_from_metadata(
                 rcond=float(config.regularization_rcond),
             )
         next_remaining = remaining - stage_action @ coefficients
-        if float(jnp.linalg.norm(next_remaining)) >= float(jnp.linalg.norm(remaining)) - threshold:
+        if (
+            float(jnp.linalg.norm(next_remaining))
+            >= float(jnp.linalg.norm(remaining)) - threshold
+        ):
             continue
 
         stage_bases.append(stage_basis)
@@ -2198,7 +2484,13 @@ def _build_residual_snapshot_residual_equation_bases_from_metadata(
         remaining = next_remaining
 
     stage_ranks = tuple(int(basis.metadata.rank) for basis in stage_bases)
-    return tuple(stage_bases), int(len(groups)), int(candidate_count), stage_ranks, int(sum(stage_ranks))
+    return (
+        tuple(stage_bases),
+        int(len(groups)),
+        int(candidate_count),
+        stage_ranks,
+        int(sum(stage_ranks)),
+    )
 
 
 def _build_block_schur_residual_basis_from_metadata(
@@ -2221,10 +2513,14 @@ def _build_block_schur_residual_basis_from_metadata(
     rank-gated ``Q`` and ``A Q`` columns, so apply-time remains device-only.
     """
 
-    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    layout = _multilevel_layout_from_metadata(
+        geometry_metadata=geometry_metadata, total_size=total_size
+    )
     residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
     if int(residual.shape[0]) != int(total_size):
-        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+        raise ValueError(
+            f"residual_seed length {residual.shape[0]} does not match operator size {total_size}"
+        )
     if int(shape[0]) != int(shape[1]):
         raise ValueError("block-Schur residual enrichment requires a square operator")
 
@@ -2241,8 +2537,12 @@ def _build_block_schur_residual_basis_from_metadata(
             total_size=int(total_size),
             dtype=dtype,
         )
-        action = jnp.asarray(operator_matvec(block_residual), dtype=dtype).reshape((-1,))
-        offblock_action = _remove_block_group(action, group=group, offsets=offsets, dtype=dtype)
+        action = jnp.asarray(operator_matvec(block_residual), dtype=dtype).reshape(
+            (-1,)
+        )
+        offblock_action = _remove_block_group(
+            action, group=group, offsets=offsets, dtype=dtype
+        )
         pulled_back = _autodiff_transpose_matvec(
             operator_matvec,
             offblock_action,
@@ -2318,7 +2618,9 @@ def _merge_group_slices(
     *,
     max_groups: int,
 ) -> tuple[tuple[int, int], ...]:
-    valid = tuple((int(start), int(stop)) for start, stop in slices if int(stop) > int(start))
+    valid = tuple(
+        (int(start), int(stop)) for start, stop in slices if int(stop) > int(start)
+    )
     if not valid:
         return ()
     group_limit = max(1, int(max_groups))
@@ -2364,10 +2666,16 @@ def _matrix_free_block_group_partitions(
     for size in block_sizes:
         offsets.append(offsets[-1] + int(size))
     if offsets[-1] > n_rows:
-        raise ValueError(f"qi_block_sizes sum {offsets[-1]} exceeds operator rows {n_rows}")
-    block_slices = tuple((offsets[index], offsets[index + 1]) for index in range(len(block_sizes)))
+        raise ValueError(
+            f"qi_block_sizes sum {offsets[-1]} exceeds operator rows {n_rows}"
+        )
+    block_slices = tuple(
+        (offsets[index], offsets[index + 1]) for index in range(len(block_sizes))
+    )
     tail_slice = (offsets[-1], n_rows) if offsets[-1] < n_rows else None
-    grouping = _normalize_matrix_free_block_smoother_grouping(config.matrix_free_block_smoother_grouping)
+    grouping = _normalize_matrix_free_block_smoother_grouping(
+        config.matrix_free_block_smoother_grouping
+    )
     max_groups = max(1, int(config.matrix_free_block_smoother_max_groups))
     if grouping == "block_hierarchy":
         layout = _multilevel_layout_from_metadata(
@@ -2402,14 +2710,21 @@ def _matrix_free_block_group_partitions(
             if partition:
                 group_partitions_list.append(partition)
         group_partitions = tuple(group_partitions_list)
-        group_slices = tuple(_partition_bounds(partition) for partition in group_partitions)
+        group_slices = tuple(
+            _partition_bounds(partition) for partition in group_partitions
+        )
         block_slices = layout_slices
     elif grouping == "contiguous":
         slices = list(block_slices)
-        if bool(config.matrix_free_block_smoother_include_tail) and tail_slice is not None:
+        if (
+            bool(config.matrix_free_block_smoother_include_tail)
+            and tail_slice is not None
+        ):
             slices.append(tail_slice)
         group_slices = _merge_group_slices(slices, max_groups=max_groups)
-        group_partitions = tuple(((int(start), int(stop)),) for start, stop in group_slices)
+        group_partitions = tuple(
+            ((int(start), int(stop)),) for start, stop in group_slices
+        )
     else:
         block_x = _metadata_int_tuple(geometry_metadata, "qi_block_x")
         block_species = _metadata_int_tuple(geometry_metadata, "qi_block_species")
@@ -2433,20 +2748,35 @@ def _matrix_free_block_group_partitions(
                     )
                 )
         tail_partitions: list[tuple[tuple[int, int], ...]] = []
-        if bool(config.matrix_free_block_smoother_include_tail) and tail_slice is not None:
+        if (
+            bool(config.matrix_free_block_smoother_include_tail)
+            and tail_slice is not None
+        ):
             tail_partitions.append((tail_slice,))
         reserved_groups = len(aggregate_partitions) + len(tail_partitions)
-        block_group_limit = max(1, max_groups - reserved_groups) if max_groups > reserved_groups else max_groups
+        block_group_limit = (
+            max(1, max_groups - reserved_groups)
+            if max_groups > reserved_groups
+            else max_groups
+        )
         block_partitions = tuple(
             ((int(start), int(stop)),)
-            for start, stop in _merge_group_slices(block_slices, max_groups=block_group_limit)
+            for start, stop in _merge_group_slices(
+                block_slices, max_groups=block_group_limit
+            )
         )
-        group_partitions = tuple(block_partitions + tuple(aggregate_partitions) + tuple(tail_partitions))
+        group_partitions = tuple(
+            block_partitions + tuple(aggregate_partitions) + tuple(tail_partitions)
+        )
         if len(group_partitions) > max_groups:
             group_partitions = group_partitions[:max_groups]
-        group_slices = tuple(_partition_bounds(partition) for partition in group_partitions)
+        group_slices = tuple(
+            _partition_bounds(partition) for partition in group_partitions
+        )
     if not group_slices:
-        raise ValueError("matrix_free_block_minres local smoother found no non-empty groups")
+        raise ValueError(
+            "matrix_free_block_minres local smoother found no non-empty groups"
+        )
     return group_partitions, group_slices, len(block_slices), grouping
 
 
@@ -2471,7 +2801,9 @@ def _build_matrix_free_residual_smoother(
         shape=tuple(int(value) for value in shape),
         sweeps=sweeps,
         damping=damping,
-        step_policy=_normalize_matrix_free_smoother_step_policy(config.matrix_free_smoother_step_policy),
+        step_policy=_normalize_matrix_free_smoother_step_policy(
+            config.matrix_free_smoother_step_policy
+        ),
         alpha_clip=alpha_clip,
         min_denominator=min_denominator,
         device_resident=True,
@@ -2504,10 +2836,12 @@ def _build_matrix_free_projected_residual_smoother(
     rcond = float(config.matrix_free_block_smoother_rcond)
     if not np.isfinite(rcond) or rcond <= 0.0:
         raise ValueError("matrix_free_block_smoother_rcond must be finite and positive")
-    group_partitions, group_slices, block_count, grouping = _matrix_free_block_group_partitions(
-        shape=shape,
-        geometry_metadata=geometry_metadata,
-        config=config,
+    group_partitions, group_slices, block_count, grouping = (
+        _matrix_free_block_group_partitions(
+            shape=shape,
+            geometry_metadata=geometry_metadata,
+            config=config,
+        )
     )
     metadata = RHS1QIMatrixFreeProjectedResidualSmootherMetadata(
         shape=tuple(int(value) for value in shape),
@@ -2532,7 +2866,9 @@ def _build_matrix_free_projected_residual_smoother(
     )
 
 
-def _regularized_least_squares(matrix: ArrayLike, rhs: ArrayLike, *, rcond: float) -> ArrayLike:
+def _regularized_least_squares(
+    matrix: ArrayLike, rhs: ArrayLike, *, rcond: float
+) -> ArrayLike:
     a = jnp.asarray(matrix)
     b = jnp.asarray(rhs, dtype=a.dtype).reshape((-1,))
     if a.ndim != 2:
@@ -2547,7 +2883,9 @@ def _regularized_least_squares(matrix: ArrayLike, rhs: ArrayLike, *, rcond: floa
     return jnp.linalg.solve(gram + ridge * eye, normal_rhs)
 
 
-def _regularized_projected_solve(matrix: ArrayLike, rhs: ArrayLike, *, rcond: float) -> ArrayLike:
+def _regularized_projected_solve(
+    matrix: ArrayLike, rhs: ArrayLike, *, rcond: float
+) -> ArrayLike:
     """Solve a square Galerkin residual equation with a scale-relative ridge."""
 
     a = jnp.asarray(matrix)
@@ -2578,14 +2916,18 @@ def _operator_on_basis(
     if q.ndim != 2:
         raise ValueError("basis vectors must be a matrix")
     if int(q.shape[0]) != int(shape[1]):
-        raise ValueError(f"basis row count {q.shape[0]} does not match operator columns {shape[1]}")
+        raise ValueError(
+            f"basis row count {q.shape[0]} does not match operator columns {shape[1]}"
+        )
     if int(q.shape[1]) == 0:
         return jnp.zeros((int(shape[0]), 0), dtype=dtype)
 
     def apply_column(column: ArrayLike) -> ArrayLike:
         action = jnp.asarray(operator_matvec(column), dtype=dtype).reshape((-1,))
         if int(action.shape[0]) != int(shape[0]):
-            raise ValueError(f"operator action row count {action.shape[0]} does not match operator rows {shape[0]}")
+            raise ValueError(
+                f"operator action row count {action.shape[0]} does not match operator rows {shape[0]}"
+            )
         return action
 
     try:
@@ -2613,10 +2955,14 @@ def _autodiff_transpose_matvec(
 
     vector_arr = jnp.asarray(vector, dtype=dtype).reshape((-1,))
     if int(vector_arr.shape[0]) != int(shape[0]):
-        raise ValueError(f"transpose vector length {vector_arr.shape[0]} does not match operator rows {shape[0]}")
+        raise ValueError(
+            f"transpose vector length {vector_arr.shape[0]} does not match operator rows {shape[0]}"
+        )
 
     def _mv(x):
-        return jnp.asarray(operator_matvec(jnp.asarray(x, dtype=dtype)), dtype=dtype).reshape((-1,))
+        return jnp.asarray(
+            operator_matvec(jnp.asarray(x, dtype=dtype)), dtype=dtype
+        ).reshape((-1,))
 
     x0 = jnp.zeros((int(shape[1]),), dtype=dtype)
     _, pullback = jax.vjp(_mv, x0)
@@ -2634,7 +2980,9 @@ def _append_normalized_candidate(
 ) -> None:
     vector = jnp.asarray(values, dtype=dtype).reshape((-1,))
     if int(vector.shape[0]) != int(total_size):
-        raise ValueError(f"candidate {label!r} has length {vector.shape[0]}, expected {total_size}")
+        raise ValueError(
+            f"candidate {label!r} has length {vector.shape[0]}, expected {total_size}"
+        )
     norm = float(jnp.linalg.norm(vector))
     if not np.isfinite(norm) or norm <= 0.0:
         return
@@ -2663,7 +3011,9 @@ def _enrich_basis_with_residual(
     residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
     total_size = int(shape[1])
     if int(residual.shape[0]) != total_size:
-        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+        raise ValueError(
+            f"residual_seed length {residual.shape[0]} does not match operator size {total_size}"
+        )
 
     columns: list[ArrayLike] = []
     labels: list[str] = []
@@ -2736,7 +3086,9 @@ def _coarse_action_residual(
     aq = _operator_on_basis(operator_matvec, basis.vectors, shape=shape, dtype=dtype)
     coefficients = _regularized_least_squares(aq, residual_vec, rcond=float(rcond))
     correction = jnp.asarray(basis.vectors, dtype=dtype) @ coefficients
-    return residual_vec - jnp.asarray(operator_matvec(correction), dtype=dtype).reshape((-1,))
+    return residual_vec - jnp.asarray(operator_matvec(correction), dtype=dtype).reshape(
+        (-1,)
+    )
 
 
 def _enrich_basis_with_recycle_residuals(
@@ -2760,7 +3112,9 @@ def _enrich_basis_with_recycle_residuals(
     residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
     total_size = int(shape[1])
     if int(residual.shape[0]) != total_size:
-        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+        raise ValueError(
+            f"residual_seed length {residual.shape[0]} does not match operator size {total_size}"
+        )
 
     current_basis = basis
     current_residual = residual
@@ -2774,7 +3128,10 @@ def _enrich_basis_with_recycle_residuals(
             dtype=dtype,
             rcond=float(config.regularization_rcond),
         )
-        columns = [jnp.asarray(current_basis.vectors, dtype=dtype)[:, idx] for idx in range(int(current_basis.metadata.rank))]
+        columns = [
+            jnp.asarray(current_basis.vectors, dtype=dtype)[:, idx]
+            for idx in range(int(current_basis.metadata.rank))
+        ]
         labels = [str(label) for label in current_basis.metadata.accepted_labels]
         before = len(columns)
         _append_normalized_candidate(
@@ -2808,7 +3165,9 @@ def _orthogonalized_candidate(
 ) -> ArrayLike | None:
     vector = jnp.asarray(values, dtype=dtype).reshape((-1,))
     if int(vector.shape[0]) != int(total_size):
-        raise ValueError(f"candidate has length {vector.shape[0]}, expected {total_size}")
+        raise ValueError(
+            f"candidate has length {vector.shape[0]}, expected {total_size}"
+        )
     residual = vector
     for _ in range(2):
         for column in columns:
@@ -2864,7 +3223,9 @@ def _block_indicator_vector(
     stop = offsets[int(block_index) + 1]
     size = max(1, int(stop) - int(start))
     values = jnp.zeros((int(total_size),), dtype=dtype)
-    return values.at[start:stop].set(jnp.asarray(1.0 / np.sqrt(float(size)), dtype=dtype))
+    return values.at[start:stop].set(
+        jnp.asarray(1.0 / np.sqrt(float(size)), dtype=dtype)
+    )
 
 
 def _masked_group_residual(
@@ -2901,7 +3262,9 @@ def _block_schur_trial_vectors(
         _append_normalized_candidate(
             columns,
             labels,
-            _block_indicator_vector(layout, int(block_index), total_size=total_size, dtype=dtype),
+            _block_indicator_vector(
+                layout, int(block_index), total_size=total_size, dtype=dtype
+            ),
             f"block_indicator:{int(block_index)}",
             total_size=total_size,
             dtype=dtype,
@@ -2909,7 +3272,9 @@ def _block_schur_trial_vectors(
     _append_normalized_candidate(
         columns,
         labels,
-        _masked_group_residual(layout, residual, group, total_size=total_size, dtype=dtype),
+        _masked_group_residual(
+            layout, residual, group, total_size=total_size, dtype=dtype
+        ),
         "masked_group_residual",
         total_size=total_size,
         dtype=dtype,
@@ -2944,7 +3309,9 @@ def _block_schur_trial_columns(
             _append_normalized_candidate(
                 raw_columns,
                 labels,
-                _block_indicator_vector(layout, int(block_index), total_size=total_size, dtype=dtype),
+                _block_indicator_vector(
+                    layout, int(block_index), total_size=total_size, dtype=dtype
+                ),
                 f"{label_prefix}:block_indicator:{int(block_index)}",
                 total_size=total_size,
                 dtype=dtype,
@@ -2952,12 +3319,16 @@ def _block_schur_trial_columns(
     _append_normalized_candidate(
         raw_columns,
         labels,
-        _masked_group_residual(layout, residual, group, total_size=total_size, dtype=dtype),
+        _masked_group_residual(
+            layout, residual, group, total_size=total_size, dtype=dtype
+        ),
         f"{label_prefix}:masked_group_residual",
         total_size=total_size,
         dtype=dtype,
     )
-    columns.extend((column, label) for column, label in zip(raw_columns, labels, strict=True))
+    columns.extend(
+        (column, label) for column, label in zip(raw_columns, labels, strict=True)
+    )
     return tuple(columns)
 
 
@@ -2991,11 +3362,17 @@ def _build_coupled_block_schur_residual_basis(
 
     def group_norm(item: tuple[str, tuple[int, ...]]) -> tuple[int, float, int]:
         kind, group = item
-        masked = _masked_group_residual(layout, residual_vec, group, total_size=total_size, dtype=dtype)
+        masked = _masked_group_residual(
+            layout, residual_vec, group, total_size=total_size, dtype=dtype
+        )
         # Keep the global group first when requested, then prioritize blocks and
         # aggregates that actually carry the remaining residual.
         global_priority = 0 if kind == "global" else 1
-        return (global_priority, -float(jnp.linalg.norm(masked)), int(group[0]) if group else 0)
+        return (
+            global_priority,
+            -float(jnp.linalg.norm(masked)),
+            int(group[0]) if group else 0,
+        )
 
     ordered_groups = tuple(sorted(groups, key=group_norm))
     columns: list[ArrayLike] = []
@@ -3037,7 +3414,9 @@ def _build_coupled_block_schur_residual_basis(
     )
     if int(basis.metadata.rank) <= 0:
         return None, candidate_count, float("inf")
-    action = _operator_on_basis(operator_matvec, basis.vectors, shape=shape, dtype=dtype)
+    action = _operator_on_basis(
+        operator_matvec, basis.vectors, shape=shape, dtype=dtype
+    )
     coefficients = _regularized_least_squares(
         action,
         residual_vec,
@@ -3070,30 +3449,40 @@ def _build_block_schur_residual_equation_bases_from_metadata(
 
     if int(shape[0]) != int(shape[1]):
         raise ValueError("block-Schur residual equation requires a square operator")
-    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    layout = _multilevel_layout_from_metadata(
+        geometry_metadata=geometry_metadata, total_size=total_size
+    )
     residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
     if int(residual.shape[0]) != int(total_size):
-        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+        raise ValueError(
+            f"residual_seed length {residual.shape[0]} does not match operator size {total_size}"
+        )
 
     groups = _block_schur_residual_equation_groups(layout, config=config)
     if not groups:
-        raise ValueError("block-Schur residual equation requires at least one QI block group")
+        raise ValueError(
+            "block-Schur residual equation requires at least one QI block group"
+        )
 
     max_rank = max(1, int(config.block_schur_residual_equation_max_rank))
     residual_norm = float(jnp.linalg.norm(residual))
-    threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_norm))
+    threshold = max(
+        float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_norm)
+    )
 
-    coupled_basis, coupled_candidate_count, coupled_residual_norm = _build_coupled_block_schur_residual_basis(
-        operator_matvec=operator_matvec,
-        layout=layout,
-        residual=residual,
-        groups=groups,
-        shape=shape,
-        total_size=int(total_size),
-        dtype=dtype,
-        config=config,
-        max_rank=max_rank,
-        threshold=threshold,
+    coupled_basis, coupled_candidate_count, coupled_residual_norm = (
+        _build_coupled_block_schur_residual_basis(
+            operator_matvec=operator_matvec,
+            layout=layout,
+            residual=residual,
+            groups=groups,
+            shape=shape,
+            total_size=int(total_size),
+            dtype=dtype,
+            config=config,
+            max_rank=max_rank,
+            threshold=threshold,
+        )
     )
     accepted_columns: list[ArrayLike] = []
     stage_bases: list[RHS1QICoarseBasis] = []
@@ -3112,7 +3501,9 @@ def _build_block_schur_residual_equation_bases_from_metadata(
         )
         if int(trial_vectors.shape[1]) <= 0:
             continue
-        trial_action = _operator_on_basis(operator_matvec, trial_vectors, shape=shape, dtype=dtype)
+        trial_action = _operator_on_basis(
+            operator_matvec, trial_vectors, shape=shape, dtype=dtype
+        )
         coefficients = _regularized_least_squares(
             trial_action,
             remaining,
@@ -3137,7 +3528,10 @@ def _build_block_schur_residual_equation_bases_from_metadata(
             rcond=float(config.regularization_rcond),
         )
         next_remaining = remaining - action * stage_coefficients[0]
-        if float(jnp.linalg.norm(next_remaining)) >= float(jnp.linalg.norm(remaining)) - threshold:
+        if (
+            float(jnp.linalg.norm(next_remaining))
+            >= float(jnp.linalg.norm(remaining)) - threshold
+        ):
             continue
 
         group_label = ",".join(str(index) for index in group)
@@ -3158,14 +3552,30 @@ def _build_block_schur_residual_equation_bases_from_metadata(
 
     stage_ranks = tuple(int(basis.metadata.rank) for basis in stage_bases)
     sequential_rank = int(sum(stage_ranks))
-    sequential_residual_norm = float(jnp.linalg.norm(remaining)) if sequential_rank > 0 else float("inf")
+    sequential_residual_norm = (
+        float(jnp.linalg.norm(remaining)) if sequential_rank > 0 else float("inf")
+    )
     if coupled_basis is not None and int(coupled_basis.metadata.rank) > 0:
         # Keep the coupled Schur space only when it is at least as good as the
         # sequential fail-closed construction on the measured setup residual.
-        if sequential_rank <= 0 or float(coupled_residual_norm) <= sequential_residual_norm + float(threshold):
+        if sequential_rank <= 0 or float(
+            coupled_residual_norm
+        ) <= sequential_residual_norm + float(threshold):
             rank = int(coupled_basis.metadata.rank)
-            return (coupled_basis,), int(len(groups)), int(coupled_candidate_count), (rank,), rank
-    return tuple(stage_bases), int(len(groups)), int(candidate_count), stage_ranks, sequential_rank
+            return (
+                (coupled_basis,),
+                int(len(groups)),
+                int(coupled_candidate_count),
+                (rank,),
+                rank,
+            )
+    return (
+        tuple(stage_bases),
+        int(len(groups)),
+        int(candidate_count),
+        stage_ranks,
+        sequential_rank,
+    )
 
 
 def _enrich_basis_with_operator_krylov(
@@ -3192,7 +3602,9 @@ def _enrich_basis_with_operator_krylov(
     residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
     total_size = int(shape[1])
     if int(residual.shape[0]) != total_size:
-        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+        raise ValueError(
+            f"residual_seed length {residual.shape[0]} does not match operator size {total_size}"
+        )
     if int(shape[0]) != total_size:
         raise ValueError("operator-Krylov enrichment requires a square operator")
 
@@ -3210,7 +3622,9 @@ def _enrich_basis_with_operator_krylov(
         )
 
     residual_norm = float(jnp.linalg.norm(residual))
-    threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_norm))
+    threshold = max(
+        float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_norm)
+    )
     rank_limit = config.max_rank if config.max_rank is not None else total_size
     candidate_count = 0
     current = _orthogonalized_candidate(
@@ -3278,7 +3692,9 @@ def _enrich_basis_with_adjoint_krylov(
     stores ``Q`` and ``A Q`` and remains a forward-operator apply.
     """
 
-    transpose_source = _normalize_adjoint_krylov_transpose_source(config.adjoint_krylov_transpose_source)
+    transpose_source = _normalize_adjoint_krylov_transpose_source(
+        config.adjoint_krylov_transpose_source
+    )
     if transpose_source == "off":
         return basis, 0
     depth_count = max(0, int(config.adjoint_krylov_depth))
@@ -3288,7 +3704,9 @@ def _enrich_basis_with_adjoint_krylov(
 
     residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
     if int(residual.shape[0]) != int(shape[0]):
-        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator rows {shape[0]}")
+        raise ValueError(
+            f"residual_seed length {residual.shape[0]} does not match operator rows {shape[0]}"
+        )
 
     columns: list[ArrayLike] = []
     labels: list[str] = []
@@ -3304,7 +3722,9 @@ def _enrich_basis_with_adjoint_krylov(
         )
 
     residual_norm = float(jnp.linalg.norm(residual))
-    threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_norm))
+    threshold = max(
+        float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_norm)
+    )
     rank_limit = config.max_rank if config.max_rank is not None else total_size
     candidate_count = 0
     current = _autodiff_transpose_matvec(
@@ -3398,7 +3818,9 @@ def _enrich_basis_with_operator_actions(
     for depth in range(depth_count):
         if int(frontier.shape[1]) <= 0:
             break
-        action_vectors = _operator_on_basis(operator_matvec, frontier, shape=shape, dtype=dtype)
+        action_vectors = _operator_on_basis(
+            operator_matvec, frontier, shape=shape, dtype=dtype
+        )
         next_labels: list[str] = []
         for index, label in enumerate(frontier_labels):
             before = len(columns)
@@ -3493,7 +3915,9 @@ def setup_rhs1_qi_device_preconditioner(
     config_use = RHS1QIDevicePreconditionerConfig() if config is None else config
     coarse_solver = _normalize_coarse_solver(config_use.coarse_solver)
     composition = _normalize_composition(config_use.composition)
-    local_smoother_kind_requested = str(config_use.local_smoother_kind).strip().lower().replace("-", "_")
+    local_smoother_kind_requested = (
+        str(config_use.local_smoother_kind).strip().lower().replace("-", "_")
+    )
     matrix_free_residual_smoother_tokens = {
         "matrix_free",
         "matrix_free_residual",
@@ -3511,7 +3935,9 @@ def setup_rhs1_qi_device_preconditioner(
         "block_angular_radial",
         "projected_block_minres",
     }
-    matrix_free_smoother_tokens = matrix_free_residual_smoother_tokens | matrix_free_block_smoother_tokens
+    matrix_free_smoother_tokens = (
+        matrix_free_residual_smoother_tokens | matrix_free_block_smoother_tokens
+    )
     if local_smoother_kind_requested not in {
         "auto",
         "device_jacobi",
@@ -3520,7 +3946,9 @@ def setup_rhs1_qi_device_preconditioner(
         "coarse_only",
         *matrix_free_smoother_tokens,
     }:
-        raise ValueError("local_smoother_kind must be 'auto', 'device_jacobi', 'matrix_free_minres', or 'none'")
+        raise ValueError(
+            "local_smoother_kind must be 'auto', 'device_jacobi', 'matrix_free_minres', or 'none'"
+        )
     damping = float(config_use.damping)
     if not np.isfinite(damping) or damping <= 0.0:
         raise ValueError("damping must be finite and positive")
@@ -3536,9 +3964,15 @@ def setup_rhs1_qi_device_preconditioner(
         nnz = int(operator.nnz)
         operator_source = "device_csr"
         placement_default_backend = str(operator.metadata.default_backend)
-        placement_available_platforms = tuple(str(value) for value in operator.metadata.available_platforms)
-        placement_array_devices = tuple(str(value) for value in operator.metadata.array_devices)
-        placement_array_platforms = tuple(str(value) for value in operator.metadata.array_platforms)
+        placement_available_platforms = tuple(
+            str(value) for value in operator.metadata.available_platforms
+        )
+        placement_array_devices = tuple(
+            str(value) for value in operator.metadata.array_devices
+        )
+        placement_array_platforms = tuple(
+            str(value) for value in operator.metadata.array_platforms
+        )
         placement_arrays_same_device = bool(operator.metadata.all_arrays_same_device)
     else:
         if total_size is None:
@@ -3547,7 +3981,9 @@ def setup_rhs1_qi_device_preconditioner(
             elif coarse_basis is not None:
                 total_size = int(jnp.asarray(coarse_basis).shape[0])
         if total_size is None or int(total_size) <= 0:
-            raise ValueError("total_size is required for a matrix-free QI device preconditioner")
+            raise ValueError(
+                "total_size is required for a matrix-free QI device preconditioner"
+            )
         operator_csr = None
         operator_matvec = operator
         shape = (int(total_size), int(total_size))
@@ -3559,7 +3995,9 @@ def setup_rhs1_qi_device_preconditioner(
         except RuntimeError:
             placement_default_backend = ""
         try:
-            placement_available_platforms = tuple(sorted({str(device.platform) for device in jax.devices()}))
+            placement_available_platforms = tuple(
+                sorted({str(device.platform) for device in jax.devices()})
+            )
         except RuntimeError:
             placement_available_platforms = ()
         placement_array_devices = ()
@@ -3570,7 +4008,11 @@ def setup_rhs1_qi_device_preconditioner(
         raise ValueError("device QI preconditioner requires a square operator")
 
     smoother = local_smoother
-    if smoother is None and operator_csr is not None and local_smoother_kind_requested not in {"none", "coarse_only"}:
+    if (
+        smoother is None
+        and operator_csr is not None
+        and local_smoother_kind_requested not in {"none", "coarse_only"}
+    ):
         smoother = build_rhs1_qi_device_jacobi_smoother(
             operator_csr,
             damping=float(config_use.jacobi_damping),
@@ -3585,9 +4027,16 @@ def setup_rhs1_qi_device_preconditioner(
         and smoother.operator.shape != shape
     ):
         raise ValueError("local_smoother operator shape must match operator shape")
-    elif smoother is None and operator_csr is None and local_smoother_kind_requested in matrix_free_block_smoother_tokens:
+    elif (
+        smoother is None
+        and operator_csr is None
+        and local_smoother_kind_requested in matrix_free_block_smoother_tokens
+    ):
         projected_config = config_use
-        if local_smoother_kind_requested in {"adaptive_residual_equation", "adaptive_residual_galerkin"}:
+        if local_smoother_kind_requested in {
+            "adaptive_residual_equation",
+            "adaptive_residual_galerkin",
+        }:
             projected_config = replace(
                 config_use,
                 matrix_free_block_smoother_grouping="block_hierarchy",
@@ -3610,7 +4059,10 @@ def setup_rhs1_qi_device_preconditioner(
             dtype=dtype_use,
             config=config_use,
         )
-    if smoother is None and local_smoother_kind_requested in {"device_jacobi", "jacobi"}:
+    if smoother is None and local_smoother_kind_requested in {
+        "device_jacobi",
+        "jacobi",
+    }:
         raise ValueError("device_jacobi local smoother requires a DeviceCSR operator")
 
     basis = _basis_from_value(
@@ -3624,13 +4076,15 @@ def setup_rhs1_qi_device_preconditioner(
     multilevel_coarse_candidate_count = 0
     multilevel_coarse_rank = 0
     if bool(config_use.multilevel_coarse):
-        multilevel_basis, multilevel_coarse_level_count, multilevel_coarse_candidate_count = (
-            _build_multilevel_coarse_basis_from_metadata(
-                geometry_metadata=geometry_metadata,
-                total_size=int(shape[1]),
-                dtype=dtype_use,
-                config=config_use,
-            )
+        (
+            multilevel_basis,
+            multilevel_coarse_level_count,
+            multilevel_coarse_candidate_count,
+        ) = _build_multilevel_coarse_basis_from_metadata(
+            geometry_metadata=geometry_metadata,
+            total_size=int(shape[1]),
+            dtype=dtype_use,
+            config=config_use,
         )
         multilevel_coarse_rank = int(multilevel_basis.metadata.rank)
         basis = _combine_coarse_bases(
@@ -3644,17 +4098,21 @@ def setup_rhs1_qi_device_preconditioner(
     residual_snapshot_group_count = 0
     if bool(config_use.residual_snapshot_enrichment):
         if residual_seed is None:
-            raise ValueError("residual_seed is required when residual_snapshot_enrichment=True")
-        snapshot_basis, residual_snapshot_candidate_count, residual_snapshot_group_count = (
-            _build_residual_snapshot_basis_from_metadata(
-                operator_matvec=operator_matvec,
-                geometry_metadata=geometry_metadata,
-                residual_seed=residual_seed,
-                shape=shape,
-                total_size=int(shape[1]),
-                dtype=dtype_use,
-                config=config_use,
+            raise ValueError(
+                "residual_seed is required when residual_snapshot_enrichment=True"
             )
+        (
+            snapshot_basis,
+            residual_snapshot_candidate_count,
+            residual_snapshot_group_count,
+        ) = _build_residual_snapshot_basis_from_metadata(
+            operator_matvec=operator_matvec,
+            geometry_metadata=geometry_metadata,
+            residual_seed=residual_seed,
+            shape=shape,
+            total_size=int(shape[1]),
+            dtype=dtype_use,
+            config=config_use,
         )
         residual_snapshot_rank = int(snapshot_basis.metadata.rank)
         basis = _combine_coarse_bases(
@@ -3668,17 +4126,21 @@ def setup_rhs1_qi_device_preconditioner(
     block_schur_residual_group_count = 0
     if bool(config_use.block_schur_residual_enrichment):
         if residual_seed is None:
-            raise ValueError("residual_seed is required when block_schur_residual_enrichment=True")
-        schur_basis, block_schur_residual_candidate_count, block_schur_residual_group_count = (
-            _build_block_schur_residual_basis_from_metadata(
-                operator_matvec=operator_matvec,
-                geometry_metadata=geometry_metadata,
-                residual_seed=residual_seed,
-                shape=shape,
-                total_size=int(shape[1]),
-                dtype=dtype_use,
-                config=config_use,
+            raise ValueError(
+                "residual_seed is required when block_schur_residual_enrichment=True"
             )
+        (
+            schur_basis,
+            block_schur_residual_candidate_count,
+            block_schur_residual_group_count,
+        ) = _build_block_schur_residual_basis_from_metadata(
+            operator_matvec=operator_matvec,
+            geometry_metadata=geometry_metadata,
+            residual_seed=residual_seed,
+            shape=shape,
+            total_size=int(shape[1]),
+            dtype=dtype_use,
+            config=config_use,
         )
         block_schur_residual_rank = int(schur_basis.metadata.rank)
         basis = _combine_coarse_bases(
@@ -3700,21 +4162,28 @@ def setup_rhs1_qi_device_preconditioner(
             config=config_use,
         )
     recycle_enrichment_candidate_count = 0
-    if bool(config_use.recycle_enrichment) and int(config_use.recycle_enrichment_cycles) > 0:
+    if (
+        bool(config_use.recycle_enrichment)
+        and int(config_use.recycle_enrichment_cycles) > 0
+    ):
         if residual_seed is None:
             raise ValueError("residual_seed is required when recycle_enrichment=True")
-        basis, recycle_enrichment_candidate_count = _enrich_basis_with_recycle_residuals(
-            operator_matvec=operator_matvec,
-            basis=basis,
-            residual_seed=residual_seed,
-            shape=shape,
-            dtype=dtype_use,
-            config=config_use,
+        basis, recycle_enrichment_candidate_count = (
+            _enrich_basis_with_recycle_residuals(
+                operator_matvec=operator_matvec,
+                basis=basis,
+                residual_seed=residual_seed,
+                shape=shape,
+                dtype=dtype_use,
+                config=config_use,
+            )
         )
     operator_krylov_candidate_count = 0
     if bool(config_use.operator_krylov_enrichment):
         if residual_seed is None:
-            raise ValueError("residual_seed is required when operator_krylov_enrichment=True")
+            raise ValueError(
+                "residual_seed is required when operator_krylov_enrichment=True"
+            )
         basis, operator_krylov_candidate_count = _enrich_basis_with_operator_krylov(
             operator_matvec=operator_matvec,
             basis=basis,
@@ -3729,7 +4198,9 @@ def setup_rhs1_qi_device_preconditioner(
     adjoint_krylov_candidate_count = 0
     if bool(config_use.adjoint_krylov_enrichment):
         if residual_seed is None:
-            raise ValueError("residual_seed is required when adjoint_krylov_enrichment=True")
+            raise ValueError(
+                "residual_seed is required when adjoint_krylov_enrichment=True"
+            )
         basis, adjoint_krylov_candidate_count = _enrich_basis_with_adjoint_krylov(
             operator_matvec=operator_matvec,
             basis=basis,
@@ -3740,12 +4211,14 @@ def setup_rhs1_qi_device_preconditioner(
         )
     operator_action_enrichment_candidate_count = 0
     if bool(config_use.operator_action_enrichment):
-        basis, operator_action_enrichment_candidate_count = _enrich_basis_with_operator_actions(
-            operator_matvec=operator_matvec,
-            basis=basis,
-            shape=shape,
-            dtype=dtype_use,
-            config=config_use,
+        basis, operator_action_enrichment_candidate_count = (
+            _enrich_basis_with_operator_actions(
+                operator_matvec=operator_matvec,
+                basis=basis,
+                shape=shape,
+                dtype=dtype_use,
+                config=config_use,
+            )
         )
     residual_equation_bases: tuple[RHS1QICoarseBasis, ...] = ()
     residual_equation_actions: tuple[ArrayLike, ...] = ()
@@ -3762,8 +4235,10 @@ def setup_rhs1_qi_device_preconditioner(
     residual_equation_solver = _normalize_multilevel_residual_equation_solver(
         config_use.multilevel_residual_equation_solver
     )
-    global_moment_residual_equation_solver = _normalize_multilevel_residual_equation_solver(
-        config_use.global_moment_residual_equation_solver
+    global_moment_residual_equation_solver = (
+        _normalize_multilevel_residual_equation_solver(
+            config_use.global_moment_residual_equation_solver
+        )
     )
     global_moment_residual_equation_candidate_count = 0
     global_moment_residual_equation_rank = 0
@@ -3771,7 +4246,9 @@ def setup_rhs1_qi_device_preconditioner(
     global_moment_residual_equation_condition_estimate = float("inf")
     if bool(config_use.global_moment_residual_equation):
         if residual_seed is None:
-            raise ValueError("residual_seed is required when global_moment_residual_equation=True")
+            raise ValueError(
+                "residual_seed is required when global_moment_residual_equation=True"
+            )
         (
             global_moment_bases,
             global_moment_residual_equation_candidate_count,
@@ -3803,7 +4280,9 @@ def setup_rhs1_qi_device_preconditioner(
     residual_galerkin_equation_residual_after = float("inf")
     if bool(config_use.residual_galerkin_equation):
         if residual_seed is None:
-            raise ValueError("residual_seed is required when residual_galerkin_equation=True")
+            raise ValueError(
+                "residual_seed is required when residual_galerkin_equation=True"
+            )
         (
             residual_galerkin_bases,
             residual_galerkin_equation_candidate_count,
@@ -3825,8 +4304,10 @@ def setup_rhs1_qi_device_preconditioner(
         residual_equation_stage_solvers = residual_equation_stage_solvers + tuple(
             residual_galerkin_equation_solver for _ in residual_galerkin_bases
         )
-    residual_region_bounce_coarse_solver = _normalize_multilevel_residual_equation_solver(
-        config_use.residual_region_bounce_coarse_solver
+    residual_region_bounce_coarse_solver = (
+        _normalize_multilevel_residual_equation_solver(
+            config_use.residual_region_bounce_coarse_solver
+        )
     )
     residual_region_bounce_coarse_candidate_count = 0
     residual_region_bounce_coarse_rank = 0
@@ -3836,7 +4317,9 @@ def setup_rhs1_qi_device_preconditioner(
     residual_region_bounce_coarse_residual_after = float("inf")
     if bool(config_use.residual_region_bounce_coarse):
         if residual_seed is None:
-            raise ValueError("residual_seed is required when residual_region_bounce_coarse=True")
+            raise ValueError(
+                "residual_seed is required when residual_region_bounce_coarse=True"
+            )
         (
             residual_region_bounce_bases,
             residual_region_bounce_coarse_candidate_count,
@@ -3869,7 +4352,9 @@ def setup_rhs1_qi_device_preconditioner(
     active_pattern_coarse_residual_after = float("inf")
     if bool(config_use.active_pattern_coarse):
         if residual_seed is None:
-            raise ValueError("residual_seed is required when active_pattern_coarse=True")
+            raise ValueError(
+                "residual_seed is required when active_pattern_coarse=True"
+            )
         (
             active_pattern_bases,
             active_pattern_coarse_candidate_count,
@@ -3891,8 +4376,10 @@ def setup_rhs1_qi_device_preconditioner(
         residual_equation_stage_solvers = residual_equation_stage_solvers + tuple(
             active_pattern_coarse_solver for _ in active_pattern_bases
         )
-    phase_space_residual_equation_solver = _normalize_multilevel_residual_equation_solver(
-        config_use.phase_space_residual_equation_solver
+    phase_space_residual_equation_solver = (
+        _normalize_multilevel_residual_equation_solver(
+            config_use.phase_space_residual_equation_solver
+        )
     )
     phase_space_residual_equation_candidate_count = 0
     phase_space_residual_equation_rank = 0
@@ -3902,7 +4389,9 @@ def setup_rhs1_qi_device_preconditioner(
     phase_space_residual_equation_residual_after = float("inf")
     if bool(config_use.phase_space_residual_equation):
         if residual_seed is None:
-            raise ValueError("residual_seed is required when phase_space_residual_equation=True")
+            raise ValueError(
+                "residual_seed is required when phase_space_residual_equation=True"
+            )
         (
             phase_space_bases,
             phase_space_residual_equation_candidate_count,
@@ -3924,8 +4413,10 @@ def setup_rhs1_qi_device_preconditioner(
         residual_equation_stage_solvers = residual_equation_stage_solvers + tuple(
             phase_space_residual_equation_solver for _ in phase_space_bases
         )
-    residual_snapshot_residual_equation_solver = _normalize_multilevel_residual_equation_solver(
-        config_use.residual_snapshot_residual_equation_solver
+    residual_snapshot_residual_equation_solver = (
+        _normalize_multilevel_residual_equation_solver(
+            config_use.residual_snapshot_residual_equation_solver
+        )
     )
     residual_snapshot_residual_equation_group_count = 0
     residual_snapshot_residual_equation_candidate_count = 0
@@ -3933,7 +4424,9 @@ def setup_rhs1_qi_device_preconditioner(
     residual_snapshot_residual_equation_stage_ranks: tuple[int, ...] = ()
     if bool(config_use.residual_snapshot_residual_equation):
         if residual_seed is None:
-            raise ValueError("residual_seed is required when residual_snapshot_residual_equation=True")
+            raise ValueError(
+                "residual_seed is required when residual_snapshot_residual_equation=True"
+            )
         (
             residual_snapshot_bases,
             residual_snapshot_residual_equation_group_count,
@@ -3959,7 +4452,9 @@ def setup_rhs1_qi_device_preconditioner(
     block_schur_residual_equation_stage_ranks: tuple[int, ...] = ()
     if bool(config_use.block_schur_residual_equation):
         if residual_seed is None:
-            raise ValueError("residual_seed is required when block_schur_residual_equation=True")
+            raise ValueError(
+                "residual_seed is required when block_schur_residual_equation=True"
+            )
         (
             block_schur_bases,
             block_schur_residual_equation_group_count,
@@ -3981,15 +4476,20 @@ def setup_rhs1_qi_device_preconditioner(
         )
     if bool(config_use.multilevel_residual_equation):
         multilevel_residual_equation_bases: tuple[RHS1QICoarseBasis, ...]
-        multilevel_residual_equation_bases, residual_equation_stage_count, residual_equation_rank, residual_equation_stage_ranks = (
-            _build_multilevel_residual_equation_bases_from_metadata(
-                geometry_metadata=geometry_metadata,
-                total_size=int(shape[1]),
-                dtype=dtype_use,
-                config=config_use,
-            )
+        (
+            multilevel_residual_equation_bases,
+            residual_equation_stage_count,
+            residual_equation_rank,
+            residual_equation_stage_ranks,
+        ) = _build_multilevel_residual_equation_bases_from_metadata(
+            geometry_metadata=geometry_metadata,
+            total_size=int(shape[1]),
+            dtype=dtype_use,
+            config=config_use,
         )
-        residual_equation_bases = residual_equation_bases + multilevel_residual_equation_bases
+        residual_equation_bases = (
+            residual_equation_bases + multilevel_residual_equation_bases
+        )
         residual_equation_stage_solvers = residual_equation_stage_solvers + tuple(
             residual_equation_solver for _ in multilevel_residual_equation_bases
         )
@@ -4007,9 +4507,14 @@ def setup_rhs1_qi_device_preconditioner(
     )
     if bool(config_use.coupled_residual_equation):
         if residual_seed is None:
-            raise ValueError("residual_seed is required when coupled_residual_equation=True")
+            raise ValueError(
+                "residual_seed is required when coupled_residual_equation=True"
+            )
         coupled_sources = tuple(residual_equation_bases)
-        if bool(config_use.coupled_residual_equation_include_flat) and int(basis.metadata.rank) > 0:
+        if (
+            bool(config_use.coupled_residual_equation_include_flat)
+            and int(basis.metadata.rank) > 0
+        ):
             coupled_sources = (basis,) + coupled_sources
         coupled_state = setup_rhs1_qi_coupled_residual_equation(
             operator=operator_matvec,
@@ -4027,22 +4532,34 @@ def setup_rhs1_qi_device_preconditioner(
             ),
         )
         coupled_metadata = coupled_state.metadata
-        coupled_residual_equation_candidate_count = int(coupled_metadata.candidate_count)
+        coupled_residual_equation_candidate_count = int(
+            coupled_metadata.candidate_count
+        )
         coupled_residual_equation_rank = int(coupled_metadata.rank)
-        coupled_residual_equation_source_stage_count = int(coupled_metadata.source_stage_count)
+        coupled_residual_equation_source_stage_count = int(
+            coupled_metadata.source_stage_count
+        )
         coupled_residual_equation_source_stage_ranks = tuple(
             int(value) for value in coupled_metadata.source_stage_ranks
         )
-        coupled_residual_equation_condition_estimate = float(coupled_metadata.condition_estimate)
-        coupled_residual_equation_residual_before = float(coupled_metadata.residual_before)
-        coupled_residual_equation_residual_after = float(coupled_metadata.residual_after)
+        coupled_residual_equation_condition_estimate = float(
+            coupled_metadata.condition_estimate
+        )
+        coupled_residual_equation_residual_before = float(
+            coupled_metadata.residual_before
+        )
+        coupled_residual_equation_residual_after = float(
+            coupled_metadata.residual_after
+        )
         coupled_residual_equation_accepted = bool(coupled_metadata.accepted)
         coupled_residual_equation_reason = str(coupled_metadata.reason)
         if coupled_residual_equation_accepted and coupled_residual_equation_rank > 0:
             residual_equation_bases = (coupled_state.basis,)
             residual_equation_stage_solvers = (coupled_residual_equation_solver,)
             residual_equation_precomputed_actions = (coupled_state.operator_on_basis,)
-            residual_equation_precomputed_coarse_operators = (coupled_state.coarse_operator,)
+            residual_equation_precomputed_coarse_operators = (
+                coupled_state.coarse_operator,
+            )
     residual_equation_action_list: list[ArrayLike] = []
     residual_equation_coarse_operator_list: list[ArrayLike] = []
     residual_equation_operator_reuse_stage_count = 0
@@ -4050,7 +4567,8 @@ def setup_rhs1_qi_device_preconditioner(
     if (
         residual_equation_precomputed_actions
         and len(residual_equation_precomputed_actions) == len(residual_equation_bases)
-        and len(residual_equation_precomputed_coarse_operators) == len(residual_equation_bases)
+        and len(residual_equation_precomputed_coarse_operators)
+        == len(residual_equation_bases)
     ):
         residual_equation_operator_reuse_stage_count = len(residual_equation_bases)
         residual_equation_actions = tuple(
@@ -4064,16 +4582,26 @@ def setup_rhs1_qi_device_preconditioner(
     else:
         for level_basis in residual_equation_bases:
             level_q = jnp.asarray(level_basis.vectors, dtype=dtype_use)
-            level_action = _operator_on_basis(operator_matvec, level_q, shape=shape, dtype=dtype_use)
+            level_action = _operator_on_basis(
+                operator_matvec, level_q, shape=shape, dtype=dtype_use
+            )
             residual_equation_action_list.append(level_action)
-            residual_equation_coarse_operator_list.append(jnp.conjugate(level_q).T @ level_action)
+            residual_equation_coarse_operator_list.append(
+                jnp.conjugate(level_q).T @ level_action
+            )
         residual_equation_operator_recomputed_stage_count = len(residual_equation_bases)
         residual_equation_actions = tuple(residual_equation_action_list)
-        residual_equation_coarse_operators = tuple(residual_equation_coarse_operator_list)
+        residual_equation_coarse_operators = tuple(
+            residual_equation_coarse_operator_list
+        )
     rank = int(basis.metadata.rank)
     if rank > 0:
-        aq = _operator_on_basis(operator_matvec, basis.vectors, shape=shape, dtype=dtype_use)
-        coarse_operator = jnp.conjugate(jnp.asarray(basis.vectors, dtype=dtype_use)).T @ aq
+        aq = _operator_on_basis(
+            operator_matvec, basis.vectors, shape=shape, dtype=dtype_use
+        )
+        coarse_operator = (
+            jnp.conjugate(jnp.asarray(basis.vectors, dtype=dtype_use)).T @ aq
+        )
     else:
         aq = jnp.zeros((int(shape[0]), 0), dtype=dtype_use)
         coarse_operator = jnp.zeros((0, 0), dtype=dtype_use)
@@ -4094,24 +4622,42 @@ def setup_rhs1_qi_device_preconditioner(
     else:
         local_smoother_kind = "matrix_free_residual"
         local_smoother_reason = str(smoother.metadata.reason)
-    if bool(config_use.coupled_residual_equation) and coupled_residual_equation_rank > 0:
+    if (
+        bool(config_use.coupled_residual_equation)
+        and coupled_residual_equation_rank > 0
+    ):
         reason = "built_with_coupled_residual_equation"
     elif (
         bool(config_use.residual_snapshot_residual_equation)
         and residual_snapshot_residual_equation_rank > 0
     ):
         reason = "built_with_residual_snapshot_residual_equation"
-    elif bool(config_use.global_moment_residual_equation) and global_moment_residual_equation_rank > 0:
+    elif (
+        bool(config_use.global_moment_residual_equation)
+        and global_moment_residual_equation_rank > 0
+    ):
         reason = "built_with_global_moment_residual_equation"
-    elif bool(config_use.residual_galerkin_equation) and residual_galerkin_equation_rank > 0:
+    elif (
+        bool(config_use.residual_galerkin_equation)
+        and residual_galerkin_equation_rank > 0
+    ):
         reason = "built_with_residual_galerkin_equation"
-    elif bool(config_use.residual_region_bounce_coarse) and residual_region_bounce_coarse_rank > 0:
+    elif (
+        bool(config_use.residual_region_bounce_coarse)
+        and residual_region_bounce_coarse_rank > 0
+    ):
         reason = "built_with_residual_region_bounce_coarse"
     elif bool(config_use.active_pattern_coarse) and active_pattern_coarse_rank > 0:
         reason = "built_with_active_pattern_coarse"
-    elif bool(config_use.phase_space_residual_equation) and phase_space_residual_equation_rank > 0:
+    elif (
+        bool(config_use.phase_space_residual_equation)
+        and phase_space_residual_equation_rank > 0
+    ):
         reason = "built_with_phase_space_residual_equation"
-    elif bool(config_use.block_schur_residual_equation) and block_schur_residual_equation_rank > 0:
+    elif (
+        bool(config_use.block_schur_residual_equation)
+        and block_schur_residual_equation_rank > 0
+    ):
         reason = "built_with_block_schur_residual_equation"
     elif (
         bool(config_use.multilevel_residual_equation)
@@ -4140,7 +4686,9 @@ def setup_rhs1_qi_device_preconditioner(
         operator_source=operator_source,
         coarse_operator_shape=tuple(int(v) for v in coarse_operator.shape),
         operator_on_basis_shape=tuple(int(v) for v in aq.shape),
-        coarse_operator_norm=float(jnp.linalg.norm(coarse_operator)) if rank > 0 else 0.0,
+        coarse_operator_norm=float(jnp.linalg.norm(coarse_operator))
+        if rank > 0
+        else 0.0,
         operator_on_basis_norm=float(jnp.linalg.norm(aq)) if rank > 0 else 0.0,
         regularization_rcond=rcond,
         damping=damping,
@@ -4158,7 +4706,9 @@ def setup_rhs1_qi_device_preconditioner(
         operator_arrays_same_device=bool(placement_arrays_same_device),
         operator_metadata_keys=_metadata_keys(operator_metadata),
         geometry_metadata_keys=_metadata_keys(geometry_metadata),
-        accepted_basis_labels=tuple(str(label) for label in basis.metadata.accepted_labels),
+        accepted_basis_labels=tuple(
+            str(label) for label in basis.metadata.accepted_labels
+        ),
         residual_enrichment_enabled=bool(config_use.residual_enrichment),
         residual_enrichment_depth=max(0, int(config_use.residual_enrichment_depth)),
         residual_enrichment_candidate_count=int(residual_enrichment_candidate_count),
@@ -4173,8 +4723,12 @@ def setup_rhs1_qi_device_preconditioner(
         adjoint_krylov_candidate_count=int(adjoint_krylov_candidate_count),
         adjoint_krylov_transpose_source=adjoint_krylov_transpose_source,
         operator_action_enrichment_enabled=bool(config_use.operator_action_enrichment),
-        operator_action_enrichment_depth=max(0, int(config_use.operator_action_enrichment_depth)),
-        operator_action_enrichment_candidate_count=int(operator_action_enrichment_candidate_count),
+        operator_action_enrichment_depth=max(
+            0, int(config_use.operator_action_enrichment_depth)
+        ),
+        operator_action_enrichment_candidate_count=int(
+            operator_action_enrichment_candidate_count
+        ),
         multilevel_coarse_enabled=bool(config_use.multilevel_coarse),
         multilevel_coarse_level_count=int(multilevel_coarse_level_count),
         multilevel_coarse_candidate_count=int(multilevel_coarse_candidate_count),
@@ -4184,7 +4738,9 @@ def setup_rhs1_qi_device_preconditioner(
         ),
         multilevel_residual_equation_stage_count=int(residual_equation_stage_count),
         multilevel_residual_equation_rank=int(residual_equation_rank),
-        multilevel_residual_equation_stage_ranks=tuple(int(v) for v in residual_equation_stage_ranks),
+        multilevel_residual_equation_stage_ranks=tuple(
+            int(v) for v in residual_equation_stage_ranks
+        ),
         multilevel_residual_equation_order=residual_equation_order,
         multilevel_residual_equation_solver=residual_equation_solver,
         multilevel_residual_equation_include_global=bool(
@@ -4193,7 +4749,9 @@ def setup_rhs1_qi_device_preconditioner(
         coupled_residual_equation_enabled=bool(
             config_use.coupled_residual_equation and coupled_residual_equation_rank > 0
         ),
-        coupled_residual_equation_candidate_count=int(coupled_residual_equation_candidate_count),
+        coupled_residual_equation_candidate_count=int(
+            coupled_residual_equation_candidate_count
+        ),
         coupled_residual_equation_rank=int(coupled_residual_equation_rank),
         coupled_residual_equation_source_stage_count=int(
             coupled_residual_equation_source_stage_count
@@ -4208,8 +4766,12 @@ def setup_rhs1_qi_device_preconditioner(
         coupled_residual_equation_condition_estimate=float(
             coupled_residual_equation_condition_estimate
         ),
-        coupled_residual_equation_residual_before=float(coupled_residual_equation_residual_before),
-        coupled_residual_equation_residual_after=float(coupled_residual_equation_residual_after),
+        coupled_residual_equation_residual_before=float(
+            coupled_residual_equation_residual_before
+        ),
+        coupled_residual_equation_residual_after=float(
+            coupled_residual_equation_residual_after
+        ),
         coupled_residual_equation_accepted=bool(coupled_residual_equation_accepted),
         coupled_residual_equation_reason=str(coupled_residual_equation_reason),
         residual_equation_operator_reuse_stage_count=int(
@@ -4219,7 +4781,8 @@ def setup_rhs1_qi_device_preconditioner(
             residual_equation_operator_recomputed_stage_count
         ),
         global_moment_residual_equation_enabled=bool(
-            config_use.global_moment_residual_equation and global_moment_residual_equation_rank > 0
+            config_use.global_moment_residual_equation
+            and global_moment_residual_equation_rank > 0
         ),
         global_moment_residual_equation_candidate_count=int(
             global_moment_residual_equation_candidate_count
@@ -4242,13 +4805,16 @@ def setup_rhs1_qi_device_preconditioner(
             global_moment_residual_equation_condition_estimate
         ),
         residual_galerkin_equation_enabled=bool(
-            config_use.residual_galerkin_equation and residual_galerkin_equation_rank > 0
+            config_use.residual_galerkin_equation
+            and residual_galerkin_equation_rank > 0
         ),
         residual_galerkin_equation_candidate_count=int(
             residual_galerkin_equation_candidate_count
         ),
         residual_galerkin_equation_rank=int(residual_galerkin_equation_rank),
-        residual_galerkin_equation_stage_count=int(residual_galerkin_equation_stage_count),
+        residual_galerkin_equation_stage_count=int(
+            residual_galerkin_equation_stage_count
+        ),
         residual_galerkin_equation_stage_ranks=tuple(
             int(v) for v in residual_galerkin_equation_stage_ranks
         ),
@@ -4263,13 +4829,16 @@ def setup_rhs1_qi_device_preconditioner(
             residual_galerkin_equation_residual_after
         ),
         phase_space_residual_equation_enabled=bool(
-            config_use.phase_space_residual_equation and phase_space_residual_equation_rank > 0
+            config_use.phase_space_residual_equation
+            and phase_space_residual_equation_rank > 0
         ),
         phase_space_residual_equation_candidate_count=int(
             phase_space_residual_equation_candidate_count
         ),
         phase_space_residual_equation_rank=int(phase_space_residual_equation_rank),
-        phase_space_residual_equation_stage_count=len(phase_space_residual_equation_stage_ranks),
+        phase_space_residual_equation_stage_count=len(
+            phase_space_residual_equation_stage_ranks
+        ),
         phase_space_residual_equation_stage_ranks=tuple(
             int(v) for v in phase_space_residual_equation_stage_ranks
         ),
@@ -4314,13 +4883,16 @@ def setup_rhs1_qi_device_preconditioner(
             phase_space_residual_equation_residual_after
         ),
         residual_region_bounce_coarse_enabled=bool(
-            config_use.residual_region_bounce_coarse and residual_region_bounce_coarse_rank > 0
+            config_use.residual_region_bounce_coarse
+            and residual_region_bounce_coarse_rank > 0
         ),
         residual_region_bounce_coarse_candidate_count=int(
             residual_region_bounce_coarse_candidate_count
         ),
         residual_region_bounce_coarse_rank=int(residual_region_bounce_coarse_rank),
-        residual_region_bounce_coarse_stage_count=len(residual_region_bounce_coarse_stage_ranks),
+        residual_region_bounce_coarse_stage_count=len(
+            residual_region_bounce_coarse_stage_ranks
+        ),
         residual_region_bounce_coarse_stage_ranks=tuple(
             int(v) for v in residual_region_bounce_coarse_stage_ranks
         ),
@@ -4358,22 +4930,36 @@ def setup_rhs1_qi_device_preconditioner(
         active_pattern_coarse_enabled=bool(
             config_use.active_pattern_coarse and active_pattern_coarse_rank > 0
         ),
-        active_pattern_coarse_candidate_count=int(active_pattern_coarse_candidate_count),
+        active_pattern_coarse_candidate_count=int(
+            active_pattern_coarse_candidate_count
+        ),
         active_pattern_coarse_rank=int(active_pattern_coarse_rank),
         active_pattern_coarse_stage_count=len(active_pattern_coarse_stage_ranks),
-        active_pattern_coarse_stage_ranks=tuple(int(v) for v in active_pattern_coarse_stage_ranks),
-        active_pattern_coarse_max_rank_requested=int(config_use.active_pattern_coarse_max_rank),
+        active_pattern_coarse_stage_ranks=tuple(
+            int(v) for v in active_pattern_coarse_stage_ranks
+        ),
+        active_pattern_coarse_max_rank_requested=int(
+            config_use.active_pattern_coarse_max_rank
+        ),
         active_pattern_coarse_max_candidates_requested=int(
             config_use.active_pattern_coarse_max_candidates
         ),
         active_pattern_coarse_solver=active_pattern_coarse_solver,
-        active_pattern_coarse_condition_estimate=float(active_pattern_coarse_condition_estimate),
-        active_pattern_coarse_residual_before=float(active_pattern_coarse_residual_before),
-        active_pattern_coarse_residual_after=float(active_pattern_coarse_residual_after),
+        active_pattern_coarse_condition_estimate=float(
+            active_pattern_coarse_condition_estimate
+        ),
+        active_pattern_coarse_residual_before=float(
+            active_pattern_coarse_residual_before
+        ),
+        active_pattern_coarse_residual_after=float(
+            active_pattern_coarse_residual_after
+        ),
         active_pattern_coarse_min_chunk_energy_fraction=float(
             config_use.active_pattern_coarse_min_chunk_energy_fraction
         ),
-        active_pattern_coarse_include_global=bool(config_use.active_pattern_coarse_include_global),
+        active_pattern_coarse_include_global=bool(
+            config_use.active_pattern_coarse_include_global
+        ),
         active_pattern_coarse_include_block_pitch=bool(
             config_use.active_pattern_coarse_include_block_pitch
         ),
@@ -4386,16 +4972,25 @@ def setup_rhs1_qi_device_preconditioner(
         active_pattern_coarse_include_radial_angular=bool(
             config_use.active_pattern_coarse_include_radial_angular
         ),
-        active_pattern_coarse_include_block=bool(config_use.active_pattern_coarse_include_block),
-        active_pattern_coarse_include_radial=bool(config_use.active_pattern_coarse_include_radial),
+        active_pattern_coarse_include_block=bool(
+            config_use.active_pattern_coarse_include_block
+        ),
+        active_pattern_coarse_include_radial=bool(
+            config_use.active_pattern_coarse_include_radial
+        ),
         active_pattern_coarse_include_species=bool(
             config_use.active_pattern_coarse_include_species
         ),
         block_schur_residual_equation_enabled=bool(
-            config_use.block_schur_residual_equation and block_schur_residual_equation_rank > 0
+            config_use.block_schur_residual_equation
+            and block_schur_residual_equation_rank > 0
         ),
-        block_schur_residual_equation_group_count=int(block_schur_residual_equation_group_count),
-        block_schur_residual_equation_candidate_count=int(block_schur_residual_equation_candidate_count),
+        block_schur_residual_equation_group_count=int(
+            block_schur_residual_equation_group_count
+        ),
+        block_schur_residual_equation_candidate_count=int(
+            block_schur_residual_equation_candidate_count
+        ),
         block_schur_residual_equation_rank=int(block_schur_residual_equation_rank),
         block_schur_residual_equation_stage_ranks=tuple(
             int(v) for v in block_schur_residual_equation_stage_ranks
@@ -4415,7 +5010,9 @@ def setup_rhs1_qi_device_preconditioner(
         residual_snapshot_candidate_count=int(residual_snapshot_candidate_count),
         residual_snapshot_rank=int(residual_snapshot_rank),
         residual_snapshot_group_count=int(residual_snapshot_group_count),
-        residual_snapshot_include_primal=bool(config_use.residual_snapshot_include_primal),
+        residual_snapshot_include_primal=bool(
+            config_use.residual_snapshot_include_primal
+        ),
         residual_snapshot_use_adjoint=bool(config_use.residual_snapshot_use_adjoint),
         residual_snapshot_residual_equation_enabled=bool(
             config_use.residual_snapshot_residual_equation
@@ -4427,7 +5024,9 @@ def setup_rhs1_qi_device_preconditioner(
         residual_snapshot_residual_equation_candidate_count=int(
             residual_snapshot_residual_equation_candidate_count
         ),
-        residual_snapshot_residual_equation_rank=int(residual_snapshot_residual_equation_rank),
+        residual_snapshot_residual_equation_rank=int(
+            residual_snapshot_residual_equation_rank
+        ),
         residual_snapshot_residual_equation_stage_ranks=tuple(
             int(v) for v in residual_snapshot_residual_equation_stage_ranks
         ),
@@ -4489,7 +5088,9 @@ def probe_rhs1_qi_device_preconditioner(
     x_initial = jnp.asarray(x0, dtype=rhs_vec.dtype).reshape((-1,))
     if rhs_vec.shape != x_initial.shape:
         raise ValueError("rhs and x0 must have the same shape")
-    residual_before = rhs_vec - jnp.asarray(matvec(x_initial), dtype=rhs_vec.dtype).reshape((-1,))
+    residual_before = rhs_vec - jnp.asarray(
+        matvec(x_initial), dtype=rhs_vec.dtype
+    ).reshape((-1,))
     residual_before_norm = float(jnp.linalg.norm(residual_before))
     if residual_before_norm == 0.0:
         probe = RHS1QIDevicePreconditionerProbe(
@@ -4516,7 +5117,9 @@ def probe_rhs1_qi_device_preconditioner(
     step_history: list[float] = []
     alpha_clip_use = max(0.0, float(alpha_clip))
     for _ in range(max_cycles_use):
-        dx = jnp.asarray(state.apply(residual_current), dtype=rhs_vec.dtype).reshape((-1,))
+        dx = jnp.asarray(state.apply(residual_current), dtype=rhs_vec.dtype).reshape(
+            (-1,)
+        )
         alpha = 1.0
         if bool(residual_minimizing_step):
             a_dx = jnp.asarray(matvec(dx), dtype=rhs_vec.dtype).reshape((-1,))
@@ -4535,7 +5138,9 @@ def probe_rhs1_qi_device_preconditioner(
             residual_after = residual_current - float(alpha) * a_dx
         else:
             x_candidate = x_best + dx
-            residual_after = rhs_vec - jnp.asarray(matvec(x_candidate), dtype=rhs_vec.dtype).reshape((-1,))
+            residual_after = rhs_vec - jnp.asarray(
+                matvec(x_candidate), dtype=rhs_vec.dtype
+            ).reshape((-1,))
         residual_after_norm_measured = float(jnp.linalg.norm(residual_after))
         finite = bool(np.isfinite(residual_after_norm_measured))
         last_finite = finite
@@ -4545,7 +5150,10 @@ def probe_rhs1_qi_device_preconditioner(
             float(acceptance_atol),
             residual_current_norm * max(0.0, float(min_relative_improvement)),
         )
-        if not (finite and residual_after_norm_measured < residual_current_norm - required_drop):
+        if not (
+            finite
+            and residual_after_norm_measured < residual_current_norm - required_drop
+        ):
             break
         x_best = x_candidate
         residual_current = residual_after
@@ -4564,7 +5172,9 @@ def probe_rhs1_qi_device_preconditioner(
     else:
         reason = "residual_not_reduced"
         residual_after_norm = last_candidate_norm
-    improvement_ratio = residual_after_norm / residual_before_norm if last_finite else None
+    improvement_ratio = (
+        residual_after_norm / residual_before_norm if last_finite else None
+    )
     probe = RHS1QIDevicePreconditionerProbe(
         accepted=bool(accepted),
         reason=reason,
@@ -4612,7 +5222,9 @@ def probe_rhs1_qi_device_augmented_seed(
 
     empty_basis = jnp.zeros((int(state.shape[1]), 0), dtype=rhs_vec.dtype)
     empty_action = jnp.zeros((int(state.shape[0]), 0), dtype=rhs_vec.dtype)
-    residual_before = rhs_vec - jnp.asarray(matvec(x_initial), dtype=rhs_vec.dtype).reshape((-1,))
+    residual_before = rhs_vec - jnp.asarray(
+        matvec(x_initial), dtype=rhs_vec.dtype
+    ).reshape((-1,))
     residual_before_norm = float(jnp.linalg.norm(residual_before))
     if residual_before_norm == 0.0:
         probe = RHS1QIDevicePreconditionerProbe(
@@ -4650,7 +5262,9 @@ def probe_rhs1_qi_device_augmented_seed(
     alpha_clip_use = max(0.0, float(alpha_clip))
 
     for _ in range(max_cycles_use):
-        dx = jnp.asarray(state.apply(residual_current), dtype=rhs_vec.dtype).reshape((-1,))
+        dx = jnp.asarray(state.apply(residual_current), dtype=rhs_vec.dtype).reshape(
+            (-1,)
+        )
         a_dx = jnp.asarray(matvec(dx), dtype=rhs_vec.dtype).reshape((-1,))
         alpha = 1.0
         if bool(residual_minimizing_step):
@@ -4678,7 +5292,10 @@ def probe_rhs1_qi_device_augmented_seed(
             float(acceptance_atol),
             residual_current_norm * max(0.0, float(min_relative_improvement)),
         )
-        if not (finite and residual_after_norm_measured < residual_current_norm - required_drop):
+        if not (
+            finite
+            and residual_after_norm_measured < residual_current_norm - required_drop
+        ):
             break
         accepted_directions.append(direction)
         x_best = x_candidate
@@ -4696,12 +5313,20 @@ def probe_rhs1_qi_device_augmented_seed(
     invalid_augmentation = False
     if accepted_directions:
         raw_basis = jnp.stack(tuple(accepted_directions), axis=1)
-        labels = tuple(f"augmented_seed:{idx}" for idx in range(int(raw_basis.shape[1])))
-        max_rank_use = int(raw_basis.shape[1]) if max_rank is None else max(0, int(max_rank))
+        labels = tuple(
+            f"augmented_seed:{idx}" for idx in range(int(raw_basis.shape[1]))
+        )
+        max_rank_use = (
+            int(raw_basis.shape[1]) if max_rank is None else max(0, int(max_rank))
+        )
         basis = orthonormalize_rhs1_qi_coarse_basis(
             raw_basis,
             labels=labels,
-            rtol=float(state.metadata.regularization_rcond if basis_rtol is None else basis_rtol),
+            rtol=float(
+                state.metadata.regularization_rcond
+                if basis_rtol is None
+                else basis_rtol
+            ),
             atol=0.0 if basis_atol is None else float(basis_atol),
             max_rank=max_rank_use,
         )
@@ -4728,17 +5353,24 @@ def probe_rhs1_qi_device_augmented_seed(
             if valid_shape and valid_values:
                 augmentation_basis = candidate_basis
                 operator_on_augmentation = candidate_action
-                accepted_labels = tuple(str(label) for label in basis.metadata.accepted_labels)
+                accepted_labels = tuple(
+                    str(label) for label in basis.metadata.accepted_labels
+                )
                 coefficients = _regularized_least_squares(
                     operator_on_augmentation,
                     residual_before,
                     rcond=float(state.metadata.regularization_rcond),
                 )
                 projected_update = augmentation_basis @ coefficients
-                projected_residual = residual_before - operator_on_augmentation @ coefficients
+                projected_residual = (
+                    residual_before - operator_on_augmentation @ coefficients
+                )
                 projected_norm = float(jnp.linalg.norm(projected_residual))
                 projection_residual_norm = projected_norm
-                if np.isfinite(projected_norm) and projected_norm < residual_current_norm:
+                if (
+                    np.isfinite(projected_norm)
+                    and projected_norm < residual_current_norm
+                ):
                     x_best = x_initial + projected_update
                     residual_current_norm = projected_norm
                     history.append(float(projected_norm))
@@ -4759,7 +5391,9 @@ def probe_rhs1_qi_device_augmented_seed(
     else:
         reason = "residual_not_reduced"
         residual_after_norm = last_candidate_norm
-    improvement_ratio = residual_after_norm / residual_before_norm if last_finite else None
+    improvement_ratio = (
+        residual_after_norm / residual_before_norm if last_finite else None
+    )
     probe = RHS1QIDevicePreconditionerProbe(
         accepted=bool(accepted),
         reason=reason,

@@ -115,23 +115,16 @@ remain open.
 
 Relevant implementation:
 
-- ``sfincs_jax/rhs1_qi_coarse.py`` builds deterministic QI coarse bases and
-  fail-closed Galerkin corrections.
-- ``sfincs_jax/rhs1_qi_block_schur.py`` provides the next standalone
-  block-Schur/angular/radial coarse-preconditioner primitive. It is
-  JAX-compatible, emits rank/conditioning metadata, and has a fail-closed
-  true-residual probe. It remains standalone until the residual-deflated driver
-  hook below produces hard-seed evidence worth expanding.
-- ``sfincs_jax/rhs1_qi_deflation.py`` provides a residual-deflated,
-  device-compatible two-level action. It builds a bounded preconditioned Krylov
-  basis from the current residual, optionally accepts physics-informed
-  block-Schur directions, and fails closed unless the true residual improves.
-- ``sfincs_jax/rhs1_qi_two_level.py`` provides the first device-compatible
-  local-smoother plus coarse-correction primitive for the next hard-seed probe.
-- ``sfincs_jax/rhs1_qi_promotion.py`` defines the production ladder promotion
-  gate: every requested seed/backend pair must converge, write output and
-  solver trace artifacts, satisfy residual/observable gates, and avoid host
-  fallback for a true device-QI claim.
+- ``sfincs_jax/solvers/preconditioners/qi/basis.py`` builds deterministic
+  QI coarse bases, phase-space and residual-region bases, active-pattern
+  chunks, global-moment closures, and fail-closed Galerkin corrections.
+- ``sfincs_jax/solvers/preconditioners/qi/corrections.py`` owns the
+  device-compatible two-level, block-Schur, residual-deflated, multilevel,
+  residual-Galerkin, and coupled residual-equation correction primitives.
+- ``sfincs_jax/solvers/preconditioners/qi/policy.py`` defines the production
+  ladder promotion gate: every requested seed/backend pair must converge,
+  write output and solver trace artifacts, satisfy residual/observable gates,
+  and avoid host fallback for a true device-QI claim.
 - ``sfincs_jax/solvers/preconditioners/qi/device.py`` provides the standalone
   device-local ``S_local`` candidate and the production-shaped device-QI state.
   It combines a bounded CSR-backed Jacobi smoother with fail-closed diagonal
@@ -148,12 +141,6 @@ Relevant implementation:
   global, aggregate, and block residual source spaces. The first hard-seed GPU
   evidence worsened the residual relative to recycled augmented Krylov, so it is
   retained only as negative evidence and a tested research control.
-- ``sfincs_jax/rhs1_qi_multilevel_coarse.py`` provides the standalone
-  multilevel angular-radial coarse prototype. It builds deterministic radial
-  aggregate levels, angular/radial candidates, rank-gated prolongation spaces,
-  and a pure-JAX local-plus-coarse action. It is evidence that the next coarse
-  architecture can be expressed without driver coupling, not evidence that the
-  production hard seed is closed.
 - ``sfincs_jax/rhs1_device_operator.py`` provides bounded device CSR matvec
   utilities and records requested/default backend, available platforms, concrete
   array devices, concrete array platforms, and same-device placement for audit
@@ -539,7 +526,7 @@ does not promote projected smoothing as the closure strategy; the GPU evidence
 above shows it is a useful local component but not sufficient by itself.
 
 The alternative coarse direction is now a standalone multilevel/angular-radial
-prototype in ``sfincs_jax/rhs1_qi_multilevel_coarse.py``. It constructs radial
+prototype in ``sfincs_jax/solvers/preconditioners/qi/corrections.py``. It constructs radial
 aggregate hierarchies, angular harmonics, radial polynomial modes, and
 radial-angular products, then applies a pure-JAX action least-squares coarse
 correction after a local smoother. Unit tests show deterministic hierarchy
@@ -848,7 +835,7 @@ trace, run:
 - parity and residual audits against the current host fallback and Fortran v3
   reference outputs where available.
 
-The checked promotion helper in ``sfincs_jax/rhs1_qi_promotion.py`` should be
+The checked promotion helper in ``sfincs_jax/solvers/preconditioners/qi/policy.py`` should be
 used for every ladder artifact. A production-resolution claim is not a loose
 collection of successful runs; it requires complete CPU/GPU seed coverage,
 convergence, output and trace provenance, residual gates, observable gates, and

@@ -4,8 +4,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.solvers.preconditioners.qi.coarse import orthonormalize_rhs1_qi_coarse_basis
-from sfincs_jax.solvers.preconditioners.qi.coupled_residual import (
+from sfincs_jax.solvers.preconditioners.qi.basis import orthonormalize_rhs1_qi_coarse_basis
+from sfincs_jax.solvers.preconditioners.qi.corrections import (
     RHS1QICoupledResidualEquationConfig,
     setup_rhs1_qi_coupled_residual_equation,
 )

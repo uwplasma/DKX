@@ -5,13 +5,13 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.solvers.preconditioners.qi.block_schur import (
+from sfincs_jax.solvers.preconditioners.qi.corrections import (
     build_rhs1_qi_block_schur_basis,
     build_rhs1_qi_block_schur_candidates,
     build_rhs1_qi_block_schur_preconditioner,
     probe_rhs1_qi_block_schur_correction,
 )
-from sfincs_jax.solvers.preconditioners.qi.coarse import RHS1QICoarseBlockLayout
+from sfincs_jax.solvers.preconditioners.qi.basis import RHS1QICoarseBlockLayout
 
 
 def _coupled_layout() -> RHS1QICoarseBlockLayout:

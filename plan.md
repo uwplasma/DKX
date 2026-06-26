@@ -25,37 +25,34 @@ are historical context, not instructions to follow.
 
 Latest execution checkpoint:
 
-- Lane 1 Batch 1 transport/output/root payback is complete.
-- `sfincs_jax/problems/transport_matrix/postsolve_diagnostics.py` was merged
-  into `sfincs_jax/problems/transport_matrix/finalize.py`, and the old relay
-  file was deleted.
-- `sfincs_jax/problems/transport_matrix/streaming_outputs.py` was merged into
-  `sfincs_jax/outputs/transport.py`, and the old relay file was deleted.
-- Root `data_fetch.py`, `scans.py`, and `postprocess_upstream.py` were audited
-  and kept at root because they are public-facing CLI/example/script/test APIs;
-  moving them now would require compatibility shims and would not reduce real
-  complexity.
-- Current counts after this checkpoint: 194 package Python files, 43 package
+- Lane 1 Batch 2 solver/preconditioner family compression has met the
+  review-ready file-count gates.
+- QI preconditioners were consolidated from 14 files into five durable owners:
+  `qi/basis.py`, `qi/corrections.py`, `qi/device.py`, `qi/policy.py`, and
+  `qi/__init__.py`.
+- The domain-decomposition line/block implementation was merged into
+  `solvers/preconditioners/domain_decomposition/__init__.py`; the old
+  `line_blocks.py` implementation file was deleted and imports now target the
+  package owner.
+- Current counts after this checkpoint: 182 package Python files, 43 package
   root files, 18 `problems/profile_response` files including `sparse`, 16
-  `problems/transport_matrix` files including `parallel`, 47
-  `solvers/preconditioners` files, `io.py` at 49 lines,
-  `outputs/writer.py` at 4,264 lines, `outputs/transport.py` at 935 lines, and
-  165,396 package Python lines.
+  `problems/transport_matrix` files including `parallel`, 35
+  `solvers/preconditioners` files, 5 QI preconditioner files, `v3_driver.py` at
+  47 lines, `io.py` at 49 lines, and 166,356 package Python lines. The line
+  count is above the previous checkpoint because the AST-safe QI merge expanded
+  compact helper formatting; this is explicitly justified by deleting ten QI
+  implementation shards plus one domain-decomposition shard and reaching the
+  planned owner boundaries.
 - Validation passed:
-  `python -m ruff check ...` for the moved transport/output modules and tests,
-  `python -m pytest tests/test_transport_postsolve_diagnostics.py
-  tests/test_transport_streaming_outputs.py tests/test_transport_output_schema.py
-  tests/test_transport_matrix_write_output_end_to_end.py
-  tests/test_output_formats.py tests/test_domain_package_import_contracts.py
-  tests/test_policy_module_docstrings.py -q --tb=short` with 31 passed,
-  `python -m pytest tests/test_api_contracts.py tests/test_cli_solve_mode.py
-  tests/test_cli_validation_io_fast_coverage.py
-  tests/test_io_output_policy_coverage.py tests/test_solver_trace_output_formats.py
-  tests/test_write_output_return_results.py -q --tb=short` with 91 passed,
-  `python -m pytest tests/test_data_fetch.py tests/test_er_scan_and_ambipolar.py
-  tests/test_scans_progress_and_recycle.py tests/test_upstream_scanplot2_smoke.py
-  -q --tb=short` with 20 passed, and
-  `python -m pytest tests/test_transport_*.py -q --tb=short` with 273 passed.
+  `python -m pytest tests/test_rhs1_qi_*.py
+  tests/test_rhs1_device_operator_unit.py tests/test_profile_response_sparse_pc.py
+  tests/test_rhs1_domain_decomposition.py tests/test_rhs1_line_blocks.py
+  -q --tb=short` with 470 passed,
+  `python -m pytest tests/test_domain_package_import_contracts.py
+  tests/test_policy_module_docstrings.py -q --tb=short` with 11 passed, and
+  scoped `ruff check`/`py_compile` for the merged QI and domain-decomposition
+  owners passed.
+
 
 ## One-Sentence Plan
 

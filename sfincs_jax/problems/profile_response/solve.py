@@ -21,7 +21,9 @@ import jax
 import jax.numpy as jnp
 
 from sfincs_jax.namelist import Namelist, read_sfincs_input
-from sfincs_jax.problems.profile_response.solver_diagnostics import emit_newton_krylov_ksp_history as _emit_newton_krylov_ksp_history
+from sfincs_jax.problems.profile_response.solver_diagnostics import (
+    emit_newton_krylov_ksp_history as _emit_newton_krylov_ksp_history,
+)
 from sfincs_jax.solver import (
     GMRESSolveResult,
     bicgstab_solve_with_residual,
@@ -62,8 +64,11 @@ from sfincs_jax.solvers.explicit_sparse import (
     estimate_multifrontal_direct_lu_nbytes,
     wrap_sparse_factor_with_coarse_correction,
 )
-from sfincs_jax.operators.profile_response.device_sparse import device_csr_from_matrix, validate_device_csr_matvec
-from sfincs_jax.solvers.preconditioners.domain_decomposition.line_blocks import (  # compatibility exports for legacy tests/debug scripts
+from sfincs_jax.operators.profile_response.device_sparse import (
+    device_csr_from_matrix,
+    validate_device_csr_matvec,
+)
+from sfincs_jax.solvers.preconditioners.domain_decomposition import (  # compatibility exports for legacy tests/debug scripts
     _dd_core_patch_ranges,
     _rhs1_dd_auto_block_size,
     _rhs1_dd_coarse_block_size,
@@ -93,14 +98,19 @@ from sfincs_jax.solvers.preconditioners.pas.policy import (
 from sfincs_jax.solvers.preconditioners.dispatch import (
     build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,
 )
-from sfincs_jax.operators.profile_response.kinetic import select_structured_rhs1_fblock_csr_operator, select_structured_rhs1_fblock_operator
+from sfincs_jax.operators.profile_response.kinetic import (
+    select_structured_rhs1_fblock_csr_operator,
+    select_structured_rhs1_fblock_operator,
+)
 from sfincs_jax.operators.profile_response.full_system import (
     build_active_projected_rhs1_full_csr_preconditioner,
     build_direct_active_fortran_v3_reduced_pmat_preconditioner,
     select_active_fortran_v3_reduced_support_mode_preconditioner,
     solve_structured_rhs1_full_csr,
 )
-from sfincs_jax.operators.profile_response.structured_csr import _try_build_structured_rhs1_full_csr_operator_bundle
+from sfincs_jax.operators.profile_response.structured_csr import (
+    _try_build_structured_rhs1_full_csr_operator_bundle,
+)
 from sfincs_jax.problems.profile_response.policies import (
     RHS1DefaultPreconditionerSelectionContext,
     canonical_rhs1_preconditioner_kind as _canonical_rhs1_preconditioner_kind,
@@ -125,7 +135,9 @@ from sfincs_jax.problems.profile_response.policies import (
 from sfincs_jax.problems.profile_response.policies import (
     rhs1_gpu_sparse_fallback_skip_allowed_current_backend as _rhs1_gpu_sparse_fallback_skip_allowed,
 )
-from sfincs_jax.solvers.preconditioners.schur.profile_response import resolve_rhs1_schur_base_kind
+from sfincs_jax.solvers.preconditioners.schur.profile_response import (
+    resolve_rhs1_schur_base_kind,
+)
 from sfincs_jax.problems.profile_response.solver_diagnostics import (
     RHS1KSPReplayState,
     RHS1SkipPrimaryKrylovSeedContext,
@@ -399,7 +411,9 @@ from sfincs_jax.problems.profile_response.setup import (
     resolve_rhs1_reduced_mode_shape_setup,
 )
 from sfincs_jax.solvers.preconditioners.xblock import policy as _rhs1_xblock_policy
-from sfincs_jax.solvers.preconditioners.xblock import policy as _rhs1_xblock_sparse_host_policy
+from sfincs_jax.solvers.preconditioners.xblock import (
+    policy as _rhs1_xblock_sparse_host_policy,
+)
 from sfincs_jax.solvers.preconditioners.xblock.policy import (
     resolve_rhs1_xblock_sparse_pc_policy,
 )
@@ -492,7 +506,9 @@ from sfincs_jax.problems.profile_response.policies import (
     _is_direct_reduced_pmat_pc_kind,
     _rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb,
 )
-from sfincs_jax.operators.profile_response.reduced_tail import _try_build_fortran_reduced_constraint1_direct_tail_bundle
+from sfincs_jax.operators.profile_response.reduced_tail import (
+    _try_build_fortran_reduced_constraint1_direct_tail_bundle,
+)
 from sfincs_jax.operators.profile_response.true_operator_rescue import (
     _ResidualCoarseHostSparsePreconditionerBundle,
     _ResidualWindowHostSparsePreconditionerBundle,
@@ -659,8 +675,12 @@ from sfincs_jax.problems.transport_matrix.policies import (
     transport_sparse_direct_rescue_first as _transport_sparse_direct_rescue_first_impl,
     transport_tzfft_first_attempt_budget as _transport_tzfft_first_attempt_budget_impl,
 )
-from sfincs_jax.problems.transport_matrix.direct_block_schur import build_transport_fp_direct_active_block_schur_preconditioner
-from sfincs_jax.problems.transport_matrix.fortran_reduced_lu import build_transport_fp_fortran_reduced_lu_preconditioner
+from sfincs_jax.problems.transport_matrix.direct_block_schur import (
+    build_transport_fp_direct_active_block_schur_preconditioner,
+)
+from sfincs_jax.problems.transport_matrix.fortran_reduced_lu import (
+    build_transport_fp_fortran_reduced_lu_preconditioner,
+)
 from sfincs_jax.problems.transport_matrix.setup import (
     resolve_transport_maxiter_setup,
     resolve_transport_parallel_request,
@@ -696,7 +716,9 @@ from sfincs_jax.problems.transport_matrix.parallel.runtime import (
     transport_parallel_process_pool_executor as _transport_parallel_process_pool_executor,
     transport_parallel_worker_env as _transport_parallel_worker_env,
 )
-from sfincs_jax.problems.profile_response.policies import resolve_use_implicit as _resolve_use_implicit_impl
+from sfincs_jax.problems.profile_response.policies import (
+    resolve_use_implicit as _resolve_use_implicit_impl,
+)
 from sfincs_jax.phi1_newton_policy import (
     phi1_frozen_jacobian_policy,
     phi1_gmres_restart,
@@ -716,7 +738,9 @@ from sfincs_jax.problems.transport_matrix.diagnostics import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
 )
-from sfincs_jax.problems.transport_matrix.finalize import compute_transport_postsolve_diagnostics
+from sfincs_jax.problems.transport_matrix.finalize import (
+    compute_transport_postsolve_diagnostics,
+)
 from sfincs_jax.outputs.transport import TransportStreamingOutputAccumulator
 from sfincs_jax.solver import (
     block_gmres_result_ready as _block_gmres_result_ready,
@@ -841,7 +865,13 @@ from sfincs_jax.problems.transport_matrix.direct_pmat import (
     _try_build_rhsmode23_fp_direct_active_operator_bundle,
     _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle,
 )
-from sfincs_jax.operators.profile_response.system import _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1, _matvec_shard_axis, sharding_constraints
+from sfincs_jax.operators.profile_response.system import (
+    _fs_average_factor,
+    _ix_min,
+    _source_basis_constraint_scheme_1,
+    _matvec_shard_axis,
+    sharding_constraints,
+)
 from sfincs_jax.profiling import Timer
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 from sfincs_jax.operators.profile_response.system import (
@@ -950,9 +980,7 @@ _rhsmode1_explicit_sparse_host_direct_allowed = (
 )
 
 
-_rhsmode1_pas_adaptive_smoother_allowed = (
-    _rhs1_pas_adaptive_smoother_allowed_impl
-)
+_rhsmode1_pas_adaptive_smoother_allowed = _rhs1_pas_adaptive_smoother_allowed_impl
 
 
 _rhsmode1_constraint0_petsc_compat = _rhs1_constraint0_petsc_compat_impl
@@ -1038,7 +1066,9 @@ def _build_rhsmode1_schur_preconditioner(
     )
 
 
-def _gmres_solve_dispatch(*, distributed_axis: str | None = None, size_hint: int | None = None, **kwargs):
+def _gmres_solve_dispatch(
+    *, distributed_axis: str | None = None, size_hint: int | None = None, **kwargs
+):
     return _gmres_solve_dispatch_impl(
         distributed_axis=distributed_axis,
         size_hint=size_hint,
@@ -1051,7 +1081,9 @@ def _gmres_solve_dispatch(*, distributed_axis: str | None = None, size_hint: int
     )
 
 
-def _gmres_solve_with_residual_dispatch(*, distributed_axis: str | None = None, size_hint: int | None = None, **kwargs):
+def _gmres_solve_with_residual_dispatch(
+    *, distributed_axis: str | None = None, size_hint: int | None = None, **kwargs
+):
     return _gmres_solve_with_residual_dispatch_impl(
         distributed_axis=distributed_axis,
         size_hint=size_hint,
@@ -1073,8 +1105,11 @@ def _resolve_distributed_gmres_axis(
         matvec_shard_axis_fn=_matvec_shard_axis,
     )
 
+
 def _rhsmode1_dense_fallback_max(op: V3FullSystemOperator) -> int:
     return _rhs1_dense_fallback_max_impl(op)
+
+
 def _rhsmode1_structured_fblock_cache_key(
     op: V3FullSystemOperator,
     kind: str,
@@ -1089,7 +1124,9 @@ def _rhsmode1_structured_fblock_cache_key(
     )
 
 
-def _transport_precond_cache_key(op: V3FullSystemOperator, kind: str) -> tuple[object, ...]:
+def _transport_precond_cache_key(
+    op: V3FullSystemOperator, kind: str
+) -> tuple[object, ...]:
     return _transport_precond_cache_key_impl(op, kind, precond_dtype=_precond_dtype())
 
 
@@ -1191,6 +1228,7 @@ def solve_v3_full_system_linear_gmres(
     def _mark(label: str) -> None:
         if profiler is not None:
             profiler.mark(label)
+
     linear_problem_setup = materialize_profile_response_linear_problem(
         ProfileResponseLinearProblemSetupContext(
             nml=nml,
@@ -1227,15 +1265,21 @@ def solve_v3_full_system_linear_gmres(
     geom_scheme_hint = int(linear_problem_setup.geom_scheme_hint)
     rhs1_progress_notes = RHS1ProgressNotes(
         emit=emit,
-        enabled=rhs1_large_progress_enabled(rhs_mode=int(op.rhs_mode), total_size=int(op.total_size)),
+        enabled=rhs1_large_progress_enabled(
+            rhs_mode=int(op.rhs_mode), total_size=int(op.total_size)
+        ),
     )
     route_setup = resolve_rhs1_initial_route_setup(
         nml=nml,
         op=op,
         solve_method=str(solve_method),
-        xblock_active_dof_env=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", ""),
+        xblock_active_dof_env=os.environ.get(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", ""
+        ),
         use_implicit=bool(_resolve_use_implicit(differentiable=differentiable)),
-        force_krylov=bool(_rhs1_bool_env("SFINCS_JAX_RHSMODE1_FORCE_KRYLOV", default=False)),
+        force_krylov=bool(
+            _rhs1_bool_env("SFINCS_JAX_RHSMODE1_FORCE_KRYLOV", default=False)
+        ),
         sharded_axis=_matvec_shard_axis(op),
         backend=str(jax.default_backend()),
         device_count=int(jax.device_count()),
@@ -1245,7 +1289,9 @@ def solve_v3_full_system_linear_gmres(
     solve_method_kind_requested = method_flags.kind
     sparse_host_like_requested = bool(method_flags.sparse_host_like_requested)
     xblock_active_dof_requested = bool(method_flags.xblock_active_dof_requested)
-    structured_full_csr_explicit_requested = bool(method_flags.structured_full_csr_explicit_requested)
+    structured_full_csr_explicit_requested = bool(
+        method_flags.structured_full_csr_explicit_requested
+    )
     use_implicit_requested = bool(route_setup.use_implicit_requested)
     structured_auto_allowed = bool(route_setup.structured_auto_allowed)
     structured_sharded_multidevice = bool(route_setup.structured_sharded_multidevice)
@@ -1267,7 +1313,9 @@ def solve_v3_full_system_linear_gmres(
             recycle_basis=recycle_basis,
             solve_driver=solve_v3_full_system_linear_gmres,
             solve_method_kind_requested=solve_method_kind_requested,
-            structured_full_csr_explicit_requested=bool(structured_full_csr_explicit_requested),
+            structured_full_csr_explicit_requested=bool(
+                structured_full_csr_explicit_requested
+            ),
             use_implicit=bool(use_implicit_requested),
             structured_auto_allowed=bool(structured_auto_allowed),
             structured_sharded_multidevice=bool(structured_sharded_multidevice),
@@ -1333,7 +1381,9 @@ def solve_v3_full_system_linear_gmres(
     maxiter = active_problem_setup.maxiter
     use_dkes = bool(active_problem_setup.use_dkes)
     include_xdot_sparse_pc = bool(active_problem_setup.include_xdot_sparse_pc)
-    include_electric_field_xi_sparse_pc = bool(active_problem_setup.include_electric_field_xi_sparse_pc)
+    include_electric_field_xi_sparse_pc = bool(
+        active_problem_setup.include_electric_field_xi_sparse_pc
+    )
     er_abs_sparse_pc = float(active_problem_setup.er_abs_sparse_pc)
     preconditioner_species = int(active_problem_setup.preconditioner_species)
     preconditioner_x = int(active_problem_setup.preconditioner_x)
@@ -1352,7 +1402,9 @@ def solve_v3_full_system_linear_gmres(
     pas_tz_guarded_correction_metadata: dict[str, object] = {}
     rhsmode1_general_metadata: dict[str, object] = {}
 
-    def _record_structured_fblock_preconditioner_metadata(precond: Callable[[jnp.ndarray], jnp.ndarray]) -> None:
+    def _record_structured_fblock_preconditioner_metadata(
+        precond: Callable[[jnp.ndarray], jnp.ndarray],
+    ) -> None:
         metadata = getattr(precond, "_sfincs_jax_structured_fblock_metadata", None)
         if not isinstance(metadata, dict):
             return
@@ -1362,10 +1414,18 @@ def solve_v3_full_system_linear_gmres(
         rhsmode1_general_metadata.update(
             {
                 "structured_fblock_preconditioner_enabled": True,
-                "structured_fblock_preconditioner_selected": bool(metadata.get("selected", False)),
-                "structured_fblock_preconditioner_reason": str(metadata.get("reason", "")),
-                "structured_fblock_preconditioner_nnz_blocks": int(assembly.get("nnz_blocks", 0) or 0),
-                "structured_fblock_preconditioner_data_nbytes": int(assembly.get("data_nbytes", 0) or 0),
+                "structured_fblock_preconditioner_selected": bool(
+                    metadata.get("selected", False)
+                ),
+                "structured_fblock_preconditioner_reason": str(
+                    metadata.get("reason", "")
+                ),
+                "structured_fblock_preconditioner_nnz_blocks": int(
+                    assembly.get("nnz_blocks", 0) or 0
+                ),
+                "structured_fblock_preconditioner_data_nbytes": int(
+                    assembly.get("data_nbytes", 0) or 0
+                ),
                 "structured_fblock_preconditioner_metadata": metadata,
             }
         )
@@ -1405,14 +1465,22 @@ def solve_v3_full_system_linear_gmres(
     maxiter = post_active_solve_policy_setup.maxiter
     solve_method = str(post_active_solve_policy_setup.solve_method)
     tokamak_pas = bool(post_active_solve_policy_setup.tokamak_pas)
-    pas_large_bicgstab_fastpath = bool(post_active_solve_policy_setup.pas_large_bicgstab_fastpath)
+    pas_large_bicgstab_fastpath = bool(
+        post_active_solve_policy_setup.pas_large_bicgstab_fastpath
+    )
     pas_large_fastpath_min = int(post_active_solve_policy_setup.pas_large_fastpath_min)
     if emit is not None:
         for level, message in post_active_solve_policy_setup.messages:
             emit(int(level), str(message))
     if emit is not None:
-        emit(1, f"solve_v3_full_system_linear_gmres: GMRES tol={tol} atol={atol} restart={restart} maxiter={maxiter} solve_method={solve_method}")
-        emit(1, "solve_v3_full_system_linear_gmres: evaluateJacobian called (matrix-free)")
+        emit(
+            1,
+            f"solve_v3_full_system_linear_gmres: GMRES tol={tol} atol={atol} restart={restart} maxiter={maxiter} solve_method={solve_method}",
+        )
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: evaluateJacobian called (matrix-free)",
+        )
     solve_method_kind_explicit = str(solve_method).strip().lower().replace("-", "_")
     sparse_host_safe_result = try_rhs1_sparse_host_safe_solve(
         RHS1SparseHostSafeSolveContext(
@@ -1496,9 +1564,13 @@ def solve_v3_full_system_linear_gmres(
             rhs=rhs,
             payload=sparse_host_direct_payload,
         )
-    rhs1_precond_env = os.environ.get("SFINCS_JAX_RHSMODE1_PRECONDITIONER", "").strip().lower()
+    rhs1_precond_env = (
+        os.environ.get("SFINCS_JAX_RHSMODE1_PRECONDITIONER", "").strip().lower()
+    )
     rhs1_precond_env_user = rhs1_precond_env
-    rhs1_bicgstab_env = os.environ.get("SFINCS_JAX_RHSMODE1_BICGSTAB_PRECOND", "").strip().lower()
+    rhs1_bicgstab_env = (
+        os.environ.get("SFINCS_JAX_RHSMODE1_BICGSTAB_PRECOND", "").strip().lower()
+    )
     rhs1_bicgstab_env_user = rhs1_bicgstab_env
     rhs1_precond_env = _rhs1_fp_dkes_env_preconditioner_kind(
         rhs1_precond_env=rhs1_precond_env,
@@ -1534,12 +1606,18 @@ def solve_v3_full_system_linear_gmres(
         theta_overlap_env=os.environ.get("SFINCS_JAX_RHSMODE1_DD_OVERLAP_T", ""),
         zeta_overlap_env=os.environ.get("SFINCS_JAX_RHSMODE1_DD_OVERLAP_Z", ""),
         overlap_env=os.environ.get("SFINCS_JAX_RHSMODE1_DD_OVERLAP", ""),
-        patch_dof_target_env=os.environ.get("SFINCS_JAX_RHSMODE1_SCHWARZ_PATCH_DOF_TARGET", ""),
+        patch_dof_target_env=os.environ.get(
+            "SFINCS_JAX_RHSMODE1_SCHWARZ_PATCH_DOF_TARGET", ""
+        ),
     )
 
-    pas_auto_strong_ratio_env = os.environ.get("SFINCS_JAX_PAS_AUTO_STRONG_RATIO", "").strip()
+    pas_auto_strong_ratio_env = os.environ.get(
+        "SFINCS_JAX_PAS_AUTO_STRONG_RATIO", ""
+    ).strip()
     try:
-        pas_auto_strong_ratio = float(pas_auto_strong_ratio_env) if pas_auto_strong_ratio_env else 10.0
+        pas_auto_strong_ratio = (
+            float(pas_auto_strong_ratio_env) if pas_auto_strong_ratio_env else 10.0
+        )
     except ValueError:
         pas_auto_strong_ratio = 10.0
     er_abs = 0.0
@@ -1548,30 +1626,32 @@ def solve_v3_full_system_linear_gmres(
     rhs1_default_precond_selection = resolve_rhs1_default_preconditioner_selection(
         RHS1DefaultPreconditionerSelectionContext({**globals(), **locals()})
     )
-    if 'er_abs' in rhs1_default_precond_selection:
-        er_abs = rhs1_default_precond_selection['er_abs']
-    if 'lmax_use' in rhs1_default_precond_selection:
-        lmax_use = rhs1_default_precond_selection['lmax_use']
-    if 'max_l' in rhs1_default_precond_selection:
-        max_l = rhs1_default_precond_selection['max_l']
-    if 'nxi_for_x' in rhs1_default_precond_selection:
-        nxi_for_x = rhs1_default_precond_selection['nxi_for_x']
-    if 'rhs1_gpu_tokamak_pas_tight_gmres' in rhs1_default_precond_selection:
-        rhs1_gpu_tokamak_pas_tight_gmres = rhs1_default_precond_selection['rhs1_gpu_tokamak_pas_tight_gmres']
-    if 'rhs1_precond_env' in rhs1_default_precond_selection:
-        rhs1_precond_env = rhs1_default_precond_selection['rhs1_precond_env']
-    if 'rhs1_precond_kind' in rhs1_default_precond_selection:
-        rhs1_precond_kind = rhs1_default_precond_selection['rhs1_precond_kind']
-    if 'rhs1_xblock_tz_lmax' in rhs1_default_precond_selection:
-        rhs1_xblock_tz_lmax = rhs1_default_precond_selection['rhs1_xblock_tz_lmax']
-    if 'schur_er_min' in rhs1_default_precond_selection:
-        schur_er_min = rhs1_default_precond_selection['schur_er_min']
-    if 'tokamak_like' in rhs1_default_precond_selection:
-        tokamak_like = rhs1_default_precond_selection['tokamak_like']
-    if 'use_collision_precond' in rhs1_default_precond_selection:
-        use_collision_precond = rhs1_default_precond_selection['use_collision_precond']
-    if 'xblock_tz_max' in rhs1_default_precond_selection:
-        xblock_tz_max = rhs1_default_precond_selection['xblock_tz_max']
+    if "er_abs" in rhs1_default_precond_selection:
+        er_abs = rhs1_default_precond_selection["er_abs"]
+    if "lmax_use" in rhs1_default_precond_selection:
+        lmax_use = rhs1_default_precond_selection["lmax_use"]
+    if "max_l" in rhs1_default_precond_selection:
+        max_l = rhs1_default_precond_selection["max_l"]
+    if "nxi_for_x" in rhs1_default_precond_selection:
+        nxi_for_x = rhs1_default_precond_selection["nxi_for_x"]
+    if "rhs1_gpu_tokamak_pas_tight_gmres" in rhs1_default_precond_selection:
+        rhs1_gpu_tokamak_pas_tight_gmres = rhs1_default_precond_selection[
+            "rhs1_gpu_tokamak_pas_tight_gmres"
+        ]
+    if "rhs1_precond_env" in rhs1_default_precond_selection:
+        rhs1_precond_env = rhs1_default_precond_selection["rhs1_precond_env"]
+    if "rhs1_precond_kind" in rhs1_default_precond_selection:
+        rhs1_precond_kind = rhs1_default_precond_selection["rhs1_precond_kind"]
+    if "rhs1_xblock_tz_lmax" in rhs1_default_precond_selection:
+        rhs1_xblock_tz_lmax = rhs1_default_precond_selection["rhs1_xblock_tz_lmax"]
+    if "schur_er_min" in rhs1_default_precond_selection:
+        schur_er_min = rhs1_default_precond_selection["schur_er_min"]
+    if "tokamak_like" in rhs1_default_precond_selection:
+        tokamak_like = rhs1_default_precond_selection["tokamak_like"]
+    if "use_collision_precond" in rhs1_default_precond_selection:
+        use_collision_precond = rhs1_default_precond_selection["use_collision_precond"]
+    if "xblock_tz_max" in rhs1_default_precond_selection:
+        xblock_tz_max = rhs1_default_precond_selection["xblock_tz_max"]
     if (
         (not rhs1_precond_env)
         and int(op.rhs_mode) == 1
@@ -1608,17 +1688,14 @@ def solve_v3_full_system_linear_gmres(
             n_zeta=int(op.n_zeta),
             max_l=int(max_l_local),
         )
-        if (
-            rhs1_precond_kind == "xblock_tz"
-            and _rhs1_pas_dkes_pas_tz_preferred(
-                has_pas=op.fblock.pas is not None,
-                use_dkes=bool(use_dkes),
-                backend=jax.default_backend(),
-                n_theta=int(op.n_theta),
-                n_zeta=int(op.n_zeta),
-                max_l=int(max_l_local),
-                active_size=int(active_size),
-            )
+        if rhs1_precond_kind == "xblock_tz" and _rhs1_pas_dkes_pas_tz_preferred(
+            has_pas=op.fblock.pas is not None,
+            use_dkes=bool(use_dkes),
+            backend=jax.default_backend(),
+            n_theta=int(op.n_theta),
+            n_zeta=int(op.n_zeta),
+            max_l=int(max_l_local),
+            active_size=int(active_size),
         ):
             rhs1_precond_kind = "pas_tz"
             if emit is not None:
@@ -1687,26 +1764,37 @@ def solve_v3_full_system_linear_gmres(
     if (
         tokamak_like
         and rhs1_precond_env in {"", "auto", "default"}
-        and rhs1_precond_kind in {"pas_lite", "pas_hybrid", "pas_tokamak_theta", "pas_tz", "xmg", "collision", "point"}
+        and rhs1_precond_kind
+        in {
+            "pas_lite",
+            "pas_hybrid",
+            "pas_tokamak_theta",
+            "pas_tz",
+            "xmg",
+            "collision",
+            "point",
+        }
         and op.fblock.pas is not None
         and op.fblock.fp is None
         and (not _pas_tz_preconditioner_applicable(op))
         and (not _pas_tokamak_theta_preconditioner_applicable(op))
-        and (not _rhs1_pas_tokamak_gpu_theta_allowed(
-            has_pas=op.fblock.pas is not None,
-            has_fp=op.fblock.fp is not None,
-            backend=jax.default_backend(),
-            tokamak_like=tokamak_like,
-            active_size=int(active_size),
-            er_abs=float(er_abs),
-            schur_er_min=float(schur_er_min),
-            has_magdrift=(
-                op.fblock.magdrift_theta is not None
-                or op.fblock.magdrift_zeta is not None
-                or op.fblock.magdrift_xidot is not None
-            ),
-            has_collisionless=op.fblock.collisionless is not None,
-        ))
+        and (
+            not _rhs1_pas_tokamak_gpu_theta_allowed(
+                has_pas=op.fblock.pas is not None,
+                has_fp=op.fblock.fp is not None,
+                backend=jax.default_backend(),
+                tokamak_like=tokamak_like,
+                active_size=int(active_size),
+                er_abs=float(er_abs),
+                schur_er_min=float(schur_er_min),
+                has_magdrift=(
+                    op.fblock.magdrift_theta is not None
+                    or op.fblock.magdrift_zeta is not None
+                    or op.fblock.magdrift_xidot is not None
+                ),
+                has_collisionless=op.fblock.collisionless is not None,
+            )
+        )
     ):
         if _rhs1_pas_tokamak_cpu_xblock_preferred(
             has_pas=op.fblock.pas is not None,
@@ -1792,20 +1880,30 @@ def solve_v3_full_system_linear_gmres(
     rhs1_precond_kind_requested = rhs1_precond_kind
     if rhs1_precond_env == "" and rhs1_precond_kind == "point" and use_pas_projection:
         # PAS tokamak-like cases benefit from a stronger line preconditioner by default.
-        rhs1_precond_kind = "theta_line" if int(op.n_theta) >= int(op.n_zeta) else "zeta_line"
+        rhs1_precond_kind = (
+            "theta_line" if int(op.n_theta) >= int(op.n_zeta) else "zeta_line"
+        )
     if rhs1_precond_env == "":
         shard_axis = _matvec_shard_axis(op)
         if shard_axis in {"theta", "zeta"} and jax.device_count() > 1:
             pas_tz_estimate = _estimate_rhs1_pas_tz_build_bytes(op)
             pas_tz_max_bytes = _rhs1_pas_tz_max_bytes()
-            pas_shard_xmg_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_SHARD_XMG_MIN", "").strip()
+            pas_shard_xmg_min_env = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_PAS_SHARD_XMG_MIN", ""
+            ).strip()
             try:
-                pas_shard_xmg_min = int(pas_shard_xmg_min_env) if pas_shard_xmg_min_env else 80000
+                pas_shard_xmg_min = (
+                    int(pas_shard_xmg_min_env) if pas_shard_xmg_min_env else 80000
+                )
             except ValueError:
                 pas_shard_xmg_min = 80000
-            fp_shard_xmg_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_SHARD_XMG_MIN", "").strip()
+            fp_shard_xmg_min_env = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_FP_SHARD_XMG_MIN", ""
+            ).strip()
             try:
-                fp_shard_xmg_min = int(fp_shard_xmg_min_env) if fp_shard_xmg_min_env else 120000
+                fp_shard_xmg_min = (
+                    int(fp_shard_xmg_min_env) if fp_shard_xmg_min_env else 120000
+                )
             except ValueError:
                 fp_shard_xmg_min = 120000
             keep_xmg_for_large_pas_er = bool(
@@ -1818,28 +1916,38 @@ def solve_v3_full_system_linear_gmres(
                 and op.fblock.fp is not None
                 and int(op.total_size) >= max(1, int(fp_shard_xmg_min))
             )
-            schwarz_auto_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHWARZ_AUTO_MIN", "").strip()
+            schwarz_auto_min_env = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_SCHWARZ_AUTO_MIN", ""
+            ).strip()
             try:
-                schwarz_auto_min = int(schwarz_auto_min_env) if schwarz_auto_min_env else 120000
+                schwarz_auto_min = (
+                    int(schwarz_auto_min_env) if schwarz_auto_min_env else 120000
+                )
             except ValueError:
                 schwarz_auto_min = 120000
             force_schwarz = bool(schwarz_auto_min_env) and int(schwarz_auto_min) <= 0
             if force_schwarz:
-                rhs1_precond_kind = "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
+                rhs1_precond_kind = (
+                    "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
+                )
             elif _rhs1_sharded_line_override_allowed(rhs1_precond_kind):
                 # Preserve dedicated PAS preconditioners on sharded runs. Demoting
                 # pas_tz/pas_tokamak_theta/pas_ilu to pure line blocks can turn a
                 # parity-clean moderate PAS solve into a long line-preconditioned
                 # Krylov run with no robustness benefit.
-                if rhs1_precond_kind in {"theta_line", "zeta_line"} and rhs1_precond_kind != f"{shard_axis}_line":
+                if (
+                    rhs1_precond_kind in {"theta_line", "zeta_line"}
+                    and rhs1_precond_kind != f"{shard_axis}_line"
+                ):
                     pass
                 elif keep_xmg_for_large_pas_er or keep_xmg_for_large_fp:
                     pass
-                elif (
-                    op.fblock.pas is not None
-                    and pas_tz_estimate > max(0, int(pas_tz_max_bytes))
+                elif op.fblock.pas is not None and pas_tz_estimate > max(
+                    0, int(pas_tz_max_bytes)
                 ):
-                    rhs1_precond_kind = "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
+                    rhs1_precond_kind = (
+                        "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
+                    )
                     if emit is not None:
                         emit(
                             1,
@@ -1848,9 +1956,13 @@ def solve_v3_full_system_linear_gmres(
                             f"{rhs1_precond_kind}",
                         )
                 elif int(op.total_size) >= max(1, int(schwarz_auto_min)):
-                    rhs1_precond_kind = "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
+                    rhs1_precond_kind = (
+                        "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
+                    )
                 else:
-                    rhs1_precond_kind = "theta_line" if shard_axis == "theta" else "zeta_line"
+                    rhs1_precond_kind = (
+                        "theta_line" if shard_axis == "theta" else "zeta_line"
+                    )
     if (
         rhs1_precond_env == ""
         and rhs1_precond_kind == "schur"
@@ -1862,20 +1974,30 @@ def solve_v3_full_system_linear_gmres(
         # Er is near zero, where this branch is typically more than sufficient.
         shard_axis = _matvec_shard_axis(op)
         if shard_axis in {"theta", "zeta"} and jax.device_count() > 1:
-            schur_shard_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHUR_SHARD_MAX", "").strip()
+            schur_shard_max_env = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_SCHUR_SHARD_MAX", ""
+            ).strip()
             try:
-                schur_shard_max = int(schur_shard_max_env) if schur_shard_max_env else 30000
+                schur_shard_max = (
+                    int(schur_shard_max_env) if schur_shard_max_env else 30000
+                )
             except ValueError:
                 schur_shard_max = 30000
-            schur_shard_er_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHUR_SHARD_ER_MAX", "").strip()
+            schur_shard_er_env = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_SCHUR_SHARD_ER_MAX", ""
+            ).strip()
             try:
-                schur_shard_er_max = float(schur_shard_er_env) if schur_shard_er_env else 1.0e-8
+                schur_shard_er_max = (
+                    float(schur_shard_er_env) if schur_shard_er_env else 1.0e-8
+                )
             except ValueError:
                 schur_shard_er_max = 1.0e-8
-            if int(op.total_size) <= max(1, int(schur_shard_max)) and float(er_abs) <= max(
-                0.0, float(schur_shard_er_max)
-            ):
-                rhs1_precond_kind = "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
+            if int(op.total_size) <= max(1, int(schur_shard_max)) and float(
+                er_abs
+            ) <= max(0.0, float(schur_shard_er_max)):
+                rhs1_precond_kind = (
+                    "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
+                )
                 if emit is not None:
                     emit(
                         1,
@@ -1885,7 +2007,8 @@ def solve_v3_full_system_linear_gmres(
     if str(solve_method).strip().lower() in {"dense", "dense_ksp", "dense_row_scaled"}:
         rhs1_precond_kind = None
     pas_tokamak_gpu_tol = _rhs1_pas_tokamak_gpu_tight_tol(
-        enabled=rhs1_gpu_tokamak_pas_tight_gmres or rhs1_precond_kind == "pas_tokamak_theta",
+        enabled=rhs1_gpu_tokamak_pas_tight_gmres
+        or rhs1_precond_kind == "pas_tokamak_theta",
         has_pas=op.fblock.pas is not None,
         has_fp=op.fblock.fp is not None,
         backend=jax.default_backend(),
@@ -1925,7 +2048,9 @@ def solve_v3_full_system_linear_gmres(
         # Use the same cap on single- and multi-device runs. The tighter multi-device
         # cap can under-converge large FP systems.
         fp_auto_maxiter = 800
-        maxiter = min(int(maxiter if maxiter is not None else 400), int(fp_auto_maxiter))
+        maxiter = min(
+            int(maxiter if maxiter is not None else 400), int(fp_auto_maxiter)
+        )
         fp_auto_restart_max = 160
         restart = max(80, min(int(restart), int(fp_auto_restart_max)))
         if emit is not None:
@@ -1934,7 +2059,9 @@ def solve_v3_full_system_linear_gmres(
                 "solve_v3_full_system_linear_gmres: large FP auto-tune "
                 f"(precond=xmg restart={int(restart)} maxiter={int(maxiter)})",
             )
-    structured_fblock_precond_requested = str(rhs1_precond_kind or "").startswith("structured_fblock_")
+    structured_fblock_precond_requested = str(rhs1_precond_kind or "").startswith(
+        "structured_fblock_"
+    )
     rhs1_precond_enabled = (
         rhs1_precond_kind is not None
         and int(op.rhs_mode) == 1
@@ -2021,9 +2148,11 @@ def solve_v3_full_system_linear_gmres(
     use_sharded_matvec = distributed_axis in {"theta", "zeta"} and (not use_implicit)
     distributed_auto_solver = str(krylov_routing_controls.distributed_auto_solver)
     if use_sharded_matvec:
+
         def mv(x):
             return apply_v3_full_system_operator(op, x, allow_sharding=True)
     else:
+
         def mv(x):
             # Use the JIT-compiled operator application to reduce Python overhead in repeated matvecs
             # (e.g. during GMRES iterations and Er scans).
@@ -2225,13 +2354,17 @@ def solve_v3_full_system_linear_gmres(
         def reduce_full(v_full: jnp.ndarray) -> jnp.ndarray:
             return reduce_full_with_indices(v_full, active_idx_jnp)
 
-        def _wrap_pas_precond(precond_fn: Callable[[jnp.ndarray], jnp.ndarray]) -> Callable[[jnp.ndarray], jnp.ndarray]:
+        def _wrap_pas_precond(
+            precond_fn: Callable[[jnp.ndarray], jnp.ndarray],
+        ) -> Callable[[jnp.ndarray], jnp.ndarray]:
             return precond_fn
 
         if use_pas_projection:
             fs_factor = _fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat)
             fs_sum = jnp.sum(fs_factor)
-            fs_sum_safe = jnp.where(fs_sum != 0, fs_sum, jnp.asarray(1.0, dtype=jnp.float64))
+            fs_sum_safe = jnp.where(
+                fs_sum != 0, fs_sum, jnp.asarray(1.0, dtype=jnp.float64)
+            )
             ix0 = _ix_min(bool(op.point_at_x0))
             mask_x = (jnp.arange(int(op.n_x)) >= ix0).astype(jnp.float64)
 
@@ -2252,10 +2385,13 @@ def solve_v3_full_system_linear_gmres(
                 f_proj = _project_pas_f(f_full)
                 return reduce_full(f_proj)
 
-            def _wrap_pas_precond(precond_fn: Callable[[jnp.ndarray], jnp.ndarray]) -> Callable[[jnp.ndarray], jnp.ndarray]:
+            def _wrap_pas_precond(
+                precond_fn: Callable[[jnp.ndarray], jnp.ndarray],
+            ) -> Callable[[jnp.ndarray], jnp.ndarray]:
                 def _apply(v_reduced: jnp.ndarray) -> jnp.ndarray:
                     z_reduced = precond_fn(v_reduced)
                     return _project_reduced(z_reduced)
+
                 return _apply
 
             def expand_reduced(v_reduced: jnp.ndarray) -> jnp.ndarray:
@@ -2270,7 +2406,11 @@ def solve_v3_full_system_linear_gmres(
             def mv_reduced(x_reduced: jnp.ndarray) -> jnp.ndarray:
                 f_full = _expand_active_f(x_reduced)
                 f_proj = _project_pas_f(f_full)
-                x_full = jnp.concatenate([f_proj, zeros_extra], axis=0) if int(op.extra_size) > 0 else f_proj
+                x_full = (
+                    jnp.concatenate([f_proj, zeros_extra], axis=0)
+                    if int(op.extra_size) > 0
+                    else f_proj
+                )
                 y_full = mv(x_full)
                 y_f = y_full[: op.f_size]
                 y_proj = _project_pas_f(y_f)
@@ -2299,16 +2439,21 @@ def solve_v3_full_system_linear_gmres(
                     basis_reduced.append(reduce_full(f_proj))
                 if basis_reduced:
                     basis_au = [mv_reduced(b) for b in basis_reduced]
-                    x0_recycled = _recycled_initial_guess(rhs_reduced, basis_reduced, basis_au)
+                    x0_recycled = _recycled_initial_guess(
+                        rhs_reduced, basis_reduced, basis_au
+                    )
                     if x0_recycled is not None:
                         if x0_reduced is None:
                             x0_reduced = x0_recycled
                         else:
                             r0 = jnp.linalg.norm(mv_reduced(x0_reduced) - rhs_reduced)
                             r1 = jnp.linalg.norm(mv_reduced(x0_recycled) - rhs_reduced)
-                            if jnp.isfinite(r1) and (not jnp.isfinite(r0) or float(r1) < float(r0)):
+                            if jnp.isfinite(r1) and (
+                                not jnp.isfinite(r0) or float(r1) < float(r0)
+                            ):
                                 x0_reduced = x0_recycled
         else:
+
             def expand_reduced(v_reduced: jnp.ndarray) -> jnp.ndarray:
                 return expand_reduced_with_map(v_reduced, full_to_active_jnp)
 
@@ -2333,19 +2478,29 @@ def solve_v3_full_system_linear_gmres(
                     basis_reduced.append(reduce_full(vec))
                 if basis_reduced:
                     basis_au = [mv_reduced(b) for b in basis_reduced]
-                    x0_recycled = _recycled_initial_guess(rhs_reduced, basis_reduced, basis_au)
+                    x0_recycled = _recycled_initial_guess(
+                        rhs_reduced, basis_reduced, basis_au
+                    )
                     if x0_recycled is not None:
                         if x0_reduced is None:
                             x0_reduced = x0_recycled
                         else:
                             r0 = jnp.linalg.norm(mv_reduced(x0_reduced) - rhs_reduced)
                             r1 = jnp.linalg.norm(mv_reduced(x0_recycled) - rhs_reduced)
-                            if jnp.isfinite(r1) and (not jnp.isfinite(r0) or float(r1) < float(r0)):
+                            if jnp.isfinite(r1) and (
+                                not jnp.isfinite(r0) or float(r1) < float(r0)
+                            ):
                                 x0_reduced = x0_recycled
-        target_reduced = max(float(atol), float(tol) * float(jnp.linalg.norm(rhs_reduced)))
+        target_reduced = max(
+            float(atol), float(tol) * float(jnp.linalg.norm(rhs_reduced))
+        )
         target_stage2 = float(target_reduced)
         res_reduced: GMRESSolveResult | None = None
-        if op.fblock.fp is not None and op.fblock.pas is None and (not bool(op.include_phi1)):
+        if (
+            op.fblock.fp is not None
+            and op.fblock.pas is None
+            and (not bool(op.include_phi1))
+        ):
             # FP RHS can have large norms; enforce a stricter absolute target for
             # stage2/strong-preconditioner decisions to avoid premature convergence
             # with loose relative norms.
@@ -2419,7 +2574,9 @@ def solve_v3_full_system_linear_gmres(
             rhs1_bicgstab_kind = None
             if emit is not None:
                 backend_name = str(jax.default_backend()).strip().lower()
-                sparse_label = "CPU" if backend_name == "cpu" else f"{backend_name} host-sparse"
+                sparse_label = (
+                    "CPU" if backend_name == "cpu" else f"{backend_name} host-sparse"
+                )
                 emit(
                     1,
                     "solve_v3_full_system_linear_gmres: "
@@ -2428,13 +2585,20 @@ def solve_v3_full_system_linear_gmres(
 
         if rhs1_bicgstab_kind is not None:
             if emit is not None:
-                emit(1, f"solve_v3_full_system_linear_gmres: RHSMode=1 BiCGStab preconditioner={rhs1_bicgstab_kind}")
+                emit(
+                    1,
+                    f"solve_v3_full_system_linear_gmres: RHSMode=1 BiCGStab preconditioner={rhs1_bicgstab_kind}",
+                )
             if rhs1_bicgstab_kind == "collision":
-                bicgstab_preconditioner_reduced = _build_rhsmode1_collision_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+                bicgstab_preconditioner_reduced = (
+                    _build_rhsmode1_collision_preconditioner(
+                        op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+                    )
                 )
             if use_pas_projection:
-                bicgstab_preconditioner_reduced = _wrap_pas_precond(bicgstab_preconditioner_reduced)
+                bicgstab_preconditioner_reduced = _wrap_pas_precond(
+                    bicgstab_preconditioner_reduced
+                )
 
         # PAS probe shortcut: avoid expensive block/line preconditioner builds when a
         # cheap collision-based preconditioner already provides a strong residual drop.
@@ -2459,12 +2623,14 @@ def solve_v3_full_system_linear_gmres(
         ):
             probe_key = _rhsmode1_precond_cache_key(op, "pas_probe_decision")
             use_collision_precond = _RHSMODE1_PAS_PRECOND_PROBE_CACHE.get(probe_key)
-            use_collision_precond, skip_message = _rhs1_pas_preconditioner_probe_large_collision_skip(
-                config=pas_probe_config,
-                cached_decision=use_collision_precond,
-                total_size=int(op.total_size),
-                constraint_scheme=int(op.constraint_scheme),
-                extra_size=int(op.extra_size),
+            use_collision_precond, skip_message = (
+                _rhs1_pas_preconditioner_probe_large_collision_skip(
+                    config=pas_probe_config,
+                    cached_decision=use_collision_precond,
+                    total_size=int(op.total_size),
+                    constraint_scheme=int(op.constraint_scheme),
+                    extra_size=int(op.extra_size),
+                )
             )
             if skip_message is not None:
                 _RHSMODE1_PAS_PRECOND_PROBE_CACHE[probe_key] = True
@@ -2480,12 +2646,20 @@ def solve_v3_full_system_linear_gmres(
                     probe_x = probe_precond(rhs_reduced)
                     probe_r = rhs_reduced - mv_reduced(probe_x)
                     rhs_norm = float(jnp.linalg.norm(rhs_reduced))
-                    probe_rel = float(jnp.linalg.norm(probe_r)) / rhs_norm if rhs_norm > 0 else 0.0
-                    use_collision_precond = _rhs1_pas_preconditioner_probe_uses_collision(
-                        probe_rel=probe_rel,
-                        rel_max=pas_probe_config.rel_max,
+                    probe_rel = (
+                        float(jnp.linalg.norm(probe_r)) / rhs_norm
+                        if rhs_norm > 0
+                        else 0.0
                     )
-                    _RHSMODE1_PAS_PRECOND_PROBE_CACHE[probe_key] = bool(use_collision_precond)
+                    use_collision_precond = (
+                        _rhs1_pas_preconditioner_probe_uses_collision(
+                            probe_rel=probe_rel,
+                            rel_max=pas_probe_config.rel_max,
+                        )
+                    )
+                    _RHSMODE1_PAS_PRECOND_PROBE_CACHE[probe_key] = bool(
+                        use_collision_precond
+                    )
                     if emit is not None:
                         emit(
                             1,
@@ -2496,7 +2670,10 @@ def solve_v3_full_system_linear_gmres(
                 except Exception as exc:  # noqa: BLE001
                     use_collision_precond = None
                     if emit is not None:
-                        emit(1, f"solve_v3_full_system_linear_gmres: PAS precond probe failed ({type(exc).__name__}: {exc})")
+                        emit(
+                            1,
+                            f"solve_v3_full_system_linear_gmres: PAS precond probe failed ({type(exc).__name__}: {exc})",
+                        )
             if use_collision_precond:
                 preconditioner_reduced = _build_rhsmode1_collision_preconditioner(
                     op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
@@ -2546,7 +2723,9 @@ def solve_v3_full_system_linear_gmres(
             rhs1_precond_kind = precond_build.rhs1_precond_kind
             rhs1_pas_tz_guarded_fallback = bool(precond_build.pas_tz_guarded_fallback)
             rhs1_pas_tz_guarded_axis = precond_build.pas_tz_guarded_axis
-            pas_precond_force_collision = bool(precond_build.pas_precond_force_collision)
+            pas_precond_force_collision = bool(
+                precond_build.pas_precond_force_collision
+            )
             if precond_build.bicgstab_preconditioner is not None:
                 bicgstab_preconditioner_reduced = precond_build.bicgstab_preconditioner
             return precond_build.preconditioner
@@ -2554,23 +2733,33 @@ def solve_v3_full_system_linear_gmres(
         if rhs1_precond_enabled and (not host_dense_shortcut):
             solver_kind = _solver_kind(solve_method)[0]
             build_rhs1 = (
-                (solver_kind != "bicgstab" and solve_method_kind != "dense")
-                or (rhs1_bicgstab_kind == "rhs1" and solve_method_kind != "dense")
-            )
+                solver_kind != "bicgstab" and solve_method_kind != "dense"
+            ) or (rhs1_bicgstab_kind == "rhs1" and solve_method_kind != "dense")
             if build_rhs1 and preconditioner_reduced is None:
-                preconditioner_reduced = _build_rhs1_preconditioner_reduced_with_fallback()
+                preconditioner_reduced = (
+                    _build_rhs1_preconditioner_reduced_with_fallback()
+                )
                 if rhs1_bicgstab_kind == "rhs1":
                     bicgstab_preconditioner_reduced = preconditioner_reduced
-        if (not host_dense_shortcut) and preconditioner_reduced is None and bicgstab_preconditioner_reduced is not None:
+        if (
+            (not host_dense_shortcut)
+            and preconditioner_reduced is None
+            and bicgstab_preconditioner_reduced is not None
+        ):
             preconditioner_reduced = bicgstab_preconditioner_reduced
-        if (not host_dense_shortcut) and preconditioner_reduced is not None and rhs1_precond_kind in {
-            "pas_hybrid",
-            "pas_lite",
-            "pas_tz",
-            "pas_schur",
-            "pas_tokamak_theta",
-            "pas_ilu",
-        }:
+        if (
+            (not host_dense_shortcut)
+            and preconditioner_reduced is not None
+            and rhs1_precond_kind
+            in {
+                "pas_hybrid",
+                "pas_lite",
+                "pas_tz",
+                "pas_schur",
+                "pas_tokamak_theta",
+                "pas_ilu",
+            }
+        ):
             try:
                 probe = preconditioner_reduced(rhs_reduced)
                 probe_ok = bool(jnp.all(jnp.isfinite(probe)))
@@ -2599,18 +2788,25 @@ def solve_v3_full_system_linear_gmres(
         # low-L block correction to improve flow/Mach convergence without dense fallback.
         if (
             not host_dense_shortcut
-            and
-            preconditioner_reduced is not None
+            and preconditioner_reduced is not None
             and int(op.rhs_mode) == 1
             and (not bool(op.include_phi1))
             and op.fblock.fp is not None
             and op.fblock.pas is None
         ):
-            fp_l1_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_HYBRID", "").strip().lower()
+            fp_l1_env = (
+                os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_HYBRID", "").strip().lower()
+            )
             fp_l1_enabled = fp_l1_env in {"1", "true", "yes", "on"}
-            fp_l1_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_HYBRID_MIN", "").strip()
-            fp_l1_lmax_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_HYBRID_LMAX", "").strip()
-            fp_l1_block_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_HYBRID_BLOCK_MAX", "").strip()
+            fp_l1_min_env = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_FP_L1_HYBRID_MIN", ""
+            ).strip()
+            fp_l1_lmax_env = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_FP_L1_HYBRID_LMAX", ""
+            ).strip()
+            fp_l1_block_env = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_FP_L1_HYBRID_BLOCK_MAX", ""
+            ).strip()
             try:
                 fp_l1_min = int(fp_l1_min_env) if fp_l1_min_env else 80000
             except ValueError:
@@ -2685,7 +2881,9 @@ def solve_v3_full_system_linear_gmres(
                 mark=_mark,
             )
             res_reduced = host_dense_shortcut_outcome.result
-            early_dense_shortcut = bool(host_dense_shortcut_outcome.early_dense_shortcut)
+            early_dense_shortcut = bool(
+                host_dense_shortcut_outcome.early_dense_shortcut
+            )
             probe_shortcut = bool(host_dense_shortcut_outcome.probe_shortcut)
         sparse_operator_admission = rhs1_sparse_operator_admission(
             operator_mode=sparse_operator_mode,
@@ -2715,20 +2913,22 @@ def solve_v3_full_system_linear_gmres(
                     ilu_drop_tol=sparse_ilu_drop_tol,
                     fill_factor=sparse_ilu_fill,
                 )
-                a_csr_full, _a_csr_drop, _ilu, _a_dense, _l_dense, _u_dense, _l_unit = _build_sparse_ilu_from_matvec(
-                    matvec=mv_reduced,
-                    n=int(active_size),
-                    dtype=rhs_reduced.dtype,
-                    cache_key=cache_key,
-                    drop_tol=sparse_drop_tol,
-                    drop_rel=sparse_drop_rel,
-                    ilu_drop_tol=sparse_ilu_drop_tol,
-                    fill_factor=sparse_ilu_fill,
-                    build_dense_factors=False,
-                    build_jax_factors=False,
-                    build_ilu=False,
-                    store_dense=False,
-                    emit=emit,
+                a_csr_full, _a_csr_drop, _ilu, _a_dense, _l_dense, _u_dense, _l_unit = (
+                    _build_sparse_ilu_from_matvec(
+                        matvec=mv_reduced,
+                        n=int(active_size),
+                        dtype=rhs_reduced.dtype,
+                        cache_key=cache_key,
+                        drop_tol=sparse_drop_tol,
+                        drop_rel=sparse_drop_rel,
+                        ilu_drop_tol=sparse_ilu_drop_tol,
+                        fill_factor=sparse_ilu_fill,
+                        build_dense_factors=False,
+                        build_jax_factors=False,
+                        build_ilu=False,
+                        store_dense=False,
+                        emit=emit,
+                    )
                 )
 
                 def _mv_sparse(v: jnp.ndarray) -> jnp.ndarray:
@@ -2738,7 +2938,10 @@ def solve_v3_full_system_linear_gmres(
 
                 mv_reduced = _mv_sparse
                 if emit is not None:
-                    emit(0, "solve_v3_full_system_linear_gmres: using sparse operator matvec")
+                    emit(
+                        0,
+                        "solve_v3_full_system_linear_gmres: using sparse operator matvec",
+                    )
             except Exception as exc:  # noqa: BLE001
                 if emit is not None:
                     emit(1, f"sparse_operator: failed ({type(exc).__name__}: {exc})")
@@ -2771,7 +2974,9 @@ def solve_v3_full_system_linear_gmres(
                     matvec_fn=cs0_outcome.replay_matvec,
                     b_vec=cs0_outcome.replay_rhs,
                     precond_fn=None,
-                    x0_vec=None if x0_reduced is None else jnp.asarray(x0_reduced, dtype=jnp.float64),
+                    x0_vec=None
+                    if x0_reduced is None
+                    else jnp.asarray(x0_reduced, dtype=jnp.float64),
                     precond_side="none",
                     solver_kind=_solver_kind("incremental")[0],
                 )
@@ -2801,7 +3006,9 @@ def solve_v3_full_system_linear_gmres(
                 solve_method=str(solve_method),
                 dense_shortcut_ratio=float(dense_shortcut_ratio),
                 dense_fallback_max=int(dense_fallback_max),
-                sparse_prefer_over_dense_shortcut=bool(sparse_prefer_over_dense_shortcut),
+                sparse_prefer_over_dense_shortcut=bool(
+                    sparse_prefer_over_dense_shortcut
+                ),
                 gmres_precond_side=gmres_precond_side,
             ),
             replay_state=ksp_replay,
@@ -2903,23 +3110,27 @@ def solve_v3_full_system_linear_gmres(
                         "solve_v3_full_system_linear_gmres: skipping initial Krylov "
                         f"({reason}) -> sparse ILU",
                     )
-                res_reduced, x0_reduced = rhs1_seed_skip_primary_krylov_and_update_replay(
-                    replay_state=ksp_replay,
-                    context=RHS1SkipPrimaryKrylovSeedContext(
-                        matvec_fn=mv_reduced,
-                        b_vec=rhs_reduced,
-                        precond_fn=preconditioner_reduced,
-                        x0_vec=x0_reduced,
-                        precond_side=gmres_precond_side,
-                        solver_kind=_solver_kind(solve_method)[0],
-                        zero_like=jnp.zeros_like,
-                        norm=jnp.linalg.norm,
-                        inf_residual=lambda: jnp.asarray(np.inf, dtype=jnp.float64),
-                        result_factory=lambda x, residual_norm: GMRESSolveResult(
-                            x=x,
-                            residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+                res_reduced, x0_reduced = (
+                    rhs1_seed_skip_primary_krylov_and_update_replay(
+                        replay_state=ksp_replay,
+                        context=RHS1SkipPrimaryKrylovSeedContext(
+                            matvec_fn=mv_reduced,
+                            b_vec=rhs_reduced,
+                            precond_fn=preconditioner_reduced,
+                            x0_vec=x0_reduced,
+                            precond_side=gmres_precond_side,
+                            solver_kind=_solver_kind(solve_method)[0],
+                            zero_like=jnp.zeros_like,
+                            norm=jnp.linalg.norm,
+                            inf_residual=lambda: jnp.asarray(np.inf, dtype=jnp.float64),
+                            result_factory=lambda x, residual_norm: GMRESSolveResult(
+                                x=x,
+                                residual_norm=jnp.asarray(
+                                    residual_norm, dtype=jnp.float64
+                                ),
+                            ),
                         ),
-                    ),
+                    )
                 )
             else:
                 res_reduced, residual_vec, _primary_elapsed_s = (
@@ -3066,15 +3277,20 @@ def solve_v3_full_system_linear_gmres(
         stage2_decision = rhs1_stage2_trigger_decision(
             res_ratio=float(res_ratio),
             use_dkes=bool(use_dkes),
-            has_fp=op.fblock.fp is not None, include_phi1=bool(op.include_phi1),
+            has_fp=op.fblock.fp is not None,
+            include_phi1=bool(op.include_phi1),
             residual_norm=float(res_reduced.residual_norm),
             has_pas=op.fblock.pas is not None,
             rhs1_precond_kind=rhs1_precond_kind,
             pas_tz_guarded_fallback=bool(rhs1_pas_tz_guarded_fallback),
             pas_tz_guarded_retry=rhs1_pas_tz_guarded_stage2_retry(),
-            cpu_large_xblock_shortcut=bool(cpu_large_xblock_shortcut), cpu_large_sparse_shortcut=bool(cpu_large_sparse_shortcut),
+            cpu_large_xblock_shortcut=bool(cpu_large_xblock_shortcut),
+            cpu_large_sparse_shortcut=bool(cpu_large_sparse_shortcut),
         )
-        stage2_trigger, fp_force_stage2 = stage2_decision.stage2_trigger, stage2_decision.fp_force_stage2
+        stage2_trigger, fp_force_stage2 = (
+            stage2_decision.stage2_trigger,
+            stage2_decision.fp_force_stage2,
+        )
         if emit is not None:
             for _level, _message in stage2_decision.messages:
                 emit(_level, _message)
@@ -3106,29 +3322,33 @@ def solve_v3_full_system_linear_gmres(
             include_phi1=bool(op.include_phi1),
         )
         if bicgstab_fallback.run_fallback:
-            res_reduced, residual_vec, preconditioner_reduced, _accepted, _bicgstab_fallback_elapsed_s = (
-                rhs1_run_bicgstab_gmres_fallback_if_allowed(
-                    allowed=True,
-                    replay_state=ksp_replay,
-                    current_result=res_reduced,
-                    current_residual_vec=residual_vec,
-                    matvec_fn=mv_reduced,
-                    b_vec=rhs_reduced,
-                    precond_fn=preconditioner_reduced,
-                    preconditioner_enabled=bool(rhs1_precond_enabled),
-                    build_preconditioner=_build_rhs1_preconditioner_reduced_with_fallback,
-                    x0_vec=x0_reduced,
-                    tol=float(tol),
-                    atol=float(atol),
-                    restart=int(restart),
-                    maxiter=maxiter,
-                    precond_side=gmres_precond_side,
-                    solve_linear=_solve_linear,
-                    target=float(bicgstab_fallback.target),
-                    returns_residual_vec=False,
-                    result_ready=_block_gmres_result_ready,
-                    emit=emit,
-                )
+            (
+                res_reduced,
+                residual_vec,
+                preconditioner_reduced,
+                _accepted,
+                _bicgstab_fallback_elapsed_s,
+            ) = rhs1_run_bicgstab_gmres_fallback_if_allowed(
+                allowed=True,
+                replay_state=ksp_replay,
+                current_result=res_reduced,
+                current_residual_vec=residual_vec,
+                matvec_fn=mv_reduced,
+                b_vec=rhs_reduced,
+                precond_fn=preconditioner_reduced,
+                preconditioner_enabled=bool(rhs1_precond_enabled),
+                build_preconditioner=_build_rhs1_preconditioner_reduced_with_fallback,
+                x0_vec=x0_reduced,
+                tol=float(tol),
+                atol=float(atol),
+                restart=int(restart),
+                maxiter=maxiter,
+                precond_side=gmres_precond_side,
+                solve_linear=_solve_linear,
+                target=float(bicgstab_fallback.target),
+                returns_residual_vec=False,
+                result_ready=_block_gmres_result_ready,
+                emit=emit,
             )
         stage2_retry_admission = rhs1_stage2_retry_admission_decision(
             residual_norm=float(res_reduced.residual_norm),
@@ -3155,32 +3375,36 @@ def solve_v3_full_system_linear_gmres(
                 tokamak_pas=bool(tokamak_pas),
             )
             stage2_method = str(stage2_controls.method)
-            res_reduced, residual_vec, preconditioner_reduced, _accepted, _stage2_elapsed_s = (
-                rhs1_run_stage2_retry_if_allowed(
-                    allowed=True,
-                    replay_state=ksp_replay,
-                    current_result=res_reduced,
-                    current_residual_vec=residual_vec,
-                    matvec_fn=mv_reduced,
-                    b_vec=rhs_reduced,
-                    precond_fn=preconditioner_reduced,
-                    preconditioner_enabled=bool(rhs1_precond_enabled),
-                    build_preconditioner=_build_rhs1_preconditioner_reduced_with_fallback,
-                    controls=stage2_controls,
-                    tol=float(tol),
-                    atol=float(atol),
-                    precond_side=gmres_precond_side,
-                    solve_linear=_solve_linear,
-                    solver_kind=_solver_kind(stage2_method)[0],
-                    candidate_name=f"stage2_reduced:{stage2_method}",
-                    baseline_name="current_reduced",
-                    target=float(target_reduced),
-                    peak_rss_mb=_rss_mb,
-                    returns_residual_vec=False,
-                    result_ready=_block_gmres_result_ready,
-                    emit=emit,
-                    label="stage2 reduced GMRES",
-                )
+            (
+                res_reduced,
+                residual_vec,
+                preconditioner_reduced,
+                _accepted,
+                _stage2_elapsed_s,
+            ) = rhs1_run_stage2_retry_if_allowed(
+                allowed=True,
+                replay_state=ksp_replay,
+                current_result=res_reduced,
+                current_residual_vec=residual_vec,
+                matvec_fn=mv_reduced,
+                b_vec=rhs_reduced,
+                precond_fn=preconditioner_reduced,
+                preconditioner_enabled=bool(rhs1_precond_enabled),
+                build_preconditioner=_build_rhs1_preconditioner_reduced_with_fallback,
+                controls=stage2_controls,
+                tol=float(tol),
+                atol=float(atol),
+                precond_side=gmres_precond_side,
+                solve_linear=_solve_linear,
+                solver_kind=_solver_kind(stage2_method)[0],
+                candidate_name=f"stage2_reduced:{stage2_method}",
+                baseline_name="current_reduced",
+                target=float(target_reduced),
+                peak_rss_mb=_rss_mb,
+                returns_residual_vec=False,
+                result_ready=_block_gmres_result_ready,
+                emit=emit,
+                label="stage2 reduced GMRES",
             )
         pas_fast_accept = _rhsmode1_pas_fast_accept(
             op=op,
@@ -3218,12 +3442,15 @@ def solve_v3_full_system_linear_gmres(
             res_reduced,
             hook="early_active_dof",
             setup=qi_device_seed_setup,
-            enabled=bool(qi_device_seed_setup.early_enabled or qi_device_seed_setup.skip_strong),
+            enabled=bool(
+                qi_device_seed_setup.early_enabled or qi_device_seed_setup.skip_strong
+            ),
         )
         res_reduced = early_qi_attempt.result
 
         pas_smoother_allowed = (
-            rhs1_precond_kind in {"pas_lite", "pas_hybrid", "pas_tz", "pas_schur", "pas_tokamak_theta"}
+            rhs1_precond_kind
+            in {"pas_lite", "pas_hybrid", "pas_tz", "pas_schur", "pas_tokamak_theta"}
             and preconditioner_reduced is not None
             and _rhsmode1_pas_adaptive_smoother_allowed(
                 op=op,
@@ -3233,33 +3460,39 @@ def solve_v3_full_system_linear_gmres(
                 use_implicit=bool(use_implicit),
             )
         )
-        smoother_controls = rhs1_pas_adaptive_smoother_controls_from_env() if pas_smoother_allowed else None
-        res_reduced, residual_vec, _accepted = rhs1_run_adaptive_smoother_and_update_replay(
-            allowed=bool(pas_smoother_allowed),
-            replay_state=ksp_replay,
-            current_result=res_reduced,
-            current_residual_vec=residual_vec,
-            smoother_factory=lambda result: adaptive_pas_smoother(
-                matvec=mv_reduced,
-                rhs=rhs_reduced,
-                preconditioner=preconditioner_reduced,
-                x0=result.x,
-                target=float(target_reduced),
-                omega=float(smoother_controls.omega),
-                max_sweeps=int(smoother_controls.max_sweeps),
-            ),
-            result_factory=lambda *, x, residual_norm: GMRESSolveResult(
-                x=x,
-                residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
-            ),
-            candidate_residual_vec=residual_vec,
-            matvec_fn=mv_reduced,
-            b_vec=rhs_reduced,
-            precond_fn=preconditioner_reduced,
-            restart=restart,
-            maxiter=maxiter,
-            precond_side=gmres_precond_side,
-            solver_kind=_solver_kind("incremental")[0],
+        smoother_controls = (
+            rhs1_pas_adaptive_smoother_controls_from_env()
+            if pas_smoother_allowed
+            else None
+        )
+        res_reduced, residual_vec, _accepted = (
+            rhs1_run_adaptive_smoother_and_update_replay(
+                allowed=bool(pas_smoother_allowed),
+                replay_state=ksp_replay,
+                current_result=res_reduced,
+                current_residual_vec=residual_vec,
+                smoother_factory=lambda result: adaptive_pas_smoother(
+                    matvec=mv_reduced,
+                    rhs=rhs_reduced,
+                    preconditioner=preconditioner_reduced,
+                    x0=result.x,
+                    target=float(target_reduced),
+                    omega=float(smoother_controls.omega),
+                    max_sweeps=int(smoother_controls.max_sweeps),
+                ),
+                result_factory=lambda *, x, residual_norm: GMRESSolveResult(
+                    x=x,
+                    residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+                ),
+                candidate_residual_vec=residual_vec,
+                matvec_fn=mv_reduced,
+                b_vec=rhs_reduced,
+                precond_fn=preconditioner_reduced,
+                restart=restart,
+                maxiter=maxiter,
+                precond_side=gmres_precond_side,
+                solver_kind=_solver_kind("incremental")[0],
+            )
         )
         if fp_force_strong:
             strong_precond_trigger = True
@@ -3273,31 +3506,35 @@ def solve_v3_full_system_linear_gmres(
             has_pas=op.fblock.pas is not None,
             strong_precond_trigger=bool(strong_precond_trigger),
         )
-        res_reduced, residual_vec, bicgstab_preconditioner_reduced, _accepted, _collision_elapsed_s = (
-            rhs1_run_collision_retry_if_allowed(
-                allowed=bool(collision_retry_allowed),
-                replay_state=ksp_replay,
-                current_result=res_reduced,
-                current_residual_vec=residual_vec,
-                matvec_fn=mv_reduced,
-                b_vec=rhs_reduced,
-                precond_fn=bicgstab_preconditioner_reduced,
-                build_preconditioner=lambda: _build_rhsmode1_collision_preconditioner(
-                    op=op,
-                    reduce_full=reduce_full,
-                    expand_reduced=expand_reduced,
-                ),
-                tol=float(tol),
-                atol=float(atol),
-                restart=int(restart),
-                maxiter=maxiter,
-                precond_side=gmres_precond_side,
-                solve_linear=_solve_linear,
-                solver_kind=_solver_kind("incremental")[0],
-                target=float(target_reduced),
-                returns_residual_vec=False,
-                emit=emit,
-            )
+        (
+            res_reduced,
+            residual_vec,
+            bicgstab_preconditioner_reduced,
+            _accepted,
+            _collision_elapsed_s,
+        ) = rhs1_run_collision_retry_if_allowed(
+            allowed=bool(collision_retry_allowed),
+            replay_state=ksp_replay,
+            current_result=res_reduced,
+            current_residual_vec=residual_vec,
+            matvec_fn=mv_reduced,
+            b_vec=rhs_reduced,
+            precond_fn=bicgstab_preconditioner_reduced,
+            build_preconditioner=lambda: _build_rhsmode1_collision_preconditioner(
+                op=op,
+                reduce_full=reduce_full,
+                expand_reduced=expand_reduced,
+            ),
+            tol=float(tol),
+            atol=float(atol),
+            restart=int(restart),
+            maxiter=maxiter,
+            precond_side=gmres_precond_side,
+            solve_linear=_solve_linear,
+            solver_kind=_solver_kind("incremental")[0],
+            target=float(target_reduced),
+            returns_residual_vec=False,
+            emit=emit,
         )
         large_cpu_sparse_rescue_active = _rhsmode1_large_cpu_sparse_rescue_allowed(
             op=op,
@@ -3344,7 +3581,9 @@ def solve_v3_full_system_linear_gmres(
         )
         strong_control = rhs1_resolved_strong_preconditioner_control(
             strong_precond_env=strong_precond_env,
-            has_extra_constraint_block=int(op.constraint_scheme) == 2 and int(op.extra_size) > 0 and (not use_pas_projection),
+            has_extra_constraint_block=int(op.constraint_scheme) == 2
+            and int(op.extra_size) > 0
+            and (not use_pas_projection),
             has_fp=op.fblock.fp is not None,
             has_pas=op.fblock.pas is not None,
             size=int(active_size),
@@ -3361,7 +3600,9 @@ def solve_v3_full_system_linear_gmres(
         )
         if emit is not None:
             backend_name = str(jax.default_backend()).strip().lower()
-            sparse_label = "large CPU" if backend_name == "cpu" else f"{backend_name} host-sparse"
+            sparse_label = (
+                "large CPU" if backend_name == "cpu" else f"{backend_name} host-sparse"
+            )
             for message in rhs1_strong_preconditioner_control_messages(
                 strong_control,
                 residual_norm=float(res_reduced.residual_norm),
@@ -3379,7 +3620,8 @@ def solve_v3_full_system_linear_gmres(
         reduced_strong_selection = resolve_rhs1_reduced_strong_preconditioner_selection(
             strong_precond_env=strong_precond_env,
             control=strong_control,
-            has_extra_constraint_block=int(op.constraint_scheme) == 2 and int(op.extra_size) > 0,
+            has_extra_constraint_block=int(op.constraint_scheme) == 2
+            and int(op.extra_size) > 0,
             has_fp=op.fblock.fp is not None,
             has_pas=op.fblock.pas is not None,
             geom_scheme=int(geom_scheme),
@@ -3525,10 +3767,14 @@ def solve_v3_full_system_linear_gmres(
         sparse_sxblock_rescue_active = bool(sparse_order.sxblock_rescue_active)
         large_cpu_sparse_label = "large CPU sparse"
         if sparse_order.reason_size_large_cpu:
-            sparse_exact_lu = _rhsmode1_large_cpu_sparse_exact_lu_allowed(active_size=int(active_size))
+            sparse_exact_lu = _rhsmode1_large_cpu_sparse_exact_lu_allowed(
+                active_size=int(active_size)
+            )
             backend_name = str(jax.default_backend()).strip().lower()
             large_cpu_sparse_label = (
-                "large CPU sparse" if backend_name == "cpu" else f"{backend_name} host-sparse"
+                "large CPU sparse"
+                if backend_name == "cpu"
+                else f"{backend_name} host-sparse"
             )
         if emit is not None:
             rescue_kind = "xblock" if sparse_xblock_rescue_active else "sxblock"
@@ -3560,7 +3806,11 @@ def solve_v3_full_system_linear_gmres(
         sparse_xblock_rescue_seed_refines_performed: int | None = None
         sparse_xblock_rescue_candidate_residual: float | None = None
         sparse_xblock_rescue_candidate_accepted = False
-        sparse_xblock_rescue_reason = "not_needed" if float(res_reduced.residual_norm) <= target_reduced else "inactive"
+        sparse_xblock_rescue_reason = (
+            "not_needed"
+            if float(res_reduced.residual_norm) <= target_reduced
+            else "inactive"
+        )
         fp_xblock_global_correction_allowed = False
         fp_xblock_global_correction_attempted = False
         fp_xblock_global_correction_accepted = False
@@ -3592,7 +3842,11 @@ def solve_v3_full_system_linear_gmres(
                 qi_device_seed_setup.pre_sparse_enabled
                 and sparse_enabled
                 and float(res_reduced.residual_norm) > target_reduced
-                and not bool(rhsmode1_general_metadata.get("xblock_qi_device_preconditioner_built", False))
+                and not bool(
+                    rhsmode1_general_metadata.get(
+                        "xblock_qi_device_preconditioner_built", False
+                    )
+                )
             ),
         )
         res_reduced = pre_sparse_qi_attempt.result
@@ -3633,12 +3887,18 @@ def solve_v3_full_system_linear_gmres(
                         )
                     )
                     precond_sparse_xblock = sparse_xblock_build.preconditioner
-                    sparse_xblock_preconditioner_xi = int(sparse_xblock_build.preconditioner_xi)
-                    assembled_host_fp = bool(sparse_xblock_build.force_assembled_host_fp)
+                    sparse_xblock_preconditioner_xi = int(
+                        sparse_xblock_build.preconditioner_xi
+                    )
+                    assembled_host_fp = bool(
+                        sparse_xblock_build.force_assembled_host_fp
+                    )
                     precond_sparse_xblock_current = precond_sparse_xblock
                     sparse_xblock_rescue_built = True
                     sparse_xblock_rescue_assembled_host_fp = bool(assembled_host_fp)
-                    sparse_xblock_rescue_preconditioner_xi = int(sparse_xblock_preconditioner_xi)
+                    sparse_xblock_rescue_preconditioner_xi = int(
+                        sparse_xblock_preconditioner_xi
+                    )
                     sparse_xblock_solve = run_sparse_xblock_rescue_solve_stage(
                         context=SparseXBlockRescueSolveContext(
                             preconditioner=precond_sparse_xblock,
@@ -3667,8 +3927,12 @@ def solve_v3_full_system_linear_gmres(
                             sparse_xblock_solve.candidate_residual
                         )
                     if sparse_xblock_solve.seed_residual is not None:
-                        explicit_fp_xblock_seed_residual = float(sparse_xblock_solve.seed_residual)
-                        sparse_xblock_rescue_seed_residual = float(sparse_xblock_solve.seed_residual)
+                        explicit_fp_xblock_seed_residual = float(
+                            sparse_xblock_solve.seed_residual
+                        )
+                        sparse_xblock_rescue_seed_residual = float(
+                            sparse_xblock_solve.seed_residual
+                        )
                     if sparse_xblock_solve.seed_improvement_ratio is not None:
                         explicit_fp_xblock_seed_improvement_ratio = float(
                             sparse_xblock_solve.seed_improvement_ratio
@@ -3725,22 +3989,30 @@ def solve_v3_full_system_linear_gmres(
                         emit(1, f"xblock_sparse: failed ({type(exc).__name__}: {exc})")
             else:
                 sparse_xblock_rescue_reason = "inactive_by_policy"
-            fp_xblock_global_correction_allowed = _rhsmode1_fp_xblock_global_correction_allowed(
-                op=op,
-                active_size=int(active_size),
-                residual_norm=float(res_reduced.residual_norm),
-                target=float(target_reduced),
-                used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
-                used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
-                sparse_xblock_candidate_accepted=bool(sparse_xblock_rescue_candidate_accepted),
-                use_implicit=bool(use_implicit),
+            fp_xblock_global_correction_allowed = (
+                _rhsmode1_fp_xblock_global_correction_allowed(
+                    op=op,
+                    active_size=int(active_size),
+                    residual_norm=float(res_reduced.residual_norm),
+                    target=float(target_reduced),
+                    used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
+                    used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
+                    sparse_xblock_candidate_accepted=bool(
+                        sparse_xblock_rescue_candidate_accepted
+                    ),
+                    use_implicit=bool(use_implicit),
+                )
             )
             if fp_xblock_global_correction_allowed:
                 fp_xblock_global_correction_attempted = True
                 fp_xblock_global_correction_reason = "started"
-                correction_precond = precond_sparse_xblock_current or preconditioner_reduced
+                correction_precond = (
+                    precond_sparse_xblock_current or preconditioner_reduced
+                )
                 fp_xblock_global_correction_preconditioner = (
-                    "sparse_xblock" if precond_sparse_xblock_current is not None else "base"
+                    "sparse_xblock"
+                    if precond_sparse_xblock_current is not None
+                    else "base"
                 )
                 correction_steps = _rhs1_int_env(
                     "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_STEPS",
@@ -3808,11 +4080,25 @@ def solve_v3_full_system_linear_gmres(
                     fp_xblock_global_correction.elapsed_s
                 )
             else:
-                correction_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION", "").strip().lower()
-                fp_xblock_global_correction_reason = (
-                    "disabled" if correction_env not in {"1", "true", "yes", "on"} else "policy_guard"
+                correction_env = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION", ""
+                    )
+                    .strip()
+                    .lower()
                 )
-            highx_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION", "").strip().lower()
+                fp_xblock_global_correction_reason = (
+                    "disabled"
+                    if correction_env not in {"1", "true", "yes", "on"}
+                    else "policy_guard"
+                )
+            highx_env = (
+                os.environ.get(
+                    "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION", ""
+                )
+                .strip()
+                .lower()
+            )
             highx_enabled = highx_env in {"1", "true", "yes", "on"}
             highx_active_max = _rhs1_int_env(
                 "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_MAX",
@@ -3831,7 +4117,10 @@ def solve_v3_full_system_linear_gmres(
                 and bool(explicit_fp_xblock_seed_used)
                 and bool(sparse_xblock_rescue_candidate_accepted)
                 and float(res_reduced.residual_norm) > float(target_reduced)
-                and (int(highx_active_max) <= 0 or int(active_size) <= int(highx_active_max))
+                and (
+                    int(highx_active_max) <= 0
+                    or int(active_size) <= int(highx_active_max)
+                )
                 and reduce_full is not None
                 and expand_reduced is not None
             )
@@ -3946,14 +4235,16 @@ def solve_v3_full_system_linear_gmres(
                 fp_xblock_highx_residual_correction_reason = (
                     "disabled" if not highx_enabled else "policy_guard"
                 )
-            skip_global_sparse_after_xblock = _rhsmode1_skip_global_sparse_after_xblock_allowed(
-                op=op,
-                active_size=int(active_size),
-                residual_norm=float(res_reduced.residual_norm),
-                target=float(target_reduced),
-                used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
-                used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
-                use_implicit=bool(use_implicit),
+            skip_global_sparse_after_xblock = (
+                _rhsmode1_skip_global_sparse_after_xblock_allowed(
+                    op=op,
+                    active_size=int(active_size),
+                    residual_norm=float(res_reduced.residual_norm),
+                    target=float(target_reduced),
+                    used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
+                    used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
+                    use_implicit=bool(use_implicit),
+                )
             )
             if (
                 large_cpu_sparse_rescue_active
@@ -3965,7 +4256,9 @@ def solve_v3_full_system_linear_gmres(
                     used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
                     used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
                     xblock_seed_residual=float(explicit_fp_xblock_seed_residual),
-                    xblock_seed_improvement_ratio=float(explicit_fp_xblock_seed_improvement_ratio),
+                    xblock_seed_improvement_ratio=float(
+                        explicit_fp_xblock_seed_improvement_ratio
+                    ),
                     use_implicit=bool(use_implicit),
                 )
             ):
@@ -4020,9 +4313,8 @@ def solve_v3_full_system_linear_gmres(
                     )
                 )
                 res_reduced = sxblock_rescue.result
-            if (
-                float(res_reduced.residual_norm) > target_reduced
-                and (not skip_global_sparse_after_xblock)
+            if float(res_reduced.residual_norm) > target_reduced and (
+                not skip_global_sparse_after_xblock
             ):
                 reduced_sparse_retry = run_rhs1_full_sparse_retry_stage(
                     RHS1FullSparseRetryStageContext(
@@ -4133,55 +4425,59 @@ def solve_v3_full_system_linear_gmres(
             )
         )
         dense_fallback_max = _rhsmode1_dense_fallback_max(op)
-        res_reduced, residual_vec, _accepted = run_rhs1_reduced_dense_fallback_admission_stage(
-            context=RHS1ReducedDenseFallbackAdmissionStageContext(
-                stage_context=RHS1ReducedDenseFallbackStageContext(
-                    candidate_context=RHS1ReducedDenseFallbackCandidateContext(
-                        matvec=mv_reduced,
-                        rhs=rhs_reduced,
-                        x0=res_reduced.x,
-                        active_size=int(active_size),
-                        constraint_scheme=int(op.constraint_scheme),
-                        has_fp=op.fblock.fp is not None,
-                        has_pas=op.fblock.pas is not None,
-                        dense_matrix_cache=dense_matrix_cache,
-                        dense_backend_allowed=bool(dense_backend_allowed),
-                        use_implicit=bool(use_implicit),
-                        tol=float(tol),
-                        atol=float(atol),
-                        restart=int(restart),
-                        maxiter=maxiter,
-                        gmres_precond_side=gmres_precond_side,
+        res_reduced, residual_vec, _accepted = (
+            run_rhs1_reduced_dense_fallback_admission_stage(
+                context=RHS1ReducedDenseFallbackAdmissionStageContext(
+                    stage_context=RHS1ReducedDenseFallbackStageContext(
+                        candidate_context=RHS1ReducedDenseFallbackCandidateContext(
+                            matvec=mv_reduced,
+                            rhs=rhs_reduced,
+                            x0=res_reduced.x,
+                            active_size=int(active_size),
+                            constraint_scheme=int(op.constraint_scheme),
+                            has_fp=op.fblock.fp is not None,
+                            has_pas=op.fblock.pas is not None,
+                            dense_matrix_cache=dense_matrix_cache,
+                            dense_backend_allowed=bool(dense_backend_allowed),
+                            use_implicit=bool(use_implicit),
+                            tol=float(tol),
+                            atol=float(atol),
+                            restart=int(restart),
+                            maxiter=maxiter,
+                            gmres_precond_side=gmres_precond_side,
+                        ),
+                        current_result=res_reduced,
+                        current_residual_vec=residual_vec,
+                        target=float(target_reduced),
                     ),
-                    current_result=res_reduced,
-                    current_residual_vec=residual_vec,
-                    target=float(target_reduced),
+                    dense_fallback_max=int(dense_fallback_max),
+                    residual_norm_true=float(residual_norm_true),
+                    reported_residual_norm=float(res_reduced.residual_norm),
+                    active_size=int(active_size),
+                    rhs_mode=int(op.rhs_mode),
+                    include_phi1=bool(op.include_phi1),
+                    has_fp=op.fblock.fp is not None,
+                    disable_dense_pas=bool(disable_dense_pas),
+                    any_dense_path_allowed=bool(
+                        dense_backend_allowed
+                        or host_dense_fallback_allowed
+                        or dense_krylov_allowed
+                    ),
+                    host_sparse_direct_used=bool(host_sparse_direct_used),
+                    backend=jax.default_backend(),
+                    host_sparse_skip_ratio=float(
+                        _rhsmode1_host_sparse_skip_dense_ratio()
+                    ),
+                    cs0_dense_fallback_allowed=bool(cs0_dense_fallback_allowed),
+                    cs0_sparse_first=bool(cs0_sparse_first),
+                    cs0_petsc_compat=bool(cs0_petsc_compat),
                 ),
-                dense_fallback_max=int(dense_fallback_max),
-                residual_norm_true=float(residual_norm_true),
-                reported_residual_norm=float(res_reduced.residual_norm),
-                active_size=int(active_size),
-                rhs_mode=int(op.rhs_mode),
-                include_phi1=bool(op.include_phi1),
-                has_fp=op.fblock.fp is not None,
-                disable_dense_pas=bool(disable_dense_pas),
-                any_dense_path_allowed=bool(
-                    dense_backend_allowed
-                    or host_dense_fallback_allowed
-                    or dense_krylov_allowed
-                ),
-                host_sparse_direct_used=bool(host_sparse_direct_used),
-                backend=jax.default_backend(),
-                host_sparse_skip_ratio=float(_rhsmode1_host_sparse_skip_dense_ratio()),
-                cs0_dense_fallback_allowed=bool(cs0_dense_fallback_allowed),
-                cs0_sparse_first=bool(cs0_sparse_first),
-                cs0_petsc_compat=bool(cs0_petsc_compat),
-            ),
-            replay_state=ksp_replay,
-            accept_candidate=rhs1_accept_measured_candidate_and_update_replay,
-            emit=emit,
-            mark=_mark,
-            peak_rss_mb=_rss_mb,
+                replay_state=ksp_replay,
+                accept_candidate=rhs1_accept_measured_candidate_and_update_replay,
+                emit=emit,
+                mark=_mark,
+                peak_rss_mb=_rss_mb,
+            )
         )
         if (
             _rhsmode1_fast_post_xblock_polish_allowed(
@@ -4235,7 +4531,8 @@ def solve_v3_full_system_linear_gmres(
             polish_precond = preconditioner_reduced
             lmax_precond_for_l1: Callable[[jnp.ndarray], jnp.ndarray] | None = None
             need_hybrid_fp_precond = fp_targeted_polish or (
-                fp_polish_controls.steps > 0 and int(active_size) >= fp_polish_controls.min_size
+                fp_polish_controls.steps > 0
+                and int(active_size) >= fp_polish_controls.min_size
             )
             if fp_polish_controls.hybrid and need_hybrid_fp_precond:
                 precond_collision = _build_rhsmode1_collision_preconditioner(
@@ -4252,17 +4549,22 @@ def solve_v3_full_system_linear_gmres(
 
                 polish_precond = _hybrid_precond
 
-            if fp_polish_controls.steps > 0 and int(active_size) >= fp_polish_controls.min_size:
+            if (
+                fp_polish_controls.steps > 0
+                and int(active_size) >= fp_polish_controls.min_size
+            ):
                 polish_base_residual = float(res_reduced.residual_norm)
-                res_polish, polish_improved = _apply_damped_preconditioned_residual_polish(
-                    current_result=res_reduced,
-                    rhs=rhs_reduced,
-                    matvec=mv_reduced,
-                    preconditioner=polish_precond,
-                    target=float(target_reduced),
-                    steps=int(fp_polish_controls.steps),
-                    omega=float(fp_polish_controls.omega),
-                    backtrack=int(fp_polish_controls.backtrack),
+                res_polish, polish_improved = (
+                    _apply_damped_preconditioned_residual_polish(
+                        current_result=res_reduced,
+                        rhs=rhs_reduced,
+                        matvec=mv_reduced,
+                        preconditioner=polish_precond,
+                        target=float(target_reduced),
+                        steps=int(fp_polish_controls.steps),
+                        omega=float(fp_polish_controls.omega),
+                        backtrack=int(fp_polish_controls.backtrack),
+                    )
                 )
                 if polish_improved:
                     if emit is not None:
@@ -4280,11 +4582,17 @@ def solve_v3_full_system_linear_gmres(
                 n_zeta=int(op.n_zeta),
             )
             if fp_targeted_polish and float(res_reduced.residual_norm) > target_reduced:
-                nxi_for_x_np = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+                nxi_for_x_np = np.asarray(
+                    op.fblock.collisionless.n_xi_for_x, dtype=np.int32
+                )
                 max_l = int(np.max(nxi_for_x_np)) if nxi_for_x_np.size else 0
                 lmax_use = max(0, min(int(max_l), int(fp_lmax_controls.lmax_default)))
                 block_size = int(lmax_use) * int(op.n_theta) * int(op.n_zeta)
-                if lmax_use > 0 and block_size > 0 and block_size <= int(fp_lmax_controls.block_max):
+                if (
+                    lmax_use > 0
+                    and block_size > 0
+                    and block_size <= int(fp_lmax_controls.block_max)
+                ):
                     if emit is not None:
                         emit(
                             1,
@@ -4312,7 +4620,9 @@ def solve_v3_full_system_linear_gmres(
                             solve_method_val="incremental",
                             precond_side=gmres_precond_side,
                         )
-                        if float(res_lmax.residual_norm) < float(res_reduced.residual_norm):
+                        if float(res_lmax.residual_norm) < float(
+                            res_reduced.residual_norm
+                        ):
                             if emit is not None:
                                 emit(
                                     1,
@@ -4322,13 +4632,18 @@ def solve_v3_full_system_linear_gmres(
                             res_reduced = res_lmax
                     except Exception as exc:  # noqa: BLE001
                         if emit is not None:
-                            emit(1, f"solve_v3_full_system_linear_gmres: FP low-L polish failed ({type(exc).__name__}: {exc})")
+                            emit(
+                                1,
+                                f"solve_v3_full_system_linear_gmres: FP low-L polish failed ({type(exc).__name__}: {exc})",
+                            )
             # L=1 targeted polish (flow channel): solve a small projected system
             # on the L=1 active modes only. This is a cheap way to improve flow/Mach
             # parity when the full-system solve stalls above the strict target.
             l1_polish_controls = rhs1_fp_l1_polish_controls_from_env()
             if fp_targeted_polish and l1_polish_controls.enabled:
-                nxi_for_x_np = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+                nxi_for_x_np = np.asarray(
+                    op.fblock.collisionless.n_xi_for_x, dtype=np.int32
+                )
                 l1_active_idx_np = fp_pitch_mode_active_indices(
                     n_species=int(op.n_species),
                     n_x=int(op.n_x),
@@ -4346,7 +4661,9 @@ def solve_v3_full_system_linear_gmres(
                 )
 
                 if int(l1_active_idx_np.size) > 0:
-                    l1_idx_jnp = jnp.asarray(np.unique(l1_active_idx_np), dtype=jnp.int32)
+                    l1_idx_jnp = jnp.asarray(
+                        np.unique(l1_active_idx_np), dtype=jnp.int32
+                    )
                     l1_n = int(l1_idx_jnp.shape[0])
 
                     def _pre_l1_full(v: jnp.ndarray) -> jnp.ndarray:
@@ -4370,7 +4687,9 @@ def solve_v3_full_system_linear_gmres(
                             target=float(target_reduced),
                             threshold_ratio=float(l1_polish_controls.ratio),
                             abs_threshold=float(l1_polish_controls.abs_threshold),
-                            full_accept_ratio=float(l1_polish_controls.full_accept_ratio),
+                            full_accept_ratio=float(
+                                l1_polish_controls.full_accept_ratio
+                            ),
                             require_full_improvement=False,
                         )
                         if (
@@ -4378,7 +4697,8 @@ def solve_v3_full_system_linear_gmres(
                             and np.isfinite(l1_outcome.projected_residual_before)
                             and l1_outcome.projected_residual_before
                             > max(
-                                float(target_reduced) * max(1.0, float(l1_polish_controls.ratio)),
+                                float(target_reduced)
+                                * max(1.0, float(l1_polish_controls.ratio)),
                                 float(l1_polish_controls.abs_threshold),
                             )
                         ):
@@ -4402,7 +4722,10 @@ def solve_v3_full_system_linear_gmres(
                             res_reduced = l1_outcome.result
                     except Exception as exc:  # noqa: BLE001
                         if emit is not None:
-                            emit(1, f"solve_v3_full_system_linear_gmres: FP L1 polish failed ({type(exc).__name__}: {exc})")
+                            emit(
+                                1,
+                                f"solve_v3_full_system_linear_gmres: FP L1 polish failed ({type(exc).__name__}: {exc})",
+                            )
             # Low-L global polish: solve a projected system on the lowest L modes across all
             # species/x/(theta,zeta). This is more expensive than the L1 polish but can be
             # significantly more effective at improving flow/current parity when the full
@@ -4420,7 +4743,9 @@ def solve_v3_full_system_linear_gmres(
                     > float(target_reduced) * float(global_low_l_controls.ratio)
                     and global_low_l_controls.lmax > 0
                 ):
-                    nxi_for_x_np = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+                    nxi_for_x_np = np.asarray(
+                        op.fblock.collisionless.n_xi_for_x, dtype=np.int32
+                    )
                     low_active_idx_np = fp_pitch_mode_active_indices(
                         n_species=int(op.n_species),
                         n_x=int(op.n_x),
@@ -4438,18 +4763,17 @@ def solve_v3_full_system_linear_gmres(
                     )
 
                     if int(low_active_idx_np.size) > 0:
-                        low_idx_jnp = jnp.asarray(np.unique(low_active_idx_np), dtype=jnp.int32)
+                        low_idx_jnp = jnp.asarray(
+                            np.unique(low_active_idx_np), dtype=jnp.int32
+                        )
                         low_n = int(low_idx_jnp.shape[0])
                     else:
                         low_n = 0
                         low_idx_jnp = None
 
-                    if (
-                        low_n > 0
-                        and (
-                            global_low_l_controls.max_size <= 0
-                            or low_n <= global_low_l_controls.max_size
-                        )
+                    if low_n > 0 and (
+                        global_low_l_controls.max_size <= 0
+                        or low_n <= global_low_l_controls.max_size
                     ):
                         assert low_idx_jnp is not None
 
@@ -4472,9 +4796,15 @@ def solve_v3_full_system_linear_gmres(
                                 maxiter=int(global_low_l_controls.maxiter),
                                 precond_side=gmres_precond_side,
                                 target=float(target_reduced),
-                                threshold_ratio=float(global_low_l_controls.threshold_ratio),
-                                abs_threshold=float(global_low_l_controls.abs_threshold),
-                                full_accept_ratio=float(global_low_l_controls.full_accept_ratio),
+                                threshold_ratio=float(
+                                    global_low_l_controls.threshold_ratio
+                                ),
+                                abs_threshold=float(
+                                    global_low_l_controls.abs_threshold
+                                ),
+                                full_accept_ratio=float(
+                                    global_low_l_controls.full_accept_ratio
+                                ),
                                 require_full_improvement=True,
                             )
                             if (
@@ -4555,7 +4885,9 @@ def solve_v3_full_system_linear_gmres(
                         res_reduced = res_bi
         if not bool(sparse_enabled):
             sparse_xblock_rescue_reason = "sparse_disabled"
-        elif float(res_reduced.residual_norm) <= float(target_reduced) and not bool(sparse_xblock_rescue_attempted):
+        elif float(res_reduced.residual_norm) <= float(target_reduced) and not bool(
+            sparse_xblock_rescue_attempted
+        ):
             sparse_xblock_rescue_reason = "not_needed"
         rhsmode1_general_metadata.update(
             sparse_rescue_tail_metadata_from_context(
@@ -4634,7 +4966,9 @@ def solve_v3_full_system_linear_gmres(
                     used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
                     used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
                     use_implicit=bool(use_implicit),
-                    skip_global_sparse_after_xblock=bool(skip_global_sparse_after_xblock),
+                    skip_global_sparse_after_xblock=bool(
+                        skip_global_sparse_after_xblock
+                    ),
                     elapsed_s=t.elapsed_s,
                     emit=emit,
                     mark=_mark,
@@ -4649,7 +4983,12 @@ def solve_v3_full_system_linear_gmres(
                 zeros_extra = jnp.zeros((int(op.extra_size),), dtype=jnp.float64)
                 y_full = mv(jnp.concatenate([f_full, zeros_extra], axis=0))
                 r_f = rhs[: op.f_size] - y_full[: op.f_size]
-                extra = _constraint_scheme2_source_from_f(op, r_f.reshape(op.fblock.f_shape)) / fs_sum_safe
+                extra = (
+                    _constraint_scheme2_source_from_f(
+                        op, r_f.reshape(op.fblock.f_shape)
+                    )
+                    / fs_sum_safe
+                )
                 if ix0 > 0:
                     extra = extra.at[:, :ix0].set(0.0)
                 zero_tol = rhs1_pas_source_zero_tolerance_from_env()
@@ -4745,24 +5084,26 @@ def solve_v3_full_system_linear_gmres(
             preconditioner_full = base_precond_setup.preconditioner
             bicgstab_preconditioner_full = base_precond_setup.bicgstab_preconditioner
             if host_dense_shortcut_full:
-                host_dense_shortcut_full_outcome = run_rhs1_full_host_dense_shortcut_stage(
-                    context=RHS1FullHostDenseShortcutContext(
-                        enabled=True,
-                        solve_context=HostDenseFullSolveContext(
-                            matvec=mv,
-                            rhs=rhs,
+                host_dense_shortcut_full_outcome = (
+                    run_rhs1_full_host_dense_shortcut_stage(
+                        context=RHS1FullHostDenseShortcutContext(
+                            enabled=True,
+                            solve_context=HostDenseFullSolveContext(
+                                matvec=mv,
+                                rhs=rhs,
+                                total_size=int(op.total_size),
+                            ),
+                            current_result=None,
+                            current_residual_vec=residual_vec,
+                            x0=x0,
                             total_size=int(op.total_size),
                         ),
-                        current_result=None,
-                        current_residual_vec=residual_vec,
-                        x0=x0,
-                        total_size=int(op.total_size),
-                    ),
-                    replay_state=ksp_replay,
-                    record_replay_problem=rhs1_record_ksp_replay_problem,
-                    solver_kind=_solver_kind,
-                    emit=emit,
-                    mark=_mark,
+                        replay_state=ksp_replay,
+                        record_replay_problem=rhs1_record_ksp_replay_problem,
+                        solver_kind=_solver_kind,
+                        emit=emit,
+                        mark=_mark,
+                    )
                 )
                 result = host_dense_shortcut_full_outcome.result
                 residual_vec = host_dense_shortcut_full_outcome.residual_vec
@@ -4780,7 +5121,9 @@ def solve_v3_full_system_linear_gmres(
                         else:
                             r0 = jnp.linalg.norm(mv(jnp.asarray(x0)) - rhs)
                             r1 = jnp.linalg.norm(mv(x0_recycled) - rhs)
-                            if jnp.isfinite(r1) and (not jnp.isfinite(r0) or float(r1) < float(r0)):
+                            if jnp.isfinite(r1) and (
+                                not jnp.isfinite(r0) or float(r1) < float(r0)
+                            ):
                                 x0 = x0_recycled
             if not host_dense_shortcut_full:
                 result, residual_vec, _primary_elapsed_s = (
@@ -4810,7 +5153,8 @@ def solve_v3_full_system_linear_gmres(
                 )
             result, residual_vec, _accepted, _retry_elapsed_s = (
                 rhs1_retry_without_preconditioner_if_nonfinite(
-                    allowed=(not host_dense_shortcut_full) and preconditioner_full is not None,
+                    allowed=(not host_dense_shortcut_full)
+                    and preconditioner_full is not None,
                     replay_state=ksp_replay,
                     current_result=result,
                     current_residual_vec=residual_vec,
@@ -4854,36 +5198,48 @@ def solve_v3_full_system_linear_gmres(
                 )
             if solver_kind == "bicgstab" and (
                 (not _gmres_result_is_finite(result))
-                or (bicgstab_fallback_strict and float(result.residual_norm) > bicgstab_fallback_target)
+                or (
+                    bicgstab_fallback_strict
+                    and float(result.residual_norm) > bicgstab_fallback_target
+                )
             ):
-                result, residual_vec, preconditioner_full, _accepted, _bicgstab_fallback_elapsed_s = (
-                    rhs1_run_bicgstab_gmres_fallback_if_allowed(
-                        allowed=True,
-                        replay_state=ksp_replay,
-                        current_result=result,
-                        current_residual_vec=residual_vec,
-                        matvec_fn=mv,
-                        b_vec=rhs,
-                        precond_fn=preconditioner_full,
-                        preconditioner_enabled=bool(rhs1_precond_enabled),
-                        build_preconditioner=_build_rhs1_preconditioner_full,
-                        x0_vec=x0,
-                        tol=float(tol),
-                        atol=float(atol),
-                        restart=int(restart),
-                        maxiter=maxiter,
-                        precond_side=gmres_precond_side,
-                        solve_linear=_solve_linear_with_residual,
-                        target=float(bicgstab_fallback_target),
-                        returns_residual_vec=True,
-                        emit=emit,
-                    )
+                (
+                    result,
+                    residual_vec,
+                    preconditioner_full,
+                    _accepted,
+                    _bicgstab_fallback_elapsed_s,
+                ) = rhs1_run_bicgstab_gmres_fallback_if_allowed(
+                    allowed=True,
+                    replay_state=ksp_replay,
+                    current_result=result,
+                    current_residual_vec=residual_vec,
+                    matvec_fn=mv,
+                    b_vec=rhs,
+                    precond_fn=preconditioner_full,
+                    preconditioner_enabled=bool(rhs1_precond_enabled),
+                    build_preconditioner=_build_rhs1_preconditioner_full,
+                    x0_vec=x0,
+                    tol=float(tol),
+                    atol=float(atol),
+                    restart=int(restart),
+                    maxiter=maxiter,
+                    precond_side=gmres_precond_side,
+                    solve_linear=_solve_linear_with_residual,
+                    target=float(bicgstab_fallback_target),
+                    returns_residual_vec=True,
+                    emit=emit,
                 )
         # The full-size RHSMode=1 branch does not have the later active-DOF sparse
         # ILU rescue. On accelerators, skipping stage2 GMRES here can therefore
         # return a high-residual solution with no real recovery path.
         prefer_sparse_accel = False
-        if prefer_sparse_accel and float(result.residual_norm) > target and stage2_trigger and emit is not None:
+        if (
+            prefer_sparse_accel
+            and float(result.residual_norm) > target
+            and stage2_trigger
+            and emit is not None
+        ):
             emit(
                 0,
                 "solve_v3_full_system_linear_gmres: skipping stage2 GMRES on accelerator "
@@ -4960,7 +5316,8 @@ def solve_v3_full_system_linear_gmres(
         res_ratio = float(strong_trigger_controls.res_ratio)
         strong_precond_trigger = bool(strong_trigger_controls.trigger)
         if (
-            rhs1_precond_kind in {"pas_lite", "pas_hybrid", "pas_tz", "pas_schur", "pas_tokamak_theta"}
+            rhs1_precond_kind
+            in {"pas_lite", "pas_hybrid", "pas_tz", "pas_schur", "pas_tokamak_theta"}
             and preconditioner_full is not None
             and _rhsmode1_pas_adaptive_smoother_allowed(
                 op=op,
@@ -5010,27 +5367,33 @@ def solve_v3_full_system_linear_gmres(
             has_pas=op.fblock.pas is not None,
             strong_precond_trigger=bool(strong_precond_trigger),
         )
-        result, residual_vec, bicgstab_preconditioner_full, _accepted, _collision_elapsed_s = (
-            rhs1_run_collision_retry_if_allowed(
-                allowed=bool(collision_retry_allowed),
-                replay_state=ksp_replay,
-                current_result=result,
-                current_residual_vec=residual_vec,
-                matvec_fn=mv,
-                b_vec=rhs,
-                precond_fn=bicgstab_preconditioner_full,
-                build_preconditioner=lambda: _build_rhsmode1_collision_preconditioner(op=op),
-                tol=float(tol),
-                atol=float(atol),
-                restart=int(restart),
-                maxiter=maxiter,
-                precond_side=gmres_precond_side,
-                solve_linear=_solve_linear_with_residual,
-                solver_kind=_solver_kind("incremental")[0],
-                target=float(target),
-                returns_residual_vec=True,
-                emit=emit,
-            )
+        (
+            result,
+            residual_vec,
+            bicgstab_preconditioner_full,
+            _accepted,
+            _collision_elapsed_s,
+        ) = rhs1_run_collision_retry_if_allowed(
+            allowed=bool(collision_retry_allowed),
+            replay_state=ksp_replay,
+            current_result=result,
+            current_residual_vec=residual_vec,
+            matvec_fn=mv,
+            b_vec=rhs,
+            precond_fn=bicgstab_preconditioner_full,
+            build_preconditioner=lambda: _build_rhsmode1_collision_preconditioner(
+                op=op
+            ),
+            tol=float(tol),
+            atol=float(atol),
+            restart=int(restart),
+            maxiter=maxiter,
+            precond_side=gmres_precond_side,
+            solve_linear=_solve_linear_with_residual,
+            solver_kind=_solver_kind("incremental")[0],
+            target=float(target),
+            returns_residual_vec=True,
+            emit=emit,
         )
         strong_precond_env = rhs1_strong_preconditioner_env_from_env()
         cs0_sparse_first = _rhsmode1_constraint0_sparse_first(
@@ -5042,7 +5405,8 @@ def solve_v3_full_system_linear_gmres(
         )
         strong_control = rhs1_resolved_strong_preconditioner_control(
             strong_precond_env=strong_precond_env,
-            has_extra_constraint_block=int(op.constraint_scheme) == 2 and int(op.extra_size) > 0,
+            has_extra_constraint_block=int(op.constraint_scheme) == 2
+            and int(op.extra_size) > 0,
             has_fp=op.fblock.fp is not None,
             has_pas=op.fblock.pas is not None,
             size=int(op.total_size),
@@ -5059,6 +5423,7 @@ def solve_v3_full_system_linear_gmres(
             ),
             pas_fast_accept=bool(pas_fast_accept),
         )
+
         def _build_rhs1_full_strong_preconditioner_for_retry(strong_kind: str):
             dd_block_theta = rhs1_dd_setup.block("theta")
             dd_overlap_theta = rhs1_dd_setup.overlap("theta", default=1)
@@ -5079,7 +5444,8 @@ def solve_v3_full_system_linear_gmres(
             RHS1FullStrongRetryStageContext(
                 strong_precond_env=strong_precond_env,
                 strong_control=strong_control,
-                has_extra_constraint_block=int(op.constraint_scheme) == 2 and int(op.extra_size) > 0,
+                has_extra_constraint_block=int(op.constraint_scheme) == 2
+                and int(op.extra_size) > 0,
                 has_fp=op.fblock.fp is not None,
                 has_pas=op.fblock.pas is not None,
                 rhs1_precond_kind=rhs1_precond_kind,
@@ -5122,7 +5488,9 @@ def solve_v3_full_system_linear_gmres(
                 current_residual_vec=residual_vec,
                 matvec_fn=mv,
                 b_vec=rhs,
-                build_preconditioner=lambda: _build_rhsmode1_schur_preconditioner(op=op),
+                build_preconditioner=lambda: _build_rhsmode1_schur_preconditioner(
+                    op=op
+                ),
                 tol=float(tol),
                 atol=float(atol),
                 restart=int(restart),
@@ -5354,5 +5722,12 @@ def solve_v3_full_system_linear_gmres(
 
 solve_v3_full_system_linear_gmres_jit = jax.jit(
     solve_v3_full_system_linear_gmres,
-    static_argnames=("tol", "atol", "restart", "maxiter", "solve_method", "identity_shift"),
+    static_argnames=(
+        "tol",
+        "atol",
+        "restart",
+        "maxiter",
+        "solve_method",
+        "identity_shift",
+    ),
 )

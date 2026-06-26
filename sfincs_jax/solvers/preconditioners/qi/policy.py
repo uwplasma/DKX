@@ -8,7 +8,7 @@ from typing import Mapping
 
 @dataclass(frozen=True)
 class QIRunEvidence:
-    """Minimal QI run evidence required for promotion decisions."""
+    """Minimal QI run evidence required for policy decisions."""
 
     seed: int
     backend: str
@@ -29,7 +29,7 @@ class QIRunEvidence:
 
 @dataclass(frozen=True)
 class QILadderPromotionResult:
-    """Fail-closed QI ladder promotion decision."""
+    """Fail-closed QI ladder policy decision."""
 
     promoted: bool
     required_seeds: tuple[int, ...]
@@ -42,7 +42,7 @@ class QILadderPromotionResult:
     warnings: tuple[str, ...]
 
     def to_dict(self) -> dict[str, object]:
-        """Return JSON-friendly promotion metadata."""
+        """Return JSON-friendly policy metadata."""
 
         return asdict(self)
 
@@ -73,7 +73,8 @@ def _normalize_evidence(value: QIRunEvidence | Mapping[str, object]) -> QIRunEvi
 
 
 def evaluate_qi_production_ladder_promotion(
-    runs: list[QIRunEvidence | Mapping[str, object]] | tuple[QIRunEvidence | Mapping[str, object], ...],
+    runs: list[QIRunEvidence | Mapping[str, object]]
+    | tuple[QIRunEvidence | Mapping[str, object], ...],
     *,
     required_seeds: tuple[int, ...],
     required_backends: tuple[str, ...] = ("cpu", "gpu"),
@@ -82,7 +83,7 @@ def evaluate_qi_production_ladder_promotion(
     max_observable_rel_diff: float = 1.0e-8,
     allow_host_fallback: bool = False,
 ) -> QILadderPromotionResult:
-    """Evaluate whether QI ladder evidence is strong enough for promotion.
+    """Evaluate whether QI ladder evidence is strong enough for policy.
 
     A production-resolution QI claim requires every requested seed/backend pair
     to converge, write output and trace artifacts, meet the residual/observable
@@ -92,7 +93,9 @@ def evaluate_qi_production_ladder_promotion(
 
     evidence = tuple(_normalize_evidence(run) for run in runs)
     required_seed_set = {int(seed) for seed in required_seeds}
-    required_backend_set = {_normalize_backend(backend) for backend in required_backends}
+    required_backend_set = {
+        _normalize_backend(backend) for backend in required_backends
+    }
     min_resolution_use = tuple(int(v) for v in min_resolution)
     if len(min_resolution_use) != 4:
         raise ValueError("min_resolution must have four entries")
@@ -107,7 +110,10 @@ def evaluate_qi_production_ladder_promotion(
                 failures.append(f"missing seed={seed} backend={backend}")
                 continue
             resolution = tuple(int(v) for v in run.resolution)
-            if any(got < need for got, need in zip(resolution, min_resolution_use, strict=True)):
+            if any(
+                got < need
+                for got, need in zip(resolution, min_resolution_use, strict=True)
+            ):
                 failures.append(
                     f"seed={seed} backend={backend} resolution={run.resolution} below {min_resolution_use}"
                 )
@@ -118,7 +124,9 @@ def evaluate_qi_production_ladder_promotion(
             if not run.output_written:
                 failures.append(f"seed={seed} backend={backend} did not write output")
             if not run.solver_trace_written:
-                failures.append(f"seed={seed} backend={backend} did not write solver trace")
+                failures.append(
+                    f"seed={seed} backend={backend} did not write solver trace"
+                )
             if float(run.residual_ratio) > float(max_residual_ratio):
                 failures.append(
                     f"seed={seed} backend={backend} residual_ratio={run.residual_ratio:.3g} "
