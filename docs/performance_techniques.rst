@@ -3089,9 +3089,12 @@ Key modules and functions referenced above:
 
 - **Transport solver + preconditioners**:
 
-  - ``sfincs_jax/v3_driver.py``: ``solve_v3_transport_matrix_linear_gmres``,
-    ``_build_rhsmode23_sxblock_preconditioner``,
-    ``_build_rhsmode23_collision_preconditioner``.
+  - ``sfincs_jax/problems/transport_solve.py``:
+    ``solve_v3_transport_matrix_linear_gmres``.
+  - ``sfincs_jax/problems/transport_linear_system.py`` and
+    ``sfincs_jax/problems/profile_preconditioner_build.py``:
+    transport reduced-system construction and RHSMode-2/3 preconditioner
+    builders.
 
 - **Diagnostics and flux formulas**:
 

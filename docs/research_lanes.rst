@@ -141,16 +141,19 @@ Relevant implementation:
   global, aggregate, and block residual source spaces. The first hard-seed GPU
   evidence worsened the residual relative to recycled augmented Krylov, so it is
   retained only as negative evidence and a tested research control.
-- ``sfincs_jax/rhs1_device_operator.py`` provides bounded device CSR matvec
-  utilities and records requested/default backend, available platforms, concrete
-  array devices, concrete array platforms, and same-device placement for audit
-  trails.
-- ``sfincs_jax/rhs1_qi_galerkin_policy.py`` rejects Galerkin candidates unless
-  a true residual probe improves.
-- ``sfincs_jax/v3_driver.py`` wires the x-block sparse-PC, device-Krylov,
-  two-level-QI opt-in, residual-deflated QI opt-in, device-QI field-split opt-in,
-  early matrix-free QI probe, bounded post-xblock acceptance, post-Krylov
-  residual-equation correction, and non-autodiff host fallback paths.
+- ``sfincs_jax/operators/profile_device_sparse.py`` provides bounded device CSR
+  matvec utilities and records requested/default backend, available platforms,
+  concrete array devices, concrete array platforms, and same-device placement
+  for audit trails.
+- ``sfincs_jax/solvers/preconditioner_qi_basis.py`` and
+  ``sfincs_jax/solvers/preconditioner_qi_device.py`` build and admit QI
+  Galerkin, residual-derived, and device-local candidates only when the true
+  residual probe improves.
+- ``sfincs_jax/problems/profile_solve.py`` wires the x-block sparse-PC,
+  device-Krylov, two-level-QI opt-in, residual-deflated QI opt-in,
+  device-QI field-split opt-in, early matrix-free QI probe, bounded
+  post-xblock acceptance, post-Krylov residual-equation correction, and
+  non-autodiff host fallback paths.
 
 Audit conclusion
 ~~~~~~~~~~~~~~~~

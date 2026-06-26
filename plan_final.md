@@ -270,6 +270,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   fails if implementation modules reintroduce a `v3_driver` dependency, keeping
   `v3_driver.py` as an external compatibility shim rather than an internal
   owner.
+- The thirty-first post-audit documentation tranche updated user-facing
+  numerics, physics-reference, API, performance-technique, and QI research-lane
+  pages to point at the canonical profile/transport solve, preconditioner, and
+  device-sparse owners instead of stale `v3_driver.py` or former `rhs1_*` module
+  names. Historical source-map and roadmap references remain only where they
+  document compatibility history.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.

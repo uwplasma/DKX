@@ -114,11 +114,6 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.solvers.krylov_dispatch
    :members:
 
-.. automodule:: sfincs_jax.v3_driver
-
-   Compatibility shim for historical imports. New code should import solve
-   entry points from the domain owners documented below.
-
 Refactored solve-policy modules
 -------------------------------
 
