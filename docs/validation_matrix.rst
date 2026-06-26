@@ -7,7 +7,7 @@ is to connect each physics claim or benchmark figure to:
 - a literature anchor,
 - the script or workflow that generates it,
 - the expected output artifact,
-- and the status of the lane on the current branch.
+- and the claim status recorded in the release manifest.
 
 Machine-readable manifest
 -------------------------
@@ -23,7 +23,7 @@ That file is intended to become the stable spine for:
 - and test/benchmark dashboards that distinguish implemented release lanes from
   deferred post-release research lanes.
 
-Each manifest lane now also carries explicit research gates:
+Each manifest lane carries explicit research gates:
 
 - ``source_code``: the implementation files that define the lane,
 - ``tests``: the tests that protect the lane or its scaffold,
@@ -36,7 +36,7 @@ The schema is enforced by ``tests/test_validation_manifest_schema.py``. Implemen
 release lanes must point to existing scripts, artifacts, source files, and tests.
 Deferred post-release lanes are closed for the tagged release but retain literature
 anchors, implementation targets, tests, and acceptance criteria so follow-up research
-work is not lost. ``scripts/check_release_gates.py`` now applies the same path
+work is not lost. ``scripts/check_release_gates.py`` applies the same path
 hygiene to deferred lanes: listed source files, tests, scripts, and artifacts must
 exist even when the claim status is ``closed_deferred``.
 
