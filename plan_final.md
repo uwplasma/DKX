@@ -283,7 +283,8 @@ Tranche 5: examples redesign.
   `docs/examples.rst`, `examples/tutorials/README.md`, three tutorial
   notebooks, and `examples/tutorials/run_quick_output_and_plot.py` are
   committed and tested. Example README tests also reject stale progress
-  language and broken Python-script references in documented task paths.
+  language and broken Python-script references in documented task paths, and
+  the fast tutorial output/plot script runs in the bounded examples smoke suite.
 - Keep the current topic folders (`getting_started`, `transport`, `autodiff`,
   `vmec_jax_finite_beta`, `optimization`, `performance`, and `parity`) because
   they are stable user-task names. Do not rename them into numbered folders
@@ -294,9 +295,8 @@ Tranche 5: examples redesign.
 - Move raw upstream SFINCS decks and benchmark-output JSON out of first-pass
   learning paths only when they are unused by tests/docs. Keep small input decks
   needed by examples.
-- Remaining work: add execution tests for the fast tutorial script to CI's
-  examples smoke path, then add notebook text references for any new public
-  capability added later.
+- Remaining work: add notebook text references for any new public capability
+  added later.
 - Acceptance: example index tells users which file to run for each application;
   smoke execution of one script per major folder stays below the CI example
   budget.
