@@ -6,7 +6,7 @@ from pathlib import Path
 import h5py
 import numpy as np
 
-from sfincs_jax.h5_parity import compare_h5_outputs, main
+from sfincs_jax.validation.h5_parity import compare_h5_outputs, main
 
 
 def _write_h5(path: Path, data: dict[str, object]) -> None:

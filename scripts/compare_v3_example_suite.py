@@ -14,10 +14,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from sfincs_jax.compare import compare_sfincs_outputs
-from sfincs_jax.fortran import run_sfincs_fortran
-from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
-from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax.compare import compare_sfincs_outputs  # noqa: E402
+from sfincs_jax.validation.fortran import run_sfincs_fortran  # noqa: E402
+from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5  # noqa: E402
+from sfincs_jax.namelist import read_sfincs_input  # noqa: E402
 
 
 @dataclass(frozen=True)

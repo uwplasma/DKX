@@ -3875,3 +3875,128 @@ Next best steps:
    `profile_response/solve.py` into existing sparse owners as the next large
    Pass 1 checkpoint.
 3. Then resume Pass 3 solver-family consolidation for symbolic sparse and QI.
+
+## 2026-06-25 Lane 1 Batch A Validation Helper Root Cleanup
+
+Steps taken:
+
+1. Audited the current refactor branch against `plan_final.md` Batch A.
+   Current hard counts before this checkpoint were: 209 package Python files,
+   52 package-root Python files, `v3_driver.py` at 47 lines,
+   `profile_response/solve.py` at 8,328 lines, and `io.py` at 4,263 lines.
+2. Confirmed that there are no top-level `rhs1_*.py` or `transport_*.py`
+   implementation/alias modules left in `sfincs_jax`.
+3. Built an AST-backed root import inventory. The safe root cleanup target was
+   validation/benchmark tooling, not core physics or public API modules.
+4. Moved these root validation helpers into canonical validation owners:
+   `sfincs_jax/fortran.py` -> `sfincs_jax/validation/fortran.py`,
+   `sfincs_jax/fortran_profile.py` ->
+   `sfincs_jax/validation/fortran_profile.py`, and
+   `sfincs_jax/h5_parity.py` -> `sfincs_jax/validation/h5_parity.py`.
+5. Rewrote CLI, scripts, examples, and tests to import the new validation
+   owners directly. No compatibility shim was kept because all in-repository
+   callers were updated and these helpers are validation tooling, not the
+   primary public API.
+
+Root-disposition table for the Batch A audit:
+
+| Root file | Disposition |
+| --- | --- |
+| `__init__.py` | Public package import and JAX runtime bootstrap; keep. |
+| `__main__.py` | CLI entry-point shim; keep. |
+| `adaptive_maps.py` | Stable differentiable x-grid/mapping kernel; keep pending later discretization review. |
+| `ambipolar.py` | Public scan/ambipolar postprocess helper; keep pending API sweep. |
+| `api.py` | Public Python API contracts; keep. |
+| `boozer_bc.py` | Stable geometry file reader; keep pending geometry package consolidation. |
+| `classical_transport.py` | Physics kernel; keep. |
+| `cli.py` | Public CLI owner; keep. |
+| `collisionless.py` | Physics operator kernel; keep. |
+| `collisionless_er.py` | Physics operator kernel; keep. |
+| `collisionless_exb.py` | Physics operator kernel; keep. |
+| `collisions.py` | Physics operator kernel; keep. |
+| `compare.py` | User-facing parity/comparison helper; keep pending validation/API sweep. |
+| `constrained_pas_branch.py` | Physics/numerics helper with direct tests; keep pending PAS consolidation. |
+| `constraint_projection.py` | Shared constraint projection helper; keep pending problem-owner consolidation. |
+| `data_fetch.py` | Equilibrium fixture fetch helper; later candidate for `validation` or `input`. |
+| `diagnostics.py` | Shared physical diagnostics; keep pending output/diagnostics consolidation. |
+| `fortran.py` | Moved to `validation/fortran.py`; root file deleted. |
+| `fortran_profile.py` | Moved to `validation/fortran_profile.py`; root file deleted. |
+| `geometry.py` | Core geometry dataclasses/kernels; keep. |
+| `grids.py` | Core grid construction; keep pending discretization package review. |
+| `h5_parity.py` | Moved to `validation/h5_parity.py`; root file deleted. |
+| `host_refinement.py` | Host-only refinement helper; later candidate for solver/validation owner. |
+| `indices.py` | Small shared indexing helper; keep pending operator-layout review. |
+| `input_compat.py` | Fortran-compatible input coercions; keep as compatibility shim until `input` package is complete. |
+| `io.py` | Large compatibility/output owner; Batch C target to shrink below 800 lines or delete. |
+| `jax_geometry_adapters.py` | Geometry integration adapter; keep pending geometry package consolidation. |
+| `magnetic_drifts.py` | Physics operator kernel; keep. |
+| `namelist.py` | Public namelist parser; keep. |
+| `pas_smoother.py` | PAS numerical helper; later candidate for PAS preconditioner consolidation. |
+| `paths.py` | Shared path/equilibrium resolution helper; keep. |
+| `periodic_stencil.py` | Shared stencil helper; keep pending discretization package review. |
+| `petsc_binary.py` | Debug/validation PETSc binary reader; later candidate for `validation`. |
+| `phi1_newton_linear.py` | Phi1 linear helper; later candidate for `problems.profile_response.phi1_newton`. |
+| `phi1_newton_policy.py` | Phi1 policy helper; later candidate for `problems.profile_response.phi1_newton`. |
+| `plotting.py` | Public plotting helper; keep. |
+| `postprocess_upstream.py` | CLI/example postprocess helper; later candidate for workflows/output. |
+| `profiling.py` | Shared profiling helper; keep pending validation/solver split. |
+| `residual.py` | Shared residual helpers; keep pending problem residual consolidation. |
+| `scans.py` | User-facing scan helper; later candidate for workflows. |
+| `sensitivity.py` | Public sensitivity/autodiff owner; keep. |
+| `solver.py` | Core linear solver owner; keep pending solver package consolidation. |
+| `structured_velocity.py` | Velocity-grid helper; keep pending discretization package review. |
+| `v3.py` | Fortran-v3-compatible grid/geometry setup owner; keep pending naming/API review. |
+| `v3_driver.py` | 47-line compatibility shim; keep until final import sweep or delete if all legacy imports migrate. |
+| `v3_fblock.py` | Core v3 f-block operator; keep pending operator package consolidation. |
+| `v3_results.py` | Typed solve-result contracts; keep pending result/API consolidation. |
+| `v3_sparse_pattern.py` | Sparse pattern utility; keep pending operator/sparse consolidation. |
+| `v3_system.py` | Core v3 full-system operator; keep pending operator package consolidation. |
+| `vmec_geometry.py` | VMEC geometry evaluator; keep pending geometry package consolidation. |
+| `vmec_wout.py` | VMEC wout reader; keep pending geometry/input package consolidation. |
+| `xgrid.py` | Speed-grid construction; keep pending discretization package review. |
+
+Results:
+
+- Package-root files decreased from `52` to `49`.
+- Package Python files stayed at `209` because this was a domain move, not a
+  file deletion.
+- No root `rhs1_*` or `transport_*` files exist.
+- `v3_driver.py` remains a 47-line compatibility shim.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/validation/fortran.py
+  sfincs_jax/validation/fortran_profile.py
+  sfincs_jax/validation/h5_parity.py sfincs_jax/cli.py
+  scripts/summarize_fortran_v3_profile.py
+  scripts/run_zenodo_vmec_parity_campaign.py
+  scripts/compare_v3_example_suite.py
+  examples/parity/geometry_scheme4_parity.py
+  examples/sfincs_examples/run_sfincs_jax.py
+  tests/test_fortran_profile.py tests/test_h5_parity.py
+  tests/test_helper_module_coverage.py` passed.
+- `python -m ruff check` over the same touched source/script/example/test set
+  passed.
+- `python -m pytest tests/test_fortran_profile.py tests/test_h5_parity.py
+  tests/test_helper_module_coverage.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` passed with
+  `23 passed`.
+- `git diff --check` passed.
+
+Completion:
+
+- Lane 1 Batch A: about `55%`; the root-disposition table exists and one safe
+  root cleanup batch landed, but final root cleanup and source-map refresh are
+  still pending.
+- Lane 1 structural consolidation: about `79%`.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Validate and commit this Batch A root cleanup.
+2. Continue Batch A with `petsc_binary.py`, `postprocess_upstream.py`,
+   `scans.py`, and `data_fetch.py` only if their imports can be rewritten as a
+   single ownership batch without adding compatibility shims.
+3. Resume Batch B by moving final result/progress metadata normalization and
+   then the generic sparse-PC/factor-preflight branch out of
+   `profile_response/solve.py`.

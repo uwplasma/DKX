@@ -283,7 +283,7 @@ def _cmd_solve_v3(args: argparse.Namespace) -> int:
 
 def _cmd_run_fortran(args: argparse.Namespace) -> int:
     t0 = _now()
-    from .fortran import run_sfincs_fortran  # noqa: PLC0415
+    from .validation.fortran import run_sfincs_fortran  # noqa: PLC0415
 
     _emit("################################################################", level=0, args=args)
     _emit(" sfincs_jax run-fortran", level=0, args=args)

@@ -54,7 +54,7 @@ def run_sfincs_fortran(
     if bool(localize_equilibrium):
         # Many upstream inputs set equilibriumFile relative to the upstream SFINCS repo.
         # When we run in a temporary workdir, localize the referenced file next to input.namelist.
-        from .io import localize_equilibrium_file_in_place  # noqa: PLC0415
+        from sfincs_jax.io import localize_equilibrium_file_in_place  # noqa: PLC0415
 
         localize_equilibrium_file_in_place(input_namelist=dst_input, overwrite=False)
 

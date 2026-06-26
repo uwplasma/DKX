@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from sfincs_jax.fortran_profile import parse_fortran_v3_profile_file
+from sfincs_jax.validation.fortran_profile import parse_fortran_v3_profile_file
 
 
 def _json_default(value: Any) -> Any:
