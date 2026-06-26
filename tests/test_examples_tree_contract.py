@@ -24,6 +24,24 @@ ALLOWED_EXAMPLE_FOLDERS = {
     "vmec_jax_finite_beta",
 }
 
+FOLDERS_REQUIRING_README = ALLOWED_EXAMPLE_FOLDERS - {
+    "additional_examples",
+    "data",
+    "utils",
+}
+
+REQUIRED_TASK_ENTRYPOINTS = {
+    "tutorials/run_quick_output_and_plot.py",
+    "getting_started/write_sfincs_output_cli.py",
+    "getting_started/write_sfincs_output_python.py",
+    "transport/transport_matrix_rhsmode2_and_rhsmode3.py",
+    "autodiff/implicit_diff_through_gmres_solve_scheme5.py",
+    "vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py",
+    "optimization/qa_nfp2_sfincs_jax_objectives.py",
+    "parity/output_parity_vs_fortran_fixture.py",
+    "performance/benchmark_output_formats.py",
+}
+
 DISALLOWED_TRACKED_PARTS = {
     "__pycache__",
     ".ipynb_checkpoints",
@@ -64,6 +82,23 @@ def test_examples_top_level_folders_are_intentional() -> None:
     }
 
     assert folders == ALLOWED_EXAMPLE_FOLDERS
+
+
+def test_examples_readme_is_a_complete_user_navigation_map() -> None:
+    readme = (EXAMPLES_ROOT / "README.md").read_text(encoding="utf-8")
+    assert "### Learning Path" in readme
+    assert "### Choose By Task" in readme
+    assert "### Folder Map" in readme
+
+    for folder in sorted(ALLOWED_EXAMPLE_FOLDERS):
+        assert f"`{folder}/`" in readme or f"`{folder}" in readme, folder
+
+    for folder in sorted(FOLDERS_REQUIRING_README):
+        assert (EXAMPLES_ROOT / folder / "README.md").is_file(), folder
+
+    for entrypoint in sorted(REQUIRED_TASK_ENTRYPOINTS):
+        assert f"`{entrypoint}`" in readme, entrypoint
+        assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
 
 
 def test_examples_do_not_track_generated_caches_or_binary_outputs() -> None:

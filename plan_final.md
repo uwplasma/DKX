@@ -63,6 +63,10 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   output-free notebooks plus a fast script that writes HDF5/NetCDF/NPZ output
   and a diagnostics PDF. Existing topic folders remain as canonical runnable
   workflows to avoid unnecessary file churn.
+- `examples/README.md` contains a task-based chooser, a learning path, and a
+  complete folder map. `tests/test_examples_tree_contract.py` enforces the
+  top-level folder set, README coverage, first-task entry points, generated-file
+  exclusions, and the no-large-example-file policy.
 - The root README no longer matches the explicit progress-language patterns
   flagged in the review prompt. Remaining historical/status language should be
   handled in docs pages and release notes rather than the first-page README.
