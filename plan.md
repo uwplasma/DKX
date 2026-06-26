@@ -4062,3 +4062,61 @@ Next best steps:
 2. If validation is clean, stop Batch A root moves unless another safe
    validation/workflow helper can move as a batch; otherwise proceed to
    Batch B profile-response result/progress normalization.
+
+## 2026-06-26 Final Lane 1 Consolidation Plan Refresh
+
+Steps taken:
+
+1. Re-audited the active refactor branch after the validation-helper and PETSc
+   binary-reader root cleanups.
+2. Confirmed the current structural inventory:
+   package source files: `209`;
+   package-root Python files: `48`;
+   `problems/profile_response` including `sparse`: `21`;
+   `problems/transport_matrix` including `parallel`: `28`;
+   `solvers/preconditioners`: `47`.
+3. Identified the current large-file pressure points:
+   `profile_response/solve.py` at `8,328` lines,
+   `profile_response/policies.py` at `6,885` lines,
+   `io.py` at `4,263` lines,
+   sparse profile-response owners between about `1.1k` and `5.0k` lines,
+   and fragmented transport/QI/symbolic/x-block owners.
+4. Updated `plan_final.md` so it is the single authoritative consolidation
+   plan and so the remaining work is only four implementation/review sweeps:
+   Batch B profile-response sparse/finalization collapse,
+   Batch C transport/output/root ownership collapse,
+   Batch D solver/preconditioner family collapse,
+   and Batch E docs/API/tests/review readiness.
+5. Explicitly recorded that more root-file churn is not the priority because
+   the root count is already at the `<=48` gate. The next implementation
+   checkpoint should materially shrink `profile_response/solve.py` without
+   adding a new helper-only file.
+
+Results:
+
+- `plan_final.md` now forbids new micro-tranche plans, helper-only refactor
+  commits, and new implementation shards unless the same commit deletes or
+  merges a larger owner.
+- Batch A is effectively closed except for source-map/API cleanup.
+- The next concrete target is the generic sparse-PC/factor-preflight branch in
+  `profile_response/solve.py`, using existing sparse/diagnostics owners.
+
+Progress:
+
+- Lane 1 structural consolidation: about `80%`.
+- Batch A root/boundary sweep: about `90%`.
+- Batch B profile-response owner collapse: about `25%`.
+- Batch C transport/output/root collapse: about `20%`.
+- Batch D solver/preconditioner family collapse: about `25%`.
+- Batch E docs/API/tests/review gate: about `20%`.
+
+Next best steps:
+
+1. Implement Batch B as one coherent code move: generic sparse-PC active setup,
+   operator/backend selection, factor/preflight admission, retry metadata,
+   progress replay, and final sparse payload normalization should leave
+   `solve.py` and move into existing owners.
+2. Run focused RHSMode-1 sparse/profile-response tests, scoped ruff,
+   py_compile, and `git diff --check`.
+3. Commit and push the Batch B checkpoint only if the source tree shrinks
+   materially and no new implementation file is introduced.
