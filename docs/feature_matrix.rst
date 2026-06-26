@@ -74,7 +74,7 @@ Fortran v3 feature ownership
        implemented with gates. Root-policy logic, dense certificates, matrix-free/JVP
        derivative-provider gates, analytic existing-branch ``E_r`` tangents,
        opt-in fixed-shape zero-field branch retention, and a namelist-backed
-       RHSMode-1 derivative-response helper now run a bounded small-deck
+       RHSMode-1 derivative-response helper run a bounded small-deck
        Fortran active-operator ``particleFlux_vm_rN`` option-1 root replay.
        Production physical replay gates remain outside normal CI.
    * - Ambipolar root solve option 2
@@ -91,7 +91,7 @@ Fortran v3 feature ownership
        implemented with bounded gates. Fast option-3-style matrix-free
        derivative-provider root tests are covered, checked small helical plus
        W7-X-like option-3 currents replay with the active namelist-backed
-       provider, and the helical small-deck pure-Newton root replay now runs
+       provider, and the helical small-deck pure-Newton root replay runs
        through the same namelist-backed provider. Production refresh benchmarks
        remain external to normal CI.
    * - RHSMode 4 fixed-``E_r`` sensitivities

@@ -126,7 +126,7 @@ Common entry points:
 
 ### Scaled upstream example sweep
 
-The vendored `examples/sfincs_examples/` inputs currently match the original
+The vendored `examples/sfincs_examples/` inputs match the original
 Fortran v3 example inputs exactly. For reproducible benchmarking, use the
 original upstream tree as the resolution reference and set `--scale-factor`
 relative to that baseline. `1.0` means the original v3 example resolution, and
@@ -159,7 +159,7 @@ interrupted long run still leaves a usable partial audit instead of only
 per-case directories.
 If you restart a long sweep after changing `sfincs_jax` code or after a bad
 launch, reuse the same `--out-root` only with `--reset-report`, otherwise the
-old case rows remain merged into the new `suite_report*.json` checkpoint files.
+legacy case rows remain merged into the `suite_report*.json` checkpoint files.
 For the legacy `examples/upstream/fortran_multispecies` tree, the Fortran lane
 also canonicalizes the old pre-v3 namelist groups and aliases into the v3
 input shape expected by the reference executable, while the `sfincs_jax` lane
@@ -243,7 +243,7 @@ output presence, solver-trace residual metadata, aggregate summary fields, and
 the optional promotion gates in the same manifest.
 
 The execute smoke defaults to the public `auto` CLI solver policy. The bounded
-checked multi-seed smoke now keeps the public `auto` method, auto-selects the
+checked multi-seed smoke keeps the public `auto` method, auto-selects the
 fast dense full-FP path for three neighboring QI seeds at `7 x 13 x 25 x 4`, and
 converges below the requested residual target. Check
 `execution.gates.passed`, `execution.summary.max_residual_ratio`, and

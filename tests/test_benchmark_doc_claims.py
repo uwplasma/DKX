@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 
@@ -14,6 +15,39 @@ SUMMARY_JSON = (
 )
 FIGURE_ROOT = REPO_ROOT / "docs" / "_static" / "figures" / "paper"
 BENCHMARK_STEM = "sfincs_jax_fortran_suite_benchmark_summary"
+PUBLIC_STANDALONE_DOCS = [
+    REPO_ROOT / "README.md",
+    REPO_ROOT / "sfincs_jax" / "README.md",
+    REPO_ROOT / "examples" / "README.md",
+    REPO_ROOT / "docs" / "index.rst",
+    REPO_ROOT / "docs" / "installation.rst",
+    REPO_ROOT / "docs" / "examples.rst",
+    REPO_ROOT / "docs" / "feature_matrix.rst",
+    REPO_ROOT / "docs" / "fortran_comparison.rst",
+    REPO_ROOT / "docs" / "usage.rst",
+    REPO_ROOT / "docs" / "method.rst",
+    REPO_ROOT / "docs" / "geometry.rst",
+    REPO_ROOT / "docs" / "performance.rst",
+]
+PUBLIC_STALE_FRAGMENTS = (
+    "On the current",
+    "current main branch",
+    "current ``main``",
+    "Current release snapshot",
+    "new version",
+    "new benchmarks",
+    "README-facing runtime/memory rows",
+    "The production benchmark manifest",
+    "production benchmark manifest",
+    "not replacements for the production-resolution gates",
+    "current-tip",
+    "Recent current-tip",
+    "earlier releases",
+    "prior release",
+    "latest guarded audit",
+    "latest root drift",
+)
+PUBLIC_STALE_PATTERNS = tuple(re.compile(rf"\b{re.escape(word)}\b") for word in ("now", "older", "newer"))
 
 
 def _summary() -> dict[str, object]:
@@ -144,3 +178,17 @@ def test_readme_is_self_contained_not_branch_history() -> None:
 
     for fragment in stale_fragments:
         assert fragment not in readme
+
+
+def test_public_docs_are_standalone_not_development_log() -> None:
+    for path in PUBLIC_STANDALONE_DOCS:
+        text = path.read_text()
+        checked_text = "\n".join(
+            line
+            for line in text.splitlines()
+            if "docs.jax.dev/en/latest" not in line
+        )
+        for fragment in PUBLIC_STALE_FRAGMENTS:
+            assert fragment not in checked_text, f"{fragment!r} appears in {path}"
+        for pattern in PUBLIC_STALE_PATTERNS:
+            assert not pattern.search(checked_text), f"{pattern.pattern!r} appears in {path}"

@@ -240,7 +240,7 @@ Use ``--verbose-sfincs`` or set ``SFINCS_JAX_EXAMPLE_VERBOSE=1`` for
 production-grid reruns so the script forwards phase, preconditioner, and Krylov
 progress messages while setup is running.
 
-The current apples-to-apples QA/QH documentation check reruns SFINCS Fortran v3
+The apples-to-apples QA/QH documentation check reruns SFINCS Fortran v3
 at the same ``13 x 13 x 21 x 5`` grid used by the fast JAX documentation solve
 on 11 surfaces, ``s = 0.10, 0.15, 0.25, 0.30, 0.45, 0.50, 0.60, 0.70, 0.75,
 0.85, 0.90``. JAX
@@ -259,9 +259,9 @@ for eligible finite-beta/full-FP points, with a guarded native-stack attempt and
 robust active-LU fallback. A no-probe
 full-CSR host lane with
 ``xblock_tz_low_l_schur`` is available for explicit non-differentiable
-structured-CSR benchmarks, but it is not part of the public default after early
+structured-CSR benchmarks, but it is not part of the public default after
 Zenodo QA/QH Krylov preconditioner probes showed multi-minute unsuccessful
-trials on medium finite-beta profile-current decks. A newer active projected
+trials on medium finite-beta profile-current decks. An active projected
 direct mode solves the residual-clean host diagnostic system without the
 matrix-free pattern probe; low-resolution QA/QH bootstrap-current agreement must
 still be treated as a convergence study, not as a production parity claim. The
@@ -271,7 +271,7 @@ reject sparse builds that exceed the configured memory budget.
 Builds that include the no-probe full-CSR lane can still force the host-only,
 non-autodiff structured solve explicitly with ``--solve-method structured_csr``
 or ``--solve-method host_structured_csr`` for reproducibility/debugging.  The
-current residual-clean finite-beta QA/QH diagnostic route uses
+residual-clean finite-beta QA/QH diagnostic route uses
 ``fortran_reduced_pc_gmres`` with direct-tail active-auto preconditioning. The
 auto ladder first tries the lower-memory
 ``active_fortran_v3_reduced_native_stack`` candidate, requires it to pass a
@@ -279,11 +279,11 @@ true-residual preflight, and falls back to the robust
 ``active_fortran_v3_reduced_lu`` reference route when that preflight fails. On
 the full archived ``25 x 39 x 60 x 7`` QA surface, this hands-off route rejected
 native stack and then converged with active LU to residual ``7.27e-16`` in
-``354.6 s`` wall in the latest guarded audit. Other combined multiline, scaled-ILU, and sparse-coarse
+``354.6 s`` wall in the guarded audit. Other combined multiline, scaled-ILU, and sparse-coarse
 preconditioners remain implemented and tested research candidates, but they are
 not public defaults until they pass the same true-residual gate. Physical RHSMode=1
 ``host_structured_csr`` output remains available for explicit structured-CSR
-experiments; the environment variables below make that older route explicit and
+experiments; the environment variables below make that structured route explicit and
 also override shifted benchmark defaults:
 
 .. code-block:: bash
@@ -312,7 +312,7 @@ field-split candidate uses a sparse exact Schur residual equation over the
 full-angle low-pitch active variables and the global tail. The low-pitch cutoff
 is controlled by
 ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_LOW_L_SCHUR_LMAX``, and the sparse factor is
-bounded by ``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB``. The older
+bounded by ``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB``. The alternate
 ``active_coarse`` candidate remains available; it uses low-``l``/angular/tail
 modal coarse residual modes. Its default coarse equation is Galerkin; set
 ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COARSE_SOLVER=least_squares`` or use
@@ -332,7 +332,7 @@ promotion path. Generic
 with ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ILU_DROP_TOL`` and
 ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ILU_FILL_FACTOR``. Treat it as a benchmark
 candidate: physical finite-beta bootstrap-current outputs should remain on the
-current active-auto host route unless active low-L/xblock/coarse/ILU satisfies
+active-auto host route unless active low-L/xblock/coarse/ILU satisfies
 the true-residual gate for that case.
 
 .. figure:: _static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface.png
@@ -363,7 +363,7 @@ the true-residual gate for that case.
    archived VMEC equilibrium and the same polynomial profile contract used in
    the original SFINCS/Redl comparison.  The black curve is the archived
    SFINCS Fortran v3 output at the paper resolution ``25 x 39 x 60 x 7``.
-   The red markers are the current ``sfincs_jax`` benchmark ``auto`` policy at
+   The red markers are the ``sfincs_jax`` benchmark ``auto`` policy at
    ``13 x 13 x 21 x 5`` on the same 39 archived radial surfaces.  All solves
    selected ``fortran_reduced_pc_gmres`` and reached the true-residual target.
    The right panels compare the total solve wall time over all plotted radii and
@@ -385,7 +385,7 @@ the true-residual gate for that case.
    effective total MUMPS factor memory for the archived Fortran v3 run.  Max
    differences are ``15.31%`` versus Redl and ``18.77%`` versus Fortran on the
    reduced JAX grid.  This keeps the QH production-resolution convergence lane
-   open; current term-level audits point away from a simple stale-radius
+   open; term-level audits point away from a simple stale-radius
    geometry, radial-gradient conversion, or current-assembly normalization bug,
    but the production-resolution convergence gate remains the acceptance
    criterion.
@@ -636,7 +636,7 @@ For sharded single-RHS solves on CPU or GPU:
      --rhs1-precond theta_schwarz \
      --schwarz-coarse-levels 2
 
-For the current one-GPU-per-case throughput benchmark on a 2-GPU node:
+For the one-GPU-per-case throughput benchmark on a 2-GPU node:
 
 .. code-block:: bash
 
@@ -647,7 +647,7 @@ For the current one-GPU-per-case throughput benchmark on a 2-GPU node:
 .. note::
 
    ``geometryScheme=5`` (VMEC) and analytic tokamak ``geometryScheme=1`` are
-   supported public examples today. `sfincs_jax` does not currently expose a
+   supported public examples. `sfincs_jax` does not expose a
    separate Miller-parameter geometry mode in the public CLI/API, so tokamak
    examples use the supported analytic Boozer tokamak path instead.
 

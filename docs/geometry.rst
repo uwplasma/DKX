@@ -124,7 +124,7 @@ Optional JAX-native geometry producers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The standard release path for ``geometryScheme=5`` remains a VMEC ``wout`` file.
-For differentiable research workflows, `sfincs_jax` now also includes a small
+For differentiable research workflows, `sfincs_jax` also includes a small
 structural adapter layer in ``sfincs_jax/geometry/jax_adapters.py``. The adapter can
 accept VMEC-like in-memory objects, including objects with the field layout used by
 ``vmec_jax.wout.WoutData``, and normalize them to the internal
@@ -256,7 +256,7 @@ The current example validates the differentiable
 objective`` graph.  File I/O and the default ``vmec_geometry_from_wout`` file
 adapter remain outside the differentiable graph.  Full VMEC-boundary-to-kinetic
 transport optimization is still a larger research workflow, but the public handoff
-now has a fast, tested gradient gate.
+has a fast, tested gradient gate.
 
 Current differentiability boundary
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

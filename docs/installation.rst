@@ -44,7 +44,7 @@ Documentation tooling
 Additional example-only packages
 --------------------------------
 
-The core install now includes ``matplotlib`` and ``netCDF4``, so plotting examples,
+The core install includes ``matplotlib`` and ``netCDF4``, so plotting examples,
 ``sfincs_jax --plot``, and ``--out sfincsOutput.nc`` work without any extra plotting
 or file-format dependency group.
 

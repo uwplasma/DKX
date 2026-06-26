@@ -152,7 +152,7 @@ Advanced linear-state export
 .. note::
 
    The matrix-free solve path is parity-tested on a growing subset of v3 options.
-   In particular, VMEC ``geometryScheme=5`` is now supported for the parity-tested tiny PAS case
+   In particular, VMEC ``geometryScheme=5`` is supported for the parity-tested tiny PAS case
    (see ``tests/ref/pas_1species_PAS_noEr_tiny_scheme5.input.namelist``).
 
 .. note::
@@ -212,20 +212,18 @@ targets large nondifferentiable full-FP ``constraintScheme=1`` systems without
 SFINCS Fortran v3 preconditioner operator, then checks convergence against the
 full SFINCS-JAX operator true residual. The default ``auto`` policy can select
 this route for eligible large systems, so ordinary CLI users do not need to pass
-the method name. The
-production benchmark manifest now enforces at least ``25 x 51 x 4 x 100``
-(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``33 x 1 x 12 x 140`` for
-tokamak cases; RHSMode=1 PAS/no-``E_r`` tokamak rows use
-``89 x 1 x 24 x 300``. The manifest also records a ``10 s`` minimum
-SFINCS Fortran v3 timing target for public production rows. Earlier
-``17 x 21 x 5 x 12`` finite-beta/profile-current
-timings were lower-resolution bring-up checks for this sparse-host lane, not
+the method name. The benchmark manifest enforces at least
+``25 x 51 x 4 x 100`` (``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and
+``33 x 1 x 12 x 140`` for tokamak cases; RHSMode=1 PAS/no-``E_r`` tokamak rows
+use ``89 x 1 x 24 x 300``. The manifest also records a ``10 s`` minimum
+SFINCS Fortran v3 timing target for public production rows. Finite-beta and
+profile-current timing studies below this floor are solver bring-up checks, not
 public production baselines.
 
 Parallel CLI controls
 ---------------------
 
-The executable path now exposes the main parallel runtime controls directly, so
+The executable path exposes the main parallel runtime controls directly, so
 you do not need to rely on undocumented shell environment setup for common
 one-node and multi-host runs.
 
@@ -297,7 +295,7 @@ For actual scaling measurements, prefer the benchmark scripts in
 ``examples/performance`` over ad hoc shell timing. They handle warmup, backend
 selection, cache reuse, and output JSON/figure generation consistently.
 
-At verbosity level ``-v`` or higher, the CLI now prints the active parallel
+At verbosity level ``-v`` or higher, the CLI prints the active parallel
 runtime summary (requested cores, host-device count, shard axis, transport
 worker mode, distributed Krylov settings, and multi-host bootstrap fields).
 This is the supported way to verify what the executable is actually doing on a
@@ -360,7 +358,7 @@ performance without changing the input file:
 
 - ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC``: enable or disable the CPU-only
   3D full-FP sparse-PC GMRES auto lane. The default is ``auto``. Set to ``0`` to
-  force the older dense/Krylov policy, or ``1`` to remove the lower active-size
+  force the dense/Krylov fallback policy, or ``1`` to remove the lower active-size
   floor while keeping the other safety checks.
 
 - ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN`` /
@@ -383,7 +381,7 @@ performance without changing the input file:
 - ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_AUTO``: enable the automatic
   Fortran-reduced sparse-PC GMRES host route for eligible non-differentiable
   RHSMode=1 full-FP, no-``Phi1``, ``constraintScheme=1`` systems. The default is
-  enabled. Set to ``0``/``false`` to force the older policy ladder.
+  enabled. Set to ``0``/``false`` to force the fallback policy ladder.
 
 - ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_AUTO_MIN_SIZE``: minimum total
   system size before the automatic Fortran-reduced route is considered
@@ -393,7 +391,7 @@ performance without changing the input file:
   ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC``: enable or disable the
   GPU/CUDA tokamak full-FP sparse-PC GMRES auto lanes for the measured
   production-floor ``N_zeta=1`` windows. Defaults are ``auto``. Set to ``0`` to
-  force the older matrix-free policy, or ``1`` to allow CPU as well while keeping
+  force the matrix-free fallback policy, or ``1`` to allow CPU as well while keeping
   the other safety checks.
 
 - ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC_MIN`` /
@@ -644,14 +642,14 @@ performance without changing the input file:
     source/constraint tail rows with kinetic moment test directions. It reduces
     small-fixture tail residuals. Optional kinetic residual-error and RHS-drive
     residual-correction columns can be enabled for research probes, but the
-    latest bounded all-RHS promotion gate still failed, so it is not an
+    bounded all-RHS promotion gate still failed, so it is not an
     ``auto`` default.
   - ``fp_fortran_reduced_lu``/``fp_petsc_like_lu``/``fp_reduced_pmat_lu``:
     PETSc-like FP transport preconditioner for RHSMode=2/3. The true operator
     remains matrix-free, while a separate Fortran-reduced ``Pmat`` is
     materialized and factored once, then reused across the transport RHS
-    columns. This is the strongest bounded residual-clean route today and is
-    now the default ``auto`` candidate for eligible non-Phi1 full-FP transport
+    columns. This is the strongest bounded residual-clean route and is
+    the default ``auto`` candidate for eligible non-Phi1 full-FP transport
     cases. Set ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO=0`` to disable
     it for a benchmark campaign.
   - ``collision``: collision-diagonal preconditioner (PAS/FP + identity shift).
@@ -862,7 +860,7 @@ performance without changing the input file:
 
 - ``SFINCS_JAX_STATE_IN``/``SFINCS_JAX_STATE_OUT``: path for reading/writing Krylov
   recycle states (used for scan warm-starting and multi-RHS reuse). RHSMode=1 states
-  now store a short history of prior solutions for recycling.
+  store a short history of prior solutions for recycling.
 
 - ``SFINCS_JAX_SCAN_RECYCLE``: enable automatic scan-level Krylov recycling in
   :func:`sfincs_jax.workflows.scans.run_er_scan` by wiring ``SFINCS_JAX_STATE_IN/OUT`` between
@@ -982,7 +980,7 @@ performance without changing the input file:
   when GMRES stagnates. This is only applied when the active system size is below the
   specified threshold (default: ``400``; see the FP-specific override below).
 - ``SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF``: for small full FP systems (``collisionOperator=0``),
-  `sfincs_jax` now **defaults to a direct dense solve** instead of Krylov to match
+  `sfincs_jax` **defaults to a direct dense solve** instead of Krylov to match
   Fortran and avoid expensive fallback paths. This cutoff controls the active-size
   threshold for that default (default: ``min(SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF,
   8000)``; set ``0`` to disable the initial dense path).
@@ -1052,7 +1050,7 @@ performance without changing the input file:
 
 - ``SFINCS_JAX_PHI1_PRECOND_KIND``: Newton–Krylov preconditioner for includePhi1 solves
   (active when ``SFINCS_JAX_PHI1_USE_PRECONDITIONER`` is enabled and frozen linearization is used;
-  frozen linearization is now opt‑in via ``SFINCS_JAX_PHI1_USE_FROZEN_LINEARIZATION``).
+  frozen linearization is opt-in via ``SFINCS_JAX_PHI1_USE_FROZEN_LINEARIZATION``).
 
   - ``collision`` (default for includePhi1): collision-diagonal preconditioner.
   - ``block``/``block_jacobi``: RHSMode=1 block-Jacobi preconditioner (stronger).
