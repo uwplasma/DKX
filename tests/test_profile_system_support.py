@@ -55,6 +55,12 @@ def _tiny_phi1_scheme2_operator():
     return full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
 
 
+def _write_tiny_profile_input(tmp_path: Path, body: str):
+    path = tmp_path / "input.namelist"
+    path.write_text(body, encoding="utf-8")
+    return read_sfincs_input(path)
+
+
 @pytest.mark.parametrize(
     ("fixture", "expected_active"),
     [
@@ -224,6 +230,106 @@ def test_profile_system_scalar_helpers_and_ix_min_match_fortran_conventions() ->
     assert _get_bool(group, "missing", default=True) is True
     assert _ix_min(point_at_x0=True) == 1
     assert _ix_min(point_at_x0=False) == 0
+
+
+def test_full_system_builder_rejects_external_phi1_before_operator_setup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    nml = _write_tiny_profile_input(
+        tmp_path,
+        "&physicsParameters\n"
+        "  includePhi1 = .true.\n"
+        "  readExternalPhi1 = .true.\n"
+        "/\n",
+    )
+
+    def fail_if_called(**_kwargs):
+        raise AssertionError("f-block setup should not run before external-Phi1 admission")
+
+    monkeypatch.setattr(profile_system, "fblock_operator_from_namelist", fail_if_called)
+    with pytest.raises(NotImplementedError, match="readExternalPhi1"):
+        full_system_operator_from_namelist(nml=nml, grids=SimpleNamespace(), geom=SimpleNamespace())
+
+
+def test_full_system_builder_rejects_invalid_radial_gradient_coordinate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    nml = _write_tiny_profile_input(
+        tmp_path,
+        "&geometryParameters\n"
+        "  geometryScheme = 1\n"
+        "  inputRadialCoordinateForGradients = 99\n"
+        "/\n"
+        "&physicsParameters\n"
+        "  collisionOperator = 0\n"
+        "/\n"
+        "&speciesParameters\n"
+        "  Zs = 1\n"
+        "  mHats = 1\n"
+        "  THats = 1\n"
+        "  nHats = 1\n"
+        "/\n",
+    )
+
+    monkeypatch.setattr(profile_system, "fblock_operator_from_namelist", lambda **_kwargs: SimpleNamespace())
+    with pytest.raises(NotImplementedError, match="inputRadialCoordinateForGradients"):
+        full_system_operator_from_namelist(nml=nml, grids=SimpleNamespace(), geom=SimpleNamespace())
+
+
+def test_full_system_builder_rejects_unsupported_geometry_scheme_after_fast_setup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    nml = _write_tiny_profile_input(
+        tmp_path,
+        "&geometryParameters\n"
+        "  geometryScheme = 13\n"
+        "/\n"
+        "&physicsParameters\n"
+        "  collisionOperator = 0\n"
+        "/\n"
+        "&speciesParameters\n"
+        "  Zs = 1\n"
+        "  mHats = 1\n"
+        "  THats = 1\n"
+        "  nHats = 1\n"
+        "/\n",
+    )
+
+    monkeypatch.setattr(profile_system, "fblock_operator_from_namelist", lambda **_kwargs: SimpleNamespace())
+    with pytest.raises(NotImplementedError, match="geometryScheme=13"):
+        full_system_operator_from_namelist(nml=nml, grids=SimpleNamespace(), geom=SimpleNamespace())
+
+
+def test_full_system_builder_checks_eparallelhat_spec_species_shape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    nml = _write_tiny_profile_input(
+        tmp_path,
+        "&general\n"
+        "  RHSMode = 1\n"
+        "/\n"
+        "&geometryParameters\n"
+        "  geometryScheme = 1\n"
+        "/\n"
+        "&physicsParameters\n"
+        "  collisionOperator = 0\n"
+        "  EParallelHatSpec = 1 2 3\n"
+        "/\n"
+        "&speciesParameters\n"
+        "  Zs = 1 -1\n"
+        "  mHats = 1 0.0005446\n"
+        "  THats = 1 1\n"
+        "  nHats = 1 1\n"
+        "/\n",
+    )
+
+    monkeypatch.setattr(profile_system, "fblock_operator_from_namelist", lambda **_kwargs: SimpleNamespace())
+    with pytest.raises(ValueError, match="EParallelHatSpec"):
+        full_system_operator_from_namelist(nml=nml, grids=SimpleNamespace(), geom=SimpleNamespace())
 
 
 def test_nonlinear_temp_vector_helpers_match_manual_l_coupling() -> None:

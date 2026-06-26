@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (output cache/localization coverage pass)
+Last updated: 2026-06-26 (profile-system admission coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -411,6 +411,14 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   paths. These protect user decks copied into scratch directories and prevent
   stale geometry-output reuse after equilibrium edits. The focused output-policy
   suite reports `36 passed` in `0.42 s`.
+- The sixty-third post-audit coverage tranche added profile-system admission
+  gates. `tests/test_profile_system_support.py` now checks that external Phi1
+  decks are rejected before f-block setup, invalid radial-gradient coordinates
+  and unsupported geometry schemes fail before expensive solve setup, and
+  `EParallelHatSpec` must match the species vector shape. These are direct
+  user-input and Fortran-v3 compatibility contracts for the differentiable
+  full-system operator constructor. The focused profile-system support suite
+  reports `26 passed` in `7.88 s`.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
