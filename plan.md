@@ -27,7 +27,7 @@ instructions to follow.
 
 Latest execution checkpoint:
 
-- Lane 1 Batches A-D have met their structural gates. Batch A restored the
+- Lane 1 Batches A-E have met their structural gates. Batch A restored the
   `profile_response/solve.py <=5,500` and sparse-handoff line gates. Batch B
   consolidated RHSMode=2/3 active dense setup, active factors, direct
   reduced-``Pmat`` emission, direct block-Schur setup, and Fortran-reduced LU
@@ -37,12 +37,15 @@ Latest execution checkpoint:
   `sfincs_jax.problems.transport_matrix.parallel.runtime`, keeping `worker.py`
   only as the subprocess entry point. Batch D consolidated solver support into
   durable owners: `explicit_sparse.py`, `preconditioning.py`, and
-  `diagnostics.py`.
+  `diagnostics.py`. Batch E classified every remaining package-root module in
+  `docs/source_map.rst`, kept public workflow roots in place without adding
+  shims, and added an import-contract guard against unclassified root files or
+  stale deleted flat aliases.
 - QI preconditioners remain consolidated in five durable owners:
   `qi/basis.py`, `qi/corrections.py`, `qi/device.py`, `qi/policy.py`, and
   `qi/__init__.py`. The domain-decomposition line/block implementation remains
   merged into its package owner.
-- Current counts after Batch D: 168 package Python files, 43 package-root files,
+- Current counts after Batch E: 168 package Python files, 43 package-root files,
   18 `problems/profile_response` files including `sparse`, 10
   `problems/transport_matrix` files including `parallel`, 11 solver-root files,
   35 `solvers/preconditioners` files, 5 QI preconditioner files,
@@ -50,6 +53,10 @@ Latest execution checkpoint:
   `profile_response/solve.py` at 5,420 lines,
   `profile_response/sparse/handoff.py` at 5,500 lines, and 165,862 package
   Python lines.
+- Batch E validation passed: stale source-map deleted-alias scan returned no
+  matches; focused CLI/API/scans/upstream/data-fetch/import-contract tests
+  passed with `39 passed`; scoped py_compile and Ruff passed for touched
+  workflow/root classification files; and Sphinx `-W` passed.
 - Validation passed:
   `python -m pytest tests/test_rhs1_qi_*.py
   tests/test_rhs1_device_operator_unit.py tests/test_profile_response_sparse_pc.py
@@ -62,9 +69,7 @@ Latest execution checkpoint:
 
 Next ordered implementation sequence:
 
-1. Batch E: classify or migrate root workflow/public-surface modules without
-   creating shims.
-2. Batch F-G: reduce oversized profile-response owners internally, refresh
+1. Batch F-G: reduce oversized profile-response owners internally, refresh
    docs/tests/source maps, and run the review-ready validation set.
 
 Batch A validation evidence:

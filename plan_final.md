@@ -848,6 +848,28 @@ Exit gates:
 - CLI, API, scans, upstream postprocess, data-fetch, output-format, docs, and
   import-contract tests pass.
 
+Status on 2026-06-26:
+
+- Complete. The package root remains at `43` Python files, which is within the
+  allowed `<=44` gate, and every remaining root file is explicitly classified
+  in `docs/source_map.rst` as a public API/entry point, stable kernel/support
+  utility, public workflow/support surface, or compatibility facade/shim.
+- `scans.py`, `postprocess_upstream.py`, and `data_fetch.py` remain at the
+  package root because they are documented or script/example-facing public
+  support workflows; moving them without shims would break public imports.
+- `tests/test_domain_package_import_contracts.py` now fails closed if a new
+  package-root module appears without a classification, or if the source map
+  advertises deleted flat `rhs1_*`/`transport_*` files as live owners or
+  legacy aliases.
+- Validation: stale source-map alias scan returned no matches; focused
+  CLI/API/scans/upstream/data-fetch/import-contract tests passed with
+  `39 passed`; scoped py_compile and Ruff passed for touched workflow/root
+  classification files; Sphinx `-W` passed; current metrics remain `168`
+  package Python files, `43` package-root files, `165,862` package source
+  lines, `profile_response/solve.py` at `5,420` lines,
+  `profile_response/sparse/handoff.py` at `5,500` lines, `v3_driver.py` at
+  `47` lines, and `io.py` at `64` lines.
+
 #### Batch F - Profile-Response Internal Line Paydown
 
 Purpose: lower complexity in the largest remaining profile-response owners
@@ -1493,17 +1515,19 @@ Current completion status:
   symbolic-sparse, and domain-decomposition file debt. The remaining active
   blockers proceed through larger owner-level batches only: root/public-surface
   classification, profile-response internal line paydown, and final
-  docs/tests/review validation. No additional solver-core consolidation is
-  planned unless a correctness bug requires it.
+  docs/tests/review validation. Batch E completed the root/public-surface
+  classification gate without moving public workflow modules or adding shims.
+  No additional solver-core consolidation is planned unless a correctness bug
+  requires it.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
 - RHSMode 4/5 sensitivity contracts: about 75 percent. Small fixture contracts
   and derivative identities are implemented; production-grid parity refresh
   remains a release benchmark.
-- Public docs/API stabilization for the refactor PR: about 45 percent. The
-  source map exists, but it must be refreshed after the final module names
-  settle.
+- Public docs/API stabilization for the refactor PR: about 65 percent. The
+  root/source-map classification is now guarded by tests; final docs/API work
+  remains in Batch G after profile-response line paydown.
 
 Completed checkpoints that remain valid:
 
@@ -1534,13 +1558,11 @@ Completed checkpoints that remain valid:
 
 Next ordered implementation steps:
 
-1. Execute Lane 1 Batch E: classify the root public surface and
-   move only modules that can migrate without creating shims.
-2. Execute Lane 1 Batch F and G: reduce oversized profile-response owners
+1. Execute Lane 1 Batch F and G: reduce oversized profile-response owners
    internally without new files, refresh docs/source maps/examples/tests, run
    the review-ready validation set, and move PR #8 out of draft only if gates
    pass.
-3. Keep production option-1/3 ambipolar reruns, production-grid RHSMode 4/5
+2. Keep production option-1/3 ambipolar reruns, production-grid RHSMode 4/5
    parity, large CPU/GPU benchmark regeneration, true device-QI promotion, and
    lower-memory production solver optimization as release-refresh or research
    lanes unless they reveal a correctness regression in the refactor branch.
