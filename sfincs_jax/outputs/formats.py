@@ -16,7 +16,7 @@ import re
 import h5py
 import numpy as np
 
-from ..solvers.trace import SolverTrace, write_solver_trace_h5
+from ..solvers.diagnostics import SolverTrace, write_solver_trace_h5
 
 
 def decode_if_bytes(x: Any) -> Any:

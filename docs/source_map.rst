@@ -952,12 +952,13 @@ the historical private driver name and test the focused module directly. This ke
   accepted-iterate update logic and solve orchestration for the Newton path,
   including PETSc-like backtracking, fixed-candidate ``best`` search, and
   finite-state fallback handling.
-- ``sfincs_jax/solvers/progress.py``:
-  user-facing duration formatting, coarse runtime hints, one-shot large RHSMode=1
-  progress messages, and transport whichRHS ETA text. This module is intentionally
-  lightweight so CLI progress can stay informative without importing heavy solver
-  dependencies. It is solver-neutral: it improves observability without affecting
-  numerical decisions.
+- ``sfincs_jax/solvers/diagnostics.py``:
+  solver-neutral diagnostics and observability support: user-facing duration
+  formatting, coarse runtime hints, one-shot large RHSMode=1 progress messages,
+  transport whichRHS ETA text, fixed-shape Krylov state signatures and
+  warm-start files, portable solver-trace JSON/HDF5 records, and compact
+  Fortran-v3/SFINCS-JAX solver-profile comparisons. These utilities improve
+  reproducibility and CLI progress without changing numerical decisions.
 - ``sfincs_jax/profiling.py``:
   opt-in coarse solver/output profiling behind ``SFINCS_JAX_PROFILE``. It owns
   phase-level timing, RSS high-water sampling, optional JAX device-memory polling,

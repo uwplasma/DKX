@@ -311,7 +311,7 @@ class SfincsJaxRadialCurrentEvaluator:
         from ..io import localize_equilibrium_file_in_place, read_sfincs_h5, write_sfincs_jax_output_h5  # noqa: PLC0415
         from ..scans import _patch_scalar_in_group  # noqa: PLC0415
         from ..solver_state import read_krylov_state_signature  # noqa: PLC0415
-        from ..solvers.trace import read_solver_trace_json  # noqa: PLC0415
+        from ..solvers.diagnostics import read_solver_trace_json  # noqa: PLC0415
 
         index = len(self.records) + 1
         run_dir = self.work_dir / f"eval_{index:03d}_{self.variable}_{float(er):+.8e}".replace("+", "p").replace("-", "m")

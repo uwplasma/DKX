@@ -27,28 +27,29 @@ instructions to follow.
 
 Latest execution checkpoint:
 
-- Lane 1 Batch 2 solver/preconditioner family compression has met the
-  review-ready file-count gates.
-- QI preconditioners were consolidated from 14 files into five durable owners:
+- Lane 1 Batches A-D have met their structural gates. Batch A restored the
+  `profile_response/solve.py <=5,500` and sparse-handoff line gates. Batch B
+  consolidated RHSMode=2/3 active dense setup, active factors, direct
+  reduced-``Pmat`` emission, direct block-Schur setup, and Fortran-reduced LU
+  setup into `sfincs_jax.problems.transport_matrix.linear_system`, deleting
+  five old implementation files. Batch C consolidated internal
+  transport-parallel policy and sharding into
+  `sfincs_jax.problems.transport_matrix.parallel.runtime`, keeping `worker.py`
+  only as the subprocess entry point. Batch D consolidated solver support into
+  durable owners: `explicit_sparse.py`, `preconditioning.py`, and
+  `diagnostics.py`.
+- QI preconditioners remain consolidated in five durable owners:
   `qi/basis.py`, `qi/corrections.py`, `qi/device.py`, `qi/policy.py`, and
-  `qi/__init__.py`.
-- The domain-decomposition line/block implementation was merged into
-  `solvers/preconditioners/domain_decomposition/__init__.py`; the old
-  `line_blocks.py` implementation file was deleted and imports now target the
-  package owner.
-- Current counts after Batch A and Batch B: 178 package Python files, 43 package
-  root files, 18 `problems/profile_response` files including `sparse`, 12
-  `problems/transport_matrix` files including `parallel`, 35
-  `solvers/preconditioners` files, 5 QI preconditioner files, `v3_driver.py` at
-  47 lines, `io.py` at 64 lines, `profile_response/solve.py` at 5,420 lines,
-  `profile_response/sparse/handoff.py` at 5,500 lines, and 165,992 package
-  Python lines. Batch A restored the reopened `profile_response/solve.py
-  <=5,500` gate, documented the sparse handoff waiver, and kept the
-  `handoff.py`, `v3_driver.py`, and `io.py` gates locked. Batch B consolidated
-  RHSMode=2/3 active dense setup, active factors, direct reduced-``Pmat``
-  emission, direct block-Schur setup, and Fortran-reduced LU setup into
-  `sfincs_jax.problems.transport_matrix.linear_system`, deleting five old
-  implementation files.
+  `qi/__init__.py`. The domain-decomposition line/block implementation remains
+  merged into its package owner.
+- Current counts after Batch D: 168 package Python files, 43 package-root files,
+  18 `problems/profile_response` files including `sparse`, 10
+  `problems/transport_matrix` files including `parallel`, 11 solver-root files,
+  35 `solvers/preconditioners` files, 5 QI preconditioner files,
+  `v3_driver.py` at 47 lines, `io.py` at 64 lines,
+  `profile_response/solve.py` at 5,420 lines,
+  `profile_response/sparse/handoff.py` at 5,500 lines, and 165,862 package
+  Python lines.
 - Validation passed:
   `python -m pytest tests/test_rhs1_qi_*.py
   tests/test_rhs1_device_operator_unit.py tests/test_profile_response_sparse_pc.py
@@ -61,12 +62,9 @@ Latest execution checkpoint:
 
 Next ordered implementation sequence:
 
-1. Batch C: collapse internal transport-parallel helpers into runtime
-   ownership if imports allow.
-2. Batch D-E: consolidate solver-core support files by durable owner, then
-   classify or migrate root workflow/public-surface modules without creating
-   shims.
-3. Batch F-G: reduce oversized profile-response owners internally, refresh
+1. Batch E: classify or migrate root workflow/public-surface modules without
+   creating shims.
+2. Batch F-G: reduce oversized profile-response owners internally, refresh
    docs/tests/source maps, and run the review-ready validation set.
 
 Batch A validation evidence:

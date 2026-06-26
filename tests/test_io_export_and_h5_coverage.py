@@ -24,7 +24,7 @@ from sfincs_jax.outputs.rhsmode1 import (
     _should_fail_nonconverged_rhsmode1_output,
     _write_nonconverged_rhsmode1_solver_trace_json,
 )
-from sfincs_jax.solvers.trace import read_solver_trace_json
+from sfincs_jax.solvers.diagnostics import read_solver_trace_json
 
 
 def _minimal_namelist(groups: dict[str, dict]) -> Namelist:

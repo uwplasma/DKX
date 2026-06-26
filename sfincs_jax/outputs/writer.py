@@ -60,8 +60,12 @@ from .rhsmode1 import (
     _solver_trace_memory_estimate,
     _write_nonconverged_rhsmode1_solver_trace_json,
 )
-from ..solvers.trace import SolverTrace, write_solver_trace_json
-from ..solvers.progress import format_duration, runtime_scale_hint
+from ..solvers.diagnostics import (
+    SolverTrace,
+    format_duration,
+    runtime_scale_hint,
+    write_solver_trace_json,
+)
 from ..vmec_wout import _set_scale_factor, psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
 from sfincs_jax.discretization.v3 import V3Grids, geometry_from_namelist, grids_from_namelist
 

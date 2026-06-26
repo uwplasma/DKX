@@ -215,7 +215,7 @@ def resolve_transport_parallel_request(
 
 
 def _load_transport_krylov_state(*, path: str, op: Any) -> dict[str, Any] | None:
-    from sfincs_jax.solvers.state import load_krylov_state  # noqa: PLC0415
+    from sfincs_jax.solvers.diagnostics import load_krylov_state  # noqa: PLC0415
 
     return load_krylov_state(path=path, op=op)
 

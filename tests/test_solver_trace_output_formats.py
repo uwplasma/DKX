@@ -12,7 +12,7 @@ from sfincs_jax.outputs.rhsmode1 import (
     _profile_memory_summary,
     _solver_trace_memory_estimate,
 )
-from sfincs_jax.solvers.trace import (
+from sfincs_jax.solvers.diagnostics import (
     SolverTrace,
     SolverTraceCandidate,
     read_solver_trace_h5,

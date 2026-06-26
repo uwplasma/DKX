@@ -47,7 +47,7 @@ from sfincs_jax.operators.profile_response.sparse_pattern import (
     v3_full_system_conservative_sparsity_pattern,
     v3_full_system_conservative_sparsity_pattern_for_indices,
 )
-from sfincs_jax.solvers.progress import transport_progress_message
+from sfincs_jax.solvers.diagnostics import transport_progress_message
 from sfincs_jax.problems.transport_matrix.policies import (
     transport_host_gmres_accepts_preconditioned_residual,
     transport_residual_gate_failure,
@@ -1776,7 +1776,7 @@ def solve_v3_transport_matrix_linear_gmres(
     transport_output_fields = postsolve_diagnostics.transport_output_fields
     if state_out_env:
         try:
-            from sfincs_jax.solvers.state import save_krylov_state  # noqa: PLC0415
+            from sfincs_jax.solvers.diagnostics import save_krylov_state  # noqa: PLC0415
 
             save_krylov_state(path=state_out_env, op=op0, x_by_rhs=state_vectors)
         except Exception:

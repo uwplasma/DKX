@@ -486,7 +486,7 @@ from sfincs_jax.phi1_newton_linear import (
     build_phi1_newton_preconditioner, solve_phi1_newton_linear_step,
 )
 from sfincs_jax.problems.profile_response.phi1_newton import advance_phi1_newton_iterate
-from sfincs_jax.solvers.progress import (
+from sfincs_jax.solvers.diagnostics import (
     RHS1ProgressNotes, rhs1_large_progress_enabled,
 )
 from sfincs_jax.problems.transport_matrix.diagnostics import (

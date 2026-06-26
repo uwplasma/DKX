@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from sfincs_jax.solvers.profile_compare import compare_solver_profile_files
+from sfincs_jax.solvers.diagnostics import compare_solver_profile_files
 
 
 def _json_default(value: Any) -> Any:

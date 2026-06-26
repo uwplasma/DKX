@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from sfincs_jax.solvers.profile_compare import compare_solver_profiles
+from sfincs_jax.solvers.diagnostics import compare_solver_profiles
 
 
 def _fortran_profile() -> dict:
