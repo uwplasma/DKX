@@ -755,7 +755,7 @@ converged residual/solution parity against the tiny PETSc state-vector
 reference for ``includePhi1InKineticEquation=true``.
 Transport worker residual abort formatting is covered in
 ``tests/test_transport_residual_quality.py`` for
-``sfincs_jax.problems.transport_matrix.residual_quality``, including custom
+``sfincs_jax.problems.transport_matrix.policies``, including custom
 environment names, negative/invalid threshold normalization, nonfinite residual
 diagnostics, and array-to-message collection. These are intentionally fast
 policy checks; they protect solver-path diagnostics without launching transport

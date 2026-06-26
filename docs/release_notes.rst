@@ -320,15 +320,15 @@ Unreleased
   delegates dense matrix assembly, active-DOF projection, streamed diagnostics,
   residual bookkeeping, and progress logging to a focused helper with direct
   unit coverage plus the existing transport-output regression.
-- Extracted optional RHSMode=2/3 transport KSP iteration-count diagnostics into
-  ``transport_iteration_stats.py``. The production solve loop now calls a
-  focused helper for small host SciPy history reruns while preserving the same
-  skip/error messages and keeping diagnostic failures non-fatal.
-- Extracted RHSMode=2/3 transport Krylov dispatch into
-  ``transport_linear_solve.py``. The driver now delegates transport-specific
+- Consolidated optional RHSMode=2/3 transport KSP iteration-count diagnostics
+  into ``problems.transport_matrix.solve``. The production solve loop now calls
+  a focused helper for small host SciPy history reruns while preserving the
+  same skip/error messages and keeping diagnostic failures non-fatal.
+- Consolidated RHSMode=2/3 transport Krylov dispatch into
+  ``problems.transport_matrix.solve``. The driver delegates transport-specific
   solver-kind mapping, restart policy, implicit custom-solve routing,
-  JIT/non-JIT selection, and distributed residual-solve routing to a focused
-  module with direct tests.
+  JIT/non-JIT selection, and distributed residual-solve routing to tested
+  solve-owner helpers.
 - Extracted the RHSMode=2/3 sparse-direct rescue implementation into
   ``transport_sparse_direct_solve.py``. The driver now builds an explicit
   context for pattern probing, direct active FP factors, explicit sparse helper

@@ -9,21 +9,33 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+import time
+from typing import Any
 
 import jax.numpy as jnp
+import jax.scipy.linalg as jla
+import numpy as np
 
 from sfincs_jax.solvers.implicit import linear_custom_solve, linear_custom_solve_with_residual
 from sfincs_jax.solver import (
     GMRESSolveResult,
+    assemble_dense_matrix_from_matvec,
+    bicgstab_solve_with_history_scipy,
     bicgstab_solve_with_residual,
     bicgstab_solve_with_residual_jit,
+    explicit_left_preconditioned_gmres_scipy,
     gmres_solve,
     gmres_solve_jit,
     gmres_solve_with_residual,
     gmres_solve_with_residual_distributed,
     gmres_solve_with_residual_jit,
+    gmres_solve_with_history_scipy,
 )
 from sfincs_jax.problems.transport_matrix.finalize import V3TransportMatrixSolveResult
+from sfincs_jax.problems.transport_matrix.policies import (
+    transport_host_gmres_accepts_preconditioned_residual,
+    transport_residual_gate_thresholds_from_env,
+)
 from sfincs_jax.operators.profile_response.system import sharding_constraints
 
 
@@ -1768,3 +1780,245 @@ def solve_v3_transport_matrix_linear_gmres(
         preconditioner_kind=precond_kind_used,
         strong_preconditioner_kind=strong_precond_kind,
     )
+
+
+# Dense LU fallbacks for bounded transport solves.
+def dense_preconditioner_for_matvec(
+    *,
+    matvec_fn,
+    n: int,
+    dtype: jnp.dtype,
+    cache: dict[tuple[object, int], Callable[[jnp.ndarray], jnp.ndarray]],
+    key: tuple[Any, ...],
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Build or reuse a dense-LU preconditioner for a matrix-free operator."""
+    if key in cache:
+        return cache[key]
+    a_dense = assemble_dense_matrix_from_matvec(matvec=matvec_fn, n=int(n), dtype=dtype)
+    a_dense = jnp.asarray(a_dense, dtype=dtype)
+    lu, piv = jla.lu_factor(a_dense)
+
+    def precond(v: jnp.ndarray) -> jnp.ndarray:
+        return jla.lu_solve((lu, piv), v)
+
+    cache[key] = precond
+    return precond
+
+
+def dense_solver_for_matvec(
+    *,
+    matvec_fn,
+    n: int,
+    dtype: jnp.dtype,
+    cache: dict[tuple[object, int], Callable[[jnp.ndarray], jnp.ndarray]],
+    key: tuple[Any, ...],
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Build or reuse a dense-LU direct solver for a matrix-free operator."""
+    if key in cache:
+        return cache[key]
+    a_dense = assemble_dense_matrix_from_matvec(matvec=matvec_fn, n=int(n), dtype=dtype)
+    a_dense = jnp.asarray(a_dense, dtype=dtype)
+    lu, piv = jla.lu_factor(a_dense)
+
+    def solve(v: jnp.ndarray) -> jnp.ndarray:
+        return jla.lu_solve((lu, piv), v)
+
+    cache[key] = solve
+    return solve
+
+
+# Host SciPy GMRES fallback for explicit transport solves.
+def transport_host_gmres_solve(
+    *,
+    op: Any,
+    matvec_fn,
+    b_vec: jnp.ndarray,
+    x0_vec: jnp.ndarray | None,
+    preconditioner_fn: Callable[[jnp.ndarray], jnp.ndarray] | None,
+    tol_val: float,
+    atol_val: float,
+    restart_val: int,
+    maxiter_val: int | None,
+    precondition_side_val: str,
+    emit: Callable[[int, str], None] | None = None,
+    which_rhs: int | None = None,
+    progress_every: int = 10,
+) -> tuple[GMRESSolveResult, jnp.ndarray]:
+    """Run host SciPy GMRES and return a JAX result plus true residual vector."""
+    side = str(precondition_side_val).strip().lower()
+    b_norm = float(jnp.linalg.norm(b_vec))
+    target_true = max(float(atol_val), float(tol_val) * b_norm)
+    reported_residual_norm: float | None = None
+    started = time.perf_counter()
+    progress_stride = max(0, int(progress_every))
+
+    def _progress(iteration: int, residual: float) -> None:
+        if emit is None or progress_stride <= 0:
+            return
+        iteration_int = int(iteration)
+        if iteration_int != 1 and iteration_int % progress_stride != 0:
+            return
+        rhs_label = "unknown" if which_rhs is None else str(int(which_rhs))
+        emit(
+            1,
+            "transport host SciPy GMRES progress "
+            f"whichRHS={rhs_label} iter={iteration_int} "
+            f"reported_residual={float(residual):.6e} "
+            f"elapsed_s={time.perf_counter() - started:.1f}",
+        )
+
+    if preconditioner_fn is not None and side == "left":
+        x_np, rn_true, rn_pc, _history = explicit_left_preconditioned_gmres_scipy(
+            matvec=matvec_fn,
+            b=b_vec,
+            preconditioner=preconditioner_fn,
+            x0=x0_vec,
+            tol=tol_val,
+            atol=atol_val,
+            restart=restart_val,
+            maxiter=maxiter_val,
+            progress_callback=_progress,
+        )
+        rhs_pc_norm = float(jnp.linalg.norm(preconditioner_fn(b_vec)))
+        target_pc = max(float(atol_val), float(tol_val) * rhs_pc_norm)
+        if (
+            np.isfinite(float(rn_pc))
+            and float(rn_pc) <= float(target_pc)
+            and transport_host_gmres_accepts_preconditioned_residual(
+                op=op,
+                true_residual_norm=float(rn_true),
+                target_true=float(target_true),
+            )
+        ):
+            # Mirror the PETSc-style transport lane, which may accept convergence
+            # on the preconditioned KSP residual for singular/near-singular systems.
+            reported_residual_norm = min(float(rn_true), float(target_true))
+    else:
+        x_np, rn_true, _history = gmres_solve_with_history_scipy(
+            matvec=matvec_fn,
+            b=b_vec,
+            preconditioner=preconditioner_fn,
+            x0=x0_vec,
+            tol=tol_val,
+            atol=atol_val,
+            restart=restart_val,
+            maxiter=maxiter_val,
+            precondition_side=precondition_side_val,
+            progress_callback=_progress,
+        )
+    x_jnp = jnp.asarray(x_np, dtype=jnp.float64)
+    residual_vec = b_vec - matvec_fn(x_jnp)
+    residual_norm = float(jnp.linalg.norm(residual_vec))
+    if np.isfinite(float(rn_true)):
+        residual_norm = min(residual_norm, float(rn_true))
+    if reported_residual_norm is not None:
+        residual_norm = min(residual_norm, float(reported_residual_norm))
+    return (
+        GMRESSolveResult(
+            x=x_jnp,
+            residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+        ),
+        residual_vec,
+    )
+
+
+# Optional host-side Krylov iteration diagnostics.
+EmitFn = Callable[[int, str], None]
+
+
+def emit_transport_ksp_iteration_stats(
+    *,
+    which_rhs: int,
+    matvec_fn: Callable[[jnp.ndarray], jnp.ndarray],
+    b_vec: jnp.ndarray,
+    precond_fn: Callable[[jnp.ndarray], jnp.ndarray] | None,
+    x0_vec: jnp.ndarray | None,
+    tol_val: float,
+    atol_val: float,
+    restart_val: int,
+    maxiter_val: int | None,
+    precond_side: str,
+    solver_kind: str,
+    emit: EmitFn | None,
+    enabled: bool,
+    max_size: int | None,
+) -> None:
+    """Emit optional SciPy KSP iteration counts without affecting the solve.
+
+    The diagnostics re-run the requested Krylov method on the host for small
+    systems only.  Any diagnostic failure is reported and swallowed so that the
+    production transport solve remains the source of truth.
+    """
+    if emit is None or not enabled:
+        return
+    size = int(b_vec.size)
+    if max_size is not None and size > int(max_size):
+        emit(1, f"whichRHS={which_rhs} ksp_iterations skipped (size={size} > max={int(max_size)})")
+        return
+    solver_kind_l = str(solver_kind).strip().lower()
+    try:
+        history = _solve_history(
+            solver_kind=solver_kind_l,
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
+            precond_fn=precond_fn,
+            x0_vec=x0_vec,
+            tol_val=tol_val,
+            atol_val=atol_val,
+            restart_val=restart_val,
+            maxiter_val=maxiter_val,
+            precond_side=precond_side,
+        )
+    except Exception as exc:  # noqa: BLE001
+        emit(1, f"whichRHS={which_rhs} ksp_iterations unavailable ({type(exc).__name__}: {exc})")
+        return
+    if history is None:
+        return
+    emit(0, f"whichRHS={which_rhs} ksp_iterations={len(history)} solver={solver_kind_l}")
+
+
+def _solve_history(
+    *,
+    solver_kind: str,
+    matvec_fn: Callable[[jnp.ndarray], jnp.ndarray],
+    b_vec: jnp.ndarray,
+    precond_fn: Callable[[jnp.ndarray], jnp.ndarray] | None,
+    x0_vec: jnp.ndarray | None,
+    tol_val: float,
+    atol_val: float,
+    restart_val: int,
+    maxiter_val: int | None,
+    precond_side: str,
+) -> list[Any] | None:
+    if solver_kind == "gmres":
+        _x_hist, _rn, history = gmres_solve_with_history_scipy(
+            matvec=matvec_fn,
+            b=b_vec,
+            preconditioner=precond_fn,
+            x0=x0_vec,
+            tol=tol_val,
+            atol=atol_val,
+            restart=restart_val,
+            maxiter=maxiter_val,
+            precondition_side=precond_side,
+        )
+        return history
+    if solver_kind == "bicgstab":
+        _x_hist, _rn, history = bicgstab_solve_with_history_scipy(
+            matvec=matvec_fn,
+            b=b_vec,
+            preconditioner=precond_fn,
+            x0=x0_vec,
+            tol=tol_val,
+            atol=atol_val,
+            maxiter=maxiter_val,
+            precondition_side=precond_side,
+        )
+        return history
+    return None
+
+
+_dense_preconditioner_for_matvec = dense_preconditioner_for_matvec
+_dense_solver_for_matvec = dense_solver_for_matvec
+_transport_host_gmres_solve = transport_host_gmres_solve
+_emit_transport_ksp_iteration_stats = emit_transport_ksp_iteration_stats

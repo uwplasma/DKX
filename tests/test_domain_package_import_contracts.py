@@ -299,8 +299,8 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "solve_transport_linear_with_residual",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.host_gmres",
-        "sfincs_jax.problems.transport_matrix.host_gmres",
+        "sfincs_jax.problems.transport_matrix.solve",
+        "sfincs_jax.problems.transport_matrix.solve",
         "transport_host_gmres_solve",
     ),
     (
@@ -309,18 +309,18 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "transport_polish_config_from_env",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.residual_quality",
-        "sfincs_jax.problems.transport_matrix.residual_quality",
+        "sfincs_jax.problems.transport_matrix.policies",
+        "sfincs_jax.problems.transport_matrix.policies",
         "transport_residual_gate_failure",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.iteration_stats",
-        "sfincs_jax.problems.transport_matrix.iteration_stats",
+        "sfincs_jax.problems.transport_matrix.solve",
+        "sfincs_jax.problems.transport_matrix.solve",
         "emit_transport_ksp_iteration_stats",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.dense_lu",
-        "sfincs_jax.problems.transport_matrix.dense_lu",
+        "sfincs_jax.problems.transport_matrix.solve",
+        "sfincs_jax.problems.transport_matrix.solve",
         "dense_solver_for_matvec",
     ),
     (

@@ -3,7 +3,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.problems.transport_matrix.dense_lu import (
+from sfincs_jax.problems.transport_matrix.solve import (
     dense_preconditioner_for_matvec,
     dense_solver_for_matvec,
 )

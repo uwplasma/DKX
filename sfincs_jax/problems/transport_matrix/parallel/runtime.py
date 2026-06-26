@@ -35,7 +35,7 @@ from sfincs_jax.problems.transport_matrix.parallel.policy import (
     transport_parallel_worker_env as _transport_parallel_worker_env,
     validate_transport_parallel_worker_count,
 )
-from sfincs_jax.problems.transport_matrix.residual_quality import (
+from sfincs_jax.problems.transport_matrix.policies import (
     transport_residual_gate_failures_from_arrays,
     transport_residual_gate_thresholds_from_env,
 )

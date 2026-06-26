@@ -667,16 +667,10 @@ from sfincs_jax.problems.transport_matrix.active_dense import (
     resolve_transport_active_dense_setup,
     transport_active_dof_indices as _transport_active_dof_indices,
 )
-from sfincs_jax.problems.transport_matrix.dense_lu import (
-    dense_preconditioner_for_matvec as _dense_preconditioner_for_matvec,
-    dense_solver_for_matvec as _dense_solver_for_matvec,
-)
 from sfincs_jax.problems.transport_matrix.dense_batch import (
     TransportDenseBatchContext,
     solve_transport_dense_batch as _solve_transport_dense_batch,
 )
-from sfincs_jax.problems.transport_matrix.host_gmres import transport_host_gmres_solve as _transport_host_gmres_solve
-from sfincs_jax.problems.transport_matrix.iteration_stats import emit_transport_ksp_iteration_stats as _emit_transport_ksp_iteration_stats
 from sfincs_jax.problems.transport_matrix.finalize import (
     TransportConstraintNullspaceProjector,
     TransportRHSFinalizationContext,
@@ -711,7 +705,6 @@ from sfincs_jax.problems.transport_matrix.parallel.runtime import (
     transport_parallel_process_pool_executor as _transport_parallel_process_pool_executor,
     transport_parallel_worker_env as _transport_parallel_worker_env,
 )
-from sfincs_jax.problems.transport_matrix.residual_quality import transport_residual_gate_thresholds_from_env
 from sfincs_jax.problems.profile_response.policies import resolve_use_implicit as _resolve_use_implicit_impl
 from sfincs_jax.phi1_newton_policy import (
     phi1_frozen_jacobian_policy,

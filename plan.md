@@ -5626,3 +5626,63 @@ Next best steps:
 3. After transport reaches `<=18` files, return to Batch A's
    `profile_response/solve.py <=5,500` line gate and then Batch C
    preconditioner-family compression.
+
+## 2026-06-26 Batch B Transport Solve-Helper Owner Merge
+
+Steps taken:
+
+1. Merged `sfincs_jax/problems/transport_matrix/dense_lu.py` into
+   `sfincs_jax/problems/transport_matrix/solve.py`. Dense-LU solver and
+   preconditioner construction now live with the transport solve branches that
+   call them.
+2. Merged `sfincs_jax/problems/transport_matrix/host_gmres.py` into
+   `transport_matrix/solve.py`. The explicit host SciPy GMRES fallback/rescue
+   helper now lives with solve orchestration while keeping the same residual
+   acceptance policy from `transport_matrix/policies.py`.
+3. Merged `sfincs_jax/problems/transport_matrix/iteration_stats.py` into
+   `transport_matrix/solve.py`. Optional host-side Krylov history diagnostics
+   now live with the solve owner and remain non-fatal.
+4. Merged `sfincs_jax/problems/transport_matrix/residual_quality.py` into
+   `transport_matrix/policies.py`. Transport worker residual-abort threshold
+   parsing and diagnostic formatting now live with policy, and both sequential
+   and parallel transport paths import that owner.
+5. Rewired focused tests, import-contract tests, source-map docs, API docs,
+   testing docs, release notes, `profile_response/solve.py`, `loop.py`, and
+   `parallel/runtime.py` to the new owners.
+6. Deleted the four absorbed modules.
+
+Results:
+
+- Package Python files decreased from `202` to `198`.
+- Package source lines decreased from `165,517` to `165,472`.
+- `problems/transport_matrix` files including `parallel/` decreased from `25`
+  to `21`.
+- `transport_matrix/solve.py` is now `2,024` lines and owns transport Krylov
+  dispatch plus dense-LU, host-GMRES, and KSP iteration diagnostics.
+- `transport_matrix/policies.py` is now `2,200` lines and owns residual gates
+  plus transport runtime/solve/retry/active/dense/preconditioner policy.
+- The Batch B transport file-count gate remains open but is close: `21` files
+  must decrease to `<=18`.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/loop.py sfincs_jax/problems/transport_matrix/parallel/runtime.py sfincs_jax/problems/profile_response/solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/loop.py sfincs_jax/problems/transport_matrix/parallel/runtime.py sfincs_jax/problems/profile_response/solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m pytest tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_transport_loop_support.py tests/test_transport_parallel_runtime.py tests/test_domain_package_import_contracts.py -q --tb=short` passed with `44 passed`.
+- `python -m pytest tests/test_transport_*.py -q --tb=short` passed with
+  `273 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `git diff --check` passed.
+
+Next best steps:
+
+1. Finish the Batch B transport file-count gate by merging at least three of
+   the remaining transport shards: `dense_batch.py`, `loop.py`,
+   `sparse_direct_solve.py`, `postsolve_diagnostics.py`, `streaming_outputs.py`,
+   `active_dense.py`, `active_factor.py`, or `parallel/policy.py`.
+2. Prefer a coherent next owner merge over one-helper churn:
+   `postsolve_diagnostics.py` into `finalize.py` plus
+   `streaming_outputs.py` into `outputs/transport.py`, or
+   `dense_batch.py` and `loop.py` into `transport_matrix/solve.py`.
+3. Once `transport_matrix` reaches `<=18` files, return to Batch A's
+   `profile_response/solve.py <=5,500` line gate.

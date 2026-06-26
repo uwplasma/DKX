@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-import sfincs_jax.problems.transport_matrix.iteration_stats as iteration_stats
-from sfincs_jax.problems.transport_matrix.iteration_stats import emit_transport_ksp_iteration_stats
+import sfincs_jax.problems.transport_matrix.solve as iteration_stats
+from sfincs_jax.problems.transport_matrix.solve import emit_transport_ksp_iteration_stats
 
 
 def test_transport_iteration_stats_skips_when_disabled(monkeypatch) -> None:
