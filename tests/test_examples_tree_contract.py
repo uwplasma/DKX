@@ -45,6 +45,21 @@ REQUIRED_TASK_ENTRYPOINTS = {
     "performance/benchmark_output_formats.py",
 }
 
+CANONICAL_WORKFLOW_ENTRYPOINTS = {
+    "getting_started/build_grids_and_geometry.py",
+    "getting_started/apply_collisionless_operator.py",
+    "getting_started/write_sfincs_output_python.py",
+    "getting_started/write_sfincs_output_vmec.py",
+    "getting_started/write_and_plot_multiple_formats.py",
+    "transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py",
+    "autodiff/implicit_diff_through_gmres_solve_scheme5.py",
+    "vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py",
+    "optimization/QA_optimization_bootstrap_current.py",
+    "parity/collisionless_operator_matvec_parity.py",
+    "publication_figures/generate_fortran_suite_benchmark_summary.py",
+    "performance/benchmark_transport_parallel_scaling.py",
+}
+
 DISALLOWED_TRACKED_PARTS = {
     "__pycache__",
     ".ipynb_checkpoints",
@@ -112,6 +127,7 @@ def test_examples_readme_is_a_complete_user_navigation_map() -> None:
     readme = (EXAMPLES_ROOT / "README.md").read_text(encoding="utf-8")
     assert "### Learning Path" in readme
     assert "### Choose By Task" in readme
+    assert "### Canonical Workflow Catalog" in readme
     assert "### Folder Map" in readme
 
     for folder in sorted(ALLOWED_EXAMPLE_FOLDERS):
@@ -121,6 +137,10 @@ def test_examples_readme_is_a_complete_user_navigation_map() -> None:
         assert (EXAMPLES_ROOT / folder / "README.md").is_file(), folder
 
     for entrypoint in sorted(REQUIRED_TASK_ENTRYPOINTS):
+        assert f"`{entrypoint}`" in readme, entrypoint
+        assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
+
+    for entrypoint in sorted(CANONICAL_WORKFLOW_ENTRYPOINTS):
         assert f"`{entrypoint}`" in readme, entrypoint
         assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
 
