@@ -316,7 +316,7 @@ the historical private driver name and test the focused module directly. This ke
   helpers around solver timing/profiling, plus small differentiable JAX-native
   linear algebra kernels such as the regularized tiny least-squares solve and
   recycled Krylov initial-guess builder used by RHSMode=1 and transport solves.
-- ``sfincs_jax/preconditioner_operators.py``:
+- ``sfincs_jax/solvers/preconditioner_operators.py``:
   diagonal and block-diagonal matrix reductions plus simplified
   preconditioner-operator builders. These are numerical building blocks with
   direct local-coupling tests.
@@ -331,12 +331,12 @@ the historical private driver name and test the focused module directly. This ke
   plus permutation inversion. These pure kernels are used by sparse
   preconditioner apply paths and are directly tested against dense triangular
   references.
-- ``sfincs_jax/preconditioner_context.py``:
+- ``sfincs_jax/solvers/preconditioner_context.py``:
   mutable solve-context hints for preconditioner auto-selection, including
   cached operator size, geometry/collision metadata, sparse structural
   tolerance, factor dtype, and solver-JIT admission. The numerical policy lives
   in ``path_policy.py``; this module owns the runtime state bridge.
-- ``sfincs_jax/preconditioner_operators.py``:
+- ``sfincs_jax/solvers/preconditioner_operators.py``:
   pure dataclass/JAX transformations that build simplified ``V3FullSystemOperator``
   variants used as point, line, domain-decomposition, and Fortran-reduced
   preconditioner matrices. These helpers encode the PETSc/Fortran-v3-style
@@ -489,14 +489,14 @@ the historical private driver name and test the focused module directly. This ke
   rescue, physics coarse correction, and host sparse-factor callback apply.
   ``v3_driver.py`` injects only the current fallback builder, cache-key policy,
   explicit sparse builder seam, and host-memory callback.
-- ``sfincs_jax/preconditioner_setup.py``:
+- ``sfincs_jax/solvers/preconditioner_setup.py``:
   shared setup utilities for preconditioner construction: memory-bounded
   basis-column chunking, selected-row/selected-column matrix-free submatrix
   probing, unsharded V3-operator probing for setup-time host factors, stable
   array hashes, and RHSMode=1/transport preconditioner cache-key construction.
   The keys intentionally omit RHS-only gradients so fixed-operator scan points
   can reuse factors.
-- ``sfincs_jax/explicit_sparse_factor_policy.py``:
+- ``sfincs_jax/solvers/explicit_sparse_factor_policy.py``:
   explicit-sparse host-factor environment parsing, canonical factor-kind alias
   resolution, monolithic LU/ILU guard sizing, and the typed
   ``ExplicitSparseFactorSettings`` bundle consumed by the host sparse builder.
@@ -504,7 +504,7 @@ the historical private driver name and test the focused module directly. This ke
   construction, but the dense/CSR budgets, pattern-color probing, symbolic
   Schur/frontal/ND/BLR settings, SuperLU pivot/permutation options, and ILU
   options are parsed in this directly tested policy layer.
-- ``sfincs_jax/explicit_sparse_factor_builder.py``:
+- ``sfincs_jax/solvers/explicit_sparse_factor_builder.py``:
   host explicit-sparse operator assembly, logging, monolithic preflight guard,
   and factorization orchestration. ``v3_driver.py`` injects its current
   ``build_operator_from_matvec``, ``build_operator_from_pattern``,
@@ -592,7 +592,7 @@ the historical private driver name and test the focused module directly. This ke
   ``SFINCS_JAX_GMRES_DISTRIBUTED`` axis selection. The driver passes its current
   solver globals through compatibility wrappers so existing monkeypatch-based
   tests still exercise the same routes.
-- ``sfincs_jax/preconditioner_caches.py``:
+- ``sfincs_jax/solvers/preconditioner_caches.py``:
   passive dataclasses and global cache registries for RHSMode=1 and
   RHSMode=2/3 preconditioners.  The numerical setup/apply routines still live
   in the driver during this stage, but cache containers are now directly
