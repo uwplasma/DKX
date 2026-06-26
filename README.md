@@ -951,7 +951,7 @@ Mismatches:
 
 Runtime columns match the summary plot: cold is `jax_runtime_s`; warm/logged is `jax_runtime_s_warm` when available, otherwise `jax_logged_elapsed_s`. The JAX memory columns match the plot and use profiler active RSS deltas (`jax_incremental_max_rss_mb`) when present; full process peak RSS remains available as `jax_max_rss_mb` in the merged JSON reports.
 The benchmark summary JSON records production-resolution floor violations for
-legacy frozen rows, so the table should be read as a reference-runtime-window
+frozen reference rows, so the table should be read as a reference-runtime-window
 comparison until every row has been rerun at the production floor.
 The public runtime/memory table is restricted to cases where the SFINCS Fortran v3 reference runtime is at least `10 s`. Excluded lower-resolution CI parity/smoke rows: `HSX_PASCollisions_DKESTrajectories` (0.994s), `HSX_PASCollisions_fullTrajectories` (2.510s), `geometryScheme4_1species_PAS_withEr_DKESTrajectories` (1.365s), `geometryScheme4_2species_PAS_noEr` (0.953s), `monoenergetic_geometryScheme1` (0.795s), `monoenergetic_geometryScheme11` (0.861s), `monoenergetic_geometryScheme5_ASCII` (1.052s), `monoenergetic_geometryScheme5_netCDF` (1.029s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` (1.104s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (1.706s), `tokamak_1species_FPCollisions_noEr` (7.897s), `tokamak_1species_FPCollisions_withEr_DKESTrajectories` (6.958s), `tokamak_1species_FPCollisions_withEr_fullTrajectories` (6.736s), `transportMatrix_geometryScheme11` (0.025s), `transportMatrix_geometryScheme2` (0.031s).
 
