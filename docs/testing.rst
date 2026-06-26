@@ -488,7 +488,7 @@ and dense-path resolver used by RHSMode=2/3: active-index compaction,
 auto-dense re-selection on the compacted system, disabled-active hints, and
 dense-preconditioner memory guard messages are tested as pure setup behavior.
 ``tests/test_transport_loop_support.py`` covers
-``sfincs_jax.problems.transport_matrix.loop``, the sequential transport-loop
+``sfincs_jax.problems.transport_matrix.solve``, the sequential transport-loop
 infrastructure that is now outside ``v3_driver.py``: cached full and active-DOF
 matvec closures, operator-variation recycle admission, stored-state recycle seeding,
 basis trimming, small recycled initial guesses, elapsed-time recording, residual

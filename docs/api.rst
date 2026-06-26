@@ -117,9 +117,6 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.problems.transport_matrix.active_dense
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.loop
-   :members:
-
 .. automodule:: sfincs_jax.problems.transport_matrix.postsolve_diagnostics
    :members:
 
@@ -265,9 +262,6 @@ research workflows.
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.policy
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.dense_batch
-   :members:
-
 .. automodule:: sfincs_jax.problems.transport_matrix.active_factor
    :members:
 
@@ -287,9 +281,6 @@ research workflows.
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.parallel.worker
-   :members:
-
-.. automodule:: sfincs_jax.problems.transport_matrix.sparse_direct_solve
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.streaming_outputs
