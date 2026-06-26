@@ -775,7 +775,7 @@ Phase 1 root-module move/delete manifest:
 | `phi1_newton_policy.py` | problems.profile_response Phi1 policy owner | move if it deletes root file without adding shim |
 | `profiling.py` | solvers/validation profiling support | defer until profiling API boundary is explicit |
 | `solver.py` | solvers public contracts owner | keep root shim until solvers exports cover public contracts |
-| `v3_driver.py` | compatibility shim to problem owners | delete after tests/examples stop importing sfincs_jax.v3_driver |
+| `v3_driver.py` | compatibility shim to problem owners | keep below 80 lines until the compatibility deprecation window closes; public examples/scripts should not import it |
 
 #### Historical Closure Phase 2 - Root-To-Domain Package Move
 
