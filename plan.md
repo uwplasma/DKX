@@ -15,12 +15,12 @@ Authoritative plan: `plan_final.md`. This file is the execution log and
 historical record only; if this file conflicts with `plan_final.md`, follow
 `plan_final.md`.
 
-Latest controlling update: `plan_final.md` now defines Lane 1 as five
-consolidation sweeps only: Sweep 0 freeze/delete/route, Sweep 1
-profile-response collapse, Sweep 2 transport/output/root cleanup, Sweep 3
-solver/preconditioner family consolidation, and Sweep 4 public
-API/docs/tests/review gate. Older tranche, iteration, pass, and batch labels in
-this execution log are historical context, not instructions to follow.
+Latest controlling update: `plan_final.md` now defines Lane 1 as four
+consolidation batches only: Batch A profile-response collapse, Batch B
+transport/output/root cleanup, Batch C solver/preconditioner family
+consolidation, and Batch D public API/docs/tests/review gate. Older sweep,
+tranche, iteration, pass, and batch labels in this execution log are historical
+context, not instructions to follow.
 
 ## One-Sentence Plan
 
@@ -4851,3 +4851,58 @@ Next best steps:
    wrappers.
 3. After Sweep 1 reduces `solve.py`, continue Sweep 2 transport/output cleanup
    and Sweep 3 solver/preconditioner file-family consolidation.
+
+## 2026-06-26 Final Batch-Based Consolidation Plan Refresh
+
+Steps taken:
+
+1. Re-audited the active refactor branch file inventory after the historical
+   root routing checkpoints.
+2. Replaced the active Lane 1 instructions in `plan_final.md` with a single
+   batch-based consolidation plan, so future work no longer follows older
+   sweep/tranche/pass vocabulary.
+3. Added a file-disposition matrix covering package-root files,
+   profile-response orchestration, transport matrix files, output ownership,
+   QI preconditioners, symbolic sparse owners, x-block/PAS/full-FP families,
+   and profile-response operator files.
+4. Tightened the rules for creating new files: new implementation files are
+   allowed only when the same commit deletes at least two smaller files or
+   moves a large implementation into a durable owner with behavior tests.
+
+Results:
+
+- Current package inventory: `209` Python files, `44` package-root Python
+  files, and `164,911` package source lines.
+- Largest remaining owners:
+  `profile_response/solve.py` (`7,836` lines),
+  `profile_response/policies.py` (`6,885` lines),
+  `profile_response/sparse/handoff.py` (`6,605` lines),
+  `operators/profile_response/full_system.py` (`5,978` lines), and
+  the QI/x-block/symbolic sparse preconditioner families.
+- Active Lane 1 plan is now:
+  Batch A profile-response collapse,
+  Batch B transport/output/root cleanup,
+  Batch C solver/preconditioner family consolidation,
+  Batch D public API/docs/tests/review gate.
+
+Progress:
+
+- Lane 1 structural consolidation remains about `89%` overall, but the
+  remaining work is now grouped into four larger batches rather than small
+  helper extractions.
+- Batch A profile-response collapse: inherited work is about `45%`.
+- Batch B transport/output/root cleanup: about `20%`.
+- Batch C solver/preconditioner family consolidation: about `25%`.
+- Batch D public API/docs/tests/review gate: about `26%`.
+
+Next best steps:
+
+1. Start Batch A with factor-preflight execution and progress reporting, moving
+   it from `profile_response/solve.py` into the existing sparse owner without
+   adding a helper-only file.
+2. Continue Batch A by moving residual-correction execution, retry
+   bookkeeping, final sparse payload normalization, and solver-trace result
+   normalization into existing sparse/diagnostic owners.
+3. Once Batch A reaches its line/file gates, execute Batch B as one transport
+   and output consolidation push, then Batch C as one solver-family
+   consolidation push.
