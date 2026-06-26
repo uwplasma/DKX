@@ -253,7 +253,7 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     SparsePCDirectTailFactorSetupContext,
     SparsePCDirectTailRescuePolicySetupContext,
     SparsePCGenericBranchSetupContext,
-    SparsePCFactorPreflightEvaluationContext,
+    SparsePCFactorPreflightRunContext,
     SparsePCResidualCandidateAcceptanceContext,
     SparsePCAutoPreflightRetrySelectionContext,
     SparsePCAutoPreflightRetryEvaluationContext,
@@ -294,9 +294,9 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     build_sparse_pc_generic_branch_setup,
     build_xblock_krylov_progress_callbacks,
     build_xblock_qi_stage_pipeline_context,
-    evaluate_sparse_pc_factor_preflight,
     evaluate_sparse_pc_residual_candidate_acceptance,
     evaluate_xblock_preflight_gate,
+    run_sparse_pc_factor_preflight,
     select_sparse_pc_auto_preflight_retry_candidates,
     evaluate_sparse_pc_auto_preflight_retry,
     complete_xblock_post_krylov_stage,
@@ -2208,8 +2208,8 @@ def solve_v3_full_system_linear_gmres(
 
         if bool(factor_preflight_enabled) and x0_sparse is None:
             try:
-                factor_preflight_evaluation = evaluate_sparse_pc_factor_preflight(
-                    SparsePCFactorPreflightEvaluationContext(
+                factor_preflight_run = run_sparse_pc_factor_preflight(
+                    SparsePCFactorPreflightRunContext(
                         rhs=sparse_pc_rhs,
                         rhs_norm=float(sparse_pc_rhs_norm),
                         target=float(target),
@@ -2220,74 +2220,19 @@ def solve_v3_full_system_linear_gmres(
                         active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
                         seed_enabled=bool(factor_preflight_seed_enabled),
                         max_target_ratio=float(factor_preflight_max_target_ratio),
+                        emit=emit,
                     )
                 )
-                factor_preflight_residual_before = float(factor_preflight_evaluation.residual_before)
-                factor_preflight_residual_after = float(factor_preflight_evaluation.residual_after)
-                factor_preflight_residual_diagnostics = factor_preflight_evaluation.diagnostics
-                factor_preflight_improvement_ratio = factor_preflight_evaluation.improvement_ratio
-                factor_preflight_target_ratio = factor_preflight_evaluation.target_ratio
-                factor_preflight_passed = bool(factor_preflight_evaluation.passed)
-                factor_preflight_seed_used = bool(factor_preflight_evaluation.seed_used)
-                residual_vec_current = factor_preflight_evaluation.residual_vec
-                if factor_preflight_evaluation.x0_seed is not None:
-                    x0_sparse = factor_preflight_evaluation.x0_seed
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: sparse_pc_gmres factor preflight "
-                        f"residual={float(factor_preflight_residual_before):.6e}"
-                        f"->{float(factor_preflight_residual_after):.6e} "
-                        f"improvement={float(factor_preflight_improvement_ratio or 0.0):.6e} "
-                        f"target_ratio={float(factor_preflight_target_ratio or float('inf')):.6e} "
-                        f"seed_used={bool(factor_preflight_seed_used)} "
-                        f"passed={bool(factor_preflight_passed)}",
-                    )
-                    if isinstance(factor_preflight_residual_diagnostics, dict) and factor_preflight_residual_diagnostics.get(
-                        "selected"
-                    ):
-                        component_norms = factor_preflight_residual_diagnostics.get("component_norms", {})
-                        kinetic_fraction = (
-                            component_norms.get("kinetic", {}).get("energy_fraction", 0.0)
-                            if isinstance(component_norms, dict)
-                            else 0.0
-                        )
-                        extra_fraction = (
-                            component_norms.get("extra", {}).get("energy_fraction", 0.0)
-                            if isinstance(component_norms, dict)
-                            else 0.0
-                        )
-                        top_sx = factor_preflight_residual_diagnostics.get("top_species_x", [])
-                        top_sx_label = top_sx[0].get("label") if isinstance(top_sx, list) and top_sx else "none"
-                        top_sx_fraction = (
-                            top_sx[0].get("energy_fraction", 0.0)
-                            if isinstance(top_sx, list) and top_sx
-                            else 0.0
-                        )
-                        top_x = factor_preflight_residual_diagnostics.get("top_x", [])
-                        top_x_label = top_x[0].get("label") if isinstance(top_x, list) and top_x else "none"
-                        top_x_fraction = (
-                            top_x[0].get("energy_fraction", 0.0)
-                            if isinstance(top_x, list) and top_x
-                            else 0.0
-                        )
-                        top_ell = factor_preflight_residual_diagnostics.get("top_ell", [])
-                        top_ell_label = top_ell[0].get("label") if isinstance(top_ell, list) and top_ell else "none"
-                        top_ell_fraction = (
-                            top_ell[0].get("energy_fraction", 0.0)
-                            if isinstance(top_ell, list) and top_ell
-                            else 0.0
-                        )
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: sparse_pc_gmres preflight residual diagnostics "
-                            f"kinetic_energy_fraction={float(kinetic_fraction):.6e} "
-                            f"extra_energy_fraction={float(extra_fraction):.6e} "
-                            f"top_species_x={top_sx_label} "
-                            f"top_species_x_fraction={float(top_sx_fraction):.6e} "
-                            f"top_x={top_x_label} top_x_fraction={float(top_x_fraction):.6e} "
-                            f"top_ell={top_ell_label} top_ell_fraction={float(top_ell_fraction):.6e}",
-                        )
+                factor_preflight_residual_before = float(factor_preflight_run.residual_before)
+                factor_preflight_residual_after = float(factor_preflight_run.residual_after)
+                factor_preflight_residual_diagnostics = factor_preflight_run.residual_diagnostics
+                factor_preflight_improvement_ratio = factor_preflight_run.improvement_ratio
+                factor_preflight_target_ratio = factor_preflight_run.target_ratio
+                factor_preflight_passed = bool(factor_preflight_run.passed)
+                factor_preflight_seed_used = bool(factor_preflight_run.seed_used)
+                residual_vec_current = factor_preflight_run.residual_vec
+                if factor_preflight_run.x0_seed is not None:
+                    x0_sparse = factor_preflight_run.x0_seed
                 true_coupled_factor_kind = str(getattr(factor_bundle_pc, "kind", "")).strip().lower().replace("-", "_")
                 true_coupled_auto_reference_kind = true_coupled_factor_kind in {
                     "active_fortran_v3_reduced_lu",

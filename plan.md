@@ -4906,3 +4906,66 @@ Next best steps:
 3. Once Batch A reaches its line/file gates, execute Batch B as one transport
    and output consolidation push, then Batch C as one solver-family
    consolidation push.
+
+## 2026-06-26 Batch A Sparse Factor-Preflight Execution Extraction
+
+Steps taken:
+
+1. Added `SparsePCFactorPreflightRunContext`,
+   `SparsePCFactorPreflightRunResult`, and `run_sparse_pc_factor_preflight()`
+   to `sfincs_jax.problems.profile_response.sparse.handoff`, keeping the
+   factor-preflight evaluator and progress messages inside the existing sparse
+   owner instead of adding another helper file.
+2. Replaced the inline factor-preflight execution block in
+   `profile_response/solve.py` with a single sparse-owner call and local state
+   assignment.
+3. Removed the direct `evaluate_sparse_pc_factor_preflight`/
+   `SparsePCFactorPreflightEvaluationContext` dependency from `solve.py`.
+4. Updated `plan_final.md` current counts and next steps so factor-preflight
+   execution is no longer listed as an open Batch A blocker.
+
+Results:
+
+- `profile_response/solve.py` decreased from `7,836` to `7,781` lines.
+- `profile_response/sparse/handoff.py` increased from `6,605` to `6,720`
+  lines because it now owns the execution/progress wrapper.
+- Package file count stayed at `209`; package-root file count stayed at `44`.
+- Package source lines are now about `164,971`; later Batch B/C file merges
+  still need to remove enough compatibility and micro-file surface to pass the
+  final source-line gate.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m pytest
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_solves_tiny_rhs1_system
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_structured_pc_preflight_can_fail_fast
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_explicit_structured_pc_rejection_is_fast
+  tests/test_rhs1_device_operator.py -q --tb=short` passed with `6 passed`.
+- `python -m pytest tests/test_domain_package_import_contracts.py -q
+  --tb=short` passed with `8 passed`.
+- `python -m pytest tests/test_v3_sparse_pattern.py -q --tb=short` passed
+  with `132 passed`.
+- `git diff --check` passed.
+
+Progress:
+
+- Lane 1 structural consolidation: about `90%`.
+- Batch A profile-response collapse: about `48%`.
+- Batch B transport/output/root cleanup: about `20%`.
+- Batch C solver/preconditioner family consolidation: about `25%`.
+- Batch D public API/docs/tests/review gate: about `26%`.
+
+Next best steps:
+
+1. Continue Batch A by moving residual-correction execution and retry
+   bookkeeping out of `profile_response/solve.py` into existing sparse owners.
+2. Move final sparse payload normalization and solver-trace result
+   normalization into `solver_diagnostics.py`, `diagnostics.py`, or
+   `sparse/finalization.py`.
+3. After those stages are outside `solve.py`, decide whether
+   `profile_response/handoff.py` or `sparse/finalization.py` can be merged or
+   deleted without creating import cycles.

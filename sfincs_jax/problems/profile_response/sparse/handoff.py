@@ -358,6 +358,118 @@ EmitFn = Callable[[int, str], None]
 
 
 @dataclass(frozen=True)
+class SparsePCFactorPreflightRunContext:
+    """Inputs for the solve-time sparse-PC factor preflight check."""
+
+    rhs: jnp.ndarray
+    rhs_norm: float
+    target: float
+    preconditioner: ArrayFn
+    matvec: ArrayFn
+    diagnostics: Callable[..., dict[str, object]]
+    layout: object
+    active_indices: object | None
+    seed_enabled: bool
+    max_target_ratio: float
+    emit: EmitFn | None
+
+
+@dataclass(frozen=True)
+class SparsePCFactorPreflightRunResult:
+    """State produced by one sparse-PC factor preflight execution."""
+
+    residual_before: float
+    residual_after: float
+    residual_diagnostics: dict[str, object] | None
+    improvement_ratio: float | None
+    target_ratio: float | None
+    passed: bool
+    seed_used: bool
+    residual_vec: jnp.ndarray
+    x0_seed: jnp.ndarray | None
+
+
+def run_sparse_pc_factor_preflight(
+    context: SparsePCFactorPreflightRunContext,
+) -> SparsePCFactorPreflightRunResult:
+    """Run sparse-PC factor preflight and emit the standard progress messages."""
+
+    evaluation = evaluate_sparse_pc_factor_preflight(
+        SparsePCFactorPreflightEvaluationContext(
+            rhs=context.rhs,
+            rhs_norm=float(context.rhs_norm),
+            target=float(context.target),
+            preconditioner=context.preconditioner,
+            matvec=context.matvec,
+            diagnostics=context.diagnostics,
+            layout=context.layout,
+            active_indices=context.active_indices,
+            seed_enabled=bool(context.seed_enabled),
+            max_target_ratio=float(context.max_target_ratio),
+        )
+    )
+    residual_diagnostics = evaluation.diagnostics
+    if context.emit is not None:
+        context.emit(
+            1,
+            "solve_v3_full_system_linear_gmres: sparse_pc_gmres factor preflight "
+            f"residual={float(evaluation.residual_before):.6e}"
+            f"->{float(evaluation.residual_after):.6e} "
+            f"improvement={float(evaluation.improvement_ratio or 0.0):.6e} "
+            f"target_ratio={float(evaluation.target_ratio or float('inf')):.6e} "
+            f"seed_used={bool(evaluation.seed_used)} "
+            f"passed={bool(evaluation.passed)}",
+        )
+        if isinstance(residual_diagnostics, dict) and residual_diagnostics.get("selected"):
+            component_norms = residual_diagnostics.get("component_norms", {})
+            kinetic_fraction = (
+                component_norms.get("kinetic", {}).get("energy_fraction", 0.0)
+                if isinstance(component_norms, dict)
+                else 0.0
+            )
+            extra_fraction = (
+                component_norms.get("extra", {}).get("energy_fraction", 0.0)
+                if isinstance(component_norms, dict)
+                else 0.0
+            )
+            top_sx = residual_diagnostics.get("top_species_x", [])
+            top_sx_label = top_sx[0].get("label") if isinstance(top_sx, list) and top_sx else "none"
+            top_sx_fraction = (
+                top_sx[0].get("energy_fraction", 0.0) if isinstance(top_sx, list) and top_sx else 0.0
+            )
+            top_x = residual_diagnostics.get("top_x", [])
+            top_x_label = top_x[0].get("label") if isinstance(top_x, list) and top_x else "none"
+            top_x_fraction = top_x[0].get("energy_fraction", 0.0) if isinstance(top_x, list) and top_x else 0.0
+            top_ell = residual_diagnostics.get("top_ell", [])
+            top_ell_label = top_ell[0].get("label") if isinstance(top_ell, list) and top_ell else "none"
+            top_ell_fraction = (
+                top_ell[0].get("energy_fraction", 0.0) if isinstance(top_ell, list) and top_ell else 0.0
+            )
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: sparse_pc_gmres preflight residual diagnostics "
+                f"kinetic_energy_fraction={float(kinetic_fraction):.6e} "
+                f"extra_energy_fraction={float(extra_fraction):.6e} "
+                f"top_species_x={top_sx_label} "
+                f"top_species_x_fraction={float(top_sx_fraction):.6e} "
+                f"top_x={top_x_label} top_x_fraction={float(top_x_fraction):.6e} "
+                f"top_ell={top_ell_label} top_ell_fraction={float(top_ell_fraction):.6e}",
+            )
+
+    return SparsePCFactorPreflightRunResult(
+        residual_before=float(evaluation.residual_before),
+        residual_after=float(evaluation.residual_after),
+        residual_diagnostics=residual_diagnostics,
+        improvement_ratio=evaluation.improvement_ratio,
+        target_ratio=evaluation.target_ratio,
+        passed=bool(evaluation.passed),
+        seed_used=bool(evaluation.seed_used),
+        residual_vec=evaluation.residual_vec,
+        x0_seed=evaluation.x0_seed,
+    )
+
+
+@dataclass(frozen=True)
 class SparsePCGMRESContext:
     """Solve-local dependencies for one sparse-PC GMRES attempt."""
 
@@ -6287,6 +6399,8 @@ __all__ = [
     "SparsePCFactorPreflightPolicy",
     "SparsePCFactorPreflightEvaluationContext",
     "SparsePCFactorPreflightEvaluationResult",
+    "SparsePCFactorPreflightRunContext",
+    "SparsePCFactorPreflightRunResult",
     "SparsePCDirectTailFactorSetupContext",
     "SparsePCDirectTailFactorSetupResult",
     "SparsePCDirectTailRescuePolicySetupContext",
@@ -6497,6 +6611,7 @@ __all__ = [
     "emit_xblock_sparse_pc_completion",
     "emit_xblock_sparse_pc_completion_from_driver_state",
     "evaluate_sparse_pc_factor_preflight",
+    "run_sparse_pc_factor_preflight",
     "evaluate_sparse_pc_residual_candidate_acceptance",
     "evaluate_xblock_preflight_gate",
     "select_sparse_pc_auto_preflight_retry_candidates",
