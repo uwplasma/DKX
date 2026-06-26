@@ -457,7 +457,7 @@ are tested with monkeypatched kernels and worker runtimes.
 directly for the process-pool and XLA-policy seams: persistent pool reuse and
 rebuild monkeypatch ``sfincs_jax.problems.transport_matrix.parallel.runtime``, while
 worker-local XLA flag rewriting is checked through
-``sfincs_jax.problems.transport_matrix.parallel.policy``. Driver aliases are
+``sfincs_jax.problems.transport_matrix.parallel.runtime``. Driver aliases are
 kept only where they preserve the public debugging seam.
 ``tests/test_transport_postsolve_diagnostics.py`` covers
 ``sfincs_jax.problems.transport_matrix.finalize`` directly:

@@ -364,8 +364,8 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "build_transport_fp_fortran_reduced_lu_preconditioner",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.parallel.policy",
-        "sfincs_jax.problems.transport_matrix.parallel.policy",
+        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "sfincs_jax.problems.transport_matrix.parallel.runtime",
         "transport_parallel_backend",
     ),
     (
@@ -399,8 +399,8 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "validate_transport_worker_result_payload",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.parallel.sharding",
-        "sfincs_jax.problems.transport_matrix.parallel.sharding",
+        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "sfincs_jax.problems.transport_matrix.parallel.runtime",
         "plan_single_case_operator_coarse_reuse",
     ),
     (

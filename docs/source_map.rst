@@ -938,27 +938,17 @@ the historical private driver name and test the focused module directly. This ke
   collection, recycle-basis updates, and optional KSP iteration-stat dispatch.
   Dense fallback accepted-state overrides are explicit so the refactor preserves
   the established active-DOF branch behavior.
-- ``sfincs_jax/problems/transport_matrix/parallel/policy.py``
-  (legacy alias: ``sfincs_jax/transport_parallel_policy.py``):
-  pure transport process-parallel backend selection, worker-count validation,
-  benchmark scaling audits, process-pool cache keys, GPU-worker environment
-  isolation, XLA worker flag rewriting, and multiprocessing fallback policy.
 - ``sfincs_jax/problems/transport_matrix/parallel/runtime.py``
   (legacy alias: ``sfincs_jax/transport_parallel_runtime.py``):
-  transport parallel RHS partitioning, injected-dependency payload
-  normalization, child-worker guard setup, merge-ready result packing, GPU
-  worker NPZ conversion, persistent process-pool caching, worker-environment
-  setup, backend-specific execution/retry/fallback, GPU subprocess launch, and
-  parent-side merge of per-worker state/residual/elapsed-time results. This
-  module absorbed the old payload, pool, execution, solve, and validation
-  micro-files.
-- ``sfincs_jax/problems/transport_matrix/parallel/sharding.py``
-  (legacy alias: ``sfincs_jax/transport_parallel_sharding.py``):
-  pure single-case sharded-solve planning metadata. It caps requested device
-  counts, records per-device workload balance, estimates whether setup and
-  Krylov communication can be amortized, marks single-case sharding as
-  experimental/non-release by default, and prevents malformed sharded payloads
-  from becoming release scaling claims.
+  transport parallel backend policy, benchmark scaling audits, worker-count
+  validation, XLA worker flag rewriting, RHS partitioning, injected-dependency
+  payload normalization, child-worker guard setup, merge-ready result packing,
+  GPU worker NPZ conversion, persistent process-pool caching, worker-environment
+  setup, backend-specific execution/retry/fallback, GPU subprocess launch,
+  parent-side merge of per-worker state/residual/elapsed-time results, and
+  single-case sharded-solve planning metadata. This module absorbed the old
+  policy, sharding, payload, pool, execution, solve, and validation micro-files
+  so transport parallelism has one canonical runtime owner.
 - ``sfincs_jax/problems/transport_matrix/parallel/worker.py``
   (legacy executable wrapper: ``sfincs_jax/transport_parallel_worker.py``):
   command-line worker entry point used by GPU transport subprocesses. The old
