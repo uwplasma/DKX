@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (transport sparse-direct policy coverage pass)
+Last updated: 2026-06-26 (profile-solve structured-route coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -360,6 +360,15 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   sparse-direct defaults and cache reuse without constructing a production
   transport operator. The focused transport sparse-direct/policy suite reports
   `27 passed` in `0.69 s`, and Ruff passes for the touched test file.
+- The fifty-seventh post-audit coverage tranche strengthened the retained
+  `profile_solve.py` owner tests. The Schur wrapper test now verifies the full
+  monkeypatchable RHSMode=1 preconditioner-builder bundle, and the top-level
+  RHSMode=1 orchestrator test covers the explicit structured-full-CSR early
+  exit with resolved solver controls, sharding hints, backend/device metadata,
+  `phi1_hat_base`, and differentiability flags. This protects the large
+  profile-response driver without launching a production solve. The focused
+  profile-solve wrapper suite reports `9 passed` in `0.60 s`, and Ruff passes
+  for the touched test file.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
