@@ -10,6 +10,7 @@ references or optional local Fortran only when explicitly requested.
 
 | Step | Goal | Start here |
 | --- | --- | --- |
+| 0 | Choose the right path for your application | `tutorials/00_start_here.ipynb` |
 | 1 | Run the CLI, write output files, and plot diagnostics | `tutorials/01_cli_outputs_and_plots.ipynb`, `tutorials/run_quick_output_and_plot.py` |
 | 2 | Compute transport matrices and see autodiff | `tutorials/02_transport_and_autodiff.ipynb` |
 | 3 | Compare bootstrap current with Redl and see optimization hooks | `tutorials/03_bootstrap_redl_and_optimization.ipynb` |
