@@ -87,19 +87,19 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.solvers.diagnostics
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.pas.xblock_ilu
+.. automodule:: sfincs_jax.solvers.preconditioner_pas_xblock_ilu
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.schur.profile_response
+.. automodule:: sfincs_jax.solvers.preconditioner_schur_profile
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.xblock.low_l_schur
+.. automodule:: sfincs_jax.solvers.preconditioner_xblock_low_l_schur
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.xblock.active_projected
+.. automodule:: sfincs_jax.solvers.preconditioner_xblock_active
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.xblock.tz_sparse
+.. automodule:: sfincs_jax.solvers.preconditioner_xblock_tz_sparse
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_linear_system
@@ -139,10 +139,10 @@ research workflows.
 .. automodule:: sfincs_jax.problems.profile_preconditioner_build
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.xblock.coarse
+.. automodule:: sfincs_jax.solvers.preconditioner_xblock_coarse
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.domain_decomposition
+.. automodule:: sfincs_jax.solvers.preconditioner_domain_decomposition
    :members:
 
 .. automodule:: sfincs_jax.operators.profile_sources
@@ -163,25 +163,25 @@ research workflows.
 .. automodule:: sfincs_jax.operators.profile_true_operator_rescue
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.pas.matrix_free
+.. automodule:: sfincs_jax.solvers.preconditioner_pas_matrix_free
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.pas.policy
+.. automodule:: sfincs_jax.solvers.preconditioner_pas_policy
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.dispatch
+.. automodule:: sfincs_jax.solvers.preconditioner_dispatch
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.basis
+.. automodule:: sfincs_jax.solvers.preconditioner_qi_basis
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.corrections
+.. automodule:: sfincs_jax.solvers.preconditioner_qi_corrections
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.device
+.. automodule:: sfincs_jax.solvers.preconditioner_qi_device
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.policy
+.. automodule:: sfincs_jax.solvers.preconditioner_qi_policy
    :members:
 
 .. automodule:: sfincs_jax.problems.profile_residual
@@ -205,7 +205,7 @@ research workflows.
 .. automodule:: sfincs_jax.problems.profile_sparse_xblock
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.xblock.policy
+.. automodule:: sfincs_jax.solvers.preconditioner_xblock_policy
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_policies
