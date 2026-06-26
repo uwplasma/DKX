@@ -17,16 +17,24 @@ def test_tutorial_learning_path_has_expected_files() -> None:
     expected = {
         "README.md",
         "run_quick_output_and_plot.py",
+        "00_start_here.ipynb",
         "01_cli_outputs_and_plots.ipynb",
         "02_transport_and_autodiff.ipynb",
         "03_bootstrap_redl_and_optimization.ipynb",
+        "04_geometry_validation_and_performance.ipynb",
     }
     assert expected <= {path.name for path in TUTORIALS.iterdir()}
 
 
 def test_tutorial_notebooks_are_pedagogic_and_parseable() -> None:
     notebooks = sorted(TUTORIALS.glob("*.ipynb"))
-    assert len(notebooks) == 3
+    assert [path.name for path in notebooks] == [
+        "00_start_here.ipynb",
+        "01_cli_outputs_and_plots.ipynb",
+        "02_transport_and_autodiff.ipynb",
+        "03_bootstrap_redl_and_optimization.ipynb",
+        "04_geometry_validation_and_performance.ipynb",
+    ]
 
     for path in notebooks:
         notebook = _notebook(path)

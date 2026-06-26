@@ -296,6 +296,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   plumbing, and cache reuse. The test injects deterministic local submatrices,
   so it protects the transport preconditioner owner without materializing a
   production operator or adding slow transport solves to CI.
+- The thirty-fifth post-audit examples/documentation tranche simplified the
+  top-level examples landing page by removing long release-audit command
+  runbooks from first-pass navigation, replacing them with concise pointers to
+  parity, performance, publication-figure, and scaled-suite tooling. It also
+  locked all five tutorial notebooks in the examples contract and removed
+  branch-status phrasing from the Fortran-example status page so the docs read
+  as standalone software documentation rather than a development log.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
@@ -2375,8 +2382,9 @@ Current completion status:
   remains a release benchmark.
 - Public docs/API stabilization for the refactor PR: about 98 percent. Source
   maps, import contracts, README/docs, artifact metadata, Sphinx, and CI pass
-  for the consolidated layout in recent focused checks; rerun the review-lock
-  bundle after this plan refresh.
+  for the consolidated layout in focused checks; the examples landing page and
+  Fortran-example status page now keep first-pass navigation separate from
+  release-audit runbooks. Rerun the review-lock bundle after this plan refresh.
 
 Next ordered implementation steps:
 
