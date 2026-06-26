@@ -424,7 +424,7 @@
         },
         {
           "claim": "Host refinement logic was split out of the driver and became directly testable.",
-          "path": "sfincs_jax/host_refinement.py"
+          "path": "sfincs_jax/solvers/explicit_sparse.py"
         },
         {
           "claim": "Fast tests cover measured candidate promotion, memory metric ordering, failed-baseline rescue, and tie-breaking.",
@@ -521,7 +521,7 @@
         },
         {
           "claim": "Adapter module isolates JAX-native geometry inputs from file-backed VMEC loading.",
-          "path": "sfincs_jax/jax_geometry_adapters.py"
+          "path": "sfincs_jax/geometry/jax_adapters.py"
         },
         {
           "claim": "Optional workflow tests cover backend readiness and measured adoption summaries without hard dependencies.",
@@ -529,7 +529,7 @@
         },
         {
           "claim": "Shared pure-JAX Boozer-spectrum proxy transport objective checks full spectral finite-difference gradients and JVP/dot-product consistency without optional dependencies.",
-          "path": "sfincs_jax/jax_geometry_adapters.py"
+          "path": "sfincs_jax/geometry/jax_adapters.py"
         },
         {
           "claim": "Optional workflow tests exercise the shared proxy transport gradient gate in default CI.",
@@ -545,7 +545,7 @@
         },
         {
           "claim": "VMEC/Boozer adapters now expose a machine-readable kinetic transport scalar contract that separates geometry preparation, kinetic operator assembly, solve, reduction, and gradient validation stages.",
-          "path": "sfincs_jax/jax_geometry_adapters.py"
+          "path": "sfincs_jax/geometry/jax_adapters.py"
         },
         {
           "claim": "Autodiff pipeline and status examples emit the kinetic scalar contract so public examples cannot overclaim full VMEC-boundary-to-kinetic gradients before the solve stage is wired.",
@@ -553,7 +553,7 @@
         },
         {
           "claim": "The no-solve provenance gate is now shared in jax_geometry_adapters and used by both the file-backed autodiff pipeline and skip-safe workflow status example, with tests for complete provenance, missing provenance, and scalar-contract tampering.",
-          "path": "sfincs_jax/jax_geometry_adapters.py"
+          "path": "sfincs_jax/geometry/jax_adapters.py"
         }
       ],
       "gates": [
