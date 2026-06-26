@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import numpy as np
+import scipy.sparse as sp
 
 from sfincs_jax.operators.profile_layout import RHS1BlockLayout
 from sfincs_jax.solvers.preconditioner_schur_profile import (
+    append_adaptive_residual_basis_csc,
     build_active_native_xell_coarse_window_basis_csc,
     build_coarse_residual_basis_csc,
     coarse_residual_config,
@@ -96,3 +98,66 @@ def test_active_native_xell_window_basis_respects_specs_and_column_cap(monkeypat
     assert metadata["window_basis_columns"] == 5
     assert metadata["window_basis_skipped_specs"] == 1
     assert metadata["window_basis_truncated"] is True
+
+
+def test_adaptive_residual_basis_appends_bounded_true_residual_columns(monkeypatch) -> None:
+    layout = _layout()
+    matrix = sp.eye(layout.total_size, format="csr")
+    basis = sp.eye(layout.total_size, 2, format="csc")
+
+    class ZeroBaseOperator:
+        def matvec(self, z: np.ndarray) -> np.ndarray:
+            return np.zeros_like(np.asarray(z, dtype=np.float64))
+
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_BASIS", "yes")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_MAX_COLUMNS", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_MAX_SEED_COLUMNS", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_MAX_NNZ_PER_COLUMN", "3")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_DROP_REL", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_MIN_REL_NORM", "0")
+
+    combined, metadata = append_adaptive_residual_basis_csc(
+        matrix=matrix,
+        base_operator=ZeroBaseOperator(),
+        basis=basis,
+        max_total_columns=3,
+    )
+
+    assert combined.shape == (layout.total_size, 3)
+    assert metadata["adaptive_residual_basis_enabled"] is True
+    assert metadata["adaptive_residual_basis_columns"] == 1
+    assert metadata["adaptive_residual_basis_seed_columns"] == 2
+    assert metadata["adaptive_residual_basis_truncated_by_total_cap"] is True
+    appended = np.asarray(combined[:, -1].toarray()).reshape((-1,))
+    assert np.count_nonzero(appended) <= 3
+    assert np.linalg.norm(appended) == np.float64(1.0)
+
+
+def test_adaptive_residual_basis_noops_when_disabled_or_base_is_exact(monkeypatch) -> None:
+    layout = _layout()
+    matrix = sp.eye(layout.total_size, format="csr")
+    basis = sp.eye(layout.total_size, 2, format="csc")
+
+    class ExactBaseOperator:
+        def matvec(self, z: np.ndarray) -> np.ndarray:
+            return np.asarray(z, dtype=np.float64)
+
+    disabled, disabled_metadata = append_adaptive_residual_basis_csc(
+        matrix=matrix,
+        base_operator=ExactBaseOperator(),
+        basis=basis,
+        max_total_columns=4,
+    )
+    assert disabled is basis
+    assert disabled_metadata["adaptive_residual_basis_enabled"] is False
+
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_BASIS", "true")
+    exact, exact_metadata = append_adaptive_residual_basis_csc(
+        matrix=matrix,
+        base_operator=ExactBaseOperator(),
+        basis=basis,
+        max_total_columns=4,
+    )
+    assert exact.shape == basis.shape
+    assert exact_metadata["adaptive_residual_basis_columns"] == 0
+    assert exact_metadata["adaptive_residual_basis_skipped_zero"] == 2

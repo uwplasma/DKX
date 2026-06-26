@@ -328,6 +328,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   nonlinear solve behavior and ahead-of-time compile policy with fake
   lower/compile hooks, so CI gains coverage without spending time compiling
   production operators.
+- The fortieth post-audit coverage tranche added Schur/profile coarse-space
+  tests for adaptive residual-derived basis construction. The tests cover
+  disabled no-op behavior, exact-base residual skipping, strict total-column
+  caps, per-column sparsity caps, and metadata reporting on a bounded synthetic
+  RHSMode=1 layout, protecting the production coarse-preconditioner admission
+  path without launching expensive kinetic solves.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
