@@ -3812,3 +3812,66 @@ Next best steps:
    existing sparse owners as one larger checkpoint.
 3. Continue Pass 3 solver-family consolidation only after the next Pass 1
    diagnostic/metadata checkpoint is committed.
+
+## 2026-06-25 Lane 1 Pass 1 SciPy Rescue Stage Extraction
+
+Steps taken:
+
+1. Added `RHS1ScipyRescueStageContext`,
+   `RHS1ScipyRescueStageResult`, and `run_rhs1_scipy_rescue_stage` to
+   `sfincs_jax/problems/profile_response/dense.py`.
+2. Moved the CPU-only SciPy rescue admission, active-size-cap metadata,
+   x-block skip message, rescue execution, improvement gate, and failure
+   metadata out of `profile_response/solve.py`.
+3. Replaced the old inlined rescue block with one dense-stage call and removed
+   stale SciPy rescue policy imports from `solve.py`.
+4. Added direct stage tests for a real improving SciPy rescue and for the
+   active-size-cap skip metadata contract.
+5. Updated `plan_final.md` with current counts and this checkpoint status.
+
+Results:
+
+- `profile_response/solve.py` decreased from `8,453` lines to `8,328` lines.
+- `profile_response/dense.py` increased from `2,487` lines to `2,751` lines
+  because it now owns the dense SciPy rescue stage as well as the low-level
+  SciPy rescue solve.
+- Package file count stayed at `209`; package-root file count stayed at `52`.
+- Package lines increased from `163,650` to `163,789`, so the final total-line
+  reduction gate remains open.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/dense.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/dense.py
+  tests/test_profile_response_linear_solve.py` passed.
+- `python -m pytest
+  tests/test_profile_response_linear_solve.py::test_run_rhs1_scipy_rescue_stage_accepts_improving_cpu_rescue
+  tests/test_profile_response_linear_solve.py::test_run_rhs1_scipy_rescue_stage_records_active_size_cap_skip
+  -q --tb=short` passed with `2 passed`.
+- `python -m pytest tests/test_profile_response_linear_solve.py
+  tests/test_profile_response_sparse_pc.py tests/test_rhs1_handoff.py
+  -q --tb=short` passed with `405 passed`.
+- `python -m pytest tests/test_domain_package_import_contracts.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py -q --tb=short` passed with
+  `45 passed`.
+- `git diff --check` passed.
+
+Completion:
+
+- Lane 1 Pass 1: about `35%`; sparse retry and SciPy rescue routing are now
+  behavior-owned, but the generic sparse-PC/factor-preflight and final
+  result/progress normalization paths still need extraction.
+- Lane 1 overall: about `78%`.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Extract final result/progress metadata normalization into
+   `solver_diagnostics.py` or `diagnostics.py` if it can reduce
+   `solve.py` without duplicating finalization logic.
+2. Move the remaining generic sparse-PC/factor-preflight branch from
+   `profile_response/solve.py` into existing sparse owners as the next large
+   Pass 1 checkpoint.
+3. Then resume Pass 3 solver-family consolidation for symbolic sparse and QI.

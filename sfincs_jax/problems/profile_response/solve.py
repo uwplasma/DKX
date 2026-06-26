@@ -170,14 +170,14 @@ from sfincs_jax.problems.profile_response.dense import (
     RHS1ReducedDenseFallbackCandidateContext,
     RHS1ReducedDenseFallbackStageContext,
     RHS1ReducedHostDenseShortcutContext,
-    RHS1ScipyRescueContext,
+    RHS1ScipyRescueStageContext,
     profile_solver_kind,
     rhs1_dense_shortcut_setup_from_env,
     rhs1_early_dense_shortcut_decision,
     rhs1_evaluate_post_krylov_dense_shortcut,
     rhs1_fp_preconditioner_probe_kind_from_env,
     rhs1_small_gmres_max_from_env,
-    run_rhs1_scipy_rescue,
+    run_rhs1_scipy_rescue_stage,
     solve_profile_linear,
     solve_profile_linear_with_residual,
     solve_rhs1_constraint0_petsc_compat,
@@ -630,12 +630,9 @@ from sfincs_jax.problems.profile_response.policies import (
     rhs1_gmres_precondition_side_from_env,
     rhs1_krylov_routing_controls_from_env,
     rhs1_pas_source_zero_tolerance_from_env,
-    rhs1_scipy_rescue_controls_from_env,
     rhsmode1_fast_post_xblock_polish_allowed_current_backend as _rhsmode1_fast_post_xblock_polish_allowed,
     rhsmode1_fp_targeted_polish_allowed_current_backend as _rhsmode1_fp_targeted_polish_allowed,
     rhsmode1_fp_xblock_global_correction_allowed_current_backend as _rhsmode1_fp_xblock_global_correction_allowed,
-    rhsmode1_scipy_rescue_abs_floor_after_xblock_current_backend as _rhsmode1_scipy_rescue_abs_floor_after_xblock,
-    rhsmode1_scipy_rescue_active_size_allowed_current_backend as _rhsmode1_scipy_rescue_active_size_allowed,
     rhsmode1_skip_global_sparse_after_xblock_allowed_current_backend as _rhsmode1_skip_global_sparse_after_xblock_allowed,
 )
 from sfincs_jax.problems.profile_response.policies import (
@@ -7585,158 +7582,36 @@ def solve_v3_full_system_linear_gmres(
             and int(op.rhs_mode) == 1
             and (not bool(op.include_phi1))
             and float(res_reduced.residual_norm) > float(target_reduced)
-            and (not skip_global_sparse_after_xblock)
         ):
-            scipy_rescue_controls = rhs1_scipy_rescue_controls_from_env(
-                restart=int(restart),
-                maxiter=maxiter,
-            )
-            if scipy_rescue_controls.enabled:
-                rescue_abs_floor = _rhsmode1_scipy_rescue_abs_floor_after_xblock(
+            scipy_rescue = run_rhs1_scipy_rescue_stage(
+                RHS1ScipyRescueStageContext(
                     op=op,
+                    result=res_reduced,
+                    residual_vec=residual_vec,
+                    matvec=mv_reduced,
+                    rhs=rhs_reduced,
+                    preconditioner=preconditioner_reduced,
+                    strong_preconditioner=strong_preconditioner_reduced,
+                    preconditioner_name=rhs1_precond_kind or "none",
+                    strong_preconditioner_name=strong_precond_kind or "strong",
+                    target=float(target_reduced),
+                    tol=float(tol),
+                    atol=float(atol),
+                    restart=int(restart),
+                    maxiter=maxiter,
+                    precond_side=gmres_precond_side,
                     active_size=int(active_size),
                     used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
                     used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
                     use_implicit=bool(use_implicit),
+                    skip_global_sparse_after_xblock=bool(skip_global_sparse_after_xblock),
+                    elapsed_s=t.elapsed_s,
+                    emit=emit,
+                    mark=_mark,
                 )
-                rescue_threshold = max(
-                    float(target_reduced) * float(scipy_rescue_controls.ratio),
-                    float(rescue_abs_floor),
-                )
-                scipy_rescue_size_allowed = _rhsmode1_scipy_rescue_active_size_allowed(
-                    op=op,
-                    active_size=int(active_size),
-                    used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
-                    used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
-                    use_implicit=bool(use_implicit),
-                )
-                if (not scipy_rescue_size_allowed) and float(res_reduced.residual_norm) > float(rescue_threshold):
-                    _mark("rhs1_scipy_rescue_skipped")
-                    rhsmode1_general_metadata.update(
-                        {
-                            "scipy_rescue_attempted": False,
-                            "scipy_rescue_skipped": True,
-                            "scipy_rescue_skip_reason": "active_size_cap",
-                            "scipy_rescue_initial_residual": float(res_reduced.residual_norm),
-                            "scipy_rescue_target": float(target_reduced),
-                            "scipy_rescue_threshold": float(rescue_threshold),
-                            "scipy_rescue_active_size": int(active_size),
-                            "scipy_rescue_used_large_cpu_xblock_shortcut": bool(cpu_large_xblock_shortcut),
-                            "scipy_rescue_used_explicit_fp_xblock_seed": bool(explicit_fp_xblock_seed_used),
-                        }
-                    )
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: skipping SciPy rescue "
-                            f"(active_size={int(active_size)} exceeds default rescue cap; "
-                            "set SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_MAX_ACTIVE=0 to force)",
-                    )
-                elif float(res_reduced.residual_norm) > float(rescue_threshold):
-                    rescue_preconditioner = preconditioner_reduced
-                    rescue_precond_name = rhs1_precond_kind or "none"
-                    if scipy_rescue_controls.use_strong and strong_preconditioner_reduced is not None:
-                        rescue_preconditioner = strong_preconditioner_reduced
-                        rescue_precond_name = strong_precond_kind or "strong"
-                    rescue_method = scipy_rescue_controls.method
-                    if rescue_method == "auto":
-                        rescue_method = "bicgstab" if rescue_preconditioner is strong_preconditioner_reduced else "gmres"
-                    try:
-                        scipy_rescue_start_s = float(t.elapsed_s())
-                        scipy_rescue_initial_residual = float(res_reduced.residual_norm)
-                        _mark("rhs1_scipy_rescue_start")
-                        rhsmode1_general_metadata.update(
-                            {
-                                "scipy_rescue_attempted": True,
-                                "scipy_rescue_method": str(rescue_method),
-                                "scipy_rescue_preconditioner": str(rescue_precond_name),
-                                "scipy_rescue_restart": int(scipy_rescue_controls.restart),
-                                "scipy_rescue_maxiter": int(scipy_rescue_controls.maxiter),
-                                "scipy_rescue_initial_residual": float(scipy_rescue_initial_residual),
-                                "scipy_rescue_target": float(target_reduced),
-                                "scipy_rescue_threshold": float(rescue_threshold),
-                                "scipy_rescue_start_s": float(scipy_rescue_start_s),
-                            }
-                        )
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: SciPy rescue "
-                                f"(residual={float(res_reduced.residual_norm):.3e} > "
-                                f"{float(scipy_rescue_controls.ratio):.1e}x target={float(target_reduced):.3e} "
-                                f"method={rescue_method} restart={int(scipy_rescue_controls.restart)} "
-                                f"maxiter={int(scipy_rescue_controls.maxiter)} "
-                                f"preconditioner={rescue_precond_name})",
-                            )
-                        scipy_outcome = run_rhs1_scipy_rescue(
-                            context=RHS1ScipyRescueContext(
-                                matvec=mv_reduced,
-                                rhs=rhs_reduced,
-                                x0=res_reduced.x,
-                                preconditioner=rescue_preconditioner,
-                                method=rescue_method,
-                                tol=float(tol),
-                                atol=float(atol),
-                                restart=int(scipy_rescue_controls.restart),
-                                maxiter=int(scipy_rescue_controls.maxiter),
-                                precond_side=gmres_precond_side,
-                            ),
-                            emit=emit,
-                        )
-                        res_scipy = scipy_outcome.result
-                        r_scipy = scipy_outcome.residual_vec
-                        scipy_rescue_elapsed_s = float(t.elapsed_s() - scipy_rescue_start_s)
-                        scipy_rescue_final_residual = float(res_scipy.residual_norm)
-                        _mark("rhs1_scipy_rescue_done")
-                        rhsmode1_general_metadata.update(
-                            {
-                                "scipy_rescue_elapsed_s": float(scipy_rescue_elapsed_s),
-                                "scipy_rescue_final_residual": float(scipy_rescue_final_residual),
-                                "scipy_rescue_reported_residual": float(scipy_outcome.reported_residual),
-                                "scipy_rescue_history_len": int(scipy_outcome.history_len),
-                                "scipy_rescue_improved": bool(
-                                    scipy_rescue_final_residual < scipy_rescue_initial_residual
-                                ),
-                            }
-                        )
-                        if float(res_scipy.residual_norm) < float(res_reduced.residual_norm):
-                            if emit is not None:
-                                emit(
-                                    1,
-                                    "solve_v3_full_system_linear_gmres: SciPy rescue improved residual "
-                                    f"{float(res_reduced.residual_norm):.3e} -> {float(res_scipy.residual_norm):.3e}",
-                                )
-                            res_reduced = res_scipy
-                    except Exception as exc:  # noqa: BLE001
-                        _mark("rhs1_scipy_rescue_failed")
-                        rhsmode1_general_metadata.update(
-                            {
-                                "scipy_rescue_failed": True,
-                                "scipy_rescue_error": f"{type(exc).__name__}: {exc}",
-                            }
-                        )
-                        if emit is not None:
-                            emit(1, f"solve_v3_full_system_linear_gmres: SciPy rescue failed ({type(exc).__name__}: {exc})")
-                elif emit is not None and float(rescue_abs_floor) > 0.0:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: skipping SciPy rescue after x-block seed "
-                        f"(residual={float(res_reduced.residual_norm):.3e} <= floor={float(rescue_abs_floor):.1e})",
-                    )
-        elif (
-            (not bool(use_implicit))
-            and jax.default_backend() == "cpu"
-            and int(op.rhs_mode) == 1
-            and (not bool(op.include_phi1))
-            and float(res_reduced.residual_norm) > float(target_reduced)
-            and skip_global_sparse_after_xblock
-            and emit is not None
-        ):
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: skipping SciPy rescue after bounded x-block seed "
-                f"(residual={float(res_reduced.residual_norm):.3e}; not accepted as converged)",
             )
+            res_reduced = scipy_rescue.result
+            rhsmode1_general_metadata.update(scipy_rescue.metadata)
         if use_pas_projection:
             f_full = _expand_active_f(res_reduced.x)
             f_full = _project_pas_f(f_full)

@@ -307,13 +307,14 @@ Current source size snapshot after the 2026-06-25 consolidation checkpoint,
 the 2026-06-25 final consolidation-plan review, the two root cleanup passes,
 the first transport-parallel consolidation, the root solver/preconditioner
 disposition move, the first profile-response sparse x-block handoff
-extraction, the Schur-family consolidation, and the full/reduced sparse retry
-stage extraction:
+extraction, the Schur-family consolidation, the full/reduced sparse retry
+stage extraction, and the SciPy rescue stage extraction:
 
 - `sfincs_jax/v3_driver.py`: 47 lines in the current consolidation worktree,
   acting as a compatibility shim for the domain-owned solve modules.
-- `sfincs_jax/problems/profile_response/solve.py`: 8,453 lines after the
-  x-block sparse-PC branch and full/reduced sparse retry extractions. This remains the largest
+- `sfincs_jax/problems/profile_response/solve.py`: 8,328 lines after the
+  x-block sparse-PC branch, full/reduced sparse retry, and SciPy rescue stage
+  extractions. This remains the largest
   structural debt and must be reduced by moving coherent sections into existing
   domain owners, not by adding many new helper files.
 - `sfincs_jax/problems/profile_response/policies.py`: 6,876 lines after
@@ -334,9 +335,10 @@ stage extraction:
   taking ownership of sparse-factor cache keys, host memory probing, explicit
   sparse-pattern probes, sparse-JAX preconditioner materialization, and host
   sparse direct builder/polish wrappers.
-- `sfincs_jax/problems/profile_response/dense.py`: 2,487 lines after taking
+- `sfincs_jax/problems/profile_response/dense.py`: 2,751 lines after taking
   ownership of profile linear-solve routing, dense-KSP, constraintScheme=0
-  PETSc-compatible sparse-ILU, and SciPy rescue contracts.
+  PETSc-compatible sparse-ILU, SciPy rescue solve contracts, and SciPy rescue
+  stage metadata/admission.
 - `sfincs_jax/problems/profile_response/auto_solve.py`: 550 lines after taking
   ownership of the explicit host structured-CSR RHSMode-1 solve entry point.
 - `sfincs_jax/problems/transport_matrix/solve.py`: 1,763 lines after the
@@ -347,7 +349,7 @@ stage extraction:
 - Top-level `transport_*` modules: 0.
 - Top-level `rhs1_*` modules: 0. Solver-family implementation now lives under
   `solvers.preconditioners`.
-- Package total is 209 Python files, 52 package-root files, and 163,650
+- Package total is 209 Python files, 52 package-root files, and 163,789
   package lines after the first two root cleanup passes and the first
   transport-parallel consolidation, plus the validation-domain,
   workflow-domain, solver-utility, and solver/preconditioner implementation
@@ -377,8 +379,8 @@ stage extraction:
   `preconditioner_context.py`, `preconditioner_operators.py`, and
   `preconditioner_setup.py` under `sfincs_jax.solvers`.
 - Current concentration of complexity after the Schur-family consolidation and
-  full/reduced sparse retry extraction:
-  `problems/profile_response` has 21 files and 50,561 lines,
+  full/reduced sparse retry and SciPy rescue stage extractions:
+  `problems/profile_response` has 21 files and 50,700 lines,
   `problems/transport_matrix` has 28 files and 15,026 lines,
   `solvers/preconditioners` has 47 files and about 37k lines,
   `operators/profile_response` has 11 files and about 14k lines, and
@@ -574,7 +576,7 @@ Current inventory from the 2026-06-25 consolidation review:
 | `sfincs_jax/v3_driver.py` | 47-line compatibility shim | Keep below 80 lines or delete after legacy imports migrate. |
 | Package source files | 209 Python files | At most 200 files, with lower total package lines than the current branch baseline. |
 | Package-root modules | 52 Python files | Keep at or below 55; no new root implementation modules. |
-| `problems/profile_response` | 21 files, 50,561 lines; `solve.py` is 8,453 lines and `policies.py` is 6,885 lines | At most 16 files; `solve.py` below 3,500 lines; policy/admission code split by stable owner, not by experiment. |
+| `problems/profile_response` | 21 files, 50,700 lines; `solve.py` is 8,328 lines and `policies.py` is 6,885 lines | At most 16 files; `solve.py` below 3,500 lines; policy/admission code split by stable owner, not by experiment. |
 | `problems/transport_matrix` | 28 files, 15,026 lines; `parallel/` has 5 files | At most 16 files; `parallel/` at most 3 implementation files; no policy/postsolve micro-files. |
 | `solvers/preconditioners` | 47 files, about 37k lines; QI, symbolic, x-block, PAS, and full-FP families are still over-fragmented after the Schur family was consolidated | At most 32 files; no implementation file starts with `rhs1_` or `transport_`; QI files are role-based, not experiment-history based. |
 | `io.py` / `outputs` | `io.py` is 4,263 lines while `outputs/` already owns formats, caches, RHSMode-1, and transport output | `io.py` below 800 lines as a shim, or gone; output implementation lives in `outputs`. |
@@ -1349,8 +1351,10 @@ Current completion status:
   `solvers/preconditioners/schur/profile_response.py` owner, reducing package
   files to 209 and preconditioner files to 47. The full/reduced sparse retry
   stage is now owned by `profile_response/sparse/handoff.py`, reducing
-  `profile_response/solve.py` to 8,453 lines. The remaining large blockers are
-  the generic sparse-PC/factor-preflight branch, final result/progress
+  `profile_response/solve.py` to 8,453 lines. The SciPy rescue stage is now
+  owned by `profile_response/dense.py`, reducing `profile_response/solve.py`
+  to 8,328 lines. The remaining large blockers are the generic
+  sparse-PC/factor-preflight branch, final result/progress
   normalization, the rest of transport/output consolidation,
   solver/preconditioner naming, and `io.py` ownership. The next work follows
   Lane 1 Passes 0-4 only.
@@ -1375,13 +1379,12 @@ Completed checkpoints that remain valid:
 - Profile-response policy shards, old low-level linear-solve files, old
   finalization/KSP shards, and top-level sparse-PC handoff have been removed or
   moved into domain owners.
-- The latest local consolidation checkpoint generalized and moved the
-  full/reduced sparse retry
-  stage from `profile_response/solve.py` into
-  `profile_response/sparse/handoff.py`, added a direct parametrized unit test
-  for the extracted sparse-JAX retry path, and passed focused owner tests,
-  scoped ruff, py_compile, and sparse/RHSMode-1 coverage. This file is the
-  authoritative final consolidation plan.
+- The latest local consolidation checkpoint moved the CPU SciPy rescue
+  stage from `profile_response/solve.py` into `profile_response/dense.py`,
+  added direct tests for improving-rescue and active-size-cap metadata
+  behavior, and passed focused owner tests, scoped ruff, py_compile, and
+  sparse/RHSMode-1 coverage. This file is the authoritative final
+  consolidation plan.
 
 Next ordered implementation steps:
 

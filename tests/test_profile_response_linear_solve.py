@@ -10,9 +10,11 @@ from sfincs_jax.problems.profile_response.dense import (
     RHS1DenseKSPFullSolveContext,
     RHS1DenseKSPReducedSolveContext,
     RHS1ScipyRescueContext,
+    RHS1ScipyRescueStageContext,
     profile_solver_kind,
     rhs1_small_gmres_max_from_env,
     run_rhs1_scipy_rescue,
+    run_rhs1_scipy_rescue_stage,
     solve_rhs1_constraint0_petsc_compat,
     solve_rhs1_dense_ksp_full,
     solve_rhs1_dense_ksp_reduced,
@@ -136,6 +138,119 @@ def test_run_rhs1_scipy_rescue_bicgstab_recomputes_true_residual() -> None:
     assert jnp.linalg.norm(outcome.residual_vec) < 1.0e-10
     assert outcome.reported_residual < 1.0e-10
     assert outcome.history_len >= 1
+
+
+def test_run_rhs1_scipy_rescue_stage_accepts_improving_cpu_rescue(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_RATIO", "1")
+    rhs = jnp.asarray([1.0, -2.0], dtype=jnp.float64)
+    current = GMRESSolveResult(
+        x=jnp.zeros_like(rhs),
+        residual_norm=jnp.asarray(10.0, dtype=jnp.float64),
+    )
+    residual_vec = jnp.asarray([10.0, 0.0], dtype=jnp.float64)
+    marks: list[str] = []
+
+    stage = run_rhs1_scipy_rescue_stage(
+        RHS1ScipyRescueStageContext(
+            op=SimpleNamespace(
+                rhs_mode=1,
+                include_phi1=False,
+                fblock=SimpleNamespace(fp=object(), pas=None),
+            ),
+            result=current,
+            residual_vec=residual_vec,
+            matvec=lambda x: x,
+            rhs=rhs,
+            preconditioner=None,
+            strong_preconditioner=None,
+            preconditioner_name="none",
+            strong_preconditioner_name="strong",
+            target=1.0e-6,
+            tol=1.0e-12,
+            atol=1.0e-12,
+            restart=4,
+            maxiter=20,
+            precond_side="left",
+            active_size=2,
+            used_large_cpu_xblock_shortcut=False,
+            used_explicit_fp_xblock_seed=False,
+            use_implicit=False,
+            skip_global_sparse_after_xblock=False,
+            elapsed_s=lambda: 1.0,
+            emit=None,
+            mark=marks.append,
+        )
+    )
+
+    assert jnp.linalg.norm(stage.result.x - rhs) < 1.0e-10
+    assert float(stage.result.residual_norm) < 1.0e-10
+    assert stage.residual_vec is residual_vec
+    assert marks == ["rhs1_scipy_rescue_start", "rhs1_scipy_rescue_done"]
+    assert stage.metadata["scipy_rescue_attempted"] is True
+    assert stage.metadata["scipy_rescue_improved"] is True
+    assert stage.metadata["scipy_rescue_method"] == "gmres"
+
+
+def test_run_rhs1_scipy_rescue_stage_records_active_size_cap_skip(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_MAX_ACTIVE", "10")
+    current = GMRESSolveResult(
+        x=jnp.asarray([0.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(1.0, dtype=jnp.float64),
+    )
+    marks: list[str] = []
+
+    stage = run_rhs1_scipy_rescue_stage(
+        RHS1ScipyRescueStageContext(
+            op=SimpleNamespace(
+                rhs_mode=1,
+                include_phi1=False,
+                fblock=SimpleNamespace(fp=object(), pas=None),
+            ),
+            result=current,
+            residual_vec=None,
+            matvec=lambda x: x,
+            rhs=jnp.asarray([1.0], dtype=jnp.float64),
+            preconditioner=None,
+            strong_preconditioner=None,
+            preconditioner_name="none",
+            strong_preconditioner_name="strong",
+            target=1.0e-12,
+            tol=1.0e-12,
+            atol=1.0e-12,
+            restart=4,
+            maxiter=20,
+            precond_side="left",
+            active_size=11,
+            used_large_cpu_xblock_shortcut=True,
+            used_explicit_fp_xblock_seed=False,
+            use_implicit=False,
+            skip_global_sparse_after_xblock=False,
+            elapsed_s=lambda: 0.0,
+            emit=None,
+            mark=marks.append,
+        )
+    )
+
+    assert stage.result is current
+    assert stage.residual_vec is None
+    assert marks == ["rhs1_scipy_rescue_skipped"]
+    assert stage.metadata == {
+        "scipy_rescue_attempted": False,
+        "scipy_rescue_skipped": True,
+        "scipy_rescue_skip_reason": "active_size_cap",
+        "scipy_rescue_initial_residual": 1.0,
+        "scipy_rescue_target": 1.0e-12,
+        "scipy_rescue_threshold": 1.0e-9,
+        "scipy_rescue_active_size": 11,
+        "scipy_rescue_used_large_cpu_xblock_shortcut": True,
+        "scipy_rescue_used_explicit_fp_xblock_seed": False,
+    }
 
 
 def test_solve_rhs1_constraint0_petsc_compat_records_preconditioned_replay() -> None:
