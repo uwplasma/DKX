@@ -280,9 +280,6 @@ research workflows.
 .. automodule:: sfincs_jax.problems.transport_matrix.solve_policy
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.handoff_policy
-   :members:
-
 .. automodule:: sfincs_jax.problems.transport_matrix.host_gmres
    :members:
 

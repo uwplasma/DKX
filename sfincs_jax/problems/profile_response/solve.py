@@ -633,8 +633,12 @@ from sfincs_jax.host_refinement import (
     host_sparse_direct_solve_with_refinement as _host_sparse_direct_solve_with_refinement_impl,
 )
 from sfincs_jax.problems.transport_matrix.policies import (
+    transport_candidate_is_better,
     transport_host_gmres_accepts_preconditioned_residual as _transport_host_gmres_accepts_preconditioned_residual_impl,
+    transport_polish_config_from_env,
     transport_precondition_side as _transport_precondition_side_impl,
+    transport_residual_value,
+    transport_result_needs_retry,
     transport_sparse_direct_needs_float64_retry as _transport_sparse_direct_needs_float64_retry_impl,
     transport_sparse_direct_rescue_first as _transport_sparse_direct_rescue_first_impl,
     transport_tzfft_first_attempt_budget as _transport_tzfft_first_attempt_budget_impl,
@@ -663,12 +667,6 @@ from sfincs_jax.problems.transport_matrix.setup import (
 from sfincs_jax.problems.transport_matrix.active_dense import (
     resolve_transport_active_dense_setup,
     transport_active_dof_indices as _transport_active_dof_indices,
-)
-from sfincs_jax.problems.transport_matrix.handoff_policy import (
-    transport_candidate_is_better,
-    transport_polish_config_from_env,
-    transport_residual_value,
-    transport_result_needs_retry,
 )
 from sfincs_jax.problems.transport_matrix.dense_lu import (
     dense_preconditioner_for_matvec as _dense_preconditioner_for_matvec,

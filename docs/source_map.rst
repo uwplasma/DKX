@@ -1257,11 +1257,13 @@ the historical private driver name and test the focused module directly. This ke
   JAX formulas for RHSMode=1 output moments, RHSMode=2/3 transport diagnostics,
   transport-matrix assembly, strict Fortran-order reductions, and cached
   geometry/species diagnostic precomputes.
-- ``sfincs_jax/problems/transport_matrix/handoff_policy.py``
-  (legacy alias: ``sfincs_jax/transport_handoff_policy.py``):
-  shared transport retry residual metrics, better-candidate comparisons, and RHSMode=3
-  polish threshold/restart/maxiter policy used by the reduced and full transport solve
-  branches.
+- ``sfincs_jax/problems/transport_matrix/policies.py``:
+  dense/sparse/direct/tzfft runtime-admission policy, active transport routing,
+  shared transport retry residual metrics, better-candidate comparisons, and
+  RHSMode=3 polish threshold/restart/maxiter policy used by the reduced and
+  full transport solve branches. The former ``handoff_policy.py`` relay and
+  legacy ``transport_handoff_policy.py`` alias have been deleted; tests import
+  the policy owner directly.
 - ``sfincs_jax/problems/transport_matrix/residual_quality.py``
   (legacy alias: ``sfincs_jax/transport_residual_quality.py``):
   fast transport worker residual-abort threshold parsing and failure-message

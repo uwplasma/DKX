@@ -5524,3 +5524,48 @@ Next best steps:
    `sparse/qi.py`, or `dense.py`.
 2. Once `solve.py <=5,500` lines, switch to Batch B transport/output/root
    compression.
+
+## 2026-06-26 Batch B Transport Handoff Policy Merge
+
+Steps taken:
+
+1. Merged the transport retry/residual polish relay
+   `sfincs_jax/problems/transport_matrix/handoff_policy.py` into the durable
+   transport policy owner `sfincs_jax/problems/transport_matrix/policies.py`.
+2. Rewired `profile_response/solve.py`, focused handoff-policy tests, import
+   contract tests, API docs, and the source map to import the policy owner
+   directly.
+3. Deleted `handoff_policy.py` instead of leaving a compatibility shim.
+4. Updated `plan_final.md` so the single authoritative consolidation plan now
+   marks `handoff_policy.py` as done and keeps the remaining Batch B policy
+   targets focused on `solve_policy.py` and `preconditioner_dispatch.py`.
+
+Results:
+
+- Package Python files decreased from `205` to `204`.
+- `problems/transport_matrix` files including `parallel/` decreased from `28`
+  to `27`.
+- `sfincs_jax/problems/transport_matrix/policies.py` is now `747` lines and
+  owns dense/sparse/direct/tzfft runtime admission plus RHSMode-3 polish
+  retry policy.
+- The Batch B review-ready gate remains open: transport matrix plus
+  `parallel/` must still decrease to `<=18` files.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/profile_response/solve.py tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/profile_response/solve.py tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m pytest tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py tests/test_transport_solve_policy.py -q --tb=short` passed with `26 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+
+Next best steps:
+
+1. Continue Batch B with a larger policy/dispatch merge:
+   `solve_policy.py` and `preconditioner_dispatch.py` should move into
+   `transport_matrix/policies.py` or a single active-system owner, with tests
+   importing the owner directly.
+2. Then merge transport solver shards (`dense_lu.py`, `dense_batch.py`,
+   `host_gmres.py`, `loop.py`, `iteration_stats.py`, `residual_quality.py`,
+   and `sparse_direct_solve.py`) into `solve.py` or one active-system owner.
+3. After Batch B reaches the transport file-count gate, return to Batch A's
+   remaining `profile_response/solve.py <=5,500` review-ready gate.
