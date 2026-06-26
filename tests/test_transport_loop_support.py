@@ -147,6 +147,57 @@ def test_transport_recycle_state_disabled_is_noop() -> None:
     assert recycle.reduced_basis == []
 
 
+def test_transport_recycle_state_candidates_use_trimmed_recent_basis() -> None:
+    recycle = TransportRecycleState(k=2)
+    recycle.append_full(
+        jnp.asarray([100.0, 0.0]),
+        jnp.asarray([100.0, 0.0]),
+    )
+    recycle.append_full(
+        jnp.asarray([1.0, 0.0]),
+        jnp.asarray([2.0, 0.0]),
+    )
+    recycle.append_full(
+        jnp.asarray([0.0, 1.0]),
+        jnp.asarray([0.0, 3.0]),
+    )
+
+    full_candidate = recycle.candidate_full(jnp.asarray([4.0, 9.0]))
+
+    assert full_candidate is not None
+    assert len(recycle.full_basis) == 2
+    np.testing.assert_allclose(
+        np.asarray(full_candidate),
+        np.asarray([2.0, 3.0]),
+        rtol=1e-10,
+        atol=1e-10,
+    )
+
+    recycle.append_reduced(
+        jnp.asarray([50.0, 0.0]),
+        jnp.asarray([50.0, 0.0]),
+    )
+    recycle.append_reduced(
+        jnp.asarray([1.0, 0.0]),
+        jnp.asarray([5.0, 0.0]),
+    )
+    recycle.append_reduced(
+        jnp.asarray([0.0, 1.0]),
+        jnp.asarray([0.0, 7.0]),
+    )
+
+    reduced_candidate = recycle.candidate_reduced(jnp.asarray([10.0, 21.0]))
+
+    assert reduced_candidate is not None
+    assert len(recycle.reduced_basis) == 2
+    np.testing.assert_allclose(
+        np.asarray(reduced_candidate),
+        np.asarray([2.0, 3.0]),
+        rtol=1e-10,
+        atol=1e-10,
+    )
+
+
 def test_resolve_transport_recycle_k_respects_env_and_operator_variation(monkeypatch) -> None:
     messages: list[tuple[int, str]] = []
 

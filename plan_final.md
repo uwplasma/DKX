@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (explicit-sparse materialization guard pass)
+Last updated: 2026-06-26 (transport recycle-candidate coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -433,6 +433,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   These fail-fast checks prevent corrupt sparse operators or preconditioners
   from being admitted during production RHSMode 1/2/3 assembly. The focused
   explicit-sparse suite reports `82 passed` in `0.78 s`.
+- The sixty-sixth post-audit coverage tranche added transport recycle-state
+  candidate gates. `tests/test_transport_loop_support.py` now checks that both
+  full and reduced recycled candidates are assembled from the retained recent
+  basis after trimming, not from evicted stale vectors. This protects warm-start
+  reuse in production transport scans without adding solve cost. The focused
+  transport loop/progress/finalization suite reports `25 passed` in `1.19 s`.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
