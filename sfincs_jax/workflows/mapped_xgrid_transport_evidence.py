@@ -21,7 +21,8 @@ import numpy as np
 from ..adaptive_maps import MappedXGrid
 from .mapped_xgrid_objectives import rational_tail_transport_grid, transport_moment_report
 from ..namelist import Namelist
-from ..v3_driver import V3TransportMatrixSolveResult, solve_v3_transport_matrix_linear_gmres
+from ..problems.transport_matrix.finalize import V3TransportMatrixSolveResult
+from ..problems.transport_matrix.solve import solve_v3_transport_matrix_linear_gmres
 
 
 SolveFn = Callable[..., V3TransportMatrixSolveResult]

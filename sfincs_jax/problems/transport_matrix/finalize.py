@@ -37,6 +37,28 @@ class TransportKSPIterationRequest:
     solver_kind: str
 
 
+@dataclass(frozen=True)
+class V3TransportMatrixSolveResult:
+    """Result of a RHSMode=2/3 transport-matrix or monoenergetic solve."""
+
+    op0: Any
+    transport_matrix: jnp.ndarray
+    state_vectors_by_rhs: dict[int, jnp.ndarray]
+    residual_norms_by_rhs: dict[int, jnp.ndarray]
+    fsab_flow: jnp.ndarray
+    particle_flux_vm_psi_hat: jnp.ndarray
+    heat_flux_vm_psi_hat: jnp.ndarray
+    elapsed_time_s: jnp.ndarray
+    transport_output_fields: dict[str, object] | None = None
+    rhs_norms_by_rhs: dict[int, jnp.ndarray] | None = None
+    active_size: int | None = None
+    use_active_dof_mode: bool | None = None
+    solver_kinds_by_rhs: dict[int, str] | None = None
+    solve_methods_by_rhs: dict[int, str] | None = None
+    preconditioner_kind: str | None = None
+    strong_preconditioner_kind: str | None = None
+
+
 @dataclass
 class TransportRHSFinalizationContext:
     """Mutable solve-loop state shared by transport RHS finalization helpers."""

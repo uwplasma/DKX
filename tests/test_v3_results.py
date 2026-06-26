@@ -7,12 +7,25 @@ from jax import tree_util as jtu
 import numpy as np
 
 from sfincs_jax.solver import GMRESSolveResult
+from sfincs_jax.problems.profile_response.solver_diagnostics import (
+    V3LinearSolveResult as DomainLinearSolveResult,
+    V3NewtonKrylovResult as DomainNewtonKrylovResult,
+)
+from sfincs_jax.problems.transport_matrix.finalize import (
+    V3TransportMatrixSolveResult as DomainTransportMatrixSolveResult,
+)
 from sfincs_jax.v3_results import (
     V3LinearSolveResult,
     V3NewtonKrylovResult,
     V3TransportMatrixSolveResult,
     v3_linear_solve_result_from_payload,
 )
+
+
+def test_v3_results_facade_reexports_domain_result_contracts() -> None:
+    assert V3LinearSolveResult is DomainLinearSolveResult
+    assert V3NewtonKrylovResult is DomainNewtonKrylovResult
+    assert V3TransportMatrixSolveResult is DomainTransportMatrixSolveResult
 
 
 def test_v3_linear_solve_result_properties_and_pytree_metadata() -> None:

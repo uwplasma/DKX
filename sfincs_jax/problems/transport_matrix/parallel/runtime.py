@@ -39,8 +39,8 @@ from sfincs_jax.problems.transport_matrix.residual_quality import (
     transport_residual_gate_failures_from_arrays,
     transport_residual_gate_thresholds_from_env,
 )
+from sfincs_jax.problems.transport_matrix.finalize import V3TransportMatrixSolveResult
 from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist
-from sfincs_jax.v3_results import V3TransportMatrixSolveResult
 from sfincs_jax.v3_system import V3FullSystemOperator
 
 

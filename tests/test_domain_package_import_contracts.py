@@ -269,6 +269,11 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "finalize_full_transport_rhs",
     ),
     (
+        "sfincs_jax.problems.transport_matrix.finalize",
+        "sfincs_jax.problems.transport_matrix.finalize",
+        "V3TransportMatrixSolveResult",
+    ),
+    (
         "sfincs_jax.problems.transport_matrix.streaming_outputs",
         "sfincs_jax.problems.transport_matrix.streaming_outputs",
         "TransportStreamingOutputAccumulator",
@@ -524,6 +529,21 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "sfincs_jax.problems.profile_response.solver_diagnostics",
         "sfincs_jax.problems.profile_response.solver_diagnostics",
         "build_rhs1_xblock_correction_metadata",
+    ),
+    (
+        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "V3LinearSolveResult",
+    ),
+    (
+        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "V3NewtonKrylovResult",
+    ),
+    (
+        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "v3_linear_solve_result_from_payload",
     ),
     (
         "sfincs_jax.problems.profile_response.preconditioner_build",

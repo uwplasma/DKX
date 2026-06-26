@@ -43,6 +43,7 @@ from sfincs_jax.problems.profile_response.policies import (
     host_sparse_factor_dtype,
 )
 from sfincs_jax.problems.profile_response.solver_diagnostics import (
+    V3NewtonKrylovResult,
     emit_newton_krylov_ksp_history,
     rhs1_fortran_stdout_from_env,
     rhs1_ksp_history_limits_from_env,
@@ -60,7 +61,6 @@ from ...solvers.preconditioners.full_fp.kinetic_blocks import (
     build_rhs1_collision_preconditioner,
 )
 from ...solvers.preconditioners.symbolic_sparse import build_sparse_ilu_from_matvec
-from ...v3_results import V3NewtonKrylovResult
 from ...v3_system import (
     V3FullSystemOperator,
     apply_v3_full_system_jacobian_jit,

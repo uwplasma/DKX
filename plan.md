@@ -4457,3 +4457,74 @@ Next best steps:
    helper-only file.
 3. Run focused compile, ruff, RHSMode-1 sparse/dense/Phi1/ambipolar/sensitivity
    tests, and `git diff --check` after each coherent sweep checkpoint.
+
+## 2026-06-26 Sweep 0 Result-Contract Root Routing
+
+Steps taken:
+
+1. Moved RHSMode=1 result contracts (`V3LinearSolveResult`,
+   `V3NewtonKrylovResult`, and `v3_linear_solve_result_from_payload`) into the
+   existing `sfincs_jax.problems.profile_response.solver_diagnostics` owner.
+2. Moved `V3TransportMatrixSolveResult` into the existing
+   `sfincs_jax.problems.transport_matrix.finalize` owner.
+3. Replaced `sfincs_jax/v3_results.py` with a 13-line compatibility facade for
+   historical imports.
+4. Rewrote package-internal imports in profile-response, transport, parallel,
+   and workflow modules to use the new domain owners directly.
+5. Updated `docs/source_map.rst`, `docs/api.rst`,
+   `tests/test_domain_package_import_contracts.py`, and
+   `tests/test_v3_results.py` so the result-contract ownership is explicit and
+   the facade is tested as a facade.
+
+Results:
+
+- Package-internal imports from `sfincs_jax.v3_results`: `0`.
+- `sfincs_jax/v3_results.py` decreased from `119` lines to `13` lines.
+- Package file count remains `209`; package-root file count remains `48`.
+- Package source lines are `164,861`, below the `164,865` consolidation
+  baseline.
+- No source behavior changed; this checkpoint only moved result-contract
+  ownership and preserved compatibility imports.
+
+Validation:
+
+- `python -m py_compile` on all touched Python modules and tests passed.
+- `python -m ruff check` on all touched Python modules and tests passed.
+- `python -m pytest tests/test_v3_results.py
+  tests/test_profile_response_finalization.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` passed with
+  `16 passed`.
+- `python -m pytest tests/test_full_system_newton_krylov.py
+  tests/test_full_system_operator_jit.py tests/test_write_output_return_results.py
+  -q --tb=short` passed with `10 passed`.
+- `python -m pytest tests/test_transport_parallel.py
+  tests/test_transport_streaming_outputs.py
+  tests/test_transport_matrix_rhsmode2_parity.py
+  tests/test_transport_matrix_rhsmode3_parity.py -q --tb=short` passed with
+  `36 passed`.
+- A direct compatibility import check confirmed `sfincs_jax.v3_results`
+  re-exports the domain-owned classes and `sfincs_jax.v3_driver` still imports
+  as the profile-response solve module.
+- `git diff --check` passed.
+
+Progress:
+
+- Lane 1 structural consolidation: about `85%`.
+- Sweep 0 freeze/delete/route: about `15%`; result-contract routing is done,
+  but the heavier root kernels still need routing.
+- Sweep 1 profile-response collapse: about `44%`.
+- Sweep 2 transport/output/root cleanup: about `20%`.
+- Sweep 3 solver/preconditioner family consolidation: about `25%`.
+- Sweep 4 public API/docs/tests/review gate: about `22%`.
+
+Next best steps:
+
+1. Continue Sweep 0 with `v3_sparse_pattern.py`, because it has a clearer
+   domain owner (`operators/profile_response` or sparse layout) than
+   `v3_system.py` and is heavily used by sparse/preconditioner tests.
+2. Then route `v3_fblock.py` and `v3_system.py` behind operator-domain owners
+   while keeping compatibility facades until examples and external imports are
+   migrated.
+3. After remaining root kernels are routed, resume Sweep 1 and collapse the
+   remaining factor-preflight/residual-correction/final sparse payload code out
+   of `profile_response/solve.py`.

@@ -883,11 +883,13 @@ from sfincs_jax.v3_system import (
     rhs_v3_full_system_jit,
     with_transport_rhs_settings,
 )
-from sfincs_jax.v3_results import (
+from sfincs_jax.problems.profile_response.solver_diagnostics import (
     V3LinearSolveResult,
     V3NewtonKrylovResult,
-    V3TransportMatrixSolveResult,
     v3_linear_solve_result_from_payload,
+)
+from sfincs_jax.problems.transport_matrix.finalize import (
+    V3TransportMatrixSolveResult,
 )
 from sfincs_jax.v3_sparse_pattern import (
     estimate_v3_full_system_conservative_sparsity_summary,

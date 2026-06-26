@@ -23,6 +23,7 @@ from sfincs_jax.solver import (
     gmres_solve_with_residual_distributed,
     gmres_solve_with_residual_jit,
 )
+from sfincs_jax.problems.transport_matrix.finalize import V3TransportMatrixSolveResult
 from sfincs_jax.v3_system import sharding_constraints
 
 

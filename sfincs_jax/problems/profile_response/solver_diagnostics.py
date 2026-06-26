@@ -8,6 +8,7 @@ import math
 import os
 from typing import Any
 
+from jax import tree_util as jtu
 import jax.numpy as jnp
 
 from sfincs_jax.solvers.krylov_dispatch import ksp_iteration_solver_label
@@ -17,7 +18,6 @@ from sfincs_jax.solver import (
     gmres_solve_with_history_scipy,
     lgmres_solve_with_history_scipy,
 )
-from sfincs_jax.v3_results import V3LinearSolveResult
 from .active_dof import finalize_rhs1_linear_solution_cleanup
 from .policies import (
     rhs1_scipy_rescue_abs_floor_after_xblock,
@@ -26,6 +26,82 @@ from .residual import l2_norm_float, residual_converged, residual_target
 
 
 EmitFn = Callable[[int, str], None]
+
+
+@jtu.register_pytree_node_class
+@dataclass(frozen=True)
+class V3LinearSolveResult:
+    """Result of one matrix-free RHSMode=1 profile-response solve."""
+
+    op: Any
+    rhs: jnp.ndarray
+    gmres: GMRESSolveResult
+    metadata: dict[str, object] | None = None
+
+    def tree_flatten(self):
+        children = (self.op, self.rhs, self.gmres)
+        aux = self.metadata
+        return children, aux
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        op, rhs, gmres_result = children
+        return cls(op=op, rhs=rhs, gmres=gmres_result, metadata=aux)
+
+    @property
+    def x(self) -> jnp.ndarray:
+        return self.gmres.x
+
+    @property
+    def residual_norm(self) -> jnp.ndarray:
+        return self.gmres.residual_norm
+
+
+def v3_linear_solve_result_from_payload(
+    *,
+    op: Any,
+    rhs: jnp.ndarray,
+    payload: Any,
+) -> V3LinearSolveResult:
+    """Wrap a sparse-PC payload in the profile-response linear-solve result."""
+
+    return V3LinearSolveResult(
+        op=op,
+        rhs=rhs,
+        gmres=GMRESSolveResult(
+            x=payload.x,
+            residual_norm=payload.residual_norm,
+        ),
+        metadata=payload.metadata,
+    )
+
+
+@jtu.register_pytree_node_class
+@dataclass(frozen=True)
+class V3NewtonKrylovResult:
+    """Result of a nonlinear Phi1 Newton-Krylov profile-response solve."""
+
+    op: Any
+    x: jnp.ndarray
+    residual_norm: jnp.ndarray
+    n_newton: int
+    last_linear_residual_norm: jnp.ndarray
+
+    def tree_flatten(self):
+        children = (self.op, self.x, self.residual_norm, self.last_linear_residual_norm)
+        aux = int(self.n_newton)
+        return children, aux
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        op, x, residual_norm, last_linear_residual_norm = children
+        return cls(
+            op=op,
+            x=x,
+            residual_norm=residual_norm,
+            n_newton=int(aux),
+            last_linear_residual_norm=last_linear_residual_norm,
+        )
 
 
 @dataclass(frozen=True)

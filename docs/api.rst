@@ -69,6 +69,12 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.solvers.memory_model
    :members:
 
+.. automodule:: sfincs_jax.problems.profile_response.solver_diagnostics
+   :members:
+
+.. automodule:: sfincs_jax.problems.transport_matrix.finalize
+   :members:
+
 .. automodule:: sfincs_jax.v3_results
    :members:
 
