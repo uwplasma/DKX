@@ -2010,7 +2010,7 @@ def write_sfincs_jax_output_h5(
             v3_rhsmode1_output_fields_vm_only_phi1_batch_jit,
             v3_rhsmode1_output_fields_vm_only_jit,
         )
-        from ..v3_driver import (
+        from ..problems.profile_solve import (
             _resolve_use_implicit,
             _rhsmode1_host_dense_shortcut_allowed,
             solve_v3_full_system_linear_gmres,

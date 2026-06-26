@@ -263,6 +263,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   serialization. These protect the native reduced-Pmat and sparse-pattern
   infrastructure without materializing production operators or adding slow
   solves to CI.
+- The thirtieth post-audit consolidation tranche removed the last internal
+  source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
+  RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
+  `tests/test_source_tree_consolidation.py` now parses package imports and
+  fails if implementation modules reintroduce a `v3_driver` dependency, keeping
+  `v3_driver.py` as an external compatibility shim rather than an internal
+  owner.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
