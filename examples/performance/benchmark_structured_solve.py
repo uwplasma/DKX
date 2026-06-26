@@ -38,7 +38,7 @@ from sfincs_jax.structured_velocity import (  # noqa: E402
     factor_block_tridiagonal,
 )
 from sfincs_jax.namelist import read_sfincs_input  # noqa: E402
-from sfincs_jax.v3_fblock import apply_v3_fblock_operator  # noqa: E402
+from sfincs_jax.operators.profile_response.fblock import apply_v3_fblock_operator  # noqa: E402
 from sfincs_jax.v3_system import full_system_operator_from_namelist  # noqa: E402
 
 

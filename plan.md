@@ -4609,3 +4609,83 @@ Next best steps:
    move sparse finalization/progress normalization, factor-preflight execution,
    and residual-correction execution out of `profile_response/solve.py`
    without adding helper-only files.
+
+## 2026-06-26 Sweep 0 F-Block Root Routing
+
+Steps taken:
+
+1. Moved the RHSMode-1 matrix-free kinetic f-block implementation from the
+   historical root module `sfincs_jax/v3_fblock.py` into the operator-domain
+   owner `sfincs_jax/operators/profile_response/fblock.py`.
+2. Removed the historical root file instead of keeping a compatibility facade,
+   because package-internal imports, docs, examples, scripts, and focused
+   tests now import `sfincs_jax.operators.profile_response.fblock`.
+3. Rewired direct imports in `v3_system.py`, `residual.py`, ambipolar helpers,
+   examples, scripts, f-block tests, and residual/JVP tests to the new owner.
+4. Updated `docs/source_map.rst`, `docs/api.rst`,
+   `docs/physics_reference.rst`, `docs/performance_techniques.rst`, and
+   `tests/test_domain_package_import_contracts.py` so the f-block ownership is
+   explicit and import-contract tested.
+5. Adjusted repository-root path resolution in the moved module so
+   geometryScheme 5/11/12 equilibrium lookup still searches the checked
+   fixture and package-data locations after the file move.
+
+Results:
+
+- Package-internal imports from `sfincs_jax.v3_fblock`: `0`.
+- `sfincs_jax/v3_fblock.py` was removed from the package root.
+- Package file count remains `209`; package-root file count decreases from
+  `47` to `46`.
+- Package source lines are `164,903`. This is still temporarily above the
+  `164,865` consolidation baseline because the owner-map, docs, and import
+  contracts added lines; the review-ready target remains net source-line
+  reduction below the baseline after deletion/merge sweeps.
+- `operators/profile_response` now owns `13` files and `16,253` lines,
+  including the sparse-pattern and f-block owners.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/operators/profile_response/fblock.py
+  sfincs_jax/v3_system.py sfincs_jax/residual.py
+  sfincs_jax/problems/ambipolar.py tests/test_v3_fblock_smoke.py
+  tests/test_rhs1_fblock_assembly.py tests/test_domain_package_import_contracts.py`
+  passed.
+- `python -m ruff check sfincs_jax/operators/profile_response/fblock.py
+  sfincs_jax/v3_system.py sfincs_jax/residual.py
+  sfincs_jax/problems/ambipolar.py tests/test_v3_fblock_smoke.py
+  tests/test_rhs1_fblock_assembly.py tests/test_domain_package_import_contracts.py`
+  passed.
+- `python -m pytest tests/test_v3_fblock_smoke.py tests/test_residual_jvp.py
+  tests/test_input_compat.py tests/test_domain_package_import_contracts.py
+  -q --tb=short` passed with `33 passed`.
+- `python -m pytest tests/test_rhs1_collisionless_stencils.py
+  tests/test_rhs1_collision_stencils.py tests/test_fblock_pas_matvec_parity.py
+  tests/test_fblock_fokker_planck_matvec_parity.py
+  tests/test_fblock_fused_matvec.py tests/test_rhs1_fblock_assembly.py
+  -q --tb=short` passed with `45 passed`.
+- A direct import check confirmed
+  `sfincs_jax.operators.profile_response.fblock.V3FBlockOperator.__module__`
+  is the new owner and `sfincs_jax.v3_fblock` is no longer importable.
+
+Progress:
+
+- Lane 1 structural consolidation: about `87%`.
+- Sweep 0 freeze/delete/route: about `45%`; result contracts, sparse
+  structural patterns, and the f-block are routed, while `v3_system.py` and
+  possible `v3.py` compatibility disposition remain.
+- Sweep 1 profile-response collapse: about `44%`.
+- Sweep 2 transport/output/root cleanup: about `20%`.
+- Sweep 3 solver/preconditioner family consolidation: about `25%`.
+- Sweep 4 public API/docs/tests/review gate: about `24%`.
+
+Next best steps:
+
+1. Continue Sweep 0 with `v3_system.py`, routing the full-system operator into
+   an operator/problem-domain owner and updating imports/docs/tests in the same
+   checkpoint.
+2. Decide whether `v3.py` remains a public compatibility facade or can be
+   split into geometry/grid owners without breaking documented public usage.
+3. Resume Sweep 1 only after root-kernel routing is complete: move sparse
+   finalization/progress normalization, factor-preflight execution, and
+   residual-correction execution out of `profile_response/solve.py` without
+   adding helper-only files.

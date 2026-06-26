@@ -1843,7 +1843,8 @@ while keeping the matvec control‑flow free (required for JAX GMRES/BiCGStab).
 
 **Implementation.**
 
-- ``SFINCS_JAX_FUSED_MATVEC`` (default enabled) in ``sfincs_jax.v3_fblock``.
+- ``SFINCS_JAX_FUSED_MATVEC`` (default enabled) in
+  ``sfincs_jax.operators.profile_response.fblock``.
 
 **Notes.** Avoid ``lax.scan``/``lax.fori_loop`` inside the matvec used by JAX
 iterative solvers: they assert on control‑flow. The collision operators (PAS/FP)
@@ -1881,7 +1882,7 @@ schemes used in reduced-suite inputs).
 - Collisionless operator fast path:
   ``sfincs_jax.collisionless.apply_collisionless_v3``.
 - Operator build wiring:
-  ``sfincs_jax.v3_fblock.collisionless_operator_from_namelist``.
+  ``sfincs_jax.operators.profile_response.fblock.collisionless_operator_from_namelist``.
 
 **Periodic circulant optimization.** For periodic circulant derivative matrices,
 an additional compact roll-based kernel is available and enabled on single-device
@@ -3050,7 +3051,7 @@ Controls:
 - ``SFINCS_JAX_FBLOCK_CACHE`` (default: enabled)
 - ``SFINCS_JAX_FBLOCK_CACHE_MAX`` (max cached entries; default: ``8``)
 
-Implementation: ``sfincs_jax.v3_fblock``.
+Implementation: ``sfincs_jax.operators.profile_response.fblock``.
 
 Performance deltas (where measured)
 -----------------------------------

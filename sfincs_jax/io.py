@@ -548,7 +548,8 @@ def _get_int(group: dict, key: str, default: int) -> int:
 def _dphi_hat_dpsi_hat_from_er_geometry_scheme4(er: float) -> float:
     """Compute dPhiHat/dpsiHat from Er for geometryScheme=4 (v3 defaults).
 
-    Matches `sfincs_jax.v3_fblock._dphi_hat_dpsi_hat_from_er_scheme4`, and v3's defaults:
+    Matches `sfincs_jax.operators.profile_response.fblock._dphi_hat_dpsi_hat_from_er`,
+    and v3's defaults:
     `inputRadialCoordinateForGradients=4` with rN forced to 0.5.
     """
     psi_a_hat = -0.384935

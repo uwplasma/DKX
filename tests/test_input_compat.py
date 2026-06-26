@@ -24,7 +24,7 @@ from sfincs_jax.input_compat import (
 from sfincs_jax.io import _resolve_equilibrium_file_from_namelist, localize_equilibrium_file_in_place, sfincs_jax_output_dict
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.v3 import grids_from_namelist
-from sfincs_jax.v3_fblock import _dphi_hat_dpsi_hat_from_er
+from sfincs_jax.operators.profile_response.fblock import _dphi_hat_dpsi_hat_from_er
 from sfincs_jax.v3_system import full_system_operator_from_namelist
 
 

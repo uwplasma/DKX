@@ -1,4 +1,8 @@
+"""Matrix-free kinetic f-block operator for RHSMode-1 profile response."""
+
 from __future__ import annotations
+
+# ruff: noqa: E402
 
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -18,10 +22,11 @@ import jax.numpy as jnp
 import numpy as np
 from jax import tree_util as jtu
 
-from .collisionless import CollisionlessV3Operator, apply_collisionless_v3
-from .collisionless_exb import ExBThetaV3Operator, ExBZetaV3Operator, apply_exb_theta_v3, apply_exb_zeta_v3
-from .collisionless_er import ErXDotV3Operator, ErXiDotV3Operator, apply_er_xdot_v3, apply_er_xidot_v3
-from .collisions import (
+from sfincs_jax.boozer_bc import read_boozer_bc_header, selected_r_n_from_bc
+from sfincs_jax.collisionless import CollisionlessV3Operator, apply_collisionless_v3
+from sfincs_jax.collisionless_er import ErXDotV3Operator, ErXiDotV3Operator, apply_er_xdot_v3, apply_er_xidot_v3
+from sfincs_jax.collisionless_exb import ExBThetaV3Operator, ExBZetaV3Operator, apply_exb_theta_v3, apply_exb_zeta_v3
+from sfincs_jax.collisions import (
     FokkerPlanckV3Operator,
     FokkerPlanckV3Phi1Operator,
     PitchAngleScatteringV3Operator,
@@ -32,12 +37,12 @@ from .collisions import (
     make_fokker_planck_v3_phi1_operator,
     make_pitch_angle_scattering_v3_operator,
 )
-from .diagnostics import b0_over_bbar as b0_over_bbar_jax
-from .diagnostics import fsab_hat2 as fsab_hat2_jax
-from .diagnostics import g_hat_i_hat as g_hat_i_hat_jax
-from .geometry import BoozerGeometry
-from .input_compat import effective_equilibrium_file, effective_psi_a_hat, effective_psi_n_wish
-from .magnetic_drifts import (
+from sfincs_jax.diagnostics import b0_over_bbar as b0_over_bbar_jax
+from sfincs_jax.diagnostics import fsab_hat2 as fsab_hat2_jax
+from sfincs_jax.diagnostics import g_hat_i_hat as g_hat_i_hat_jax
+from sfincs_jax.geometry import BoozerGeometry
+from sfincs_jax.input_compat import effective_equilibrium_file, effective_psi_a_hat, effective_psi_n_wish
+from sfincs_jax.magnetic_drifts import (
     MagneticDriftThetaV3Operator,
     MagneticDriftXiDotV3Operator,
     MagneticDriftZetaV3Operator,
@@ -45,13 +50,12 @@ from .magnetic_drifts import (
     apply_magnetic_drift_xidot_v3,
     apply_magnetic_drift_zeta_v3,
 )
-from .namelist import Namelist
-from .solver import GMRESSolveResult, gmres_solve
-from .boozer_bc import read_boozer_bc_header, selected_r_n_from_bc
-from .periodic_stencil import extract_sparse_circulant_stencil, extract_sparse_row_stencil
-from .paths import resolve_existing_path
-from .v3 import V3Grids, geometry_from_namelist, grids_from_namelist
-from .vmec_wout import psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
+from sfincs_jax.namelist import Namelist
+from sfincs_jax.paths import resolve_existing_path
+from sfincs_jax.periodic_stencil import extract_sparse_circulant_stencil, extract_sparse_row_stencil
+from sfincs_jax.solver import GMRESSolveResult, gmres_solve
+from sfincs_jax.v3 import V3Grids, geometry_from_namelist, grids_from_namelist
+from sfincs_jax.vmec_wout import psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
 
 
 def _as_1d_float(group: dict, key: str) -> np.ndarray:
@@ -226,7 +230,7 @@ def _dphi_hat_dpsi_hat_from_er(*, nml: Namelist, er: float) -> float:
         if eq is None:
             raise ValueError("geometryScheme=11/12 requires equilibriumFile in geometryParameters.")
         base_dir = nml.source_path.parent if nml.source_path is not None else None
-        repo_root = Path(__file__).resolve().parents[1]
+        repo_root = Path(__file__).resolve().parents[3]
         extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
         p = resolve_existing_path(str(eq), base_dir=base_dir, extra_search_dirs=extra).path
 
@@ -247,7 +251,7 @@ def _dphi_hat_dpsi_hat_from_er(*, nml: Namelist, er: float) -> float:
         if eq is None:
             raise ValueError("geometryScheme=5 requires equilibriumFile in geometryParameters.")
         base_dir = nml.source_path.parent if nml.source_path is not None else None
-        repo_root = Path(__file__).resolve().parents[1]
+        repo_root = Path(__file__).resolve().parents[3]
         extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
         p = resolve_existing_path(str(eq), base_dir=base_dir, extra_search_dirs=extra).path
 
@@ -498,8 +502,8 @@ class V3FBlockOperator:
 
     @property
     def flat_size(self) -> int:
-        s, x, l, t, z = self.f_shape
-        return int(s * x * l * t * z)
+        n_species, n_x, n_ell, n_theta, n_zeta = self.f_shape
+        return int(n_species * n_x * n_ell * n_theta * n_zeta)
 
     def tree_flatten(self):
         children = (

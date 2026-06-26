@@ -324,7 +324,7 @@ The SFINCS manual further notes that, for these runs, the input parameters
 
 In `sfincs_jax`, the mapping between ``nuPrime``/``EStar`` and the internal
 ``nu_n``/``dPhiHatdpsiHat`` parameters is handled in ``sfincs_jax/io.py`` and
-``sfincs_jax/v3_fblock.py``, while geometry-dependent factors
+``sfincs_jax/operators/profile_response/fblock.py``, while geometry-dependent factors
 (:math:`B_0`, :math:`G`, :math:`I`) are computed in ``sfincs_jax/problems/transport_matrix/diagnostics.py``
 and ``sfincs_jax/diagnostics.py``.
 

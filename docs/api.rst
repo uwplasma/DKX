@@ -49,7 +49,7 @@ API reference
 .. automodule:: sfincs_jax.collisions
    :members:
 
-.. automodule:: sfincs_jax.v3_fblock
+.. automodule:: sfincs_jax.operators.profile_response.fblock
    :members:
 
 .. automodule:: sfincs_jax.v3_system

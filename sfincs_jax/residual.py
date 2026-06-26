@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 from dataclasses import dataclass
 
 from jax import config as _jax_config
@@ -10,7 +12,7 @@ import jax
 import jax.numpy as jnp
 from jax import tree_util as jtu
 
-from .v3_fblock import V3FBlockOperator, matvec_v3_fblock_flat
+from sfincs_jax.operators.profile_response.fblock import V3FBlockOperator, matvec_v3_fblock_flat
 from .v3_system import V3FullSystemOperator, apply_v3_full_system_operator_cached
 
 
@@ -23,7 +25,8 @@ class V3FBlockLinearSystem:
 
       r(x) = A x - b
 
-    where A is represented matrix-free by :class:`sfincs_jax.v3_fblock.V3FBlockOperator`.
+    where A is represented matrix-free by
+    :class:`sfincs_jax.operators.profile_response.fblock.V3FBlockOperator`.
     """
 
     op: V3FBlockOperator

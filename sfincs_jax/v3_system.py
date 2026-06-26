@@ -47,7 +47,11 @@ from .collisions import (
     FokkerPlanckV3Operator,
     FokkerPlanckV3Phi1Operator,
 )
-from .v3_fblock import V3FBlockOperator, apply_v3_fblock_operator, fblock_operator_from_namelist
+from sfincs_jax.operators.profile_response.fblock import (
+    V3FBlockOperator,
+    apply_v3_fblock_operator,
+    fblock_operator_from_namelist,
+)
 from .vmec_wout import psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
 
 _THRESHOLD_FOR_INCLUSION = 1e-12  # Matches v3 `sparsify.F90`.

@@ -556,6 +556,21 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "v3_full_system_fortran_reduced_preconditioner_sparsity_pattern",
     ),
     (
+        "sfincs_jax.operators.profile_response.fblock",
+        "sfincs_jax.operators.profile_response.fblock",
+        "V3FBlockOperator",
+    ),
+    (
+        "sfincs_jax.operators.profile_response.fblock",
+        "sfincs_jax.operators.profile_response.fblock",
+        "fblock_operator_from_namelist",
+    ),
+    (
+        "sfincs_jax.operators.profile_response.fblock",
+        "sfincs_jax.operators.profile_response.fblock",
+        "matvec_v3_fblock_flat",
+    ),
+    (
         "sfincs_jax.problems.profile_response.preconditioner_build",
         "sfincs_jax.problems.profile_response.preconditioner_build",
         "auto_rhs1_full_strong_kind",

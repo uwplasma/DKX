@@ -672,6 +672,11 @@ the historical private driver name and test the focused module directly. This ke
   profile-response full-system operators, including active-index restricted
   patterns, sparse-pattern summaries, and memory-preflight estimates. This
   replaces the historical root ``sfincs_jax/v3_sparse_pattern.py`` owner.
+- ``sfincs_jax/operators/profile_response/fblock.py``:
+  matrix-free kinetic f-block operator builder and matvec for RHSMode-1
+  profile-response solves, including collisionless streaming, ExB, magnetic
+  drift, Er, PAS, and Fokker-Planck terms. This replaces the historical root
+  ``sfincs_jax/v3_fblock.py`` owner.
 - ``sfincs_jax/problems/profile_response/sparse/finalization.py``:
   sparse-PC GMRES result contracts, post-MinRes polish metadata, dtype-retry
   result assembly, completion messages, and final payload construction.

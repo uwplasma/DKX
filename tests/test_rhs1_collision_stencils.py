@@ -20,7 +20,7 @@ from sfincs_jax.operators.profile_response.collisions import (
     build_fokker_planck_phi1_collision_f_block_operator,
     build_pas_collision_f_block_operator,
 )
-from sfincs_jax.v3_fblock import fblock_operator_from_namelist
+from sfincs_jax.operators.profile_response.fblock import fblock_operator_from_namelist
 
 
 def _layout(*, n_species: int = 1, n_x: int = 2, n_xi: int = 4, n_theta: int = 3, n_zeta: int = 2) -> RHS1BlockLayout:

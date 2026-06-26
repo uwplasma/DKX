@@ -1310,7 +1310,7 @@ def operator_tangent_from_centered_difference(
 def dphi_hat_dpsi_hat_er_derivative_from_namelist(nml: Any) -> float:
     """Return ``d(dPhiHat/dpsiHat)/dEr`` using the v3 radial conversion."""
 
-    from ..v3_fblock import _dphi_hat_dpsi_hat_from_er  # noqa: PLC0415
+    from sfincs_jax.operators.profile_response.fblock import _dphi_hat_dpsi_hat_from_er  # noqa: PLC0415
 
     return float(
         _dphi_hat_dpsi_hat_from_er(nml=nml, er=1.0)

@@ -25,7 +25,7 @@ from sfincs_jax.operators.profile_response.drifts import (
     build_magnetic_drift_zeta_f_block_operator,
 )
 from sfincs_jax.operators.profile_response.collisions import build_pas_collision_f_block_operator
-from sfincs_jax.v3_fblock import fblock_operator_from_namelist
+from sfincs_jax.operators.profile_response.fblock import fblock_operator_from_namelist
 
 
 def _layout(
