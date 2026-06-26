@@ -17,67 +17,48 @@ For a standard solve, the execution path is:
 5. run the linear or nonlinear iteration,
 6. postprocess diagnostics and write ``sfincsOutput.h5``.
 
-Active package migration
-------------------------
+Package layout
+--------------
 
-The architecture branch is migrating the historical flat module layout into
-domain packages. New behavior should be placed by physics or numerical
-responsibility, not by historical helper prefixes. The current importable
-skeleton packages are:
+The package uses one level of domain folders below ``sfincs_jax/``. New
+implementation code should be placed by physics or numerical responsibility,
+not by historical helper prefixes. The importable package folders are:
 
-- ``sfincs_jax/input`` for namelist parsing, input normalization, compatibility
-  translation, defaults, and option validation.
-- ``sfincs_jax/physics`` for drift-kinetic terms, collisions, ambipolarity,
-  bootstrap-current normalization, and analytic validation formulas.
 - ``sfincs_jax/discretization`` for grids, quadrature, basis functions,
-  indexing/layout, sparse stencils, and active degrees of freedom.
-- ``sfincs_jax/operators`` for matrix-free and assembled DKE operators,
-  residual/source assembly, sparse patterns, and SFINCS Fortran-v3 convention
-  translation.
-- ``sfincs_jax/problems/profile_*.py`` for RHSMode=1 profile-current and
-  bootstrap-current problem orchestration. ``profile_response.py`` is a
-  compatibility shim for the former nested import path, not an implementation
-  folder.
-- ``sfincs_jax/problems/transport_*.py`` for RHSMode=2/3 transport-matrix and
-  monoenergetic-response orchestration, diagnostics, output-field assembly, and
-  parallel transport workers. ``transport_matrix.py`` is a compatibility shim
-  for the former nested import path, not an implementation folder.
-- ``sfincs_jax/solvers`` for reusable Krylov, sparse/direct, residual-gate,
-  implicit-differentiation, and flat ``preconditioner_*.py`` machinery.
-- ``sfincs_jax/parallel`` for CPU/GPU process, sharding, worker payload, and
-  scaling utilities.
-- ``sfincs_jax/outputs`` for output-schema-adjacent helpers and flat
-  HDF5/NetCDF/NPZ file-format readers and writers.
-- ``sfincs_jax/workflows`` for optimization, VMEC-JAX/Boozer/SFINCS-JAX
-  pipelines, scans, and publication figures.
-- ``sfincs_jax/validation`` and ``sfincs_jax/benchmarks`` for physics gates,
-  parity reports, benchmark schemas, and release artifact readers.
-- ``sfincs_jax/compat`` for legacy import shims and external-code comparison
-  helpers.
+  indexing/layout, sparse stencils, active degrees of freedom, speed-grid
+  maps, and velocity-space structure.
+- ``sfincs_jax/geometry`` for analytic Boozer geometry, Boozer-file loading,
+  VMEC ``wout`` loading, and JAX-native geometry adapters.
+- ``sfincs_jax/operators`` for drift-kinetic operator terms, matrix-free
+  actions, assembled sparse helpers, profile-response layouts, source terms,
+  and SFINCS Fortran-v3 convention translation.
+- ``sfincs_jax/outputs`` for output schemas, output caches, HDF5/NetCDF/NPZ
+  file formats, RHSMode=1 diagnostics, and RHSMode=2/3 transport-output fields.
+- ``sfincs_jax/physics`` for collision operators, classical-transport formulas,
+  bootstrap-current normalization, and analytic validation formulas.
+- ``sfincs_jax/problems`` for physical problem orchestration: RHSMode=1
+  profile-current/bootstrap-current solves, RHSMode=2/3 transport-matrix and
+  monoenergetic-response solves, ambipolar root solves, and scan-level
+  diagnostics.
+- ``sfincs_jax/solvers`` for Krylov dispatch, sparse/direct factors,
+  residual-gate policies, memory models, implicit differentiation, and
+  preconditioner families.
+- ``sfincs_jax/validation`` for frozen-reference loading, parity checks,
+  release-data manifests, validation artifacts, and comparison math.
+- ``sfincs_jax/workflows`` for optional research workflows that combine the
+  public APIs into optimization, mapped-grid, scan, QI-promotion, and upstream
+  postprocessing tasks.
 
-``sfincs_jax/geometry`` is now a real package owner for analytic Boozer,
-Boozer-file, VMEC, and JAX-native geometry adapters. ``sfincs_jax/io.py``
-intentionally remains a module for now because that import path is already part
-of the active public code; the ``io`` package name is reserved for a later
-migration step that moves the implementation without shadowing or breaking
-existing imports.
+The root modules are the stable user-facing surface: ``api.py``, ``cli.py``,
+``solver.py``, ``ambipolar.py``, ``sensitivity.py``, ``plotting.py``,
+``compare.py``, ``io.py``, ``namelist.py``, ``input_compat.py``, ``grids.py``,
+``diagnostics.py``, ``paths.py``, and ``profiling.py``. ``v3_driver.py`` is a
+small compatibility facade for historical imports; it must not own physics,
+operator, or solver implementation.
 
-``sfincs_jax/discretization`` now also owns the former flat speed-grid,
-indexing, sparse-stencil, and structured velocity kernels:
-``adaptive_maps.py``, ``indices.py``, ``periodic_stencil.py``,
-``structured_velocity.py``, and ``xgrid.py``. Public examples and tests import
-these modules through the package owner, not through root compatibility shims.
-
-``sfincs_jax/operators/profile_*.py`` owns the profile-response operator
-kernels: collisionless streaming, radial electric-field terms, ExB terms,
-magnetic drifts, sparse layouts, full-system assembly, and matrix-free
-linear-system residual wrappers. The old
-``sfincs_jax.operators.profile_response`` import path is preserved by a
-one-file compatibility shim, not by a nested source folder.
-
-``sfincs_jax/physics`` now owns the former flat collision and classical
-transport physics kernels. Operator assembly imports the physics package for
-PAS/full-FP/classical formulas instead of using root compatibility shims.
+Compatibility imports such as ``sfincs_jax.operators.profile_response`` and
+``sfincs_jax.problems.transport_matrix`` resolve through one-file facades. The
+source tree does not contain nested implementation packages for those names.
 
 Root public surface classification
 ----------------------------------

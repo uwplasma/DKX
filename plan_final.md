@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (coverage, source-layout, and README guard pass)
+Last updated: 2026-06-26 (source-map and one-level package documentation guard pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -74,8 +74,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   top-level folder set, README coverage, first-task entry points, generated-file
   exclusions, and the no-large-example-file policy.
 - The root README no longer matches the explicit progress-language patterns
-  flagged in the review prompt. Remaining historical/status language should be
-  handled in docs pages and release notes rather than the first-page README.
+  flagged in the review prompt. The source-map page also describes the actual
+  one-level package tree and no longer advertises removed `input`, `parallel`,
+  `benchmarks`, or `compat` packages. Remaining historical/status language
+  should be handled in release notes, research-lane pages, or implementation
+  audit pages rather than the first-page README.
 - A repository-size audit found no tracked files larger than 2 MB. Local ignored
   caches (`docs/_build`, `.pytest_cache`, `.ruff_cache`, and `__pycache__`
   folders) were removed; ignored benchmark input caches remain local-only and
@@ -258,11 +261,17 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   scripts, and parallelism entry points. The examples contract now requires this
   notebook and checks that it stays pedagogic, topic-complete, and output-free.
 - The twenty-ninth post-audit coverage tranche added sparse-pattern helper tests
-  for Fortran-style active index conventions, derivative-matrix support
+  for direct/structured profile-response pattern builders, Fortran-style active
+  index conventions, derivative-matrix support
   extraction, reduced x/ell support policies, and summary metadata
   serialization. These protect the native reduced-Pmat and sparse-pattern
   infrastructure without materializing production operators or adding slow
   solves to CI.
+- The forty-fifth post-audit documentation tranche corrected
+  `docs/source_map.rst` so it matches the flattened source tree and added a
+  source-map guard in `tests/test_source_tree_consolidation.py`. The focused
+  structure test reports `11 passed` and Ruff passes for the guard file. This
+  closes the known docs mismatch that still described removed source packages.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
