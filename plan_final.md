@@ -309,7 +309,7 @@ the first transport-parallel consolidation, the root solver/preconditioner
 disposition move, the first profile-response sparse x-block handoff
 extraction, the Schur-family consolidation, the full/reduced sparse retry
 stage extraction, the SciPy rescue stage extraction, the final consolidation
-planning audit, and the first Batch A validation-helper root cleanup:
+planning audit, and the Batch A validation-helper root cleanups:
 
 - `sfincs_jax/v3_driver.py`: 47 lines in the current consolidation worktree,
   acting as a compatibility shim for the domain-owned solve modules.
@@ -350,7 +350,7 @@ planning audit, and the first Batch A validation-helper root cleanup:
 - Top-level `transport_*` modules: 0.
 - Top-level `rhs1_*` modules: 0. Solver-family implementation now lives under
   `solvers.preconditioners`.
-- Package total is 209 Python files, 49 package-root files, and about 164k
+- Package total is 209 Python files, 48 package-root files, and about 164k
   package lines after the first two root cleanup passes and the first
   transport-parallel consolidation, plus the validation-domain,
   workflow-domain, solver-utility, and solver/preconditioner implementation
@@ -379,9 +379,10 @@ planning audit, and the first Batch A validation-helper root cleanup:
   `native_block_factor.py`, `preconditioner_caches.py`,
   `preconditioner_context.py`, `preconditioner_operators.py`, and
   `preconditioner_setup.py` under `sfincs_jax.solvers`. The first Batch A
-  validation-helper cleanup moved `fortran.py`, `fortran_profile.py`, and
-  `h5_parity.py` under `sfincs_jax.validation`, reducing package-root files
-  from 52 to 49 without keeping root compatibility shims.
+  validation-helper cleanup moved `fortran.py`, `fortran_profile.py`,
+  `h5_parity.py`, and `petsc_binary.py` under `sfincs_jax.validation`,
+  reducing package-root files from 52 to 48 without keeping root compatibility
+  shims.
 - Current concentration of complexity after the Schur-family consolidation and
   full/reduced sparse retry and SciPy rescue stage extractions:
   `problems/profile_response` has 13 direct files plus 8 sparse subpackage
@@ -581,12 +582,12 @@ Current inventory from the final 2026-06-25 consolidation audit:
 | --- | --- | --- |
 | `sfincs_jax/v3_driver.py` | 47-line compatibility shim; many tests/scripts still import it | Keep below 80 lines until the final compatibility sweep; delete only if all external imports migrate cleanly. |
 | Package source files | 209 Python files | At most 195 files, with lower total package lines than the current branch baseline. |
-| Package-root modules | 49 Python files | At most 48 root files unless a documented compatibility shim must remain; no new root implementation modules. |
+| Package-root modules | 48 Python files | At most 48 root files unless a documented compatibility shim must remain; no new root implementation modules. |
 | `problems/profile_response` | 13 direct files plus 8 sparse files; `solve.py` is 8,328 lines and `policies.py` is 6,885 lines | At most 16 total files; `solve.py` below 3,500 lines; policy/admission code owned by stable responsibilities, not experiment history. |
 | `problems/transport_matrix` | 23 direct files plus 5 parallel files; many policy, loop, active-system, and postsolve shards | At most 16 total files; `parallel/` at most 3 implementation files; no policy/postsolve micro-files. |
 | `solvers/preconditioners` | 47 files; QI, symbolic, x-block, PAS, full-FP, and domain-decomposition families are still over-fragmented | At most 32 files; no implementation file starts with `rhs1_` or `transport_`; QI files are role-based, not experiment-history based. |
 | `io.py` / `outputs` | `io.py` is 4,263 lines; `outputs/` already owns formats, caches, RHSMode-1, and transport output | `io.py` below 800 lines as a compatibility shim, or gone; output implementation lives in `outputs`. |
-| Docs/tests/examples | Many references still point to `sfincs_jax.io`, `sfincs_jax.v3_driver`, `sparse.finalization`, and symbolic `rhs1_fortran_reduced` | Public examples use `api`, `cli`, `outputs`, or stable workflows; private imports appear only in focused owner/shim tests. |
+| Docs/tests/examples | Many references still point to `sfincs_jax.io`, `sfincs_jax.v3_driver`, `sparse.finalization`, and symbolic `rhs1_fortran_reduced`; PETSc/Fortran/HDF5 validation helpers now use validation owners | Public examples use `api`, `cli`, `outputs`, or stable workflows; private imports appear only in focused owner/shim tests. |
 
 Non-negotiable consolidation rules:
 
@@ -636,7 +637,7 @@ Exit gates:
 
 - Worktree clean before Batch B.
 - Package file count does not increase.
-- Root file count is at most 49 and trends toward 48.
+- Root file count is at most 48.
 - `docs/source_map.rst` does not reference files deleted in completed batches.
 
 ### Batch B - Profile-Response Owner Collapse
@@ -1383,8 +1384,9 @@ Current completion status:
   eight solver/preconditioner implementation modules into `sfincs_jax.solvers`,
   reducing package-root files to 52 and meeting the earlier root-count gate.
   The first Batch A validation-helper cleanup moved `fortran.py`,
-  `fortran_profile.py`, and `h5_parity.py` under `sfincs_jax.validation`,
-  reducing package-root files to 49. The first profile-response sparse
+  `fortran_profile.py`, `h5_parity.py`, and `petsc_binary.py` under
+  `sfincs_jax.validation`, reducing package-root files to 48. The first
+  profile-response sparse
   checkpoint moved the x-block sparse-PC GMRES branch
   from `profile_response/solve.py` into `profile_response/sparse/handoff.py`.
   The Schur-family consolidation then replaced four historical
@@ -1435,7 +1437,7 @@ Next ordered implementation steps:
 1. Execute Lane 1 Batch A as a boundary freeze and compatibility sweep.
    Record the root-disposition table in `plan.md`, delete obvious
    re-export-only shims, refresh source maps for already-landed moves, and keep
-   root files at or below 49 while trending toward 48.
+   root files at or below 48.
 2. Execute Lane 1 Batch B as one profile-response consolidation. Move the
    remaining generic sparse-PC/factor-preflight branch, result payload
    assembly, progress replay, and diagnostic normalization out of `solve.py`.

@@ -24,7 +24,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.petsc_binary import read_petsc_vec
+from sfincs_jax.validation.petsc_binary import read_petsc_vec
 from sfincs_jax.v3_driver import solve_v3_full_system_linear_gmres
 
 

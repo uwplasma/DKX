@@ -10,7 +10,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.petsc_binary import read_petsc_mat_aij, read_petsc_vec
+from sfincs_jax.validation.petsc_binary import read_petsc_mat_aij, read_petsc_vec
 from sfincs_jax.solver import assemble_dense_matrix_from_matvec
 from sfincs_jax.v3_driver import _transport_active_dof_indices
 from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist

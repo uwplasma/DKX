@@ -9,7 +9,7 @@ from sfincs_jax.collisionless_er import ErXiDotV3Operator, apply_er_xidot_v3_off
 from sfincs_jax.geometry import boozer_geometry_scheme4
 from sfincs_jax.indices import V3Indexing
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.petsc_binary import read_petsc_mat_aij
+from sfincs_jax.validation.petsc_binary import read_petsc_mat_aij
 from sfincs_jax.v3 import grids_from_namelist
 
 

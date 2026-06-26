@@ -8,7 +8,7 @@ import pytest
 
 from sfincs_jax.io import read_sfincs_h5
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.petsc_binary import read_petsc_vec
+from sfincs_jax.validation.petsc_binary import read_petsc_vec
 from sfincs_jax.problems.transport_matrix.diagnostics import v3_transport_matrix_from_state_vectors
 from sfincs_jax.problems.transport_matrix.diagnostics import v3_transport_output_fields_vm_only
 from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist

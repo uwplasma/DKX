@@ -48,7 +48,7 @@ except Exception:  # pragma: no cover
     plt = None
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.petsc_binary import read_petsc_vec
+from sfincs_jax.validation.petsc_binary import read_petsc_vec
 from sfincs_jax.v3_system import full_system_operator_from_namelist, residual_v3_full_system
 
 

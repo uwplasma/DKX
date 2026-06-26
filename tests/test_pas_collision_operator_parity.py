@@ -8,7 +8,7 @@ import jax.numpy as jnp
 from sfincs_jax.collisions import make_pitch_angle_scattering_v3_operator, apply_pitch_angle_scattering_v3
 from sfincs_jax.indices import V3Indexing
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.petsc_binary import read_petsc_mat_aij, read_petsc_vec
+from sfincs_jax.validation.petsc_binary import read_petsc_mat_aij, read_petsc_vec
 from sfincs_jax.v3 import grids_from_namelist
 
 

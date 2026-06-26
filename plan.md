@@ -3934,7 +3934,7 @@ Root-disposition table for the Batch A audit:
 | `pas_smoother.py` | PAS numerical helper; later candidate for PAS preconditioner consolidation. |
 | `paths.py` | Shared path/equilibrium resolution helper; keep. |
 | `periodic_stencil.py` | Shared stencil helper; keep pending discretization package review. |
-| `petsc_binary.py` | Debug/validation PETSc binary reader; later candidate for `validation`. |
+| `petsc_binary.py` | Moved to `validation/petsc_binary.py`; root file deleted in the next Batch A checkpoint. |
 | `phi1_newton_linear.py` | Phi1 linear helper; later candidate for `problems.profile_response.phi1_newton`. |
 | `phi1_newton_policy.py` | Phi1 policy helper; later candidate for `problems.profile_response.phi1_newton`. |
 | `plotting.py` | Public plotting helper; keep. |
@@ -3994,9 +3994,71 @@ Completion:
 Next best steps:
 
 1. Validate and commit this Batch A root cleanup.
-2. Continue Batch A with `petsc_binary.py`, `postprocess_upstream.py`,
-   `scans.py`, and `data_fetch.py` only if their imports can be rewritten as a
-   single ownership batch without adding compatibility shims.
+2. Continue Batch A with `postprocess_upstream.py`, `scans.py`, and
+   `data_fetch.py` only if their imports can be rewritten as a single
+   ownership batch without adding compatibility shims.
 3. Resume Batch B by moving final result/progress metadata normalization and
    then the generic sparse-PC/factor-preflight branch out of
    `profile_response/solve.py`.
+
+## 2026-06-25 Lane 1 Batch A PETSc Binary Reader Root Cleanup
+
+Steps taken:
+
+1. Audited `petsc_binary.py` imports. It is used by parity tests, debug
+   scripts, and educational examples to read PETSc Vec/AIJ binary artifacts,
+   not by production solve orchestration.
+2. Moved `sfincs_jax/petsc_binary.py` to
+   `sfincs_jax/validation/petsc_binary.py`.
+3. Rewrote all in-repository imports and `docs/api.rst` to reference
+   `sfincs_jax.validation.petsc_binary` directly. No root compatibility shim
+   was kept because this is validation/debug tooling and the PR is explicitly
+   migrating internal imports to canonical owners.
+
+Results:
+
+- Package-root files decreased from `49` to `48`, satisfying the Batch A root
+  target from `plan_final.md`.
+- Package Python files stayed at `209`.
+- No top-level `rhs1_*`, `transport_*`, `fortran*`, `h5_parity.py`, or
+  `petsc_binary.py` files remain in the package root.
+
+Validation:
+
+- `git diff --name-only --diff-filter=ACMR -- '*.py' | xargs python -m
+  py_compile` passed for the Python files touched by the PETSc import rewrite.
+- `python -m pytest tests/test_v3_sparse_pattern.py
+  tests/test_full_system_matvec_parity.py tests/test_full_system_rhs_parity.py
+  tests/test_transport_matrix_rhsmode2_parity.py
+  tests/test_transport_matrix_rhsmode3_parity.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` passed with
+  `176 passed`.
+- `python -m ruff check sfincs_jax/validation/petsc_binary.py
+  sfincs_jax/validation/fortran.py
+  sfincs_jax/validation/fortran_profile.py
+  sfincs_jax/validation/h5_parity.py` passed.
+- Direct imports from `sfincs_jax.validation.petsc_binary`,
+  `sfincs_jax.validation.fortran`, `sfincs_jax.validation.fortran_profile`,
+  and `sfincs_jax.validation.h5_parity` passed.
+- `git diff --check` passed.
+- A full ruff pass over every import-rewritten parity/example file was not used
+  as a gate for this checkpoint because it exposed pre-existing `E402`/`E741`
+  lint debt in those parity scripts and tests that is unrelated to the module
+  move. That debt remains for Batch E/test cleanup rather than this root-owner
+  move.
+
+Completion:
+
+- Lane 1 Batch A: about `70%`; the root-disposition table exists and the
+  first root target (`<=48` files) is reached. Remaining Batch A work is
+  limited to source-map/API cleanup and deciding whether `data_fetch.py`,
+  `postprocess_upstream.py`, or `scans.py` can move without public API churn.
+- Lane 1 structural consolidation: about `80%`.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Validate and commit this PETSc binary reader move.
+2. If validation is clean, stop Batch A root moves unless another safe
+   validation/workflow helper can move as a batch; otherwise proceed to
+   Batch B profile-response result/progress normalization.

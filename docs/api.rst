@@ -325,7 +325,7 @@ research workflows.
 .. automodule:: sfincs_jax.indices
    :members:
 
-.. automodule:: sfincs_jax.petsc_binary
+.. automodule:: sfincs_jax.validation.petsc_binary
    :members:
 
 .. automodule:: sfincs_jax.solvers.explicit_sparse
