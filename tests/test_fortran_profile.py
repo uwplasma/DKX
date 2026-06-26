@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from sfincs_jax.validation.fortran_profile import parse_fortran_v3_profile_text
+from sfincs_jax.validation.fortran import parse_fortran_v3_profile_text
 
 
 SYNTHETIC_LOG = """
