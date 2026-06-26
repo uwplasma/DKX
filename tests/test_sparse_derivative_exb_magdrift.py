@@ -5,13 +5,13 @@ from dataclasses import replace
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.collisionless_exb import (
+from sfincs_jax.operators.profile_response.exb import (
     ExBThetaV3Operator,
     ExBZetaV3Operator,
     apply_exb_theta_v3,
     apply_exb_zeta_v3,
 )
-from sfincs_jax.magnetic_drifts import (
+from sfincs_jax.operators.profile_response.magnetic_drifts import (
     MagneticDriftThetaV3Operator,
     MagneticDriftZetaV3Operator,
     apply_magnetic_drift_theta_v3,

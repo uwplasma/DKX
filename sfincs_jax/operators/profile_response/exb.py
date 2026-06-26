@@ -1,3 +1,5 @@
+"""ExB angular-advection terms for the RHSMode-1 kinetic operator."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,7 +12,7 @@ import jax
 import jax.numpy as jnp
 from jax import tree_util as jtu
 
-from .discretization.periodic_stencil import (
+from sfincs_jax.discretization.periodic_stencil import (
     apply_periodic_stencil_halo,
     apply_periodic_stencil_roll,
     apply_sparse_row_stencil_gather,

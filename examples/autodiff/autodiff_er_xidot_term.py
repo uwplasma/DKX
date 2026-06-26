@@ -35,7 +35,7 @@ try:
 except Exception as e:  # pragma: no cover
     raise SystemExit("This example requires matplotlib. Install with: pip install matplotlib") from e
 
-from sfincs_jax.collisionless_er import ErXiDotV3Operator, apply_er_xidot_v3
+from sfincs_jax.operators.profile_response.electric_field import ErXiDotV3Operator, apply_er_xidot_v3
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 

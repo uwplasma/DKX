@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import pytest
 
 from sfincs_jax.discretization.indices import V3Indexing
-from sfincs_jax.magnetic_drifts import (
+from sfincs_jax.operators.profile_response.magnetic_drifts import (
     MagneticDriftThetaV3Operator,
     MagneticDriftZetaV3Operator,
     MagneticDriftXiDotV3Operator,

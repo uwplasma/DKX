@@ -114,7 +114,7 @@ def main() -> int:
     bhat = np.asarray(geom["BHat"], dtype=np.float64)
     dhat = np.asarray(geom["DHat"], dtype=np.float64)
 
-    # Magnetic-drift geometric factors for scheme=1, matching sfincs_jax.magnetic_drifts.
+    # Magnetic-drift geometric factors for scheme=1, matching the profile-response magnetic-drift operator.
     gf1_theta = np.asarray(geom["BHat_sub_zeta"]) * np.asarray(geom["dBHatdpsiHat"]) - np.asarray(geom["BHat_sub_psi"]) * np.asarray(
         geom["dBHatdzeta"]
     )

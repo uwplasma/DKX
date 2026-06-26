@@ -1,3 +1,5 @@
+"""Radial-electric-field terms for the RHSMode-1 kinetic operator."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

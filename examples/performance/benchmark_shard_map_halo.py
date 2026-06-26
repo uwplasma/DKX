@@ -10,7 +10,7 @@ import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.operators.profile_response.fblock import fblock_operator_from_namelist
-from sfincs_jax.collisionless import apply_collisionless_v3
+from sfincs_jax.operators.profile_response.collisionless import apply_collisionless_v3
 
 
 def main() -> None:

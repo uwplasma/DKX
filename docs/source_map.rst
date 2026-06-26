@@ -66,6 +66,12 @@ indexing, sparse-stencil, and structured velocity kernels:
 ``structured_velocity.py``, and ``xgrid.py``. Public examples and tests import
 these modules through the package owner, not through root compatibility shims.
 
+``sfincs_jax/operators/profile_response`` now owns the former flat
+profile-response operator kernels: collisionless streaming, radial electric
+field terms, ExB terms, magnetic drifts, and matrix-free linear-system
+residual wrappers. These are imported through the operator package, not through
+root compatibility shims.
+
 Root public surface classification
 ----------------------------------
 
@@ -118,15 +124,6 @@ facades.
    * - ``classical_transport.py``
      - stable physics kernel
      - Classical transport formulas and validation gates.
-   * - ``collisionless.py``
-     - stable operator kernel
-     - Streaming/mirror terms in the kinetic operator.
-   * - ``collisionless_er.py``
-     - stable operator kernel
-     - Radial-electric-field operator terms.
-   * - ``collisionless_exb.py``
-     - stable operator kernel
-     - :math:`E\times B` operator terms.
    * - ``collisions.py``
      - stable physics kernel
      - Collision-operator formulas shared by profile-response and transport solves.
@@ -145,9 +142,6 @@ facades.
    * - ``host_refinement.py``
      - stable solver-policy kernel
      - Host-side iterative refinement gates.
-   * - ``magnetic_drifts.py``
-     - stable operator kernel
-     - Magnetic-drift coefficient and stencil construction.
    * - ``pas_smoother.py``
      - stable preconditioner kernel
      - PAS smoother formulas used by preconditioner owners.
@@ -163,9 +157,6 @@ facades.
    * - ``profiling.py``
      - stable support utility
      - Phase timing and optional memory profiling helpers.
-   * - ``residual.py``
-     - stable operator kernel
-     - Residual/JVP helpers used by autodiff examples and tests.
    * - ``solver.py``
      - stable solver kernel
      - Krylov result contracts, XLA synchronization, and linear algebra utilities.
@@ -225,15 +216,6 @@ tests.
    * - ``classical_transport.py``
      - physics classical transport owner
      - move only with physics API export tests
-   * - ``collisionless.py``
-     - operators profile-response streaming owner
-     - move with operator-kernel group
-   * - ``collisionless_er.py``
-     - operators electric-field owner
-     - move with operator-kernel group
-   * - ``collisionless_exb.py``
-     - operators ExB owner
-     - move with operator-kernel group
    * - ``collisions.py``
      - physics/operators collision owner
      - move only with collision API export tests
@@ -252,9 +234,6 @@ tests.
    * - ``host_refinement.py``
      - solvers refinement policy owner
      - move in solver-policy group if profile-response imports migrate
-   * - ``magnetic_drifts.py``
-     - operators magnetic-drift owner
-     - move with operator-kernel group
    * - ``pas_smoother.py``
      - solvers/preconditioners PAS smoother owner
      - move in solver-preconditioner group
@@ -270,9 +249,6 @@ tests.
    * - ``profiling.py``
      - solvers/validation profiling support
      - defer until profiling API boundary is explicit
-   * - ``residual.py``
-     - operators residual/autodiff owner
-     - move with operator-kernel group if docs imports migrate
    * - ``solver.py``
      - solvers public contracts owner
      - keep root shim until solvers exports cover public contracts
@@ -519,20 +495,20 @@ SFINCS-v3-compatible grid construction, mapped speed-grid construction,
 geometry loading, geometry cache keys, and the ``V3Grids`` data contract. This
 replaces the historical root ``sfincs_jax/v3.py`` owner.
 
-``sfincs_jax/collisionless.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+``sfincs_jax/operators/profile_response/collisionless.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Streaming and mirror-force contributions in the Legendre basis.
 
-``sfincs_jax/collisionless_exb.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+``sfincs_jax/operators/profile_response/exb.py`` and ``electric_field.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The :math:`E\times B` terms in the kinetic operator, including angular advection and
 the radial-electric-field contributions to :math:`\dot \xi` and :math:`\dot x` where
 supported.
 
-``sfincs_jax/magnetic_drifts.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+``sfincs_jax/operators/profile_response/magnetic_drifts.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Magnetic-drift coefficient construction, angular advection terms, upwinding masks, and
 associated :math:`\partial_\xi` couplings.
@@ -558,8 +534,8 @@ System construction:
 - cached operator application,
 - system metadata used by the driver and diagnostics.
 
-``sfincs_jax/residual.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+``sfincs_jax/operators/profile_response/linear_systems.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Residual and source-term helpers. This is where the thermodynamic drives and other RHS
 pieces are assembled before being fed to the solve stack.

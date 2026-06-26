@@ -34,16 +34,16 @@ API reference
 .. automodule:: sfincs_jax.discretization.xgrid
    :members:
 
-.. automodule:: sfincs_jax.collisionless
+.. automodule:: sfincs_jax.operators.profile_response.collisionless
    :members:
 
-.. automodule:: sfincs_jax.collisionless_er
+.. automodule:: sfincs_jax.operators.profile_response.electric_field
    :members:
 
-.. automodule:: sfincs_jax.collisionless_exb
+.. automodule:: sfincs_jax.operators.profile_response.exb
    :members:
 
-.. automodule:: sfincs_jax.magnetic_drifts
+.. automodule:: sfincs_jax.operators.profile_response.magnetic_drifts
    :members:
 
 .. automodule:: sfincs_jax.collisions
@@ -60,7 +60,7 @@ API reference
 
 Transport-matrix helpers are documented through their maintained domain module.
 
-.. automodule:: sfincs_jax.residual
+.. automodule:: sfincs_jax.operators.profile_response.linear_systems
    :members:
 
 .. automodule:: sfincs_jax.validation.artifacts

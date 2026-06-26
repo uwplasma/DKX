@@ -1880,7 +1880,7 @@ schemes used in reduced-suite inputs).
   ``sfincs_jax.discretization.periodic_stencil.extract_sparse_row_stencil`` and
   ``sfincs_jax.discretization.periodic_stencil.apply_sparse_row_stencil_gather``.
 - Collisionless operator fast path:
-  ``sfincs_jax.collisionless.apply_collisionless_v3``.
+  ``sfincs_jax.operators.profile_response.collisionless.apply_collisionless_v3``.
 - Operator build wiring:
   ``sfincs_jax.operators.profile_response.fblock.collisionless_operator_from_namelist``.
 

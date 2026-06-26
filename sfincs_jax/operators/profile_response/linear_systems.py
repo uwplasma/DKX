@@ -1,3 +1,5 @@
+"""Matrix-free linear-system residual wrappers for profile-response operators."""
+
 from __future__ import annotations
 
 # ruff: noqa: E402

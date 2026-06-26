@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import jax.numpy as jnp
 
-from sfincs_jax.collisionless_er import ErXDotV3Operator, apply_er_xdot_v3_offdiag2
+from sfincs_jax.operators.profile_response.electric_field import ErXDotV3Operator, apply_er_xdot_v3_offdiag2
 from sfincs_jax.geometry import boozer_geometry_scheme4
 from sfincs_jax.discretization.indices import V3Indexing
 from sfincs_jax.namelist import read_sfincs_input

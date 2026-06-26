@@ -24,9 +24,9 @@ from jax.sharding import Mesh, PartitionSpec
 _spmd_jit = jax.jit
 
 from sfincs_jax.geometry.boozer import read_boozer_bc_header, selected_r_n_from_bc
-from sfincs_jax.collisionless import CollisionlessV3Operator
-from sfincs_jax.collisionless_er import ErXiDotV3Operator, ErXDotV3Operator
-from sfincs_jax.collisionless_exb import ExBThetaV3Operator, ExBZetaV3Operator
+from sfincs_jax.operators.profile_response.collisionless import CollisionlessV3Operator
+from sfincs_jax.operators.profile_response.electric_field import ErXiDotV3Operator, ErXDotV3Operator
+from sfincs_jax.operators.profile_response.exb import ExBThetaV3Operator, ExBZetaV3Operator
 from sfincs_jax.collisions import (
     PitchAngleScatteringV3Operator,
     FokkerPlanckV3Operator,
@@ -43,7 +43,7 @@ from sfincs_jax.input_compat import (
     infer_phi_input_radial_coordinate_for_gradients,
     infer_species_input_radial_coordinate_for_gradients,
 )
-from sfincs_jax.magnetic_drifts import (
+from sfincs_jax.operators.profile_response.magnetic_drifts import (
     MagneticDriftThetaV3Operator,
     MagneticDriftZetaV3Operator,
     MagneticDriftXiDotV3Operator,

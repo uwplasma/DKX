@@ -8,7 +8,7 @@ import jax.numpy as jnp
 
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.petsc_binary import read_petsc_vec
-from sfincs_jax.residual import V3FullLinearSystem
+from sfincs_jax.operators.profile_response.linear_systems import V3FullLinearSystem
 from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator, full_system_operator_from_namelist
 
 
@@ -34,4 +34,3 @@ def test_full_system_residual_and_jvp_pas_tiny() -> None:
 
     np.testing.assert_allclose(np.asarray(r0), 0.0, rtol=0, atol=1e-12)
     np.testing.assert_allclose(np.asarray(jvp), np.asarray(sys.jacobian_matvec(v)), rtol=0, atol=1e-12)
-
