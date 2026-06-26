@@ -448,7 +448,10 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "profiling.py": ("solvers/validation profiling support", "defer until profiling API boundary is explicit"),
     "sensitivity.py": ("package root differentiation API", "keep at root"),
     "solver.py": ("solvers public contracts owner", "keep root shim until solvers exports cover public contracts"),
-    "v3_driver.py": ("compatibility shim to problem owners", "delete after tests/examples stop importing sfincs_jax.v3_driver"),
+    "v3_driver.py": (
+        "compatibility shim to problem owners",
+        "keep tiny shim until the compatibility deprecation window closes; public examples and scripts should not import it",
+    ),
 }
 
 TRANSPORT_COMPATIBILITY_IMPORTS = (
