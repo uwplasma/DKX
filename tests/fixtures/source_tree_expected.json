@@ -33,15 +33,11 @@
     "solver.py"
   ],
   "allowed_root_packages": [
-    "benchmarks",
-    "compat",
     "data",
     "discretization",
     "geometry",
-    "input",
     "operators",
     "outputs",
-    "parallel",
     "physics",
     "problems",
     "solvers",
@@ -66,7 +62,6 @@
     "problems/transport_matrix",
     "problems/transport_matrix/parallel",
     "solvers/preconditioners",
-    "solvers/preconditioners/coarse_space",
     "solvers/preconditioners/domain_decomposition",
     "solvers/preconditioners/full_fp",
     "solvers/preconditioners/pas",
@@ -76,12 +71,7 @@
     "solvers/preconditioners/xblock"
   ],
   "temporary_init_only_packages": [
-    "benchmarks",
-    "compat",
-    "input",
     "operators",
-    "parallel",
-    "solvers/preconditioners/coarse_space",
     "solvers/preconditioners/domain_decomposition"
   ],
   "final_depth_policy": "One package level below sfincs_jax is the target. Entries in temporary_nested_packages are explicit refactor debt and should shrink, not grow."
