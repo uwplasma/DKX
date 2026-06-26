@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (post-review source/examples consolidation plan)
+Last updated: 2026-06-26 (post-tutorial source/examples consolidation pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -27,16 +27,16 @@ physics models overlap.
 
 This is the only active refactor plan for making PR #8 reviewable. The prior
 `v3_driver.py` split is functionally complete enough to proceed: the driver is
-a thin compatibility entry point, but the package tree still exposes too many
-intermediate folders, empty packages, generated example artifacts, and
-history-oriented README/docs text. The next work must therefore reduce the
-navigational surface, not create another layer of wrappers.
+a thin compatibility entry point, nested source packages have been flattened,
+and the examples tree has a tutorial-led learning surface. The remaining
+review blockers are coverage, final root-helper consolidation, benchmark
+regeneration, and a final docs/README consistency pass.
 
 ### Current Audit Snapshot
 
 Checked on 2026-06-26 from
 `refactor/rhs1-full-assembly-preconditioners` after the profile-response,
-transport-matrix, and solver-preconditioner flattening tranches.
+transport-matrix, solver-preconditioner, and tutorial/examples tranches.
 
 - `sfincs_jax/` contains `143` Python files after adding one-file
   compatibility shims for `operators/profile_response.py` and
@@ -55,15 +55,18 @@ transport-matrix, and solver-preconditioner flattening tranches.
   tree.
 - No nested source package directories remain below `sfincs_jax/`; the
   source-tree guard keeps `temporary_nested_packages` empty.
-- `examples/` has many user-facing folders plus untracked `__pycache__`
-  directories and tracked benchmark-summary JSON files under pedagogic example
-  paths. Those JSON files are useful evidence, but they should not be the
-  primary learning surface for new users.
-- The root README still contains branch-history/progress language such as
-  "On the current main branch", "now", "previous", "new benchmark", and
-  "production benchmark manifest". That content belongs in documentation or
-  release notes, not in the first-page project pitch.
-- The documented coverage audit is about `72-74%`. The target remains `95%`
+- `sfincs_jax/README.md` documents the one-level source layout, stable public
+  root modules, temporary compatibility roots, release-data manifest policy,
+  and contributor move rules. `tests/test_source_tree_consolidation.py`
+  verifies that this README mentions every allowed root package and module.
+- `examples/tutorials/` is the first learning surface. It contains three
+  output-free notebooks plus a fast script that writes HDF5/NetCDF/NPZ output
+  and a diagnostics PDF. Existing topic folders remain as canonical runnable
+  workflows to avoid unnecessary file churn.
+- The root README no longer matches the explicit progress-language patterns
+  flagged in the review prompt. Remaining historical/status language should be
+  handled in docs pages and release notes rather than the first-page README.
+- The latest full coverage XML available in-tree measured `74.23%`; the target remains `95%`
   meaningful package coverage with GitHub Actions under `10 min`; this requires
   targeted unit, numerical, and frozen-reference tests, not slow full-solve
   CI jobs.
@@ -132,7 +135,8 @@ Compatibility policy:
 
 ### Source README Deliverable
 
-Add `sfincs_jax/README.md` during the first tranche. It must explain:
+`sfincs_jax/README.md` is present and guarded by source-tree tests. It must
+continue to explain:
 
 - what each root module is for;
 - what each retained domain folder owns;
@@ -147,7 +151,10 @@ Add `sfincs_jax/README.md` during the first tranche. It must explain:
 
 Tranche 0: lock the inventory and import map.
 
-- Add a generated-but-checked text summary under `docs/source_map.rst` or a
+- Status: complete. `tests/fixtures/source_tree_expected.json` records allowed
+  root modules, allowed domain folders, target root modules, and compatibility
+  debt.
+- Keep a generated-but-checked text summary under `docs/source_map.rst` or a
   compact JSON under `tests/fixtures/source_tree_expected.json` that records
   allowed root modules, allowed domain folders, and allowed compatibility
   aliases.
@@ -157,8 +164,9 @@ Tranche 0: lock the inventory and import map.
 
 Tranche 1: README and docs cleanup.
 
-- Add `sfincs_jax/README.md`.
-- Rewrite the root README opening so it is self-contained and free of branch
+- Status: mostly complete. `sfincs_jax/README.md` exists, the root README
+  explicit progress-language patterns are cleared, and strict docs builds pass.
+- Keep the root README opening self-contained and free of branch
   history. Move detailed production-gate caveats to docs pages.
 - Replace user-facing "now", "previous", "new version", and "current main"
   language outside `docs/release_notes.rst` and `docs/development_roadmap.rst`.
@@ -202,19 +210,26 @@ Tranche 4: flatten preconditioners without losing domain ownership.
 
 Tranche 5: examples redesign.
 
-- Replace the current examples surface with an indexed learning path:
-  `01_getting_started`, `02_transport`, `03_geometry`, `04_bootstrap_redl`,
-  `05_autodiff`, `06_optimization`, and `07_performance_validation`.
-- Each folder gets a short README, one runnable script, and one notebook when
-  plots or derivations are pedagogically useful.
-- Move raw upstream SFINCS decks and benchmark-output JSON out of the learning
-  path into `benchmarks/` or `validation/` evidence folders; keep only small
-  input decks needed by examples.
-- Add notebooks for bootstrap current vs Redl, QA/QH finite-beta profile
-  currents, ambipolar `E_r`, autodiff sensitivities, VMEC/Boozer geometry, and
-  optimization objectives.
+- Status: first learning layer complete. `examples/README.md`,
+  `docs/examples.rst`, `examples/tutorials/README.md`, three tutorial
+  notebooks, and `examples/tutorials/run_quick_output_and_plot.py` are
+  committed and tested.
+- Keep the current topic folders (`getting_started`, `transport`, `autodiff`,
+  `vmec_jax_finite_beta`, `optimization`, `performance`, and `parity`) because
+  they are stable user-task names. Do not rename them into numbered folders
+  unless the same commit deletes real duplication and updates docs/tests.
+- Each major user task should have one clear first script and, where plots or
+  derivations matter, one notebook. The tutorial layer points users to those
+  canonical scripts instead of duplicating heavy workflows.
+- Move raw upstream SFINCS decks and benchmark-output JSON out of first-pass
+  learning paths only when they are unused by tests/docs. Keep small input decks
+  needed by examples.
+- Remaining work: add execution tests for the fast tutorial script to CI's
+  examples smoke path, then add notebook text references for any new public
+  capability added later.
 - Acceptance: example index tells users which file to run for each application;
-  smoke execution of one script per folder stays below the CI example budget.
+  smoke execution of one script per major folder stays below the CI example
+  budget.
 
 Tranche 6: coverage ramp to 95%.
 

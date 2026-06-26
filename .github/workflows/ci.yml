@@ -121,6 +121,7 @@ jobs:
           python examples/getting_started/write_sfincs_output_cli.py
           python examples/getting_started/write_sfincs_output_vmec.py --out "${RUNNER_TEMP}/sfincsOutput_vmec_release_data.h5"
           python examples/getting_started/plot_sfincs_output.py
+          python examples/tutorials/run_quick_output_and_plot.py --out-dir "${RUNNER_TEMP}/sfincs_jax_tutorial_output"
           python examples/parity/write_output_upstream_quick2species_python.py
           python examples/parity/write_output_upstream_quick2species_cli.py
           python examples/parity/geometry_scheme4_parity.py

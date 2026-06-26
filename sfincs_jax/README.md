@@ -9,6 +9,7 @@ discretization, operators, solvers, outputs, validation, and research workflows.
 
 - `api.py`: high-level Python helpers for running solves from scripts or
   notebooks.
+- `__init__.py`: stable package exports and compatibility aliases.
 - `cli.py` and `__main__.py`: command-line entry points used by `sfincs_jax`.
 - `solver.py`: public solve orchestration and solver-result metadata.
 - `ambipolar.py`: public ambipolar electric-field workflows.
@@ -20,11 +21,28 @@ discretization, operators, solvers, outputs, validation, and research workflows.
 - `io.py`, `namelist.py`, and `paths.py`: file I/O, input parsing, and cache or
   data-path helpers.
 
+Transitional root modules remain only where they are still documented or used by
+compatibility tests:
+
+- `diagnostics.py`: public flux-surface averages and `uHat` diagnostics used by
+  output writers and API docs.
+- `grids.py`: public grid helper retained while callers migrate to
+  `discretization/`.
+- `input_compat.py`: input-normalization helpers retained while namelist parsing
+  and geometry defaults are consolidated.
+- `profiling.py`: lightweight timers and memory probes used by CLI and
+  benchmark paths.
+- `v3_driver.py`: compatibility shim for former monolithic imports; it should
+  stay small and contain no physics or solver implementation.
+
 Normal users should use these public modules or the CLI. Implementation modules
 inside domain folders are for contributors and advanced research workflows.
 
 ## Domain Folders
 
+- `data/`: tiny manifest files for release-hosted equilibrium assets. Large
+  `.bc`, `.nc`, and benchmark data are fetched on demand rather than stored in
+  the git clone or wheel.
 - `discretization/`: grids, differentiation stencils, active indices, and
   coordinate maps.
 - `geometry/`: analytic magnetic geometries, VMEC `wout` loading, Boozer data,

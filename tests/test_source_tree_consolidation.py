@@ -8,6 +8,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = REPO_ROOT / "sfincs_jax"
 EXPECTED_TREE = REPO_ROOT / "tests" / "fixtures" / "source_tree_expected.json"
+PACKAGE_README = PACKAGE_ROOT / "README.md"
 
 
 def _expected_tree() -> dict[str, list[str]]:
@@ -77,6 +78,19 @@ def test_source_tree_consolidation_target_is_stricter_than_current_tree() -> Non
     assert set(expected["target_root_packages"]) < set(expected["allowed_root_packages"])
     assert expected["temporary_nested_packages"] == []
     assert expected["temporary_init_only_packages"] == []
+
+
+def test_package_readme_describes_current_source_layout() -> None:
+    expected = _expected_tree()
+    text = PACKAGE_README.read_text(encoding="utf-8")
+
+    assert "one-level domain structure" in text
+    for package in expected["allowed_root_packages"]:
+        assert f"`{package}/`" in text
+    for module in expected["target_root_modules"]:
+        assert f"`{module}`" in text or f"`{module.removesuffix('.py')}`" in text
+    for module in sorted(set(expected["allowed_root_modules"]) - set(expected["target_root_modules"])):
+        assert f"`{module}`" in text
 
 
 def test_flattened_operator_legacy_imports_resolve_to_canonical_modules() -> None:
