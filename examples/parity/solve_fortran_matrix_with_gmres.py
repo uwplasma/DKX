@@ -19,7 +19,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.petsc_binary import read_petsc_mat_aij, read_petsc_vec
+from sfincs_jax.validation.petsc_binary import read_petsc_mat_aij, read_petsc_vec
 from sfincs_jax.solver import gmres_solve
 from sfincs_jax.solvers.explicit_sparse import csr_matvec
 
