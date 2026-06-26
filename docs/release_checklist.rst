@@ -70,8 +70,9 @@ For a fast claim-scope check without running the whole suite, use:
    python scripts/check_qi_device_artifacts.py docs/_static/figures/optimization --min-relevant 1
 
 This validates that publication-facing lanes are either implemented for the
-documented current claim, kept as bounded scaffolds/proxies, or explicitly closed as
-post-release work. No manifest lane may silently remain an open release blocker.
+documented release-scope claim, kept as bounded scaffolds/proxies, or explicitly
+closed as post-release work. No manifest lane may silently remain an open
+release blocker.
 The research-lane check additionally validates that active large-push completion
 estimates are tied to checked-in evidence and next actions rather than informal
 status text. When a push asks for a larger absolute movement than a lane has
@@ -83,7 +84,7 @@ they drift from the checked-in CPU/GPU suite reports or benchmark summary JSON.
 The QI device-artifact check is a no-solve guard against accidentally promoting
 nonconverged GPU/operator-reuse evidence into a production true-device-QI claim.
 
-For the current mapped-grid / QI / solver-path integration branch, also run the
+For mapped-grid, QI, or solver-path integration branches, also run the
 bounded integration checks before promoting any of those lanes into release-facing
 metadata:
 
