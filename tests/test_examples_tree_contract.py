@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 import subprocess
@@ -32,6 +33,7 @@ FOLDERS_REQUIRING_README = ALLOWED_EXAMPLE_FOLDERS - {
 }
 
 REQUIRED_TASK_ENTRYPOINTS = {
+    "tutorials/00_start_here.ipynb",
     "tutorials/run_quick_output_and_plot.py",
     "getting_started/write_sfincs_output_cli.py",
     "getting_started/write_sfincs_output_python.py",
@@ -72,6 +74,12 @@ README_STALE_FRAGMENTS = (
     "new users",
 )
 SCRIPT_TOKEN_RE = re.compile(r"`([^`]*?\.py)`")
+TUTORIAL_NOTEBOOK_REQUIREMENTS = {
+    "00_start_here.ipynb": ("drift-kinetic", "bootstrap current", "optimization"),
+    "01_cli_outputs_and_plots.ipynb": ("HDF5", "NetCDF", "diagnostics"),
+    "02_transport_and_autodiff.ipynb": ("RHSMode=2/3", "Autodiff", "JAX"),
+    "03_bootstrap_redl_and_optimization.ipynb": ("Redl", "bootstrap", "Optimization"),
+}
 
 
 def _tracked_example_files() -> list[Path]:
@@ -156,3 +164,34 @@ def test_examples_do_not_track_large_files() -> None:
     ]
 
     assert oversized == []
+
+
+def test_tutorial_notebooks_are_pedagogic_and_output_free() -> None:
+    missing_topics: list[str] = []
+    structural_errors: list[str] = []
+    persisted_outputs: list[str] = []
+
+    for notebook_name, required_terms in sorted(TUTORIAL_NOTEBOOK_REQUIREMENTS.items()):
+        path = EXAMPLES_ROOT / "tutorials" / notebook_name
+        notebook = json.loads(path.read_text(encoding="utf-8"))
+        cells = notebook.get("cells", [])
+        markdown_cells = [cell for cell in cells if cell.get("cell_type") == "markdown"]
+        code_cells = [cell for cell in cells if cell.get("cell_type") == "code"]
+        joined_markdown = "\n".join("".join(cell.get("source", [])) for cell in markdown_cells)
+
+        if len(markdown_cells) < 5 or len(code_cells) < 3:
+            structural_errors.append(f"{notebook_name}: markdown={len(markdown_cells)} code={len(code_cells)}")
+
+        for term in required_terms:
+            if term not in joined_markdown:
+                missing_topics.append(f"{notebook_name}: {term}")
+
+        for cell_index, cell in enumerate(code_cells):
+            if cell.get("outputs"):
+                persisted_outputs.append(f"{notebook_name}: code cell {cell_index}")
+            if cell.get("execution_count") is not None:
+                persisted_outputs.append(f"{notebook_name}: executed code cell {cell_index}")
+
+    assert structural_errors == []
+    assert missing_topics == []
+    assert persisted_outputs == []
