@@ -11,7 +11,7 @@ Validation philosophy
 The validation stack is organized from local to global:
 
 1. **Unit tests** for grids, geometry, collisions, solver heuristics, and CLI behavior.
-2. **Regression tests** for previously broken branches and edge cases.
+2. **Regression tests** for fixed branches and edge cases.
 3. **Output tests** for ``sfincsOutput.h5`` generation and dataset integrity.
 4. **Example-suite audits** that compare full case outputs against frozen reference
    artifacts.
@@ -202,7 +202,7 @@ cache/solver-policy behavior on bounded inputs.
 
 Coverage tests must still be scientific tests. A new branch test is acceptable
 when it verifies residual admission, output-key completeness, normalization,
-fixture checksum handling, solver-policy invariants, or a known bug boundary. A
+fixture checksum handling, solver-policy invariants, or a recorded bug boundary. A
 test that only calls a function to cover a line is not acceptable.
 
 QI device artifacts are route-level evidence, not production claims unless the
@@ -284,7 +284,7 @@ you are doing targeted device-memory diagnosis. Kernel/XLA traces should go
 through ``scripts/profile_write_output_trace.py`` or the transport-trace helpers,
 not through always-on per-phase GPU memory polling. The runtime-drift audit also
 prefers the solver's logged ``elapsed_s=...`` value when available, falling back
-to subprocess wall time only for older artifacts that do not record it. The suite
+to subprocess wall time only for legacy artifacts that do not record it. The suite
 subprocesses also pin ``SFINCS_JAX_PRECOMPILE=0`` unless explicitly overridden, and
 they leave ``JAX_COMPILATION_CACHE_DIR`` unset unless ``--jax-cache-dir`` is requested,
 so runtime drift is not polluted by eager precompile or persistent-cache write cost.
@@ -328,7 +328,7 @@ unit/regression suite:
   CI-fast release gate over the manifest's ``release_gate`` metadata. Each lane must be
   ``release_ready``, ``regression_scaffold``, ``bounded_proxy``, or
   ``closed_deferred``; none may block the current release without being explicitly
-  closed or removed from the release manifest. The release checker now also validates
+  closed or removed from the release manifest. The release checker also validates
   the record status/kind, the non-empty literature/claim/source/test/gate lists, and
   all listed source, test, script, and artifact paths, including paths on
   ``closed_deferred`` lanes. A deferred lane is therefore allowed to stay out of the
@@ -345,7 +345,7 @@ unit/regression suite:
   ``tests/test_qi_device_artifact_policy.py`` add the QI-specific offline gate
   for device/operator-reuse artifacts. The gate checks provenance and
   fail-closed metadata only; it is not a convergence certificate. The release
-  metadata checker now runs the same policy over ``docs/_static`` so legacy or
+  metadata checker runs the same policy over ``docs/_static`` so legacy or
   newly checked QI-device artifacts cannot silently overclaim GPU/device status.
 
 The first new lane on the refactor branch is the ``E_r`` trajectory-model sweep family:
@@ -360,7 +360,7 @@ The first new lane on the refactor branch is the ``E_r`` trajectory-model sweep 
 - pinned stellarator-like fast figure:
   ``docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.png``
 
-This lane is now used as:
+This lane is used as:
 
 - a branch-level regression target for the trajectory-model sweep script,
 - a fixed tokamak-like reference lane with direct numerical assertions on zero-field
@@ -379,12 +379,12 @@ files exist. On this branch, two real bugs were found in its scan-input writer:
   namelist group, while also choosing ``Nzeta=3``, which is below the current stencil
   floor for these runs.
 
-Those writer bugs are now unit-tested and fixed. The corrected bounded fast reruns are
+Those writer bugs are unit-tested and fixed. The corrected bounded fast reruns are
 kept as branch-level regression scaffolds, and the full LHD/W7-X collisionality
 summaries and figures have been regenerated from the fixed script and promoted as
 audited validation artifacts.
 
-The audited full artifacts from that lane are now checked in:
+The audited full artifacts from that lane are checked in:
 
 - summary:
   ``examples/publication_figures/artifacts/lhd_collisionality_summary.json``
@@ -501,10 +501,10 @@ makes the next required algorithmic step a different global coupling strategy,
 not a larger timeout, full sparse materialization, default initial-seed probe,
 scalar post-minres cleanup, the current small residual subspace, or a Krylov
 method toggle alone.
-The next implementation step now lives behind
+The next implementation step lives behind
 ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION``: it reuses the final
 Krylov residual and cached QI ``(U, A U)`` columns in a bounded JAX
-least-squares residual equation. Its unit and driver tests currently validate
+least-squares residual equation. Its unit and driver tests validate
 fail-closed residual reduction and metadata/output visibility; promotion still
 requires a converged hard-seed CPU/GPU artifact.
 
@@ -555,7 +555,7 @@ The hard-seed follow-up
 ``docs/_static/qi_seed_robustness_scale055_xblock_auto_side_seed3_cpu.json``
 checks the same ``15 x 29 x 55 x 4`` bounded scale on seed ``3``. That seed was
 the right-preconditioned slow-mode outlier in the five-seed CPU/GPU probes, so
-the default policy now keeps right-PC only below the measured 3D full-FP
+the default policy keeps right-PC only below the measured 3D full-FP
 active-size window and switches this larger 3D full-FP case to left-PC. The
 artifact records ``precondition_side=left``, zero process failures, output and
 solver trace written, residual ratio ``2.98e-3``, and elapsed time ``~47 s``.
@@ -630,7 +630,7 @@ the production QI gate above remains unchanged until the scale-0.60 seed-3 and
 production-resolution CPU/GPU ladders pass.
 
 The 2026-05-15 compact-factor apply diagnostics add another negative gate. The
-runner now includes diagonal, exact-LU diagonal, row-cap-16 exact triangular,
+runner includes diagonal, exact-LU diagonal, row-cap-16 exact triangular,
 forced-left FGMRES, and left ``gmres_jax`` artifacts in the QI evidence manifest.
 These probes demonstrate that a GPU-cheap diagonal apply can return restart
 cycles without the old timeout, but it does not reduce the physical residual.
@@ -645,14 +645,14 @@ finishes before timeout, but diverges and therefore remains rejected. This is
 valuable blocker evidence because it separates memory pressure from
 preconditioner/Krylov stability.
 
-The same blocker artifact now includes the final conditioning probes for this
+The same blocker artifact includes the final conditioning probes for this
 push. Row equilibration, two-sided row/column equilibration, and a larger
 x-block JAX factor row cap all complete the bounded GPU hard seed but leave the
 physical residual at the same ``3.02e-5`` floor. A closer device analogue of the
 CPU-closing route, exact per-x sparse LU with left device GMRES, reaches the
 intended factors but times out inside the bounded GPU window. Tests therefore
 keep these routes as negative infrastructure evidence. The compact-CSR
-exact-factor replacement is now tested too: it stores actual SuperLU factor
+exact-factor replacement is tested too: it stores actual SuperLU factor
 nonzeros rather than padded rows and builds the full exact factors, but the
 bounded GPU hard seed still times out before a solver trace. The remaining QI
 closure therefore requires a cheaper exact/block-Schur application or a
@@ -687,7 +687,7 @@ gate requires five seeds on both CPU and one GPU with ``public_cli_default_path`
 ``outputs_written=5``, ``solver_traces_written=5``, ``converged=5``, and
 ``max_residual_ratio <= 1``. Treat these as bounded runner and solver-policy
 evidence, not as a production-resolution QI robustness claim. The separate
-kinetic-promotion lane has now closed the first QI ``nfp=2`` low-resolution
+kinetic-promotion lane has closed the first QI ``nfp=2`` low-resolution
 CPU/GPU/Fortran artifact, a refined ``9 x 9 x 11 x 4`` CPU/GPU/Fortran rung,
 and a second ``11 x 11 x 13 x 4`` CPU/GPU/Fortran rung that also verifies the
 bounded dense-policy fix for mid-size RHSMode=1 full-FP systems. The
@@ -735,11 +735,11 @@ records the same hook and reduces ``2.450895e-05 -> 2.142936e-05``. The gate
 remains open until a CPU and GPU artifact write converged HDF5 plus solver trace
 metadata.
 For the current release documentation this is a scoped research result, not a
-production claim: this hard seed is now below ``3e-5`` on CPU and GPU, while
+production claim: this hard seed is below ``3e-5`` on CPU and GPU, while
 additional algorithmic work is still required to reach the production write
 tolerance.
 
-The current QI device-preconditioner unit gate now checks one more non-smoother
+The QI device-preconditioner unit gate checks one more non-smoother
 piece of infrastructure: coupled residual-equation setup batches the ``A Q``
 operator-action construction with ``jax.vmap`` when the operator has a batching
 rule, and the installed device preconditioner reuses that cached action instead
@@ -761,7 +761,7 @@ This checker is intentionally narrower than the PAS benchmark artifact policy.
 It classifies QI/device JSON artifacts, requires backend/provenance and claim
 boundary fields, rejects operator-reuse routes that silently fall back to host
 x-block factors, and requires fail-closed artifacts to refuse nonconverged
-outputs. Older fail-closed GPU blocker artifacts may use the ``gpu0``/``gpu1``
+outputs. Legacy fail-closed GPU blocker artifacts may use the ``gpu0``/``gpu1``
 file name as provenance only when they write no output and fail their gates.
 
 The latest residual-weighted angular probe-coarse artifact
@@ -772,7 +772,7 @@ lower-fill local ILU, no-LGMRES GPU, and compact-factor device-Krylov follow-up
 artifacts are deliberately kept as rejected evidence because they either regress
 CPU time/memory or fail to write GPU HDF5/trace output.
 
-Large device-Krylov QI solves now have a tested non-autodiff host fallback
+Large device-Krylov QI solves have a tested non-autodiff host fallback
 policy. ``tests/test_rhs1_xblock_policy.py`` covers the auto/force/disable
 decision gates, and
 ``tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_device_host_fallback_records_non_autodiff_host_policy``
@@ -784,7 +784,7 @@ route for large RHSMode=1 QI runs that need a solution today; it is deliberately
 metadata-visible and does not count as an end-to-end differentiable device
 Krylov closure.
 
-The high-collisionality Simakov-Helander lane now has a bounded normalization audit:
+The high-collisionality Simakov-Helander lane has a bounded normalization audit:
 
 - script: ``examples/publication_figures/generate_simakov_helander_limit_audit.py``
 - artifact:
@@ -812,7 +812,7 @@ The scaffold only marks a panel as literature-ready when all numerical,
 high-``nu`` range, provenance, and checked-in-artifact gates pass. Otherwise it
 keeps the label as a deferred scaffold and reports whether the blocker is the
 scan range, the asymptotic trend, provenance, or source-artifact status.
-The panel metadata now also carries a ``publication_figure`` block so downstream
+The panel metadata also carries a ``publication_figure`` block so downstream
 plotting code can distinguish a checked-in converged artifact from a proxy or
 deferred scaffold without inferring that status from the title text.
 
@@ -836,7 +836,7 @@ The W7-X ambipolar literature lane has an executable scaffold as well:
 - focused test: ``tests/test_generate_w7x_ambipolar_validation.py``
 
 This keeps the W7-X ambipolar validation work out of the "purely aspirational" bucket:
-the scan, ambipolar postprocessing, summary JSON, and figure generation paths are now
+the scan, ambipolar postprocessing, summary JSON, and figure generation paths are
 covered by a bounded end-to-end test on a tiny fixture. The heavy W7-X reference
 artifact is closed in the manifest as ``deferred_post_release`` until a defensible
 profile/equilibrium reconstruction is pinned.
@@ -845,17 +845,17 @@ The deferred panel data also records explicit ``deferred_reasons`` and provenanc
 completeness scores. This keeps manuscript-facing labels conservative: a W7-X
 ambipolar figure remains a scaffold until the numerical root gates pass and the
 matching W7-X provenance artifact is complete and checked in.
-The summary generator mirrors those gates directly: it now requires finite distinct
+The summary generator mirrors those gates directly: it requires finite distinct
 ``E_r`` scan points, a radial-current sign-change bracket, reported roots inside
 the scanned range, root consistency with that bracket, a resolved local current
 slope, an ion-root candidate, complete provenance, and checked-in source-artifact
 status before ``ready_for_literature_claim`` can become true.
 
-The same scaffold is now resumable for heavy runs: ``run_er_scan`` accepts
+The same scaffold is resumable for heavy runs: ``run_er_scan`` accepts
 ``skip_existing=True``, the ``sfincs_jax scan-er`` CLI exposes ``--skip-existing``,
 and the publication script adds ``--skip-existing``, ``--scan-only``, and
 ``--index/--stride`` so the heavy W7-X reference ladder can be filled across multiple
-devices before a final aggregation pass. Each non-skipped scan point now also
+devices before a final aggregation pass. Each non-skipped scan point also
 writes ``sfincsOutput.solver_trace.json`` beside ``sfincsOutput.h5``. Tests assert
 that the sidecar path is forwarded in serial, recycled, and end-to-end scan
 paths, so future promotion artifacts cannot silently lose solver-path timing and

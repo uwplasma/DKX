@@ -104,7 +104,7 @@ Current scope limits
   - ``tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak``
   - ``tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas``
 
-  The older reduced-suite artifacts remain useful for debugging, fixture history, and faster local
+  The reduced-suite artifacts remain useful for debugging, fixture history, and faster local
   triage, but they are no longer the primary release status.
 - The unconstrained ``constraintScheme=0`` branch is rank-deficient, so different solvers can select different nullspace
   components. For comparisons, sfincs_jax treats a small set of density/pressure-like outputs as gauge-dependent and
@@ -118,15 +118,15 @@ Current scope limits
   preconditioned-residual branches remain explicitly labeled.
 - The default CLI and ``write-output`` path use an explicit performance-oriented solve strategy.
   End-to-end differentiable solves remain available from Python via the implicit/differentiable path when requested.
-- Full Phi1 coupling end-to-end (nonlinear residual assembly + collision operator contributions) is still being expanded beyond the currently parity-tested subset.
-- VMEC-based geometry schemes beyond the current ``geometryScheme=5`` parity subset.
+- Full Phi1 coupling end-to-end (nonlinear residual assembly + collision operator contributions) is still being expanded beyond the parity-tested subset.
+- VMEC-based geometry schemes beyond the ``geometryScheme=5`` parity subset.
 - Rosenbluth response matrices for FP cross-species coupling are computed with QUADPACK (matching v3). We added strict
   scalar-order accumulation for the collocation-to-modal projection, but the remaining ~1e-10 deltas appear dominated by
   quadrature rounding differences rather than matrix-ordering effects.
 - VMEC geometryScheme=5 full Fokker–Planck fixtures exhibit small (~1e-6 absolute) differences in local flow/Mach
   diagnostics at isolated grid points. These deltas are well below the physics tolerance but can trip strict relative
   checks when the true value is near zero, so we apply a dedicated absolute-floor override for the VMEC FP subset in
-  ``sfincs_jax/compare.py``. The current release-facing CPU and GPU example-suite audits remain strict-clean.
+  ``sfincs_jax/compare.py``. The release-facing CPU and GPU example-suite audits remain strict-clean.
 
 Near-zero tolerances
 --------------------
@@ -187,7 +187,7 @@ After a suite refresh, verify the structural output coverage explicitly:
      --suite-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
      --fail-on-missing
 
-When refreshing a frozen CPU lane, compare runtime against the previously promoted lane:
+When refreshing a frozen CPU lane, compare runtime against the promoted reference lane:
 
 .. code-block:: bash
 

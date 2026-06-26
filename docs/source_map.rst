@@ -260,7 +260,7 @@ Input/output orchestration:
 - resolves equilibrium overrides (including ``wout_path``),
 - materializes output diagnostics,
 - exposes the in-memory results API,
-- keeps legacy compatibility aliases for flat output-format helpers now owned by
+- keeps legacy compatibility aliases for flat output-format helpers owned by
   ``sfincs_jax.outputs.formats``.
 
 ``sfincs_jax/outputs/formats.py``
@@ -361,7 +361,7 @@ Optimization-facing workflow owner. It contains the differentiable
 neoclassical proxy objectives, high-fidelity scan-promotion gates,
 candidate-scan plan builders, promotion evidence campaign builders,
 CPU/GPU/Fortran promotion comparison gates, and finite-beta convergence-ladder
-checks. Historical ``optimization_*`` workflow modules now resolve through
+checks. Historical ``optimization_*`` workflow modules resolve through
 package-level compatibility aliases in ``sfincs_jax.workflows`` instead of
 separate implementation files.
 
@@ -372,7 +372,7 @@ Mapped speed-grid workflow owner. It contains differentiable Maxwellian moment
 objectives for rational-tail speed grids, bounded transport-matrix evidence
 reports, namelist patching for ``xGridScheme = 50``, CSV/JSON artifact writers,
 and solve-summary/error metrics. Historical mapped-x-grid objective/evidence
-modules now resolve through package-level compatibility aliases.
+modules resolve through package-level compatibility aliases.
 
 ``sfincs_jax/validation/data_fetch.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -565,7 +565,7 @@ domain owners replacing the old monolith are:
   builder. This module owns the block-Thomas factor setup, low-mode combined
   ``L=0,1`` singularity handling, optional structured velocity tail factors,
   PAS-TZ memory fallback invocation, cache population, and reduced/full apply
-  wrappers. Fallback-builder wiring now lives in the profile-response solve
+  wrappers. Fallback-builder wiring lives in the profile-response solve
   owner; ``v3_driver.py`` only exposes the compatibility import path.
 - ``sfincs_jax/solvers/preconditioner_pas_xblock_ilu.py``
   (historical location: ``sfincs_jax/rhs1_pas_xblock_ilu.py``):
@@ -835,8 +835,8 @@ domain owners replacing the old monolith are:
   driver-facing sparse-PC attempt orchestration that depends on solve-local
   cache/replay/residual routing, generic sparse-PC retry execution, direct-tail
   correction admission, and the compatibility import surface used by the
-  monolithic solve owner while Batch A continues. Sparse GMRES finalization now
-  lives in ``sparse/finalization.py`` and x-block branch orchestration now
+  monolithic solve owner while Batch A continues. Sparse GMRES finalization
+  lives in ``sparse/finalization.py`` and x-block branch orchestration
   lives in ``sparse/xblock.py``; ``handoff.py`` only re-exports those names for
   compatibility until the public internal imports are fully migrated. Its local
   ``F401,F811`` Ruff waiver is intentional: the module composes dynamic
@@ -1029,7 +1029,7 @@ domain owners replacing the old monolith are:
 - ``sfincs_jax/problems/profile_preconditioner_build.py``
   (historical location: ``sfincs_jax/rhs1_strong_fallback.py``):
   compatibility facade for historical RHSMode=1 strong-preconditioner fallback
-  imports. The implementation owner is now
+  imports. The implementation owner is
   ``sfincs_jax/problems/profile_preconditioner_build.py``.
 - ``sfincs_jax/problems/profile_solver_diagnostics.py``
   (absorbed owner for former ``profile_response/handoff.py``):
