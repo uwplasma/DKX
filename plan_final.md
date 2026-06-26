@@ -272,6 +272,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   source-map guard in `tests/test_source_tree_consolidation.py`. The focused
   structure test reports `11 passed` and Ruff passes for the guard file. This
   closes the known docs mismatch that still described removed source packages.
+- The forty-sixth post-audit examples tranche removed time-relative wording
+  from the performance, optimization, and vendored-upstream example READMEs and
+  extended `tests/test_examples_tree_contract.py` so first-pass example
+  navigation cannot reintroduce those phrases. The examples/tutorial contract
+  reports `9 passed` and Ruff passes for the guard file.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
