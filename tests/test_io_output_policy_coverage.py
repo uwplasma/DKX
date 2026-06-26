@@ -28,6 +28,7 @@ from sfincs_jax.io import (
     _should_precompile_v3_full_system,
     read_sfincs_h5,
     _resolve_equilibrium_file_from_namelist,
+    sfincs_jax_output_dict,
     write_sfincs_h5,
 )
 from sfincs_jax.geometry.boozer import BoozerBCHeader, BoozerBCSurface
@@ -895,3 +896,134 @@ def test_vmec_metric_output_branch_filters_modes_and_produces_finite_metric(
     assert gpsipsi.shape == (3, 2)
     assert np.all(np.isfinite(gpsipsi))
     assert np.all(gpsipsi > 0.0)
+
+
+def _toy_output_grids_and_geometry() -> tuple[SimpleNamespace, SimpleNamespace]:
+    shape = (2, 2)
+    zeros = np.zeros(shape, dtype=np.float64)
+    ones = np.ones(shape, dtype=np.float64)
+    grids = SimpleNamespace(
+        theta=np.asarray([0.0, np.pi], dtype=np.float64),
+        zeta=np.asarray([0.0, np.pi / 2.0], dtype=np.float64),
+        theta_weights=np.asarray([0.5, 0.5], dtype=np.float64),
+        zeta_weights=np.asarray([0.5, 0.5], dtype=np.float64),
+        x=np.asarray([0.25, 0.75], dtype=np.float64),
+        n_xi=3,
+        n_l=3,
+        n_xi_for_x=np.asarray([3, 2], dtype=np.int32),
+    )
+    geom = SimpleNamespace(
+        n_periods=10,
+        b0_over_bbar=1.2,
+        iota=0.45,
+        g_hat=1.1,
+        i_hat=0.2,
+        d_hat=ones,
+        b_hat=1.0 + 0.05 * np.asarray([[0.0, 1.0], [1.0, 0.0]], dtype=np.float64),
+        db_hat_dpsi_hat=zeros,
+        db_hat_dtheta=zeros,
+        db_hat_dzeta=zeros,
+        b_hat_sub_psi=zeros,
+        db_hat_sub_psi_dtheta=zeros,
+        db_hat_sub_psi_dzeta=zeros,
+        b_hat_sub_theta=ones,
+        db_hat_sub_theta_dpsi_hat=zeros,
+        db_hat_sub_theta_dzeta=zeros,
+        b_hat_sub_zeta=0.5 * ones,
+        db_hat_sub_zeta_dpsi_hat=zeros,
+        db_hat_sub_zeta_dtheta=zeros,
+        b_hat_sup_theta=0.25 * ones,
+        db_hat_sup_theta_dpsi_hat=zeros,
+        db_hat_sup_theta_dzeta=zeros,
+        b_hat_sup_zeta=0.125 * ones,
+        db_hat_sup_zeta_dpsi_hat=zeros,
+        db_hat_sup_zeta_dtheta=zeros,
+    )
+    return grids, geom
+
+
+def test_output_dict_scheme2_writes_v3_flags_species_and_geometry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SFINCS_JAX_OUTPUT_CACHE", "0")
+    monkeypatch.setattr(output_writer, "vprime_hat_jax", lambda *, grids, geom: 4.0)
+    monkeypatch.setattr(output_writer, "fsab_hat2_jax", lambda *, grids, geom: 1.25)
+    monkeypatch.setattr(output_writer, "u_hat_np", lambda *, grids, geom: np.full((2, 2), 0.3))
+    grids, geom = _toy_output_grids_and_geometry()
+    nml = Namelist(
+        groups={
+            "geometryparameters": {
+                "GEOMETRYSCHEME": 2,
+                "INPUTRADIALCOORDINATE": 3,
+                "RN_WISH": 0.5,
+            },
+            "physicsparameters": {
+                "COLLISIONOPERATOR": 1,
+                "ER": 2.0,
+                "INCLUDEPHI1": True,
+                "INCLUDEPHI1INKINETICEQUATION": False,
+                "QUASINEUTRALITYOPTION": 2,
+            },
+            "speciesparameters": {
+                "ZS": [1.0, -1.0],
+                "MHATS": [2.0, 5.446170214e-4],
+                "THATS": [1.2, 0.8],
+                "NHATS": [1.0, 0.9],
+                "WITHADIABATIC": True,
+                "ADIABATICZ": -1.0,
+                "ADIABATICNHAT": 0.8,
+                "ADIABATICTHAT": 0.7,
+            },
+            "othernumericalparameters": {"XGRIDSCHEME": 5, "USEITERATIVELINEARSOLVER": False},
+            "resolutionparameters": {"SOLVERTOLERANCE": 1.0e-9},
+            "preconditioneroptions": {},
+            "general": {"RHSMODE": 1},
+        },
+        indexed={},
+    )
+
+    out = sfincs_jax_output_dict(nml=nml, grids=grids, geom=geom)
+
+    assert int(out["geometryScheme"]) == 2
+    assert int(out["Nspecies"]) == 2
+    assert int(out["constraintScheme"]) == 2
+    assert int(out["includePhi1"]) == 1
+    assert int(out["includePhi1InKineticEquation"]) == -1
+    assert int(out["quasineutralityOption"]) == 2
+    assert int(out["withAdiabatic"]) == 1
+    assert float(out["adiabaticNHat"]) == pytest.approx(0.8)
+    assert int(out["useIterativeLinearSolver"]) == -1
+    np.testing.assert_allclose(out["VPrimeHat"], 4.0)
+    np.testing.assert_allclose(out["FSABHat2"], 1.25)
+    np.testing.assert_allclose(out["gpsiHatpsiHat"], np.zeros((2, 2)))
+    np.testing.assert_allclose(out["uHat"], np.full((2, 2), 0.3))
+    np.testing.assert_allclose(out["BHat"], geom.b_hat)
+    assert out["classicalParticleFluxNoPhi1_psiHat"].shape == (2,)
+
+
+def test_output_dict_rejects_unsupported_geometry_and_singular_monoenergetic() -> None:
+    grids, geom = _toy_output_grids_and_geometry()
+    with pytest.raises(NotImplementedError, match="geometryScheme"):
+        sfincs_jax_output_dict(
+            nml=Namelist(groups={"geometryparameters": {"GEOMETRYSCHEME": 99}}, indexed={}),
+            grids=grids,
+            geom=geom,
+        )
+
+    singular_geom = SimpleNamespace(**vars(geom))
+    singular_geom.g_hat = 0.0
+    singular_geom.i_hat = 0.0
+    mono_nml = Namelist(
+        groups={
+            "geometryparameters": {"GEOMETRYSCHEME": 2, "INPUTRADIALCOORDINATE": 3, "RN_WISH": 0.5},
+            "physicsparameters": {"NUPRIME": 0.1, "ESTAR": 0.2},
+            "speciesparameters": {"ZS": [1.0]},
+            "othernumericalparameters": {},
+            "resolutionparameters": {},
+            "preconditioneroptions": {},
+            "general": {"RHSMODE": 3},
+        },
+        indexed={},
+    )
+    with pytest.raises(ZeroDivisionError, match="GHat"):
+        sfincs_jax_output_dict(nml=mono_nml, grids=grids, geom=singular_geom)

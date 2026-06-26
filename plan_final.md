@@ -2728,7 +2728,12 @@ Current completion status:
   preconditioner coverage now includes direct assembler cache-key fields,
   invalid-environment normalization, finite cached factors, reduced-space
   projection, synthetic diagonal fallback after factorization failure, and
-  bounded-memory fallback to the line factor. Benchmark-artifact promotion policy
+  bounded-memory fallback to the line factor. Output-writer coverage now includes
+  a synthetic geometryScheme=2 output-dictionary contract for v3-style Phi1/QN
+  flags, adiabatic-species fields, default PAS constraint selection, iterative
+  solver logicals, geometry arrays, classical-flux shapes, and fail-closed
+  unsupported-geometry / singular monoenergetic-denominator errors.
+  Benchmark-artifact promotion policy
   also has fast gates for
   default-promotion evidence and canonical runtime/memory ordering. The next
   coverage work must focus on
