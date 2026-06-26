@@ -72,8 +72,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
 - The root README no longer matches the explicit progress-language patterns
   flagged in the review prompt. Remaining historical/status language should be
   handled in docs pages and release notes rather than the first-page README.
-- A fresh xdist coverage audit on this branch measured `85.003%`
-  (`58,784 / 69,155` covered lines). The most recent local audit took `14:42`,
+- A fresh xdist coverage audit on this branch measured `83.053%`
+  (`57,435 / 69,155` covered lines). The most recent local audit wrote
+  `.coverage` and `coverage.xml`, but local focused JAX coverage invocations
+  still sometimes abort with exit code `134` after the tests pass; use the
+  full-suite report as the authoritative local number for this tranche.
   so the CI floor remains `80%` until the sharded GitHub Actions runtime is
   verified and the measured coverage has enough margin above the next floor.
   The target remains `95%` meaningful package coverage with GitHub Actions
@@ -155,6 +158,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   routing tests for implicit residual solves, plain/JIT GMRES residual routes,
   distributed-axis dispatch, and callback binding. These keep RHSMode=2/3
   solver orchestration covered without launching expensive transport examples.
+- The fifteenth post-audit coverage tranche added RHSMode=1 radial x-grid
+  preconditioner tests for FP x-multigrid factors, PAS+Er x-upwind dispatch,
+  reduced-vector application, cache reuse, finite factor values, and tail
+  preservation. These tests exercise the radial preconditioner algebra used by
+  production bootstrap-current solves without adding production solves to CI.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
