@@ -1544,6 +1544,480 @@ class SparsePCDirectTailFactorSetupResult:
     setup_s: float
 
 
+@dataclass(frozen=True)
+class SparsePCDirectTailRescuePolicySetupContext:
+    """Inputs for direct-tail support preflight and rescue-policy expansion."""
+
+    env: Mapping[str, str] | None
+    op: object
+    rhs_dtype: object
+    sparse_pc_rhs: jnp.ndarray
+    sparse_pc_linear_size: int
+    fortran_reduced_sparse_pc: bool
+    factor_bundle_pc: object
+    structured_pc_ready: bool
+    direct_tail_operator_bundle: object | None
+    direct_tail_structured_layout: object | None
+    direct_tail_structured_active_indices: np.ndarray | None
+    direct_tail_structured_max_nbytes: int | None
+    direct_tail_structured_pc_selected: bool
+    direct_tail_structured_pc_reason: str | None
+    direct_tail_structured_pc_metadata: dict[str, object] | None
+    pc_reg: float
+    preconditioner_x: int
+    preconditioner_xi: int
+    preconditioner_species: int
+    preconditioner_x_min_l: int
+    emit: EmitFn | None
+    true_matvec: Callable[[np.ndarray], np.ndarray]
+    support_mode_selector: Callable[..., object]
+    structured_factor_bundle_factory: Callable[..., object]
+    layout_from_operator: Callable[[object], object]
+    parse_true_operator_window_specs: Callable[..., tuple[object, ...]]
+
+
+@dataclass(frozen=True)
+class SparsePCDirectTailRescuePolicySetupResult:
+    """Direct-tail support/preflight/rescue policy state for sparse-PC solves."""
+
+    factor_bundle_pc: object
+    direct_tail_structured_pc_selected: bool
+    direct_tail_structured_pc_reason: str | None
+    direct_tail_structured_pc_metadata: dict[str, object] | None
+    direct_tail_support_mode_preflight_requested: bool
+    direct_tail_support_mode_preflight_selected: bool
+    direct_tail_support_mode_preflight_metadata: dict[str, object] | None
+    direct_tail_support_mode_preflight_error: str | None
+    factor_preflight_policy: SparsePCFactorPreflightPolicy
+    factor_preflight_enabled: bool
+    factor_preflight_required: bool
+    factor_preflight_seed_enabled: bool
+    structured_pc_preflight_required_min_size: int
+    direct_tail_structured_pc_requires_preflight: bool
+    direct_tail_structured_pc_kind_for_preflight: str
+    direct_tail_structured_pc_size_requires_preflight: bool
+    structured_pc_preflight_required: bool
+    factor_preflight_max_target_ratio: float
+    factor_preflight_residual_before: float | None
+    factor_preflight_residual_after: float | None
+    factor_preflight_improvement_ratio: float | None
+    factor_preflight_target_ratio: float | None
+    factor_preflight_residual_diagnostics: dict[str, object] | None
+    factor_preflight_seed_used: bool
+    factor_preflight_passed: bool | None
+    factor_preflight_error: str | None
+    direct_tail_residual_rescue_policy: DirectTailResidualRescuePolicy
+    direct_tail_true_active_rescue_policy: DirectTailTrueActiveRescuePolicy
+    direct_tail_true_coupled_coarse_policy: DirectTailCoupledCoarseRescuePolicy
+    rescue_values: Mapping[str, object]
+
+    def driver_rescue_tuple(self) -> tuple[object, ...]:
+        """Return legacy driver locals in the order used by ``solve.py``.
+
+        This keeps the current driver behavior stable while the surrounding
+        sparse-PC rescue stages are still being collapsed into owner modules.
+        """
+
+        return tuple(
+            self.rescue_values[name]
+            for name in (
+                "direct_tail_residual_coarse_requested",
+                "direct_tail_residual_coarse_selected",
+                "direct_tail_residual_coarse_metadata",
+                "direct_tail_residual_coarse_error",
+                "direct_tail_residual_coarse_residual_after",
+                "direct_tail_residual_coarse_rank",
+                "direct_tail_residual_coarse_max_mb",
+                "direct_tail_residual_coarse_regularization",
+                "direct_tail_residual_window_requested",
+                "direct_tail_true_window_requested",
+                "direct_tail_true_coupled_coarse_explicit_requested",
+                "direct_tail_true_coupled_coarse_auto_enabled",
+                "direct_tail_true_coupled_coarse_auto_native_enabled",
+                "direct_tail_true_coupled_coarse_auto_target_ratio",
+                "direct_tail_true_coupled_coarse_auto_min_size",
+                "direct_tail_true_coupled_coarse_requested",
+                "direct_tail_true_coupled_coarse_auto_selected",
+                "direct_tail_true_coupled_coarse_selected",
+                "direct_tail_true_coupled_coarse_metadata",
+                "direct_tail_true_coupled_coarse_error",
+                "direct_tail_true_coupled_coarse_residual_after",
+                "direct_tail_true_window_selected",
+                "direct_tail_true_window_metadata",
+                "direct_tail_true_window_error",
+                "direct_tail_true_window_residual_after",
+                "direct_tail_residual_window_selected",
+                "direct_tail_residual_window_metadata",
+                "direct_tail_residual_window_error",
+                "direct_tail_residual_window_residual_after",
+                "direct_tail_residual_window_max_windows",
+                "direct_tail_residual_window_x_radius",
+                "direct_tail_residual_window_ell_radius",
+                "direct_tail_residual_window_max_mb",
+                "direct_tail_residual_window_regularization",
+                "direct_tail_residual_window_coefficient_mode",
+                "direct_tail_residual_window_combine_mode",
+                "direct_tail_residual_window_interface_depth",
+                "direct_tail_residual_window_max_size",
+                "direct_tail_true_window_max_windows",
+                "direct_tail_true_window_x_radius",
+                "direct_tail_true_window_ell_radius",
+                "direct_tail_true_window_max_mb",
+                "direct_tail_true_window_regularization",
+                "direct_tail_true_window_max_size",
+                "direct_tail_true_window_column_batch",
+                "direct_tail_true_window_drop_tol",
+                "direct_tail_true_window_include_tail",
+                "direct_tail_true_window_damping",
+                "direct_tail_true_window_beta_max",
+                "direct_tail_true_window_specs_env",
+                "direct_tail_true_window_specs",
+                "direct_tail_true_active_block_requested",
+                "direct_tail_true_active_residual_block_requested",
+                "direct_tail_true_active_submatrix_requested",
+                "direct_tail_true_active_submatrix_selected",
+                "direct_tail_true_active_submatrix_metadata",
+                "direct_tail_true_active_submatrix_error",
+                "direct_tail_true_active_submatrix_residual_after",
+                "direct_tail_true_active_block_selected",
+                "direct_tail_true_active_block_metadata",
+                "direct_tail_true_active_block_error",
+                "direct_tail_true_active_block_residual_after",
+                "direct_tail_true_active_residual_block_selected",
+                "direct_tail_true_active_residual_block_metadata",
+                "direct_tail_true_active_residual_block_error",
+                "direct_tail_true_active_residual_block_residual_after",
+                "direct_tail_true_active_column_cache_requested",
+                "direct_tail_true_active_column_cache_max_mb",
+                "direct_tail_true_active_column_cache_metadata",
+                "direct_tail_true_active_block_x_count",
+                "direct_tail_true_active_block_ell_count",
+                "direct_tail_true_active_block_species_count",
+                "direct_tail_true_active_block_theta_stride",
+                "direct_tail_true_active_block_zeta_stride",
+                "direct_tail_true_active_block_max_mb",
+                "direct_tail_true_active_block_regularization",
+                "direct_tail_true_active_block_max_size",
+                "direct_tail_true_active_block_column_batch",
+                "direct_tail_true_active_block_drop_tol",
+                "direct_tail_true_active_block_include_tail",
+                "direct_tail_true_active_block_max_tail",
+                "direct_tail_true_active_block_damping",
+                "direct_tail_true_active_block_beta_max",
+                "direct_tail_true_active_residual_block_max_mb",
+                "direct_tail_true_active_residual_block_regularization",
+                "direct_tail_true_active_residual_block_max_size",
+                "direct_tail_true_active_residual_block_column_batch",
+                "direct_tail_true_active_residual_block_drop_tol",
+                "direct_tail_true_active_residual_block_include_tail",
+                "direct_tail_true_active_residual_block_max_tail",
+                "direct_tail_true_active_residual_block_kinetic_only",
+                "direct_tail_true_active_residual_block_damping",
+                "direct_tail_true_active_residual_block_beta_max",
+                "direct_tail_true_active_residual_block_min_improvement",
+                "direct_tail_true_active_residual_block_accept_base_improvement",
+                "direct_tail_true_active_residual_block_base_improvement_override_used",
+                "direct_tail_true_active_submatrix_damping",
+                "direct_tail_true_active_submatrix_alpha_clip",
+                "direct_tail_true_active_submatrix_min_improvement",
+                "direct_tail_true_coupled_coarse_max_windows",
+                "direct_tail_true_coupled_coarse_x_radius",
+                "direct_tail_true_coupled_coarse_ell_radius",
+                "direct_tail_true_coupled_coarse_max_mb",
+                "direct_tail_true_coupled_coarse_regularization",
+                "direct_tail_true_coupled_coarse_max_size",
+                "direct_tail_true_coupled_coarse_column_batch",
+                "direct_tail_true_coupled_coarse_drop_tol",
+                "direct_tail_true_coupled_coarse_low_lmax",
+                "direct_tail_true_coupled_coarse_profile_moment_count",
+                "direct_tail_true_coupled_coarse_angular_lmax",
+                "direct_tail_true_coupled_coarse_angular_mode_max",
+                "direct_tail_true_coupled_coarse_max_tail_units",
+                "direct_tail_true_coupled_coarse_include_tail",
+                "direct_tail_true_coupled_coarse_include_constraint_sources",
+                "direct_tail_true_coupled_coarse_include_fsavg",
+                "direct_tail_true_coupled_coarse_include_window_residual",
+                "direct_tail_true_coupled_coarse_include_profile_moments",
+                "direct_tail_true_coupled_coarse_include_angular_residual",
+                "direct_tail_true_coupled_coarse_include_angular_basis",
+                "direct_tail_true_coupled_coarse_include_preconditioned_loads",
+                "direct_tail_true_coupled_coarse_preconditioned_load_max_columns",
+                "direct_tail_true_coupled_coarse_preconditioned_load_max_nnz",
+                "direct_tail_true_coupled_coarse_preconditioned_load_drop_tol",
+                "direct_tail_true_coupled_coarse_damping",
+                "direct_tail_true_coupled_coarse_beta_max",
+                "direct_tail_true_coupled_coarse_accept_base_improvement",
+                "direct_tail_true_coupled_coarse_base_improvement_override_used",
+            )
+        )
+
+
+def _direct_tail_residual_rescue_driver_values(
+    policy: DirectTailResidualRescuePolicy,
+    *,
+    true_window_specs_env: str,
+    true_window_specs: tuple[object, ...],
+    true_coupled_coarse_explicit_requested: bool,
+) -> dict[str, object]:
+    """Return default driver state derived from residual-window policy."""
+
+    return {
+        "direct_tail_residual_coarse_requested": bool(policy.residual_coarse_requested),
+        "direct_tail_residual_coarse_selected": False,
+        "direct_tail_residual_coarse_metadata": None,
+        "direct_tail_residual_coarse_error": None,
+        "direct_tail_residual_coarse_residual_after": None,
+        "direct_tail_residual_coarse_rank": int(policy.residual_coarse_rank),
+        "direct_tail_residual_coarse_max_mb": float(policy.residual_coarse_max_mb),
+        "direct_tail_residual_coarse_regularization": float(
+            policy.residual_coarse_regularization
+        ),
+        "direct_tail_residual_window_requested": bool(policy.residual_window_requested),
+        "direct_tail_true_window_requested": bool(policy.true_window_requested),
+        "direct_tail_true_coupled_coarse_explicit_requested": bool(
+            true_coupled_coarse_explicit_requested
+        ),
+        "direct_tail_true_coupled_coarse_auto_enabled": bool(
+            policy.true_coupled_coarse_auto_enabled
+        ),
+        "direct_tail_true_coupled_coarse_auto_native_enabled": bool(
+            policy.true_coupled_coarse_auto_native_enabled
+        ),
+        "direct_tail_true_coupled_coarse_auto_target_ratio": float(
+            policy.true_coupled_coarse_auto_target_ratio
+        ),
+        "direct_tail_true_coupled_coarse_auto_min_size": int(
+            policy.true_coupled_coarse_auto_min_size
+        ),
+        "direct_tail_true_coupled_coarse_requested": bool(
+            true_coupled_coarse_explicit_requested
+        ),
+        "direct_tail_true_coupled_coarse_auto_selected": False,
+        "direct_tail_true_coupled_coarse_selected": False,
+        "direct_tail_true_coupled_coarse_metadata": None,
+        "direct_tail_true_coupled_coarse_error": None,
+        "direct_tail_true_coupled_coarse_residual_after": None,
+        "direct_tail_true_window_selected": False,
+        "direct_tail_true_window_metadata": None,
+        "direct_tail_true_window_error": None,
+        "direct_tail_true_window_residual_after": None,
+        "direct_tail_residual_window_selected": False,
+        "direct_tail_residual_window_metadata": None,
+        "direct_tail_residual_window_error": None,
+        "direct_tail_residual_window_residual_after": None,
+        "direct_tail_residual_window_max_windows": int(
+            policy.residual_window_max_windows
+        ),
+        "direct_tail_residual_window_x_radius": int(policy.residual_window_x_radius),
+        "direct_tail_residual_window_ell_radius": int(
+            policy.residual_window_ell_radius
+        ),
+        "direct_tail_residual_window_max_mb": float(policy.residual_window_max_mb),
+        "direct_tail_residual_window_regularization": float(
+            policy.residual_window_regularization
+        ),
+        "direct_tail_residual_window_coefficient_mode": str(
+            policy.residual_window_coefficient_mode
+        ),
+        "direct_tail_residual_window_combine_mode": str(
+            policy.residual_window_combine_mode
+        ),
+        "direct_tail_residual_window_interface_depth": int(
+            policy.residual_window_interface_depth
+        ),
+        "direct_tail_residual_window_max_size": int(policy.residual_window_max_size),
+        "direct_tail_true_window_max_windows": int(policy.true_window_max_windows),
+        "direct_tail_true_window_x_radius": int(policy.true_window_x_radius),
+        "direct_tail_true_window_ell_radius": int(policy.true_window_ell_radius),
+        "direct_tail_true_window_max_mb": float(policy.true_window_max_mb),
+        "direct_tail_true_window_regularization": float(
+            policy.true_window_regularization
+        ),
+        "direct_tail_true_window_max_size": int(policy.true_window_max_size),
+        "direct_tail_true_window_column_batch": int(policy.true_window_column_batch),
+        "direct_tail_true_window_drop_tol": float(policy.true_window_drop_tol),
+        "direct_tail_true_window_include_tail": bool(policy.true_window_include_tail),
+        "direct_tail_true_window_damping": bool(policy.true_window_damping),
+        "direct_tail_true_window_beta_max": float(policy.true_window_beta_max),
+        "direct_tail_true_window_specs_env": str(true_window_specs_env),
+        "direct_tail_true_window_specs": tuple(true_window_specs),
+    }
+
+
+def _direct_tail_true_active_rescue_driver_values(
+    policy: DirectTailTrueActiveRescuePolicy,
+) -> dict[str, object]:
+    """Return default driver state derived from true-active rescue policy."""
+
+    return {
+        "direct_tail_true_active_block_requested": bool(
+            policy.active_block_requested
+        ),
+        "direct_tail_true_active_residual_block_requested": bool(
+            policy.active_residual_block_requested
+        ),
+        "direct_tail_true_active_submatrix_requested": bool(
+            policy.active_submatrix_requested
+        ),
+        "direct_tail_true_active_submatrix_selected": False,
+        "direct_tail_true_active_submatrix_metadata": None,
+        "direct_tail_true_active_submatrix_error": None,
+        "direct_tail_true_active_submatrix_residual_after": None,
+        "direct_tail_true_active_block_selected": False,
+        "direct_tail_true_active_block_metadata": None,
+        "direct_tail_true_active_block_error": None,
+        "direct_tail_true_active_block_residual_after": None,
+        "direct_tail_true_active_residual_block_selected": False,
+        "direct_tail_true_active_residual_block_metadata": None,
+        "direct_tail_true_active_residual_block_error": None,
+        "direct_tail_true_active_residual_block_residual_after": None,
+        "direct_tail_true_active_column_cache_requested": bool(
+            policy.active_column_cache_requested
+        ),
+        "direct_tail_true_active_column_cache_max_mb": float(
+            policy.active_column_cache_max_mb
+        ),
+        "direct_tail_true_active_column_cache_metadata": None,
+        "direct_tail_true_active_block_x_count": int(policy.active_block_x_count),
+        "direct_tail_true_active_block_ell_count": int(policy.active_block_ell_count),
+        "direct_tail_true_active_block_species_count": (
+            None
+            if policy.active_block_species_count is None
+            else int(policy.active_block_species_count)
+        ),
+        "direct_tail_true_active_block_theta_stride": int(
+            policy.active_block_theta_stride
+        ),
+        "direct_tail_true_active_block_zeta_stride": int(
+            policy.active_block_zeta_stride
+        ),
+        "direct_tail_true_active_block_max_mb": float(policy.active_block_max_mb),
+        "direct_tail_true_active_block_regularization": float(
+            policy.active_block_regularization
+        ),
+        "direct_tail_true_active_block_max_size": int(policy.active_block_max_size),
+        "direct_tail_true_active_block_column_batch": int(
+            policy.active_block_column_batch
+        ),
+        "direct_tail_true_active_block_drop_tol": float(policy.active_block_drop_tol),
+        "direct_tail_true_active_block_include_tail": bool(
+            policy.active_block_include_tail
+        ),
+        "direct_tail_true_active_block_max_tail": int(policy.active_block_max_tail),
+        "direct_tail_true_active_block_damping": bool(policy.active_block_damping),
+        "direct_tail_true_active_block_beta_max": float(policy.active_block_beta_max),
+        "direct_tail_true_active_residual_block_max_mb": float(
+            policy.active_residual_block_max_mb
+        ),
+        "direct_tail_true_active_residual_block_regularization": float(
+            policy.active_residual_block_regularization
+        ),
+        "direct_tail_true_active_residual_block_max_size": int(
+            policy.active_residual_block_max_size
+        ),
+        "direct_tail_true_active_residual_block_column_batch": int(
+            policy.active_residual_block_column_batch
+        ),
+        "direct_tail_true_active_residual_block_drop_tol": float(
+            policy.active_residual_block_drop_tol
+        ),
+        "direct_tail_true_active_residual_block_include_tail": bool(
+            policy.active_residual_block_include_tail
+        ),
+        "direct_tail_true_active_residual_block_max_tail": int(
+            policy.active_residual_block_max_tail
+        ),
+        "direct_tail_true_active_residual_block_kinetic_only": bool(
+            policy.active_residual_block_kinetic_only
+        ),
+        "direct_tail_true_active_residual_block_damping": bool(
+            policy.active_residual_block_damping
+        ),
+        "direct_tail_true_active_residual_block_beta_max": float(
+            policy.active_residual_block_beta_max
+        ),
+        "direct_tail_true_active_residual_block_min_improvement": float(
+            policy.active_residual_block_min_improvement
+        ),
+        "direct_tail_true_active_residual_block_accept_base_improvement": bool(
+            policy.active_residual_block_accept_base_improvement
+        ),
+        "direct_tail_true_active_residual_block_base_improvement_override_used": False,
+        "direct_tail_true_active_submatrix_damping": bool(
+            policy.active_submatrix_damping
+        ),
+        "direct_tail_true_active_submatrix_alpha_clip": float(
+            policy.active_submatrix_alpha_clip
+        ),
+        "direct_tail_true_active_submatrix_min_improvement": float(
+            policy.active_submatrix_min_improvement
+        ),
+    }
+
+
+def _direct_tail_coupled_coarse_rescue_driver_values(
+    policy: DirectTailCoupledCoarseRescuePolicy,
+) -> dict[str, object]:
+    """Return default driver state derived from coupled-coarse rescue policy."""
+
+    return {
+        "direct_tail_true_coupled_coarse_max_windows": int(policy.max_windows),
+        "direct_tail_true_coupled_coarse_x_radius": int(policy.x_radius),
+        "direct_tail_true_coupled_coarse_ell_radius": int(policy.ell_radius),
+        "direct_tail_true_coupled_coarse_max_mb": float(policy.max_mb),
+        "direct_tail_true_coupled_coarse_regularization": float(
+            policy.regularization
+        ),
+        "direct_tail_true_coupled_coarse_max_size": int(policy.max_size),
+        "direct_tail_true_coupled_coarse_column_batch": int(policy.column_batch),
+        "direct_tail_true_coupled_coarse_drop_tol": float(policy.drop_tol),
+        "direct_tail_true_coupled_coarse_low_lmax": int(policy.low_lmax),
+        "direct_tail_true_coupled_coarse_profile_moment_count": int(
+            policy.profile_moment_count
+        ),
+        "direct_tail_true_coupled_coarse_angular_lmax": int(policy.angular_lmax),
+        "direct_tail_true_coupled_coarse_angular_mode_max": int(
+            policy.angular_mode_max
+        ),
+        "direct_tail_true_coupled_coarse_max_tail_units": int(policy.max_tail_units),
+        "direct_tail_true_coupled_coarse_include_tail": bool(policy.include_tail),
+        "direct_tail_true_coupled_coarse_include_constraint_sources": bool(
+            policy.include_constraint_sources
+        ),
+        "direct_tail_true_coupled_coarse_include_fsavg": bool(policy.include_fsavg),
+        "direct_tail_true_coupled_coarse_include_window_residual": bool(
+            policy.include_window_residual
+        ),
+        "direct_tail_true_coupled_coarse_include_profile_moments": bool(
+            policy.include_profile_moments
+        ),
+        "direct_tail_true_coupled_coarse_include_angular_residual": bool(
+            policy.include_angular_residual
+        ),
+        "direct_tail_true_coupled_coarse_include_angular_basis": bool(
+            policy.include_angular_basis
+        ),
+        "direct_tail_true_coupled_coarse_include_preconditioned_loads": bool(
+            policy.include_preconditioned_loads
+        ),
+        "direct_tail_true_coupled_coarse_preconditioned_load_max_columns": int(
+            policy.preconditioned_load_max_columns
+        ),
+        "direct_tail_true_coupled_coarse_preconditioned_load_max_nnz": int(
+            policy.preconditioned_load_max_nnz
+        ),
+        "direct_tail_true_coupled_coarse_preconditioned_load_drop_tol": float(
+            policy.preconditioned_load_drop_tol
+        ),
+        "direct_tail_true_coupled_coarse_damping": bool(policy.damping),
+        "direct_tail_true_coupled_coarse_beta_max": float(policy.beta_max),
+        "direct_tail_true_coupled_coarse_accept_base_improvement": bool(
+            policy.accept_base_improvement
+        ),
+        "direct_tail_true_coupled_coarse_base_improvement_override_used": False,
+    }
+
+
 def build_sparse_pc_generic_branch_setup(
     context: SparsePCGenericBranchSetupContext,
 ) -> SparsePCGenericBranchSetupResult:
@@ -1979,6 +2453,218 @@ def build_sparse_pc_direct_tail_factor_setup(
         factor_bundle_pc=factor_bundle_pc,
         pc_factor_s=float(pc_factor_s),
         setup_s=float(sparse_timer.elapsed_s()),
+    )
+
+
+def build_sparse_pc_direct_tail_rescue_policy_setup(
+    context: SparsePCDirectTailRescuePolicySetupContext,
+) -> SparsePCDirectTailRescuePolicySetupResult:
+    """Resolve direct-tail support-mode preflight and rescue policy defaults."""
+
+    emit = context.emit
+    factor_bundle_pc = context.factor_bundle_pc
+    direct_tail_structured_pc_selected = bool(
+        context.direct_tail_structured_pc_selected
+    )
+    direct_tail_structured_pc_reason = context.direct_tail_structured_pc_reason
+    direct_tail_structured_pc_metadata = context.direct_tail_structured_pc_metadata
+    direct_tail_support_mode_preflight_requested = _env_bool(
+        context.env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_PREFLIGHT",
+        default=False,
+    )
+    direct_tail_support_mode_preflight_selected = False
+    direct_tail_support_mode_preflight_metadata: dict[str, object] | None = None
+    direct_tail_support_mode_preflight_error: str | None = None
+    if bool(direct_tail_support_mode_preflight_requested):
+        factor_kind_for_support = (
+            str(getattr(factor_bundle_pc, "kind", "")).strip().lower().replace("-", "_")
+        )
+        support_preflight = run_direct_tail_support_mode_preflight(
+            DirectTailSupportModePreflightContext(
+                env=context.env,
+                factor_kind=factor_kind_for_support,
+                structured_pc_ready=bool(context.structured_pc_ready),
+                operator_bundle=context.direct_tail_operator_bundle,
+                layout=context.direct_tail_structured_layout,
+                active_indices=context.direct_tail_structured_active_indices,
+                max_nbytes=context.direct_tail_structured_max_nbytes,
+                regularization=float(context.pc_reg),
+                rhs=np.asarray(context.sparse_pc_rhs, dtype=np.float64),
+                true_matvec=context.true_matvec,
+                preconditioner_x=int(context.preconditioner_x),
+                preconditioner_xi=int(context.preconditioner_xi),
+                preconditioner_species=int(context.preconditioner_species),
+                preconditioner_x_min_l=int(context.preconditioner_x_min_l),
+                selector=context.support_mode_selector,
+                factor_bundle=context.structured_factor_bundle_factory,
+            )
+        )
+        direct_tail_support_mode_preflight_metadata = support_preflight.metadata
+        direct_tail_support_mode_preflight_error = support_preflight.error
+        if bool(support_preflight.selected):
+            support_pc = support_preflight.preconditioner
+            factor_bundle_pc = support_preflight.factor_bundle
+            direct_tail_structured_pc_selected = True
+            direct_tail_structured_pc_reason = str(
+                getattr(support_pc, "reason", "support_mode_selected")
+            )
+            direct_tail_structured_pc_metadata = support_pc.to_dict()
+            direct_tail_support_mode_preflight_selected = True
+            if (
+                emit is not None
+                and isinstance(direct_tail_support_mode_preflight_metadata, dict)
+            ):
+                selected_candidate = direct_tail_support_mode_preflight_metadata.get(
+                    "selected_candidate"
+                )
+                baseline_after = direct_tail_support_mode_preflight_metadata.get(
+                    "baseline_residual_after"
+                )
+                best_after = direct_tail_support_mode_preflight_metadata.get(
+                    "best_residual_after"
+                )
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                    "support-mode preflight selected "
+                    f"candidate={selected_candidate} "
+                    f"baseline_residual={float(baseline_after or float('nan')):.6e} "
+                    f"best_residual={float(best_after or float('nan')):.6e} "
+                    f"accepted_nonbaseline="
+                    f"{bool(direct_tail_support_mode_preflight_metadata.get('accepted_nonbaseline', False))}",
+                )
+        elif direct_tail_support_mode_preflight_error is not None and emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                f"support-mode preflight failed ({direct_tail_support_mode_preflight_error}); "
+                "continuing with existing structured preconditioner",
+            )
+
+    factor_preflight_policy = resolve_sparse_pc_factor_preflight_policy(
+        SparsePCFactorPreflightPolicyContext(
+            env=context.env,
+            fortran_reduced_sparse_pc=bool(context.fortran_reduced_sparse_pc),
+            structured_pc_ready=bool(context.structured_pc_ready),
+            structured_pc_metadata=(
+                direct_tail_structured_pc_metadata
+                if isinstance(direct_tail_structured_pc_metadata, dict)
+                else None
+            ),
+            sparse_pc_linear_size=int(context.sparse_pc_linear_size),
+        )
+    )
+    direct_tail_residual_rescue_policy = resolve_direct_tail_residual_rescue_policy(
+        context.env
+    )
+    direct_tail_true_window_specs_env = (
+        _env_value(
+            context.env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_SPECS",
+        ).strip()
+        or _env_value(
+            context.env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_SPEC",
+        ).strip()
+    )
+    direct_tail_true_window_specs: tuple[object, ...] = ()
+    if direct_tail_true_window_specs_env:
+        try:
+            direct_tail_true_window_specs = context.parse_true_operator_window_specs(
+                direct_tail_true_window_specs_env,
+                layout=context.layout_from_operator(context.op),
+            )
+        except (AttributeError, TypeError, ValueError) as exc:
+            if emit is not None:
+                emit(
+                    1,
+                    "fortran_reduced_direct_tail_true_window: "
+                    f"skipped explicit specs ({type(exc).__name__}: {exc})",
+                )
+
+    direct_tail_true_active_rescue_policy = (
+        resolve_direct_tail_true_active_rescue_policy(context.env)
+    )
+    direct_tail_true_coupled_coarse_policy = (
+        resolve_direct_tail_coupled_coarse_rescue_policy(context.env)
+    )
+    direct_tail_true_coupled_coarse_explicit_requested = bool(
+        direct_tail_residual_rescue_policy.true_coupled_coarse_explicit_requested
+    )
+    rescue_values = {
+        **_direct_tail_residual_rescue_driver_values(
+            direct_tail_residual_rescue_policy,
+            true_window_specs_env=str(direct_tail_true_window_specs_env),
+            true_window_specs=tuple(direct_tail_true_window_specs),
+            true_coupled_coarse_explicit_requested=bool(
+                direct_tail_true_coupled_coarse_explicit_requested
+            ),
+        ),
+        **_direct_tail_true_active_rescue_driver_values(
+            direct_tail_true_active_rescue_policy
+        ),
+        **_direct_tail_coupled_coarse_rescue_driver_values(
+            direct_tail_true_coupled_coarse_policy
+        ),
+    }
+    return SparsePCDirectTailRescuePolicySetupResult(
+        factor_bundle_pc=factor_bundle_pc,
+        direct_tail_structured_pc_selected=bool(direct_tail_structured_pc_selected),
+        direct_tail_structured_pc_reason=direct_tail_structured_pc_reason,
+        direct_tail_structured_pc_metadata=direct_tail_structured_pc_metadata,
+        direct_tail_support_mode_preflight_requested=bool(
+            direct_tail_support_mode_preflight_requested
+        ),
+        direct_tail_support_mode_preflight_selected=bool(
+            direct_tail_support_mode_preflight_selected
+        ),
+        direct_tail_support_mode_preflight_metadata=(
+            direct_tail_support_mode_preflight_metadata
+        ),
+        direct_tail_support_mode_preflight_error=(
+            direct_tail_support_mode_preflight_error
+        ),
+        factor_preflight_policy=factor_preflight_policy,
+        factor_preflight_enabled=bool(
+            factor_preflight_policy.factor_preflight_enabled
+        ),
+        factor_preflight_required=bool(
+            factor_preflight_policy.factor_preflight_required
+        ),
+        factor_preflight_seed_enabled=bool(
+            factor_preflight_policy.factor_preflight_seed_enabled
+        ),
+        structured_pc_preflight_required_min_size=int(
+            factor_preflight_policy.structured_pc_preflight_required_min_size
+        ),
+        direct_tail_structured_pc_requires_preflight=bool(
+            factor_preflight_policy.direct_tail_structured_pc_requires_preflight
+        ),
+        direct_tail_structured_pc_kind_for_preflight=str(
+            factor_preflight_policy.direct_tail_structured_pc_kind_for_preflight
+        ),
+        direct_tail_structured_pc_size_requires_preflight=bool(
+            factor_preflight_policy.direct_tail_structured_pc_size_requires_preflight
+        ),
+        structured_pc_preflight_required=bool(
+            factor_preflight_policy.structured_pc_preflight_required
+        ),
+        factor_preflight_max_target_ratio=float(
+            factor_preflight_policy.factor_preflight_max_target_ratio
+        ),
+        factor_preflight_residual_before=None,
+        factor_preflight_residual_after=None,
+        factor_preflight_improvement_ratio=None,
+        factor_preflight_target_ratio=None,
+        factor_preflight_residual_diagnostics=None,
+        factor_preflight_seed_used=False,
+        factor_preflight_passed=None,
+        factor_preflight_error=None,
+        direct_tail_residual_rescue_policy=direct_tail_residual_rescue_policy,
+        direct_tail_true_active_rescue_policy=direct_tail_true_active_rescue_policy,
+        direct_tail_true_coupled_coarse_policy=direct_tail_true_coupled_coarse_policy,
+        rescue_values=rescue_values,
     )
 
 
@@ -5575,6 +6261,8 @@ __all__ = [
     "SparsePCFactorPreflightEvaluationResult",
     "SparsePCDirectTailFactorSetupContext",
     "SparsePCDirectTailFactorSetupResult",
+    "SparsePCDirectTailRescuePolicySetupContext",
+    "SparsePCDirectTailRescuePolicySetupResult",
     "SparsePCGenericBranchSetupContext",
     "SparsePCGenericBranchSetupResult",
     "SparsePCResidualCandidateAcceptanceContext",
@@ -5772,6 +6460,7 @@ __all__ = [
     "resolve_xblock_krylov_control_setup",
     "build_sparse_pc_active_dof_setup",
     "build_sparse_pc_direct_tail_factor_setup",
+    "build_sparse_pc_direct_tail_rescue_policy_setup",
     "build_sparse_pc_generic_branch_setup",
     "build_sparse_pc_pattern_setup",
     "build_direct_tail_materialization_setup",

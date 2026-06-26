@@ -4328,3 +4328,75 @@ Next best steps:
    `diagnostics.py`, and `solver_diagnostics.py`.
 3. After Batch B reaches its gate, execute Batch C as one transport/output/root
    ownership sweep.
+
+## 2026-06-26 Lane 1 Batch B Direct-Tail Rescue Policy Setup Extraction
+
+Steps taken:
+
+1. Added `SparsePCDirectTailRescuePolicySetupContext`,
+   `SparsePCDirectTailRescuePolicySetupResult`, and
+   `build_sparse_pc_direct_tail_rescue_policy_setup` to the existing sparse
+   handoff owner.
+2. Moved direct-tail support-mode preflight, factor-preflight policy setup, and
+   residual/window/active/coupled-coarse rescue-policy state construction out
+   of `profile_response/solve.py`.
+3. Kept the later residual-correction code behavior-preserving by exposing an
+   ordered driver-state tuple from the sparse owner; this avoids unsafe dynamic
+   `locals()` mutation while keeping the current driver variables intact.
+4. Exported the new setup context/helper from `sparse/handoff.py` and pinned
+   them in the profile-response import-contract test.
+5. Updated `plan_final.md` so the remaining Batch B work is now focused on
+   factor-preflight execution, residual-correction execution, sparse retry
+   bookkeeping, progress replay, and final sparse payload normalization.
+
+Results:
+
+- `profile_response/solve.py` decreased from `7,930` lines to `7,834` lines.
+- The combined 2026-06-26 Batch B sparse-owner work reduced `solve.py` from
+  `8,328` to `7,834` lines.
+- No new implementation file was created.
+- Package source-file count remains `209`; package-root files remain `48`.
+- Package source lines are temporarily higher because the sparse owner now
+  carries explicit policy mapping; Batch B must still collapse execution and
+  finalization boilerplate before the final package-line gate can pass.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py
+  tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py
+  tests/test_domain_package_import_contracts.py` passed.
+- `python -m pytest tests/test_domain_package_import_contracts.py
+  tests/test_profile_response_sparse_pc.py tests/test_rhs1_handoff.py -q
+  --tb=short` passed with `402 passed`.
+- `python -m pytest tests/test_profile_response_diagnostics.py
+  tests/test_rhs1_fortran_reduced_symbolic_sparse.py
+  tests/test_rhs1_xblock_policy.py tests/test_rhs1_xblock_sparse_host_policy.py
+  tests/test_v3_driver_sparse_helper_coverage.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py -q --tb=short` passed with
+  `140 passed`.
+- `python -m pytest tests/test_sparse_assembly.py
+  tests/test_rhs1_xblock_block_jacobi.py
+  tests/test_rhs1_sxblock_tz_sparse_host.py
+  tests/test_rhs1_active_projected_xblock.py -q --tb=short` passed with
+  `17 passed`.
+
+Progress:
+
+- Lane 1 structural consolidation: about `84%`.
+- Batch A root/boundary sweep: about `90%`.
+- Batch B profile-response owner collapse: about `44%`.
+- Batch C transport/output/root collapse: about `20%`.
+- Batch D solver/preconditioner family collapse: about `25%`.
+- Batch E docs/API/tests/review gate: about `20%`.
+
+Next best steps:
+
+1. Continue Batch B by moving factor-preflight execution and the residual
+   correction execution stages out of `solve.py` into existing sparse owners.
+2. Then move sparse final payload/progress normalization into existing sparse
+   finalization, diagnostics, or solver-diagnostics owners.
+3. After the remaining RHSMode-1 sparse execution/finalization code is owned
+   outside `solve.py`, start Batch C transport/output/root consolidation.
