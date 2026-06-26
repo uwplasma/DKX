@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (transport recycle-candidate coverage pass)
+Last updated: 2026-06-26 (transport active-block admission coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -439,6 +439,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   basis after trimming, not from evicted stale vectors. This protects warm-start
   reuse in production transport scans without adding solve cost. The focused
   transport loop/progress/finalization suite reports `25 passed` in `1.19 s`.
+- The sixty-seventh post-audit coverage tranche added transport active-block
+  admission gates. `tests/test_transport_active_factor.py` now covers invalid
+  symbolic orderings, matrix-shape and memory-budget rejection, insufficient
+  improvement rejection, and residual-coarse probe shape/rank failures. These
+  are production-solver safeguards for the lower-memory RHSMode=2/3
+  preconditioner path, exercised on tiny matrices rather than slow full solves.
+  The focused active-factor suite reports `9 passed` in `0.29 s`.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.

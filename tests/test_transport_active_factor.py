@@ -64,6 +64,21 @@ def test_active_block_ordering_rejects_oversized_blocks() -> None:
         )
 
 
+def test_active_block_ordering_rejects_invalid_layout_contracts() -> None:
+    invalid_cases = [
+        dict(kinetic_size=0, tail_size=0, n_theta=1, n_zeta=1, block_kind="zeta_line"),
+        dict(kinetic_size=4, tail_size=0, n_theta=0, n_zeta=1, block_kind="zeta_line"),
+        dict(kinetic_size=5, tail_size=0, n_theta=2, n_zeta=3, block_kind="zeta_line"),
+        dict(kinetic_size=5, tail_size=0, n_theta=2, n_zeta=3, block_kind="theta_line"),
+        dict(kinetic_size=5, tail_size=0, n_theta=2, n_zeta=3, block_kind="angular_plane"),
+        dict(kinetic_size=6, tail_size=0, n_theta=2, n_zeta=3, block_kind="unknown"),
+    ]
+
+    for kwargs in invalid_cases:
+        with pytest.raises(ValueError):
+            build_active_block_ordering(max_block_size=8, **kwargs)
+
+
 def test_active_block_schur_factor_solves_exact_block_tail_system() -> None:
     k = np.asarray(
         [
@@ -103,6 +118,23 @@ def test_active_block_schur_factor_solves_exact_block_tail_system() -> None:
     assert admission.max_relative_residual < 1.0e-10
 
 
+def test_active_block_schur_factor_rejects_bad_shape_and_memory_budget() -> None:
+    ordering = build_active_block_ordering(
+        kinetic_size=4,
+        tail_size=1,
+        n_theta=1,
+        n_zeta=2,
+        block_kind="zeta_line",
+        max_block_size=2,
+    )
+
+    with pytest.raises(ValueError, match="matrix shape"):
+        build_active_block_schur_factor(sp.eye(4, format="csr"), ordering, max_mb=1.0)
+
+    with pytest.raises(MemoryError, match="active block-Schur factor estimate"):
+        build_active_block_schur_factor(sp.eye(5, format="csr"), ordering, max_mb=1.0e-9)
+
+
 def test_active_block_schur_admission_rejects_missing_strong_offblock_couplings() -> None:
     k = np.asarray(
         [
@@ -135,6 +167,29 @@ def test_active_block_schur_admission_rejects_missing_strong_offblock_couplings(
     assert not admission.accepted
     assert admission.reason == "relative_residual_gate"
     assert admission.max_relative_residual > 1.0e-1
+
+
+def test_active_block_schur_admission_rejects_insufficient_improvement() -> None:
+    matrix = sp.eye(4, format="csr")
+    ordering = build_active_block_ordering(
+        kinetic_size=4,
+        tail_size=0,
+        n_theta=1,
+        n_zeta=2,
+        block_kind="zeta_line",
+        max_block_size=2,
+    )
+    factor = build_active_block_schur_factor(matrix, ordering, reg=0.0, max_mb=1.0)
+    admission = admit_active_block_schur_factor(
+        matrix,
+        factor,
+        deterministic_probe_matrix(active_size=4, kinetic_size=4, tail_size=0, count=2),
+        max_relative_residual=1.0e-10,
+        min_improvement_vs_identity=2.0,
+    )
+
+    assert not admission.accepted
+    assert admission.reason == "improvement_gate"
 
 
 def test_residual_coarse_factor_repairs_ranked_offblock_residuals() -> None:
@@ -186,3 +241,32 @@ def test_residual_coarse_factor_repairs_ranked_offblock_residuals() -> None:
     assert admission.accepted
     assert admission.max_relative_residual < 1.0e-10
     assert coarse.metadata["residual_coarse_cols"] == 4
+
+
+def test_residual_coarse_factor_rejects_bad_or_rank_deficient_probes() -> None:
+    matrix = sp.eye(4, format="csr")
+    ordering = build_active_block_ordering(
+        kinetic_size=4,
+        tail_size=0,
+        n_theta=1,
+        n_zeta=2,
+        block_kind="zeta_line",
+        max_block_size=2,
+    )
+    factor = build_active_block_schur_factor(matrix, ordering, reg=0.0, max_mb=1.0)
+
+    with pytest.raises(ValueError, match="probe length"):
+        build_active_block_schur_residual_coarse_factor(
+            matrix,
+            factor,
+            np.ones((3, 1), dtype=np.float64),
+            max_mb=1.0,
+        )
+
+    with pytest.raises(ValueError, match="no finite candidate"):
+        build_active_block_schur_residual_coarse_factor(
+            matrix,
+            factor,
+            np.eye(4, dtype=np.float64),
+            max_mb=1.0,
+        )
