@@ -16,7 +16,7 @@ Building v3 grids and geometry
 
 .. code-block:: python
 
-   from sfincs_jax.v3 import grids_from_namelist, geometry_from_namelist
+   from sfincs_jax.discretization.v3 import grids_from_namelist, geometry_from_namelist
 
    grids = grids_from_namelist(nml)
    geom = geometry_from_namelist(nml=nml, grids=grids)
