@@ -5569,3 +5569,60 @@ Next best steps:
    and `sparse_direct_solve.py`) into `solve.py` or one active-system owner.
 3. After Batch B reaches the transport file-count gate, return to Batch A's
    remaining `profile_response/solve.py <=5,500` review-ready gate.
+
+## 2026-06-26 Batch B Transport Policy/Dispatch Owner Merge
+
+Steps taken:
+
+1. Merged `sfincs_jax/problems/transport_matrix/solve_policy.py` into the
+   durable owner `sfincs_jax/problems/transport_matrix/policies.py`.
+   Geometry-scheme parsing, low-memory output policy, active-DOF admission,
+   dense fallback/preconditioner admission, state-vector retention, GMRES
+   budgets, and per-`whichRHS` loop policy now live in the policy owner.
+2. Merged `sfincs_jax/problems/transport_matrix/preconditioner_dispatch.py`
+   into the same policy owner. Preconditioner-kind normalization, automatic
+   transport preconditioner selection, DD/sparse-JAX environment parsing,
+   reduced/full builder dispatch, and strong-preconditioner caching now live
+   with the transport policy they serve.
+3. Rewired `profile_response/solve.py`, `transport_matrix/active_dense.py`,
+   focused transport policy/preconditioner tests, import-contract tests, API
+   docs, testing docs, release notes, and the source map to import
+   `transport_matrix.policies` directly.
+4. Deleted both relay files instead of leaving compatibility shims.
+5. Updated `plan_final.md` metrics and Batch B status so the next transport
+   work is solver-shard consolidation, not another policy merge.
+
+Results:
+
+- Package Python files decreased from `204` to `202`.
+- Package source lines decreased from `165,574` to `165,517`.
+- `problems/transport_matrix` files including `parallel/` decreased from `27`
+  to `25`.
+- `sfincs_jax/problems/transport_matrix/policies.py` is now `2,123` lines and
+  owns the transport runtime, solve, retry, active/dense, and preconditioner
+  dispatch policy family.
+- The Batch B transport file-count gate remains open: `25` files must decrease
+  to `<=18`.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/active_dense.py sfincs_jax/problems/profile_response/solve.py tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/active_dense.py sfincs_jax/problems/profile_response/solve.py tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m pytest tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_transport_active_dense_setup.py tests/test_domain_package_import_contracts.py -q --tb=short` passed with `54 passed`.
+- `python -m pytest tests/test_transport_*.py -q --tb=short` passed with
+  `273 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `git diff --check` passed.
+
+Next best steps:
+
+1. Continue Batch B by merging transport solver shards with direct behavioral
+   coverage: `dense_lu.py`, `dense_batch.py`, `host_gmres.py`, `loop.py`,
+   `iteration_stats.py`, `residual_quality.py`, and `sparse_direct_solve.py`
+   should move into `transport_matrix/solve.py` or one active-system owner.
+2. Then merge `postsolve_diagnostics.py` into `finalize.py` and
+   `streaming_outputs.py` into `outputs/transport.py` to reduce output
+   ownership complexity.
+3. After transport reaches `<=18` files, return to Batch A's
+   `profile_response/solve.py <=5,500` line gate and then Batch C
+   preconditioner-family compression.

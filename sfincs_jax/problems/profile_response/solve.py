@@ -633,31 +633,30 @@ from sfincs_jax.host_refinement import (
     host_sparse_direct_solve_with_refinement as _host_sparse_direct_solve_with_refinement_impl,
 )
 from sfincs_jax.problems.transport_matrix.policies import (
-    transport_candidate_is_better,
-    transport_host_gmres_accepts_preconditioned_residual as _transport_host_gmres_accepts_preconditioned_residual_impl,
-    transport_polish_config_from_env,
-    transport_precondition_side as _transport_precondition_side_impl,
-    transport_residual_value,
-    transport_result_needs_retry,
-    transport_sparse_direct_needs_float64_retry as _transport_sparse_direct_needs_float64_retry_impl,
-    transport_sparse_direct_rescue_first as _transport_sparse_direct_rescue_first_impl,
-    transport_tzfft_first_attempt_budget as _transport_tzfft_first_attempt_budget_impl,
-    TransportRuntimePolicy,
-)
-from sfincs_jax.problems.transport_matrix.preconditioner_dispatch import (
     TransportPreconditionerContext,
     TransportPreconditionerDispatchBuilders,
+    TransportRuntimePolicy,
     TransportStrongPreconditionerCache,
     build_transport_preconditioner_from_kind,
     normalize_transport_preconditioner_kind,
     resolve_transport_precondition_side_for_kind,
     resolve_transport_preconditioner_choice,
+    resolve_transport_per_rhs_loop_policy,
+    transport_candidate_is_better,
     transport_dd_config_from_env,
+    transport_geometry_scheme_from_namelist,
+    transport_host_gmres_accepts_preconditioned_residual as _transport_host_gmres_accepts_preconditioned_residual_impl,
+    transport_polish_config_from_env,
+    transport_precondition_side as _transport_precondition_side_impl,
+    transport_residual_value,
+    transport_result_needs_retry,
     transport_sparse_jax_config_from_env,
+    transport_sparse_direct_needs_float64_retry as _transport_sparse_direct_needs_float64_retry_impl,
+    transport_sparse_direct_rescue_first as _transport_sparse_direct_rescue_first_impl,
+    transport_tzfft_first_attempt_budget as _transport_tzfft_first_attempt_budget_impl,
 )
 from sfincs_jax.problems.transport_matrix.direct_block_schur import build_transport_fp_direct_active_block_schur_preconditioner
 from sfincs_jax.problems.transport_matrix.fortran_reduced_lu import build_transport_fp_fortran_reduced_lu_preconditioner
-from sfincs_jax.problems.transport_matrix.solve_policy import resolve_transport_per_rhs_loop_policy, transport_geometry_scheme_from_namelist
 from sfincs_jax.problems.transport_matrix.setup import (
     resolve_transport_maxiter_setup,
     resolve_transport_parallel_request,

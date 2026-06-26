@@ -1200,23 +1200,15 @@ the historical private driver name and test the focused module directly. This ke
   comparisons against an incumbent path.
 - ``sfincs_jax/problems/transport_matrix/policies.py``
   (legacy alias: ``sfincs_jax/transport_policy.py``):
-  pure transport backend, sparse-direct, host-GMRES, dtype, and recycle policy.
-  ``TransportRuntimePolicy`` binds those pure decisions to the active JAX
-  backend and host sparse-factor dtype provider, so ``v3_driver.py`` no longer
-  carries private transport backend-injection wrapper functions.
-- ``sfincs_jax/problems/transport_matrix/preconditioner_dispatch.py``
-  (legacy alias: ``sfincs_jax/transport_preconditioner_dispatch.py``):
-  shared transport preconditioner-kind normalization, auto-selection, DD/sparse-JAX
-  env parsing, and reduced/full preconditioner builder dispatch.
-- ``sfincs_jax/problems/transport_matrix/solve_policy.py``
-  (legacy alias: ``sfincs_jax/transport_solve_policy.py``):
-  shared RHSMode=2/3 initial solve policy, active-DOF transport policy,
-  active-index map construction, dense fallback, dense-preconditioner, low-memory
-  output, streamed-diagnostic, state-vector retention, and GMRES restart policy
-  used before the transport preconditioner and solve handoff layers. It also owns
-  the per-``whichRHS`` loop policy for E_parallel loose/Krylov routing,
-  constraint-nullspace projection admission, KSP iteration-stat settings, and
-  dense-batch fallback admission.
+  pure transport backend, sparse-direct, host-GMRES, dtype, recycle, polish,
+  RHSMode=2/3 initial solve, active-DOF, dense fallback, low-memory output,
+  streamed-diagnostic, state-vector retention, GMRES restart, per-``whichRHS``
+  loop, preconditioner-kind normalization, auto-selection, DD/sparse-JAX env,
+  and reduced/full preconditioner builder-dispatch policy. ``TransportRuntimePolicy``
+  binds backend-sensitive decisions to the active JAX backend and host
+  sparse-factor dtype provider. The former ``preconditioner_dispatch.py`` and
+  ``solve_policy.py`` relays have been deleted; tests import this owner
+  directly.
 - ``sfincs_jax/problems/transport_matrix/setup.py``
   (legacy alias: ``sfincs_jax/transport_solve_setup.py``):
   side-effect-light RHSMode=2/3 setup resolution for transport max-iteration
