@@ -1,21 +1,56 @@
 ## Examples
 
-The examples are organized by **topic** (rather than “difficulty”), so you can jump directly to what you need.
+This directory is the learning surface for `sfincs_jax`. Start with the
+numbered path below if you are new to the code; jump to the topic folders if
+you already know which workflow you need. All first-pass examples avoid a local
+SFINCS Fortran v3 executable. Parity and benchmark scripts use frozen
+references or optional local Fortran only when explicitly requested.
 
-- `examples/getting_started/`: minimal “hello world” workflows (no Fortran required)
-- `examples/parity/`: parity + validation against frozen v3 fixtures
-- `examples/transport/`: `RHSMode=2/3` transport-matrix workflows + upstream scanplot scripts
-- `examples/autodiff/`: AD / implicit-diff examples
-- `examples/optimization/`: optimization with Optax/JAX-native tooling
-- `examples/performance/`: JIT + performance microbenchmarks
-- `examples/publication_figures/`: publication-ready figure generation
-- `examples/vmec_jax_finite_beta/`: finite-beta `vmec_jax` -> `sfincs_jax` radial bootstrap-current and ambipolar-`E_r` workflow
+### Learning Path
 
-Also included:
+| Step | Goal | Start here |
+| --- | --- | --- |
+| 1 | Run the CLI, write an output file, and plot it | `getting_started/write_and_plot_multiple_formats.py` |
+| 2 | Understand grids, geometry, and one operator action | `getting_started/build_grids_and_geometry.py`, `getting_started/apply_collisionless_operator.py` |
+| 3 | Compute RHSMode=2/3 transport matrices | `transport/transport_matrix_rhsmode2_and_rhsmode3.py` |
+| 4 | Compare outputs with frozen SFINCS Fortran v3 references | `parity/output_parity_vs_fortran_fixture.py` |
+| 5 | Differentiate residuals, fluxes, and solve outputs | `autodiff/autodiff_gradient_nu_n_residual.py`, `autodiff/implicit_diff_through_gmres_solve_scheme5.py` |
+| 6 | Compute bootstrap-current and Redl comparisons for QA/QH VMEC cases | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` |
+| 7 | Add neoclassical objectives to stellarator optimization | `optimization/qa_nfp2_sfincs_jax_objectives.py` |
+| 8 | Profile CPU/GPU, JIT, output formats, and parallelism | `performance/benchmark_sharded_solve_scaling.py`, `performance/benchmark_output_formats.py` |
 
-- `examples/sfincs_examples/`: a vendored copy of the upstream v3 example suite + helper scripts.
-- `examples/upstream/`: curated upstream inputs used in tests and docs.
-- `examples/additional_examples/`: the checked-in quasi-isodynamic VMEC deck used by the extra example lane.
+### Folder Map
+
+- `getting_started/`: minimal CLI and Python workflows, plotting, file formats,
+  analytic tokamak geometry, and VMEC `wout_path` usage.
+- `transport/`: RHSMode=2/3 transport-matrix workflows, Krylov recycling, and
+  scan-plot utilities.
+- `autodiff/`: JAX `grad`, JVP/VJP, implicit differentiation, and
+  VMEC/Boozer-to-SFINCS differentiable handoff examples.
+- `optimization/`: JAX-native proxy objectives, kinetic promotion scripts, QI
+  electron-root screens, and QA bootstrap-current optimization helpers.
+- `vmec_jax_finite_beta/`: finite-beta VMEC-to-SFINCS radial profiles,
+  ambipolar `E_r`, bootstrap-current comparisons, Redl formula checks, and
+  convergence plots.
+- `parity/`: frozen-reference parity checks against SFINCS Fortran v3 outputs
+  without requiring Fortran in CI.
+- `performance/`: JIT, memory, output-format, sharding, multi-GPU, and
+  production-floor benchmark drivers.
+- `publication_figures/`: scripts that regenerate documentation and paper
+  figures from checked summaries or explicit benchmark runs.
+- `sfincs_examples/`: vendored upstream SFINCS v3 example inputs plus helpers
+  used for parity and benchmark-suite audits, not the recommended starting
+  point for new users.
+- `upstream/` and `additional_examples/`: curated reference inputs used by
+  tests, docs, and validation lanes.
+
+### Notebook Plan
+
+The consolidation plan is to keep one runnable script and one pedagogic notebook
+per major learning step. The notebooks should show inputs, equations, code,
+plots, interpretation, convergence/error bars where relevant, and links to the
+matching documentation page. Until those notebooks are finalized, the scripts
+listed above are the canonical runnable examples.
 
 ### Setup
 
