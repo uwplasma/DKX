@@ -439,34 +439,17 @@ the historical private driver name and test the focused module directly. This ke
   axis-line index maps, cache keys, regularization policy, extra-variable tail
   solves, and multi-level residual correction hooks live here; ``v3_driver.py``
   keeps compatibility wrappers only.
-- ``sfincs_jax/solvers/preconditioners/schur/rhs1.py``:
-  RHSMode=1 constraintScheme=2 constraint-source Schur preconditioner. It owns
-  Schur base-preconditioner selection, diagonal/full/x-coupled Schur inverse
-  setup, PAS-ILU Schur shortcuts, constraint-source injection/projection, cache
-  population, and reduced/full apply wrappers. ``v3_driver.py`` injects the
-  current base builders and keeps a compatibility wrapper only.
-- ``sfincs_jax/solvers/preconditioners/schur/rhs1_coarse_policy.py``:
-  environment-normalized policy for RHSMode=1 active native-stack and
-  sparse-coarse residual preconditioners. It owns side-effect-free parsing for
-  memory budgets, Schwarz admission, coarse-equation solver choice,
-  field-split output/base-kind routing, and coupled-kinetic admission probes;
-  ``rhs1_full_assembly.py`` keeps sparse basis assembly, factorization, cache
-  ownership, and true residual admission.
-- ``sfincs_jax/solvers/preconditioners/schur/rhs1_coarse_basis.py``:
-  reusable RHSMode=1 active coarse residual basis construction for the Schur
-  preconditioner family. It owns low-``L``/low-angular-mode config, normalized
-  surface modes, sparse basis materialization, targeted ``(species,x,L)``
-  window columns, and storage estimates; ``rhs1_full_assembly.py`` keeps only
-  aliases at the existing internal call sites plus the matrix/operator-dependent
-  adaptive residual-basis stages.
-- ``sfincs_jax/solvers/preconditioners/schur/rhs1_full_csr.py``:
-  complete full-CSR RHSMode=1 Schur preconditioner family for the explicit
-  host solve lane. It owns the shared structured full-CSR preconditioner result
-  type, Jacobi fallback, diagonal tail-Schur, zeta-line Schur, pitch-line Schur,
-  radial-pitch Schur builders, block memory estimates, and regularized diagonal
-  inversion. ``rhs1_full_assembly.py`` now imports the historical private names
-  from this module so existing call sites and debug scripts keep working while
-  the implementation has direct tests.
+- ``sfincs_jax/solvers/preconditioners/schur/profile_response.py``:
+  profile-response Schur and coarse preconditioners. It owns Schur
+  base-preconditioner selection, constraint-source projection/injection,
+  diagonal/full/x-coupled Schur inverse setup, active native-stack and
+  sparse-coarse policy parsing, low-``L``/low-angular-mode coarse residual
+  bases, targeted ``(species,x,L)`` window bases, full-CSR structured Schur
+  result objects, Jacobi fallback, diagonal tail-Schur, zeta-line Schur,
+  pitch-line Schur, radial-pitch Schur builders, block memory estimates, and
+  regularized diagonal inversion. The package-level
+  ``sfincs_jax.solvers.preconditioners.schur`` import re-exports this stable
+  owner; the historical ``rhs1*`` Schur implementation files were removed.
 - ``sfincs_jax/problems/transport_matrix/direct_pmat.py``
   (legacy alias: ``sfincs_jax/transport_direct_pmat.py``):
   direct term-level RHSMode=2/3 reduced ``Pmat`` and exact active-operator
