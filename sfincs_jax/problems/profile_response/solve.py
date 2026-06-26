@@ -254,7 +254,7 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     SparsePCDirectTailRescuePolicySetupContext,
     SparsePCGenericBranchSetupContext,
     SparsePCFactorPreflightRunContext,
-    SparsePCResidualCandidateUpdateContext,
+    SparsePCResidualCorrectionStageContext,
     SparsePCAutoPreflightRetryStageContext,
     SparsePCTrueCoupledCoarseStageContext,
     ExplicitSparseMinimumNormBranchContext,
@@ -286,7 +286,6 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     run_xblock_qi_preconditioner_pipeline,
     apply_xblock_side_probe_stage,
     apply_xblock_two_level_stage,
-    apply_sparse_pc_residual_candidate_update,
     build_xblock_local_preconditioner,
     build_xblock_krylov_matvec_setup,
     build_xblock_assembled_operator_if_requested,
@@ -298,6 +297,7 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     evaluate_xblock_preflight_gate,
     run_sparse_pc_auto_preflight_retry_stage,
     run_sparse_pc_factor_preflight,
+    run_sparse_pc_residual_correction_stage,
     run_sparse_pc_true_coupled_coarse_stage,
     complete_xblock_post_krylov_stage,
     resolve_sparse_pc_gmres_control_policy,
@@ -2325,711 +2325,186 @@ def solve_v3_full_system_linear_gmres(
                     true_coupled_stage.base_improvement_override_used
                 )
 
-                def _direct_tail_rescue_needed_after_preflight() -> bool:
-                    if factor_preflight_passed is False:
-                        return True
-                    if not bool(direct_tail_true_coupled_coarse_base_improvement_override_used):
-                        return False
-                    continue_after_override = _rhs1_bool_env(
-                        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESCUE_AFTER_BASE_IMPROVEMENT",
-                        default=True,
-                    )
-                    if not bool(continue_after_override):
-                        return False
-                    if factor_preflight_target_ratio is None:
-                        return True
-                    try:
-                        return float(factor_preflight_target_ratio) > float(factor_preflight_max_target_ratio)
-                    except (TypeError, ValueError):
-                        return True
-
-                direct_tail_true_active_column_cache: _ReusableTrueActionColumnCache | None = None
-                if (
-                    bool(direct_tail_true_active_submatrix_requested)
-                    or bool(direct_tail_true_active_block_requested)
-                    or bool(direct_tail_true_active_residual_block_requested)
-                    or bool(direct_tail_true_window_requested)
-                ):
-                    direct_tail_true_active_column_cache = _ReusableTrueActionColumnCache(
-                        true_matvec=lambda vec: np.asarray(
-                            jax.device_get(_mv_true_no_count(jnp.asarray(vec, dtype=jnp.float64))),
-                            dtype=np.float64,
-                        ).reshape((-1,)),
-                        true_matmat=lambda mat: np.asarray(_mv_true_matmat(np.asarray(mat, dtype=np.float64))),
-                        n=int(sparse_pc_linear_size),
-                        max_nbytes=int(
-                            max(0.0, float(direct_tail_true_active_column_cache_max_mb)) * 1024.0 * 1024.0
+                residual_correction_stage = run_sparse_pc_residual_correction_stage(
+                    SparsePCResidualCorrectionStageContext(
+                        factor_bundle_pc=factor_bundle_pc,
+                        operator_bundle_pc=_operator_bundle_pc,
+                        structured_pc_ready=bool(structured_pc_ready),
+                        pc_factor_s=float(pc_factor_s),
+                        setup_s=float(setup_s),
+                        sparse_pc_rhs=sparse_pc_rhs,
+                        sparse_pc_linear_size=int(sparse_pc_linear_size),
+                        target=float(target),
+                        factor_preflight_residual_before=factor_preflight_residual_before,
+                        factor_preflight_residual_after=factor_preflight_residual_after,
+                        factor_preflight_residual_diagnostics=factor_preflight_residual_diagnostics,
+                        factor_preflight_improvement_ratio=factor_preflight_improvement_ratio,
+                        factor_preflight_target_ratio=factor_preflight_target_ratio,
+                        factor_preflight_passed=factor_preflight_passed,
+                        factor_preflight_seed_enabled=bool(factor_preflight_seed_enabled),
+                        factor_preflight_seed_used=bool(factor_preflight_seed_used),
+                        factor_preflight_max_target_ratio=float(factor_preflight_max_target_ratio),
+                        residual_vec_current=residual_vec_current,
+                        x0_sparse=x0_sparse,
+                        matvec=_mv_true,
+                        matvec_no_count=_mv_true_no_count,
+                        matmat=_mv_true_matmat,
+                        diagnostics=_rhs1_active_reduced_residual_diagnostics,
+                        layout=RHS1BlockLayout.from_operator(op),
+                        active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                        elapsed_s=sparse_timer.elapsed_s,
+                        emit=emit,
+                        additive_rescue_nbytes=_rhs1_additive_rescue_nbytes,
+                        true_action_column_cache_factory=_ReusableTrueActionColumnCache,
+                        true_active_submatrix_builder=_try_build_true_operator_active_submatrix_preconditioner,
+                        true_active_block_builder=_try_build_true_operator_active_block_lsq_preconditioner,
+                        true_active_residual_block_builder=(
+                            _try_build_true_operator_active_residual_block_lsq_preconditioner
                         ),
-                        enabled=bool(direct_tail_true_active_column_cache_requested),
+                        true_window_builder=_try_build_true_operator_residual_window_lsq_preconditioner,
+                        residual_coarse_builder=_try_build_residual_coarse_host_sparse_preconditioner,
+                        residual_window_builder=_try_build_residual_window_host_sparse_preconditioner,
+                        continue_after_base_improvement=_rhs1_bool_env(
+                            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESCUE_AFTER_BASE_IMPROVEMENT",
+                            default=True,
+                        ),
+                        true_coupled_base_improvement_override_used=bool(
+                            direct_tail_true_coupled_coarse_base_improvement_override_used
+                        ),
+                        true_active_submatrix_requested=bool(direct_tail_true_active_submatrix_requested),
+                        true_active_block_requested=bool(direct_tail_true_active_block_requested),
+                        true_active_residual_block_requested=bool(direct_tail_true_active_residual_block_requested),
+                        true_window_requested=bool(direct_tail_true_window_requested),
+                        residual_coarse_requested=bool(direct_tail_residual_coarse_requested),
+                        residual_window_requested=bool(direct_tail_residual_window_requested),
+                        true_active_column_cache_requested=bool(direct_tail_true_active_column_cache_requested),
+                        true_active_column_cache_max_mb=float(direct_tail_true_active_column_cache_max_mb),
+                        true_active_block_x_count=int(direct_tail_true_active_block_x_count),
+                        true_active_block_ell_count=int(direct_tail_true_active_block_ell_count),
+                        true_active_block_species_count=direct_tail_true_active_block_species_count,
+                        true_active_block_theta_stride=int(direct_tail_true_active_block_theta_stride),
+                        true_active_block_zeta_stride=int(direct_tail_true_active_block_zeta_stride),
+                        true_active_block_max_mb=float(direct_tail_true_active_block_max_mb),
+                        true_active_block_regularization=float(direct_tail_true_active_block_regularization),
+                        true_active_block_max_size=int(direct_tail_true_active_block_max_size),
+                        true_active_block_column_batch=int(direct_tail_true_active_block_column_batch),
+                        true_active_block_drop_tol=float(direct_tail_true_active_block_drop_tol),
+                        true_active_block_include_tail=bool(direct_tail_true_active_block_include_tail),
+                        true_active_block_max_tail=int(direct_tail_true_active_block_max_tail),
+                        true_active_block_damping=bool(direct_tail_true_active_block_damping),
+                        true_active_block_beta_max=float(direct_tail_true_active_block_beta_max),
+                        true_active_submatrix_damping=bool(direct_tail_true_active_submatrix_damping),
+                        true_active_submatrix_alpha_clip=float(direct_tail_true_active_submatrix_alpha_clip),
+                        true_active_submatrix_min_improvement=float(
+                            direct_tail_true_active_submatrix_min_improvement
+                        ),
+                        true_active_residual_block_max_mb=float(direct_tail_true_active_residual_block_max_mb),
+                        true_active_residual_block_regularization=float(
+                            direct_tail_true_active_residual_block_regularization
+                        ),
+                        true_active_residual_block_max_size=int(direct_tail_true_active_residual_block_max_size),
+                        true_active_residual_block_column_batch=int(
+                            direct_tail_true_active_residual_block_column_batch
+                        ),
+                        true_active_residual_block_drop_tol=float(direct_tail_true_active_residual_block_drop_tol),
+                        true_active_residual_block_include_tail=bool(
+                            direct_tail_true_active_residual_block_include_tail
+                        ),
+                        true_active_residual_block_max_tail=int(direct_tail_true_active_residual_block_max_tail),
+                        true_active_residual_block_kinetic_only=bool(
+                            direct_tail_true_active_residual_block_kinetic_only
+                        ),
+                        true_active_residual_block_damping=bool(direct_tail_true_active_residual_block_damping),
+                        true_active_residual_block_beta_max=float(direct_tail_true_active_residual_block_beta_max),
+                        true_active_residual_block_min_improvement=float(
+                            direct_tail_true_active_residual_block_min_improvement
+                        ),
+                        true_active_residual_block_accept_base_improvement=bool(
+                            direct_tail_true_active_residual_block_accept_base_improvement
+                        ),
+                        true_window_max_windows=int(direct_tail_true_window_max_windows),
+                        true_window_x_radius=int(direct_tail_true_window_x_radius),
+                        true_window_ell_radius=int(direct_tail_true_window_ell_radius),
+                        true_window_max_mb=float(direct_tail_true_window_max_mb),
+                        true_window_regularization=float(direct_tail_true_window_regularization),
+                        true_window_max_size=int(direct_tail_true_window_max_size),
+                        true_window_column_batch=int(direct_tail_true_window_column_batch),
+                        true_window_drop_tol=float(direct_tail_true_window_drop_tol),
+                        true_window_include_tail=bool(direct_tail_true_window_include_tail),
+                        true_window_specs=tuple(direct_tail_true_window_specs),
+                        true_window_damping=bool(direct_tail_true_window_damping),
+                        true_window_beta_max=float(direct_tail_true_window_beta_max),
+                        residual_coarse_rank=int(direct_tail_residual_coarse_rank),
+                        residual_coarse_max_mb=float(direct_tail_residual_coarse_max_mb),
+                        residual_coarse_regularization=float(direct_tail_residual_coarse_regularization),
+                        residual_window_max_windows=int(direct_tail_residual_window_max_windows),
+                        residual_window_x_radius=int(direct_tail_residual_window_x_radius),
+                        residual_window_ell_radius=int(direct_tail_residual_window_ell_radius),
+                        residual_window_max_mb=float(direct_tail_residual_window_max_mb),
+                        residual_window_regularization=float(direct_tail_residual_window_regularization),
+                        residual_window_coefficient_mode=str(direct_tail_residual_window_coefficient_mode),
+                        residual_window_combine_mode=str(direct_tail_residual_window_combine_mode),
+                        residual_window_interface_depth=int(direct_tail_residual_window_interface_depth),
+                        residual_window_max_size=int(direct_tail_residual_window_max_size),
                     )
-
-                def _true_active_cached_matvec(vec: np.ndarray) -> np.ndarray:
-                    if direct_tail_true_active_column_cache is not None:
-                        return direct_tail_true_active_column_cache.matvec(vec)
-                    return np.asarray(
-                        jax.device_get(_mv_true_no_count(jnp.asarray(vec, dtype=jnp.float64))),
-                        dtype=np.float64,
-                    ).reshape((-1,))
-
-                def _true_active_cached_matmat(mat: np.ndarray) -> np.ndarray:
-                    if direct_tail_true_active_column_cache is not None:
-                        return direct_tail_true_active_column_cache.matmat(mat)
-                    return np.asarray(_mv_true_matmat(np.asarray(mat, dtype=np.float64)))
-
-                if (
-                    bool(direct_tail_true_active_submatrix_requested)
-                    and _direct_tail_rescue_needed_after_preflight()
-                    and factor_preflight_residual_after is not None
-                    and np.isfinite(float(factor_preflight_residual_after))
-                ):
-                    try:
-                        true_active_submatrix_bundle = _try_build_true_operator_active_submatrix_preconditioner(
-                            true_matvec=_true_active_cached_matvec,
-                            true_matmat=_true_active_cached_matmat,
-                            factor_bundle=factor_bundle_pc,
-                            residual=np.asarray(jax.device_get(residual_vec_current), dtype=np.float64),
-                            layout=RHS1BlockLayout.from_operator(op),
-                            active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                            x_count=int(direct_tail_true_active_block_x_count),
-                            ell_count=int(direct_tail_true_active_block_ell_count),
-                            species_count=direct_tail_true_active_block_species_count,
-                            theta_stride=int(direct_tail_true_active_block_theta_stride),
-                            zeta_stride=int(direct_tail_true_active_block_zeta_stride),
-                            max_nbytes=_rhs1_additive_rescue_nbytes(
-                                factor_bundle_pc,
-                                direct_tail_true_active_block_max_mb
-                            ),
-                            regularization=float(direct_tail_true_active_block_regularization),
-                            max_block_size=int(direct_tail_true_active_block_max_size),
-                            column_batch=int(direct_tail_true_active_block_column_batch),
-                            drop_tol=float(direct_tail_true_active_block_drop_tol),
-                            include_tail=bool(direct_tail_true_active_block_include_tail),
-                            max_tail=int(direct_tail_true_active_block_max_tail),
-                            damping=bool(direct_tail_true_active_submatrix_damping),
-                            alpha_clip=float(direct_tail_true_active_submatrix_alpha_clip),
-                            emit=emit,
-                        )
-                        if true_active_submatrix_bundle is None:
-                            direct_tail_true_active_submatrix_error = "builder_returned_none"
-                        else:
-                            x_true_active_submatrix_sparse = jnp.asarray(
-                                true_active_submatrix_bundle.solve(np.asarray(sparse_pc_rhs, dtype=np.float64)),
-                                dtype=jnp.float64,
-                            )
-                            residual_vec_true_active_submatrix = sparse_pc_rhs - jnp.asarray(
-                                _mv_true_no_count(x_true_active_submatrix_sparse),
-                                dtype=jnp.float64,
-                            )
-                            direct_tail_true_active_submatrix_residual_after = float(
-                                jnp.linalg.norm(residual_vec_true_active_submatrix)
-                            )
-                            true_active_submatrix_update = apply_sparse_pc_residual_candidate_update(
-                                SparsePCResidualCandidateUpdateContext(
-                                    label="true active submatrix",
-                                    metadata_count_key="block_size",
-                                    metadata_count_label="block_size",
-                                    bundle=true_active_submatrix_bundle,
-                                    candidate_x=x_true_active_submatrix_sparse,
-                                    candidate_residual_vec=residual_vec_true_active_submatrix,
-                                    candidate_residual_after=float(
-                                        direct_tail_true_active_submatrix_residual_after
-                                    ),
-                                    candidate_metadata=dict(true_active_submatrix_bundle.metadata or {}),
-                                    factor_bundle_pc=factor_bundle_pc,
-                                    pc_factor_s=float(pc_factor_s),
-                                    setup_s=float(setup_s),
-                                    factor_preflight_residual_before=factor_preflight_residual_before,
-                                    factor_preflight_residual_after=factor_preflight_residual_after,
-                                    factor_preflight_residual_diagnostics=factor_preflight_residual_diagnostics,
-                                    factor_preflight_improvement_ratio=factor_preflight_improvement_ratio,
-                                    factor_preflight_target_ratio=factor_preflight_target_ratio,
-                                    factor_preflight_passed=factor_preflight_passed,
-                                    factor_preflight_seed_enabled=bool(factor_preflight_seed_enabled),
-                                    factor_preflight_seed_used=bool(factor_preflight_seed_used),
-                                    target=float(target),
-                                    max_target_ratio=float(factor_preflight_max_target_ratio),
-                                    residual_vec_current=residual_vec_current,
-                                    x0_sparse=x0_sparse,
-                                    diagnostics=_rhs1_active_reduced_residual_diagnostics,
-                                    layout=RHS1BlockLayout.from_operator(op),
-                                    active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                                    elapsed_s=sparse_timer.elapsed_s,
-                                    emit=emit,
-                                    require_original_improvement=False,
-                                    current_min_improvement=float(
-                                        direct_tail_true_active_submatrix_min_improvement
-                                    ),
-                                )
-                            )
-                            direct_tail_true_active_submatrix_metadata = true_active_submatrix_update.metadata
-                            direct_tail_true_active_submatrix_selected = bool(true_active_submatrix_update.accepted)
-                            factor_bundle_pc = true_active_submatrix_update.factor_bundle_pc
-                            pc_factor_s = float(true_active_submatrix_update.pc_factor_s)
-                            setup_s = float(true_active_submatrix_update.setup_s)
-                            factor_preflight_residual_after = (
-                                true_active_submatrix_update.factor_preflight_residual_after
-                            )
-                            factor_preflight_residual_diagnostics = (
-                                true_active_submatrix_update.factor_preflight_residual_diagnostics
-                            )
-                            factor_preflight_improvement_ratio = (
-                                true_active_submatrix_update.factor_preflight_improvement_ratio
-                            )
-                            factor_preflight_target_ratio = true_active_submatrix_update.factor_preflight_target_ratio
-                            factor_preflight_passed = true_active_submatrix_update.factor_preflight_passed
-                            factor_preflight_seed_used = bool(
-                                true_active_submatrix_update.factor_preflight_seed_used
-                            )
-                            residual_vec_current = true_active_submatrix_update.residual_vec_current
-                            x0_sparse = true_active_submatrix_update.x0_sparse
-                    except Exception as exc:  # noqa: BLE001
-                        direct_tail_true_active_submatrix_error = f"{type(exc).__name__}: {exc}"
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: true active submatrix failed "
-                                f"({direct_tail_true_active_submatrix_error})",
-                            )
-
-                if (
-                    bool(direct_tail_true_active_block_requested)
-                    and _direct_tail_rescue_needed_after_preflight()
-                    and factor_preflight_residual_after is not None
-                    and np.isfinite(float(factor_preflight_residual_after))
-                ):
-                    try:
-                        true_active_block_bundle = _try_build_true_operator_active_block_lsq_preconditioner(
-                            true_matvec=_true_active_cached_matvec,
-                            true_matmat=_true_active_cached_matmat,
-                            factor_bundle=factor_bundle_pc,
-                            residual=np.asarray(jax.device_get(residual_vec_current), dtype=np.float64),
-                            layout=RHS1BlockLayout.from_operator(op),
-                            active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                            x_count=int(direct_tail_true_active_block_x_count),
-                            ell_count=int(direct_tail_true_active_block_ell_count),
-                            species_count=direct_tail_true_active_block_species_count,
-                            theta_stride=int(direct_tail_true_active_block_theta_stride),
-                            zeta_stride=int(direct_tail_true_active_block_zeta_stride),
-                            max_nbytes=_rhs1_additive_rescue_nbytes(
-                                factor_bundle_pc,
-                                direct_tail_true_active_block_max_mb
-                            ),
-                            regularization=float(direct_tail_true_active_block_regularization),
-                            max_block_size=int(direct_tail_true_active_block_max_size),
-                            column_batch=int(direct_tail_true_active_block_column_batch),
-                            drop_tol=float(direct_tail_true_active_block_drop_tol),
-                            include_tail=bool(direct_tail_true_active_block_include_tail),
-                            max_tail=int(direct_tail_true_active_block_max_tail),
-                            damping=bool(direct_tail_true_active_block_damping),
-                            beta_max=float(direct_tail_true_active_block_beta_max),
-                            emit=emit,
-                        )
-                        if true_active_block_bundle is None:
-                            direct_tail_true_active_block_error = "builder_returned_none"
-                        else:
-                            x_true_active_block_sparse = jnp.asarray(
-                                true_active_block_bundle.solve(np.asarray(sparse_pc_rhs, dtype=np.float64)),
-                                dtype=jnp.float64,
-                            )
-                            residual_vec_true_active_block = sparse_pc_rhs - jnp.asarray(
-                                _mv_true_no_count(x_true_active_block_sparse),
-                                dtype=jnp.float64,
-                            )
-                            direct_tail_true_active_block_residual_after = float(
-                                jnp.linalg.norm(residual_vec_true_active_block)
-                            )
-                            true_active_block_update = apply_sparse_pc_residual_candidate_update(
-                                SparsePCResidualCandidateUpdateContext(
-                                    label="true active block",
-                                    metadata_count_key="block_size",
-                                    metadata_count_label="block_size",
-                                    bundle=true_active_block_bundle,
-                                    candidate_x=x_true_active_block_sparse,
-                                    candidate_residual_vec=residual_vec_true_active_block,
-                                    candidate_residual_after=float(direct_tail_true_active_block_residual_after),
-                                    candidate_metadata=dict(true_active_block_bundle.metadata or {}),
-                                    factor_bundle_pc=factor_bundle_pc,
-                                    pc_factor_s=float(pc_factor_s),
-                                    setup_s=float(setup_s),
-                                    factor_preflight_residual_before=factor_preflight_residual_before,
-                                    factor_preflight_residual_after=factor_preflight_residual_after,
-                                    factor_preflight_residual_diagnostics=factor_preflight_residual_diagnostics,
-                                    factor_preflight_improvement_ratio=factor_preflight_improvement_ratio,
-                                    factor_preflight_target_ratio=factor_preflight_target_ratio,
-                                    factor_preflight_passed=factor_preflight_passed,
-                                    factor_preflight_seed_enabled=bool(factor_preflight_seed_enabled),
-                                    factor_preflight_seed_used=bool(factor_preflight_seed_used),
-                                    target=float(target),
-                                    max_target_ratio=float(factor_preflight_max_target_ratio),
-                                    residual_vec_current=residual_vec_current,
-                                    x0_sparse=x0_sparse,
-                                    diagnostics=_rhs1_active_reduced_residual_diagnostics,
-                                    layout=RHS1BlockLayout.from_operator(op),
-                                    active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                                    elapsed_s=sparse_timer.elapsed_s,
-                                    emit=emit,
-                                    require_original_improvement=False,
-                                )
-                            )
-                            direct_tail_true_active_block_metadata = true_active_block_update.metadata
-                            direct_tail_true_active_block_selected = bool(true_active_block_update.accepted)
-                            factor_bundle_pc = true_active_block_update.factor_bundle_pc
-                            pc_factor_s = float(true_active_block_update.pc_factor_s)
-                            setup_s = float(true_active_block_update.setup_s)
-                            factor_preflight_residual_after = true_active_block_update.factor_preflight_residual_after
-                            factor_preflight_residual_diagnostics = (
-                                true_active_block_update.factor_preflight_residual_diagnostics
-                            )
-                            factor_preflight_improvement_ratio = (
-                                true_active_block_update.factor_preflight_improvement_ratio
-                            )
-                            factor_preflight_target_ratio = true_active_block_update.factor_preflight_target_ratio
-                            factor_preflight_passed = true_active_block_update.factor_preflight_passed
-                            factor_preflight_seed_used = bool(true_active_block_update.factor_preflight_seed_used)
-                            residual_vec_current = true_active_block_update.residual_vec_current
-                            x0_sparse = true_active_block_update.x0_sparse
-                    except Exception as exc:  # noqa: BLE001
-                        direct_tail_true_active_block_error = f"{type(exc).__name__}: {exc}"
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: true active block failed "
-                                f"({direct_tail_true_active_block_error})",
-                            )
-
-                if (
-                    bool(direct_tail_true_active_residual_block_requested)
-                    and _direct_tail_rescue_needed_after_preflight()
-                    and factor_preflight_residual_after is not None
-                    and np.isfinite(float(factor_preflight_residual_after))
-                ):
-                    try:
-                        true_active_residual_block_bundle = (
-                            _try_build_true_operator_active_residual_block_lsq_preconditioner(
-                                true_matvec=_true_active_cached_matvec,
-                                true_matmat=_true_active_cached_matmat,
-                                factor_bundle=factor_bundle_pc,
-                                residual=np.asarray(jax.device_get(residual_vec_current), dtype=np.float64),
-                                layout=RHS1BlockLayout.from_operator(op),
-                                active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                                max_nbytes=_rhs1_additive_rescue_nbytes(
-                                    factor_bundle_pc,
-                                    direct_tail_true_active_residual_block_max_mb
-                                ),
-                                regularization=float(direct_tail_true_active_residual_block_regularization),
-                                max_block_size=int(direct_tail_true_active_residual_block_max_size),
-                                column_batch=int(direct_tail_true_active_residual_block_column_batch),
-                                drop_tol=float(direct_tail_true_active_residual_block_drop_tol),
-                                include_tail=bool(direct_tail_true_active_residual_block_include_tail),
-                                max_tail=int(direct_tail_true_active_residual_block_max_tail),
-                                kinetic_only=bool(direct_tail_true_active_residual_block_kinetic_only),
-                                damping=bool(direct_tail_true_active_residual_block_damping),
-                                beta_max=float(direct_tail_true_active_residual_block_beta_max),
-                                emit=emit,
-                            )
-                        )
-                        if true_active_residual_block_bundle is None:
-                            direct_tail_true_active_residual_block_error = "builder_returned_none"
-                        else:
-                            x_true_active_residual_block_sparse = jnp.asarray(
-                                true_active_residual_block_bundle.solve(np.asarray(sparse_pc_rhs, dtype=np.float64)),
-                                dtype=jnp.float64,
-                            )
-                            residual_vec_true_active_residual_block = sparse_pc_rhs - jnp.asarray(
-                                _mv_true_no_count(x_true_active_residual_block_sparse),
-                                dtype=jnp.float64,
-                            )
-                            direct_tail_true_active_residual_block_residual_after = float(
-                                jnp.linalg.norm(residual_vec_true_active_residual_block)
-                            )
-                            true_active_residual_block_update = apply_sparse_pc_residual_candidate_update(
-                                SparsePCResidualCandidateUpdateContext(
-                                    label="true active residual block",
-                                    metadata_count_key="block_size",
-                                    metadata_count_label="block_size",
-                                    bundle=true_active_residual_block_bundle,
-                                    candidate_x=x_true_active_residual_block_sparse,
-                                    candidate_residual_vec=residual_vec_true_active_residual_block,
-                                    candidate_residual_after=float(
-                                        direct_tail_true_active_residual_block_residual_after
-                                    ),
-                                    candidate_metadata=dict(true_active_residual_block_bundle.metadata or {}),
-                                    factor_bundle_pc=factor_bundle_pc,
-                                    pc_factor_s=float(pc_factor_s),
-                                    setup_s=float(setup_s),
-                                    factor_preflight_residual_before=factor_preflight_residual_before,
-                                    factor_preflight_residual_after=factor_preflight_residual_after,
-                                    factor_preflight_residual_diagnostics=factor_preflight_residual_diagnostics,
-                                    factor_preflight_improvement_ratio=factor_preflight_improvement_ratio,
-                                    factor_preflight_target_ratio=factor_preflight_target_ratio,
-                                    factor_preflight_passed=factor_preflight_passed,
-                                    factor_preflight_seed_enabled=bool(factor_preflight_seed_enabled),
-                                    factor_preflight_seed_used=bool(factor_preflight_seed_used),
-                                    target=float(target),
-                                    max_target_ratio=float(factor_preflight_max_target_ratio),
-                                    residual_vec_current=residual_vec_current,
-                                    x0_sparse=x0_sparse,
-                                    diagnostics=_rhs1_active_reduced_residual_diagnostics,
-                                    layout=RHS1BlockLayout.from_operator(op),
-                                    active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                                    elapsed_s=sparse_timer.elapsed_s,
-                                    emit=emit,
-                                    current_min_improvement=float(
-                                        direct_tail_true_active_residual_block_min_improvement
-                                    ),
-                                    accept_base_improvement=bool(
-                                        direct_tail_true_active_residual_block_accept_base_improvement
-                                    ),
-                                    missing_original_improves=True,
-                                )
-                            )
-                            direct_tail_true_active_residual_block_metadata = (
-                                true_active_residual_block_update.metadata
-                            )
-                            direct_tail_true_active_residual_block_base_improvement_override_used = bool(
-                                true_active_residual_block_update.base_improvement_override_used
-                            )
-                            direct_tail_true_active_residual_block_metadata[
-                                "accept_base_improvement"
-                            ] = bool(direct_tail_true_active_residual_block_accept_base_improvement)
-                            direct_tail_true_active_residual_block_metadata[
-                                "base_improvement_override_used"
-                            ] = bool(direct_tail_true_active_residual_block_base_improvement_override_used)
-                            direct_tail_true_active_residual_block_metadata[
-                                "improves_current_residual"
-                            ] = bool(true_active_residual_block_update.improves_current_residual)
-                            direct_tail_true_active_residual_block_metadata[
-                                "improves_original_residual"
-                            ] = bool(true_active_residual_block_update.improves_original_residual)
-                            direct_tail_true_active_residual_block_selected = bool(
-                                true_active_residual_block_update.accepted
-                            )
-                            factor_bundle_pc = true_active_residual_block_update.factor_bundle_pc
-                            pc_factor_s = float(true_active_residual_block_update.pc_factor_s)
-                            setup_s = float(true_active_residual_block_update.setup_s)
-                            factor_preflight_residual_after = (
-                                true_active_residual_block_update.factor_preflight_residual_after
-                            )
-                            factor_preflight_residual_diagnostics = (
-                                true_active_residual_block_update.factor_preflight_residual_diagnostics
-                            )
-                            factor_preflight_improvement_ratio = (
-                                true_active_residual_block_update.factor_preflight_improvement_ratio
-                            )
-                            factor_preflight_target_ratio = (
-                                true_active_residual_block_update.factor_preflight_target_ratio
-                            )
-                            factor_preflight_passed = true_active_residual_block_update.factor_preflight_passed
-                            factor_preflight_seed_used = bool(
-                                true_active_residual_block_update.factor_preflight_seed_used
-                            )
-                            residual_vec_current = true_active_residual_block_update.residual_vec_current
-                            x0_sparse = true_active_residual_block_update.x0_sparse
-                    except Exception as exc:  # noqa: BLE001
-                        direct_tail_true_active_residual_block_error = f"{type(exc).__name__}: {exc}"
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: true active residual block failed "
-                                f"({direct_tail_true_active_residual_block_error})",
-                            )
-
-                if (
-                    bool(direct_tail_true_window_requested)
-                    and _direct_tail_rescue_needed_after_preflight()
-                    and factor_preflight_residual_after is not None
-                    and np.isfinite(float(factor_preflight_residual_after))
-                ):
-                    try:
-                        true_window_bundle = _try_build_true_operator_residual_window_lsq_preconditioner(
-                            true_matvec=_true_active_cached_matvec,
-                            true_matmat=_true_active_cached_matmat,
-                            factor_bundle=factor_bundle_pc,
-                            residual=np.asarray(jax.device_get(residual_vec_current), dtype=np.float64),
-                            layout=RHS1BlockLayout.from_operator(op),
-                            active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                            max_windows=int(direct_tail_true_window_max_windows),
-                            x_radius=int(direct_tail_true_window_x_radius),
-                            ell_radius=int(direct_tail_true_window_ell_radius),
-                            max_nbytes=_rhs1_additive_rescue_nbytes(factor_bundle_pc, direct_tail_true_window_max_mb),
-                            regularization=float(direct_tail_true_window_regularization),
-                            max_window_size=int(direct_tail_true_window_max_size),
-                            column_batch=int(direct_tail_true_window_column_batch),
-                            drop_tol=float(direct_tail_true_window_drop_tol),
-                            include_tail=bool(direct_tail_true_window_include_tail),
-                            explicit_specs=tuple(direct_tail_true_window_specs),
-                            damping=bool(direct_tail_true_window_damping),
-                            beta_max=float(direct_tail_true_window_beta_max),
-                            emit=emit,
-                        )
-                        if true_window_bundle is None:
-                            direct_tail_true_window_error = "builder_returned_none"
-                        else:
-                            x_true_window_sparse = jnp.asarray(
-                                true_window_bundle.solve(np.asarray(sparse_pc_rhs, dtype=np.float64)),
-                                dtype=jnp.float64,
-                            )
-                            residual_vec_true_window = sparse_pc_rhs - jnp.asarray(
-                                _mv_true_no_count(x_true_window_sparse),
-                                dtype=jnp.float64,
-                            )
-                            direct_tail_true_window_residual_after = float(jnp.linalg.norm(residual_vec_true_window))
-                            true_window_update = apply_sparse_pc_residual_candidate_update(
-                                SparsePCResidualCandidateUpdateContext(
-                                    label="true residual window",
-                                    metadata_count_key="window_size",
-                                    metadata_count_label="window_size",
-                                    bundle=true_window_bundle,
-                                    candidate_x=x_true_window_sparse,
-                                    candidate_residual_vec=residual_vec_true_window,
-                                    candidate_residual_after=float(direct_tail_true_window_residual_after),
-                                    candidate_metadata=dict(true_window_bundle.metadata or {}),
-                                    factor_bundle_pc=factor_bundle_pc,
-                                    pc_factor_s=float(pc_factor_s),
-                                    setup_s=float(setup_s),
-                                    factor_preflight_residual_before=factor_preflight_residual_before,
-                                    factor_preflight_residual_after=factor_preflight_residual_after,
-                                    factor_preflight_residual_diagnostics=factor_preflight_residual_diagnostics,
-                                    factor_preflight_improvement_ratio=factor_preflight_improvement_ratio,
-                                    factor_preflight_target_ratio=factor_preflight_target_ratio,
-                                    factor_preflight_passed=factor_preflight_passed,
-                                    factor_preflight_seed_enabled=bool(factor_preflight_seed_enabled),
-                                    factor_preflight_seed_used=bool(factor_preflight_seed_used),
-                                    target=float(target),
-                                    max_target_ratio=float(factor_preflight_max_target_ratio),
-                                    residual_vec_current=residual_vec_current,
-                                    x0_sparse=x0_sparse,
-                                    diagnostics=_rhs1_active_reduced_residual_diagnostics,
-                                    layout=RHS1BlockLayout.from_operator(op),
-                                    active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                                    elapsed_s=sparse_timer.elapsed_s,
-                                    emit=emit,
-                                )
-                            )
-                            direct_tail_true_window_metadata = true_window_update.metadata
-                            direct_tail_true_window_selected = bool(true_window_update.accepted)
-                            factor_bundle_pc = true_window_update.factor_bundle_pc
-                            pc_factor_s = float(true_window_update.pc_factor_s)
-                            setup_s = float(true_window_update.setup_s)
-                            factor_preflight_residual_after = true_window_update.factor_preflight_residual_after
-                            factor_preflight_residual_diagnostics = (
-                                true_window_update.factor_preflight_residual_diagnostics
-                            )
-                            factor_preflight_improvement_ratio = (
-                                true_window_update.factor_preflight_improvement_ratio
-                            )
-                            factor_preflight_target_ratio = true_window_update.factor_preflight_target_ratio
-                            factor_preflight_passed = true_window_update.factor_preflight_passed
-                            factor_preflight_seed_used = bool(true_window_update.factor_preflight_seed_used)
-                            residual_vec_current = true_window_update.residual_vec_current
-                            x0_sparse = true_window_update.x0_sparse
-                    except Exception as exc:  # noqa: BLE001
-                        direct_tail_true_window_error = f"{type(exc).__name__}: {exc}"
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: true residual window failed "
-                                f"({direct_tail_true_window_error})",
-                            )
-                if (
-                    bool(direct_tail_residual_coarse_requested)
-                    and bool(structured_pc_ready)
-                    and _operator_bundle_pc is not None
-                    and _direct_tail_rescue_needed_after_preflight()
-                    and factor_preflight_residual_after is not None
-                    and np.isfinite(float(factor_preflight_residual_after))
-                ):
-                    try:
-                        residual_coarse_bundle = _try_build_residual_coarse_host_sparse_preconditioner(
-                            operator_bundle=_operator_bundle_pc,
-                            factor_bundle=factor_bundle_pc,
-                            residual=np.asarray(jax.device_get(residual_vec_current), dtype=np.float64),
-                            max_rank=int(direct_tail_residual_coarse_rank),
-                            max_nbytes=_rhs1_additive_rescue_nbytes(
-                                factor_bundle_pc, direct_tail_residual_coarse_max_mb
-                            ),
-                            regularization=float(direct_tail_residual_coarse_regularization),
-                            emit=emit,
-                        )
-                        if residual_coarse_bundle is None:
-                            direct_tail_residual_coarse_error = "builder_returned_none"
-                        else:
-                            x_rescue_sparse = jnp.asarray(
-                                residual_coarse_bundle.solve(np.asarray(sparse_pc_rhs, dtype=np.float64)),
-                                dtype=jnp.float64,
-                            )
-                            residual_vec_rescue = sparse_pc_rhs - jnp.asarray(
-                                _mv_true(x_rescue_sparse),
-                                dtype=jnp.float64,
-                            )
-                            direct_tail_residual_coarse_residual_after = float(jnp.linalg.norm(residual_vec_rescue))
-                            residual_coarse_update = apply_sparse_pc_residual_candidate_update(
-                                SparsePCResidualCandidateUpdateContext(
-                                    label="residual coarse",
-                                    metadata_count_key="rank",
-                                    metadata_count_label="rank",
-                                    bundle=residual_coarse_bundle,
-                                    candidate_x=x_rescue_sparse,
-                                    candidate_residual_vec=residual_vec_rescue,
-                                    candidate_residual_after=float(direct_tail_residual_coarse_residual_after),
-                                    candidate_metadata=dict(residual_coarse_bundle.metadata or {}),
-                                    factor_bundle_pc=factor_bundle_pc,
-                                    pc_factor_s=float(pc_factor_s),
-                                    setup_s=float(setup_s),
-                                    factor_preflight_residual_before=factor_preflight_residual_before,
-                                    factor_preflight_residual_after=factor_preflight_residual_after,
-                                    factor_preflight_residual_diagnostics=factor_preflight_residual_diagnostics,
-                                    factor_preflight_improvement_ratio=factor_preflight_improvement_ratio,
-                                    factor_preflight_target_ratio=factor_preflight_target_ratio,
-                                    factor_preflight_passed=factor_preflight_passed,
-                                    factor_preflight_seed_enabled=bool(factor_preflight_seed_enabled),
-                                    factor_preflight_seed_used=bool(factor_preflight_seed_used),
-                                    target=float(target),
-                                    max_target_ratio=float(factor_preflight_max_target_ratio),
-                                    residual_vec_current=residual_vec_current,
-                                    x0_sparse=x0_sparse,
-                                    diagnostics=_rhs1_active_reduced_residual_diagnostics,
-                                    layout=RHS1BlockLayout.from_operator(op),
-                                    active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                                    elapsed_s=sparse_timer.elapsed_s,
-                                    emit=emit,
-                                )
-                            )
-                            direct_tail_residual_coarse_metadata = residual_coarse_update.metadata
-                            direct_tail_residual_coarse_selected = bool(residual_coarse_update.accepted)
-                            factor_bundle_pc = residual_coarse_update.factor_bundle_pc
-                            pc_factor_s = float(residual_coarse_update.pc_factor_s)
-                            setup_s = float(residual_coarse_update.setup_s)
-                            factor_preflight_residual_after = residual_coarse_update.factor_preflight_residual_after
-                            factor_preflight_residual_diagnostics = (
-                                residual_coarse_update.factor_preflight_residual_diagnostics
-                            )
-                            factor_preflight_improvement_ratio = (
-                                residual_coarse_update.factor_preflight_improvement_ratio
-                            )
-                            factor_preflight_target_ratio = residual_coarse_update.factor_preflight_target_ratio
-                            factor_preflight_passed = residual_coarse_update.factor_preflight_passed
-                            factor_preflight_seed_used = bool(residual_coarse_update.factor_preflight_seed_used)
-                            residual_vec_current = residual_coarse_update.residual_vec_current
-                            x0_sparse = residual_coarse_update.x0_sparse
-                    except Exception as exc:  # noqa: BLE001
-                        direct_tail_residual_coarse_error = f"{type(exc).__name__}: {exc}"
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: residual coarse failed "
-                                f"({direct_tail_residual_coarse_error})",
-                            )
-                if (
-                    bool(direct_tail_residual_window_requested)
-                    and bool(structured_pc_ready)
-                    and _operator_bundle_pc is not None
-                    and _direct_tail_rescue_needed_after_preflight()
-                    and factor_preflight_residual_after is not None
-                    and np.isfinite(float(factor_preflight_residual_after))
-                ):
-                    try:
-                        residual_window_bundle = _try_build_residual_window_host_sparse_preconditioner(
-                            operator_bundle=_operator_bundle_pc,
-                            factor_bundle=factor_bundle_pc,
-                            residual=np.asarray(jax.device_get(residual_vec_current), dtype=np.float64),
-                            layout=RHS1BlockLayout.from_operator(op),
-                            active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                            max_windows=int(direct_tail_residual_window_max_windows),
-                            x_radius=int(direct_tail_residual_window_x_radius),
-                            ell_radius=int(direct_tail_residual_window_ell_radius),
-                            max_nbytes=_rhs1_additive_rescue_nbytes(
-                                factor_bundle_pc, direct_tail_residual_window_max_mb
-                            ),
-                            regularization=float(direct_tail_residual_window_regularization),
-                            coefficient_mode=str(direct_tail_residual_window_coefficient_mode),
-                            combine_mode=str(direct_tail_residual_window_combine_mode),
-                            interface_depth=int(direct_tail_residual_window_interface_depth),
-                            max_window_size=int(direct_tail_residual_window_max_size),
-                            emit=emit,
-                        )
-                        if residual_window_bundle is None:
-                            direct_tail_residual_window_error = "builder_returned_none"
-                        else:
-                            x_window_sparse = jnp.asarray(
-                                residual_window_bundle.solve(np.asarray(sparse_pc_rhs, dtype=np.float64)),
-                                dtype=jnp.float64,
-                            )
-                            residual_vec_window = sparse_pc_rhs - jnp.asarray(
-                                _mv_true(x_window_sparse),
-                                dtype=jnp.float64,
-                            )
-                            direct_tail_residual_window_residual_after = float(jnp.linalg.norm(residual_vec_window))
-                            residual_window_update = apply_sparse_pc_residual_candidate_update(
-                                SparsePCResidualCandidateUpdateContext(
-                                    label="residual window",
-                                    metadata_count_key="window_count",
-                                    metadata_count_label="windows",
-                                    bundle=residual_window_bundle,
-                                    candidate_x=x_window_sparse,
-                                    candidate_residual_vec=residual_vec_window,
-                                    candidate_residual_after=float(direct_tail_residual_window_residual_after),
-                                    candidate_metadata=dict(residual_window_bundle.metadata or {}),
-                                    factor_bundle_pc=factor_bundle_pc,
-                                    pc_factor_s=float(pc_factor_s),
-                                    setup_s=float(setup_s),
-                                    factor_preflight_residual_before=factor_preflight_residual_before,
-                                    factor_preflight_residual_after=factor_preflight_residual_after,
-                                    factor_preflight_residual_diagnostics=factor_preflight_residual_diagnostics,
-                                    factor_preflight_improvement_ratio=factor_preflight_improvement_ratio,
-                                    factor_preflight_target_ratio=factor_preflight_target_ratio,
-                                    factor_preflight_passed=factor_preflight_passed,
-                                    factor_preflight_seed_enabled=bool(factor_preflight_seed_enabled),
-                                    factor_preflight_seed_used=bool(factor_preflight_seed_used),
-                                    target=float(target),
-                                    max_target_ratio=float(factor_preflight_max_target_ratio),
-                                    residual_vec_current=residual_vec_current,
-                                    x0_sparse=x0_sparse,
-                                    diagnostics=_rhs1_active_reduced_residual_diagnostics,
-                                    layout=RHS1BlockLayout.from_operator(op),
-                                    active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                                    elapsed_s=sparse_timer.elapsed_s,
-                                    emit=emit,
-                                )
-                            )
-                            direct_tail_residual_window_metadata = residual_window_update.metadata
-                            direct_tail_residual_window_selected = bool(residual_window_update.accepted)
-                            factor_bundle_pc = residual_window_update.factor_bundle_pc
-                            pc_factor_s = float(residual_window_update.pc_factor_s)
-                            setup_s = float(residual_window_update.setup_s)
-                            factor_preflight_residual_after = residual_window_update.factor_preflight_residual_after
-                            factor_preflight_residual_diagnostics = (
-                                residual_window_update.factor_preflight_residual_diagnostics
-                            )
-                            factor_preflight_improvement_ratio = (
-                                residual_window_update.factor_preflight_improvement_ratio
-                            )
-                            factor_preflight_target_ratio = residual_window_update.factor_preflight_target_ratio
-                            factor_preflight_passed = residual_window_update.factor_preflight_passed
-                            factor_preflight_seed_used = bool(residual_window_update.factor_preflight_seed_used)
-                            residual_vec_current = residual_window_update.residual_vec_current
-                            x0_sparse = residual_window_update.x0_sparse
-                    except Exception as exc:  # noqa: BLE001
-                        direct_tail_residual_window_error = f"{type(exc).__name__}: {exc}"
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: residual window failed "
-                                f"({direct_tail_residual_window_error})",
-                            )
-                if direct_tail_true_active_column_cache is not None:
-                    direct_tail_true_active_column_cache_metadata = (
-                        direct_tail_true_active_column_cache.metadata()
-                    )
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: true active column cache "
-                            f"hits={direct_tail_true_active_column_cache_metadata['hits']} "
-                            f"misses={direct_tail_true_active_column_cache_metadata['misses']} "
-                            f"stored_columns={direct_tail_true_active_column_cache_metadata['stored_columns']} "
-                            f"stored_mb={float(direct_tail_true_active_column_cache_metadata['stored_nbytes']) / 1.0e6:.3f}",
-                        )
+                )
+                factor_bundle_pc = residual_correction_stage.factor_bundle_pc
+                pc_factor_s = float(residual_correction_stage.pc_factor_s)
+                setup_s = float(residual_correction_stage.setup_s)
+                factor_preflight_residual_after = residual_correction_stage.factor_preflight_residual_after
+                factor_preflight_residual_diagnostics = (
+                    residual_correction_stage.factor_preflight_residual_diagnostics
+                )
+                factor_preflight_improvement_ratio = residual_correction_stage.factor_preflight_improvement_ratio
+                factor_preflight_target_ratio = residual_correction_stage.factor_preflight_target_ratio
+                factor_preflight_passed = residual_correction_stage.factor_preflight_passed
+                factor_preflight_seed_used = bool(residual_correction_stage.factor_preflight_seed_used)
+                residual_vec_current = residual_correction_stage.residual_vec_current
+                x0_sparse = residual_correction_stage.x0_sparse
+                direct_tail_true_active_submatrix_selected = bool(
+                    residual_correction_stage.true_active_submatrix_selected
+                )
+                direct_tail_true_active_submatrix_residual_after = (
+                    residual_correction_stage.true_active_submatrix_residual_after
+                )
+                direct_tail_true_active_submatrix_error = residual_correction_stage.true_active_submatrix_error
+                direct_tail_true_active_submatrix_metadata = residual_correction_stage.true_active_submatrix_metadata
+                direct_tail_true_active_block_selected = bool(residual_correction_stage.true_active_block_selected)
+                direct_tail_true_active_block_residual_after = (
+                    residual_correction_stage.true_active_block_residual_after
+                )
+                direct_tail_true_active_block_error = residual_correction_stage.true_active_block_error
+                direct_tail_true_active_block_metadata = residual_correction_stage.true_active_block_metadata
+                direct_tail_true_active_residual_block_selected = bool(
+                    residual_correction_stage.true_active_residual_block_selected
+                )
+                direct_tail_true_active_residual_block_residual_after = (
+                    residual_correction_stage.true_active_residual_block_residual_after
+                )
+                direct_tail_true_active_residual_block_error = (
+                    residual_correction_stage.true_active_residual_block_error
+                )
+                direct_tail_true_active_residual_block_metadata = (
+                    residual_correction_stage.true_active_residual_block_metadata
+                )
+                direct_tail_true_active_residual_block_base_improvement_override_used = bool(
+                    residual_correction_stage.true_active_residual_block_base_improvement_override_used
+                )
+                direct_tail_true_window_selected = bool(residual_correction_stage.true_window_selected)
+                direct_tail_true_window_residual_after = residual_correction_stage.true_window_residual_after
+                direct_tail_true_window_error = residual_correction_stage.true_window_error
+                direct_tail_true_window_metadata = residual_correction_stage.true_window_metadata
+                direct_tail_residual_coarse_selected = bool(residual_correction_stage.residual_coarse_selected)
+                direct_tail_residual_coarse_residual_after = residual_correction_stage.residual_coarse_residual_after
+                direct_tail_residual_coarse_error = residual_correction_stage.residual_coarse_error
+                direct_tail_residual_coarse_metadata = residual_correction_stage.residual_coarse_metadata
+                direct_tail_residual_window_selected = bool(residual_correction_stage.residual_window_selected)
+                direct_tail_residual_window_residual_after = residual_correction_stage.residual_window_residual_after
+                direct_tail_residual_window_error = residual_correction_stage.residual_window_error
+                direct_tail_residual_window_metadata = residual_correction_stage.residual_window_metadata
+                direct_tail_true_active_column_cache_metadata = (
+                    residual_correction_stage.true_active_column_cache_metadata
+                )
             except Exception as exc:  # noqa: BLE001
                 factor_preflight_passed = False
                 factor_preflight_error = f"{type(exc).__name__}: {exc}"

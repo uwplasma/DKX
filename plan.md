@@ -5199,3 +5199,76 @@ Validation to run next:
    --tb=short`
 3. `python -m py_compile` and `ruff` on the touched docs/source code where
    applicable.
+
+## 2026-06-26 Batch A Residual-Correction Stage Extraction And Final Plan Refresh
+
+Steps taken:
+
+1. Reviewed the dirty local worktree from the interrupted consolidation pass.
+   The branch had a newly added sparse-owned residual-correction stage in
+   `problems/profile_response/sparse/handoff.py`, but
+   `problems/profile_response/solve.py` still carried the old inline
+   true-active/true-window/residual-window candidate branches.
+2. Replaced the remaining inline residual-correction family in `solve.py` with
+   one call to `run_sparse_pc_residual_correction_stage(...)`.
+3. Removed obsolete direct imports of the residual-candidate update context and
+   updater from `solve.py`; sparse candidate admission now stays inside the
+   sparse owner.
+4. Audited the current package topology and large files before revising the
+   authoritative plan:
+   `208` package Python files, `43` package-root Python files,
+   `v3_driver.py` `47` lines, `profile_response/solve.py` `7,014` lines,
+   `profile_response/sparse/handoff.py` `8,231` lines, `io.py` `4,264` lines,
+   `problems/transport_matrix` `28` files, and
+   `solvers/preconditioners` `47` files.
+5. Updated `plan_final.md` so it is the single authoritative consolidation
+   plan. The plan now explicitly prevents `sparse/handoff.py` from becoming a
+   new monolith and defines the remaining work as four coarse batches:
+   profile-response collapse, transport/output/root cleanup,
+   solver/preconditioner family consolidation, and public API/docs/tests review
+   gate.
+
+Results:
+
+- `profile_response/solve.py` decreased from `7,539` to `7,014` lines.
+- `profile_response/sparse/handoff.py` increased from `7,479` to `8,231`
+  lines, so Batch A now includes an explicit handoff-owner reduction gate.
+- Package file count stayed at `208`; package-root file count stayed at `43`.
+- The true-active, true-window, residual-coarse, and residual-window
+  correction family now shares one sparse-owned execution and admission path.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `git diff --check` passed.
+- `python -m pytest
+  tests/test_profile_response_sparse_pc.py::test_sparse_pc_residual_candidate_acceptance_base_improvement_override_sets_passed
+  tests/test_v3_sparse_pattern.py::test_true_operator_residual_window_lsq_reduces_global_residual
+  tests/test_v3_sparse_pattern.py::test_residual_window_host_preconditioner_solves_targeted_kinetic_window
+  tests/test_v3_sparse_pattern.py::test_residual_coarse_host_preconditioner_solves_adaptive_identity_residual
+  tests/test_domain_package_import_contracts.py -q --tb=short` passed with
+  `12 passed`.
+- `python -m pytest tests/test_v3_sparse_pattern.py -q --tb=short` passed
+  with `132 passed in 114.32s`.
+
+Progress:
+
+- Lane 1 structural consolidation: about `91%`.
+- Batch A profile-response collapse: about `62%`.
+- Batch B transport/output/root cleanup: about `20%`.
+- Batch C solver/preconditioner family consolidation: about `25%`.
+- Batch D public API/docs/tests/review gate: about `26%`.
+
+Next best steps:
+
+1. Finish Batch A by moving sparse finalization, progress replay, remaining
+   retry bookkeeping, final sparse payload normalization, and fallback summaries
+   out of `solve.py`.
+2. Reduce `sparse/handoff.py` by moving stable groups into existing sparse
+   owners (`direct.py`, `xblock.py`, `qi.py`, `fortran_reduced.py`,
+   `policy.py`, or `finalization.py`) rather than creating another helper file.
+3. Execute Batch B as one transport/output/root cleanup push, then Batch C as
+   one solver/preconditioner family cleanup push.
