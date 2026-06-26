@@ -424,3 +424,174 @@ def test_profile_solve_top_level_orchestrator_can_exit_through_structured_csr(mo
     assert captured["route_setup"]["sharded_axis"] == "theta"
     assert captured["route_setup"]["backend"] == "gpu"
     assert captured["route_setup"]["device_count"] == 2
+
+
+def _install_profile_solve_sparse_branch_scaffold(monkeypatch, *, solve_method: str) -> tuple[SimpleNamespace, dict]:
+    captured: dict[str, object] = {}
+    nml = SimpleNamespace(label="nml", group=lambda _name: {})
+    op = SimpleNamespace(
+        rhs_mode=1,
+        total_size=8,
+        n_xi=2,
+        fblock=SimpleNamespace(collisionless=SimpleNamespace(n_xi_for_x=jnp.asarray([2, 2]))),
+    )
+    rhs = jnp.asarray([1.0, 0.0], dtype=jnp.float64)
+
+    def fake_materialize(context):
+        captured["materialize_context"] = context
+        return SimpleNamespace(
+            op=op,
+            which_rhs=1,
+            rhs=rhs,
+            rhs_norm=jnp.asarray(1.0, dtype=jnp.float64),
+            tol=1.0e-8,
+            fp_tol=2.0e-8,
+            restart=17,
+            maxiter=23,
+            restart_env_forced=False,
+            maxiter_env_forced=False,
+            geom_scheme_hint=1,
+        )
+
+    def fake_route_setup(**kwargs):
+        captured["route_setup"] = kwargs
+        return SimpleNamespace(
+            method_flags=SimpleNamespace(
+                kind=solve_method,
+                sparse_host_like_requested=True,
+                xblock_active_dof_requested=False,
+                structured_full_csr_explicit_requested=False,
+            ),
+            use_implicit_requested=False,
+            structured_auto_allowed=False,
+            structured_sharded_multidevice=False,
+        )
+
+    monkeypatch.setattr(profile_solve, "maybe_profiler", lambda **_kwargs: None)
+    monkeypatch.setattr(profile_solve, "materialize_profile_response_linear_problem", fake_materialize)
+    monkeypatch.setattr(profile_solve, "resolve_rhs1_initial_route_setup", fake_route_setup)
+    monkeypatch.setattr(profile_solve, "try_rhs1_auto_host_solve", lambda _context: None)
+    monkeypatch.setattr(profile_solve, "resolve_rhs1_recycle_basis_setup", lambda **_kwargs: SimpleNamespace(basis=()))
+    monkeypatch.setattr(
+        profile_solve,
+        "resolve_rhs1_reduced_mode_shape_setup",
+        lambda **_kwargs: SimpleNamespace(
+            nxi_for_x=jnp.asarray([2, 2]),
+            max_l=1,
+            has_reduced_modes=False,
+        ),
+    )
+    monkeypatch.setattr(
+        profile_solve,
+        "resolve_rhs1_active_problem_setup",
+        lambda **_kwargs: SimpleNamespace(
+            tol=1.0e-8,
+            restart=19,
+            maxiter=29,
+            use_dkes=False,
+            include_xdot_sparse_pc=False,
+            include_electric_field_xi_sparse_pc=False,
+            er_abs_sparse_pc=0.0,
+            preconditioner_species=1,
+            preconditioner_x=1,
+            preconditioner_x_min_l=0,
+            preconditioner_xi=1,
+            full_preconditioner_requested=False,
+            geom_scheme=1,
+            use_pas_projection=False,
+            use_active_dof_mode=False,
+            active_idx_jnp=None,
+            full_to_active_jnp=None,
+            active_size=8,
+            messages=((1, "active setup"),),
+        ),
+    )
+    monkeypatch.setattr(
+        profile_solve,
+        "resolve_rhs1_post_active_solve_policy_setup",
+        lambda **_kwargs: SimpleNamespace(
+            restart=31,
+            maxiter=37,
+            solve_method=solve_method,
+            tokamak_pas=False,
+            pas_large_bicgstab_fastpath=False,
+            pas_large_fastpath_min=0,
+            messages=((1, "post-active setup"),),
+        ),
+    )
+    monkeypatch.setattr(profile_solve, "try_rhs1_sparse_host_safe_solve", lambda _context: None)
+    monkeypatch.setattr(profile_solve, "try_run_requested_sparse_pc_gmres_branch", lambda _context: None)
+    monkeypatch.setattr(profile_solve, "_resolve_use_implicit", lambda *, differentiable: bool(differentiable))
+    monkeypatch.setattr(profile_solve, "_matvec_shard_axis", lambda _op: None)
+    monkeypatch.setattr(profile_solve.jax, "default_backend", lambda: "cpu")
+    monkeypatch.setattr(profile_solve.jax, "device_count", lambda: 1)
+    return nml, captured
+
+
+def test_profile_solve_top_level_orchestrator_can_exit_through_sparse_minimum_norm(monkeypatch) -> None:
+    nml, captured = _install_profile_solve_sparse_branch_scaffold(monkeypatch, solve_method="sparse_minimum_norm")
+    sentinel_payload = SimpleNamespace(kind="minimum-norm-payload")
+    sentinel_result = SimpleNamespace(kind="minimum-norm-result")
+
+    def fake_minimum_norm(context):
+        captured["minimum_norm_context"] = context
+        assert context.solve_method_kind == "sparse_minimum_norm"
+        assert context.use_active_dof is False
+        assert context.tol == 1.0e-8
+        assert context.maxiter == 37
+        assert context.backend == "cpu"
+        assert context.build_operator_from_pattern is profile_solve.build_operator_from_pattern
+        return sentinel_payload
+
+    def fake_result(**kwargs):
+        captured["result_payload"] = kwargs
+        assert kwargs["payload"] is sentinel_payload
+        return sentinel_result
+
+    monkeypatch.setattr(profile_solve, "solve_explicit_sparse_minimum_norm_branch", fake_minimum_norm)
+    monkeypatch.setattr(profile_solve, "v3_linear_solve_result_from_payload", fake_result)
+
+    result = profile_solve.solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="sparse_minimum_norm",
+        differentiable=False,
+        atol=1.0e-12,
+    )
+
+    assert result is sentinel_result
+    assert "minimum_norm_context" in captured
+    assert "result_payload" in captured
+
+
+def test_profile_solve_top_level_orchestrator_can_exit_through_sparse_host_direct(monkeypatch) -> None:
+    nml, captured = _install_profile_solve_sparse_branch_scaffold(monkeypatch, solve_method="sparse_host")
+    sentinel_payload = SimpleNamespace(kind="host-direct-payload")
+    sentinel_result = SimpleNamespace(kind="host-direct-result")
+
+    def fake_sparse_direct(context):
+        captured["sparse_direct_context"] = context
+        assert context.use_active_dof is False
+        assert context.tol == 1.0e-8
+        assert context.atol == 1.0e-12
+        assert context.refine_steps >= 0
+        assert context.build_host_sparse_direct_factor_from_matvec is profile_solve._build_host_sparse_direct_factor_from_matvec
+        return sentinel_payload
+
+    def fake_result(**kwargs):
+        captured["result_payload"] = kwargs
+        assert kwargs["payload"] is sentinel_payload
+        return sentinel_result
+
+    monkeypatch.setattr(profile_solve, "solve_explicit_sparse_host_direct_branch", fake_sparse_direct)
+    monkeypatch.setattr(profile_solve, "v3_linear_solve_result_from_payload", fake_result)
+
+    result = profile_solve.solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="sparse_host",
+        differentiable=False,
+        atol=1.0e-12,
+    )
+
+    assert result is sentinel_result
+    assert "sparse_direct_context" in captured
+    assert "result_payload" in captured

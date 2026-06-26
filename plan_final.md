@@ -2715,9 +2715,11 @@ Current completion status:
   dense-backend admission, Phi1 Newton policy/linear-step branches, and
   Phi1 Newton-Krylov history-control, active-DOF, nonfinite fallback, relative
   convergence, and frozen-Jacobian branch behavior, plus frozen-reference
-  comparison semantics. Benchmark-artifact promotion policy also has fast gates
-  for default-promotion evidence and canonical runtime/memory ordering. The next
-  coverage work must focus on
+  comparison semantics. The large RHSMode=1 profile-solve orchestrator has
+  bounded routing tests for auto-host, structured-CSR, explicit sparse
+  minimum-norm, and explicit sparse-host/direct early exits. Benchmark-artifact
+  promotion policy also has fast gates for default-promotion evidence and
+  canonical runtime/memory ordering. The next coverage work must focus on
   profile/transport solve owners, sparse-pattern emission, Schur/profile
   preconditioners, profile true-operator rescue paths, output writer branches,
   and ambipolar derivative/root edge cases while keeping CI below ten minutes.
