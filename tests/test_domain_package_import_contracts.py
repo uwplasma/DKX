@@ -304,8 +304,8 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "transport_host_gmres_solve",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.handoff_policy",
-        "sfincs_jax.problems.transport_matrix.handoff_policy",
+        "sfincs_jax.problems.transport_matrix.policies",
+        "sfincs_jax.problems.transport_matrix.policies",
         "transport_polish_config_from_env",
     ),
     (
