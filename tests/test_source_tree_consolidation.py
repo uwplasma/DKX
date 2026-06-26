@@ -85,3 +85,17 @@ def test_flattened_operator_legacy_imports_resolve_to_canonical_modules() -> Non
         legacy = importlib.import_module(f"sfincs_jax.operators.profile_response.{name}")
         canonical = importlib.import_module(f"sfincs_jax.operators.profile_{name}")
         assert legacy is canonical
+
+
+def test_flattened_profile_problem_legacy_imports_resolve_to_canonical_modules() -> None:
+    assert not (PACKAGE_ROOT / "problems" / "profile_response").exists()
+
+    for name in ("solve", "policies", "residual", "dense", "solver_diagnostics"):
+        legacy = importlib.import_module(f"sfincs_jax.problems.profile_response.{name}")
+        canonical = importlib.import_module(f"sfincs_jax.problems.profile_{name}")
+        assert legacy is canonical
+
+    for name in ("direct", "finalization", "fortran_reduced", "handoff", "policy", "qi", "xblock"):
+        legacy = importlib.import_module(f"sfincs_jax.problems.profile_response.sparse.{name}")
+        canonical = importlib.import_module(f"sfincs_jax.problems.profile_sparse_{name}")
+        assert legacy is canonical
