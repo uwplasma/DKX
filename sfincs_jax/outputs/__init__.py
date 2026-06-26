@@ -15,6 +15,7 @@ from .formats import (
     write_sfincs_output_file,
 )
 from .transport import (
+    TransportStreamingOutputAccumulator,
     conversion_factors_to_from_dpsi_hat,
     transport_solver_diagnostic_arrays,
     write_transport_h5_streaming,
@@ -28,6 +29,7 @@ from .writer import (
 
 __all__ = (
     "ExportFConfig",
+    "TransportStreamingOutputAccumulator",
     "conversion_factors_to_from_dpsi_hat",
     "decode_if_bytes",
     "fortran_h5_layout",

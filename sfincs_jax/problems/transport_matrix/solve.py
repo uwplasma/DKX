@@ -38,7 +38,10 @@ from sfincs_jax.solver import (
     gmres_solve_with_history_scipy,
     recycled_initial_guess,
 )
-from sfincs_jax.problems.transport_matrix.finalize import V3TransportMatrixSolveResult
+from sfincs_jax.problems.transport_matrix.finalize import (
+    V3TransportMatrixSolveResult,
+    compute_transport_postsolve_diagnostics,
+)
 from sfincs_jax.operators.profile_response.sparse_pattern import (
     summarize_v3_sparse_pattern,
     v3_full_system_conservative_sparsity_pattern,
@@ -50,6 +53,7 @@ from sfincs_jax.problems.transport_matrix.policies import (
     transport_residual_gate_failure,
     transport_residual_gate_thresholds_from_env,
 )
+from sfincs_jax.outputs.transport import TransportStreamingOutputAccumulator
 from sfincs_jax.operators.profile_response.system import (
     V3FullSystemOperator,
     _operator_signature_cached,

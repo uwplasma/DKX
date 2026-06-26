@@ -460,7 +460,7 @@ worker-local XLA flag rewriting is checked through
 ``sfincs_jax.problems.transport_matrix.parallel.policy``. Driver aliases are
 kept only where they preserve the public debugging seam.
 ``tests/test_transport_postsolve_diagnostics.py`` covers
-``sfincs_jax.problems.transport_matrix.postsolve_diagnostics`` directly:
+``sfincs_jax.problems.transport_matrix.finalize`` directly:
 streamed accumulator reuse, output-field propagation,
 chunked fixed-operator diagnostic evaluation, and transport-matrix assembly are
 checked with monkeypatched numerical kernels so the behavior is protected without

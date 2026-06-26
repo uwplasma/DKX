@@ -310,11 +310,11 @@ Unreleased
   compatibility import aliases, not one-line wrapper bodies. This reduces
   ``v3_driver.py`` without adding new runtime layers and keeps future line-count
   reductions focused on whole solve-orchestration clusters.
-- Extracted the RHSMode=2/3 streamed transport-output accumulator into
-  ``transport_streaming_outputs.py``. The driver now delegates per-``whichRHS``
-  diagnostic collection, NTV/source handling, and final output-field assembly
-  to a focused module, with regression tests comparing streamed diagnostics
-  against the established batched transport-output path.
+- Consolidated the RHSMode=2/3 streamed transport-output accumulator into
+  ``outputs.transport``. The driver now delegates per-``whichRHS`` diagnostic
+  collection, NTV/source handling, final output-field assembly, and streaming
+  HDF5 output to the same output-domain owner, with regression tests comparing
+  streamed diagnostics against the established batched transport-output path.
 - Consolidated the RHSMode=2/3 all-RHS dense batch solve path into
   ``problems.transport_matrix.solve``. The driver now builds a transport context and
   delegates dense matrix assembly, active-DOF projection, streamed diagnostics,
@@ -427,8 +427,8 @@ Unreleased
   build, cache storage, and extra-variable Schur solve; the old
   top-level ``sfincs_jax.rhs1_pas_xblock_ilu`` alias was removed in the
   consolidation pass.
-- Extracted the RHSMode=2/3 post-solve diagnostic assembly into
-  ``transport_postsolve_diagnostics.py``. The new module owns streamed versus
+- Consolidated RHSMode=2/3 post-solve diagnostic assembly into
+  ``problems.transport_matrix.finalize``. The owner now covers streamed versus
   batched diagnostic selection, rematerialization/precompute/chunking policy,
   final flux-array assembly, optional output-field propagation, and transport
   matrix construction after the Krylov solve loop.

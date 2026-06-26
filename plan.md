@@ -25,21 +25,37 @@ are historical context, not instructions to follow.
 
 Latest execution checkpoint:
 
-- The profile-response solve sequencer and sparse handoff export layer are
-  compressed enough for the Lane 1 review gates:
-  `profile_response/solve.py` is 5,358 lines and
-  `profile_response/sparse/handoff.py` is 5,498 lines.
-- The concrete output writer now lives in `sfincs_jax.outputs.writer`, while
-  root `sfincs_jax.io` is a 49-line compatibility facade.
-- The authoritative plan was refreshed so remaining work is not another series
-  of one-helper moves: it must pay down files in transport/output/root owners,
-  compress solver/preconditioner families, freeze compatibility shims, refresh
-  docs/tests/source maps, and pass the review-ready gate.
-- Current counts after this checkpoint: 196 package Python files, 43 package
-  root files, 18 `problems/profile_response` files including `sparse`, 18
+- Lane 1 Batch 1 transport/output/root payback is complete.
+- `sfincs_jax/problems/transport_matrix/postsolve_diagnostics.py` was merged
+  into `sfincs_jax/problems/transport_matrix/finalize.py`, and the old relay
+  file was deleted.
+- `sfincs_jax/problems/transport_matrix/streaming_outputs.py` was merged into
+  `sfincs_jax/outputs/transport.py`, and the old relay file was deleted.
+- Root `data_fetch.py`, `scans.py`, and `postprocess_upstream.py` were audited
+  and kept at root because they are public-facing CLI/example/script/test APIs;
+  moving them now would require compatibility shims and would not reduce real
+  complexity.
+- Current counts after this checkpoint: 194 package Python files, 43 package
+  root files, 18 `problems/profile_response` files including `sparse`, 16
   `problems/transport_matrix` files including `parallel`, 47
   `solvers/preconditioners` files, `io.py` at 49 lines,
-  `outputs/writer.py` at 4,264 lines, and 165,430 package Python lines.
+  `outputs/writer.py` at 4,264 lines, `outputs/transport.py` at 935 lines, and
+  165,396 package Python lines.
+- Validation passed:
+  `python -m ruff check ...` for the moved transport/output modules and tests,
+  `python -m pytest tests/test_transport_postsolve_diagnostics.py
+  tests/test_transport_streaming_outputs.py tests/test_transport_output_schema.py
+  tests/test_transport_matrix_write_output_end_to_end.py
+  tests/test_output_formats.py tests/test_domain_package_import_contracts.py
+  tests/test_policy_module_docstrings.py -q --tb=short` with 31 passed,
+  `python -m pytest tests/test_api_contracts.py tests/test_cli_solve_mode.py
+  tests/test_cli_validation_io_fast_coverage.py
+  tests/test_io_output_policy_coverage.py tests/test_solver_trace_output_formats.py
+  tests/test_write_output_return_results.py -q --tb=short` with 91 passed,
+  `python -m pytest tests/test_data_fetch.py tests/test_er_scan_and_ambipolar.py
+  tests/test_scans_progress_and_recycle.py tests/test_upstream_scanplot2_smoke.py
+  -q --tb=short` with 20 passed, and
+  `python -m pytest tests/test_transport_*.py -q --tb=short` with 273 passed.
 
 ## One-Sentence Plan
 

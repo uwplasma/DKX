@@ -716,8 +716,8 @@ from sfincs_jax.problems.transport_matrix.diagnostics import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
 )
-from sfincs_jax.problems.transport_matrix.postsolve_diagnostics import compute_transport_postsolve_diagnostics
-from sfincs_jax.problems.transport_matrix.streaming_outputs import TransportStreamingOutputAccumulator
+from sfincs_jax.problems.transport_matrix.finalize import compute_transport_postsolve_diagnostics
+from sfincs_jax.outputs.transport import TransportStreamingOutputAccumulator
 from sfincs_jax.solver import (
     block_gmres_result_ready as _block_gmres_result_ready,
     gmres_result_is_finite as _gmres_result_is_finite,
