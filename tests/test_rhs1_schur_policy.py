@@ -1,12 +1,117 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import jax.numpy as jnp
+import numpy as np
+import pytest
+
+import sfincs_jax.solvers.preconditioner_schur_profile as schur_profile
 from sfincs_jax.solvers.preconditioner_schur_profile import (
+    RHS1SchurPreconditionerBuilders,
+    build_rhs1_schur_preconditioner,
     canonical_schur_base_kind,
     resolve_active_native_field_split_sparse_coarse_policy,
     resolve_active_native_stack_policy,
     resolve_active_sparse_coarse_residual_policy,
     resolve_rhs1_schur_base_kind,
 )
+
+
+def _schur_dispatch_op() -> SimpleNamespace:
+    f_shape = (1, 2, 2, 2, 2)
+    f_size = int(np.prod(f_shape))
+    fblock = SimpleNamespace(
+        f_shape=f_shape,
+        collisionless=SimpleNamespace(n_xi_for_x=np.asarray([2, 2], dtype=np.int32)),
+        exb_theta=None,
+        exb_zeta=None,
+        pas=None,
+        fp=None,
+        er_xdot=None,
+        er_xidot=None,
+    )
+    return SimpleNamespace(
+        rhs_mode=1,
+        constraint_scheme=2,
+        phi1_size=0,
+        extra_size=0,
+        f_size=f_size,
+        total_size=f_size,
+        n_species=1,
+        n_x=2,
+        n_theta=2,
+        n_zeta=2,
+        point_at_x0=False,
+        theta_weights=np.ones(2, dtype=np.float64),
+        zeta_weights=np.ones(2, dtype=np.float64),
+        d_hat=np.ones((2, 2), dtype=np.float64),
+        fblock=fblock,
+    )
+
+
+def _dispatch_builders(
+    calls: list[tuple[str, dict[str, object]]],
+    *,
+    pas_tokamak_theta_applicable: bool = True,
+    pas_tz_applicable: bool = True,
+) -> RHS1SchurPreconditionerBuilders:
+    offsets = {
+        "theta_line": 1.0,
+        "theta_dd": 2.0,
+        "species_block": 3.0,
+        "sxblock_tz": 4.0,
+        "xblock_tz": 5.0,
+        "xblock_tz_lmax": 6.0,
+        "pas_ilu": 7.0,
+        "xmg": 8.0,
+        "pas_lite": 9.0,
+        "pas_hybrid": 10.0,
+        "pas_schur": 11.0,
+        "pas_tokamak_theta": 12.0,
+        "pas_tz": 13.0,
+        "theta_zeta": 14.0,
+        "zeta_line": 15.0,
+        "zeta_dd": 16.0,
+        "block": 17.0,
+    }
+
+    def make_builder(name: str):
+        def builder(**kwargs):
+            calls.append((name, dict(kwargs)))
+            return lambda vector: jnp.asarray(vector, dtype=jnp.float64) + offsets[name]
+
+        return builder
+
+    return RHS1SchurPreconditionerBuilders(
+        pas_tokamak_theta_applicable=lambda _op: bool(pas_tokamak_theta_applicable),
+        pas_tz_applicable=lambda _op: bool(pas_tz_applicable),
+        theta_line_builder=make_builder("theta_line"),
+        theta_dd_builder=make_builder("theta_dd"),
+        species_block_builder=make_builder("species_block"),
+        sxblock_tz_builder=make_builder("sxblock_tz"),
+        xblock_tz_builder=make_builder("xblock_tz"),
+        xblock_tz_lmax_builder=make_builder("xblock_tz_lmax"),
+        pas_xblock_ilu_builder=make_builder("pas_ilu"),
+        xmg_builder=make_builder("xmg"),
+        pas_lite_builder=make_builder("pas_lite"),
+        pas_hybrid_builder=make_builder("pas_hybrid"),
+        pas_schur_builder=make_builder("pas_schur"),
+        pas_tokamak_theta_builder=make_builder("pas_tokamak_theta"),
+        pas_tz_builder=make_builder("pas_tz"),
+        theta_zeta_builder=make_builder("theta_zeta"),
+        zeta_line_builder=make_builder("zeta_line"),
+        zeta_dd_builder=make_builder("zeta_dd"),
+        block_builder=make_builder("block"),
+    )
+
+
+def _patch_schur_dispatch_cache_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        schur_profile,
+        "_rhsmode1_precond_cache_key",
+        lambda op, kind: ("schur-dispatch", kind, id(op)),
+    )
 
 
 def test_canonical_schur_base_kind_aliases() -> None:
@@ -16,6 +121,94 @@ def test_canonical_schur_base_kind_aliases() -> None:
     assert canonical_schur_base_kind("tokamak_theta") == "pas_tokamak_theta"
     assert canonical_schur_base_kind("theta_zeta") == "adi"
     assert canonical_schur_base_kind("unknown") is None
+
+
+@pytest.mark.parametrize(
+    ("env_value", "expected_builder", "expected_offset"),
+    [
+        ("theta", "theta_line", 1.0),
+        ("theta_dd", "theta_dd", 2.0),
+        ("species", "species_block", 3.0),
+        ("sx_tz", "sxblock_tz", 4.0),
+        ("xblock", "xblock_tz", 5.0),
+        ("xblock_lmax", "xblock_tz_lmax", 6.0),
+        ("block_ilu", "pas_ilu", 7.0),
+        ("xmg", "xmg", 8.0),
+        ("pas_light", "pas_lite", 9.0),
+        ("pas_line_xcoarse", "pas_hybrid", 10.0),
+        ("pas_block_schur", "pas_schur", 11.0),
+        ("pas_tokamak", "pas_tokamak_theta", 12.0),
+        ("pas_theta_zeta", "pas_tz", 13.0),
+        ("line_zeta", "zeta_line", 15.0),
+        ("zeta_dd", "zeta_dd", 16.0),
+        ("point", "block", 17.0),
+    ],
+)
+def test_build_rhs1_schur_preconditioner_dispatches_explicit_base_builders(
+    monkeypatch,
+    env_value: str,
+    expected_builder: str,
+    expected_offset: float,
+) -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+    op = _schur_dispatch_op()
+    _patch_schur_dispatch_cache_key(monkeypatch)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCHUR_BASE", env_value)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DD_BLOCK_T", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DD_BLOCK_Z", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCHUR_XBLOCK_TZ_LMAX", "bad")
+
+    preconditioner = build_rhs1_schur_preconditioner(
+        op=op,
+        builders=_dispatch_builders(calls),
+    )
+    vector = jnp.arange(op.total_size, dtype=jnp.float64)
+
+    np.testing.assert_allclose(np.asarray(preconditioner(vector)), np.asarray(vector + expected_offset))
+    assert calls[0][0] == expected_builder
+    if expected_builder in {"pas_lite", "pas_hybrid", "pas_schur"}:
+        assert calls[0][1]["safe"] is False
+    if expected_builder == "xblock_tz_lmax":
+        assert calls[0][1]["lmax"] == 0
+    if expected_builder in {"theta_dd", "zeta_dd"}:
+        assert calls[0][1]["block"] == 8
+
+
+def test_build_rhs1_schur_preconditioner_adi_composes_theta_and_zeta(monkeypatch) -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+    op = _schur_dispatch_op()
+    _patch_schur_dispatch_cache_key(monkeypatch)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCHUR_BASE", "adi")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "bad")
+    preconditioner = build_rhs1_schur_preconditioner(
+        op=op,
+        builders=_dispatch_builders(calls),
+    )
+    vector = jnp.arange(op.total_size, dtype=jnp.float64)
+
+    # Default bad-env fallback is two ADI sweeps: zeta(theta(v)) twice.
+    np.testing.assert_allclose(np.asarray(preconditioner(vector)), np.asarray(vector + 32.0))
+    assert [name for name, _kwargs in calls[:2]] == ["theta_line", "zeta_line"]
+
+
+def test_build_rhs1_schur_preconditioner_auto_can_route_theta_zeta_branch(monkeypatch) -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+    op = _schur_dispatch_op()
+    op.fblock.pas = object()
+    _patch_schur_dispatch_cache_key(monkeypatch)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCHUR_BASE", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPECIES_BLOCK_MAX", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TZ_PRECOND_MAX", "99")
+    preconditioner = build_rhs1_schur_preconditioner(
+        op=op,
+        builders=_dispatch_builders(calls, pas_tokamak_theta_applicable=False, pas_tz_applicable=False),
+        geom_scheme=99,
+    )
+    vector = jnp.arange(op.total_size, dtype=jnp.float64)
+
+    np.testing.assert_allclose(np.asarray(preconditioner(vector)), np.asarray(vector + 14.0))
+    assert calls[0][0] == "theta_zeta"
 
 
 def test_active_native_stack_policy_bounds_memory_and_solver_aliases() -> None:

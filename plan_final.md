@@ -2777,6 +2777,12 @@ Current completion status:
   manufactured-grid numerical tests that check finite output, inactive-pitch
   masking, reduced/full consistency, and exact fallback dispatch without
   requiring production RHSMode 1 solves.
+- Schur/profile preconditioner coverage was expanded with synthetic
+  RHSMode-1 dispatch tests over the explicit base aliases, DD block-size
+  fallback parsing, low-L xblock lmax parsing, PAS safe-flag forwarding, ADI
+  theta/zeta composition, and the automatic theta-zeta routing branch. The
+  test operator has no global tail, so it validates branch selection and
+  preconditioner composition without invoking expensive constraint assembly.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
