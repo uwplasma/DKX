@@ -483,7 +483,7 @@ that sits between high-level solve entry and the transport loop:
 caps, GPU worker capping, and child-worker recursion flags are checked without
 launching transport solves.
 ``tests/test_transport_active_dense_setup.py`` covers
-``sfincs_jax.problems.transport_matrix.active_dense``, the combined active-DOF
+``sfincs_jax.problems.transport_matrix.linear_system``, the combined active-DOF
 and dense-path resolver used by RHSMode=2/3: active-index compaction,
 auto-dense re-selection on the compacted system, disabled-active hints, and
 dense-preconditioner memory guard messages are tested as pure setup behavior.
@@ -601,19 +601,19 @@ ILU/LU path.
 operator-shaping contract, including the radial-x simplification and the
 preserved driver compatibility alias.
 The same file now protects the extracted
-``sfincs_jax.problems.transport_matrix.direct_pmat`` module:
+``sfincs_jax.problems.transport_matrix.linear_system`` module:
 direct reduced-``Pmat`` and exact active transport CSR emission are compared
 column-action-by-column-action against the matrix-free v3 operator for
 geometryScheme 2 and 11 reduced inputs, and the physics coarse-basis test
 checks source, constraint, and tail-Schur response columns without launching a
 production solve.
 Those same direct-active tests now exercise the wrapper into
-``sfincs_jax.problems.transport_matrix.direct_block_schur`` as well: the active block-Schur
+``sfincs_jax.problems.transport_matrix.linear_system`` as well: the active block-Schur
 preconditioner is built from the exact active operator, applies through the
 host callback path, and closes the source/constraint tail residual on the
 reduced geometryScheme 11 case.
 The Fortran-reduced LU tests also exercise
-``sfincs_jax.problems.transport_matrix.fortran_reduced_lu`` through the driver
+``sfincs_jax.problems.transport_matrix.linear_system`` through the driver
 compatibility seam: symbolic block, block-Schur, BLR
 frontal, and ND frontal factor metadata, direct reduced-``Pmat`` admission,
 symbolic rejection fallback, and exact-LU rescue are checked on reduced
