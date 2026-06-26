@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError, is_dataclass
 from pathlib import Path
 
+import jax.distributed as jax_distributed
 import pytest
 
 import sfincs_jax
@@ -109,6 +110,59 @@ def test_contracts_are_reexported_from_top_level_package() -> None:
     assert "write_output" in sfincs_jax.__all__
     assert "read_output" in sfincs_jax.__all__
     assert "run_ambipolar_brent" in sfincs_jax.__all__
+
+
+def test_distributed_runtime_env_bootstrap_is_safe_and_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sfincs_jax, "_distributed_runtime_initialized", True)
+    assert sfincs_jax.initialize_distributed_runtime_from_env() is True
+
+    monkeypatch.setattr(sfincs_jax, "_distributed_runtime_initialized", False)
+    monkeypatch.delenv("SFINCS_JAX_DISTRIBUTED", raising=False)
+    assert sfincs_jax.initialize_distributed_runtime_from_env() is False
+
+    monkeypatch.setenv("SFINCS_JAX_DISTRIBUTED", "1")
+    monkeypatch.delenv("SFINCS_JAX_COORDINATOR_ADDRESS", raising=False)
+    assert sfincs_jax.initialize_distributed_runtime_from_env() is False
+
+
+def test_distributed_runtime_env_bootstrap_parses_and_calls_jax(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_initialize(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(sfincs_jax, "_distributed_runtime_initialized", False)
+    monkeypatch.setattr(jax_distributed, "initialize", fake_initialize)
+    monkeypatch.setenv("SFINCS_JAX_DISTRIBUTED", "true")
+    monkeypatch.setenv("SFINCS_JAX_COORDINATOR_ADDRESS", "127.0.0.1")
+    monkeypatch.setenv("SFINCS_JAX_COORDINATOR_PORT", "3456")
+    monkeypatch.setenv("SFINCS_JAX_PROCESS_COUNT", "4")
+    monkeypatch.setenv("SFINCS_JAX_PROCESS_ID", "2")
+
+    assert sfincs_jax.initialize_distributed_runtime_from_env() is True
+    assert calls == [
+        {
+            "coordinator_address": "127.0.0.1",
+            "coordinator_port": 3456,
+            "num_processes": 4,
+            "process_id": 2,
+        }
+    ]
+    assert sfincs_jax.initialize_distributed_runtime_from_env() is True
+    assert len(calls) == 1
+
+
+def test_distributed_runtime_env_bootstrap_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_initialize(**_kwargs):
+        raise RuntimeError("backend unavailable")
+
+    monkeypatch.setattr(sfincs_jax, "_distributed_runtime_initialized", False)
+    monkeypatch.setattr(jax_distributed, "initialize", fake_initialize)
+    monkeypatch.setenv("SFINCS_JAX_DISTRIBUTED", "yes")
+    monkeypatch.setenv("SFINCS_JAX_COORDINATOR_ADDRESS", "127.0.0.1")
+
+    assert sfincs_jax.initialize_distributed_runtime_from_env() is False
+    assert sfincs_jax._distributed_runtime_initialized is False
 
 
 def test_public_write_output_facade_routes_solve_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
