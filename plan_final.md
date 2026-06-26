@@ -207,6 +207,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   batch state/metadata storage, and streaming-diagnostics collector guards.
   These protect production RHSMode=2/3 loop bookkeeping without running a full
   transport solve.
+- The twenty-second post-audit coverage tranche added profile-system helper
+  tests for Fortran-style scalar option lookup, `pointAtX0` index conventions,
+  `V3FullSystemOperator` PyTree roundtrips, public size properties, supported
+  constraint-scheme sizes, and unsupported constraint-scheme rejection. These
+  protect matrix-free operator metadata and JAX-transform compatibility without
+  constructing production matrices.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.

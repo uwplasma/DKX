@@ -12,7 +12,11 @@ import pytest
 import sfincs_jax.operators.profile_system as profile_system
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.operators.profile_system import (
+    V3FullSystemOperator,
     _fs_average_factor,
+    _get_bool,
+    _get_int,
+    _ix_min,
     _matvec_shard_axis,
     _operator_signature,
     _operator_signature_cached,
@@ -99,6 +103,51 @@ def test_profile_system_moment_helpers_match_analytic_formulas() -> None:
     coef = np.exp(-np.asarray(x) ** 2) / (np.pi * np.sqrt(np.pi))
     np.testing.assert_allclose(np.asarray(s1), (-np.asarray(x) ** 2 + 2.5) * coef)
     np.testing.assert_allclose(np.asarray(s2), ((2.0 / 3.0) * np.asarray(x) ** 2 - 1.0) * coef)
+
+
+def test_profile_system_scalar_helpers_and_ix_min_match_fortran_conventions() -> None:
+    group = {
+        "A": [7],
+        "EMPTY": [],
+        "FLAG_TRUE": True,
+        "FLAG_FALSE": 0,
+    }
+
+    assert _get_int(group, "a", 0) == 7
+    assert _get_int(group, "empty", 3) == 3
+    assert _get_int(group, "missing", 11) == 11
+    assert _get_bool(group, "flag_true") is True
+    assert _get_bool(group, "flag_false") is False
+    assert _get_bool(group, "missing", default=True) is True
+    assert _ix_min(point_at_x0=True) == 1
+    assert _ix_min(point_at_x0=False) == 0
+
+
+def test_full_system_operator_properties_and_pytree_roundtrip() -> None:
+    op = _tiny_phi1_scheme2_operator()
+    children, aux = op.tree_flatten()
+    rebuilt = V3FullSystemOperator.tree_unflatten(aux, children)
+
+    assert _operator_signature(rebuilt) == _operator_signature(op)
+    assert op.n_species == int(op.fblock.n_species)
+    assert op.n_x == int(op.fblock.n_x)
+    assert op.n_xi == int(op.fblock.n_xi)
+    assert op.n_theta == int(op.fblock.n_theta)
+    assert op.n_zeta == int(op.fblock.n_zeta)
+    assert op.f_size == int(op.fblock.flat_size)
+    assert op.phi1_size == op.n_theta * op.n_zeta + 1
+    assert op.total_size == op.f_size + op.phi1_size + op.extra_size
+
+    no_constraints = replace(op, include_phi1=False, constraint_scheme=0)
+    assert no_constraints.phi1_size == 0
+    assert no_constraints.extra_size == 0
+    assert no_constraints.total_size == no_constraints.f_size
+
+    for scheme in (1, 3, 4):
+        assert replace(op, constraint_scheme=scheme).extra_size == 2 * op.n_species
+
+    with pytest.raises(NotImplementedError, match="constraintScheme=99"):
+        _ = replace(op, constraint_scheme=99).extra_size
 
 
 def test_operator_signature_cache_uses_object_identity_and_static_layout() -> None:
