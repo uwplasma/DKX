@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import sfincs_jax.v3_driver as v3_driver
+import sfincs_jax.problems.profile_solve as profile_solve
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -21,7 +21,7 @@ def _doc_text() -> str:
 
 
 def test_structured_csr_solve_method_names_are_documented() -> None:
-    methods = v3_driver._STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS
+    methods = profile_solve._STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS
     docs = _doc_text()
 
     for method in ("structured_csr", "host_structured_csr"):

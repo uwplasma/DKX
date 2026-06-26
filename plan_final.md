@@ -2824,6 +2824,10 @@ Current completion status:
   the CLI, `sfincs_jax.api`, and other stable public modules rather than the
   compatibility facade. The only retained example-tree `v3_driver.py` mention is
   in validation metadata, not a runnable user entry point.
+- Two additional low-risk facade imports were removed after the guard landed:
+  structured-CSR documentation checks now use `problems.profile_solve` for the
+  canonical solve-method set, and the RHSMode=1 XMG/Er-xdot transpose-safety
+  tests now use the solver-owned x-grid/xblock preconditioner modules directly.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
