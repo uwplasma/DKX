@@ -501,6 +501,359 @@ def run_sparse_pc_gmres_once_for_retry(
         float(result.solve_s),
     )
 
+
+@dataclass(frozen=True)
+class RHS1FullSparseRetryStageContext:
+    """Inputs for the full-space sparse retry stage after primary RHSMode-1 solve."""
+
+    op: Any
+    result: Any
+    residual_vec: Any
+    rhs: jnp.ndarray
+    matvec: ArrayFn
+    target: float
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int | None
+    precondition_side: str
+    sparse_kind_use: str
+    sparse_exact_lu: bool
+    sparse_drop_tol: float
+    sparse_drop_rel: float
+    sparse_ilu_drop_tol: float
+    sparse_ilu_fill: float
+    sparse_ilu_dense_max: int
+    sparse_dense_cache_max: int
+    sparse_use_matvec: bool
+    sparse_jax_reg: float
+    sparse_jax_omega: float
+    sparse_jax_sweeps: int
+    use_implicit: bool
+    use_pas_projection: bool
+    active_size: int
+    large_cpu_sparse_rescue: bool
+    rhs1_polish_enabled: bool
+    emit: EmitFn | None
+    mark: Callable[[str], None]
+    cache_key_builder: Callable[..., object]
+    precond_dtype: Callable[[int], Any]
+    build_sparse_jax_preconditioner_from_matvec: Callable[..., ArrayFn]
+    host_sparse_direct_allowed: Callable[..., bool]
+    sparse_operator_preconditioned_rescue_allowed: Callable[..., bool]
+    build_point_preconditioner_operator: Callable[[Any], Any]
+    apply_cached_operator: Callable[[Any, jnp.ndarray], jnp.ndarray]
+    host_sparse_factor_dtype: Callable[[], Any]
+    sparse_factor_cache_key: Callable[..., object]
+    explicit_sparse_host_direct_allowed: Callable[..., bool]
+    maybe_full_sparse_pattern: Callable[..., Any]
+    build_host_sparse_direct_factor_from_matvec: Callable[..., Any]
+    build_sparse_ilu_from_matvec: Callable[..., Any]
+    host_sparse_direct_refine_steps: Callable[..., int]
+    direct_solve_with_refinement: Callable[..., Any]
+    ilu_solve_with_refinement: Callable[..., Any]
+    host_sparse_direct_polish: Callable[..., Any]
+    parse_polish_gmres_config: Callable[..., tuple[int, int]]
+    gmres_solver: Callable[..., Any]
+    solve_linear_with_residual: Callable[..., Any]
+    run_measured_linear_candidate: Callable[..., tuple[Any, Any, bool, float]]
+    accept_sparse_retry_candidate: Callable[..., tuple[Any, Any, bool]]
+    replay_state: Any
+    solver_kind: str
+    peak_rss_mb: Callable[[], float | None]
+    sparse_ilu_cache: Mapping[object, Any]
+
+
+@dataclass(frozen=True)
+class RHS1FullSparseRetryStageResult:
+    """Updated solve state after attempting the full-space sparse retry."""
+
+    result: Any
+    residual_vec: Any
+    dense_matrix_cache: np.ndarray | None
+    host_sparse_direct_used: bool
+
+
+def run_rhs1_full_sparse_retry_stage(
+    context: RHS1FullSparseRetryStageContext,
+) -> RHS1FullSparseRetryStageResult:
+    """Run the full-space sparse-JAX or host sparse retry and update replay.
+
+    This stage is intentionally driver-independent except for callbacks that
+    own cache keys, monkeypatchable builders, and replay acceptance. Keeping the
+    branch here makes the public solve entry point a phase sequencer instead of
+    a sparse-factor implementation.
+    """
+
+    result = context.result
+    residual_vec = context.residual_vec
+    dense_matrix_cache: np.ndarray | None = None
+    host_sparse_direct_used = False
+
+    if float(result.residual_norm) <= float(context.target):
+        return RHS1FullSparseRetryStageResult(
+            result=result,
+            residual_vec=residual_vec,
+            dense_matrix_cache=dense_matrix_cache,
+            host_sparse_direct_used=host_sparse_direct_used,
+        )
+
+    if str(context.sparse_kind_use) == "jax":
+        try:
+            context.mark("rhs1_sparse_precond_build_start")
+            cache_key = context.cache_key_builder(
+                context.op,
+                kind="sparse_jax",
+                active_size=int(context.op.total_size),
+                use_active_dof_mode=False,
+                use_pas_projection=bool(context.use_pas_projection),
+                drop_tol=float(context.sparse_drop_tol),
+                drop_rel=float(context.sparse_drop_rel),
+                ilu_drop_tol=float(context.sparse_ilu_drop_tol),
+                fill_factor=float(context.sparse_ilu_fill),
+            )
+            precond_sparse = build_sparse_jax_retry_preconditioner(
+                SparseJAXRetryPreconditionerBuildContext(
+                    matvec=context.matvec,
+                    n=int(context.op.total_size),
+                    dtype=context.precond_dtype(int(context.op.total_size)),
+                    cache_key=cache_key,
+                    drop_tol=float(context.sparse_drop_tol),
+                    drop_rel=float(context.sparse_drop_rel),
+                    reg=float(context.sparse_jax_reg),
+                    omega=float(context.sparse_jax_omega),
+                    sweeps=int(context.sparse_jax_sweeps),
+                    emit=context.emit,
+                    builder=context.build_sparse_jax_preconditioner_from_matvec,
+                )
+            )
+            context.mark("rhs1_sparse_precond_build_done")
+            result, residual_vec, _accepted, _elapsed = (
+                context.run_measured_linear_candidate(
+                    replay_state=context.replay_state,
+                    current_result=result,
+                    current_residual_vec=residual_vec,
+                    matvec_fn=context.matvec,
+                    b_vec=context.rhs,
+                    precond_fn=precond_sparse,
+                    tol=float(context.tol),
+                    atol=float(context.atol),
+                    restart=int(context.restart),
+                    maxiter=context.maxiter,
+                    solve_method="incremental",
+                    precond_side=context.precondition_side,
+                    solve_linear=context.solve_linear_with_residual,
+                    solver_kind=context.solver_kind,
+                    candidate_name="sparse_jax_full",
+                    baseline_name="current_full",
+                    target_value=float(context.target),
+                    peak_rss_mb=context.peak_rss_mb(),
+                    returns_residual_vec=True,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            if context.emit is not None:
+                context.emit(1, f"sparse_jax: failed ({type(exc).__name__}: {exc})")
+        return RHS1FullSparseRetryStageResult(
+            result=result,
+            residual_vec=residual_vec,
+            dense_matrix_cache=dense_matrix_cache,
+            host_sparse_direct_used=host_sparse_direct_used,
+        )
+
+    try:
+        context.mark("rhs1_sparse_precond_build_start")
+        cache_key = context.cache_key_builder(
+            context.op,
+            kind="sparse_lu" if bool(context.sparse_exact_lu) else "sparse_ilu",
+            active_size=int(context.op.total_size),
+            use_active_dof_mode=False,
+            use_pas_projection=bool(context.use_pas_projection),
+            drop_tol=float(context.sparse_drop_tol),
+            drop_rel=float(context.sparse_drop_rel),
+            ilu_drop_tol=float(context.sparse_ilu_drop_tol),
+            fill_factor=float(context.sparse_ilu_fill),
+        )
+        host_sparse_direct_wanted = context.host_sparse_direct_allowed(
+            sparse_exact_lu=bool(context.sparse_exact_lu),
+            use_implicit=bool(context.use_implicit),
+        )
+        if bool(context.large_cpu_sparse_rescue) and bool(context.sparse_exact_lu):
+            host_sparse_direct_wanted = True
+        sparse_operator_pc = context.sparse_operator_preconditioned_rescue_allowed(
+            op=context.op,
+            sparse_exact_lu=bool(context.sparse_exact_lu),
+            host_sparse_direct_wanted=bool(host_sparse_direct_wanted),
+        )
+        sparse_factor_matvec = context.matvec
+        if bool(sparse_operator_pc):
+            op_sparse_pc = context.build_point_preconditioner_operator(context.op)
+
+            def sparse_factor_matvec(v: jnp.ndarray, op_pc=op_sparse_pc) -> jnp.ndarray:
+                return context.apply_cached_operator(op_pc, v)
+
+        cache_key_for_factor = cache_key
+        if bool(sparse_operator_pc):
+            cache_key_for_factor = context.cache_key_builder(
+                context.op,
+                kind="sparse_lu_pc_point",
+                active_size=int(context.active_size),
+                use_active_dof_mode=False,
+                use_pas_projection=bool(context.use_pas_projection),
+                drop_tol=float(context.sparse_drop_tol),
+                drop_rel=float(context.sparse_drop_rel),
+                ilu_drop_tol=float(context.sparse_ilu_drop_tol),
+                fill_factor=float(context.sparse_ilu_fill),
+            )
+        sparse_factor_controls = resolve_sparse_host_or_ilu_factor_controls(
+            n=int(context.op.total_size),
+            cache_key=cache_key_for_factor,
+            sparse_exact_lu=bool(context.sparse_exact_lu),
+            use_implicit=bool(context.use_implicit),
+            force_host_sparse_direct=False,
+            sparse_ilu_dense_max=int(context.sparse_ilu_dense_max),
+            sparse_dense_cache_max=int(context.sparse_dense_cache_max),
+            host_sparse_direct_wanted=bool(host_sparse_direct_wanted),
+            host_sparse_direct_allowed=context.host_sparse_direct_allowed,
+            host_sparse_factor_dtype=context.host_sparse_factor_dtype,
+            sparse_factor_cache_key=context.sparse_factor_cache_key,
+            explicit_sparse_host_direct_allowed=context.explicit_sparse_host_direct_allowed,
+        )
+        factor_dtype = sparse_factor_controls.factor_dtype
+        explicit_sparse_pattern = (
+            context.maybe_full_sparse_pattern(context.op, emit=context.emit)
+            if sparse_factor_controls.explicit_sparse_allowed
+            else None
+        )
+        sparse_factor_build = build_sparse_host_or_ilu_factor(
+            SparseHostOrILUFactorBuildContext(
+                matvec=sparse_factor_matvec,
+                n=int(context.op.total_size),
+                dtype=context.rhs.dtype,
+                cache_key=sparse_factor_controls.cache_key_use,
+                factor_dtype=sparse_factor_controls.factor_dtype,
+                drop_tol=float(context.sparse_drop_tol),
+                drop_rel=float(context.sparse_drop_rel),
+                ilu_drop_tol=float(context.sparse_ilu_drop_tol),
+                fill_factor=float(context.sparse_ilu_fill),
+                build_dense_factors=sparse_factor_controls.build_dense_factors,
+                build_jax_factors=sparse_factor_controls.build_jax_factors,
+                store_dense=sparse_factor_controls.store_dense,
+                factorization="lu" if bool(context.sparse_exact_lu) else "ilu",
+                emit=context.emit,
+                host_sparse_direct_wanted=sparse_factor_controls.host_sparse_direct_wanted,
+                explicit_sparse_allowed=sparse_factor_controls.explicit_sparse_allowed,
+                explicit_sparse_pattern=explicit_sparse_pattern,
+                build_host_sparse_direct_factor_from_matvec=(
+                    context.build_host_sparse_direct_factor_from_matvec
+                ),
+                build_sparse_ilu_from_matvec=context.build_sparse_ilu_from_matvec,
+            )
+        )
+        dense_matrix_cache = sparse_factor_build.a_dense_cache
+        context.mark("rhs1_sparse_precond_build_done")
+
+        sparse_pc_restart = None
+        sparse_pc_maxiter = None
+        if bool(sparse_operator_pc):
+            sparse_pc_restart, sparse_pc_maxiter = context.parse_polish_gmres_config(
+                restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART",
+                maxiter_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER",
+                default_restart=max(120, int(context.restart)),
+                default_maxiter=max(800, int(context.maxiter or 400) * 2),
+            )
+
+        def run_full_implicit_sparse(precond_sparse):
+            return context.solve_linear_with_residual(
+                matvec_fn=context.matvec,
+                b_vec=context.rhs,
+                precond_fn=precond_sparse,
+                x0_vec=result.x,
+                tol_val=float(context.tol),
+                atol_val=float(context.atol),
+                restart_val=int(context.restart),
+                maxiter_val=context.maxiter,
+                solve_method_val="incremental",
+                precond_side=context.precondition_side,
+            )
+
+        sparse_retry_candidate = run_sparse_host_retry_candidate(
+            SparseHostRetryCandidateContext(
+                factor_build=sparse_factor_build,
+                host_sparse_direct=bool(host_sparse_direct_wanted),
+                host_direct_operator_pc=bool(sparse_operator_pc),
+                use_implicit=bool(context.use_implicit),
+                matvec=context.matvec,
+                rhs=context.rhs,
+                x0=result.x,
+                factor_dtype=factor_dtype,
+                refine_steps=context.host_sparse_direct_refine_steps(
+                    "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
+                    default=2,
+                ),
+                target=float(context.target),
+                tol=float(context.tol),
+                atol=float(context.atol),
+                restart=int(context.restart),
+                maxiter=context.maxiter,
+                precondition_side=context.precondition_side,
+                emit=context.emit,
+                backend_name=jax.default_backend(),
+                sparse_use_matvec=bool(context.sparse_use_matvec),
+                sparse_exact_lu=bool(context.sparse_exact_lu),
+                cache_entry=context.sparse_ilu_cache.get(cache_key),
+                require_lower_diag=True,
+                polish_enabled=bool(context.rhs1_polish_enabled),
+                parse_polish_gmres_config=context.parse_polish_gmres_config,
+                direct_solve_with_refinement=context.direct_solve_with_refinement,
+                ilu_solve_with_refinement=context.ilu_solve_with_refinement,
+                host_sparse_direct_polish=context.host_sparse_direct_polish,
+                gmres_solver=context.gmres_solver,
+                implicit_solver=run_full_implicit_sparse,
+                operator_pc_restart=sparse_pc_restart,
+                operator_pc_maxiter=sparse_pc_maxiter,
+                compute_scipy_residual_vec=True,
+            )
+        )
+        if sparse_retry_candidate.result is not None:
+            host_sparse_direct_used = (
+                host_sparse_direct_used
+                or sparse_retry_candidate.host_sparse_direct_used
+            )
+            result, residual_vec, _accepted = context.accept_sparse_retry_candidate(
+                replay_state=context.replay_state,
+                current_result=result,
+                candidate_result=sparse_retry_candidate.result,
+                current_residual_vec=residual_vec,
+                candidate_residual_vec=sparse_retry_candidate.residual_vec,
+                matvec_fn=sparse_retry_candidate.matvec,
+                b_vec=context.rhs,
+                precond_fn=sparse_retry_candidate.preconditioner,
+                restart=int(context.restart),
+                maxiter=context.maxiter,
+                precond_side=context.precondition_side,
+                solver_kind=context.solver_kind,
+                candidate_family="sparse",
+                scope="full",
+                target_value=float(context.target),
+                solve_s=sparse_retry_candidate.solve_s,
+                peak_rss_mb=context.peak_rss_mb(),
+            )
+    except Exception as exc:  # noqa: BLE001
+        if context.emit is not None:
+            context.emit(
+                1,
+                f"{'sparse_lu' if bool(context.sparse_exact_lu) else 'sparse_ilu'}: "
+                f"failed ({type(exc).__name__}: {exc})",
+            )
+
+    return RHS1FullSparseRetryStageResult(
+        result=result,
+        residual_vec=residual_vec,
+        dense_matrix_cache=dense_matrix_cache,
+        host_sparse_direct_used=host_sparse_direct_used,
+    )
+
 ArrayFn = Callable[[jnp.ndarray], jnp.ndarray]
 EmitFn = Callable[[int, str], None]
 

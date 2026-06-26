@@ -3689,3 +3689,66 @@ Next best steps:
    QI experiment-history files into role-based owners.
 3. Keep running focused owner tests plus import-contract and Sphinx checks after
    each large consolidation batch.
+
+## 2026-06-25 Lane 1 Pass 1 Full-Space Sparse Retry Extraction
+
+Steps taken:
+
+1. Moved the full-space sparse retry stage from
+   `sfincs_jax/problems/profile_response/solve.py` into the existing sparse
+   handoff owner, `sfincs_jax/problems/profile_response/sparse/handoff.py`.
+2. Added `RHS1FullSparseRetryStageContext`,
+   `RHS1FullSparseRetryStageResult`, and
+   `run_rhs1_full_sparse_retry_stage` so the solve entry point now delegates
+   sparse-JAX retry, host LU/ILU retry, direct-host polish, replay acceptance,
+   and failure reporting as one coherent phase.
+3. Added a focused unit test proving the extracted sparse-JAX full retry path
+   still uses the measured-candidate replay gate with the expected
+   full-scope labels.
+4. Updated `plan_final.md` with current counts and the revised Lane 1 status.
+
+Results:
+
+- `profile_response/solve.py` decreased from `8,729` lines to `8,558` lines.
+- `profile_response/sparse/handoff.py` increased from `4,623` lines to
+  `4,976` lines because it now owns the explicit sparse retry context and
+  execution phase.
+- Package file count stayed at `209`; package-root file count stayed at `52`.
+- Package lines are now `163,724`; this checkpoint improves behavior
+  ownership but does not yet satisfy the final total-line reduction gate.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py
+  tests/test_profile_response_sparse_pc.py` passed.
+- `python -m pytest
+  tests/test_profile_response_sparse_pc.py::test_rhs1_full_sparse_retry_stage_uses_measured_sparse_jax_path
+  -q --tb=short` passed with `1 passed`.
+- `python -m pytest tests/test_profile_response_sparse_pc.py
+  tests/test_rhs1_handoff.py -q --tb=short` passed with `393 passed`.
+- `python -m pytest tests/test_domain_package_import_contracts.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py -q --tb=short` passed with
+  `45 passed`.
+- `git diff --check` passed.
+
+Completion:
+
+- Lane 1 Pass 1: about `25%`; the full-space sparse retry stage is extracted,
+  but the larger generic sparse-PC/factor-preflight branch and result/progress
+  normalization still live in `solve.py`.
+- Lane 1 overall: about `77%`.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Extract the reduced sparse retry branch using the same sparse handoff stage
+   pattern, then collapse duplicated full/reduced sparse retry context fields
+   if doing so reduces code rather than adding abstraction.
+2. Move result payload assembly, progress replay, and sparse fallback summaries
+   from `profile_response/solve.py` into `diagnostics.py`,
+   `solver_diagnostics.py`, or existing sparse owners.
+3. Continue Pass 3 after the next Pass 1 checkpoint by collapsing
+   symbolic-sparse and QI experiment-history files into role-based owners.

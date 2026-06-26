@@ -82,6 +82,7 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     SparseHostDirectFallbackPayload,
     ExplicitSparseMinimumNormBranchContext,
     ExplicitSparseHostDirectBranchContext,
+    RHS1FullSparseRetryStageContext,
     SparseHostOrILUFactorBuildContext,
     SparseHostOrILUFactorControls,
     SparseILUPreconditionerBuildContext,
@@ -104,6 +105,7 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     SparseMinimumNormPayload,
     SparseMinimumNormPolicy,
     SparsePCGMRESResult,
+    run_rhs1_full_sparse_retry_stage,
     XBlockAugmentedKrylovBasisContext,
     XBlockAugmentedKrylovBasisResult,
     XBlockAugmentedKrylovStageContext,
@@ -12588,3 +12590,115 @@ def test_xblock_sparse_pc_final_payload_from_driver_state_sets_gate_and_expands(
         "post_minres_alphas": (0.5,),
     }
     assert payload.metadata == {"core": 1, "correction": 2}
+
+
+def test_rhs1_full_sparse_retry_stage_uses_measured_sparse_jax_path() -> None:
+    calls: dict[str, object] = {}
+    current = GMRESSolveResult(x=jnp.asarray([1.0, 0.0]), residual_norm=4.0)
+    candidate = GMRESSolveResult(x=jnp.asarray([0.5, 0.0]), residual_norm=0.25)
+    residual_vec = jnp.asarray([4.0, 0.0])
+    candidate_residual_vec = jnp.asarray([0.25, 0.0])
+
+    def builder(**kwargs):
+        calls["builder_kind"] = kwargs["cache_key"]
+        calls["builder_n"] = kwargs["n"]
+        return lambda x: x
+
+    def solve_linear(**kwargs):
+        calls["solve_method"] = kwargs["solve_method_val"]
+        calls["x0"] = np.asarray(kwargs["x0_vec"])
+        return candidate, candidate_residual_vec
+
+    def measured_candidate(**kwargs):
+        calls["candidate_name"] = kwargs["candidate_name"]
+        calls["baseline_name"] = kwargs["baseline_name"]
+        calls["returns_residual_vec"] = kwargs["returns_residual_vec"]
+        result, residual = kwargs["solve_linear"](
+            matvec_fn=kwargs["matvec_fn"],
+            b_vec=kwargs["b_vec"],
+            precond_fn=kwargs["precond_fn"],
+            x0_vec=current.x,
+            tol_val=kwargs["tol"],
+            atol_val=kwargs["atol"],
+            restart_val=kwargs["restart"],
+            maxiter_val=kwargs["maxiter"],
+            solve_method_val=kwargs["solve_method"],
+            precond_side=kwargs["precond_side"],
+        )
+        return result, residual, True, 0.01
+
+    stage = run_rhs1_full_sparse_retry_stage(
+        RHS1FullSparseRetryStageContext(
+            op=SimpleNamespace(total_size=2),
+            result=current,
+            residual_vec=residual_vec,
+            rhs=jnp.asarray([1.0, 0.0]),
+            matvec=lambda x: x,
+            target=1.0,
+            tol=1e-8,
+            atol=0.0,
+            restart=5,
+            maxiter=10,
+            precondition_side="left",
+            sparse_kind_use="jax",
+            sparse_exact_lu=False,
+            sparse_drop_tol=0.0,
+            sparse_drop_rel=0.0,
+            sparse_ilu_drop_tol=0.0,
+            sparse_ilu_fill=1.0,
+            sparse_ilu_dense_max=0,
+            sparse_dense_cache_max=0,
+            sparse_use_matvec=False,
+            sparse_jax_reg=1e-8,
+            sparse_jax_omega=0.8,
+            sparse_jax_sweeps=2,
+            use_implicit=False,
+            use_pas_projection=False,
+            active_size=2,
+            large_cpu_sparse_rescue=False,
+            rhs1_polish_enabled=False,
+            emit=None,
+            mark=lambda label: calls.setdefault("marks", []).append(label),
+            cache_key_builder=lambda *args, **kwargs: kwargs["kind"],
+            precond_dtype=lambda _n: jnp.float64,
+            build_sparse_jax_preconditioner_from_matvec=builder,
+            host_sparse_direct_allowed=lambda **_kwargs: False,
+            sparse_operator_preconditioned_rescue_allowed=lambda **_kwargs: False,
+            build_point_preconditioner_operator=lambda _op: None,
+            apply_cached_operator=lambda _op, x: x,
+            host_sparse_factor_dtype=lambda: np.float64,
+            sparse_factor_cache_key=lambda **_kwargs: "unused",
+            explicit_sparse_host_direct_allowed=lambda **_kwargs: False,
+            maybe_full_sparse_pattern=lambda *_args, **_kwargs: None,
+            build_host_sparse_direct_factor_from_matvec=lambda **_kwargs: None,
+            build_sparse_ilu_from_matvec=lambda **_kwargs: None,
+            host_sparse_direct_refine_steps=lambda *_args, **_kwargs: 0,
+            direct_solve_with_refinement=lambda **_kwargs: None,
+            ilu_solve_with_refinement=lambda **_kwargs: None,
+            host_sparse_direct_polish=lambda **_kwargs: None,
+            parse_polish_gmres_config=lambda **_kwargs: (5, 10),
+            gmres_solver=lambda **_kwargs: None,
+            solve_linear_with_residual=solve_linear,
+            run_measured_linear_candidate=measured_candidate,
+            accept_sparse_retry_candidate=lambda **_kwargs: (current, residual_vec, False),
+            replay_state=object(),
+            solver_kind="gmres",
+            peak_rss_mb=lambda: 12.5,
+            sparse_ilu_cache={},
+        )
+    )
+
+    assert stage.result is candidate
+    assert stage.residual_vec is candidate_residual_vec
+    assert stage.dense_matrix_cache is None
+    assert not stage.host_sparse_direct_used
+    np.testing.assert_allclose(calls.pop("x0"), np.asarray([1.0, 0.0]))
+    assert calls == {
+        "marks": ["rhs1_sparse_precond_build_start", "rhs1_sparse_precond_build_done"],
+        "builder_kind": "sparse_jax",
+        "builder_n": 2,
+        "candidate_name": "sparse_jax_full",
+        "baseline_name": "current_full",
+        "returns_residual_vec": True,
+        "solve_method": "incremental",
+    }
