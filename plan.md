@@ -5272,3 +5272,71 @@ Next best steps:
    `policy.py`, or `finalization.py`) rather than creating another helper file.
 3. Execute Batch B as one transport/output/root cleanup push, then Batch C as
    one solver/preconditioner family cleanup push.
+
+## 2026-06-26 Batch A Sparse GMRES Finalization Owner Move
+
+Steps taken:
+
+1. Moved sparse-PC GMRES attempt helpers, stagnation/progress callback logic,
+   typed finalization state builders, finalization bundle construction, and
+   final GMRES payload construction from
+   `sfincs_jax/problems/profile_response/sparse/handoff.py` to the existing
+   `sfincs_jax/problems/profile_response/sparse/finalization.py` owner.
+2. Kept the legacy sparse handoff import surface stable by importing and
+   re-exporting the moved names from the compatibility layer.
+3. Updated sparse-PC import-contract tests so the canonical owner is now
+   `sparse.finalization`, including the monkeypatch seam for
+   `finalize_sparse_pc_gmres_with_dtype_retry`.
+4. Re-audited the package topology and refreshed `plan_final.md` as the single
+   controlling consolidation plan with current counts and the final four-batch
+   sequence.
+
+Results:
+
+- `profile_response/sparse/handoff.py` decreased from `8,231` to `7,577`
+  lines.
+- `profile_response/sparse/finalization.py` increased to `1,551` lines and is
+  now the documented sparse-PC final-payload owner.
+- `profile_response/solve.py` remains `7,014` lines.
+- Package file count remains `208`; package-root file count remains `43`;
+  package source lines are `165,674`.
+- Batch A now has one less blocker: sparse GMRES/finalization ownership is
+  complete, while progress replay, fallback summaries, remaining retry
+  bookkeeping, and `sparse/handoff.py` owner reduction remain open.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/sparse/finalization.py sfincs_jax/problems/profile_response/sparse/handoff.py sfincs_jax/problems/profile_response/solve.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/sparse/finalization.py sfincs_jax/problems/profile_response/sparse/handoff.py sfincs_jax/problems/profile_response/solve.py tests/test_profile_response_sparse_pc.py` passed.
+- `python -m pytest tests/test_profile_response_sparse_pc.py -q --tb=short`
+  passed with `329 passed in 3.09s`.
+- `python -m pytest
+  tests/test_profile_response_sparse_pc.py::test_sparse_finalization_module_reexports_match_compat_layer
+  tests/test_profile_response_sparse_pc.py::test_sparse_krylov_helpers_live_on_sparse_pc_owner
+  tests/test_profile_response_sparse_pc.py::test_sparse_pc_gmres_finalization_state_from_driver_scope_filters_scope
+  tests/test_profile_response_sparse_pc.py::test_sparse_pc_gmres_finalization_bundle_from_driver_scope_groups_locals
+  tests/test_profile_response_sparse_pc.py::test_finalize_sparse_pc_gmres_bundle_builds_typed_state
+  tests/test_profile_response_sparse_pc.py::test_finalize_sparse_pc_gmres_with_dtype_retry_uses_explicit_finalization_contexts
+  tests/test_domain_package_import_contracts.py -q --tb=short` passed with
+  `14 passed`.
+- `git diff --check` passed.
+
+Progress:
+
+- Lane 1 structural consolidation: about `92%`.
+- Batch A profile-response collapse: about `66%`.
+- Batch B transport/output/root cleanup: about `20%`.
+- Batch C solver/preconditioner family consolidation: about `25%`.
+- Batch D public API/docs/tests/review gate: about `27%`.
+
+Next best steps:
+
+1. Finish Batch A as one larger owner move: progress replay, remaining retry
+   bookkeeping, final fallback summaries, and solver-trace result normalization
+   go to existing sparse/dense/diagnostic owners.
+2. Reduce `sparse/handoff.py` by moving direct-tail, x-block, QI, policy, and
+   result-relay groups into existing sparse owners; do not create new helper
+   files.
+3. Then execute Batch B transport/output/root cleanup and Batch C
+   solver/preconditioner family consolidation before the Batch D docs/API/test
+   review gate.

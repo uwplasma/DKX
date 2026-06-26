@@ -6,13 +6,30 @@ from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ..diagnostics import sparse_pc_gmres_result_metadata
+from ..diagnostics import (
+    SparsePCFactorPreflightMetadataContext,
+    SparsePCGMRESStaticMetadataContext,
+    SparsePCPatternMetadataContext,
+    sparse_pc_direct_tail_result_metadata,
+    sparse_pc_factor_preflight_result_metadata,
+    sparse_pc_factor_preflight_result_metadata_from_context,
+    sparse_pc_gmres_result_metadata,
+    sparse_pc_gmres_static_metadata,
+    sparse_pc_gmres_static_metadata_from_context,
+    sparse_pc_pattern_result_metadata,
+    sparse_pc_pattern_result_metadata_from_context,
+)
 from ..residual import (
     residual_converged as profile_residual_converged,
     residual_target as profile_residual_target,
+)
+from .direct import (
+    SparsePCDirectTailFinalMetadataContext,
+    sparse_pc_direct_tail_final_metadata,
 )
 
 
@@ -29,6 +46,154 @@ class SparsePCGMRESResult:
     preconditioned_residual_norm: float
     history: tuple[float, ...]
     solve_s: float
+
+
+@dataclass(frozen=True)
+class SparsePCGMRESContext:
+    """Solve-local dependencies for one sparse-PC GMRES attempt."""
+
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    preconditioner: ArrayFn
+    emit: EmitFn | None
+    elapsed_s: Callable[[], float]
+    pc_form: str
+    restart: int
+    tol: float
+    atol: float
+    precondition_side: str
+    factor_dtype: np.dtype
+    progress_every: int
+    stagnation_abort: bool
+    stagnation_min_iter: int
+    stagnation_window: int
+    stagnation_rel_improvement: float
+    explicit_left_solver: Callable[..., tuple[np.ndarray, float, float, Sequence[float]]]
+    gmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+
+
+def run_sparse_pc_gmres_once(
+    *,
+    context: SparsePCGMRESContext,
+    x0: jnp.ndarray | np.ndarray | None,
+    maxiter: int,
+) -> SparsePCGMRESResult:
+    """Run one host sparse-PC GMRES attempt and recompute the true residual."""
+
+    if context.emit is not None:
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: sparse_pc_gmres solve start "
+            f"form={context.pc_form} restart={int(context.restart)} maxiter={int(maxiter)} "
+            f"precondition_side={context.precondition_side} "
+            f"factor_dtype={np.dtype(context.factor_dtype).name}",
+        )
+
+    solve_start_s = float(context.elapsed_s())
+    stagnation_best = float("inf")
+    stagnation_best_iter = 0
+
+    def _progress_callback(iteration: int, residual_norm: float) -> None:
+        nonlocal stagnation_best, stagnation_best_iter
+        iteration_i = int(iteration)
+        residual_f = float(residual_norm)
+        if np.isfinite(residual_f) and (
+            not np.isfinite(stagnation_best)
+            or residual_f < stagnation_best * (1.0 - float(context.stagnation_rel_improvement))
+        ):
+            stagnation_best = float(residual_f)
+            stagnation_best_iter = int(iteration_i)
+        if (
+            bool(context.stagnation_abort)
+            and iteration_i >= int(context.stagnation_min_iter)
+            and iteration_i - int(stagnation_best_iter) >= int(context.stagnation_window)
+        ):
+            raise RuntimeError(
+                "sparse_pc_gmres stagnation detected: "
+                f"iters={iteration_i} best_iter={int(stagnation_best_iter)} "
+                f"best_ksp_residual={float(stagnation_best):.6e} "
+                f"current_ksp_residual={residual_f:.6e} "
+                f"window={int(context.stagnation_window)} "
+                f"rel_improvement={float(context.stagnation_rel_improvement):.3e}"
+            )
+        if context.emit is None or int(context.progress_every) <= 0:
+            return
+        if iteration_i % int(context.progress_every) != 0:
+            return
+        context.emit(
+            1,
+            "solve_v3_full_system_linear_gmres: sparse_pc_gmres "
+            f"iters={iteration_i} ksp_residual={residual_f:.6e} "
+            f"elapsed_s={float(context.elapsed_s()):.3f}",
+        )
+
+    preconditioned_residual_norm = float("nan")
+    if context.pc_form in {"explicit_left", "petsc_left"}:
+        x_np, residual_norm, preconditioned_residual_norm, history = context.explicit_left_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=int(context.restart),
+            maxiter=int(maxiter),
+            progress_callback=_progress_callback,
+        )
+    else:
+        x_np, residual_norm, history = context.gmres_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner if context.precondition_side != "none" else None,
+            x0=x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=int(context.restart),
+            maxiter=int(maxiter),
+            precondition_side=context.precondition_side,
+            progress_callback=_progress_callback,
+        )
+
+    solve_s = float(context.elapsed_s()) - solve_start_s
+    try:
+        residual_true = np.asarray(context.rhs, dtype=np.float64) - np.asarray(
+            jax.device_get(context.matvec(jnp.asarray(x_np, dtype=jnp.float64))),
+            dtype=np.float64,
+        )
+        residual_norm = float(np.linalg.norm(residual_true))
+    except Exception:
+        residual_norm = float(residual_norm)
+
+    return SparsePCGMRESResult(
+        x=np.asarray(x_np, dtype=np.float64),
+        residual_norm=float(residual_norm),
+        preconditioned_residual_norm=float(preconditioned_residual_norm),
+        history=tuple(float(v) for v in (history or ())),
+        solve_s=float(solve_s),
+    )
+
+
+def run_sparse_pc_gmres_once_for_retry(
+    *,
+    context: SparsePCGMRESContext,
+    x0: jnp.ndarray | np.ndarray | None,
+    maxiter: int,
+) -> tuple[np.ndarray, float, float, tuple[float, ...], float]:
+    """Run sparse-PC GMRES and return the tuple contract used by dtype retry."""
+
+    result = run_sparse_pc_gmres_once(
+        context=context,
+        x0=x0,
+        maxiter=int(maxiter),
+    )
+    return (
+        result.x,
+        float(result.residual_norm),
+        float(result.preconditioned_residual_norm),
+        tuple(float(value) for value in result.history),
+        float(result.solve_s),
+    )
+
 
 @dataclass(frozen=True)
 class SparsePCGMRESFinalPayload:
@@ -104,6 +269,390 @@ class SparsePCGMRESFinalResultContext:
     factor_bundle: Any
     pc_factor_s: float
     setup_s: float
+
+
+@dataclass(frozen=True)
+class SparsePCGMRESFinalizationBundleContext:
+    """Typed sparse-PC finalization inputs that the driver passes as one bundle."""
+
+    atol: object
+    mv_count: object
+    rhs_norm: object
+    target: object
+    tol: object
+    direct_tail: SparsePCDirectTailFinalMetadataContext
+    factor_preflight: SparsePCFactorPreflightMetadataContext
+    pattern: SparsePCPatternMetadataContext
+    static: SparsePCGMRESStaticMetadataContext
+    result: SparsePCGMRESFinalResultContext
+    post_minres: SparsePCPostMinresFinalizationContext
+    dtype_retry: SparsePCFactorDtypeRetryFinalizationContext
+
+
+def _unique_state_keys(*groups: Sequence[str]) -> tuple[str, ...]:
+    """Return state keys in first-seen order without duplicate diagnostics."""
+
+    keys: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for key in group:
+            if key in seen:
+                continue
+            seen.add(key)
+            keys.append(key)
+    return tuple(keys)
+
+
+_SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS = (
+    "atol",
+    "mv_count",
+    "rhs_norm",
+    "target",
+    "tol",
+)
+
+_SPARSE_PC_GMRES_FINALIZATION_STATIC_METADATA_SCOPE_KEYS = (
+    "fortran_reduced_sparse_pc",
+    "fortran_reduced_sparse_pc_backend",
+    "fortran_reduced_sparse_pc_backend_reason",
+    "fortran_reduced_xblock_min_size",
+    "op",
+    "pc_maxiter",
+    "pc_restart",
+    "pc_shift",
+    "preconditioner_species",
+    "preconditioner_x",
+    "preconditioner_x_min_l",
+    "preconditioner_xi",
+    "sparse_pc_default_factor_kind",
+    "sparse_pc_default_ilu_drop_tol",
+    "sparse_pc_default_ilu_fill_factor",
+    "sparse_pc_default_pattern_color_batch",
+    "sparse_pc_default_permc_spec",
+    "sparse_pc_factor_dtype_initial",
+    "sparse_pc_factorization",
+    "sparse_pc_first_attempt_maxiter",
+    "sparse_pc_fp_dense_velocity_block",
+    "sparse_pc_linear_size",
+    "sparse_pc_permc_spec",
+    "sparse_pc_preconditioner_operator",
+    "sparse_pc_use_active_dof",
+)
+
+_SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS = _unique_state_keys(
+    _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS,
+)
+
+_SPARSE_PC_GMRES_FINALIZATION_SCOPE_KEYS = _unique_state_keys(
+    _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS,
+    _SPARSE_PC_GMRES_FINALIZATION_STATIC_METADATA_SCOPE_KEYS,
+)
+
+
+def sparse_pc_gmres_finalization_driver_state_keys() -> tuple[str, ...]:
+    """Return finalizer keys copied from driver scope before metadata injection."""
+
+    return _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS
+
+
+def sparse_pc_gmres_finalization_driver_scope_keys() -> tuple[str, ...]:
+    """Return raw driver-scope keys needed to build sparse-PC finalization state."""
+
+    return _SPARSE_PC_GMRES_FINALIZATION_SCOPE_KEYS
+
+
+@dataclass(frozen=True)
+class SparsePCGMRESFinalizationStateContext:
+    """Explicit sparse-PC final metadata state inputs."""
+
+    atol: object
+    mv_count: object
+    rhs_norm: object
+    target: object
+    tol: object
+    sparse_pc_direct_tail_metadata: object
+    sparse_pc_factor_preflight_metadata: object
+    sparse_pc_pattern_metadata: object
+    sparse_pc_static_metadata: object
+
+
+def sparse_pc_gmres_finalization_state_from_context(
+    context: SparsePCGMRESFinalizationStateContext,
+) -> dict[str, object]:
+    """Build sparse-PC finalization metadata state from typed inputs."""
+
+    return {
+        "atol": context.atol,
+        "mv_count": context.mv_count,
+        "rhs_norm": context.rhs_norm,
+        "target": context.target,
+        "tol": context.tol,
+        "sparse_pc_direct_tail_metadata": context.sparse_pc_direct_tail_metadata,
+        "sparse_pc_factor_preflight_metadata": context.sparse_pc_factor_preflight_metadata,
+        "sparse_pc_pattern_metadata": context.sparse_pc_pattern_metadata,
+        "sparse_pc_static_metadata": context.sparse_pc_static_metadata,
+    }
+
+
+def sparse_pc_gmres_finalization_state_from_driver_scope(
+    scope: Mapping[str, object],
+) -> dict[str, object]:
+    """Copy only sparse-PC finalizer state and precompute direct-tail metadata."""
+
+    required_keys = _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS
+    if "sparse_pc_static_metadata" not in scope:
+        required_keys = _unique_state_keys(
+            required_keys,
+            _SPARSE_PC_GMRES_FINALIZATION_STATIC_METADATA_SCOPE_KEYS,
+        )
+    missing = tuple(key for key in required_keys if key not in scope)
+    if missing:
+        joined = ", ".join(missing[:8])
+        suffix = "" if len(missing) <= 8 else f", ... ({len(missing)} total)"
+        raise KeyError(f"sparse-PC GMRES finalization state missing: {joined}{suffix}")
+    state = {key: scope[key] for key in _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS}
+    if "sparse_pc_direct_tail_metadata" in scope:
+        direct_tail_metadata = scope["sparse_pc_direct_tail_metadata"]
+    else:
+        direct_tail_metadata = sparse_pc_direct_tail_result_metadata(scope)
+    if "sparse_pc_factor_preflight_metadata" in scope:
+        factor_preflight_metadata = scope["sparse_pc_factor_preflight_metadata"]
+    else:
+        factor_preflight_metadata = sparse_pc_factor_preflight_result_metadata(scope)
+    if "sparse_pc_pattern_metadata" in scope:
+        pattern_metadata = scope["sparse_pc_pattern_metadata"]
+    else:
+        pattern_metadata = sparse_pc_pattern_result_metadata(scope)
+    if "sparse_pc_static_metadata" in scope:
+        static_metadata = scope["sparse_pc_static_metadata"]
+    else:
+        static_metadata = sparse_pc_gmres_static_metadata(scope)
+    return sparse_pc_gmres_finalization_state_from_context(
+        SparsePCGMRESFinalizationStateContext(
+            atol=state["atol"],
+            mv_count=state["mv_count"],
+            rhs_norm=state["rhs_norm"],
+            target=state["target"],
+            tol=state["tol"],
+            sparse_pc_direct_tail_metadata=direct_tail_metadata,
+            sparse_pc_factor_preflight_metadata=factor_preflight_metadata,
+            sparse_pc_pattern_metadata=pattern_metadata,
+            sparse_pc_static_metadata=static_metadata,
+        )
+    )
+
+
+def sparse_pc_gmres_finalization_bundle_from_driver_scope(
+    scope: Mapping[str, object],
+    *,
+    result: SparsePCGMRESFinalResultContext,
+    post_minres: SparsePCPostMinresFinalizationContext,
+    dtype_retry: SparsePCFactorDtypeRetryFinalizationContext,
+) -> SparsePCGMRESFinalizationBundleContext:
+    """Build the typed sparse-PC finalization bundle from driver-local names."""
+
+    return SparsePCGMRESFinalizationBundleContext(
+        atol=scope["atol"],
+        mv_count=scope["mv_count"],
+        rhs_norm=scope["rhs_norm"],
+        target=scope["target"],
+        tol=scope["tol"],
+        direct_tail=SparsePCDirectTailFinalMetadataContext(
+            structured_pc_preflight_required=bool(
+                scope["structured_pc_preflight_required"]
+            ),
+            structured_pc_preflight_required_min_size=int(
+                scope["structured_pc_preflight_required_min_size"]
+            ),
+            materialization=scope["direct_tail_materialization"],
+            structured_admission=scope["direct_tail_structured_admission"],
+            residual_policy=scope["direct_tail_residual_rescue_policy"],
+            true_active_policy=scope["direct_tail_true_active_rescue_policy"],
+            coupled_coarse_policy=scope["direct_tail_true_coupled_coarse_policy"],
+            true_window_specs=tuple(
+                tuple(int(value) for value in spec)
+                for spec in scope["direct_tail_true_window_specs"]
+            ),
+            true_active_block_species_count=scope[
+                "direct_tail_true_active_block_species_count"
+            ],
+            structured_max_nbytes=scope["direct_tail_structured_max_nbytes"],
+            structured_pc_selected=bool(scope["direct_tail_structured_pc_selected"]),
+            structured_pc_reason=scope["direct_tail_structured_pc_reason"],
+            structured_pc_error=scope["direct_tail_structured_pc_error"],
+            structured_pc_metadata=scope["direct_tail_structured_pc_metadata"],
+            support_mode_preflight_requested=bool(
+                scope["direct_tail_support_mode_preflight_requested"]
+            ),
+            support_mode_preflight_selected=bool(
+                scope["direct_tail_support_mode_preflight_selected"]
+            ),
+            support_mode_preflight_error=scope[
+                "direct_tail_support_mode_preflight_error"
+            ],
+            support_mode_preflight_metadata=scope[
+                "direct_tail_support_mode_preflight_metadata"
+            ],
+            true_active_column_cache_metadata=scope["direct_tail_true_active_column_cache_metadata"],
+            residual_coarse_selected=bool(scope["direct_tail_residual_coarse_selected"]),
+            residual_coarse_residual_after=scope["direct_tail_residual_coarse_residual_after"],
+            residual_coarse_error=scope["direct_tail_residual_coarse_error"],
+            residual_coarse_metadata=scope["direct_tail_residual_coarse_metadata"],
+            true_coupled_coarse_requested=bool(scope["direct_tail_true_coupled_coarse_requested"]),
+            true_coupled_coarse_auto_selected=bool(scope["direct_tail_true_coupled_coarse_auto_selected"]),
+            true_coupled_coarse_selected=bool(scope["direct_tail_true_coupled_coarse_selected"]),
+            true_coupled_coarse_residual_after=scope[
+                "direct_tail_true_coupled_coarse_residual_after"
+            ],
+            true_coupled_coarse_error=scope["direct_tail_true_coupled_coarse_error"],
+            true_coupled_coarse_metadata=scope["direct_tail_true_coupled_coarse_metadata"],
+            true_coupled_coarse_base_improvement_override_used=bool(
+                scope["direct_tail_true_coupled_coarse_base_improvement_override_used"]
+            ),
+            true_active_submatrix_selected=bool(scope["direct_tail_true_active_submatrix_selected"]),
+            true_active_submatrix_residual_after=scope[
+                "direct_tail_true_active_submatrix_residual_after"
+            ],
+            true_active_submatrix_error=scope["direct_tail_true_active_submatrix_error"],
+            true_active_submatrix_metadata=scope["direct_tail_true_active_submatrix_metadata"],
+            true_active_block_selected=bool(scope["direct_tail_true_active_block_selected"]),
+            true_active_block_residual_after=scope["direct_tail_true_active_block_residual_after"],
+            true_active_block_error=scope["direct_tail_true_active_block_error"],
+            true_active_block_metadata=scope["direct_tail_true_active_block_metadata"],
+            true_active_residual_block_selected=bool(
+                scope["direct_tail_true_active_residual_block_selected"]
+            ),
+            true_active_residual_block_residual_after=scope[
+                "direct_tail_true_active_residual_block_residual_after"
+            ],
+            true_active_residual_block_error=scope["direct_tail_true_active_residual_block_error"],
+            true_active_residual_block_metadata=scope[
+                "direct_tail_true_active_residual_block_metadata"
+            ],
+            true_active_residual_block_base_improvement_override_used=bool(
+                scope["direct_tail_true_active_residual_block_base_improvement_override_used"]
+            ),
+            true_window_selected=bool(scope["direct_tail_true_window_selected"]),
+            true_window_residual_after=scope["direct_tail_true_window_residual_after"],
+            true_window_error=scope["direct_tail_true_window_error"],
+            true_window_metadata=scope["direct_tail_true_window_metadata"],
+            residual_window_selected=bool(scope["direct_tail_residual_window_selected"]),
+            residual_window_residual_after=scope["direct_tail_residual_window_residual_after"],
+            residual_window_error=scope["direct_tail_residual_window_error"],
+            residual_window_metadata=scope["direct_tail_residual_window_metadata"],
+        ),
+        factor_preflight=SparsePCFactorPreflightMetadataContext(
+            enabled=bool(scope["factor_preflight_enabled"]),
+            required=bool(scope["factor_preflight_required"]),
+            seed_enabled=bool(scope["factor_preflight_seed_enabled"]),
+            seed_used=bool(scope["factor_preflight_seed_used"]),
+            passed=scope["factor_preflight_passed"],
+            error=scope["factor_preflight_error"],
+            residual_before=scope["factor_preflight_residual_before"],
+            residual_after=scope["factor_preflight_residual_after"],
+            improvement_ratio=scope["factor_preflight_improvement_ratio"],
+            target_ratio=scope["factor_preflight_target_ratio"],
+            max_target_ratio=float(scope["factor_preflight_max_target_ratio"]),
+            residual_diagnostics=scope["factor_preflight_residual_diagnostics"],
+        ),
+        pattern=SparsePCPatternMetadataContext(
+            summary=scope["summary"],
+            scope=scope["sparse_pattern_scope"],
+            build_s=float(scope["pattern_build_s"]),
+        ),
+        static=SparsePCGMRESStaticMetadataContext(
+            op=scope["op"],
+            fortran_reduced_sparse_pc=bool(scope["fortran_reduced_sparse_pc"]),
+            fortran_reduced_sparse_pc_backend=scope["fortran_reduced_sparse_pc_backend"],
+            fortran_reduced_sparse_pc_backend_reason=scope[
+                "fortran_reduced_sparse_pc_backend_reason"
+            ],
+            fortran_reduced_xblock_min_size=scope["fortran_reduced_xblock_min_size"],
+            pc_restart=int(scope["pc_restart"]),
+            pc_maxiter=int(scope["pc_maxiter"]),
+            sparse_pc_first_attempt_maxiter=int(scope["sparse_pc_first_attempt_maxiter"]),
+            pc_shift=float(scope["pc_shift"]),
+            sparse_pc_factor_dtype_initial=scope["sparse_pc_factor_dtype_initial"],
+            sparse_pc_preconditioner_operator=scope["sparse_pc_preconditioner_operator"],
+            sparse_pc_factorization=scope["sparse_pc_factorization"],
+            sparse_pc_default_factor_kind=scope["sparse_pc_default_factor_kind"],
+            sparse_pc_default_ilu_fill_factor=float(scope["sparse_pc_default_ilu_fill_factor"]),
+            sparse_pc_default_ilu_drop_tol=float(scope["sparse_pc_default_ilu_drop_tol"]),
+            sparse_pc_default_pattern_color_batch=int(scope["sparse_pc_default_pattern_color_batch"]),
+            preconditioner_x=int(scope["preconditioner_x"]),
+            preconditioner_x_min_l=int(scope["preconditioner_x_min_l"]),
+            preconditioner_xi=int(scope["preconditioner_xi"]),
+            preconditioner_species=int(scope["preconditioner_species"]),
+            sparse_pc_permc_spec=scope["sparse_pc_permc_spec"],
+            sparse_pc_default_permc_spec=scope["sparse_pc_default_permc_spec"],
+            sparse_pc_use_active_dof=bool(scope["sparse_pc_use_active_dof"]),
+            sparse_pc_linear_size=int(scope["sparse_pc_linear_size"]),
+            sparse_pc_fp_dense_velocity_block=scope["sparse_pc_fp_dense_velocity_block"],
+        ),
+        result=result,
+        post_minres=post_minres,
+        dtype_retry=dtype_retry,
+    )
+
+
+def sparse_pc_gmres_finalization_bundle_from_driver_result(
+    scope: Mapping[str, object],
+    *,
+    x: np.ndarray,
+    residual_norm: float,
+    preconditioned_residual_norm: float,
+    history: Sequence[float] | None,
+    solve_s: float,
+) -> SparsePCGMRESFinalizationBundleContext:
+    """Build the full sparse-PC finalization bundle from the first GMRES result."""
+
+    return sparse_pc_gmres_finalization_bundle_from_driver_scope(
+        scope,
+        result=SparsePCGMRESFinalResultContext(
+            x=np.asarray(x, dtype=np.float64),
+            residual_norm=float(residual_norm),
+            preconditioned_residual_norm=float(preconditioned_residual_norm),
+            history=tuple(float(v) for v in (history or ())),
+            solve_s=float(solve_s),
+            factor_dtype_used=np.dtype(scope["sparse_pc_factor_dtype_used"]),
+            factor_dtype_retry=scope["sparse_pc_factor_dtype_retry"],
+            operator_bundle=scope["_operator_bundle_pc"],
+            factor_bundle=scope["factor_bundle_pc"],
+            pc_factor_s=float(scope["pc_factor_s"]),
+            setup_s=float(scope["setup_s"]),
+        ),
+        post_minres=SparsePCPostMinresFinalizationContext(
+            matvec=scope["_mv_true"],
+            rhs=scope["sparse_pc_rhs"],
+            preconditioner=scope["_precond_sparse"],
+            emit=scope["emit"],
+            elapsed_s=scope["sparse_timer"].elapsed_s,
+            pc_form=scope["pc_form"],
+            steps=int(scope["sparse_pc_post_minres_steps"]),
+            alpha_clip=float(scope["sparse_pc_post_minres_alpha_clip"]),
+            min_improvement=float(scope["sparse_pc_post_minres_min_improvement"]),
+            target=float(scope["target"]),
+        ),
+        dtype_retry=SparsePCFactorDtypeRetryFinalizationContext(
+            factor_matvec=scope["_sparse_pc_factor_mv"],
+            linear_size=int(scope["sparse_pc_linear_size"]),
+            rhs_dtype=np.dtype(scope["rhs"].dtype),
+            pattern=scope["pattern"],
+            emit=scope["emit"],
+            constrained_pas_pc=bool(scope["constrained_pas_pc"]),
+            tokamak_fp_pc=bool(scope["tokamak_fp_pc"]),
+            fortran_reduced_sparse_pc=bool(scope["fortran_reduced_sparse_pc"]),
+            default_permc_spec=scope["sparse_pc_default_permc_spec"],
+            default_factor_kind=scope["sparse_pc_default_factor_kind"],
+            default_ilu_fill_factor=float(scope["sparse_pc_default_ilu_fill_factor"]),
+            default_ilu_drop_tol=float(scope["sparse_pc_default_ilu_drop_tol"]),
+            default_pattern_color_batch=int(scope["sparse_pc_default_pattern_color_batch"]),
+            x0_fallback=scope["x0_sparse"],
+            pc_maxiter=int(scope["pc_maxiter"]),
+            elapsed_s=scope["sparse_timer"].elapsed_s,
+        ),
+    )
+
 
 @dataclass(frozen=True)
 class SparsePCGMRESCompletionMessageContext:
@@ -587,6 +1136,71 @@ def finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state(
         expand_reduced=expand_reduced,
     )
 
+
+def finalize_sparse_pc_gmres_bundle(
+    context: SparsePCGMRESFinalizationBundleContext,
+    *,
+    build_host_sparse_direct_factor_from_matvec: Callable[..., tuple[Any, Any]],
+    run_sparse_pc_gmres_once_callback: Callable[..., tuple[np.ndarray, float, float, Sequence[float], float]],
+    minres_correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[float]]],
+    expand_reduced: ArrayFn,
+) -> SparsePCGMRESFinalPayload:
+    """Build typed sparse-PC final metadata, apply retry/polish, and return payload."""
+
+    diagnostic_state = sparse_pc_gmres_finalization_state_from_context(
+        SparsePCGMRESFinalizationStateContext(
+            atol=context.atol,
+            mv_count=context.mv_count,
+            rhs_norm=context.rhs_norm,
+            target=context.target,
+            tol=context.tol,
+            sparse_pc_direct_tail_metadata=sparse_pc_direct_tail_final_metadata(
+                context.direct_tail
+            ),
+            sparse_pc_factor_preflight_metadata=(
+                sparse_pc_factor_preflight_result_metadata_from_context(
+                    context.factor_preflight
+                )
+            ),
+            sparse_pc_pattern_metadata=sparse_pc_pattern_result_metadata_from_context(
+                context.pattern
+            ),
+            sparse_pc_static_metadata=sparse_pc_gmres_static_metadata_from_context(
+                context.static
+            ),
+        )
+    )
+    result = context.result
+    return finalize_sparse_pc_gmres_with_dtype_retry(
+        SparsePCGMRESFinalizationContext(
+            diagnostic_state=diagnostic_state,
+            result=SparsePCGMRESResult(
+                x=np.asarray(result.x, dtype=np.float64),
+                residual_norm=float(result.residual_norm),
+                preconditioned_residual_norm=float(
+                    result.preconditioned_residual_norm
+                ),
+                history=tuple(float(v) for v in (result.history or ())),
+                solve_s=float(result.solve_s),
+            ),
+            factor_dtype_used=np.dtype(result.factor_dtype_used),
+            factor_dtype_retry=result.factor_dtype_retry,
+            operator_bundle=result.operator_bundle,
+            factor_bundle=result.factor_bundle,
+            pc_factor_s=float(result.pc_factor_s),
+            setup_s=float(result.setup_s),
+            post_minres=context.post_minres,
+            dtype_retry=context.dtype_retry,
+        ),
+        build_host_sparse_direct_factor_from_matvec=(
+            build_host_sparse_direct_factor_from_matvec
+        ),
+        run_sparse_pc_gmres_once_callback=run_sparse_pc_gmres_once_callback,
+        minres_correction=minres_correction,
+        expand_reduced=expand_reduced,
+    )
+
+
 def finalize_sparse_pc_gmres_with_dtype_retry(
     context: SparsePCGMRESFinalizationContext,
     *,
@@ -895,16 +1509,27 @@ def apply_sparse_pc_post_minres_from_driver_state(
 
 __all__ = (
     "SparsePCGMRESResult",
+    "SparsePCGMRESContext",
     "SparsePCGMRESFinalPayload",
     "SparsePCPostMinresFinalizationContext",
     "SparsePCFactorDtypeRetryFinalizationContext",
     "SparsePCGMRESFinalizationContext",
     "SparsePCGMRESFinalResultContext",
+    "SparsePCGMRESFinalizationBundleContext",
+    "SparsePCGMRESFinalizationStateContext",
     "SparsePCGMRESCompletionMessageContext",
     "SparsePCPostMinresContext",
     "SparsePCPostMinresResult",
     "SparsePCPostMinresUpdateContext",
     "SparsePCPostMinresUpdateResult",
+    "run_sparse_pc_gmres_once",
+    "run_sparse_pc_gmres_once_for_retry",
+    "sparse_pc_gmres_finalization_driver_state_keys",
+    "sparse_pc_gmres_finalization_driver_scope_keys",
+    "sparse_pc_gmres_finalization_state_from_context",
+    "sparse_pc_gmres_finalization_state_from_driver_scope",
+    "sparse_pc_gmres_finalization_bundle_from_driver_scope",
+    "sparse_pc_gmres_finalization_bundle_from_driver_result",
     "SparsePCFactorDtypeRetryDecision",
     "SparsePCFactorDtypeRetryContext",
     "SparsePCFactorDtypeRetryResult",
@@ -918,6 +1543,7 @@ __all__ = (
     "sparse_pc_gmres_final_payload_from_driver_state",
     "finalize_sparse_pc_gmres_from_driver_state",
     "finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state",
+    "finalize_sparse_pc_gmres_bundle",
     "finalize_sparse_pc_gmres_with_dtype_retry",
     "apply_sparse_pc_post_minres",
     "apply_sparse_pc_post_minres_if_needed",

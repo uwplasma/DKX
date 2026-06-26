@@ -597,9 +597,12 @@ def test_sparse_finalization_module_reexports_match_compat_layer() -> None:
         "SparsePCFactorDtypeRetryFinalizationContext",
         "SparsePCFactorDtypeRetryResult",
         "SparsePCGMRESCompletionMessageContext",
+        "SparsePCGMRESContext",
         "SparsePCGMRESFinalPayload",
         "SparsePCGMRESFinalResultContext",
+        "SparsePCGMRESFinalizationBundleContext",
         "SparsePCGMRESFinalizationContext",
+        "SparsePCGMRESFinalizationStateContext",
         "SparsePCGMRESResult",
         "SparsePCPostMinresContext",
         "SparsePCPostMinresFinalizationContext",
@@ -611,14 +614,23 @@ def test_sparse_finalization_module_reexports_match_compat_layer() -> None:
         "apply_sparse_pc_post_minres_if_needed",
         "emit_sparse_pc_gmres_completion_from_driver_state",
         "evaluate_sparse_pc_factor_dtype_retry",
+        "finalize_sparse_pc_gmres_bundle",
         "finalize_sparse_pc_gmres_from_driver_state",
         "finalize_sparse_pc_gmres_with_dtype_retry",
         "finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state",
+        "run_sparse_pc_gmres_once",
+        "run_sparse_pc_gmres_once_for_retry",
         "retry_sparse_pc_factor_dtype_from_driver_state",
         "retry_sparse_pc_factor_dtype_from_finalization_context",
         "retry_sparse_pc_factor_dtype_if_needed",
         "sparse_pc_factor_dtype_retry_initial_guess",
         "sparse_pc_gmres_completion_message",
+        "sparse_pc_gmres_finalization_bundle_from_driver_result",
+        "sparse_pc_gmres_finalization_bundle_from_driver_scope",
+        "sparse_pc_gmres_finalization_driver_scope_keys",
+        "sparse_pc_gmres_finalization_driver_state_keys",
+        "sparse_pc_gmres_finalization_state_from_context",
+        "sparse_pc_gmres_finalization_state_from_driver_scope",
         "sparse_pc_gmres_final_payload_from_driver_state",
     )
     for name in moved_names:
@@ -637,7 +649,10 @@ def test_sparse_krylov_helpers_live_on_sparse_pc_owner() -> None:
         "run_sparse_pc_gmres_once_for_retry",
     )
     for name in moved_names:
-        assert hasattr(sparse_pc_module, name)
+        assert getattr(sparse_pc_module, name) is getattr(
+            sparse_finalization_module,
+            name,
+        )
 
 
 def test_sparse_policy_module_reexports_match_compat_layer() -> None:
@@ -11909,7 +11924,7 @@ def test_finalize_sparse_pc_gmres_bundle_builds_typed_state(
         )
 
     monkeypatch.setattr(
-        sparse_pc_module,
+        sparse_finalization_module,
         "finalize_sparse_pc_gmres_with_dtype_retry",
         fake_finalize,
     )
