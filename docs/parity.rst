@@ -23,19 +23,19 @@ High-level summary (parity-tested)
      - Output parity fixtures
    * - Geometry scheme ``5`` (VMEC ``wout_*.nc``)
      - Yes
-     - End-to-end output parity in the current full example-suite audit, plus frozen fixture coverage
+     - End-to-end output parity in the full example-suite audit, plus frozen fixture coverage
    * - Geometry schemes ``11/12`` (Boozer ``.bc``)
      - Yes
      - Geometry + transport-matrix end-to-end fixtures
    * - Linear runs (RHSMode=1)
      - Yes
-     - Explicit CPU/GPU release lanes are parity-clean across the current vendored example suite
+     - Explicit CPU/GPU release lanes are parity-clean across the vendored example suite
    * - Transport matrices (RHSMode=2/3)
      - Yes
      - End-to-end ``sfincsOutput.h5`` parity for 2×2 and 3×3 cases
    * - Full upstream v3 example suite
      - Yes
-     - Current ``main`` release audit is ``39/39 parity_ok`` on CPU and ``39/39 parity_ok`` on GPU, with no strict mismatches, no ``jax_error``, no ``max_attempts``, and zero missing Fortran top-level output keys in JAX.
+     - The release audit is ``39/39 parity_ok`` on CPU and ``39/39 parity_ok`` on GPU, with no strict mismatches, no ``jax_error``, no ``max_attempts``, and zero missing Fortran top-level output keys in JAX.
 
 Implemented (parity-tested)
 ---------------------------
