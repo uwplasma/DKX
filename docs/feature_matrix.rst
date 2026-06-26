@@ -119,7 +119,7 @@ Fortran v3 feature ownership
      - ``populateMatrix.F90`` and collision-specific helpers
      - Manual and validation checks distinguish PAS and full Fokker-Planck
        branches, plus field-particle and momentum-restoring terms.
-     - ``sfincs_jax.collisions`` and assembly helpers: implemented for the
+     - ``sfincs_jax.physics.collisions`` and assembly helpers: implemented for the
        release-facing suite, with high-pitch/geometry-rich performance gates
        tracked separately.
    * - Magnetic and electric drift branches

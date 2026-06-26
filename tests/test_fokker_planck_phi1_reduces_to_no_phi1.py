@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import jax.numpy as jnp
 
-from sfincs_jax.collisions import (
+from sfincs_jax.physics.collisions import (
     apply_fokker_planck_v3,
     apply_fokker_planck_v3_phi1,
     make_fokker_planck_v3_operator,
@@ -71,4 +71,3 @@ def test_phi1_in_collisions_reduces_to_no_phi1_when_phi1_zero() -> None:
     y1 = apply_fokker_planck_v3_phi1(op_phi1, f, phi1_hat=phi1_hat)
 
     np.testing.assert_allclose(np.asarray(y1), np.asarray(y0), rtol=0, atol=2e-11)
-
