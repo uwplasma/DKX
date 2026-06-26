@@ -29,6 +29,58 @@ def test_unknown_external_equilibrium_does_not_fetch() -> None:
     assert data_fetch.resolve_external_equilibrium("not_a_known_fixture.nc", fetch=False) is None
 
 
+def test_external_data_cache_root_honors_environment(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(tmp_path / "explicit"))
+    assert data_fetch.data_cache_root() == tmp_path / "explicit"
+
+    monkeypatch.delenv("SFINCS_JAX_DATA_DIR", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
+    assert data_fetch.data_cache_root() == tmp_path / "xdg" / "sfincs_jax" / "data"
+
+
+def test_external_data_archive_rejects_path_traversal(tmp_path: Path) -> None:
+    archive = tmp_path / "unsafe.tar.gz"
+    with tarfile.open(archive, "w:gz") as tf:
+        info = tarfile.TarInfo("../escape.txt")
+        payload = b"unsafe"
+        info.size = len(payload)
+        tf.addfile(info, io.BytesIO(payload))
+
+    with tarfile.open(archive, "r:gz") as tf:
+        try:
+            data_fetch._safe_extract(tf, tmp_path / "target")
+        except RuntimeError as exc:
+            assert "Unsafe path" in str(exc)
+        else:  # pragma: no cover - defensive assertion branch
+            raise AssertionError("unsafe archive member should be rejected")
+
+
+def test_external_data_download_rejects_checksum_mismatch(tmp_path: Path) -> None:
+    release_dir = tmp_path / "release"
+    release_dir.mkdir()
+    archive = release_dir / "payload.tar.gz"
+    with tarfile.open(archive, "w:gz") as tf:
+        info = tarfile.TarInfo("payload.txt")
+        payload = b"payload"
+        info.size = len(payload)
+        tf.addfile(info, io.BytesIO(payload))
+
+    destination = tmp_path / "cache" / "payload.tar.gz"
+    manifest = {
+        "release_url": release_dir.as_uri(),
+        "asset": archive.name,
+        "archive_sha256": "0" * 64,
+    }
+
+    try:
+        data_fetch._download_archive(manifest, destination)
+    except RuntimeError as exc:
+        assert "Checksum mismatch" in str(exc)
+    else:  # pragma: no cover - defensive assertion branch
+        raise AssertionError("checksum mismatch should fail")
+    assert not destination.with_suffix(destination.suffix + ".tmp").exists()
+
+
 def test_external_equilibrium_download_extract_and_resolve(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_OFFLINE", raising=False)
     payload = b"small release-hosted fixture\n"
@@ -67,6 +119,37 @@ def test_external_equilibrium_download_extract_and_resolve(tmp_path: Path, monke
     assert resolved == target / rel_path
     assert resolved.read_bytes() == payload
     assert (target / ".complete").read_text(encoding="ascii") == "ok\n"
+
+
+def test_external_equilibrium_cached_data_short_circuits_download(tmp_path: Path, monkeypatch) -> None:
+    payload = b"already cached\n"
+    rel_path = Path("sfincs_jax/data/equilibria/tiny_cached.bc")
+    target = tmp_path / "cache" / "test-v1"
+    cached = target / rel_path
+    cached.parent.mkdir(parents=True, exist_ok=True)
+    cached.write_bytes(payload)
+    (target / ".complete").write_text("ok\n", encoding="ascii")
+    manifest = {
+        "version": "test-v1",
+        "release_tag": "test-data",
+        "release_url": "https://example.invalid/release",
+        "asset": "missing.tar.gz",
+        "archive_sha256": "0" * 64,
+        "files": [
+            {
+                "path": rel_path.as_posix(),
+                "size": len(payload),
+                "sha256": _sha256_bytes(payload),
+            }
+        ],
+    }
+
+    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("SFINCS_JAX_OFFLINE", "1")
+    monkeypatch.setattr(data_fetch, "_load_manifest", lambda: manifest)
+
+    assert data_fetch.ensure_external_equilibrium_data(quiet=True) == target
+    assert data_fetch.resolve_external_equilibrium("'tiny_cached.bc'", fetch=True) == cached
 
 
 def test_external_equilibrium_offline_missing_cache_raises(tmp_path: Path, monkeypatch) -> None:
