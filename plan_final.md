@@ -2819,6 +2819,11 @@ Current completion status:
   remaining `v3_driver` references are intentionally concentrated in
   compatibility/facade tests or legacy monkeypatch surfaces that need a separate
   careful pass.
+- The examples contract now also rejects `v3_driver` mentions in example
+  READMEs, scripts, and tutorial notebooks, so public teaching material stays on
+  the CLI, `sfincs_jax.api`, and other stable public modules rather than the
+  compatibility facade. The only retained example-tree `v3_driver.py` mention is
+  in validation metadata, not a runnable user entry point.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.

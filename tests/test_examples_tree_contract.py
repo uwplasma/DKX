@@ -165,6 +165,21 @@ def test_example_readmes_are_standalone_and_reference_existing_scripts() -> None
     assert missing_scripts == []
 
 
+def test_examples_do_not_teach_v3_driver_facade_imports() -> None:
+    """Examples should teach the public API, not the compatibility shim."""
+
+    offenders: list[str] = []
+    checked_suffixes = {".md", ".py", ".ipynb"}
+    for path in sorted(EXAMPLES_ROOT.rglob("*")):
+        if not path.is_file() or path.suffix not in checked_suffixes:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "v3_driver" in text or "sfincs_jax.v3_driver" in text:
+            offenders.append(path.relative_to(REPO_ROOT).as_posix())
+
+    assert offenders == []
+
+
 def test_examples_do_not_track_generated_caches_or_binary_outputs() -> None:
     offenders: list[str] = []
     for path in _tracked_example_files():
