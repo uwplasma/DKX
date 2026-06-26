@@ -20,6 +20,24 @@ def test_io_legacy_output_format_aliases_point_to_new_owner() -> None:
     assert io._output_file_format is formats.output_file_format
 
 
+def test_io_facade_forwards_writer_private_names_and_missing_attributes() -> None:
+    """Compatibility facade should route monkeypatches to the output writer owner."""
+
+    import sfincs_jax.outputs.writer as writer
+
+    sentinel = object()
+    old_value = writer._should_precompile_v3_full_system
+    try:
+        io._should_precompile_v3_full_system = sentinel  # type: ignore[attr-defined]
+        assert writer._should_precompile_v3_full_system is sentinel
+        assert io._should_precompile_v3_full_system is sentinel
+    finally:
+        io._should_precompile_v3_full_system = old_value  # type: ignore[attr-defined]
+
+    with pytest.raises(AttributeError, match="has no attribute"):
+        _ = io.definitely_not_a_sfincs_jax_io_attribute
+
+
 def test_output_file_format_suffixes_and_invalid_suffix() -> None:
     assert formats.output_file_format(Path("sfincsOutput.h5")) == "h5"
     assert formats.output_file_format(Path("sfincsOutput.hdf5")) == "h5"
