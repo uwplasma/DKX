@@ -3,6 +3,7 @@ Examples
 
 The repository includes a structured `examples/` tree:
 
+- `examples/tutorials/`: notebook-led learning path and a fast output/plot script
 - `examples/getting_started/`: basic API usage (no external reference code required)
 - `examples/parity/`: focused validation scripts against frozen reference fixtures
 - `examples/transport/`: `RHSMode=2/3` transport-matrix workflows + upstream scanplot scripts
@@ -17,7 +18,15 @@ Run from the repo root:
 .. code-block:: bash
 
    cd sfincs_jax
+   python examples/tutorials/run_quick_output_and_plot.py --out-dir tutorial_output
    python examples/getting_started/build_grids_and_geometry.py
+
+For a guided classroom-style path, open the notebooks in
+``examples/tutorials``:
+
+- ``01_cli_outputs_and_plots.ipynb``: CLI, output formats, and diagnostics panels.
+- ``02_transport_and_autodiff.ipynb``: RHSMode=2/3 transport matrices and JAX differentiation.
+- ``03_bootstrap_redl_and_optimization.ipynb``: bootstrap-current/Redl comparisons and optimization objectives.
 
 Some geometry examples reference public W7-X/HSX/QI equilibrium fixtures by
 basename. Those multi-megabyte files are fetched from the
