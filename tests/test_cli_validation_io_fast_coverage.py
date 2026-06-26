@@ -11,7 +11,7 @@ import pytest
 
 from sfincs_jax import cli
 from sfincs_jax import plotting
-from sfincs_jax.validation.benchmark_artifacts import (
+from sfincs_jax.validation.artifacts import (
     check_benchmark_artifact_file,
     check_benchmark_artifact_files,
     fortran_suite_benchmark_summary_errors,
