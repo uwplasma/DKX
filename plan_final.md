@@ -285,6 +285,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   policy knobs, permutation fallbacks, and ILU option bounds. This protects the
   production sparse-factor memory/runtime admission layer with deterministic
   unit tests instead of full production solves.
+- The thirty-third post-audit coverage tranche added profile-system algebra
+  tests for nonlinear temperature/Phi1 L-coupling helpers and primitive
+  theta/zeta/x padding utilities. These cover Fortran-style kinetic coupling
+  and sharded-padding invariants directly without building full input-deck
+  operators.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.

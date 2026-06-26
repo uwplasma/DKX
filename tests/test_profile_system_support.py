@@ -18,10 +18,17 @@ from sfincs_jax.operators.profile_system import (
     _get_int,
     _ix_min,
     _matvec_shard_axis,
+    _nonlinear_temp_vector,
+    _nonlinear_temp_vector_phi1,
     _operator_signature,
     _operator_signature_cached,
+    _pad_1d,
+    _pad_2d,
     _pad_full_system_operator,
     _pad_full_vector,
+    _pad_square,
+    _pad_x_1d,
+    _pad_x_square,
     _shard_pad_enabled,
     _source_basis_constraint_scheme_1,
     _unpad_full_vector,
@@ -121,6 +128,52 @@ def test_profile_system_scalar_helpers_and_ix_min_match_fortran_conventions() ->
     assert _get_bool(group, "missing", default=True) is True
     assert _ix_min(point_at_x0=True) == 1
     assert _ix_min(point_at_x0=False) == 0
+
+
+def test_nonlinear_temp_vector_helpers_match_manual_l_coupling() -> None:
+    op = SimpleNamespace(
+        n_x=2,
+        n_xi=2,
+        x=jnp.asarray([1.0, 2.0], dtype=jnp.float64),
+        ddx=jnp.eye(2, dtype=jnp.float64),
+        point_at_x0=True,
+        fblock=SimpleNamespace(collisionless=SimpleNamespace(n_xi_for_x=jnp.asarray([1, 2], dtype=jnp.int32))),
+    )
+    f = jnp.asarray([[[[[2.0]], [[3.0]]], [[[5.0]], [[7.0]]]]], dtype=jnp.float64)
+
+    nonlinear, mask_l, mask_x = _nonlinear_temp_vector(op, f)
+    phi1, phi1_mask_l, phi1_mask_x = _nonlinear_temp_vector_phi1(op, f)
+    expected = np.asarray([[[[[3.0]], [[2.0]]], [[[14.0 / 3.0]], [[5.0]]]]])
+
+    np.testing.assert_allclose(np.asarray(nonlinear), expected)
+    np.testing.assert_allclose(np.asarray(phi1), expected)
+    np.testing.assert_allclose(np.asarray(mask_l), np.asarray([[1.0, 0.0], [1.0, 1.0]]))
+    np.testing.assert_allclose(np.asarray(phi1_mask_l), np.asarray(mask_l))
+    np.testing.assert_allclose(np.asarray(mask_x), np.asarray([0.0, 1.0]))
+    np.testing.assert_allclose(np.asarray(phi1_mask_x), np.asarray(mask_x))
+
+
+def test_profile_system_padding_primitives_preserve_values_and_fill_policy() -> None:
+    vector = jnp.asarray([1.0, 2.0], dtype=jnp.float64)
+    square = jnp.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=jnp.float64)
+    surface = jnp.asarray([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=jnp.float64)
+
+    np.testing.assert_allclose(np.asarray(_pad_1d(vector, 2, fill=-1.0)), np.asarray([1.0, 2.0, -1.0, -1.0]))
+    np.testing.assert_allclose(
+        np.asarray(_pad_square(square, 1)),
+        np.asarray([[1.0, 2.0, 0.0], [3.0, 4.0, 0.0], [0.0, 0.0, 0.0]]),
+    )
+    np.testing.assert_allclose(
+        np.asarray(_pad_2d(surface, axis="theta", pad=1, fill=9.0)),
+        np.asarray([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [9.0, 9.0, 9.0]]),
+    )
+    np.testing.assert_allclose(
+        np.asarray(_pad_2d(surface, axis="zeta", pad=2, fill=-2.0)),
+        np.asarray([[1.0, 2.0, 3.0, -2.0, -2.0], [4.0, 5.0, 6.0, -2.0, -2.0]]),
+    )
+    assert _pad_2d(surface, axis="x", pad=5) is surface
+    assert _pad_x_1d(vector, 0) is vector
+    assert _pad_x_square(square, 0) is square
 
 
 def test_full_system_operator_properties_and_pytree_roundtrip() -> None:
