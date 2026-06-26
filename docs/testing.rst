@@ -223,7 +223,7 @@ pass then targeted the sparse/circulant derivative layer and the PAS residual-ga
 metrics directly. That batch pushed ``periodic_stencil.py`` from about ``57%`` to
 about ``67%`` by checking circulant/Fourier-mode exactness, sparse-row extraction
 bounds, and the documented sharded-halo fallback behavior; it also pushed
-``solvers/preconditioners/pas/policy.py`` by checking
+``solvers/preconditioner_pas_policy.py`` by checking
 target/upward/plateau gate logic and bounded stationary-smoother convergence on
 tiny analytic systems. These tests are anchored in standard numerical-analysis
 invariants: Fourier modes as eigenvectors of circulant derivative operators, and
@@ -653,13 +653,13 @@ historical uncapped experiment available. ``tests/test_v3_sparse_pattern.py``
 then checks that singular local ILU attempts escalate diagonal regularization
 before failing closed, which makes high-resolution blocker evidence more
 diagnostic without changing the physical operator.
-The moved ``sfincs_jax.solvers.preconditioners.xblock.tz_sparse`` module is
+The moved ``sfincs_jax.solvers.preconditioner_xblock_tz_sparse`` module is
 covered through the same driver compatibility seam and direct policy gates:
 compact CSR and padded JAX factor application, host-factor caps, lower-fill
 policy, explicit FP x-block assembly admission, skipped-block diagonal
 fallback, and extra-variable Schur solve behavior remain exercised without
 promoting production-grid RHSMode=1 solves into CI.
-The adjacent ``sfincs_jax.solvers.preconditioners.pas.xblock_ilu`` module keeps
+The adjacent ``sfincs_jax.solvers.preconditioner_pas_xblock_ilu`` module keeps
 the PAS-only block ILU/LU path under the same solver-path and PAS heuristic
 gates: DKES/tokamak PAS branch selection, SciPy ILU/exact-LU fallback behavior,
 padded triangular apply kernels, cache reuse, and the extra-variable Schur block
@@ -681,7 +681,7 @@ environment variables. ``tests/test_rhs1_acceptance_policy.py`` checks the
 large-PAS fast-accept environment parsing and backend/implicit/Phi1/PAS guards,
 plus the host x-block factor probe for exceptions, shape mismatches, nonfinite
 solves, and excessive amplification. The PAS residual formula itself is shared
-with ``sfincs_jax.solvers.preconditioners.pas.policy`` so the acceptance
+with ``sfincs_jax.solvers.preconditioner_pas_policy`` so the acceptance
 threshold is not duplicated.
 
 The PAS adaptive-smoother gate and implicit-solve mode resolver also have direct
@@ -765,7 +765,7 @@ solves.
 
 The RHSMode=1 full-CSR Schur extraction is covered by
 ``tests/test_rhs1_full_csr_schur_preconditioners.py``. These tests exercise the
-new ``sfincs_jax.solvers.preconditioners.schur.profile_response`` implementation
+new ``sfincs_jax.solvers.preconditioner_schur_profile`` implementation
 directly: regularized Jacobi pivots, diagonal kinetic plus tail Schur exactness,
 zeta-line Schur exactness, pitch-line Schur exactness, radial-pitch Schur
 exactness, block-memory estimates, and legacy ``rhs1_full_assembly`` alias
@@ -776,7 +776,7 @@ preconditioner setup/apply behavior without launching a full transport solve.
 The adjacent Fortran-v3-style reduced active sparse-factor extraction is covered
 by ``tests/test_rhs1_fortran_reduced_symbolic_sparse.py``. These tests exercise
 the new
-``sfincs_jax.solvers.preconditioners.symbolic_sparse.profile_response``
+``sfincs_jax.solvers.preconditioner_symbolic_profile``
 owner directly: package-facade exports, legacy ``rhs1_full_assembly`` alias
 compatibility, support-mode parsing and rejection of invalid tokens, default
 Fortran-reduced support dropping, and exact LU application when the support is
@@ -786,7 +786,7 @@ solve for coverage.
 
 The active sparse-factor family extracted next is covered by
 ``tests/test_rhs1_active_sparse_factors.py``. These tests exercise
-``sfincs_jax.solvers.preconditioners.symbolic_sparse.active_factors`` directly:
+``sfincs_jax.solvers.preconditioner_symbolic_active`` directly:
 legacy ``rhs1_full_assembly`` aliases, exact global sparse-factor application on
 a bounded active system, row/column equilibration metadata for the scaled
 factor, and physics-filtered sparse-factor retention of selected kinetic
@@ -796,7 +796,7 @@ preconditioner routes.
 
 The RHSMode=1 x-block low-``ell`` Schur extraction is covered by
 ``tests/test_rhs1_xblock_low_l_schur.py``. These tests exercise
-``sfincs_jax.solvers.preconditioners.xblock.low_l_schur`` directly: legacy
+``sfincs_jax.solvers.preconditioner_xblock_low_l_schur`` directly: legacy
 ``rhs1_full_assembly`` aliases, SFINCS-v3 flat low-``ell`` x-block index
 ordering, sparse x-block/tail Schur exactness on a bounded constructed system,
 memory-budget rejection, and the physics low-mode coarse residual wrapper. The
@@ -805,7 +805,7 @@ kinetic block, giving a real residual-zero Schur check without a full solve.
 
 The adjacent active-projected x-block extraction is covered by
 ``tests/test_rhs1_active_projected_xblock.py``. These tests exercise
-``sfincs_jax.solvers.preconditioners.xblock.active_projected`` directly:
+``sfincs_jax.solvers.preconditioner_xblock_active`` directly:
 legacy ``rhs1_full_assembly`` aliases, active-position mapping for unsorted
 active indices, exact active x-block solves on a block-diagonal active system,
 factor-memory budget rejection, exact radius-zero restricted additive-Schwarz

@@ -115,7 +115,7 @@
         },
         {
           "claim": "Reusable JAX-compatible Galerkin QI coarse preconditioner infrastructure eliminates synthetic residuals to roundoff with DeviceCSR/JIT coverage, but remains to be wired into the production GPU hard-seed loop.",
-          "path": "sfincs_jax/solvers/preconditioners/qi/basis.py"
+          "path": "sfincs_jax/solvers/preconditioner_qi_basis.py"
         },
         {
           "claim": "Focused QI coarse tests cover regularized JAX normal-equation solves, Galerkin correction reuse, and JIT/device CSR application without requiring a large solve.",
@@ -123,7 +123,7 @@
         },
         {
           "claim": "The opt-in production Galerkin QI preconditioner is now fail-closed: additive/multiplicative/damping probe candidates are selected only when they reduce the true residual, otherwise the base preconditioner remains active.",
-          "path": "sfincs_jax/solvers/preconditioners/qi/corrections.py"
+          "path": "sfincs_jax/solvers/preconditioner_qi_corrections.py"
         },
         {
           "claim": "Focused policy tests cover Galerkin mode parsing, damping parsing, residual-reduction selection, nonfinite rejection, and required-drop gates.",
@@ -131,7 +131,7 @@
         },
         {
           "claim": "Standalone device-local QI smoother infrastructure now provides a pure-JAX CSR damped-Jacobi/stationary smoother with fail-closed diagonal validation and JIT-safe DeviceCSR matvec reuse.",
-          "path": "sfincs_jax/solvers/preconditioners/qi/device.py"
+          "path": "sfincs_jax/solvers/preconditioner_qi_device.py"
         },
         {
           "claim": "Focused QI smoother tests cover CSR diagonal extraction, missing-diagonal rejection, permissive partial diagnostics, JIT stationary sweeps, and compatibility with the existing two-level true-residual probe.",
@@ -139,7 +139,7 @@
         },
         {
           "claim": "Device-local QI smoother now has an opt-in residual-minimizing step policy and fail-closed true-residual seed probe; the bounded synthetic gate reduces residual norm from 1.0 to 0.8944 and rejects stricter non-material improvements.",
-          "path": "sfincs_jax/solvers/preconditioners/qi/device.py"
+          "path": "sfincs_jax/solvers/preconditioner_qi_device.py"
         },
         {
           "claim": "Focused QI smoother tests cover the residual-minimizing accepted seed, fail-closed strict-improvement rejection, and JSON-safe probe metadata.",
@@ -192,7 +192,7 @@
         },
         {
           "claim": "No-op PAS matrix-free corrections now avoid the extra candidate matvec while preserving residual history and reject reason.",
-          "path": "sfincs_jax/solvers/preconditioners/pas/matrix_free.py"
+          "path": "sfincs_jax/solvers/preconditioner_pas_matrix_free.py"
         },
         {
           "claim": "Benchmark harness now rejects default-promotion candidates that regress elapsed time or peak RSS against baseline.",
@@ -204,7 +204,7 @@
         },
         {
           "claim": "Structured PAS-TZ guard metadata records production-grid memory rejection estimates without allocating dense guards.",
-          "path": "sfincs_jax/solvers/preconditioners/pas/policy.py"
+          "path": "sfincs_jax/solvers/preconditioner_pas_policy.py"
         },
         {
           "claim": "Matrix-free PAS tests cover tiny-update and candidate-size fail-fast gates that avoid wasted candidate matvecs.",
@@ -228,7 +228,7 @@
         },
         {
           "claim": "Matrix-free PAS correction now has a fail-fast live-byte preflight that rejects oversized candidates before update allocation or candidate residual matvecs.",
-          "path": "sfincs_jax/solvers/preconditioners/pas/matrix_free.py"
+          "path": "sfincs_jax/solvers/preconditioner_pas_matrix_free.py"
         },
         {
           "claim": "PAS matrix-free benchmark dry-runs can record a maximum candidate byte budget so unsafe production-floor probes fail before allocating the candidate path.",
@@ -252,7 +252,7 @@
         },
         {
           "claim": "PAS matrix-free correction now has an opt-in streamed update path that builds candidates from bounded residual chunks without materializing a full dense update vector.",
-          "path": "sfincs_jax/solvers/preconditioners/pas/matrix_free.py"
+          "path": "sfincs_jax/solvers/preconditioner_pas_matrix_free.py"
         },
         {
           "claim": "PAS benchmark gates now reject guarded-correction variants unless metadata proves streamed/no-full-update behavior, and focused tests cover chunk equivalence, byte-budget rejection, and residual-gate semantics.",
@@ -468,7 +468,7 @@
         },
         {
           "claim": "QI Galerkin residual-selection policy is split out of the driver with direct fast tests, reducing the remaining untested hard-seed branch surface without adding slow solves.",
-          "path": "sfincs_jax/solvers/preconditioners/qi/corrections.py"
+          "path": "sfincs_jax/solvers/preconditioner_qi_corrections.py"
         },
         {
           "claim": "RHSMode=1 handoff residual-improvement logic is split into a source-mapped helper with direct finite/nonfinite boundary tests, reducing driver acceptance-branch surface without launching solves.",

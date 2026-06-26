@@ -42,9 +42,8 @@ skeleton packages are:
   monoenergetic-response orchestration, diagnostics, output-field assembly, and
   parallel transport workers. ``transport_matrix.py`` is a compatibility shim
   for the former nested import path, not an implementation folder.
-- ``sfincs_jax/solvers`` and ``sfincs_jax/solvers/preconditioners`` for reusable
-  Krylov, sparse/direct, residual-gate, implicit-differentiation, and
-  preconditioning machinery.
+- ``sfincs_jax/solvers`` for reusable Krylov, sparse/direct, residual-gate,
+  implicit-differentiation, and flat ``preconditioner_*.py`` machinery.
 - ``sfincs_jax/parallel`` for CPU/GPU process, sharding, worker payload, and
   scaling utilities.
 - ``sfincs_jax/outputs`` for output-schema-adjacent helpers and flat
@@ -570,7 +569,7 @@ domain owners replacing the old monolith are:
   plus permutation inversion. These pure kernels are used by sparse
   preconditioner apply paths and are directly tested against dense triangular
   references.
-- ``sfincs_jax/solvers/preconditioners/pas/composite.py``:
+- ``sfincs_jax/solvers/preconditioner_pas_composite.py``:
   PAS-family RHSMode=1 composite preconditioner policy. It owns the
   ``pas_lite``, ``pas_hybrid``, and ``pas_schur`` composition rules, including
   angular/TZ applicability, line/truncated-:math:`L` selection, ``Er`` x-upwind
@@ -579,7 +578,7 @@ domain owners replacing the old monolith are:
   PAS-family variants. Legacy access through the historical driver namespace is
   provided by the tiny ``sfincs_jax.v3_driver`` shim, while this package remains
   the numerical owner.
-- ``sfincs_jax/solvers/preconditioners/pas/angular.py``:
+- ``sfincs_jax/solvers/preconditioner_pas_angular.py``:
   PAS-only RHSMode=1 angular block-tridiagonal factors, including the
   tokamak-like theta/:math:`L` builder and the geometry-rich theta-zeta/:math:`L`
   builder. This module owns the block-Thomas factor setup, low-mode combined
@@ -587,48 +586,48 @@ domain owners replacing the old monolith are:
   PAS-TZ memory fallback invocation, cache population, and reduced/full apply
   wrappers. Fallback-builder wiring now lives in the profile-response solve
   owner; ``v3_driver.py`` only exposes the compatibility import path.
-- ``sfincs_jax/solvers/preconditioners/pas/xblock_ilu.py``
+- ``sfincs_jax/solvers/preconditioner_pas_xblock_ilu.py``
   (historical location: ``sfincs_jax/rhs1_pas_xblock_ilu.py``):
   sparse block-Jacobi ILU/LU setup for PAS-only RHSMode=1 operators. This
   module owns the per-``(species,x)`` Legendre/theta/zeta block assembly,
   PETSc-style ILU/exact-LU cutoff policy, padded triangular-factor conversion,
   threaded block factor setup, and extra-variable Schur solve. PAS-hybrid
   fallback injection lives in the profile-response solve owner.
-- ``sfincs_jax/solvers/preconditioners/full_fp/species_blocks.py``:
+- ``sfincs_jax/solvers/preconditioner_full_fp_species.py``:
   species-block and species-by-``(x,L)`` block-Jacobi preconditioners for
   RHSMode=1. The module owns the active block index maps, chunked unsharded
   operator probing, block inverse construction, extra-variable tail inverse,
   and JAX apply kernels. Historical driver access is a compatibility alias, not
   an implementation owner.
-- ``sfincs_jax/solvers/preconditioners/full_fp/kinetic_blocks.py``:
+- ``sfincs_jax/solvers/preconditioner_full_fp_kinetic.py``:
   RHSMode=1 collision-based, point-xdiag, and point-block kinetic
   preconditioners. The module owns PAS/FP diagonal collision inverses, FP
   species-``x`` and ``x`` block collision factors, low-rank FP collision
   correction, PETSc-style point block probing, extra-variable tail solves, and
   reduced/full apply wrappers. Historical driver access is a compatibility
   alias, not an implementation owner.
-- ``sfincs_jax/solvers/preconditioners/full_fp/structured_fblock.py``:
+- ``sfincs_jax/solvers/preconditioner_full_fp_structured.py``:
   structured full-Fokker-Planck RHSMode=1 f-block preconditioners. The module
   owns block-Jacobi, angular-line, pitch-angular, FP-radial grouped factors,
   and low-mode/moment/tail Schur correction builders over the structured
   f-block operator. Same-shape cache keys, metadata emission, memory guards,
   and matrix-free residual-correction composition live here; historical driver
   access is a compatibility alias, not an implementation owner.
-- ``sfincs_jax/solvers/preconditioners/xblock/block_jacobi.py``:
+- ``sfincs_jax/solvers/preconditioner_xblock_block_jacobi.py``:
   dense x-block Jacobi preconditioners for RHSMode=1, including
   per-``(species,x)`` blocks, the truncated-low-:math:`L` variant used by PAS
   and strong-fallback routes, and species/``x``-per-:math:`L` blocks. The module
   owns block slicing, active pitch-index maps, PAS chunk caps, chunked
   unsharded operator probing, extra-variable tail inversion, and identity
   passthrough for modes not covered by the truncated-:math:`L` factor.
-- ``sfincs_jax/solvers/preconditioners/xblock/radial.py``:
+- ``sfincs_jax/solvers/preconditioner_xblock_radial.py``:
   radial x-grid RHSMode=1 preconditioners, including the two-level additive
   x-multigrid approximation and the stable PAS+``Er`` x-upwind solve. The
   module owns coarse-x selection, Legendre-low-mode xDot coupling, upwind
   line-factor setup, cache population, and reduced/full apply wrappers.
   Historical driver access is a compatibility alias, not an implementation
   owner.
-- ``sfincs_jax/solvers/preconditioners/xblock/tz_sparse.py``
+- ``sfincs_jax/solvers/preconditioner_xblock_tz_sparse.py``
   (historical location: ``sfincs_jax/rhs1_xblock_tz_sparse.py``):
   sparse per-``x`` RHSMode=1 full-FP preconditioner setup. This module owns the
   host/JAX x-block LU/ILU policy, compact CSR/padded triangular-factor apply,
@@ -639,7 +638,7 @@ domain owners replacing the old monolith are:
   host-factor probe/cache-key policy, shared chunked unsharded matrix probing,
   and extra-variable Schur solve. Historical driver access is a compatibility
   alias, not an implementation owner.
-- ``sfincs_jax/solvers/preconditioners/xblock/low_l_schur.py``:
+- ``sfincs_jax/solvers/preconditioner_xblock_low_l_schur.py``:
   low-pitch x-block Schur preconditioners for exact RHSMode=1 full-CSR systems.
   This module owns the opt-in native ``x_ell`` kinetic factor, native
   ``x_ell`` plus dense-tail Schur factor, sparse low-``ell`` ``(theta,zeta)``
@@ -647,7 +646,7 @@ domain owners replacing the old monolith are:
   low-``ell`` x-block index helper. Dispatch/admission wiring lives in the
   profile-response sparse owners and the public solve owner; the old
   ``rhs1_full_assembly.py`` module no longer exists.
-- ``sfincs_jax/solvers/preconditioners/xblock/active_projected.py``:
+- ``sfincs_jax/solvers/preconditioner_xblock_active.py``:
   active-projected x-block, diagonal-Schur, x-ell kinetic-line, angular-line,
   native indexed Schwarz, restricted-additive-Schwarz, global field-split,
   multiline field-split, bounded native-stack, and Fortran-v3-reduced
@@ -661,7 +660,7 @@ domain owners replacing the old monolith are:
   Dispatch/admission wiring lives in the profile-response sparse owners and the
   public solve owner; the old ``rhs1_full_assembly.py`` module no longer
   exists.
-- ``sfincs_jax/solvers/preconditioners/domain_decomposition/__init__.py``:
+- ``sfincs_jax/solvers/preconditioner_domain_decomposition.py``:
   angular line-block and restricted-additive-Schwarz preconditioners for
   RHSMode=1 domain-decomposition and strong fallback paths. It owns the
   theta-line, zeta-line, theta-domain, zeta-domain, theta-Schwarz,
@@ -671,7 +670,7 @@ domain owners replacing the old monolith are:
   axis-line index maps, cache keys, regularization policy, extra-variable tail
   solves, and multi-level residual correction hooks live here. Historical
   driver access is a compatibility alias, not an implementation owner.
-- ``sfincs_jax/solvers/preconditioners/schur/profile_response.py``:
+- ``sfincs_jax/solvers/preconditioner_schur_profile.py``:
   profile-response Schur and coarse preconditioners. It owns Schur
   base-preconditioner selection, constraint-source projection/injection,
   diagonal/full/x-coupled Schur inverse setup, active native-stack and
@@ -679,9 +678,9 @@ domain owners replacing the old monolith are:
   bases, targeted ``(species,x,L)`` window bases, full-CSR structured Schur
   result objects, Jacobi fallback, diagonal tail-Schur, zeta-line Schur,
   pitch-line Schur, radial-pitch Schur builders, block memory estimates, and
-  regularized diagonal inversion. The package-level
-  ``sfincs_jax.solvers.preconditioners.schur`` import re-exports this stable
-  owner; the historical ``rhs1*`` Schur implementation files were removed.
+  regularized diagonal inversion. The historical
+  ``sfincs_jax.solvers.preconditioners.schur`` import remains a compatibility
+  alias; the canonical owner is this flat module.
 - ``sfincs_jax/problems/transport_linear_system.py``:
   RHSMode=2/3 transport active-system owner. It owns active-DOF and dense-path
   setup, active block ordering, bounded block-Schur factors, residual-coarse
@@ -702,7 +701,7 @@ domain owners replacing the old monolith are:
   operator/factor callbacks; ``v3_driver.py`` only exposes the compatibility
   import path. The old explicit-sparse policy and builder support files were
   absorbed here so the explicit sparse host-factor lane has one review surface.
-- ``sfincs_jax/solvers/preconditioners/symbolic_sparse/host_factor.py``:
+- ``sfincs_jax/solvers/preconditioner_symbolic_host.py``:
   RHSMode=1 host sparse ILU/LU factor setup used by non-differentiable
   CLI-oriented rescue paths. The module owns matrix-free column assembly,
   structural-threshold application, SuperLU retry/regularization policy, cached
@@ -710,7 +709,7 @@ domain owners replacing the old monolith are:
   adapter used by coarse/Galerkin corrections. Historical private helper names
   are exposed through the profile-response solve owner and the tiny driver
   compatibility shim.
-- ``sfincs_jax/solvers/preconditioners/symbolic_sparse/profile_response.py``:
+- ``sfincs_jax/solvers/preconditioner_symbolic_profile.py``:
   Fortran-v3-style reduced active sparse factors for RHSMode=1. The module owns
   reduced active matrix construction, support-mode parsing and preflight,
   symbolic-plan permutation, sparse equilibration, LU/ILU memory admission, and
@@ -718,7 +717,7 @@ domain owners replacing the old monolith are:
   private names are exposed through the profile-response solve owner; direct
   ``Pmat`` emission and active-preconditioner dispatch live in profile-response
   sparse/operator owners.
-- ``sfincs_jax/solvers/preconditioners/symbolic_sparse/active_factors.py``:
+- ``sfincs_jax/solvers/preconditioner_symbolic_active.py``:
   active-projected RHSMode=1 sparse-factor preconditioners. The module owns the
   global active sparse factor, row/column-equilibrated active factor, and
   physics-filtered active sparse factor that retains selected off-diagonal
@@ -745,21 +744,21 @@ domain owners replacing the old monolith are:
   owns environment parsing for the candidate ladder, large-system fallback
   guard, skipped-fallback metadata, and progress logging default. Candidate
   dispatch and setup timing live in the profile-response sparse/solve owners.
-- ``sfincs_jax/solvers/preconditioners/symbolic_sparse/policy.py``
+- ``sfincs_jax/solvers/preconditioner_symbolic_policy.py``
   (historical location: ``sfincs_jax/rhs1_fortran_reduced_factor_policy.py``):
   Fortran-v3-reduced RHSMode=1 active-Pmat factorization policy. The module
   owns factor-kind normalization, large-matrix ILU guards, LU prefill safety
   defaults, SuperLU/RCM ordering candidates, equilibration norm selection, and
   progress logging defaults; the symbolic-sparse RHSMode=1 Fortran-reduced
   module consumes this policy and performs the numerical sparse factor setup.
-- ``sfincs_jax/solvers/preconditioners/symbolic_sparse/policy.py``
+- ``sfincs_jax/solvers/preconditioner_symbolic_policy.py``
   (historical location: ``sfincs_jax/rhs1_symbolic_frontal_policy.py``):
   symbolic frontal/Schur RHSMode=1 active-preconditioner policy. The module
   owns frontal versus nested-dissection routing, separator/block limits, dense
   Schur update budgets, admission probe thresholds, and ND residual-polish
   controls; sparse symbolic analysis, factorization, and true-residual
   admission live in the symbolic-sparse and profile-response sparse owners.
-- ``sfincs_jax/solvers/preconditioners/symbolic_sparse/policy.py``
+- ``sfincs_jax/solvers/preconditioner_symbolic_policy.py``
   (historical location: ``sfincs_jax/rhs1_symbolic_sparse_policy.py``):
   symbolic superblock and separator-Schur RHSMode=1 active-preconditioner
   policy. The module owns grouped-block and block-Schur size gates, ordering
@@ -792,7 +791,7 @@ domain owners replacing the old monolith are:
   ``SFINCS_JAX_GMRES_DISTRIBUTED`` axis selection. Problem solve owners pass the
   selected solver callbacks through typed contexts; the driver shim only
   preserves historical import access.
-- ``sfincs_jax/solvers/preconditioners/transport_matrix.py``:
+- ``sfincs_jax/solvers/preconditioner_transport_matrix.py``:
   numerical builder implementations for the common RHSMode=2/3 transport
   preconditioners: collision diagonal, species/speed block, x-grid coarse
   correction, angular FFT/tridiagonal solve, point-block transport
@@ -801,11 +800,11 @@ domain owners replacing the old monolith are:
   factors, x-block angular sparse LU, x-block Schur correction, and structured
   f-block LU. Historical private wrapper names are exposed through the
   transport/profile-response solve owners and the driver compatibility shim.
-- ``sfincs_jax/solvers/preconditioners/pas/policy.py``
+- ``sfincs_jax/solvers/preconditioner_pas_policy.py``
   (historical location: ``sfincs_jax/rhs1_pas_policy.py``):
   PAS applicability, PAS-TZ memory safety, PAS fallback routing, and PAS
   adaptive-smoother eligibility.
-- ``sfincs_jax/solvers/preconditioners/pas/matrix_free.py``
+- ``sfincs_jax/solvers/preconditioner_pas_matrix_free.py``
   (historical location: ``sfincs_jax/rhs1_pas_matrixfree.py``):
   bounded matrix-free PAS correction probes, streaming L2 norms, candidate
   byte-budget preflights, and ``PasRuntimeChunkPlan`` metadata for keeping
@@ -947,14 +946,14 @@ domain owners replacing the old monolith are:
   acceptance-floor metadata, wraps the result in ``V3LinearSolveResult``, and
   owns the bounded PETSc-style GMRES history replay for the optional
   Phi1/Newton-Krylov full-system path.
-- ``sfincs_jax/solvers/preconditioners/xblock/coarse.py``
+- ``sfincs_jax/solvers/preconditioner_xblock_coarse.py``
   (historical location: ``sfincs_jax/rhs1_lowmode_coarse.py``):
   low-mode angular, moment, coupled f/tail, and tail-only feature construction
   plus matrix-free Galerkin/least-squares residual-correction builders for
   structured RHSMode=1 f-block preconditioners. The module keeps coarse-space
   algebra independently testable without materializing dense operator bases in
   the driver.
-- ``sfincs_jax/solvers/preconditioners/domain_decomposition/__init__.py``
+- ``sfincs_jax/solvers/preconditioner_domain_decomposition.py``
   (historical location: ``sfincs_jax/rhs1_domain_decomposition.py``):
   deterministic angular domain-decomposition patch ranges, shard-aware block
   sizing, and two-level Schwarz coarse-block heuristics. These rules are kept
@@ -984,7 +983,7 @@ domain owners replacing the old monolith are:
   bounded JAX-device CSR materialization, active-index slicing, sparse matvec
   closures, and host-vs-device validation utilities for opt-in RHSMode=1
   device-QI and operator-reuse experiments.
-- ``sfincs_jax/solvers/preconditioners/qi/basis.py``:
+- ``sfincs_jax/solvers/preconditioner_qi_basis.py``:
   deterministic QI basis, coarse-space, phase-space, residual-region,
   active-pattern, global-moment, and Galerkin/action coarse utilities. This
   owner replaces the historical ``rhs1_qi_coarse.py``,
@@ -992,7 +991,7 @@ domain owners replacing the old monolith are:
   ``rhs1_qi_residual_region_coarse.py``,
   ``rhs1_qi_active_pattern_coarse.py``, and
   ``rhs1_qi_global_moment_closure.py`` shards.
-- ``sfincs_jax/solvers/preconditioners/qi/corrections.py``:
+- ``sfincs_jax/solvers/preconditioner_qi_corrections.py``:
   reusable QI correction primitives: local-plus-coarse two-level actions,
   block-Schur/angular/radial corrections, residual-deflated corrections,
   multilevel residual equations, residual-derived Galerkin selection, and the
@@ -1001,11 +1000,11 @@ domain owners replacing the old monolith are:
   ``rhs1_qi_deflation.py``, ``rhs1_qi_multilevel_coarse.py``,
   ``rhs1_qi_residual_galerkin.py``, and ``rhs1_qi_coupled_residual.py``
   shards.
-- ``sfincs_jax/solvers/preconditioners/qi/device.py``:
+- ``sfincs_jax/solvers/preconditioner_qi_device.py``:
   device-local QI preconditioner and smoother primitives, including
   CSR-backed Jacobi, matrix-free residual-minimizing steps, fail-closed seed
   probes, and the production-shaped device-QI local-plus-coarse state.
-- ``sfincs_jax/solvers/preconditioners/qi/policy.py``:
+- ``sfincs_jax/solvers/preconditioner_qi_policy.py``:
   pure promotion gates for QI hard-seed and production-ladder evidence. It
   requires complete seed/backend coverage, convergence, output and trace
   provenance, residual/observable bounds, and no host fallback before a true
@@ -1019,7 +1018,7 @@ domain owners replacing the old monolith are:
   automatic preconditioner policy predicates for PAS, DKES, tokamak, GPU sparse
   fallback, weak-default PAS promotion, PAS-family refinement, FP/DKES routing,
   large-FP near-zero-Er overrides, and sharded line-overrides.
-- ``sfincs_jax/solvers/preconditioners/schur/profile_response.py``
+- ``sfincs_jax/solvers/preconditioner_schur_profile.py``
   (historical location: ``sfincs_jax/rhs1_schur_policy.py``):
   RHSMode=1 Schur base-preconditioner alias normalization and automatic
   geometry/PAS/DKES routing policy.
@@ -1081,12 +1080,12 @@ domain owners replacing the old monolith are:
   (historical location: ``sfincs_jax/rhs1_large_cpu_policy.py``):
   large explicit full-FP CPU sparse rescue, x-block seed, exact-LU promotion,
   host x-block assembly, and species-x-block rescue policy.
-- ``sfincs_jax/solvers/preconditioners/xblock/policy.py``
+- ``sfincs_jax/solvers/preconditioner_xblock_policy.py``
   (historical location: ``sfincs_jax/rhs1_xblock_policy.py``):
   pure x-block sparse-PC routing, Krylov-side selection, local factorization
   tuning, lower-fill acceptance gates, and non-autodiff device-host fallback
   metadata for large RHSMode=1 QI/full-FP solves.
-- ``sfincs_jax/solvers/preconditioners/xblock/policy.py``
+- ``sfincs_jax/solvers/preconditioner_xblock_policy.py``
   (historical location: ``sfincs_jax/rhs1_xblock_sparse_host_policy.py``):
   host sparse x-block rescue policy and metadata normalization for the
   non-autodiff large-system fallback path.
@@ -1261,7 +1260,7 @@ The conceptual mapping is:
 - solve stack:
   ``sfincs_jax/problems/profile_solve.py``,
   ``sfincs_jax/problems/transport_solve.py``,
-  ``sfincs_jax/solvers``, and ``sfincs_jax/solvers/preconditioners``
+  ``sfincs_jax/solvers`` and its flat ``preconditioner_*.py`` modules
 - outputs and diagnostics:
   :doc:`outputs`, ``sfincs_jax/io.py``, ``sfincs_jax/diagnostics.py``
 

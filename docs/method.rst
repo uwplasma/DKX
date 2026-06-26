@@ -294,7 +294,7 @@ For large non-differentiable RHSMode=1 constrained-PAS profile-current solves,
 ``solve_method=auto`` may route to the host sparse-preconditioned GMRES branch.
 That branch factors an explicit sparse preconditioner but still polishes the
 true matrix-free residual.  Branch-sensitive diagnostics are labeled with
-``sfincs_jax.solvers.preconditioners.pas.policy``: exact true-residual branches,
+``sfincs_jax.solvers.preconditioner_pas_policy``: exact true-residual branches,
 PETSc-compatible minimum-norm diagnostics, and weak preconditioned-residual
 references are kept distinct so current/flow parity is not claimed across
 different nullspace gauges.
