@@ -1450,8 +1450,10 @@ Current completion status:
   stage is now owned by `profile_response/sparse/handoff.py`, reducing
   `profile_response/solve.py` to 8,453 lines. The SciPy rescue stage is now
   owned by `profile_response/dense.py`, reducing `profile_response/solve.py`
-  to 8,328 lines. The remaining large blockers are the generic
-  sparse-PC/factor-preflight branch, final result/progress
+  to 8,328 lines. The fortran-reduced x-block sparse-PC backend is now owned
+  by `profile_response/sparse/handoff.py`, reducing
+  `profile_response/solve.py` to 8,104 lines. The remaining large blockers are
+  the generic sparse-PC/factor-preflight branch, final result/progress
   normalization, the rest of transport/output consolidation,
   solver/preconditioner naming, and `io.py` ownership. The next work follows
   Lane 1 Batches A-E only.

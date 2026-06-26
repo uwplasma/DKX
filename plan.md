@@ -4120,3 +4120,69 @@ Next best steps:
    py_compile, and `git diff --check`.
 3. Commit and push the Batch B checkpoint only if the source tree shrinks
    materially and no new implementation file is introduced.
+
+## 2026-06-26 Lane 1 Batch B Fortran-Reduced X-Block Backend Extraction
+
+Steps taken:
+
+1. Moved the fortran-reduced x-block sparse-PC backend implementation out of
+   `sfincs_jax/problems/profile_response/solve.py` and into the existing
+   sparse owner `sfincs_jax/problems/profile_response/sparse/handoff.py`.
+2. Added `FortranReducedXBlockBackendContext` and
+   `solve_fortran_reduced_xblock_backend` so the driver passes a typed context
+   and receives the same linear-solve payload as before.
+3. Removed the moved fortran-reduced x-block builder/policy/final-payload
+   imports from `solve.py`.
+4. Added the new sparse-owner context/helper to `handoff.py.__all__` and to
+   the profile-response import-contract test.
+5. Updated `plan_final.md` with the new `solve.py` count and Batch B status.
+
+Results:
+
+- `profile_response/solve.py` decreased from `8,328` lines to `8,104` lines.
+- No new implementation file was created.
+- `profile_response/sparse/handoff.py` is larger, but it is the existing owner
+  for sparse branch handoff and backend orchestration.
+- Package source-file count remains `209`.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m pytest tests/test_profile_response_sparse_pc.py
+  tests/test_rhs1_handoff.py tests/test_domain_package_import_contracts.py -q
+  --tb=short` passed with `402 passed`.
+- `python -m pytest tests/test_profile_response_diagnostics.py
+  tests/test_rhs1_fortran_reduced_symbolic_sparse.py
+  tests/test_rhs1_xblock_policy.py tests/test_rhs1_xblock_sparse_host_policy.py
+  tests/test_v3_driver_sparse_helper_coverage.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py -q --tb=short` passed with
+  `140 passed`.
+- `python -m pytest tests/test_sparse_assembly.py
+  tests/test_rhs1_xblock_block_jacobi.py
+  tests/test_rhs1_sxblock_tz_sparse_host.py
+  tests/test_rhs1_active_projected_xblock.py -q --tb=short` passed with
+  `17 passed`.
+- `git diff --check` passed before the plan-log update.
+
+Progress:
+
+- Lane 1 structural consolidation: about `81%`.
+- Batch A root/boundary sweep: about `90%`.
+- Batch B profile-response owner collapse: about `30%`.
+- Batch C transport/output/root collapse: about `20%`.
+- Batch D solver/preconditioner family collapse: about `25%`.
+- Batch E docs/API/tests/review gate: about `20%`.
+
+Next best steps:
+
+1. Continue Batch B with the generic sparse-PC setup/factor-preflight branch:
+   active setup, preconditioner-operator selection, backend selection, pattern
+   setup, factor policy, memory-budget admission, and preflight/rescue metadata
+   should move into existing sparse owners.
+2. After the generic branch is extracted, move sparse final payload/progress
+   normalization to `sparse/finalization.py`, `solver_diagnostics.py`, or
+   `diagnostics.py` without adding a new file.
+3. Only then proceed to Batch C transport/output collapse.

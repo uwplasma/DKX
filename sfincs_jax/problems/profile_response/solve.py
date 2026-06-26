@@ -253,12 +253,7 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     DirectTailStructuredAdmissionContext,
     DirectTailStructuredBuildContext,
     DirectTailSupportModePreflightContext,
-    FortranReducedXBlockFactorBuildContext,
-    FortranReducedXBlockFinalPayloadContext,
-    FortranReducedXBlockGlobalCouplingStageContext,
-    FortranReducedXBlockKrylovSetupContext,
-    FortranReducedXBlockKrylovSolveContext,
-    FortranReducedXBlockMomentSchurStageContext,
+    FortranReducedXBlockBackendContext,
     SparsePCMemoryBudgetPreflightContext,
     SparsePCFactorPreflightPolicyContext,
     SparsePCFactorPreflightEvaluationContext,
@@ -288,9 +283,6 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     XBlockSideProbeStageContext,
     XBlockSparsePCBranchContext,
     XBlockTwoLevelStageContext,
-    apply_fortran_reduced_xblock_global_coupling_stage,
-    apply_fortran_reduced_xblock_initial_seed,
-    apply_fortran_reduced_xblock_moment_schur_stage,
     apply_xblock_global_coupling_stage,
     apply_xblock_augmented_krylov_stage,
     apply_xblock_moment_schur_stage,
@@ -298,8 +290,6 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     run_xblock_qi_preconditioner_pipeline,
     apply_xblock_side_probe_stage,
     apply_xblock_two_level_stage,
-    build_fortran_reduced_xblock_factor_stage,
-    build_fortran_reduced_xblock_krylov_setup,
     build_xblock_local_preconditioner,
     build_sparse_pc_pattern_setup,
     build_xblock_krylov_matvec_setup,
@@ -309,7 +299,6 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     build_direct_tail_materialization_setup,
     build_xblock_krylov_progress_callbacks,
     build_xblock_qi_stage_pipeline_context,
-    fortran_reduced_xblock_final_payload,
     evaluate_sparse_pc_factor_preflight,
     evaluate_sparse_pc_residual_candidate_acceptance,
     evaluate_xblock_preflight_gate,
@@ -318,7 +307,6 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     complete_xblock_post_krylov_stage,
     resolve_sparse_pc_gmres_control_policy,
     enforce_sparse_pc_memory_budget,
-    prepare_fortran_reduced_xblock_initial_guess,
     prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
     resolve_sparse_pc_factor_policy,
@@ -330,9 +318,6 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     resolve_fortran_reduced_sparse_pc_backend,
     run_direct_tail_support_mode_preflight,
     resolve_fortran_reduced_xblock_factor_policy,
-    resolve_fortran_reduced_xblock_global_coupling_policy,
-    resolve_fortran_reduced_xblock_initial_seed_policy,
-    resolve_fortran_reduced_xblock_moment_schur_policy,
     prepare_xblock_augmented_krylov_basis,
     prepare_xblock_krylov_solve_space,
     resolve_xblock_krylov_control_setup,
@@ -341,7 +326,6 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     resolve_xblock_seed_policy_setup,
     resolve_xblock_sparse_pc_branch_setup,
     resolve_xblock_two_level_policy_setup,
-    run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
     run_sparse_pc_gmres_once_for_retry,
     FPXBlockGlobalCorrectionContext,
@@ -363,6 +347,7 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     run_sparse_host_retry_candidate,
     build_sparse_jax_retry_preconditioner,
     resolve_sparse_host_or_ilu_factor_controls,
+    solve_fortran_reduced_xblock_backend,
     finalize_sparse_pc_gmres_bundle,
     sparse_pc_gmres_finalization_bundle_from_driver_result,
     solve_explicit_sparse_minimum_norm_branch,
@@ -1693,256 +1678,47 @@ def solve_v3_full_system_linear_gmres(
                 emit(level, message)
 
         if bool(fortran_reduced_sparse_pc) and str(fortran_reduced_sparse_pc_backend) == "xblock":
-            if op_pc.fblock.fp is None or op_pc.fblock.pas is not None:
-                raise NotImplementedError(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND=xblock currently targets "
-                    "full-FP RHSMode=1 systems."
-                )
-
-            xblock_factor_build = build_fortran_reduced_xblock_factor_stage(
-                context=FortranReducedXBlockFactorBuildContext(
+            fortran_reduced_xblock_payload = solve_fortran_reduced_xblock_backend(
+                FortranReducedXBlockBackendContext(
+                    op=op,
                     op_pc=op_pc,
+                    rhs=rhs,
+                    sparse_pc_rhs=sparse_pc_rhs,
+                    x0=x0,
+                    sparse_pc_use_active_dof=bool(sparse_pc_use_active_dof),
+                    sparse_pc_active_idx_jnp=sparse_pc_active_idx_jnp,
+                    sparse_pc_full_to_active_jnp=sparse_pc_full_to_active_jnp,
+                    sparse_pc_linear_size=int(sparse_pc_linear_size),
+                    sparse_pc_fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
                     reduce_full=_sparse_pc_reduce_full,
                     expand_reduced=_sparse_pc_expand_reduced,
-                    preconditioner_species=int(preconditioner_species),
-                    preconditioner_xi=int(preconditioner_xi),
-                    sparse_pc_linear_size=int(sparse_pc_linear_size),
-                    backend_reason=str(fortran_reduced_sparse_pc_backend_reason),
-                    elapsed_s=sparse_timer.elapsed_s,
-                    emit=emit,
-                    env=os.environ,
-                    assembled_host_allowed=_rhsmode1_fp_xblock_assembled_host_allowed,
-                    builder=_build_rhsmode1_xblock_tz_sparse_preconditioner,
-                )
-            )
-            precond_xblock = xblock_factor_build.preconditioner
-            xblock_drop_tol = float(xblock_factor_build.drop_tol)
-            xblock_drop_rel = float(xblock_factor_build.drop_rel)
-            xblock_ilu_drop_tol = float(xblock_factor_build.ilu_drop_tol)
-            xblock_fill_factor = float(xblock_factor_build.fill_factor)
-            xblock_preconditioner_xi = int(xblock_factor_build.preconditioner_xi)
-            force_assembled_host_fp = bool(xblock_factor_build.force_assembled_host_fp)
-            pc_factor_s = float(xblock_factor_build.factor_s)
-            setup_s = sparse_timer.elapsed_s()
-
-            xblock_krylov_setup = build_fortran_reduced_xblock_krylov_setup(
-                context=FortranReducedXBlockKrylovSetupContext(
-                    op=op,
-                    rhs=rhs,
-                    xblock_use_active_dof=bool(sparse_pc_use_active_dof),
-                    active_idx=sparse_pc_active_idx_jnp,
-                    full_to_active=sparse_pc_full_to_active_jnp,
                     reduce_full_with_indices=reduce_full_with_indices,
                     expand_reduced_with_map=expand_reduced_with_map,
                     operator_matvec=lambda x_full: apply_v3_full_system_operator_cached(op, x_full),
-                    base_preconditioner=precond_xblock,
-                    elapsed_s=sparse_timer.elapsed_s,
-                    emit=emit,
-                    env=os.environ,
-                )
-            )
-            side_env = xblock_krylov_setup.side_env
-            precondition_side = xblock_krylov_setup.precondition_side
-            pc_form = xblock_krylov_setup.pc_form
-            xblock_krylov_method = xblock_krylov_setup.krylov_method
-            progress_every = xblock_krylov_setup.progress_every
-            mv_count = xblock_krylov_setup.mv_count
-            _mv_true_no_count = xblock_krylov_setup.matvec_no_count
-            _mv_true = xblock_krylov_setup.matvec
-            precond_xblock_krylov = xblock_krylov_setup.preconditioner
-            moment_schur_policy = resolve_fortran_reduced_xblock_moment_schur_policy(
-                precondition_side=precondition_side,
-                env=os.environ,
-            )
-            moment_schur_enabled = bool(moment_schur_policy.enabled)
-            moment_schur_result = apply_fortran_reduced_xblock_moment_schur_stage(
-                context=FortranReducedXBlockMomentSchurStageContext(
-                    op=op,
-                    base_preconditioner=precond_xblock_krylov,
-                    reduce_full=_sparse_pc_reduce_full if sparse_pc_use_active_dof else None,
-                    expand_reduced=_sparse_pc_expand_reduced if sparse_pc_use_active_dof else None,
-                    policy=moment_schur_policy,
-                    precondition_side=str(precondition_side),
-                    rhs=sparse_pc_rhs,
-                    matvec_no_count=_mv_true_no_count,
-                    elapsed_s=sparse_timer.elapsed_s,
-                    emit=emit,
-                    builder=_build_rhs1_xblock_constraint1_moment_schur_preconditioner,
-                )
-            )
-            precond_xblock_krylov = moment_schur_result.preconditioner
-            moment_schur_built = bool(moment_schur_result.built)
-            moment_schur_used = bool(moment_schur_result.used)
-            moment_schur_reason = moment_schur_result.reason
-            moment_schur_metadata = moment_schur_result.metadata
-            moment_schur_stats = moment_schur_result.stats
-            moment_schur_probe_residual_before = moment_schur_result.probe_residual_before
-            moment_schur_probe_residual_after = moment_schur_result.probe_residual_after
-            moment_schur_probe_improvement_ratio = moment_schur_result.probe_improvement_ratio
-            pc_factor_s += float(moment_schur_result.setup_s)
-
-            global_coupling_policy = (
-                resolve_fortran_reduced_xblock_global_coupling_policy(
-                    precondition_side=precondition_side,
-                    env=os.environ,
-                )
-            )
-            global_coupling_enabled = bool(global_coupling_policy.enabled)
-            global_coupling_result = apply_fortran_reduced_xblock_global_coupling_stage(
-                context=FortranReducedXBlockGlobalCouplingStageContext(
-                    op=op,
-                    rhs=rhs,
-                    matvec=_mv_true_no_count,
-                    base_preconditioner=precond_xblock_krylov,
-                    direction_projector=_sparse_pc_reduce_full if sparse_pc_use_active_dof else None,
-                    expected_size=int(sparse_pc_linear_size),
-                    policy=global_coupling_policy,
-                    elapsed_s=sparse_timer.elapsed_s,
-                    emit=emit,
-                )
-            )
-            precond_xblock_krylov = global_coupling_result.preconditioner
-            global_coupling_built = bool(global_coupling_result.built)
-            global_coupling_metadata = global_coupling_result.metadata
-            global_coupling_stats = global_coupling_result.stats
-            pc_factor_s += float(global_coupling_result.setup_s)
-
-            fortran_x0_setup = prepare_fortran_reduced_xblock_initial_guess(
-                x0=x0,
-                sparse_pc_rhs=sparse_pc_rhs,
-                full_rhs=rhs,
-                reduce_full=_sparse_pc_reduce_full,
-            )
-            x0_sparse = fortran_x0_setup.x0_full
-            if emit is not None:
-                for level, message in fortran_x0_setup.messages:
-                    emit(level, message)
-
-            sparse_pc_rhs_norm = rhs1_l2_norm_float(sparse_pc_rhs)
-            target = rhs1_residual_target(
-                atol=float(atol),
-                tol=float(tol),
-                rhs_norm=float(sparse_pc_rhs_norm),
-            )
-            initial_seed_policy = resolve_fortran_reduced_xblock_initial_seed_policy(
-                env=os.environ,
-            )
-            seed_enabled = bool(initial_seed_policy.enabled)
-            seed_residual_norm: float | None = None
-            seed_improvement_ratio: float | None = None
-            seed_refines_performed = 0
-            seed_refine_steps = int(initial_seed_policy.refine_steps)
-            seed_accept_ratio = float(initial_seed_policy.accept_ratio)
-            seed_used = False
-            initial_seed_result = apply_fortran_reduced_xblock_initial_seed(
-                policy=initial_seed_policy,
-                rhs=sparse_pc_rhs,
-                rhs_norm=float(sparse_pc_rhs_norm),
-                x0=x0_sparse,
-                preconditioner=precond_xblock_krylov,
-                matvec_no_count=_mv_true_no_count,
-                elapsed_s=sparse_timer.elapsed_s,
-            )
-            x0_sparse = initial_seed_result.x0
-            seed_used = bool(initial_seed_result.used)
-            seed_residual_norm = initial_seed_result.residual_norm
-            seed_improvement_ratio = initial_seed_result.improvement_ratio
-            seed_refines_performed = int(initial_seed_result.refines_performed)
-            if emit is not None:
-                for level, message in initial_seed_result.messages:
-                    emit(level, message)
-            xblock_krylov_result = run_fortran_reduced_xblock_krylov_solve(
-                context=FortranReducedXBlockKrylovSolveContext(
-                    matvec=_mv_true,
-                    rhs=sparse_pc_rhs,
-                    preconditioner=precond_xblock_krylov,
-                    emit=emit,
-                    elapsed_s=sparse_timer.elapsed_s,
-                    method=str(xblock_krylov_method),
-                    pc_form=str(pc_form),
-                    restart=int(pc_restart),
-                    maxiter=int(pc_maxiter),
-                    tol=float(tol),
+                    preconditioner_x=int(preconditioner_x),
+                    preconditioner_x_min_l=int(preconditioner_x_min_l),
+                    preconditioner_xi=int(preconditioner_xi),
+                    preconditioner_species=int(preconditioner_species),
+                    backend_reason=str(fortran_reduced_sparse_pc_backend_reason),
+                    xblock_min_size=int(fortran_reduced_xblock_min_size),
+                    sparse_timer=sparse_timer,
+                    pc_restart=int(pc_restart),
+                    pc_maxiter=int(pc_maxiter),
                     atol=float(atol),
-                    target=float(target),
-                    precondition_side=str(precondition_side),
-                    progress_every=int(progress_every),
-                    mv_count=mv_count,
+                    tol=float(tol),
+                    rhs_norm=float(rhs_norm),
+                    emit=emit,
+                    env=os.environ,
+                    rhs1_l2_norm_float=rhs1_l2_norm_float,
+                    rhs1_residual_target=rhs1_residual_target,
+                    assembled_host_allowed=_rhsmode1_fp_xblock_assembled_host_allowed,
+                    xblock_preconditioner_builder=_build_rhsmode1_xblock_tz_sparse_preconditioner,
+                    moment_schur_builder=_build_rhs1_xblock_constraint1_moment_schur_preconditioner,
                     explicit_left_solver=explicit_left_preconditioned_gmres_scipy,
                     gmres_solver=gmres_solve_with_history_scipy,
                     lgmres_solver=lgmres_solve_with_history_scipy,
                     gcrotmk_solver=gcrotmk_solve_with_history_scipy,
                     bicgstab_solver=bicgstab_solve_with_history_scipy,
-                ),
-                x0=x0_sparse,
-            )
-            fortran_reduced_xblock_payload = (
-                fortran_reduced_xblock_final_payload(
-                    FortranReducedXBlockFinalPayloadContext(
-                        diagnostic_state={
-                            "op": op,
-                            "fortran_reduced_sparse_pc_backend_reason": fortran_reduced_sparse_pc_backend_reason,
-                            "fortran_reduced_xblock_min_size": fortran_reduced_xblock_min_size,
-                            "preconditioner_x": preconditioner_x,
-                            "preconditioner_x_min_l": preconditioner_x_min_l,
-                            "preconditioner_xi": preconditioner_xi,
-                            "preconditioner_species": preconditioner_species,
-                            "xblock_preconditioner_xi": xblock_preconditioner_xi,
-                            "force_assembled_host_fp": force_assembled_host_fp,
-                            "xblock_krylov_method": xblock_krylov_method,
-                            "seed_enabled": seed_enabled,
-                            "seed_used": seed_used,
-                            "seed_residual_norm": seed_residual_norm,
-                            "seed_improvement_ratio": seed_improvement_ratio,
-                            "seed_accept_ratio": seed_accept_ratio,
-                            "seed_refine_steps": seed_refine_steps,
-                            "seed_refines_performed": seed_refines_performed,
-                            "moment_schur_enabled": moment_schur_enabled,
-                            "moment_schur_built": moment_schur_built,
-                            "moment_schur_used": moment_schur_used,
-                            "moment_schur_reason": moment_schur_reason,
-                            "moment_schur_metadata": moment_schur_metadata,
-                            "moment_schur_stats": moment_schur_stats,
-                            "moment_schur_probe_residual_before": (
-                                moment_schur_probe_residual_before
-                            ),
-                            "moment_schur_probe_residual_after": (
-                                moment_schur_probe_residual_after
-                            ),
-                            "moment_schur_probe_improvement_ratio": (
-                                moment_schur_probe_improvement_ratio
-                            ),
-                            "global_coupling_enabled": global_coupling_enabled,
-                            "global_coupling_built": global_coupling_built,
-                            "global_coupling_metadata": global_coupling_metadata,
-                            "global_coupling_stats": global_coupling_stats,
-                            "xblock_drop_tol": xblock_drop_tol,
-                            "xblock_drop_rel": xblock_drop_rel,
-                            "xblock_ilu_drop_tol": xblock_ilu_drop_tol,
-                            "xblock_fill_factor": xblock_fill_factor,
-                            "sparse_pc_use_active_dof": sparse_pc_use_active_dof,
-                            "sparse_pc_linear_size": sparse_pc_linear_size,
-                            "sparse_pc_fp_dense_velocity_block": sparse_pc_fp_dense_velocity_block,
-                            "setup_s": setup_s,
-                            "solve_s": float(xblock_krylov_result.solve_s),
-                            "sparse_timer": sparse_timer,
-                            "pc_factor_s": pc_factor_s,
-                            "target": target,
-                            "mv_count": mv_count,
-                            "pc_restart": pc_restart,
-                            "pc_maxiter": pc_maxiter,
-                            "history": tuple(xblock_krylov_result.history),
-                            "residual_norm_sparse_pc": float(
-                                xblock_krylov_result.residual_norm
-                            ),
-                        },
-                        result=xblock_krylov_result,
-                        atol=float(atol),
-                        tol=float(tol),
-                        rhs_norm=float(rhs_norm),
-                        target=float(target),
-                    ),
-                    expand_reduced=_sparse_pc_expand_reduced,
                 )
             )
             return v3_linear_solve_result_from_payload(
