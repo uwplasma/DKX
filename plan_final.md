@@ -298,6 +298,9 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   package-layout language into stable compatibility-facade language. The
   package/source layout guard reports `25 passed`, and the package README stale
   wording scan has no matches for the blocked transition/release-cycle phrases.
+- The post-forty-ninth documentation gate ran `python -m sphinx -W -b html docs
+  docs/_build/html` successfully for all `44` documentation pages. Generated
+  build/cache directories were removed afterward so no docs artifacts are staged.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
