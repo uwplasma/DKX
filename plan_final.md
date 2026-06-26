@@ -82,6 +82,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   The target remains `95%` meaningful package coverage with GitHub Actions
   under `10 min`; this requires targeted unit, numerical, and frozen-reference
   tests, not slow full-solve CI jobs.
+- A post-twentieth-tranche local coverage attempt completed `959` tests in
+  `6:21` before hanging in JAX array teardown and was interrupted; a file-scoped
+  pytest-cov run for `outputs/writer.py` also aborted with exit code `134`.
+  Until the local coverage runner is stable, use normal fast pytest suites plus
+  GitHub Actions coverage as the acceptance signal and keep adding targeted
+  high-value tests from the static gap list.
 - The largest coverage gaps by missing executable lines are
   `problems/profile_solve.py`, `problems/transport_solve.py`,
   `operators/profile_system.py`, `outputs/writer.py`,
@@ -194,6 +200,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   and Boozer-alias equilibrium localization/namelist patching. These are fast
   Fortran-v3 output-contract tests for `outputs/writer.py` that keep generated
   data out of the repository.
+- The twenty-first post-audit coverage tranche added transport-loop support
+  tests for inactive full-space matvec cache fallback, disabled recycle-basis
+  no-op behavior, invalid/negative recycle environment values, zero-RHS
+  relative-residual reporting, dense mixed-precision dtype selection, dense
+  batch state/metadata storage, and streaming-diagnostics collector guards.
+  These protect production RHSMode=2/3 loop bookkeeping without running a full
+  transport solve.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
