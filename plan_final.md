@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (output equilibrium-path coverage pass)
+Last updated: 2026-06-26 (transport iteration-diagnostics coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -389,6 +389,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   adding large fixtures or running solves. The focused output/input/write-output
   suite reports `67 passed` in `4.21 s`, and Ruff passes for the touched test
   file.
+- The sixtieth post-audit coverage tranche added transport iteration-diagnostic
+  tests for the BiCGStab history path and fail-closed unknown solver kinds.
+  These protect optional KSP iteration reporting used by runtime/profile audits:
+  diagnostics can report GMRES/BiCGStab history on small systems, but unsupported
+  solver kinds do not launch host-side replay or perturb the production solve.
+  The focused transport iteration/progress/finalization suite reports
+  `24 passed` in `1.31 s`, and Ruff passes for the touched test file.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
