@@ -111,10 +111,7 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.solvers.preconditioner_setup
    :members:
 
-.. automodule:: sfincs_jax.solvers.explicit_sparse_factor_policy
-   :members:
-
-.. automodule:: sfincs_jax.solvers.explicit_sparse_factor_builder
+.. automodule:: sfincs_jax.solvers.explicit_sparse
    :members:
 
 .. automodule:: sfincs_jax.solvers.krylov_dispatch
@@ -239,9 +236,6 @@ research workflows.
    :members:
 
 .. automodule:: sfincs_jax.validation.petsc_binary
-   :members:
-
-.. automodule:: sfincs_jax.solvers.explicit_sparse
    :members:
 
 .. automodule:: sfincs_jax.solvers.implicit

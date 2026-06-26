@@ -476,21 +476,19 @@ the historical private driver name and test the focused module directly. This ke
   array hashes, and RHSMode=1/transport preconditioner cache-key construction.
   The keys intentionally omit RHS-only gradients so fixed-operator scan points
   can reuse factors.
-- ``sfincs_jax/solvers/explicit_sparse_factor_policy.py``:
+- ``sfincs_jax/solvers/explicit_sparse.py``:
   explicit-sparse host-factor environment parsing, canonical factor-kind alias
   resolution, monolithic LU/ILU guard sizing, and the typed
-  ``ExplicitSparseFactorSettings`` bundle consumed by the host sparse builder.
-  The sparse builder still owns monkeypatch-sensitive operator/factor
-  construction, but the dense/CSR budgets, pattern-color probing, symbolic
-  Schur/frontal/ND/BLR settings, SuperLU pivot/permutation options, and ILU
-  options are parsed in this directly tested policy layer.
-- ``sfincs_jax/solvers/explicit_sparse_factor_builder.py``:
-  host explicit-sparse operator assembly, logging, monolithic preflight guard,
-  and factorization orchestration. ``v3_driver.py`` injects its current
+  ``ExplicitSparseFactorSettings`` bundle, dense/CSR storage decisions,
+  pattern-color probing, symbolic Schur/frontal/ND/BLR settings, SuperLU
+  pivot/permutation options, ILU options, host explicit-sparse operator
+  assembly, logging, monolithic preflight guard, and factorization
+  orchestration. ``v3_driver.py`` injects its current
   ``build_operator_from_matvec``, ``build_operator_from_pattern``,
   ``factorize_host_sparse_operator``, and backend callbacks so existing
-  monkeypatch/debug workflows keep exercising the same runtime seam while the
-  implementation is directly testable outside the monolith.
+  monkeypatch/debug workflows keep exercising the same runtime seam. The old
+  explicit-sparse policy and builder support files were absorbed here so the
+  explicit sparse host-factor lane has one review surface.
 - ``sfincs_jax/solvers/preconditioners/symbolic_sparse/host_factor.py``:
   RHSMode=1 host sparse ILU/LU factor setup used by non-differentiable
   CLI-oriented rescue paths. The module owns matrix-free column assembly,
