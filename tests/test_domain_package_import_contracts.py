@@ -294,6 +294,52 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "xgrid.py": "stable discretization kernel",
 }
 
+ROOT_MODULE_CLOSURE_MANIFEST = {
+    "__init__.py": ("package root public facade", "keep at root"),
+    "__main__.py": ("package root CLI entry point", "keep at root"),
+    "adaptive_maps.py": ("discretization speed-grid owner", "move with grid/discretization kernel group"),
+    "ambipolar.py": ("problems.ambipolar via public API facade", "keep root shim until public docs/examples migrate"),
+    "api.py": ("package root public API", "keep at root"),
+    "boozer_bc.py": ("geometry package Boozer owner", "move after geometry.py package migration is staged"),
+    "classical_transport.py": ("physics classical transport owner", "move only with physics API export tests"),
+    "cli.py": ("package root CLI entry point", "keep at root"),
+    "collisionless.py": ("operators profile-response streaming owner", "move with operator-kernel group"),
+    "collisionless_er.py": ("operators electric-field owner", "move with operator-kernel group"),
+    "collisionless_exb.py": ("operators ExB owner", "move with operator-kernel group"),
+    "collisions.py": ("physics/operators collision owner", "move only with collision API export tests"),
+    "compare.py": ("validation comparison API", "move only after examples/scripts use validation owner"),
+    "constrained_pas_branch.py": ("solvers/preconditioners PAS policy owner", "move in solver-policy group if no public shim is needed"),
+    "constraint_projection.py": ("solvers constraint-projection owner", "move only after transport/profile imports use solver owner"),
+    "data_fetch.py": ("validation/data fixture support", "move in Phase 2 if scripts/tests need no shim"),
+    "diagnostics.py": ("physics/output diagnostics owner", "defer until diagnostics API split is explicit"),
+    "geometry.py": ("future geometry package public owner", "convert from module to package only in one dedicated Phase 2 move"),
+    "grids.py": ("discretization public grid owner", "keep root public helper until discretization package exports are documented"),
+    "host_refinement.py": ("solvers refinement policy owner", "move in solver-policy group if profile-response imports migrate"),
+    "indices.py": ("discretization layout owner", "move with grid/discretization kernel group"),
+    "input_compat.py": ("input compatibility owner", "keep root public compatibility shim until input package exports cover callers"),
+    "io.py": ("outputs writer/formats/cache owners", "keep tiny root facade until public imports migrate"),
+    "jax_geometry_adapters.py": ("geometry package JAX-adapter owner", "move after geometry.py package migration is staged"),
+    "magnetic_drifts.py": ("operators magnetic-drift owner", "move with operator-kernel group"),
+    "namelist.py": ("input namelist owner", "keep root public parser until input package exports are documented"),
+    "pas_smoother.py": ("solvers/preconditioners PAS smoother owner", "move in solver-preconditioner group"),
+    "paths.py": ("package root path support utility", "keep at root unless a support package is introduced with broad import rewrite"),
+    "periodic_stencil.py": ("discretization stencil owner", "move with grid/discretization kernel group"),
+    "phi1_newton_linear.py": ("problems.profile_response Phi1 Newton owner", "move if it deletes root file without adding shim"),
+    "phi1_newton_policy.py": ("problems.profile_response Phi1 policy owner", "move if it deletes root file without adding shim"),
+    "plotting.py": ("outputs/plotting public helper", "keep root public helper unless API replacement is documented"),
+    "postprocess_upstream.py": ("workflows upstream postprocess owner", "move in Phase 2 if example imports can migrate cleanly"),
+    "profiling.py": ("solvers/validation profiling support", "defer until profiling API boundary is explicit"),
+    "residual.py": ("operators residual/autodiff owner", "move with operator-kernel group if docs imports migrate"),
+    "scans.py": ("workflows scan owner", "move in Phase 2 only if public scan imports can migrate cleanly"),
+    "sensitivity.py": ("package root differentiation API", "keep at root"),
+    "solver.py": ("solvers public contracts owner", "keep root shim until solvers exports cover public contracts"),
+    "structured_velocity.py": ("discretization structured-velocity owner", "move with grid/discretization kernel group"),
+    "v3_driver.py": ("compatibility shim to problem owners", "delete after tests/examples stop importing sfincs_jax.v3_driver"),
+    "vmec_geometry.py": ("geometry package VMEC evaluator owner", "move after geometry.py package migration is staged"),
+    "vmec_wout.py": ("geometry package VMEC wout owner", "move after geometry.py package migration is staged"),
+    "xgrid.py": ("discretization speed-grid owner", "move with grid/discretization kernel group"),
+}
+
 TRANSPORT_COMPATIBILITY_IMPORTS = (
     (
         "sfincs_jax.problems.transport_matrix.diagnostics",
@@ -797,6 +843,23 @@ def test_root_modules_are_explicitly_classified() -> None:
         "stable support utility",
     }
     assert set(ROOT_MODULE_CLASSIFICATIONS.values()) <= allowed_classes
+
+
+def test_root_module_closure_manifest_is_complete_and_documented() -> None:
+    """Closure Phase 1 requires a move/delete decision for every root module."""
+
+    repo_root = Path(__file__).resolve().parents[1]
+    root = repo_root / "sfincs_jax"
+    actual = {path.name for path in root.glob("*.py")}
+    assert set(ROOT_MODULE_CLOSURE_MANIFEST) == actual
+    assert set(ROOT_MODULE_CLOSURE_MANIFEST) == set(ROOT_MODULE_CLASSIFICATIONS)
+
+    source_map = (repo_root / "docs" / "source_map.rst").read_text(encoding="utf-8")
+    assert "Closure move/delete manifest" in source_map
+    for filename, (target_owner, disposition) in ROOT_MODULE_CLOSURE_MANIFEST.items():
+        assert f"``{filename}``" in source_map
+        assert target_owner in source_map
+        assert disposition in source_map
 
 
 def test_source_map_does_not_advertise_deleted_flat_aliases() -> None:

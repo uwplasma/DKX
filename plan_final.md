@@ -695,6 +695,54 @@ Exit gates:
   implementation module without a manifest entry.
 - Focused import/API/docs gates pass.
 
+Phase 1 root-module move/delete manifest:
+
+| Root file | Target owner | Disposition or deletion condition |
+| --- | --- | --- |
+| `__init__.py` | package root public facade | keep at root |
+| `__main__.py` | package root CLI entry point | keep at root |
+| `api.py` | package root public API | keep at root |
+| `cli.py` | package root CLI entry point | keep at root |
+| `ambipolar.py` | problems.ambipolar via public API facade | keep root shim until public docs/examples migrate |
+| `compare.py` | validation comparison API | move only after examples/scripts use validation owner |
+| `data_fetch.py` | validation/data fixture support | move in Phase 2 if scripts/tests need no shim |
+| `input_compat.py` | input compatibility owner | keep root public compatibility shim until input package exports cover callers |
+| `io.py` | outputs writer/formats/cache owners | keep tiny root facade until public imports migrate |
+| `namelist.py` | input namelist owner | keep root public parser until input package exports are documented |
+| `plotting.py` | outputs/plotting public helper | keep root public helper unless API replacement is documented |
+| `postprocess_upstream.py` | workflows upstream postprocess owner | move in Phase 2 if example imports can migrate cleanly |
+| `scans.py` | workflows scan owner | move in Phase 2 only if public scan imports can migrate cleanly |
+| `sensitivity.py` | package root differentiation API | keep at root |
+| `adaptive_maps.py` | discretization speed-grid owner | move with grid/discretization kernel group |
+| `boozer_bc.py` | geometry package Boozer owner | move after geometry.py package migration is staged |
+| `classical_transport.py` | physics classical transport owner | move only with physics API export tests |
+| `collisionless.py` | operators profile-response streaming owner | move with operator-kernel group |
+| `collisionless_er.py` | operators electric-field owner | move with operator-kernel group |
+| `collisionless_exb.py` | operators ExB owner | move with operator-kernel group |
+| `collisions.py` | physics/operators collision owner | move only with collision API export tests |
+| `constrained_pas_branch.py` | solvers/preconditioners PAS policy owner | move in solver-policy group if no public shim is needed |
+| `constraint_projection.py` | solvers constraint-projection owner | move only after transport/profile imports use solver owner |
+| `diagnostics.py` | physics/output diagnostics owner | defer until diagnostics API split is explicit |
+| `geometry.py` | future geometry package public owner | convert from module to package only in one dedicated Phase 2 move |
+| `grids.py` | discretization public grid owner | keep root public helper until discretization package exports are documented |
+| `host_refinement.py` | solvers refinement policy owner | move in solver-policy group if profile-response imports migrate |
+| `indices.py` | discretization layout owner | move with grid/discretization kernel group |
+| `jax_geometry_adapters.py` | geometry package JAX-adapter owner | move after geometry.py package migration is staged |
+| `magnetic_drifts.py` | operators magnetic-drift owner | move with operator-kernel group |
+| `pas_smoother.py` | solvers/preconditioners PAS smoother owner | move in solver-preconditioner group |
+| `paths.py` | package root path support utility | keep at root unless a support package is introduced with broad import rewrite |
+| `periodic_stencil.py` | discretization stencil owner | move with grid/discretization kernel group |
+| `phi1_newton_linear.py` | problems.profile_response Phi1 Newton owner | move if it deletes root file without adding shim |
+| `phi1_newton_policy.py` | problems.profile_response Phi1 policy owner | move if it deletes root file without adding shim |
+| `profiling.py` | solvers/validation profiling support | defer until profiling API boundary is explicit |
+| `residual.py` | operators residual/autodiff owner | move with operator-kernel group if docs imports migrate |
+| `solver.py` | solvers public contracts owner | keep root shim until solvers exports cover public contracts |
+| `structured_velocity.py` | discretization structured-velocity owner | move with grid/discretization kernel group |
+| `v3_driver.py` | compatibility shim to problem owners | delete after tests/examples stop importing sfincs_jax.v3_driver |
+| `vmec_geometry.py` | geometry package VMEC evaluator owner | move after geometry.py package migration is staged |
+| `vmec_wout.py` | geometry package VMEC wout owner | move after geometry.py package migration is staged |
+| `xgrid.py` | discretization speed-grid owner | move with grid/discretization kernel group |
+
 #### Closure Phase 2 - Root-To-Domain Package Move
 
 Purpose: reduce root-level clutter by moving coherent domains, not helpers.
