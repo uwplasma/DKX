@@ -181,12 +181,11 @@ host sparse-LU first attempts/rescues when a bounded pilot shows they are useful
 instead of the differentiable implicit path that intentionally avoids host-only
 direct solvers.
 
-On the current two-GPU ``office`` pilot for the first LHD FP high-``nu'`` point,
-this explicit worker lane produced residuals ``4.33e-16``, ``5.33e-14``, and
-``4.06e-11`` in about ``262 s``. The same explicit point on one GPU took about
-``345 s``; the older implicit-path pilot took about ``569 s`` and stalled at much
-larger residuals. The first full-resolution W7-X FP high-``nu'`` point now also
-has a residual-clean route: with one GPU worker,
+The two-GPU ``office`` pilot for the first LHD FP high-``nu'`` point produced
+residuals ``4.33e-16``, ``5.33e-14``, and ``4.06e-11`` in about ``262 s``. The
+same explicit point on one GPU took about ``345 s``; the implicit-path
+comparison took about ``569 s`` and stalled at much larger residuals. The first
+full-resolution W7-X FP high-``nu'`` point has a residual-clean route: with one GPU worker,
 ``SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE=float32``, and
 ``--transport-sparse-direct-max 40000``, the three RHS residual/RHS/relative
 tuples were ``1.297471e-10 / 1.885192e-04 / 6.882435e-07``,
@@ -194,7 +193,7 @@ tuples were ``1.297471e-10 / 1.885192e-04 / 6.882435e-07``,
 ``4.841651e-09 / 6.589011e-01 / 7.348069e-09``. With sparse-helper factor
 reuse, the scan took about ``582 s`` on one office GPU instead of about
 ``2028 s`` before reuse; RHS timings were about ``574.0 s``, ``2.47 s``, and
-``2.38 s``. The smaller ``30000`` cap and the current Krylov-only
+``2.38 s``. The smaller ``30000`` cap and Krylov-only
 preconditioners still fail this point, so the strict residual gates remain
 mandatory for widened scans.
 

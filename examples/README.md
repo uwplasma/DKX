@@ -26,7 +26,7 @@ references or optional local Fortran only when explicitly requested.
 | understand transport matrices | `transport/transport_matrix_rhsmode2_and_rhsmode3.py` | `transport/transport_matrix_recycle_demo.py` |
 | differentiate a solve or residual | `tutorials/02_transport_and_autodiff.ipynb` | `autodiff/implicit_diff_through_gmres_solve_scheme5.py` |
 | compute bootstrap current and compare Redl | `tutorials/03_bootstrap_redl_and_optimization.ipynb` | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` |
-| add neoclassical objectives to optimization | `optimization/qa_nfp2_sfincs_jax_objectives.py` | `optimization/qa_nfp2_bootstrap_current_optimization.py` |
+| add neoclassical objectives to optimization | `optimization/qa_nfp2_sfincs_jax_objectives.py` | `optimization/QA_optimization_bootstrap_current.py` |
 | check CPU/GPU performance or output formats | `performance/benchmark_output_formats.py` | `performance/benchmark_sharded_solve_scaling.py` |
 | validate against frozen SFINCS Fortran v3 data | `parity/output_parity_vs_fortran_fixture.py` | `publication_figures/` and `sfincs_examples/` |
 
@@ -53,7 +53,7 @@ references or optional local Fortran only when explicitly requested.
   figures from checked summaries or explicit benchmark runs.
 - `sfincs_examples/`: vendored upstream SFINCS v3 example inputs plus helpers
   used for parity and benchmark-suite audits, not the recommended starting
-  point for new users.
+  point for first-time users.
 - `upstream/` and `additional_examples/`: curated reference inputs used by
   tests, docs, and validation lanes.
 - `data/`: small input data needed by public examples.

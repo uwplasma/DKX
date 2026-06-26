@@ -6,11 +6,12 @@ This page is intended for maintainers preparing a tagged release (PyPI + Read th
 What this project can and cannot claim
 --------------------------------------
 
-On the current ``main`` branch, `sfincs_jax` can claim:
+For a tagged release, `sfincs_jax` can claim the following only when the
+corresponding release artifacts are regenerated from the tagged commit:
 
 - full CPU and GPU parity for the vendored 39-case example suite, including
   ``examples/additional_examples/input.namelist``,
-- no ``jax_error`` or ``max_attempts`` in the current release-facing suite artifacts,
+- no ``jax_error`` or ``max_attempts`` in the release-facing suite artifacts,
 - matching ``sfincsOutput.h5`` common numeric datasets, zero missing Fortran top-level
   output keys in JAX, and the required terminal-output signals for the supported examples.
 - a bounded, metadata-visible non-autodiff host fallback for explicit large-QI
