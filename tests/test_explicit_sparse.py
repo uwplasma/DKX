@@ -23,6 +23,9 @@ from sfincs_jax.solvers.explicit_sparse import (
     estimate_multifrontal_direct_lu_nbytes,
     estimate_superlu_factor_storage,
     factorize_host_sparse_operator,
+    host_direct_solve_with_refinement,
+    host_sparse_direct_polish,
+    host_sparse_direct_solve_with_refinement,
     wrap_sparse_factor_with_coarse_correction,
 )
 
@@ -1469,6 +1472,35 @@ def test_wrap_sparse_factor_with_coarse_correction_uses_supplied_modes() -> None
     assert wrapped_error < 0.4 * local_error
 
 
+def test_wrap_sparse_factor_with_coarse_correction_noops_for_invalid_basis() -> None:
+    factor = factorize_host_sparse_operator(sp.eye(2, format="csr"), kind="jacobi")
+
+    assert wrap_sparse_factor_with_coarse_correction(factor, sp.csr_matrix((2, 0))) is factor
+    assert wrap_sparse_factor_with_coarse_correction(factor, sp.csr_matrix((3, 1))) is factor
+
+    metadata = SparseDecision(
+        storage_kind="linear_operator",
+        reason="operator only",
+        backend="cpu",
+        shape=(2, 2),
+        dense_nbytes=32,
+        csr_nbytes_estimate=0,
+        nnz_estimate=None,
+    )
+    operator_only = SparseOperatorBundle(matrix=None, operator=factor.operator.operator, metadata=metadata)
+    factor_without_matrix = factorize_host_sparse_operator(sp.eye(2, format="csr"), kind="jacobi")
+    factor_without_matrix = factor_without_matrix.__class__(
+        factor=factor_without_matrix.factor,
+        operator=operator_only,
+        metadata=metadata,
+        kind=factor_without_matrix.kind,
+        factor_nbytes_estimate=factor_without_matrix.factor_nbytes_estimate,
+        factor_nnz_estimate=factor_without_matrix.factor_nnz_estimate,
+        factor_s=factor_without_matrix.factor_s,
+    )
+    assert wrap_sparse_factor_with_coarse_correction(factor_without_matrix, sp.eye(2, format="csr")) is factor_without_matrix
+
+
 def test_factorize_host_sparse_operator_jacobi_floors_zero_diagonal() -> None:
     matrix = sp.csr_matrix([[0.0, 1.0], [2.0, 4.0]])
     factor = factorize_host_sparse_operator(matrix, kind="jacobi")
@@ -1496,3 +1528,102 @@ def test_factorize_host_sparse_operator_reports_singular_branch_actionably() -> 
 
     with pytest.raises(RuntimeError, match="Host sparse factorization failed"):
         factorize_host_sparse_operator(matrix, kind="lu")
+
+
+def test_host_direct_refinement_keeps_only_residual_improving_steps() -> None:
+    matrix = np.diag([2.0, 4.0])
+    rhs = np.asarray([2.0, 8.0])
+    calls: list[np.ndarray] = []
+
+    def improving_solve(load: np.ndarray) -> np.ndarray:
+        calls.append(np.asarray(load, dtype=np.float64).copy())
+        # First solve is deliberately under-corrected; residual solve is exact.
+        if len(calls) == 1:
+            return np.asarray([0.5, 1.5])
+        load_np = np.asarray(load, dtype=np.float64)
+        return np.asarray([0.5 * load_np[0], 0.25 * load_np[1]])
+
+    x, residual = host_direct_solve_with_refinement(
+        factor_solve=improving_solve,
+        operator_matrix=matrix,
+        rhs_vec=rhs,
+        factor_dtype=np.dtype(np.float64),
+        refine_steps=3,
+    )
+
+    np.testing.assert_allclose(x, np.asarray([1.0, 2.0]))
+    assert residual == pytest.approx(0.0)
+    assert len(calls) == 2
+
+    def worsening_solve(load: np.ndarray) -> np.ndarray:
+        calls.append(np.asarray(load, dtype=np.float64).copy())
+        if len(calls) == 1:
+            return np.asarray([0.5, 1.5])
+        return -10.0 * np.asarray(load, dtype=np.float64)
+
+    calls.clear()
+    x_worse, residual_worse = host_direct_solve_with_refinement(
+        factor_solve=worsening_solve,
+        operator_matrix=matrix,
+        rhs_vec=rhs,
+        factor_dtype=np.dtype(np.float64),
+        refine_steps=2,
+    )
+    np.testing.assert_allclose(x_worse, np.asarray([0.5, 1.5]))
+    assert residual_worse == pytest.approx(np.linalg.norm(rhs - matrix @ x_worse))
+    assert len(calls) == 2
+
+
+def test_host_sparse_direct_refinement_and_polish_callbacks() -> None:
+    matrix = sp.diags([2.0, 4.0], format="csr")
+
+    class _Factor:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def solve(self, load: np.ndarray) -> np.ndarray:
+            self.calls += 1
+            load_np = np.asarray(load, dtype=np.float64)
+            if self.calls == 1:
+                return np.asarray([0.5, 1.5])
+            return np.asarray([0.5 * load_np[0], 0.25 * load_np[1]])
+
+    factor = _Factor()
+    rhs = np.asarray([2.0, 8.0])
+    x, residual = host_sparse_direct_solve_with_refinement(
+        ilu=factor,
+        a_csr_full=matrix,
+        rhs_vec=rhs,
+        factor_dtype=np.dtype(np.float64),
+        refine_steps=2,
+    )
+    np.testing.assert_allclose(x, np.asarray([1.0, 2.0]))
+    assert residual == pytest.approx(0.0)
+
+    polish_seen: dict[str, object] = {}
+
+    def fake_gmres_solver(**kwargs):
+        polish_seen.update(kwargs)
+        return np.asarray([1.0, 2.0]), 0.0, [1.0, 0.0]
+
+    x_polish, residual_polish = host_sparse_direct_polish(
+        matvec_fn=lambda x_vec: jnp.asarray(matrix @ np.asarray(x_vec), dtype=jnp.float64),
+        rhs_vec=jnp.asarray(rhs, dtype=jnp.float64),
+        x0_np=np.asarray([0.0, 0.0]),
+        ilu=factor,
+        factor_dtype=np.dtype(np.float64),
+        tol=1.0e-10,
+        atol=1.0e-12,
+        restart=5,
+        maxiter=7,
+        precondition_side="left",
+        gmres_solver=fake_gmres_solver,
+    )
+
+    np.testing.assert_allclose(x_polish, np.asarray([1.0, 2.0]))
+    assert residual_polish == pytest.approx(0.0)
+    assert polish_seen["restart"] == 5
+    assert polish_seen["maxiter"] == 7
+    assert polish_seen["precondition_side"] == "left"
+    preconditioned = polish_seen["preconditioner"](jnp.asarray([2.0, 4.0]))
+    np.testing.assert_allclose(np.asarray(preconditioned), np.asarray([1.0, 1.0]))

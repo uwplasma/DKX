@@ -146,6 +146,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   factors, Schur disable paths, reduced-view wrappers, and structured f-block
   factor metadata. These tests protect production solver selection and memory
   admission without materializing a production operator.
+- The thirteenth post-audit coverage tranche added explicit-sparse solver tests
+  for coarse-correction no-op guards, monotone direct refinement, sparse
+  refinement, and GMRES-polish callback wiring. These protect the native sparse
+  factor infrastructure used by production preconditioners without running a
+  full production solve.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
