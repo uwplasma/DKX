@@ -345,11 +345,10 @@ time rebuilding a Krylov basis on hard nonsymmetric systems.
 
 This makes the new method safe as a CLI performance option: it can accelerate
 hard host-only Krylov runs without changing differentiable workflows or
-contaminating the differentiable reference route. Frozen-case offender probes on
-``main`` still support keeping this as an explicit tuning knob rather than an
-automatic default. On the current pinned heavy cases, ``lgmres`` preserves
-parity but is not yet a general win: it is only marginally different on the
-tokamak PAS+Er offender and is slower on the current frozen geometry4 and
+contaminating the differentiable reference route. Frozen-case offender probes
+support keeping this as an explicit tuning knob rather than an automatic default.
+On the pinned heavy cases, ``lgmres`` preserves parity but is not a general win:
+it is only marginally different on the tokamak PAS+Er offender and is slower on the frozen geometry4 and
 geometry5 full-system examples. The method is therefore kept available, but
 opt-in.
 
@@ -429,7 +428,7 @@ Controls for the CPU 3D full-FP auto lane are
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC``,
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN``, and
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MAX``.
-The production benchmark manifest now enforces at least ``25 x 51 x 4 x 100``
+The production benchmark manifest enforces at least ``25 x 51 x 4 x 100``
 (``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``33 x 1 x 12 x 140`` for
 tokamak cases. RHSMode=1 PAS/no-``E_r`` tokamak rows use the calibrated
 ``89 x 1 x 24 x 300`` floor. The manifest also records a ``10 s`` minimum

@@ -9,12 +9,20 @@ import pytest
 from sfincs_jax.io import (
     _apply_export_f_maps,
     _as_1d_float,
+    _dphi_hat_dpsi_hat_from_er_geometry_scheme4,
+    _evaluate_boozer_rzd_and_derivatives,
     _export_f_config,
+    _fortran_logical,
     _get_float,
     _get_int,
     _legendre_matrix,
     _phi1_fast_explicit_gmres_restart_default,
+    _scheme4_radial_constants,
+    _select_phi1_use_frozen_linearization,
     _select_phi1_newton_linear_solve_method,
+    _select_rhsmode1_linear_solve_method,
+    _set_input_radial_coordinate_wish,
+    _should_precompile_v3_full_system,
     read_sfincs_h5,
     write_sfincs_h5,
 )
@@ -100,6 +108,45 @@ def test_select_phi1_newton_linear_solve_method_handles_invalid_sparse_direct_mi
     assert any("host sparse-direct Newton step" in msg for msg in msgs)
 
 
+def test_write_output_solver_policy_helpers_are_fail_closed() -> None:
+    messages: list[tuple[int, str]] = []
+
+    assert _should_precompile_v3_full_system(env_value=" yes ")
+    assert not _should_precompile_v3_full_system(env_value="maybe")
+
+    selected = _select_rhsmode1_linear_solve_method(
+        default_method="AUTO",
+        env_override=" sparse_host_lu ",
+        emit=lambda level, message: messages.append((level, message)),
+    )
+    assert selected == "sparse_host_lu"
+    assert messages == [(1, "write_sfincs_jax_output_h5: solve method forced by env -> sparse_host_lu")]
+
+    assert (
+        _select_rhsmode1_linear_solve_method(
+            default_method="dense",
+            env_override="not-a-method",
+            emit=messages.append,
+        )
+        == "dense"
+    )
+    assert _select_phi1_use_frozen_linearization(
+        fast_explicit=True,
+        solve_method="sparse_direct",
+        env_value="",
+    ) is False
+    assert _select_phi1_use_frozen_linearization(
+        fast_explicit=False,
+        solve_method="dense",
+        env_value="true",
+    ) is True
+    assert _select_phi1_use_frozen_linearization(
+        fast_explicit=True,
+        solve_method="dense",
+        env_value="off",
+    ) is False
+
+
 def test_select_phi1_newton_linear_solve_method_env_override_wins() -> None:
     method = _select_phi1_newton_linear_solve_method(
         active_total_size=25000,
@@ -119,6 +166,106 @@ def test_phi1_fast_explicit_gmres_restart_default_targets_production_size() -> N
     assert _phi1_fast_explicit_gmres_restart_default(8000) == 120
     assert _phi1_fast_explicit_gmres_restart_default(12753) == 120
     assert _phi1_fast_explicit_gmres_restart_default(25000) == 120
+
+
+def test_phi1_history_alignment_preserves_accepted_iterates() -> None:
+    from sfincs_jax.outputs.writer import _align_phi1_history_for_output
+
+    history = [np.asarray([1.0]), np.asarray([2.0])]
+    aligned = _align_phi1_history_for_output(
+        history=history,
+        result_x=np.asarray([3.0]),
+        x0_state=np.asarray([0.0]),
+        use_frozen_linearization=True,
+        min_iters=0,
+        n_newton=2,
+    )
+    np.testing.assert_allclose(aligned[0], np.asarray([1.0]))
+    np.testing.assert_allclose(aligned[1], np.asarray([2.0]))
+
+    padded = _align_phi1_history_for_output(
+        history=[],
+        result_x=np.asarray([3.0]),
+        x0_state=None,
+        use_frozen_linearization=False,
+        min_iters=3,
+        n_newton=4,
+    )
+    assert len(padded) == 4
+    for item in padded:
+        np.testing.assert_allclose(item, np.asarray([3.0]))
+
+
+def test_geometry_scheme4_radial_helpers_match_v3_conventions() -> None:
+    psi_a_hat, a_hat = _scheme4_radial_constants()
+    assert psi_a_hat == pytest.approx(-0.384935)
+    assert a_hat == pytest.approx(0.5109)
+
+    psi_hat, psi_n, r_hat, r_n = _set_input_radial_coordinate_wish(
+        input_radial_coordinate=3,
+        psi_a_hat=psi_a_hat,
+        a_hat=a_hat,
+        psi_hat_wish_in=0.0,
+        psi_n_wish_in=0.0,
+        r_hat_wish_in=0.0,
+        r_n_wish_in=0.5,
+    )
+    assert psi_hat == pytest.approx(0.25 * psi_a_hat)
+    assert psi_n == pytest.approx(0.25)
+    assert r_hat == pytest.approx(0.5 * a_hat)
+    assert r_n == pytest.approx(0.5)
+
+    dphi = _dphi_hat_dpsi_hat_from_er_geometry_scheme4(2.0)
+    expected = a_hat / (2.0 * psi_a_hat * np.sqrt(0.25)) * (-2.0)
+    assert dphi == pytest.approx(expected)
+
+    assert _fortran_logical(True) == np.int32(1)
+    assert _fortran_logical(False) == np.int32(-1)
+    with pytest.raises(ValueError, match="Invalid inputRadialCoordinate"):
+        _set_input_radial_coordinate_wish(
+            input_radial_coordinate=99,
+            psi_a_hat=psi_a_hat,
+            a_hat=a_hat,
+            psi_hat_wish_in=0.0,
+            psi_n_wish_in=0.0,
+            r_hat_wish_in=0.0,
+            r_n_wish_in=0.5,
+        )
+
+
+def test_boozer_fourier_derivative_evaluator_matches_analytic_modes() -> None:
+    theta = np.asarray([0.0, np.pi / 2.0], dtype=np.float64)
+    zeta = np.asarray([0.0, np.pi / 3.0], dtype=np.float64)
+    m = np.asarray([1], dtype=np.int32)
+    n = np.asarray([1], dtype=np.int32)
+    parity = np.asarray([True])
+
+    r, dr_dtheta, dr_dzeta, z, dz_dtheta, dz_dzeta, dzeta, ddz_dtheta, ddz_dzeta = (
+        _evaluate_boozer_rzd_and_derivatives(
+            theta=theta,
+            zeta=zeta,
+            n_periods=2,
+            m=m,
+            n=n,
+            parity=parity,
+            r0=3.0,
+            r_amp=np.asarray([0.25]),
+            z_amp=np.asarray([0.5]),
+            dz_amp=np.asarray([0.75]),
+            dz_scale=2.0,
+            chunk=1,
+        )
+    )
+    angle = theta[:, None] - 2.0 * zeta[None, :]
+    np.testing.assert_allclose(r, 3.0 + 0.25 * np.cos(angle))
+    np.testing.assert_allclose(dr_dtheta, -0.25 * np.sin(angle))
+    np.testing.assert_allclose(dr_dzeta, 0.5 * np.sin(angle))
+    np.testing.assert_allclose(z, 0.5 * np.sin(angle))
+    np.testing.assert_allclose(dz_dtheta, 0.5 * np.cos(angle))
+    np.testing.assert_allclose(dz_dzeta, -1.0 * np.cos(angle))
+    np.testing.assert_allclose(dzeta, 1.5 * np.sin(angle))
+    np.testing.assert_allclose(ddz_dtheta, 1.5 * np.cos(angle))
+    np.testing.assert_allclose(ddz_dzeta, -3.0 * np.cos(angle))
 
 
 def test_export_f_config_returns_none_without_export_request() -> None:

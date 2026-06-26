@@ -45,9 +45,9 @@ python examples/vmec_jax_finite_beta/plot_convergence_scan.py
 For the cached documentation campaign, kinetic-space refinement from
 `7/6/6` to `8/6/6` still moves the ambipolar root, while the same-grid
 root-bracket refinement at `8/6/6` is tight. Single-parameter probes show that
-`NL=7` is already stable at `r_N=0.50`, but `Nxi=8` and `Nx=7` both affect the
+`NL=7` is stable at `r_N=0.50`, but `Nxi=8` and `Nx=7` both affect the
 root. Combined `Nxi=8,Nx=7` and `Nxi=9` probes were attempted on an RTX A4000
-and are currently too expensive for this bounded documentation example.
+and remain too expensive for this bounded documentation example.
 
 The Landreman-Paul QA Redl comparison script is a separate diagnostic file, not
 an optimizer. It evaluates the Redl bootstrap-current formula with `vmec_jax` on

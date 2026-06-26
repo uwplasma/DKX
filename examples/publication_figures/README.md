@@ -58,11 +58,11 @@ python examples/publication_figures/generate_sfincs_paper_figs.py \
   --work-dir examples/publication_figures/output/lhd_reaudit_fast
 ```
 
-`generate_sfincs_paper_figs.py` now writes machine-readable collisionality summaries
+`generate_sfincs_paper_figs.py` writes machine-readable collisionality summaries
 to `--summary-dir` as well. If `--summary-dir` is omitted, the summaries are written
 into the selected `--work-dir` with top-level `metadata` and sorted `rows`.
 
-For the heavy full-resolution re-audit lanes, the generator now supports
+For the heavy full-resolution re-audit lanes, the generator supports
 split-operator execution so the FP and PAS ladders can be resumed independently
 on separate devices:
 
@@ -104,11 +104,11 @@ When ``--skip-existing`` is used, the generator keeps completed scan points and
 prunes only stale subdirectories that do not contain ``sfincsOutput.h5`` before
 rerunning the missing points.
 
-The corrected bounded LHD rerun is currently pinned as:
+The corrected bounded LHD rerun is pinned as:
 - `examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json`
 - `docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png`
 
-The corrected bounded W7-X rerun is currently pinned as:
+The corrected bounded W7-X rerun is pinned as:
 - `examples/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json`
 - `docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality_reaudit_fast.png`
 
@@ -166,11 +166,11 @@ The launcher forces the explicit executable solve path for scans
 (`SFINCS_JAX_IMPLICIT_SOLVE=0`) so high-collisionality transport can use sparse-LU
 first attempts/rescues when Krylov residuals stall. The checked-in high-`nu'`
 run plan uses a bounded sparse-direct cap and strict absolute/relative residual
-gates. LHD FP is accepted only with clean residuals. W7-X FP high-`nu'` now has
+gates. LHD FP is accepted only with clean residuals. W7-X FP high-`nu'` has
 a residual-clean sparse-LU route with float32 host factors, exact matrix-free
 residual verification, block-basis sparse-helper materialization, and
 within-solve factor reuse across transport RHS solves. The first full-resolution
-W7-X point now takes about 582 s on one office GPU, down from about 2028 s
+W7-X point takes about 582 s on one office GPU, down from about 2028 s
 before factor reuse, with the same transport matrix and residual diagnostics.
 Those residual thresholds are also wired as fail-fast aborts for new runs.
 
@@ -213,11 +213,11 @@ python examples/publication_figures/generate_w7x_ambipolar_validation.py \
   --out-dir docs/_static/figures/paper
 ```
 
-This lane currently ships as an executable scaffold with a metadata-rich JSON summary
+This lane ships as an executable scaffold with a metadata-rich JSON summary
 and figure writer, but it is not promoted to a checked-in W7-X literature artifact
 until the heavier reference input is rerun and audited.
 
-The ambipolar scaffold now supports restart and split execution as well:
+The ambipolar scaffold supports restart and split execution as well:
 
 ```bash
 python examples/publication_figures/generate_w7x_ambipolar_validation.py \

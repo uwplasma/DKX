@@ -125,6 +125,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   one-sided schemes, grid-placement/quadrature conventions, and finite-size
   guards. These are fast numerical tests anchored in the v3 finite-difference
   stencil definitions and do not add solve time to CI.
+- The ninth post-audit coverage tranche added output-writer policy and geometry
+  helper tests for eager-precompile opt-in handling, RHSMode=1 solver-method
+  overrides, Phi1 frozen-linearization/history alignment, Fortran logical
+  encoding, geometryScheme=4 radial-coordinate conversion, and Boozer
+  Fourier-derivative evaluation. These tests pin output semantics and
+  geometry algebra without launching full solves.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
@@ -276,7 +282,8 @@ Tranche 5: examples redesign.
 - Status: first learning layer complete. `examples/README.md`,
   `docs/examples.rst`, `examples/tutorials/README.md`, three tutorial
   notebooks, and `examples/tutorials/run_quick_output_and_plot.py` are
-  committed and tested.
+  committed and tested. Example README tests also reject stale progress
+  language and broken Python-script references in documented task paths.
 - Keep the current topic folders (`getting_started`, `transport`, `autodiff`,
   `vmec_jax_finite_beta`, `optimization`, `performance`, and `parity`) because
   they are stable user-task names. Do not rename them into numbered folders

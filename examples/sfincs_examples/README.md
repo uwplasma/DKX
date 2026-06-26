@@ -10,7 +10,7 @@ Goals:
 - Provide a convenient place to benchmark against the compiled Fortran v3 executable.
 - Keep the upstream plotting scripts available while `sfincs_jax` grows output parity.
 
-## What works today
+## Supported Scope
 
 `sfincs_jax` does not yet match every upstream solve mode end-to-end in this folder.
 
@@ -58,10 +58,11 @@ layout, this file lives next to `utils/`, so this repo vendors it as:
 
 - `examples/sfincs_examples/globalVariables.F90`
 
-`sfincs_jax` currently writes the fields needed by the transport-matrix plotting scripts for RHSMode=2/3:
+`sfincs_jax` writes the fields needed by the transport-matrix plotting scripts for RHSMode=2/3:
 `transportMatrix`, `FSABFlow`, `particleFlux_vm_psiHat`, and `heatFlux_vm_psiHat`.
 
-Over time, more datasets will be added for broader postprocessing parity.
+Broader postprocessing parity is tracked in the validation and output-key
+coverage tests before additional datasets are documented as supported.
 
 To run an upstream `utils/` script in a non-interactive way:
 
