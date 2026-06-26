@@ -256,6 +256,29 @@ RESERVED_MODULE_NAMES_UNTIL_MIGRATION = (
 )
 
 MOVED_ROOT_MODULE_OWNERS = {
+    "sfincs_jax.discretization.adaptive_maps": (
+        "AffineXMap",
+        "MappedXGrid",
+        "RationalTailXMap",
+        "make_reference_eta_grid",
+    ),
+    "sfincs_jax.discretization.indices": (
+        "V3Indexing",
+    ),
+    "sfincs_jax.discretization.periodic_stencil": (
+        "apply_periodic_stencil_roll",
+        "extract_sparse_row_stencil",
+    ),
+    "sfincs_jax.discretization.structured_velocity": (
+        "BlockTridiagonalFactorization",
+        "factor_block_tridiagonal",
+        "solve_block_tridiagonal",
+    ),
+    "sfincs_jax.discretization.xgrid": (
+        "XGrid",
+        "make_x_grid",
+        "make_x_polynomial_diff_matrices",
+    ),
     "sfincs_jax.geometry.boozer": (
         "read_boozer_bc_header",
         "read_boozer_bc_bracketing_surfaces",
@@ -293,7 +316,6 @@ MOVED_ROOT_MODULE_OWNERS = {
 ROOT_MODULE_CLASSIFICATIONS = {
     "__init__.py": "public package facade",
     "__main__.py": "public entry point",
-    "adaptive_maps.py": "stable numerical kernel",
     "ambipolar.py": "public physics API",
     "api.py": "public API",
     "classical_transport.py": "stable physics kernel",
@@ -308,14 +330,12 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "diagnostics.py": "stable physics kernel",
     "grids.py": "public discretization API",
     "host_refinement.py": "stable solver-policy kernel",
-    "indices.py": "stable discretization kernel",
     "input_compat.py": "public compatibility API",
     "io.py": "compatibility facade",
     "magnetic_drifts.py": "stable operator kernel",
     "namelist.py": "public input API",
     "pas_smoother.py": "stable preconditioner kernel",
     "paths.py": "stable support utility",
-    "periodic_stencil.py": "stable numerical kernel",
     "phi1_newton_linear.py": "stable solver kernel",
     "phi1_newton_policy.py": "stable solver-policy kernel",
     "plotting.py": "public plotting API",
@@ -323,15 +343,12 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "residual.py": "stable operator kernel",
     "sensitivity.py": "public differentiation API",
     "solver.py": "stable solver kernel",
-    "structured_velocity.py": "stable numerical kernel",
     "v3_driver.py": "compatibility shim",
-    "xgrid.py": "stable discretization kernel",
 }
 
 ROOT_MODULE_CLOSURE_MANIFEST = {
     "__init__.py": ("package root public facade", "keep at root"),
     "__main__.py": ("package root CLI entry point", "keep at root"),
-    "adaptive_maps.py": ("discretization speed-grid owner", "move with grid/discretization kernel group"),
     "ambipolar.py": ("problems.ambipolar via public API facade", "keep root shim until public docs/examples migrate"),
     "api.py": ("package root public API", "keep at root"),
     "classical_transport.py": ("physics classical transport owner", "move only with physics API export tests"),
@@ -346,14 +363,12 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "diagnostics.py": ("physics/output diagnostics owner", "defer until diagnostics API split is explicit"),
     "grids.py": ("discretization public grid owner", "keep root public helper until discretization package exports are documented"),
     "host_refinement.py": ("solvers refinement policy owner", "move in solver-policy group if profile-response imports migrate"),
-    "indices.py": ("discretization layout owner", "move with grid/discretization kernel group"),
     "input_compat.py": ("input compatibility owner", "keep root public compatibility shim until input package exports cover callers"),
     "io.py": ("outputs writer/formats/cache owners", "keep tiny root facade until public imports migrate"),
     "magnetic_drifts.py": ("operators magnetic-drift owner", "move with operator-kernel group"),
     "namelist.py": ("input namelist owner", "keep root public parser until input package exports are documented"),
     "pas_smoother.py": ("solvers/preconditioners PAS smoother owner", "move in solver-preconditioner group"),
     "paths.py": ("package root path support utility", "keep at root unless a support package is introduced with broad import rewrite"),
-    "periodic_stencil.py": ("discretization stencil owner", "move with grid/discretization kernel group"),
     "phi1_newton_linear.py": ("problems.profile_response Phi1 Newton owner", "move if it deletes root file without adding shim"),
     "phi1_newton_policy.py": ("problems.profile_response Phi1 policy owner", "move if it deletes root file without adding shim"),
     "plotting.py": ("outputs/plotting public helper", "keep root public helper unless API replacement is documented"),
@@ -361,9 +376,7 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "residual.py": ("operators residual/autodiff owner", "move with operator-kernel group if docs imports migrate"),
     "sensitivity.py": ("package root differentiation API", "keep at root"),
     "solver.py": ("solvers public contracts owner", "keep root shim until solvers exports cover public contracts"),
-    "structured_velocity.py": ("discretization structured-velocity owner", "move with grid/discretization kernel group"),
     "v3_driver.py": ("compatibility shim to problem owners", "delete after tests/examples stop importing sfincs_jax.v3_driver"),
-    "xgrid.py": ("discretization speed-grid owner", "move with grid/discretization kernel group"),
 }
 
 TRANSPORT_COMPATIBILITY_IMPORTS = (
@@ -844,13 +857,18 @@ def test_moved_root_workflow_modules_have_domain_owners() -> None:
             assert hasattr(module, export_name), f"{module_name}.{export_name}"
 
     for deleted_root in (
+        "sfincs_jax.adaptive_maps",
         "sfincs_jax.boozer_bc",
         "sfincs_jax.data_fetch",
+        "sfincs_jax.indices",
         "sfincs_jax.jax_geometry_adapters",
+        "sfincs_jax.periodic_stencil",
         "sfincs_jax.postprocess_upstream",
         "sfincs_jax.scans",
+        "sfincs_jax.structured_velocity",
         "sfincs_jax.vmec_geometry",
         "sfincs_jax.vmec_wout",
+        "sfincs_jax.xgrid",
     ):
         try:
             _import_module(deleted_root)
