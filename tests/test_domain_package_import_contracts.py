@@ -289,8 +289,8 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "transport_dense_backend_allowed",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.solve_policy",
-        "sfincs_jax.problems.transport_matrix.solve_policy",
+        "sfincs_jax.problems.transport_matrix.policies",
+        "sfincs_jax.problems.transport_matrix.policies",
         "resolve_transport_initial_solve_policy",
     ),
     (
@@ -339,8 +339,8 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "transport_sparse_direct_solve",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.preconditioner_dispatch",
-        "sfincs_jax.problems.transport_matrix.preconditioner_dispatch",
+        "sfincs_jax.problems.transport_matrix.policies",
+        "sfincs_jax.problems.transport_matrix.policies",
         "build_transport_preconditioner_from_kind",
     ),
     (

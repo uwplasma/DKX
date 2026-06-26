@@ -277,9 +277,6 @@ research workflows.
 .. automodule:: sfincs_jax.problems.transport_matrix.policies
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.solve_policy
-   :members:
-
 .. automodule:: sfincs_jax.problems.transport_matrix.host_gmres
    :members:
 
@@ -299,9 +296,6 @@ research workflows.
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.parallel.worker
-   :members:
-
-.. automodule:: sfincs_jax.problems.transport_matrix.preconditioner_dispatch
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.residual_quality
