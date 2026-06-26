@@ -910,12 +910,11 @@ Relevant implementation:
 - ``examples/performance/benchmark_sharded_solve_scaling.py`` and
   ``examples/performance/benchmark_sharded_matvec_scaling.py`` generate
   bounded single-case scaling evidence.
-- ``sfincs_jax/problems/transport_matrix/parallel/policy.py`` prevents cold or
-  malformed scaling payloads from becoming release claims.
-- ``sfincs_jax/problems/transport_matrix/parallel/sharding.py`` records pure single-case
-  sharded-solve plans, caps requested devices to available work, reports
-  workload balance, estimates setup/communication amortization, and fail-closes
-  release scaling claims for experimental single-case sharding.
+- ``sfincs_jax/problems/transport_matrix/parallel/runtime.py`` prevents cold or
+  malformed scaling payloads from becoming release claims, records pure
+  single-case sharded-solve plans, caps requested devices to available work,
+  reports workload balance, estimates setup/communication amortization, and
+  fail-closes release scaling claims for experimental single-case sharding.
 - ``sfincs_jax/operators/profile_response/system.py`` contains the sharded matrix-free operator path.
 - ``docs/_static/transport_sharded_solve_gpu_1v2_failclosed_2026_05_17.json``
   is the current negative 1-vs-2 GPU evidence artifact.

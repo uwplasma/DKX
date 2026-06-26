@@ -285,11 +285,12 @@ Unreleased
   the extracted polish helper with an injected solver and sparse-factor
   preconditioner. The post-extraction local full suite passed with
   ``2559 passed in 543.75 s``.
-- Moved transport-worker XLA flag rewriting into
-  ``transport_parallel_policy.py`` next to the backend, environment, and
-  process-pool policy helpers. The driver now imports the helper under the
-  historical private name instead of carrying a forwarding wrapper, and focused
-  tests cover stale XLA thread/device-cap replacement. The
+- Moved transport-worker XLA flag rewriting into the consolidated
+  ``problems.transport_matrix.parallel.runtime`` owner next to the backend,
+  environment, sharding, and process-pool policy helpers. The driver now
+  imports the helper under the historical private name instead of carrying a
+  forwarding wrapper, and focused tests cover stale XLA thread/device-cap
+  replacement. The
   post-extraction local full suite passed with ``2562 passed in 550.40 s``.
 - Extracted shared transport parallel payload handling into
   ``transport_parallel_payload.py``. CPU process workers and GPU subprocess
@@ -652,9 +653,9 @@ Highlights
   bounded chunks from configured byte budgets, and tight budgets fail before
   launching a matvec or correction.
 - Added release-safe single-case sharded-solve planning metadata in
-  ``sfincs_jax/transport_parallel_sharding.py``. The helper caps requested
-  devices to available work, records per-device balance diagnostics, and
-  fail-closes release scaling claims for experimental single-case sharding.
+  ``sfincs_jax/problems/transport_matrix/parallel/runtime.py``. The helper caps
+  requested devices to available work, records per-device balance diagnostics,
+  and fail-closes release scaling claims for experimental single-case sharding.
 - Refreshed QI evidence metadata to include the scale-0.60 smoothed-load and
   probed moment-Schur CPU artifacts. The moment-Schur probe rejected itself
   after worsening the hard-seed residual, preserving the baseline x-block path.
