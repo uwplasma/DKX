@@ -345,6 +345,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   bounded identity operators to check memory-budget rejection, tail/kinetic
   basis selection, column-batched true actions, and exact residual correction
   without running a full profile solve.
+- The forty-third post-audit coverage tranche added transport sparse-direct
+  tests for active-index sparse-pattern caching, forced CSR-budget rejection,
+  automatic pattern fallback, direct active true-operator factor caching and
+  eligibility guards, and float32 polish policy. These tests protect RHSMode=2/3
+  production fallback behavior with fake factors and toy operators rather than
+  expensive transport solves.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
