@@ -127,4 +127,20 @@ def test_readme_suite_counts_and_filtered_table_scope_match_summary() -> None:
     excluded_case_names = {str(row["case"]) for row in excluded_cases if isinstance(row, dict)}
     table_case_names = {line.split("`", maxsplit=2)[1] for line in rows}
     assert table_case_names.isdisjoint(excluded_case_names)
-    assert "README-facing runtime/memory rows are restricted" in readme
+    assert "The public runtime/memory table is restricted" in readme
+
+
+def test_readme_is_self_contained_not_branch_history() -> None:
+    readme = (REPO_ROOT / "README.md").read_text()
+    stale_fragments = (
+        "On the current main branch",
+        "current main branch",
+        "new version",
+        "new benchmarks",
+        "README-facing runtime/memory rows",
+        "The production benchmark manifest",
+        "not replacements for the production-resolution gates",
+    )
+
+    for fragment in stale_fragments:
+        assert fragment not in readme

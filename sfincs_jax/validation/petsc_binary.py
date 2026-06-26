@@ -42,6 +42,8 @@ class PetscCSRMatrix:
 def read_petsc_vec(path: str | Path) -> PetscVec:
     """Read a PETSc Vec binary file (big-endian header + float64 data)."""
     b = Path(path).read_bytes()
+    if len(b) < 2 * 4:
+        raise ValueError("File too small to be a PETSc Vec.")
     header = np.frombuffer(b, dtype=">i4", count=2)
     if header.size != 2:
         raise ValueError("File too small to be a PETSc Vec.")
@@ -58,6 +60,8 @@ def read_petsc_mat_aij(path: str | Path) -> PetscCSRMatrix:
     This reader supports the common format written by `MatView(..., PETSC_VIEWER_BINARY_)`.
     """
     b = Path(path).read_bytes()
+    if len(b) < 4 * 4:
+        raise ValueError("File too small to be a PETSc Mat.")
     header = np.frombuffer(b, dtype=">i4", count=4)
     if header.size != 4:
         raise ValueError("File too small to be a PETSc Mat.")
@@ -84,4 +88,3 @@ def read_petsc_mat_aij(path: str | Path) -> PetscCSRMatrix:
         col_ind=col_ind,
         data=data,
     )
-

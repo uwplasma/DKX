@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (post-tutorial source/examples consolidation pass)
+Last updated: 2026-06-26 (coverage, source-layout, and README guard pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -66,11 +66,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
 - The root README no longer matches the explicit progress-language patterns
   flagged in the review prompt. Remaining historical/status language should be
   handled in docs pages and release notes rather than the first-page README.
-- A fresh xdist coverage audit on this branch measured `84.31%`
-  (`58,304 / 69,151` covered lines) in `5:51`. The target remains `95%`
-  meaningful package coverage with GitHub Actions under `10 min`; this requires
-  targeted unit, numerical, and frozen-reference tests, not slow full-solve
-  CI jobs.
+- A fresh xdist coverage audit on this branch measured `85.003%`
+  (`58,784 / 69,155` covered lines). The most recent local audit took `14:42`,
+  so the CI floor remains `80%` until the sharded GitHub Actions runtime is
+  verified and the measured coverage has enough margin above the next floor.
+  The target remains `95%` meaningful package coverage with GitHub Actions
+  under `10 min`; this requires targeted unit, numerical, and frozen-reference
+  tests, not slow full-solve CI jobs.
 - The largest coverage gaps by missing executable lines are
   `problems/profile_solve.py`, `problems/transport_solve.py`,
   `operators/profile_system.py`, `outputs/writer.py`,
@@ -96,9 +98,14 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   x-grid coarse correction, Fourier angular, and FP Fourier paths. These tests
   validate the numerical preconditioner algebra and reduced/full projection
   behavior without running a full transport solve.
-- The CI coverage floor is raised to `80%` after this audit. The next planned
-  gate is `85%`, once the profile-solve, transport-solve, output-writer, and
-  remaining preconditioner gaps are reduced while keeping CI below ten minutes.
+- The fifth post-audit coverage tranche added output-streaming schema tests,
+  periodic-stencil guard tests, release-data fixture safety tests, PETSc binary
+  reference-reader tests, upstream-postprocessing wrapper tests, and active
+  RHSMode=1 full-FP kinetic block-preconditioner tests. It also fixed short-file
+  PETSc reader errors so malformed references fail with deterministic messages.
+- The CI coverage floor is `80%`. The next planned gate is `85%`, once the
+  branch has a stable margin above `85%` and the sharded CI wall time remains
+  below ten minutes.
 
 ### Target Package Shape
 
@@ -262,8 +269,14 @@ Tranche 5: examples redesign.
 
 Tranche 6: coverage ramp to 95%.
 
-- First run `pytest --cov=sfincs_jax --cov-report=json` and rank uncovered
-  modules by executable lines and user risk.
+- Status: exact package coverage is `85.003%` after the latest local audit.
+  The next increment should target large user-risk modules rather than helper
+  edges: `problems/profile_solve.py`, `problems/transport_solve.py`,
+  `operators/profile_system.py`, `outputs/writer.py`,
+  `solvers/preconditioner_transport_matrix.py`, `solvers/explicit_sparse.py`,
+  `operators/profile_sparse_pattern.py`,
+  `solvers/preconditioner_schur_profile.py`, and
+  `operators/profile_true_operator_rescue.py`.
 - Add fast, literature-anchored tests before adding broad coverage-only tests:
   Onsager symmetry and positivity for transport matrices, pitch-angle collision
   conservation/nullspace checks, finite-difference stencil exactness on
@@ -277,8 +290,9 @@ Tranche 6: coverage ramp to 95%.
 - Add production-shape fast tests that exercise large-resolution sizing,
   policy admission, memory estimates, output schemas, and residual gates without
   solving the full production system.
-- Raise coverage in gates: `75%`, `85%`, `90%`, then `95%`. Do not raise a gate
-  until Linux CI remains below `10 min`.
+- Raise coverage in gates: `85%`, `90%`, then `95%`. Do not raise a gate until
+  Linux CI remains below `10 min` and the exact coverage has margin above that
+  floor.
 - Acceptance: coverage floor reaches `95%`, no multi-megabyte fixture bloat,
   and CI stays below the time budget.
 
@@ -2139,6 +2153,13 @@ Current completion status:
   public import migration, and compatibility-shim locking are complete. The
   only remaining refactor work is the retained-boundary audit for the four large
   owners and the review-lock validation pass.
+- Coverage and future-proof validation: about 85 percent by measured package
+  coverage. The newest fast tests cover output streaming, periodic stencils,
+  release-data fetching, PETSc reference readers, upstream wrapper behavior, and
+  active full-FP kinetic block preconditioners. The next coverage work must
+  focus on profile/transport solve owners, output writers, explicit sparse
+  assembly, and profile true-operator rescue paths while keeping CI below ten
+  minutes.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
@@ -2152,25 +2173,32 @@ Current completion status:
 
 Next ordered implementation steps:
 
-1. Finish the retained-boundary audit: inspect
-   `policies.py`, `sparse/xblock.py`, `sparse/handoff.py`, and
-   `qi/device.py`; delete code only if a single patch removes a repeated
-   internal section of roughly 300 lines or more without adding files. If not,
-   keep the retained-boundary notes above as the decision record.
-2. Run the stale-import and layout scans: no top-level `rhs1_*` or
+1. Finish the current coverage tranche: remove generated coverage artifacts,
+   run the focused tests added in this pass, run Sphinx `-W`, Ruff, and
+   `git diff --check`, then commit and push the plan refresh plus tests.
+2. Continue the coverage ramp with bounded tests for the highest-risk remaining
+   modules: profile solve/system assembly, transport solve/output writer,
+   explicit sparse assembly, Schur/profile preconditioners, and true-operator
+   rescue. Prefer frozen references, algebraic invariants, and production-shape
+   admission tests over slow full solves.
+3. Run the stale-import and layout scans: no top-level `rhs1_*` or
    `transport_*` files, no public example/script imports of `v3_driver`, no
    imports of deleted validation/workflow modules except compatibility aliases,
    and no tracked generated outputs or large temporary artifacts.
-3. Run the review-lock validation bundle: import-contract tests, CLI/output
+4. Add examples/tutorial smoke coverage for the fast tutorial script and one
+   canonical script per major workflow folder, keeping the CI example budget
+   below ten minutes.
+5. Run the review-lock validation bundle: import-contract tests, CLI/output
    tests, workflow/validation behavior tests, representative RHSMode 1/2/3,
    ambipolar, RHSMode 4/5 sensitivity, sparse-PC, QI, and differentiable
-   linear-solve tests, plus Sphinx `-W`, touched-file Ruff, py_compile, and
-   `git diff --check`.
-4. Fix only real regressions found by the review-lock bundle. Do not start
-   another performance or file-movement lane in this PR.
-5. Commit and push the final plan refresh plus any regression fixes to the PR
-   branch, update the PR body with the retained boundaries and validation
-   evidence, then mark PR #8 ready for review.
+   linear-solve tests, plus Sphinx `-W`, Ruff, py_compile, and `git diff --check`.
+6. Regenerate release-facing benchmark, parity, runtime/memory, and
+   bootstrap-current figures only after the source/test structure is stable.
+7. Fix only real regressions found by these gates. Do not start another
+   performance or file-movement lane in this PR unless it blocks correctness.
+8. Commit and push the final validation evidence to the PR branch, update the
+   PR body with retained boundaries and validation status, then mark PR #8
+   ready for review.
 
 Completion definition for this plan:
 
