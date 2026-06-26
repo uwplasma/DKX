@@ -2724,7 +2724,11 @@ Current completion status:
   fallback, pool-cache reuse/replacement, and parent missing-RHS fail-fast
   behavior. The transport worker subprocess entrypoint has direct CLI and
   ``python -m`` tests for payload normalization, NPZ schema, output-directory
-  creation, and ``rhs_norms`` preservation. Benchmark-artifact promotion policy
+  creation, and ``rhs_norms`` preservation. RHSMode=2/3 full-FP x-block TZ-LU
+  preconditioner coverage now includes direct assembler cache-key fields,
+  invalid-environment normalization, finite cached factors, reduced-space
+  projection, synthetic diagonal fallback after factorization failure, and
+  bounded-memory fallback to the line factor. Benchmark-artifact promotion policy
   also has fast gates for
   default-promotion evidence and canonical runtime/memory ordering. The next
   coverage work must focus on
