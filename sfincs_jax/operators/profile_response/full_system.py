@@ -64,7 +64,7 @@ from sfincs_jax.solvers.preconditioners.schur.profile_response import (
     estimate_xi_block_inverse_nbytes as _estimate_xi_block_inverse_nbytes,
     estimate_zeta_block_inverse_nbytes as _estimate_zeta_block_inverse_nbytes,
 )
-from sfincs_jax.solvers.preconditioners.symbolic_sparse import rhs1_fortran_reduced as _rhs1_fortran_reduced_pc
+from sfincs_jax.solvers.preconditioners.symbolic_sparse import profile_response as _symbolic_profile_response_pc
 from sfincs_jax.solvers.preconditioners.symbolic_sparse.active_factors import (
     build_active_filtered_sparse_factor_preconditioner as _build_active_projected_filtered_sparse_factor_preconditioner,
     build_active_global_sparse_factor_preconditioner as _build_active_global_sparse_factor_preconditioner,
@@ -94,24 +94,24 @@ from sfincs_jax.operators.profile_response.sparse_pattern import estimate_v3_ful
 _STRUCTURED_FULL_CSR_OBJECT_CACHE: dict[tuple[object, ...], tuple[Any, dict[str, object]]] = {}
 _active_fortran_v3_reduced_permc_candidates = active_fortran_v3_reduced_permc_candidates
 _active_fortran_v3_reduced_preconditioner_matrix = (
-    _rhs1_fortran_reduced_pc.active_fortran_v3_reduced_preconditioner_matrix
+    _symbolic_profile_response_pc.active_fortran_v3_reduced_preconditioner_matrix
 )
 _active_fortran_v3_support_mode_dropped_no_entries = (
-    _rhs1_fortran_reduced_pc.active_fortran_v3_support_mode_dropped_no_entries
+    _symbolic_profile_response_pc.active_fortran_v3_support_mode_dropped_no_entries
 )
-_apply_active_fortran_v3_support_mode_token = _rhs1_fortran_reduced_pc.apply_active_fortran_v3_support_mode_token
+_apply_active_fortran_v3_support_mode_token = _symbolic_profile_response_pc.apply_active_fortran_v3_support_mode_token
 _build_active_fortran_v3_reduced_sparse_factor_preconditioner = (
-    _rhs1_fortran_reduced_pc.build_active_fortran_v3_reduced_sparse_factor_preconditioner
+    _symbolic_profile_response_pc.build_active_fortran_v3_reduced_sparse_factor_preconditioner
 )
-_estimate_spilu_factor_nbytes = _rhs1_fortran_reduced_pc.estimate_spilu_factor_nbytes
+_estimate_spilu_factor_nbytes = _symbolic_profile_response_pc.estimate_spilu_factor_nbytes
 _parse_active_fortran_v3_support_mode_candidates = (
-    _rhs1_fortran_reduced_pc.parse_active_fortran_v3_support_mode_candidates
+    _symbolic_profile_response_pc.parse_active_fortran_v3_support_mode_candidates
 )
 select_active_fortran_v3_reduced_support_mode_preconditioner = (
-    _rhs1_fortran_reduced_pc.select_active_fortran_v3_reduced_support_mode_preconditioner
+    _symbolic_profile_response_pc.select_active_fortran_v3_reduced_support_mode_preconditioner
 )
-_sparse_equilibration_scale = _rhs1_fortran_reduced_pc.sparse_equilibration_scale
-_sparse_lu_factor_nbytes = _rhs1_fortran_reduced_pc.sparse_lu_factor_nbytes
+_sparse_equilibration_scale = _symbolic_profile_response_pc.sparse_equilibration_scale
+_sparse_lu_factor_nbytes = _symbolic_profile_response_pc.sparse_lu_factor_nbytes
 
 
 def _estimate_csr_nbytes_from_nnz(*, shape: tuple[int, int], nnz: int, dtype: Any = np.float64) -> int:

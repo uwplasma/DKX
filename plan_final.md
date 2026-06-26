@@ -306,12 +306,11 @@ Observed facts to feed directly into implementation:
 Current source size snapshot after the 2026-06-26 consolidation audit and the
 latest transport/profile-response owner moves:
 
-- Whole package: 194 Python files, 165,396 package lines after the completed
+- Whole package: 192 Python files after the completed
   profile-response solve-sequencer/handoff compression and the output-writer
-  move. The `io.py` line gate is met, but the added output owner must be paid
-  back by Lane 1 file-count consolidation before review. The first Batch 1
-  transport/output payback is now complete and below the previous
-  165,398-line checkpoint.
+  move plus the first Batch 2 preconditioner cleanup. The `io.py` line gate is
+  met, Batch 1 transport/output payback is complete, and the historical
+  symbolic-sparse `rhs1_*` filename has been removed.
 - Package root: 43 Python files. No top-level `rhs1_*` or `transport_*`
   implementation files remain.
 - `sfincs_jax/v3_driver.py`: 47-line compatibility shim. It must not regain
@@ -331,10 +330,11 @@ latest transport/profile-response owner moves:
   `outputs/transport.py`. Remaining small numerical-family files are
   `active_dense.py`, `active_factor.py`, `direct_block_schur.py`,
   `direct_pmat.py`, and `fortran_reduced_lu.py`.
-- `sfincs_jax/solvers/preconditioners`: 47 files, about 37.0k lines. The
-  remaining high-file-count areas are QI, x-block, PAS, full-FP, and symbolic
-  sparse. `symbolic_sparse/rhs1_fortran_reduced.py` is the remaining
-  historical filename inside this package.
+- `sfincs_jax/solvers/preconditioners`: 45 files. The remaining
+  high-file-count areas are QI, x-block, PAS, and full-FP. The empty
+  `coarse_space` package was deleted, the QI device smoother was merged into
+  `qi/device.py`, and `symbolic_sparse/rhs1_fortran_reduced.py` was renamed to
+  the non-historical `symbolic_sparse/profile_response.py`.
 - `sfincs_jax/operators/profile_response`: 14 files, about 18.4k lines.
   `full_system.py` is 5,978 lines. This package is large but domain coherent;
   do not split it in this PR unless a correctness bug requires it.
@@ -345,7 +345,7 @@ latest transport/profile-response owner moves:
 
 The next consolidation pass must reduce these concentrated owners in a few
 large batches. It must not add more one-off helper files, and it must not turn
-the current 195-file tree into a larger but more fragmented tree.
+the current 192-file tree into a larger but more fragmented tree.
 
 Useful existing assets:
 
@@ -548,13 +548,13 @@ Current source inventory from the final consolidation audit:
 
 | Area | Current state | Review-ready target |
 | --- | --- | --- |
-| Whole package | 194 Python files, 165,396 package lines | `<=190` Python files and below the previous 165,398-line checkpoint before review. Stretch target: `<=175` files only if it improves clarity. |
+| Whole package | 192 Python files, 165,357 package lines after the Batch 1 output move and the first Batch 2 preconditioner cleanup. | `<=190` Python files and below the previous 165,398-line checkpoint before review. Stretch target: `<=175` files only if it improves clarity. |
 | Package root | 43 Python files | `<=40` preferred, `<=44` maximum. Every remaining root file must be public API, stable physics kernel, or documented compatibility shim. |
 | `v3_driver.py` | 47-line compatibility shim | Keep below 80 lines or delete after public imports migrate. It must not regain implementation logic. |
 | `io.py` and `outputs/` | `io.py` is a 49-line compatibility facade; `outputs/writer.py` owns the 4,264-line writer; `outputs/transport.py` owns transport output accumulation and streaming writes. | `io.py` gate is met. Batch 1 output-owner file/line payback is complete. |
 | `problems/profile_response` | 18 files including `sparse/`; `solve.py` is 5,358 lines and `sparse/handoff.py` is 5,498 lines. | Review-ready file and line gates are met. Do not reopen this area unless a later batch needs a focused compatibility fix. |
 | `problems/transport_matrix` | 16 files including `parallel/`; obvious numerical-family files remain, but `postsolve_diagnostics.py` and `streaming_outputs.py` are deleted. | Keep `<=18` for review-ready; stretch `<=14`. Delete or merge only obvious relays. |
-| `solvers/preconditioners` | 47 files; QI has 15 files and symbolic sparse still has `rhs1_fortran_reduced.py`. | `<=35` files for review-ready; stretch `<=30`. QI `<=7` files. No implementation file starts with `rhs1_` or `transport_`. |
+| `solvers/preconditioners` | 45 files; QI has 14 files. The empty `coarse_space` package is deleted, QI device smoother lives in `qi/device.py`, and the historical symbolic-sparse `rhs1_fortran_reduced.py` file has been renamed to `symbolic_sparse/profile_response.py`. | `<=35` files for review-ready; stretch `<=30`. QI `<=7` files. No implementation file starts with `rhs1_` or `transport_`. |
 | Docs/tests/examples | Some private owner names still appear in docs/tests/examples. | Public examples use `api`, `cli`, `outputs`, or documented workflows. Private imports stay only in owner tests. |
 
 Locked checkpoints:
@@ -603,8 +603,8 @@ Locked checkpoints:
 | Profile response | Existing owners only: `setup.py`, `solve.py`, `policies.py`, `preconditioner_build.py`, `dense.py`, `residual.py`, `diagnostics.py`, `solver_diagnostics.py`, `phi1_newton.py`, `sparse/` | Only move coherent compatibility/re-export logic needed to remove the temporary `handoff.py` lint waiver. | Do not create another profile-response file. |
 | Transport matrix | `solve.py`, `setup.py`, `diagnostics.py`, `finalize.py`, `policies.py`, numerical-family files, `parallel/runtime.py`, `parallel/worker.py` | Merge `postsolve_diagnostics.py` into `finalize.py`. Merge `streaming_outputs.py` into `outputs/transport.py`. Merge active/factor micro-files only if the destination owner is clearer. | Delete tiny relay files after tests import the owner. Merge `parallel/policy.py` into `parallel/runtime.py` only if it is not an independently tested policy owner. |
 | Outputs | `outputs/formats.py`, `outputs/cache.py`, `outputs/rhsmode1.py`, `outputs/transport.py`, `outputs/writer.py` | Continue moving schema/output-policy pieces into output owners only if total package complexity drops. | `io.py` remains a `<=800` line compatibility facade until public imports no longer need it. |
-| QI preconditioners | Target durable owners: `qi/basis.py`, `qi/corrections.py`, `qi/device.py`, `qi/policy.py` | Merge active pattern, phase-space, global moments, and residual regions into `basis.py`; merge block-Schur, two-level, multilevel, deflation, residual-Galerkin, and coupled residual into `corrections.py`; merge smoother support into `device.py`; merge admission/promotion into `policy.py`. | Delete `device_smoother.py`, `promotion.py`, and re-export-only experiment files after behavior tests pass. |
-| Symbolic sparse | `symbolic_sparse/active_factors.py`, `symbolic_sparse/host_factor.py`, `symbolic_sparse/policy.py` | Merge `symbolic_sparse/rhs1_fortran_reduced.py` into an existing non-historical owner. | Delete the `rhs1_*` filename. |
+| QI preconditioners | Target durable owners: `qi/basis.py`, `qi/corrections.py`, `qi/device.py`, `qi/policy.py`, plus `qi/__init__.py` | Merge active pattern, phase-space, global moments, residual regions, and current `coarse.py` basis construction into `basis.py`; merge block-Schur, two-level, multilevel, deflation, residual-Galerkin, and coupled residual into `corrections.py`; keep device-compatible matrix-free/application logic in `device.py`; merge admission/promotion into `policy.py`. | Delete `device_smoother.py` is done. Delete `promotion.py` and all one-method QI experiment files after behavior tests pass. Keep compatibility aliases only through `qi/__init__.py` or owner tests, not as files. |
+| Symbolic sparse | `symbolic_sparse/active_factors.py`, `symbolic_sparse/host_factor.py`, `symbolic_sparse/policy.py`, `symbolic_sparse/profile_response.py` | Done for the historical filename: `rhs1_fortran_reduced.py` is now `profile_response.py`. Later merge `profile_response.py` into `active_factors.py` or `policy.py` only if the destination remains clearer. | No symbolic-sparse implementation file may use an `rhs1_*` filename. |
 | X-block/PAS/full-FP | Role-based family owners only | Merge policy/detail shards into family owners when they are not independent mathematical kernels. | Delete empty packages such as `coarse_space` if unused. |
 | Operators | Current owners are acceptable for this PR | Only merge very small term files if needed for file-count gates and if docs remain clearer. | Do not split `full_system.py` during this consolidation. |
 
@@ -654,18 +654,35 @@ while preserving automatic solver selection.
 
 Actions:
 
-1. Collapse `solvers/preconditioners/qi/` toward
-   `basis.py`, `corrections.py`, `device.py`, and `policy.py`. Merge first;
-   rename only after tests pass.
-2. Merge `symbolic_sparse/rhs1_fortran_reduced.py` into an existing
-   non-historical symbolic-sparse owner and delete the old filename.
-3. Delete empty or re-export-only packages such as `coarse_space` after
-   import-contract tests confirm no public dependency.
-4. Collapse PAS, x-block, full-FP, and domain-decomposition detail shards only
+1. Done checkpoint: merge `qi/device_smoother.py` into `qi/device.py`, delete
+   the old file, and keep the QI smoother behavior tests as owner tests.
+2. Done checkpoint: rename the historical
+   `symbolic_sparse/rhs1_fortran_reduced.py` owner to
+   `symbolic_sparse/profile_response.py`, update imports/docs/tests, and delete
+   the `rhs1_*` filename from implementation code.
+3. Done checkpoint: delete the empty `solvers/preconditioners/coarse_space`
+   package after import-contract coverage confirms no public dependency.
+4. Remaining main compression step: collapse `solvers/preconditioners/qi/`
+   from 14 files to at most 7 files in one package-level pass. The intended
+   destination set is `basis.py`, `corrections.py`, `device.py`, `policy.py`,
+   and `__init__.py`; any extra kept QI file needs a written reason in this
+   plan and an owner test.
+5. Remaining secondary compression step: collapse PAS, x-block, full-FP, and
+   domain-decomposition detail shards only
    when they are policy/detail relays. Keep independent mathematical kernels
    separate if merging would hide physics or worsen maintainability.
-5. Move routine solver controls behind namelist/Python policy objects. Keep
+6. Move routine solver controls behind namelist/Python policy objects. Keep
    environment variables only as documented debug compatibility switches.
+
+Batch 2 stop rules:
+
+- Do not stop after only one QI file move. Stop after QI reaches `<=7` files,
+  or after a real import-cycle/correctness blocker is documented with the exact
+  cycle and the smallest safe next owner boundary.
+- Do not create a new QI file unless the same commit deletes at least two old
+  QI files.
+- Do not expose private QI submodules in docs after this batch. Public docs
+  should point to solver-policy behavior and only owner-level modules.
 
 Exit gates:
 
@@ -1308,7 +1325,7 @@ Current completion status:
 - Lane 1 structural consolidation: about 96 percent. The compatibility-driver
   boundary is done, historical `v3_*` implementation roots are routed or
   deleted, top-level `rhs1_*` and `transport_*` implementation files are gone,
-  package-root count is 43, package file count is 194, and `v3_driver.py` is a
+  package-root count is 43, package file count is 192, and `v3_driver.py` is a
   47-line shim. The `profile_response/solve.py <=5,500` review gate is now met
   at 5,358 lines, and `profile_response/sparse/handoff.py <=5,500` is now met
   at 5,498 lines. The remaining blockers are concentrated and measurable:
@@ -1316,11 +1333,16 @@ Current completion status:
   `profile_response/sparse/xblock.py` is 7,725 lines,
   `problems/profile_response` has 18 files including `sparse`,
   `problems/transport_matrix` has 16 files including `parallel`,
-  `solvers/preconditioners` has 47 files, `io.py` is 49 lines,
+  `solvers/preconditioners` has 45 files, QI preconditioners have 14 files,
+  `io.py` is 49 lines,
   `outputs/writer.py` is 4,264 lines, `outputs/transport.py` is 935 lines,
-  and package source lines are 165,396. Lane 1 Batch 1 met its transport/output
-  file and line payback gates; the next active blocker is Batch 2
-  solver/preconditioner-family compression.
+  and package source lines are 165,357. Lane 1 Batch 1 met its
+  transport/output file and line payback gates. The first Batch 2 checkpoint
+  also merged QI device smoothing into `qi/device.py`, deleted the empty
+  `coarse_space` package, and removed the historical symbolic-sparse
+  `rhs1_*` filename. The remaining active blocker is the larger QI
+  basis/correction/policy compression required to reach the preconditioner
+  file-count gates.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
@@ -1360,10 +1382,11 @@ Completed checkpoints that remain valid:
 
 Next ordered implementation steps:
 
-1. Execute Lane 1 Batch 2 as one solver-family-compression pass or one commit
-   pair: reduce `solvers/preconditioners` to `<=35` files, reduce QI to
-   `<=7` files, and remove `symbolic_sparse/rhs1_fortran_reduced.py` without
-   adding replacement shards.
+1. Finish Lane 1 Batch 2 as one QI-family compression pass or one commit pair:
+   merge QI basis construction into one owner, merge QI residual/coarse
+   corrections into one owner, fold promotion/admission into policy, reduce
+   `solvers/preconditioners` to `<=35` files, and reduce QI to `<=7` files
+   without adding replacement shards.
 2. Execute Lane 1 Batch 3 after the solver-family names settle: remove or
    explicitly document the `profile_response/sparse/handoff.py` compatibility
    re-export waiver, and verify the locked `solve.py`, `handoff.py`,

@@ -9,7 +9,7 @@ import scipy.sparse as sp
 
 import sfincs_jax.operators.profile_response.full_system as rfa
 import sfincs_jax.v3_driver as vd
-from sfincs_jax.solvers.preconditioners.symbolic_sparse import rhs1_fortran_reduced as rfr
+from sfincs_jax.solvers.preconditioners.symbolic_sparse import profile_response as rfr
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.problems.profile_response.policies import (
     resolve_active_projected_preconditioner_auto_policy,

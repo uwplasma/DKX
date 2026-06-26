@@ -8,7 +8,7 @@ import scipy.sparse as sp
 
 from sfincs_jax.operators.profile_response.device_sparse import device_csr_from_scipy_csr
 from sfincs_jax.solvers.preconditioners.qi.coarse import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata
-from sfincs_jax.solvers.preconditioners.qi.device_smoother import (
+from sfincs_jax.solvers.preconditioners.qi.device import (
     build_rhs1_qi_device_jacobi_smoother,
     extract_device_csr_diagonal,
     probe_rhs1_qi_device_smoother_correction,

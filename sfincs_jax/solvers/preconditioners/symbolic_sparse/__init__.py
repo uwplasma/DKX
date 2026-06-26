@@ -12,7 +12,7 @@ from .active_factors import (
     build_active_global_sparse_factor_preconditioner,
     build_active_scaled_sparse_factor_preconditioner,
 )
-from .rhs1_fortran_reduced import (
+from .profile_response import (
     active_fortran_v3_reduced_preconditioner_matrix,
     build_active_fortran_v3_reduced_sparse_factor_preconditioner,
     estimate_spilu_factor_nbytes,

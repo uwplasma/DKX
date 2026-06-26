@@ -14,7 +14,7 @@ from sfincs_jax.solvers.preconditioners.qi.device import (
     probe_rhs1_qi_device_preconditioner,
     setup_rhs1_qi_device_preconditioner,
 )
-from sfincs_jax.solvers.preconditioners.qi.device_smoother import build_rhs1_qi_device_jacobi_smoother
+from sfincs_jax.solvers.preconditioners.qi.device import build_rhs1_qi_device_jacobi_smoother
 from sfincs_jax.solvers.preconditioners.qi.active_pattern import (
     RHS1QIActivePatternCoarseConfig,
     build_rhs1_qi_active_pattern_coarse_basis,

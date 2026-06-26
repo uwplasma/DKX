@@ -29,7 +29,7 @@ from ..schur.profile_response import (
     coarse_residual_config,
 )
 from ..schur.profile_response import resolve_active_native_stack_policy
-from ..symbolic_sparse.rhs1_fortran_reduced import (
+from ..symbolic_sparse.profile_response import (
     estimate_spilu_factor_nbytes,
     sparse_equilibration_scale,
     sparse_lu_factor_nbytes,

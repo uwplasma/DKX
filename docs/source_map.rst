@@ -512,7 +512,7 @@ the historical private driver name and test the focused module directly. This ke
   adapter used by coarse/Galerkin corrections. ``v3_driver.py`` imports the
   historical private helper names as aliases so existing debugging and
   monkeypatch tests keep using the same seam.
-- ``sfincs_jax/solvers/preconditioners/symbolic_sparse/rhs1_fortran_reduced.py``:
+- ``sfincs_jax/solvers/preconditioners/symbolic_sparse/profile_response.py``:
   Fortran-v3-style reduced active sparse factors for RHSMode=1. The module owns
   reduced active matrix construction, support-mode parsing and preflight,
   symbolic-plan permutation, sparse equilibration, LU/ILU memory admission, and
@@ -795,10 +795,10 @@ the historical private driver name and test the focused module directly. This ke
   device global-coupling preconditioner wrappers that build the actual
   coarse-action callables used by the sparse/profile-response stage helpers.
   ``v3_driver.py`` no longer imports or re-exports these private builders.
-- ``sfincs_jax/rhs1_qi_device_smoother.py``:
-  device-local QI smoother primitives, including CSR-backed Jacobi,
-  matrix-free residual-minimizing steps, and fail-closed seed probes for the
-  differentiable/device QI lane.
+- ``sfincs_jax/solvers/preconditioners/qi/device.py``:
+  device-local QI preconditioner and smoother primitives, including
+  CSR-backed Jacobi, matrix-free residual-minimizing steps, fail-closed seed
+  probes, and the production-shaped device-QI local-plus-coarse state.
 - ``sfincs_jax/rhs1_qi_block_schur.py``:
   standalone JAX-compatible QI block-Schur/angular/radial coarse-preconditioner
   primitive. It builds deterministic global, radial, angular, and block-Schur

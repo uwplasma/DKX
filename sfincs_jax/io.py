@@ -8,6 +8,9 @@ work while the public API moves to domain-owned output modules.
 
 from __future__ import annotations
 
+import sys
+from types import ModuleType
+
 from .outputs.formats import (
     read_sfincs_h5,
     read_sfincs_output_file,
@@ -33,6 +36,18 @@ def __getattr__(name: str):
         return getattr(_writer, name)
     except AttributeError as exc:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
+
+
+class _IOFacadeModule(ModuleType):
+    """Forward legacy private monkeypatches to the output-writer owner."""
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if hasattr(_writer, name):
+            setattr(_writer, name, value)
+        super().__setattr__(name, value)
+
+
+sys.modules[__name__].__class__ = _IOFacadeModule
 
 __all__ = (
     "ExportFConfig",
