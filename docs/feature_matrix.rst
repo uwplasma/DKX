@@ -44,9 +44,9 @@ Fortran v3 feature ownership
      - ``readInput.F90``, ``validateInput.F90``, ``globalVariables.F90``
      - Manual ``inputParameters.tex`` documents ``RHSMode``,
        ``ambipolarSolve``, geometry, collision, and drift compatibility.
-     - ``sfincs_jax.namelist``, ``sfincs_jax.input`` and validation helpers:
-       implemented, with compatibility guards expanded as refactoring exposes
-       cleaner public contracts.
+     - ``sfincs_jax.namelist`` and ``sfincs_jax.input_compat`` validation
+       helpers: implemented, with compatibility guards expanded as refactoring
+       exposes cleaner public contracts.
    * - RHSMode 1 profile-response solve
      - ``solver.F90``, ``evaluateResidual.F90``, ``populateMatrix.F90``,
        ``diagnostics.F90``, ``writeHDF5Output.F90``
