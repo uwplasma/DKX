@@ -196,43 +196,16 @@ research workflows.
 .. automodule:: sfincs_jax.solvers.preconditioners.dispatch
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.active_pattern
+.. automodule:: sfincs_jax.solvers.preconditioners.qi.basis
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.block_schur
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.coarse
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.coupled_residual
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.deflation
+.. automodule:: sfincs_jax.solvers.preconditioners.qi.corrections
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioners.qi.device
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.residual_galerkin
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.global_moments
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.multilevel
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.phase_space
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.promotion
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.residual_regions
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.two_level
+.. automodule:: sfincs_jax.solvers.preconditioners.qi.policy
    :members:
 
 .. automodule:: sfincs_jax.problems.profile_response.residual
