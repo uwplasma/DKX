@@ -249,11 +249,9 @@ from sfincs_jax.problems.profile_response.diagnostics import (
     sparse_rescue_tail_metadata_from_context,
 )
 from sfincs_jax.problems.profile_response.sparse.handoff import (
-    DirectTailMaterializationContext,
-    DirectTailStructuredAdmissionContext,
-    DirectTailStructuredBuildContext,
     DirectTailSupportModePreflightContext,
     FortranReducedXBlockBackendContext,
+    SparsePCDirectTailFactorSetupContext,
     SparsePCGenericBranchSetupContext,
     SparsePCFactorPreflightPolicyContext,
     SparsePCFactorPreflightEvaluationContext,
@@ -291,10 +289,9 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     apply_xblock_two_level_stage,
     build_xblock_local_preconditioner,
     build_xblock_krylov_matvec_setup,
-    build_direct_tail_structured_preconditioner_setup,
     build_xblock_assembled_operator_if_requested,
+    build_sparse_pc_direct_tail_factor_setup,
     build_sparse_pc_generic_branch_setup,
-    build_direct_tail_materialization_setup,
     build_xblock_krylov_progress_callbacks,
     build_xblock_qi_stage_pipeline_context,
     evaluate_sparse_pc_factor_preflight,
@@ -307,7 +304,6 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
     resolve_sparse_pc_factor_preflight_policy,
-    resolve_direct_tail_structured_admission,
     resolve_direct_tail_residual_rescue_policy,
     resolve_direct_tail_true_active_rescue_policy,
     resolve_direct_tail_coupled_coarse_rescue_policy,
@@ -1753,260 +1749,137 @@ def solve_v3_full_system_linear_gmres(
                 y_jnp = y_jnp + jnp.asarray(pc_shift, dtype=rhs.dtype) * x_jnp
             return _sparse_pc_reduce_full(y_jnp)
 
-        if emit is not None:
-            shift_note = f" shift={pc_shift:.1e}" if pc_shift != 0.0 else ""
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: sparse_pc_gmres factoring RHSMode=1 preconditioner"
-                f"{shift_note} factor_dtype={sparse_pc_factor_dtype_initial.name} "
-                f"factor_kind={sparse_pc_factorization} permc={sparse_pc_permc_spec}",
-            )
-        direct_tail_materialization = build_direct_tail_materialization_setup(
-            DirectTailMaterializationContext(
+        direct_tail_factor_setup = build_sparse_pc_direct_tail_factor_setup(
+            SparsePCDirectTailFactorSetupContext(
                 env=os.environ,
                 op=op,
                 op_pc=op_pc,
+                rhs_dtype=rhs.dtype,
                 pattern=pattern,
                 active_indices=sparse_pc_active_idx_np,
                 sparse_pc_use_active_dof=bool(sparse_pc_use_active_dof),
                 reduce_full=_sparse_pc_reduce_full,
                 expand_reduced=_sparse_pc_expand_reduced,
+                factor_matvec=_sparse_pc_factor_mv,
                 pc_shift=float(pc_shift),
-                dtype=rhs.dtype,
-                factor_dtype=sparse_pc_factor_dtype_initial,
-                sparse_pc_linear_size=int(sparse_pc_linear_size),
-                default_pattern_color_batch=int(sparse_pc_default_pattern_color_batch),
-                elapsed_s=sparse_timer.elapsed_s,
-                emit=emit,
-                is_direct_reduced_pmat_pc_kind=_is_direct_reduced_pmat_pc_kind,
-                build_direct_tail_bundle=_try_build_fortran_reduced_constraint1_direct_tail_bundle,
-                build_structured_rhs1_full_csr_operator_bundle_callback=(
-                    _try_build_structured_rhs1_full_csr_operator_bundle
-                ),
-            )
-        )
-        direct_tail_default = bool(direct_tail_materialization.direct_tail_default)
-        direct_tail_enabled = bool(direct_tail_materialization.enabled)
-        direct_tail_built = bool(direct_tail_materialization.built)
-        direct_tail_error = direct_tail_materialization.error
-        direct_tail_operator_bundle = direct_tail_materialization.operator_bundle
-        direct_tail_structured_pc_requested: str | None = None
-        direct_tail_structured_pc_selected = False
-        direct_tail_structured_pc_reason: str | None = None
-        direct_tail_structured_pc_metadata: dict[str, object] | None = None
-        direct_tail_structured_pc_error: str | None = None
-        direct_tail_pc_env_early = str(direct_tail_materialization.pc_env)
-        direct_tail_direct_reduced_pmat_requested = bool(
-            direct_tail_materialization.direct_reduced_pmat_requested
-        )
-        factor_start_s = sparse_timer.elapsed_s()
-        direct_tail_structured_admission = resolve_direct_tail_structured_admission(
-            DirectTailStructuredAdmissionContext(
-                env=os.environ,
-                pc_env=str(direct_tail_materialization.pc_env),
-                operator_bundle=direct_tail_operator_bundle,
-                direct_reduced_pmat_requested=bool(direct_tail_direct_reduced_pmat_requested),
-                sparse_pc_linear_size=int(sparse_pc_linear_size),
-                default_max_mb=_rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb,
-            )
-        )
-        direct_tail_pc_env = str(direct_tail_structured_admission.pc_env)
-        direct_tail_pc_auto_default = bool(direct_tail_structured_admission.auto_default)
-        direct_tail_structured_pc_requested = direct_tail_structured_admission.requested
-        direct_tail_fail_closed_size = int(direct_tail_structured_admission.fail_closed_size)
-        direct_tail_auto_large_fail_closed = bool(direct_tail_structured_admission.auto_large_fail_closed)
-        direct_tail_structured_pc_required = bool(direct_tail_structured_admission.required)
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: sparse_pc_gmres factor setup start "
-                f"size={int(sparse_pc_linear_size)} "
-                f"factor_dtype={sparse_pc_factor_dtype_initial.name} "
-                f"factor_kind={sparse_pc_factorization} direct_tail_built={bool(direct_tail_built)} "
-                f"structured_pc_requested={direct_tail_structured_pc_requested}",
-            )
-        structured_pc_ready = False
-        direct_tail_structured_layout: RHS1BlockLayout | None = None
-        direct_tail_structured_active_indices: np.ndarray | None = None
-        direct_tail_structured_max_nbytes: int | None = None
-        direct_tail_support_mode_preflight_requested = False
-        direct_tail_support_mode_preflight_selected = False
-        direct_tail_support_mode_preflight_metadata: dict[str, object] | None = None
-        direct_tail_support_mode_preflight_error: str | None = None
-        direct_tail_structured_pc_max_mb_auto = bool(direct_tail_structured_admission.max_mb_auto)
-        pc_max_mb = float(direct_tail_structured_admission.max_mb)
-        pc_reg = float(direct_tail_structured_admission.regularization)
-        if bool(direct_tail_structured_admission.setup_allowed):
-            direct_tail_structured_pc_start_s = sparse_timer.elapsed_s()
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
-                    "structured preconditioner setup start "
-                    f"kind={direct_tail_structured_pc_requested} "
-                    f"active_size={int(sparse_pc_linear_size)} "
-                    f"max_mb={float(pc_max_mb):.3g} "
-                    f"max_mb_auto={bool(direct_tail_structured_pc_max_mb_auto)} "
-                    f"reg={float(pc_reg):.3e}",
-                )
-            try:
-                direct_tail_structured_build = build_direct_tail_structured_preconditioner_setup(
-                    DirectTailStructuredBuildContext(
-                        env=os.environ,
-                        op=op_pc,
-                        operator_bundle=direct_tail_operator_bundle,
-                        active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                        requested_kind=direct_tail_structured_pc_requested,
-                        direct_reduced_pmat_requested=bool(direct_tail_direct_reduced_pmat_requested),
-                        sparse_pc_linear_size=int(sparse_pc_linear_size),
-                        max_mb=float(pc_max_mb),
-                        regularization=float(pc_reg),
-                        preconditioner_x=int(preconditioner_x),
-                        preconditioner_xi=int(preconditioner_xi),
-                        preconditioner_species=int(preconditioner_species),
-                        preconditioner_x_min_l=int(preconditioner_x_min_l),
-                        layout_from_operator=RHS1BlockLayout.from_operator,
-                        build_direct_active_preconditioner=(
-                            build_direct_active_fortran_v3_reduced_pmat_preconditioner
-                        ),
-                        build_active_projected_preconditioner=(
-                            build_active_projected_rhs1_full_csr_preconditioner
-                        ),
-                        cache=_DIRECT_TAIL_STRUCTURED_PC_CACHE,
-                        cache_key=_direct_tail_structured_pc_cache_key,
-                        with_cache_metadata=_direct_tail_structured_pc_with_cache_metadata,
-                        factor_bundle=_StructuredHostSparsePreconditionerBundle,
-                    )
-                )
-                direct_tail_structured_layout = direct_tail_structured_build.layout
-                direct_tail_structured_active_indices = direct_tail_structured_build.active_indices
-                direct_tail_structured_max_nbytes = direct_tail_structured_build.max_nbytes
-                direct_tail_structured_pc_selected = bool(direct_tail_structured_build.selected)
-                direct_tail_structured_pc_reason = direct_tail_structured_build.reason
-                direct_tail_structured_pc_metadata = direct_tail_structured_build.metadata
-                direct_tail_structured_pc_error = direct_tail_structured_build.error
-                direct_tail_structured_pc_cache_hit = bool(direct_tail_structured_build.cache_hit)
-                if bool(direct_tail_structured_pc_cache_hit) and emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
-                        "structured preconditioner cache hit "
-                        f"elapsed_s={sparse_timer.elapsed_s() - direct_tail_structured_pc_start_s:.3f}",
-                    )
-                if bool(direct_tail_structured_build.ready):
-                    factor_bundle_pc = direct_tail_structured_build.factor_bundle
-                    _operator_bundle_pc = direct_tail_structured_build.operator_bundle_pc
-                    structured_pc_ready = True
-                    if emit is not None:
-                        structured_pc_metadata_inner = {}
-                        if isinstance(direct_tail_structured_pc_metadata, dict):
-                            maybe_inner = direct_tail_structured_pc_metadata.get("metadata")
-                            if isinstance(maybe_inner, dict):
-                                structured_pc_metadata_inner = maybe_inner
-                        factor_nbytes = structured_pc_metadata_inner.get("factor_nbytes_actual")
-                        if factor_nbytes is None:
-                            factor_nbytes = structured_pc_metadata_inner.get("factor_nbytes_estimate")
-                        factor_permc = structured_pc_metadata_inner.get("permc_spec", "na")
-                        factor_superlu_permc = structured_pc_metadata_inner.get("superlu_permc_spec", "na")
-                        pc_kind = (
-                            str(direct_tail_structured_pc_metadata.get("kind", direct_tail_structured_pc_requested))
-                            if isinstance(direct_tail_structured_pc_metadata, dict)
-                            else str(direct_tail_structured_pc_requested)
-                        )
-                        pc_setup_s = (
-                            float(direct_tail_structured_pc_metadata.get("setup_s", 0.0) or 0.0)
-                            if isinstance(direct_tail_structured_pc_metadata, dict)
-                            else 0.0
-                        )
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
-                            f"structured preconditioner selected kind={pc_kind} "
-                            f"setup_s={float(pc_setup_s):.3f} "
-                            f"elapsed_s={sparse_timer.elapsed_s() - direct_tail_structured_pc_start_s:.3f} "
-                            f"reason={direct_tail_structured_pc_reason} "
-                            f"cache_hit={bool(direct_tail_structured_pc_cache_hit)} "
-                            f"factor_nbytes={factor_nbytes if factor_nbytes is not None else 'na'} "
-                            f"permc={factor_permc} superlu_permc={factor_superlu_permc}",
-                        )
-                elif emit is not None:
-                    tail_action = (
-                        "required path will fail fast"
-                        if bool(direct_tail_structured_pc_required)
-                        else "falling back to host factorization"
-                    )
-                    if direct_tail_structured_pc_error is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
-                            "structured preconditioner failed "
-                            f"elapsed_s={sparse_timer.elapsed_s() - direct_tail_structured_pc_start_s:.3f} "
-                            f"({direct_tail_structured_pc_error}); {tail_action}",
-                        )
-                    else:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
-                            "structured preconditioner not selected "
-                            f"kind={direct_tail_structured_pc_requested} reason={direct_tail_structured_pc_reason}; "
-                            f"elapsed_s={sparse_timer.elapsed_s() - direct_tail_structured_pc_start_s:.3f}; "
-                            f"{tail_action}",
-                        )
-            except Exception as exc:  # noqa: BLE001
-                direct_tail_structured_pc_error = f"{type(exc).__name__}: {exc}"
-                direct_tail_structured_pc_selected = False
-                direct_tail_structured_pc_reason = "structured_pc_exception"
-                if emit is not None:
-                    tail_action = (
-                        "required path will fail fast"
-                        if bool(direct_tail_structured_pc_required)
-                        else "falling back to host factorization"
-                    )
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
-                        "structured preconditioner failed "
-                        f"elapsed_s={sparse_timer.elapsed_s() - direct_tail_structured_pc_start_s:.3f} "
-                        f"({direct_tail_structured_pc_error}); {tail_action}",
-                    )
-        if (
-            direct_tail_structured_pc_requested is not None
-            and bool(direct_tail_structured_pc_required)
-            and not bool(structured_pc_ready)
-        ):
-            raise RuntimeError(
-                "direct-tail structured preconditioner was explicitly requested but not selected: "
-                f"kind={direct_tail_structured_pc_requested} "
-                f"reason={direct_tail_structured_pc_reason} "
-                f"error={direct_tail_structured_pc_error} "
-                f"direct_tail_built={bool(direct_tail_built)} "
-                f"direct_reduced_pmat_requested={bool(direct_tail_direct_reduced_pmat_requested)}"
-            )
-        if not structured_pc_ready:
-            _operator_bundle_pc, factor_bundle_pc = _build_host_sparse_direct_factor_from_matvec(
-                matvec=_sparse_pc_factor_mv,
-                n=int(sparse_pc_linear_size),
-                dtype=rhs.dtype,
-                factor_dtype=sparse_pc_factor_dtype_initial,
-                pattern=pattern,
-                operator_bundle_override=direct_tail_operator_bundle,
-                emit=emit,
-                default_diag_pivot_thresh=0.0 if (constrained_pas_pc or tokamak_fp_pc or fortran_reduced_sparse_pc) else 1.0,
-                default_permc_spec=sparse_pc_default_permc_spec,
-                default_factor_kind=sparse_pc_default_factor_kind,
+                factor_dtype_initial=sparse_pc_factor_dtype_initial,
+                factorization=str(sparse_pc_factorization),
+                default_factor_kind=str(sparse_pc_default_factor_kind),
                 default_ilu_fill_factor=float(sparse_pc_default_ilu_fill_factor),
                 default_ilu_drop_tol=float(sparse_pc_default_ilu_drop_tol),
                 default_pattern_color_batch=int(sparse_pc_default_pattern_color_batch),
+                default_permc_spec=str(sparse_pc_default_permc_spec),
+                permc_spec=str(sparse_pc_permc_spec),
+                sparse_pc_linear_size=int(sparse_pc_linear_size),
+                constrained_pas_pc=bool(constrained_pas_pc),
+                tokamak_fp_pc=bool(tokamak_fp_pc),
+                fortran_reduced_sparse_pc=bool(fortran_reduced_sparse_pc),
+                preconditioner_x=int(preconditioner_x),
+                preconditioner_x_min_l=int(preconditioner_x_min_l),
+                preconditioner_xi=int(preconditioner_xi),
+                preconditioner_species=int(preconditioner_species),
+                sparse_timer=sparse_timer,
+                emit=emit,
+                default_direct_tail_max_mb=(
+                    _rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb
+                ),
+                is_direct_reduced_pmat_pc_kind=_is_direct_reduced_pmat_pc_kind,
+                build_direct_tail_bundle=(
+                    _try_build_fortran_reduced_constraint1_direct_tail_bundle
+                ),
+                build_structured_full_csr_operator_bundle=(
+                    _try_build_structured_rhs1_full_csr_operator_bundle
+                ),
+                layout_from_operator=RHS1BlockLayout.from_operator,
+                build_direct_active_preconditioner=(
+                    build_direct_active_fortran_v3_reduced_pmat_preconditioner
+                ),
+                build_active_projected_preconditioner=(
+                    build_active_projected_rhs1_full_csr_preconditioner
+                ),
+                structured_cache=_DIRECT_TAIL_STRUCTURED_PC_CACHE,
+                structured_cache_key=_direct_tail_structured_pc_cache_key,
+                structured_cache_metadata=(
+                    _direct_tail_structured_pc_with_cache_metadata
+                ),
+                structured_factor_bundle_factory=(
+                    _StructuredHostSparsePreconditionerBundle
+                ),
+                host_factor_builder=_build_host_sparse_direct_factor_from_matvec,
             )
-        pc_factor_s = sparse_timer.elapsed_s() - factor_start_s
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: sparse_pc_gmres factor setup complete "
-                f"elapsed_s={float(pc_factor_s):.3f} structured_pc_ready={bool(structured_pc_ready)} "
-                f"direct_tail_built={bool(direct_tail_built)}",
-            )
-        setup_s = sparse_timer.elapsed_s()
+        )
+        direct_tail_materialization = direct_tail_factor_setup.materialization
+        direct_tail_default = direct_tail_factor_setup.direct_tail_default
+        direct_tail_enabled = direct_tail_factor_setup.direct_tail_enabled
+        direct_tail_built = direct_tail_factor_setup.direct_tail_built
+        direct_tail_error = direct_tail_factor_setup.direct_tail_error
+        direct_tail_operator_bundle = direct_tail_factor_setup.direct_tail_operator_bundle
+        direct_tail_structured_pc_requested = (
+            direct_tail_factor_setup.direct_tail_structured_pc_requested
+        )
+        direct_tail_structured_pc_selected = (
+            direct_tail_factor_setup.direct_tail_structured_pc_selected
+        )
+        direct_tail_structured_pc_reason = (
+            direct_tail_factor_setup.direct_tail_structured_pc_reason
+        )
+        direct_tail_structured_pc_metadata = (
+            direct_tail_factor_setup.direct_tail_structured_pc_metadata
+        )
+        direct_tail_structured_pc_error = (
+            direct_tail_factor_setup.direct_tail_structured_pc_error
+        )
+        direct_tail_pc_env_early = direct_tail_factor_setup.direct_tail_pc_env_early
+        direct_tail_direct_reduced_pmat_requested = (
+            direct_tail_factor_setup.direct_tail_direct_reduced_pmat_requested
+        )
+        direct_tail_structured_admission = (
+            direct_tail_factor_setup.structured_admission
+        )
+        direct_tail_pc_env = direct_tail_factor_setup.direct_tail_pc_env
+        direct_tail_pc_auto_default = (
+            direct_tail_factor_setup.direct_tail_pc_auto_default
+        )
+        direct_tail_fail_closed_size = (
+            direct_tail_factor_setup.direct_tail_fail_closed_size
+        )
+        direct_tail_auto_large_fail_closed = (
+            direct_tail_factor_setup.direct_tail_auto_large_fail_closed
+        )
+        direct_tail_structured_pc_required = (
+            direct_tail_factor_setup.direct_tail_structured_pc_required
+        )
+        structured_pc_ready = direct_tail_factor_setup.structured_pc_ready
+        direct_tail_structured_layout = (
+            direct_tail_factor_setup.direct_tail_structured_layout
+        )
+        direct_tail_structured_active_indices = (
+            direct_tail_factor_setup.direct_tail_structured_active_indices
+        )
+        direct_tail_structured_max_nbytes = (
+            direct_tail_factor_setup.direct_tail_structured_max_nbytes
+        )
+        direct_tail_support_mode_preflight_requested = (
+            direct_tail_factor_setup.direct_tail_support_mode_preflight_requested
+        )
+        direct_tail_support_mode_preflight_selected = (
+            direct_tail_factor_setup.direct_tail_support_mode_preflight_selected
+        )
+        direct_tail_support_mode_preflight_metadata = (
+            direct_tail_factor_setup.direct_tail_support_mode_preflight_metadata
+        )
+        direct_tail_support_mode_preflight_error = (
+            direct_tail_factor_setup.direct_tail_support_mode_preflight_error
+        )
+        direct_tail_structured_pc_max_mb_auto = (
+            direct_tail_factor_setup.direct_tail_structured_pc_max_mb_auto
+        )
+        pc_max_mb = direct_tail_factor_setup.pc_max_mb
+        pc_reg = direct_tail_factor_setup.pc_reg
+        _operator_bundle_pc = direct_tail_factor_setup.operator_bundle_pc
+        factor_bundle_pc = direct_tail_factor_setup.factor_bundle_pc
+        pc_factor_s = direct_tail_factor_setup.pc_factor_s
+        setup_s = direct_tail_factor_setup.setup_s
 
         precondition_side = rhs1_gmres_precondition_side_from_env()
         pc_form = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_FORM", "").strip().lower()

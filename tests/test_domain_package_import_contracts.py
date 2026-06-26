@@ -548,7 +548,17 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
     (
         "sfincs_jax.problems.profile_response.sparse.handoff",
         "sfincs_jax.problems.profile_response.sparse.handoff",
+        "SparsePCDirectTailFactorSetupContext",
+    ),
+    (
+        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "sfincs_jax.problems.profile_response.sparse.handoff",
         "SparsePCGenericBranchSetupContext",
+    ),
+    (
+        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "build_sparse_pc_direct_tail_factor_setup",
     ),
     (
         "sfincs_jax.problems.profile_response.sparse.handoff",
