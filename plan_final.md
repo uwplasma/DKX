@@ -351,6 +351,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   eligibility guards, and float32 polish policy. These tests protect RHSMode=2/3
   production fallback behavior with fake factors and toy operators rather than
   expensive transport solves.
+- The forty-fourth post-audit documentation tranche removed the remaining
+  release-log wording from the top-level README benchmark-table prose and
+  reran the README/source-layout/examples documentation guards. The public
+  README, package source README, and examples README no longer match the
+  explicitly flagged branch-history phrases.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
