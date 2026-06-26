@@ -33,7 +33,6 @@
     "solver.py"
   ],
   "allowed_root_packages": [
-    "data",
     "discretization",
     "geometry",
     "operators",

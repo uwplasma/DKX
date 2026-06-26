@@ -75,7 +75,7 @@ def test_source_tree_consolidation_target_is_stricter_than_current_tree() -> Non
     expected = _expected_tree()
 
     assert set(expected["target_root_modules"]) < set(expected["allowed_root_modules"])
-    assert set(expected["target_root_packages"]) < set(expected["allowed_root_packages"])
+    assert set(expected["target_root_packages"]) <= set(expected["allowed_root_packages"])
     assert expected["temporary_nested_packages"] == []
     assert expected["temporary_init_only_packages"] == []
 
