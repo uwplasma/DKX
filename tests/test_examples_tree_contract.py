@@ -68,6 +68,10 @@ MAX_TRACKED_EXAMPLE_BYTES = 2 * 1024 * 1024
 README_STALE_FRAGMENTS = (
     "What works today",
     "checked docs now contain",
+    "For the current support matrix",
+    "For current hot-solve",
+    "The current panel",
+    "The current publication-grade",
     "currently pinned",
     "currently ships",
     "now supports",
