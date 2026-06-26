@@ -34,25 +34,25 @@ API reference
 .. automodule:: sfincs_jax.discretization.xgrid
    :members:
 
-.. automodule:: sfincs_jax.operators.profile_response.collisionless
+.. automodule:: sfincs_jax.operators.profile_collisionless
    :members:
 
-.. automodule:: sfincs_jax.operators.profile_response.electric_field
+.. automodule:: sfincs_jax.operators.profile_electric_field
    :members:
 
-.. automodule:: sfincs_jax.operators.profile_response.exb
+.. automodule:: sfincs_jax.operators.profile_exb
    :members:
 
-.. automodule:: sfincs_jax.operators.profile_response.magnetic_drifts
+.. automodule:: sfincs_jax.operators.profile_magnetic_drifts
    :members:
 
 .. automodule:: sfincs_jax.physics.collisions
    :members:
 
-.. automodule:: sfincs_jax.operators.profile_response.fblock
+.. automodule:: sfincs_jax.operators.profile_fblock
    :members:
 
-.. automodule:: sfincs_jax.operators.profile_response.system
+.. automodule:: sfincs_jax.operators.profile_system
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.diagnostics
@@ -60,7 +60,7 @@ API reference
 
 Transport-matrix helpers are documented through their maintained domain module.
 
-.. automodule:: sfincs_jax.operators.profile_response.linear_systems
+.. automodule:: sfincs_jax.operators.profile_linear_systems
    :members:
 
 .. automodule:: sfincs_jax.validation.artifacts
@@ -145,22 +145,22 @@ research workflows.
 .. automodule:: sfincs_jax.solvers.preconditioners.domain_decomposition
    :members:
 
-.. automodule:: sfincs_jax.operators.profile_response.sources
+.. automodule:: sfincs_jax.operators.profile_sources
    :members:
 
-.. automodule:: sfincs_jax.operators.profile_response.device_sparse
+.. automodule:: sfincs_jax.operators.profile_device_sparse
    :members:
 
-.. automodule:: sfincs_jax.operators.profile_response.reduced_tail
+.. automodule:: sfincs_jax.operators.profile_reduced_tail
    :members:
 
-.. automodule:: sfincs_jax.operators.profile_response.structured_csr
+.. automodule:: sfincs_jax.operators.profile_structured_csr
    :members:
 
-.. automodule:: sfincs_jax.operators.profile_response.sparse_pattern
+.. automodule:: sfincs_jax.operators.profile_sparse_pattern
    :members:
 
-.. automodule:: sfincs_jax.operators.profile_response.true_operator_rescue
+.. automodule:: sfincs_jax.operators.profile_true_operator_rescue
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioners.pas.matrix_free
