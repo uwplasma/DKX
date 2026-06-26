@@ -16,20 +16,20 @@ historical record only; if this file conflicts with `plan_final.md`, follow
 `plan_final.md`.
 
 Latest controlling update: `plan_final.md` now defines Lane 1 as five
-consolidation phases only: Phase 1 profile-response collapse, Phase 2
-transport/output/root cleanup, Phase 3 solver/preconditioner family
-consolidation, Phase 4 public API/docs/tests/source-map cleanup, and Phase 5
-review-ready validation. Older sweep, tranche, iteration, pass, and batch
-labels in this execution log are historical context, not instructions to
+consolidation batches only: Batch A profile-response owner compression,
+Batch B transport/output/root compression, Batch C solver/preconditioner
+family compression, Batch D public API/docs/tests/source-map cleanup, and
+Batch E review-ready validation. Older phase, sweep, tranche, iteration, and
+pass labels in this execution log are historical context, not instructions to
 follow.
 
 Latest execution checkpoint:
 
-- Phase 1 deleted `sfincs_jax/problems/profile_response/handoff.py` by moving
+- Batch A deleted `sfincs_jax/problems/profile_response/handoff.py` by moving
   accepted-candidate replay, solver-candidate residual gates, and Krylov
   replay-state updates into
   `sfincs_jax/problems/profile_response/solver_diagnostics.py`.
-- Phase 1 then deleted `sfincs_jax/problems/profile_response/auto_solve.py` by
+- Batch A then deleted `sfincs_jax/problems/profile_response/auto_solve.py` by
   moving explicit host structured-CSR and automatic RHSMode-1 host-solver
   routing into `sfincs_jax/problems/profile_response/dense.py`, the existing
   host solve owner.
@@ -4424,7 +4424,7 @@ Next best steps:
 3. After the remaining RHSMode-1 sparse execution/finalization code is owned
    outside `solve.py`, start Batch C transport/output/root consolidation.
 
-## 2026-06-26 Final Consolidation Sweep Plan Refresh
+## 2026-06-26 Superseded Consolidation Sweep Plan Refresh
 
 Steps taken:
 
@@ -4434,15 +4434,16 @@ Steps taken:
    `profile_response` plus `sparse` at `21` files and `51,776` lines,
    `transport_matrix` plus `parallel` at `28` files and `15,026` lines, and
    `solvers/preconditioners` at `47` files and `36,992` lines.
-2. Replaced the active Lane 1 refactor language in `plan_final.md` with one
-   authoritative Sweep 0-4 consolidation plan. Older Batch A-E, tranche, pass,
-   and helper-extraction labels remain only as historical execution-log
-   provenance.
+2. Replaced the then-active Lane 1 refactor language in `plan_final.md` with a
+   Sweep 0-4 consolidation plan. This checkpoint is now superseded by the
+   current `plan_final.md` Batch A-E plan and remains only as historical
+   execution-log provenance.
 3. Added concrete file-level consolidation targets for historical root kernels,
    `profile_response/solve.py`, `profile_response/sparse`, transport
    micro-files, `io.py`, QI preconditioner files, symbolic sparse
    `rhs1_fortran_reduced.py`, and public API/docs/tests cleanup.
-4. Tightened review gates to emphasize fewer durable domain owners:
+4. At that time, tightened review gates to emphasize fewer durable domain
+   owners:
    package files `<=185` with stretch `<=175`, root files `<=44` or explicit
    shim labels, `profile_response` plus `sparse <=15` files,
    `transport_matrix` plus `parallel <=14` files,
@@ -4452,9 +4453,10 @@ Steps taken:
 Results:
 
 - No source behavior changed; this was a planning/documentation checkpoint.
-- `plan_final.md` is again the single authoritative plan for PR #8.
-- `plan.md` remains an execution log and now points to Sweep 0-4 as the active
-  sequence.
+- At that checkpoint, `plan_final.md` was again the single authoritative plan
+  for PR #8. This result is superseded by the current Batch A-E plan.
+- `plan.md` remains an execution log; follow the current `plan_final.md`
+  Batch A-E sequence, not this historical Sweep 0-4 sequence.
 
 Progress:
 
@@ -5428,3 +5430,49 @@ Next best steps:
 2. Move the remaining direct-tail and generic sparse setup pieces out of
    `sparse/handoff.py` only where they land in existing durable owners.
 3. Then switch to Batch B transport/output/root cleanup.
+
+## 2026-06-26 Final Consolidation Plan Refresh
+
+Steps taken:
+
+1. Re-audited the current source layout after the latest Batch A commits:
+   `206` package Python files, `43` package-root files, `19`
+   profile-response files including `sparse/`, `28` transport-matrix files
+   including `parallel/`, and `165,631` package source lines.
+2. Reviewed the remaining largest owners: `sparse/xblock.py`, `solve.py`,
+   `policies.py`, `operators/profile_response/full_system.py`, `sparse/qi.py`,
+   `sparse/handoff.py`, `io.py`, and the transport/preconditioner micro-file
+   clusters.
+3. Replaced the old phase/tranche wording in `plan_final.md` with one
+   authoritative Batch A-E consolidation plan. The new plan separates
+   review-ready gates from stretch cleanup targets so the PR can become
+   reviewable without unsafe line-count churn.
+4. Recorded explicit cut/defer decisions:
+   `active_dof.py` should merge into `profile_response/setup.py`;
+   `sparse/policy.py` should not be quick-merged because its `_env_*` helper
+   signatures conflict with `profile_response/policies.py`;
+   `sparse/finalization.py` stays until import-cycle risk is eliminated; and
+   no new helper/handoff/campaign files should be created.
+
+Results:
+
+- `plan_final.md` is now the single authoritative refactor plan.
+- The required review-ready gates are: package files `<=190`, root files
+  `<=44`, `profile_response/solve.py <=5,500` lines,
+  `profile_response` plus `sparse <=18` files, transport matrix plus parallel
+  `<=18` files, preconditioners `<=35` files, and `io.py <=1,200` lines.
+- The stricter targets remain as stretch goals: package files `<=175`,
+  `profile_response/solve.py <=3,500` lines, profile-response `<=15` files,
+  transport matrix `<=14` files, preconditioners `<=30` files, and
+  `io.py <=800` lines or deletion.
+
+Next best steps:
+
+1. Execute Batch A without more one-helper churn: merge `active_dof.py` into
+   `setup.py`, then move remaining result/retry/progress relays from
+   `solve.py` into existing dense/sparse/diagnostic owners.
+2. Execute Batch B as a transport/output/root compression pass, deleting
+   transport micro-files and moving implementation from `io.py` to
+   `outputs/`.
+3. Execute Batch C as a solver/preconditioner family compression pass, with QI
+   and symbolic-sparse filenames as the first targets.
