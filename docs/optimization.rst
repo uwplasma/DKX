@@ -14,7 +14,7 @@ workflow is therefore to optimize with cheap JAX-native terms and promote only
 selected candidates to full ``sfincs_jax`` scans.
 
 The implementation lives in
-``sfincs_jax.workflows.optimization_objectives`` and the public example is
+``sfincs_jax.workflows.optimization`` and the public example is
 ``examples/optimization/qa_nfp2_sfincs_jax_objectives.py``.
 
 QA nfp=2 Example
@@ -1160,7 +1160,7 @@ added as an outer-loop or accepted-candidate gate:
 
 .. code-block:: python
 
-   from sfincs_jax.workflows.optimization_objectives import (
+   from sfincs_jax.workflows.optimization import (
        bootstrap_current_objective,
        find_ambipolar_roots,
        flux_selectivity_objective,

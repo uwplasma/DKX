@@ -370,6 +370,17 @@ Upstream utility postprocessing wrapper:
 This module replaces the former root ``sfincs_jax/postprocess_upstream.py``
 implementation.
 
+``sfincs_jax/workflows/optimization.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Optimization-facing workflow owner. It contains the differentiable
+neoclassical proxy objectives, high-fidelity scan-promotion gates,
+candidate-scan plan builders, promotion evidence campaign builders,
+CPU/GPU/Fortran promotion comparison gates, and finite-beta convergence-ladder
+checks. Historical ``optimization_*`` workflow modules now resolve through
+package-level compatibility aliases in ``sfincs_jax.workflows`` instead of
+separate implementation files.
+
 ``sfincs_jax/validation/data_fetch.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
