@@ -66,16 +66,17 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
 - The root README no longer matches the explicit progress-language patterns
   flagged in the review prompt. Remaining historical/status language should be
   handled in docs pages and release notes rather than the first-page README.
-- A fresh xdist coverage audit on this branch measured `82.76%`
-  (`57,232 / 69,151` covered lines) in `5:06`. The target remains `95%`
+- A fresh xdist coverage audit on this branch measured `84.31%`
+  (`58,304 / 69,151` covered lines) in `5:51`. The target remains `95%`
   meaningful package coverage with GitHub Actions under `10 min`; this requires
   targeted unit, numerical, and frozen-reference tests, not slow full-solve
   CI jobs.
 - The largest coverage gaps by missing executable lines are
-  `solvers/preconditioner_transport_matrix.py`, `problems/profile_solve.py`,
-  `problems/transport_solve.py`, `operators/profile_system.py`,
-  `outputs/writer.py`, `solvers/preconditioner_pas_angular.py`,
-  `solvers/explicit_sparse.py`, and `operators/profile_sparse_pattern.py`.
+  `problems/profile_solve.py`, `problems/transport_solve.py`,
+  `operators/profile_system.py`, `outputs/writer.py`,
+  `solvers/preconditioner_transport_matrix.py`, `solvers/explicit_sparse.py`,
+  `operators/profile_sparse_pattern.py`, `solvers/preconditioner_schur_profile.py`,
+  and `operators/profile_true_operator_rescue.py`.
 - The first post-audit coverage tranche added bounded PAS x-block ILU tests for
   inapplicable-model fallback, tiny-fixture padded factor construction,
   environment normalization, cache reuse, and reduced-vector application. That
@@ -90,6 +91,14 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   block-Thomas paths. The tests cover inactive pitch masking, structured-tail
   factors, memory/fallback admission, cache reuse, and reduced/full projection
   consistency while keeping CI execution below a few seconds.
+- The fourth post-audit coverage tranche added synthetic RHSMode=2/3 transport
+  preconditioner tests for collision diagonal, species/x block, low-rank,
+  x-grid coarse correction, Fourier angular, and FP Fourier paths. These tests
+  validate the numerical preconditioner algebra and reduced/full projection
+  behavior without running a full transport solve.
+- The CI coverage floor is raised to `80%` after this audit. The next planned
+  gate is `85%`, once the profile-solve, transport-solve, output-writer, and
+  remaining preconditioner gaps are reduced while keeping CI below ten minutes.
 
 ### Target Package Shape
 
