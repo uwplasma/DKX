@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.problems.transport_matrix.loop import (
+from sfincs_jax.problems.transport_matrix.solve import (
     TransportLoopProgress,
     TransportMatvecCache,
     TransportRecycleState,

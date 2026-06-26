@@ -5686,3 +5686,60 @@ Next best steps:
    `dense_batch.py` and `loop.py` into `transport_matrix/solve.py`.
 3. Once `transport_matrix` reaches `<=18` files, return to Batch A's
    `profile_response/solve.py <=5,500` line gate.
+
+## 2026-06-26 Batch B Transport Solve Owner Gate Merge
+
+Steps taken:
+
+1. Merged `sfincs_jax/problems/transport_matrix/dense_batch.py` into
+   `sfincs_jax/problems/transport_matrix/solve.py`. All-RHS dense transport
+   matrix assembly, active-DOF projection, streamed diagnostic collection,
+   residual bookkeeping, and per-`whichRHS` dense progress emission now live
+   with the solve owner.
+2. Merged `sfincs_jax/problems/transport_matrix/loop.py` into
+   `transport_matrix/solve.py`. Full/reduced matvec caching, bounded recycle
+   bases, stored-state recycle seeding, recycled initial guesses, residual
+   gates, and ETA progress bookkeeping now live with solve orchestration.
+3. Merged `sfincs_jax/problems/transport_matrix/sparse_direct_solve.py` into
+   `transport_matrix/solve.py`. Sparse-pattern admission/caching, direct
+   active FP operator factor reuse, explicit sparse helper materialization,
+   fallback sparse-ILU setup, host iterative refinement, float32 polish, and
+   float64 retry now live with the solve branches that invoke them.
+4. Rewired `profile_response/solve.py`, focused dense-batch/loop/sparse-direct
+   tests, import-contract tests, API docs, source map, testing docs, and release
+   notes to the `transport_matrix.solve` owner.
+5. Deleted the three absorbed modules.
+
+Results:
+
+- Package Python files decreased from `198` to `195`.
+- Package source lines decreased from `165,472` to `165,398`.
+- `problems/transport_matrix` files including `parallel/` decreased from `21`
+  to `18`, meeting the Batch B review-ready file-count gate.
+- `transport_matrix/solve.py` is now the owner for transport Krylov dispatch,
+  dense-LU fallback, dense-batch fallback, host GMRES fallback, iteration
+  diagnostics, loop-local recycle/progress state, and sparse-direct rescue.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/profile_response/solve.py tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/profile_response/solve.py tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m pytest tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py -q --tb=short` passed with `36 passed`.
+- `python -m pytest tests/test_transport_*.py -q --tb=short` passed with
+  `273 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `git diff --check` passed.
+
+Next best steps:
+
+1. Batch B review-ready transport file-count gate is met. Remaining Batch B
+   work is optional stretch cleanup: `postsolve_diagnostics.py` into
+   `finalize.py`, `streaming_outputs.py` into `outputs/transport.py`, and
+   possibly `parallel/policy.py` into `parallel/runtime.py` if review still
+   favors fewer files.
+2. Return to Batch A next: reduce `profile_response/solve.py` from `7,008`
+   lines to `<=5,500` by moving progress replay, retry bookkeeping, final
+   sparse-result normalization, and fallback summaries into existing sparse,
+   dense, or diagnostic owners.
+3. After the Batch A solve-line gate is met, proceed to Batch C solver and
+   preconditioner-family compression.

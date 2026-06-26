@@ -667,24 +667,11 @@ from sfincs_jax.problems.transport_matrix.active_dense import (
     resolve_transport_active_dense_setup,
     transport_active_dof_indices as _transport_active_dof_indices,
 )
-from sfincs_jax.problems.transport_matrix.dense_batch import (
-    TransportDenseBatchContext,
-    solve_transport_dense_batch as _solve_transport_dense_batch,
-)
 from sfincs_jax.problems.transport_matrix.finalize import (
     TransportConstraintNullspaceProjector,
     TransportRHSFinalizationContext,
     finalize_full_transport_rhs,
     finalize_reduced_transport_rhs,
-)
-from sfincs_jax.problems.transport_matrix.loop import (
-    TransportLoopProgress,
-    TransportMatvecCache,
-    TransportRecycleState,
-    resolve_transport_recycle_k,
-)
-from sfincs_jax.problems.transport_matrix.sparse_direct_solve import (
-    transport_sparse_direct_context_from_env as _transport_sparse_direct_context_from_env,
 )
 from sfincs_jax.problems.transport_matrix.parallel.policy import (
     transport_parallel_backend as _transport_parallel_backend,

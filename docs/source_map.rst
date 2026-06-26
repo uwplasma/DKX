@@ -1226,13 +1226,6 @@ the historical private driver name and test the focused module directly. This ke
   loop builds matvecs or preconditioners. It also owns the active full-vector
   DOF index helper used when the driver needs to mirror Fortran's reduced
   active transport unknown layout.
-- ``sfincs_jax/problems/transport_matrix/sparse_direct_solve.py``
-  (legacy alias: ``sfincs_jax/transport_sparse_direct_solve.py``):
-  RHSMode=2/3 sparse-direct rescue implementation. It owns sparse-pattern
-  admission/caching, direct active FP operator factor reuse, explicit sparse
-  helper materialization, fallback sparse-ILU setup, host iterative refinement,
-  float32 polish, and float64 retry while receiving driver-local builders as
-  explicit callbacks.
 - ``sfincs_jax/problems/transport_matrix/streaming_outputs.py``
   (legacy alias: ``sfincs_jax/transport_streaming_outputs.py``):
   host-side streaming accumulator for RHSMode=2/3 transport diagnostics. It owns the
@@ -1255,29 +1248,22 @@ the historical private driver name and test the focused module directly. This ke
   public RHSMode=2/3 transport solve orchestration, transport-specific Krylov
   dispatch, dense-LU solver/preconditioner construction for bounded fallback
   paths, host SciPy GMRES first-attempt/rescue solves, and optional small-system
-  SciPy Krylov-history diagnostics. The former ``dense_lu.py``,
-  ``host_gmres.py``, ``iteration_stats.py``, and stale ``linear_solve.py``
-  source-map entries have been absorbed here; focused tests import this owner
-  directly.
-- ``sfincs_jax/problems/transport_matrix/dense_batch.py``
-  (legacy alias: ``sfincs_jax/transport_dense_batch.py``):
-  batched dense RHSMode=2/3 transport solve helper. It owns all-RHS dense matrix
-  assembly, active-DOF reduction/expansion, optional streamed diagnostic
-  collection, residual bookkeeping, and per-``whichRHS`` progress emission for
-  the bounded dense branch.
+  SciPy Krylov-history diagnostics. It also owns all-RHS dense-batch solves,
+  loop-local full/reduced matvec caches, bounded Krylov recycle bases,
+  sequential residual-gate/ETA progress bookkeeping, and RHSMode=2/3
+  sparse-direct rescue implementation, including sparse-pattern admission,
+  direct active FP operator factors, explicit sparse helper materialization,
+  fallback sparse-ILU setup, host iterative refinement, float32 polish, and
+  float64 retry. The former ``dense_lu.py``, ``dense_batch.py``,
+  ``host_gmres.py``, ``iteration_stats.py``, ``loop.py``,
+  ``sparse_direct_solve.py``, and stale ``linear_solve.py`` entries have been
+  absorbed here; focused tests import this owner directly.
 - ``sfincs_jax/problems/transport_matrix/active_factor.py``
   (legacy alias: ``sfincs_jax/transport_active_factor.py``):
   active-operator block-Schur and residual-coarse factors for RHSMode=2/3
   transport. It owns symbolic active block ordering, bounded numerical block
   inverses, source/constraint Schur closure, and setup-time true-residual
   admission before any factor is eligible for production use.
-- ``sfincs_jax/problems/transport_matrix/loop.py``
-  (legacy alias: ``sfincs_jax/transport_loop_support.py``):
-  loop-local RHSMode=2/3 support for cached full/reduced transport matvec
-  closures and bounded Krylov recycle bases. It owns recycle-size admission,
-  stored-state seeding, reduced/full recycle-vector trimming, and small recycled
-  initial guesses plus sequential residual-gate and ETA progress bookkeeping, so
-  the main solve loop no longer carries this mutable cache/progress state.
 - ``sfincs_jax/problems/transport_matrix/finalize.py``
   (legacy alias: ``sfincs_jax/transport_solve_finalization.py``):
   sequential RHSMode=2/3 per-``whichRHS`` finalization after a solver branch has

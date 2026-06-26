@@ -315,8 +315,8 @@ Unreleased
   diagnostic collection, NTV/source handling, and final output-field assembly
   to a focused module, with regression tests comparing streamed diagnostics
   against the established batched transport-output path.
-- Extracted the RHSMode=2/3 all-RHS dense batch solve path into
-  ``transport_dense_batch.py``. The driver now builds a transport context and
+- Consolidated the RHSMode=2/3 all-RHS dense batch solve path into
+  ``problems.transport_matrix.solve``. The driver now builds a transport context and
   delegates dense matrix assembly, active-DOF projection, streamed diagnostics,
   residual bookkeeping, and progress logging to a focused helper with direct
   unit coverage plus the existing transport-output regression.
@@ -329,8 +329,8 @@ Unreleased
   solver-kind mapping, restart policy, implicit custom-solve routing,
   JIT/non-JIT selection, and distributed residual-solve routing to tested
   solve-owner helpers.
-- Extracted the RHSMode=2/3 sparse-direct rescue implementation into
-  ``transport_sparse_direct_solve.py``. The driver now builds an explicit
+- Consolidated the RHSMode=2/3 sparse-direct rescue implementation into
+  ``problems.transport_matrix.solve``. The driver now builds an explicit
   context for pattern probing, direct active FP factors, explicit sparse helper
   setup, fallback sparse-ILU setup, host refinement, float32 polish, and
   float64 retry, preserving the existing sparse rescue behavior with direct
@@ -443,8 +443,8 @@ Unreleased
   force-dense/force-Krylov handling, dense fallback admission, dense memory-cap
   blocking, and GMRES restart/max-iteration guards to a focused policy object
   before active-DOF and preconditioner setup.
-- Extracted RHSMode=2/3 sequential-loop matvec caching and recycle-basis
-  bookkeeping into ``transport_loop_support.py``. The driver now delegates
+- Consolidated RHSMode=2/3 sequential-loop matvec caching and recycle-basis
+  bookkeeping into ``problems.transport_matrix.solve``. The driver delegates
   cached full/reduced matvec closure construction, recycle-size admission,
   stored-state recycle seeding, basis trimming, and recycled initial-guess
   construction to a focused helper before the per-``whichRHS`` solve branches.

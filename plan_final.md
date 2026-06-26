@@ -639,12 +639,12 @@ move, and x-block owner move:
 
 | Area | Current state | Review-ready target |
 | --- | --- | --- |
-| Whole package | 198 Python files, 165,472 package lines | `<=190` Python files and fewer package lines than this checkpoint for review-ready. Stretch target: `<=175` files if compatibility shims can be deleted safely. |
+| Whole package | 195 Python files, 165,398 package lines | `<=190` Python files and fewer package lines than this checkpoint for review-ready. Stretch target: `<=175` files if compatibility shims can be deleted safely. |
 | Package root | 43 Python files | `<=40` preferred, `<=44` allowed only when every remaining root file is public API, stable physics kernel, or documented compatibility shim. No new root implementation modules. |
 | `v3_driver.py` | 47-line compatibility shim | Keep below 80 lines until external users migrate; delete only if all public imports and tests move to domain APIs. It must not regain implementation logic. |
 | Historical roots already routed | `v3_results.py`, `v3_sparse_pattern.py`, `v3_fblock.py`, `v3_system.py`, and `v3.py` are deleted; canonical owners are `problems/profile_response/solver_diagnostics.py`, `problems/transport_matrix/finalize.py`, `operators/profile_response/sparse_pattern.py`, `operators/profile_response/fblock.py`, `operators/profile_response/system.py`, and `discretization/v3.py` | Keep this state. Do not recreate historical roots. |
 | `problems/profile_response` | 18 files including `sparse/`; current `solve.py` 7,008 lines; `setup.py` 1,558 lines after absorbing the former `active_dof.py` owner; `policies.py` 6,885 lines; `dense.py` 3,287 lines after absorbing the former `auto_solve.py` owner; `solver_diagnostics.py` 2,114 lines after absorbing the former accepted-candidate replay handoff owner; `sparse/handoff.py` 4,438 lines; `sparse/xblock.py` 7,725 lines; `sparse/finalization.py` 1,551 lines | The review-ready file-count gate is met; keep moving result/retry/progress relays until `solve.py <=5,500` lines. Stretch targets: `<=15` files and `solve.py <=3,500` lines if that does not create unsafe churn. |
-| `problems/transport_matrix` | 21 files including `parallel/`; 14,945 lines; `solve.py` now owns dense-LU, host-GMRES, and iteration-stat helpers; `policies.py` owns residual-gate and policy/dispatch relays; remaining files are mostly output, dense-batch, loop, sparse-direct, active-factor, and parallel shards | `<=18` files for review-ready. Stretch target: `<=14` files including `parallel/`; `parallel/ <=3` files. |
+| `problems/transport_matrix` | 18 files including `parallel/`; 14,884 lines; review-ready file-count gate met. `solve.py` now owns dense-LU, dense-batch, host-GMRES, iteration-stat, loop-cache/recycle, and sparse-direct rescue helpers; `policies.py` owns residual-gate and policy/dispatch relays | `<=18` files for review-ready. Stretch target: `<=14` files including `parallel/`; `parallel/ <=3` files. |
 | `solvers/preconditioners` | 47 files, 36,992 lines; QI has 13 implementation files; symbolic sparse still has `rhs1_fortran_reduced.py` | `<=35` files and QI `<=7` files for review-ready. Stretch targets: `<=30` preconditioner files and QI `<=5` files including `__init__.py`. No implementation file starts with `rhs1_` or `transport_`. |
 | `operators/profile_response` | 14 files, 18,368 lines; `full_system.py` is 5,978 lines | No urgent split. Merge small term/layout files only if needed to meet file-count gates without hiding physics. Do not create more operator shards in this PR. |
 | `io.py` and `outputs/` | `io.py` 4,264 lines; `outputs/` owns formats, cache, RHSMode-1, and transport output pieces | `io.py <=1,200` lines for review-ready. Stretch target: `io.py <=800` lines as a compatibility shim or deleted; implementation owned by `outputs`. |
@@ -745,11 +745,11 @@ output ownership obvious.
 
 Actions, in order:
 
-1. Partly done: merge small transport solver shards into durable owners.
-   `dense_lu.py`, `host_gmres.py`, and `iteration_stats.py` are now in
+1. Done: merge small transport solver shards into durable owners.
+   `dense_lu.py`, `dense_batch.py`, `host_gmres.py`, `loop.py`,
+   `iteration_stats.py`, and `sparse_direct_solve.py` are now in
    `problems/transport_matrix/solve.py`; `residual_quality.py` is now in
-   `policies.py`. Remaining solver-shard targets are `dense_batch.py`,
-   `loop.py`, and `sparse_direct_solve.py`.
+   `policies.py`.
 2. Done: merge policy/dispatch shards:
    `handoff_policy.py`, `solve_policy.py`, and
    `preconditioner_dispatch.py` are now part of

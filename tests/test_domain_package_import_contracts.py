@@ -259,8 +259,8 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "resolve_transport_active_dense_setup",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.loop",
-        "sfincs_jax.problems.transport_matrix.loop",
+        "sfincs_jax.problems.transport_matrix.solve",
+        "sfincs_jax.problems.transport_matrix.solve",
         "resolve_transport_recycle_k",
     ),
     (
@@ -324,8 +324,8 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "dense_solver_for_matvec",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.dense_batch",
-        "sfincs_jax.problems.transport_matrix.dense_batch",
+        "sfincs_jax.problems.transport_matrix.solve",
+        "sfincs_jax.problems.transport_matrix.solve",
         "solve_transport_dense_batch",
     ),
     (
@@ -334,8 +334,8 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "build_active_block_schur_factor",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.sparse_direct_solve",
-        "sfincs_jax.problems.transport_matrix.sparse_direct_solve",
+        "sfincs_jax.problems.transport_matrix.solve",
+        "sfincs_jax.problems.transport_matrix.solve",
         "transport_sparse_direct_solve",
     ),
     (
