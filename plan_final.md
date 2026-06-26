@@ -163,6 +163,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   reduced-vector application, cache reuse, finite factor values, and tail
   preservation. These tests exercise the radial preconditioner algebra used by
   production bootstrap-current solves without adding production solves to CI.
+- The sixteenth post-audit coverage tranche added research-lane manifest policy
+  tests for malformed manifests, bad lane schemas, duplicate IDs, closed/deferred
+  lane gates, evidence path/claim checks, invalid JSON files, missing files, and
+  structured exception wrappers. These keep release/readiness claims
+  evidence-backed without launching any simulations.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
