@@ -17,6 +17,7 @@ from sfincs_jax.io import (
     _get_float,
     _get_int,
     _legendre_matrix,
+    _output_geom_cache_key,
     localize_equilibrium_file_in_place,
     _phi1_fast_explicit_gmres_restart_default,
     _scheme4_radial_constants,
@@ -52,6 +53,36 @@ def test_output_cache_path_is_stable_and_key_sensitive(tmp_path: Path, monkeypat
     assert path1 == path2
     assert path1 != path3
     assert path1 is not None and path1.name.startswith("output_geom_")
+
+
+def test_output_geom_cache_key_uses_equilibrium_content_identity(tmp_path: Path) -> None:
+    eq1 = tmp_path / "wout_a.nc"
+    eq2 = tmp_path / "wout_b.nc"
+    eq1.write_bytes(b"same vmec content")
+    eq2.write_bytes(b"same vmec content")
+
+    def _read_with_equilibrium(name: str) -> Namelist:
+        input_path = tmp_path / f"input_{name}.namelist"
+        input_path.write_text(
+            "&geometryParameters\n"
+            "  geometryScheme = 5\n"
+            f"  equilibriumFile = '{name}'\n"
+            "/\n",
+            encoding="utf-8",
+        )
+        return read_sfincs_input(input_path)
+
+    grids = SimpleNamespace(
+        theta=np.asarray([0.0, 1.0, 2.0], dtype=np.float64),
+        zeta=np.asarray([0.0, 1.0], dtype=np.float64),
+    )
+    key1 = _output_geom_cache_key(nml=_read_with_equilibrium(eq1.name), grids=grids)
+    key2 = _output_geom_cache_key(nml=_read_with_equilibrium(eq2.name), grids=grids)
+    assert key1 == key2
+
+    eq2.write_bytes(b"different vmec content")
+    key3 = _output_geom_cache_key(nml=_read_with_equilibrium(eq2.name), grids=grids)
+    assert key3 != key1
 
 
 def test_read_sfincs_h5_handles_nested_datasets_and_missing_file(tmp_path: Path) -> None:
@@ -649,6 +680,29 @@ def test_localize_equilibrium_file_copies_boozer_alias_and_patches_input(tmp_pat
     assert localized == run_dir / "toy.bc"
     assert localized.read_text() == "toy boozer content\n"
     assert "fort996boozer_file = 'toy.bc'" in input_path.read_text()
+
+
+def test_localize_equilibrium_file_patches_unquoted_vmec_path(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    run_dir = tmp_path / "run"
+    source_dir.mkdir()
+    run_dir.mkdir()
+    source = source_dir / "wout_toy.nc"
+    source.write_bytes(b"toy vmec netcdf bytes")
+    input_path = run_dir / "input.namelist"
+    input_path.write_text(
+        "&geometryParameters\n"
+        "  geometryScheme = 5\n"
+        "  equilibriumFile = ../source/wout_toy.nc\n"
+        "/\n",
+        encoding="utf-8",
+    )
+
+    localized = localize_equilibrium_file_in_place(input_namelist=input_path)
+
+    assert localized == run_dir / "wout_toy.nc"
+    assert localized.read_bytes() == b"toy vmec netcdf bytes"
+    assert 'equilibriumFile = "wout_toy.nc"' in input_path.read_text(encoding="utf-8")
 
 
 def test_resolve_equilibrium_file_contracts_cover_missing_vmec_fallback_and_nonvmec_ascii(

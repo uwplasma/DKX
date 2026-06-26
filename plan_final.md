@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (output-coordinate parity coverage pass)
+Last updated: 2026-06-26 (output cache/localization coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -404,6 +404,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   for CLI/output geometry correctness without large fixtures or solves. The
   focused output-policy suite reports `34 passed` in `0.45 s`, and the current
   review-lock subset reports `138 passed` in `6.71 s`.
+- The sixty-second post-audit coverage tranche added output cache/localization
+  gates. The output geometry cache key is now tested to depend on VMEC
+  equilibrium file content instead of only on user path spelling, and
+  `localize_equilibrium_file_in_place` is tested on unquoted VMEC namelist
+  paths. These protect user decks copied into scratch directories and prevent
+  stale geometry-output reuse after equilibrium edits. The focused output-policy
+  suite reports `36 passed` in `0.42 s`.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
