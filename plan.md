@@ -5038,3 +5038,65 @@ Next best steps:
 3. After the residual-correction stages move, collapse final sparse payload
    normalization and then revisit whether `sparse/finalization.py` can merge
    into a lower shared sparse owner.
+
+## 2026-06-26 Batch A True-Coupled Coarse Stage Extraction
+
+Steps taken:
+
+1. Added `SparsePCTrueCoupledCoarseStageContext`,
+   `SparsePCTrueCoupledCoarseStageResult`, and
+   `run_sparse_pc_true_coupled_coarse_stage()` to the existing
+   `profile_response.sparse.handoff` owner.
+2. Moved the true-operator coupled coarse auto-selection, builder invocation,
+   residual recomputation, acceptance policy, progress messages, and state
+   updates out of `profile_response/solve.py`.
+3. Kept the actual true-operator builder and additive-memory estimator injected
+   from `solve.py`, so this move does not introduce a new import cycle and
+   still preserves monkeypatch/debug behavior for the current tests.
+4. Updated `plan_final.md` so the controlling Batch A plan marks
+   factor-preflight execution, direct-tail auto preflight retry, and the
+   true-coupled coarse stage as complete.
+
+Results:
+
+- `profile_response/solve.py` decreased from `7,657` to `7,567` lines.
+- `profile_response/sparse/handoff.py` increased from `7,029` to `7,309`
+  lines because it now owns true-coupled coarse execution.
+- Package file count stayed at `209`; package-root file count stayed at `44`.
+- Package source lines are now about `165,346`; `profile_response` source
+  lines are about `52,317`. Source-line reduction remains a downstream Batch
+  B/C gate after compatibility and micro-file merges.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m pytest
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_true_coupled_coarse_records_bounded_metadata
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_true_coupled_coarse_auto_promotes_active_lu
+  -q --tb=short` passed with `2 passed`.
+- `python -m pytest tests/test_domain_package_import_contracts.py -q
+  --tb=short` passed with `8 passed`.
+- `python -m pytest tests/test_v3_sparse_pattern.py -q --tb=short` passed
+  with `132 passed`.
+
+Progress:
+
+- Lane 1 structural consolidation: about `90%`.
+- Batch A profile-response collapse: about `54%`.
+- Batch B transport/output/root cleanup: about `20%`.
+- Batch C solver/preconditioner family consolidation: about `25%`.
+- Batch D public API/docs/tests/review gate: about `26%`.
+
+Next best steps:
+
+1. Continue Batch A with the remaining true-active and residual-window
+   families: true active submatrix/block/residual-block, true residual window,
+   residual coarse, and residual window.
+2. Extract a shared sparse-owner candidate residual acceptance/update helper
+   before moving those remaining families, so the next tranche removes repeated
+   state mutation code rather than only another narrow block.
+3. Move final sparse payload normalization and progress replay after the
+   residual-correction stages are outside `solve.py`.

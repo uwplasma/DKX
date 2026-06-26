@@ -256,6 +256,7 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     SparsePCFactorPreflightRunContext,
     SparsePCResidualCandidateAcceptanceContext,
     SparsePCAutoPreflightRetryStageContext,
+    SparsePCTrueCoupledCoarseStageContext,
     ExplicitSparseMinimumNormBranchContext,
     ExplicitSparseHostDirectBranchContext,
     RHS1FullSparseRetryStageContext,
@@ -297,6 +298,7 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     evaluate_xblock_preflight_gate,
     run_sparse_pc_auto_preflight_retry_stage,
     run_sparse_pc_factor_preflight,
+    run_sparse_pc_true_coupled_coarse_stage,
     complete_xblock_post_krylov_stage,
     resolve_sparse_pc_gmres_control_policy,
     prepare_xblock_initial_guess,
@@ -2231,189 +2233,97 @@ def solve_v3_full_system_linear_gmres(
                 residual_vec_current = factor_preflight_run.residual_vec
                 if factor_preflight_run.x0_seed is not None:
                     x0_sparse = factor_preflight_run.x0_seed
-                true_coupled_factor_kind = str(getattr(factor_bundle_pc, "kind", "")).strip().lower().replace("-", "_")
-                true_coupled_auto_reference_kind = true_coupled_factor_kind in {
-                    "active_fortran_v3_reduced_lu",
-                }
-                true_coupled_auto_native_kind = true_coupled_factor_kind in {
-                    "active_fortran_v3_reduced_native_stack",
-                    "active_v3_reduced_native_stack",
-                    "fortran_v3_reduced_native_stack",
-                    "active_bounded_native_stack",
-                    "active_native_stack",
-                }
-                direct_tail_true_coupled_coarse_auto_selected = bool(
-                    direct_tail_true_coupled_coarse_auto_enabled
-                    and (
-                        bool(true_coupled_auto_reference_kind)
-                        or (
-                            bool(direct_tail_true_coupled_coarse_auto_native_enabled)
-                            and bool(true_coupled_auto_native_kind)
-                        )
+                true_coupled_stage = run_sparse_pc_true_coupled_coarse_stage(
+                    SparsePCTrueCoupledCoarseStageContext(
+                        factor_bundle_pc=factor_bundle_pc,
+                        pc_factor_s=float(pc_factor_s),
+                        setup_s=float(setup_s),
+                        sparse_pc_rhs=sparse_pc_rhs,
+                        sparse_pc_linear_size=int(sparse_pc_linear_size),
+                        target=float(target),
+                        factor_preflight_residual_before=factor_preflight_residual_before,
+                        factor_preflight_residual_after=factor_preflight_residual_after,
+                        factor_preflight_residual_diagnostics=factor_preflight_residual_diagnostics,
+                        factor_preflight_improvement_ratio=factor_preflight_improvement_ratio,
+                        factor_preflight_target_ratio=factor_preflight_target_ratio,
+                        factor_preflight_passed=factor_preflight_passed,
+                        factor_preflight_seed_enabled=bool(factor_preflight_seed_enabled),
+                        factor_preflight_seed_used=bool(factor_preflight_seed_used),
+                        factor_preflight_max_target_ratio=float(factor_preflight_max_target_ratio),
+                        residual_vec_current=residual_vec_current,
+                        x0_sparse=x0_sparse,
+                        matvec_no_count=_mv_true_no_count,
+                        matmat=_mv_true_matmat,
+                        diagnostics=_rhs1_active_reduced_residual_diagnostics,
+                        op=op,
+                        layout=RHS1BlockLayout.from_operator(op),
+                        active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                        elapsed_s=sparse_timer.elapsed_s,
+                        emit=emit,
+                        builder=_try_build_true_operator_coupled_coarse_lsq_preconditioner,
+                        additive_rescue_nbytes=_rhs1_additive_rescue_nbytes,
+                        explicit_requested=bool(direct_tail_true_coupled_coarse_explicit_requested),
+                        auto_enabled=bool(direct_tail_true_coupled_coarse_auto_enabled),
+                        auto_native_enabled=bool(direct_tail_true_coupled_coarse_auto_native_enabled),
+                        auto_target_ratio=float(direct_tail_true_coupled_coarse_auto_target_ratio),
+                        auto_min_size=int(direct_tail_true_coupled_coarse_auto_min_size),
+                        max_windows=int(direct_tail_true_coupled_coarse_max_windows),
+                        x_radius=int(direct_tail_true_coupled_coarse_x_radius),
+                        ell_radius=int(direct_tail_true_coupled_coarse_ell_radius),
+                        max_mb=float(direct_tail_true_coupled_coarse_max_mb),
+                        regularization=float(direct_tail_true_coupled_coarse_regularization),
+                        max_size=int(direct_tail_true_coupled_coarse_max_size),
+                        column_batch=int(direct_tail_true_coupled_coarse_column_batch),
+                        drop_tol=float(direct_tail_true_coupled_coarse_drop_tol),
+                        low_lmax=int(direct_tail_true_coupled_coarse_low_lmax),
+                        profile_moment_count=int(direct_tail_true_coupled_coarse_profile_moment_count),
+                        angular_lmax=int(direct_tail_true_coupled_coarse_angular_lmax),
+                        angular_mode_max=int(direct_tail_true_coupled_coarse_angular_mode_max),
+                        max_tail_units=int(direct_tail_true_coupled_coarse_max_tail_units),
+                        include_tail=bool(direct_tail_true_coupled_coarse_include_tail),
+                        include_constraint_sources=bool(direct_tail_true_coupled_coarse_include_constraint_sources),
+                        include_fsavg=bool(direct_tail_true_coupled_coarse_include_fsavg),
+                        include_window_residual=bool(direct_tail_true_coupled_coarse_include_window_residual),
+                        include_profile_moments=bool(direct_tail_true_coupled_coarse_include_profile_moments),
+                        include_angular_residual=bool(direct_tail_true_coupled_coarse_include_angular_residual),
+                        include_angular_basis=bool(direct_tail_true_coupled_coarse_include_angular_basis),
+                        include_preconditioned_loads=bool(
+                            direct_tail_true_coupled_coarse_include_preconditioned_loads
+                        ),
+                        preconditioned_load_max_columns=int(
+                            direct_tail_true_coupled_coarse_preconditioned_load_max_columns
+                        ),
+                        preconditioned_load_max_nnz=int(
+                            direct_tail_true_coupled_coarse_preconditioned_load_max_nnz
+                        ),
+                        preconditioned_load_drop_tol=float(
+                            direct_tail_true_coupled_coarse_preconditioned_load_drop_tol
+                        ),
+                        damping=bool(direct_tail_true_coupled_coarse_damping),
+                        beta_max=float(direct_tail_true_coupled_coarse_beta_max),
+                        accept_base_improvement=bool(direct_tail_true_coupled_coarse_accept_base_improvement),
                     )
-                    and int(sparse_pc_linear_size) >= int(direct_tail_true_coupled_coarse_auto_min_size)
-                    and factor_preflight_target_ratio is not None
-                    and np.isfinite(float(factor_preflight_target_ratio))
-                    and float(factor_preflight_target_ratio)
-                    > float(direct_tail_true_coupled_coarse_auto_target_ratio)
-                    and factor_preflight_residual_after is not None
-                    and np.isfinite(float(factor_preflight_residual_after))
                 )
-                direct_tail_true_coupled_coarse_requested = bool(
-                    direct_tail_true_coupled_coarse_explicit_requested
-                    or direct_tail_true_coupled_coarse_auto_selected
+                factor_bundle_pc = true_coupled_stage.factor_bundle_pc
+                pc_factor_s = float(true_coupled_stage.pc_factor_s)
+                setup_s = float(true_coupled_stage.setup_s)
+                factor_preflight_residual_after = true_coupled_stage.factor_preflight_residual_after
+                factor_preflight_residual_diagnostics = true_coupled_stage.factor_preflight_residual_diagnostics
+                factor_preflight_improvement_ratio = true_coupled_stage.factor_preflight_improvement_ratio
+                factor_preflight_target_ratio = true_coupled_stage.factor_preflight_target_ratio
+                factor_preflight_passed = true_coupled_stage.factor_preflight_passed
+                factor_preflight_seed_used = bool(true_coupled_stage.factor_preflight_seed_used)
+                residual_vec_current = true_coupled_stage.residual_vec_current
+                x0_sparse = true_coupled_stage.x0_sparse
+                direct_tail_true_coupled_coarse_requested = bool(true_coupled_stage.requested)
+                direct_tail_true_coupled_coarse_auto_selected = bool(true_coupled_stage.auto_selected)
+                direct_tail_true_coupled_coarse_selected = bool(true_coupled_stage.selected)
+                direct_tail_true_coupled_coarse_residual_after = true_coupled_stage.residual_after
+                direct_tail_true_coupled_coarse_metadata = true_coupled_stage.metadata
+                direct_tail_true_coupled_coarse_error = true_coupled_stage.error
+                direct_tail_true_coupled_coarse_base_improvement_override_used = bool(
+                    true_coupled_stage.base_improvement_override_used
                 )
-                if (
-                    bool(direct_tail_true_coupled_coarse_requested)
-                    and (
-                        factor_preflight_passed is False
-                        or bool(direct_tail_true_coupled_coarse_auto_selected)
-                    )
-                    and factor_preflight_residual_after is not None
-                    and np.isfinite(float(factor_preflight_residual_after))
-                ):
-                    try:
-                        true_coupled_bundle = _try_build_true_operator_coupled_coarse_lsq_preconditioner(
-                            true_matvec=lambda vec: np.asarray(
-                                jax.device_get(_mv_true_no_count(jnp.asarray(vec, dtype=jnp.float64))),
-                                dtype=np.float64,
-                            ),
-                            true_matmat=lambda mat: np.asarray(_mv_true_matmat(np.asarray(mat, dtype=np.float64))),
-                            factor_bundle=factor_bundle_pc,
-                            residual=np.asarray(jax.device_get(residual_vec_current), dtype=np.float64),
-                            op=op,
-                            layout=RHS1BlockLayout.from_operator(op),
-                            active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                            max_windows=int(direct_tail_true_coupled_coarse_max_windows),
-                            x_radius=int(direct_tail_true_coupled_coarse_x_radius),
-                            ell_radius=int(direct_tail_true_coupled_coarse_ell_radius),
-                            max_nbytes=_rhs1_additive_rescue_nbytes(
-                                factor_bundle_pc,
-                                direct_tail_true_coupled_coarse_max_mb
-                            ),
-                            regularization=float(direct_tail_true_coupled_coarse_regularization),
-                            max_coarse_size=int(direct_tail_true_coupled_coarse_max_size),
-                            column_batch=int(direct_tail_true_coupled_coarse_column_batch),
-                            drop_tol=float(direct_tail_true_coupled_coarse_drop_tol),
-                            low_lmax=int(direct_tail_true_coupled_coarse_low_lmax),
-                            profile_moment_count=int(direct_tail_true_coupled_coarse_profile_moment_count),
-                            angular_lmax=int(direct_tail_true_coupled_coarse_angular_lmax),
-                            angular_mode_max=int(direct_tail_true_coupled_coarse_angular_mode_max),
-                            max_tail_units=int(direct_tail_true_coupled_coarse_max_tail_units),
-                            include_tail=bool(direct_tail_true_coupled_coarse_include_tail),
-                            include_constraint_sources=bool(
-                                direct_tail_true_coupled_coarse_include_constraint_sources
-                            ),
-                            include_fsavg=bool(direct_tail_true_coupled_coarse_include_fsavg),
-                            include_window_residual=bool(direct_tail_true_coupled_coarse_include_window_residual),
-                            include_profile_moments=bool(
-                                direct_tail_true_coupled_coarse_include_profile_moments
-                            ),
-                            include_angular_residual=bool(
-                                direct_tail_true_coupled_coarse_include_angular_residual
-                            ),
-                            include_angular_basis=bool(direct_tail_true_coupled_coarse_include_angular_basis),
-                            include_preconditioned_loads=bool(
-                                direct_tail_true_coupled_coarse_include_preconditioned_loads
-                            ),
-                            preconditioned_load_max_columns=int(
-                                direct_tail_true_coupled_coarse_preconditioned_load_max_columns
-                            ),
-                            preconditioned_load_max_nnz=int(
-                                direct_tail_true_coupled_coarse_preconditioned_load_max_nnz
-                            ),
-                            preconditioned_load_drop_tol=float(
-                                direct_tail_true_coupled_coarse_preconditioned_load_drop_tol
-                            ),
-                            damping=bool(direct_tail_true_coupled_coarse_damping),
-                            beta_max=float(direct_tail_true_coupled_coarse_beta_max),
-                            emit=emit,
-                        )
-                        if true_coupled_bundle is None:
-                            direct_tail_true_coupled_coarse_error = "builder_returned_none"
-                        else:
-                            x_true_coupled_sparse = jnp.asarray(
-                                true_coupled_bundle.solve(np.asarray(sparse_pc_rhs, dtype=np.float64)),
-                                dtype=jnp.float64,
-                            )
-                            residual_vec_true_coupled = sparse_pc_rhs - jnp.asarray(
-                                _mv_true_no_count(x_true_coupled_sparse),
-                                dtype=jnp.float64,
-                            )
-                            direct_tail_true_coupled_coarse_residual_after = float(
-                                jnp.linalg.norm(residual_vec_true_coupled)
-                            )
-                            true_coupled_diagnostics = _rhs1_active_reduced_residual_diagnostics(
-                                residual=residual_vec_true_coupled,
-                                layout=RHS1BlockLayout.from_operator(op),
-                                active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                            )
-                            direct_tail_true_coupled_coarse_metadata = dict(true_coupled_bundle.metadata or {})
-                            direct_tail_true_coupled_coarse_metadata["residual_after"] = float(
-                                direct_tail_true_coupled_coarse_residual_after
-                            )
-                            direct_tail_true_coupled_coarse_metadata["base_residual_after"] = float(
-                                factor_preflight_residual_after
-                            )
-                            true_coupled_acceptance = evaluate_sparse_pc_residual_candidate_acceptance(
-                                SparsePCResidualCandidateAcceptanceContext(
-                                    candidate_residual_after=float(
-                                        direct_tail_true_coupled_coarse_residual_after
-                                    ),
-                                    current_residual_after=float(factor_preflight_residual_after),
-                                    original_residual_before=factor_preflight_residual_before,
-                                    target=float(target),
-                                    max_target_ratio=float(factor_preflight_max_target_ratio),
-                                    seed_enabled=bool(factor_preflight_seed_enabled),
-                                    accept_base_improvement=bool(
-                                        direct_tail_true_coupled_coarse_accept_base_improvement
-                                    ),
-                                    base_improvement_requires_original_miss=False,
-                                    base_improvement_sets_passed=True,
-                                )
-                            )
-                            if bool(true_coupled_acceptance.accepted):
-                                direct_tail_true_coupled_coarse_selected = True
-                                direct_tail_true_coupled_coarse_base_improvement_override_used = bool(
-                                    true_coupled_acceptance.base_improvement_override_used
-                                )
-                                factor_bundle_pc = true_coupled_bundle
-                                pc_factor_s += float(true_coupled_bundle.factor_s or 0.0)
-                                setup_s = sparse_timer.elapsed_s()
-                                factor_preflight_residual_after = float(true_coupled_acceptance.residual_after)
-                                residual_vec_current = residual_vec_true_coupled
-                                factor_preflight_residual_diagnostics = true_coupled_diagnostics
-                                factor_preflight_improvement_ratio = true_coupled_acceptance.improvement_ratio
-                                factor_preflight_target_ratio = true_coupled_acceptance.target_ratio
-                                factor_preflight_passed = bool(true_coupled_acceptance.passed)
-                                if bool(true_coupled_acceptance.seed_used):
-                                    x0_sparse = x_true_coupled_sparse
-                                    factor_preflight_seed_used = True
-                                if emit is not None:
-                                    emit(
-                                        1,
-                                        "solve_v3_full_system_linear_gmres: true coupled coarse accepted "
-                                        f"coarse_size={direct_tail_true_coupled_coarse_metadata.get('coarse_size')} "
-                                        f"residual={direct_tail_true_coupled_coarse_metadata['base_residual_after']:.6e}"
-                                        f"->{float(factor_preflight_residual_after):.6e} "
-                                        f"passed={bool(factor_preflight_passed)} "
-                                        f"base_improvement_override={bool(direct_tail_true_coupled_coarse_base_improvement_override_used)}",
-                                    )
-                            elif emit is not None:
-                                emit(
-                                    1,
-                                    "solve_v3_full_system_linear_gmres: true coupled coarse rejected "
-                                    f"residual={float(factor_preflight_residual_after):.6e}"
-                                    f"->{float(direct_tail_true_coupled_coarse_residual_after):.6e}",
-                                )
-                    except Exception as exc:  # noqa: BLE001
-                        direct_tail_true_coupled_coarse_error = f"{type(exc).__name__}: {exc}"
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: true coupled coarse failed "
-                                f"({direct_tail_true_coupled_coarse_error})",
-                            )
 
                 def _direct_tail_rescue_needed_after_preflight() -> bool:
                     if factor_preflight_passed is False:

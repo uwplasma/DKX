@@ -459,6 +459,95 @@ class SparsePCAutoPreflightRetryStageResult:
     x0_sparse: jnp.ndarray | None
 
 
+@dataclass(frozen=True)
+class SparsePCTrueCoupledCoarseStageContext:
+    """Inputs for the true-operator coupled coarse rescue stage."""
+
+    factor_bundle_pc: object
+    pc_factor_s: float
+    setup_s: float
+    sparse_pc_rhs: jnp.ndarray
+    sparse_pc_linear_size: int
+    target: float
+    factor_preflight_residual_before: float | None
+    factor_preflight_residual_after: float | None
+    factor_preflight_residual_diagnostics: dict[str, object] | None
+    factor_preflight_improvement_ratio: float | None
+    factor_preflight_target_ratio: float | None
+    factor_preflight_passed: bool | None
+    factor_preflight_seed_enabled: bool
+    factor_preflight_seed_used: bool
+    factor_preflight_max_target_ratio: float
+    residual_vec_current: jnp.ndarray
+    x0_sparse: jnp.ndarray | None
+    matvec_no_count: ArrayFn
+    matmat: Callable[[np.ndarray], np.ndarray]
+    diagnostics: Callable[..., dict[str, object]]
+    op: object
+    layout: object
+    active_indices: object | None
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    builder: Callable[..., object]
+    additive_rescue_nbytes: Callable[[object, float], int]
+    explicit_requested: bool
+    auto_enabled: bool
+    auto_native_enabled: bool
+    auto_target_ratio: float
+    auto_min_size: int
+    max_windows: int
+    x_radius: int
+    ell_radius: int
+    max_mb: float
+    regularization: float
+    max_size: int
+    column_batch: int
+    drop_tol: float
+    low_lmax: int
+    profile_moment_count: int
+    angular_lmax: int
+    angular_mode_max: int
+    max_tail_units: int
+    include_tail: bool
+    include_constraint_sources: bool
+    include_fsavg: bool
+    include_window_residual: bool
+    include_profile_moments: bool
+    include_angular_residual: bool
+    include_angular_basis: bool
+    include_preconditioned_loads: bool
+    preconditioned_load_max_columns: int
+    preconditioned_load_max_nnz: int
+    preconditioned_load_drop_tol: float
+    damping: bool
+    beta_max: float
+    accept_base_improvement: bool
+
+
+@dataclass(frozen=True)
+class SparsePCTrueCoupledCoarseStageResult:
+    """Updated sparse-PC state after a true-operator coupled coarse attempt."""
+
+    factor_bundle_pc: object
+    pc_factor_s: float
+    setup_s: float
+    factor_preflight_residual_after: float | None
+    factor_preflight_residual_diagnostics: dict[str, object] | None
+    factor_preflight_improvement_ratio: float | None
+    factor_preflight_target_ratio: float | None
+    factor_preflight_passed: bool | None
+    factor_preflight_seed_used: bool
+    residual_vec_current: jnp.ndarray
+    x0_sparse: jnp.ndarray | None
+    requested: bool
+    auto_selected: bool
+    selected: bool
+    residual_after: float | None
+    metadata: dict[str, object] | None
+    error: str | None
+    base_improvement_override_used: bool
+
+
 def run_sparse_pc_factor_preflight(
     context: SparsePCFactorPreflightRunContext,
 ) -> SparsePCFactorPreflightRunResult:
@@ -772,6 +861,194 @@ def run_sparse_pc_auto_preflight_retry_stage(
         factor_preflight_passed=factor_preflight_passed,
         factor_preflight_seed_used=bool(factor_preflight_seed_used),
         x0_sparse=x0_sparse,
+    )
+
+
+def run_sparse_pc_true_coupled_coarse_stage(
+    context: SparsePCTrueCoupledCoarseStageContext,
+) -> SparsePCTrueCoupledCoarseStageResult:
+    """Try the bounded true-operator coupled coarse correction after preflight."""
+
+    factor_bundle_pc = context.factor_bundle_pc
+    pc_factor_s = float(context.pc_factor_s)
+    setup_s = float(context.setup_s)
+    residual_vec_current = context.residual_vec_current
+    x0_sparse = context.x0_sparse
+    factor_preflight_residual_after = context.factor_preflight_residual_after
+    factor_preflight_residual_diagnostics = context.factor_preflight_residual_diagnostics
+    factor_preflight_improvement_ratio = context.factor_preflight_improvement_ratio
+    factor_preflight_target_ratio = context.factor_preflight_target_ratio
+    factor_preflight_passed = context.factor_preflight_passed
+    factor_preflight_seed_used = bool(context.factor_preflight_seed_used)
+    selected = False
+    residual_after: float | None = None
+    metadata: dict[str, object] | None = None
+    error: str | None = None
+    base_improvement_override_used = False
+
+    factor_kind = str(getattr(factor_bundle_pc, "kind", "")).strip().lower().replace("-", "_")
+    auto_reference_kind = factor_kind in {"active_fortran_v3_reduced_lu"}
+    auto_native_kind = factor_kind in {
+        "active_fortran_v3_reduced_native_stack",
+        "active_v3_reduced_native_stack",
+        "fortran_v3_reduced_native_stack",
+        "active_bounded_native_stack",
+        "active_native_stack",
+    }
+    auto_selected = bool(
+        context.auto_enabled
+        and (
+            bool(auto_reference_kind)
+            or (bool(context.auto_native_enabled) and bool(auto_native_kind))
+        )
+        and int(context.sparse_pc_linear_size) >= int(context.auto_min_size)
+        and factor_preflight_target_ratio is not None
+        and np.isfinite(float(factor_preflight_target_ratio))
+        and float(factor_preflight_target_ratio) > float(context.auto_target_ratio)
+        and factor_preflight_residual_after is not None
+        and np.isfinite(float(factor_preflight_residual_after))
+    )
+    requested = bool(context.explicit_requested or auto_selected)
+
+    if (
+        bool(requested)
+        and (factor_preflight_passed is False or bool(auto_selected))
+        and factor_preflight_residual_after is not None
+        and np.isfinite(float(factor_preflight_residual_after))
+    ):
+        try:
+            true_coupled_bundle = context.builder(
+                true_matvec=lambda vec: np.asarray(
+                    jax.device_get(context.matvec_no_count(jnp.asarray(vec, dtype=jnp.float64))),
+                    dtype=np.float64,
+                ),
+                true_matmat=lambda mat: np.asarray(context.matmat(np.asarray(mat, dtype=np.float64))),
+                factor_bundle=factor_bundle_pc,
+                residual=np.asarray(jax.device_get(residual_vec_current), dtype=np.float64),
+                op=context.op,
+                layout=context.layout,
+                active_indices=context.active_indices,
+                max_windows=int(context.max_windows),
+                x_radius=int(context.x_radius),
+                ell_radius=int(context.ell_radius),
+                max_nbytes=context.additive_rescue_nbytes(factor_bundle_pc, float(context.max_mb)),
+                regularization=float(context.regularization),
+                max_coarse_size=int(context.max_size),
+                column_batch=int(context.column_batch),
+                drop_tol=float(context.drop_tol),
+                low_lmax=int(context.low_lmax),
+                profile_moment_count=int(context.profile_moment_count),
+                angular_lmax=int(context.angular_lmax),
+                angular_mode_max=int(context.angular_mode_max),
+                max_tail_units=int(context.max_tail_units),
+                include_tail=bool(context.include_tail),
+                include_constraint_sources=bool(context.include_constraint_sources),
+                include_fsavg=bool(context.include_fsavg),
+                include_window_residual=bool(context.include_window_residual),
+                include_profile_moments=bool(context.include_profile_moments),
+                include_angular_residual=bool(context.include_angular_residual),
+                include_angular_basis=bool(context.include_angular_basis),
+                include_preconditioned_loads=bool(context.include_preconditioned_loads),
+                preconditioned_load_max_columns=int(context.preconditioned_load_max_columns),
+                preconditioned_load_max_nnz=int(context.preconditioned_load_max_nnz),
+                preconditioned_load_drop_tol=float(context.preconditioned_load_drop_tol),
+                damping=bool(context.damping),
+                beta_max=float(context.beta_max),
+                emit=context.emit,
+            )
+            if true_coupled_bundle is None:
+                error = "builder_returned_none"
+            else:
+                x_true_coupled_sparse = jnp.asarray(
+                    true_coupled_bundle.solve(np.asarray(context.sparse_pc_rhs, dtype=np.float64)),
+                    dtype=jnp.float64,
+                )
+                residual_vec_true_coupled = context.sparse_pc_rhs - jnp.asarray(
+                    context.matvec_no_count(x_true_coupled_sparse),
+                    dtype=jnp.float64,
+                )
+                residual_after = float(jnp.linalg.norm(residual_vec_true_coupled))
+                true_coupled_diagnostics = context.diagnostics(
+                    residual=residual_vec_true_coupled,
+                    layout=context.layout,
+                    active_indices=context.active_indices,
+                )
+                metadata = dict(true_coupled_bundle.metadata or {})
+                metadata["residual_after"] = float(residual_after)
+                metadata["base_residual_after"] = float(factor_preflight_residual_after)
+                acceptance = evaluate_sparse_pc_residual_candidate_acceptance(
+                    SparsePCResidualCandidateAcceptanceContext(
+                        candidate_residual_after=float(residual_after),
+                        current_residual_after=float(factor_preflight_residual_after),
+                        original_residual_before=context.factor_preflight_residual_before,
+                        target=float(context.target),
+                        max_target_ratio=float(context.factor_preflight_max_target_ratio),
+                        seed_enabled=bool(context.factor_preflight_seed_enabled),
+                        accept_base_improvement=bool(context.accept_base_improvement),
+                        base_improvement_requires_original_miss=False,
+                        base_improvement_sets_passed=True,
+                    )
+                )
+                if bool(acceptance.accepted):
+                    selected = True
+                    base_improvement_override_used = bool(acceptance.base_improvement_override_used)
+                    factor_bundle_pc = true_coupled_bundle
+                    pc_factor_s += float(true_coupled_bundle.factor_s or 0.0)
+                    setup_s = float(context.elapsed_s())
+                    factor_preflight_residual_after = float(acceptance.residual_after)
+                    residual_vec_current = residual_vec_true_coupled
+                    factor_preflight_residual_diagnostics = true_coupled_diagnostics
+                    factor_preflight_improvement_ratio = acceptance.improvement_ratio
+                    factor_preflight_target_ratio = acceptance.target_ratio
+                    factor_preflight_passed = bool(acceptance.passed)
+                    if bool(acceptance.seed_used):
+                        x0_sparse = x_true_coupled_sparse
+                        factor_preflight_seed_used = True
+                    if context.emit is not None:
+                        context.emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: true coupled coarse accepted "
+                            f"coarse_size={metadata.get('coarse_size')} "
+                            f"residual={metadata['base_residual_after']:.6e}"
+                            f"->{float(factor_preflight_residual_after):.6e} "
+                            f"passed={bool(factor_preflight_passed)} "
+                            f"base_improvement_override={bool(base_improvement_override_used)}",
+                        )
+                elif context.emit is not None:
+                    context.emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: true coupled coarse rejected "
+                        f"residual={float(factor_preflight_residual_after):.6e}"
+                        f"->{float(residual_after):.6e}",
+                    )
+        except Exception as exc:  # noqa: BLE001
+            error = f"{type(exc).__name__}: {exc}"
+            if context.emit is not None:
+                context.emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: true coupled coarse failed "
+                    f"({error})",
+                )
+
+    return SparsePCTrueCoupledCoarseStageResult(
+        factor_bundle_pc=factor_bundle_pc,
+        pc_factor_s=float(pc_factor_s),
+        setup_s=float(setup_s),
+        factor_preflight_residual_after=factor_preflight_residual_after,
+        factor_preflight_residual_diagnostics=factor_preflight_residual_diagnostics,
+        factor_preflight_improvement_ratio=factor_preflight_improvement_ratio,
+        factor_preflight_target_ratio=factor_preflight_target_ratio,
+        factor_preflight_passed=factor_preflight_passed,
+        factor_preflight_seed_used=bool(factor_preflight_seed_used),
+        residual_vec_current=residual_vec_current,
+        x0_sparse=x0_sparse,
+        requested=bool(requested),
+        auto_selected=bool(auto_selected),
+        selected=bool(selected),
+        residual_after=residual_after,
+        metadata=metadata,
+        error=error,
+        base_improvement_override_used=bool(base_improvement_override_used),
     )
 
 
@@ -6721,6 +6998,8 @@ __all__ = [
     "SparsePCAutoPreflightRetryEvaluationResult",
     "SparsePCAutoPreflightRetryStageContext",
     "SparsePCAutoPreflightRetryStageResult",
+    "SparsePCTrueCoupledCoarseStageContext",
+    "SparsePCTrueCoupledCoarseStageResult",
     "SparsePCGMRESControlPolicy",
     "SparsePCEntryPolicySetup",
     "DirectTailResidualRescuePolicy",
@@ -6925,6 +7204,7 @@ __all__ = [
     "select_sparse_pc_auto_preflight_retry_candidates",
     "evaluate_sparse_pc_auto_preflight_retry",
     "run_sparse_pc_auto_preflight_retry_stage",
+    "run_sparse_pc_true_coupled_coarse_stage",
     "resolve_sparse_pc_gmres_control_policy",
     "resolve_sparse_pc_factor_preflight_policy",
     "resolve_direct_tail_residual_rescue_policy",

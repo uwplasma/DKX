@@ -343,12 +343,12 @@ geometry routing:
   geometry loading, geometry cache keys, and `V3Grids`. The historical root
   file `sfincs_jax/v3.py` has been removed, and package-internal imports,
   examples, scripts, docs, and focused tests use the discretization owner.
-- `sfincs_jax/problems/profile_response/solve.py`: 7,657 lines after the
+- `sfincs_jax/problems/profile_response/solve.py`: 7,567 lines after the
   x-block sparse-PC branch, full/reduced sparse retry, SciPy rescue stage,
   fortran-reduced x-block backend, generic sparse-PC setup, and direct-tail
   structured/factor plus support/preflight rescue-policy setup extractions,
   sparse factor-preflight execution extraction, and direct-tail auto
-  preflight-retry extraction.
+  preflight-retry plus true-coupled coarse-stage extractions.
   This remains the largest structural debt and must be reduced by moving
   coherent sections into existing domain owners, not by adding many new helper
   files.
@@ -360,14 +360,15 @@ geometry routing:
   after taking ownership of the current RHSMode-1 preconditioner builder
   registry, PAS-family compatibility bindings, Schur binding, x-block builder
   aliases, transport `tzfft` reuse, and strong fallback binding.
-- `sfincs_jax/problems/profile_response/sparse/handoff.py`: 7,029 lines after
+- `sfincs_jax/problems/profile_response/sparse/handoff.py`: 7,309 lines after
   moving the former top-level sparse-PC handoff into the sparse package and
   taking ownership of the driver-facing x-block sparse-PC GMRES branch
   orchestration, the full/reduced sparse retry stage, the fortran-reduced
   x-block backend, generic sparse-PC setup, and direct-tail structured/factor
   setup plus direct-tail support/preflight rescue-policy setup, and solve-time
   factor-preflight execution/progress reporting plus direct-tail auto
-  preflight retry. Shared generic sparse-PC finalization remains in
+  preflight retry and true-operator coupled coarse execution. Shared generic
+  sparse-PC finalization remains in
   `problems/profile_response/sparse/finalization.py`; do not extract more
   one-off sparse helpers into new files.
 - `sfincs_jax/problems/profile_response/sparse/direct.py`: 3,569 lines after
@@ -695,14 +696,17 @@ Steps:
 
 1. Done: move factor-preflight run execution and its progress messages from
    `profile_response/solve.py` to `profile_response/sparse/handoff.py`.
-2. Move residual-correction execution and sparse retry bookkeeping from
+2. Done: move direct-tail auto preflight retry and the true-operator coupled
+   coarse stage from `solve.py` to `profile_response/sparse/handoff.py`.
+3. Move the remaining true-active, true-window, residual-coarse, and
+   residual-window execution plus sparse retry bookkeeping from
    `solve.py` to existing sparse owners.
-3. Move progress replay, final sparse payload normalization, final fallback
+4. Move progress replay, final sparse payload normalization, final fallback
    summaries, and solver-trace result normalization to
    `solver_diagnostics.py`, `diagnostics.py`, or `sparse/finalization.py`.
-4. Merge or delete `profile_response/handoff.py` if its remaining content is
+5. Merge or delete `profile_response/handoff.py` if its remaining content is
    result relays.
-5. Invert the sparse payload imports enough to merge `sparse/finalization.py`
+6. Invert the sparse payload imports enough to merge `sparse/finalization.py`
    into the sparse owner, or keep it only with a documented import-cycle reason.
 
 Exit gates:
@@ -1405,7 +1409,9 @@ Current completion status:
   `profile_response/sparse/handoff.py`, reducing
   `profile_response/solve.py` to 7,781 lines. Direct-tail auto preflight retry
   is now owned by the same sparse module, reducing
-  `profile_response/solve.py` to 7,657 lines. The first Sweep 0
+  `profile_response/solve.py` to 7,657 lines. The true-operator coupled
+  coarse stage is now also owned by the sparse module, reducing
+  `profile_response/solve.py` to 7,567 lines. The first Sweep 0
   historical-root routing checkpoint moved `v3_results.py` implementation
   ownership into profile-response and transport-matrix problem owners while
   keeping a 13-line compatibility facade, so package-internal code no longer
@@ -1423,7 +1429,8 @@ Current completion status:
   moved v3-compatible grid/geometry construction to
   `discretization/v3.py` and removed the historical `sfincs_jax/v3.py` root
   file. The remaining large blockers are sparse finalization/progress
-  normalization, residual-correction execution, remaining retry bookkeeping, the rest of
+  normalization, the remaining true-active/true-window/residual-coarse
+  correction execution, remaining retry bookkeeping, the rest of
   transport/output consolidation, solver/preconditioner naming, and `io.py`
   ownership. The next work follows Lane 1 Batches A-D.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
@@ -1451,7 +1458,7 @@ Completed checkpoints that remain valid:
   fortran-reduced x-block backend, generic sparse-PC setup stage, and
   direct-tail structured/factor setup stage, plus direct-tail support/preflight
   rescue-policy setup stage, sparse factor-preflight execution, and direct-tail
-  auto preflight retry out of
+  auto preflight retry plus true-operator coupled coarse execution out of
   `profile_response/solve.py` into existing dense/sparse owners. Focused owner tests, scoped ruff,
   py_compile, and sparse/RHSMode-1 coverage passed after each checkpoint. The
   final consolidation audit also found that direct deletion of
@@ -1469,8 +1476,8 @@ Next ordered implementation steps:
    changes.
 2. Execute Batch A as the profile-response collapse. Move sparse
    finalization, progress replay, retry bookkeeping, final sparse payload
-   normalization, residual-correction execution, and remaining retry
-   bookkeeping out of
+   normalization, remaining true-active/true-window/residual-coarse correction
+   execution, and remaining retry bookkeeping out of
    `problems/profile_response/solve.py` into existing sparse,
    finalization, diagnostics, and solver-diagnostics owners. Do not add a new
    helper-only file.
