@@ -2713,9 +2713,10 @@ Current completion status:
   assembly and admission gates, public solver/API facades, transport
   recycle-state reuse, ambipolar fail-closed utility gates, transport
   dense-backend admission, Phi1 Newton policy/linear-step branches, and
-  frozen-reference comparison semantics. Benchmark-artifact promotion policy
-  also has fast gates for default-promotion evidence and canonical
-  runtime/memory ordering. The next coverage work must focus on
+  Phi1 Newton-Krylov history-control branches, plus frozen-reference comparison
+  semantics. Benchmark-artifact promotion policy also has fast gates for
+  default-promotion evidence and canonical runtime/memory ordering. The next
+  coverage work must focus on
   profile/transport solve owners, sparse-pattern emission, Schur/profile
   preconditioners, profile true-operator rescue paths, output writer branches,
   and ambipolar derivative/root edge cases while keeping CI below ten minutes.
