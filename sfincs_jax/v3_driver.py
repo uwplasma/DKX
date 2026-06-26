@@ -2,7 +2,7 @@
 
 The RHSMode-1 solve entry points now live in
 ``sfincs_jax.problems.profile_solve`` and the RHSMode-2/3 transport
-entry point lives in ``sfincs_jax.problems.transport_matrix.solve``.  This
+entry point lives in ``sfincs_jax.problems.transport_solve``.  This
 module intentionally contains no physics equations or solver algorithms; it
 only preserves historical imports while the refactor PR migrates tests,
 scripts, and docs to the domain-owned modules.
@@ -15,7 +15,7 @@ import sys
 from typing import Any
 
 _PROFILE_SOLVE = _import_module("sfincs_jax.problems.profile_solve")
-_TRANSPORT_SOLVE = _import_module("sfincs_jax.problems.transport_matrix.solve")
+_TRANSPORT_SOLVE = _import_module("sfincs_jax.problems.transport_solve")
 
 
 def _export_public_and_legacy(target: Any, source: Any) -> None:

@@ -62,7 +62,8 @@ Fortran v3 feature ownership
      - ``solver.F90``, ``diagnostics.F90``, ``validateInput.F90``
      - Fortran loops over transport RHS columns; RHSMode 3 enforces
        monoenergetic constraints such as ``Nx=1`` and DKES-compatible settings.
-     - ``sfincs_jax.problems.transport_matrix``: implemented with gates.
+     - ``sfincs_jax.problems.transport_solve`` plus flat ``transport_*``
+       problem owners: implemented with gates.
        Geometry-rich production preconditioners are bounded by residual and
        setup-time admission tests before auto promotion.
    * - Ambipolar root solve option 1

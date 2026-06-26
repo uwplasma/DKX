@@ -24,15 +24,15 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 from sfincs_jax.namelist import Namelist
-from sfincs_jax.problems.transport_matrix.diagnostics import (
+from sfincs_jax.problems.transport_diagnostics import (
     v3_transport_matrix_from_flux_arrays,
     v3_transport_output_fields_vm_only,
 )
-from sfincs_jax.problems.transport_matrix.policies import (
+from sfincs_jax.problems.transport_policies import (
     transport_residual_gate_failures_from_arrays,
     transport_residual_gate_thresholds_from_env,
 )
-from sfincs_jax.problems.transport_matrix.finalize import V3TransportMatrixSolveResult
+from sfincs_jax.problems.transport_finalize import V3TransportMatrixSolveResult
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 from sfincs_jax.operators.profile_system import V3FullSystemOperator
 
@@ -2609,7 +2609,7 @@ def run_transport_parallel_gpu_subprocesses(
             cmd = [
                 sys.executable,
                 "-m",
-                "sfincs_jax.problems.transport_matrix.parallel.worker",
+                "sfincs_jax.problems.transport_parallel_worker",
                 "--payload",
                 str(payload_path),
                 "--output",

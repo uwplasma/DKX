@@ -20,7 +20,7 @@ from sfincs_jax.workflows.mapped_xgrid import (  # noqa: E402
     write_transport_evidence_json,
 )
 from sfincs_jax.namelist import Namelist, read_sfincs_input  # noqa: E402
-from sfincs_jax.problems.transport_matrix.solve import solve_v3_transport_matrix_linear_gmres  # noqa: E402
+from sfincs_jax.problems.transport_solve import solve_v3_transport_matrix_linear_gmres  # noqa: E402
 
 
 DEFAULT_LOG_LENGTHS = (-1.0, -0.5, 0.0, 0.5, 1.0)

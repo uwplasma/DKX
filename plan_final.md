@@ -35,14 +35,15 @@ navigational surface, not create another layer of wrappers.
 ### Current Audit Snapshot
 
 Checked on 2026-06-26 from
-`refactor/rhs1-full-assembly-preconditioners` after the profile-response
-problem-owner flattening tranche.
+`refactor/rhs1-full-assembly-preconditioners` after the profile-response and
+transport-matrix problem-owner flattening tranches.
 
-- `sfincs_jax/` contains `150` Python files after adding one-file
+- `sfincs_jax/` contains `149` Python files after adding one-file
   compatibility shims for `operators/profile_response.py` and
-  `problems/profile_response.py`, flattening the former nested operator modules
-  into `operators/profile_*.py`, and flattening the RHSMode=1 problem modules
-  into `problems/profile_*.py`.
+  `problems/profile_response.py` / `problems/transport_matrix.py`, flattening
+  the former nested operator modules into `operators/profile_*.py`, flattening
+  the RHSMode=1 problem modules into `problems/profile_*.py`, and flattening
+  RHSMode=2/3 transport modules into `problems/transport_*.py`.
 - Largest source domains by line count are `problems` (`69k` lines), `solvers`
   (`47k`), and `operators` (`21k`).
 - Empty root packages `sfincs_jax/benchmarks`, `sfincs_jax/compat`,
@@ -50,8 +51,7 @@ problem-owner flattening tranche.
   consolidation tranche. The empty nested
   `sfincs_jax/solvers/preconditioners/coarse_space` directory was also removed
   from the working tree.
-- Deep paths remain in `sfincs_jax/problems/transport_matrix/parallel` and
-  `sfincs_jax/solvers/preconditioners/*`.
+- Deep implementation paths remain in `sfincs_jax/solvers/preconditioners/*`.
 - `examples/` has many user-facing folders plus untracked `__pycache__`
   directories and tracked benchmark-summary JSON files under pedagogic example
   paths. Those JSON files are useful evidence, but they should not be the
@@ -103,8 +103,8 @@ Folders to remove or absorb:
 
 - `benchmarks/`, `compat/`, `input/`, and `parallel/` empty package stubs have
   been removed; use `validation/`, `namelist.py`/`input_compat.py`, and the
-  concrete `problems/transport_matrix/parallel` owner while the transport
-  parallel code is still being flattened.
+  flat `problems/transport_parallel_runtime.py` / `transport_parallel_worker.py`
+  owners for transport parallel code.
 - Remove empty `solvers/preconditioners/coarse_space`.
 - Flatten `operators/profile_response/*` into `operators/profile_*.py` files.
   This is complete; `operators/profile_response.py` is a compatibility shim.
@@ -112,7 +112,8 @@ Folders to remove or absorb:
   `problems/profile_response/sparse/*` into `problems/profile_*.py` files.
   This is complete; `problems/profile_response.py` is a compatibility shim.
 - Flatten `problems/transport_matrix/*` and its `parallel/` subfolder into
-  `problems/transport_*.py` files.
+  `problems/transport_*.py` files. This is complete; `transport_matrix.py` is
+  a compatibility shim.
 - Flatten `solvers/preconditioners/*` into one-level solver files such as
   `solvers/preconditioner_pas.py`, `solvers/preconditioner_xblock.py`,
   `solvers/preconditioner_qi.py`, `solvers/preconditioner_symbolic.py`, and
@@ -181,7 +182,7 @@ Tranche 3: flatten operators and problems.
   `problems/profile_response/sparse/*` into one-level `problems/profile_*.py`
   modules. Complete.
 - Move `problems/transport_matrix/*` into one-level `problems/transport_*.py`
-  modules.
+  modules. Complete.
 - Rename only when the new name is more domain-descriptive; avoid broad
   `rhs1_*` names except inside compatibility aliases.
 - Acceptance: `v3_driver.py` stays below `75` lines; API docs import canonical
@@ -325,7 +326,7 @@ Implementation progress on 2026-06-23:
   from an existing linear diagnostic `J(x) = c^T x + J0` on small validation
   decks. This is a validation bridge for pinning radial-current weights before
   replacing it with analytic production weights.
-- `sfincs_jax.problems.transport_matrix.diagnostics` now exposes
+- `sfincs_jax.problems.transport_diagnostics` now exposes
   `radial_current_vm_psi_hat_from_state` and a chunked observable-vector helper
   for the magnetic-drift radial-current contribution, plus explicit
   `psiHat`/`rHat`/`rN` coordinate wrappers. A tiny RHSMode-1 deck checks the
@@ -581,13 +582,14 @@ completed owner moves, and private-root deletion pass:
   lines, and
   `preconditioner_build.py` 2,683 lines. The `solve.py <=5,500` and
   `handoff.py <=5,500` review gates are restored.
-- `sfincs_jax/problems/transport_matrix`: 10 files including `parallel/`.
-  The file-count gate is met. `postsolve_diagnostics.py` was merged into
-  `finalize.py`, `streaming_outputs.py` was merged into `outputs/transport.py`,
-  active dense setup, active factors, direct reduced-``Pmat``, direct
-  block-Schur setup, and Fortran-reduced LU setup were consolidated into
-  `linear_system.py`, and internal parallel policy/sharding helpers were
-  consolidated into `parallel/runtime.py`.
+- `sfincs_jax/problems/transport_*.py`: 8 flat implementation files plus the
+  one-file `transport_matrix.py` compatibility shim. The file-count gate is
+  met. `postsolve_diagnostics.py` was merged into `transport_finalize.py`,
+  `streaming_outputs.py` was merged into `outputs/transport.py`, active dense
+  setup, active factors, direct reduced-``Pmat``, direct block-Schur setup, and
+  Fortran-reduced LU setup were consolidated into `transport_linear_system.py`,
+  and internal parallel policy/sharding helpers were consolidated into
+  `transport_parallel_runtime.py`.
 - `sfincs_jax/solvers`: 11 root files. Explicit sparse factor policy/building
   now lives in `explicit_sparse.py`; shared preconditioner state/setup/operator
   shaping now lives in `preconditioning.py`; progress, Krylov state,
@@ -819,11 +821,11 @@ Current source inventory from the 2026-06-26 consolidation audit:
 
 | Area | Current state | Review-ready target |
 | --- | --- | --- |
-| Whole package | 150 Python files, about 165,600 package lines | Keep `<=150` files unless a new durable owner deletes at least two old files in the same commit. Review target is no package-file increase and no line-count increase unless the change deletes files and simplifies ownership. |
+| Whole package | 149 Python files, about 165,650 package lines | Keep `<=149` files unless a new durable owner deletes at least two old files in the same commit. Review target is no package-file increase and no line-count increase unless the change deletes files and simplifies ownership. |
 | Package root | 17 Python files | Root gate is met. Root files now remain only when they are public API, CLI, compatibility, plotting/profiling helpers, or stable user-facing facades. |
 | `v3_driver.py` / `io.py` | 47-line and 64-line compatibility shims | Keep below 80 lines. Do not put implementation logic back into either file. Delete only after public docs, examples, scripts, and compatibility tests no longer need the shim. |
 | `problems/profile_*.py` | 17 flat implementation files plus `profile_response.py` compatibility shim; largest owners are `profile_sparse_xblock.py`, `profile_policies.py`, `profile_sparse_handoff.py`, `profile_solve.py`, `profile_sparse_qi.py`, and `profile_sparse_direct.py`. | Do not add profile-response files. Reduce complexity only by deleting duplicate policy branches or moving historical names into existing owners without creating a new monolith. |
-| `problems/transport_matrix` | 10 files including `parallel/`; direct reduced-`Pmat`, active factors, and block-Schur setup live in `linear_system.py`; parallel policy/sharding lives in `parallel/runtime.py`. | Keep `parallel/worker.py` only as the subprocess entry point. Do not grow `solve.py` into another monolith. |
+| `problems/transport_*.py` | 8 flat implementation files plus `transport_matrix.py` compatibility shim; direct reduced-`Pmat`, active factors, and block-Schur setup live in `transport_linear_system.py`; parallel policy/sharding lives in `transport_parallel_runtime.py`. | Keep `transport_parallel_worker.py` only as the subprocess entry point. Do not grow `transport_solve.py` into another monolith. |
 | `solvers/preconditioners` | 35 files, 37,495 lines; QI, PAS, x-block, full-FP, Schur, symbolic-sparse, and transport-matrix owners are explicit. | Keep mathematical family names. Merge only if one commit deletes at least three files and keeps ownership clearer. |
 | `workflows` / `validation` | 16 files total. `validation.benchmark_artifacts` was merged into `validation.artifacts`; `validation.fortran_profile` was merged into `validation.fortran`; six `optimization_*` workflow implementation files were merged into `workflows.optimization`; and two mapped-x-grid files were merged into `workflows.mapped_xgrid`. Old workflow module imports are package-level compatibility aliases. | Further consolidation only when import graphs show this can delete files without file-level shims and without obscuring public workflow concepts. |
 | Docs/tests/examples/scripts | Public examples/scripts are being migrated off `sfincs_jax.v3_driver`; tests still intentionally cover compatibility imports. | Public-facing material uses `api`, `cli`, `outputs`, `validation`, `workflows`, or problem owners. Owner tests may keep private imports. |
@@ -887,7 +889,7 @@ Locked checkpoints:
 | Root public surface | `api.py`, `cli.py`, `namelist.py`, `input_compat.py`, `grids.py`, `sensitivity.py`, `plotting.py`, stable physics kernels | Workflow/data and geometry support roots have moved to domain owners. Continue moving only if public imports can migrate without adding shims. | Delete no-op root shims after public imports migrate. |
 | Compatibility roots | `v3_driver.py` only as temporary import shim | Result tests/docs import problem-owned result contracts directly | Delete `v3_driver.py` only if all public imports and tests move to domain APIs. |
 | Profile response | Existing owners only: `setup.py`, `solve.py`, `policies.py`, `preconditioner_build.py`, `dense.py`, `residual.py`, `diagnostics.py`, `solver_diagnostics.py`, `phi1_newton.py`, `sparse/` | Restore `solve.py <=5,500` without creating files. Keep the `handoff.py` waiver only if documented as a compatibility re-export facade. Reduce oversized owners by deleting duplicate branch patterns, not by creating shards. | Do not create another profile-response file. |
-| Transport matrix | `solve.py`, `setup.py`, `diagnostics.py`, `finalize.py`, `policies.py`, `linear_system.py`, `parallel/runtime.py`, and `parallel/worker.py` | Batch B merged `active_dense.py`, `active_factor.py`, `direct_block_schur.py`, `direct_pmat.py`, and `fortran_reduced_lu.py` into `linear_system.py`. Batch C merged internal `parallel/policy.py` and `parallel/sharding.py` into `parallel/runtime.py`. | Keep `parallel/worker.py` only as the documented `python -m sfincs_jax.problems.transport_matrix.parallel.worker` subprocess entry point. Delete tiny relay files after tests import the owner. Do not grow `transport_matrix/solve.py` into another monolith. |
+| Transport matrix | `transport_solve.py`, `transport_setup.py`, `transport_diagnostics.py`, `transport_finalize.py`, `transport_policies.py`, `transport_linear_system.py`, `transport_parallel_runtime.py`, and `transport_parallel_worker.py` | Batch B merged `active_dense.py`, `active_factor.py`, `direct_block_schur.py`, `direct_pmat.py`, and `fortran_reduced_lu.py` into `transport_linear_system.py`. Batch C merged internal parallel policy/sharding into `transport_parallel_runtime.py`. | Keep `transport_parallel_worker.py` only as the documented `python -m sfincs_jax.problems.transport_parallel_worker` subprocess entry point. Delete tiny relay files after tests import the owner. Do not grow `transport_solve.py` into another monolith. |
 | Outputs | `outputs/formats.py`, `outputs/cache.py`, `outputs/rhsmode1.py`, `outputs/transport.py`, `outputs/writer.py` | Continue moving schema/output-policy pieces into output owners only if total package complexity drops. | `io.py` remains a `<=800` line compatibility facade until public imports no longer need it. |
 | Solver core | `explicit_sparse.py`, `preconditioning.py`, `diagnostics.py`, `implicit.py`, `krylov_dispatch.py`, `path_policy.py`, `selection_policy.py`, `memory_model.py`, and native factor kernels | Batch D merged `explicit_sparse_factor_builder.py` and `explicit_sparse_factor_policy.py` into `explicit_sparse.py`; merged `preconditioner_caches.py`, `preconditioner_context.py`, `preconditioner_operators.py`, and `preconditioner_setup.py` into `preconditioning.py`; and merged `progress.py`, `state.py`, `trace.py`, and `profile_compare.py` into `diagnostics.py`. | Keep this owner set stable unless a future commit deletes a larger real boundary and passes solver-dispatch/import tests. |
 | QI preconditioners | Durable owners are fixed: `qi/basis.py`, `qi/corrections.py`, `qi/device.py`, `qi/policy.py`, plus `qi/__init__.py` | No more QI file movement unless a correctness bug appears. Simplify internally by deleting dead `qi_*` compatibility symbols or duplicated basis/correction code. | Keep compatibility aliases only through `qi/__init__.py` or owner tests, not as files. |
@@ -1204,7 +1206,7 @@ move without making `transport_matrix/solve.py` a second monolith.
 Actions:
 
 1. Create or reuse one durable owner named by the domain, preferably
-   `sfincs_jax/problems/transport_matrix/linear_system.py`.
+   `sfincs_jax/problems/transport_linear_system.py`.
 2. Move the coherent active-system/factor/direct-Pmat functionality from
    `active_dense.py`, `active_factor.py`, `direct_block_schur.py`,
    `direct_pmat.py`, and `fortran_reduced_lu.py` into that owner.
@@ -1217,8 +1219,10 @@ Actions:
 Exit gates:
 
 - Net package file count decreases by at least four.
-- `problems/transport_matrix` remains `<=18` files including `parallel`.
-- No `transport_*` or old algorithm-history filename is introduced.
+- Transport problem implementation remains in the flat `problems/transport_*.py`
+  owner set plus the `transport_matrix.py` compatibility shim.
+- No top-level package-root `transport_*` implementation file or old
+  algorithm-history filename is introduced.
 - Transport RHSMode 2/3, monoenergetic, sparse/direct fallback, active-system,
   streaming-output, and import-contract tests pass.
 
@@ -1242,21 +1246,22 @@ Actions:
 
 Exit gates:
 
-- `problems/transport_matrix/parallel` has two implementation files:
-  `runtime.py` and `worker.py`.
+- Transport parallel implementation has two flat files:
+  `transport_parallel_runtime.py` and `transport_parallel_worker.py`.
 - Parallel runtime, sharding, worker-payload, CPU/GPU admission, and import
   tests pass.
 
 Status on 2026-06-26:
 
-- Complete. `parallel/policy.py` and `parallel/sharding.py` were absorbed into
-  `parallel/runtime.py`; `parallel/worker.py` stayed as the public executable
-  wrapper. Live docs, examples, tests, and source no longer import the deleted
-  modules.
-- Current metrics after Batch C: `176` package Python files, `43` package-root
-  files, `165,968` package source lines, `problems/transport_matrix` at `10`
-  Python files including `parallel`, and `parallel` at `runtime.py`,
-  `worker.py`, and `__init__.py`.
+- Complete and flattened. `parallel/policy.py` and `parallel/sharding.py` were
+  absorbed into `transport_parallel_runtime.py`;
+  `transport_parallel_worker.py` is the public executable wrapper. Live docs,
+  examples, tests, and source import the flat transport owners, with old nested
+  imports covered only by compatibility tests.
+- Current metrics after the transport flattening tranche: `149` package Python
+  files, `17` package-root files, about `165,650` package source lines, and
+  `problems/transport_*.py` at 8 implementation files plus the
+  `transport_matrix.py` compatibility shim.
 - Validation: scoped py_compile and Ruff passed; the focused transport-parallel
   suite passed with `101 passed`; the full `tests/test_transport_*.py` pattern
   passed with `273 passed`; Sphinx `-W` passed; `git diff --check` passed; and
@@ -1492,8 +1497,10 @@ Review-ready acceptance gates:
 - `profile_solve.py <=5,500`.
 - `profile_sparse_handoff.py <=5,500`.
 - `io.py <=800` or deleted.
-- `problems/profile_response` plus `sparse` has `<=18` files.
-- `problems/transport_matrix` plus `parallel` has `<=18` files.
+- `problems/profile_*.py` has 17 implementation files plus the
+  `profile_response.py` compatibility shim.
+- `problems/transport_*.py` has 8 implementation files plus the
+  `transport_matrix.py` compatibility shim.
 - `solvers/preconditioners` has `<=35` files.
 - No top-level `rhs1_*` or `transport_*` implementation files exist.
 - No broad package-level lint ignores exist; the only allowed exception is a
@@ -1524,7 +1531,7 @@ Status on 2026-06-26:
 - The research-lane manifest now points at the consolidated QI, transport
   parallel, and sparse handoff owners:
   `solvers/preconditioners/qi/{basis,corrections,device}.py`,
-  `problems/transport_matrix/parallel/runtime.py`, and
+  `problems/transport_parallel_runtime.py`, and
   `problems/profile_sparse_handoff.py`.
 - Validation passed with the review-ready focused bundle:
   `191 passed in 32.86s`; targeted benchmark-summary and research-lane gates

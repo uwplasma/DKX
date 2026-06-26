@@ -49,6 +49,6 @@ testpaths = ["tests"]
 # them back under normal lint. Keep the rest of the package strict during the
 # ownership move.
 "sfincs_jax/problems/profile_solve.py" = ["E402", "E731", "E741", "F401", "F811", "F821", "F841"]
-"sfincs_jax/problems/transport_matrix/solve.py" = ["E402", "E731", "E741", "F401", "F811", "F821", "F841"]
+"sfincs_jax/problems/transport_solve.py" = ["E402", "E731", "E741", "F401", "F811", "F821", "F841"]
 "sfincs_jax/v3_driver.py" = ["E402", "E731", "E741", "F401", "F811", "F821", "F841"]
 "sfincs_jax/v3_system.py" = ["E402", "E741"]

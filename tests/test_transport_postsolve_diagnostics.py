@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.problems.transport_matrix import finalize as postsolve
+import sfincs_jax.problems.transport_finalize as postsolve
 
 
 @dataclass(frozen=True)

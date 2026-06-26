@@ -9,8 +9,8 @@ import pytest
 from sfincs_jax.io import read_sfincs_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.petsc_binary import read_petsc_vec
-from sfincs_jax.problems.transport_matrix.diagnostics import v3_transport_matrix_from_state_vectors
-from sfincs_jax.problems.transport_matrix.diagnostics import v3_transport_output_fields_vm_only
+from sfincs_jax.problems.transport_diagnostics import v3_transport_matrix_from_state_vectors
+from sfincs_jax.problems.transport_diagnostics import v3_transport_output_fields_vm_only
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 from sfincs_jax.operators.profile_system import (
     apply_v3_full_system_operator,
@@ -69,7 +69,7 @@ def test_transport_matrix_rhsmode2_matches_fortran_output(base: str) -> None:
     hf_ref = np.asarray(out["heatFlux_vm_psiHat"], dtype=np.float64)
     fsab_ref = np.asarray(out["FSABFlow"], dtype=np.float64)
 
-    from sfincs_jax.problems.transport_matrix.diagnostics import v3_transport_diagnostics_vm_only
+    from sfincs_jax.problems.transport_diagnostics import v3_transport_diagnostics_vm_only
 
     d = [v3_transport_diagnostics_vm_only(op0, x_full=state_vecs[k]) for k in (1, 2, 3)]
     pf = np.stack([np.asarray(di.particle_flux_vm_psi_hat) for di in d], axis=1)

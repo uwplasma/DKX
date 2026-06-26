@@ -346,7 +346,7 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
 
 def _cmd_transport_matrix_v3(args: argparse.Namespace) -> int:
     t0 = _now()
-    from .problems.transport_matrix.solve import solve_v3_transport_matrix_linear_gmres  # noqa: PLC0415
+    from .problems.transport_solve import solve_v3_transport_matrix_linear_gmres  # noqa: PLC0415
 
     nml = _nml_with_cli_equilibrium_override(read_sfincs_input(Path(args.input)), args)
     _emit("################################################################", level=0, args=args)

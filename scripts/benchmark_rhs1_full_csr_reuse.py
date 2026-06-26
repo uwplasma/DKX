@@ -20,7 +20,7 @@ from sfincs_jax.operators.profile_full_system import (
     select_structured_rhs1_full_csr_operator,
     solve_structured_rhs1_full_csr,
 )
-from sfincs_jax.problems.transport_matrix.linear_system import transport_active_dof_indices as _transport_active_dof_indices
+from sfincs_jax.problems.transport_linear_system import transport_active_dof_indices as _transport_active_dof_indices
 from sfincs_jax.operators.profile_system import apply_v3_full_system_operator, full_system_operator_from_namelist, rhs_v3_full_system
 
 

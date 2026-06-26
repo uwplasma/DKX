@@ -39,7 +39,7 @@ from sfincs_jax.operators.profile_system import (
     sharding_constraints,
     with_transport_rhs_settings,
 )
-from .transport_matrix.linear_system import transport_active_dof_indices
+from .transport_linear_system import transport_active_dof_indices
 from .profile_policies import (
     rhsmode1_scipy_rescue_abs_floor_after_xblock_current_backend,
     rhsmode1_scipy_rescue_active_size_allowed_current_backend,

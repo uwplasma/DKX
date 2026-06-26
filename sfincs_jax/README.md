@@ -37,9 +37,9 @@ inside domain folders are for contributors and advanced research workflows.
 - `physics/`: collision, classical-transport, bootstrap-current, and
   normalization formulas.
 - `problems/`: physical problem owners, including flat RHSMode-1
-  `profile_*.py` modules, RHSMode-2/3 transport matrices, and ambipolar root
-  solves. `profile_response.py` is only a compatibility shim for the former
-  nested import path.
+  `profile_*.py` modules, flat RHSMode-2/3 `transport_*.py` modules, and
+  ambipolar root solves. `profile_response.py` and `transport_matrix.py` are
+  compatibility shims for former nested import paths.
 - `solvers/`: Krylov dispatch, solver-path selection, sparse/native factors,
   memory models, and preconditioners.
 - `outputs/`: HDF5/NetCDF/NPZ schemas, writer logic, and post-solve

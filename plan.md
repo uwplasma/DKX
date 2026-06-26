@@ -31,10 +31,10 @@ Latest execution checkpoint:
   `profile_solve.py <=5,500` and sparse-handoff line gates. Batch B
   consolidated RHSMode=2/3 active dense setup, active factors, direct
   reduced-``Pmat`` emission, direct block-Schur setup, and Fortran-reduced LU
-  setup into `sfincs_jax.problems.transport_matrix.linear_system`, deleting
+  setup into `sfincs_jax.problems.transport_linear_system`, deleting
   five old implementation files. Batch C consolidated internal
   transport-parallel policy and sharding into
-  `sfincs_jax.problems.transport_matrix.parallel.runtime`, keeping `worker.py`
+  `sfincs_jax.problems.transport_parallel_runtime`, keeping `worker.py`
   only as the subprocess entry point. Batch D consolidated solver support into
   durable owners: `explicit_sparse.py`, `preconditioning.py`, and
   `diagnostics.py`. Batch E classified every remaining package-root module in
@@ -145,13 +145,13 @@ Batch A validation evidence:
 
 Batch B validation evidence:
 
-- `python -m py_compile sfincs_jax/problems/transport_matrix/linear_system.py
+- `python -m py_compile sfincs_jax/problems/transport_linear_system.py
   sfincs_jax/problems/profile_solve.py
   sfincs_jax/problems/profile_dense.py
   tests/test_domain_package_import_contracts.py
   tests/test_transport_active_dense_setup.py tests/test_transport_active_factor.py
   tests/test_fortran_reduced_preconditioner.py` passed.
-- `python -m ruff check sfincs_jax/problems/transport_matrix/linear_system.py
+- `python -m ruff check sfincs_jax/problems/transport_linear_system.py
   sfincs_jax/problems/profile_solve.py
   sfincs_jax/problems/profile_dense.py
   tests/test_domain_package_import_contracts.py
@@ -323,7 +323,7 @@ deferred research lanes.
   builders internally when the driver does not inject a test builder, and tests
   assert that the old private driver aliases stay absent.
 - Transport runtime backend/dtype policy binding moved into
-  `sfincs_jax.problems.transport_matrix.policies.TransportRuntimePolicy`.
+  `sfincs_jax.problems.transport_policies.TransportRuntimePolicy`.
   `v3_driver.py` now keeps bound method aliases for compatibility and no longer
   owns private transport backend-injection wrapper functions.
 - Active-projected diagonal-Schur, x-ell kinetic-line, angular-line, and native
@@ -1081,7 +1081,7 @@ Next best steps:
 Steps taken:
 
 1. Added `radial_current_vm_psi_hat_from_state` to
-   `sfincs_jax.problems.transport_matrix.diagnostics`.
+   `sfincs_jax.problems.transport_diagnostics`.
 2. Added `radial_current_vm_psi_hat_observable_vector`, which recovers the
    scalar radial-current observable vector from the existing diagnostic in
    bounded chunks.
@@ -2206,7 +2206,7 @@ Steps taken:
 1. Re-inventoried the remaining nested helpers in `v3_driver.py` after the
    ambipolar and RHSMode 4/5 closure work.
 2. Moved the RHSMode=2/3 constraint-nullspace projection adapter into
-   `sfincs_jax/problems/transport_matrix/finalize.py` as
+   `sfincs_jax/problems/transport_finalize.py` as
    `TransportConstraintNullspaceProjector`.
 3. Rewired `v3_driver.py` so dense-batch and RHS finalization paths receive
    `constraint_projector.project` instead of a local projection closure.
@@ -2230,7 +2230,7 @@ Results:
   tests/test_transport_parallel.py::test_transport_theta_schwarz_preconditioner_matches_default
   -q --tb=short` passed with `2 passed in 12.16 s`.
 - `python -m ruff check
-  sfincs_jax/problems/transport_matrix/finalize.py sfincs_jax/v3_driver.py
+  sfincs_jax/problems/transport_finalize.py sfincs_jax/v3_driver.py
   tests/test_constraint_projection.py`, `python -m py_compile
   sfincs_jax/v3_driver.py`, and `git diff --check` passed.
 
@@ -2369,8 +2369,8 @@ Results:
 Validation:
 
 - `python -m py_compile sfincs_jax/v3_driver.py
-  sfincs_jax/problems/transport_matrix/parallel/runtime.py
-  sfincs_jax/problems/transport_matrix/parallel/worker.py` passed.
+  sfincs_jax/problems/transport_parallel_runtime.py
+  sfincs_jax/problems/transport_parallel_worker.py` passed.
 - `python -m pytest tests/test_domain_package_import_contracts.py
   tests/test_policy_module_docstrings.py tests/test_helper_module_coverage.py
   -q --tb=short` passed with `20 passed in 1.99 s`.
@@ -2612,7 +2612,7 @@ Next best steps:
    `solve_v3_full_system_linear_gmres` to
    `sfincs_jax.problems.profile_solve` and
    `solve_v3_transport_matrix_linear_gmres` to
-   `sfincs_jax.problems.transport_matrix.solve`, leaving `v3_driver.py` as a
+   `sfincs_jax.problems.transport_solve`, leaving `v3_driver.py` as a
    thin compatibility shim.
 3. After Iteration 4, execute Lane 1 Iteration 5 once: dead-code pruning,
    docs/API cleanup, final count checks, focused physics/refactor tests, docs
@@ -2628,7 +2628,7 @@ Steps taken:
 2. Moved the legacy profile-response solve entry point into
    `sfincs_jax.problems.profile_solve`.
 3. Moved the legacy RHSMode 2/3 transport solve entry point into
-   `sfincs_jax.problems.transport_matrix.solve`.
+   `sfincs_jax.problems.transport_solve`.
 4. Absorbed the old low-level profile-response and transport
    `linear_solve.py` implementations into their solve owners and queued those
    two files for deletion.
@@ -2647,7 +2647,7 @@ Current inventory:
 - Top-level `transport_*` files: `0`.
 - `sfincs_jax/v3_driver.py`: `47` lines.
 - `sfincs_jax/problems/profile_solve.py`: `11,279` lines.
-- `sfincs_jax/problems/transport_matrix/solve.py`: `1,763` lines.
+- `sfincs_jax/problems/transport_solve.py`: `1,763` lines.
 - `problems/profile_response`: `33` Python files and about `50k` lines.
 - `problems/transport_matrix`: `33` Python files and about `15k` lines.
 - `solvers/preconditioners`: `50` Python files and about `37k` lines.
@@ -2656,7 +2656,7 @@ Validation so far:
 
 - `python -m py_compile sfincs_jax/v3_driver.py
   sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/transport_matrix/solve.py
+  sfincs_jax/problems/transport_solve.py
   sfincs_jax/problems/profile_response/*.py
   sfincs_jax/problems/transport_matrix/*.py` passed.
 - Import smoke confirmed `sfincs_jax.v3_driver` resolves to the
@@ -2984,7 +2984,7 @@ Validation:
 
 - `python -m py_compile sfincs_jax/problems/profile_solve.py
   sfincs_jax/problems/profile_sparse_direct.py
-  sfincs_jax/problems/transport_matrix/solve.py` passed.
+  sfincs_jax/problems/transport_solve.py` passed.
 - Scoped ruff passed for touched source and tests.
 - Sparse-helper canonical-owner coverage passed:
   `15 passed in 0.74s`.
@@ -3250,7 +3250,7 @@ Validation:
   sfincs_jax/problems/profile_policies.py
   sfincs_jax/problems/profile_solve.py
   sfincs_jax/problems/profile_phi1_newton.py
-  sfincs_jax/problems/transport_matrix/solve.py
+  sfincs_jax/problems/transport_solve.py
   sfincs_jax/solvers/progress.py
   sfincs_jax/validation_artifacts.py
   tests/test_solver_runtime.py
@@ -3265,7 +3265,7 @@ Validation:
   sfincs_jax/problems/profile_policies.py
   sfincs_jax/problems/profile_solve.py
   sfincs_jax/problems/profile_phi1_newton.py
-  sfincs_jax/problems/transport_matrix/solve.py
+  sfincs_jax/problems/transport_solve.py
   sfincs_jax/solvers/progress.py
   sfincs_jax/validation_artifacts.py` passed.
 - Focused helper tests passed:
@@ -3379,7 +3379,7 @@ Next best steps:
 
 1. Start the transport-parallel consolidation: merge `execution.py`,
    `payload.py`, `pool.py`, `solve.py`, and `validation.py` into
-   `problems/transport_matrix/parallel/runtime.py`, leaving only
+   `problems/transport_parallel_runtime.py`, leaving only
    `runtime.py`, `policy.py`, `sharding.py`, and `worker.py` in the subpackage
    before the final policy merge.
 2. Continue Batch 1 with a real profile-response solve cut, targeting sparse
@@ -3393,7 +3393,7 @@ Steps taken:
 
 1. Merged parent-side execution, payload packing, process-pool cache
    management, parent solve orchestration, and worker-result validation into
-   `sfincs_jax/problems/transport_matrix/parallel/runtime.py`.
+   `sfincs_jax/problems/transport_parallel_runtime.py`.
 2. Deleted five transport-parallel micro-files:
    `execution.py`, `payload.py`, `pool.py`, `solve.py`, and `validation.py`.
 3. Updated source, tests, examples, and docs so payload, execution, pool,
@@ -3477,7 +3477,7 @@ Steps taken:
    documentation and release/research manifests point at existing canonical
    owners.
 4. Removed stale deleted-parallel-file section comments from
-   `problems/transport_matrix/parallel/runtime.py`.
+   `problems/transport_parallel_runtime.py`.
 
 Current inventory:
 
@@ -4617,7 +4617,7 @@ Steps taken:
    `V3NewtonKrylovResult`, and `v3_linear_solve_result_from_payload`) into the
    existing `sfincs_jax.problems.profile_solver_diagnostics` owner.
 2. Moved `V3TransportMatrixSolveResult` into the existing
-   `sfincs_jax.problems.transport_matrix.finalize` owner.
+   `sfincs_jax.problems.transport_finalize` owner.
 3. Replaced `sfincs_jax/v3_results.py` with a 13-line compatibility facade for
    historical imports.
 4. Rewrote package-internal imports in profile-response, transport, parallel,
@@ -4876,13 +4876,13 @@ Validation:
 - `python -m py_compile sfincs_jax/operators/profile_system.py
   sfincs_jax/residual.py sfincs_jax/constraint_projection.py
   sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/transport_matrix/solve.py
+  sfincs_jax/problems/transport_solve.py
   tests/test_full_system_operator_jit.py tests/test_v3_system_cached_matvec.py`
   passed.
 - `python -m ruff check sfincs_jax/operators/profile_system.py
   sfincs_jax/residual.py sfincs_jax/constraint_projection.py
   sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/transport_matrix/solve.py
+  sfincs_jax/problems/transport_solve.py
   tests/test_full_system_operator_jit.py tests/test_v3_system_cached_matvec.py`
   passed.
 - `python -m pytest tests/test_domain_package_import_contracts.py
@@ -5657,7 +5657,7 @@ Steps taken:
 
 1. Merged the transport retry/residual polish relay
    `sfincs_jax/problems/transport_matrix/handoff_policy.py` into the durable
-   transport policy owner `sfincs_jax/problems/transport_matrix/policies.py`.
+   transport policy owner `sfincs_jax/problems/transport_policies.py`.
 2. Rewired `profile_solve.py`, focused handoff-policy tests, import
    contract tests, API docs, and the source map to import the policy owner
    directly.
@@ -5671,7 +5671,7 @@ Results:
 - Package Python files decreased from `205` to `204`.
 - `problems/transport_matrix` files including `parallel/` decreased from `28`
   to `27`.
-- `sfincs_jax/problems/transport_matrix/policies.py` is now `747` lines and
+- `sfincs_jax/problems/transport_policies.py` is now `747` lines and
   owns dense/sparse/direct/tzfft runtime admission plus RHSMode-3 polish
   retry policy.
 - The Batch B review-ready gate remains open: transport matrix plus
@@ -5679,8 +5679,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/profile_solve.py tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/profile_solve.py tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m py_compile sfincs_jax/problems/transport_policies.py sfincs_jax/problems/transport_solve.py sfincs_jax/problems/profile_solve.py tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/problems/transport_policies.py sfincs_jax/problems/transport_solve.py sfincs_jax/problems/profile_solve.py tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py tests/test_transport_solve_policy.py -q --tb=short` passed with `26 passed`.
 - `sphinx-build -W -b html docs docs/_build/html` passed.
 
@@ -5701,7 +5701,7 @@ Next best steps:
 Steps taken:
 
 1. Merged `sfincs_jax/problems/transport_matrix/solve_policy.py` into the
-   durable owner `sfincs_jax/problems/transport_matrix/policies.py`.
+   durable owner `sfincs_jax/problems/transport_policies.py`.
    Geometry-scheme parsing, low-memory output policy, active-DOF admission,
    dense fallback/preconditioner admission, state-vector retention, GMRES
    budgets, and per-`whichRHS` loop policy now live in the policy owner.
@@ -5724,7 +5724,7 @@ Results:
 - Package source lines decreased from `165,574` to `165,517`.
 - `problems/transport_matrix` files including `parallel/` decreased from `27`
   to `25`.
-- `sfincs_jax/problems/transport_matrix/policies.py` is now `2,123` lines and
+- `sfincs_jax/problems/transport_policies.py` is now `2,123` lines and
   owns the transport runtime, solve, retry, active/dense, and preconditioner
   dispatch policy family.
 - The Batch B transport file-count gate remains open: `25` files must decrease
@@ -5732,8 +5732,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/active_dense.py sfincs_jax/problems/profile_solve.py tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/active_dense.py sfincs_jax/problems/profile_solve.py tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m py_compile sfincs_jax/problems/transport_policies.py sfincs_jax/problems/transport_matrix/active_dense.py sfincs_jax/problems/profile_solve.py tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/problems/transport_policies.py sfincs_jax/problems/transport_matrix/active_dense.py sfincs_jax/problems/profile_solve.py tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_transport_active_dense_setup.py tests/test_domain_package_import_contracts.py -q --tb=short` passed with `54 passed`.
 - `python -m pytest tests/test_transport_*.py -q --tb=short` passed with
   `273 passed`.
@@ -5758,7 +5758,7 @@ Next best steps:
 Steps taken:
 
 1. Merged `sfincs_jax/problems/transport_matrix/dense_lu.py` into
-   `sfincs_jax/problems/transport_matrix/solve.py`. Dense-LU solver and
+   `sfincs_jax/problems/transport_solve.py`. Dense-LU solver and
    preconditioner construction now live with the transport solve branches that
    call them.
 2. Merged `sfincs_jax/problems/transport_matrix/host_gmres.py` into
@@ -5792,8 +5792,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/loop.py sfincs_jax/problems/transport_matrix/parallel/runtime.py sfincs_jax/problems/profile_solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/transport_matrix/loop.py sfincs_jax/problems/transport_matrix/parallel/runtime.py sfincs_jax/problems/profile_solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m py_compile sfincs_jax/problems/transport_solve.py sfincs_jax/problems/transport_policies.py sfincs_jax/problems/transport_matrix/loop.py sfincs_jax/problems/transport_parallel_runtime.py sfincs_jax/problems/profile_solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/problems/transport_solve.py sfincs_jax/problems/transport_policies.py sfincs_jax/problems/transport_matrix/loop.py sfincs_jax/problems/transport_parallel_runtime.py sfincs_jax/problems/profile_solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_transport_loop_support.py tests/test_transport_parallel_runtime.py tests/test_domain_package_import_contracts.py -q --tb=short` passed with `44 passed`.
 - `python -m pytest tests/test_transport_*.py -q --tb=short` passed with
   `273 passed`.
@@ -5818,7 +5818,7 @@ Next best steps:
 Steps taken:
 
 1. Merged `sfincs_jax/problems/transport_matrix/dense_batch.py` into
-   `sfincs_jax/problems/transport_matrix/solve.py`. All-RHS dense transport
+   `sfincs_jax/problems/transport_solve.py`. All-RHS dense transport
    matrix assembly, active-DOF projection, streamed diagnostic collection,
    residual bookkeeping, and per-`whichRHS` dense progress emission now live
    with the solve owner.
@@ -5848,8 +5848,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/profile_solve.py tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/transport_matrix/solve.py sfincs_jax/problems/transport_matrix/policies.py sfincs_jax/problems/profile_solve.py tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m py_compile sfincs_jax/problems/transport_solve.py sfincs_jax/problems/transport_policies.py sfincs_jax/problems/profile_solve.py tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/problems/transport_solve.py sfincs_jax/problems/transport_policies.py sfincs_jax/problems/profile_solve.py tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py -q --tb=short` passed with `36 passed`.
 - `python -m pytest tests/test_transport_*.py -q --tb=short` passed with
   `273 passed`.
@@ -6188,10 +6188,10 @@ Next best steps:
 Steps taken:
 
 1. Merged the remaining internal transport-parallel policy and sharding owners
-   into `sfincs_jax/problems/transport_matrix/parallel/runtime.py`.
+   into `sfincs_jax/problems/transport_parallel_runtime.py`.
 2. Deleted `parallel/policy.py` and `parallel/sharding.py`.
 3. Kept `parallel/worker.py` as the documented
-   `python -m sfincs_jax.problems.transport_matrix.parallel.worker`
+   `python -m sfincs_jax.problems.transport_parallel_worker`
    subprocess entry point; it is no longer considered consolidation debt.
 4. Updated source, examples, tests, API docs, source map, parallelism docs,
    research-lane docs, and release notes to import and describe the

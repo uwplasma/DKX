@@ -23,8 +23,8 @@ from ..discretization.adaptive_maps import (  # noqa: E402
     make_reference_eta_grid,
 )
 from ..namelist import Namelist  # noqa: E402
-from ..problems.transport_matrix.finalize import V3TransportMatrixSolveResult  # noqa: E402
-from ..problems.transport_matrix.solve import solve_v3_transport_matrix_linear_gmres  # noqa: E402
+from ..problems.transport_finalize import V3TransportMatrixSolveResult  # noqa: E402
+from ..problems.transport_solve import solve_v3_transport_matrix_linear_gmres  # noqa: E402
 
 
 Array = jax.Array

@@ -9,8 +9,8 @@ import pytest
 from sfincs_jax.io import read_sfincs_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.petsc_binary import read_petsc_vec
-from sfincs_jax.problems.transport_matrix.diagnostics import v3_transport_matrix_from_state_vectors
-from sfincs_jax.problems.transport_matrix.diagnostics import v3_transport_output_fields_vm_only
+from sfincs_jax.problems.transport_diagnostics import v3_transport_matrix_from_state_vectors
+from sfincs_jax.problems.transport_diagnostics import v3_transport_output_fields_vm_only
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
 
@@ -70,7 +70,7 @@ def test_transport_matrix_rhsmode3_matches_fortran_output(base: str) -> None:
     fsab_ref = np.asarray(out["FSABFlow"], dtype=np.float64)
 
     # Compute from the solved state vectors:
-    from sfincs_jax.problems.transport_matrix.diagnostics import v3_transport_diagnostics_vm_only
+    from sfincs_jax.problems.transport_diagnostics import v3_transport_diagnostics_vm_only
 
     d1 = v3_transport_diagnostics_vm_only(op0, x_full=state_vecs[1])
     d2 = v3_transport_diagnostics_vm_only(op0, x_full=state_vecs[2])

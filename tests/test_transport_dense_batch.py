@@ -6,8 +6,8 @@ import jax.numpy as jnp
 import numpy as np
 from jax import config as jax_config
 
-import sfincs_jax.problems.transport_matrix.solve as dense_batch
-from sfincs_jax.problems.transport_matrix.solve import (
+import sfincs_jax.problems.transport_solve as dense_batch
+from sfincs_jax.problems.transport_solve import (
     TransportDenseBatchContext,
     solve_transport_dense_batch,
 )

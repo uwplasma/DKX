@@ -11,13 +11,13 @@ import jax
 import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.problems.transport_matrix.diagnostics import transport_matrix_size_from_rhs_mode
-from sfincs_jax.problems.transport_matrix.parallel.runtime import (
+from sfincs_jax.problems.transport_diagnostics import transport_matrix_size_from_rhs_mode
+from sfincs_jax.problems.transport_parallel_runtime import (
     audit_parallel_scaling_claim_scope,
     audit_transport_parallel_scaling_summary,
 )
-from sfincs_jax.problems.transport_matrix.parallel.runtime import partition_transport_rhs
-from sfincs_jax.problems.transport_matrix.solve import solve_v3_transport_matrix_linear_gmres
+from sfincs_jax.problems.transport_parallel_runtime import partition_transport_rhs
+from sfincs_jax.problems.transport_solve import solve_v3_transport_matrix_linear_gmres
 
 
 def _configure_backend_env(*, workers: int, backend: str) -> None:

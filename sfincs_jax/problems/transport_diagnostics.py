@@ -677,7 +677,7 @@ def radial_current_vm_psi_hat_observable_vector(
     pinned against Fortran-compatible coordinate conversions.
     """
 
-    from ...sensitivity import probe_linear_observable_vector  # noqa: PLC0415
+    from ..sensitivity import probe_linear_observable_vector  # noqa: PLC0415
 
     return probe_linear_observable_vector(
         lambda state: radial_current_vm_psi_hat_from_state(op, x_full=state),
@@ -703,7 +703,7 @@ def radial_current_vm_from_state(
         return value
     if psi_a_hat is None or a_hat is None or r_n is None:
         raise ValueError("psi_a_hat, a_hat, and r_n are required for rHat/rN radial-current conversion.")
-    from ...outputs.transport import conversion_factors_to_from_dpsi_hat  # noqa: PLC0415
+    from ..outputs.transport import conversion_factors_to_from_dpsi_hat  # noqa: PLC0415
 
     conv = conversion_factors_to_from_dpsi_hat(
         psi_a_hat=float(psi_a_hat),
@@ -728,7 +728,7 @@ def radial_current_vm_observable_vector(
 ) -> tuple[jnp.ndarray, float]:
     """Return ``(c, J0)`` for magnetic-drift radial current diagnostics."""
 
-    from ...sensitivity import probe_linear_observable_vector  # noqa: PLC0415
+    from ..sensitivity import probe_linear_observable_vector  # noqa: PLC0415
 
     return probe_linear_observable_vector(
         lambda state: radial_current_vm_from_state(

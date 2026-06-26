@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import jax.numpy as jnp
 
-from sfincs_jax.problems.transport_matrix.policies import (
+from sfincs_jax.problems.transport_policies import (
     TransportPreconditionerContext,
     TransportPreconditionerDispatchBuilders,
     TransportSparseJaxConfig,

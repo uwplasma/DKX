@@ -139,7 +139,7 @@ def _run_one(args: argparse.Namespace) -> int:
     os.environ.update(env)
 
     from sfincs_jax.namelist import read_sfincs_input
-    from sfincs_jax.problems.transport_matrix.solve import solve_v3_transport_matrix_linear_gmres
+    from sfincs_jax.problems.transport_solve import solve_v3_transport_matrix_linear_gmres
 
     rhs_values = _parse_csv_ints(args.which_rhs)
     messages: list[str] = []

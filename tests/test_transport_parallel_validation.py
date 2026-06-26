@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from sfincs_jax.problems.transport_matrix.parallel.runtime import (
+from sfincs_jax.problems.transport_parallel_runtime import (
     validate_complete_transport_worker_rhs_coverage,
     validate_distinct_transport_worker_rhs,
     validate_gpu_transport_worker_arrays,

@@ -55,7 +55,7 @@ API reference
 .. automodule:: sfincs_jax.operators.profile_system
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.diagnostics
+.. automodule:: sfincs_jax.problems.transport_diagnostics
    :members:
 
 Transport-matrix helpers are documented through their maintained domain module.
@@ -72,7 +72,7 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.problems.profile_solver_diagnostics
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.finalize
+.. automodule:: sfincs_jax.problems.transport_finalize
    :members:
 
 .. automodule:: sfincs_jax.solver
@@ -102,10 +102,10 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.tz_sparse
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.linear_system
+.. automodule:: sfincs_jax.problems.transport_linear_system
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.setup
+.. automodule:: sfincs_jax.problems.transport_setup
    :members:
 
 .. automodule:: sfincs_jax.solvers.explicit_sparse
@@ -208,16 +208,16 @@ research workflows.
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.policy
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.policies
+.. automodule:: sfincs_jax.problems.transport_policies
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.solve
+.. automodule:: sfincs_jax.problems.transport_solve
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.parallel.runtime
+.. automodule:: sfincs_jax.problems.transport_parallel_runtime
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.parallel.worker
+.. automodule:: sfincs_jax.problems.transport_parallel_worker
    :members:
 
 .. automodule:: sfincs_jax.outputs.transport

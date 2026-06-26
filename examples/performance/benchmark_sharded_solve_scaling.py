@@ -14,11 +14,11 @@ import jax
 import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.problems.transport_matrix.parallel.runtime import (
+from sfincs_jax.problems.transport_parallel_runtime import (
     audit_parallel_scaling_claim_scope,
     audit_sharded_solve_scaling_summary,
 )
-from sfincs_jax.problems.transport_matrix.parallel.runtime import (
+from sfincs_jax.problems.transport_parallel_runtime import (
     plan_compiled_sharded_operator_reuse,
     plan_sharded_solve_deterministic_output_gate,
     plan_single_case_sharded_solve,

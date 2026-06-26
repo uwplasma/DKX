@@ -12,7 +12,7 @@ from sfincs_jax.problems.profile_solver_diagnostics import (
     V3NewtonKrylovResult,
     v3_linear_solve_result_from_payload,
 )
-from sfincs_jax.problems.transport_matrix.finalize import (
+from sfincs_jax.problems.transport_finalize import (
     V3TransportMatrixSolveResult,
 )
 
@@ -20,7 +20,7 @@ from sfincs_jax.problems.transport_matrix.finalize import (
 def test_domain_result_contracts_are_importable_from_problem_owners() -> None:
     assert V3LinearSolveResult.__module__ == "sfincs_jax.problems.profile_solver_diagnostics"
     assert V3NewtonKrylovResult.__module__ == "sfincs_jax.problems.profile_solver_diagnostics"
-    assert V3TransportMatrixSolveResult.__module__ == "sfincs_jax.problems.transport_matrix.finalize"
+    assert V3TransportMatrixSolveResult.__module__ == "sfincs_jax.problems.transport_finalize"
 
 
 def test_v3_linear_solve_result_properties_and_pytree_metadata() -> None:

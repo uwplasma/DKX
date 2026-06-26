@@ -2004,7 +2004,7 @@ def write_sfincs_jax_output_h5(
 
         import jax.numpy as jnp
 
-        from ..problems.transport_matrix.diagnostics import (
+        from ..problems.transport_diagnostics import (
             f0_l0_v3_from_operator,
             v3_rhsmode1_output_fields_vm_only_batch_jit,
             v3_rhsmode1_output_fields_vm_only_phi1_batch_jit,
@@ -2941,7 +2941,7 @@ def write_sfincs_jax_output_h5(
         export_full_f = int(np.asarray(data.get("export_full_f", 0)).reshape(())) == 1
         export_delta_f = int(np.asarray(data.get("export_delta_f", 0)).reshape(())) == 1
         if export_full_f or export_delta_f:
-            from ..problems.transport_matrix.diagnostics import f0_l0_v3_from_operator  # noqa: PLC0415
+            from ..problems.transport_diagnostics import f0_l0_v3_from_operator  # noqa: PLC0415
 
             op_use = result.op
             f0_l0 = f0_l0_v3_from_operator(op_use)
@@ -3641,12 +3641,12 @@ def write_sfincs_jax_output_h5(
             import jax.numpy as jnp
 
             # Import lazily to keep geometry-only use-cases lightweight.
-            from ..problems.transport_matrix.diagnostics import (
+            from ..problems.transport_diagnostics import (
                 transport_matrix_size_from_rhs_mode,
                 v3_rhsmode1_output_fields_vm_only_jit,
                 v3_transport_output_fields_vm_only,
             )
-            from ..problems.transport_matrix.solve import solve_v3_transport_matrix_linear_gmres
+            from ..problems.transport_solve import solve_v3_transport_matrix_linear_gmres
 
             n_rhs = transport_matrix_size_from_rhs_mode(int(rhs_mode))
             n_species = int(np.asarray(nml.group("speciesParameters").get("ZS", [])).size)
@@ -3772,7 +3772,7 @@ def write_sfincs_jax_output_h5(
             export_full_f = int(np.asarray(data.get("export_full_f", 0)).reshape(())) == 1
             export_delta_f = int(np.asarray(data.get("export_delta_f", 0)).reshape(())) == 1
             if (export_full_f or export_delta_f) and result.state_vectors_by_rhs:
-                from ..problems.transport_matrix.diagnostics import f0_l0_v3_from_operator  # noqa: PLC0415
+                from ..problems.transport_diagnostics import f0_l0_v3_from_operator  # noqa: PLC0415
 
                 f0_l0 = f0_l0_v3_from_operator(result.op0)
                 delta_list: list[np.ndarray] = []

@@ -502,7 +502,7 @@
       "This lane is closed for the current release as a post-release cross-code target because shared-model normalizations must be pinned before claiming overlap"
     ],
     "source_code": [
-      "sfincs_jax/problems/transport_matrix/solve.py",
+      "sfincs_jax/problems/transport_solve.py",
       "sfincs_jax/v3_driver.py"
     ],
     "tests": [

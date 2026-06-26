@@ -280,7 +280,7 @@ construct a reduced system that contains only active degrees of freedom.
 **Implementation.**
 
 - Transport solves: ``transport_active_dof_indices`` in
-  ``sfincs_jax.problems.transport_matrix.linear_system``.
+  ``sfincs_jax.problems.transport_linear_system``.
 - RHSMode=1: similar logic for active DOFs to reduce matrix-free work.
 
 **Mathematics.**
@@ -953,7 +953,7 @@ by itself.
 
 The direct-active true-operator emitter is also now paired with a reusable
 symbolic block/coarse factor layer in
-``sfincs_jax.problems.transport_matrix.linear_system``. The layer separates symbolic block
+``sfincs_jax.problems.transport_linear_system``. The layer separates symbolic block
 ordering over active kinetic unknowns, numerical block inverse plus
 source/constraint Schur construction, and setup-time true-residual admission
 against the same active operator used by the residual gate. This mirrors the
@@ -1281,7 +1281,7 @@ Implementation:
   ``sfincs_jax.solvers.explicit_sparse.build_operator_from_matvec`` and
   ``factorize_host_sparse_operator``;
 - RHSMode=2/3 sparse-direct reuse:
-  ``sfincs_jax.problems.transport_matrix.solve.solve_v3_transport_matrix_linear_gmres``.
+  ``sfincs_jax.problems.transport_solve.solve_v3_transport_matrix_linear_gmres``.
 
 Controls:
 
@@ -1342,7 +1342,7 @@ Measured production-floor evidence:
 - RHSMode=2/3 transport preconditioner builders in
   ``sfincs_jax.solvers.preconditioners.transport_matrix``.
 - Transport preconditioner selection and gating in
-  ``sfincs_jax.problems.transport_matrix.policies``.
+  ``sfincs_jax.problems.transport_policies``.
 - Controlled by ``SFINCS_JAX_TRANSPORT_PRECOND`` (``auto``, ``sxblock``, ``collision``, etc.).
   ``auto`` picks the collision-diagonal preconditioner for the default BiCGStab transport
   solver and upgrades to species×x blocks for modest FP systems when GMRES is selected.
@@ -1936,7 +1936,7 @@ then compute diagnostics in one batched kernel.
    \mathrm{FSABFlow}_s \propto \int d\theta\,d\zeta\; \frac{B}{D}\,
    \sum_x w_x x^3 f_{s,L=1}.
 
-These are implemented in ``sfincs_jax.problems.transport_matrix.diagnostics``
+These are implemented in ``sfincs_jax.problems.transport_diagnostics``
 with strict-order reductions matching v3 when required.
 
 **Precompute constants + cache.**
@@ -1950,7 +1950,7 @@ and reused for all ``whichRHS`` solves.
 - ``v3_transport_diagnostics_vm_only_precompute`` and
   ``v3_transport_diagnostics_vm_only_batch_op0_precomputed``.
 - Cached by operator signature in
-  ``sfincs_jax.problems.transport_matrix.diagnostics`` to reuse
+  ``sfincs_jax.problems.transport_diagnostics`` to reuse
   geometry/species factors across repeated transport solves (default cache size: ``4``;
   override with ``SFINCS_JAX_TRANSPORT_DIAG_CACHE_MAX``).
 - For large transport solves, diagnostics can be processed in chunks to reduce peak
@@ -1983,7 +1983,7 @@ where :math:`U` contains recent solution vectors.
 **Implementation.**
 
 - ``SFINCS_JAX_TRANSPORT_RECYCLE_K`` in
-  ``sfincs_jax.problems.transport_matrix.solve``.
+  ``sfincs_jax.problems.transport_solve``.
 - ``SFINCS_JAX_STATE_IN``/``SFINCS_JAX_STATE_OUT`` (cross-run recycling).
 - ``SFINCS_JAX_SCAN_RECYCLE`` (auto-wires state files between scan points).
 - ``SFINCS_JAX_RHSMODE1_RECYCLE_K`` (RHSMode=1 scan reuse with least-squares deflation).
@@ -2002,7 +2002,7 @@ Fortran-like deterministic accumulation order when parity demands it.
 **Implementation.**
 
 - ``_weighted_sum_x_fortran`` and ``_weighted_sum_tz_fortran`` in
-  ``sfincs_jax.problems.transport_matrix.diagnostics``.
+  ``sfincs_jax.problems.transport_diagnostics``.
 - Strict order controlled by ``SFINCS_JAX_STRICT_SUM_ORDER``.
 
 This reduces Python overhead and improves performance, while still preserving
@@ -3096,7 +3096,7 @@ Key modules and functions referenced above:
 
 - **Diagnostics and flux formulas**:
 
-  - ``sfincs_jax/problems/transport_matrix/diagnostics.py``:
+  - ``sfincs_jax/problems/transport_diagnostics.py``:
     ``v3_transport_diagnostics_vm_only_precompute``,
     ``v3_transport_diagnostics_vm_only_batch_op0_precomputed``.
 

@@ -1220,7 +1220,7 @@ def dense_rhs1_vm_radial_current_linear_observable_system(
     from ..sensitivity import LinearObservableSystem  # noqa: PLC0415
     from ..solver import assemble_dense_matrix_from_matvec  # noqa: PLC0415
     from sfincs_jax.operators.profile_system import apply_v3_full_system_operator_cached, rhs_v3_full_system_jit  # noqa: PLC0415
-    from .transport_matrix.diagnostics import radial_current_vm_observable_vector  # noqa: PLC0415
+    from .transport_diagnostics import radial_current_vm_observable_vector  # noqa: PLC0415
 
     def assemble_matrix(operator: Any) -> Any:
         return assemble_dense_matrix_from_matvec(
@@ -1876,7 +1876,7 @@ def matrix_free_rhs1_vm_radial_current_linear_observable_system(
 
     from ..sensitivity import MatrixFreeLinearObservableSystem  # noqa: PLC0415
     from sfincs_jax.operators.profile_system import apply_v3_full_system_operator_cached, rhs_v3_full_system_jit  # noqa: PLC0415
-    from .transport_matrix.diagnostics import radial_current_vm_observable_vector  # noqa: PLC0415
+    from .transport_diagnostics import radial_current_vm_observable_vector  # noqa: PLC0415
 
     def apply_operator(operator: Any, state: Any) -> Any:
         vector = jnp.asarray(state, dtype=jnp.float64)

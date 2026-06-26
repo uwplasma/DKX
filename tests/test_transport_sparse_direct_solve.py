@@ -5,8 +5,8 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 import numpy as np
 
-import sfincs_jax.problems.transport_matrix.solve as sparse_direct
-from sfincs_jax.problems.transport_matrix.solve import (
+import sfincs_jax.problems.transport_solve as sparse_direct
+from sfincs_jax.problems.transport_solve import (
     TransportSparseDirectContext,
     transport_sparse_direct_context_from_env,
     transport_sparse_direct_pattern_for_solve,

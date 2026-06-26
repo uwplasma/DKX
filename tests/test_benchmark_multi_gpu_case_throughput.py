@@ -12,7 +12,7 @@ from examples.performance.benchmark_multi_gpu_case_throughput import (
     _case_run_once_command,
     _run_case_once,
 )
-from sfincs_jax.problems.transport_matrix.parallel.runtime import audit_multi_gpu_case_throughput_summary
+from sfincs_jax.problems.transport_parallel_runtime import audit_multi_gpu_case_throughput_summary
 
 
 def test_base_env_sets_gpu_benchmark_defaults(tmp_path: Path) -> None:

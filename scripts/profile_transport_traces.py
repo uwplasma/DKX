@@ -13,7 +13,7 @@ from jax import profiler as jax_profiler
 
 from sfincs_jax.io import localize_equilibrium_file_in_place
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.problems.transport_matrix.solve import solve_v3_transport_matrix_linear_gmres
+from sfincs_jax.problems.transport_solve import solve_v3_transport_matrix_linear_gmres
 
 
 def _prepare_input(input_path: Path) -> Path:

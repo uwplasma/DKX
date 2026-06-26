@@ -13,7 +13,7 @@ import numpy as np
 
 from sfincs_jax.diagnostics import u_hat_np
 from sfincs_jax.operators.profile_system import with_transport_rhs_settings
-from sfincs_jax.problems.transport_matrix.diagnostics import (
+from sfincs_jax.problems.transport_diagnostics import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
     v3_rhsmode1_output_fields_vm_only_jit,

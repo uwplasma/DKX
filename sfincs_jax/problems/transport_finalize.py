@@ -19,7 +19,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.operators.profile_system import V3FullSystemOperator
-from sfincs_jax.problems.transport_matrix.diagnostics import (
+from sfincs_jax.problems.transport_diagnostics import (
     v3_transport_diagnostics_vm_only_batch_jit,
     v3_transport_diagnostics_vm_only_batch_op0_jit,
     v3_transport_diagnostics_vm_only_batch_op0_precomputed_jit,

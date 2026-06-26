@@ -428,7 +428,7 @@ from sfincs_jax.solvers.explicit_sparse import (
     host_direct_solve_with_refinement as _host_direct_solve_with_refinement_impl,
     host_sparse_direct_solve_with_refinement as _host_sparse_direct_solve_with_refinement_impl,
 )
-from sfincs_jax.problems.transport_matrix.policies import (
+from sfincs_jax.problems.transport_policies import (
     TransportPreconditionerContext, TransportPreconditionerDispatchBuilders, TransportRuntimePolicy,
     TransportStrongPreconditionerCache, build_transport_preconditioner_from_kind,
     normalize_transport_preconditioner_kind, resolve_transport_precondition_side_for_kind,
@@ -441,31 +441,31 @@ from sfincs_jax.problems.transport_matrix.policies import (
     transport_sparse_direct_rescue_first as _transport_sparse_direct_rescue_first_impl,
     transport_tzfft_first_attempt_budget as _transport_tzfft_first_attempt_budget_impl,
 )
-from sfincs_jax.problems.transport_matrix.linear_system import (
+from sfincs_jax.problems.transport_linear_system import (
     build_transport_fp_direct_active_block_schur_preconditioner,
 )
-from sfincs_jax.problems.transport_matrix.linear_system import (
+from sfincs_jax.problems.transport_linear_system import (
     build_transport_fp_fortran_reduced_lu_preconditioner,
 )
-from sfincs_jax.problems.transport_matrix.setup import (
+from sfincs_jax.problems.transport_setup import (
     resolve_transport_maxiter_setup, resolve_transport_parallel_request, resolve_transport_state_setup,
     resolve_transport_which_rhs_setup,
 )
-from sfincs_jax.problems.transport_matrix.linear_system import (
+from sfincs_jax.problems.transport_linear_system import (
     resolve_transport_active_dense_setup, transport_active_dof_indices as _transport_active_dof_indices,
 )
-from sfincs_jax.problems.transport_matrix.finalize import (
+from sfincs_jax.problems.transport_finalize import (
     TransportConstraintNullspaceProjector, TransportRHSFinalizationContext, finalize_full_transport_rhs,
     finalize_reduced_transport_rhs,
 )
-from sfincs_jax.problems.transport_matrix.parallel.runtime import (
+from sfincs_jax.problems.transport_parallel_runtime import (
     transport_parallel_backend as _transport_parallel_backend,
     transport_parallel_gpu_worker_env as _transport_parallel_gpu_worker_env,
     transport_parallel_persistent_pool_enabled as _transport_parallel_persistent_pool_enabled,
     transport_parallel_start_method as _transport_parallel_start_method,
     transport_parallel_visible_gpu_ids as _transport_parallel_visible_gpu_ids,
 )
-from sfincs_jax.problems.transport_matrix.parallel.runtime import (
+from sfincs_jax.problems.transport_parallel_runtime import (
     TransportParallelSolveRuntime, get_transport_parallel_pool as _get_transport_parallel_pool,
     maybe_run_transport_parallel_solve,
     run_transport_parallel_gpu_subprocesses_with_policy as _run_transport_parallel_gpu_subprocesses,
@@ -489,10 +489,10 @@ from sfincs_jax.problems.profile_phi1_newton import advance_phi1_newton_iterate
 from sfincs_jax.solvers.diagnostics import (
     RHS1ProgressNotes, rhs1_large_progress_enabled,
 )
-from sfincs_jax.problems.transport_matrix.diagnostics import (
+from sfincs_jax.problems.transport_diagnostics import (
     _flux_functions_from_op, transport_matrix_size_from_rhs_mode,
 )
-from sfincs_jax.problems.transport_matrix.finalize import (
+from sfincs_jax.problems.transport_finalize import (
     compute_transport_postsolve_diagnostics,
 )
 from sfincs_jax.outputs.transport import TransportStreamingOutputAccumulator
@@ -564,7 +564,7 @@ from sfincs_jax.solvers.preconditioners.symbolic_sparse import (
     build_sparse_ilu_from_matvec as _build_sparse_ilu_from_matvec,
     factorize_sparse_matrix_csr_host as _factorize_sparse_matrix_csr_host,
 )
-from sfincs_jax.problems.transport_matrix.linear_system import (
+from sfincs_jax.problems.transport_linear_system import (
     _build_rhsmode23_direct_pmat_physics_coarse_basis, _try_build_rhsmode23_fp_direct_active_operator_bundle,
     _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle,
 )
@@ -582,7 +582,7 @@ from sfincs_jax.operators.profile_system import (
 from sfincs_jax.problems.profile_solver_diagnostics import (
     V3LinearSolveResult, V3NewtonKrylovResult, v3_linear_solve_result_from_payload,
 )
-from sfincs_jax.problems.transport_matrix.finalize import (
+from sfincs_jax.problems.transport_finalize import (
     V3TransportMatrixSolveResult,
 )
 from sfincs_jax.operators.profile_sparse_pattern import (
