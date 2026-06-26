@@ -288,6 +288,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   differentiable ambipolar override behavior, and `sfincs_jax.io` private-name
   forwarding/error semantics. The API/output-format suite reports `18 passed`
   in `0.37 s` and Ruff passes for the touched files.
+- A post-forty-eighth review-lock validation bundle passed `341` tests in
+  `93.48 s`, covering source layout, domain imports, examples/tutorials,
+  benchmark-doc claims, public API/facades, solver/Krylov helpers, CLI/output
+  paths, profile/transport solve wrappers, true-operator rescue, ambipolar
+  workflows, and sensitivity contracts. `ruff check sfincs_jax ...`,
+  `compileall -q sfincs_jax`, and `git diff --check` also passed.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
