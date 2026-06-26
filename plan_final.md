@@ -181,6 +181,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   lookup, nested-group rejection, unterminated-group rejection, and indexed
   multi-value rejection. These protect the parser used by every example and
   CLI run without touching production solve budgets.
+- The nineteenth post-audit coverage tranche added direct RHSMode=1
+  PAS/composite and preconditioner-dispatch tests for composition order,
+  environment-gated theta-zeta admission, zeta-dominated line selection,
+  x-block fallback selection, hybrid fallback behavior, Schwarz progress
+  messages, ADI sweep composition, named family routing, and default block
+  dimension forwarding. These protect automatic solver-policy behavior in the
+  extracted one-level solver modules without launching production solves.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
