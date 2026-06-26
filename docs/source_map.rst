@@ -1201,12 +1201,14 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/problems/transport_matrix/policies.py``
   (legacy alias: ``sfincs_jax/transport_policy.py``):
   pure transport backend, sparse-direct, host-GMRES, dtype, recycle, polish,
+  residual-abort threshold parsing and failure-message formatting,
   RHSMode=2/3 initial solve, active-DOF, dense fallback, low-memory output,
   streamed-diagnostic, state-vector retention, GMRES restart, per-``whichRHS``
   loop, preconditioner-kind normalization, auto-selection, DD/sparse-JAX env,
   and reduced/full preconditioner builder-dispatch policy. ``TransportRuntimePolicy``
   binds backend-sensitive decisions to the active JAX backend and host
-  sparse-factor dtype provider. The former ``preconditioner_dispatch.py`` and
+  sparse-factor dtype provider. The former ``handoff_policy.py``,
+  ``residual_quality.py``, ``preconditioner_dispatch.py``, and
   ``solve_policy.py`` relays have been deleted; tests import this owner
   directly.
 - ``sfincs_jax/problems/transport_matrix/setup.py``
@@ -1249,21 +1251,14 @@ the historical private driver name and test the focused module directly. This ke
   JAX formulas for RHSMode=1 output moments, RHSMode=2/3 transport diagnostics,
   transport-matrix assembly, strict Fortran-order reductions, and cached
   geometry/species diagnostic precomputes.
-- ``sfincs_jax/problems/transport_matrix/policies.py``:
-  dense/sparse/direct/tzfft runtime-admission policy, active transport routing,
-  shared transport retry residual metrics, better-candidate comparisons, and
-  RHSMode=3 polish threshold/restart/maxiter policy used by the reduced and
-  full transport solve branches. The former ``handoff_policy.py`` relay and
-  legacy ``transport_handoff_policy.py`` alias have been deleted; tests import
-  the policy owner directly.
-- ``sfincs_jax/problems/transport_matrix/residual_quality.py``
-  (legacy alias: ``sfincs_jax/transport_residual_quality.py``):
-  fast transport worker residual-abort threshold parsing and failure-message
-  formatting for absolute and RHS-normalized diagnostics.
-- ``sfincs_jax/problems/transport_matrix/dense_lu.py``
-  (legacy alias: ``sfincs_jax/transport_dense_lu.py``):
-  cached dense-LU solver and preconditioner construction used by bounded transport
-  dense fallback and dense-preconditioner paths.
+- ``sfincs_jax/problems/transport_matrix/solve.py``:
+  public RHSMode=2/3 transport solve orchestration, transport-specific Krylov
+  dispatch, dense-LU solver/preconditioner construction for bounded fallback
+  paths, host SciPy GMRES first-attempt/rescue solves, and optional small-system
+  SciPy Krylov-history diagnostics. The former ``dense_lu.py``,
+  ``host_gmres.py``, ``iteration_stats.py``, and stale ``linear_solve.py``
+  source-map entries have been absorbed here; focused tests import this owner
+  directly.
 - ``sfincs_jax/problems/transport_matrix/dense_batch.py``
   (legacy alias: ``sfincs_jax/transport_dense_batch.py``):
   batched dense RHSMode=2/3 transport solve helper. It owns all-RHS dense matrix
@@ -1276,22 +1271,6 @@ the historical private driver name and test the focused module directly. This ke
   transport. It owns symbolic active block ordering, bounded numerical block
   inverses, source/constraint Schur closure, and setup-time true-residual
   admission before any factor is eligible for production use.
-- ``sfincs_jax/problems/transport_matrix/host_gmres.py``
-  (legacy alias: ``sfincs_jax/transport_host_gmres.py``):
-  host SciPy GMRES first-attempt/rescue solve helper for explicit transport paths,
-  including PETSc-like preconditioned-residual acceptance for the relevant
-  near-singular transport systems.
-- ``sfincs_jax/problems/transport_matrix/iteration_stats.py``
-  (legacy alias: ``sfincs_jax/transport_iteration_stats.py``):
-  optional small-system SciPy Krylov history reruns used only for transport
-  ``ksp_iterations`` progress diagnostics. Diagnostic failures are reported but
-  never change the production solve result.
-- ``sfincs_jax/problems/transport_matrix/linear_solve.py``
-  (legacy alias: ``sfincs_jax/transport_linear_solve.py``):
-  transport RHSMode=2/3 Krylov dispatch, including the transport-specific
-  ``auto``/``default`` BiCGStab preference, implicit custom-solve routing,
-  JIT/non-JIT solver selection, restart-budget policy, and distributed-axis
-  residual-solve routing.
 - ``sfincs_jax/problems/transport_matrix/loop.py``
   (legacy alias: ``sfincs_jax/transport_loop_support.py``):
   loop-local RHSMode=2/3 support for cached full/reduced transport matvec

@@ -265,9 +265,6 @@ research workflows.
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.policy
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.dense_lu
-   :members:
-
 .. automodule:: sfincs_jax.problems.transport_matrix.dense_batch
    :members:
 
@@ -275,12 +272,6 @@ research workflows.
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.policies
-   :members:
-
-.. automodule:: sfincs_jax.problems.transport_matrix.host_gmres
-   :members:
-
-.. automodule:: sfincs_jax.problems.transport_matrix.iteration_stats
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.solve
@@ -296,9 +287,6 @@ research workflows.
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.parallel.worker
-   :members:
-
-.. automodule:: sfincs_jax.problems.transport_matrix.residual_quality
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.sparse_direct_solve
