@@ -65,9 +65,10 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   `tests/test_source_tree_consolidation.py`
   verifies that this README mentions every allowed root package and module.
 - `examples/tutorials/` is the first learning surface. It contains three
-  output-free notebooks plus a fast script that writes HDF5/NetCDF/NPZ output
-  and a diagnostics PDF. Existing topic folders remain as canonical runnable
-  workflows to avoid unnecessary file churn.
+  output-free workflow notebooks, a `00_start_here.ipynb` chooser notebook, and
+  a fast script that writes HDF5/NetCDF/NPZ output and a diagnostics PDF.
+  Existing topic folders remain as canonical runnable workflows to avoid
+  unnecessary file churn.
 - `examples/README.md` contains a task-based chooser, a learning path, and a
   complete folder map. `tests/test_examples_tree_contract.py` enforces the
   top-level folder set, README coverage, first-task entry points, generated-file
@@ -225,6 +226,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   dense-auto skip messages, sparse-direct environment overrides, and frozen
   nonlinear-history trimming. These protect CLI/output behavior for nonlinear
   Phi1 runs without launching Newton solves.
+- The twenty-fourth post-audit examples tranche added
+  `examples/tutorials/00_start_here.ipynb`, linked it from the examples
+  navigation README files, and added notebook contract tests for pedagogy,
+  required physics topics, output-free cells, and checked first-path assets.
+  This improves the user-facing learning path without adding generated outputs
+  or changing production examples.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
