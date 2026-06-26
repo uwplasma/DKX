@@ -17,6 +17,19 @@ references or optional local Fortran only when explicitly requested.
 | 5 | Compare outputs with frozen SFINCS Fortran v3 references | `parity/output_parity_vs_fortran_fixture.py` |
 | 6 | Profile CPU/GPU, JIT, output formats, and parallelism | `performance/benchmark_sharded_solve_scaling.py`, `performance/benchmark_output_formats.py` |
 
+### Choose By Task
+
+| If you want to... | Use this first | Then look at |
+| --- | --- | --- |
+| run one small case from the terminal | `tutorials/run_quick_output_and_plot.py` | `getting_started/write_sfincs_output_cli.py` |
+| call SFINCS-JAX from Python | `getting_started/write_sfincs_output_python.py` | `getting_started/write_and_plot_multiple_formats.py` |
+| understand transport matrices | `transport/transport_matrix_rhsmode2_and_rhsmode3.py` | `transport/transport_matrix_recycle_demo.py` |
+| differentiate a solve or residual | `tutorials/02_transport_and_autodiff.ipynb` | `autodiff/implicit_diff_through_gmres_solve_scheme5.py` |
+| compute bootstrap current and compare Redl | `tutorials/03_bootstrap_redl_and_optimization.ipynb` | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` |
+| add neoclassical objectives to optimization | `optimization/qa_nfp2_sfincs_jax_objectives.py` | `optimization/qa_nfp2_bootstrap_current_optimization.py` |
+| check CPU/GPU performance or output formats | `performance/benchmark_output_formats.py` | `performance/benchmark_sharded_solve_scaling.py` |
+| validate against frozen SFINCS Fortran v3 data | `parity/output_parity_vs_fortran_fixture.py` | `publication_figures/` and `sfincs_examples/` |
+
 ### Folder Map
 
 - `tutorials/`: notebook-led learning path plus one fast script that writes
@@ -43,6 +56,9 @@ references or optional local Fortran only when explicitly requested.
   point for new users.
 - `upstream/` and `additional_examples/`: curated reference inputs used by
   tests, docs, and validation lanes.
+- `data/`: small input data needed by public examples.
+- `utils/`: helper code shared by example scripts; users normally call the
+  topic scripts rather than importing this folder directly.
 
 ### Notebook Guides
 
