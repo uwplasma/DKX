@@ -168,7 +168,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          from sfincs_jax.data_fetch import external_data_dir, external_data_manifest
+          from sfincs_jax.validation.data_fetch import external_data_dir, external_data_manifest
 
           root = external_data_dir()
           manifest = external_data_manifest()
