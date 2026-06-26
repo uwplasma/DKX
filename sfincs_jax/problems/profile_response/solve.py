@@ -270,6 +270,7 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     XBlockPreflightGateContext,
     XBlockProbeCoarseStageContext,
     XBlockSideProbeStageContext,
+    XBlockSparsePCBranchContext,
     XBlockTwoLevelStageContext,
     apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
@@ -339,6 +340,7 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     run_fp_xblock_highx_residual_correction_stage,
     run_sparse_sxblock_rescue_stage,
     run_sparse_xblock_rescue_solve_stage,
+    run_xblock_sparse_pc_branch,
     run_xblock_krylov_solve_stage,
     build_sparse_host_or_ilu_factor,
     run_sparse_host_retry_candidate,
@@ -1475,845 +1477,103 @@ def solve_v3_full_system_linear_gmres(
         pc_maxiter = int(sparse_pc_entry_policy.pc_maxiter)
 
         if xblock_sparse_pc:
-            xblock_branch_setup = resolve_xblock_sparse_pc_branch_setup(
-                op=op,
-                preconditioner_species=int(preconditioner_species),
-                preconditioner_xi=int(preconditioner_xi),
-                active_size=int(active_size),
-                pc_restart=int(pc_restart),
-                pc_restart_env=str(pc_restart_env),
-                tokamak_fp_er_pc=bool(tokamak_fp_er_pc),
-                use_dkes=bool(use_dkes),
-                include_xdot_sparse_pc=bool(include_xdot_sparse_pc),
-                include_electric_field_xi_sparse_pc=bool(include_electric_field_xi_sparse_pc),
-                lower_fill_mode=_rhs1_xblock_policy.rhs1_xblock_lower_fill_mode,
-                species_decoupled_for_host_assembly=_rhsmode1_fp_xblock_species_decoupled_for_host_assembly,
-                assembled_host_allowed=_rhsmode1_fp_xblock_assembled_host_allowed,
-                krylov_method=_rhs1_xblock_policy.rhs1_xblock_krylov_method,
-                device_host_fallback_decision=_rhs1_xblock_policy.rhs1_xblock_device_host_fallback_decision,
-                resolve_xblock_policy=resolve_rhs1_xblock_sparse_pc_policy,
-                reuse_decision=_rhs1_xblock_policy.rhs1_xblock_qi_device_operator_reuse_decision,
-                env=os.environ,
-            )
-            xblock_drop_tol = float(xblock_branch_setup.xblock_drop_tol)
-            xblock_drop_rel = float(xblock_branch_setup.xblock_drop_rel)
-            xblock_ilu_drop_tol = float(xblock_branch_setup.xblock_ilu_drop_tol)
-            xblock_fill_factor = float(xblock_branch_setup.xblock_fill_factor)
-            xblock_lower_fill_mode = str(xblock_branch_setup.xblock_lower_fill_mode)
-            xblock_lower_fill_ignored_env = bool(xblock_branch_setup.xblock_lower_fill_ignored_env)
-            xblock_preconditioner_xi = int(xblock_branch_setup.xblock_preconditioner_xi)
-            force_assembled_host_fp = bool(xblock_branch_setup.force_assembled_host_fp)
-            xblock_assembled_host_fp = bool(xblock_branch_setup.xblock_assembled_host_fp)
-            xblock_krylov_env_requested = str(xblock_branch_setup.xblock_krylov_env_requested)
-            xblock_krylov_env = str(xblock_branch_setup.xblock_krylov_env)
-            xblock_krylov_requested = str(xblock_branch_setup.xblock_krylov_requested)
-            xblock_device_fgmres_requested = bool(xblock_branch_setup.xblock_device_fgmres_requested)
-            xblock_device_gmres_requested = bool(xblock_branch_setup.xblock_device_gmres_requested)
-            xblock_device_bicgstab_requested = bool(xblock_branch_setup.xblock_device_bicgstab_requested)
-            xblock_device_tfqmr_requested = bool(xblock_branch_setup.xblock_device_tfqmr_requested)
-            xblock_device_krylov_requested = bool(xblock_branch_setup.xblock_device_krylov_requested)
-            xblock_device_host_fallback_decision = xblock_branch_setup.xblock_device_host_fallback_decision
-            xblock_device_host_fallback_auto_disabled_by_qi_device = bool(
-                xblock_branch_setup.xblock_device_host_fallback_auto_disabled_by_qi_device
-            )
-            qi_device_preconditioner_requested_for_fallback = bool(
-                xblock_branch_setup.qi_device_preconditioner_requested_for_fallback
-            )
-            qi_device_matrix_free_requested_for_fallback = bool(
-                xblock_branch_setup.qi_device_matrix_free_requested_for_fallback
-            )
-            qi_device_use_in_krylov_requested_for_fallback = bool(
-                xblock_branch_setup.qi_device_use_in_krylov_requested_for_fallback
-            )
-            xblock_jax_factors = bool(xblock_branch_setup.xblock_jax_factors)
-            xblock_jax_factor_format = str(xblock_branch_setup.xblock_jax_factor_format)
-            xblock_jax_factor_apply = str(xblock_branch_setup.xblock_jax_factor_apply)
-            xblock_device_krylov_forced_jax_factors = bool(
-                xblock_branch_setup.xblock_device_krylov_forced_jax_factors
-            )
-            full_fp_3d_pc = bool(xblock_branch_setup.full_fp_3d_pc)
-            side_env = str(xblock_branch_setup.side_env)
-            precondition_side = str(xblock_branch_setup.precondition_side)
-            xblock_default_right_pc = bool(xblock_branch_setup.xblock_default_right_pc)
-            xblock_krylov_method = str(xblock_branch_setup.xblock_krylov_method)
-            xblock_device_fgmres_forced_right_pc = bool(
-                xblock_branch_setup.xblock_device_fgmres_forced_right_pc
-            )
-            pc_restart = int(xblock_branch_setup.pc_restart)
-            xblock_default_restart_capped = bool(xblock_branch_setup.xblock_default_restart_capped)
-            xblock_qi_device_operator_reuse_decision = xblock_branch_setup.xblock_qi_device_operator_reuse_decision
-            xblock_qi_device_operator_reuse_skip_factors = bool(
-                xblock_branch_setup.xblock_qi_device_operator_reuse_skip_factors
-            )
-            if emit is not None:
-                for level, message in xblock_branch_setup.messages:
-                    emit(int(level), str(message))
-            xblock_local_preconditioner = build_xblock_local_preconditioner(
-                skip_factors=bool(xblock_qi_device_operator_reuse_skip_factors),
-                elapsed_s=sparse_timer.elapsed_s,
-                build_preconditioner=_build_rhsmode1_xblock_tz_sparse_preconditioner,
-                op=op,
-                build_jax_factors=bool(xblock_jax_factors),
-                preconditioner_species=preconditioner_species,
-                preconditioner_xi=xblock_preconditioner_xi,
-                drop_tol=xblock_drop_tol,
-                drop_rel=xblock_drop_rel,
-                ilu_drop_tol=xblock_ilu_drop_tol,
-                fill_factor=xblock_fill_factor,
-                force_assembled_host_fp=bool(force_assembled_host_fp),
-                emit=emit,
-            )
-            precond_xblock = xblock_local_preconditioner.preconditioner
-            pc_factor_s = float(xblock_local_preconditioner.factor_s)
-            xblock_preconditioner_built = bool(xblock_local_preconditioner.built)
-            setup_s = sparse_timer.elapsed_s()
-            xblock_matvec_setup = build_xblock_krylov_matvec_setup(
-                op=op,
-                rhs=rhs,
-                xblock_use_active_dof=bool(xblock_use_active_dof),
-                active_idx=active_idx_jnp,
-                full_to_active=full_to_active_jnp,
-                reduce_full_with_indices=reduce_full_with_indices,
-                expand_reduced_with_map=expand_reduced_with_map,
-                operator_matvec=lambda x_full: apply_v3_full_system_operator_cached(op, x_full),
-                elapsed_s=sparse_timer.elapsed_s,
-                emit=emit,
-                env=os.environ,
-            )
-            progress_every = int(xblock_matvec_setup.progress_every)
-            mv_count = xblock_matvec_setup.mv_count
-            xblock_linear_size = int(xblock_matvec_setup.xblock_linear_size)
-            xblock_active_idx_np = xblock_matvec_setup.xblock_active_idx_np
-            xblock_rhs = xblock_matvec_setup.xblock_rhs
-            _xblock_reduce_full = xblock_matvec_setup.reduce_full
-            _xblock_expand_reduced = xblock_matvec_setup.expand_reduced
-            _mv_true_no_count = xblock_matvec_setup.matvec_no_count
-            _mv_true = xblock_matvec_setup.matvec
-            if emit is not None:
-                for level, message in xblock_matvec_setup.messages:
-                    emit(int(level), str(message))
-
-            _mv_xblock_krylov = _mv_true
-
-            def _precond_xblock_krylov_base(v: jnp.ndarray) -> jnp.ndarray:
-                if not xblock_use_active_dof:
-                    return precond_xblock(v)
-                z_full = precond_xblock(_xblock_expand_reduced(jnp.asarray(v, dtype=rhs.dtype)))
-                return _xblock_reduce_full(z_full)
-
-            assembled_operator_enabled = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR",
-                default=False,
-            )
-            assembled_operator = build_xblock_assembled_operator_if_requested(
-                enabled=bool(assembled_operator_enabled),
-                op=op,
-                rhs_dtype=rhs.dtype,
-                xblock_active_idx_np=xblock_active_idx_np,
-                sparse_pc_fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
-                xblock_krylov_method=str(xblock_krylov_method),
-                xblock_linear_size=int(xblock_linear_size),
-                true_matvec_no_count=_mv_true_no_count,
-                default_matvec=_mv_xblock_krylov,
-                mv_count=mv_count,
-                progress_every=int(progress_every),
-                elapsed_s=sparse_timer.elapsed_s,
-                emit=emit,
-                estimate_summary=estimate_v3_full_system_conservative_sparsity_summary,
-                full_pattern=v3_full_system_conservative_sparsity_pattern,
-                active_pattern=v3_full_system_conservative_sparsity_pattern_for_indices,
-                summarize_pattern=summarize_v3_sparse_pattern,
-                build_operator_from_pattern=build_operator_from_pattern,
-                device_csr_from_matrix=device_csr_from_matrix,
-                validate_device_csr_matvec=validate_device_csr_matvec,
-                finalize_metadata=finalize_xblock_assembled_operator_metadata,
-                backend=str(jax.default_backend()),
-                env=os.environ,
-            )
-            _mv_xblock_krylov = assembled_operator.matvec
-            assembled_operator_built = bool(assembled_operator.built)
-            assembled_operator_device_resident = bool(assembled_operator.device_resident)
-            assembled_operator_metadata = dict(assembled_operator.metadata)
-            assembled_device_operator = assembled_operator.device_operator
-            pc_factor_s += float(assembled_operator.pc_factor_increment_s)
-            xblock_row_equilibration_enabled = bool(assembled_operator.row_enabled)
-            xblock_row_equilibration_built = bool(assembled_operator.row_built)
-            xblock_row_equilibration_metadata = dict(assembled_operator.row_metadata)
-            xblock_row_scale_jnp = assembled_operator.row_scale
-            xblock_inv_row_scale_jnp = assembled_operator.inv_row_scale
-            xblock_col_equilibration_enabled = bool(assembled_operator.col_enabled)
-            xblock_col_equilibration_built = bool(assembled_operator.col_built)
-            xblock_col_equilibration_metadata = dict(assembled_operator.col_metadata)
-            xblock_col_scale_jnp = assembled_operator.col_scale
-            xblock_inv_col_scale_jnp = assembled_operator.inv_col_scale
-
-            precond_xblock_krylov = _precond_xblock_krylov_base
-            moment_schur_policy = resolve_xblock_moment_schur_policy_setup(
-                op=op,
-                xblock_krylov_method=str(xblock_krylov_method),
-                xblock_jax_factors=bool(xblock_jax_factors),
-                xblock_jax_factor_format=str(xblock_jax_factor_format),
-                precondition_side=str(precondition_side),
-                env=os.environ,
-            )
-            moment_schur_default_candidate = bool(moment_schur_policy.default_candidate)
-            moment_schur_default_blocked_by_compact_factors = bool(
-                moment_schur_policy.default_blocked_by_compact_factors
-            )
-            moment_schur_enabled = bool(moment_schur_policy.enabled)
-            moment_schur_stage = apply_xblock_moment_schur_stage(
-                context=XBlockMomentSchurStageContext(
-                    op=op,
-                    base_preconditioner=precond_xblock_krylov,
-                    reduce_full=_xblock_reduce_full if xblock_use_active_dof else None,
-                    expand_reduced=_xblock_expand_reduced if xblock_use_active_dof else None,
-                    policy=moment_schur_policy,
-                    precondition_side=str(precondition_side),
-                    rhs=xblock_rhs,
-                    matvec_no_count=_mv_true_no_count,
-                    elapsed_s=sparse_timer.elapsed_s,
-                    emit=emit,
-                    builder=_build_rhs1_xblock_constraint1_moment_schur_preconditioner,
-                )
-            )
-            precond_xblock_krylov = moment_schur_stage.preconditioner
-            moment_schur_built = bool(moment_schur_stage.built)
-            moment_schur_used = bool(moment_schur_stage.used)
-            moment_schur_reason = moment_schur_stage.reason
-            moment_schur_probe_residual_before = moment_schur_stage.probe_residual_before
-            moment_schur_probe_residual_after = moment_schur_stage.probe_residual_after
-            moment_schur_probe_improvement_ratio = moment_schur_stage.probe_improvement_ratio
-            moment_schur_metadata = moment_schur_stage.metadata
-            moment_schur_stats = moment_schur_stage.stats
-            pc_factor_s += float(moment_schur_stage.setup_s)
-
-            two_level_policy = resolve_xblock_two_level_policy_setup(
-                precondition_side=str(precondition_side),
-                env=os.environ,
-            )
-            two_level_enabled = bool(two_level_policy.enabled)
-            two_level_stage = apply_xblock_two_level_stage(
-                context=XBlockTwoLevelStageContext(
-                    op=op,
-                    rhs=rhs,
-                    matvec=_mv_xblock_krylov,
-                    base_preconditioner=precond_xblock_krylov,
-                    direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
-                    expected_size=int(xblock_linear_size),
-                    policy=two_level_policy,
-                    elapsed_s=sparse_timer.elapsed_s,
-                    emit=emit,
-                )
-            )
-            precond_xblock_krylov = two_level_stage.preconditioner
-            two_level_built = bool(two_level_stage.built)
-            two_level_metadata = two_level_stage.metadata
-            two_level_stats = two_level_stage.stats
-            pc_factor_s += float(two_level_stage.setup_s)
-
-            global_coupling_policy = resolve_xblock_global_coupling_policy_setup(
-                precondition_side=str(precondition_side),
-                xblock_krylov_method=str(xblock_krylov_method),
-                env=os.environ,
-            )
-            global_coupling_enabled = bool(global_coupling_policy.enabled)
-            global_coupling_stage = apply_xblock_global_coupling_stage(
-                context=XBlockGlobalCouplingStageContext(
-                    op=op,
-                    rhs=rhs,
-                    matvec=_mv_xblock_krylov,
-                    base_preconditioner=precond_xblock_krylov,
-                    direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
-                    expected_size=int(xblock_linear_size),
-                    policy=global_coupling_policy,
-                    elapsed_s=sparse_timer.elapsed_s,
-                    emit=emit,
-                )
-            )
-            precond_xblock_krylov = global_coupling_stage.preconditioner
-            global_coupling_built = bool(global_coupling_stage.built)
-            global_coupling_metadata = global_coupling_stage.metadata
-            global_coupling_stats = global_coupling_stage.stats
-            pc_factor_s += float(global_coupling_stage.setup_s)
-
-            setup_s = sparse_timer.elapsed_s()
-            x0_setup = prepare_xblock_initial_guess(
-                x0=x0,
-                xblock_rhs=xblock_rhs,
-                full_rhs=rhs,
-                xblock_use_active_dof=bool(xblock_use_active_dof),
-                reduce_full=_xblock_reduce_full,
-            )
-            x0_full = x0_setup.x0_full
-            for level, message in x0_setup.messages:
-                if emit is not None:
-                    emit(level, message)
-            xblock_initial_seed_used = False
-            xblock_initial_seed_residual_norm: float | None = None
-            xblock_initial_seed_residual_ratio: float | None = None
-            seed_policy = resolve_xblock_seed_policy_setup(
-                moment_schur_used=bool(moment_schur_used),
-                env=os.environ,
-            )
-            seed_enabled = bool(seed_policy.initial_seed_enabled)
-            if x0_full is None and seed_enabled:
-                try:
-                    seed_vec = jnp.asarray(precond_xblock_krylov(xblock_rhs), dtype=jnp.float64)
-                    if seed_vec.shape == xblock_rhs.shape and bool(jnp.all(jnp.isfinite(seed_vec))):
-                        seed_residual = xblock_rhs - _mv_true(seed_vec)
-                        seed_residual_norm = rhs1_l2_norm_float(seed_residual)
-                        rhs_norm_float = rhs1_l2_norm_float(xblock_rhs)
-                        xblock_initial_seed_residual_norm = float(seed_residual_norm)
-                        xblock_initial_seed_residual_ratio = rhs1_safe_ratio(
-                            seed_residual_norm,
-                            rhs_norm_float,
-                        )
-                        if np.isfinite(seed_residual_norm) and seed_residual_norm < rhs_norm_float:
-                            x0_full = seed_vec
-                            xblock_initial_seed_used = True
-                            if emit is not None:
-                                emit(
-                                    0,
-                                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                    f"initial x-block seed residual={seed_residual_norm:.6e} "
-                                    f"rhs_norm={rhs_norm_float:.6e}",
-                                )
-                        elif emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                f"initial x-block seed rejected residual={seed_residual_norm:.6e} "
-                                f"rhs_norm={rhs_norm_float:.6e}",
-                            )
-                except Exception as exc:  # noqa: BLE001
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"initial x-block seed failed ({type(exc).__name__}: {exc})",
-                        )
-
-            xblock_rhs_norm = rhs1_l2_norm_float(xblock_rhs)
-            target_xblock = rhs1_residual_target(
-                atol=float(atol),
-                tol=float(tol),
-                rhs_norm=float(xblock_rhs_norm),
-            )
-            moment_schur_seed_enabled = bool(seed_policy.moment_schur_seed_enabled)
-            moment_schur_seed_used = False
-            moment_schur_seed_residual_norm: float | None = None
-            moment_schur_seed_residual_ratio: float | None = None
-            if moment_schur_seed_enabled and moment_schur_built:
-                try:
-                    seed_vec = jnp.asarray(precond_xblock_krylov(xblock_rhs), dtype=jnp.float64)
-                    if seed_vec.shape == xblock_rhs.shape and bool(jnp.all(jnp.isfinite(seed_vec))):
-                        seed_residual = xblock_rhs - jnp.asarray(_mv_true_no_count(seed_vec), dtype=jnp.float64)
-                        seed_residual_norm = rhs1_l2_norm_float(seed_residual)
-                        moment_schur_seed_residual_norm = float(seed_residual_norm)
-                        moment_schur_seed_residual_ratio = rhs1_safe_ratio(
-                            seed_residual_norm,
-                            target_xblock,
-                        )
-                        incumbent_norm = float(xblock_rhs_norm)
-                        if x0_full is not None:
-                            incumbent_residual = xblock_rhs - jnp.asarray(
-                                _mv_true_no_count(jnp.asarray(x0_full, dtype=jnp.float64)),
-                                dtype=jnp.float64,
-                            )
-                            incumbent_norm = rhs1_l2_norm_float(incumbent_residual)
-                        if np.isfinite(seed_residual_norm) and float(seed_residual_norm) < float(incumbent_norm):
-                            x0_full = seed_vec
-                            moment_schur_seed_used = True
-                            if emit is not None:
-                                emit(
-                                    0,
-                                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                    f"constraint1 moment-Schur seed residual={seed_residual_norm:.6e} "
-                                    f"rhs_norm={float(xblock_rhs_norm):.6e}",
-                                )
-                        elif emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                f"constraint1 moment-Schur seed rejected residual={seed_residual_norm:.6e} "
-                                f"incumbent={float(incumbent_norm):.6e}",
-                            )
-                except Exception as exc:  # noqa: BLE001
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"constraint1 moment-Schur seed failed ({type(exc).__name__}: {exc})",
-                        )
-            qi_pipeline = run_xblock_qi_preconditioner_pipeline(
-                build_xblock_qi_stage_pipeline_context(
-                    op=op,
-                    rhs=rhs,
-                    x0_full=x0_full,
-                    xblock_rhs=xblock_rhs,
-                    xblock_rhs_norm=float(xblock_rhs_norm),
-                    base_preconditioner=precond_xblock_krylov,
-                    matvec=_mv_xblock_krylov,
-                    true_matvec_no_count=_mv_true_no_count,
-                    direction_projector=(
-                        _xblock_reduce_full if xblock_use_active_dof else None
+            return run_xblock_sparse_pc_branch(
+                XBlockSparsePCBranchContext(
+                    _apply_device_subspace_residual_equation_correction=(
+                        _apply_device_subspace_residual_equation_correction
                     ),
-                    active_dof=bool(xblock_use_active_dof),
-                    linear_size=int(xblock_linear_size),
-                    host_fallback_used=bool(xblock_device_host_fallback_decision.used),
-                    precondition_side=str(precondition_side),
-                    assembled_device_operator=assembled_device_operator,
-                    assembled_operator_metadata=assembled_operator_metadata,
-                    assembled_operator_enabled=bool(assembled_operator_enabled),
-                    assembled_operator_built=bool(assembled_operator_built),
-                    assembled_operator_device_resident=bool(
-                        assembled_operator_device_resident
+                    _apply_preconditioned_minres_correction=(
+                        _apply_preconditioned_minres_correction
                     ),
-                    assembled_operator_device_error=assembled_operator_metadata.get(
-                        "device_error"
+                    _apply_subspace_minres_correction=_apply_subspace_minres_correction,
+                    _rhs1_xblock_post_coarse_directions=(
+                        _rhs1_xblock_post_coarse_directions
                     ),
-                    elapsed_s=sparse_timer.elapsed_s,
+                    _build_rhs1_xblock_constraint1_moment_schur_preconditioner=(
+                        _build_rhs1_xblock_constraint1_moment_schur_preconditioner
+                    ),
+                    _build_rhsmode1_xblock_tz_sparse_preconditioner=(
+                        _build_rhsmode1_xblock_tz_sparse_preconditioner
+                    ),
+                    _read_rhs1_post_solve_correction_policy=(
+                        _read_rhs1_post_solve_correction_policy
+                    ),
+                    _read_rhs1_probe_coarse_policy=_read_rhs1_probe_coarse_policy,
+                    _rhs1_bool_env=_rhs1_bool_env,
+                    _rhs1_float_env=_rhs1_float_env,
+                    _rhs1_xblock_fallback_initial_guess=(
+                        _rhs1_xblock_fallback_initial_guess
+                    ),
+                    _rhs1_xblock_policy=_rhs1_xblock_policy,
+                    _rhsmode1_fp_xblock_assembled_host_allowed=(
+                        _rhsmode1_fp_xblock_assembled_host_allowed
+                    ),
+                    _rhsmode1_fp_xblock_species_decoupled_for_host_assembly=(
+                        _rhsmode1_fp_xblock_species_decoupled_for_host_assembly
+                    ),
+                    active_idx_jnp=active_idx_jnp,
+                    active_size=active_size,
+                    apply_v3_full_system_operator_cached=(
+                        apply_v3_full_system_operator_cached
+                    ),
+                    atol=atol,
+                    bicgstab_solve_with_history_scipy=bicgstab_solve_with_history_scipy,
+                    bicgstab_solve_with_residual=bicgstab_solve_with_residual,
+                    build_operator_from_pattern=build_operator_from_pattern,
+                    device_csr_from_matrix=device_csr_from_matrix,
                     emit=emit,
-                    env=os.environ,
-                    reduce_full=_xblock_reduce_full,
-                )
-            )
-            precond_xblock_krylov = qi_pipeline.preconditioner
-            x0_full = qi_pipeline.x0_full
-            qi_device_state_for_augmented_krylov = (
-                qi_pipeline.qi_device_state_for_augmented_krylov
-            )
-            qi_device_augmented_seed_basis_for_krylov = (
-                qi_pipeline.qi_device_augmented_seed_basis_for_krylov
-            )
-            qi_device_augmented_seed_action_for_krylov = (
-                qi_pipeline.qi_device_augmented_seed_action_for_krylov
-            )
-            qi_device_augmented_seed_available = (
-                qi_pipeline.qi_device_augmented_seed_available
-            )
-            qi_device_augmented_seed_used = qi_pipeline.qi_device_augmented_seed_used
-            qi_device_augmented_seed_rank = qi_pipeline.qi_device_augmented_seed_rank
-            qi_device_preconditioner_metadata = (
-                qi_pipeline.qi_device_preconditioner_metadata
-            )
-            pc_factor_s += float(qi_pipeline.pc_factor_s)
-            xblock_side_probe_controls = _rhs1_xblock_policy.rhs1_xblock_side_probe_controls_from_env(
-                env=os.environ,
-                explicit_side_env_value=side_env,
-                full_fp_3d_pc=bool(full_fp_3d_pc),
-                active_size=int(active_size),
-                krylov_method=str(xblock_krylov_method),
-                precondition_side=str(precondition_side),
-                pc_restart=int(pc_restart),
-                pc_maxiter=int(pc_maxiter),
-                backend=str(jax.default_backend()),
-                krylov_env_value=xblock_krylov_env,
-                device_host_fallback_used=bool(xblock_device_host_fallback_decision.used),
-            )
-            xblock_side_probe_stage = apply_xblock_side_probe_stage(
-                XBlockSideProbeStageContext(
-                    controls=xblock_side_probe_controls,
-                    precondition_side=str(precondition_side),
-                    krylov_method=str(xblock_krylov_method),
+                    estimate_v3_full_system_conservative_sparsity_summary=(
+                        estimate_v3_full_system_conservative_sparsity_summary
+                    ),
+                    expand_reduced_with_map=expand_reduced_with_map,
+                    fgmres_cycle_jit_solve_with_residual=(
+                        fgmres_cycle_jit_solve_with_residual
+                    ),
+                    fgmres_solve_with_residual=fgmres_solve_with_residual,
+                    fgmres_solve_with_residual_jit=fgmres_solve_with_residual_jit,
+                    full_to_active_jnp=full_to_active_jnp,
+                    gcrotmk_solve_with_history_scipy=gcrotmk_solve_with_history_scipy,
+                    gmres_solve_with_history_scipy=gmres_solve_with_history_scipy,
+                    include_electric_field_xi_sparse_pc=(
+                        include_electric_field_xi_sparse_pc
+                    ),
+                    include_xdot_sparse_pc=include_xdot_sparse_pc,
+                    lgmres_solve_with_history_scipy=lgmres_solve_with_history_scipy,
+                    op=op,
                     pc_maxiter=pc_maxiter,
-                    side_env=str(side_env),
-                    global_coupling_built=bool(global_coupling_built),
-                    matvec=_mv_xblock_krylov,
-                    true_matvec_no_count=_mv_true_no_count,
-                    rhs=xblock_rhs,
-                    rhs_norm=float(xblock_rhs_norm),
-                    target=float(target_xblock),
-                    preconditioner=precond_xblock_krylov,
-                    x0=x0_full,
-                    tol=float(tol),
-                    atol=float(atol),
-                    elapsed_s=sparse_timer.elapsed_s,
-                    matvec_count=lambda: int(mv_count),
-                    emit=emit,
-                    gmres_solver=gmres_solve_with_history_scipy,
-                )
-            )
-            x0_full = xblock_side_probe_stage.x0
-            precondition_side = xblock_side_probe_stage.precondition_side
-            xblock_krylov_method = xblock_side_probe_stage.krylov_method
-            pc_maxiter = xblock_side_probe_stage.pc_maxiter
-            xblock_side_probe_enabled = bool(xblock_side_probe_stage.enabled)
-            xblock_side_probe_used = bool(xblock_side_probe_stage.used)
-            xblock_side_probe_switched = bool(xblock_side_probe_stage.switched)
-            xblock_side_probe_initial_side = xblock_side_probe_stage.initial_side
-            xblock_side_probe_selected_side = xblock_side_probe_stage.selected_side
-            xblock_side_probe_initial_method = xblock_side_probe_stage.initial_method
-            xblock_side_probe_selected_method = xblock_side_probe_stage.selected_method
-            xblock_side_probe_lgmres_rescue = bool(xblock_side_probe_stage.lgmres_rescue)
-            xblock_lgmres_rescue_maxiter_capped = bool(
-                xblock_side_probe_stage.lgmres_rescue_maxiter_capped
-            )
-            xblock_lgmres_rescue_outer_k = xblock_side_probe_stage.lgmres_rescue_outer_k
-            xblock_side_probe_residual_norm = xblock_side_probe_stage.residual_norm
-            xblock_side_probe_residual_ratio = xblock_side_probe_stage.residual_ratio
-            xblock_side_probe_iterations = int(xblock_side_probe_stage.iterations)
-            xblock_side_probe_matvecs = int(xblock_side_probe_stage.matvecs)
-            xblock_side_probe_s = float(xblock_side_probe_stage.elapsed_s)
-            xblock_side_probe_switch_suppressed_by_global_coupling = bool(
-                xblock_side_probe_stage.switch_suppressed_by_global_coupling
-            )
-            xblock_side_probe_switch_suppressed_by_explicit_side = bool(
-                xblock_side_probe_stage.switch_suppressed_by_explicit_side
-            )
-            xblock_side_probe_physical_seed_preserved_after_switch = bool(
-                xblock_side_probe_stage.physical_seed_preserved_after_switch
-            )
-            xblock_side_probe_seed_used = bool(xblock_side_probe_stage.seed_used)
-            xblock_side_probe_seed_residual_norm = (
-                xblock_side_probe_stage.seed_residual_norm
-            )
-
-            if precondition_side != "none":
-                if xblock_use_active_dof:
-
-                    def _coarse_preconditioner_for_basis(v_full: jnp.ndarray) -> jnp.ndarray:
-                        reduced = _xblock_reduce_full(jnp.asarray(v_full, dtype=jnp.float64))
-                        return _xblock_expand_reduced(precond_xblock_krylov(reduced))
-
-                else:
-                    _coarse_preconditioner_for_basis = precond_xblock_krylov
-            else:
-
-                def _coarse_preconditioner_for_basis(v_full: jnp.ndarray) -> jnp.ndarray:
-                    return jnp.asarray(v_full, dtype=jnp.float64)
-
-            def _xblock_coarse_direction_builder(
-                residual_vec: jnp.ndarray,
-                *,
-                include_raw: bool,
-                fsavg_lmax: int,
-                angular_lmax: int,
-                max_extra_units: int,
-                max_directions: int,
-                include_angular_residual: bool,
-            ) -> tuple[tuple[str, jnp.ndarray], ...]:
-                residual_for_basis = (
-                    _xblock_expand_reduced(jnp.asarray(residual_vec, dtype=jnp.float64))
-                    if xblock_use_active_dof
-                    else jnp.asarray(residual_vec, dtype=jnp.float64)
-                )
-                return _rhs1_xblock_post_coarse_directions(
-                    op=op,
-                    residual=residual_for_basis,
-                    preconditioner=_coarse_preconditioner_for_basis,
-                    direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
-                    expected_size=int(xblock_linear_size),
-                    include_raw=bool(include_raw),
-                    fsavg_lmax=int(fsavg_lmax),
-                    angular_lmax=int(angular_lmax),
-                    max_extra_units=int(max_extra_units),
-                    max_directions=int(max_directions),
-                    include_angular_residual=bool(include_angular_residual),
-                )
-
-            probe_coarse_policy = _read_rhs1_probe_coarse_policy()
-            probe_coarse_stage = apply_xblock_probe_coarse_stage(
-                XBlockProbeCoarseStageContext(
-                    policy=probe_coarse_policy,
-                    rhs=xblock_rhs,
-                    x0=x0_full,
-                    matvec=_mv_true,
-                    target=float(target_xblock),
-                    direction_builder=_xblock_coarse_direction_builder,
-                    correction=_apply_subspace_minres_correction,
-                    elapsed_s=sparse_timer.elapsed_s,
-                    emit=emit,
-                )
-            )
-            x0_full = probe_coarse_stage.x0
-            probe_coarse_steps_requested = int(probe_coarse_stage.steps_requested)
-            probe_coarse_max_directions = int(probe_coarse_stage.max_directions)
-            probe_coarse_max_extra_units = int(probe_coarse_stage.max_extra_units)
-            probe_coarse_fsavg_lmax = int(probe_coarse_stage.fsavg_lmax)
-            probe_coarse_angular_lmax = int(probe_coarse_stage.angular_lmax)
-            probe_coarse_include_angular_residual = bool(
-                probe_coarse_stage.include_angular_residual
-            )
-            probe_coarse_include_raw = bool(probe_coarse_stage.include_raw)
-            probe_coarse_alpha_clip = float(probe_coarse_stage.alpha_clip)
-            probe_coarse_rcond = float(probe_coarse_stage.rcond)
-            probe_coarse_min_improvement = float(probe_coarse_stage.min_improvement)
-            probe_coarse_s = float(probe_coarse_stage.elapsed_s)
-            probe_coarse_history = probe_coarse_stage.history
-            probe_coarse_direction_counts = probe_coarse_stage.direction_counts
-            probe_coarse_direction_names = probe_coarse_stage.direction_names
-            probe_coarse_residual_before = probe_coarse_stage.residual_before
-            probe_coarse_residual_after = probe_coarse_stage.residual_after
-            probe_coarse_seed_initialized = bool(probe_coarse_stage.seed_initialized)
-
-            preflight_min_improvement = _rhs1_float_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PREFLIGHT_MIN_IMPROVEMENT",
-                default=0.0,
-                minimum=0.0,
-            )
-            preflight_required = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PREFLIGHT_REQUIRED",
-                default=False,
-            )
-            preflight_gate = evaluate_xblock_preflight_gate(
-                XBlockPreflightGateContext(
-                    min_improvement=float(preflight_min_improvement),
-                    required=bool(preflight_required),
-                    rhs=xblock_rhs,
-                    rhs_norm=float(xblock_rhs_norm),
-                    x0=x0_full,
-                    matvec=_mv_true_no_count,
-                    target=float(target_xblock),
-                    emit=emit,
-                )
-            )
-            preflight_residual_norm = preflight_gate.residual_norm
-            preflight_improvement = preflight_gate.improvement
-            preflight_passed = preflight_gate.passed
-
-            xblock_krylov_controls = resolve_xblock_krylov_control_setup(
-                XBlockKrylovControlSetupContext(
-                    env=os.environ,
-                    krylov_method=str(xblock_krylov_method),
-                    pc_restart=int(pc_restart),
-                    pc_maxiter=pc_maxiter,
-                    precondition_side=str(precondition_side),
-                    emit=emit,
-                )
-            )
-            fgmres_block_between_cycles = bool(
-                xblock_krylov_controls.fgmres_block_between_cycles
-            )
-            tfqmr_replacement_interval = int(
-                xblock_krylov_controls.tfqmr_replacement_interval
-            )
-            xblock_device_fgmres_jit = bool(
-                xblock_krylov_controls.device_fgmres_jit
-            )
-            xblock_device_fgmres_jit_mode = (
-                xblock_krylov_controls.device_fgmres_jit_mode
-            )
-            xblock_device_fgmres_jit_outer_k = int(
-                xblock_krylov_controls.device_fgmres_jit_outer_k
-            )
-            qi_device_augmented_krylov_requested = bool(
-                xblock_krylov_controls.qi_device_augmented_krylov_requested
-            )
-            qi_device_augmented_krylov_mode = (
-                xblock_krylov_controls.qi_device_augmented_krylov_mode
-            )
-            solve_matvec = _mv_xblock_krylov
-            solve_rhs = xblock_rhs
-            solve_preconditioner = precond_xblock_krylov if precondition_side != "none" else None
-            solve_x0 = x0_full
-            solve_solution_to_physical = lambda v: jnp.asarray(v, dtype=jnp.float64)
-            solve_space = prepare_xblock_krylov_solve_space(
-                XBlockKrylovSolveSpaceContext(
-                    matvec=solve_matvec,
-                    rhs=solve_rhs,
-                    preconditioner=solve_preconditioner,
-                    x0=solve_x0,
-                    precondition_side=str(precondition_side),
-                    row_equilibration_built=bool(xblock_row_equilibration_built),
-                    col_equilibration_built=bool(xblock_col_equilibration_built),
-                    row_scale=xblock_row_scale_jnp,
-                    inv_row_scale=xblock_inv_row_scale_jnp,
-                    col_scale=xblock_col_scale_jnp,
-                    inv_col_scale=xblock_inv_col_scale_jnp,
-                )
-            )
-            solve_matvec = solve_space.matvec
-            solve_rhs = solve_space.rhs
-            solve_preconditioner = solve_space.preconditioner
-            solve_x0 = solve_space.x0
-            solve_solution_to_physical = solve_space.solution_to_physical
-            if emit is not None and solve_space.transform_label is not None:
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                    f"using {solve_space.transform_label}-equilibrated assembled operator for Krylov solve",
-                )
-            augmentation_basis_for_solve = None
-            operator_on_augmentation_for_solve = None
-            augmented_krylov_stage = apply_xblock_augmented_krylov_stage(
-                XBlockAugmentedKrylovStageContext(
-                    requested=bool(qi_device_augmented_krylov_requested),
-                    krylov_method=str(xblock_krylov_method),
-                    qi_device_state=qi_device_state_for_augmented_krylov,
-                    seed_available=bool(qi_device_augmented_seed_available),
-                    seed_rank=int(qi_device_augmented_seed_rank),
-                    seed_basis=qi_device_augmented_seed_basis_for_krylov,
-                    seed_operator_on_basis=qi_device_augmented_seed_action_for_krylov,
-                    seed_used=bool(qi_device_augmented_seed_used),
-                    row_equilibration_built=bool(xblock_row_equilibration_built),
-                    col_equilibration_built=bool(xblock_col_equilibration_built),
-                    row_scale=xblock_row_scale_jnp,
-                    inv_col_scale=xblock_inv_col_scale_jnp,
-                    precondition_side=str(precondition_side),
-                    solve_preconditioner=solve_preconditioner,
-                    mode=str(qi_device_augmented_krylov_mode),
-                    metadata=qi_device_preconditioner_metadata,
-                    emit=emit,
-                    basis_builder=prepare_xblock_augmented_krylov_basis,
-                )
-            )
-            augmentation_basis_for_solve = augmented_krylov_stage.basis
-            operator_on_augmentation_for_solve = (
-                augmented_krylov_stage.operator_on_basis
-            )
-            qi_device_augmented_krylov_used = bool(augmented_krylov_stage.used)
-            qi_device_augmented_krylov_rank = int(augmented_krylov_stage.rank)
-            qi_device_augmented_krylov_reason = augmented_krylov_stage.reason
-            qi_device_augmented_seed_used = bool(augmented_krylov_stage.seed_used)
-            qi_device_preconditioner_metadata = augmented_krylov_stage.metadata
-            solve_start_s = sparse_timer.elapsed_s()
-            progress_callbacks = build_xblock_krylov_progress_callbacks(
-                XBlockKrylovProgressCallbacksContext(
-                    emit=emit,
-                    elapsed_s=sparse_timer.elapsed_s,
-                    progress_every=int(progress_every),
-                )
-            )
-
-            fallback_to_gmres = _rhs1_xblock_policy.rhs1_xblock_fallback_to_gmres_enabled(
-                env_value=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_FALLBACK_GMRES", ""),
-                xblock_side_probe_lgmres_rescue=bool(xblock_side_probe_lgmres_rescue),
-                xblock_krylov_method=str(xblock_krylov_method),
-            )
-            krylov_stage = run_xblock_krylov_solve_stage(
-                XBlockKrylovSolveStageContext(
-                    first_attempt=XBlockFirstKrylovAttemptContext(
-                        krylov_method=str(xblock_krylov_method),
-                        matvec=solve_matvec,
-                        rhs=solve_rhs,
-                        preconditioner=solve_preconditioner,
-                        x0=solve_x0,
-                        tol=float(tol),
-                        atol=float(atol),
-                        restart=int(pc_restart),
-                        maxiter=pc_maxiter,
-                        precondition_side=str(precondition_side),
-                        lgmres_outer_k=xblock_lgmres_rescue_outer_k,
-                        fgmres_block_between_cycles=bool(fgmres_block_between_cycles),
-                        skip_inactive_work=not bool(two_level_built),
-                        device_fgmres_jit=bool(xblock_device_fgmres_jit),
-                        device_fgmres_jit_mode=str(xblock_device_fgmres_jit_mode),
-                        device_fgmres_jit_outer_k=int(xblock_device_fgmres_jit_outer_k),
-                        augmented_krylov_used=bool(qi_device_augmented_krylov_used),
-                        augmentation_basis=augmentation_basis_for_solve,
-                        operator_on_augmentation=operator_on_augmentation_for_solve,
-                        augmentation_mode=str(qi_device_augmented_krylov_mode),
-                        tfqmr_replacement_interval=int(tfqmr_replacement_interval),
-                        mv_count=int(mv_count),
-                        host_progress_callback=progress_callbacks.host_progress_callback,
-                        device_cycle_progress_callback=(
-                            progress_callbacks.device_cycle_progress_callback
-                        ),
-                        gmres_solver=gmres_solve_with_history_scipy,
-                        lgmres_solver=lgmres_solve_with_history_scipy,
-                        gcrotmk_solver=gcrotmk_solve_with_history_scipy,
-                        bicgstab_solver=bicgstab_solve_with_history_scipy,
-                        fgmres_solver=fgmres_solve_with_residual,
-                        fgmres_jit_solver=fgmres_solve_with_residual_jit,
-                        fgmres_cycle_jit_solver=fgmres_cycle_jit_solve_with_residual,
-                        bicgstab_jax_solver=bicgstab_solve_with_residual,
-                        tfqmr_jax_solver=tfqmr_solve_with_residual,
+                    pc_restart=pc_restart,
+                    pc_restart_env=pc_restart_env,
+                    preconditioner_species=preconditioner_species,
+                    preconditioner_xi=preconditioner_xi,
+                    reduce_full_with_indices=reduce_full_with_indices,
+                    resolve_rhs1_xblock_sparse_pc_policy=(
+                        resolve_rhs1_xblock_sparse_pc_policy
                     ),
-                    solve_start_s=float(solve_start_s),
-                    side_probe_s=float(xblock_side_probe_s),
-                    probe_coarse_s=float(probe_coarse_s),
-                    elapsed_s=sparse_timer.elapsed_s,
-                    solution_to_physical=solve_solution_to_physical,
-                    physical_rhs=xblock_rhs,
-                    physical_matvec=_mv_true,
-                    target=float(target_xblock),
-                    rhs_norm=float(xblock_rhs_norm),
-                    fallback_enabled=bool(fallback_to_gmres),
-                    progress_callback=progress_callbacks.host_progress_callback,
-                    emit=emit,
-                    initial_guess_builder=_rhs1_xblock_fallback_initial_guess,
-                )
-            )
-            candidate_state = krylov_stage.candidate_state
-            candidate_krylov_method = str(candidate_state.krylov_method)
-            candidate_residual_norm = float(candidate_state.residual_norm)
-            candidate_iterations = int(candidate_state.reported_iterations)
-            candidate_matvecs = int(candidate_state.reported_matvecs)
-            solve_state = krylov_stage.final_state
-            xblock_krylov_method = str(solve_state.krylov_method)
-            x_solution_np = solve_state.x_solution
-            x_physical_np = solve_state.x_physical
-            residual_norm_xblock_pc = float(solve_state.residual_norm)
-            history = solve_state.history
-            solve_s = float(solve_state.solve_s)
-            device_krylov_iterations = solve_state.device_iterations
-            device_krylov_estimated_matvecs = solve_state.device_estimated_matvecs
-            fallback_started_from_candidate = solve_state.fallback_started_from_candidate
-            fallback_candidate_improved_rhs = solve_state.fallback_candidate_improved_rhs
-            reported_iterations = int(solve_state.reported_iterations)
-            reported_matvecs = int(solve_state.reported_matvecs)
-            x_np = solve_state.x_physical
-            post_completion = complete_xblock_post_krylov_stage(
-                XBlockPostKrylovCompletionContext(
-                    corrections=XBlockPostSolveCorrectionContext(
-                        matvec=_mv_true,
-                        rhs=xblock_rhs,
-                        x=np.asarray(x_np, dtype=np.float64),
-                        residual_norm=float(residual_norm_xblock_pc),
-                        target=float(target_xblock),
-                        solve_s=float(solve_s),
-                        preconditioner=precond_xblock_krylov,
-                        precondition_side=str(precondition_side),
-                        post_solve_policy=_read_rhs1_post_solve_correction_policy(),
-                        qi_device_state=qi_device_state_for_augmented_krylov,
-                        coarse_direction_builder=_xblock_coarse_direction_builder,
-                        emit=emit,
-                        elapsed_s=sparse_timer.elapsed_s,
-                        minres_correction=_apply_preconditioned_minres_correction,
-                        residual_equation_correction=(
-                            _apply_device_subspace_residual_equation_correction
-                        ),
-                        coarse_correction=_apply_subspace_minres_correction,
+                    rhs=rhs,
+                    rhs1_l2_norm_float=rhs1_l2_norm_float,
+                    rhs1_residual_target=rhs1_residual_target,
+                    rhs1_safe_ratio=rhs1_safe_ratio,
+                    sparse_pc_fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+                    sparse_timer=sparse_timer,
+                    summarize_v3_sparse_pattern=summarize_v3_sparse_pattern,
+                    tfqmr_solve_with_residual=tfqmr_solve_with_residual,
+                    tokamak_fp_er_pc=tokamak_fp_er_pc,
+                    tol=tol,
+                    use_dkes=use_dkes,
+                    v3_full_system_conservative_sparsity_pattern=(
+                        v3_full_system_conservative_sparsity_pattern
                     ),
-                    krylov_method=str(xblock_krylov_method),
-                    elapsed_s=sparse_timer.elapsed_s,
-                    iterations=int(reported_iterations),
-                    matvecs=int(reported_matvecs),
-                    target=float(target_xblock),
-                    history=history,
+                    v3_full_system_conservative_sparsity_pattern_for_indices=(
+                        v3_full_system_conservative_sparsity_pattern_for_indices
+                    ),
+                    v3_linear_solve_result_from_payload=(
+                        v3_linear_solve_result_from_payload
+                    ),
+                    validate_device_csr_matvec=validate_device_csr_matvec,
+                    x0=x0,
+                    xblock_sparse_pc=xblock_sparse_pc,
+                    xblock_use_active_dof=xblock_use_active_dof,
                 )
-            )
-            post_corrections = post_completion.corrections
-            x_np = np.asarray(post_completion.x, dtype=np.float64)
-            residual_norm_xblock_pc = float(post_completion.residual_norm)
-            solve_s = float(post_completion.solve_s)
-            xblock_final_driver_state = {**qi_pipeline.diagnostic_scope(), **locals()}
-            xblock_final_metadata_state = (
-                xblock_sparse_pc_final_metadata_state_from_driver_scope(
-                    xblock_final_driver_state
-                )
-            )
-            xblock_sparse_pc_final_payload = (
-                xblock_sparse_pc_final_payload_from_driver_state(
-                    {
-                        **xblock_final_metadata_state,
-                        "op": op,
-                        "x_np": np.asarray(x_np, dtype=np.float64),
-                        "residual_norm_xblock_pc": float(residual_norm_xblock_pc),
-                        "target_xblock": float(target_xblock),
-                        "xblock_krylov_method": str(xblock_krylov_method),
-                        "xblock_linear_size": int(xblock_linear_size),
-                        "pc_restart": int(pc_restart),
-                    },
-                    expand_reduced=_xblock_expand_reduced,
-                    post_corrections=post_corrections,
-                )
-            )
-            return v3_linear_solve_result_from_payload(
-                op=op,
-                rhs=rhs,
-                payload=xblock_sparse_pc_final_payload,
             )
 
         sparse_pc_active_setup = build_sparse_pc_active_dof_setup(

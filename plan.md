@@ -3558,3 +3558,68 @@ Next best steps:
    reduce `profile_response/solve.py` or delete re-export-only owners.
 3. After Tranche B, execute transport/output consolidation and solver-domain
    collapse, then run the final docs/API/tests review gate.
+
+## 2026-06-25 Lane 1 Tranche B X-Block Sparse-PC Branch Extraction
+
+Steps taken:
+
+1. Moved the driver-facing RHSMode=1 x-block sparse-PC GMRES branch from
+   `sfincs_jax/problems/profile_response/solve.py` into the existing
+   `sfincs_jax/problems/profile_response/sparse/handoff.py` owner.
+2. Added `XBlockSparsePCBranchContext` and `run_xblock_sparse_pc_branch()` so
+   the solve entry point passes solve-local state and callbacks explicitly.
+   The numerical x-block stage kernels and final payload builders remain in
+   `sparse/xblock.py`; `handoff.py` now owns the branch orchestration that
+   decides and wires those stages.
+3. Kept `sparse/finalization.py` in place after audit because both
+   `sparse/xblock.py` and `sparse/fortran_reduced.py` still depend on its
+   shared payload/result contracts. Deleting it now would create a circular
+   dependency or force generic result types into the x-block owner.
+4. Updated `docs/source_map.rst` and `plan_final.md` with the new owner
+   boundary and current counts.
+
+Current inventory:
+
+- Package Python files: `212`.
+- Package-root Python files: `52`.
+- Package source lines: `163,535`.
+- `sfincs_jax/problems/profile_response/solve.py`: `8,671` lines, down from
+  `9,411` in the previous checkpoint.
+- `sfincs_jax/problems/profile_response/sparse/handoff.py`: `4,623` lines
+  after taking the x-block sparse-PC branch orchestration.
+- `problems/profile_response`: `13` package files.
+
+Validation:
+
+- Scoped `ruff` passed for `profile_response/solve.py`,
+  `profile_response/sparse/handoff.py`, and the focused sparse/x-block tests.
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- Targeted x-block/export tests passed with `5 passed in 11.14 s`.
+- Broader sparse/profile-response regression passed:
+  `python -m pytest tests/test_profile_response_sparse_pc.py
+  tests/test_v3_sparse_pattern.py tests/test_rhs1_device_operator.py
+  tests/test_rhs1_device_operator_unit.py tests/test_rhs1_full_csr_kinetic_pc.py
+  tests/test_rhs1_true_operator_rescue.py
+  tests/test_fortran_reduced_preconditioner.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py -q --tb=short`
+  with `545 passed in 157.67 s`.
+- Import-contract and policy-docstring tests passed with `11 passed in 0.57 s`.
+- `git diff --check` passed.
+
+Current lane status:
+
+- Lane 1 Tranche A: complete except ongoing stale-reference maintenance.
+- Lane 1 Tranche B: about `18%`; the first sparse-PC branch is extracted, but
+  the generic sparse-PC/factor-preflight branch and final result/progress
+  normalization remain in `solve.py`.
+- Lane 1 overall: about `74%`.
+
+Next best steps:
+
+1. Continue Tranche B by extracting the generic sparse-PC/factor-preflight
+   branch from `solve.py` into existing sparse owners.
+2. Then move final progress replay/result normalization into
+   `solver_diagnostics.py`, `diagnostics.py`, and sparse owners.
+3. Only after `solve.py` is much smaller should Tranche C transport/output
+   consolidation begin.

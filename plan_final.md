@@ -305,13 +305,14 @@ Observed facts to feed directly into implementation:
 
 Current source size snapshot after the 2026-06-25 consolidation checkpoint,
 the 2026-06-25 final consolidation-plan review, the two root cleanup passes,
-the first transport-parallel consolidation, and the Tranche A root
-solver/preconditioner disposition move:
+the first transport-parallel consolidation, the Tranche A root
+solver/preconditioner disposition move, and the first Tranche B x-block sparse
+handoff extraction:
 
 - `sfincs_jax/v3_driver.py`: 47 lines in the current consolidation worktree,
   acting as a compatibility shim for the domain-owned solve modules.
-- `sfincs_jax/problems/profile_response/solve.py`: 9,411 lines after the
-  first profile-response ownership moves. This remains the largest
+- `sfincs_jax/problems/profile_response/solve.py`: 8,671 lines after the
+  first Tranche B x-block sparse-PC branch extraction. This remains the largest
   structural debt and must be reduced by moving coherent sections into existing
   domain owners, not by adding many new helper files.
 - `sfincs_jax/problems/profile_response/policies.py`: 6,876 lines after
@@ -322,10 +323,10 @@ solver/preconditioner disposition move:
   after taking ownership of the current RHSMode-1 preconditioner builder
   registry, PAS-family compatibility bindings, Schur binding, x-block builder
   aliases, transport `tzfft` reuse, and strong fallback binding.
-- `sfincs_jax/problems/profile_response/sparse/handoff.py`: 3,649 lines after
+- `sfincs_jax/problems/profile_response/sparse/handoff.py`: 4,623 lines after
   moving the former top-level sparse-PC handoff into the sparse package and
-  handing x-block final payload builders to `sparse/xblock.py`. Shared generic
-  sparse-PC finalization remains in
+  taking ownership of the driver-facing x-block sparse-PC GMRES branch
+  orchestration. Shared generic sparse-PC finalization remains in
   `problems/profile_response/sparse/finalization.py`.
 - `sfincs_jax/problems/profile_response/sparse/direct.py`: 3,569 lines after
   taking ownership of sparse-factor cache keys, host memory probing, explicit
@@ -343,7 +344,7 @@ solver/preconditioner disposition move:
 - Top-level `transport_*` modules: 0 after Lane 1 Iteration 1.
 - Top-level `rhs1_*` modules: 0 after the Lane 1 Iteration 3 ownership move.
   Solver-family implementation now lives under `solvers.preconditioners`.
-- Package total is 212 Python files, 52 package-root files, and 163,301
+- Package total is 212 Python files, 52 package-root files, and 163,535
   package lines after the first two root cleanup passes and the first
   transport-parallel consolidation, plus the first Tranche A validation-domain
   workflow-domain, solver-utility, and solver/preconditioner implementation
@@ -557,9 +558,9 @@ Current inventory from the 2026-06-25 final consolidation review:
 | Area | Current state | Final target for this PR |
 | --- | --- | --- |
 | `sfincs_jax/v3_driver.py` | 47-line compatibility shim | Keep below 80 lines or delete after legacy imports migrate. |
-| Package source files | 212 Python files, 163,301 package lines | At most 200 files and fewer total source lines. |
+| Package source files | 212 Python files, 163,535 package lines | At most 200 files and fewer total source lines. |
 | Package-root modules | 52 Python files at package root; root-count gate met | At most 55 root files; implementation belongs in domain packages. |
-| `problems/profile_response` | 13 files, about 30k lines; `solve.py` is 9,411 lines | At most 16 files; `solve.py` below 3,500 lines. |
+| `problems/profile_response` | 13 files, about 30k lines; `solve.py` is 8,671 lines | At most 16 files; `solve.py` below 3,500 lines. |
 | `problems/transport_matrix` | 23 files, about 11.5k lines | At most 16 files; no policy or postsolve micro-files. |
 | `problems/transport_matrix/parallel` | `runtime.py`, `policy.py`, `sharding.py`, `worker.py` plus `__init__.py` | At most 3 implementation files; merge or justify `policy.py`. |
 | `solvers/preconditioners` | 50 files, about 37k lines; QI, Schur, symbolic, x-block, PAS families are over-fragmented | At most 32 files; no implementation file starts with `rhs1_` or `transport_`. |
@@ -1369,11 +1370,15 @@ Current completion status:
   A checkpoint moved ten solver utility modules into `sfincs_jax.solvers`,
   reducing package-root files to 60. The fourth Tranche A checkpoint moved
   eight solver/preconditioner implementation modules into `sfincs_jax.solvers`,
-  reducing package-root files to 52 and meeting the root-count gate. The
-  remaining large blockers are `profile_response/solve.py`, the rest of
-  transport/output consolidation, solver/preconditioner naming, and `io.py`
-  ownership. The next work follows Lane 1 Tranches B-E only, with Tranche A
-  limited to stale-import/source-map audits.
+  reducing package-root files to 52 and meeting the root-count gate. The first
+  Tranche B checkpoint moved the x-block sparse-PC GMRES branch from
+  `profile_response/solve.py` into `profile_response/sparse/handoff.py`,
+  reducing `solve.py` to 8,671 lines. The remaining large blockers are the
+  generic sparse-PC/factor-preflight branch, final result/progress
+  normalization, the rest of transport/output consolidation,
+  solver/preconditioner naming, and `io.py` ownership. The next work follows
+  Lane 1 Tranches B-E only, with Tranche A limited to stale-import/source-map
+  audits.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
@@ -1405,10 +1410,12 @@ Next ordered implementation steps:
 
 1. Seal Lane 1 Tranche A with this root solver/preconditioner move, stale
    import/source-map audits, and no root solver implementation files.
-2. Execute Lane 1 Tranche B as one profile-response consolidation. Move sparse
-   branch orchestration, sparse finalization, result payload assembly,
-   progress replay, and diagnostic normalization out of `solve.py`; delete
-   re-export-only profile-response files; and reach
+2. Continue Lane 1 Tranche B as one profile-response consolidation. Move the
+   remaining generic sparse-PC/factor-preflight branch, result payload
+   assembly, progress replay, and diagnostic normalization out of `solve.py`.
+   Keep `sparse/finalization.py` until `sparse/xblock.py` and
+   `sparse/fortran_reduced.py` no longer both depend on its shared payload
+   types; delete re-export-only profile-response files when they appear; and reach
    `profile_response/solve.py < 3.5k` with
    `problems/profile_response <= 16` files.
 3. Execute Lane 1 Tranche C as one transport/output/root consolidation.
