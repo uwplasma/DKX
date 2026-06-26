@@ -5100,3 +5100,69 @@ Next best steps:
    state mutation code rather than only another narrow block.
 3. Move final sparse payload normalization and progress replay after the
    residual-correction stages are outside `solve.py`.
+
+## 2026-06-26 Batch A Shared Residual-Candidate Update Extraction
+
+Steps taken:
+
+1. Added `SparsePCResidualCandidateUpdateContext`,
+   `SparsePCResidualCandidateUpdateResult`, and
+   `apply_sparse_pc_residual_candidate_update()` to the existing
+   `profile_response.sparse.handoff` owner.
+2. Replaced repeated residual-candidate admission and state mutation in the
+   true-active submatrix, true-active block, true-active residual-block, true
+   residual-window, residual-coarse, and residual-window paths with the shared
+   sparse-owner updater.
+3. Preserved the candidate builders and true residual recomputation at the
+   current call site, so this is a behavior-preserving consolidation step that
+   prepares the next larger stage extraction.
+4. Removed direct imports of `SparsePCResidualCandidateAcceptanceContext` and
+   `evaluate_sparse_pc_residual_candidate_acceptance` from
+   `profile_response/solve.py`; residual admission is now consumed through the
+   sparse owner.
+5. Updated `plan_final.md` so the controlling Batch A plan marks the shared
+   residual-candidate accept/update extraction as complete.
+
+Results:
+
+- `profile_response/solve.py` decreased from `7,567` to `7,539` lines.
+- `profile_response/sparse/handoff.py` increased from `7,309` to `7,479`
+  lines because it now owns shared residual-candidate state updates.
+- Package file count stayed at `209`; package-root file count stayed at `44`.
+- Package source lines are now about `165,488`; this helper extraction is a
+  staging step for moving the full residual-correction family out of
+  `solve.py`.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m pytest
+  tests/test_profile_response_sparse_pc.py::test_sparse_pc_residual_candidate_acceptance_base_improvement_override_sets_passed
+  tests/test_v3_sparse_pattern.py::test_true_operator_residual_window_lsq_reduces_global_residual
+  tests/test_v3_sparse_pattern.py::test_residual_window_host_preconditioner_solves_targeted_kinetic_window
+  tests/test_v3_sparse_pattern.py::test_residual_coarse_host_preconditioner_solves_adaptive_identity_residual
+  -q --tb=short` passed with `4 passed`.
+- `python -m pytest tests/test_domain_package_import_contracts.py -q
+  --tb=short` passed with `8 passed`.
+- `python -m pytest tests/test_v3_sparse_pattern.py -q --tb=short` passed
+  with `132 passed`.
+
+Progress:
+
+- Lane 1 structural consolidation: about `90%`.
+- Batch A profile-response collapse: about `57%`.
+- Batch B transport/output/root cleanup: about `20%`.
+- Batch C solver/preconditioner family consolidation: about `25%`.
+- Batch D public API/docs/tests/review gate: about `26%`.
+
+Next best steps:
+
+1. Move the full true-active/residual-window correction family into a single
+   sparse-owner stage now that all candidates share the same updater.
+2. Then move final sparse payload normalization and progress replay out of
+   `solve.py`.
+3. After Batch A reaches the line/file gates, switch to Batch B transport and
+   output consolidation.

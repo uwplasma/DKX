@@ -548,6 +548,68 @@ class SparsePCTrueCoupledCoarseStageResult:
     base_improvement_override_used: bool
 
 
+@dataclass(frozen=True)
+class SparsePCResidualCandidateUpdateContext:
+    """State update contract shared by sparse residual rescue candidates."""
+
+    label: str
+    metadata_count_key: str | None
+    metadata_count_label: str | None
+    bundle: object
+    candidate_x: jnp.ndarray
+    candidate_residual_vec: jnp.ndarray
+    candidate_residual_after: float
+    candidate_metadata: dict[str, object]
+    factor_bundle_pc: object
+    pc_factor_s: float
+    setup_s: float
+    factor_preflight_residual_before: float | None
+    factor_preflight_residual_after: float | None
+    factor_preflight_residual_diagnostics: dict[str, object] | None
+    factor_preflight_improvement_ratio: float | None
+    factor_preflight_target_ratio: float | None
+    factor_preflight_passed: bool | None
+    factor_preflight_seed_enabled: bool
+    factor_preflight_seed_used: bool
+    target: float
+    max_target_ratio: float
+    residual_vec_current: jnp.ndarray
+    x0_sparse: jnp.ndarray | None
+    diagnostics: Callable[..., dict[str, object]]
+    layout: object
+    active_indices: object | None
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    require_original_improvement: bool = True
+    current_min_improvement: float = 0.0
+    accept_base_improvement: bool = False
+    base_improvement_requires_original_miss: bool = True
+    base_improvement_sets_passed: bool = False
+    missing_original_improves: bool = False
+
+
+@dataclass(frozen=True)
+class SparsePCResidualCandidateUpdateResult:
+    """Updated sparse-PC state after evaluating one residual candidate."""
+
+    accepted: bool
+    factor_bundle_pc: object
+    pc_factor_s: float
+    setup_s: float
+    factor_preflight_residual_after: float | None
+    factor_preflight_residual_diagnostics: dict[str, object] | None
+    factor_preflight_improvement_ratio: float | None
+    factor_preflight_target_ratio: float | None
+    factor_preflight_passed: bool | None
+    factor_preflight_seed_used: bool
+    residual_vec_current: jnp.ndarray
+    x0_sparse: jnp.ndarray | None
+    metadata: dict[str, object]
+    base_improvement_override_used: bool
+    improves_current_residual: bool
+    improves_original_residual: bool
+
+
 def run_sparse_pc_factor_preflight(
     context: SparsePCFactorPreflightRunContext,
 ) -> SparsePCFactorPreflightRunResult:
@@ -861,6 +923,111 @@ def run_sparse_pc_auto_preflight_retry_stage(
         factor_preflight_passed=factor_preflight_passed,
         factor_preflight_seed_used=bool(factor_preflight_seed_used),
         x0_sparse=x0_sparse,
+    )
+
+
+def apply_sparse_pc_residual_candidate_update(
+    context: SparsePCResidualCandidateUpdateContext,
+) -> SparsePCResidualCandidateUpdateResult:
+    """Evaluate one sparse rescue candidate and update shared preflight state."""
+
+    metadata = dict(context.candidate_metadata or {})
+    metadata["residual_after"] = float(context.candidate_residual_after)
+    if context.factor_preflight_residual_after is not None:
+        metadata["base_residual_after"] = float(context.factor_preflight_residual_after)
+
+    acceptance = evaluate_sparse_pc_residual_candidate_acceptance(
+        SparsePCResidualCandidateAcceptanceContext(
+            candidate_residual_after=float(context.candidate_residual_after),
+            current_residual_after=context.factor_preflight_residual_after,
+            original_residual_before=context.factor_preflight_residual_before,
+            target=float(context.target),
+            max_target_ratio=float(context.max_target_ratio),
+            seed_enabled=bool(context.factor_preflight_seed_enabled),
+            require_original_improvement=bool(context.require_original_improvement),
+            current_min_improvement=float(context.current_min_improvement),
+            accept_base_improvement=bool(context.accept_base_improvement),
+            base_improvement_requires_original_miss=bool(
+                context.base_improvement_requires_original_miss
+            ),
+            base_improvement_sets_passed=bool(context.base_improvement_sets_passed),
+            missing_original_improves=bool(context.missing_original_improves),
+        )
+    )
+
+    factor_bundle_pc = context.factor_bundle_pc
+    pc_factor_s = float(context.pc_factor_s)
+    setup_s = float(context.setup_s)
+    factor_preflight_residual_after = context.factor_preflight_residual_after
+    factor_preflight_residual_diagnostics = context.factor_preflight_residual_diagnostics
+    factor_preflight_improvement_ratio = context.factor_preflight_improvement_ratio
+    factor_preflight_target_ratio = context.factor_preflight_target_ratio
+    factor_preflight_passed = context.factor_preflight_passed
+    factor_preflight_seed_used = bool(context.factor_preflight_seed_used)
+    residual_vec_current = context.residual_vec_current
+    x0_sparse = context.x0_sparse
+
+    if bool(acceptance.accepted):
+        factor_bundle_pc = context.bundle
+        pc_factor_s += float(getattr(context.bundle, "factor_s", None) or 0.0)
+        setup_s = float(context.elapsed_s())
+        factor_preflight_residual_after = float(acceptance.residual_after)
+        residual_vec_current = context.candidate_residual_vec
+        factor_preflight_residual_diagnostics = context.diagnostics(
+            residual=context.candidate_residual_vec,
+            layout=context.layout,
+            active_indices=context.active_indices,
+        )
+        factor_preflight_improvement_ratio = acceptance.improvement_ratio
+        factor_preflight_target_ratio = acceptance.target_ratio
+        factor_preflight_passed = bool(acceptance.passed)
+        if bool(acceptance.seed_used):
+            x0_sparse = context.candidate_x
+            factor_preflight_seed_used = True
+        if context.emit is not None:
+            count_fragment = ""
+            if context.metadata_count_key and context.metadata_count_label:
+                count_fragment = (
+                    f"{context.metadata_count_label}="
+                    f"{metadata.get(context.metadata_count_key)} "
+                )
+            context.emit(
+                1,
+                f"solve_v3_full_system_linear_gmres: {context.label} accepted "
+                f"{count_fragment}"
+                f"residual={metadata.get('base_residual_after', float('nan')):.6e}"
+                f"->{float(factor_preflight_residual_after):.6e} "
+                f"passed={bool(factor_preflight_passed)}",
+            )
+    elif context.emit is not None:
+        base = (
+            float(context.factor_preflight_residual_after)
+            if context.factor_preflight_residual_after is not None
+            else float("nan")
+        )
+        context.emit(
+            1,
+            f"solve_v3_full_system_linear_gmres: {context.label} rejected "
+            f"residual={base:.6e}->{float(context.candidate_residual_after):.6e}",
+        )
+
+    return SparsePCResidualCandidateUpdateResult(
+        accepted=bool(acceptance.accepted),
+        factor_bundle_pc=factor_bundle_pc,
+        pc_factor_s=float(pc_factor_s),
+        setup_s=float(setup_s),
+        factor_preflight_residual_after=factor_preflight_residual_after,
+        factor_preflight_residual_diagnostics=factor_preflight_residual_diagnostics,
+        factor_preflight_improvement_ratio=factor_preflight_improvement_ratio,
+        factor_preflight_target_ratio=factor_preflight_target_ratio,
+        factor_preflight_passed=factor_preflight_passed,
+        factor_preflight_seed_used=bool(factor_preflight_seed_used),
+        residual_vec_current=residual_vec_current,
+        x0_sparse=x0_sparse,
+        metadata=metadata,
+        base_improvement_override_used=bool(acceptance.base_improvement_override_used),
+        improves_current_residual=bool(acceptance.improves_current_residual),
+        improves_original_residual=bool(acceptance.improves_original_residual),
     )
 
 
@@ -6998,6 +7165,8 @@ __all__ = [
     "SparsePCAutoPreflightRetryEvaluationResult",
     "SparsePCAutoPreflightRetryStageContext",
     "SparsePCAutoPreflightRetryStageResult",
+    "SparsePCResidualCandidateUpdateContext",
+    "SparsePCResidualCandidateUpdateResult",
     "SparsePCTrueCoupledCoarseStageContext",
     "SparsePCTrueCoupledCoarseStageResult",
     "SparsePCGMRESControlPolicy",
@@ -7164,6 +7333,7 @@ __all__ = [
     "apply_sparse_pc_post_minres_if_needed",
     "apply_sparse_pc_post_minres_from_driver_state",
     "apply_sparse_xblock_explicit_seed",
+    "apply_sparse_pc_residual_candidate_update",
     "apply_xblock_subspace_correction_if_needed",
     "build_fortran_reduced_xblock_factor_stage",
     "build_sparse_xblock_rescue_preconditioner",
