@@ -7188,45 +7188,9 @@ class XBlockPostSolveCorrectionResult:
         """Return historical driver-state keys consumed by final metadata."""
 
         return {
-            "post_minres_steps_requested": self.post_minres_steps_requested,
-            "post_minres_alpha_clip": self.post_minres_alpha_clip,
-            "post_minres_min_improvement": self.post_minres_min_improvement,
-            "post_minres_history": self.post_minres_history,
-            "post_minres_alphas": self.post_minres_alphas,
-            "post_minres_residual_before": self.post_minres_residual_before,
-            "post_minres_residual_after": self.post_minres_residual_after,
-            "post_coarse_steps_requested": self.post_coarse_steps_requested,
-            "post_coarse_max_directions": self.post_coarse_max_directions,
-            "post_coarse_max_extra_units": self.post_coarse_max_extra_units,
-            "post_coarse_fsavg_lmax": self.post_coarse_fsavg_lmax,
-            "post_coarse_angular_lmax": self.post_coarse_angular_lmax,
-            "post_coarse_include_angular_residual": self.post_coarse_include_angular_residual,
-            "post_coarse_include_raw": self.post_coarse_include_raw,
-            "post_coarse_alpha_clip": self.post_coarse_alpha_clip,
-            "post_coarse_rcond": self.post_coarse_rcond,
-            "post_coarse_min_improvement": self.post_coarse_min_improvement,
-            "post_coarse_history": self.post_coarse_history,
-            "post_coarse_direction_counts": self.post_coarse_direction_counts,
-            "post_coarse_direction_names": self.post_coarse_direction_names,
-            "post_coarse_residual_before": self.post_coarse_residual_before,
-            "post_coarse_residual_after": self.post_coarse_residual_after,
-            "post_residual_equation_steps_requested": self.post_residual_equation_steps_requested,
-            "post_residual_equation_max_directions": self.post_residual_equation_max_directions,
-            "post_residual_equation_max_extra_units": self.post_residual_equation_max_extra_units,
-            "post_residual_equation_fsavg_lmax": self.post_residual_equation_fsavg_lmax,
-            "post_residual_equation_angular_lmax": self.post_residual_equation_angular_lmax,
-            "post_residual_equation_include_angular_residual": self.post_residual_equation_include_angular_residual,
-            "post_residual_equation_include_raw": self.post_residual_equation_include_raw,
-            "post_residual_equation_include_post_coarse": self.post_residual_equation_include_post_coarse,
-            "post_residual_equation_include_qi_basis": self.post_residual_equation_include_qi_basis,
-            "post_residual_equation_alpha_clip": self.post_residual_equation_alpha_clip,
-            "post_residual_equation_rcond": self.post_residual_equation_rcond,
-            "post_residual_equation_min_improvement": self.post_residual_equation_min_improvement,
-            "post_residual_equation_history": self.post_residual_equation_history,
-            "post_residual_equation_direction_counts": self.post_residual_equation_direction_counts,
-            "post_residual_equation_direction_names": self.post_residual_equation_direction_names,
-            "post_residual_equation_residual_before": self.post_residual_equation_residual_before,
-            "post_residual_equation_residual_after": self.post_residual_equation_residual_after,
+            name: getattr(self, name)
+            for name in self.__dataclass_fields__
+            if name not in {"x", "residual_norm", "solve_s"}
         }
 
 

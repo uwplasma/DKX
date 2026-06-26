@@ -989,6 +989,74 @@ def _object_metadata_dict(metadata: object) -> dict[str, object]:
     return {}
 
 
+_QI_DEVICE_ENRICHMENT_BOOL_METADATA_FIELDS = (
+    "residual_enrichment",
+    "recycle_enrichment",
+    "operator_krylov_enrichment",
+    "adjoint_krylov_enrichment",
+    "operator_action_enrichment",
+)
+_QI_DEVICE_ENRICHMENT_INT_METADATA_FIELDS = (
+    "residual_enrichment_depth",
+    "operator_krylov_depth",
+    "adjoint_krylov_depth",
+    "operator_action_depth",
+)
+_QI_DEVICE_ENRICHMENT_METADATA_ALIASES = (
+    ("residual_enrichment_include_residual", "residual_enrichment_include_residual", bool, False),
+    ("recycle_cycles", "recycle_enrichment_cycles_requested", int, 0),
+    ("adjoint_krylov_transpose_source", "adjoint_krylov_transpose_requested", None, None),
+)
+
+_QI_DEVICE_MULTILEVEL_BOOL_METADATA_FIELDS = (
+    "multilevel_coarse",
+    "multilevel_current_moments",
+    "multilevel_species_current_moments",
+    "multilevel_radial_current_moments",
+    "multilevel_tail_constraint_moments",
+    "multilevel_residual_equation",
+    "multilevel_residual_equation_include_global",
+)
+_QI_DEVICE_MULTILEVEL_INT_METADATA_FIELDS = (
+    "multilevel_max_levels",
+    "multilevel_aggregate_factor",
+    "multilevel_max_angular_mode",
+    "multilevel_max_radial_degree",
+    "multilevel_max_pitch_degree",
+    "multilevel_current_max_pitch_degree",
+    "multilevel_residual_equation_max_level_rank",
+)
+_QI_DEVICE_MULTILEVEL_VALUE_METADATA_FIELDS = (
+    "multilevel_residual_equation_order",
+    "multilevel_residual_equation_solver",
+)
+
+
+def _requested_config_metadata(
+    config: object,
+    *,
+    bool_fields: tuple[str, ...] = (),
+    int_fields: tuple[str, ...] = (),
+    value_fields: tuple[str, ...] = (),
+    aliases: tuple[
+        tuple[str, str, type[Any] | None, object],
+        ...,
+    ] = (),
+) -> dict[str, object]:
+    metadata: dict[str, object] = {
+        f"{name}_requested": bool(getattr(config, name, False))
+        for name in bool_fields
+    }
+    metadata.update(
+        {f"{name}_requested": int(getattr(config, name, 0)) for name in int_fields}
+    )
+    metadata.update({f"{name}_requested": getattr(config, name, None) for name in value_fields})
+    for field_name, output_key, caster, default in aliases:
+        value = getattr(config, field_name, default)
+        metadata[output_key] = value if caster is None else caster(value)
+    return metadata
+
+
 def build_xblock_qi_device_preconditioner_metadata(
     context: XBlockQIDeviceMetadataContext,
 ) -> dict[str, object]:
@@ -1023,8 +1091,6 @@ def build_xblock_qi_device_preconditioner_metadata(
         if hasattr(local_metadata, "to_dict"):
             local_smoother_metadata = dict(local_metadata.to_dict())
 
-    enrichment = context.enrichment_config
-    multilevel = context.multilevel_config
     return {
         **probe_metadata,
         "basis_reused_from_seed": bool(context.basis_reused_from_seed),
@@ -1060,100 +1126,22 @@ def build_xblock_qi_device_preconditioner_metadata(
         "matrix_free_enabled": bool(context.matrix_free_enabled),
         "local_smoother_kind_requested": str(context.local_smoother_kind),
         "local_smoother_metadata": local_smoother_metadata,
-        "residual_enrichment_requested": bool(
-            getattr(enrichment, "residual_enrichment", False)
+        **_requested_config_metadata(
+            context.enrichment_config,
+            bool_fields=_QI_DEVICE_ENRICHMENT_BOOL_METADATA_FIELDS,
+            int_fields=_QI_DEVICE_ENRICHMENT_INT_METADATA_FIELDS,
+            aliases=_QI_DEVICE_ENRICHMENT_METADATA_ALIASES,
         ),
-        "residual_enrichment_depth_requested": int(
-            getattr(enrichment, "residual_enrichment_depth", 0)
-        ),
-        "residual_enrichment_include_residual": bool(
-            getattr(enrichment, "residual_enrichment_include_residual", False)
-        ),
-        "recycle_enrichment_requested": bool(
-            getattr(enrichment, "recycle_enrichment", False)
-        ),
-        "recycle_enrichment_cycles_requested": int(
-            getattr(enrichment, "recycle_cycles", 0)
-        ),
-        "operator_krylov_enrichment_requested": bool(
-            getattr(enrichment, "operator_krylov_enrichment", False)
-        ),
-        "operator_krylov_depth_requested": int(
-            getattr(enrichment, "operator_krylov_depth", 0)
-        ),
-        "adjoint_krylov_enrichment_requested": bool(
-            getattr(enrichment, "adjoint_krylov_enrichment", False)
-        ),
-        "adjoint_krylov_depth_requested": int(
-            getattr(enrichment, "adjoint_krylov_depth", 0)
-        ),
-        "adjoint_krylov_transpose_requested": getattr(
-            enrichment,
-            "adjoint_krylov_transpose_source",
-            None,
-        ),
-        "operator_action_enrichment_requested": bool(
-            getattr(enrichment, "operator_action_enrichment", False)
-        ),
-        "operator_action_depth_requested": int(
-            getattr(enrichment, "operator_action_depth", 0)
-        ),
-        "multilevel_coarse_requested": bool(
-            getattr(multilevel, "multilevel_coarse", False)
-        ),
-        "multilevel_max_levels_requested": int(
-            getattr(multilevel, "multilevel_max_levels", 1)
-        ),
-        "multilevel_aggregate_factor_requested": int(
-            getattr(multilevel, "multilevel_aggregate_factor", 2)
+        **_requested_config_metadata(
+            context.multilevel_config,
+            bool_fields=_QI_DEVICE_MULTILEVEL_BOOL_METADATA_FIELDS,
+            int_fields=_QI_DEVICE_MULTILEVEL_INT_METADATA_FIELDS,
+            value_fields=_QI_DEVICE_MULTILEVEL_VALUE_METADATA_FIELDS,
         ),
         "multilevel_max_rank_requested": (
             None
             if context.multilevel_max_rank is None
             else int(context.multilevel_max_rank)
-        ),
-        "multilevel_max_angular_mode_requested": int(
-            getattr(multilevel, "multilevel_max_angular_mode", 0)
-        ),
-        "multilevel_max_radial_degree_requested": int(
-            getattr(multilevel, "multilevel_max_radial_degree", 0)
-        ),
-        "multilevel_max_pitch_degree_requested": int(
-            getattr(multilevel, "multilevel_max_pitch_degree", 0)
-        ),
-        "multilevel_current_moments_requested": bool(
-            getattr(multilevel, "multilevel_current_moments", False)
-        ),
-        "multilevel_species_current_moments_requested": bool(
-            getattr(multilevel, "multilevel_species_current_moments", False)
-        ),
-        "multilevel_radial_current_moments_requested": bool(
-            getattr(multilevel, "multilevel_radial_current_moments", False)
-        ),
-        "multilevel_tail_constraint_moments_requested": bool(
-            getattr(multilevel, "multilevel_tail_constraint_moments", False)
-        ),
-        "multilevel_current_max_pitch_degree_requested": int(
-            getattr(multilevel, "multilevel_current_max_pitch_degree", 0)
-        ),
-        "multilevel_residual_equation_requested": bool(
-            getattr(multilevel, "multilevel_residual_equation", False)
-        ),
-        "multilevel_residual_equation_max_level_rank_requested": int(
-            getattr(multilevel, "multilevel_residual_equation_max_level_rank", 0)
-        ),
-        "multilevel_residual_equation_order_requested": getattr(
-            multilevel,
-            "multilevel_residual_equation_order",
-            None,
-        ),
-        "multilevel_residual_equation_solver_requested": getattr(
-            multilevel,
-            "multilevel_residual_equation_solver",
-            None,
-        ),
-        "multilevel_residual_equation_include_global_requested": bool(
-            getattr(multilevel, "multilevel_residual_equation_include_global", False)
         ),
         **dict(context.extra_coarse_metadata),
         **dict(context.residual_correction_metadata),

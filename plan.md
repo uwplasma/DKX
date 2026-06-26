@@ -45,7 +45,7 @@ Latest execution checkpoint:
   `qi/basis.py`, `qi/corrections.py`, `qi/device.py`, `qi/policy.py`, and
   `qi/__init__.py`. The domain-decomposition line/block implementation remains
   merged into its package owner.
-- Current counts after Batch F first policy-table substep: 168 package Python
+- Current counts after Batch F second sparse-owner cleanup: 168 package Python
   files, 43 package-root files,
   18 `problems/profile_response` files including `sparse`, 10
   `problems/transport_matrix` files including `parallel`, 11 solver-root files,
@@ -53,7 +53,9 @@ Latest execution checkpoint:
   `v3_driver.py` at 47 lines, `io.py` at 64 lines,
   `profile_response/solve.py` at 5,420 lines,
   `profile_response/sparse/handoff.py` at 5,500 lines,
-  `profile_response/policies.py` at 7,369 lines, and 165,806 package Python
+  `profile_response/policies.py` at 7,369 lines,
+  `profile_response/sparse/xblock.py` at 7,689 lines,
+  `profile_response/sparse/qi.py` at 4,873 lines, and 165,758 package Python
   lines.
 - Batch F first policy-table substep is complete. `policies.py` now uses
   grouped requested-control metadata tables and a table-driven QI-device
@@ -72,6 +74,20 @@ Latest execution checkpoint:
   with 329 passed; `python -m pytest tests/test_rhs1_device_operator_unit.py
   tests/test_rhs1_xblock_fallback_initial_guess.py -q --tb=short` with
   41 passed; scoped py_compile/Ruff and `git diff --check` passed.
+- Batch F second sparse-owner cleanup is complete. `sparse/xblock.py` derives
+  post-solve correction driver-state metadata from dataclass fields, and
+  `sparse/qi.py` uses grouped QI-device enrichment/multilevel metadata specs.
+  `sparse/xblock.py` decreased from 7,725 to 7,689 lines, `sparse/qi.py`
+  decreased from 4,885 to 4,873 lines, package Python lines decreased from
+  165,806 to 165,758, and no files were added.
+- Batch F second-substep validation passed:
+  `python -m pytest tests/test_profile_response_sparse_pc.py
+  tests/test_rhs1_qi_*.py -q --tb=short` with 452 passed;
+  `python -m pytest tests/test_rhs1_device_operator_unit.py
+  tests/test_rhs1_xblock_fallback_initial_guess.py
+  tests/test_profile_response_diagnostics.py -q --tb=short` with 57 passed;
+  targeted QI sparse-pattern metadata tests with 3 passed; scoped
+  py_compile/Ruff and `git diff --check` passed.
 - Batch E validation passed: stale source-map deleted-alias scan returned no
   matches; focused CLI/API/scans/upstream/data-fetch/import-contract tests
   passed with `39 passed`; scoped py_compile and Ruff passed for touched
