@@ -2704,7 +2704,7 @@ Current completion status:
   only remaining refactor work is the retained-boundary audit for the large
   profile/transport solve owners and final PR-body documentation.
 - Coverage and future-proof validation: the latest full local xdist coverage
-  audit completed `3620` tests with `168` skips in `255.85 s` and measured
+  audit completed `3632` tests with `168` skips in `258.88 s` and measured
   `84%` package coverage. The newest tests cover output streaming, periodic
   stencils, release-data fetching, PETSc reference readers, upstream wrapper
   behavior, active full-FP kinetic block preconditioners, sparse-pattern
@@ -2717,9 +2717,11 @@ Current completion status:
   convergence, and frozen-Jacobian branch behavior, plus frozen-reference
   comparison semantics. The large RHSMode=1 profile-solve orchestrator has
   bounded routing tests for auto-host, structured-CSR, explicit sparse
-  minimum-norm, and explicit sparse-host/direct early exits. Benchmark-artifact
-  promotion policy also has fast gates for default-promotion evidence and
-  canonical runtime/memory ordering. The next coverage work must focus on
+  minimum-norm, and explicit sparse-host/direct early exits; the Phi1 Newton
+  owner rose from `43%` to `85%` file coverage in the fresh audit.
+  Benchmark-artifact promotion policy also has fast gates for default-promotion
+  evidence and canonical runtime/memory ordering. The next coverage work must
+  focus on
   profile/transport solve owners, sparse-pattern emission, Schur/profile
   preconditioners, profile true-operator rescue paths, output writer branches,
   and ambipolar derivative/root edge cases while keeping CI below ten minutes.
