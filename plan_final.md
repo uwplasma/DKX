@@ -294,6 +294,10 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   paths, profile/transport solve wrappers, true-operator rescue, ambipolar
   workflows, and sensitivity contracts. `ruff check sfincs_jax ...`,
   `compileall -q sfincs_jax`, and `git diff --check` also passed.
+- The forty-ninth post-audit package-README tranche rewrote transitional
+  package-layout language into stable compatibility-facade language. The
+  package/source layout guard reports `25 passed`, and the package README stale
+  wording scan has no matches for the blocked transition/release-cycle phrases.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.

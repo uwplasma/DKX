@@ -25,10 +25,10 @@ discretization, operators, solvers, outputs, validation, and research workflows.
 - `profiling.py`: lightweight timers and memory probes used by CLI, examples,
   and benchmark paths.
 
-Only compatibility shims should remain transitional:
+Compatibility facades are intentionally small:
 
-- `v3_driver.py`: compatibility shim for former monolithic imports; it should
-  stay small and contain no physics or solver implementation.
+- `v3_driver.py`: facade for historical monolithic imports; it should stay
+  small and contain no physics or solver implementation.
 
 Normal users should use these public modules or the CLI. Implementation modules
 inside domain folders are for contributors and advanced research workflows.
@@ -41,18 +41,17 @@ inside domain folders are for contributors and advanced research workflows.
   and JAX geometry adapters.
 - `operators/`: drift-kinetic operator terms, matrix-free actions, sparse
   operator helpers, and profile-response operator assembly. Profile-response
-  owners use flat `profile_*.py` names; `profile_response.py` is only a
-  compatibility shim for the former nested import path.
+  owners use flat `profile_*.py` names; `profile_response.py` is a small import
+  facade for compatibility.
 - `physics/`: collision, classical-transport, bootstrap-current, and
   normalization formulas.
 - `problems/`: physical problem owners, including flat RHSMode-1
   `profile_*.py` modules, flat RHSMode-2/3 `transport_*.py` modules, and
   ambipolar root solves. `profile_response.py` and `transport_matrix.py` are
-  compatibility shims for former nested import paths.
+  small import facades for compatibility.
 - `solvers/`: Krylov dispatch, solver-path selection, sparse/native factors,
   memory models, and flat `preconditioner_*.py` modules. `preconditioners.py`
-  is a compatibility index for former nested solver imports, not an
-  implementation folder.
+  is a compatibility index, not an implementation folder.
 - `outputs/`: HDF5/NetCDF/NPZ schemas, writer logic, and post-solve
   diagnostics.
 - `validation/`: frozen-reference loading, parity checks, the release-data
@@ -72,9 +71,9 @@ inside domain folders are for contributors and advanced research workflows.
 - Prefer descriptive domain names over historical names. For example, use
   `profile_*`, `transport_*`, or `preconditioner_*` names only when they point
   to the physics or numerical role of the module.
-- Preserve public imports through compatibility aliases during one release
-  cycle, but move internal imports to the canonical modules as soon as a module
-  is consolidated.
+- Preserve public imports through compatibility aliases when they are part of
+  documented user workflows, but keep internal imports pointed at the canonical
+  domain modules.
 - Keep large validation data out of the git clone and wheel. Small frozen
   references can live in `tests/fixtures`; large equilibria or benchmark outputs
   should be fetched through `validation.data_fetch` from release assets. The
