@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 import subprocess
 
@@ -61,6 +62,16 @@ DISALLOWED_TRACKED_SUFFIXES = {
 }
 
 MAX_TRACKED_EXAMPLE_BYTES = 2 * 1024 * 1024
+README_STALE_FRAGMENTS = (
+    "What works today",
+    "checked docs now contain",
+    "currently pinned",
+    "currently ships",
+    "now supports",
+    "now writes",
+    "new users",
+)
+SCRIPT_TOKEN_RE = re.compile(r"`([^`]*?\.py)`")
 
 
 def _tracked_example_files() -> list[Path]:
@@ -99,6 +110,29 @@ def test_examples_readme_is_a_complete_user_navigation_map() -> None:
     for entrypoint in sorted(REQUIRED_TASK_ENTRYPOINTS):
         assert f"`{entrypoint}`" in readme, entrypoint
         assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
+
+
+def test_example_readmes_are_standalone_and_reference_existing_scripts() -> None:
+    offenders: list[str] = []
+    missing_scripts: list[str] = []
+
+    for readme_path in sorted(EXAMPLES_ROOT.glob("*/README.md")) + [EXAMPLES_ROOT / "README.md"]:
+        text = readme_path.read_text(encoding="utf-8")
+        relative_readme = readme_path.relative_to(REPO_ROOT).as_posix()
+        for fragment in README_STALE_FRAGMENTS:
+            if fragment in text:
+                offenders.append(f"{relative_readme}: {fragment!r}")
+
+        base = readme_path.parent
+        for token in SCRIPT_TOKEN_RE.findall(text):
+            if " " in token or token.startswith(("/", "http")):
+                continue
+            script_path = (REPO_ROOT / token) if token.startswith("examples/") else (base / token)
+            if not script_path.is_file():
+                missing_scripts.append(f"{relative_readme}: {token}")
+
+    assert offenders == []
+    assert missing_scripts == []
 
 
 def test_examples_do_not_track_generated_caches_or_binary_outputs() -> None:
