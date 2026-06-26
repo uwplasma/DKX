@@ -256,6 +256,32 @@ RESERVED_MODULE_NAMES_UNTIL_MIGRATION = (
 )
 
 MOVED_ROOT_MODULE_OWNERS = {
+    "sfincs_jax.operators.profile_response.collisionless": (
+        "CollisionlessV3Operator",
+        "apply_collisionless_v3",
+    ),
+    "sfincs_jax.operators.profile_response.electric_field": (
+        "ErXiDotV3Operator",
+        "ErXDotV3Operator",
+        "apply_er_xidot_v3",
+        "apply_er_xdot_v3",
+    ),
+    "sfincs_jax.operators.profile_response.exb": (
+        "ExBThetaV3Operator",
+        "ExBZetaV3Operator",
+        "apply_exb_theta_v3",
+        "apply_exb_zeta_v3",
+    ),
+    "sfincs_jax.operators.profile_response.linear_systems": (
+        "V3FBlockLinearSystem",
+        "V3FullLinearSystem",
+    ),
+    "sfincs_jax.operators.profile_response.magnetic_drifts": (
+        "MagneticDriftThetaV3Operator",
+        "MagneticDriftXiDotV3Operator",
+        "MagneticDriftZetaV3Operator",
+        "apply_magnetic_drift_theta_v3",
+    ),
     "sfincs_jax.discretization.adaptive_maps": (
         "AffineXMap",
         "MappedXGrid",
@@ -326,6 +352,11 @@ DELETED_ROOT_ALIASES = (
     "sfincs_jax.vmec_geometry",
     "sfincs_jax.vmec_wout",
     "sfincs_jax.xgrid",
+    "sfincs_jax.collisionless",
+    "sfincs_jax.collisionless_er",
+    "sfincs_jax.collisionless_exb",
+    "sfincs_jax.magnetic_drifts",
+    "sfincs_jax.residual",
 )
 
 ROOT_MODULE_CLASSIFICATIONS = {
@@ -335,9 +366,6 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "api.py": "public API",
     "classical_transport.py": "stable physics kernel",
     "cli.py": "public entry point",
-    "collisionless.py": "stable operator kernel",
-    "collisionless_er.py": "stable operator kernel",
-    "collisionless_exb.py": "stable operator kernel",
     "collisions.py": "stable physics kernel",
     "compare.py": "public validation API",
     "constrained_pas_branch.py": "stable solver-policy kernel",
@@ -347,7 +375,6 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "host_refinement.py": "stable solver-policy kernel",
     "input_compat.py": "public compatibility API",
     "io.py": "compatibility facade",
-    "magnetic_drifts.py": "stable operator kernel",
     "namelist.py": "public input API",
     "pas_smoother.py": "stable preconditioner kernel",
     "paths.py": "stable support utility",
@@ -355,7 +382,6 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "phi1_newton_policy.py": "stable solver-policy kernel",
     "plotting.py": "public plotting API",
     "profiling.py": "stable support utility",
-    "residual.py": "stable operator kernel",
     "sensitivity.py": "public differentiation API",
     "solver.py": "stable solver kernel",
     "v3_driver.py": "compatibility shim",
@@ -368,9 +394,6 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "api.py": ("package root public API", "keep at root"),
     "classical_transport.py": ("physics classical transport owner", "move only with physics API export tests"),
     "cli.py": ("package root CLI entry point", "keep at root"),
-    "collisionless.py": ("operators profile-response streaming owner", "move with operator-kernel group"),
-    "collisionless_er.py": ("operators electric-field owner", "move with operator-kernel group"),
-    "collisionless_exb.py": ("operators ExB owner", "move with operator-kernel group"),
     "collisions.py": ("physics/operators collision owner", "move only with collision API export tests"),
     "compare.py": ("validation comparison API", "move only after examples/scripts use validation owner"),
     "constrained_pas_branch.py": ("solvers/preconditioners PAS policy owner", "move in solver-policy group if no public shim is needed"),
@@ -380,7 +403,6 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "host_refinement.py": ("solvers refinement policy owner", "move in solver-policy group if profile-response imports migrate"),
     "input_compat.py": ("input compatibility owner", "keep root public compatibility shim until input package exports cover callers"),
     "io.py": ("outputs writer/formats/cache owners", "keep tiny root facade until public imports migrate"),
-    "magnetic_drifts.py": ("operators magnetic-drift owner", "move with operator-kernel group"),
     "namelist.py": ("input namelist owner", "keep root public parser until input package exports are documented"),
     "pas_smoother.py": ("solvers/preconditioners PAS smoother owner", "move in solver-preconditioner group"),
     "paths.py": ("package root path support utility", "keep at root unless a support package is introduced with broad import rewrite"),
@@ -388,7 +410,6 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "phi1_newton_policy.py": ("problems.profile_response Phi1 policy owner", "move if it deletes root file without adding shim"),
     "plotting.py": ("outputs/plotting public helper", "keep root public helper unless API replacement is documented"),
     "profiling.py": ("solvers/validation profiling support", "defer until profiling API boundary is explicit"),
-    "residual.py": ("operators residual/autodiff owner", "move with operator-kernel group if docs imports migrate"),
     "sensitivity.py": ("package root differentiation API", "keep at root"),
     "solver.py": ("solvers public contracts owner", "keep root shim until solvers exports cover public contracts"),
     "v3_driver.py": ("compatibility shim to problem owners", "delete after tests/examples stop importing sfincs_jax.v3_driver"),
