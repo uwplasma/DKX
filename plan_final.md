@@ -322,6 +322,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   dtype instead of silently promoting float32 operators to float64, which keeps
   this fallback aligned with the memory-reduction goal while preserving the
   strict residual-admission path.
+- The thirty-ninth post-audit coverage tranche added profile-system branch
+  tests for nonlinear residual Phi1-state substitution, precompile kernel
+  routing, and Jacobian shape guards. These tests protect differentiable
+  nonlinear solve behavior and ahead-of-time compile policy with fake
+  lower/compile hooks, so CI gains coverage without spending time compiling
+  production operators.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.

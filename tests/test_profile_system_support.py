@@ -13,6 +13,7 @@ import sfincs_jax.operators.profile_system as profile_system
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.operators.profile_system import (
     V3FullSystemOperator,
+    apply_v3_full_system_jacobian,
     _fs_average_factor,
     _get_bool,
     _get_int,
@@ -33,6 +34,8 @@ from sfincs_jax.operators.profile_system import (
     _source_basis_constraint_scheme_1,
     _unpad_full_vector,
     full_system_operator_from_namelist,
+    precompile_v3_full_system,
+    residual_v3_full_system,
     sharding_constraints,
     with_transport_rhs_settings,
 )
@@ -288,3 +291,66 @@ def test_value_contains_tracer_makes_transformed_operator_uncacheable() -> None:
 
     assert bool(profile_system._op_cacheable(op)) is True
     assert bool(_inside_transform(jnp.asarray(1.0))) is False
+
+
+def test_residual_uses_current_phi1_state_for_nonlinear_operator(monkeypatch: pytest.MonkeyPatch) -> None:
+    op = _tiny_phi1_scheme2_operator()
+    state = jnp.zeros((op.total_size,), dtype=jnp.float64)
+    phi1_state = jnp.arange(op.n_theta * op.n_zeta, dtype=jnp.float64).reshape((op.n_theta, op.n_zeta))
+    state = state.at[op.f_size : op.f_size + op.n_theta * op.n_zeta].set(phi1_state.reshape((-1,)))
+    captured: dict[str, np.ndarray] = {}
+
+    def fake_matvec(op_use: V3FullSystemOperator, x_full: jnp.ndarray, *, include_jacobian_terms: bool = True) -> jnp.ndarray:
+        assert include_jacobian_terms is False
+        captured["phi1_hat_base"] = np.asarray(op_use.phi1_hat_base)
+        return jnp.asarray(x_full, dtype=jnp.float64)
+
+    monkeypatch.setattr(profile_system, "apply_v3_full_system_operator_cached", fake_matvec)
+    monkeypatch.setattr(profile_system, "rhs_v3_full_system_jit", lambda _op: jnp.ones((op.total_size,), dtype=jnp.float64))
+
+    residual = residual_v3_full_system(op, state)
+
+    np.testing.assert_allclose(captured["phi1_hat_base"], np.asarray(phi1_state))
+    np.testing.assert_allclose(np.asarray(residual), np.asarray(state) - 1.0)
+
+
+def test_precompile_v3_full_system_compiles_expected_kernels(monkeypatch: pytest.MonkeyPatch) -> None:
+    op = _tiny_phi1_scheme2_operator()
+    calls: list[tuple[str, bool | None]] = []
+
+    class FakeLowered:
+        def __init__(self, name: str, include_jacobian_terms: bool | None) -> None:
+            self.name = name
+            self.include_jacobian_terms = include_jacobian_terms
+
+        def compile(self) -> None:
+            calls.append((self.name, self.include_jacobian_terms))
+
+    class FakeKernel:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def lower(self, *_args, **kwargs) -> FakeLowered:
+            return FakeLowered(self.name, kwargs.get("include_jacobian_terms"))
+
+    monkeypatch.setattr(profile_system, "_get_apply_full_system_operator_jit", lambda _signature: FakeKernel("matvec"))
+    monkeypatch.setattr(profile_system, "apply_v3_full_system_jacobian_jit", FakeKernel("jacobian"))
+    monkeypatch.setattr(profile_system, "rhs_v3_full_system_jit", FakeKernel("rhs"))
+
+    precompile_v3_full_system(op, include_jacobian=False)
+    assert calls == [("matvec", True), ("matvec", False), ("rhs", None)]
+
+    calls.clear()
+    precompile_v3_full_system(op, include_jacobian=True)
+    assert calls == [("matvec", True), ("matvec", False), ("jacobian", None), ("rhs", None)]
+
+
+def test_full_system_jacobian_rejects_mismatched_state_shapes() -> None:
+    op = _tiny_phi1_scheme2_operator()
+    state = jnp.zeros((op.total_size,), dtype=jnp.float64)
+
+    with pytest.raises(ValueError, match="total_size"):
+        apply_v3_full_system_jacobian(op, state[:-1], state)
+
+    with pytest.raises(ValueError, match="total_size"):
+        apply_v3_full_system_jacobian(op, state, state[:-1])
