@@ -87,10 +87,7 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.solvers.preconditioners.pas.xblock_ilu
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.schur.rhs1_coarse_policy
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioners.schur.rhs1_coarse_basis
+.. automodule:: sfincs_jax.solvers.preconditioners.schur.profile_response
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.low_l_schur
@@ -266,9 +263,6 @@ research workflows.
    :members:
 
 .. automodule:: sfincs_jax.problems.profile_response.sparse.xblock
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioners.schur.rhs1
    :members:
 
 .. automodule:: sfincs_jax.problems.profile_response.solver_diagnostics
