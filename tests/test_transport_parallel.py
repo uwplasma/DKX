@@ -12,7 +12,6 @@ from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax import cli
 from sfincs_jax import v3_driver
 from sfincs_jax.problems.transport_matrix.parallel import runtime as transport_parallel_pool
-from sfincs_jax.problems.transport_matrix.parallel import policy as transport_parallel_policy
 from sfincs_jax.v3_driver import solve_v3_transport_matrix_linear_gmres
 
 
@@ -491,7 +490,7 @@ def test_transport_parallel_pool_key_tracks_backend(monkeypatch: pytest.MonkeyPa
 
 
 def test_parallel_policy_xla_rewrite_accepts_worker_env_positional_callback() -> None:
-    rewritten = transport_parallel_policy.rewrite_xla_flags(
+    rewritten = transport_parallel_pool.rewrite_xla_flags(
         "--xla_cpu_multi_thread_eigen=false --keep=1",
         3,
         1,

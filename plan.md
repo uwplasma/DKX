@@ -6005,3 +6005,69 @@ Next best steps:
 2. Decide whether `data_fetch.py`, `postprocess_upstream.py`, and `scans.py`
    should stay at root as public workflows or move under domain packages.
 3. Then execute Batch C solver/preconditioner-family compression.
+## 2026-06-26 Lane 1 Batch C Transport-Parallel Runtime Consolidation
+
+Steps taken:
+
+1. Merged the remaining internal transport-parallel policy and sharding owners
+   into `sfincs_jax/problems/transport_matrix/parallel/runtime.py`.
+2. Deleted `parallel/policy.py` and `parallel/sharding.py`.
+3. Kept `parallel/worker.py` as the documented
+   `python -m sfincs_jax.problems.transport_matrix.parallel.worker`
+   subprocess entry point; it is no longer considered consolidation debt.
+4. Updated source, examples, tests, API docs, source map, parallelism docs,
+   research-lane docs, and release notes to import and describe the
+   consolidated runtime owner.
+5. Updated `plan_final.md`, which remains the only authoritative completion
+   plan. Older notes in this execution log that say to preserve or merge
+   `parallel/policy.py` are historical and superseded by this batch.
+
+Results:
+
+- Package Python files: `176`.
+- Package-root Python files: `43`.
+- Package source lines: `165,968`.
+- `sfincs_jax/problems/transport_matrix`: `10` Python files including
+  `parallel`.
+- `sfincs_jax/problems/transport_matrix/parallel`: `3` Python files:
+  `__init__.py`, `runtime.py`, and `worker.py`.
+- `profile_response/solve.py`: `5,420` lines.
+- `profile_response/sparse/handoff.py`: `5,500` lines.
+- `transport_matrix/linear_system.py`: `3,122` lines.
+- `transport_matrix/parallel/runtime.py`: `3,463` lines.
+- `v3_driver.py`: `47` lines.
+- `io.py`: `64` lines.
+
+Validation:
+
+- Scoped py_compile passed for the consolidated runtime, worker, profile
+  response solve shim, and touched tests.
+- Scoped Ruff passed for the consolidated runtime, worker, touched tests, and
+  touched benchmark examples.
+- Focused transport-parallel and import-contract suite passed with
+  `101 passed in 28.93 s`.
+- Full `tests/test_transport_*.py` pattern passed with
+  `273 passed in 46.67 s`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `git diff --check` passed.
+- Live stale-reference audit found no references to deleted
+  `parallel.policy` or `parallel.sharding` modules outside frozen static
+  evidence artifacts.
+
+Progress:
+
+- Lane 1 structural consolidation: about `99%`.
+- Batch A profile-response review gates: complete, with the documented
+  handoff compatibility-waiver deletion condition still tracked.
+- Batch B transport/output/root cleanup: about `85%`.
+- Batch C transport-parallel runtime consolidation: complete.
+- Batch D solver/preconditioner family consolidation: next active batch.
+- Public docs/API stabilization for the refactor PR: about `50%`.
+
+Next best steps:
+
+1. Execute `plan_final.md` Batch D: consolidate solver-core
+   policy/context/cache/diagnostic files by durable owner without changing
+   automatic solver selection, differentiable JAX paths, or CLI fast paths.
+2. Then execute Batch E root/public-surface classification, followed by Batch F
+   profile-response internal line paydown and Batch G review-ready validation.

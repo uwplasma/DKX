@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.problems.transport_matrix.parallel.policy import (
+from sfincs_jax.problems.transport_matrix.parallel.runtime import (
     audit_parallel_scaling_claim_scope,
     audit_sharded_solve_scaling_summary,
     audit_transport_parallel_scaling_summary,

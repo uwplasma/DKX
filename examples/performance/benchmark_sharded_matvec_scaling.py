@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.problems.transport_matrix.parallel.sharding import plan_compiled_sharded_operator_reuse
+from sfincs_jax.problems.transport_matrix.parallel.runtime import plan_compiled_sharded_operator_reuse
 from sfincs_jax.v3_driver import full_system_operator_from_namelist
 from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator_cached
 

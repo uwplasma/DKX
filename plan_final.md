@@ -616,7 +616,7 @@ Locked checkpoints:
 | Root public surface | `api.py`, `cli.py`, `namelist.py`, `input_compat.py`, `geometry.py`, `grids.py`, `sensitivity.py`, `plotting.py`, stable physics kernels | Classify `data_fetch.py`, `postprocess_upstream.py`, and `scans.py`. Move them only if public imports can migrate without adding shims; otherwise document them as public root workflows. | Delete no-op root shims after public imports migrate. |
 | Compatibility roots | `v3_driver.py` only as temporary import shim | Result tests/docs import problem-owned result contracts directly | Delete `v3_driver.py` only if all public imports and tests move to domain APIs. |
 | Profile response | Existing owners only: `setup.py`, `solve.py`, `policies.py`, `preconditioner_build.py`, `dense.py`, `residual.py`, `diagnostics.py`, `solver_diagnostics.py`, `phi1_newton.py`, `sparse/` | Restore `solve.py <=5,500` without creating files. Keep the `handoff.py` waiver only if documented as a compatibility re-export facade. Reduce oversized owners by deleting duplicate branch patterns, not by creating shards. | Do not create another profile-response file. |
-| Transport matrix | `solve.py`, `setup.py`, `diagnostics.py`, `finalize.py`, `policies.py`, `parallel/runtime.py`, and one durable linear-system owner if needed | Preferred large move: merge `active_dense.py`, `active_factor.py`, `direct_block_schur.py`, `direct_pmat.py`, and `fortran_reduced_lu.py` into a single `linear_system.py` owner, deleting five files in the same commit. Merge `parallel/policy.py`, `parallel/sharding.py`, and `parallel/worker.py` into `parallel/runtime.py` only if tests show they are internal. | Delete tiny relay files after tests import the owner. Do not grow `transport_matrix/solve.py` into another monolith. |
+| Transport matrix | `solve.py`, `setup.py`, `diagnostics.py`, `finalize.py`, `policies.py`, `linear_system.py`, `parallel/runtime.py`, and `parallel/worker.py` | Batch B merged `active_dense.py`, `active_factor.py`, `direct_block_schur.py`, `direct_pmat.py`, and `fortran_reduced_lu.py` into `linear_system.py`. Batch C merged internal `parallel/policy.py` and `parallel/sharding.py` into `parallel/runtime.py`. | Keep `parallel/worker.py` only as the documented `python -m sfincs_jax.problems.transport_matrix.parallel.worker` subprocess entry point. Delete tiny relay files after tests import the owner. Do not grow `transport_matrix/solve.py` into another monolith. |
 | Outputs | `outputs/formats.py`, `outputs/cache.py`, `outputs/rhsmode1.py`, `outputs/transport.py`, `outputs/writer.py` | Continue moving schema/output-policy pieces into output owners only if total package complexity drops. | `io.py` remains a `<=800` line compatibility facade until public imports no longer need it. |
 | Solver core | `explicit_sparse.py`, `implicit.py`, `krylov_dispatch.py`, `path_policy.py`, `selection_policy.py`, `memory_model.py`, native factor kernels, and one preconditioning-state owner | Merge `explicit_sparse_factor_builder.py` and `explicit_sparse_factor_policy.py` into `explicit_sparse.py`. Merge `preconditioner_caches.py`, `preconditioner_context.py`, `preconditioner_operators.py`, and `preconditioner_setup.py` into one clear owner only if imports stay acyclic. Merge `progress.py`, `state.py`, `trace.py`, and `profile_compare.py` into a diagnostics/progress owner if they are internal. | Delete old policy/context/cache files only after import-contract and solver-dispatch tests pass. |
 | QI preconditioners | Durable owners are fixed: `qi/basis.py`, `qi/corrections.py`, `qi/device.py`, `qi/policy.py`, plus `qi/__init__.py` | No more QI file movement unless a correctness bug appears. Simplify internally by deleting dead `qi_*` compatibility symbols or duplicated basis/correction code. | Keep compatibility aliases only through `qi/__init__.py` or owner tests, not as files. |
@@ -693,18 +693,37 @@ Actions:
 
 1. Audit `parallel/policy.py`, `parallel/sharding.py`, and `parallel/worker.py`
    imports and tests.
-2. Merge purely internal policy, sharding, and worker payload helpers into
+2. Merge purely internal policy and sharding helpers into
    `parallel/runtime.py`; delete the old files in the same commit if imports
    are internal.
-3. If any public import must remain, expose it from `parallel/__init__.py` or a
-   documented API owner, not by keeping a tiny implementation file.
+3. Keep `parallel/worker.py` because it is a documented subprocess executable
+   path, not a tiny implementation shard.
+4. If any other public import must remain, expose it from a documented API
+   owner, not by keeping a tiny implementation file.
 
 Exit gates:
 
-- `problems/transport_matrix/parallel` has `<=2` implementation files unless
-  a documented public API dependency blocks deletion.
+- `problems/transport_matrix/parallel` has two implementation files:
+  `runtime.py` and `worker.py`.
 - Parallel runtime, sharding, worker-payload, CPU/GPU admission, and import
   tests pass.
+
+Status on 2026-06-26:
+
+- Complete. `parallel/policy.py` and `parallel/sharding.py` were absorbed into
+  `parallel/runtime.py`; `parallel/worker.py` stayed as the public executable
+  wrapper. Live docs, examples, tests, and source no longer import the deleted
+  modules.
+- Current metrics after Batch C: `176` package Python files, `43` package-root
+  files, `165,968` package source lines, `problems/transport_matrix` at `10`
+  Python files including `parallel`, and `parallel` at `runtime.py`,
+  `worker.py`, and `__init__.py`.
+- Validation: scoped py_compile and Ruff passed; the focused transport-parallel
+  suite passed with `101 passed`; the full `tests/test_transport_*.py` pattern
+  passed with `273 passed`; Sphinx `-W` passed; `git diff --check` passed; and
+  the live stale-reference audit found no references to deleted
+  `parallel.policy` or `parallel.sharding` modules outside frozen static
+  evidence artifacts.
 
 #### Batch D - Solver Core And Preconditioner Surface Consolidation
 
@@ -1375,31 +1394,32 @@ Deliverables:
 
 Current completion status:
 
-- Lane 1 structural consolidation: about 98 percent. The compatibility-driver
+- Lane 1 structural consolidation: about 99 percent. The compatibility-driver
   boundary is done, historical `v3_*` implementation roots are routed or
   deleted, top-level `rhs1_*` and `transport_*` implementation files are gone,
-  package-root count is 43, package file count is 178, and `v3_driver.py` is a
+  package-root count is 43, package file count is 176, and `v3_driver.py` is a
   47-line shim. Batch A restored the `profile_response/solve.py <=5,500`
   review gate at 5,420 lines and documented the
   `profile_response/sparse/handoff.py` compatibility waiver while keeping
   `handoff.py` at the 5,500-line gate. Batch B consolidated the active dense,
   active factor, direct reduced-``Pmat``, direct block-Schur, and
   Fortran-reduced LU transport files into
-  `problems/transport_matrix/linear_system.py`.
+  `problems/transport_matrix/linear_system.py`. Batch C consolidated internal
+  transport-parallel policy and sharding ownership into
+  `problems/transport_matrix/parallel/runtime.py`, keeping only `worker.py` as
+  the documented subprocess executable.
   The remaining blockers are concentrated and measurable:
   `profile_response/policies.py` is 7,425 lines,
   `profile_response/sparse/xblock.py` is 7,725 lines,
   `problems/profile_response` has 18 files including `sparse`,
-  `problems/transport_matrix` has 12 files including `parallel`,
+  `problems/transport_matrix` has 10 files including `parallel`,
   `solvers/preconditioners` has 35 files, QI preconditioners have 5 files,
   `io.py` is 64 lines,
   `outputs/writer.py` is 4,264 lines, `outputs/transport.py` is 935 lines,
-  and package source lines are 165,992. Completed consolidation already removed
+  and package source lines are 165,968. Completed consolidation already removed
   the historical `v3_*`, `rhs1_*`, `transport_*`, transport-output, QI-shard,
   symbolic-sparse, and domain-decomposition file debt. The remaining active
-  blocker is Lane 1 Batch C: collapse internal transport-parallel policy,
-  sharding, and worker helpers into runtime ownership if imports allow. After
-  that, the plan proceeds through larger owner-level batches only: solver
+  blockers proceed through larger owner-level batches only: solver
   core/preconditioner-surface consolidation, root/public-surface
   classification, profile-response internal line paydown, and final
   docs/tests/review validation.
@@ -1442,10 +1462,10 @@ Completed checkpoints that remain valid:
 
 Next ordered implementation steps:
 
-1. Execute Lane 1 Batch C: collapse internal transport-parallel
-   policy/sharding/worker helpers into runtime ownership if imports allow.
-2. Execute Lane 1 Batch D and E: consolidate solver-core policy/context/cache/
-   diagnostic files by durable owner, then classify the root public surface and
+1. Execute Lane 1 Batch D: consolidate solver-core policy/context/cache/
+   diagnostic files by durable owner without changing automatic solver
+   selection, differentiable JAX paths, or CLI fast paths.
+2. Execute Lane 1 Batch E: classify the root public surface and
    move only modules that can migrate without creating shims.
 3. Execute Lane 1 Batch F and G: reduce oversized profile-response owners
    internally without new files, refresh docs/source maps/examples/tests, run

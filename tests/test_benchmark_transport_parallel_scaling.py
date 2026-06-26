@@ -10,7 +10,7 @@ from examples.performance.benchmark_transport_parallel_scaling import (
     _timing_semantics,
     _write_scaling_figure,
 )
-from sfincs_jax.problems.transport_matrix.parallel.policy import audit_transport_parallel_scaling_summary
+from sfincs_jax.problems.transport_matrix.parallel.runtime import audit_transport_parallel_scaling_summary
 from sfincs_jax.problems.transport_matrix.parallel.runtime import plan_transport_parallel_gpu_subprocesses
 
 

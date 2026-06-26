@@ -226,13 +226,7 @@ research workflows.
 .. automodule:: sfincs_jax.problems.transport_matrix.solve
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_matrix.parallel.policy
-   :members:
-
 .. automodule:: sfincs_jax.problems.transport_matrix.parallel.runtime
-   :members:
-
-.. automodule:: sfincs_jax.problems.transport_matrix.parallel.sharding
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.parallel.worker

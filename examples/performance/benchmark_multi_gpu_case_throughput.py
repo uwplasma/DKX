@@ -12,7 +12,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.problems.transport_matrix.parallel.policy import audit_multi_gpu_case_throughput_summary  # noqa: E402
+from sfincs_jax.problems.transport_matrix.parallel.runtime import audit_multi_gpu_case_throughput_summary  # noqa: E402
 
 
 def _display_path(path: Path, *, repo_root: Path) -> str:

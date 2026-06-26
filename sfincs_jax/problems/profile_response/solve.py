@@ -458,7 +458,7 @@ from sfincs_jax.problems.transport_matrix.finalize import (
     TransportConstraintNullspaceProjector, TransportRHSFinalizationContext, finalize_full_transport_rhs,
     finalize_reduced_transport_rhs,
 )
-from sfincs_jax.problems.transport_matrix.parallel.policy import (
+from sfincs_jax.problems.transport_matrix.parallel.runtime import (
     transport_parallel_backend as _transport_parallel_backend,
     transport_parallel_gpu_worker_env as _transport_parallel_gpu_worker_env,
     transport_parallel_persistent_pool_enabled as _transport_parallel_persistent_pool_enabled,
