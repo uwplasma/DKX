@@ -62,6 +62,76 @@ def test_build_phi1_newton_preconditioner_collision_and_block_modes() -> None:
     assert calls[-1][1]["preconditioner_xi"] == 4
 
 
+def test_build_phi1_newton_preconditioner_gates_env_aliases_and_defaults(monkeypatch) -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+    emitted: list[tuple[int, str]] = []
+
+    def collision_builder(**kwargs):
+        calls.append(("collision", kwargs))
+        return "collision"
+
+    def block_builder(**kwargs):
+        calls.append(("block", kwargs))
+        return "block"
+
+    common = dict(
+        rhs_mode=1,
+        include_phi1=True,
+        use_active_dof_mode=True,
+        op="op",
+        reduce_full="reduce",
+        expand_reduced="expand",
+        preconditioner_options={
+            "PRECONDITIONER_SPECIES": "bad",
+            "PRECONDITIONER_X": None,
+            "PRECONDITIONER_XI": "6",
+        },
+        collision_builder=collision_builder,
+        block_builder=block_builder,
+        emit=lambda level, message: emitted.append((level, message)),
+    )
+
+    assert build_phi1_newton_preconditioner(
+        use_preconditioner=False,
+        use_frozen_linearization=True,
+        **common,
+    ) is None
+    assert build_phi1_newton_preconditioner(
+        use_preconditioner=True,
+        use_frozen_linearization=False,
+        **common,
+    ) is None
+    assert build_phi1_newton_preconditioner(
+        use_preconditioner=True,
+        use_frozen_linearization=True,
+        **{**common, "rhs_mode": 2},
+    ) is None
+
+    monkeypatch.setenv("SFINCS_JAX_PHI1_PRECOND_KIND", "diag")
+    assert build_phi1_newton_preconditioner(
+        use_preconditioner=True,
+        use_frozen_linearization=True,
+        **common,
+    ) == "collision"
+    assert calls[-1][0] == "collision"
+    assert calls[-1][1]["reduce_full"] == "reduce"
+    assert calls[-1][1]["expand_reduced"] == "expand"
+
+    monkeypatch.setenv("SFINCS_JAX_PHI1_PRECOND_KIND", "point")
+    assert build_phi1_newton_preconditioner(
+        use_preconditioner=True,
+        use_frozen_linearization=True,
+        **common,
+    ) == "block"
+    assert calls[-1][0] == "block"
+    assert calls[-1][1]["preconditioner_species"] == 1
+    assert calls[-1][1]["preconditioner_x"] == 1
+    assert calls[-1][1]["preconditioner_xi"] == 6
+    assert calls[-1][1]["reduce_full"] == "reduce"
+    assert calls[-1][1]["expand_reduced"] == "expand"
+    assert any("preconditioner=block" in message for _, message in emitted)
+
+
 def test_solve_phi1_newton_linear_step_retries_without_preconditioner() -> None:
     dispatch_calls: list[tuple[object, jnp.ndarray]] = []
     history_calls: list[object] = []
@@ -108,6 +178,43 @@ def test_solve_phi1_newton_linear_step_retries_without_preconditioner() -> None:
     assert np.allclose(np.asarray(step_vec), np.array([1.0, 2.0]))
     assert float(linear_resid_norm) == 3.0
     assert any("retrying without preconditioner" in msg for _, msg in emitted)
+
+
+def test_solve_phi1_newton_linear_step_full_sparse_direct_uses_full_cache_tag() -> None:
+    sparse_calls: list[dict[str, object]] = []
+
+    def sparse_direct_solve(**kwargs):
+        sparse_calls.append(kwargs)
+        return GMRESSolveResult(
+            x=jnp.array([0.25, -0.5]),
+            residual_norm=jnp.array(1.0e-9),
+        )
+
+    lin, step_vec, linear_resid_norm = solve_phi1_newton_linear_step(
+        use_active_dof_mode=False,
+        solve_method_linear="sparse_direct",
+        matvec=lambda x: 2.0 * x,
+        residual_vec=jnp.array([-0.5, 1.0]),
+        preconditioner="unused",
+        gmres_tol=1e-8,
+        gmres_restart=40,
+        gmres_maxiter=12,
+        sparse_direct_solve=sparse_direct_solve,
+        gmres_dispatch=lambda **kwargs: (_ for _ in ()).throw(AssertionError("unexpected gmres dispatch")),
+        gmres_result_is_finite=lambda res: True,
+        emit_ksp_history=lambda **kwargs: (_ for _ in ()).throw(AssertionError("unexpected history emission")),
+        emit=None,
+        newton_iter=3,
+        total_size=2,
+    )
+
+    assert sparse_calls
+    assert sparse_calls[0]["cache_tag"] == ("full", 3, 2)
+    assert sparse_calls[0]["n"] == 2
+    assert sparse_calls[0]["restart_val"] == 40
+    np.testing.assert_allclose(np.asarray(lin.x), np.asarray([0.25, -0.5]))
+    np.testing.assert_allclose(np.asarray(step_vec), np.asarray([0.25, -0.5]))
+    np.testing.assert_allclose(float(linear_resid_norm), 1.0e-9)
 
 
 def test_solve_phi1_newton_linear_step_reduced_sparse_direct_expands_and_recomputes_residual() -> None:

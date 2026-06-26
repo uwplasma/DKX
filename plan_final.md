@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (transport dense-admission coverage pass)
+Last updated: 2026-06-26 (Phi1 Newton policy coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -84,7 +84,7 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   folders) were removed; ignored benchmark input caches remain local-only and
   are not part of a user clone or wheel.
 - A fresh xdist coverage audit on this branch completed successfully:
-  `3757 passed in 292.02 s` with `86%` package coverage. The CI floor remains
+  `3615 passed, 163 skipped in 258.23 s` with `84%` package coverage. The CI floor remains
   `80%` until the branch has enough measured margin to raise it safely, but the
   target remains `95%` meaningful package coverage with GitHub Actions under
   `10 min`. The gap must be closed with bounded unit, numerical,
@@ -483,6 +483,16 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   on `dense_backend_allowed`. The focused active/dense setup suite reports
   `7 passed` in `0.31 s`, and the bounded transport/API/source review bundle
   reports `94 passed` in `25.38 s`.
+- The seventy-third post-audit coverage tranche added Phi1 Newton policy and
+  linear-step branch gates. `tests/test_phi1_newton_policy.py` now covers
+  invalid frozen-Jacobian and line-search environment fallbacks, while
+  `tests/test_phi1_newton_linear.py` covers preconditioner admission gates,
+  `diag`/`point` environment aliases, defaulted invalid block-preconditioner
+  options, active block-preconditioner argument forwarding, and the full-size
+  sparse-direct linear-step path. These tests exercise differentiable and
+  non-differentiable Phi1 solve policy seams without launching a nonlinear
+  production solve. The focused Phi1 suite reports `13 passed` in `0.63 s`, and
+  the compact recent-lane review bundle reports `107 passed` in `24.89 s`.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
@@ -2646,15 +2656,17 @@ Current completion status:
   only remaining refactor work is the retained-boundary audit for the large
   profile/transport solve owners and final PR-body documentation.
 - Coverage and future-proof validation: the latest full local xdist coverage
-  audit completed `3757` tests in `292.02 s` and measured `86%` package
-  coverage. The newest tests cover output streaming, periodic stencils,
-  release-data fetching, PETSc reference readers, upstream wrapper behavior,
-  active full-FP kinetic block preconditioners, sparse-pattern helpers,
-  explicit-sparse settings/materialization guards, profile-system algebra and
-  admission gates, RHSMode=2/3 transport block-preconditioner assembly and
-  admission gates, public solver/API facades, transport recycle-state reuse,
-  and frozen-reference comparison semantics. Benchmark-artifact promotion
-  policy also has fast gates for default-promotion evidence and canonical
+  audit completed `3615` tests with `163` skips in `258.23 s` and measured
+  `84%` package coverage. The newest tests cover output streaming, periodic
+  stencils, release-data fetching, PETSc reference readers, upstream wrapper
+  behavior, active full-FP kinetic block preconditioners, sparse-pattern
+  helpers, explicit-sparse settings/materialization guards, profile-system
+  algebra and admission gates, RHSMode=2/3 transport block-preconditioner
+  assembly and admission gates, public solver/API facades, transport
+  recycle-state reuse, ambipolar fail-closed utility gates, transport
+  dense-backend admission, Phi1 Newton policy/linear-step branches, and
+  frozen-reference comparison semantics. Benchmark-artifact promotion policy
+  also has fast gates for default-promotion evidence and canonical
   runtime/memory ordering. The next coverage work must focus on
   profile/transport solve owners, sparse-pattern emission, Schur/profile
   preconditioners, profile true-operator rescue paths, output writer branches,

@@ -58,6 +58,14 @@ def test_phi1_frozen_jacobian_policy_defaults_and_env(monkeypatch) -> None:
     assert pol.use_cache is False
     assert pol.every == 5
 
+    monkeypatch.setenv("SFINCS_JAX_PHI1_FROZEN_JAC_MODE", "invalid")
+    monkeypatch.setenv("SFINCS_JAX_PHI1_FROZEN_JAC_CACHE", "maybe")
+    monkeypatch.setenv("SFINCS_JAX_PHI1_FROZEN_JAC_CACHE_EVERY", "bad")
+    pol = phi1_frozen_jacobian_policy(include_phi1=False)
+    assert pol.mode == "frozen_rhs"
+    assert pol.use_cache is True
+    assert pol.every == 1
+
 
 def test_phi1_line_search_policy_defaults_and_env(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_PHI1_STEP_SCALE", raising=False)
@@ -82,3 +90,15 @@ def test_phi1_line_search_policy_defaults_and_env(monkeypatch) -> None:
     assert pol.factor == 0.5
     assert pol.c1 == 1.0e-3
     assert pol.step_scale == 2.0
+
+    monkeypatch.setenv("SFINCS_JAX_PHI1_LINESEARCH_MODE", "")
+    monkeypatch.setenv("SFINCS_JAX_PHI1_LINESEARCH_MAXITER", "bad")
+    monkeypatch.setenv("SFINCS_JAX_PHI1_LINESEARCH_FACTOR", "bad")
+    monkeypatch.setenv("SFINCS_JAX_PHI1_LINESEARCH_C1", "bad")
+    monkeypatch.setenv("SFINCS_JAX_PHI1_STEP_SCALE", "bad")
+    pol = phi1_line_search_policy(use_frozen_linearization=False, include_phi1=True)
+    assert pol.mode == "best"
+    assert pol.maxiter == 12
+    assert pol.factor is None
+    assert pol.c1 == 1.0e-4
+    assert pol.step_scale == 1.0
