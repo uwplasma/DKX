@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (roadmap/source-map consistency pass)
+Last updated: 2026-06-26 (examples and procedural-doc navigation pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -525,6 +525,19 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   examples README, source map, and development roadmap is clean for the checked
   progress phrases, and the import/source/doc-claim guard reports `31 passed`
   in `1.81 s`.
+- The seventy-seventh post-audit examples tranche made every top-level examples
+  folder self-documenting. `examples/data/README.md` explains the small shared
+  input-deck policy and redirects large artifacts to release-data fetches,
+  while `examples/utils/README.md` explains that helper scripts are support code
+  rather than first-pass workflows. `tests/test_examples_tree_contract.py` now
+  requires a README in every allowed top-level examples folder, including
+  support folders. The same tranche cleaned progress-style wording from the
+  procedural parallelism and release-checklist pages, replacing `current main`,
+  `now`, `previous`, and `currently` phrasing with stable support and benchmark
+  language. The scoped wording scan is clean across README, the package README,
+  examples READMEs, `docs/parallelism.rst`, and `docs/release_checklist.rst`.
+  The examples/import/source/doc-claim guard reports `37 passed` in `1.88 s`,
+  and Ruff passes on the changed contract test.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.

@@ -73,7 +73,7 @@ preserving differentiability:
 2. **Parallel cases / scan points**
 
    The reduced suite and scan workflows are embarrassingly parallel across
-   cases or scan points. The suite runner now supports `--jobs` to execute
+   cases or scan points. The suite runner supports `--jobs` to execute
    multiple cases concurrently.
 
    Implementation: `scripts/run_reduced_upstream_suite.py`.
@@ -268,7 +268,7 @@ explicit timing, device, task, and payload-coverage metadata.
 Deterministic benchmark plans
 -----------------------------
 
-The parallel benchmark drivers can now write deterministic no-run plan artifacts
+The parallel benchmark drivers write deterministic no-run plan artifacts
 for CI and launch review. These commands validate CLI wiring, worker/device
 allocation, warm/cold timing metadata, finite-task speedup limits, and memory
 allocator/timeout semantics without launching SFINCS solves:
@@ -345,7 +345,7 @@ Gate semantics are explicit in the plans:
   release strong-scaling gate.
 - If a single-case sharded artifact sets ``release_scaling_claim=true``, the
   scope audit fails before speedup is inspected. This keeps the public claim
-  precise: current production scaling is independent-work throughput; single
+  precise: production scaling is independent-work throughput; single
   RHSMode=1 strong scaling remains experimental until it has reproducible
   speedup, parity, and memory gates.
 - Multi-GPU case-throughput plans define throughput speedup as
@@ -414,7 +414,7 @@ To avoid skew from compilation:
 Step (2): Parallel cases / scans
 --------------------------------
 
-The reduced suite runner can now execute multiple cases in parallel:
+The reduced suite runner can execute multiple cases in parallel:
 
 .. code-block:: bash
 
@@ -494,7 +494,7 @@ On GPUs, JAX will automatically see all local devices.
 
 **Notes**
 
-- Sharding is currently **experimental** and only enabled when multiple devices
+- Sharding is **experimental** and only enabled when multiple devices
   are visible.
 - When only one device is available, the code falls back to the standard JIT path
   and skips sharding constraints (no functional change).
@@ -503,7 +503,7 @@ On GPUs, JAX will automatically see all local devices.
   only odd device counts activate theta/zeta sharding by default. Set
   ``SFINCS_JAX_SHARD_PAD=1`` (default) to pad ghost planes so even device counts
   can still shard without changing outputs in the cached sharded-JIT matvec path.
-  (The current RHSMode=1 distributed-GMRES matvec path still requires
+  (The RHSMode=1 distributed-GMRES matvec path still requires
   divisible theta/zeta partitions.)
 - ``x`` sharding is available as a fallback when odd ``Ntheta``/``Nzeta`` block
   theta/zeta sharding. Use ``SFINCS_JAX_MATVEC_SHARD_AXIS=x`` or set
@@ -522,7 +522,7 @@ On GPUs, JAX will automatically see all local devices.
   a custom linear solve use a local unsharded JIT matvec instead. This avoids
   nested ``jax.set_mesh``/``pjit`` contexts while keeping normal CPU/GPU
   top-level matvecs sharded.
-- Collisionless, ExB, and magnetic-drift derivative kernels now use a
+- Collisionless, ExB, and magnetic-drift derivative kernels use a
   sparse-row gather apply when the differentiation matrices are banded/sparse
   (common 3‑point/5‑point schemes). This keeps the operator matrix-free and
   differentiable while reducing dense derivative apply cost. The periodic roll
@@ -672,7 +672,7 @@ Historical long-run measurement (Macbook M3 Max, ``nsolve=240``, baseline >2 min
 - 3 devices: 105.33 s (1.29x speedup)
 - 4 devices: 110.78 s (1.23x speedup)
 
-The benchmark now runs with implicit linear solves enabled
+The benchmark runs with implicit linear solves enabled
 (``SFINCS_JAX_IMPLICIT_SOLVE=1``) to match production defaults. Since the
 2026-04-24 benchmark audit, use ``--inner-warmup-solves`` for hot-solve scaling
 and ``--sample-timeout-s`` to keep cold XLA setup bounded. Pre-audit sharded
@@ -700,7 +700,7 @@ In A/B runs, ``distributed_krylov=auto`` remains the best default on this host.
 
 This confirms that the sharded execution path can run deterministically under
 controlled conditions, but it is **not** a release-facing strong-scaling claim.
-Single-RHS GMRES remains reduction-heavy, and the current implementation still
+Single-RHS GMRES remains reduction-heavy, and the implementation still
 pays substantial synchronization/compile overhead on >1 CPU device.
 
 The sharded-solve benchmark JSON is intentionally marked as
@@ -727,8 +727,8 @@ fail-closed. It remains ``promotion_ready=false`` until the same artifact has:
 - a measured hot 1-vs-N speedup above the configured threshold;
 - non-increasing peak memory relative to the one-device run.
 
-On this host, long 8-device CPU runs still hit occasional XLA rendezvous timeouts,
-so published strong-scaling results are currently capped at 5 devices.
+On this host, long 8-device CPU runs still hit occasional XLA rendezvous
+timeouts, so published strong-scaling results are capped at 5 devices.
 
 Why scaling is still poor for single‑RHS GMRES
 ----------------------------------------------
@@ -837,7 +837,7 @@ The near-term parallelization program is split into two explicit tracks:
 That split matters because the fastest cluster path and the cleanest
 end-to-end differentiable path are not always the same implementation.
 
-The current hardware targets are:
+Hardware targets:
 
 - **Local MacBook Pro M3**: one visible JAX CPU device by default; host-device
   parallelism is activated with ``--cores N`` or ``SFINCS_JAX_CORES=N``.
@@ -947,7 +947,7 @@ residual verification, and ``--transport-sparse-direct-max 40000``:
      --max-transport-relative-residual 1e-6 \
      --scan-only
 
-On ``office`` this first W7-X FP high-``nu'`` point now takes about ``582 s``
+On ``office`` this first W7-X FP high-``nu'`` point takes about ``582 s``
 with sparse-helper factor reuse, down from about ``2028 s`` when the same CSR
 operator and sparse-LU factors were rebuilt separately for every RHS. It passed
 with residual/RHS/relative tuples
@@ -956,8 +956,8 @@ with residual/RHS/relative tuples
 ``4.841651e-09 / 6.589011e-01 / 7.348069e-09``. The measured per-RHS timings
 were about ``574.0 s``, ``2.47 s``, and ``2.38 s``; the later RHS solves reuse
 the explicit sparse helper. Peak RSS from ``/usr/bin/time -v`` was about
-``15.3 GB``. The previous bounded ``30000`` cap finished faster but failed with
-order-unity relative residuals, and the current Krylov preconditioners do not
+``15.3 GB``. A bounded ``30000`` cap finished faster but failed with
+order-unity relative residuals, and the available Krylov preconditioners do not
 close the full point by themselves. Widened W7-X high-``nu'`` campaigns should
 therefore keep the strict residual gates enabled and use this sparse-LU lane
 until a cheaper preconditioner is demonstrated.
@@ -1024,9 +1024,9 @@ Performance notes
 Measured large-case scaling snapshot
 ------------------------------------
 
-The current executable-side scaling story is functional but not yet the final
+The executable-side scaling story is functional but not yet the final
 research-grade result. On the challenging geometryScheme=2 benchmark inputs used
-in this repository, the `main` branch has produced the following regression
+in this repository, checked regression artifacts record the following
 measurements. Treat single-case sharded entries as non-publication snapshots
 until they are regenerated with the audited child-option propagation,
 ``--inner-warmup-solves``, and ``--sample-timeout-s`` controls:
@@ -1039,7 +1039,7 @@ until they are regenerated with the audited child-option propagation,
   - `4` devices: `3.97 s`
   - `8` devices: `4.46 s`
 
-  These runs use the current bounded multilevel Schwarz correction path
+  These runs use the bounded multilevel Schwarz correction path
   (``--rhs1-precond theta_schwarz --schwarz-coarse-levels 2``).
 
 - Local Fortran v3 MPI benchmark on the same input:
@@ -1074,27 +1074,26 @@ until they are regenerated with the audited child-option propagation,
   ``examples/performance/rhsmode1_sharded.input.namelist``:
 
   - `1` GPU: `16.58 s`
-  - previous code path failed by trying to allocate a `pas_tz` block of about
-    `155 GiB`
-  - current `main` now guards that path and falls back to shard-local Schwarz /
+  - unbounded PAS-TZ allocation would require about `155 GiB`
+  - `sfincs_jax` guards that path and falls back to shard-local Schwarz /
     lighter PAS alternatives instead of crashing
 
-These results support the current deployment recommendation:
+These results support the deployment recommendation:
 
 - CPU and GPU executable paths are parallel-capable and deterministic.
-- The robust production GPU-parallel path today is **transport-worker
+- The robust production GPU-parallel path is **transport-worker
   parallelism**, with one worker per GPU for independent RHSMode=2/3 solves.
-- The robust production CPU-parallel path today is process-parallel transport
+- The robust production CPU-parallel path is process-parallel transport
   workers for RHSMode=2/3 solves and parallel suite/scan throughput.
 - CPU host sharding for single-RHS solves is useful for regression experiments,
   but it is not the release-facing strong-scaling story.
 - Multi-GPU single-case sharding remains experimental until stronger local
   domain decomposition and lower-synchronization Krylov are in place.
 
-Fresh two-GPU throughput rerun
-------------------------------
+Two-GPU throughput rerun
+------------------------
 
-We also reran the practical production-style GPU lane on office by comparing
+A practical production-style GPU lane on office compares
 two sequential one-GPU runs against two concurrent one-GPU runs on the same
 2-GPU workstation, using:
 
@@ -1106,17 +1105,18 @@ two sequential one-GPU runs against two concurrent one-GPU runs on the same
      --rhs1-precond theta_schwarz \
      --schwarz-coarse-levels 2
 
-The fresh measured result on current ``main`` was still below ideal:
+The measured result is below ideal:
 
 - sequential 1-GPU execution of two cases: ``107.65 s`` wall time
 - two concurrent 1-GPU runs on two GPUs: ``194.08 s`` wall time
 - measured throughput speedup: ``0.55x``
 
-This confirms the current technical state more clearly than the older snapshot:
-the code is correct and reproducible on multi-GPU launches, but the current
-single-node GPU parallel path is still not publication-grade from a scaling
+This measurement separates correctness from scaling quality: the code is correct
+and reproducible on multi-GPU launches, but the single-node GPU parallel path is
+still not publication-grade from a scaling
 standpoint. That is why the release-facing recommendation stays conservative:
-use GPU acceleration per case today, and treat multi-GPU parallelism as an
+use GPU acceleration per case for supported release workflows, and treat
+multi-GPU parallelism as an
 active research path rather than a proven default.
 
 The 2026-05-12 timeout-safe rerun of the same audit on commit ``39e1e2f``
@@ -1133,13 +1133,13 @@ throughput gate:
 
 This is an intentionally non-promoting artifact. It proves the timeout-safe
 measurement path works on a clean checkout and confirms that this particular
-case-throughput lane is currently setup/compile dominated on office. It should
+case-throughput lane is setup/compile dominated on office. It should
 not be used as a release scaling claim.
 
 Fresh two-GPU transport-worker rerun
 ------------------------------------
 
-The stronger current multi-GPU result comes from independent transport workers,
+The stronger multi-GPU result comes from independent transport workers,
 not from single-case sharding. On office we reran:
 
 .. code-block:: bash
@@ -1163,7 +1163,7 @@ multi-minute GPU benchmark:
      --out-dir docs/_static/figures/parallel \
      --figure-name transport_parallel_scaling_gpu.png
 
-Measured result on current ``main``:
+Measured result:
 
 - `1` GPU worker: ``351.05 s``
 - `2` GPU workers: ``237.75 s``
@@ -1177,20 +1177,21 @@ Measured result on current ``main``:
 
    Fresh office rerun of the publication-facing GPU transport-worker lane.
 
-This is the release-quality GPU scaling result in ``sfincs_jax`` today:
+This is the release-quality GPU scaling result in ``sfincs_jax``:
 parallelize independent transport RHS solves across GPUs. It is deterministic,
 parity-preserving, and close to the finite-task ideal on the tested 2-GPU node.
-That is a materially stronger story than the current single-case sharded GPU
+That is a materially stronger story than the single-case sharded GPU
 lane, which remains experimental.
 
-Recent sharded-solve updates
-----------------------------
+Sharded-solve patch-width policy
+--------------------------------
 
-The current RHSMode=1 theta/zeta Schwarz auto path no longer clamps the local
+The RHSMode=1 theta/zeta Schwarz auto path does not clamp the local
 patch width to a single sharded slice. On the measured CPU benchmark
-``examples/performance/rhsmode1_sharded_scaling.input.namelist``, that old rule
+``examples/performance/rhsmode1_sharded_scaling.input.namelist``, a single-slice
+rule
 caused an 8-device collapse because the additive-Schwarz patches became too
-small to capture cross-shard angular coupling. The current auto rule grows each
+small to capture cross-shard angular coupling. The auto rule grows each
 patch to roughly one local shard plus one DOF-target angular span, which keeps
 the preconditioner local but avoids that fragmentation failure mode.
 
@@ -1200,8 +1201,8 @@ On the same benchmark, the older published multi-device timings were:
 - `2` devices: `4.45 s`
 - `4` devices: `7.00 s`
 
-Current ``main`` with the wider auto patch rule and the bounded multilevel
-residual correction now measures:
+With the wider auto patch rule and the bounded multilevel residual correction,
+the benchmark measures:
 
 - `1` device: `3.99 s`
 - `2` devices: `3.56 s`
@@ -1212,14 +1213,14 @@ This is still not ideal strong scaling, but it removes the old 4-device
 collapse and makes the 8-device CPU path usable for real benchmarking instead of
 pathological.
 
-Current ``main`` also adds a bounded multilevel correction on top of the
+The implementation also includes a bounded multilevel correction on top of the
 theta/zeta Schwarz patches when the solve is actually sharded across many
 devices. The first coarse step reuses a wider theta/zeta block-diagonal
 preconditioner as a residual correction; on 8-device runs, a second still-wider
 correction level can be enabled automatically. This improves the worst
 high-device fragmentation cases without changing the operator or output parity.
 
-The sharded solve benchmark driver also now supports explicit backend
+The sharded solve benchmark driver also supports explicit backend
 selection, hot-solve timing, bounded child-process samples, and an optional
 deterministic output probe:
 
@@ -1246,7 +1247,7 @@ deterministic output probe:
      --schwarz-coarse-levels 2 \
      --deterministic-output-probe
 
-For the GPU benchmark path, the runner now uses ``CUDA_VISIBLE_DEVICES`` and
+For the GPU benchmark path, the runner uses ``CUDA_VISIBLE_DEVICES`` and
 disables JAX preallocation by default in the subprocess. It also enables the
 ``cuda_malloc_async`` allocator in the benchmark subprocess so multi-GPU
 benchmarking is less sensitive to fragmentation than the plain default allocator
@@ -1269,9 +1270,9 @@ at the ``300 s`` sample cap before producing a timed solve. The saved artifact
 therefore records ``sharded_solve_audit.ci_gate_pass=false``,
 ``devices=2`` as a failed/timed-out sample, and
 ``deterministic_output_gate.evidence_source="skipped_after_timing_failure"``.
-This is the correct current state: single-case multi-GPU sharding is a
-documented research lane, not a user-facing performance claim. The next real
-implementation step is compiled device operator/coarse reuse across Krylov
+This is the supported interpretation: single-case multi-GPU sharding is a
+documented research lane, not a user-facing performance claim. The research
+implementation path is compiled device operator/coarse reuse across Krylov
 iterations, not another solver-label toggle.
 
 .. figure:: _static/figures/parallel/sharded_solve_gpu_1v2_failclosed_2026_05_17.png
