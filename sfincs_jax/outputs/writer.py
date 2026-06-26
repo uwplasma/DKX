@@ -2050,7 +2050,7 @@ def write_sfincs_jax_output_h5(
         recycle_basis_state = None
         if state_in_env:
             try:
-                from ..solver_state import load_krylov_state  # noqa: PLC0415
+                from ..solvers.diagnostics import load_krylov_state  # noqa: PLC0415
 
                 state = load_krylov_state(path=state_in_env, op=op0)
                 if state is not None:
@@ -2729,7 +2729,7 @@ def write_sfincs_jax_output_h5(
         state_out_env = os.environ.get("SFINCS_JAX_STATE_OUT", "").strip()
         if state_out_env:
             try:
-                from ..solver_state import save_krylov_state  # noqa: PLC0415
+                from ..solvers.diagnostics import save_krylov_state  # noqa: PLC0415
 
                 x_history = None
                 if recycle_k > 0:

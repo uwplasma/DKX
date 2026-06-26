@@ -166,18 +166,18 @@ def _median(values: list[float]) -> float | None:
 
 
 def _build_preconditioner(op, preconditioner: str):
-    import sfincs_jax.v3_driver as vd
+    from sfincs_jax.problems.profile_response import preconditioner_build as pb
 
     if preconditioner == "fp_radial":
-        return vd._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
+        return pb._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
     if preconditioner == "fp_lowmode_schur":
-        return vd._build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner(op=op)
+        return pb._build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner(op=op)
     if preconditioner == "fp_moment_schur":
-        return vd._build_rhsmode1_structured_fblock_fp_moment_schur_preconditioner(op=op)
+        return pb._build_rhsmode1_structured_fblock_fp_moment_schur_preconditioner(op=op)
     if preconditioner == "fp_coupled_moment_schur":
-        return vd._build_rhsmode1_structured_fblock_fp_coupled_moment_schur_preconditioner(op=op)
+        return pb._build_rhsmode1_structured_fblock_fp_coupled_moment_schur_preconditioner(op=op)
     if preconditioner == "fp_tail_coupled_schur":
-        return vd._build_rhsmode1_structured_fblock_fp_tail_coupled_schur_preconditioner(op=op)
+        return pb._build_rhsmode1_structured_fblock_fp_tail_coupled_schur_preconditioner(op=op)
     raise ValueError(f"unknown preconditioner {preconditioner!r}")
 
 

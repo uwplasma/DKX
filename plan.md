@@ -88,6 +88,20 @@ Latest execution checkpoint:
   tests/test_profile_response_diagnostics.py -q --tb=short` with 57 passed;
   targeted QI sparse-pattern metadata tests with 3 passed; scoped
   py_compile/Ruff and `git diff --check` passed.
+- Batch G stale-owner and review-gate fixes are complete. Stale validation
+  imports were moved to their real owners (`validation.fortran`,
+  `solvers.diagnostics`, `profile_response.policies`, and
+  `profile_response.preconditioner_build`), release benchmark metadata now
+  normalizes source-report paths relative to the repository root, and the
+  research-lane manifest points at the consolidated QI, transport-parallel,
+  and sparse-handoff owners.
+- Batch G validation passed: targeted stale-owner tests passed; the focused
+  review-ready bundle passed with `191 passed in 32.86 s`; scoped Ruff and
+  py_compile passed; Sphinx `-W` passed; `git diff --check` passed; and
+  source scans found only historical release-note references to deleted aliases.
+  Full fail-fast validation was attempted: the first run reached `1504 passed`
+  before exposing the fixed stale research-lane manifest paths, and a second
+  repeated run was stopped after `486 passed` with no new failures observed.
 - Batch E validation passed: stale source-map deleted-alias scan returned no
   matches; focused CLI/API/scans/upstream/data-fetch/import-contract tests
   passed with `39 passed`; scoped py_compile and Ruff passed for touched
@@ -104,8 +118,9 @@ Latest execution checkpoint:
 
 Next ordered implementation sequence:
 
-1. Batch F-G: reduce oversized profile-response owners internally, refresh
-   docs/tests/source maps, and run the review-ready validation set.
+1. Final PR #8 review pass: inspect CI after push, check the GitHub diff, and
+   move the PR out of draft only if remote CI agrees with the local
+   review-ready gates.
 
 Batch A validation evidence:
 
@@ -6234,3 +6249,67 @@ Next best steps:
    automatic solver selection, differentiable JAX paths, or CLI fast paths.
 2. Then execute Batch E root/public-surface classification, followed by Batch F
    profile-response internal line paydown and Batch G review-ready validation.
+
+## 2026-06-26 Batch G Stale-Owner And Review-Gate Closeout
+
+Steps taken:
+
+1. Fixed stale imports exposed by fail-fast validation after the consolidation:
+   `optimization_evidence.py` now uses `sfincs_jax.validation.fortran`,
+   ambipolar and output writing use `sfincs_jax.solvers.diagnostics` for Krylov
+   state helpers, the sparse-first heuristic test patches
+   `profile_response.policies`, and the structured f-block benchmark imports
+   private builders from `profile_response.preconditioner_build` instead of
+   `v3_driver.py`.
+2. Fixed benchmark-summary path determinism by changing
+   `sfincs_jax.validation.artifacts._repo_stable_path()` to relativize against
+   the repository root rather than the package root.
+3. Updated `docs/_static/research_lane_completion_2026_05_12.json` so evidence
+   paths point at the consolidated QI, transport-parallel, and sparse-handoff
+   owners.
+4. Updated `plan_final.md` as the authoritative plan and this execution log as
+   historical evidence.
+
+Results:
+
+- Package Python files: `168`.
+- Package-root Python files: `43`.
+- Package source lines: `165,758`.
+- `sfincs_jax/v3_driver.py`: `47` lines.
+- `sfincs_jax/io.py`: `64` lines.
+- `sfincs_jax/problems/profile_response/solve.py`: `5,420` lines.
+- `sfincs_jax/problems/profile_response/sparse/handoff.py`: `5,500` lines.
+- `sfincs_jax/problems/profile_response/policies.py`: `7,369` lines.
+- `sfincs_jax/problems/profile_response/sparse/xblock.py`: `7,689` lines.
+- `sfincs_jax/problems/profile_response/sparse/qi.py`: `4,873` lines.
+
+Validation:
+
+- `python -m pytest tests/test_research_lane_policy.py -q --tb=short` passed
+  with `7 passed`.
+- Targeted benchmark-summary checks passed with `3 passed`.
+- The focused review-ready validation bundle passed with
+  `191 passed in 32.86 s`.
+- Scoped Ruff and py_compile passed for touched source/test files.
+- `python -m sphinx -W -b html docs docs/_build/html` passed.
+- `git diff --check` passed.
+- Full fail-fast validation was attempted. The first run reached
+  `1504 passed` before the stale research-lane manifest failure fixed above;
+  the second repeated run was stopped after `486 passed` with no new failures.
+
+Progress:
+
+- Lane 1 structural consolidation: `99%`.
+- Batch F profile-response internal line paydown: complete for the review-ready
+  PR scope.
+- Batch G docs/tests/source-map/review gate: complete locally.
+- Public docs/API stabilization for PR #8: about `95%`; remaining work is
+  final PR/CI review only.
+
+Next best steps:
+
+1. Commit and push the Batch G closeout.
+2. Check PR #8 CI after the push; do not watch it continuously, but inspect it
+   after enough time has elapsed for checks to finish.
+3. If CI matches local validation, perform a final PR diff review and move PR
+   #8 out of draft.

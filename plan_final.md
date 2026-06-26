@@ -980,6 +980,36 @@ production-runtime optimization, true device-QI promotion, lower-memory native
 factor work, or production benchmark refresh belongs in the research/release
 lanes below unless it blocks correctness.
 
+Status on 2026-06-26:
+
+- Batch G stale-owner repairs are complete. The remaining stale imports found
+  by fail-fast validation were corrected to their current owners:
+  `sfincs_jax.validation.fortran`, `sfincs_jax.solvers.diagnostics`,
+  `sfincs_jax.problems.profile_response.policies`, and
+  `sfincs_jax.problems.profile_response.preconditioner_build`.
+- Deterministic benchmark-summary metadata now uses repository-relative source
+  report paths from `sfincs_jax.validation.artifacts`, avoiding local absolute
+  paths in regenerated release artifacts.
+- The research-lane manifest now points at the consolidated QI, transport
+  parallel, and sparse handoff owners:
+  `solvers/preconditioners/qi/{basis,corrections,device}.py`,
+  `problems/transport_matrix/parallel/runtime.py`, and
+  `problems/profile_response/sparse/handoff.py`.
+- Validation passed with the review-ready focused bundle:
+  `191 passed in 32.86s`; targeted benchmark-summary and research-lane gates
+  passed; scoped Ruff and py_compile passed; Sphinx `-W` passed; and
+  `git diff --check` passed.
+- Fail-fast full-suite validation was attempted twice. The first run reached
+  `1504 passed` before exposing the stale research-lane manifest paths fixed
+  above. The second run repeated already-clean sections and was stopped after
+  `486 passed`; no new failure was observed before interruption.
+- Current structural counts satisfy the Batch G hard gates:
+  168 package Python files, 43 package-root Python files,
+  165,758 package Python lines, `v3_driver.py` at 47 lines, `io.py` at
+  64 lines, `profile_response/solve.py` at 5,420 lines,
+  `profile_response/sparse/handoff.py` at 5,500 lines, and no top-level
+  `rhs1_*` or `transport_*` implementation files.
+
 ## Lane 2 - Full Fortran v3 Functionality Matrix
 
 Goal: make the Fortran v3 feature surface explicit and either implemented,
@@ -1563,9 +1593,10 @@ Current completion status:
 - RHSMode 4/5 sensitivity contracts: about 75 percent. Small fixture contracts
   and derivative identities are implemented; production-grid parity refresh
   remains a release benchmark.
-- Public docs/API stabilization for the refactor PR: about 65 percent. The
-  root/source-map classification is now guarded by tests; final docs/API work
-  remains in Batch G after profile-response line paydown.
+- Public docs/API stabilization for the refactor PR: about 95 percent. Batch G
+  source-map/import-contract, README/docs, artifact metadata, and Sphinx gates
+  pass. The remaining work before moving PR #8 out of draft is a final reviewer
+  pass over the PR diff and any CI-only environment failures.
 
 Completed checkpoints that remain valid:
 
@@ -1596,10 +1627,9 @@ Completed checkpoints that remain valid:
 
 Next ordered implementation steps:
 
-1. Execute Lane 1 Batch F and G: reduce oversized profile-response owners
-   internally without new files, refresh docs/source maps/examples/tests, run
-   the review-ready validation set, and move PR #8 out of draft only if gates
-   pass.
+1. Do the final PR #8 review pass: inspect the GitHub diff, check CI after the
+   latest push, and move the PR from draft only if CI agrees with the local
+   review-ready gates.
 2. Keep production option-1/3 ambipolar reruns, production-grid RHSMode 4/5
    parity, large CPU/GPU benchmark regeneration, true device-QI promotion, and
    lower-memory production solver optimization as release-refresh or research

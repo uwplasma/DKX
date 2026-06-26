@@ -126,7 +126,7 @@ def _repo_stable_path(path: Path) -> str:
     """Return a reproducible path for checked-in validation metadata."""
 
     path = Path(path)
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     try:
         return path.resolve().relative_to(repo_root).as_posix()
     except ValueError:
