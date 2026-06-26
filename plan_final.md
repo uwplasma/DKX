@@ -303,138 +303,40 @@ Observed facts to feed directly into implementation:
 
 ### Current sfincs_jax State
 
-Current source size snapshot after the 2026-06-26 consolidation audit, root
-cleanup passes, transport-parallel consolidation, historical `v3_*` routing,
-profile-response sparse branch extractions, residual-correction extraction,
-and sparse GMRES/finalization owner move:
+Current source size snapshot after the 2026-06-26 consolidation audit and the
+latest transport/profile-response owner moves:
 
-- `sfincs_jax/v3_driver.py`: 47 lines in the current consolidation worktree,
-  acting as a compatibility shim for the domain-owned solve modules.
-- `sfincs_jax/operators/profile_response/sparse_pattern.py`: 1,191-line
-  operator-domain owner for conservative and Fortran-reduced sparse structural
-  patterns. The historical root file `sfincs_jax/v3_sparse_pattern.py` has
-  been removed, and package-internal imports use the operator-domain owner.
-- `sfincs_jax/operators/profile_response/fblock.py`: 985-line operator-domain
-  owner for the RHSMode-1 matrix-free kinetic f-block builder, matvec, and
-  small GMRES helper. The historical root file `sfincs_jax/v3_fblock.py` has
-  been removed, and package-internal imports, examples, scripts, docs, and
-  focused tests use the operator-domain owner.
-- `sfincs_jax/operators/profile_response/system.py`: 2,115-line
-  operator-domain owner for the matrix-free full-system profile-response
-  operator, RHS builders, cached matvec, transport-RHS rewrites, and
-  sharding constraints. The historical root file `sfincs_jax/v3_system.py` has
-  been removed, and package-internal imports, examples, scripts, docs, and
-  focused tests use the operator-domain owner.
-- `sfincs_jax/discretization/v3.py`: 756-line discretization-domain owner for
-  SFINCS-v3-compatible grid construction, mapped speed-grid construction,
-  geometry loading, geometry cache keys, and `V3Grids`. The historical root
-  file `sfincs_jax/v3.py` has been removed, and package-internal imports,
-  examples, scripts, docs, and focused tests use the discretization owner.
-- `sfincs_jax/problems/profile_response/solve.py`: 7,014 lines after the
-  x-block sparse-PC branch, full/reduced sparse retry, SciPy rescue stage,
-  fortran-reduced x-block backend, generic sparse-PC setup, and direct-tail
-  structured/factor plus support/preflight rescue-policy setup extractions,
-  sparse factor-preflight execution extraction, and direct-tail auto
-  preflight-retry plus true-coupled coarse-stage extractions, and shared
-  sparse residual-candidate accept/update extraction, plus the remaining
-  true-active/true-window/residual-window correction extraction.
-  This remains the largest structural debt and must be reduced by moving
-  coherent sections into existing domain owners, not by adding many new helper
-  files.
-- `sfincs_jax/problems/profile_response/policies.py`: 6,885 lines after
-  absorbing six former policy shards and current-backend RHSMode-1 policy
-  wrappers. This is intentionally a temporary single policy owner during
-  Lane 1 Batch A; do not split it back into micro-files.
-- `sfincs_jax/problems/profile_response/preconditioner_build.py`: 2,683 lines
-  after taking ownership of the current RHSMode-1 preconditioner builder
-  registry, PAS-family compatibility bindings, Schur binding, x-block builder
-  aliases, transport `tzfft` reuse, and strong fallback binding.
-- `sfincs_jax/problems/profile_response/sparse/handoff.py`: 4,438 lines after
-  moving the former top-level sparse-PC handoff into the sparse package and
-  taking ownership of the driver-facing x-block sparse-PC GMRES branch
-  orchestration, the full/reduced sparse retry stage, the fortran-reduced
-  x-block backend, generic sparse-PC setup, and direct-tail structured/factor
-  setup plus direct-tail support/preflight rescue-policy setup, and solve-time
-  factor-preflight execution/progress reporting plus direct-tail auto
-  preflight retry, true-operator coupled coarse execution, and shared sparse
-  residual-candidate accept/update logic. Sparse GMRES attempt helpers and
-  finalization bundle/state builders now live in
-  `problems/profile_response/sparse/finalization.py`; x-block branch setup,
-  assembled-operator setup, moment/two-level/global-coupling stage helpers,
-  and x-block branch orchestration now live in
-  `problems/profile_response/sparse/xblock.py`. The remaining handoff content
-  is direct-tail, generic sparse retry, and policy relay work that still needs
-  one more owner-level reduction.
-- `sfincs_jax/problems/profile_response/sparse/xblock.py`: 7,725-line
-  x-block owner after taking the branch setup/orchestration cluster from
-  `sparse/handoff.py`. This is intentionally large for this PR because it
-  consolidates x-block behavior under one role owner; split it later only by
-  durable numerical subfamilies, not by extraction history.
-- `sfincs_jax/problems/profile_response/sparse/finalization.py`: 1,551-line
-  sparse-PC final-payload owner for GMRES result contracts, dtype retry,
-  post-minres polish, completion messages, GMRES attempt helpers, and
-  typed finalization bundles. Keep this owner because deleting it currently
-  creates import-cycle risk between sparse handoff, x-block, and
-  fortran-reduced owners.
-- `sfincs_jax/problems/profile_response/sparse/direct.py`: 3,569 lines after
-  taking ownership of sparse-factor cache keys, host memory probing, explicit
-  sparse-pattern probes, sparse-JAX preconditioner materialization, and host
-  sparse direct builder/polish wrappers.
-- `sfincs_jax/problems/profile_response/dense.py`: 3,287 lines after taking
-  ownership of profile linear-solve routing, dense-KSP, constraintScheme=0
-  PETSc-compatible sparse-ILU, SciPy rescue solve contracts, and SciPy rescue
-  stage metadata/admission, plus the explicit host structured-CSR and
-  automatic host-solver RHSMode-1 routes formerly owned by `auto_solve.py`.
-- `sfincs_jax/problems/transport_matrix/solve.py`: 1,763 lines after the
-  RHSMode 2/3 solve-entry extraction.
-- `sfincs_jax/operators/profile_response/full_system.py`: about 6.0k
-  lines, moved from `rhs1_full_assembly.py` during the earlier RHSMode-1
-  ownership move.
-- Top-level `transport_*` modules: 0.
-- Top-level `rhs1_*` modules: 0. Solver-family implementation now lives under
-  `solvers.preconditioners`.
-- Package total is 205 Python files, 43 package-root files, and about 165,586
-  package lines after the first two root cleanup passes and the first
-  transport-parallel consolidation, plus the validation-domain,
-  workflow-domain, solver-utility, and solver/preconditioner implementation
-  root-disposition moves. The root cleanups
-  deleted the obsolete root modules `solver_runtime.py`,
-  `matrix_reductions.py`, `solve_mode_policy.py`,
-  `solver_progress_policy.py`, `phase_timing.py`, `linear_algebra.py`,
-  `newton_krylov_diagnostics.py`, `phi1_line_search.py`, `sparse.py`, and
-  `verbose.py` after moving their tested helpers into canonical owners.
-  The transport-parallel consolidation merged `execution.py`, `payload.py`,
-  `pool.py`, `solve.py`, and `validation.py` into
-  `problems/transport_matrix/parallel/runtime.py`.
-  The validation-domain move placed `validation_artifacts.py`,
-  `validation_figures.py`, `validation_math.py`,
-  `benchmark_artifact_policy.py`, `research_lane_policy.py`, and
-  `qi_device_artifact_policy.py` under `sfincs_jax.validation`.
-  The workflow-domain move placed `optimization_*`, `mapped_xgrid_*`, and
-  `qi_res15_gpu_campaign.py` under `sfincs_jax.workflows`.
-  The solver-utility move placed `solver_path_policy.py`,
-  `solver_profile_compare.py`, `solver_progress.py`,
-  `solver_selection_policy.py`, `solver_state.py`, `solver_trace.py`,
-  `krylov_dispatch.py`, `implicit_solve.py`, `memory_model.py`, and
-  `sparse_triangular.py` under `sfincs_jax.solvers`.
-  The solver/preconditioner implementation move placed `explicit_sparse.py`,
-  `explicit_sparse_factor_builder.py`, `explicit_sparse_factor_policy.py`,
-  `native_block_factor.py`, `preconditioner_caches.py`,
-  `preconditioner_context.py`, `preconditioner_operators.py`, and
-  `preconditioner_setup.py` under `sfincs_jax.solvers`. The first root
-  validation-helper cleanup moved `fortran.py`, `fortran_profile.py`,
-  `h5_parity.py`, and `petsc_binary.py` under `sfincs_jax.validation`,
-  reducing package-root files from 52 to 48 without keeping root compatibility
-  shims.
-- Current concentration of complexity after the Schur-family consolidation,
-  full/reduced sparse retry, SciPy rescue, residual-correction, and sparse
-  finalization owner extractions:
-  `problems/profile_response` has 10 direct files plus 8 sparse subpackage
-  files, for 18 files and 52,570 lines;
-  `problems/transport_matrix` has 23 direct files plus 5 parallel subpackage
-  files, for 28 files and about 15k lines; `solvers/preconditioners` has
-  47 files and about 37k lines; `operators/profile_response` has 14 files and
-  about 18.4k lines; and `io.py` remains 4,264 lines.
+- Whole package: 195 Python files, 165,398 package lines.
+- Package root: 43 Python files. No top-level `rhs1_*` or `transport_*`
+  implementation files remain.
+- `sfincs_jax/v3_driver.py`: 47-line compatibility shim. It must not regain
+  implementation logic.
+- Historical roots deleted and routed to owners:
+  `v3_results.py`, `v3_sparse_pattern.py`, `v3_fblock.py`, `v3_system.py`,
+  and `v3.py`.
+- `sfincs_jax/problems/profile_response`: 18 files including `sparse/`, about
+  52.6k lines. The largest files are `sparse/xblock.py` 7,725 lines,
+  `solve.py` 6,985 lines, `policies.py` 6,885 lines, `sparse/qi.py` 4,885
+  lines, `sparse/handoff.py` 4,438 lines, `sparse/direct.py` 3,569 lines,
+  `dense.py` 3,287 lines, and `preconditioner_build.py` 2,683 lines.
+- `sfincs_jax/problems/transport_matrix`: 18 files including `parallel/`,
+  about 14.9k lines. The file-count gate is met, but small files remain:
+  `postsolve_diagnostics.py`, `streaming_outputs.py`, `active_dense.py`,
+  `active_factor.py`, `direct_block_schur.py`, `direct_pmat.py`, and
+  `fortran_reduced_lu.py`.
+- `sfincs_jax/solvers/preconditioners`: 47 files, about 37.0k lines. The
+  remaining high-file-count areas are QI, x-block, PAS, full-FP, and symbolic
+  sparse. `symbolic_sparse/rhs1_fortran_reduced.py` is the remaining
+  historical filename inside this package.
+- `sfincs_jax/operators/profile_response`: 14 files, about 18.4k lines.
+  `full_system.py` is 5,978 lines. This package is large but domain coherent;
+  do not split it in this PR unless a correctness bug requires it.
+- `sfincs_jax/io.py`: 4,264 lines. Output implementation still needs to move
+  behind the `outputs` package so `io.py` can become a compatibility shim.
+
+The next consolidation pass must reduce these concentrated owners in a few
+large batches. It must not add more one-off helper files, and it must not turn
+the current 195-file tree into a larger but more fragmented tree.
 
 Useful existing assets:
 
@@ -633,22 +535,19 @@ find sfincs_jax/problems/transport_matrix -maxdepth 2 -type f -name '*.py' -prin
 find sfincs_jax/solvers/preconditioners -maxdepth 3 -type f -name '*.py' -print0 | xargs -0 wc -l | sort -nr
 ```
 
-Current source inventory from the 2026-06-26 consolidation audit,
-residual-correction extraction checkpoint, sparse GMRES/finalization owner
-move, and x-block owner move:
+Current source inventory from the final consolidation audit:
 
 | Area | Current state | Review-ready target |
 | --- | --- | --- |
-| Whole package | 195 Python files, 165,398 package lines | `<=190` Python files and fewer package lines than this checkpoint for review-ready. Stretch target: `<=175` files if compatibility shims can be deleted safely. |
-| Package root | 43 Python files | `<=40` preferred, `<=44` allowed only when every remaining root file is public API, stable physics kernel, or documented compatibility shim. No new root implementation modules. |
-| `v3_driver.py` | 47-line compatibility shim | Keep below 80 lines until external users migrate; delete only if all public imports and tests move to domain APIs. It must not regain implementation logic. |
-| Historical roots already routed | `v3_results.py`, `v3_sparse_pattern.py`, `v3_fblock.py`, `v3_system.py`, and `v3.py` are deleted; canonical owners are `problems/profile_response/solver_diagnostics.py`, `problems/transport_matrix/finalize.py`, `operators/profile_response/sparse_pattern.py`, `operators/profile_response/fblock.py`, `operators/profile_response/system.py`, and `discretization/v3.py` | Keep this state. Do not recreate historical roots. |
-| `problems/profile_response` | 18 files including `sparse/`; current `solve.py` 7,008 lines; `setup.py` 1,558 lines after absorbing the former `active_dof.py` owner; `policies.py` 6,885 lines; `dense.py` 3,287 lines after absorbing the former `auto_solve.py` owner; `solver_diagnostics.py` 2,114 lines after absorbing the former accepted-candidate replay handoff owner; `sparse/handoff.py` 4,438 lines; `sparse/xblock.py` 7,725 lines; `sparse/finalization.py` 1,551 lines | The review-ready file-count gate is met; keep moving result/retry/progress relays until `solve.py <=5,500` lines. Stretch targets: `<=15` files and `solve.py <=3,500` lines if that does not create unsafe churn. |
-| `problems/transport_matrix` | 18 files including `parallel/`; 14,884 lines; review-ready file-count gate met. `solve.py` now owns dense-LU, dense-batch, host-GMRES, iteration-stat, loop-cache/recycle, and sparse-direct rescue helpers; `policies.py` owns residual-gate and policy/dispatch relays | `<=18` files for review-ready. Stretch target: `<=14` files including `parallel/`; `parallel/ <=3` files. |
-| `solvers/preconditioners` | 47 files, 36,992 lines; QI has 13 implementation files; symbolic sparse still has `rhs1_fortran_reduced.py` | `<=35` files and QI `<=7` files for review-ready. Stretch targets: `<=30` preconditioner files and QI `<=5` files including `__init__.py`. No implementation file starts with `rhs1_` or `transport_`. |
-| `operators/profile_response` | 14 files, 18,368 lines; `full_system.py` is 5,978 lines | No urgent split. Merge small term/layout files only if needed to meet file-count gates without hiding physics. Do not create more operator shards in this PR. |
-| `io.py` and `outputs/` | `io.py` 4,264 lines; `outputs/` owns formats, cache, RHSMode-1, and transport output pieces | `io.py <=1,200` lines for review-ready. Stretch target: `io.py <=800` lines as a compatibility shim or deleted; implementation owned by `outputs`. |
-| Docs/tests/examples | Some references still use private owners and historical names | Public examples use `api`, `cli`, `outputs`, or stable workflows. Private imports appear only in focused owner/shim tests. |
+| Whole package | 195 Python files, 165,398 package lines | `<=190` Python files and fewer package lines than this checkpoint. Stretch target: `<=175` files only if it improves clarity. |
+| Package root | 43 Python files | `<=40` preferred, `<=44` maximum. Every remaining root file must be public API, stable physics kernel, or documented compatibility shim. |
+| `v3_driver.py` | 47-line compatibility shim | Keep below 80 lines or delete after public imports migrate. It must not regain implementation logic. |
+| `problems/profile_response` | 18 files, about 52.6k lines. Largest files: `sparse/xblock.py`, `solve.py`, `policies.py`, `sparse/qi.py`, `sparse/handoff.py`, `sparse/direct.py`, `dense.py`. | Review-ready file count is met. Required: `solve.py <=5,500`; preferred: fewer relay sections in `sparse/handoff.py`; stretch: `<=15` files only if safe. |
+| `problems/transport_matrix` | 18 files, about 14.9k lines. Small files remain around postsolve, streaming output, active factors, and direct Pmat/factor families. | File count gate is met. Remove/merge obvious micro-files only when the owner is clearer. Stretch: `<=14` files. |
+| `solvers/preconditioners` | 47 files, about 37.0k lines. QI and symbolic sparse are the main file-count drivers. | `<=35` files for review-ready; stretch `<=30`. QI `<=7` files. No implementation file starts with `rhs1_` or `transport_`. |
+| `operators/profile_response` | 14 files, about 18.4k lines. `full_system.py` is 5,978 lines. | Keep current ownership for this PR unless correctness requires edits. Do not split it to chase line counts. |
+| `io.py` and `outputs/` | `io.py` 4,264 lines; `outputs/` owns cache/formats/RHSMode-1/transport pieces. | Move implementation to `outputs`; `io.py <=1,200` lines, stretch `<=800` or delete. |
+| Docs/tests/examples | Some private owner names still appear in docs/tests/examples. | Public examples use `api`, `cli`, `outputs`, or documented workflows. Private imports stay only in owner tests. |
 
 ### Consolidation Rules
 
@@ -676,10 +575,10 @@ move, and x-block owner move:
 - Every consolidation batch gets an import-contract test and at least one
   behavior test through a public API or problem-level entry point before
   commit.
-- The rest of this pass must finish in Batches A-E below. Do not add another
-  phase/sweep/tranche/iteration vocabulary. If a proposed edit does not materially
-  reduce `solve.py`, `io.py`, transport micro-files, QI/preconditioner
-  micro-files, or public-import complexity, defer it.
+- The rest of this pass must finish in the four implementation batches and one
+  review gate below. If a proposed edit does not materially reduce `solve.py`,
+  `io.py`, transport micro-files, preconditioner micro-files, or public-import
+  complexity, defer it.
 
 ### File Disposition Matrix
 
@@ -687,8 +586,8 @@ move, and x-block owner move:
 | --- | --- | --- | --- |
 | Root public surface | `api.py`, `cli.py`, `namelist.py`, `input_compat.py`, `geometry.py`, `grids.py`, `sensitivity.py`, `plotting.py`, stable physics kernels | `postprocess_upstream.py` and `scans.py` move to `workflows` or `validation` unless proven public; `data_fetch.py` becomes public data helper or validation fixture fetcher | Delete no-op root shims after public imports migrate. |
 | Compatibility roots | `v3_driver.py` only as temporary import shim | Result tests/docs now import problem-owned result contracts directly | Never add implementation to `v3_driver.py`; delete it only if all public imports and tests move to domain APIs. |
-| Profile response orchestration | `setup.py`, `solve.py`, `policies.py`, `preconditioner_build.py`, `dense.py`, `residual.py`, `diagnostics.py`, `solver_diagnostics.py`, `phi1_newton.py`, `sparse/` | Factor-preflight execution, direct-tail auto retry, true-coupled coarse execution, shared residual-candidate accept/update, true-active/true-window/residual-window correction, sparse GMRES/finalization bundle logic, accepted-candidate replay handoff, host auto-solve routing, and active-DOF setup/projection helpers are now moved; next move progress replay, remaining retry bookkeeping, final sparse result normalization, and fallback summaries out of `solve.py`/`sparse/handoff.py` into existing sparse/dense/diagnostic owners | `profile_response/handoff.py`, `profile_response/auto_solve.py`, and `profile_response/active_dof.py` are deleted. Continue reducing `sparse/handoff.py` by moving stable groups into existing sparse owners (`direct.py`, `xblock.py`, `qi.py`, `fortran_reduced.py`, `policy.py`, `finalization.py`) rather than creating another handoff file. |
-| Transport matrix problem | `solve.py`, `setup.py`, `diagnostics.py`, `finalize.py`, `policies.py`, one active-system owner, `parallel/runtime.py`, `parallel/worker.py`, optional `parallel/sharding.py` | Merge `dense_lu.py`, `dense_batch.py`, `host_gmres.py`, `loop.py`, `iteration_stats.py`, and `residual_quality.py` into `solve.py`; `handoff_policy.py`, `solve_policy.py`, and `preconditioner_dispatch.py` are merged into `policies.py`; merge `postsolve_diagnostics.py` into `finalize.py`; merge `active_dense.py` and `active_factor.py` into one active-system owner | Delete tiny relay files after tests import the owner. Merge `parallel/policy.py` into `parallel/runtime.py` unless it remains an independently tested public policy owner. |
+| Profile response orchestration | `setup.py`, `solve.py`, `policies.py`, `preconditioner_build.py`, `dense.py`, `residual.py`, `diagnostics.py`, `solver_diagnostics.py`, `phi1_newton.py`, `sparse/` | Move one coherent remaining solve branch or result/retry/progress cluster from `solve.py` into existing sparse/dense/diagnostic owners. Keep `policies.py` and `sparse/xblock.py` as large-but-owned files for this PR unless behavior-preserving consolidation is obvious. | `profile_response/handoff.py`, `profile_response/auto_solve.py`, and `profile_response/active_dof.py` are deleted. Do not create another handoff file. |
+| Transport matrix problem | `solve.py`, `setup.py`, `diagnostics.py`, `finalize.py`, `policies.py`, active-system numerical-family files, `parallel/runtime.py`, `parallel/worker.py`, optional `parallel/sharding.py` | Merge only the remaining obvious relays: `postsolve_diagnostics.py` into `finalize.py`, `streaming_outputs.py` into `outputs/transport.py`, and any internal active/factor micro-file whose destination owner is clearer. | Delete tiny relay files after tests import the owner. Merge `parallel/policy.py` into `parallel/runtime.py` only if it is not an independently tested policy owner. |
 | Outputs | `outputs/formats.py`, `outputs/cache.py`, `outputs/rhsmode1.py`, `outputs/transport.py` | Move solved-field schema assembly, output dictionary construction, HDF5/netCDF/NPZ writing, and precompile/output policy helpers from `io.py` into output owners | `io.py` becomes `<=800` line compatibility shim or is deleted after examples/tests use public output APIs. |
 | QI preconditioners | `qi/basis.py`, `qi/corrections.py`, `qi/device.py`, `qi/policy.py` | Merge active pattern, phase-space, global moments, residual regions into `basis.py`; merge block-Schur, two-level, multilevel, deflation, residual-Galerkin, coupled residual into `corrections.py`; merge smoother support into `device.py`; merge promotion/admission into `policy.py` | Delete `device_smoother.py`, `promotion.py`, and re-export-only experiment files after behavior tests pass. |
 | Symbolic sparse | `symbolic_sparse/active_factors.py`, `symbolic_sparse/host_factor.py`, `symbolic_sparse/policy.py`, optional `symbolic_sparse/profile_response.py` | Move `symbolic_sparse/rhs1_fortran_reduced.py` into a non-historical owner | Delete the `rhs1_*` filename. |
@@ -698,32 +597,33 @@ move, and x-block owner move:
 ### Final Consolidation Execution Plan
 
 This is the only implementation sequence for the consolidation pass. It
-replaces the earlier tranche/sweep language. Each batch is intentionally large
-enough to reduce complexity, but bounded enough to test and review. A commit in
-this pass must delete files, merge files, or materially shrink a named large
-owner while preserving behavior.
+replaces the earlier tranche/sweep language. Each implementation batch is large
+enough to matter, but bounded enough to test and review. Do not stop after
+single-helper moves; stop after a batch reaches its gate or after a documented
+import-cycle/correctness blocker.
 
 #### Batch A - Profile-Response Owner Compression
 
-Purpose: make `profile_response/solve.py` a phase sequencer and remove relay
-files that no longer own numerical behavior.
+Purpose: make `profile_response/solve.py` a phase sequencer without creating
+new profile-response files.
 
 Actions, in order:
 
-1. Done: `active_dof.py` was merged into `profile_response/setup.py`, because
-   active-DOF decisions, maps, projections, and final RHSMode-1 cleanup are
-   setup/finalization contracts.
-2. Move final sparse-result normalization, progress replay, retry bookkeeping,
-   and fallback summaries from `solve.py` into existing owners:
-   `solver_diagnostics.py`, `sparse/finalization.py`, `sparse/direct.py`,
-   `sparse/xblock.py`, `sparse/qi.py`, or `dense.py`.
-3. Keep `sparse/policy.py` as a sparse-policy owner unless it is merged with
-   explicit namespacing of its `_env_*` helpers. A quick merge into
-   `policies.py` is forbidden because the helper signatures conflict with the
-   existing profile-response policy helpers.
-4. Keep `sparse/finalization.py` for this PR unless import-cycle risk is
-   eliminated by moving all finalization types into a single owner.
-5. Do not create another `handoff`, `helpers`, or `rhs1_*` file.
+1. Move one full remaining solve branch or result/retry/progress cluster out
+   of `solve.py` into an existing owner: `dense.py`, `solver_diagnostics.py`,
+   `sparse/finalization.py`, `sparse/direct.py`, `sparse/xblock.py`,
+   `sparse/qi.py`, or `sparse/fortran_reduced.py`.
+2. Move only coherent behavior, not isolated helpers. Good candidates are:
+   explicit sparse-PC requested branches, final sparse-result normalization,
+   retry bookkeeping, progress replay, fallback summaries, and accepted/result
+   replay logic.
+3. Keep `sparse/policy.py` separate unless conflicting `_env_*` helper names
+   are explicitly namespaced. Do not dump sparse policy into the 6.9k-line
+   general `policies.py`.
+4. Keep `sparse/finalization.py` unless the shared payload/result types can be
+   moved without cycles between `handoff.py`, `xblock.py`, and
+   `fortran_reduced.py`.
+5. Do not add another `handoff`, `helpers`, or `rhs1_*` file.
 
 Required exit gates:
 
@@ -732,41 +632,31 @@ Required exit gates:
   blocker if further reduction would create unsafe churn.
 - `problems/profile_response` plus `sparse` has `<=18` Python files for
   review-ready and `<=15` as a stretch target.
-- `profile_response/sparse/handoff.py <=5,500` lines and contains no generic
-  result/finalization logic that belongs to `finalization.py`.
+- `profile_response/sparse/handoff.py` contains only sparse-hand-off behavior,
+  not generic finalization, replay, or policy logic.
 - Focused RHSMode-1, active-DOF, dense fallback, sparse-PC, direct-tail, QI
   admission, Phi1, ambipolar, sensitivity, output-diagnostic, and public API
   tests pass.
 
 #### Batch B - Transport, Output, And Root Compression
 
-Purpose: remove the largest file-count source outside RHSMode 1 and make
-output ownership obvious.
+Purpose: finish obvious file-count reduction outside RHSMode 1 and make output
+ownership obvious.
 
 Actions, in order:
 
-1. Done: merge small transport solver shards into durable owners.
-   `dense_lu.py`, `dense_batch.py`, `host_gmres.py`, `loop.py`,
-   `iteration_stats.py`, and `sparse_direct_solve.py` are now in
-   `problems/transport_matrix/solve.py`; `residual_quality.py` is now in
-   `policies.py`.
-2. Done: merge policy/dispatch shards:
-   `handoff_policy.py`, `solve_policy.py`, and
-   `preconditioner_dispatch.py` are now part of
-   `problems/transport_matrix/policies.py`, and the relays have been deleted.
-3. Merge output relays:
-   `postsolve_diagnostics.py` into `finalize.py`, and
-   `streaming_outputs.py` into `outputs/transport.py`.
-4. Consolidate active/factor transport files only if their APIs are internal:
-   `active_dense.py`, `active_factor.py`, `direct_block_schur.py`,
-   `direct_pmat.py`, and `fortran_reduced_lu.py` become one active-system
-   owner or remain as independently tested numerical families.
-5. Move implementation from `io.py` into `outputs/formats.py`,
-   `outputs/cache.py`, `outputs/rhsmode1.py`, and `outputs/transport.py`.
-   `io.py` becomes a compatibility shim or is deleted.
-6. Move root `data_fetch.py`, `postprocess_upstream.py`, and `scans.py` to
-   `validation`, `workflows`, or the public API based on actual imports; delete
-   root relays when tests/docs import the owners directly.
+1. Merge `problems/transport_matrix/postsolve_diagnostics.py` into
+   `finalize.py` and `streaming_outputs.py` into `outputs/transport.py`.
+2. Audit `active_dense.py`, `active_factor.py`, `direct_block_schur.py`,
+   `direct_pmat.py`, and `fortran_reduced_lu.py`. Merge them only when the
+   destination owner is clearer; otherwise leave them as numerical-family
+   files and document that choice.
+3. Move HDF5/netCDF/NPZ formatting, solved-field schema assembly, cache/output
+   policy, and plotting payload construction from `io.py` into `outputs`.
+   `io.py` becomes a thin compatibility facade.
+4. Move or delete root `data_fetch.py`, `postprocess_upstream.py`, and
+   `scans.py` after import audits decide whether each is public API,
+   validation support, or workflow code.
 
 Required exit gates:
 
@@ -788,19 +678,17 @@ while preserving automatic solver selection.
 Actions, in order:
 
 1. Collapse `solvers/preconditioners/qi/` toward four durable owners:
-   `basis.py`, `corrections.py`, `device.py`, and `policy.py`. Basis owns
-   active patterns, phase-space modes, global moments, and residual regions.
-   Corrections owns block-Schur, two-level, multilevel, deflation,
-   residual-Galerkin, and coupled residual equations. Device owns GPU-compatible
-   apply/smoother pieces. Policy owns admission and promotion rules.
-2. Remove historical symbolic-sparse names by merging or renaming
+   `basis.py`, `corrections.py`, `device.py`, and `policy.py`. If preserving
+   existing filenames is safer, merge into current owners first and rename only
+   after tests pass.
+2. Remove the historical symbolic-sparse filename by merging
    `symbolic_sparse/rhs1_fortran_reduced.py` into a non-historical owner such
    as `symbolic_sparse/profile_response.py` or `active_factors.py`.
 3. Delete empty or re-export-only packages such as `coarse_space` after
    import-contract tests confirm no public dependency.
-4. Collapse PAS, x-block, and full-FP policy/detail shards only when the
-   result is fewer files and clearer numerical ownership. Do not combine
-   independent mathematical kernels merely to hide line count.
+4. Collapse PAS, x-block, full-FP, and domain-decomposition detail shards only
+   when they are policy/detail relays. Keep independent mathematical kernels
+   separate if merging would hide physics.
 5. Move routine solver controls behind namelist/Python policy objects. Keep
    environment variables only as documented debug compatibility switches.
 
@@ -852,7 +740,7 @@ Review-ready acceptance gates:
 
 - Package source file count is `<=190`; stretch target `<=175`.
 - Package source lines are below the final consolidation checkpoint recorded
-  at Batch E entry; current working value is 165,586 lines and must decrease
+  at Batch E entry; current working value is 165,398 lines and must decrease
   before review.
 - Package root has `<=40` Python files preferred, `<=44` allowed only with
   explicit public/shim labels.
@@ -1423,18 +1311,19 @@ Deliverables:
 
 Current completion status:
 
-- Lane 1 structural consolidation: about 91 percent. The compatibility-driver
+- Lane 1 structural consolidation: about 92 percent. The compatibility-driver
   boundary is done, historical `v3_*` implementation roots are routed or
   deleted, top-level `rhs1_*` and `transport_*` implementation files are gone,
-  package-root count is down to 43, and `v3_driver.py` is a 47-line shim.
-  The remaining blockers are now concentrated and measurable:
-  `profile_response/solve.py` is 7,012 lines, `profile_response/policies.py`
+  package-root count is 43, package file count is 195, and `v3_driver.py` is a
+  47-line shim. The remaining blockers are concentrated and measurable:
+  `profile_response/solve.py` is 6,985 lines, `profile_response/policies.py`
   is 6,885 lines, `profile_response/sparse/xblock.py` is 7,725 lines,
-  `problems/profile_response` now has 18 files including `sparse`,
-  `problems/transport_matrix` still has 28 files including `parallel`,
-  `solvers/preconditioners` still has 47 files, and `io.py` is 4,264 lines.
-  Lane 1 must now follow Batches A-E above instead of continuing small
-  extraction/checkpoint churn.
+  `profile_response/sparse/handoff.py` is 4,438 lines,
+  `problems/profile_response` has 18 files including `sparse`,
+  `problems/transport_matrix` has 18 files including `parallel`,
+  `solvers/preconditioners` has 47 files, and `io.py` is 4,264 lines.
+  Lane 1 must now follow Batches A-E above as a few large consolidation
+  commits instead of small extraction/checkpoint churn.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
@@ -1474,16 +1363,18 @@ Completed checkpoints that remain valid:
 
 Next ordered implementation steps:
 
-1. Continue Batch A as one profile-response owner-compression pass: move
-   remaining result/retry/progress relays from `solve.py` into existing
-   dense/sparse/diagnostic owners. Stop only when the review-ready gates are
-   met or an import-cycle note blocks a specific deletion.
-2. Execute Batch B as one transport/output/root-compression pass. Remove
-   transport micro-files, move output implementation out of `io.py`, and
-   resolve root candidates in the same batch.
-3. Execute Batch C as one solver-family-compression pass. Reduce QI, symbolic
-   sparse, and preconditioner family shards to durable role owners, and remove
-   historical filenames.
+1. Execute Batch A in one profile-response owner-compression commit or tightly
+   related commit pair. The target is to remove at least 1,500 lines from
+   `solve.py` by moving a full requested-sparse/result-replay/retry-progress
+   branch into existing sparse/dense/diagnostic owners.
+2. Execute Batch B as one transport/output/root-compression commit or commit
+   pair. The target is to finish obvious transport micro-file cleanup, reduce
+   `io.py` below 1,200 lines by moving implementation to `outputs`, and decide
+   root placement for `data_fetch.py`, `postprocess_upstream.py`, and
+   `scans.py`.
+3. Execute Batch C as one solver-family-compression commit or commit pair. The
+   target is to reduce `solvers/preconditioners` to `<=35` files, reduce QI to
+   `<=7` files, and remove `symbolic_sparse/rhs1_fortran_reduced.py`.
 4. Execute Batch D after names stop moving. Refresh source maps, docs, README
    developer notes, examples, import-contract tests, and owner tests against
    the final package structure.
