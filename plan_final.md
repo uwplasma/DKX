@@ -168,6 +168,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   lane gates, evidence path/claim checks, invalid JSON files, missing files, and
   structured exception wrappers. These keep release/readiness claims
   evidence-backed without launching any simulations.
+- The seventeenth post-audit coverage tranche added input-compatibility tests
+  for top-level case-insensitive lookup, empty/scalar namelist value handling,
+  legacy Boozer equilibrium-file aliases, `wout_path`/`equilibriumFile`
+  override rendering, radial-coordinate conversion errors, `psiAHat`
+  precedence, and explicit gradient-coordinate overrides. These protect the
+  CLI/Python input contract and Fortran-v3 namelist parity without launching
+  solves.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
