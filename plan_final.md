@@ -2719,9 +2719,12 @@ Current completion status:
   bounded routing tests for auto-host, structured-CSR, explicit sparse
   minimum-norm, and explicit sparse-host/direct early exits; the Phi1 Newton
   owner rose from `43%` to `85%` file coverage in the fresh audit.
-  Benchmark-artifact promotion policy also has fast gates for default-promotion
-  evidence and canonical runtime/memory ordering. The next coverage work must
-  focus on
+  Transport parallel runtime has bounded gates for GPU worker planning,
+  worker-result validation, residual-log summarization, persistent-pool
+  fallback, pool-cache reuse/replacement, and parent missing-RHS fail-fast
+  behavior. Benchmark-artifact promotion policy also has fast gates for
+  default-promotion evidence and canonical runtime/memory ordering. The next
+  coverage work must focus on
   profile/transport solve owners, sparse-pattern emission, Schur/profile
   preconditioners, profile true-operator rescue paths, output writer branches,
   and ambipolar derivative/root edge cases while keeping CI below ten minutes.

@@ -132,3 +132,47 @@ def test_parallel_parent_solve_merges_workers_and_builds_result(monkeypatch) -> 
     assert result.transport_output_fields is not None
     assert result.transport_output_fields["diagnostic"].tolist() == [7.0]
     assert any("parallel whichRHS" in msg for msg in messages)
+
+
+def test_parallel_parent_solve_rejects_missing_worker_state_vectors(monkeypatch) -> None:
+    """Parallel orchestration should fail before diagnostics if a worker drops an RHS."""
+
+    def fake_run_transport_parallel_payloads(**_kwargs):
+        return [
+            {
+                "which_rhs_values": [1],
+                "state_vectors_by_rhs": {1: np.asarray([1.0, 2.0])},
+                "residual_norms_by_rhs": {1: 1.0e-11},
+                "rhs_norms_by_rhs": {1: 10.0},
+                "elapsed_time_s": np.asarray([0.25]),
+            },
+        ]
+
+    monkeypatch.setattr(parallel_solve, "run_transport_parallel_payloads", fake_run_transport_parallel_payloads)
+
+    try:
+        parallel_solve.maybe_run_transport_parallel_solve(
+            nml=SimpleNamespace(),
+            op0=SimpleNamespace(),
+            rhs_mode=2,
+            n_rhs=2,
+            which_rhs_values=(1, 2),
+            parallel_child=False,
+            parallel_workers=2,
+            parallel_backend="cpu",
+            input_namelist=Path("input.namelist"),
+            tol=1e-10,
+            atol=0.0,
+            restart=40,
+            maxiter=100,
+            solve_method="auto",
+            identity_shift=0.0,
+            collect_transport_output_fields=False,
+            phi1_hat_base=None,
+            differentiable=False,
+            runtime=_runtime(),
+        )
+    except RuntimeError as exc:
+        assert "missing state vectors for whichRHS=[2]" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected missing-state-vector failure")

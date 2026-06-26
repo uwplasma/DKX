@@ -6,12 +6,18 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+import sfincs_jax.problems.transport_parallel_runtime as transport_parallel_runtime
 from sfincs_jax.problems.transport_parallel_runtime import (
+    TransportParallelPoolCache,
+    plan_transport_parallel_gpu_subprocesses,
     merge_transport_parallel_results,
     partition_transport_rhs,
     run_transport_parallel_gpu_subprocesses,
+    run_transport_parallel_payloads,
     summarize_transport_worker_output,
     transport_worker_subprocess_env,
+    validate_complete_transport_worker_rhs_coverage,
+    validate_transport_worker_result_payload,
 )
 
 
@@ -333,6 +339,169 @@ def test_summarize_transport_worker_output_filters_noise() -> None:
         "solve_v3_transport_matrix_linear_gmres: preconditioner=sxblock strong=xmg",
         "whichRHS=2: residual_norm=1.0e-10 elapsed_s=0.2",
     ]
+
+
+def test_summarize_transport_worker_output_truncates_long_logs() -> None:
+    text = "\n".join(
+        f"whichRHS={idx}: residual_norm={idx}.0e-12 elapsed_s=0.{idx}"
+        for idx in range(1, 9)
+    )
+
+    lines = summarize_transport_worker_output(text, max_lines=5)
+
+    assert lines[0].startswith("whichRHS=1")
+    assert lines[1] == "..."
+    assert lines[-1].startswith("whichRHS=8")
+    assert len(lines) == 5
+
+
+def test_gpu_subprocess_plan_handles_empty_payloads_and_rejects_missing_gpus() -> None:
+    empty = plan_transport_parallel_gpu_subprocesses(
+        payloads=[],
+        parallel_workers=4,
+        visible_gpu_ids=[],
+    )
+    assert empty["active_workers"] == 0
+    assert empty["worker_assignments"] == []
+    assert empty["capped"] is False
+
+    with pytest.raises(RuntimeError, match="no visible GPU ids"):
+        plan_transport_parallel_gpu_subprocesses(
+            payloads=[{"which_rhs_values": [1]}],
+            parallel_workers=1,
+            visible_gpu_ids=["", " "],
+        )
+
+
+def test_transport_worker_payload_validators_fail_closed() -> None:
+    with pytest.raises(ValueError, match="invalid whichRHS"):
+        validate_transport_worker_result_payload(
+            rhs_values=[0],
+            result={
+                "state_vectors_by_rhs": {0: np.asarray([0.0])},
+                "residual_norms_by_rhs": {0: 0.0},
+                "rhs_norms_by_rhs": {0: 1.0},
+            },
+            n_rhs=2,
+        )
+
+    with pytest.raises(ValueError, match="out-of-range whichRHS"):
+        validate_transport_worker_result_payload(
+            rhs_values=[3],
+            result={
+                "state_vectors_by_rhs": {3: np.asarray([0.0])},
+                "residual_norms_by_rhs": {3: 0.0},
+                "rhs_norms_by_rhs": {3: 1.0},
+            },
+            n_rhs=2,
+        )
+
+    with pytest.raises(ValueError, match="must be a mapping"):
+        validate_transport_worker_result_payload(
+            rhs_values=[1],
+            result={
+                "state_vectors_by_rhs": [],
+                "residual_norms_by_rhs": {1: 0.0},
+                "rhs_norms_by_rhs": {1: 1.0},
+            },
+            n_rhs=2,
+        )
+
+    with pytest.raises(ValueError, match="out-of-range whichRHS values \\[3\\]"):
+        validate_complete_transport_worker_rhs_coverage(seen_rhs={1, 2, 3}, n_rhs=2)
+
+
+def test_run_transport_parallel_payloads_falls_back_when_persistent_pool_breaks() -> None:
+    messages: list[str] = []
+    calls = {"get_pool": 0, "worker": 0, "shutdown": 0}
+    payloads = [{"which_rhs_values": [1]}, {"which_rhs_values": [2]}]
+
+    def _get_pool(**_kwargs):
+        calls["get_pool"] += 1
+        if calls["get_pool"] == 1:
+            raise transport_parallel_runtime.BrokenProcessPool("broken")
+        raise OSError("retry unavailable")
+
+    def _worker(payload):
+        calls["worker"] += 1
+        return {"which_rhs_values": payload["which_rhs_values"]}
+
+    results = run_transport_parallel_payloads(
+        payloads=payloads,
+        parallel_workers=2,
+        parallel_backend="cpu",
+        run_gpu_subprocesses=lambda **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected GPU path")),
+        persistent_pool_enabled=True,
+        get_pool=_get_pool,
+        shutdown_pool=lambda: calls.__setitem__("shutdown", calls["shutdown"] + 1),
+        worker=_worker,
+        worker_env=lambda _workers: (_ for _ in ()).throw(AssertionError("persistent pool should not use worker_env")),
+        executor_class=object,
+        executor_kwargs=lambda **_kwargs: {},
+        emit=lambda _level, message: messages.append(message),
+    )
+
+    assert results == [{"which_rhs_values": [1]}, {"which_rhs_values": [2]}]
+    assert calls == {"get_pool": 2, "worker": 2, "shutdown": 1}
+    assert any("persistent transport pool broke" in message for message in messages)
+    assert any("falling back to sequential whichRHS" in message for message in messages)
+
+
+def test_transport_parallel_pool_cache_reuses_and_replaces_matching_keys() -> None:
+    cache = TransportParallelPoolCache()
+    shutdowns: list[str] = []
+
+    class _Pool:
+        def __init__(self, label: str):
+            self.label = label
+
+        def shutdown(self, **_kwargs):
+            shutdowns.append(self.label)
+
+    class _WorkerEnv:
+        def __init__(self, workers: int):
+            self.workers = workers
+
+        def __enter__(self):
+            return None
+
+        def __exit__(self, *_exc):
+            return False
+
+    created: list[str] = []
+
+    def _executor_class(**kwargs):
+        label = f"pool-{kwargs['label']}"
+        created.append(label)
+        return _Pool(label)
+
+    pool1 = cache.get(
+        parallel_workers=2,
+        key_fn=lambda workers: ("key", workers),
+        worker_env=lambda workers: _WorkerEnv(workers),
+        executor_kwargs=lambda **_kwargs: {"label": "a"},
+        executor_class=_executor_class,
+    )
+    pool2 = cache.get(
+        parallel_workers=2,
+        key_fn=lambda workers: ("key", workers),
+        worker_env=lambda workers: _WorkerEnv(workers),
+        executor_kwargs=lambda **_kwargs: {"label": "b"},
+        executor_class=_executor_class,
+    )
+    pool3 = cache.get(
+        parallel_workers=3,
+        key_fn=lambda workers: ("key", workers),
+        worker_env=lambda workers: _WorkerEnv(workers),
+        executor_kwargs=lambda **_kwargs: {"label": "c"},
+        executor_class=_executor_class,
+    )
+    cache.shutdown()
+
+    assert pool1 is pool2
+    assert pool3 is not pool1
+    assert created == ["pool-a", "pool-c"]
+    assert shutdowns == ["pool-a", "pool-c"]
 
 
 def test_gpu_subprocesses_abort_pending_workers_on_residual_gate(
