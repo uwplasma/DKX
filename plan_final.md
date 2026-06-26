@@ -55,6 +55,9 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   tree.
 - No nested source package directories remain below `sfincs_jax/`; the
   source-tree guard keeps `temporary_nested_packages` empty.
+- `v3_driver.py` is a 47-line compatibility shim that imports the domain-owned
+  profile and transport solve modules, exposes former legacy names, and contains
+  no physics or solver implementation.
 - `sfincs_jax/README.md` documents the one-level source layout, stable public
   root modules, temporary compatibility roots, release-data manifest policy,
   and contributor move rules. The tiny release-data manifest lives under
@@ -72,6 +75,10 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
 - The root README no longer matches the explicit progress-language patterns
   flagged in the review prompt. Remaining historical/status language should be
   handled in docs pages and release notes rather than the first-page README.
+- A repository-size audit found no tracked files larger than 2 MB. Local ignored
+  caches (`docs/_build`, `.pytest_cache`, `.ruff_cache`, and `__pycache__`
+  folders) were removed; ignored benchmark input caches remain local-only and
+  are not part of a user clone or wheel.
 - A fresh xdist coverage audit on this branch measured `83.053%`
   (`57,435 / 69,155` covered lines). The most recent local audit wrote
   `.coverage` and `coverage.xml`, but local focused JAX coverage invocations
