@@ -276,6 +276,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   device-sparse owners instead of stale `v3_driver.py` or former `rhs1_*` module
   names. Historical source-map and roadmap references remain only where they
   document compatibility history.
+- The thirty-second post-audit coverage tranche added explicit-sparse settings
+  tests for factor-kind aliases, monolithic guard parsing, LU/ILU size caps,
+  bounded integer/float environment parsing, symbolic nested-dissection/BLR
+  policy knobs, permutation fallbacks, and ILU option bounds. This protects the
+  production sparse-factor memory/runtime admission layer with deterministic
+  unit tests instead of full production solves.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.

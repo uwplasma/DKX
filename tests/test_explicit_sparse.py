@@ -16,8 +16,13 @@ from sfincs_jax.solvers.explicit_sparse import (
     build_operator_from_pattern,
     choose_storage_kind,
     color_pattern_columns,
+    canonical_explicit_sparse_factor_kind,
     csr_matvec,
     deterministic_sparse_probe_matrix,
+    explicit_sparse_factor_kind_from_env,
+    explicit_sparse_factor_settings_from_env,
+    explicit_sparse_monolithic_guard_enabled,
+    explicit_sparse_monolithic_max_size,
     estimate_csr_nbytes,
     estimate_dense_nbytes,
     estimate_multifrontal_direct_lu_nbytes,
@@ -33,6 +38,50 @@ from sfincs_jax.solvers.explicit_sparse import (
 def test_storage_estimates_are_consistent() -> None:
     assert estimate_dense_nbytes((3, 4), np.float64) == 3 * 4 * 8
     assert estimate_csr_nbytes((3, 4), 5, data_dtype=np.float64, index_dtype=np.int32) == 5 * 12 + 4 * 4
+
+
+def test_explicit_sparse_settings_parse_aliases_and_fail_closed_bounds() -> None:
+    env = {
+        "SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND": "native_nd_frontal_schur_lu",
+        "SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_GUARD": ".false.",
+        "SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_LU_MAX_SIZE": "123",
+        "SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_ILU_MAX_SIZE": "bad",
+        "SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_MAX_SIZE": "456",
+        "SFINCS_JAX_EXPLICIT_SPARSE_BLOCK_COLS": "-9",
+        "SFINCS_JAX_EXPLICIT_SPARSE_PATTERN_COLOR_BATCH": "0",
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_COMPRESS_UPDATES": "yes",
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_PARALLEL_UPDATE_WORKERS": "0",
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_WOODBURY_MAX_CONDITION": "0.01",
+        "SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC": "bad_permc",
+        "SFINCS_JAX_EXPLICIT_SPARSE_DIAG_PIVOT_THRESH": "-1.5",
+        "SFINCS_JAX_EXPLICIT_SPARSE_ILU_FILL_FACTOR": "0",
+        "SFINCS_JAX_EXPLICIT_SPARSE_ILU_DROP_TOL": "-2",
+    }
+
+    settings = explicit_sparse_factor_settings_from_env(
+        env=env,
+        default_permc_spec="MMD_AT_PLUS_A",
+        default_ilu_fill_factor=9.0,
+        default_ilu_drop_tol=1.0e-3,
+    )
+
+    assert canonical_explicit_sparse_factor_kind("block_schur_lu") == "symbolic_block_schur_lu"
+    assert canonical_explicit_sparse_factor_kind("unknown", default="spilu") == "ilu"
+    assert explicit_sparse_factor_kind_from_env("lu", env=env) == "symbolic_nd_frontal_schur_lu"
+    assert explicit_sparse_monolithic_guard_enabled(True, env=env) is False
+    assert explicit_sparse_monolithic_max_size("lu", env=env, default=999) == 123
+    assert explicit_sparse_monolithic_max_size("ilu", env=env, default=999) == 999
+    assert settings.factor_kind == "symbolic_nd_frontal_schur_lu"
+    assert settings.monolithic_guard_enabled is False
+    assert settings.block_cols == 0
+    assert settings.pattern_color_batch == 1
+    assert settings.symbolic_nd_compress_updates is True
+    assert settings.symbolic_nd_parallel_update_workers == 1
+    assert settings.symbolic_blr_frontal_woodbury_max_condition == pytest.approx(1.0)
+    assert settings.permc_spec == "MMD_AT_PLUS_A"
+    assert settings.diag_pivot_thresh == pytest.approx(0.0)
+    assert settings.ilu_fill_factor == pytest.approx(0.0)
+    assert settings.ilu_drop_tol == pytest.approx(0.0)
 
 
 def test_csr_matvec_matches_dense_and_rejects_invalid_shapes() -> None:
