@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from sfincs_jax.workflows.optimization_workflow import (
+from sfincs_jax.workflows.optimization import (
     build_candidate_scan_plan,
     er_values_from_bounds,
     write_candidate_scan_plan,

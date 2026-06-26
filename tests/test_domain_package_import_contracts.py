@@ -34,6 +34,9 @@ DOMAIN_PACKAGES = (
 )
 
 ACTIVE_PACKAGE_EXPORTS = {
+    "sfincs_jax.workflows": (
+        "optimization",
+    ),
     "sfincs_jax.geometry": (
         "BoozerGeometry",
         "boozer_geometry_from_bc_file",
@@ -370,6 +373,12 @@ MOVED_ROOT_MODULE_OWNERS = {
         "ScanResult",
         "linspace_including_endpoints",
         "run_er_scan",
+    ),
+    "sfincs_jax.workflows.optimization": (
+        "AmbipolarRoot",
+        "build_candidate_scan_plan",
+        "evaluate_sfincs_scan_promotion",
+        "qa_proxy_neoclassical_objective",
     ),
 }
 
