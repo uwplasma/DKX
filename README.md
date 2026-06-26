@@ -287,8 +287,9 @@ dense full-FP lane covers active sizes up to `8000`; this reduced the checked
 GPU0 scan also completes in about `23 s`. CPU and GPU selected
 `E_r = 2.2224054815` within `2.5e-13`; Fortran-v3 selected
 `E_r = 2.2224043880`, within the documented `2e-6` reference tolerance. The
-root still drifts from the `9 x 9 x 11 x 4` rung, so production-resolution QI
-remains an explicit research lane.
+root drift from the `9 x 9 x 11 x 4` rung is reported in the JSON artifact so
+publication claims can require the higher-resolution gates documented in the
+validation pages.
 
 ![QI nfp=2 second refined CPU/GPU/Fortran electron-root comparison](docs/_static/figures/optimization/qi_nfp2_electron_root_res11_reference_tolerance_comparison_dense8000_default.png)
 
@@ -304,13 +305,13 @@ the requested target; it is infrastructure evidence, not a public performance
 claim.
 
 A checked no-solve rollup records the QI `nfp=2` electron-root ladder from
-`7x` through `15x`. The recorded root drift is `0.00210`, but the rollup remains
-`deferred` because the `15x` GPU rung and the full `25 x 51 x 100 x 4`
-production floor are still open.
+`7x` through `15x`, with a recorded root drift of `0.00210`. Treat this as a
+bounded validation example; use the documented full-resolution gates before
+making production-resolution QI claims.
 
 The separate finite-beta QA convergence ladder extends the finite-beta QA
-artifact to `9 x 9 x 7 x 4` at the central surface and remains explicitly
-`deferred` because it does not meet the production floor.
+artifact to `9 x 9 x 7 x 4` at the central surface and is presented as a bounded
+workflow example rather than a production-floor claim.
 A follow-up medium-resolution solver-policy probe at `17 x 21 x 12 x 4`
 validated the non-dense `xblock_sparse_pc_gmres` fallback route for the
 same two-species finite-beta QA deck: the automatic CPU path converged in about
@@ -640,10 +641,10 @@ wall after rejecting the native stack; checked QA/QH active-LU reference
 audits converge to `9.95e-13` and `8.71e-14` residual with a `13.3 GB` active LU
 factor. A stricter guarded rerun with `tol=1e-10` converged to `7.27e-16` in
 `354.6 s`. Native true-coupled, BLR/HSS, and nested-dissection rescue paths
-remain opt-in because the measured full-grid probes reduce some setup residuals
-but do not yet produce residual-clean production Krylov solves within the setup
-budget. This remains deferred optimization work, not a blocker for the
-parity/release scope.
+are opt-in advanced routes: the default path uses them only when they satisfy
+the same true-residual gate, otherwise it falls back to the residual-clean
+active-LU reference route. Detailed lower-memory optimization evidence lives in
+the performance documentation.
 
 ```bash
 SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=direct \
