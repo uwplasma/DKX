@@ -38,7 +38,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from sfincs_jax.solvers.implicit import gmres_custom_linear_solve, linear_custom_solve
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3_system import (
+from sfincs_jax.operators.profile_response.system import (
     apply_v3_full_system_operator,
     full_system_operator_from_namelist,
     rhs_v3_full_system,
