@@ -61,7 +61,7 @@ and uses the standard :math:`E\times B` drift
    \mathbf{E} = -\nabla\Phi_0.
 
 Code links:
-``sfincs_jax/v3_system.py`` (operator assembly),
+``sfincs_jax/operators/profile_response/system.py`` (operator assembly),
 ``sfincs_jax/residual.py`` (source terms and residuals),
 ``sfincs_jax/problems/transport_matrix/diagnostics.py`` (RHSMode=2/3 forcing).
 
@@ -125,7 +125,7 @@ with test-particle and field-particle pieces that couple the Legendre modes acro
 species. This coupling is what makes the Fokker–Planck operator dense in speed space.
 `sfincs_jax` mirrors the v3 block structure in
 ``sfincs_jax/collisions.py`` and assembles multi-species blocks in
-``sfincs_jax/v3_system.py``.
+``sfincs_jax/operators/profile_response/system.py``.
 
 Numerical implications:
 
@@ -237,7 +237,7 @@ Numerical challenges include:
   (``includePhi1InCollisionOperator``).
 
 Code links:
-``sfincs_jax/v3_system.py`` (Phi1 block),
+``sfincs_jax/operators/profile_response/system.py`` (Phi1 block),
 ``sfincs_jax/io.py`` (Phi1 input handling),
 ``sfincs_jax/collisions.py`` (Phi1-in-collisions),
 ``sfincs_jax/diagnostics.py`` (Phi1 output fields).
@@ -342,7 +342,7 @@ Numerically, these constraints introduce near-nullspaces that require explicit p
 or block preconditioning to solve robustly.
 
 Code links:
-``sfincs_jax/v3_system.py`` (constraint rows/columns),
+``sfincs_jax/operators/profile_response/system.py`` (constraint rows/columns),
 ``sfincs_jax/v3_driver.py`` (constraint projections and preconditioners),
 ``sfincs_jax/solver.py`` (nullspace-aware diagnostics).
 
@@ -390,7 +390,7 @@ by choosing the DKES trajectory model and PAS collisions. This is the basis for 
 monoenergetic transport-matrix benchmarking in ``RHSMode=3``.
 
 Code links:
-``sfincs_jax/v3_system.py`` (trajectory switches),
+``sfincs_jax/operators/profile_response/system.py`` (trajectory switches),
 ``sfincs_jax/problems/transport_matrix/diagnostics.py`` (monoenergetic RHS construction).
 
 Equation-to-code map
@@ -409,7 +409,7 @@ The table below summarizes where each term in the v3 drift-kinetic equation is i
 - Collision operators (PAS and full FP):
   ``sfincs_jax/collisions.py`` with modal transforms in ``sfincs_jax/xgrid.py``.
 - Constraint rows/columns and Phi1 blocks:
-  ``sfincs_jax/v3_system.py`` and ``sfincs_jax/v3_driver.py``.
+  ``sfincs_jax/operators/profile_response/system.py`` and ``sfincs_jax/v3_driver.py``.
 - Diagnostics and flux assembly:
   ``sfincs_jax/diagnostics.py`` and
   ``sfincs_jax/problems/transport_matrix/diagnostics.py``.

@@ -52,7 +52,7 @@ API reference
 .. automodule:: sfincs_jax.operators.profile_response.fblock
    :members:
 
-.. automodule:: sfincs_jax.v3_system
+.. automodule:: sfincs_jax.operators.profile_response.system
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.diagnostics

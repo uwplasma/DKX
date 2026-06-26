@@ -35,7 +35,7 @@ from sfincs_jax.validation.artifacts import (
     build_autodiff_sensitivity_validation_summary,
     load_autodiff_sensitivity_summary,
 )
-from sfincs_jax.v3_system import (
+from sfincs_jax.operators.profile_response.system import (
     apply_v3_full_system_operator,
     full_system_operator_from_namelist,
     rhs_v3_full_system,

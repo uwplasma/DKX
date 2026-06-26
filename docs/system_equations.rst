@@ -135,7 +135,7 @@ For ``RHSMode=2`` (transport matrix) and ``RHSMode=3`` (monoenergetic transport)
 - and, for ``RHSMode=3``, the single-point ``x=1`` grid used to compute monoenergetic coefficients.
 
 `sfincs_jax` mirrors this behavior via
-:func:`sfincs_jax.v3_system.with_transport_rhs_settings`, ensuring that the transport-mode
+:func:`sfincs_jax.operators.profile_response.system.with_transport_rhs_settings`, ensuring that the transport-mode
 RHS matches v3 ``evaluateResidual(f=0)`` exactly.
 
 Quasineutrality and Phi1 constraint
@@ -159,4 +159,4 @@ Implementation note
 Not every optional Phi1 coupling that appears in the extended literature is active in
 every public workflow. The supported scope is documented in :doc:`inputs`,
 :doc:`outputs`, and :doc:`fortran_comparison`, and the code paths that construct these
-blocks live primarily in ``sfincs_jax/v3_system.py`` and ``sfincs_jax/collisions.py``.
+blocks live primarily in ``sfincs_jax/operators/profile_response/system.py`` and ``sfincs_jax/collisions.py``.

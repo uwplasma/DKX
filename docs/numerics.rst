@@ -126,7 +126,7 @@ The advantages are:
 - and large solve branches can stay on device until a rescue path is actually needed.
 
 In the source tree, the core operator assembly and cached application live in
-``sfincs_jax/v3_system.py`` and are driven by the orchestration logic in
+``sfincs_jax/operators/profile_response/system.py`` and are driven by the orchestration logic in
 ``sfincs_jax/v3_driver.py``.
 
 Solve modes
@@ -187,7 +187,7 @@ Code locations
 
 The most important numerical modules are:
 
-- ``sfincs_jax/v3_system.py``: system definition, cached operators, block structure.
+- ``sfincs_jax/operators/profile_response/system.py``: system definition, cached operators, block structure.
 - ``sfincs_jax/v3_driver.py``: solve orchestration, solver/preconditioner selection,
   rescues, parallel transport execution.
 - ``sfincs_jax/residual.py``: residual and right-hand-side evaluation.
