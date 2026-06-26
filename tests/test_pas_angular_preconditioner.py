@@ -95,6 +95,32 @@ def _fallback_builder(scale: float):
     return _builder
 
 
+def _attach_exb_terms(op: SimpleNamespace, *, theta_dkes: bool, zeta_dkes: bool) -> SimpleNamespace:
+    shape = (int(op.n_theta), int(op.n_zeta))
+    base = jnp.ones(shape, dtype=jnp.float64)
+    op.fblock.exb_theta = SimpleNamespace(
+        alpha=jnp.asarray(1.2, dtype=jnp.float64),
+        delta=jnp.asarray(0.4, dtype=jnp.float64),
+        dphi_hat_dpsi_hat=jnp.asarray(-0.7, dtype=jnp.float64),
+        d_hat=0.8 * base,
+        b_hat_sub_zeta=1.1 * base,
+        b_hat=1.3 * base,
+        fsab_hat2=jnp.asarray(2.0, dtype=jnp.float64),
+        use_dkes_exb_drift=theta_dkes,
+    )
+    op.fblock.exb_zeta = SimpleNamespace(
+        alpha=jnp.asarray(0.9, dtype=jnp.float64),
+        delta=jnp.asarray(0.5, dtype=jnp.float64),
+        dphi_hat_dpsi_hat=jnp.asarray(0.6, dtype=jnp.float64),
+        d_hat=0.7 * base,
+        b_hat_sub_theta=1.4 * base,
+        b_hat=1.2 * base,
+        fsab_hat2=jnp.asarray(2.5, dtype=jnp.float64),
+        use_dkes_exb_drift=zeta_dkes,
+    )
+    return op
+
+
 def test_pas_tokamak_theta_preconditioner_masks_inactive_pitch_and_reuses_cache(monkeypatch) -> None:
     op = _pas_operator(n_zeta=1)
     monkeypatch.setattr(pa, "_rhsmode1_precond_cache_key", lambda _op, kind: ("tokamak", kind, id(_op)))
@@ -174,6 +200,38 @@ def test_pas_tokamak_theta_falls_back_when_not_applicable() -> None:
     np.testing.assert_allclose(np.asarray(preconditioner(vector)), np.asarray(4.0 * vector))
 
 
+def test_pas_tokamak_theta_falls_back_for_degenerate_theta_or_pitch(monkeypatch) -> None:
+    monkeypatch.setattr(pa, "_rhsmode1_precond_cache_key", lambda _op, kind: ("tokamak-degenerate", kind, id(_op)))
+    for op in (_pas_operator(n_zeta=1, n_theta=1), _pas_operator(n_zeta=1, n_l=1)):
+        preconditioner = pa.build_rhs1_pas_tokamak_theta_preconditioner(
+            op=op,
+            block_preconditioner_builder=_fallback_builder(3.0),
+            pas_tokamak_theta_applicable=lambda _op: True,
+        )
+        vector = _vector(op)
+        np.testing.assert_allclose(np.asarray(preconditioner(vector)), np.asarray(3.0 * vector))
+
+
+def test_pas_tokamak_theta_can_apply_independently_to_zeta_planes(monkeypatch) -> None:
+    op = _pas_operator(n_zeta=2, n_theta=2, n_l=3)
+    monkeypatch.setattr(pa, "_rhsmode1_precond_cache_key", lambda _op, kind: ("tokamak-zeta", kind, id(_op)))
+    monkeypatch.setenv("SFINCS_JAX_PAS_TOKAMAK_LMAX", "2")
+    pa._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.clear()
+
+    preconditioner = pa.build_rhs1_pas_tokamak_theta_preconditioner(
+        op=op,
+        block_preconditioner_builder=_fallback_builder(8.0),
+        pas_tokamak_theta_applicable=lambda _op: True,
+    )
+    vector = _vector(op)
+    result = preconditioner(vector)
+
+    assert result.shape == vector.shape
+    assert bool(jnp.all(jnp.isfinite(result)))
+    np.testing.assert_allclose(np.asarray(result[op.f_size :]), np.asarray(vector[op.f_size :]))
+    np.testing.assert_allclose(np.asarray(result)[_inactive_indices(op)], 0.0, atol=1e-12)
+
+
 def test_pas_tz_preconditioner_masks_inactive_pitch_and_reuses_cache(monkeypatch) -> None:
     op = _pas_operator(n_zeta=2, n_theta=2)
     monkeypatch.setattr(pa, "_rhsmode1_precond_cache_key", lambda _op, kind: ("tz", kind, id(_op)))
@@ -216,6 +274,74 @@ def test_pas_tz_preconditioner_masks_inactive_pitch_and_reuses_cache(monkeypatch
     )
     assert len(pa._RHSMODE1_PAS_TZ_CACHE) == 1
     np.testing.assert_allclose(np.asarray(second(vector)), np.asarray(result))
+
+
+def test_pas_tz_preconditioner_reduced_application_and_exb_terms(monkeypatch) -> None:
+    op = _attach_exb_terms(_pas_operator(n_zeta=3, n_theta=2, n_l=3), theta_dkes=True, zeta_dkes=False)
+    monkeypatch.setattr(pa, "_rhsmode1_precond_cache_key", lambda _op, kind: ("tz-exb", kind, id(_op)))
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_LMAX", "3")
+    pa._RHSMODE1_PAS_TZ_CACHE.clear()
+
+    full_preconditioner = pa.build_rhs1_pas_tz_preconditioner(
+        op=op,
+        pas_tz_applicable=lambda _op: True,
+        pas_tz_memory_safe=lambda _op: True,
+        matvec_shard_axis=lambda _op: None,
+        device_count=lambda: 1,
+        theta_schwarz_builder=_fallback_builder(2.0),
+        zeta_schwarz_builder=_fallback_builder(3.0),
+        pas_hybrid_builder=_fallback_builder(4.0),
+        collision_builder=_fallback_builder(5.0),
+        tzfft_builder=_fallback_builder(6.0),
+    )
+    vector = _vector(op)
+    full_result = full_preconditioner(vector)
+    assert bool(jnp.all(jnp.isfinite(full_result)))
+
+    active = jnp.arange(op.total_size, dtype=jnp.int32)[::4]
+
+    def reduce_full(vector_in: jnp.ndarray) -> jnp.ndarray:
+        return vector_in[active]
+
+    def expand_reduced(vector_in: jnp.ndarray) -> jnp.ndarray:
+        expanded = jnp.zeros((op.total_size,), dtype=jnp.float64)
+        return expanded.at[active].set(vector_in)
+
+    reduced_preconditioner = pa.build_rhs1_pas_tz_preconditioner(
+        op=op,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        pas_tz_applicable=lambda _op: True,
+        pas_tz_memory_safe=lambda _op: True,
+        matvec_shard_axis=lambda _op: None,
+        device_count=lambda: 1,
+        theta_schwarz_builder=_fallback_builder(2.0),
+        zeta_schwarz_builder=_fallback_builder(3.0),
+        pas_hybrid_builder=_fallback_builder(4.0),
+        collision_builder=_fallback_builder(5.0),
+        tzfft_builder=_fallback_builder(6.0),
+    )
+    reduced_rhs = jnp.cos(0.11 * jnp.arange(active.size, dtype=jnp.float64))
+    expected = reduce_full(full_preconditioner(expand_reduced(reduced_rhs)))
+    np.testing.assert_allclose(np.asarray(reduced_preconditioner(reduced_rhs)), np.asarray(expected))
+
+
+def test_pas_tz_falls_back_for_degenerate_angular_or_pitch_grid() -> None:
+    for op in (_pas_operator(n_zeta=1, n_theta=1), _pas_operator(n_zeta=2, n_theta=2, n_l=1)):
+        preconditioner = pa.build_rhs1_pas_tz_preconditioner(
+            op=op,
+            pas_tz_applicable=lambda _op: True,
+            pas_tz_memory_safe=lambda _op: True,
+            matvec_shard_axis=lambda _op: None,
+            device_count=lambda: 1,
+            theta_schwarz_builder=_fallback_builder(2.0),
+            zeta_schwarz_builder=_fallback_builder(3.0),
+            pas_hybrid_builder=_fallback_builder(4.0),
+            collision_builder=_fallback_builder(5.0),
+            tzfft_builder=_fallback_builder(6.0),
+        )
+        vector = _vector(op)
+        np.testing.assert_allclose(np.asarray(preconditioner(vector)), np.asarray(4.0 * vector))
 
 
 def test_pas_tz_fallback_branches(monkeypatch) -> None:

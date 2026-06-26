@@ -2771,6 +2771,12 @@ Current completion status:
   and float32-to-float64 sparse-direct retry logic. These tests exercise the
   production branch policies and numerical invariants without adding slow
   production solves to CI.
+- PAS angular preconditioner coverage was expanded with degenerate
+  theta/pitch fallback gates, independent zeta-plane theta-line application,
+  reduced TZ application, and ExB theta/zeta drift terms. These are
+  manufactured-grid numerical tests that check finite output, inactive-pitch
+  masking, reduced/full consistency, and exact fallback dispatch without
+  requiring production RHSMode 1 solves.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
