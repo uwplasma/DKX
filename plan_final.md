@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (lint-retained-owner cleanup pass)
+Last updated: 2026-06-26 (profiling public-helper coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -336,6 +336,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   package Ruff exceptions are limited to the two retained large solve owners
   (`problems/profile_solve.py` and `problems/transport_solve.py`) pending the
   retained-owner audit. Package Ruff, compileall, and `git diff --check` pass.
+- The fifty-fourth post-audit coverage tranche added public profiling-helper
+  tests for deterministic CLI/API emission, quiet/verbosity gates, prefixes,
+  and timer elapsed-time accounting. These checks protect user-facing progress
+  and ETA plumbing without launching solves. The focused profiling/source-tree/
+  examples contract suite reports `25 passed` in `2.27 s`, Ruff passes for
+  `sfincs_jax/profiling.py` and the touched test file, and `git diff --check`
+  passes.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.

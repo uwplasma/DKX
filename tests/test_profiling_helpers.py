@@ -1,11 +1,38 @@
 from __future__ import annotations
 
+import io
 import sys
 from types import SimpleNamespace
 
 import pytest
 
 from sfincs_jax import profiling
+
+
+def test_make_emit_respects_quiet_verbosity_prefix_and_flush() -> None:
+    stream = io.StringIO()
+    emit = profiling.make_emit(verbose=1, quiet=False, stream=stream, prefix="[sfincs] ")
+
+    emit(2, "hidden")
+    assert stream.getvalue() == ""
+
+    emit(1, "visible")
+    assert stream.getvalue() == "[sfincs] visible\n"
+
+    quiet_stream = io.StringIO()
+    quiet_emit = profiling.make_emit(verbose=99, quiet=True, stream=quiet_stream)
+    quiet_emit(0, "suppressed")
+    assert quiet_stream.getvalue() == ""
+
+
+def test_timer_elapsed_uses_monotone_perf_counter(monkeypatch: pytest.MonkeyPatch) -> None:
+    ticks = iter([10.0, 12.5, 13.25])
+    monkeypatch.setattr(profiling.time, "perf_counter", lambda: next(ticks))
+
+    timer = profiling.Timer()
+
+    assert timer.elapsed_s() == pytest.approx(2.5)
+    assert timer.elapsed_s() == pytest.approx(3.25)
 
 
 def test_profile_env_flags_enable_profiler_and_device_sampling(monkeypatch: pytest.MonkeyPatch) -> None:
