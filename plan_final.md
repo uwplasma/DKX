@@ -232,6 +232,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   required physics topics, output-free cells, and checked first-path assets.
   This improves the user-facing learning path without adding generated outputs
   or changing production examples.
+- The twenty-fifth post-audit coverage tranche added output-geometry metric
+  tests for Boozer `.bc` and VMEC `wout` `gpsiHatpsiHat` assembly. The tests use
+  tiny analytic surfaces with monkeypatched readers, so they exercise the same
+  Fortran-v3 metric formulas, mode filtering, and radial interpolation branches
+  used in production HDF5 output without adding large equilibrium fixtures or
+  slow solves to CI.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.

@@ -28,7 +28,9 @@ from sfincs_jax.io import (
     read_sfincs_h5,
     write_sfincs_h5,
 )
+from sfincs_jax.geometry.boozer import BoozerBCHeader, BoozerBCSurface
 from sfincs_jax.namelist import Namelist, read_sfincs_input
+from sfincs_jax.outputs import writer as output_writer
 from sfincs_jax.outputs.cache import output_cache_dir, output_cache_path
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 
@@ -568,3 +570,128 @@ def test_localize_equilibrium_file_copies_boozer_alias_and_patches_input(tmp_pat
     assert localized == run_dir / "toy.bc"
     assert localized.read_text() == "toy boozer content\n"
     assert "fort996boozer_file = 'toy.bc'" in input_path.read_text()
+
+
+def test_bc_metric_output_branch_matches_positive_boozer_surface_metric(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pin the v3 Boozer ``gpsiHatpsiHat`` output path on a tiny analytic surface."""
+
+    header = BoozerBCHeader(n_periods=1, psi_a_hat=0.5, a_hat=1.0, turkin_sign=1)
+    old = BoozerBCSurface(
+        r_n=0.25,
+        iota=0.4,
+        g_hat=1.0,
+        i_hat=0.1,
+        p_prime_hat=0.0,
+        b0_over_bbar=1.0,
+        r0=1.6,
+        m=np.asarray([1], dtype=np.int32),
+        n=np.asarray([0], dtype=np.int32),
+        parity=np.asarray([True]),
+        b_amp=np.asarray([0.0]),
+        r_amp=np.asarray([0.10]),
+        z_amp=np.asarray([0.12]),
+        dz_amp=np.asarray([0.03]),
+    )
+    new = BoozerBCSurface(
+        r_n=0.75,
+        iota=0.5,
+        g_hat=1.0,
+        i_hat=0.1,
+        p_prime_hat=0.0,
+        b0_over_bbar=1.0,
+        r0=1.8,
+        m=old.m,
+        n=old.n,
+        parity=old.parity,
+        b_amp=old.b_amp,
+        r_amp=np.asarray([0.14]),
+        z_amp=np.asarray([0.16]),
+        dz_amp=np.asarray([0.04]),
+    )
+
+    monkeypatch.setattr(output_writer, "_resolve_equilibrium_file_from_namelist", lambda *, nml: Path("toy.bc"))
+    monkeypatch.setattr(
+        output_writer,
+        "read_boozer_bc_bracketing_surfaces",
+        lambda **_kwargs: (header, old, new),
+    )
+
+    grids = SimpleNamespace(
+        theta=np.asarray([0.0, np.pi / 2.0, np.pi], dtype=np.float64),
+        zeta=np.asarray([0.0, np.pi], dtype=np.float64),
+    )
+    geom = SimpleNamespace(d_hat=np.asarray(0.7, dtype=np.float64))
+    gpsipsi = output_writer._gpsipsi_from_bc_file(
+        nml=Namelist(groups={}, indexed={}),
+        grids=grids,
+        geom=geom,
+        r_n_wish=0.5,
+        vmecradial_option=0,
+        geometry_scheme=11,
+    )
+
+    assert gpsipsi.shape == (3, 2)
+    assert np.all(np.isfinite(gpsipsi))
+    assert np.all(gpsipsi > 0.0)
+
+
+def test_vmec_metric_output_branch_filters_modes_and_produces_finite_metric(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exercise the VMEC ``gpsiHatpsiHat`` output formula without a large wout fixture."""
+
+    w = SimpleNamespace(
+        nfp=1,
+        ns=3,
+        mpol=2,
+        ntor=0,
+        phi=np.asarray([0.0, 0.5, 1.0], dtype=np.float64),
+        xm=np.asarray([0, 1], dtype=np.int32),
+        xn=np.asarray([0, 0], dtype=np.int32),
+        xm_nyq=np.asarray([0, 1], dtype=np.int32),
+        xn_nyq=np.asarray([0, 0], dtype=np.int32),
+        bmnc=np.asarray([[1.0, 1.0, 1.0], [0.05, 0.05, 0.05]], dtype=np.float64),
+        rmnc=np.asarray([[1.5, 1.6, 1.7], [0.10, 0.12, 0.14]], dtype=np.float64),
+        zmns=np.asarray([[0.0, 0.0, 0.0], [0.08, 0.10, 0.12]], dtype=np.float64),
+    )
+    interp = SimpleNamespace(
+        index_full=(1, 2),
+        weight_full=(0.75, 0.25),
+        index_half=(1, 2),
+        weight_half=(0.75, 0.25),
+    )
+
+    monkeypatch.setattr(output_writer, "_resolve_equilibrium_file_from_namelist", lambda *, nml: Path("wout_toy.nc"))
+    monkeypatch.setattr(output_writer, "read_vmec_wout", lambda _path: w)
+    monkeypatch.setattr(output_writer, "vmec_interpolation", lambda **_kwargs: interp)
+
+    nml = Namelist(
+        groups={
+            "geometryparameters": {
+                "EQUILIBRIUMFILE": "wout_toy.nc",
+                "MIN_BMN_TO_LOAD": 0.02,
+                "RIPPLESCALE": 0.5,
+                "HELICITY_N": 0,
+                "HELICITY_L": 0,
+                "VMEC_NYQUIST_OPTION": 1,
+            }
+        },
+        indexed={},
+    )
+    grids = SimpleNamespace(
+        theta=np.asarray([0.0, np.pi / 2.0, np.pi], dtype=np.float64),
+        zeta=np.asarray([0.0, np.pi], dtype=np.float64),
+    )
+
+    gpsipsi = output_writer._gpsipsi_from_wout_file(
+        nml=nml,
+        grids=grids,
+        psi_n_wish=0.5,
+        vmec_radial_option=0,
+    )
+
+    assert gpsipsi.shape == (3, 2)
+    assert np.all(np.isfinite(gpsipsi))
+    assert np.all(gpsipsi > 0.0)
