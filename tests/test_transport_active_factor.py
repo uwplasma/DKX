@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import jax.numpy as jnp
 import numpy as np
 import pytest
 import scipy.sparse as sp
 
+import sfincs_jax.problems.transport_linear_system as tls
 from sfincs_jax.problems.transport_linear_system import (
     admit_active_block_schur_factor,
     build_active_block_ordering,
@@ -270,3 +274,170 @@ def test_residual_coarse_factor_rejects_bad_or_rank_deficient_probes() -> None:
             np.eye(4, dtype=np.float64),
             max_mb=1.0,
         )
+
+
+class _ToyProjectedFBlock:
+    def __init__(self, *, n_zeta: int):
+        self.n_zeta = int(n_zeta)
+
+    def project_block_indices(self, active_blocks: np.ndarray) -> "_ToyProjectedFBlockMatrix":
+        size = int(np.asarray(active_blocks).size) * int(self.n_zeta)
+        return _ToyProjectedFBlockMatrix(size=size)
+
+
+class _ToyProjectedFBlockMatrix:
+    def __init__(self, *, size: int):
+        self.size = int(size)
+
+    def to_scipy_csr_matrix(self):
+        diagonal = np.linspace(3.0, 4.0, self.size, dtype=np.float64)
+        return sp.diags(diagonal, 0, format="csr")
+
+
+def _toy_transport_op(*, constraint_scheme: int = 2, rhs_mode: int = 2) -> SimpleNamespace:
+    n_species = 1
+    n_x = 2
+    n_xi = 1
+    n_theta = 1
+    n_zeta = 2
+    f_size = n_species * n_x * n_xi * n_theta * n_zeta
+    extra_size = 2
+    return SimpleNamespace(
+        rhs_mode=rhs_mode,
+        n_species=n_species,
+        n_x=n_x,
+        n_xi=n_xi,
+        n_theta=n_theta,
+        n_zeta=n_zeta,
+        f_size=f_size,
+        phi1_size=0,
+        extra_size=extra_size,
+        total_size=f_size + extra_size,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        constraint_scheme=constraint_scheme,
+        point_at_x0=False,
+        theta_weights=jnp.ones((n_theta,), dtype=jnp.float64),
+        zeta_weights=jnp.asarray([0.25, 0.75], dtype=jnp.float64),
+        d_hat=jnp.ones((n_theta, n_zeta), dtype=jnp.float64),
+        x=jnp.asarray([0.5, 1.0], dtype=jnp.float64),
+        x_weights=jnp.asarray([0.4, 0.6], dtype=jnp.float64),
+        fblock=SimpleNamespace(fp=object()),
+    )
+
+
+@pytest.mark.parametrize("constraint_scheme", [1, 2])
+def test_direct_reduced_pmat_emits_term_level_operator_for_constraint_schemes(
+    monkeypatch: pytest.MonkeyPatch,
+    constraint_scheme: int,
+) -> None:
+    op = _toy_transport_op(constraint_scheme=constraint_scheme)
+
+    def fake_select(_fblock, *, include_identity_shift: bool, require_complete: bool):
+        assert include_identity_shift
+        assert require_complete
+        return SimpleNamespace(
+            selected=True,
+            assembly=SimpleNamespace(
+                operator=_ToyProjectedFBlock(n_zeta=op.n_zeta),
+                included_terms=("identity", "fp_collision"),
+            ),
+        )
+
+    messages: list[str] = []
+    monkeypatch.setattr(tls, "select_structured_rhs1_fblock_operator", fake_select)
+
+    result = tls._try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle(
+        op_pc=op,
+        active_indices=np.arange(op.total_size, dtype=np.int64),
+        factor_dtype=np.dtype(np.float64),
+        pc_shift=0.125,
+        emit=lambda _level, message: messages.append(str(message)),
+    )
+
+    assert result is not None
+    bundle, metadata = result
+    assert bundle.matrix.shape == (op.total_size, op.total_size)
+    assert metadata["direct_pmat"] is True
+    assert metadata["direct_pmat_reason"] == "term_level_reduced_fortran_pmat"
+    assert metadata["direct_pmat_active_size"] == op.total_size
+    assert metadata["direct_pmat_kinetic_size"] == op.f_size
+    assert metadata["direct_pmat_tail_size"] == op.extra_size
+    assert metadata["direct_pmat_kinetic_nnz"] == op.f_size
+    assert metadata["direct_pmat_source_nnz"] > 0
+    assert metadata["direct_pmat_constraint_nnz"] > 0
+    assert metadata["direct_pmat_included_terms"] == ("identity", "fp_collision")
+    assert any("direct reduced Pmat selected" in message for message in messages)
+
+    x = np.arange(1, op.total_size + 1, dtype=np.float64)
+    np.testing.assert_allclose(bundle.operator @ x, np.asarray(bundle.matrix @ x).reshape((-1,)))
+
+    true_result = tls._try_build_rhsmode23_fp_direct_active_operator_bundle(
+        op=op,
+        active_indices=np.arange(op.total_size, dtype=np.int64),
+        factor_dtype=np.dtype(np.float64),
+        emit=lambda _level, message: messages.append(str(message)),
+    )
+    assert true_result is not None
+    true_bundle, true_metadata = true_result
+    assert true_bundle.metadata.reason == "direct term-level active true FP operator emission"
+    assert true_metadata["direct_true_operator"] is True
+    assert true_metadata["direct_true_operator_active_size"] == op.total_size
+    assert any("direct active true FP operator selected" in message for message in messages)
+
+
+@pytest.mark.parametrize(
+    "op_mutation, active_indices",
+    [
+        ({"rhs_mode": 1}, None),
+        ({"include_phi1": True}, None),
+        ({"include_phi1_in_kinetic": True}, None),
+        ({"constraint_scheme": 9}, None),
+        ({}, np.asarray([], dtype=np.int64)),
+        ({}, np.asarray([0, 0, 4, 5], dtype=np.int64)),
+        ({}, np.asarray([0, 1, 2, 99], dtype=np.int64)),
+        ({}, np.asarray([0, 1, 2, 3], dtype=np.int64)),
+        ({}, np.asarray([1, 2, 4, 5], dtype=np.int64)),
+    ],
+)
+def test_direct_reduced_pmat_fails_closed_for_incompatible_layouts(
+    op_mutation: dict[str, object],
+    active_indices: np.ndarray | None,
+) -> None:
+    op = _toy_transport_op()
+    for key, value in op_mutation.items():
+        setattr(op, key, value)
+
+    result = tls._try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle(
+        op_pc=op,
+        active_indices=active_indices,
+        factor_dtype=np.dtype(np.float64),
+        pc_shift=0.0,
+        emit=None,
+    )
+
+    assert result is None
+
+
+def test_direct_reduced_pmat_reports_structured_fblock_selection_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    op = _toy_transport_op()
+    messages: list[str] = []
+
+    def fail_select(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("synthetic structured selection failure")
+
+    monkeypatch.setattr(tls, "select_structured_rhs1_fblock_operator", fail_select)
+
+    result = tls._try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle(
+        op_pc=op,
+        active_indices=np.arange(op.total_size, dtype=np.int64),
+        factor_dtype=np.dtype(np.float64),
+        pc_shift=0.0,
+        emit=lambda _level, message: messages.append(str(message)),
+    )
+
+    assert result is None
+    assert any("direct reduced Pmat unavailable" in message for message in messages)

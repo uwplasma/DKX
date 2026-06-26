@@ -2744,6 +2744,12 @@ Current completion status:
   block-factor failure fallback, invalid environment parsing, one-shot seed
   reduced projection, and seed failure fallback while preserving source/tail
   solves and dropping temporary factors.
+  RHSMode=2/3 transport linear-system coverage now includes direct term-level
+  reduced Pmat emission for constraint schemes 1 and 2, active true-operator
+  wrapper metadata, sparse operator matvec equivalence, fail-closed layout
+  rejection for bad active sets, and structured-fblock selection failure
+  diagnostics. These gates protect the lower-memory production preconditioner
+  path without running production solves in CI.
   Benchmark-artifact promotion policy
   also has fast gates for
   default-promotion evidence and canonical runtime/memory ordering. The next
