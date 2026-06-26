@@ -13,7 +13,7 @@ from scipy.sparse.linalg import aslinearoperator
 import sfincs_jax.io as io_module
 import sfincs_jax.operators.profile_sparse_pattern as sparse_pattern_module
 import sfincs_jax.solvers.preconditioner_qi_device as rhs1_qi_device_preconditioner_module
-import sfincs_jax.v3_driver as v3_driver_module
+import sfincs_jax.problems.profile_solve as profile_solve_module
 from sfincs_jax.solvers.explicit_sparse import SparseDecision, SparseOperatorBundle, build_operator_from_pattern
 from sfincs_jax.io import write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
@@ -32,7 +32,7 @@ from sfincs_jax.operators.profile_sparse_pattern import (
     v3_full_system_conservative_sparsity_pattern_for_indices,
     v3_full_system_fortran_reduced_preconditioner_sparsity_pattern,
 )
-from sfincs_jax.v3_driver import (
+from sfincs_jax.problems.profile_solve import (
     _rhs1_additive_rescue_nbytes,
     _rhs1_xblock_gmres_restart,
     _rhs1_xblock_precondition_side,
@@ -184,7 +184,7 @@ def test_residual_coarse_host_preconditioner_solves_adaptive_identity_residual()
     rhs = np.asarray([1.0, -2.0, 3.0, -4.0], dtype=np.float64)
     failed_residual = rhs - operator.matvec(HalfFactor().solve(rhs))
 
-    bundle = v3_driver_module._try_build_residual_coarse_host_sparse_preconditioner(
+    bundle = profile_solve_module._try_build_residual_coarse_host_sparse_preconditioner(
         operator_bundle=operator,
         factor_bundle=HalfFactor(),
         residual=failed_residual,
@@ -243,7 +243,7 @@ def test_residual_window_host_preconditioner_solves_targeted_kinetic_window() ->
     rhs = np.asarray([0.0, 2.0, 0.0, 0.0], dtype=np.float64)
     failed_residual = rhs - operator.matvec(HalfFactor().solve(rhs))
 
-    bundle = v3_driver_module._try_build_residual_window_host_sparse_preconditioner(
+    bundle = profile_solve_module._try_build_residual_window_host_sparse_preconditioner(
         operator_bundle=operator,
         factor_bundle=HalfFactor(),
         residual=failed_residual,
@@ -302,7 +302,7 @@ def test_true_operator_residual_window_lsq_reduces_global_residual() -> None:
             return np.zeros_like(np.asarray(rhs, dtype=np.float64))
 
     rhs = np.asarray([1.0, 0.25, -0.5], dtype=np.float64)
-    bundle = v3_driver_module._try_build_true_operator_residual_window_lsq_preconditioner(
+    bundle = profile_solve_module._try_build_true_operator_residual_window_lsq_preconditioner(
         true_matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         true_matmat=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         factor_bundle=ZeroFactor(),
@@ -356,7 +356,7 @@ def test_true_operator_residual_window_lsq_is_linear_without_damping() -> None:
         def solve(self, rhs):
             return np.zeros_like(np.asarray(rhs, dtype=np.float64))
 
-    bundle = v3_driver_module._try_build_true_operator_residual_window_lsq_preconditioner(
+    bundle = profile_solve_module._try_build_true_operator_residual_window_lsq_preconditioner(
         true_matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         true_matmat=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         factor_bundle=ZeroFactor(),
@@ -422,7 +422,7 @@ def test_true_operator_active_block_lsq_solves_deterministic_active_block() -> N
             return np.zeros_like(np.asarray(rhs, dtype=np.float64))
 
     rhs = np.asarray([1.0, -0.25, 0.5], dtype=np.float64)
-    bundle = v3_driver_module._try_build_true_operator_active_block_lsq_preconditioner(
+    bundle = profile_solve_module._try_build_true_operator_active_block_lsq_preconditioner(
         true_matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         true_matmat=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         factor_bundle=ZeroFactor(),
@@ -485,7 +485,7 @@ def test_true_operator_active_residual_block_lsq_solves_dominant_true_residual()
             return np.zeros_like(np.asarray(rhs, dtype=np.float64))
 
     rhs = np.asarray([0.1, 2.0, -3.0, 4.0], dtype=np.float64)
-    bundle = v3_driver_module._try_build_true_operator_active_residual_block_lsq_preconditioner(
+    bundle = profile_solve_module._try_build_true_operator_active_residual_block_lsq_preconditioner(
         true_matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         true_matmat=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         factor_bundle=ZeroFactor(),
@@ -548,7 +548,7 @@ def test_true_operator_active_submatrix_solves_deterministic_active_block() -> N
             return np.zeros_like(np.asarray(rhs, dtype=np.float64))
 
     rhs = np.asarray([1.0, -0.25, 0.5], dtype=np.float64)
-    bundle = v3_driver_module._try_build_true_operator_active_submatrix_preconditioner(
+    bundle = profile_solve_module._try_build_true_operator_active_submatrix_preconditioner(
         true_matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         true_matmat=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         factor_bundle=ZeroFactor(),
@@ -591,7 +591,7 @@ def test_reusable_true_action_column_cache_reuses_batched_columns() -> None:
         calls["matmat"] += 1
         return matrix @ np.asarray(x, dtype=np.float64)
 
-    cache = v3_driver_module._ReusableTrueActionColumnCache(
+    cache = profile_solve_module._ReusableTrueActionColumnCache(
         true_matvec=lambda x: matrix @ np.asarray(x, dtype=np.float64),
         true_matmat=true_matmat,
         n=3,
@@ -655,7 +655,7 @@ def test_active_residual_block_reuses_true_action_column_cache() -> None:
         calls["matmat"] += 1
         return matrix @ np.asarray(x, dtype=np.float64)
 
-    cache = v3_driver_module._ReusableTrueActionColumnCache(
+    cache = profile_solve_module._ReusableTrueActionColumnCache(
         true_matvec=lambda x: matrix @ np.asarray(x, dtype=np.float64),
         true_matmat=true_matmat,
         n=3,
@@ -664,7 +664,7 @@ def test_active_residual_block_reuses_true_action_column_cache() -> None:
     )
     rhs = np.asarray([1.0, -2.0, 3.0], dtype=np.float64)
 
-    first = v3_driver_module._try_build_true_operator_active_block_lsq_preconditioner(
+    first = profile_solve_module._try_build_true_operator_active_block_lsq_preconditioner(
         true_matvec=cache.matvec,
         true_matmat=cache.matmat,
         factor_bundle=ZeroFactor(),
@@ -681,7 +681,7 @@ def test_active_residual_block_reuses_true_action_column_cache() -> None:
         include_tail=False,
         max_tail=0,
     )
-    second = v3_driver_module._try_build_true_operator_active_residual_block_lsq_preconditioner(
+    second = profile_solve_module._try_build_true_operator_active_residual_block_lsq_preconditioner(
         true_matvec=cache.matvec,
         true_matmat=cache.matmat,
         factor_bundle=ZeroFactor(),
@@ -725,7 +725,7 @@ def test_true_operator_residual_window_specs_skip_invalid_indices() -> None:
         rhs_mode=1,
     )
 
-    specs = v3_driver_module._parse_true_operator_window_specs(
+    specs = profile_solve_module._parse_true_operator_window_specs(
         "0:0:1, 4:0:0, -1:0:0, 0:5:0, 0:0:9, 0/1/2",
         layout=layout,
     )
@@ -766,7 +766,7 @@ def test_true_operator_residual_window_lsq_supports_matvec_only_short_batches() 
             return np.zeros_like(np.asarray(rhs, dtype=np.float64))
 
     rhs = np.asarray([2.0, 3.0, 4.0], dtype=np.float64)
-    bundle = v3_driver_module._try_build_true_operator_residual_window_lsq_preconditioner(
+    bundle = profile_solve_module._try_build_true_operator_residual_window_lsq_preconditioner(
         true_matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         true_matmat=None,
         factor_bundle=ZeroFactor(),
@@ -817,7 +817,7 @@ def test_true_operator_residual_window_lsq_is_memory_gated() -> None:
         def solve(self, rhs):
             return np.zeros_like(np.asarray(rhs, dtype=np.float64))
 
-    bundle = v3_driver_module._try_build_true_operator_residual_window_lsq_preconditioner(
+    bundle = profile_solve_module._try_build_true_operator_residual_window_lsq_preconditioner(
         true_matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         true_matmat=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         factor_bundle=ZeroFactor(),
@@ -884,7 +884,7 @@ def test_residual_window_host_preconditioner_can_combine_windows() -> None:
     rhs = np.asarray([2.0, 0.0, 0.0, 0.0, 0.0, -3.0, 0.0, 0.0], dtype=np.float64)
     failed_residual = rhs - operator.matvec(HalfFactor().solve(rhs))
 
-    bundle = v3_driver_module._try_build_residual_window_host_sparse_preconditioner(
+    bundle = profile_solve_module._try_build_residual_window_host_sparse_preconditioner(
         operator_bundle=operator,
         factor_bundle=HalfFactor(),
         residual=failed_residual,
@@ -910,12 +910,12 @@ def test_residual_window_host_preconditioner_can_combine_windows() -> None:
 
 
 def test_sparse_host_ilu_escalates_regularization_after_singular_factor(monkeypatch) -> None:
-    v3_driver_module._RHSMODE1_SPARSE_ILU_CACHE.clear()
+    profile_solve_module._RHSMODE1_SPARSE_ILU_CACHE.clear()
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_REG", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ATTEMPTS", "2")
     messages: list[str] = []
 
-    _a_full, _a_drop, ilu = v3_driver_module._factorize_sparse_matrix_csr_host(
+    _a_full, _a_drop, ilu = profile_solve_module._factorize_sparse_matrix_csr_host(
         a_csr_full=sp.csr_matrix([[0.0, 0.0], [0.0, 1.0]]),
         cache_key=("singular-regularization-test",),
         drop_tol=0.0,
@@ -1521,8 +1521,8 @@ def test_fortran_reduced_pc_operator_preserves_angular_coupling() -> None:
     nml.group("resolutionParameters")["NX"] = 3
 
     op = full_system_operator_from_namelist(nml=nml)
-    point = v3_driver_module._build_rhsmode1_preconditioner_operator_point(op)
-    reduced = v3_driver_module._build_rhsmode1_preconditioner_operator_fortran_reduced(
+    point = profile_solve_module._build_rhsmode1_preconditioner_operator_point(op)
+    reduced = profile_solve_module._build_rhsmode1_preconditioner_operator_fortran_reduced(
         op,
         preconditioner_x=1,
         preconditioner_xi=1,
@@ -1556,8 +1556,8 @@ def test_fortran_reduced_pc_pattern_keeps_global_coupling() -> None:
     nml.group("resolutionParameters")["NX"] = 3
 
     op = full_system_operator_from_namelist(nml=nml)
-    point = v3_driver_module._build_rhsmode1_preconditioner_operator_point(op)
-    reduced = v3_driver_module._build_rhsmode1_preconditioner_operator_fortran_reduced(
+    point = profile_solve_module._build_rhsmode1_preconditioner_operator_point(op)
+    reduced = profile_solve_module._build_rhsmode1_preconditioner_operator_fortran_reduced(
         op,
         preconditioner_x=1,
         preconditioner_xi=1,
@@ -1771,7 +1771,7 @@ def test_sparse_pc_post_minres_records_true_residual_improvement(monkeypatch) ->
         return x, float(np.linalg.norm(b)), [float(np.linalg.norm(b))]
 
     monkeypatch.setattr(
-        v3_driver_module,
+        profile_solve_module,
         "gmres_solve_with_history_scipy",
         fake_gmres_solve_with_history_scipy,
     )
@@ -1942,7 +1942,7 @@ def test_fortran_reduced_direct_pmat_preconditioner_skips_active_csr_materializa
 def test_fortran_reduced_direct_tail_auto_retries_active_lu_after_native_preflight_failure(
     monkeypatch,
 ) -> None:
-    v3_driver_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
+    profile_solve_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     nml.group("resolutionParameters")["NTHETA"] = 5
@@ -2004,7 +2004,7 @@ def test_fortran_reduced_direct_tail_auto_retries_active_lu_after_native_preflig
 def test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback(
     monkeypatch,
 ) -> None:
-    v3_driver_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
+    profile_solve_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     nml.group("resolutionParameters")["NTHETA"] = 5
@@ -2047,7 +2047,7 @@ def test_structured_direct_tail_uses_actual_csr_budget_instead_of_preflight() ->
     op = full_system_operator_from_namelist(nml=nml)
     messages: list[str] = []
 
-    bundle = v3_driver_module._try_build_structured_rhs1_full_csr_operator_bundle(
+    bundle = profile_solve_module._try_build_structured_rhs1_full_csr_operator_bundle(
         op=op,
         active_indices=None,
         csr_max_mb=1.0e-4,
@@ -2072,7 +2072,7 @@ def test_structured_direct_tail_skips_large_project_after_build(monkeypatch) -> 
     messages: list[str] = []
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRUCTURED_FULL_CSR_PROJECT_AFTER_BUILD_MAX_SIZE", "1")
 
-    bundle = v3_driver_module._try_build_structured_rhs1_full_csr_operator_bundle(
+    bundle = profile_solve_module._try_build_structured_rhs1_full_csr_operator_bundle(
         op=op,
         active_indices=active,
         csr_max_mb=100.0,
@@ -2486,7 +2486,7 @@ def test_fortran_reduced_pc_gmres_direct_tail_active_native_stack_production_ali
         raise AssertionError("native-stack true-coupled auto rescue should be opt-in")
 
     monkeypatch.setattr(
-        v3_driver_module,
+        profile_solve_module,
         "_try_build_true_operator_coupled_coarse_lsq_preconditioner",
         _unexpected_true_coupled_builder,
     )
@@ -2710,7 +2710,7 @@ def test_fortran_reduced_pc_gmres_direct_tail_sparse_coarse_solves_tiny_rhs1_sys
 
 
 def test_fortran_reduced_direct_tail_structured_pc_cache_reuses_candidate(monkeypatch) -> None:
-    v3_driver_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
+    profile_solve_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     nml.group("resolutionParameters")["NTHETA"] = 5
@@ -2917,31 +2917,31 @@ def test_fortran_reduced_direct_tail_pc_default_cap_is_adaptive_for_active_lu(mo
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_MAX_MB", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_MB_PER_UNKNOWN", raising=False)
 
-    small = v3_driver_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    small = profile_solve_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=604,
     )
-    mid = v3_driver_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    mid = profile_solve_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=110_000,
     )
-    production = v3_driver_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    production = profile_solve_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=900_000,
     )
-    fullgrid_qa_qh = v3_driver_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    fullgrid_qa_qh = profile_solve_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=507_004,
     )
-    upper_midgrid = v3_driver_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    upper_midgrid = profile_solve_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=169_264,
     )
-    auto_upper_midgrid = v3_driver_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    auto_upper_midgrid = profile_solve_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="auto",
         active_size=169_264,
     )
-    non_exact = v3_driver_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    non_exact = profile_solve_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_xblock",
         active_size=900_000,
     )
@@ -2985,7 +2985,7 @@ def test_fortran_reduced_direct_tail_explicit_structured_pc_rejection_is_fast(mo
 
 
 def test_fortran_reduced_direct_tail_required_pc_forces_global_backend(monkeypatch) -> None:
-    v3_driver_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
+    profile_solve_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     nml.group("resolutionParameters")["NTHETA"] = 5
@@ -3017,7 +3017,7 @@ def test_fortran_reduced_direct_tail_required_pc_forces_global_backend(monkeypat
     assert result.metadata["sparse_pc_fortran_reduced_direct_tail_built"] is True
     assert result.metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_required"] is True
     assert result.metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb_auto"] is True
-    expected_cap_mb = v3_driver_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    expected_cap_mb = profile_solve_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=int(result.metadata["sparse_pc_linear_size"]),
     )
@@ -3057,7 +3057,7 @@ def test_sparse_pc_gmres_stagnation_guard_aborts_mocked_krylov(monkeypatch) -> N
             progress_callback(iteration, 1.0)
         return np.zeros_like(np.asarray(b, dtype=np.float64)), float(np.linalg.norm(b)), [1.0] * 4
 
-    monkeypatch.setattr(v3_driver_module, "gmres_solve_with_history_scipy", _stagnating_gmres)
+    monkeypatch.setattr(profile_solve_module, "gmres_solve_with_history_scipy", _stagnating_gmres)
 
     with pytest.raises(RuntimeError, match="sparse_pc_gmres stagnation detected"):
         solve_v3_full_system_linear_gmres(
@@ -3083,7 +3083,7 @@ def test_fortran_reduced_pc_gmres_xblock_backend_solves_tiny_rhs1_system(monkeyp
         raise AssertionError("x-block backend must not build the monolithic Fortran-reduced pattern")
 
     monkeypatch.setattr(
-        v3_driver_module,
+        profile_solve_module,
         "v3_full_system_fortran_reduced_preconditioner_sparsity_pattern",
         _forbidden_global_pattern,
     )
@@ -3223,7 +3223,7 @@ def test_sparse_pc_gmres_active_dof_reduces_truncated_pas_system(monkeypatch) ->
     assert result.metadata["sparse_pc_active_dof"] is True
     assert result.metadata["sparse_pattern_scope"] == "active_dof"
     assert result.metadata["sparse_pc_linear_size"] < result.metadata["sparse_pc_full_size"]
-    active_idx = v3_driver_module._transport_active_dof_indices(result.op)
+    active_idx = profile_solve_module._transport_active_dof_indices(result.op)
     inactive_idx = np.setdiff1d(np.arange(int(result.op.total_size), dtype=np.int32), active_idx)
     assert np.allclose(np.asarray(result.x)[inactive_idx], 0.0)
     residual = result.rhs[active_idx] - apply_v3_full_system_operator(result.op, result.x)[active_idx]
@@ -3322,8 +3322,8 @@ def test_xblock_sparse_pc_post_residual_equation_records_metadata(monkeypatch) -
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_ANGULAR_LMAX", "-1")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     messages: list[str] = []
 
@@ -3707,7 +3707,7 @@ def test_xblock_sparse_pc_probe_coarse_uses_active_projected_directions(monkeypa
 
 def test_xblock_post_coarse_directions_can_include_angular_modes() -> None:
     assert (
-        v3_driver_module._rhs1_xblock_post_coarse_directions
+        profile_solve_module._rhs1_xblock_post_coarse_directions
         is build_rhs1_xblock_post_coarse_directions
     )
     here = Path(__file__).parent
@@ -3766,7 +3766,7 @@ def test_xblock_post_coarse_directions_can_include_residual_weighted_angular_mod
 
 def test_device_subspace_residual_equation_reuses_cached_operator_basis() -> None:
     assert (
-        v3_driver_module._apply_device_subspace_residual_equation_correction
+        profile_solve_module._apply_device_subspace_residual_equation_correction
         is apply_device_subspace_residual_equation_correction
     )
     operator_matrix = jnp.asarray([[1.0, 1.0], [0.0, 1.0]], dtype=jnp.float64)
@@ -4081,7 +4081,7 @@ def test_xblock_side_probe_switch_preserves_physical_seed_for_right_pc(monkeypat
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_RESTART", "4")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE", "0")
     monkeypatch.setattr(
-        v3_driver_module._rhs1_xblock_policy,
+        profile_solve_module._rhs1_xblock_policy,
         "rhs1_xblock_side_probe_should_switch",
         lambda *, residual_ratio, switch_ratio_env_value: True,
     )
@@ -4139,7 +4139,7 @@ def test_xblock_sparse_pc_assembled_operator_active_dof_uses_sliced_budget(monke
     nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
 
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active_idx = v3_driver_module._transport_active_dof_indices(op)
+    active_idx = profile_solve_module._transport_active_dof_indices(op)
     full_summary = estimate_v3_full_system_conservative_sparsity_summary(op)
     full_csr_nbytes = int(full_summary.nnz * 12 + (full_summary.shape[0] + 1) * 4)
     full_sliced_pattern = v3_full_system_conservative_sparsity_pattern(op)[active_idx, :][:, active_idx].tocsr()
@@ -4225,8 +4225,8 @@ def test_xblock_sparse_pc_device_krylov_records_experimental_metadata(
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING", "1")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_DIRECTIONS", "4")
 
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -4268,7 +4268,7 @@ def test_xblock_sparse_pc_device_cycle_jit_reports_internal_iterations(monkeypat
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE", "cycle")
 
     monkeypatch.setattr(
-        v3_driver_module,
+        profile_solve_module,
         "fgmres_cycle_jit_solve_with_residual",
         _fast_device_cycle_krylov_result,
     )
@@ -4367,14 +4367,14 @@ def test_xblock_sparse_pc_qi_device_krylov_request_disables_auto_host_fallback(m
     )
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     def _forbidden_xblock_factor_build(**_kwargs):
         raise AssertionError("device-QI operator reuse should bypass local x-block factors")
 
     monkeypatch.setattr(
-        v3_driver_module,
+        profile_solve_module,
         "_build_rhsmode1_xblock_tz_sparse_preconditioner",
         _forbidden_xblock_factor_build,
     )
@@ -4473,8 +4473,8 @@ def test_xblock_sparse_pc_device_krylov_can_use_compact_csr_factors(monkeypatch)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "gmres-jax")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_FORMAT", "csr")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX", "100000")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
     messages: list[str] = []
 
     result = solve_v3_full_system_linear_gmres(
@@ -4506,8 +4506,8 @@ def test_xblock_sparse_pc_device_krylov_can_use_compact_diagonal_factor_apply(mo
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX", "100000")
     messages: list[str] = []
 
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -4533,8 +4533,8 @@ def test_xblock_sparse_pc_device_global_coupling_can_use_normal_equations(monkey
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING", "1")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_DIRECTIONS", "4")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_DEVICE_SOLVER", "normal-equations")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -4566,8 +4566,8 @@ def test_xblock_sparse_pc_device_krylov_with_device_assembled_operator_is_transf
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_FGMRES_BLOCK_BETWEEN_CYCLES", "1")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -4604,8 +4604,8 @@ def test_xblock_sparse_pc_qi_device_preconditioner_opt_in_records_acceptance(mon
     )
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     def _accepted_probe(**kwargs):
         state = kwargs["state"]
@@ -4655,8 +4655,8 @@ def test_xblock_sparse_pc_qi_device_preconditioner_fails_closed_without_device_o
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER", "1")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -4700,8 +4700,8 @@ def test_xblock_sparse_pc_qi_device_preconditioner_matrix_free_fallback(monkeypa
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MIN_IMPROVEMENT", "0.05")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     def _accepted_probe(**kwargs):
         state = kwargs["state"]
@@ -4772,8 +4772,8 @@ def test_xblock_sparse_pc_qi_device_multilevel_coarse_env_records_metadata(monke
     )
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     def _accepted_probe(**kwargs):
         state = kwargs["state"]
@@ -4840,8 +4840,8 @@ def test_xblock_sparse_pc_qi_device_augmented_krylov_reuses_operator_basis(monke
         captured.update(kwargs)
         return _fast_device_krylov_result(**kwargs)
 
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _capturing_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _capturing_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _capturing_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _capturing_device_krylov_result)
 
     def _accepted_probe(**kwargs):
         state = kwargs["state"]
@@ -4928,8 +4928,8 @@ def test_xblock_sparse_pc_qi_device_augmented_krylov_can_reuse_probe_seed_space(
             projection_residual_norm=1.0,
         )
 
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _capturing_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _capturing_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _capturing_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _capturing_device_krylov_result)
     monkeypatch.setattr(
         rhs1_qi_device_preconditioner_module,
         "probe_rhs1_qi_device_augmented_seed",
@@ -4991,8 +4991,8 @@ def test_xblock_sparse_pc_qi_device_multilevel_residual_equation_env_records_met
     )
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     def _accepted_probe(**kwargs):
         state = kwargs["state"]
@@ -5065,8 +5065,8 @@ def test_xblock_sparse_pc_qi_device_residual_snapshot_env_records_metadata(monke
     )
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
     messages: list[str] = []
 
     def _accepted_probe(**kwargs):
@@ -5141,8 +5141,8 @@ def test_xblock_sparse_pc_qi_device_block_schur_residual_equation_env_records_me
     )
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
     messages: list[str] = []
 
     def _accepted_probe(**kwargs):
@@ -5223,8 +5223,8 @@ def test_xblock_sparse_pc_qi_device_residual_snapshot_equation_env_records_metad
     )
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
     messages: list[str] = []
 
     def _accepted_probe(**kwargs):
@@ -5296,8 +5296,8 @@ def test_xblock_sparse_pc_qi_device_matrix_free_local_smoother_routing(monkeypat
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MIN_IMPROVEMENT", "0.05")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     def _accepted_probe(**kwargs):
         state = kwargs["state"]
@@ -5359,8 +5359,8 @@ def test_xblock_sparse_pc_qi_device_matrix_free_block_smoother_routing(monkeypat
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MIN_IMPROVEMENT", "0.05")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     def _accepted_probe(**kwargs):
         state = kwargs["state"]
@@ -5414,8 +5414,8 @@ def test_xblock_sparse_pc_qi_device_matrix_free_seed_runs_with_precondition_side
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV", "1")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     def _accepted_probe(**kwargs):
         state = kwargs["state"]
@@ -5463,7 +5463,7 @@ def test_xblock_sparse_pc_device_bicgstab_uses_device_assembled_operator(monkeyp
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB", "64")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS", "4096")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
-    monkeypatch.setattr(v3_driver_module, "bicgstab_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "bicgstab_solve_with_residual", _fast_device_krylov_result)
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -5498,7 +5498,7 @@ def test_xblock_sparse_pc_device_tfqmr_uses_device_assembled_operator(monkeypatc
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS", "4096")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TFQMR_REPLACE_INTERVAL", "2")
-    monkeypatch.setattr(v3_driver_module, "tfqmr_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "tfqmr_solve_with_residual", _fast_device_krylov_result)
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -5529,8 +5529,8 @@ def test_xblock_sparse_pc_device_krylov_marks_host_two_level_transfer(monkeypatc
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "fgmres")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL", "1")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MAX_DIRECTIONS", "2")
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -5555,7 +5555,7 @@ def test_xblock_sparse_pc_candidate_falls_back_to_gmres_when_residual_is_bad(mon
     def fake_bicgstab(*, b, **_kwargs):
         return np.zeros(int(b.size), dtype=np.float64), float("inf"), [float("inf")]
 
-    monkeypatch.setattr(v3_driver_module, "bicgstab_solve_with_history_scipy", fake_bicgstab)
+    monkeypatch.setattr(profile_solve_module, "bicgstab_solve_with_history_scipy", fake_bicgstab)
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,

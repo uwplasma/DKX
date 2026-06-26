@@ -2840,6 +2840,11 @@ Current completion status:
   `problems.profile_solve` module directly, so its GPU/CPU backend policies,
   PAS structured-tail checks, and preconditioner-selection monkeypatches no
   longer depend on the legacy driver facade.
+- The large sparse-pattern/operator suite now imports `problems.profile_solve`
+  for residual-window, active-operator, direct-tail, and device-QI policy
+  behavior. Its full local gate passed after the move, so the remaining
+  `v3_driver` imports are increasingly limited to explicit compatibility-shim
+  tests.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
