@@ -1,6 +1,6 @@
 # SFINCS_JAX Refactor And Release-Readiness Execution Log
 
-Last updated: 2026-06-25 (America/Chicago)
+Last updated: 2026-06-26 (America/Chicago)
 
 Active implementation branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -16,9 +16,10 @@ historical record only; if this file conflicts with `plan_final.md`, follow
 `plan_final.md`.
 
 Latest controlling update: `plan_final.md` now defines Lane 1 as five
-consolidation passes only: boundary freeze, profile-response kernel collapse,
-transport/output ownership collapse, solver/preconditioner family collapse, and
-public API/docs/tests review gate. Older tranche, iteration, and batch labels in
+consolidation sweeps only: Sweep 0 freeze/delete/route, Sweep 1
+profile-response collapse, Sweep 2 transport/output/root cleanup, Sweep 3
+solver/preconditioner family consolidation, and Sweep 4 public
+API/docs/tests/review gate. Older tranche, iteration, pass, and batch labels in
 this execution log are historical context, not instructions to follow.
 
 ## One-Sentence Plan
@@ -4400,3 +4401,59 @@ Next best steps:
    finalization, diagnostics, or solver-diagnostics owners.
 3. After the remaining RHSMode-1 sparse execution/finalization code is owned
    outside `solve.py`, start Batch C transport/output/root consolidation.
+
+## 2026-06-26 Final Consolidation Sweep Plan Refresh
+
+Steps taken:
+
+1. Re-audited the current source tree before any further code movement:
+   `209` Python package files, `164,865` package lines, `48` package-root
+   Python files, `profile_response/solve.py` at `7,834` lines,
+   `profile_response` plus `sparse` at `21` files and `51,776` lines,
+   `transport_matrix` plus `parallel` at `28` files and `15,026` lines, and
+   `solvers/preconditioners` at `47` files and `36,992` lines.
+2. Replaced the active Lane 1 refactor language in `plan_final.md` with one
+   authoritative Sweep 0-4 consolidation plan. Older Batch A-E, tranche, pass,
+   and helper-extraction labels remain only as historical execution-log
+   provenance.
+3. Added concrete file-level consolidation targets for historical root kernels,
+   `profile_response/solve.py`, `profile_response/sparse`, transport
+   micro-files, `io.py`, QI preconditioner files, symbolic sparse
+   `rhs1_fortran_reduced.py`, and public API/docs/tests cleanup.
+4. Tightened review gates to emphasize fewer durable domain owners:
+   package files `<=185` with stretch `<=175`, root files `<=44` or explicit
+   shim labels, `profile_response` plus `sparse <=15` files,
+   `transport_matrix` plus `parallel <=14` files,
+   `solvers/preconditioners <=30` files, `solve.py <=3,500` lines, and
+   `io.py <=800` lines or deleted.
+
+Results:
+
+- No source behavior changed; this was a planning/documentation checkpoint.
+- `plan_final.md` is again the single authoritative plan for PR #8.
+- `plan.md` remains an execution log and now points to Sweep 0-4 as the active
+  sequence.
+
+Progress:
+
+- Lane 1 structural consolidation remains about `84%`; the percent does not
+  increase from a plan-only refresh.
+- Sweep 0 freeze/delete/route: `0%` against the new gate.
+- Sweep 1 profile-response collapse: inherited work is about `44%`, but the
+  new gate requires the remaining execution/finalization collapse and file-count
+  cleanup.
+- Sweep 2 transport/output/root cleanup: about `20%`.
+- Sweep 3 solver/preconditioner family consolidation: about `25%`.
+- Sweep 4 public API/docs/tests/review gate: about `20%`.
+
+Next best steps:
+
+1. Execute Sweep 0: generate the import/use map, classify all large/root files,
+   delete re-export-only aliases, route historical root kernels, and refresh
+   `docs/source_map.rst`, `docs/api.rst`, and import-contract tests.
+2. Execute Sweep 1: move factor-preflight execution, residual-correction
+   execution, sparse retry bookkeeping, progress replay, and final sparse
+   payload normalization out of `profile_response/solve.py` without adding a
+   helper-only file.
+3. Run focused compile, ruff, RHSMode-1 sparse/dense/Phi1/ambipolar/sensitivity
+   tests, and `git diff --check` after each coherent sweep checkpoint.
