@@ -303,6 +303,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   locked all five tutorial notebooks in the examples contract and removed
   branch-status phrasing from the Fortran-example status page so the docs read
   as standalone software documentation rather than a development log.
+- The thirty-sixth post-audit coverage tranche added RHSMode=1 output-safety
+  tests for PAS-projected active-size accounting, solver metadata integer/float
+  parsing, bounded JSON compaction, and metadata-copy semantics. These tests
+  protect production HDF5/NetCDF/NPZ diagnostic fields and nonconverged-output
+  sidecar traces without running a profile solve.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
@@ -2371,9 +2376,11 @@ Current completion status:
   release-data fetching, PETSc reference readers, upstream wrapper behavior,
   active full-FP kinetic block preconditioners, sparse-pattern helpers,
   explicit-sparse settings, profile-system algebra helpers, and RHSMode=2/3
-  transport block-preconditioner assembly. The next coverage work must focus on
-  profile/transport solve owners, output writers, explicit sparse assembly, and
-  profile true-operator rescue paths while keeping CI below ten minutes.
+  transport block-preconditioner assembly. Output-safety helpers now also cover
+  PAS-projection active-size accounting and solver-trace metadata sanitization.
+  The next coverage work must focus on profile/transport solve owners, explicit
+  sparse assembly, Schur/profile preconditioners, and profile true-operator
+  rescue paths while keeping CI below ten minutes.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.

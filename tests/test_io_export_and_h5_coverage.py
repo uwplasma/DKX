@@ -19,9 +19,14 @@ from sfincs_jax.io import (
 from sfincs_jax.namelist import Namelist
 from sfincs_jax.outputs.rhsmode1 import (
     _add_rhsmode1_solver_diagnostics,
+    _compact_json_metadata,
+    _metadata_float,
+    _metadata_int,
     _raise_for_nonconverged_rhsmode1_output,
+    _rhs1_active_size_for_trace,
     _rhsmode1_result_residual_and_target,
     _should_fail_nonconverged_rhsmode1_output,
+    _solver_metadata_dict,
     _write_nonconverged_rhsmode1_solver_trace_json,
 )
 from sfincs_jax.solvers.diagnostics import read_solver_trace_json
@@ -155,6 +160,65 @@ def test_nonconverged_rhsmode1_solver_trace_sidecar_is_written(tmp_path: Path) -
     solver_metadata = trace.metadata["solver_metadata"]
     assert solver_metadata["xblock_qi_device_operator_reuse_enabled"] is True
     assert solver_metadata["sparse_pc_xblock_preconditioner_built"] is False
+
+
+def test_rhsmode1_active_trace_size_uses_pas_projection_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
+    collisionless = SimpleNamespace(n_xi_for_x=np.asarray([3, 2, 1], dtype=np.int32))
+    op = SimpleNamespace(
+        n_species=2,
+        n_theta=3,
+        n_zeta=4,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=2,
+        phi1_size=0,
+        extra_size=2,
+        total_size=5000,
+        fblock=SimpleNamespace(collisionless=collisionless, pas=SimpleNamespace()),
+    )
+
+    active_f = 2 * int(np.sum(collisionless.n_xi_for_x)) * 3 * 4
+    assert _rhs1_active_size_for_trace(op) == active_f
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_PROJECT_MIN", "99999")
+    assert _rhs1_active_size_for_trace(op) == active_f + 2
+
+    op.include_phi1 = True
+    op.phi1_size = 7
+    assert _rhs1_active_size_for_trace(op) == active_f + 7 + 2
+    assert _rhs1_active_size_for_trace(SimpleNamespace()) is None
+
+
+def test_rhsmode1_solver_metadata_helpers_are_fail_closed_and_bounded() -> None:
+    metadata = {
+        "good_int": "12",
+        "bad_int": "not-an-int",
+        "negative_int": -1,
+        "good_float": "1.25",
+        "bad_float": "nan",
+        "inf_float": float("inf"),
+    }
+
+    assert _metadata_int(metadata, "good_int") == 12
+    assert _metadata_int(metadata, "bad_int") is None
+    assert _metadata_int(metadata, "negative_int") is None
+    assert _metadata_int(metadata, "missing") is None
+    assert _metadata_float(metadata, "good_float") == pytest.approx(1.25)
+    assert _metadata_float(metadata, "bad_float") is None
+    assert _metadata_float(metadata, "inf_float") is None
+    assert _metadata_float(metadata, "missing") is None
+
+    compact = _compact_json_metadata({"letters": "abcdef"}, max_chars=12)
+    assert compact is not None
+    assert compact.endswith("...<truncated>")
+    assert len(compact) <= len("...<truncated>")
+    assert _compact_json_metadata({"ok": (1, 2)}, max_chars=128) == '{"ok": [1, 2]}'
+
+    source = {"metadata": {"accepted_converged": True}}
+    copied = _solver_metadata_dict(SimpleNamespace(**source))
+    copied["accepted_converged"] = False
+    assert source["metadata"]["accepted_converged"] is True
+    assert _solver_metadata_dict(SimpleNamespace(metadata=("not", "dict"))) == {}
 
 
 def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
