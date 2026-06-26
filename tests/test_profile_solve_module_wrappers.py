@@ -563,6 +563,65 @@ def test_profile_solve_top_level_orchestrator_can_exit_through_sparse_minimum_no
     assert "result_payload" in captured
 
 
+def test_profile_solve_top_level_orchestrator_can_exit_through_sparse_host_safe(monkeypatch) -> None:
+    nml, captured = _install_profile_solve_sparse_branch_scaffold(monkeypatch, solve_method="sparse_host_safe")
+    sentinel = SimpleNamespace(kind="sparse-host-safe-result")
+
+    def fake_sparse_host_safe(context):
+        captured["sparse_host_safe_context"] = context
+        assert context.nml is nml
+        assert context.which_rhs == 1
+        assert context.tol == 1.0e-8
+        assert context.atol == 1.0e-12
+        assert context.restart == 31
+        assert context.maxiter == 37
+        assert context.solve_driver is profile_solve.solve_v3_full_system_linear_gmres
+        assert context.solve_method_kind_explicit == "sparse_host_safe"
+        assert context.requested is True
+        return sentinel
+
+    monkeypatch.setattr(profile_solve, "try_rhs1_sparse_host_safe_solve", fake_sparse_host_safe)
+
+    result = profile_solve.solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="sparse_host_safe",
+        differentiable=False,
+        atol=1.0e-12,
+    )
+
+    assert result is sentinel
+    assert "sparse_host_safe_context" in captured
+    assert "minimum_norm_context" not in captured
+
+
+def test_profile_solve_top_level_orchestrator_can_exit_through_sparse_pc_handoff(monkeypatch) -> None:
+    nml, captured = _install_profile_solve_sparse_branch_scaffold(monkeypatch, solve_method="sparse_pc_gmres")
+    sentinel = SimpleNamespace(kind="sparse-pc-result")
+
+    def fake_sparse_pc(context):
+        captured["sparse_pc_context"] = context
+        assert context.values["nml"] is nml
+        assert context.values["solve_method_kind_explicit"] == "sparse_pc_gmres"
+        assert context.values["tol"] == 1.0e-8
+        assert context.values["restart"] == 31
+        assert context.values["maxiter"] == 37
+        assert context.values["active_size"] == 8
+        return sentinel
+
+    monkeypatch.setattr(profile_solve, "try_run_requested_sparse_pc_gmres_branch", fake_sparse_pc)
+
+    result = profile_solve.solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="sparse_pc_gmres",
+        differentiable=False,
+        atol=1.0e-12,
+    )
+
+    assert result is sentinel
+    assert "sparse_pc_context" in captured
+    assert "minimum_norm_context" not in captured
+
+
 def test_profile_solve_top_level_orchestrator_can_exit_through_sparse_host_direct(monkeypatch) -> None:
     nml, captured = _install_profile_solve_sparse_branch_scaffold(monkeypatch, solve_method="sparse_host")
     sentinel_payload = SimpleNamespace(kind="host-direct-payload")

@@ -2733,6 +2733,11 @@ Current completion status:
   flags, adiabatic-species fields, default PAS constraint selection, iterative
   solver logicals, geometry arrays, classical-flux shapes, and fail-closed
   unsupported-geometry / singular monoenergetic-denominator errors.
+  RHSMode=1 profile-solve orchestration coverage now includes no-solve exits
+  through explicit structured CSR, sparse-host-safe, requested sparse-PC GMRES,
+  explicit sparse minimum-norm, and sparse-host direct branches, with context
+  assertions that lock solver-method propagation and prevent accidental slow
+  setup before branch admission.
   Benchmark-artifact promotion policy
   also has fast gates for
   default-promotion evidence and canonical runtime/memory ordering. The next
