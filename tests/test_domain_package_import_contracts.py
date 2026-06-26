@@ -248,6 +248,23 @@ RESERVED_MODULE_NAMES_UNTIL_MIGRATION = (
     "sfincs_jax.io",
 )
 
+MOVED_ROOT_MODULE_OWNERS = {
+    "sfincs_jax.validation.data_fetch": (
+        "ensure_external_equilibrium_data",
+        "external_data_manifest",
+        "resolve_external_equilibrium",
+    ),
+    "sfincs_jax.workflows.postprocess_upstream": (
+        "find_upstream_utils_dir",
+        "run_upstream_util",
+    ),
+    "sfincs_jax.workflows.scans": (
+        "ScanResult",
+        "linspace_including_endpoints",
+        "run_er_scan",
+    ),
+}
+
 ROOT_MODULE_CLASSIFICATIONS = {
     "__init__.py": "public package facade",
     "__main__.py": "public entry point",
@@ -264,7 +281,6 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "compare.py": "public validation API",
     "constrained_pas_branch.py": "stable solver-policy kernel",
     "constraint_projection.py": "stable numerical kernel",
-    "data_fetch.py": "public support workflow",
     "diagnostics.py": "stable physics kernel",
     "geometry.py": "public geometry API",
     "grids.py": "public discretization API",
@@ -281,10 +297,8 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "phi1_newton_linear.py": "stable solver kernel",
     "phi1_newton_policy.py": "stable solver-policy kernel",
     "plotting.py": "public plotting API",
-    "postprocess_upstream.py": "public support workflow",
     "profiling.py": "stable support utility",
     "residual.py": "stable operator kernel",
-    "scans.py": "public workflow API",
     "sensitivity.py": "public differentiation API",
     "solver.py": "stable solver kernel",
     "structured_velocity.py": "stable numerical kernel",
@@ -310,7 +324,6 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "compare.py": ("validation comparison API", "move only after examples/scripts use validation owner"),
     "constrained_pas_branch.py": ("solvers/preconditioners PAS policy owner", "move in solver-policy group if no public shim is needed"),
     "constraint_projection.py": ("solvers constraint-projection owner", "move only after transport/profile imports use solver owner"),
-    "data_fetch.py": ("validation/data fixture support", "move in Phase 2 if scripts/tests need no shim"),
     "diagnostics.py": ("physics/output diagnostics owner", "defer until diagnostics API split is explicit"),
     "geometry.py": ("future geometry package public owner", "convert from module to package only in one dedicated Phase 2 move"),
     "grids.py": ("discretization public grid owner", "keep root public helper until discretization package exports are documented"),
@@ -327,10 +340,8 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "phi1_newton_linear.py": ("problems.profile_response Phi1 Newton owner", "move if it deletes root file without adding shim"),
     "phi1_newton_policy.py": ("problems.profile_response Phi1 policy owner", "move if it deletes root file without adding shim"),
     "plotting.py": ("outputs/plotting public helper", "keep root public helper unless API replacement is documented"),
-    "postprocess_upstream.py": ("workflows upstream postprocess owner", "move in Phase 2 if example imports can migrate cleanly"),
     "profiling.py": ("solvers/validation profiling support", "defer until profiling API boundary is explicit"),
     "residual.py": ("operators residual/autodiff owner", "move with operator-kernel group if docs imports migrate"),
-    "scans.py": ("workflows scan owner", "move in Phase 2 only if public scan imports can migrate cleanly"),
     "sensitivity.py": ("package root differentiation API", "keep at root"),
     "solver.py": ("solvers public contracts owner", "keep root shim until solvers exports cover public contracts"),
     "structured_velocity.py": ("discretization structured-velocity owner", "move with grid/discretization kernel group"),
@@ -806,6 +817,23 @@ def test_module_names_reserved_for_later_package_migration_still_load_as_modules
         assert not hasattr(module, "__path__"), module_name
         assert module.__file__ is not None
         assert module.__file__.endswith(".py"), module.__file__
+
+
+def test_moved_root_workflow_modules_have_domain_owners() -> None:
+    """Phase 2 root reductions should land in durable domain owners, not shims."""
+
+    for module_name, expected_exports in MOVED_ROOT_MODULE_OWNERS.items():
+        module = _import_module(module_name)
+        assert module.__doc__ is not None
+        for export_name in expected_exports:
+            assert hasattr(module, export_name), f"{module_name}.{export_name}"
+
+    for deleted_root in ("sfincs_jax.data_fetch", "sfincs_jax.postprocess_upstream", "sfincs_jax.scans"):
+        try:
+            _import_module(deleted_root)
+        except ModuleNotFoundError:
+            continue
+        raise AssertionError(f"{deleted_root} should not remain as a root compatibility shim")
 
 
 def test_root_modules_are_explicitly_classified() -> None:

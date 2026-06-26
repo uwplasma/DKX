@@ -5,7 +5,7 @@ import io
 from pathlib import Path
 import tarfile
 
-from sfincs_jax import data_fetch
+from sfincs_jax.validation import data_fetch
 
 
 def _sha256_bytes(payload: bytes) -> str:
