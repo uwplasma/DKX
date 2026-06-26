@@ -652,16 +652,12 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/problems/profile_response/sparse/handoff.py``:
   RHSMode=1/profile-response sparse-PC handoff layer. It owns the
   driver-facing sparse-PC attempt orchestration that depends on solve-local
-  cache/replay/residual routing, generic sparse-PC Krylov execution, final
-  generic sparse-PC bundle assembly, x-block sparse-PC branch orchestration,
-  and the compatibility import surface used by the monolithic solve owner while
-  Tranche B continues. X-block stage kernels and final payload builders live in
-  ``sparse/xblock.py``; ``handoff.py`` owns the solve-local branch wiring and
-  re-exports lower-level x-block names for compatibility. Optional two-level
-  and global-coupling
-  stage contexts accept injected builders for tests, but resolve the canonical
-  QI builders themselves in production so ``v3_driver.py`` no longer
-  re-exports private QI builder aliases.
+  cache/replay/residual routing, generic sparse-PC retry execution, direct-tail
+  correction admission, and the compatibility import surface used by the
+  monolithic solve owner while Batch A continues. Sparse GMRES finalization now
+  lives in ``sparse/finalization.py`` and x-block branch orchestration now
+  lives in ``sparse/xblock.py``; ``handoff.py`` only re-exports those names for
+  compatibility until the public internal imports are fully migrated.
 - ``sfincs_jax/problems/profile_response/sparse/policy.py``:
   generic sparse-PC policy and admission helpers: active-DOF map construction,
   entry classification, sparse factor policy, conservative-pattern setup,
@@ -692,15 +688,15 @@ the historical private driver name and test the focused module directly. This ke
   materialization, and final direct-tail metadata assembly.
 - ``sfincs_jax/problems/profile_response/sparse/xblock.py``:
   x-block and sxblock rescue/correction helpers, shared x-block Krylov matvec
-  and initial-guess policy dataclasses, precondition-side/probe-coarse gates,
-  device/host Krylov control, optional augmented Krylov setup, GMRES fallback
-  routing, work estimates, progress messages, physical-residual measurement,
-  post-Krylov post-solve correction/completion orchestration, and final
-  x-block sparse-PC diagnostic metadata assembly. The driver-facing handoff
-  accepts the solve-local scope, filters it into typed finalization state, and
-  returns the final sparse-PC payload used by ``V3LinearSolveResult``. This
-  module owns generic x-block stage mechanics; QI-specific coarse-basis choices
-  remain in ``sparse/qi.py``.
+  and initial-guess policy dataclasses, x-block sparse-PC setup/side-policy
+  resolution, assembled-operator setup and preflight, local factor setup,
+  precondition-side/probe-coarse gates, moment-Schur/two-level/global-coupling
+  stage setup, device/host Krylov control, optional augmented Krylov setup,
+  GMRES fallback routing, work estimates, progress messages, physical-residual
+  measurement, post-Krylov post-solve correction/completion orchestration,
+  x-block branch orchestration, and final x-block sparse-PC diagnostic metadata
+  assembly. This module owns generic x-block stage mechanics; QI-specific
+  coarse-basis choices remain in ``sparse/qi.py``.
 - ``sfincs_jax/problems/profile_response/sparse/fortran_reduced.py``:
   Fortran-reduced x-block backend policy, factor-build, Krylov setup/solve,
   optional moment/global coarse stages, and final payload construction. The

@@ -5340,3 +5340,69 @@ Next best steps:
 3. Then execute Batch B transport/output/root cleanup and Batch C
    solver/preconditioner family consolidation before the Batch D docs/API/test
    review gate.
+
+## 2026-06-26 Batch A X-Block Owner Consolidation
+
+Steps taken:
+
+1. Moved the x-block branch/setup/stage cluster from
+   `sfincs_jax/problems/profile_response/sparse/handoff.py` to the existing
+   `sfincs_jax/problems/profile_response/sparse/xblock.py` owner. This moved
+   x-block sparse-PC setup policy, side-policy setup, assembled-operator
+   setup/preflight/device/matvec helpers, local preconditioner setup,
+   moment-Schur/two-level/global-coupling stage helpers, seed policy setup,
+   and the x-block sparse-PC branch orchestration.
+2. Kept the legacy `sparse.handoff` import surface stable through explicit
+   re-export aliases for the moved x-block names.
+3. Expanded the sparse x-block import-contract test so the newly moved setup
+   and stage names are proven to come from `sparse.xblock`.
+4. Updated `plan_final.md` so the handoff-size gate is marked as passed and
+   the remaining Batch A work is narrowed to progress/fallback/retry/result
+   normalization plus direct-tail/generic sparse cleanup.
+5. Updated `docs/source_map.rst` so it no longer describes x-block branch
+   orchestration as owned by `sparse/handoff.py`.
+
+Results:
+
+- `profile_response/sparse/handoff.py` decreased from `7,577` to `4,438`
+  lines, passing the `<=5,500` Batch A handoff gate.
+- `profile_response/sparse/xblock.py` increased to `7,725` lines and is now
+  the single x-block setup/orchestration owner for this PR.
+- `profile_response/solve.py` remains `7,014` lines.
+- `problems/profile_response` remains `21` files and is now `52,672` lines.
+- Package file count remains `208`; package-root file count remains `43`;
+  package source lines are currently `165,688`.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/sparse/xblock.py sfincs_jax/problems/profile_response/sparse/handoff.py sfincs_jax/problems/profile_response/solve.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/sparse/xblock.py sfincs_jax/problems/profile_response/sparse/handoff.py sfincs_jax/problems/profile_response/solve.py tests/test_profile_response_sparse_pc.py` passed.
+- `python -m pytest tests/test_profile_response_sparse_pc.py -q --tb=short`
+  passed with `329 passed in 2.66s`.
+- `python -m pytest tests/test_domain_package_import_contracts.py tests/test_profile_response_sparse_pc.py::test_sparse_xblock_module_reexports_match_compat_layer -q --tb=short`
+  passed with `9 passed`.
+- `python -m pytest
+  tests/test_profile_response_sparse_pc.py::test_xblock_assembled_equilibration_setup_builds_row_scales
+  tests/test_profile_response_sparse_pc.py::test_xblock_assembled_equilibration_setup_builds_row_and_column_scales
+  tests/test_profile_response_sparse_pc.py::test_xblock_assembled_device_setup_builds_and_validates_operator
+  tests/test_profile_response_sparse_pc.py::test_xblock_assembled_matvec_setup_host_counts_progress
+  tests/test_profile_response_sparse_pc.py::test_xblock_assembled_matvec_setup_device_counts_progress
+  -q --tb=short` passed with `5 passed`.
+- `git diff --check` passed.
+
+Progress:
+
+- Lane 1 structural consolidation: about `93%`.
+- Batch A profile-response collapse: about `73%`.
+- Batch B transport/output/root cleanup: about `20%`.
+- Batch C solver/preconditioner family consolidation: about `25%`.
+- Batch D public API/docs/tests/review gate: about `28%`.
+
+Next best steps:
+
+1. Finish the remaining Batch A owner move: progress replay, fallback summaries,
+   remaining retry bookkeeping, and final trace/result normalization should move
+   to `solver_diagnostics.py`, `diagnostics.py`, or `sparse/finalization.py`.
+2. Move the remaining direct-tail and generic sparse setup pieces out of
+   `sparse/handoff.py` only where they land in existing durable owners.
+3. Then switch to Batch B transport/output/root cleanup.
