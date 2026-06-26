@@ -37,7 +37,7 @@ except Exception as e:  # pragma: no cover
 
 from sfincs_jax.collisionless_er import ErXiDotV3Operator, apply_er_xidot_v3
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist
+from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 
 
 def _setup_mpl() -> None:

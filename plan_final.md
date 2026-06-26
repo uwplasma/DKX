@@ -314,7 +314,8 @@ extraction, the generic sparse-PC setup extraction, and the direct-tail
 structured/factor setup extraction, the direct-tail support/preflight
 rescue-policy setup extraction, the first Sweep 0 historical-root result
 facade routing, the Sweep 0 sparse-pattern root routing, the Sweep 0 f-block
-root routing, and the Sweep 0 full-system root routing:
+root routing, the Sweep 0 full-system root routing, and the Sweep 0 v3 grid/
+geometry routing:
 
 - `sfincs_jax/v3_driver.py`: 47 lines in the current consolidation worktree,
   acting as a compatibility shim for the domain-owned solve modules.
@@ -337,6 +338,11 @@ root routing, and the Sweep 0 full-system root routing:
   sharding constraints. The historical root file `sfincs_jax/v3_system.py` has
   been removed, and package-internal imports, examples, scripts, docs, and
   focused tests use the operator-domain owner.
+- `sfincs_jax/discretization/v3.py`: 756-line discretization-domain owner for
+  SFINCS-v3-compatible grid construction, mapped speed-grid construction,
+  geometry loading, geometry cache keys, and `V3Grids`. The historical root
+  file `sfincs_jax/v3.py` has been removed, and package-internal imports,
+  examples, scripts, docs, and focused tests use the discretization owner.
 - `sfincs_jax/problems/profile_response/solve.py`: 7,834 lines after the
   x-block sparse-PC branch, full/reduced sparse retry, SciPy rescue stage,
   fortran-reduced x-block backend, generic sparse-PC setup, and direct-tail
@@ -379,7 +385,7 @@ root routing, and the Sweep 0 full-system root routing:
 - Top-level `transport_*` modules: 0.
 - Top-level `rhs1_*` modules: 0. Solver-family implementation now lives under
   `solvers.preconditioners`.
-- Package total is 209 Python files, 45 package-root files, and about 164,907
+- Package total is 209 Python files, 44 package-root files, and about 164,911
   package lines after the first two root cleanup passes and the first
   transport-parallel consolidation, plus the validation-domain,
   workflow-domain, solver-utility, and solver/preconditioner implementation
@@ -618,14 +624,15 @@ find sfincs_jax/solvers/preconditioners -maxdepth 2 -type f -name '*.py' | xargs
 ```
 
 Current source inventory from the 2026-06-26 consolidation audit, including
-the Sweep 0 sparse-pattern, f-block, and full-system root routing:
+the Sweep 0 sparse-pattern, f-block, full-system, and v3 grid/geometry root
+routing:
 
 | Area | Current state | Review-ready target |
 | --- | --- | --- |
-| Whole package | 209 Python files, 164,907 package lines | `<=185` Python files, lower package lines than the 164,865-line consolidation baseline, no generated artifacts. Stretch target: `<=175` files after duplicate shims are removed. |
-| Package root | 45 Python files | `<=44` root files, or `<=45` only with explicit public/shim/deletion labels. No new root implementation modules. |
+| Whole package | 209 Python files, 164,911 package lines | `<=185` Python files, lower package lines than the 164,865-line consolidation baseline, no generated artifacts. Stretch target: `<=175` files after duplicate shims are removed. |
+| Package root | 44 Python files | `<=44` root files, or `<=44` only with explicit public/shim/deletion labels. No new root implementation modules. |
 | `v3_driver.py` | 47-line compatibility shim | Keep below 80 lines or delete after external imports migrate. It must not regain implementation logic. |
-| Historical root kernels | `v3_results.py` is now a compatibility facade; `v3_sparse_pattern.py` has moved to `operators/profile_response/sparse_pattern.py`; `v3_fblock.py` has moved to `operators/profile_response/fblock.py`; `v3_system.py` has moved to `operators/profile_response/system.py`; `v3.py` remains a root module | Move remaining implementation roots to domain names or mark as public compatibility shims with deletion conditions. Preferred owners: profile-response operators, sparse layout, or API compatibility. |
+| Historical root kernels | `v3_results.py` is now a compatibility facade; `v3_sparse_pattern.py` has moved to `operators/profile_response/sparse_pattern.py`; `v3_fblock.py` has moved to `operators/profile_response/fblock.py`; `v3_system.py` has moved to `operators/profile_response/system.py`; `v3.py` has moved to `discretization/v3.py` | Root implementation routing is complete. Only intentional compatibility shims may remain at the package root. |
 | `problems/profile_response` | 21 files including `sparse/`; 51,882 lines; `solve.py` 7,834 lines; `policies.py` 6,885 lines; `sparse/handoff.py` 6,605 lines | `<=15` files including `sparse/`; `solve.py <=3,500` lines; `policies.py` and sparse owners split only by durable responsibility, not experiment history. |
 | `problems/transport_matrix` | 28 files including `parallel/`; many files are 50-600 line shards | `<=14` files including `parallel/`; `parallel/` has runtime, worker, and optional sharding only. |
 | `solvers/preconditioners` | 47 files, 36,992 lines; QI has 13 implementation files; symbolic sparse still has `rhs1_fortran_reduced.py` | `<=30` files; QI `<=5` files including `__init__.py`; no implementation file starts with `rhs1_` or `transport_`. |
@@ -683,8 +690,9 @@ Actions:
    `v3_system.py` is already routed to
    `operators/profile_response/system.py` with no root compatibility file
    because package imports no longer need it;
-   `v3.py` stays only as a public compatibility facade if external imports
-   require it.
+   `v3.py` is already routed to `discretization/v3.py` with no root
+   compatibility file because docs, examples, scripts, tests, and package
+   imports have migrated to the domain owner.
 5. Update `docs/source_map.rst`, `docs/api.rst`, and import-contract tests
    with the freeze map before moving more code.
 
@@ -1472,11 +1480,13 @@ Current completion status:
   and removed the historical `sfincs_jax/v3_fblock.py` root file. The fourth
   Sweep 0 routing checkpoint moved the matrix-free full-system operator to
   `operators/profile_response/system.py` and removed the historical
-  `sfincs_jax/v3_system.py` root file. The remaining large blockers are
-  sparse finalization/progress normalization, factor-preflight execution and
-  residual-correction execution, `v3.py` compatibility disposition, the rest
-  of transport/output consolidation, solver/preconditioner naming, and `io.py`
-  ownership. The next work follows Lane 1 Sweeps 0-4 only.
+  `sfincs_jax/v3_system.py` root file. The fifth Sweep 0 routing checkpoint
+  moved v3-compatible grid/geometry construction to
+  `discretization/v3.py` and removed the historical `sfincs_jax/v3.py` root
+  file. The remaining large blockers are sparse finalization/progress
+  normalization, factor-preflight execution and residual-correction execution,
+  the rest of transport/output consolidation, solver/preconditioner naming,
+  and `io.py` ownership. The next work follows Lane 1 Sweeps 1-4.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
@@ -1512,11 +1522,11 @@ Completed checkpoints that remain valid:
 
 Next ordered implementation steps:
 
-1. Execute Sweep 0 first: generate the import/use map, classify root and large
-   domain files, delete re-export-only aliases, decide whether the remaining
-   historical root `v3.py` stays as a compatibility facade or moves to
-   geometry/grid owners, and keep `docs/source_map.rst`,
-   `docs/api.rst`, and import-contract tests synchronized.
+1. Sweep 0 root routing is complete for the former implementation roots
+   (`v3_results.py`, `v3_sparse_pattern.py`, `v3_fblock.py`, `v3_system.py`,
+   and `v3.py`). Keep `docs/source_map.rst`, `docs/api.rst`, and
+   import-contract tests synchronized if any remaining package-root shim
+   changes.
 2. Execute Sweep 1 as the profile-response collapse. Move sparse
    finalization, progress replay, retry bookkeeping, final sparse payload
    normalization, factor-preflight execution, and residual-correction execution

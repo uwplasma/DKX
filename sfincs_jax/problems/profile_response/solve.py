@@ -868,7 +868,7 @@ from sfincs_jax.problems.transport_matrix.direct_pmat import (
 )
 from sfincs_jax.operators.profile_response.system import _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1, _matvec_shard_axis, sharding_constraints
 from sfincs_jax.profiling import Timer
-from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist
+from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 from sfincs_jax.operators.profile_response.system import (
     V3FullSystemOperator,
     _THRESHOLD_FOR_INCLUSION,

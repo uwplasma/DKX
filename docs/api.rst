@@ -7,7 +7,7 @@ API reference
 .. automodule:: sfincs_jax.namelist
    :members:
 
-.. automodule:: sfincs_jax.v3
+.. automodule:: sfincs_jax.discretization.v3
    :members:
 
 .. automodule:: sfincs_jax.geometry

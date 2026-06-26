@@ -21,7 +21,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist
+from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 
 
 def _default_input() -> Path:

@@ -29,7 +29,7 @@ if str(_REPO_ROOT) not in sys.path:
 from sfincs_jax.diagnostics import fsab_hat2
 from sfincs_jax.geometry import boozer_geometry_scheme4
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3 import grids_from_namelist
+from sfincs_jax.discretization.v3 import grids_from_namelist
 
 
 def main() -> int:

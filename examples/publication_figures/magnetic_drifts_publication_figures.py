@@ -31,7 +31,7 @@ except Exception as e:  # pragma: no cover
     raise SystemExit("This example requires matplotlib. Install with: pip install matplotlib") from e
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3 import grids_from_namelist
+from sfincs_jax.discretization.v3 import grids_from_namelist
 
 
 def _setup_mpl() -> None:

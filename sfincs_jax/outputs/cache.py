@@ -17,7 +17,7 @@ import os
 import numpy as np
 
 from ..namelist import Namelist
-from ..v3 import V3Grids
+from sfincs_jax.discretization.v3 import V3Grids
 
 OUTPUT_GEOM_CACHE: dict[tuple[object, ...], dict[str, np.ndarray]] = {}
 OUTPUT_GEOM_CACHE_VERSION = 2

@@ -20,7 +20,7 @@ from sfincs_jax.io import (
 )
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.outputs.cache import output_cache_dir, output_cache_path
-from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist
+from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 
 
 def test_output_cache_dir_prefers_xdg_cache_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

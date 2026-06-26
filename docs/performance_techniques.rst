@@ -231,7 +231,7 @@ so repeated cases that share the same equilibrium file reuse the computed data.
 
 **Implementation.**
 
-- ``sfincs_jax.v3.geometry_from_namelist`` persists the full ``BoozerGeometry`` arrays
+- ``sfincs_jax.discretization.v3.geometry_from_namelist`` persists the full ``BoozerGeometry`` arrays
   to ``~/.cache/sfincs_jax/geometry_cache`` by default.
 - ``sfincs_jax.io.sfincs_jax_output_dict`` caches expensive output-only fields
   (``gpsiHatpsiHat``, ``uHat``, ``diotadpsiHat``, ``VPrimeHat``, ``FSABHat2``,
@@ -3037,7 +3037,7 @@ Geometry parsing cache
 `sfincs_jax` caches parsed Boozer geometry files (.bc) by content hash and
 geometry scheme to avoid repeated parsing for multiple runs of the same equilibrium.
 
-Implementation: ``sfincs_jax.geometry`` and ``sfincs_jax.v3``.
+Implementation: ``sfincs_jax.geometry`` and ``sfincs_jax.discretization.v3``.
 
 F-block operator cache
 ----------------------

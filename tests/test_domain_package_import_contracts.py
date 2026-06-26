@@ -586,6 +586,21 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "apply_v3_full_system_operator_cached",
     ),
     (
+        "sfincs_jax.discretization.v3",
+        "sfincs_jax.discretization.v3",
+        "V3Grids",
+    ),
+    (
+        "sfincs_jax.discretization.v3",
+        "sfincs_jax.discretization.v3",
+        "grids_from_namelist",
+    ),
+    (
+        "sfincs_jax.discretization.v3",
+        "sfincs_jax.discretization.v3",
+        "geometry_from_namelist",
+    ),
+    (
         "sfincs_jax.problems.profile_response.preconditioner_build",
         "sfincs_jax.problems.profile_response.preconditioner_build",
         "auto_rhs1_full_strong_kind",

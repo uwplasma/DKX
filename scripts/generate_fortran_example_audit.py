@@ -15,7 +15,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from sfincs_jax.io import sfincs_jax_output_dict
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist
+from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 
 
 def _get_int(group: Dict[str, Any], key: str, default: int | None = None) -> int | None:

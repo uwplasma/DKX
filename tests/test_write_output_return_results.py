@@ -6,7 +6,7 @@ import pytest
 from sfincs_jax.io import _OUTPUT_GEOM_CACHE, _output_geom_cache_key, read_sfincs_h5, write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.paths import resolve_existing_path
-from sfincs_jax.v3 import _GEOMETRY_CACHE, _equilibrium_file_key, grids_from_namelist
+from sfincs_jax.discretization.v3 import _GEOMETRY_CACHE, _equilibrium_file_key, grids_from_namelist
 
 
 def _w7x_wout() -> Path:

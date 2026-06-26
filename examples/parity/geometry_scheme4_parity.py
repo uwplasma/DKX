@@ -24,7 +24,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from sfincs_jax.validation.fortran import run_sfincs_fortran  # noqa: E402
 from sfincs_jax.namelist import read_sfincs_input  # noqa: E402
-from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist  # noqa: E402
+from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist  # noqa: E402
 
 
 def main() -> int:

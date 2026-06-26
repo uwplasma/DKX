@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 from jax import config as _jax_config
 
 _jax_config.update("jax_enable_x64", True)
@@ -9,7 +11,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from .geometry import BoozerGeometry
-from .v3 import V3Grids
+from sfincs_jax.discretization.v3 import V3Grids
 
 
 def vprime_hat(*, grids: V3Grids, geom: BoozerGeometry) -> jnp.ndarray:

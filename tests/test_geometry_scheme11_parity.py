@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist
+from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 
 
 def test_geometry_scheme11_matches_fortran_fixture() -> None:

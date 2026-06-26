@@ -9,7 +9,7 @@ from sfincs_jax.collisionless import CollisionlessV3Operator, apply_collisionles
 from sfincs_jax.indices import V3Indexing
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.petsc_binary import read_petsc_mat_aij, read_petsc_vec
-from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist
+from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 
 
 def test_collisionless_offdiag_xi_matvec_matches_fortran_matrix() -> None:

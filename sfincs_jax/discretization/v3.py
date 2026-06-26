@@ -1,3 +1,5 @@
+"""SFINCS-v3-compatible grids and geometry loading."""
+
 from __future__ import annotations
 
 import hashlib
@@ -12,21 +14,21 @@ _jax_config.update("jax_enable_x64", True)
 import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
 
-from .geometry import BoozerGeometry, boozer_geometry_from_bc_file, boozer_geometry_scheme4  # noqa: E402
-from .input_compat import effective_equilibrium_file, effective_psi_n_wish  # noqa: E402
-from .grids import uniform_diff_matrices  # noqa: E402
-from .namelist import Namelist  # noqa: E402
-from .paths import resolve_existing_path  # noqa: E402
-from .vmec_geometry import vmec_geometry_from_wout_file  # noqa: E402
-from .vmec_wout import read_vmec_wout  # noqa: E402
-from .xgrid import XGrid, make_x_grid, make_x_polynomial_diff_matrices  # noqa: E402
-from .adaptive_maps import (  # noqa: E402
+from sfincs_jax.adaptive_maps import (  # noqa: E402
     AffineXMap,
     RationalTailXMap,
     SoftplusCellXMap,
     SplineDensityXMap,
     make_reference_eta_grid,
 )
+from sfincs_jax.geometry import BoozerGeometry, boozer_geometry_from_bc_file, boozer_geometry_scheme4  # noqa: E402
+from sfincs_jax.grids import uniform_diff_matrices  # noqa: E402
+from sfincs_jax.input_compat import effective_equilibrium_file, effective_psi_n_wish  # noqa: E402
+from sfincs_jax.namelist import Namelist  # noqa: E402
+from sfincs_jax.paths import resolve_existing_path  # noqa: E402
+from sfincs_jax.vmec_geometry import vmec_geometry_from_wout_file  # noqa: E402
+from sfincs_jax.vmec_wout import read_vmec_wout  # noqa: E402
+from sfincs_jax.xgrid import XGrid, make_x_grid, make_x_polynomial_diff_matrices  # noqa: E402
 
 
 def _n_periods_from_bc_file(path: str, *, base_dir: Path | None = None) -> int:
@@ -36,7 +38,7 @@ def _n_periods_from_bc_file(path: str, *, base_dir: Path | None = None) -> int:
     path, resolved relative to the run directory (i.e. the directory containing
     ``input.namelist``).
     """
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
     p = resolve_existing_path(path, base_dir=base_dir, extra_search_dirs=extra).path
     with open(p, "r") as f:
@@ -107,7 +109,7 @@ def _equilibrium_file_key(*, nml: Namelist, geometry_scheme: int, geom_group: di
     if equilibrium_file is None:
         return None
     base_dir = nml.source_path.parent if nml.source_path is not None else None
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
     if geometry_scheme == 5:
         path = _resolve_vmec_equilibrium_file(str(equilibrium_file), base_dir=base_dir, extra_search_dirs=extra)
@@ -442,7 +444,7 @@ def grids_from_namelist(nml: Namelist) -> V3Grids:
         if equilibrium_file is None:
             raise ValueError("geometryScheme=5 requires equilibriumFile in geometryParameters.")
         base_dir = nml.source_path.parent if nml.source_path is not None else None
-        repo_root = Path(__file__).resolve().parents[1]
+        repo_root = Path(__file__).resolve().parents[2]
         extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
         p = _resolve_vmec_equilibrium_file(str(equilibrium_file), base_dir=base_dir, extra_search_dirs=extra)
         n_periods = int(read_vmec_wout(p).nfp)
@@ -659,7 +661,7 @@ def geometry_from_namelist(*, nml: Namelist, grids: V3Grids) -> BoozerGeometry:
             _GEOMETRY_CACHE[cache_key] = disk_cached
             return disk_cached
     if geometry_scheme == 1:
-        from .geometry import boozer_geometry_scheme1
+        from sfincs_jax.geometry import boozer_geometry_scheme1
 
         geom_out = boozer_geometry_scheme1(
             theta=grids.theta,
@@ -681,7 +683,7 @@ def geometry_from_namelist(*, nml: Namelist, grids: V3Grids) -> BoozerGeometry:
             _save_geometry_cache(cache_key, geom_out)
         return geom_out
     if geometry_scheme == 2:
-        from .geometry import boozer_geometry_scheme2
+        from sfincs_jax.geometry import boozer_geometry_scheme2
 
         geom_out = boozer_geometry_scheme2(theta=grids.theta, zeta=grids.zeta)
         if use_cache:
@@ -699,7 +701,7 @@ def geometry_from_namelist(*, nml: Namelist, grids: V3Grids) -> BoozerGeometry:
         if equilibrium_file is None:
             raise ValueError("geometryScheme=11/12 requires equilibriumFile in geometryParameters.")
         base_dir = nml.source_path.parent if nml.source_path is not None else None
-        repo_root = Path(__file__).resolve().parents[1]
+        repo_root = Path(__file__).resolve().parents[2]
         extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
         p = resolve_existing_path(str(equilibrium_file), base_dir=base_dir, extra_search_dirs=extra).path
 
@@ -723,7 +725,7 @@ def geometry_from_namelist(*, nml: Namelist, grids: V3Grids) -> BoozerGeometry:
         if equilibrium_file is None:
             raise ValueError("geometryScheme=5 requires equilibriumFile in geometryParameters.")
         base_dir = nml.source_path.parent if nml.source_path is not None else None
-        repo_root = Path(__file__).resolve().parents[1]
+        repo_root = Path(__file__).resolve().parents[2]
         extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
         p = _resolve_vmec_equilibrium_file(str(equilibrium_file), base_dir=base_dir, extra_search_dirs=extra)
 

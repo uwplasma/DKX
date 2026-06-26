@@ -4772,3 +4772,82 @@ Next best steps:
 3. Resume Sweep 1 after that: move sparse finalization/progress normalization,
    factor-preflight execution, and residual-correction execution out of
    `profile_response/solve.py` without adding helper-only files.
+
+## 2026-06-26 Sweep 0 V3 Grid/Geometry Root Deletion
+
+Steps taken:
+
+1. Moved the SFINCS-v3-compatible grid/geometry implementation from the
+   historical root module `sfincs_jax/v3.py` into
+   `sfincs_jax/discretization/v3.py`.
+2. Rewrote package-internal imports to the domain owner, including diagnostics,
+   I/O, output-cache helpers, profile-response f-block/full-system operators,
+   transport parallel runtime, and profile-response solve orchestration.
+3. Migrated docs, examples, scripts, and focused tests away from
+   `sfincs_jax.v3` to `sfincs_jax.discretization.v3`, so the historical root
+   facade could be deleted instead of preserved.
+4. Updated `docs/api.rst`, `docs/source_map.rst`,
+   `docs/performance_techniques.rst`, `docs/inputs.rst`,
+   `docs/validation_matrix.rst`, `docs/adaptive_speed_grid.rst`,
+   `docs/usage.rst`, and `tests/test_domain_package_import_contracts.py` so
+   `discretization.v3` is documented and tested as the implementation owner.
+5. Adjusted repository-root path resolution in the moved implementation so
+   geometryScheme 5/11/12 equilibrium lookup still searches checked fixtures
+   and package-data locations after the move.
+
+Results:
+
+- Package-internal imports from `sfincs_jax.v3`: `0`.
+- Repo references to `sfincs_jax.v3` or `sfincs_jax/v3.py`: `0`, except the
+  intentional historical-owner note in `docs/source_map.rst`.
+- `sfincs_jax/v3.py` was deleted.
+- Package file count remains `209`; package-root file count decreases from
+  `45` to `44`, meeting the Sweep 0 package-root target.
+- Package source lines are `164,911`; still above the `164,865`
+  consolidation baseline until later deletion/merge sweeps remove more
+  implementation and compatibility surface.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/discretization/v3.py
+  sfincs_jax/diagnostics.py sfincs_jax/io.py
+  sfincs_jax/operators/profile_response/fblock.py
+  sfincs_jax/operators/profile_response/system.py
+  sfincs_jax/problems/profile_response/solve.py
+  tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/discretization/v3.py
+  sfincs_jax/diagnostics.py sfincs_jax/io.py
+  sfincs_jax/operators/profile_response/fblock.py
+  sfincs_jax/operators/profile_response/system.py
+  sfincs_jax/problems/profile_response/solve.py
+  tests/test_domain_package_import_contracts.py` passed.
+- `python -m pytest tests/test_domain_package_import_contracts.py
+  tests/test_mapped_xgrid_v3.py tests/test_v3_geometry_scheme4.py
+  tests/test_geometry_scheme11_parity.py tests/test_write_output_return_results.py
+  tests/test_full_system_operator_jit.py tests/test_v3_system_cached_matvec.py
+  tests/test_v3_fblock_smoke.py tests/test_transport_matrix_rhsmode2_parity.py
+  tests/test_transport_matrix_rhsmode3_parity.py -q --tb=short` passed with
+  `46 passed`.
+
+Progress:
+
+- Lane 1 structural consolidation: about `89%`.
+- Sweep 0 freeze/delete/route: `100%` for historical root implementation
+  routing. Remaining package-root work is now covered by later Sweep 2/4
+  compatibility and API cleanup, not Sweep 0.
+- Sweep 1 profile-response collapse: about `44%`.
+- Sweep 2 transport/output/root cleanup: about `20%`.
+- Sweep 3 solver/preconditioner family consolidation: about `25%`.
+- Sweep 4 public API/docs/tests/review gate: about `26%`.
+
+Next best steps:
+
+1. Start Sweep 1: move sparse finalization/progress normalization,
+   factor-preflight execution, and residual-correction execution out of
+   `profile_response/solve.py` into existing sparse, diagnostics, and
+   solver-diagnostics owners.
+2. Do not add helper-only files. Each Sweep 1 checkpoint should remove a
+   coherent solve-phase section from `solve.py` or merge/delete existing sparse
+   wrappers.
+3. After Sweep 1 reduces `solve.py`, continue Sweep 2 transport/output cleanup
+   and Sweep 3 solver/preconditioner file-family consolidation.

@@ -55,7 +55,7 @@ from sfincs_jax.operators.profile_response.fblock import (
     fblock_operator_from_namelist,
 )
 from sfincs_jax.paths import resolve_existing_path
-from sfincs_jax.v3 import V3Grids, geometry_from_namelist, grids_from_namelist
+from sfincs_jax.discretization.v3 import V3Grids, geometry_from_namelist, grids_from_namelist
 from sfincs_jax.vmec_wout import psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
 
 _THRESHOLD_FOR_INCLUSION = 1e-12  # Matches v3 `sparsify.F90`.

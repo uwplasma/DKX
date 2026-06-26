@@ -31,7 +31,7 @@ except Exception as e:  # pragma: no cover
 
 from sfincs_jax.geometry import boozer_geometry_scheme4
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3 import grids_from_namelist
+from sfincs_jax.discretization.v3 import grids_from_namelist
 
 
 def _setup_mpl() -> None:

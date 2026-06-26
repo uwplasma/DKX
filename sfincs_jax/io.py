@@ -63,7 +63,7 @@ from .outputs.rhsmode1 import (
 from .solvers.trace import SolverTrace, write_solver_trace_json
 from .solvers.progress import format_duration, runtime_scale_hint
 from .vmec_wout import _set_scale_factor, psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
-from .v3 import V3Grids, geometry_from_namelist, grids_from_namelist
+from sfincs_jax.discretization.v3 import V3Grids, geometry_from_namelist, grids_from_namelist
 
 
 @dataclass(frozen=True)

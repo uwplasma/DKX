@@ -18,8 +18,8 @@ from sfincs_jax.magnetic_drifts import (
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.namelist import Namelist
 from sfincs_jax.validation.petsc_binary import read_petsc_mat_aij
-from sfincs_jax.v3 import V3Grids
-from sfincs_jax.v3 import grids_from_namelist
+from sfincs_jax.discretization.v3 import V3Grids
+from sfincs_jax.discretization.v3 import grids_from_namelist
 
 
 def _read_nml_and_grids(*, input_path: Path) -> tuple[Namelist, V3Grids]:
