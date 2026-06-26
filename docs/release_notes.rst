@@ -346,17 +346,16 @@ Unreleased
   diagnostics, size/iteration skip gates, successful residual-history emission,
   and non-fatal replay failures.
 - Extracted explicit sparse host-factor policy parsing into
-  ``explicit_sparse_factor_policy.py``. Factor-kind aliases, numeric/boolean
+  ``explicit_sparse.py``. Factor-kind aliases, numeric/boolean
   environment parsing, and monolithic LU/ILU guard sizing now have direct tests
   while the driver keeps the monkeypatch-sensitive operator/factorization seam.
 - Moved the remaining explicit sparse host-factor environment bundle into the
-  typed ``ExplicitSparseFactorSettings`` policy object. The driver still owns
-  operator assembly, sparse factorization, logging, and the existing
-  monkeypatch-compatible seams, but default/override parsing for dense/CSR
-  budgets, pattern probing, symbolic Schur/frontal/ND/BLR settings, SuperLU
-  options, and ILU options is now tested in one focused module.
+  typed ``ExplicitSparseFactorSettings`` policy object. Default/override
+  parsing for dense/CSR budgets, pattern probing, symbolic Schur/frontal/ND/BLR
+  settings, SuperLU options, and ILU options is now tested in one focused
+  owner.
 - Extracted explicit sparse host-factor assembly/factorization orchestration
-  into ``explicit_sparse_factor_builder.py``. ``v3_driver.py`` now keeps a
+  into ``explicit_sparse.py``. ``v3_driver.py`` now keeps a
   compatibility wrapper that injects the current operator-build, pattern-build,
   factorization, backend, and guard callbacks, preserving existing debug and
   monkeypatch seams while removing another large block from the monolith.

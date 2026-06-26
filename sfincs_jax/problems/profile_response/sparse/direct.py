@@ -18,10 +18,10 @@ from sfincs_jax.solvers.explicit_sparse import (
     build_operator_from_pattern,
     factorize_host_sparse_operator,
 )
-from sfincs_jax.solvers.explicit_sparse_factor_builder import (
+from sfincs_jax.solvers.explicit_sparse import (
     build_host_sparse_direct_factor_from_matvec as _build_host_sparse_direct_factor_from_matvec_impl,
 )
-from sfincs_jax.solvers.explicit_sparse_factor_policy import (
+from sfincs_jax.solvers.explicit_sparse import (
     explicit_sparse_monolithic_max_size as _explicit_sparse_monolithic_max_size,
 )
 from sfincs_jax.host_refinement import (
@@ -3327,7 +3327,7 @@ def host_physical_memory_mb() -> float | None:
 def build_host_sparse_direct_factor_from_matvec(**kwargs: Any) -> tuple[object, object]:
     """Build a host sparse direct factor with canonical sparse-direct defaults.
 
-    The full keyword schema lives in :mod:`sfincs_jax.solvers.explicit_sparse_factor_builder`.
+    The full keyword schema lives in :mod:`sfincs_jax.solvers.explicit_sparse`.
     This wrapper centralizes the callback injection that used to live in the
     monolithic profile-response solve owner.
     """

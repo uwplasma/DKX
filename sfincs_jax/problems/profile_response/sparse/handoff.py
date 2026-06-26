@@ -1301,7 +1301,7 @@ def try_run_requested_sparse_pc_gmres_branch(
             direct_tail_true_coupled_coarse_accept_base_improvement,
             direct_tail_true_coupled_coarse_base_improvement_override_used,
         ) = direct_tail_rescue_policy_setup.driver_rescue_tuple()
-
+        residual_vec_current = jnp.asarray(sparse_pc_rhs, dtype=jnp.float64)
         if bool(factor_preflight_enabled) and x0_sparse is None:
             try:
                 factor_preflight_run = run_sparse_pc_factor_preflight(
@@ -1656,7 +1656,7 @@ def try_run_requested_sparse_pc_gmres_branch(
                     target=float(target),
                     matvec_no_count=_mv_true_no_count,
                     diagnostics=_rhs1_active_reduced_residual_diagnostics,
-                    layout=RHS1BlockLayout.from_operator(op),
+                    layout=direct_tail_structured_layout,
                     active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
                     elapsed_s=sparse_timer.elapsed_s,
                     emit=emit,

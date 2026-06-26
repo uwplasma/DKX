@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from scipy import sparse
 
-from sfincs_jax.solvers.explicit_sparse_factor_builder import build_host_sparse_direct_factor_from_matvec
+from sfincs_jax.solvers.explicit_sparse import build_host_sparse_direct_factor_from_matvec
 
 
 def test_explicit_sparse_factor_builder_uses_injected_matvec_backend_and_factorizer(monkeypatch) -> None:

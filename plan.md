@@ -6005,6 +6005,69 @@ Next best steps:
 2. Decide whether `data_fetch.py`, `postprocess_upstream.py`, and `scans.py`
    should stay at root as public workflows or move under domain packages.
 3. Then execute Batch C solver/preconditioner-family compression.
+## 2026-06-26 Lane 1 Batch D Explicit-Sparse Owner Consolidation
+
+Steps taken:
+
+1. Merged `sfincs_jax/solvers/explicit_sparse_factor_policy.py` and
+   `sfincs_jax/solvers/explicit_sparse_factor_builder.py` into the canonical
+   `sfincs_jax/solvers/explicit_sparse.py` owner.
+2. Deleted both old explicit-sparse support files and rewrote live source,
+   tests, API docs, source map, testing docs, and release notes to the
+   consolidated owner.
+3. Kept the existing focused test filenames for continuity, but their imports
+   now exercise `sfincs_jax.solvers.explicit_sparse` directly.
+4. Fixed a validation-exposed sparse-PC branch bug: requested sparse-PC setup
+   now initializes `residual_vec_current` from the zero-state residual when
+   optional factor preflight is disabled, and the auto-preflight retry context
+   now reuses the structured layout instead of eagerly deriving a layout from
+   lightweight mocked operators.
+
+Results:
+
+- Package Python files: `174`.
+- Package-root Python files: `43`.
+- Package source lines: `165,929`.
+- Solver-root Python files: `17`.
+- Preconditioner Python files: `35`.
+- `sfincs_jax/solvers/explicit_sparse.py`: `4,952` lines.
+- `profile_response/solve.py`: `5,420` lines.
+- `profile_response/sparse/handoff.py`: `5,500` lines.
+- `v3_driver.py`: `47` lines.
+- `io.py`: `64` lines.
+
+Validation:
+
+- Scoped py_compile passed for the consolidated explicit-sparse owner, sparse
+  direct/handoff users, and touched tests.
+- Scoped Ruff passed for the same source/test set.
+- Explicit-sparse, sparse-helper, and matrix-reduction tests passed with
+  `29 passed in 0.75 s`.
+- Preconditioner setup/cache/context/x-block/PAS/Schur policy tests passed
+  with `125 passed in 1.08 s`.
+- Broader sparse/profile-response validation passed with
+  `618 passed in 145.21 s`.
+- Import/API/docstring contracts passed with `20 passed in 0.55 s`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `git diff --check` passed.
+
+Progress:
+
+- Lane 1 structural consolidation: about `99%`.
+- Batch D solver/preconditioner family consolidation: explicit-sparse substep
+  complete; next substep is preconditioner-state ownership.
+- Public docs/API stabilization for the refactor PR: about `55%`.
+
+Next best steps:
+
+1. Continue Batch D with an import-cycle audit for
+   `preconditioner_caches.py`, `preconditioner_context.py`,
+   `preconditioner_operators.py`, and `preconditioner_setup.py`; merge only if
+   the same commit deletes at least three files and keeps semantics clearer.
+2. If that owner merge is too cyclic, document the blocker in `plan_final.md`
+   and move to the progress/trace/state/profile-compare diagnostics owner
+   consolidation.
+
 ## 2026-06-26 Lane 1 Batch C Transport-Parallel Runtime Consolidation
 
 Steps taken:
