@@ -29,14 +29,19 @@ Latest execution checkpoint:
   accepted-candidate replay, solver-candidate residual gates, and Krylov
   replay-state updates into
   `sfincs_jax/problems/profile_response/solver_diagnostics.py`.
+- Phase 1 then deleted `sfincs_jax/problems/profile_response/auto_solve.py` by
+  moving explicit host structured-CSR and automatic RHSMode-1 host-solver
+  routing into `sfincs_jax/problems/profile_response/dense.py`, the existing
+  host solve owner.
 - `sfincs_jax/problems/profile_response/solve.py`, focused tests, source maps,
-  and docs now import the canonical `solver_diagnostics.py` owner for those
-  helpers.
-- Current counts after this checkpoint: 207 package Python files, 43 package
-  root files, 20 `problems/profile_response` files including `sparse`,
-  `profile_response/solve.py` at 7,014 lines,
+  and docs now import the canonical `solver_diagnostics.py` and `dense.py`
+  owners for those helpers.
+- Current counts after this checkpoint: 206 package Python files, 43 package
+  root files, 19 `problems/profile_response` files including `sparse`,
+  `profile_response/solve.py` at 7,012 lines,
+  `profile_response/dense.py` at 3,287 lines,
   `profile_response/solver_diagnostics.py` at 2,114 lines,
-  `profile_response/sparse/handoff.py` at 4,438 lines, and 165,647 package
+  `profile_response/sparse/handoff.py` at 4,438 lines, and 165,631 package
   Python lines.
 
 ## One-Sentence Plan
@@ -2655,7 +2660,7 @@ Steps taken:
 2. Updated `tests/test_profile_response_linear_solve.py` to import from the
    canonical dense owner instead of the monolithic solve owner.
 3. Moved the explicit host structured-CSR RHSMode-1 solve entry point into
-   `sfincs_jax.problems.profile_response.auto_solve`, beside the auto-routing
+   `sfincs_jax.problems.profile_response.dense`, beside the auto-routing
    code that invokes it. `profile_response.solve` imports it only for
    compatibility and internal dispatch.
 4. Preserved behavior and legacy import compatibility while removing another
