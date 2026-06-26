@@ -322,6 +322,14 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   artifacts, but it is no longer an undocumented top-level folder. The
   examples/tutorial contract reports `9 passed` and Ruff passes for the touched
   guard file.
+- A post-fifty-second review-lock validation subset passed `402` tests in
+  `91.88 s`, covering source layout, domain imports, examples/tutorials,
+  README/docs benchmark claims, benchmark-artifact promotion policy,
+  frozen-reference comparison, HDF5 parity, public API/facades, solver/Krylov
+  helpers, CLI/output paths, profile/transport wrappers, true-operator rescue,
+  transport dense/sparse paths, ambipolar workflows, and sensitivity contracts.
+  `ruff check sfincs_jax ...`, `compileall -q sfincs_jax`, `git diff --check`,
+  and the public README/docs stale-fragment scan also passed.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
