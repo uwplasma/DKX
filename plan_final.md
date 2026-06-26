@@ -313,7 +313,8 @@ completed Batch A-D owner moves:
   consolidation, and Batch D solver-core consolidation. The historical
   symbolic-sparse `rhs1_*` filename has been removed, QI has durable owner
   modules, and the preconditioner file-count gate is met. Package source lines
-  are 165,862; this is above the previous line-count checkpoint but is
+  are 165,806 after the first Batch F policy-table consolidation; this is
+  above the previous line-count checkpoint but is
   justified by replacing many implementation shards with durable owner modules
   while preserving production behavior.
 - Package root: 43 Python files. No top-level `rhs1_*` or `transport_*`
@@ -325,7 +326,7 @@ completed Batch A-D owner moves:
   and `v3.py`.
 - `sfincs_jax/problems/profile_response`: 18 files including `sparse/`, about
   52.7k lines. The largest files are `sparse/xblock.py` 7,725 lines,
-  `policies.py` 7,425 lines, `solve.py` 5,420 lines,
+  `policies.py` 7,369 lines, `solve.py` 5,420 lines,
   `sparse/handoff.py` 5,500 lines, `sparse/qi.py` 4,885 lines,
   `sparse/direct.py` 3,569 lines, `dense.py` 3,287 lines, and
   `preconditioner_build.py` 2,683 lines. The `solve.py <=5,500` and
@@ -563,7 +564,7 @@ Current source inventory from the final consolidation audit:
 
 | Area | Current state | Review-ready target |
 | --- | --- | --- |
-| Whole package | 168 Python files, 165,862 package lines after Batch D. The file-count gate and stretch file-count target are met; the remaining line increase is explicitly justified by replacing multiple implementation shards with durable owner modules. | `<=190` Python files and below the previous 165,398-line checkpoint before review, or a documented line-count exception tied to deleted files plus clearer ownership. Stretch target `<=175` is met and must not be lost unless clarity improves. |
+| Whole package | 168 Python files, 165,806 package lines after the first Batch F policy-table consolidation. The file-count gate and stretch file-count target are met; the remaining line increase is explicitly justified by replacing multiple implementation shards with durable owner modules. | `<=190` Python files and below the previous 165,398-line checkpoint before review, or a documented line-count exception tied to deleted files plus clearer ownership. Stretch target `<=175` is met and must not be lost unless clarity improves. |
 | Package root | 43 Python files | `<=40` preferred, `<=44` maximum. Every remaining root file must be public API, stable physics kernel, or documented compatibility shim. |
 | `v3_driver.py` | 47-line compatibility shim | Keep below 80 lines or delete after public imports migrate. It must not regain implementation logic. |
 | `io.py` and `outputs/` | `io.py` is a 64-line compatibility facade; `outputs/writer.py` owns the 4,264-line writer; `outputs/transport.py` owns transport output accumulation and streaming writes. | `io.py` gate is met. Output implementation belongs in `outputs`, not root. |
@@ -864,7 +865,7 @@ Status on 2026-06-26:
 - Validation: stale source-map alias scan returned no matches; focused
   CLI/API/scans/upstream/data-fetch/import-contract tests passed with
   `39 passed`; scoped py_compile and Ruff passed for touched workflow/root
-  classification files; Sphinx `-W` passed; current metrics remain `168`
+  classification files; Sphinx `-W` passed; Batch E metrics were `168`
   package Python files, `43` package-root files, `165,862` package source
   lines, `profile_response/solve.py` at `5,420` lines,
   `profile_response/sparse/handoff.py` at `5,500` lines, `v3_driver.py` at
@@ -874,6 +875,27 @@ Status on 2026-06-26:
 
 Purpose: lower complexity in the largest remaining profile-response owners
 without creating more files.
+
+Progress:
+
+- First Batch F substep complete on 2026-06-26. `policies.py` now uses grouped
+  requested-control metadata tables and a table-driven QI-device progress
+  formatter instead of two large repeated metadata dicts and a long repeated
+  progress branch. The public helper names and keyword-call behavior are
+  preserved. `policies.py` decreased from 7,425 to 7,369 lines, and package
+  source lines decreased from 165,862 to 165,806. No files were added.
+- Validation passed for this substep:
+  `python -m pytest tests/test_rhs1_xblock_fallback_initial_guess.py -q
+  --tb=short` with 36 passed,
+  `python -m pytest tests/test_profile_response_diagnostics.py
+  tests/test_domain_package_import_contracts.py
+  tests/test_policy_module_docstrings.py -q --tb=short` with 30 passed,
+  targeted QI sparse-pattern metadata tests with 3 passed,
+  `python -m pytest tests/test_rhs1_qi_*.py -q --tb=short` with 123 passed,
+  `python -m pytest tests/test_profile_response_sparse_pc.py -q --tb=short`
+  with 329 passed, and `python -m pytest tests/test_rhs1_device_operator_unit.py
+  tests/test_rhs1_xblock_fallback_initial_guess.py -q --tb=short` with
+  41 passed. Scoped py_compile, Ruff, and `git diff --check` passed.
 
 Actions:
 
@@ -1502,7 +1524,8 @@ Current completion status:
   `solvers/explicit_sparse.py`, `solvers/preconditioning.py`, and
   `solvers/diagnostics.py`.
   The remaining blockers are concentrated and measurable:
-  `profile_response/policies.py` is 7,425 lines,
+  `profile_response/policies.py` is 7,369 lines after the first Batch F
+  policy-table consolidation,
   `profile_response/sparse/xblock.py` is 7,725 lines,
   `problems/profile_response` has 18 files including `sparse`,
   `problems/transport_matrix` has 10 files including `parallel`,
@@ -1510,7 +1533,7 @@ Current completion status:
   QI preconditioners have 5 files,
   `io.py` is 64 lines,
   `outputs/writer.py` is 4,264 lines, `outputs/transport.py` is 935 lines,
-  and package source lines are 165,862. Completed consolidation already removed
+  and package source lines are 165,806. Completed consolidation already removed
   the historical `v3_*`, `rhs1_*`, `transport_*`, transport-output, QI-shard,
   symbolic-sparse, and domain-decomposition file debt. The remaining active
   blockers proceed through larger owner-level batches only: root/public-surface
