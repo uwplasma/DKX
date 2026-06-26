@@ -184,6 +184,7 @@ ACTIVE_PACKAGE_EXPORTS = {
     ),
     "sfincs_jax.outputs": (
         "ExportFConfig",
+        "TransportStreamingOutputAccumulator",
         "conversion_factors_to_from_dpsi_hat",
         "decode_if_bytes",
         "fortran_h5_layout",
@@ -278,13 +279,13 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "V3TransportMatrixSolveResult",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.streaming_outputs",
-        "sfincs_jax.problems.transport_matrix.streaming_outputs",
+        "sfincs_jax.outputs.transport",
+        "sfincs_jax.outputs.transport",
         "TransportStreamingOutputAccumulator",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.postsolve_diagnostics",
-        "sfincs_jax.problems.transport_matrix.postsolve_diagnostics",
+        "sfincs_jax.problems.transport_matrix.finalize",
+        "sfincs_jax.problems.transport_matrix.finalize",
         "compute_transport_postsolve_diagnostics",
     ),
     (
