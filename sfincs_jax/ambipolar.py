@@ -214,14 +214,22 @@ def solve_ambipolar_from_scan_dir(
 
     if var_vals.size < 3:
         interpolator = interp1d(var_vals, jpsi_vals, kind="linear")
-        quantity_interp = lambda y: interp1d(var_vals, y, kind="linear")
+
+        def quantity_interp(y):
+            return interp1d(var_vals, y, kind="linear")
+
     else:
         try:
             interpolator = PchipInterpolator(var_vals, jpsi_vals)
-            quantity_interp = lambda y: PchipInterpolator(var_vals, y)
+
+            def quantity_interp(y):
+                return PchipInterpolator(var_vals, y)
+
         except Exception:
             interpolator = interp1d(var_vals, jpsi_vals, kind="linear")
-            quantity_interp = lambda y: interp1d(var_vals, y, kind="linear")
+
+            def quantity_interp(y):
+                return interp1d(var_vals, y, kind="linear")
 
     roots_var: list[float] = []
     if float(np.max(jpsi_vals)) > 0.0 and float(np.min(jpsi_vals)) < 0.0:

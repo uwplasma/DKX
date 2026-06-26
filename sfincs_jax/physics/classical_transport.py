@@ -6,7 +6,7 @@ from jax import config as _jax_config
 
 _jax_config.update("jax_enable_x64", True)
 
-import jax.numpy as jnp
+import jax.numpy as jnp  # noqa: E402
 
 
 def classical_flux_v3(

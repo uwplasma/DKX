@@ -376,7 +376,6 @@ def compare_sfincs_outputs(
                 "heatFlux_vm_rHat": {"rtol": 1e-1},
                 "heatFlux_vm_rN": {"rtol": 1e-1},
                 "momentumFluxBeforeSurfaceIntegral_vm": {"rtol": 1e-1},
-                "momentumFlux_vm_psiHat": {"rtol": 1e-1},
             }
             for k, v in dkes_flow_tol.items():
                 if k in local_tolerances:

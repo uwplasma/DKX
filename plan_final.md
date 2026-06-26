@@ -308,6 +308,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   parsing, bounded JSON compaction, and metadata-copy semantics. These tests
   protect production HDF5/NetCDF/NPZ diagnostic fields and nonconverged-output
   sidecar traces without running a profile solve.
+- The thirty-seventh post-audit review-readiness tranche made the full
+  ``sfincs_jax`` source tree pass Ruff by replacing assigned lambdas in the
+  ambipolar scan interpolator, removing a duplicate comparison-tolerance key,
+  documenting the intentional JAX x64 import-order exceptions, and renaming
+  ambiguous Legendre-index locals in collision kernels. Focused physics,
+  comparison, ambipolar, output, examples, and transport-preconditioner tests
+  pass after the cleanup.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
@@ -2388,10 +2395,11 @@ Current completion status:
   and derivative identities are implemented; production-grid parity refresh
   remains a release benchmark.
 - Public docs/API stabilization for the refactor PR: about 98 percent. Source
-  maps, import contracts, README/docs, artifact metadata, Sphinx, and CI pass
-  for the consolidated layout in focused checks; the examples landing page and
-  Fortran-example status page now keep first-pass navigation separate from
-  release-audit runbooks. Rerun the review-lock bundle after this plan refresh.
+  maps, import contracts, README/docs, artifact metadata, Sphinx, source Ruff,
+  and CI pass for the consolidated layout in focused checks; the examples
+  landing page and Fortran-example status page now keep first-pass navigation
+  separate from release-audit runbooks. Rerun the review-lock bundle after this
+  plan refresh.
 
 Next ordered implementation steps:
 

@@ -10,15 +10,15 @@ from jax import config as _jax_config
 
 _jax_config.update("jax_enable_x64", True)
 
-import jax
-import jax.numpy as jnp
-import numpy as np
-from jax import tree_util as jtu
-from jax.scipy.special import erf
-from scipy import special as sp_special
-from scipy.integrate import quad
+import jax  # noqa: E402
+import jax.numpy as jnp  # noqa: E402
+import numpy as np  # noqa: E402
+from jax import tree_util as jtu  # noqa: E402
+from jax.scipy.special import erf  # noqa: E402
+from scipy import special as sp_special  # noqa: E402
+from scipy.integrate import quad  # noqa: E402
 
-from sfincs_jax.discretization.xgrid import XGrid, make_x_grid
+from sfincs_jax.discretization.xgrid import XGrid, make_x_grid  # noqa: E402
 
 
 _V3_PI = 3.14159265358979
@@ -307,10 +307,10 @@ def _rosenbluth_potential_terms_v3_np_quadpack(
     limit = 5000
 
     terms = np.zeros((n_species, n_species, int(nl), n_x, n_x), dtype=np.float64)
-    for l in range(int(nl)):
-        alpha = -float(2 * l - 1) / float(2 * l + 3)
-        denom_h = float(2 * l + 1)
-        denom_g = float(4 * l * l - 1)
+    for ell in range(int(nl)):
+        alpha = -float(2 * ell - 1) / float(2 * ell + 3)
+        denom_h = float(2 * ell + 1)
+        denom_g = float(4 * ell * ell - 1)
 
         for ia in range(n_species):
             for ib in range(n_species):
@@ -364,27 +364,27 @@ def _rosenbluth_potential_terms_v3_np_quadpack(
                             )
                             return float(val)
 
-                        i_2pl = quad_finite(l + 2, 0.0, xb_safe)
-                        i_4pl = quad_finite(l + 4, 0.0, xb_safe)
+                        i_2pl = quad_finite(ell + 2, 0.0, xb_safe)
+                        i_4pl = quad_finite(ell + 4, 0.0, xb_safe)
 
-                        i_1ml = quad_finite(1 - l, xb_safe, partition) + quad_semiinf(1 - l, partition)
-                        i_3ml = quad_finite(3 - l, xb_safe, partition) + quad_semiinf(3 - l, partition)
+                        i_1ml = quad_finite(1 - ell, xb_safe, partition) + quad_semiinf(1 - ell, partition)
+                        i_3ml = quad_finite(3 - ell, xb_safe, partition) + quad_semiinf(3 - ell, partition)
 
-                        xb_pow_l = xb_safe**l
-                        xb_pow_lm1 = xb_safe ** (l - 1) if l >= 1 else xb_safe ** (-1)
-                        xb_pow_lm2 = xb_safe ** (l - 2) if l >= 2 else xb_safe ** (-2)
+                        xb_pow_l = xb_safe**ell
+                        xb_pow_lm1 = xb_safe ** (ell - 1) if ell >= 1 else xb_safe ** (-1)
+                        xb_pow_lm2 = xb_safe ** (ell - 2) if ell >= 2 else xb_safe ** (-2)
 
                         temp_h[ix, j - 1] = (4.0 * pi / denom_h) * (
-                            i_2pl / (xb_safe ** (l + 1)) + xb_pow_l * i_1ml
+                            i_2pl / (xb_safe ** (ell + 1)) + xb_pow_l * i_1ml
                         )
                         temp_dh[ix, j - 1] = (4.0 * pi / denom_h) * (
-                            -(l + 1) * i_2pl / (xb_safe ** (l + 2)) + l * xb_pow_lm1 * i_1ml
+                            -(ell + 1) * i_2pl / (xb_safe ** (ell + 2)) + ell * xb_pow_lm1 * i_1ml
                         )
                         temp_d2g[ix, j - 1] = (-4.0 * pi / denom_g) * (
-                            l * (l - 1) * xb_pow_lm2 * i_3ml
-                            + alpha * (l + 1) * (l + 2) * xb_pow_l * i_1ml
-                            + alpha * (l + 1) * (l + 2) * i_4pl / (xb_safe ** (l + 3))
-                            + l * (l - 1) * i_2pl / (xb_safe ** (l + 1))
+                            ell * (ell - 1) * xb_pow_lm2 * i_3ml
+                            + alpha * (ell + 1) * (ell + 2) * xb_pow_l * i_1ml
+                            + alpha * (ell + 1) * (ell + 2) * i_4pl / (xb_safe ** (ell + 3))
+                            + ell * (ell - 1) * i_2pl / (xb_safe ** (ell + 1))
                         )
 
                 temp_combined = np.zeros((n_x, n_x), dtype=np.float64)
@@ -397,7 +397,7 @@ def _rosenbluth_potential_terms_v3_np_quadpack(
                         + float(x[i] * x[i]) * temp_d2g[i, :]
                     )
 
-                terms[ia, ib, l, :, :] = temp_combined @ collocation2modal
+                terms[ia, ib, ell, :, :] = temp_combined @ collocation2modal
 
     return terms
 
@@ -473,10 +473,10 @@ def rosenbluth_potential_terms_v3_np(
     terms = np.zeros((n_species, n_species, int(nl), n_x, n_x), dtype=np.float64)
     pi = float(_V3_PI)
 
-    for l in range(int(nl)):
-        alpha = -float(2 * l - 1) / float(2 * l + 3)
-        denom_h = float(2 * l + 1)
-        denom_g = float(4 * l * l - 1)
+    for ell in range(int(nl)):
+        alpha = -float(2 * ell - 1) / float(2 * ell + 3)
+        denom_h = float(2 * ell + 1)
+        denom_g = float(4 * ell * ell - 1)
         for ia in range(n_species):
             for ib in range(n_species):
                 species_factor = float(
@@ -495,9 +495,9 @@ def rosenbluth_potential_terms_v3_np(
                 for ix in range(n_x):
                     xb = float(x[ix] * species_factor)
                     xb_safe = xb if xb > 0 else 1e-14
-                    xb_pow_l = xb_safe**l
-                    xb_pow_lm1 = xb_safe ** (l - 1) if l >= 1 else xb_safe ** (-1)
-                    xb_pow_lm2 = xb_safe ** (l - 2) if l >= 2 else xb_safe ** (-2)
+                    xb_pow_l = xb_safe**ell
+                    xb_pow_lm1 = xb_safe ** (ell - 1) if ell >= 1 else xb_safe ** (-1)
+                    xb_pow_lm2 = xb_safe ** (ell - 2) if ell >= 2 else xb_safe ** (-2)
 
                     for j in range(1, n_x + 1):
                         coeff = poly_coeffs[j - 1]
@@ -514,22 +514,22 @@ def rosenbluth_potential_terms_v3_np(
                                 acc += float(cm) * _monomial_int_upper(xb_safe, base_power + m)
                             return float(acc)
 
-                        i_2pl = poly_int_lower(l + 2)
-                        i_4pl = poly_int_lower(l + 4)
-                        i_1ml = poly_int_upper(1 - l)
-                        i_3ml = poly_int_upper(3 - l)
+                        i_2pl = poly_int_lower(ell + 2)
+                        i_4pl = poly_int_lower(ell + 4)
+                        i_1ml = poly_int_upper(1 - ell)
+                        i_3ml = poly_int_upper(3 - ell)
 
                         temp_h[ix, j - 1] = (4.0 * pi / denom_h) * (
-                            i_2pl / (xb_safe ** (l + 1)) + xb_pow_l * i_1ml
+                            i_2pl / (xb_safe ** (ell + 1)) + xb_pow_l * i_1ml
                         )
                         temp_dh[ix, j - 1] = (4.0 * pi / denom_h) * (
-                            -(l + 1) * i_2pl / (xb_safe ** (l + 2)) + l * xb_pow_lm1 * i_1ml
+                            -(ell + 1) * i_2pl / (xb_safe ** (ell + 2)) + ell * xb_pow_lm1 * i_1ml
                         )
                         temp_d2g[ix, j - 1] = (-4.0 * pi / denom_g) * (
-                            l * (l - 1) * xb_pow_lm2 * i_3ml
-                            + alpha * (l + 1) * (l + 2) * xb_pow_l * i_1ml
-                            + alpha * (l + 1) * (l + 2) * i_4pl / (xb_safe ** (l + 3))
-                            + l * (l - 1) * i_2pl / (xb_safe ** (l + 1))
+                            ell * (ell - 1) * xb_pow_lm2 * i_3ml
+                            + alpha * (ell + 1) * (ell + 2) * xb_pow_l * i_1ml
+                            + alpha * (ell + 1) * (ell + 2) * i_4pl / (xb_safe ** (ell + 3))
+                            + ell * (ell - 1) * i_2pl / (xb_safe ** (ell + 1))
                         )
 
                 temp_combined = np.zeros((n_x, n_x), dtype=np.float64)
@@ -542,7 +542,7 @@ def rosenbluth_potential_terms_v3_np(
                         + float(x[i] * x[i]) * temp_d2g[i, :]
                     )
 
-                terms[ia, ib, l, :, :] = temp_combined @ collocation2modal
+                terms[ia, ib, ell, :, :] = temp_combined @ collocation2modal
 
     return terms
 
@@ -600,8 +600,8 @@ def make_pitch_angle_scattering_v3_operator(
         x=x, z_s=z_s, m_hats=m_hats, n_hats=n_hats, t_hats=t_hats
     )
     n_xi_int = int(n_xi)
-    l = jnp.arange(n_xi_int, dtype=jnp.float64)
-    factor_l = 0.5 * (l * (l + 1.0) + 2.0 * krook)
+    ell = jnp.arange(n_xi_int, dtype=jnp.float64)
+    factor_l = 0.5 * (ell * (ell + 1.0) + 2.0 * krook)
     coef = jnp.asarray(nu_n, dtype=jnp.float64) * nu_d_hat[:, :, None] * factor_l[None, None, :]
     mask = _mask_xi(jnp.asarray(n_xi_for_x, dtype=jnp.int32), n_xi_int)
     return PitchAngleScatteringV3Operator(
@@ -615,8 +615,8 @@ def make_pitch_angle_scattering_v3_operator(
 
 
 def _mask_xi(n_xi_for_x: jnp.ndarray, n_xi_max: int) -> jnp.ndarray:
-    l = jnp.arange(n_xi_max, dtype=jnp.int32)[None, :]
-    return l < n_xi_for_x[:, None]
+    ell = jnp.arange(n_xi_max, dtype=jnp.int32)[None, :]
+    return ell < n_xi_for_x[:, None]
 
 
 def apply_pitch_angle_scattering_v3(op: PitchAngleScatteringV3Operator, f: jnp.ndarray) -> jnp.ndarray:
@@ -641,8 +641,8 @@ def apply_pitch_angle_scattering_v3(op: PitchAngleScatteringV3Operator, f: jnp.n
         )
 
     if op.coef.shape[-1] != n_xi:
-        l = jnp.arange(n_xi, dtype=jnp.float64)  # row L
-        factor_l = 0.5 * (l * (l + 1.0) + 2.0 * op.krook)  # (L,)
+        ell = jnp.arange(n_xi, dtype=jnp.float64)  # row L
+        factor_l = 0.5 * (ell * (ell + 1.0) + 2.0 * op.krook)  # (L,)
         coef = op.nu_n * op.nu_d_hat[:, :, None] * factor_l[None, None, :]  # (S,X,L)
         mask = _mask_xi(op.n_xi_for_x.astype(jnp.int32), n_xi).astype(coef.dtype)  # (X,L)
     else:
@@ -845,14 +845,14 @@ def make_fokker_planck_v3_operator(
 
     # Assemble per-L matrices and include the overall (-nu_n) factor to match the PETSc Jacobian entries.
     mat = np.zeros((n_species, n_species, int(n_xi), n_x, n_x), dtype=np.float64)
-    for l in range(int(n_xi)):
+    for ell in range(int(n_xi)):
         m11 = cecd.copy()
-        diag = -0.5 * nu_d_hat * (float(l * (l + 1)) + 2.0 * float(krook))
+        diag = -0.5 * nu_d_hat * (float(ell * (ell + 1)) + 2.0 * float(krook))
         for s in range(n_species):
             m11[s, s, range(n_x), range(n_x)] += diag[s, :]
-        if l < int(nl):
-            m11 = m11 + rosen[:, :, l, :, :]
-        mat[:, :, l, :, :] = -float(nu_n) * m11
+        if ell < int(nl):
+            m11 = m11 + rosen[:, :, ell, :, :]
+        mat[:, :, ell, :, :] = -float(nu_n) * m11
 
     return FokkerPlanckV3Operator(
         mat=jnp.asarray(mat),
@@ -1133,8 +1133,8 @@ def apply_fokker_planck_v3_phi1(op: FokkerPlanckV3Phi1Operator, f: jnp.ndarray, 
     y_ce = jnp.einsum("aijTZ,aLjTZ->aLiTZ", ce_mat, f2)  # (S,L,X,T,Z)
 
     # Pitch-angle scattering / Krook diagonal term.
-    l = jnp.arange(n_xi, dtype=jnp.float64)  # (L,)
-    factor_l = l * (l + 1.0) + 2.0 * op.krook  # (L,)
+    ell = jnp.arange(n_xi, dtype=jnp.float64)  # (L,)
+    factor_l = ell * (ell + 1.0) + 2.0 * op.krook  # (L,)
     y_diag = 0.5 * op.nu_n * nu_d_hat[:, None, :, :, :] * factor_l[None, :, None, None, None] * f2
 
     y = (-op.nu_n) * (y_cd + y_ce) + y_diag
