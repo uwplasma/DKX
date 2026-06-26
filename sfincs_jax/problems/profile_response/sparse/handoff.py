@@ -1,8 +1,10 @@
 """Sparse-PC handoff helpers for RHSMode=1 profile-response solves."""
 
-# This compatibility owner intentionally re-exports sparse branch primitives and
-# maps driver-scope values onto local names while the solve sequencer is being
-# collapsed. Keep the waiver local to this handoff facade.
+# This compatibility owner intentionally re-exports sparse branch primitives by
+# composing owner __all__ lists and maps driver-scope names onto local aliases.
+# Ruff cannot statically prove that dynamic re-export surface, and it reports a
+# small number of intentional shadowed compatibility names. Delete this waiver
+# only after solve.py and owner tests import the concrete sparse owners directly.
 # ruff: noqa: F401,F811
 
 from __future__ import annotations

@@ -40,14 +40,11 @@ Latest execution checkpoint:
   root files, 18 `problems/profile_response` files including `sparse`, 16
   `problems/transport_matrix` files including `parallel`, 35
   `solvers/preconditioners` files, 5 QI preconditioner files, `v3_driver.py` at
-  47 lines, `io.py` at 64 lines, `profile_response/solve.py` at 5,733 lines,
-  `profile_response/sparse/handoff.py` at 5,498 lines, and 166,356 package
-  Python lines. The line count is above the previous checkpoint because the
-  AST-safe QI merge expanded compact helper formatting; this is explicitly
-  justified by deleting ten QI implementation shards plus one
-  domain-decomposition shard and reaching the planned owner boundaries. The
-  `profile_response/solve.py <=5,500` gate is reopened and is the first Batch A
-  blocker.
+  47 lines, `io.py` at 64 lines, `profile_response/solve.py` at 5,420 lines,
+  `profile_response/sparse/handoff.py` at 5,500 lines, and 166,045 package
+  Python lines. Batch A restored the reopened `profile_response/solve.py
+  <=5,500` gate, documented the sparse handoff waiver, and kept the
+  `handoff.py`, `v3_driver.py`, and `io.py` gates locked.
 - Validation passed:
   `python -m pytest tests/test_rhs1_qi_*.py
   tests/test_rhs1_device_operator_unit.py tests/test_profile_response_sparse_pc.py
@@ -60,16 +57,35 @@ Latest execution checkpoint:
 
 Next ordered implementation sequence:
 
-1. Batch A: repair the `profile_response/solve.py <=5,500` gate and document
-   or remove the `sparse/handoff.py` compatibility waiver.
-2. Batch B-C: consolidate transport active/direct/factor files into one
+1. Batch B-C: consolidate transport active/direct/factor files into one
    linear-system owner, then collapse internal transport-parallel helpers into
    runtime ownership if imports allow.
-3. Batch D-E: consolidate solver-core support files by durable owner, then
+2. Batch D-E: consolidate solver-core support files by durable owner, then
    classify or migrate root workflow/public-surface modules without creating
    shims.
-4. Batch F-G: reduce oversized profile-response owners internally, refresh
+3. Batch F-G: reduce oversized profile-response owners internally, refresh
    docs/tests/source maps, and run the review-ready validation set.
+
+Batch A validation evidence:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py
+  tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py
+  tests/test_domain_package_import_contracts.py` passed.
+- `python -m pytest tests/test_domain_package_import_contracts.py
+  tests/test_profile_response_sparse_pc.py tests/test_profile_response_dense.py
+  tests/test_profile_response_active_projection.py tests/test_rhs1_active_dof.py
+  tests/test_rhs1_active_projection.py -q --tb=short` passed with
+  `395 passed in 3.16s`.
+- `python -m pytest tests/test_rhs1_qi_*.py
+  tests/test_rhs1_device_operator_unit.py tests/test_v3_sparse_pattern.py
+  -q --tb=short` passed with `260 passed in 125.16s`.
+- `python -m pytest tests/test_output_h5_scheme5_parity.py
+  tests/test_write_output_return_results.py tests/test_api_contracts.py
+  -q --tb=short` passed with `14 passed in 0.95s`.
+- `git diff --check` passed.
 
 
 ## One-Sentence Plan

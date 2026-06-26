@@ -657,7 +657,11 @@ the historical private driver name and test the focused module directly. This ke
   monolithic solve owner while Batch A continues. Sparse GMRES finalization now
   lives in ``sparse/finalization.py`` and x-block branch orchestration now
   lives in ``sparse/xblock.py``; ``handoff.py`` only re-exports those names for
-  compatibility until the public internal imports are fully migrated.
+  compatibility until the public internal imports are fully migrated. Its local
+  ``F401,F811`` Ruff waiver is intentional: the module composes dynamic
+  ``__all__`` lists from sparse owner modules and carries a few shadowed
+  compatibility aliases. Delete the waiver only after ``solve.py`` and owner
+  tests import the concrete sparse owners directly.
 - ``sfincs_jax/problems/profile_response/sparse/policy.py``:
   generic sparse-PC policy and admission helpers: active-DOF map construction,
   entry classification, sparse factor policy, conservative-pattern setup,
