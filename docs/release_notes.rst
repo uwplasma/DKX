@@ -240,7 +240,7 @@ Unreleased
   into focused modules with direct tests while preserving compatibility imports
   from ``v3_driver.py``.
 - Moved mutable preconditioner hint/context state out of ``v3_driver.py`` and
-  into ``preconditioner_context.py``. The driver keeps the same private
+  into ``preconditioning.py``. The driver keeps the same private
   compatibility names, while dtype, structural-tolerance, and solver-JIT policy
   now have direct module tests. The post-extraction local full suite passed
   with ``2531 passed in 508.54 s``.
@@ -251,7 +251,7 @@ Unreleased
   tests. The post-extraction local full suite passed with
   ``2537 passed in 534.28 s``.
 - Moved passive RHSMode=1 and RHSMode=2/3 preconditioner cache dataclasses and
-  global cache registries into ``preconditioner_caches.py``. The driver still
+  global cache registries into ``preconditioning.py``. The driver still
   re-exports the same registry objects under the existing private names, so
   existing cache-clearing tests and debugging scripts keep working while the
   containers now have direct lightweight tests. The post-extraction local full
@@ -261,14 +261,14 @@ Unreleased
   keeps the old private helper names by import, preserving sparse-preconditioner
   apply behavior while making the kernels independently testable. The
   post-extraction local full suite passed with ``2549 passed in 507.83 s``.
-- Extracted preconditioner setup utilities into ``preconditioner_setup.py``:
+- Extracted preconditioner setup utilities into ``preconditioning.py``:
   chunk-size policy, matrix-free selected submatrix probing, and stable array
   hashing for cache keys. ``v3_driver.py`` keeps a compatibility wrapper for
   submatrix probing so tests and debugging hooks can still monkeypatch the
   driver-level unsharded operator application. The post-extraction local full
   suite passed with ``2553 passed in 541.27 s``.
 - Moved RHSMode=1 structured-preconditioner and RHSMode=2/3 transport
-  preconditioner cache-key construction into ``preconditioner_setup.py``.
+  preconditioner cache-key construction into ``preconditioning.py``.
   Driver wrappers keep the historical private function names and live
   ``_precond_dtype()`` behavior, while direct tests now cover key stability,
   Phi1 participation, PAS/FP signatures, and dtype partitioning. The
@@ -392,7 +392,7 @@ Unreleased
   adapter, active projection, memory-budget admission, and no-probe metadata
   emission previously embedded in ``v3_driver.py``.
 - Extracted RHSMode=1 and RHSMode=2/3 preconditioner-operator shaping into
-  ``preconditioner_operators.py``. Point, theta/zeta line, theta/zeta
+  ``preconditioning.py``. Point, theta/zeta line, theta/zeta
   domain-decomposition, and Fortran-reduced operator builders are now pure
   dataclass/JAX transformations outside the solve driver, with the existing
   driver private names preserved as import aliases.

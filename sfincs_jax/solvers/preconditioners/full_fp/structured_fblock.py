@@ -7,12 +7,12 @@ from collections.abc import Callable
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.solvers.preconditioner_caches import (
+from sfincs_jax.solvers.preconditioning import (
     _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE,
     _RHSMode1StructuredFBlockPrecondCache,
 )
-from sfincs_jax.solvers.preconditioner_context import precond_dtype
-from sfincs_jax.solvers.preconditioner_setup import rhs_mode1_structured_fblock_cache_key
+from sfincs_jax.solvers.preconditioning import precond_dtype
+from sfincs_jax.solvers.preconditioning import rhs_mode1_structured_fblock_cache_key
 from ....problems.profile_response.residual import safe_preconditioner
 from sfincs_jax.operators.profile_response.kinetic import select_structured_rhs1_fblock_operator
 from sfincs_jax.solvers.preconditioners.xblock.coarse import (

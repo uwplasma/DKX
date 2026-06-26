@@ -11,8 +11,8 @@ import numpy as np
 
 from sfincs_jax.solvers.preconditioners.xblock import policy as _rhs1_xblock_policy
 from sfincs_jax.solvers.preconditioners.xblock import policy as _rhs1_xblock_sparse_host_policy
-from sfincs_jax.solvers.preconditioner_context import precond_dtype, sparse_structural_tol
-from sfincs_jax.solvers.preconditioner_caches import (
+from sfincs_jax.solvers.preconditioning import precond_dtype, sparse_structural_tol
+from sfincs_jax.solvers.preconditioning import (
     _RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST_CACHE,
     _RHSMODE1_SPARSE_ILU_CACHE,
     _RHSMODE1_SPARSE_SXBLOCK_HOST_PRECOND_CACHE,
@@ -25,7 +25,7 @@ from sfincs_jax.solvers.preconditioner_caches import (
     _RHSMode1SparseXBlockHostPrecondCache,
     _RHSMode1SparseXBlockPrecondCache,
 )
-from sfincs_jax.solvers.preconditioner_setup import (
+from sfincs_jax.solvers.preconditioning import (
     matvec_submatrix_v3_unsharded,
     precond_chunk_cols,
     rhs_mode1_precond_cache_key,

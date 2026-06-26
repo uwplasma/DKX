@@ -9,14 +9,14 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.solvers.preconditioner_caches import (
+from sfincs_jax.solvers.preconditioning import (
     _RHSMODE1_XMG_PRECOND_CACHE,
     _RHSMODE1_XUPWIND_PRECOND_CACHE,
     _TransportXmgPrecondCache,
     _XUpwindPrecondCache,
 )
-from sfincs_jax.solvers.preconditioner_context import precond_dtype as _precond_dtype
-from sfincs_jax.solvers.preconditioner_setup import rhs_mode1_precond_cache_key
+from sfincs_jax.solvers.preconditioning import precond_dtype as _precond_dtype
+from sfincs_jax.solvers.preconditioning import rhs_mode1_precond_cache_key
 from sfincs_jax.operators.profile_response.system import V3FullSystemOperator
 
 Preconditioner = Callable[[jnp.ndarray], jnp.ndarray]

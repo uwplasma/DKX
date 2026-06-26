@@ -11,7 +11,7 @@ import os
 import jax
 import jax.numpy as jnp
 
-from sfincs_jax.solvers.preconditioner_context import precond_policy_hints
+from sfincs_jax.solvers.preconditioning import precond_policy_hints
 from sfincs_jax.solvers.preconditioners.dispatch import (
     RHS1PreconditionerDispatchBuilders,
     build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,

@@ -27,11 +27,11 @@ from sfincs_jax.solvers.explicit_sparse import (
 from sfincs_jax.host_refinement import (
     host_sparse_direct_polish as _host_sparse_direct_polish_impl,
 )
-from sfincs_jax.solvers.preconditioner_caches import (
+from sfincs_jax.solvers.preconditioning import (
     _RHSMODE1_SPARSE_JAX_CACHE,
     _SparseJaxPrecondCache,
 )
-from sfincs_jax.solvers.preconditioner_setup import matvec_submatrix as _matvec_submatrix_impl
+from sfincs_jax.solvers.preconditioning import matvec_submatrix as _matvec_submatrix_impl
 from sfincs_jax.solvers.preconditioners.xblock import (
     rhsmode1_precond_cache_key as _rhsmode1_precond_cache_key,
 )

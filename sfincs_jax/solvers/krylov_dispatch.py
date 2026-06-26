@@ -14,7 +14,7 @@ from typing import Any
 
 import jax
 
-from .preconditioner_context import use_solver_jit
+from .preconditioning import use_solver_jit
 from ..solver import (
     distributed_gmres_enabled,
     gmres_solve,

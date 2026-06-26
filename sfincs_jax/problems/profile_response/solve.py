@@ -499,11 +499,11 @@ from sfincs_jax.outputs.transport import TransportStreamingOutputAccumulator
 from sfincs_jax.solver import (
     block_gmres_result_ready as _block_gmres_result_ready, gmres_result_is_finite as _gmres_result_is_finite,
 )
-from sfincs_jax.solvers.preconditioner_operators import (  # noqa: F401
+from sfincs_jax.solvers.preconditioning import (  # noqa: F401
     block_diagonal_only as _block_diag_only,
     diagonal_only as _diag_only,
 )
-from sfincs_jax.solvers.preconditioner_operators import (
+from sfincs_jax.solvers.preconditioning import (
     _build_rhsmode1_preconditioner_operator_fortran_reduced, _build_rhsmode1_preconditioner_operator_point,
     _build_rhsmode1_preconditioner_operator_theta_dd, _build_rhsmode1_preconditioner_operator_theta_line,
     _build_rhsmode1_preconditioner_operator_zeta_dd, _build_rhsmode1_preconditioner_operator_zeta_line,
@@ -515,7 +515,7 @@ from sfincs_jax.solvers.sparse_triangular import (
     triangular_solve_upper_csr_rows as _triangular_solve_upper_csr_rows,
     triangular_solve_upper_padded as _triangular_solve_upper_padded,
 )
-from sfincs_jax.solvers.preconditioner_setup import (
+from sfincs_jax.solvers.preconditioning import (
     hash_array as _hash_array, precond_chunk_cols as _precond_chunk_cols,
     rhs_mode1_precond_cache_key as _rhs_mode1_precond_cache_key_impl,
     rhs_mode1_structured_fblock_cache_key as _rhs_mode1_structured_fblock_cache_key_impl,
@@ -529,7 +529,7 @@ from sfincs_jax.solvers.krylov_dispatch import (
     resolve_distributed_gmres_axis as _resolve_distributed_gmres_axis_impl,
     rhs_krylov_method_for_context as _rhs_krylov_method_for_context, solver_kind_for_label as _solver_kind_for_label,
 )
-from sfincs_jax.solvers.preconditioner_caches import (
+from sfincs_jax.solvers.preconditioning import (
     _RHSMODE1_PAS_PRECOND_PROBE_CACHE, _RHSMODE1_PAS_TOKAMAK_THETA_CACHE, _RHSMODE1_PAS_TZ_CACHE,
     _RHSMODE1_PRECOND_CACHE, _RHSMODE1_PRECOND_GLOBAL_CACHE, _RHSMODE1_PRECOND_IDX_CACHE, _RHSMODE1_PRECOND_ILU_CACHE,
     _RHSMODE1_PRECOND_LIST_CACHE, _RHSMODE1_SCHUR_CACHE, _RHSMODE1_SPARSE_ILU_CACHE,
@@ -553,7 +553,7 @@ from sfincs_jax.solvers.preconditioner_caches import (
     _TransportFpXBlockTzLuPrecondCache, _TransportPrecondCache, _TransportTzFftPrecondCache,
     _TransportXBlockPrecondCache, _TransportXmgPrecondCache, _XUpwindPrecondCache,
 )
-from sfincs_jax.solvers.preconditioner_context import (
+from sfincs_jax.solvers.preconditioning import (
     auto_pas_geom4_fp32_precond_allowed as _auto_pas_geom4_fp32_precond_allowed, precond_dtype as _precond_dtype,
     precond_policy_hints as _precond_policy_hints, set_precond_policy_hints as _set_precond_policy_hints,
     set_precond_size_hint as _set_precond_size_hint, sparse_structural_tol as _sparse_structural_tol,

@@ -16,8 +16,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.solvers.preconditioner_caches import _RHSMODE1_SPARSE_ILU_CACHE, _SparseILUCache
-from sfincs_jax.solvers.preconditioner_context import sparse_structural_tol
+from sfincs_jax.solvers.preconditioning import _RHSMODE1_SPARSE_ILU_CACHE, _SparseILUCache
+from sfincs_jax.solvers.preconditioning import sparse_structural_tol
 from ....solver import assemble_dense_matrix_from_matvec
 from sfincs_jax.operators.profile_response.system import V3FullSystemOperator, apply_v3_full_system_operator_cached
 from ....profiling import Timer

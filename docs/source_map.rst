@@ -326,10 +326,17 @@ the historical private driver name and test the focused module directly. This ke
   helpers around solver timing/profiling, plus small differentiable JAX-native
   linear algebra kernels such as the regularized tiny least-squares solve and
   recycled Krylov initial-guess builder used by RHSMode=1 and transport solves.
-- ``sfincs_jax/solvers/preconditioner_operators.py``:
-  diagonal and block-diagonal matrix reductions plus simplified
-  preconditioner-operator builders. These are numerical building blocks with
-  direct local-coupling tests.
+- ``sfincs_jax/solvers/preconditioning.py``:
+  shared preconditioning state, setup utilities, and operator-shaping helpers.
+  It owns passive cache dataclasses/global registries for RHSMode=1 and
+  RHSMode=2/3 preconditioners, mutable solve-context hints for automatic
+  preconditioner selection, sparse structural tolerance, factor dtype and
+  solver-JIT admission, diagonal/block-diagonal reductions, point/line/
+  domain-decomposition/Fortran-reduced ``Pmat`` builders, memory-bounded
+  setup-column chunking, selected submatrix probing, stable array hashes, and
+  RHSMode=1/transport preconditioner cache-key construction. The numerical
+  setup/apply routines still live in the family owners; this module is the
+  common state and shaping surface.
 - ``sfincs_jax/constraint_projection.py``:
   constraintScheme=1 nullspace/source-row projection used by RHSMode=1 and
   RHSMode=2/3 solves after iterative branches. It builds the small
@@ -341,17 +348,6 @@ the historical private driver name and test the focused module directly. This ke
   plus permutation inversion. These pure kernels are used by sparse
   preconditioner apply paths and are directly tested against dense triangular
   references.
-- ``sfincs_jax/solvers/preconditioner_context.py``:
-  mutable solve-context hints for preconditioner auto-selection, including
-  cached operator size, geometry/collision metadata, sparse structural
-  tolerance, factor dtype, and solver-JIT admission. The numerical policy lives
-  in ``path_policy.py``; this module owns the runtime state bridge.
-- ``sfincs_jax/solvers/preconditioner_operators.py``:
-  pure dataclass/JAX transformations that build simplified ``V3FullSystemOperator``
-  variants used as point, line, domain-decomposition, and Fortran-reduced
-  preconditioner matrices. These helpers encode the PETSc/Fortran-v3-style
-  ``Pmat`` shaping rules without carrying solve state, caches, or sparse
-  factorization logic.
 - ``sfincs_jax/solvers/preconditioners/pas/composite.py``:
   PAS-family RHSMode=1 composite preconditioner policy. It owns the
   ``pas_lite``, ``pas_hybrid``, and ``pas_schur`` composition rules, including
@@ -469,13 +465,6 @@ the historical private driver name and test the focused module directly. This ke
   active-factor, direct-``Pmat``, direct block-Schur, and Fortran-reduced LU
   implementation files were absorbed here so transport linear-system logic has
   one review surface.
-- ``sfincs_jax/solvers/preconditioner_setup.py``:
-  shared setup utilities for preconditioner construction: memory-bounded
-  basis-column chunking, selected-row/selected-column matrix-free submatrix
-  probing, unsharded V3-operator probing for setup-time host factors, stable
-  array hashes, and RHSMode=1/transport preconditioner cache-key construction.
-  The keys intentionally omit RHS-only gradients so fixed-operator scan points
-  can reuse factors.
 - ``sfincs_jax/solvers/explicit_sparse.py``:
   explicit-sparse host-factor environment parsing, canonical factor-kind alias
   resolution, monolithic LU/ILU guard sizing, and the typed
@@ -570,13 +559,6 @@ the historical private driver name and test the focused module directly. This ke
   ``SFINCS_JAX_GMRES_DISTRIBUTED`` axis selection. The driver passes its current
   solver globals through compatibility wrappers so existing monkeypatch-based
   tests still exercise the same routes.
-- ``sfincs_jax/solvers/preconditioner_caches.py``:
-  passive dataclasses and global cache registries for RHSMode=1 and
-  RHSMode=2/3 preconditioners.  The numerical setup/apply routines still live
-  in the driver during this stage, but cache containers are now directly
-  importable and tested.  ``v3_driver.py`` re-exports the same registry objects
-  under the old private names so existing debugging scripts and tests keep
-  clearing the real caches.
 - ``sfincs_jax/solvers/preconditioners/transport_matrix.py``:
   numerical builder implementations for the common RHSMode=2/3 transport
   preconditioners: collision diagonal, species/speed block, x-grid coarse

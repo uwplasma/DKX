@@ -6005,6 +6005,68 @@ Next best steps:
 2. Decide whether `data_fetch.py`, `postprocess_upstream.py`, and `scans.py`
    should stay at root as public workflows or move under domain packages.
 3. Then execute Batch C solver/preconditioner-family compression.
+## 2026-06-26 Lane 1 Batch D Preconditioning Owner Consolidation
+
+Steps taken:
+
+1. Merged `sfincs_jax/solvers/preconditioner_caches.py`,
+   `sfincs_jax/solvers/preconditioner_context.py`,
+   `sfincs_jax/solvers/preconditioner_operators.py`, and
+   `sfincs_jax/solvers/preconditioner_setup.py` into the durable owner
+   `sfincs_jax/solvers/preconditioning.py`.
+2. Deleted the four old files in the same batch and rewrote live imports across
+   profile-response, transport-matrix, preconditioner-family modules, tests,
+   and docs.
+3. Consolidated duplicate API/source-map entries so `preconditioning.py` has
+   one documented owner description: cache registries, runtime policy context,
+   operator shaping, setup utilities, selected submatrix probing, and
+   RHSMode=1/transport cache keys.
+
+Results:
+
+- Package Python files: `171`.
+- Package-root Python files: `43`.
+- Package source lines: `165,865`.
+- Solver-root Python files: `14`.
+- Preconditioner Python files: `35`.
+- `sfincs_jax/solvers/preconditioning.py`: `1,173` lines.
+- `profile_response/solve.py`: `5,420` lines.
+- `profile_response/sparse/handoff.py`: `5,500` lines.
+- `v3_driver.py`: `47` lines.
+- `io.py`: `64` lines.
+
+Validation:
+
+- Scoped py_compile passed for `preconditioning.py`, touched solver/problem
+  users, and touched tests.
+- Scoped Ruff passed for the same source/test set.
+- Preconditioning setup/cache/context/matrix-reduction/Fortran-reduced/
+  dispatch tests passed with `87 passed in 31.66 s`.
+- Broader profile-response/preconditioner-family tests passed with
+  `490 passed in 2.88 s`.
+- Import/API/docstring contracts passed with `20 passed in 0.57 s`.
+- Full transport test pattern passed with `273 passed in 46.01 s`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- Stale live-import audit found no references to deleted preconditioner-state
+  modules.
+- `git diff --check` passed.
+
+Progress:
+
+- Lane 1 structural consolidation: about `99%`.
+- Batch D solver/preconditioner family consolidation: explicit-sparse and
+  preconditioning-state substeps complete. The remaining Batch D candidate is
+  progress/trace/state/profile-compare diagnostics ownership.
+- Public docs/API stabilization for the refactor PR: about `60%`.
+
+Next best steps:
+
+1. Audit `progress.py`, `state.py`, `trace.py`, and `profile_compare.py` for a
+   possible `solver_diagnostics.py` owner merge.
+2. If the diagnostics merge deletes at least three files and keeps source
+   clearer, implement it; otherwise document the blocker and move to Batch E
+   root/public-surface classification.
+
 ## 2026-06-26 Lane 1 Batch D Explicit-Sparse Owner Consolidation
 
 Steps taken:

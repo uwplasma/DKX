@@ -29,7 +29,7 @@ from sfincs_jax.solvers.explicit_sparse import SparseDecision, SparseOperatorBun
 from sfincs_jax.operators.profile_response.kinetic import select_structured_rhs1_fblock_operator
 from sfincs_jax.operators.profile_response.system import V3FullSystemOperator, _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1
 from sfincs_jax.profiling import Timer
-from sfincs_jax.solvers.preconditioner_caches import (
+from sfincs_jax.solvers.preconditioning import (
     _TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_PRECOND_CACHE,
     _TransportFpDirectActiveBlockSchurPrecondCache,
 )
@@ -41,11 +41,11 @@ from sfincs_jax.solvers.explicit_sparse import (
     factorize_host_sparse_operator,
     wrap_sparse_factor_with_coarse_correction,
 )
-from sfincs_jax.solvers.preconditioner_caches import (
+from sfincs_jax.solvers.preconditioning import (
     _TRANSPORT_FP_FORTRAN_REDUCED_LU_PRECOND_CACHE,
     _TransportFpFortranReducedLuPrecondCache,
 )
-from sfincs_jax.solvers.preconditioner_operators import _build_transport_preconditioner_operator_fortran_reduced
+from sfincs_jax.solvers.preconditioning import _build_transport_preconditioner_operator_fortran_reduced
 from sfincs_jax.operators.profile_response.sparse_pattern import (
     summarize_v3_sparse_pattern,
     v3_full_system_fortran_reduced_preconditioner_sparsity_pattern,
