@@ -306,7 +306,9 @@ Observed facts to feed directly into implementation:
 Current source size snapshot after the 2026-06-26 consolidation audit and the
 latest transport/profile-response owner moves:
 
-- Whole package: 195 Python files, 165,398 package lines.
+- Whole package: 195 Python files, 165,653 package lines after the Batch A
+  solve-sequencer compression. The Batch E review gate must pay this wrapper
+  overhead back down below the previous 165,398-line checkpoint.
 - Package root: 43 Python files. No top-level `rhs1_*` or `transport_*`
   implementation files remain.
 - `sfincs_jax/v3_driver.py`: 47-line compatibility shim. It must not regain
@@ -315,9 +317,9 @@ latest transport/profile-response owner moves:
   `v3_results.py`, `v3_sparse_pattern.py`, `v3_fblock.py`, `v3_system.py`,
   and `v3.py`.
 - `sfincs_jax/problems/profile_response`: 18 files including `sparse/`, about
-  52.6k lines. The largest files are `sparse/xblock.py` 7,725 lines,
-  `solve.py` 6,985 lines, `policies.py` 6,885 lines, `sparse/qi.py` 4,885
-  lines, `sparse/handoff.py` 4,438 lines, `sparse/direct.py` 3,569 lines,
+  53.0k lines. The largest files are `sparse/xblock.py` 7,725 lines,
+  `policies.py` 7,425 lines, `sparse/handoff.py` 5,780 lines, `solve.py`
+  5,358 lines, `sparse/qi.py` 4,885 lines, `sparse/direct.py` 3,569 lines,
   `dense.py` 3,287 lines, and `preconditioner_build.py` 2,683 lines.
 - `sfincs_jax/problems/transport_matrix`: 18 files including `parallel/`,
   about 14.9k lines. The file-count gate is met, but small files remain:
@@ -539,10 +541,10 @@ Current source inventory from the final consolidation audit:
 
 | Area | Current state | Review-ready target |
 | --- | --- | --- |
-| Whole package | 195 Python files, 165,398 package lines | `<=190` Python files and fewer package lines than this checkpoint. Stretch target: `<=175` files only if it improves clarity. |
+| Whole package | 195 Python files, 165,653 package lines | `<=190` Python files and below the previous 165,398-line checkpoint before review. Stretch target: `<=175` files only if it improves clarity. |
 | Package root | 43 Python files | `<=40` preferred, `<=44` maximum. Every remaining root file must be public API, stable physics kernel, or documented compatibility shim. |
 | `v3_driver.py` | 47-line compatibility shim | Keep below 80 lines or delete after public imports migrate. It must not regain implementation logic. |
-| `problems/profile_response` | 18 files, about 52.6k lines. Largest files: `sparse/xblock.py`, `solve.py`, `policies.py`, `sparse/qi.py`, `sparse/handoff.py`, `sparse/direct.py`, `dense.py`. | Review-ready file count is met. Required: `solve.py <=5,500`; preferred: fewer relay sections in `sparse/handoff.py`; stretch: `<=15` files only if safe. |
+| `problems/profile_response` | 18 files, about 53.0k lines. `solve.py` is 5,358 lines and now below the review gate; `sparse/handoff.py` is 5,780 lines after taking the requested sparse-PC branch. | Review-ready file count and `solve.py <=5,500` gates are met. Required next: reduce `sparse/handoff.py <=5,500` or move remaining large direct-tail/generic setup sections into existing owners. Stretch: `<=15` files only if safe. |
 | `problems/transport_matrix` | 18 files, about 14.9k lines. Small files remain around postsolve, streaming output, active factors, and direct Pmat/factor families. | File count gate is met. Remove/merge obvious micro-files only when the owner is clearer. Stretch: `<=14` files. |
 | `solvers/preconditioners` | 47 files, about 37.0k lines. QI and symbolic sparse are the main file-count drivers. | `<=35` files for review-ready; stretch `<=30`. QI `<=7` files. No implementation file starts with `rhs1_` or `transport_`. |
 | `operators/profile_response` | 14 files, about 18.4k lines. `full_system.py` is 5,978 lines. | Keep current ownership for this PR unless correctness requires edits. Do not split it to chase line counts. |
@@ -627,7 +629,8 @@ Actions, in order:
 
 Required exit gates:
 
-- `profile_response/solve.py <=5,500` lines for review-ready.
+- `profile_response/solve.py <=5,500` lines for review-ready. This is met at
+  5,358 lines.
 - `profile_response/solve.py <=3,500` lines remains a stretch target, not a
   blocker if further reduction would create unsafe churn.
 - `problems/profile_response` plus `sparse` has `<=18` Python files for
@@ -740,13 +743,13 @@ Review-ready acceptance gates:
 
 - Package source file count is `<=190`; stretch target `<=175`.
 - Package source lines are below the final consolidation checkpoint recorded
-  at Batch E entry; current working value is 165,398 lines and must decrease
-  before review.
+  at Batch E entry. Current working value is 165,653 lines, and the
+  review-ready target remains below the previous 165,398-line checkpoint.
 - Package root has `<=40` Python files preferred, `<=44` allowed only with
   explicit public/shim labels.
 - `v3_driver.py` is deleted or below 80 lines.
-- `profile_response/solve.py <=5,500` lines for review-ready, with
-  `<=3,500` as a stretch target.
+- `profile_response/solve.py <=5,500` lines for review-ready; currently met at
+  5,358 lines, with `<=3,500` as a stretch target.
 - `profile_response/sparse/handoff.py <=5,500` lines or its remaining large
   sections are merged into existing sparse owners before review.
 - `io.py <=1,200` lines for review-ready, with `<=800` or deletion as a
@@ -1311,19 +1314,20 @@ Deliverables:
 
 Current completion status:
 
-- Lane 1 structural consolidation: about 92 percent. The compatibility-driver
+- Lane 1 structural consolidation: about 94 percent. The compatibility-driver
   boundary is done, historical `v3_*` implementation roots are routed or
   deleted, top-level `rhs1_*` and `transport_*` implementation files are gone,
   package-root count is 43, package file count is 195, and `v3_driver.py` is a
-  47-line shim. The remaining blockers are concentrated and measurable:
-  `profile_response/solve.py` is 6,985 lines, `profile_response/policies.py`
-  is 6,885 lines, `profile_response/sparse/xblock.py` is 7,725 lines,
-  `profile_response/sparse/handoff.py` is 4,438 lines,
+  47-line shim. The `profile_response/solve.py <=5,500` review gate is now met
+  at 5,358 lines. The remaining blockers are concentrated and measurable:
+  `profile_response/policies.py` is 7,425 lines,
+  `profile_response/sparse/xblock.py` is 7,725 lines,
+  `profile_response/sparse/handoff.py` is 5,780 lines,
   `problems/profile_response` has 18 files including `sparse`,
   `problems/transport_matrix` has 18 files including `parallel`,
-  `solvers/preconditioners` has 47 files, and `io.py` is 4,264 lines.
-  Lane 1 must now follow Batches A-E above as a few large consolidation
-  commits instead of small extraction/checkpoint churn.
+  `solvers/preconditioners` has 47 files, `io.py` is 4,264 lines, and package
+  source lines are 165,653. The line-count overhead from the mechanical
+  context moves must be paid down before review.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
@@ -1363,10 +1367,10 @@ Completed checkpoints that remain valid:
 
 Next ordered implementation steps:
 
-1. Execute Batch A in one profile-response owner-compression commit or tightly
-   related commit pair. The target is to remove at least 1,500 lines from
-   `solve.py` by moving a full requested-sparse/result-replay/retry-progress
-   branch into existing sparse/dense/diagnostic owners.
+1. Finish the remaining Batch A handoff paydown by moving direct-tail/generic
+   setup support out of `sparse/handoff.py` into existing sparse policy/direct
+   owners, or document an import-cycle blocker. Target: `sparse/handoff.py
+   <=5,500` and package lines back below 165,398 before review.
 2. Execute Batch B as one transport/output/root-compression commit or commit
    pair. The target is to finish obvious transport micro-file cleanup, reduce
    `io.py` below 1,200 lines by moving implementation to `outputs`, and decide

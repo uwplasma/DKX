@@ -5552,6 +5552,544 @@ def _env_token(name: str) -> str:
 _FALSE_VALUES = {"0", "false", "no", "off"}
 
 
+@dataclass(frozen=True)
+class RHS1DefaultPreconditionerSelectionContext:
+    """Driver scope for automatic RHSMode-1 preconditioner selection."""
+
+    values: Mapping[str, Any]
+
+
+def resolve_rhs1_default_preconditioner_selection(
+    context: RHS1DefaultPreconditionerSelectionContext,
+) -> dict[str, Any]:
+    """Resolve the default RHSMode-1 preconditioner policy branch."""
+
+    _canonical_rhs1_preconditioner_kind = context.values['_canonical_rhs1_preconditioner_kind']
+    _matvec_shard_axis = context.values['_matvec_shard_axis']
+    _pas_tz_preconditioner_applicable = context.values['_pas_tz_preconditioner_applicable']
+    _rhs1_fp_dkes_default_kind = context.values['_rhs1_fp_dkes_default_kind']
+    _rhs1_pas_auto_large_base_kind = context.values['_rhs1_pas_auto_large_base_kind']
+    _rhs1_pas_dkes_pas_tz_preferred = context.values['_rhs1_pas_dkes_pas_tz_preferred']
+    _rhs1_pas_dkes_xblock_allowed = context.values['_rhs1_pas_dkes_xblock_allowed']
+    _rhs1_pas_small_near_zero_er_kind = context.values['_rhs1_pas_small_near_zero_er_kind']
+    _rhs1_pas_tokamak_gpu_theta_allowed = context.values['_rhs1_pas_tokamak_gpu_theta_allowed']
+    _rhs1_pas_tokamak_gpu_xblock_preferred = context.values['_rhs1_pas_tokamak_gpu_xblock_preferred']
+    active_size = context.values['active_size']
+    emit = context.values['emit']
+    full_precond_requested = context.values['full_precond_requested']
+    geom_scheme = context.values['geom_scheme']
+    jax = context.values['jax']
+    nml = context.values['nml']
+    np = context.values['np']
+    op = context.values['op']
+    os = context.values['os']
+    pre_theta = context.values['pre_theta']
+    pre_zeta = context.values['pre_zeta']
+    er_abs = context.values['er_abs']
+    rhs1_gpu_tokamak_pas_tight_gmres = context.values[
+        'rhs1_gpu_tokamak_pas_tight_gmres'
+    ]
+    rhs1_precond_env = context.values['rhs1_precond_env']
+    rhs1_xblock_tz_lmax = context.values['rhs1_xblock_tz_lmax']
+    schur_er_min = context.values['schur_er_min']
+    use_dkes = context.values['use_dkes']
+
+    if rhs1_precond_env:
+        rhs1_precond_kind = _canonical_rhs1_preconditioner_kind(rhs1_precond_env)
+    else:
+        # Default to v3-like preconditioner options: when preconditioner_theta/zeta are 0,
+        # use point-block Jacobi. Enable line preconditioning only when explicitly requested.
+        if int(op.rhs_mode) == 1 and (not bool(op.include_phi1)):
+            if pre_theta == 0 and pre_zeta == 0:
+                tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_TZ_PRECOND_MAX", "").strip()
+                try:
+                    tz_max = int(tz_max_env) if tz_max_env else 128
+                except ValueError:
+                    tz_max = 128
+                xblock_tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "").strip()
+                default_xblock_tz_max = 1200
+                if op.fblock.pas is not None and geom_scheme == 1:
+                    default_xblock_tz_max = 6000
+                elif op.fblock.pas is not None:
+                    default_xblock_tz_max = 2000
+                try:
+                    xblock_tz_max = int(xblock_tz_max_env) if xblock_tz_max_env else default_xblock_tz_max
+                except ValueError:
+                    xblock_tz_max = default_xblock_tz_max
+                xblock_tz_lmax_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX", "").strip()
+                try:
+                    xblock_tz_lmax_override = int(xblock_tz_lmax_env) if xblock_tz_lmax_env else 0
+                except ValueError:
+                    xblock_tz_lmax_override = 0
+                species_block_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPECIES_BLOCK_MAX", "").strip()
+                try:
+                    species_block_max = int(species_block_max_env) if species_block_max_env else 1600
+                except ValueError:
+                    species_block_max = 1600
+                nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+                max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
+                lmax_auto = 0
+                if int(op.n_theta) > 0 and int(op.n_zeta) > 0:
+                    lmax_auto = int(xblock_tz_max // (int(op.n_theta) * int(op.n_zeta)))
+                lmax_auto = max(0, min(max_l, lmax_auto))
+                local_per_species = int(np.sum(nxi_for_x))
+                dke_size = int(local_per_species * int(op.n_theta) * int(op.n_zeta))
+                line_size = int(local_per_species * int(op.n_theta))
+                sxblock_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SXBLOCK_MAX", "").strip()
+                try:
+                    sxblock_max = int(sxblock_max_env) if sxblock_max_env else 64
+                except ValueError:
+                    sxblock_max = 64
+                sxblock_tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SXBLOCK_TZ_MAX", "").strip()
+                try:
+                    sxblock_tz_max = int(sxblock_tz_max_env) if sxblock_tz_max_env else 0
+                except ValueError:
+                    sxblock_tz_max = 0
+                sxblock_tz_active_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SXBLOCK_TZ_ACTIVE_MAX", "").strip()
+                try:
+                    sxblock_tz_active_max = int(sxblock_tz_active_max_env) if sxblock_tz_active_max_env else 20000
+                except ValueError:
+                    sxblock_tz_active_max = 20000
+                if sxblock_tz_max == 0 and op.fblock.fp is not None and (
+                    int(op.n_theta) > 1 or int(op.n_zeta) > 1
+                ):
+                    # Allow a modest FP sxblock_tz preconditioner in multi-angle FP cases
+                    # to avoid RHSMode=1 stagnation without large dense fallbacks.
+                    sxblock_tz_max = 2000
+                sxblock_size = int(int(op.n_species) * local_per_species)
+                sxblock_tz_size = int(int(op.n_species) * int(op.n_x) * int(op.n_theta) * int(op.n_zeta))
+                schur_auto = False
+                if (
+                    int(op.constraint_scheme) == 2
+                    and int(op.extra_size) > 0
+                    and op.fblock.pas is not None
+                    and (int(op.n_theta) > 1 or int(op.n_zeta) > 1)
+                ):
+                    schur_auto_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHUR_AUTO_MIN", "").strip()
+                    try:
+                        schur_auto_min = int(schur_auto_min_env) if schur_auto_min_env else 2500
+                    except ValueError:
+                        schur_auto_min = 2500
+                    schur_auto = int(op.total_size) >= schur_auto_min
+                phys_params = nml.group("physicsParameters")
+                er_val = phys_params.get("ER", phys_params.get("Er", phys_params.get("er", None)))
+                er_abs = 0.0
+                if er_val is not None:
+                    try:
+                        er_abs = float(er_val)
+                    except (TypeError, ValueError):
+                        er_abs = 0.0
+                er_abs = abs(er_abs)
+                epar_val = phys_params.get("EPARALLELHAT", phys_params.get("EParallelHat", None))
+                try:
+                    epar_abs = abs(float(epar_val)) if epar_val is not None else 0.0
+                except (TypeError, ValueError):
+                    epar_abs = 0.0
+                if epar_abs > 0.0 and sxblock_tz_max == 0:
+                    sxblock_tz_max = 2000
+                schur_er_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHUR_ER_ABS_MIN", "").strip()
+                try:
+                    schur_er_min = float(schur_er_env) if schur_er_env else 1.0e-12
+                except ValueError:
+                    schur_er_min = 1.0e-12
+                pas_dkes_gpu_xblock_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_DKES_GPU_XBLOCK_TZ_MAX", "").strip()
+                try:
+                    pas_dkes_gpu_xblock_max = int(pas_dkes_gpu_xblock_env) if pas_dkes_gpu_xblock_env else 2500
+                except ValueError:
+                    pas_dkes_gpu_xblock_max = 2500
+                pas_xdiag_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_XDIAG_MIN", "").strip()
+                try:
+                    pas_xdiag_min = int(pas_xdiag_env) if pas_xdiag_env else 1000000000
+                except ValueError:
+                    pas_xdiag_min = 1000000000
+                pas_xmg_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_XMG_MIN", "").strip()
+                try:
+                    pas_xmg_min = int(pas_xmg_env) if pas_xmg_env else 80000
+                except ValueError:
+                    pas_xmg_min = 80000
+                fp_xmg_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_XMG_MAX", "").strip()
+                try:
+                    # Keep xmg as the default for larger FP systems as long as we are still
+                    # in the matrix-free Krylov regime; this avoids expensive Schwarz builds
+                    # that can dominate runtime in high-resolution single-RHS runs.
+                    fp_xmg_max = int(fp_xmg_env) if fp_xmg_env else 200000
+                except ValueError:
+                    fp_xmg_max = 200000
+                schur_tokamak_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHUR_TOKAMAK", "").strip().lower()
+                schur_tokamak = schur_tokamak_env in {"1", "true", "yes", "on"}
+                tokamak_like = int(op.n_zeta) == 1 or geom_scheme == 1
+                if full_precond_requested and int(op.constraint_scheme) == 2 and int(op.extra_size) > 0:
+                    if tokamak_like and schur_tokamak and er_abs <= schur_er_min:
+                        rhs1_precond_kind = "schur"
+                    elif tokamak_like and (not schur_tokamak) and er_abs <= schur_er_min:
+                        if op.fblock.pas is not None:
+                            # For tiny tokamak PAS systems, prefer the xblock_tz preconditioner
+                            # (matches legacy fixtures). For larger systems, keep the lighter
+                            # PAS hybrid to avoid expensive dense angular blocks.
+                            xblock_small_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_SMALL_MAX", "").strip()
+                            try:
+                                xblock_small_max = int(xblock_small_env) if xblock_small_env else 4000
+                            except ValueError:
+                                xblock_small_max = 4000
+                            if (
+                                int(op.total_size) <= max(1, int(xblock_small_max))
+                                and int(max_l) * int(op.n_theta) * int(op.n_zeta) <= max(1, int(xblock_tz_max))
+                            ):
+                                rhs1_precond_kind = "xblock_tz"
+                            else:
+                                # Tokamak-like PAS systems benefit from the PAS hybrid (line + x-coarse)
+                                # preconditioner; avoid the expensive global Schur/xblock path here.
+                                rhs1_precond_kind = "pas_hybrid"
+                        else:
+                            pas_schur_small_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_SCHUR_SMALL_MAX", "").strip()
+                            try:
+                                pas_schur_small_max = int(pas_schur_small_env) if pas_schur_small_env else 20000
+                            except ValueError:
+                                pas_schur_small_max = 20000
+                            if int(op.total_size) <= max(1, int(pas_schur_small_max)):
+                                rhs1_precond_kind = "schur"
+                            elif (
+                                int(op.n_theta) > 1
+                                and xblock_tz_max > 0
+                                and int(max_l) * int(op.n_theta) * int(op.n_zeta) <= xblock_tz_max
+                            ):
+                                rhs1_precond_kind = "xblock_tz"
+                            else:
+                                rhs1_precond_kind = "theta_line" if int(op.n_theta) >= int(op.n_zeta) else "zeta_line"
+                    else:
+                        if (
+                            op.fblock.pas is not None
+                            and er_abs <= schur_er_min
+                            and (not schur_tokamak)
+                            and int(op.total_size) < pas_xmg_min
+                        ):
+                            # For constrained PAS near-zero-Er systems below the Schur regime,
+                            # prefer a lightweight PAS preconditioner when angular blocks are
+                            # modest; otherwise fall back to x-coarsening to avoid expensive
+                            # global Schur setup while retaining good Krylov convergence.
+                            rhs1_precond_kind = _rhs1_pas_small_near_zero_er_kind(
+                                pas_tz_applicable=_pas_tz_preconditioner_applicable(op),
+                                tz_size=int(op.n_theta) * int(op.n_zeta),
+                                active_size=int(active_size),
+                            )
+                        elif (
+                            op.fblock.fp is not None
+                            and er_abs <= schur_er_min
+                            and int(op.total_size) < fp_xmg_max
+                        ):
+                            rhs1_precond_kind = "xmg"
+                        elif _rhs1_pas_tokamak_gpu_xblock_preferred(
+                            has_pas=op.fblock.pas is not None,
+                            has_fp=op.fblock.fp is not None,
+                            backend=jax.default_backend(),
+                            tokamak_like=tokamak_like,
+                            active_size=int(active_size),
+                            er_abs=float(er_abs),
+                            schur_er_min=float(schur_er_min),
+                            has_magdrift=(
+                                op.fblock.magdrift_theta is not None
+                                or op.fblock.magdrift_zeta is not None
+                                or op.fblock.magdrift_xidot is not None
+                            ),
+                            has_collisionless=op.fblock.collisionless is not None,
+                            n_theta=int(op.n_theta),
+                            n_zeta=int(op.n_zeta),
+                            max_l=int(max_l),
+                            xblock_tz_limit=max(int(xblock_tz_max), int(pas_dkes_gpu_xblock_max)),
+                        ):
+                            rhs1_precond_kind = "xblock_tz"
+                            if emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: GPU PAS tokamak "
+                                    "auto -> xblock_tz preconditioner",
+                                )
+                        elif _rhs1_pas_tokamak_gpu_theta_allowed(
+                            has_pas=op.fblock.pas is not None,
+                            has_fp=op.fblock.fp is not None,
+                            backend=jax.default_backend(),
+                            tokamak_like=tokamak_like,
+                            active_size=int(active_size),
+                            er_abs=float(er_abs),
+                            schur_er_min=float(schur_er_min),
+                            has_magdrift=(
+                                op.fblock.magdrift_theta is not None
+                                or op.fblock.magdrift_zeta is not None
+                                or op.fblock.magdrift_xidot is not None
+                            ),
+                            has_collisionless=op.fblock.collisionless is not None,
+                        ):
+                            rhs1_precond_kind = None
+                            rhs1_gpu_tokamak_pas_tight_gmres = True
+                            if emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: GPU PAS tokamak "
+                                    "auto -> tight unpreconditioned GMRES",
+                                )
+                        elif op.fblock.pas is not None and int(op.total_size) >= pas_xmg_min:
+                            # Large constrained PAS+Er systems need stronger x/L coupling than
+                            # collision/point/xmg alone, but a global Schur setup can dominate
+                            # wall time. Keep the auto path in the PAS-native family here so
+                            # the later tokamak/3D refinements can promote to pas_tz/pas_ilu.
+                            rhs1_precond_kind = _rhs1_pas_auto_large_base_kind(active_size=int(active_size))
+                        elif op.fblock.pas is not None and int(op.total_size) >= pas_xdiag_min:
+                            lmax_use = xblock_tz_lmax_override if xblock_tz_lmax_override > 0 else lmax_auto
+                            if lmax_use >= 1:
+                                rhs1_precond_kind = "xblock_tz_lmax"
+                                rhs1_xblock_tz_lmax = int(lmax_use)
+                            else:
+                                rhs1_precond_kind = "point_xdiag"
+                        else:
+                            if op.fblock.pas is not None:
+                                rhs1_precond_kind = _rhs1_pas_auto_large_base_kind(active_size=int(active_size))
+                            else:
+                                rhs1_precond_kind = "schur"
+                elif full_precond_requested and (int(op.n_theta) > 1 or int(op.n_zeta) > 1):
+                    if (
+                        op.fblock.pas is not None
+                        and er_abs <= schur_er_min
+                        and (not schur_tokamak)
+                        and int(op.total_size) < pas_xmg_min
+                    ):
+                        rhs1_precond_kind = _rhs1_pas_small_near_zero_er_kind(
+                            pas_tz_applicable=_pas_tz_preconditioner_applicable(op),
+                            tz_size=int(op.n_theta) * int(op.n_zeta),
+                            active_size=int(active_size),
+                        )
+                    elif (
+                        op.fblock.fp is not None
+                        and er_abs <= schur_er_min
+                        and int(op.total_size) < fp_xmg_max
+                    ):
+                        rhs1_precond_kind = "xmg"
+                    else:
+                        rhs1_precond_kind = "theta_line" if int(op.n_theta) >= int(op.n_zeta) else "zeta_line"
+                elif schur_auto:
+                    # For sharded multi-device PAS near-zero-Er runs, Schur can become
+                    # communication-dominated as device count increases. Prefer x-coarsening
+                    # here to keep Krylov/preconditioner cost closer to shard-local.
+                    shard_axis_auto = _matvec_shard_axis(op)
+                    if (
+                        op.fblock.pas is not None
+                        and (not bool(op.include_phi1))
+                        and float(er_abs) <= float(schur_er_min)
+                        and shard_axis_auto in {"theta", "zeta"}
+                        and jax.device_count() > 1
+                        and int(op.total_size) <= max(1, int(pas_xmg_min))
+                    ):
+                        rhs1_precond_kind = "xmg"
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: sharded PAS near-zero-Er "
+                                "schur_auto -> xmg preconditioner",
+                            )
+                    elif _rhs1_pas_dkes_pas_tz_preferred(
+                        has_pas=op.fblock.pas is not None,
+                        use_dkes=bool(use_dkes),
+                        backend=jax.default_backend(),
+                        n_theta=int(op.n_theta),
+                        n_zeta=int(op.n_zeta),
+                        max_l=int(max_l),
+                        active_size=int(active_size),
+                    ):
+                        rhs1_precond_kind = "pas_tz"
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: PAS DKES "
+                                "schur_auto -> pas_tz preconditioner",
+                            )
+                    elif _rhs1_pas_dkes_xblock_allowed(
+                        has_pas=op.fblock.pas is not None,
+                        use_dkes=bool(use_dkes),
+                        backend=jax.default_backend(),
+                        n_theta=int(op.n_theta),
+                        n_zeta=int(op.n_zeta),
+                        max_l=int(max_l),
+                        xblock_tz_limit=max(int(xblock_tz_max), int(pas_dkes_gpu_xblock_max)),
+                    ):
+                        rhs1_precond_kind = "xblock_tz"
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: GPU PAS DKES "
+                                "schur_auto -> xblock_tz preconditioner",
+                            )
+                    else:
+                        rhs1_precond_kind = "schur"
+                elif op.fblock.fp is not None and use_dkes:
+                    # DKES-trajectory FP cases can stagnate with collision-only
+                    # preconditioners. Prefer a lightweight xmg/sxblock_tz path for
+                    # small/medium systems, and fall back to collision for larger sizes
+                    # to avoid expensive block builds.
+                    max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
+                    rhs1_precond_kind = _rhs1_fp_dkes_default_kind(
+                        active_size=int(active_size),
+                        n_theta=int(op.n_theta),
+                        n_zeta=int(op.n_zeta),
+                        max_l=int(max_l),
+                        xblock_tz_limit=int(xblock_tz_max),
+                    )
+                    if rhs1_precond_kind == "xblock_tz" and not rhs1_precond_env:
+                        rhs1_precond_env = "xblock_tz"
+                elif (
+                    op.fblock.fp is not None
+                    and er_abs <= schur_er_min
+                    and int(active_size) < fp_xmg_max
+                ):
+                    # For moderate-size FP systems at near-zero Er, x-coarsened preconditioning
+                    # is typically much cheaper than global (S,X,theta,zeta) blocks and
+                    # preserves parity for RHSMode=1.
+                    rhs1_precond_kind = "xmg"
+                elif (
+                    op.fblock.fp is not None
+                    and (int(op.n_theta) > 1 or int(op.n_zeta) > 1)
+                    and sxblock_tz_max > 0
+                    and int(op.total_size) <= max(1, int(sxblock_tz_active_max))
+                    and sxblock_tz_size <= sxblock_tz_max
+                ):
+                    rhs1_precond_kind = "sxblock_tz"
+                elif (
+                    op.fblock.fp is not None
+                    and (int(op.n_theta) > 1 or int(op.n_zeta) > 1)
+                    and int(op.n_theta) * int(op.n_zeta) <= tz_max
+                ):
+                    rhs1_precond_kind = "theta_zeta"
+                elif op.fblock.fp is not None and sxblock_max > 0 and sxblock_size <= sxblock_max:
+                    rhs1_precond_kind = "sxblock"
+                elif (
+                    op.fblock.pas is not None
+                    and int(op.n_theta) > 1
+                    and int(op.n_zeta) > 1
+                    and species_block_max > 0
+                    and dke_size <= species_block_max
+                ):
+                    rhs1_precond_kind = "species_block"
+                elif _rhs1_pas_dkes_pas_tz_preferred(
+                    has_pas=op.fblock.pas is not None,
+                    use_dkes=bool(use_dkes),
+                    backend=jax.default_backend(),
+                    n_theta=int(op.n_theta),
+                    n_zeta=int(op.n_zeta),
+                    max_l=int(max_l),
+                    active_size=int(active_size),
+                ):
+                    rhs1_precond_kind = "pas_tz"
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: PAS DKES "
+                            "auto -> pas_tz preconditioner",
+                        )
+                elif (
+                    op.fblock.pas is not None
+                    and int(op.n_theta) > 1
+                    and xblock_tz_max > 0
+                    and int(max_l) * int(op.n_theta) * int(op.n_zeta) <= xblock_tz_max
+                ):
+                    rhs1_precond_kind = "xblock_tz"
+                elif (
+                    op.fblock.pas is not None
+                    and int(op.n_theta) > 1
+                    and int(op.n_zeta) > 1
+                    and int(op.n_theta) * int(op.n_zeta) <= tz_max
+                ):
+                    rhs1_precond_kind = "theta_zeta"
+                elif (
+                    op.fblock.pas is not None
+                    and int(active_size) >= pas_xmg_min
+                ):
+                    # Large PAS systems tend to be x/L-coupling dominated. Prefer the
+                    # x-coarsened PAS preconditioner over weak collision/point
+                    # preconditioners that often trigger expensive fallback branches.
+                    rhs1_precond_kind = "xmg"
+                else:
+                    if (
+                        op.fblock.pas is not None
+                        and er_abs <= schur_er_min
+                        and int(active_size) < pas_xmg_min
+                    ):
+                        rhs1_precond_kind = _rhs1_pas_small_near_zero_er_kind(
+                            pas_tz_applicable=_pas_tz_preconditioner_applicable(op),
+                            tz_size=int(op.n_theta) * int(op.n_zeta),
+                            active_size=int(active_size),
+                        )
+                    else:
+                        collision_precond_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_COLLISION_PRECOND_MIN", "").strip()
+                        try:
+                            collision_precond_min = int(collision_precond_min_env) if collision_precond_min_env else 600
+                        except ValueError:
+                            collision_precond_min = 600
+                        use_collision_precond = (
+                            (op.fblock.fp is not None or op.fblock.pas is not None)
+                            and int(op.total_size) >= collision_precond_min
+                        )
+                        if (
+                            use_collision_precond
+                            and full_precond_requested
+                            and op.fblock.pas is not None
+                            and int(op.total_size) >= pas_xdiag_min
+                        ):
+                            rhs1_precond_kind = "point_xdiag"
+                        else:
+                            # Last-resort auto mode: collision-only preconditioning is cheap but
+                            # can be too weak/unstable for FP systems at nonzero Er. Prefer xmg
+                            # when the (x,theta,zeta) grid is still moderate to improve robustness.
+                            if (
+                                op.fblock.fp is not None
+                                and op.fblock.pas is None
+                                and int(active_size) < fp_xmg_max
+                            ):
+                                rhs1_precond_kind = "xmg"
+                            else:
+                                rhs1_precond_kind = "collision" if use_collision_precond else "point"
+                theta_line_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_THETA_LINE_MAX", "").strip()
+                try:
+                    theta_line_max = int(theta_line_max_env) if theta_line_max_env else 0
+                except ValueError:
+                    theta_line_max = 0
+                if rhs1_precond_kind == "theta_line" and theta_line_max > 0 and line_size > theta_line_max:
+                    rhs1_precond_kind = "theta_line_xdiag"
+            elif pre_theta > 0 and pre_zeta > 0:
+                rhs1_precond_kind = "adi"
+            elif pre_theta > 0:
+                rhs1_precond_kind = "theta_line"
+            elif pre_zeta > 0:
+                rhs1_precond_kind = "zeta_line"
+            else:
+                rhs1_precond_kind = "point"
+        else:
+            rhs1_precond_kind = None
+    result: dict[str, Any] = {}
+    if 'er_abs' in locals():
+        result['er_abs'] = er_abs
+    if 'lmax_use' in locals():
+        result['lmax_use'] = lmax_use
+    if 'max_l' in locals():
+        result['max_l'] = max_l
+    if 'nxi_for_x' in locals():
+        result['nxi_for_x'] = nxi_for_x
+    if 'rhs1_gpu_tokamak_pas_tight_gmres' in locals():
+        result['rhs1_gpu_tokamak_pas_tight_gmres'] = rhs1_gpu_tokamak_pas_tight_gmres
+    if 'rhs1_precond_env' in locals():
+        result['rhs1_precond_env'] = rhs1_precond_env
+    if 'rhs1_precond_kind' in locals():
+        result['rhs1_precond_kind'] = rhs1_precond_kind
+    if 'rhs1_xblock_tz_lmax' in locals():
+        result['rhs1_xblock_tz_lmax'] = rhs1_xblock_tz_lmax
+    if 'schur_er_min' in locals():
+        result['schur_er_min'] = schur_er_min
+    if 'tokamak_like' in locals():
+        result['tokamak_like'] = tokamak_like
+    if 'use_collision_precond' in locals():
+        result['use_collision_precond'] = use_collision_precond
+    if 'xblock_tz_max' in locals():
+        result['xblock_tz_max'] = xblock_tz_max
+    return result
+
+
 def canonical_rhs1_preconditioner_kind(raw: str | None) -> str | None:
     """Canonicalize ``SFINCS_JAX_RHSMODE1_PRECONDITIONER`` aliases.
 
@@ -6743,11 +7281,13 @@ __all__ = (
     "rhs1_large_cpu_xblock_skip_primary_allowed",
     "rhs1_sparse_sxblock_rescue_allowed",
     "rhs1_sparse_xblock_rescue_allowed",
+    "RHS1DefaultPreconditionerSelectionContext",
     "PAS_AUTO_STRONG_BASE_KINDS",
     "FP_FORCE_XMG_WEAK_KINDS",
     "PAS_WEAK_AUTO_OVERRIDE_KINDS",
     "canonical_rhs1_preconditioner_kind",
     "pas_auto_skip_strong_retry",
+    "resolve_rhs1_default_preconditioner_selection",
     "rhs1_measured_auto_promotion_allowed",
     "rhs1_measured_auto_promotion_gate",
     "rhs1_fp_dkes_default_kind",

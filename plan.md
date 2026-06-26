@@ -5743,3 +5743,70 @@ Next best steps:
    dense, or diagnostic owners.
 3. After the Batch A solve-line gate is met, proceed to Batch C solver and
    preconditioner-family compression.
+
+## 2026-06-26 Batch A Solve-Sequencer Gate Compression
+
+Steps taken:
+
+1. Moved the full explicitly requested `sparse_pc_gmres` /
+   `xblock_sparse_pc_gmres` branch out of
+   `sfincs_jax/problems/profile_response/solve.py` into the existing
+   `sfincs_jax/problems/profile_response/sparse/handoff.py` sparse owner.
+   The solve entry point now delegates through
+   `try_run_requested_sparse_pc_gmres_branch(...)`.
+2. Moved the large default RHSMode-1 preconditioner selection policy block out
+   of `profile_response/solve.py` into
+   `sfincs_jax/problems/profile_response/policies.py` as
+   `resolve_rhs1_default_preconditioner_selection(...)`.
+3. Kept behavior stable by passing the existing driver scope into the moved
+   owner functions and by updating only the values that the moved policy branch
+   actually assigns.
+4. Updated sparse and policy owner exports for the new owner-level entry
+   points.
+5. Updated `plan_final.md` with current metrics and the remaining handoff
+   paydown blocker.
+
+Results:
+
+- `profile_response/solve.py` decreased from `6,985` to `5,358` lines,
+  meeting the `<=5,500` Batch A review-ready solve-sequencer gate.
+- Package Python files remain `195`.
+- Package source lines increased from `165,398` to `165,653` because the
+  mechanical context wrappers added overhead. This must be paid down before
+  the final review gate.
+- `profile_response/sparse/handoff.py` increased from `4,438` to `5,780`
+  lines. The handoff review target is therefore open again by about `280`
+  lines, and the next owner move should relocate direct-tail/generic setup
+  support into existing sparse policy/direct owners.
+- `profile_response/policies.py` increased to `7,425` lines and now owns the
+  default RHSMode-1 preconditioner policy block.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py sfincs_jax/problems/profile_response/sparse/handoff.py sfincs_jax/problems/profile_response/policies.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/solve.py sfincs_jax/problems/profile_response/sparse/handoff.py sfincs_jax/problems/profile_response/policies.py` passed.
+- `python -m pytest tests/test_profile_response_sparse_pc.py tests/test_profile_response_dense.py tests/test_rhs1_solver_policy.py tests/test_v3_sparse_pattern.py -q --tb=short` passed with `510 passed in 103.18s`.
+- `python -m pytest tests/test_domain_package_import_contracts.py tests/test_profile_response_finalization.py tests/test_profile_response_linear_solve.py tests/test_profile_response_auto_solve.py -q --tb=short` passed with `29 passed in 1.68s`.
+- `git diff --check` passed.
+
+Progress:
+
+- Lane 1 structural consolidation: about `94%`.
+- Batch A profile-response collapse: about `86%`. The solve-sequencer gate is
+  met; the remaining blocker is `sparse/handoff.py <=5,500` plus line-count
+  paydown.
+- Batch B transport/output/root cleanup: about `45%`; transport file-count is
+  met, but output/root compression remains.
+- Batch C solver/preconditioner family consolidation: about `25%`.
+- Batch D public API/docs/tests/review gate: about `30%`.
+
+Next best steps:
+
+1. Finish Batch A paydown by moving
+   `SparsePCGenericBranchSetup*` and/or direct-tail setup support from
+   `sparse/handoff.py` into existing sparse policy/direct owners without
+   adding a new file.
+2. Keep `profile_response/solve.py` below `5,500` while reducing package lines
+   back below the pre-Batch-A `165,398` checkpoint before review.
+3. Then proceed to Batch B output/root compression and Batch C
+   preconditioner-family compression.
