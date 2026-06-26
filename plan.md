@@ -8,12 +8,18 @@ Intended review PR: #8, `refactor/v3-driver-architecture`
 
 PR state: draft. The active implementation branch has been pushed to the PR
 branch at the latest clean commit. Do not open additional refactor PRs; keep PR
-#8 as the single review surface until this plan reaches the review-ready
-boundary.
+#8 as the single review surface until the authoritative `plan_final.md` gates
+reach the review-ready boundary.
 
 Authoritative plan: `plan_final.md`. This file is the execution log and
 historical record only; if this file conflicts with `plan_final.md`, follow
 `plan_final.md`.
+
+Latest controlling update: `plan_final.md` now defines Lane 1 as five
+consolidation passes only: boundary freeze, profile-response kernel collapse,
+transport/output ownership collapse, solver/preconditioner family collapse, and
+public API/docs/tests review gate. Older tranche, iteration, and batch labels in
+this execution log are historical context, not instructions to follow.
 
 ## One-Sentence Plan
 
