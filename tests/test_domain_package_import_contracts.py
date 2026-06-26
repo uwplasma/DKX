@@ -476,13 +476,13 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "rhs1_pas_fast_accept",
     ),
     (
-        "sfincs_jax.problems.profile_response.active_dof",
-        "sfincs_jax.problems.profile_response.active_dof",
+        "sfincs_jax.problems.profile_response.setup",
+        "sfincs_jax.problems.profile_response.setup",
         "resolve_rhs1_active_dof_mode",
     ),
     (
-        "sfincs_jax.problems.profile_response.active_dof",
-        "sfincs_jax.problems.profile_response.active_dof",
+        "sfincs_jax.problems.profile_response.setup",
+        "sfincs_jax.problems.profile_response.setup",
         "reduce_full_with_indices",
     ),
     (
