@@ -187,10 +187,10 @@ permanent number here. The Linux CI coverage floor is intentionally conservative
 until the remaining driver monolith is split further; the research-grade target
 is ``95%`` meaningful package coverage, with the dominant uncovered surface still
 the large solver/geometry stack, especially ``v3_driver.py``, ``io.py``,
-``geometry.py``, ``grids.py``, and ``vmec_geometry.py``. The latest
+``sfincs_jax.geometry``, ``grids.py``, and ``sfincs_jax.geometry.vmec``. The latest
 low-cost campaign improved the analytic geometry/grid surface materially
-(``geometry.py`` to about ``88%``, ``grids.py`` to about ``82%``, and
-``vmec_geometry.py`` to about ``97%``) and then added direct coverage for the
+(``sfincs_jax.geometry`` to about ``88%``, ``grids.py`` to about ``82%``, and
+``sfincs_jax.geometry.vmec`` to about ``97%``) and then added direct coverage for the
 operational cache/policy seams in ``io.py`` and ``v3_driver.py`` plus bounded
 HDF5/export and distributed-Krylov branches in ``io.py`` and ``solver.py``.
 Those later heavy-module tests raised ``io.py`` from about ``65%`` to ``67%`` and
