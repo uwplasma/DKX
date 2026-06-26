@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (profile-solve structured-route coverage pass)
+Last updated: 2026-06-26 (canonical examples catalog pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -369,6 +369,17 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   profile-response driver without launching a production solve. The focused
   profile-solve wrapper suite reports `9 passed` in `0.60 s`, and Ruff passes
   for the touched test file.
+- The fifty-eighth post-audit examples tranche added a canonical workflow
+  catalog to `examples/README.md`. It maps each major user capability
+  (CLI/output/plotting, Python API, geometry setup, operator action,
+  transport matrices, autodiff, bootstrap-current/Redl comparison,
+  optimization objectives, frozen Fortran-v3 parity, and CPU/GPU performance)
+  to the first-pass example and the production follow-up. The examples-tree
+  contract now verifies every catalog entry exists, so the user-facing
+  navigation layer cannot drift from runnable scripts and notebooks. The
+  focused examples contract reports `6 passed` in `0.04 s`, Ruff passes for
+  the guard file, and the scoped README/docs stale-wording scan reports no
+  matches.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.

@@ -33,6 +33,25 @@ references or optional local Fortran only when explicitly requested.
 | check CPU/GPU performance or output formats | `performance/benchmark_output_formats.py` | `performance/benchmark_sharded_solve_scaling.py` |
 | validate against frozen SFINCS Fortran v3 data | `parity/output_parity_vs_fortran_fixture.py` | `publication_figures/` and `sfincs_examples/` |
 
+### Canonical Workflow Catalog
+
+These are the recommended first examples for each major capability. They are
+kept small enough for learning and CI checks; the final column points to the
+heavier workflow when you need release-quality evidence.
+
+| Capability | First-pass example | What it teaches | Production follow-up |
+| --- | --- | --- | --- |
+| CLI run and plot | `tutorials/run_quick_output_and_plot.py` | Run `sfincs_jax`, write HDF5/NetCDF/NPZ, and create a diagnostics PDF. | `getting_started/write_and_plot_multiple_formats.py` |
+| Python API output | `getting_started/write_sfincs_output_python.py` | Call the output writer directly and inspect returned arrays. | `getting_started/write_sfincs_output_vmec.py` |
+| Geometry setup | `getting_started/build_grids_and_geometry.py` | Build v3 grids and analytic/VMEC geometry objects. | `tutorials/04_geometry_validation_and_performance.ipynb` |
+| Operator action | `getting_started/apply_collisionless_operator.py` | Apply one drift-kinetic operator term on a small grid. | `parity/collisionless_operator_matvec_parity.py` |
+| Transport matrix | `transport/transport_matrix_rhsmode2_and_rhsmode3.py` | Run RHSMode=2/3 and read transport coefficients. | `transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py` |
+| Autodiff | `tutorials/02_transport_and_autodiff.ipynb` | Differentiate residual/transport quantities with JAX. | `autodiff/implicit_diff_through_gmres_solve_scheme5.py` |
+| Bootstrap current and Redl | `tutorials/03_bootstrap_redl_and_optimization.ipynb` | Compare kinetic bootstrap current with a Redl-formula workflow. | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` |
+| Optimization objectives | `optimization/qa_nfp2_sfincs_jax_objectives.py` | Add neoclassical objectives to a QA optimization workflow. | `optimization/QA_optimization_bootstrap_current.py` |
+| Frozen Fortran-v3 parity | `parity/output_parity_vs_fortran_fixture.py` | Compare output fields against checked frozen references. | `publication_figures/generate_fortran_suite_benchmark_summary.py` |
+| CPU/GPU performance | `performance/benchmark_output_formats.py` | Time output formats and inspect memory behavior. | `performance/benchmark_transport_parallel_scaling.py` |
+
 ### Folder Map
 
 - `tutorials/`: notebook-led learning path plus one fast script that writes
