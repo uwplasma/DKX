@@ -334,6 +334,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   caps, per-column sparsity caps, and metadata reporting on a bounded synthetic
   RHSMode=1 layout, protecting the production coarse-preconditioner admission
   path without launching expensive kinetic solves.
+- The forty-first post-audit coverage tranche added a no-solve profile-solve
+  orchestrator test for top-level RHSMode=1 materialization, initial route
+  setup, auto-host exit, solver-driver forwarding, and recycle-basis forwarding.
+  This locks one of the largest retained solve owners without launching GMRES,
+  so it improves review confidence while preserving the CI time budget.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.

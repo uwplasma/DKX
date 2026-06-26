@@ -180,3 +180,112 @@ def test_profile_solve_dense_fallback_max_delegates_to_policy(monkeypatch) -> No
     monkeypatch.setattr(profile_solve, "_rhs1_dense_fallback_max_impl", lambda op_arg: op_arg.total_size + 5)
 
     assert profile_solve._rhsmode1_dense_fallback_max(op) == 128
+
+
+def test_profile_solve_top_level_orchestrator_can_exit_through_auto_host(monkeypatch) -> None:
+    """Lock the no-solve wiring boundary for the large RHSMode=1 orchestrator."""
+
+    captured: dict[str, object] = {}
+    nml = SimpleNamespace(label="nml")
+    op = SimpleNamespace(
+        rhs_mode=1,
+        total_size=19,
+        fblock=SimpleNamespace(collisionless=SimpleNamespace(n_xi_for_x=jnp.asarray([2, 2]))),
+    )
+    rhs = jnp.asarray([1.0, 0.0])
+    x0 = jnp.asarray([0.25, -0.5])
+    recycle_basis = [jnp.asarray([1.0, 0.0])]
+
+    def fake_materialize(context):
+        captured["materialize_context"] = context
+        assert context.nml is nml
+        assert context.op is op
+        assert context.which_rhs == 2
+        assert context.restart == 37
+        assert context.maxiter == 41
+        assert context.tol == 1.0e-8
+        assert context.identity_shift == 0.125
+        assert context.build_operator is profile_solve.full_system_operator_from_namelist
+        assert context.rhs_builder is profile_solve.rhs_v3_full_system
+        return SimpleNamespace(
+            op=op,
+            which_rhs=2,
+            rhs=rhs,
+            rhs_norm=jnp.asarray(1.0),
+            tol=2.0e-8,
+            fp_tol=3.0e-8,
+            restart=23,
+            maxiter=29,
+            restart_env_forced=True,
+            maxiter_env_forced=False,
+            geom_scheme_hint=5,
+        )
+
+    def fake_route_setup(**kwargs):
+        captured["route_setup"] = kwargs
+        assert kwargs["nml"] is nml
+        assert kwargs["op"] is op
+        assert kwargs["solve_method"] == "auto"
+        assert kwargs["use_implicit"] is False
+        assert kwargs["sharded_axis"] is None
+        method_flags = SimpleNamespace(
+            kind="auto",
+            sparse_host_like_requested=False,
+            xblock_active_dof_requested=False,
+            structured_full_csr_explicit_requested=False,
+        )
+        return SimpleNamespace(
+            method_flags=method_flags,
+            use_implicit_requested=False,
+            structured_auto_allowed=False,
+            structured_sharded_multidevice=False,
+        )
+
+    sentinel = SimpleNamespace(kind="auto-host-result")
+
+    def fake_auto_host(context):
+        captured["auto_host_context"] = context
+        assert context.nml is nml
+        assert context.which_rhs == 2
+        assert context.op is op
+        assert context.x0 is x0
+        assert context.tol == 2.0e-8
+        assert context.atol == 1.0e-12
+        assert context.restart == 23
+        assert context.maxiter == 29
+        assert context.solve_method == "auto"
+        assert context.identity_shift == 0.125
+        assert context.differentiable is False
+        assert context.recycle_basis is recycle_basis
+        assert context.solve_driver is profile_solve.solve_v3_full_system_linear_gmres
+        assert context.solve_method_kind_requested == "auto"
+        assert context.structured_full_csr_explicit_requested is False
+        assert context.use_implicit is False
+        return sentinel
+
+    monkeypatch.setattr(profile_solve, "maybe_profiler", lambda **_kwargs: None)
+    monkeypatch.setattr(profile_solve, "materialize_profile_response_linear_problem", fake_materialize)
+    monkeypatch.setattr(profile_solve, "resolve_rhs1_initial_route_setup", fake_route_setup)
+    monkeypatch.setattr(profile_solve, "try_rhs1_auto_host_solve", fake_auto_host)
+    monkeypatch.setattr(profile_solve, "_resolve_use_implicit", lambda *, differentiable: bool(differentiable))
+    monkeypatch.setattr(profile_solve, "_matvec_shard_axis", lambda _op: None)
+    monkeypatch.setattr(profile_solve.jax, "default_backend", lambda: "cpu")
+    monkeypatch.setattr(profile_solve.jax, "device_count", lambda: 1)
+
+    result = profile_solve.solve_v3_full_system_linear_gmres(
+        nml=nml,
+        which_rhs=2,
+        op=op,
+        x0=x0,
+        tol=1.0e-8,
+        atol=1.0e-12,
+        restart=37,
+        maxiter=41,
+        solve_method="auto",
+        identity_shift=0.125,
+        differentiable=False,
+        recycle_basis=recycle_basis,
+    )
+
+    assert result is sentinel
+    assert set(captured) == {"materialize_context", "route_setup", "auto_host_context"}
