@@ -214,9 +214,6 @@ research workflows.
 .. automodule:: sfincs_jax.solvers.preconditioners.qi.device
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.device_smoother
-   :members:
-
 .. automodule:: sfincs_jax.solvers.preconditioners.qi.residual_galerkin
    :members:
 
