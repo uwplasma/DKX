@@ -2783,6 +2783,14 @@ Current completion status:
   theta/zeta composition, and the automatic theta-zeta routing branch. The
   test operator has no global tail, so it validates branch selection and
   preconditioner composition without invoking expensive constraint assembly.
+- Transport diagnostic coverage was expanded with manufactured
+  Fortran-compatible moment tests for deterministic x/theta/zeta quadrature,
+  Maxwellian/Phi1 L=0 assembly, low-pitch masks, cached precompute eviction,
+  RHSMode=1 source layouts, batch shape gates, radial-current coordinate
+  conversions, observable-vector probing, chunked RHSMode=2/3 output fields,
+  flux-function fallback, and transport-matrix branch errors. These tests pin
+  the diagnostic algebra used by frozen Fortran parity fixtures without adding
+  new production solves or large HDF5 files.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
