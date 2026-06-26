@@ -63,7 +63,7 @@ and uses the standard :math:`E\times B` drift
 Code links:
 ``sfincs_jax/operators/profile_system.py`` (operator assembly),
 ``sfincs_jax/operators/profile_linear_systems.py`` (source terms and residuals),
-``sfincs_jax/problems/transport_matrix/diagnostics.py`` (RHSMode=2/3 forcing).
+``sfincs_jax/problems/transport_diagnostics.py`` (RHSMode=2/3 forcing).
 
 Single-species baseline (20131220-04)
 -------------------------------------
@@ -108,7 +108,7 @@ The same note writes the thermodynamic drive in the compact form
 with additional :math:`\Phi_1`-dependent pieces if flux-surface variation is enabled.
 In `sfincs_jax`, these drive terms are assembled in
 ``sfincs_jax/operators/profile_linear_systems.py`` and combined with the transport-matrix forcing in
-``sfincs_jax/problems/transport_matrix/diagnostics.py``.
+``sfincs_jax/problems/transport_diagnostics.py``.
 
 Multi-species extension (20131219-01)
 -------------------------------------
@@ -289,7 +289,7 @@ relations, e.g.
 and analogous expressions for the heat flux :math:`q\cdot\nabla\psi`.
 
 Code links:
-``sfincs_jax/problems/transport_matrix/diagnostics.py`` (RHS generation),
+``sfincs_jax/problems/transport_diagnostics.py`` (RHS generation),
 ``sfincs_jax/diagnostics.py`` (flux and flow diagnostics),
 ``sfincs_jax/compare.py`` (transport-matrix parity handling).
 
@@ -303,7 +303,7 @@ earlier single-species results and for interpreting monoenergetic (``RHSMode=3``
 
 Code links:
 ``sfincs_jax/diagnostics.py`` (normalization of flux outputs),
-``sfincs_jax/problems/transport_matrix/diagnostics.py`` (multi-RHS assembly).
+``sfincs_jax/problems/transport_diagnostics.py`` (multi-RHS assembly).
 
 Monoenergetic control parameters (nuPrime, EStar)
 -------------------------------------------------
@@ -325,7 +325,7 @@ The SFINCS manual further notes that, for these runs, the input parameters
 In `sfincs_jax`, the mapping between ``nuPrime``/``EStar`` and the internal
 ``nu_n``/``dPhiHatdpsiHat`` parameters is handled in ``sfincs_jax/io.py`` and
 ``sfincs_jax/operators/profile_fblock.py``, while geometry-dependent factors
-(:math:`B_0`, :math:`G`, :math:`I`) are computed in ``sfincs_jax/problems/transport_matrix/diagnostics.py``
+(:math:`B_0`, :math:`G`, :math:`I`) are computed in ``sfincs_jax/problems/transport_diagnostics.py``
 and ``sfincs_jax/diagnostics.py``.
 
 Constraint schemes and source terms
@@ -391,7 +391,7 @@ monoenergetic transport-matrix benchmarking in ``RHSMode=3``.
 
 Code links:
 ``sfincs_jax/operators/profile_system.py`` (trajectory switches),
-``sfincs_jax/problems/transport_matrix/diagnostics.py`` (monoenergetic RHS construction).
+``sfincs_jax/problems/transport_diagnostics.py`` (monoenergetic RHS construction).
 
 Equation-to-code map
 --------------------
@@ -414,7 +414,7 @@ The table below summarizes where each term in the v3 drift-kinetic equation is i
   ``sfincs_jax/operators/profile_system.py`` and ``sfincs_jax/v3_driver.py``.
 - Diagnostics and flux assembly:
   ``sfincs_jax/diagnostics.py`` and
-  ``sfincs_jax/problems/transport_matrix/diagnostics.py``.
+  ``sfincs_jax/problems/transport_diagnostics.py``.
 
 Numerical implementation notes
 ------------------------------

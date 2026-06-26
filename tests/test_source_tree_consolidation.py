@@ -99,3 +99,17 @@ def test_flattened_profile_problem_legacy_imports_resolve_to_canonical_modules()
         legacy = importlib.import_module(f"sfincs_jax.problems.profile_response.sparse.{name}")
         canonical = importlib.import_module(f"sfincs_jax.problems.profile_sparse_{name}")
         assert legacy is canonical
+
+
+def test_flattened_transport_problem_legacy_imports_resolve_to_canonical_modules() -> None:
+    assert not (PACKAGE_ROOT / "problems" / "transport_matrix").exists()
+
+    for name in ("diagnostics", "finalize", "linear_system", "policies", "setup", "solve"):
+        legacy = importlib.import_module(f"sfincs_jax.problems.transport_matrix.{name}")
+        canonical = importlib.import_module(f"sfincs_jax.problems.transport_{name}")
+        assert legacy is canonical
+
+    for name in ("runtime", "worker"):
+        legacy = importlib.import_module(f"sfincs_jax.problems.transport_matrix.parallel.{name}")
+        canonical = importlib.import_module(f"sfincs_jax.problems.transport_parallel_{name}")
+        assert legacy is canonical
