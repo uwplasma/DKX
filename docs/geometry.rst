@@ -125,10 +125,10 @@ Optional JAX-native geometry producers
 
 The standard release path for ``geometryScheme=5`` remains a VMEC ``wout`` file.
 For differentiable research workflows, `sfincs_jax` now also includes a small
-structural adapter layer in ``sfincs_jax/jax_geometry_adapters.py``. The adapter can
+structural adapter layer in ``sfincs_jax/geometry/jax_adapters.py``. The adapter can
 accept VMEC-like in-memory objects, including objects with the field layout used by
 ``vmec_jax.wout.WoutData``, and normalize them to the internal
-``sfincs_jax.vmec_wout.VmecWout`` convention without making ``vmec_jax`` a required
+``sfincs_jax.geometry.vmec_wout.VmecWout`` convention without making ``vmec_jax`` a required
 dependency.
 
 This is the intended staged path for JAX-native equilibrium coupling:
@@ -159,8 +159,8 @@ Minimal adapter workflow:
    import numpy as np
    from vmec_jax.wout import read_wout as read_vmec_jax_wout
 
-   from sfincs_jax.jax_geometry_adapters import vmec_wout_from_wout_like
-   from sfincs_jax.vmec_geometry import vmec_geometry_from_wout
+   from sfincs_jax.geometry.jax_adapters import vmec_wout_from_wout_like
+   from sfincs_jax.geometry.vmec import vmec_geometry_from_wout
 
    wout_like = read_vmec_jax_wout("wout_circular_tokamak.nc")
    wout = vmec_wout_from_wout_like(wout_like)
@@ -192,7 +192,7 @@ gradient-availability labels for each stage, a ``workflow_contract`` block, the
 differentiated graph, and the explicit non-claim that this is a geometry-proxy
 gradient gate rather than a full transport-gradient workflow.  The contract is
 also available directly from
-``sfincs_jax.jax_geometry_adapters.geometry_proxy_workflow_contract()`` and is
+``sfincs_jax.geometry.jax_adapters.geometry_proxy_workflow_contract()`` and is
 kept intentionally small enough for tests and notebook provenance:
 
 - default CI does not require ``vmec_jax`` or ``booz_xform_jax``,
@@ -245,7 +245,7 @@ Boozer transform:
 
 This script uses ``vmec_jax`` provenance for a VMEC ``wout`` object,
 ``booz_xform_jax`` for the Boozer transform, and
-``sfincs_jax.jax_geometry_adapters.boozer_spectrum_geometry_proxy_objective``
+``sfincs_jax.geometry.jax_adapters.boozer_spectrum_geometry_proxy_objective``
 for a differentiable scalar objective.  It reports the objective, the JAX
 gradient with respect to a VMEC magnetic-spectrum scale parameter, a centered
 finite-difference check, a pass/fail numerical gradient gate for that proxy
@@ -364,7 +364,9 @@ Geometry in the source tree
 
 The main geometry-related modules are:
 
-- ``sfincs_jax/geometry.py``: normalized geometric fields and coefficient assembly.
+- ``sfincs_jax/geometry/__init__.py``: normalized geometric fields and coefficient assembly.
+- ``sfincs_jax/geometry/{boozer.py,vmec_wout.py,vmec.py,jax_adapters.py}``: Boozer-file,
+  VMEC-file, VMEC Fourier-sum, and JAX-native geometry adapter owners.
 - ``sfincs_jax/input_compat.py``: equilibrium-file resolution and namelist overrides.
 - ``sfincs_jax/diagnostics.py``: geometry-derived scalar diagnostics and moments.
 - ``sfincs_jax/operators/profile_response/system.py``: insertion of geometry coefficients into the kinetic

@@ -8,9 +8,10 @@ Unreleased
   architecture refactor: input, physics, discretization, operators, problems,
   solvers/preconditioners, parallel, workflows, validation, benchmarks, and
   compatibility. Import-contract tests verify that the new packages are
-  importable while legacy ``geometry.py`` and ``io.py`` module paths remain
-  unchanged until their later migration. The post-skeleton local full suite
-  passed with ``2662 passed in 549.92 s``.
+  importable while ``sfincs_jax.geometry`` now owns analytic Boozer, Boozer-file,
+  VMEC, and JAX-native geometry adapters as a package. The ``io.py`` module path
+  remains a compatibility facade until its later migration. The post-skeleton
+  local full suite passed with ``2662 passed in 549.92 s``.
 - Added ``sfincs_jax/api.py`` with frozen public dataclass contracts for
   normalized solve inputs, geometry/grid/operator summaries, preconditioner and
   solver metadata, transport summaries, output schemas, and benchmark reports.

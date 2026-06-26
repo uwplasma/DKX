@@ -21,7 +21,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ..jax_geometry_adapters import boozer_bhat_from_spectrum
+from ..geometry.jax_adapters import boozer_bhat_from_spectrum
 
 
 @dataclass(frozen=True)

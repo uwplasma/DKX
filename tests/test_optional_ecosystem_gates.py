@@ -8,7 +8,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from sfincs_jax.jax_geometry_adapters import boozer_spectrum_proxy_transport_gradient_gate
+from sfincs_jax.geometry.jax_adapters import boozer_spectrum_proxy_transport_gradient_gate
 
 
 _REPO = Path(__file__).resolve().parents[1]

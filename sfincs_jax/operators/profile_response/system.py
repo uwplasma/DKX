@@ -23,7 +23,7 @@ from jax.sharding import Mesh, PartitionSpec
 
 _spmd_jit = jax.jit
 
-from sfincs_jax.boozer_bc import read_boozer_bc_header, selected_r_n_from_bc
+from sfincs_jax.geometry.boozer import read_boozer_bc_header, selected_r_n_from_bc
 from sfincs_jax.collisionless import CollisionlessV3Operator
 from sfincs_jax.collisionless_er import ErXiDotV3Operator, ErXDotV3Operator
 from sfincs_jax.collisionless_exb import ExBThetaV3Operator, ExBZetaV3Operator
@@ -56,7 +56,7 @@ from sfincs_jax.operators.profile_response.fblock import (
 )
 from sfincs_jax.paths import resolve_existing_path
 from sfincs_jax.discretization.v3 import V3Grids, geometry_from_namelist, grids_from_namelist
-from sfincs_jax.vmec_wout import psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
+from sfincs_jax.geometry.vmec_wout import psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
 
 _THRESHOLD_FOR_INCLUSION = 1e-12  # Matches v3 `sparsify.F90`.
 _V3_DEFAULT_DELTA = 4.5694e-3  # v3 `globalVariables.F90`

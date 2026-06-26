@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax import jax_geometry_adapters
+from sfincs_jax.geometry import jax_adapters as jax_geometry_adapters
 from sfincs_jax.geometry import boozer_geometry_scheme1, boozer_geometry_scheme2, boozer_geometry_scheme4
 from sfincs_jax.geometry import boozer_geometry_from_bc_file
 from sfincs_jax.grids import uniform_diff_matrices
@@ -17,9 +17,9 @@ from sfincs_jax.io import (
     _scheme4_radial_constants,
     _set_input_radial_coordinate_wish,
 )
-from sfincs_jax.vmec_geometry import _finite_diff_on_full_mesh_from_half_mesh
-from sfincs_jax.vmec_geometry import vmec_geometry_from_wout, vmec_geometry_from_wout_file
-from sfincs_jax.vmec_wout import read_vmec_wout
+from sfincs_jax.geometry.vmec import _finite_diff_on_full_mesh_from_half_mesh
+from sfincs_jax.geometry.vmec import vmec_geometry_from_wout, vmec_geometry_from_wout_file
+from sfincs_jax.geometry.vmec_wout import read_vmec_wout
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]

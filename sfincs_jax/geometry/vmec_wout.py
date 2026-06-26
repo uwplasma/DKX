@@ -1,3 +1,5 @@
+"""VMEC ``wout`` reader and radial interpolation contracts."""
+
 from __future__ import annotations
 
 import math
@@ -7,7 +9,7 @@ from pathlib import Path
 import numpy as np
 from scipy.io import netcdf_file
 
-from .paths import resolve_existing_path
+from ..paths import resolve_existing_path
 
 
 @dataclass(frozen=True)
@@ -86,7 +88,7 @@ def read_vmec_wout(path: str | Path) -> VmecWout:
             # Reduced upstream examples may localize only `wout_*.txt`. If so, try to
             # resolve a matching `.nc` by basename using the same equilibrium search roots
             # used elsewhere in sfincs_jax.
-            repo_root = Path(__file__).resolve().parents[1]
+            repo_root = Path(__file__).resolve().parents[2]
             extra = (
                 repo_root / "tests" / "ref",
                 repo_root / "sfincs_jax" / "data" / "equilibria",

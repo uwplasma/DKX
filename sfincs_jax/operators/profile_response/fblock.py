@@ -22,7 +22,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax import tree_util as jtu
 
-from sfincs_jax.boozer_bc import read_boozer_bc_header, selected_r_n_from_bc
+from sfincs_jax.geometry.boozer import read_boozer_bc_header, selected_r_n_from_bc
 from sfincs_jax.collisionless import CollisionlessV3Operator, apply_collisionless_v3
 from sfincs_jax.collisionless_er import ErXDotV3Operator, ErXiDotV3Operator, apply_er_xdot_v3, apply_er_xidot_v3
 from sfincs_jax.collisionless_exb import ExBThetaV3Operator, ExBZetaV3Operator, apply_exb_theta_v3, apply_exb_zeta_v3
@@ -55,7 +55,7 @@ from sfincs_jax.paths import resolve_existing_path
 from sfincs_jax.periodic_stencil import extract_sparse_circulant_stencil, extract_sparse_row_stencil
 from sfincs_jax.solver import GMRESSolveResult, gmres_solve
 from sfincs_jax.discretization.v3 import V3Grids, geometry_from_namelist, grids_from_namelist
-from sfincs_jax.vmec_wout import psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
+from sfincs_jax.geometry.vmec_wout import psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
 
 
 def _as_1d_float(group: dict, key: str) -> np.ndarray:

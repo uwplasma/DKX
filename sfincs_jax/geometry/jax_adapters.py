@@ -673,10 +673,10 @@ def _mode_radius_attr(
 
 
 def vmec_wout_from_wout_like(wout_like: Any, *, path: str | Path | None = None) -> VmecWout:
-    """Convert a VMEC-like in-memory object into ``sfincs_jax.vmec_wout.VmecWout``.
+    """Convert a VMEC-like in-memory object into ``sfincs_jax.geometry.vmec_wout.VmecWout``.
 
     This covers the field names used by ``vmec_jax.wout.WoutData`` and by
-    ``sfincs_jax.vmec_wout.VmecWout``. Arrays may be stored either as
+    ``sfincs_jax.geometry.vmec_wout.VmecWout``. Arrays may be stored either as
     ``(radius, mode)`` or ``(mode, radius)``; the returned object always uses the
     ``sfincs_jax`` convention ``(mode, radius)``.  The optional ``path`` argument
     is metadata only and is useful when the source object is produced entirely in

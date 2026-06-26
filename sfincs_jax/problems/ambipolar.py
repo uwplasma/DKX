@@ -1462,14 +1462,14 @@ def _dense_validation_linear_algebra_for_operator(
 def _radial_current_conversion_kwargs_from_namelist(nml: Any) -> dict[str, float]:
     """Infer Fortran v3 radial-current conversion factors from a namelist."""
 
-    from ..boozer_bc import read_boozer_bc_header, selected_r_n_from_bc  # noqa: PLC0415
+    from ..geometry.boozer import read_boozer_bc_header, selected_r_n_from_bc  # noqa: PLC0415
     from ..input_compat import (  # noqa: PLC0415
         effective_equilibrium_file,
         effective_psi_a_hat,
         effective_psi_n_wish,
     )
     from ..paths import resolve_existing_path  # noqa: PLC0415
-    from ..vmec_wout import psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation  # noqa: PLC0415
+    from ..geometry.vmec_wout import psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation  # noqa: PLC0415
 
     def _get_int(group: Mapping[str, Any], key: str, default: int) -> int:
         value = group.get(key.upper(), default)

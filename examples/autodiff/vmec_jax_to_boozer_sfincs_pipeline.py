@@ -42,7 +42,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.jax_geometry_adapters import (  # noqa: E402
+from sfincs_jax.geometry.jax_adapters import (  # noqa: E402
     boozer_spectrum_proxy_transport_gradient_gate,
     boozer_spectrum_proxy_transport_objective,
     geometry_proxy_no_solve_provenance_gate,

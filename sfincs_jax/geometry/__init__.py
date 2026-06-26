@@ -1,13 +1,23 @@
+"""Geometry data contracts and analytic Boozer geometry builders."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from jax import config as _jax_config
 _jax_config.update("jax_enable_x64", True)
-import jax.numpy as jnp
-import numpy as np
+import jax.numpy as jnp  # noqa: E402
+import numpy as np  # noqa: E402
 
-from .boozer_bc import read_boozer_bc_bracketing_surfaces
+from .boozer import read_boozer_bc_bracketing_surfaces  # noqa: E402
+
+__all__ = (
+    "BoozerGeometry",
+    "boozer_geometry_from_bc_file",
+    "boozer_geometry_scheme1",
+    "boozer_geometry_scheme2",
+    "boozer_geometry_scheme4",
+)
 
 
 @dataclass(frozen=True)
@@ -224,15 +234,15 @@ def boozer_geometry_scheme2(*, theta: jnp.ndarray, zeta: jnp.ndarray) -> BoozerG
 
 
 def _scheme4_default_harmonics() -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """Return the (l, n, amp0) harmonic table for `geometryScheme=4`.
+    """Return the (ell, n, amp0) harmonic table for `geometryScheme=4`.
 
     The amplitudes `amp0` are normalized by B0 in the Fortran code, and later multiplied
     by `B0OverBBar`.
     """
-    l = jnp.asarray([0, 1, 1], dtype=jnp.int32)
+    ell = jnp.asarray([0, 1, 1], dtype=jnp.int32)
     n = jnp.asarray([1, 1, 0], dtype=jnp.int32)
     amp0 = jnp.asarray([0.04645, -0.04351, -0.01902], dtype=jnp.float64)
-    return l, n, amp0
+    return ell, n, amp0
 
 
 def boozer_geometry_scheme4(
@@ -256,7 +266,7 @@ def boozer_geometry_scheme4(
     """
     n_periods = 5
 
-    l, n, default_amp0 = _scheme4_default_harmonics()
+    ell, n, default_amp0 = _scheme4_default_harmonics()
     if harmonics_amp0 is None:
         amp0 = default_amp0
     else:
@@ -267,17 +277,17 @@ def boozer_geometry_scheme4(
     theta2 = theta[:, None]
     zeta2 = zeta[None, :]
 
-    # Harmonics (l, n, amplitude) from Beidler et al, NF 51, 076001 (2011), Table 1.
+    # Harmonics (ell, n, amplitude) from Beidler et al, NF 51, 076001 (2011), Table 1.
     # Keep this path in JAX operations because it is the smallest deterministic gate
     # for differentiating geometry-dependent objectives with respect to magnetic
     # spectrum amplitudes.
     amp = (amp0 * b0_over_bbar)[:, None, None]  # (H,1,1)
-    angle = l[:, None, None] * theta2[None, :, :] - n_periods * n[:, None, None] * zeta2[None, :, :]
+    angle = ell[:, None, None] * theta2[None, :, :] - n_periods * n[:, None, None] * zeta2[None, :, :]
     cos_angle = jnp.cos(angle)
     sin_angle = jnp.sin(angle)
 
     b_hat = b0_over_bbar + jnp.sum(amp * cos_angle, axis=0)
-    db_hat_dtheta = -jnp.sum(amp * (l[:, None, None]) * sin_angle, axis=0)
+    db_hat_dtheta = -jnp.sum(amp * (ell[:, None, None]) * sin_angle, axis=0)
     db_hat_dzeta = jnp.sum(amp * (n_periods * n[:, None, None]) * sin_angle, axis=0)
 
     denom = g_hat + iota * i_hat

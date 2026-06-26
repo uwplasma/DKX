@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, Optional, Sequence
 
 import numpy as np
 
-from ..boozer_bc import read_boozer_bc_bracketing_surfaces, read_boozer_bc_header, selected_r_n_from_bc
+from ..geometry.boozer import read_boozer_bc_bracketing_surfaces, read_boozer_bc_header, selected_r_n_from_bc
 from ..diagnostics import fsab_hat2 as fsab_hat2_jax
 from ..diagnostics import u_hat_np
 from ..diagnostics import vprime_hat as vprime_hat_jax
@@ -66,7 +66,7 @@ from ..solvers.diagnostics import (
     runtime_scale_hint,
     write_solver_trace_json,
 )
-from ..vmec_wout import _set_scale_factor, psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
+from ..geometry.vmec_wout import _set_scale_factor, psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
 from sfincs_jax.discretization.v3 import V3Grids, geometry_from_namelist, grids_from_namelist
 
 

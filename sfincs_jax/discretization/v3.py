@@ -26,8 +26,8 @@ from sfincs_jax.grids import uniform_diff_matrices  # noqa: E402
 from sfincs_jax.input_compat import effective_equilibrium_file, effective_psi_n_wish  # noqa: E402
 from sfincs_jax.namelist import Namelist  # noqa: E402
 from sfincs_jax.paths import resolve_existing_path  # noqa: E402
-from sfincs_jax.vmec_geometry import vmec_geometry_from_wout_file  # noqa: E402
-from sfincs_jax.vmec_wout import read_vmec_wout  # noqa: E402
+from sfincs_jax.geometry.vmec import vmec_geometry_from_wout_file  # noqa: E402
+from sfincs_jax.geometry.vmec_wout import read_vmec_wout  # noqa: E402
 from sfincs_jax.xgrid import XGrid, make_x_grid, make_x_polynomial_diff_matrices  # noqa: E402
 
 

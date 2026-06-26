@@ -1,3 +1,5 @@
+"""VMEC Fourier-sum evaluator for SFINCS geometryScheme 5."""
+
 from __future__ import annotations
 
 import math
@@ -9,7 +11,7 @@ _jax_config.update("jax_enable_x64", True)
 import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
 
-from .geometry import BoozerGeometry  # noqa: E402
+from . import BoozerGeometry  # noqa: E402
 from .vmec_wout import VmecWout, psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation, _set_scale_factor  # noqa: E402
 
 
@@ -96,7 +98,7 @@ def vmec_geometry_from_wout(
 
     Notes
     -----
-    - Passing a preloaded :class:`~sfincs_jax.vmec_wout.VmecWout` separates file I/O
+    - Passing a preloaded :class:`~sfincs_jax.geometry.vmec_wout.VmecWout` separates file I/O
       from geometry evaluation, which is the seam used by optional JAX-native
       geometry producers.
     - This implementation aims to support output parity and operator kernels on the same

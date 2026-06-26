@@ -1,3 +1,5 @@
+"""Boozer ``.bc`` parsing and surface interpolation helpers."""
+
 from __future__ import annotations
 
 import hashlib
@@ -61,7 +63,7 @@ def _read_boozer_bc_header_uncached(*, path: str | Path, geometry_scheme: int) -
 
     p = Path(path).expanduser()
     if not p.exists():
-        from .paths import resolve_existing_path
+        from ..paths import resolve_existing_path
 
         p = resolve_existing_path(p).path
 
@@ -100,7 +102,7 @@ def _read_boozer_bc_header_uncached(*, path: str | Path, geometry_scheme: int) -
 def _bc_cache_key(path: str | Path) -> tuple[str, int, int]:
     p = Path(path).expanduser().resolve()
     if not p.exists():
-        from .paths import resolve_existing_path
+        from ..paths import resolve_existing_path
 
         p = resolve_existing_path(path).path.resolve()
     st = p.stat()
