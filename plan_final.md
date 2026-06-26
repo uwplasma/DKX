@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (sparse-pattern structural coverage pass)
+Last updated: 2026-06-26 (roadmap/source-map consistency pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -514,6 +514,17 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   operators without launching full transport solves. The focused sparse-pattern
   suite reports `141 passed` in `108.45 s`, and Ruff passes on the changed test
   module.
+- The seventy-sixth post-audit documentation tranche removed stale competing
+  refactor-plan language from `docs/development_roadmap.rst` and
+  `docs/source_map.rst`. The roadmap now points to `plan_final.md`, describes
+  the retained one-level package folders, documents flat `profile_*`,
+  `transport_*`, and `preconditioner_*` owners as the intended structure, and
+  keeps QI residual language as a bounded scope boundary rather than an
+  iteration update. The source map no longer says output schema construction is
+  in a current tranche. The stale-language scan over README, package README,
+  examples README, source map, and development roadmap is clean for the checked
+  progress phrases, and the import/source/doc-claim guard reports `31 passed`
+  in `1.81 s`.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.

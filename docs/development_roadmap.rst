@@ -1,15 +1,16 @@
 Development Roadmap
 ===================
 
-``sfincs_jax`` has grown from a parity implementation into a larger research
-codebase with production CLI/API paths, optional differentiable paths, GPU
-solver paths, benchmark generation, and research-only QI/parallelism probes.
-The next phase should improve maintainability without changing the validated
-physics behavior. This page is the working plan for that phase.
+``sfincs_jax`` is a research neoclassical-transport code with production
+CLI/API paths, optional differentiable Python paths, CPU/GPU solver paths,
+benchmark generation, and explicitly gated research probes for difficult QI
+and parallel-scaling cases. The code-health roadmap is to keep those
+capabilities in a compact domain-organized package without changing validated
+physics behavior.
 
-The active branch checklist for the current refactor PR lives in the repository
-root as ``plan.md``. This page records the stable public roadmap and must not
-introduce a competing sequence of work.
+The authoritative branch checklist lives in the repository root as
+``plan_final.md``. This page summarizes stable development principles and does
+not define a competing sequence of work.
 
 Goals
 -----
@@ -70,52 +71,55 @@ contracts.
 Refactoring Plan
 ----------------
 
-The main code-health target is to reduce the responsibility of
-``sfincs_jax/v3_driver.py``. The refactor should be behavior-preserving and
-land in gated slices. The active branch uses a domain-package plan rather than
-adding more flat ``rhs1_*`` or ``transport_*`` files.
+The main code-health target is to keep ``sfincs_jax/v3_driver.py`` as a small
+compatibility facade and keep implementation ownership in one level of domain
+folders below ``sfincs_jax/``. Refactor work should be behavior-preserving,
+tested in gated slices, and should avoid new historical helper names such as
+top-level ``rhs1_*`` files.
 
-1. Package skeleton and import contract
-   Introduce importable domain packages before moving logic:
-   ``input``, ``physics``, ``discretization``, ``operators``, ``problems``,
-   ``solvers``, ``parallel``, ``workflows``, ``validation``, ``benchmarks``,
-   and ``compat``. ``sfincs_jax.geometry`` is now a package owner for analytic
-   Boozer, Boozer-file, VMEC, and JAX-native geometry adapters. The ``io``
-   package name remains reserved for a later migration because
-   ``sfincs_jax/io.py`` must keep its existing import path until the move is
-   complete. Import tests should verify both the new package names and any
-   intentionally retained compatibility module paths.
+1. Package structure and import contract
+   The retained package folders are ``discretization``, ``geometry``,
+   ``operators``, ``outputs``, ``physics``, ``problems``, ``solvers``,
+   ``validation``, and ``workflows``. Root modules are reserved for public
+   entry points and stable facades: API, CLI, solver results, input parsing,
+   plotting, sensitivity, diagnostics, grid helpers, paths, comparison, and
+   compatibility I/O. Import tests verify the package folders, documented root
+   modules, compatibility aliases, and absence of nested implementation
+   packages.
 
-2. Problem packages
-   Move RHSMode=2/3 orchestration into ``problems/transport_matrix`` and
-   RHSMode=1 profile-current/bootstrap-current orchestration into
-   ``problems/profile_response``. Public-internal APIs should use physics names
-   such as ``solve_profile_response`` and ``compute_transport_matrix`` instead
-   of new historical ``rhs1`` wrapper names.
+2. Problem owners
+   RHSMode=1 profile-current/bootstrap-current orchestration belongs to flat
+   ``problems/profile_*.py`` modules. RHSMode=2/3 transport-matrix and
+   monoenergetic-response orchestration belongs to flat
+   ``problems/transport_*.py`` modules. Compatibility facades such as
+   ``sfincs_jax.problems.profile_response`` and
+   ``sfincs_jax.problems.transport_matrix`` may remain as one-file import
+   shims, but they should not own implementation logic.
 
 3. Physics, discretization, and operators
-   Move model terms, grids, quadrature, active layouts, residual construction,
-   and sparse/operator assembly into packages named for the equations they own.
-   Each extracted term builder should have shape, masking, zero-drive or
-   constant-field, and order-condition/conservation tests where applicable.
+   Model terms, grids, quadrature, active layouts, residual construction, and
+   sparse/operator assembly live in domain packages named for the equations or
+   numerical objects they own. Each owner should have shape, masking,
+   zero-drive or constant-field, order-condition, conservation, or parity tests
+   where those properties apply.
 
 4. Solver and preconditioner architecture
-   Keep reusable Krylov dispatch, residual gates, progress reporting, sparse
-   factors, recycling, checkpoints, and implicit-differentiation contracts in
-   ``solvers``. Preconditioners live as flat ``preconditioner_*.py`` modules
+   Reusable Krylov dispatch, residual gates, progress reporting, sparse
+   factors, recycling, checkpoints, and implicit-differentiation contracts live
+   in ``solvers``. Preconditioners are flat ``preconditioner_*.py`` modules
    named by numerical structure: PAS, full-FP, QI, Schur, domain decomposition,
    x-block, symbolic sparse, and transport-matrix blocks. Auto-selection remains
-   a user-facing default, but the implementation should return typed decisions with capability
-   metadata: CPU/GPU safe, differentiable/non-differentiable, setup memory
-   estimate, and expected operator shape.
+   the user-facing default; implementation decisions should return metadata for
+   CPU/GPU safety, differentiable or non-differentiable status, setup-memory
+   estimates, expected operator shape, residual gates, and rejected candidates.
 
 5. I/O, workflow, validation, and benchmark boundaries
-   Keep HDF5/NPZ/NetCDF writes outside solver internals. Solver code should
-   return structured diagnostics; I/O modules should serialize those diagnostics
-   without reinterpreting convergence. Benchmark JSON schemas should be shared
-   by README plots, documentation figures, and research-lane manifests so
-   runtime, memory, residuals, backend, solver path, and comparison status have
-   one contract.
+   HDF5/NPZ/NetCDF writes stay outside solver internals. Solver code returns
+   structured diagnostics; output modules serialize those diagnostics without
+   reinterpreting convergence. Benchmark JSON schemas are shared by README
+   plots, documentation figures, and research-lane manifests so runtime,
+   memory, residuals, backend, solver path, and comparison status use one
+   contract.
 
 Testing Plan
 ------------
@@ -233,12 +237,12 @@ all relevant gates:
 - documentation: new methods include equations, controls, failure modes, and
   reproducible benchmark commands.
 
-Current QI Scope Boundary
--------------------------
+QI Scope Boundary
+-----------------
 
-The scale-0.60 QI hard seed is now below ``3e-5`` residual on both CPU and GPU
-with the post-residual-equation research path. This is a useful bounded result
-and confirms that the implementation is device-safe for the checked path. It is
-not a production convergence claim. Closing that lane requires new
-residual-equation/coarse variables built from the remaining Krylov error modes
-and current/constraint/profile moments.
+The documented scale-0.60 QI hard seed reaches residuals below ``3e-5`` on both
+CPU and GPU with the post-residual-equation research path. This bounded result
+confirms device safety for that checked path, but it is not a production
+convergence claim. Promoting the lane requires residual-equation/coarse
+variables built from the remaining Krylov error modes and from
+current/constraint/profile moments.

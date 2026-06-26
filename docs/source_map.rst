@@ -306,11 +306,11 @@ RHSMode=1 output-safety and trace-schema helpers:
 - sidecar JSON trace writing when a large RHSMode=1 diagnostic output is
   intentionally refused.
 
-The solved-field physics schema construction still lives in ``sfincs_jax/io.py``
-during the current refactor tranche. The next I/O split should move physical
-solved-field and provenance schema construction behind a smaller output
-contract while preserving these writer functions and the output-cache boundary
-in the ``outputs`` package.
+Solved-field physics schema construction is exposed through the stable
+``sfincs_jax/io.py`` facade and implemented with the output owners listed on
+this page. Future I/O work should keep physical solved-field and provenance
+schema construction behind a small output contract while preserving writer
+functions and the output-cache boundary in the ``outputs`` package.
 
 ``sfincs_jax/outputs/transport.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -514,8 +514,8 @@ preconditioner setup logic.
 
 When a solve behaves differently on CPU and GPU, inspect the problem owner
 first: ``sfincs_jax.problems.profile_solve`` for RHSMode 1 and
-``sfincs_jax.problems.transport_solve`` for RHSMode 2/3. The current
-domain owners replacing the old monolith are:
+``sfincs_jax.problems.transport_solve`` for RHSMode 2/3. The domain owners
+replacing the old monolith are:
 
 - ``sfincs_jax/problems/profile_solver_diagnostics.py``:
   RHSMode=1 linear-solve and Newton-Krylov result dataclasses, final
