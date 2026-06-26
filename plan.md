@@ -5873,3 +5873,62 @@ Next best steps:
 3. After Batch B, execute Batch C solver/preconditioner-family compression,
    targeting `solvers/preconditioners <=35` files and removal of the remaining
    historical `symbolic_sparse/rhs1_fortran_reduced.py` filename.
+
+## 2026-06-26 Batch B Output Writer Ownership Move
+
+Steps taken:
+
+1. Moved the concrete output writer implementation from `sfincs_jax/io.py` to
+   the output-domain owner `sfincs_jax/outputs/writer.py`.
+2. Recreated `sfincs_jax/io.py` as a small compatibility facade that re-exports
+   public output readers/writers and delegates legacy private names to
+   `outputs.writer` through module-level `__getattr__`.
+3. Rewrote moved-module imports from root-relative local imports to parent
+   package imports and output-sibling imports.
+4. Added the moved writer API to `sfincs_jax.outputs.__all__` and refreshed the
+   domain import-contract test.
+5. Updated `plan_final.md` to mark the `io.py <=1,200` gate as met and to
+   record the temporary file-count/source-line debt from adding
+   `outputs/writer.py`.
+
+Results:
+
+- `sfincs_jax/io.py` decreased from `4,264` lines to `49` lines.
+- `sfincs_jax/outputs/writer.py` now owns the concrete `4,264`-line writer.
+- Package Python files increased from `195` to `196`; this must be paid back
+  before the final review gate.
+- Package source lines increased from `165,371` to `165,430`; this must be
+  paid back below the previous `165,398` checkpoint before review.
+- Public import parity is preserved:
+  `sfincs_jax.io.write_sfincs_jax_output_h5` and
+  `sfincs_jax.outputs.write_sfincs_jax_output_h5` resolve to the same function.
+- Legacy private imports used by focused tests still resolve through the
+  `io.py` facade.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/io.py sfincs_jax/outputs/__init__.py sfincs_jax/outputs/writer.py` passed.
+- `python -m ruff check sfincs_jax/io.py sfincs_jax/outputs/__init__.py sfincs_jax/outputs/writer.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m pytest tests/test_domain_package_import_contracts.py tests/test_output_h5_scheme5_parity.py tests/test_input_compat.py tests/test_transport_matrix_rhsmode3_parity.py tests/test_rhsmode1_current_closure.py -q --tb=short` passed with `42 passed`.
+- `python -m pytest tests/test_api_contracts.py tests/test_cli_solve_mode.py tests/test_cli_validation_io_fast_coverage.py tests/test_io_output_policy_coverage.py tests/test_output_formats.py tests/test_solver_trace_output_formats.py tests/test_transport_output_schema.py tests/test_transport_streaming_outputs.py tests/test_write_output_return_results.py -q --tb=short` passed with `101 passed`.
+- Explicit legacy-private import probe for `_OUTPUT_GEOM_CACHE`,
+  `_select_rhsmode1_linear_solve_method`, and `_apply_export_f_maps` passed.
+
+Progress:
+
+- Lane 1 structural consolidation: about `95%`.
+- Batch A profile-response collapse: about `92%`.
+- Batch B transport/output/root cleanup: about `60%`. The major `io.py` facade
+  gate is met; the remaining blocker is payback of the added writer owner by
+  deleting/merging relay modules.
+- Batch C solver/preconditioner family consolidation: about `25%`.
+- Batch D public API/docs/tests/review gate: about `35%`.
+
+Next best steps:
+
+1. Continue Batch B payback by merging obvious transport/output relay modules
+   whose owners are already clear, targeting package files back to `<=195`
+   immediately and ultimately `<=190`.
+2. Decide whether `data_fetch.py`, `postprocess_upstream.py`, and `scans.py`
+   should stay at root as public workflows or move under domain packages.
+3. Then execute Batch C solver/preconditioner-family compression.
