@@ -313,6 +313,21 @@ MOVED_ROOT_MODULE_OWNERS = {
     ),
 }
 
+DELETED_ROOT_ALIASES = (
+    "sfincs_jax.adaptive_maps",
+    "sfincs_jax.boozer_bc",
+    "sfincs_jax.data_fetch",
+    "sfincs_jax.indices",
+    "sfincs_jax.jax_geometry_adapters",
+    "sfincs_jax.periodic_stencil",
+    "sfincs_jax.postprocess_upstream",
+    "sfincs_jax.scans",
+    "sfincs_jax.structured_velocity",
+    "sfincs_jax.vmec_geometry",
+    "sfincs_jax.vmec_wout",
+    "sfincs_jax.xgrid",
+)
+
 ROOT_MODULE_CLASSIFICATIONS = {
     "__init__.py": "public package facade",
     "__main__.py": "public entry point",
@@ -856,25 +871,23 @@ def test_moved_root_workflow_modules_have_domain_owners() -> None:
         for export_name in expected_exports:
             assert hasattr(module, export_name), f"{module_name}.{export_name}"
 
-    for deleted_root in (
-        "sfincs_jax.adaptive_maps",
-        "sfincs_jax.boozer_bc",
-        "sfincs_jax.data_fetch",
-        "sfincs_jax.indices",
-        "sfincs_jax.jax_geometry_adapters",
-        "sfincs_jax.periodic_stencil",
-        "sfincs_jax.postprocess_upstream",
-        "sfincs_jax.scans",
-        "sfincs_jax.structured_velocity",
-        "sfincs_jax.vmec_geometry",
-        "sfincs_jax.vmec_wout",
-        "sfincs_jax.xgrid",
-    ):
+    for deleted_root in DELETED_ROOT_ALIASES:
         try:
             _import_module(deleted_root)
         except ModuleNotFoundError:
             continue
         raise AssertionError(f"{deleted_root} should not remain as a root compatibility shim")
+
+
+def test_github_workflows_do_not_use_deleted_flat_import_aliases() -> None:
+    """CI jobs must follow the same domain-owner import contract as code/tests."""
+
+    repo_root = Path(__file__).resolve().parents[1]
+    workflow_dir = repo_root / ".github" / "workflows"
+    for path in workflow_dir.glob("*.yml"):
+        text = path.read_text(encoding="utf-8")
+        for deleted_alias in DELETED_ROOT_ALIASES:
+            assert deleted_alias not in text, f"{path.relative_to(repo_root)} still imports {deleted_alias}"
 
 
 def test_root_modules_are_explicitly_classified() -> None:
