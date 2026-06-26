@@ -2836,6 +2836,10 @@ Current completion status:
   solve-orchestration namespace from `problems.profile_solve`; this keeps the
   large structured operator, active-factor, and guarded production-path tests on
   the domain owner rather than the compatibility shim.
+- The Schur/PAS heuristic suite now imports and names the canonical
+  `problems.profile_solve` module directly, so its GPU/CPU backend policies,
+  PAS structured-tail checks, and preconditioner-selection monkeypatches no
+  longer depend on the legacy driver facade.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
