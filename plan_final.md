@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (profile-system admission coverage pass)
+Last updated: 2026-06-26 (public-doc stale-fragment guard pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -419,6 +419,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   user-input and Fortran-v3 compatibility contracts for the differentiable
   full-system operator constructor. The focused profile-system support suite
   reports `26 passed` in `7.88 s`.
+- The sixty-fourth post-audit documentation tranche removed a remaining
+  benchmark-history phrase from `docs/performance_techniques.rst` and added a
+  docs-tree guard for the rejected README/progress fragments across README,
+  package README, examples README, and public docs outside release notes and
+  vendored upstream material. The focused benchmark-doc guard reports
+  `6 passed` in `0.06 s`, and a direct ripgrep scan finds no rejected fragments
+  in the public docs tree.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.

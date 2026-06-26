@@ -58,6 +58,17 @@ PUBLIC_STALE_PATTERNS = tuple(
     re.compile(rf"\b{re.escape(word)}\b")
     for word in ("now", "older", "newer", "previous", "currently")
 )
+DOC_TREE_STALE_FRAGMENTS = (
+    "On the current main branch",
+    "current main branch",
+    "new version",
+    "new benchmarks",
+    "README-facing runtime/memory rows",
+    "The production benchmark manifest",
+    "production benchmark manifest",
+    "not replacements for the production-resolution gates",
+    "not a public performance row",
+)
 
 
 def _summary() -> dict[str, object]:
@@ -202,3 +213,23 @@ def test_public_docs_are_standalone_not_development_log() -> None:
             assert fragment not in checked_text, f"{fragment!r} appears in {path}"
         for pattern in PUBLIC_STALE_PATTERNS:
             assert not pattern.search(checked_text), f"{pattern.pattern!r} appears in {path}"
+
+
+def test_rejected_benchmark_history_fragments_are_not_in_public_docs_tree() -> None:
+    docs_to_scan = [
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "sfincs_jax" / "README.md",
+        REPO_ROOT / "examples" / "README.md",
+    ]
+    docs_to_scan.extend(
+        path
+        for path in (REPO_ROOT / "docs").rglob("*")
+        if path.suffix in {".md", ".rst"}
+        and path.name != "release_notes.rst"
+        and "upstream" not in path.parts
+    )
+
+    for path in docs_to_scan:
+        text = path.read_text(encoding="utf-8")
+        for fragment in DOC_TREE_STALE_FRAGMENTS:
+            assert fragment not in text, f"{fragment!r} appears in {path}"

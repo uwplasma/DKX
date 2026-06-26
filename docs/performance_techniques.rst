@@ -428,14 +428,13 @@ Controls for the CPU 3D full-FP auto lane are
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC``,
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN``, and
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MAX``.
-The production benchmark manifest enforces at least ``25 x 51 x 4 x 100``
+Public performance rows use at least ``25 x 51 x 4 x 100``
 (``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``33 x 1 x 12 x 140`` for
 tokamak cases. RHSMode=1 PAS/no-``E_r`` tokamak rows use the calibrated
-``89 x 1 x 24 x 300`` floor. The manifest also records a ``10 s`` minimum
-SFINCS Fortran v3 timing target for public production rows. Performance claims
-for this lane should be regenerated from that manifest rather than from earlier
-lower-resolution bring-up probes. It is
-available via:
+``89 x 1 x 24 x 300`` floor. Public production rows also require a ``10 s``
+minimum SFINCS Fortran v3 timing target. Regenerate performance claims for this
+lane from the checked benchmark inputs and summary artifacts, not from
+lower-resolution development probes. The sparse-PC lane is available via:
 
 .. code-block:: bash
 
