@@ -184,7 +184,8 @@ Coverage audits use the full test suite with package instrumentation:
 The exact collected-test count changes as targeted regression tests are added, so
 release notes cite a dated local/CI artifact rather than hard-code a permanent
 number here. The audited coverage artifact associated with this refactor records
-``82.76%`` line coverage. The research-grade target is ``95%`` meaningful package
+``84.31%`` line coverage (``58,304 / 69,151`` covered lines in ``5:51`` on the
+local xdist suite). The research-grade target is ``95%`` meaningful package
 coverage with CI wall time below ten minutes.
 
 The coverage gap is concentrated in large, risk-bearing owners rather than in
