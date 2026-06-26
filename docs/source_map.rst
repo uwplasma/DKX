@@ -235,6 +235,13 @@ VMEC ``geometryScheme=5`` Fourier-sum evaluator. The public file path
 ``vmec_geometry_from_wout(...)`` so optional in-memory producers can exercise the
 same formulas and parity tests without hidden file I/O.
 
+``sfincs_jax/discretization/v3.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+SFINCS-v3-compatible grid construction, mapped speed-grid construction,
+geometry loading, geometry cache keys, and the ``V3Grids`` data contract. This
+replaces the historical root ``sfincs_jax/v3.py`` owner.
+
 ``sfincs_jax/collisionless.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

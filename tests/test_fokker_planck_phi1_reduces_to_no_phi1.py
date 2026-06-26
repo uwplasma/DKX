@@ -10,7 +10,7 @@ from sfincs_jax.collisions import (
     make_fokker_planck_v3_phi1_operator,
 )
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3 import grids_from_namelist
+from sfincs_jax.discretization.v3 import grids_from_namelist
 
 
 def test_phi1_in_collisions_reduces_to_no_phi1_when_phi1_zero() -> None:
