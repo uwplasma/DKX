@@ -139,7 +139,7 @@ Unreleased
   execution, runtime merge/partition helpers, persistent-pool management,
   scaling/sharding policy, validation, and the subprocess worker entry point.
   The maintained worker entry point is now
-  ``python -m sfincs_jax.problems.transport_matrix.parallel.worker`` for GPU
+  ``python -m sfincs_jax.problems.transport_parallel_worker`` for GPU
   worker subprocesses; top-level ``sfincs_jax.transport_parallel_*`` aliases
   were removed in the consolidation pass. Focused parallel/import tests passed with
   ``139 passed``, a broader transport/CLI slice passed with ``169 passed``, and
@@ -155,7 +155,7 @@ Unreleased
   local full suite passed with
   ``2668 passed in 554.82 s``.
 - Moved the RHSMode=1/2/3 transport diagnostics and transport-matrix assembly
-  implementation into ``sfincs_jax.problems.transport_matrix.diagnostics``.
+  implementation into ``sfincs_jax.problems.transport_diagnostics``.
   Existing notebooks and scripts should import this maintained domain module
   directly.
 - Moved RHSMode=1 host sparse ILU/LU matvec assembly, CSR factorization, cached
@@ -398,7 +398,7 @@ Unreleased
 - Consolidated RHSMode=2/3 active-system, direct reduced-``Pmat``, exact active
   transport-operator sparse emission, direct block-Schur setup, and full-FP
   Fortran-reduced LU preconditioner code into
-  ``sfincs_jax.problems.transport_matrix.linear_system``. Focused tests verify
+  ``sfincs_jax.problems.transport_linear_system``. Focused tests verify
   the emitted CSR matrices against the matrix-free active operator, physics
   coarse-basis source/constraint columns, direct block-Schur callback path, and
   Fortran-reduced LU symbolic/BLR/ND metadata.
@@ -651,7 +651,7 @@ Highlights
   bounded chunks from configured byte budgets, and tight budgets fail before
   launching a matvec or correction.
 - Added release-safe single-case sharded-solve planning metadata in
-  ``sfincs_jax/problems/transport_matrix/parallel/runtime.py``. The helper caps
+  ``sfincs_jax/problems/transport_parallel_runtime.py``. The helper caps
   requested devices to available work, records per-device balance diagnostics,
   and fail-closes release scaling claims for experimental single-case sharding.
 - Refreshed QI evidence metadata to include the scale-0.60 smoothed-load and

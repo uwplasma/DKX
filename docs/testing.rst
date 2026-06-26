@@ -442,7 +442,7 @@ empty-metadata handling without running a full solve.
 The docstring gate now discovers every ``sfincs_jax/*policy*.py`` module and also
 checks public policy classes/functions, so new extraction seams must remain
 discoverable. ``tests/test_transport_policy_coverage.py`` adds fast direct coverage
-for ``sfincs_jax.problems.transport_matrix.policies`` transport
+for ``sfincs_jax.problems.transport_policies`` transport
 backend/sparse-host/recycle policy, transport parallel
 scaling-audit/environment helpers, and worker-local XLA flag rewriting without running
 transport solves. ``tests/test_transport_parallel_payload.py`` separately validates the
@@ -455,18 +455,18 @@ merge, output-field propagation, transport-matrix assembly, and progress emissio
 are tested with monkeypatched kernels and worker runtimes.
 ``tests/test_transport_parallel.py`` now targets the transport parallel modules
 directly for the process-pool and XLA-policy seams: persistent pool reuse and
-rebuild monkeypatch ``sfincs_jax.problems.transport_matrix.parallel.runtime``, while
+rebuild monkeypatch ``sfincs_jax.problems.transport_parallel_runtime``, while
 worker-local XLA flag rewriting is checked through
-``sfincs_jax.problems.transport_matrix.parallel.runtime``. Driver aliases are
+``sfincs_jax.problems.transport_parallel_runtime``. Driver aliases are
 kept only where they preserve the public debugging seam.
 ``tests/test_transport_postsolve_diagnostics.py`` covers
-``sfincs_jax.problems.transport_matrix.finalize`` directly:
+``sfincs_jax.problems.transport_finalize`` directly:
 streamed accumulator reuse, output-field propagation,
 chunked fixed-operator diagnostic evaluation, and transport-matrix assembly are
 checked with monkeypatched numerical kernels so the behavior is protected without
 adding heavyweight transport solves to CI.
 ``tests/test_transport_solve_policy.py`` covers
-``sfincs_jax.problems.transport_matrix.policies``, the initial RHSMode=2/3
+``sfincs_jax.problems.transport_policies``, the initial RHSMode=2/3
 solve policy extracted from ``v3_driver.py``: geometryScheme namelist parsing,
 low-memory VMEC monoenergetic routing, dense fallback admission, dense
 memory-cap blocking, subset streaming, state-vector retention, and GMRES
@@ -476,19 +476,19 @@ per-``whichRHS`` loop policy for E_parallel loose/Krylov routing,
 constraint-nullspace projection admission, optional iteration-stat limits, and
 dense-batch fallback admission.
 ``tests/test_transport_solve_setup.py`` covers
-``sfincs_jax.problems.transport_matrix.setup``, the RHSMode=2/3 setup resolver
+``sfincs_jax.problems.transport_setup``, the RHSMode=2/3 setup resolver
 that sits between high-level solve entry and the transport loop:
 ``SFINCS_JAX_TRANSPORT_MAXITER`` parsing, Krylov state checkpoint merge rules,
 ``whichRHS`` subset normalization, CPU worker-count defaults, explicit worker
 caps, GPU worker capping, and child-worker recursion flags are checked without
 launching transport solves.
 ``tests/test_transport_active_dense_setup.py`` covers
-``sfincs_jax.problems.transport_matrix.linear_system``, the combined active-DOF
+``sfincs_jax.problems.transport_linear_system``, the combined active-DOF
 and dense-path resolver used by RHSMode=2/3: active-index compaction,
 auto-dense re-selection on the compacted system, disabled-active hints, and
 dense-preconditioner memory guard messages are tested as pure setup behavior.
 ``tests/test_transport_loop_support.py`` covers
-``sfincs_jax.problems.transport_matrix.solve``, the sequential transport-loop
+``sfincs_jax.problems.transport_solve``, the sequential transport-loop
 infrastructure that is now outside ``v3_driver.py``: cached full and active-DOF
 matvec closures, operator-variation recycle admission, stored-state recycle seeding,
 basis trimming, small recycled initial guesses, elapsed-time recording, residual
@@ -502,7 +502,7 @@ disabled projection is a true no-op, transport roundoff residuals skip the
 correction, and source-row residuals are reduced by the small least-squares
 correction.
 ``tests/test_transport_solve_finalization.py`` covers
-``sfincs_jax.problems.transport_matrix.finalize``, the sequential RHSMode=2/3
+``sfincs_jax.problems.transport_finalize``, the sequential RHSMode=2/3
 finalization seam: full-space residual-vector reuse, projection-time
 true-residual recomputation, active-DOF accepted-state overrides for dense
 fallback, streamed-output collection, recycle updates, solver-method recording,
@@ -603,19 +603,19 @@ ILU/LU path.
 operator-shaping contract, including the radial-x simplification and the
 preserved driver compatibility alias.
 The same file now protects the extracted
-``sfincs_jax.problems.transport_matrix.linear_system`` module:
+``sfincs_jax.problems.transport_linear_system`` module:
 direct reduced-``Pmat`` and exact active transport CSR emission are compared
 column-action-by-column-action against the matrix-free v3 operator for
 geometryScheme 2 and 11 reduced inputs, and the physics coarse-basis test
 checks source, constraint, and tail-Schur response columns without launching a
 production solve.
 Those same direct-active tests now exercise the wrapper into
-``sfincs_jax.problems.transport_matrix.linear_system`` as well: the active block-Schur
+``sfincs_jax.problems.transport_linear_system`` as well: the active block-Schur
 preconditioner is built from the exact active operator, applies through the
 host callback path, and closes the source/constraint tail residual on the
 reduced geometryScheme 11 case.
 The Fortran-reduced LU tests also exercise
-``sfincs_jax.problems.transport_matrix.linear_system`` through the driver
+``sfincs_jax.problems.transport_linear_system`` through the driver
 compatibility seam: symbolic block, block-Schur, BLR
 frontal, and ND frontal factor metadata, direct reduced-``Pmat`` admission,
 symbolic rejection fallback, and exact-LU rescue are checked on reduced
@@ -757,7 +757,7 @@ converged residual/solution parity against the tiny PETSc state-vector
 reference for ``includePhi1InKineticEquation=true``.
 Transport worker residual abort formatting is covered in
 ``tests/test_transport_residual_quality.py`` for
-``sfincs_jax.problems.transport_matrix.policies``, including custom
+``sfincs_jax.problems.transport_policies``, including custom
 environment names, negative/invalid threshold normalization, nonfinite residual
 diagnostics, and array-to-message collection. These are intentionally fast
 policy checks; they protect solver-path diagnostics without launching transport

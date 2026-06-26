@@ -910,7 +910,7 @@ Relevant implementation:
 - ``examples/performance/benchmark_sharded_solve_scaling.py`` and
   ``examples/performance/benchmark_sharded_matvec_scaling.py`` generate
   bounded single-case scaling evidence.
-- ``sfincs_jax/problems/transport_matrix/parallel/runtime.py`` prevents cold or
+- ``sfincs_jax/problems/transport_parallel_runtime.py`` prevents cold or
   malformed scaling payloads from becoming release claims, records pure
   single-case sharded-solve plans, caps requested devices to available work,
   reports workload balance, estimates setup/communication amortization, and

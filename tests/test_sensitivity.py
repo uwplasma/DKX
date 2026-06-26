@@ -21,7 +21,7 @@ from sfincs_jax.problems.ambipolar import (
     operator_tangent_from_centered_difference,
     rhsmode1_radial_current_response_from_namelist,
 )
-from sfincs_jax.problems.transport_matrix.diagnostics import (
+from sfincs_jax.problems.transport_diagnostics import (
     radial_current_vm_from_state,
     radial_current_vm_observable_vector,
     radial_current_vm_psi_hat_from_state,

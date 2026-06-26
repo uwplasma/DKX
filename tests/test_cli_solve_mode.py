@@ -144,7 +144,7 @@ def test_cmd_transport_matrix_v3_forces_explicit_mode(monkeypatch, tmp_path: Pat
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=2))
     monkeypatch.setattr(
-        "sfincs_jax.problems.transport_matrix.solve.solve_v3_transport_matrix_linear_gmres",
+        "sfincs_jax.problems.transport_solve.solve_v3_transport_matrix_linear_gmres",
         _fake_transport,
     )
 

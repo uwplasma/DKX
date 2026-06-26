@@ -56,8 +56,6 @@
     "workflows"
   ],
   "temporary_nested_packages": [
-    "problems/transport_matrix",
-    "problems/transport_matrix/parallel",
     "solvers/preconditioners",
     "solvers/preconditioners/domain_decomposition",
     "solvers/preconditioners/full_fp",
