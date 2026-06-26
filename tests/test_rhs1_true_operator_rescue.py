@@ -20,6 +20,11 @@ from sfincs_jax.operators.profile_true_operator_rescue import (
     _rhs1_additive_rescue_nbytes,
     _rhs1_active_reduced_residual_diagnostics,
     _sparse_factor_nbytes_estimate,
+    _try_build_true_operator_active_block_lsq_preconditioner,
+    _try_build_true_operator_active_residual_block_lsq_preconditioner,
+    _try_build_true_operator_active_submatrix_preconditioner,
+    _try_build_true_operator_coupled_coarse_lsq_preconditioner,
+    _try_build_true_operator_residual_window_lsq_preconditioner,
     _true_operator_window_positions_from_residual,
     _try_build_residual_coarse_host_sparse_preconditioner,
     _try_build_residual_window_host_sparse_preconditioner,
@@ -65,6 +70,32 @@ def _layout_with_tail() -> RHS1BlockLayout:
         include_phi1=True,
         include_phi1_in_kinetic=False,
         rhs_mode=1,
+    )
+
+
+def _small_active_layout() -> RHS1BlockLayout:
+    return RHS1BlockLayout(
+        n_species=1,
+        n_x=1,
+        n_xi=2,
+        n_theta=2,
+        n_zeta=1,
+        f_size=4,
+        phi1_size=1,
+        extra_size=1,
+        total_size=6,
+        constraint_scheme=1,
+        include_phi1=True,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+
+
+def _identity_true_actions(size: int):
+    matrix = np.eye(int(size), dtype=np.float64)
+    return (
+        lambda x: matrix @ np.asarray(x, dtype=np.float64),
+        lambda x: matrix @ np.asarray(x, dtype=np.float64),
     )
 
 
@@ -308,6 +339,195 @@ def test_residual_coarse_builder_corrects_failed_identity_factor() -> None:
     assert bundle.metadata is not None
     assert bundle.metadata["rank"] == 1
     np.testing.assert_allclose(operator.matvec(bundle.solve(rhs)), rhs, rtol=1.0e-12, atol=1.0e-12)
+
+
+def test_true_operator_residual_window_builder_admits_bounded_tail_window() -> None:
+    layout = _layout_with_tail()
+    true_matvec, true_matmat = _identity_true_actions(layout.total_size)
+    rhs = np.asarray([0.0, 4.0, 0.0, 0.0, 0.0, 3.0, 2.0, -1.0], dtype=np.float64)
+    emitted: list[str] = []
+
+    bundle = _try_build_true_operator_residual_window_lsq_preconditioner(
+        true_matvec=true_matvec,
+        true_matmat=true_matmat,
+        factor_bundle=_ZeroFactor(),
+        residual=rhs,
+        layout=layout,
+        active_indices=None,
+        max_windows=2,
+        x_radius=0,
+        ell_radius=0,
+        max_nbytes=1024 * 1024,
+        regularization=0.0,
+        max_window_size=4,
+        column_batch=2,
+        drop_tol=0.0,
+        include_tail=True,
+        damping=False,
+        emit=lambda _level, message: emitted.append(str(message)),
+    )
+
+    assert bundle is not None
+    assert bundle.metadata is not None
+    assert bundle.metadata["window_size"] == 4
+    assert bundle.metadata["include_tail"] is True
+    assert any("true residual window built" in message for message in emitted)
+    np.testing.assert_allclose(true_matvec(bundle.solve(rhs)), rhs, rtol=1.0e-12, atol=1.0e-12)
+
+
+def test_true_operator_residual_window_builder_rejects_memory_budget() -> None:
+    layout = _layout_with_tail()
+    true_matvec, true_matmat = _identity_true_actions(layout.total_size)
+
+    bundle = _try_build_true_operator_residual_window_lsq_preconditioner(
+        true_matvec=true_matvec,
+        true_matmat=true_matmat,
+        factor_bundle=_ZeroFactor(),
+        residual=np.ones((layout.total_size,), dtype=np.float64),
+        layout=layout,
+        active_indices=None,
+        max_windows=2,
+        x_radius=1,
+        ell_radius=1,
+        max_nbytes=1,
+        regularization=0.0,
+        max_window_size=layout.total_size,
+        column_batch=2,
+        drop_tol=0.0,
+        include_tail=True,
+    )
+
+    assert bundle is None
+
+
+def test_true_operator_active_block_builders_correct_small_identity_operator() -> None:
+    layout = _small_active_layout()
+    true_matvec, true_matmat = _identity_true_actions(layout.total_size)
+    rhs = np.asarray([1.0, -2.0, 3.0, -4.0, 0.5, -0.25], dtype=np.float64)
+
+    active_block = _try_build_true_operator_active_block_lsq_preconditioner(
+        true_matvec=true_matvec,
+        true_matmat=true_matmat,
+        factor_bundle=_ZeroFactor(),
+        residual=rhs,
+        layout=layout,
+        active_indices=None,
+        x_count=1,
+        ell_count=2,
+        max_nbytes=1024 * 1024,
+        regularization=0.0,
+        max_block_size=layout.total_size,
+        column_batch=2,
+        drop_tol=0.0,
+        include_tail=True,
+        max_tail=2,
+        damping=False,
+    )
+    assert active_block is not None
+    assert active_block.metadata is not None
+    assert active_block.metadata["kinetic_selected"] == layout.f_size
+    assert active_block.metadata["tail_selected"] == 2
+    np.testing.assert_allclose(true_matvec(active_block.solve(rhs)), rhs, rtol=1.0e-12, atol=1.0e-12)
+
+    active_residual = _try_build_true_operator_active_residual_block_lsq_preconditioner(
+        true_matvec=true_matvec,
+        true_matmat=true_matmat,
+        factor_bundle=_ZeroFactor(),
+        residual=rhs,
+        layout=layout,
+        active_indices=None,
+        max_nbytes=1024 * 1024,
+        regularization=0.0,
+        max_block_size=layout.total_size,
+        column_batch=2,
+        drop_tol=0.0,
+        include_tail=True,
+        max_tail=2,
+        kinetic_only=True,
+        damping=False,
+    )
+    assert active_residual is not None
+    assert active_residual.metadata is not None
+    assert active_residual.metadata["selection"] == "top_residual_active_positions"
+    np.testing.assert_allclose(true_matvec(active_residual.solve(rhs)), rhs, rtol=1.0e-12, atol=1.0e-12)
+
+    active_submatrix = _try_build_true_operator_active_submatrix_preconditioner(
+        true_matvec=true_matvec,
+        true_matmat=true_matmat,
+        factor_bundle=_ZeroFactor(),
+        residual=rhs,
+        layout=layout,
+        active_indices=None,
+        x_count=1,
+        ell_count=2,
+        max_nbytes=1024 * 1024,
+        regularization=0.0,
+        max_block_size=layout.total_size,
+        column_batch=2,
+        drop_tol=0.0,
+        include_tail=True,
+        max_tail=2,
+        damping=False,
+    )
+    assert active_submatrix is not None
+    assert active_submatrix.metadata is not None
+    assert active_submatrix.metadata["block_size"] == layout.total_size
+    np.testing.assert_allclose(true_matvec(active_submatrix.solve(rhs)), rhs, rtol=1.0e-12, atol=1.0e-12)
+
+
+def test_true_operator_coupled_coarse_builder_uses_window_and_tail_basis() -> None:
+    layout = _small_active_layout()
+    true_matvec, true_matmat = _identity_true_actions(layout.total_size)
+    rhs = np.asarray([0.0, 2.0, 0.0, -3.0, 0.75, -0.5], dtype=np.float64)
+    op = SimpleNamespace(
+        constraint_scheme=1,
+        fblock=SimpleNamespace(f_shape=layout.f_shape),
+        theta_weights=np.ones((layout.n_theta,), dtype=np.float64),
+        zeta_weights=np.ones((layout.n_zeta,), dtype=np.float64),
+        d_hat=np.ones((layout.n_theta, layout.n_zeta), dtype=np.float64),
+    )
+
+    bundle = _try_build_true_operator_coupled_coarse_lsq_preconditioner(
+        true_matvec=true_matvec,
+        true_matmat=true_matmat,
+        factor_bundle=_ZeroFactor(),
+        residual=rhs,
+        op=op,
+        layout=layout,
+        active_indices=None,
+        max_windows=2,
+        x_radius=0,
+        ell_radius=0,
+        max_nbytes=1024 * 1024,
+        regularization=0.0,
+        max_coarse_size=8,
+        column_batch=2,
+        drop_tol=0.0,
+        low_lmax=0,
+        profile_moment_count=0,
+        angular_lmax=0,
+        angular_mode_max=0,
+        max_tail_units=2,
+        include_tail=True,
+        include_constraint_sources=False,
+        include_fsavg=False,
+        include_window_residual=True,
+        include_profile_moments=False,
+        include_angular_residual=False,
+        include_angular_basis=False,
+        include_preconditioned_loads=False,
+        preconditioned_load_max_columns=0,
+        preconditioned_load_max_nnz=0,
+        preconditioned_load_drop_tol=0.0,
+        damping=False,
+    )
+
+    assert bundle is not None
+    assert bundle.metadata is not None
+    assert bundle.metadata["window_residual_included"] is True
+    assert bundle.metadata["tail_included"] is True
+    assert bundle.metadata["coarse_size"] >= 2
+    np.testing.assert_allclose(true_matvec(bundle.solve(rhs)), rhs, rtol=1.0e-10, atol=1.0e-10)
 
 
 def test_residual_window_builder_corrects_targeted_kinetic_window() -> None:

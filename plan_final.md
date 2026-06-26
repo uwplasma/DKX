@@ -339,6 +339,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   setup, auto-host exit, solver-driver forwarding, and recycle-basis forwarding.
   This locks one of the largest retained solve owners without launching GMRES,
   so it improves review confidence while preserving the CI time budget.
+- The forty-second post-audit coverage tranche added true-operator rescue
+  builder tests for residual-window LSQ, active-block LSQ, active residual-block
+  LSQ, active-submatrix, and coupled coarse Schur corrections. The tests use
+  bounded identity operators to check memory-budget rejection, tail/kinetic
+  basis selection, column-batched true actions, and exact residual correction
+  without running a full profile solve.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
