@@ -437,8 +437,8 @@ Unreleased
   CPU/GPU worker launch through injected runtime hooks, worker payload merging,
   parallel-result diagnostics assembly, and early transport-matrix result
   construction.
-- Extracted the initial RHSMode=2/3 transport solve policy into
-  ``transport_solve_policy.py``. The driver now delegates geometryScheme parsing,
+- Consolidated the initial RHSMode=2/3 transport solve policy into
+  ``problems.transport_matrix.policies``. The driver delegates geometryScheme parsing,
   low-memory output routing, streamed-diagnostic/state-vector retention,
   force-dense/force-Krylov handling, dense fallback admission, dense memory-cap
   blocking, and GMRES restart/max-iteration guards to a focused policy object
@@ -454,7 +454,7 @@ Unreleased
   estimates through ``TransportLoopProgress`` instead of carrying mutable
   progress state inline.
 - Moved the RHSMode=2/3 per-``whichRHS`` loop policy into
-  ``transport_solve_policy.py``. The driver now delegates E_parallel loose/Krylov
+  ``problems.transport_matrix.policies``. The driver delegates E_parallel loose/Krylov
   routing, constraint-nullspace projection admission, optional KSP iteration-stat
   settings, and dense-batch fallback admission to a focused policy object before
   entering the sequential solve branches.

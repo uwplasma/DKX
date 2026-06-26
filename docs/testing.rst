@@ -466,7 +466,7 @@ chunked fixed-operator diagnostic evaluation, and transport-matrix assembly are
 checked with monkeypatched numerical kernels so the behavior is protected without
 adding heavyweight transport solves to CI.
 ``tests/test_transport_solve_policy.py`` covers
-``sfincs_jax.problems.transport_matrix.solve_policy``, the initial RHSMode=2/3
+``sfincs_jax.problems.transport_matrix.policies``, the initial RHSMode=2/3
 solve policy extracted from ``v3_driver.py``: geometryScheme namelist parsing,
 low-memory VMEC monoenergetic routing, dense fallback admission, dense
 memory-cap blocking, subset streaming, state-vector retention, and GMRES
