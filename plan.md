@@ -15,35 +15,31 @@ Authoritative plan: `plan_final.md`. This file is the execution log and
 historical record only; if this file conflicts with `plan_final.md`, follow
 `plan_final.md`.
 
-Latest controlling update: `plan_final.md` now defines Lane 1 as five
-consolidation batches only: Batch A profile-response owner compression,
-Batch B transport/output/root compression, Batch C solver/preconditioner
-family compression, Batch D public API/docs/tests/source-map cleanup, and
-Batch E review-ready validation. Older phase, sweep, tranche, iteration, and
-pass labels in this execution log are historical context, not instructions to
-follow.
+Latest controlling update: `plan_final.md` now defines Lane 1 as locked
+completed checkpoints plus five active consolidation batches only: Batch 1
+transport/output/root payback, Batch 2 solver/preconditioner family
+compression, Batch 3 compatibility-waiver/profile-response freeze, Batch 4
+public API/docs/tests/source-map cleanup, and Batch 5 review-ready validation.
+Older phase, sweep, tranche, iteration, and pass labels in this execution log
+are historical context, not instructions to follow.
 
 Latest execution checkpoint:
 
-- Batch A deleted `sfincs_jax/problems/profile_response/handoff.py` by moving
-  accepted-candidate replay, solver-candidate residual gates, and Krylov
-  replay-state updates into
-  `sfincs_jax/problems/profile_response/solver_diagnostics.py`.
-- Batch A then deleted `sfincs_jax/problems/profile_response/auto_solve.py` by
-  moving explicit host structured-CSR and automatic RHSMode-1 host-solver
-  routing into `sfincs_jax/problems/profile_response/dense.py`, the existing
-  host solve owner.
-- `sfincs_jax/problems/profile_response/solve.py`, focused tests, source maps,
-  and docs now import the canonical `solver_diagnostics.py` and `dense.py`
-  owners for those helpers.
-- Current counts after this checkpoint: 205 package Python files, 43 package
-  root files, 18 `problems/profile_response` files including `sparse`,
-  `profile_response/solve.py` at 7,008 lines,
-  `profile_response/setup.py` at 1,558 lines,
-  `profile_response/dense.py` at 3,287 lines,
-  `profile_response/solver_diagnostics.py` at 2,114 lines,
-  `profile_response/sparse/handoff.py` at 4,438 lines, and 165,586 package
-  Python lines.
+- The profile-response solve sequencer and sparse handoff export layer are
+  compressed enough for the Lane 1 review gates:
+  `profile_response/solve.py` is 5,358 lines and
+  `profile_response/sparse/handoff.py` is 5,498 lines.
+- The concrete output writer now lives in `sfincs_jax.outputs.writer`, while
+  root `sfincs_jax.io` is a 49-line compatibility facade.
+- The authoritative plan was refreshed so remaining work is not another series
+  of one-helper moves: it must pay down files in transport/output/root owners,
+  compress solver/preconditioner families, freeze compatibility shims, refresh
+  docs/tests/source maps, and pass the review-ready gate.
+- Current counts after this checkpoint: 196 package Python files, 43 package
+  root files, 18 `problems/profile_response` files including `sparse`, 18
+  `problems/transport_matrix` files including `parallel`, 47
+  `solvers/preconditioners` files, `io.py` at 49 lines,
+  `outputs/writer.py` at 4,264 lines, and 165,430 package Python lines.
 
 ## One-Sentence Plan
 
