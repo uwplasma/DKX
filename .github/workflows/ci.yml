@@ -78,7 +78,7 @@ jobs:
       - name: Combine coverage
         run: |
           python -m coverage combine $(find coverage-parts -type f -name '.coverage.*' | sort)
-          python -m coverage report --fail-under=43
+          python -m coverage report --fail-under=75
           python -m coverage xml
       - name: Upload coverage
         uses: codecov/codecov-action@v6

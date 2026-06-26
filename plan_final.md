@@ -66,10 +66,18 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
 - The root README no longer matches the explicit progress-language patterns
   flagged in the review prompt. Remaining historical/status language should be
   handled in docs pages and release notes rather than the first-page README.
-- The latest full coverage XML available in-tree measured `74.23%`; the target remains `95%`
+- A fresh xdist coverage audit on this branch measured `82.76%`
+  (`57,232 / 69,151` covered lines) in `5:06`. The target remains `95%`
   meaningful package coverage with GitHub Actions under `10 min`; this requires
   targeted unit, numerical, and frozen-reference tests, not slow full-solve
   CI jobs.
+- The largest coverage gaps by missing executable lines are
+  `solvers/preconditioner_transport_matrix.py`, `problems/profile_solve.py`,
+  `problems/transport_solve.py`, `operators/profile_system.py`,
+  `outputs/writer.py`, `solvers/preconditioner_pas_xblock_ilu.py`,
+  `solvers/preconditioner_pas_angular.py`,
+  `solvers/preconditioner_full_fp_kinetic.py`, `solvers/explicit_sparse.py`,
+  and `operators/profile_sparse_pattern.py`.
 
 ### Target Package Shape
 
@@ -248,7 +256,7 @@ Tranche 6: coverage ramp to 95%.
 - Add production-shape fast tests that exercise large-resolution sizing,
   policy admission, memory estimates, output schemas, and residual gates without
   solving the full production system.
-- Raise coverage in gates: `80%`, `87%`, `92%`, then `95%`. Do not raise a gate
+- Raise coverage in gates: `75%`, `85%`, `90%`, then `95%`. Do not raise a gate
   until Linux CI remains below `10 min`.
 - Acceptance: coverage floor reaches `95%`, no multi-megabyte fixture bloat,
   and CI stays below the time budget.

@@ -18,6 +18,7 @@ ALLOWED_EXAMPLE_FOLDERS = {
     "publication_figures",
     "sfincs_examples",
     "transport",
+    "tutorials",
     "upstream",
     "utils",
     "vmec_jax_finite_beta",
