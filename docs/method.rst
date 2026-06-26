@@ -347,7 +347,7 @@ forward and backward substitutions:
 
 This is the same factor-and-reuse pattern used by memory-efficient block-tridiagonal
 solvers. In `sfincs_jax`, the reusable implementation lives in
-`sfincs_jax/discretization/structured_velocity.py`. It is now used in the weakly coupled
+`sfincs_jax/discretization/structured_velocity.py`. It is used in the weakly coupled
 `pas_tokamak_theta` tail solve for the `L>=2` block chain, while the
 special `(L=0,1)` entrance block remains handled explicitly in
 `sfincs_jax/v3_driver.py`. A reverse factorization is available for cases where
