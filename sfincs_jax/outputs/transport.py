@@ -101,7 +101,7 @@ def write_transport_h5_streaming(
         v3_rhsmode1_output_fields_vm_only_jit,
         v3_transport_diagnostics_vm_only,
     )
-    from ..v3_system import with_transport_rhs_settings  # noqa: PLC0415
+    from sfincs_jax.operators.profile_response.system import with_transport_rhs_settings  # noqa: PLC0415
 
     op0 = result.op0
     n_rhs = transport_matrix_size_from_rhs_mode(int(op0.rhs_mode))

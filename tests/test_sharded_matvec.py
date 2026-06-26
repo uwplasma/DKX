@@ -8,7 +8,7 @@ import pytest
 
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.v3_driver import full_system_operator_from_namelist
-from sfincs_jax.v3_system import apply_v3_full_system_operator_cached
+from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator_cached
 
 
 def test_sharded_matvec_fallback_matches_unsharded(monkeypatch) -> None:

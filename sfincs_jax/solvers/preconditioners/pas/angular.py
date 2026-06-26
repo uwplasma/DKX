@@ -19,7 +19,7 @@ from sfincs_jax.solvers.preconditioner_context import precond_dtype as _precond_
 from sfincs_jax.solvers.preconditioner_setup import rhs_mode1_precond_cache_key
 from sfincs_jax.solvers.preconditioners.pas.policy import build_pas_tz_memory_fallback
 from ....structured_velocity import factor_block_tridiagonal
-from ....v3_system import V3FullSystemOperator
+from sfincs_jax.operators.profile_response.system import V3FullSystemOperator
 
 Preconditioner = Callable[[jnp.ndarray], jnp.ndarray]
 

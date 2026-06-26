@@ -12,7 +12,7 @@ import jax.numpy as jnp
 from ...namelist import Namelist
 from ...operators.profile_response.full_system import solve_structured_rhs1_full_csr
 from ...solver import GMRESSolveResult
-from ...v3_system import (
+from sfincs_jax.operators.profile_response.system import (
     V3FullSystemOperator,
     full_system_operator_from_namelist,
     rhs_v3_full_system,

@@ -16,7 +16,7 @@ from jax import tree_util as jtu  # noqa: E402
 from jax import vmap  # noqa: E402
 
 from sfincs_jax.geometry import BoozerGeometry  # noqa: E402
-from sfincs_jax.v3_system import V3FullSystemOperator  # noqa: E402
+from sfincs_jax.operators.profile_response.system import V3FullSystemOperator  # noqa: E402
 
 _STRICT_SUM_ORDER = os.environ.get("SFINCS_JAX_STRICT_SUM_ORDER", "").strip().lower() in {"1", "true", "yes", "on"}
 _TRANSPORT_DIAG_PRECOMPUTE_CACHE_MAX_ENV = os.environ.get("SFINCS_JAX_TRANSPORT_DIAG_CACHE_MAX", "").strip()

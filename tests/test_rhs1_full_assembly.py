@@ -38,7 +38,7 @@ from sfincs_jax.operators.profile_response.layout import (
     clear_rhs1_active_field_split_ordering_cache,
 )
 from sfincs_jax.solvers.preconditioners.full_fp.full_csr_kinetic import rhs1_full_csr_x_ell_block_indices
-from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist, rhs_v3_full_system
+from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator, full_system_operator_from_namelist, rhs_v3_full_system
 
 
 REF = Path(__file__).parent / "ref"

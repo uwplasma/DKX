@@ -61,7 +61,7 @@ from ...solvers.preconditioners.full_fp.kinetic_blocks import (
     build_rhs1_collision_preconditioner,
 )
 from ...solvers.preconditioners.symbolic_sparse import build_sparse_ilu_from_matvec
-from ...v3_system import (
+from sfincs_jax.operators.profile_response.system import (
     V3FullSystemOperator,
     apply_v3_full_system_jacobian_jit,
     apply_v3_full_system_operator_cached,

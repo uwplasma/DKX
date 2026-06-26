@@ -89,7 +89,7 @@ def matvec_submatrix_v3_unsharded(
 ) -> np.ndarray:
     """Assemble selected V3 operator rows with the unsharded operator apply."""
 
-    from ..v3_system import apply_v3_full_system_operator  # noqa: PLC0415
+    from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator  # noqa: PLC0415
 
     return matvec_submatrix(
         op_pc,

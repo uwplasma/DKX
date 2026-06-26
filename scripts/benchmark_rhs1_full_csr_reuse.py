@@ -21,7 +21,7 @@ from sfincs_jax.operators.profile_response.full_system import (
     solve_structured_rhs1_full_csr,
 )
 from sfincs_jax.v3_driver import _transport_active_dof_indices
-from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist, rhs_v3_full_system
+from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator, full_system_operator_from_namelist, rhs_v3_full_system
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]

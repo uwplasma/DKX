@@ -30,7 +30,7 @@ from ...solver import (
     gmres_solve_with_residual_distributed,
     gmres_solve_with_residual_jit,
 )
-from ...v3_system import sharding_constraints
+from sfincs_jax.operators.profile_response.system import sharding_constraints
 from .policies import (
     rhsmode1_scipy_rescue_abs_floor_after_xblock_current_backend,
     rhsmode1_scipy_rescue_active_size_allowed_current_backend,

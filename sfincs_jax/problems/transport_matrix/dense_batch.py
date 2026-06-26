@@ -17,7 +17,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.solver import assemble_dense_matrix_from_matvec, dense_solve_from_matrix
-from sfincs_jax.v3_system import _operator_signature_cached, apply_v3_full_system_operator_cached
+from sfincs_jax.operators.profile_response.system import _operator_signature_cached, apply_v3_full_system_operator_cached
 from sfincs_jax.profiling import Timer
 
 

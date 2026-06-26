@@ -141,7 +141,7 @@ Fortran v3 feature ownership
      - ``evaluateResidual.F90``, ``populateMatrix.F90``, ``diagnostics.F90``
      - Fortran solves coupled kinetic/quasineutrality systems for compatible
        RHSMode-1 settings and rejects RHSMode>3 with Phi1.
-     - ``sfincs_jax.v3_system`` and profile-response modules: implemented for
+     - ``sfincs_jax.operators.profile_response.system`` and profile-response modules: implemented for
        documented RHSMode-1 cases. RHSMode 4/5 with Phi1 remains invalid by
        design, matching Fortran validation.
    * - Sparse solver and preconditioner backend

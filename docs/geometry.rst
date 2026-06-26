@@ -367,7 +367,7 @@ The main geometry-related modules are:
 - ``sfincs_jax/geometry.py``: normalized geometric fields and coefficient assembly.
 - ``sfincs_jax/input_compat.py``: equilibrium-file resolution and namelist overrides.
 - ``sfincs_jax/diagnostics.py``: geometry-derived scalar diagnostics and moments.
-- ``sfincs_jax/v3_system.py``: insertion of geometry coefficients into the kinetic
+- ``sfincs_jax/operators/profile_response/system.py``: insertion of geometry coefficients into the kinetic
   operator.
 - ``sfincs_jax/magnetic_drifts.py`` and ``sfincs_jax/collisionless_exb.py``:
   construction of drift coefficients from the geometry arrays.

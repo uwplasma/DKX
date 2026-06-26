@@ -22,7 +22,7 @@ from sfincs_jax.problems.transport_matrix.active_factor import (
     deterministic_probe_matrix,
 )
 from sfincs_jax.problems.transport_matrix.direct_pmat import _try_build_rhsmode23_fp_direct_active_operator_bundle
-from sfincs_jax.v3_system import V3FullSystemOperator
+from sfincs_jax.operators.profile_response.system import V3FullSystemOperator
 from sfincs_jax.profiling import Timer
 
 __all__ = ["build_transport_fp_direct_active_block_schur_preconditioner"]

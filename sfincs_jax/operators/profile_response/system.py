@@ -1,4 +1,8 @@
+"""Matrix-free full-system operator for profile-response solves."""
+
 from __future__ import annotations
+
+# ruff: noqa: E402
 
 from dataclasses import dataclass, fields, is_dataclass, replace
 import os
@@ -19,40 +23,40 @@ from jax.sharding import Mesh, PartitionSpec
 
 _spmd_jit = jax.jit
 
-from .boozer_bc import read_boozer_bc_header, selected_r_n_from_bc
-from .diagnostics import b0_over_bbar as b0_over_bbar_jax
-from .diagnostics import fsab_hat2 as fsab_hat2_jax
-from .diagnostics import g_hat_i_hat as g_hat_i_hat_jax
-from .input_compat import (
+from sfincs_jax.boozer_bc import read_boozer_bc_header, selected_r_n_from_bc
+from sfincs_jax.collisionless import CollisionlessV3Operator
+from sfincs_jax.collisionless_er import ErXiDotV3Operator, ErXDotV3Operator
+from sfincs_jax.collisionless_exb import ExBThetaV3Operator, ExBZetaV3Operator
+from sfincs_jax.collisions import (
+    PitchAngleScatteringV3Operator,
+    FokkerPlanckV3Operator,
+    FokkerPlanckV3Phi1Operator,
+)
+from sfincs_jax.diagnostics import b0_over_bbar as b0_over_bbar_jax
+from sfincs_jax.diagnostics import fsab_hat2 as fsab_hat2_jax
+from sfincs_jax.diagnostics import g_hat_i_hat as g_hat_i_hat_jax
+from sfincs_jax.geometry import BoozerGeometry
+from sfincs_jax.input_compat import (
     effective_equilibrium_file,
     effective_psi_a_hat,
     effective_psi_n_wish,
     infer_phi_input_radial_coordinate_for_gradients,
     infer_species_input_radial_coordinate_for_gradients,
 )
-from .geometry import BoozerGeometry
-from .namelist import Namelist
-from .paths import resolve_existing_path
-from .v3 import V3Grids, geometry_from_namelist, grids_from_namelist
-from .collisionless import CollisionlessV3Operator
-from .collisionless_er import ErXiDotV3Operator, ErXDotV3Operator
-from .collisionless_exb import ExBThetaV3Operator, ExBZetaV3Operator
-from .magnetic_drifts import (
+from sfincs_jax.magnetic_drifts import (
     MagneticDriftThetaV3Operator,
     MagneticDriftZetaV3Operator,
     MagneticDriftXiDotV3Operator,
 )
-from .collisions import (
-    PitchAngleScatteringV3Operator,
-    FokkerPlanckV3Operator,
-    FokkerPlanckV3Phi1Operator,
-)
+from sfincs_jax.namelist import Namelist
 from sfincs_jax.operators.profile_response.fblock import (
     V3FBlockOperator,
     apply_v3_fblock_operator,
     fblock_operator_from_namelist,
 )
-from .vmec_wout import psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
+from sfincs_jax.paths import resolve_existing_path
+from sfincs_jax.v3 import V3Grids, geometry_from_namelist, grids_from_namelist
+from sfincs_jax.vmec_wout import psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
 
 _THRESHOLD_FOR_INCLUSION = 1e-12  # Matches v3 `sparsify.F90`.
 _V3_DEFAULT_DELTA = 4.5694e-3  # v3 `globalVariables.F90`
@@ -368,10 +372,10 @@ def _nonlinear_temp_vector(
     ddx_f = jnp.transpose(ddx_f, (0, 4, 1, 2, 3))  # (S,X,L,T,Z)
 
     out_nl = jnp.zeros_like(f, dtype=jnp.float64)
-    l = jnp.arange(n_xi, dtype=jnp.float64)
+    ell = jnp.arange(n_xi, dtype=jnp.float64)
 
     if n_xi > 1:
-        lp1 = l[:-1]
+        lp1 = ell[:-1]
         coef = (lp1 + 1.0) / (2.0 * lp1 + 3.0)
         diag_xl = (((lp1 + 1.0) * (lp1 + 2.0) / (2.0 * lp1 + 3.0))[:, None] * inv_x[None, :]).T
         src = f[:, :, 1:, :, :]
@@ -379,7 +383,7 @@ def _nonlinear_temp_vector(
         term = coef[None, None, :, None, None] * ddx_src + diag_xl[None, :, :, None, None] * src
         out_nl = out_nl.at[:, :, :-1, :, :].add(term)
 
-        lm1 = l[1:]
+        lm1 = ell[1:]
         coef = lm1 / (2.0 * lm1 - 1.0)
         diag_xl = ((-(lm1 - 1.0) * lm1 / (2.0 * lm1 - 1.0))[:, None] * inv_x[None, :]).T
         src = f[:, :, :-1, :, :]
@@ -406,11 +410,11 @@ def _nonlinear_temp_vector_phi1(
     ddx_f = jnp.transpose(ddx_f, (0, 4, 1, 2, 3))  # (S,X,L,T,Z)
 
     out_phi1 = jnp.zeros_like(f, dtype=jnp.float64)
-    l = jnp.arange(n_xi, dtype=jnp.float64)
+    ell = jnp.arange(n_xi, dtype=jnp.float64)
 
     if n_xi > 1:
         # For L < Nxi-1, populateMatrix.F90 overwrites tempVector2 with the L+1 contribution.
-        lp1 = l[:-1]
+        lp1 = ell[:-1]
         coef = (lp1 + 1.0) / (2.0 * lp1 + 3.0)
         diag_xl = (((lp1 + 1.0) * (lp1 + 2.0) / (2.0 * lp1 + 3.0))[:, None] * inv_x[None, :]).T
         src = f[:, :, 1:, :, :]
@@ -1937,7 +1941,7 @@ def full_system_operator_from_namelist(
         if eq is None:
             raise ValueError("geometryScheme=11/12 requires equilibriumFile in geometryParameters.")
         base_dir = nml.source_path.parent if nml.source_path is not None else None
-        repo_root = Path(__file__).resolve().parents[1]
+        repo_root = Path(__file__).resolve().parents[3]
         extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
         p = resolve_existing_path(str(eq), base_dir=base_dir, extra_search_dirs=extra).path
         header = read_boozer_bc_header(path=str(p), geometry_scheme=int(geometry_scheme))
@@ -1957,7 +1961,7 @@ def full_system_operator_from_namelist(
         if eq is None:
             raise ValueError("geometryScheme=5 requires equilibriumFile in geometryParameters.")
         base_dir = nml.source_path.parent if nml.source_path is not None else None
-        repo_root = Path(__file__).resolve().parents[1]
+        repo_root = Path(__file__).resolve().parents[3]
         extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
         # Allow `.txt -> .nc` fallback for VMEC wout files.
         try:

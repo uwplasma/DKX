@@ -14,7 +14,7 @@ from sfincs_jax.operators.profile_response.kinetic import (
     select_structured_rhs1_fblock_operator,
 )
 from sfincs_jax.operators.profile_response.fblock import apply_v3_fblock_operator, fblock_operator_from_namelist
-from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist
+from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator, full_system_operator_from_namelist
 
 
 def test_partial_fblock_assembly_matches_complete_pas_er_operator(tmp_path: Path) -> None:

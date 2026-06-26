@@ -16,7 +16,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from .solver import small_regularized_lstsq
-from .v3_system import _source_basis_constraint_scheme_1, apply_v3_full_system_operator_cached
+from sfincs_jax.operators.profile_response.system import _source_basis_constraint_scheme_1, apply_v3_full_system_operator_cached
 
 
 ApplyOperatorFn = Callable[[Any, jnp.ndarray], jnp.ndarray]

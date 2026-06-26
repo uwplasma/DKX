@@ -1219,7 +1219,7 @@ def dense_rhs1_vm_radial_current_linear_observable_system(
 
     from ..sensitivity import LinearObservableSystem  # noqa: PLC0415
     from ..solver import assemble_dense_matrix_from_matvec  # noqa: PLC0415
-    from ..v3_system import apply_v3_full_system_operator_cached, rhs_v3_full_system_jit  # noqa: PLC0415
+    from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator_cached, rhs_v3_full_system_jit  # noqa: PLC0415
     from .transport_matrix.diagnostics import radial_current_vm_observable_vector  # noqa: PLC0415
 
     def assemble_matrix(operator: Any) -> Any:
@@ -1388,7 +1388,7 @@ def _dense_validation_linear_algebra_for_operator(
 
     from sfincs_jax.operators.profile_response.compressed_layout import build_rhs1_compressed_pitch_layout  # noqa: PLC0415
     from ..solver import assemble_dense_matrix_from_matvec  # noqa: PLC0415
-    from ..v3_system import apply_v3_full_system_operator_cached  # noqa: PLC0415
+    from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator_cached  # noqa: PLC0415
 
     layout = build_rhs1_compressed_pitch_layout(op)
     active_idx_np = np.asarray(layout.active_full_indices, dtype=np.int32)
@@ -1599,7 +1599,7 @@ def rhsmode1_radial_current_response_from_namelist(
         raise ValueError("finite_difference_step must be positive.")
 
     from ..namelist import read_sfincs_input  # noqa: PLC0415
-    from ..v3_system import full_system_operator_from_namelist  # noqa: PLC0415
+    from sfincs_jax.operators.profile_response.system import full_system_operator_from_namelist  # noqa: PLC0415
 
     nml_base = read_sfincs_input(nml) if isinstance(nml, (str, Path)) else nml
     rhs_mode = int(nml_base.group("general").get("RHSMODE", 1))
@@ -1875,7 +1875,7 @@ def matrix_free_rhs1_vm_radial_current_linear_observable_system(
     import jax.numpy as jnp  # noqa: PLC0415
 
     from ..sensitivity import MatrixFreeLinearObservableSystem  # noqa: PLC0415
-    from ..v3_system import apply_v3_full_system_operator_cached, rhs_v3_full_system_jit  # noqa: PLC0415
+    from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator_cached, rhs_v3_full_system_jit  # noqa: PLC0415
     from .transport_matrix.diagnostics import radial_current_vm_observable_vector  # noqa: PLC0415
 
     def apply_operator(operator: Any, state: Any) -> Any:

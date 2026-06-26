@@ -15,7 +15,7 @@ import pytest
 
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.operators.profile_response.full_system import clear_structured_rhs1_full_csr_cache, select_structured_rhs1_full_csr_operator
-from sfincs_jax.v3_system import full_system_operator_from_namelist
+from sfincs_jax.operators.profile_response.system import full_system_operator_from_namelist
 
 
 REF = Path(__file__).parent / "ref"

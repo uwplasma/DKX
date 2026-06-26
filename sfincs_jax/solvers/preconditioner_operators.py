@@ -14,7 +14,7 @@ from dataclasses import replace
 import jax.numpy as jnp
 import numpy as np
 
-from ..v3_system import V3FullSystemOperator
+from sfincs_jax.operators.profile_response.system import V3FullSystemOperator
 
 __all__ = [
     "block_diagonal_only",

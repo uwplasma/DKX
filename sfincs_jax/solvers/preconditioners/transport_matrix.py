@@ -59,7 +59,7 @@ from sfincs_jax.solvers.preconditioners.xblock import (
     rhsmode1_fp_xblock_tz_sparse_diagonal as _rhsmode1_fp_xblock_tz_sparse_diagonal,
     safe_inverse_diagonal_np as _safe_inverse_diagonal_np,
 )
-from sfincs_jax.v3_system import (
+from sfincs_jax.operators.profile_response.system import (
     V3FullSystemOperator,
     _fs_average_factor,
     _ix_min,

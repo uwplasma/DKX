@@ -20,7 +20,7 @@ from sfincs_jax.solvers.preconditioner_setup import (
     precond_chunk_cols,
     rhs_mode1_precond_cache_key,
 )
-from ....v3_system import V3FullSystemOperator
+from sfincs_jax.operators.profile_response.system import V3FullSystemOperator
 
 Preconditioner = Callable[[jnp.ndarray], jnp.ndarray]
 

@@ -21,7 +21,7 @@ from sfincs_jax.problems.profile_response.policies import read_bool_env, read_in
 from sfincs_jax.profiling import Timer
 
 if TYPE_CHECKING:
-    from sfincs_jax.v3_system import V3FullSystemOperator
+    from sfincs_jax.operators.profile_response.system import V3FullSystemOperator
 
 __all__ = ["_try_build_structured_rhs1_full_csr_operator_bundle"]
 

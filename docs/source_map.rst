@@ -263,8 +263,8 @@ Collision models:
 - field-particle terms,
 - Phi1-modified collision coefficients.
 
-``sfincs_jax/v3_system.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+``sfincs_jax/operators/profile_response/system.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 System construction:
 

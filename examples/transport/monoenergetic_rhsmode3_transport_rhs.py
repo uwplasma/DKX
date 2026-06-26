@@ -5,7 +5,7 @@ In upstream SFINCS v3, `RHSMode=3` (monoenergetic coefficients) runs a *loop* ov
 overwrites (dnHatdpsiHats, dTHatdpsiHats, EParallelHat) internally before constructing each RHS.
 
 In `sfincs_jax`, the same behavior is exposed via:
-  - `sfincs_jax.v3_system.with_transport_rhs_settings` (low-level operator manipulation), and
+  - `sfincs_jax.operators.profile_response.system.with_transport_rhs_settings` (low-level operator manipulation), and
   - `sfincs_jax.v3_driver.solve_v3_full_system_linear_gmres(..., which_rhs=...)` (convenience driver),
   - `sfincs_jax solve-v3 --which-rhs ...` (CLI).
 

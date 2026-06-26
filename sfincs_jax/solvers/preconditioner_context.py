@@ -13,7 +13,7 @@ import jax
 import jax.numpy as jnp
 
 from . import path_policy as solver_path_policy
-from ..v3_system import _THRESHOLD_FOR_INCLUSION
+from sfincs_jax.operators.profile_response.system import _THRESHOLD_FOR_INCLUSION
 
 
 _PRECOND_SIZE_HINT: int | None = None

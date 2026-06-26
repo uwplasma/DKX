@@ -9,7 +9,7 @@ from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.petsc_binary import read_petsc_vec
 from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist
 from sfincs_jax.v3_driver import solve_v3_full_system_linear_gmres
-from sfincs_jax.v3_system import apply_v3_full_system_operator, apply_v3_full_system_operator_jit, full_system_operator_from_namelist
+from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator, apply_v3_full_system_operator_jit, full_system_operator_from_namelist
 
 
 def test_full_system_operator_can_jit_compile() -> None:

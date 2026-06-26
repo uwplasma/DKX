@@ -571,6 +571,21 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "matvec_v3_fblock_flat",
     ),
     (
+        "sfincs_jax.operators.profile_response.system",
+        "sfincs_jax.operators.profile_response.system",
+        "V3FullSystemOperator",
+    ),
+    (
+        "sfincs_jax.operators.profile_response.system",
+        "sfincs_jax.operators.profile_response.system",
+        "full_system_operator_from_namelist",
+    ),
+    (
+        "sfincs_jax.operators.profile_response.system",
+        "sfincs_jax.operators.profile_response.system",
+        "apply_v3_full_system_operator_cached",
+    ),
+    (
         "sfincs_jax.problems.profile_response.preconditioner_build",
         "sfincs_jax.problems.profile_response.preconditioner_build",
         "auto_rhs1_full_strong_kind",

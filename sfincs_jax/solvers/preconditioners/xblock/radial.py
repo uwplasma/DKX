@@ -17,7 +17,7 @@ from sfincs_jax.solvers.preconditioner_caches import (
 )
 from sfincs_jax.solvers.preconditioner_context import precond_dtype as _precond_dtype
 from sfincs_jax.solvers.preconditioner_setup import rhs_mode1_precond_cache_key
-from ....v3_system import V3FullSystemOperator
+from sfincs_jax.operators.profile_response.system import V3FullSystemOperator
 
 Preconditioner = Callable[[jnp.ndarray], jnp.ndarray]
 

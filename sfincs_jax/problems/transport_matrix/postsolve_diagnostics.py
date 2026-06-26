@@ -22,7 +22,7 @@ from sfincs_jax.problems.transport_matrix.diagnostics import (
     v3_transport_matrix_from_flux_arrays,
 )
 from sfincs_jax.problems.transport_matrix.streaming_outputs import TransportStreamingOutputAccumulator
-from sfincs_jax.v3_system import V3FullSystemOperator
+from sfincs_jax.operators.profile_response.system import V3FullSystemOperator
 
 
 @dataclass(frozen=True)

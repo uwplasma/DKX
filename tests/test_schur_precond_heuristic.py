@@ -11,7 +11,7 @@ from sfincs_jax.io import write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.solver import GMRESSolveResult
 import sfincs_jax.v3_driver as v3_driver
-from sfincs_jax.v3_system import full_system_operator_from_namelist, rhs_v3_full_system
+from sfincs_jax.operators.profile_response.system import full_system_operator_from_namelist, rhs_v3_full_system
 
 
 @pytest.fixture(autouse=True)

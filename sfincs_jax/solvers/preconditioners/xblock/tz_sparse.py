@@ -46,7 +46,7 @@ from sfincs_jax.solvers.sparse_triangular import (
     triangular_solve_upper_padded as _triangular_solve_upper_padded,
 )
 from ..symbolic_sparse import build_sparse_ilu_from_matvec, factorize_sparse_matrix_csr_host
-from ....v3_system import V3FullSystemOperator, apply_v3_full_system_operator_cached
+from sfincs_jax.operators.profile_response.system import V3FullSystemOperator, apply_v3_full_system_operator_cached
 
 __all__ = [
     "assemble_rhsmode1_fp_xblock_tz_sparse_matrix",

@@ -39,7 +39,7 @@ from sfincs_jax.v3_driver import (
     _triangular_solve_upper_csr_rows,
     solve_v3_full_system_linear_gmres,
 )
-from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist
+from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator, full_system_operator_from_namelist
 
 
 def _csr_from_petsc(path: Path) -> sp.csr_matrix:

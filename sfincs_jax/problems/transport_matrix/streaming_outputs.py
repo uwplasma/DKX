@@ -20,7 +20,7 @@ from sfincs_jax.problems.transport_matrix.diagnostics import (
     v3_rhsmode1_output_fields_vm_only_jit,
     v3_transport_diagnostics_vm_only,
 )
-from sfincs_jax.v3_system import with_transport_rhs_settings
+from sfincs_jax.operators.profile_response.system import with_transport_rhs_settings
 
 
 def _zeros(shape: tuple[int, ...]) -> np.ndarray:

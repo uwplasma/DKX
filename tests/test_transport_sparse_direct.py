@@ -34,7 +34,7 @@ from sfincs_jax.v3_driver import (
     _transport_tzfft_structured_first_attempt_allowed,
     solve_v3_transport_matrix_linear_gmres,
 )
-from sfincs_jax.v3_system import (
+from sfincs_jax.operators.profile_response.system import (
     apply_v3_full_system_operator_cached,
     full_system_operator_from_namelist,
     rhs_v3_full_system,

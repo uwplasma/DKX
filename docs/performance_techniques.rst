@@ -88,7 +88,7 @@ operators directly on the state vector.
 
 **Implementation.**
 
-- Core operator apply: ``sfincs_jax.v3_system.apply_v3_full_system_operator_cached``.
+- Core operator apply: ``sfincs_jax.operators.profile_response.system.apply_v3_full_system_operator_cached``.
 - Per-operator **signature cache** prevents re-JITing the matvec when the operator
   shape and static fields are unchanged. See ``_operator_signature_cached``.
 
@@ -3078,7 +3078,7 @@ Key modules and functions referenced above:
 
 - **Operator apply + caching**:
 
-  - ``sfincs_jax/v3_system.py``: ``apply_v3_full_system_operator_cached``,
+  - ``sfincs_jax/operators/profile_response/system.py``: ``apply_v3_full_system_operator_cached``,
     ``_operator_signature_cached``.
 
 - **Transport solver + preconditioners**:

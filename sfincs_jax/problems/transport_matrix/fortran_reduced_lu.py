@@ -32,7 +32,7 @@ from sfincs_jax.operators.profile_response.sparse_pattern import (
     v3_full_system_fortran_reduced_preconditioner_sparsity_pattern,
     v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices,
 )
-from sfincs_jax.v3_system import V3FullSystemOperator, apply_v3_full_system_operator_cached
+from sfincs_jax.operators.profile_response.system import V3FullSystemOperator, apply_v3_full_system_operator_cached
 
 __all__ = ["build_transport_fp_fortran_reduced_lu_preconditioner"]
 

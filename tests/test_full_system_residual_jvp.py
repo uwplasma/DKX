@@ -9,7 +9,7 @@ import jax.numpy as jnp
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.petsc_binary import read_petsc_vec
 from sfincs_jax.residual import V3FullLinearSystem
-from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist
+from sfincs_jax.operators.profile_response.system import apply_v3_full_system_operator, full_system_operator_from_namelist
 
 
 def test_full_system_residual_and_jvp_pas_tiny() -> None:

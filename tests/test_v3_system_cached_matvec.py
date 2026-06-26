@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-import sfincs_jax.v3_system as vs
+import sfincs_jax.operators.profile_response.system as vs
 
 
 def test_cached_full_system_matvec_uses_local_path_inside_jax_transform(monkeypatch) -> None:

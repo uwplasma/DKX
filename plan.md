@@ -4689,3 +4689,86 @@ Next best steps:
    finalization/progress normalization, factor-preflight execution, and
    residual-correction execution out of `profile_response/solve.py` without
    adding helper-only files.
+
+## 2026-06-26 Sweep 0 Full-System Root Routing
+
+Steps taken:
+
+1. Moved the matrix-free full-system profile-response operator from the
+   historical root module `sfincs_jax/v3_system.py` into the operator-domain
+   owner `sfincs_jax/operators/profile_response/system.py`.
+2. Removed the historical root file instead of keeping a compatibility facade,
+   because package-internal imports, docs, examples, scripts, and focused
+   tests now import `sfincs_jax.operators.profile_response.system`.
+3. Rewired imports across profile-response, transport-matrix, preconditioner,
+   residual, output, examples, scripts, and tests to the new owner.
+4. Updated docs and import contracts so `operators.profile_response.system`
+   owns `V3FullSystemOperator`, `full_system_operator_from_namelist`, and
+   `apply_v3_full_system_operator_cached`.
+5. Adjusted repository-root path resolution in the moved module so
+   geometryScheme 5/11/12 equilibrium lookup still searches checked fixtures
+   and package-data locations after the file move.
+
+Results:
+
+- Package-internal imports from `sfincs_jax.v3_system`: `0`.
+- `sfincs_jax/v3_system.py` was removed from the package root.
+- Package file count remains `209`; package-root file count decreases from
+  `46` to `45`.
+- Package source lines are `164,907`; still above the `164,865`
+  consolidation baseline until later deletion/merge sweeps remove more
+  compatibility and implementation surface.
+- `operators/profile_response` now owns `14` files and `18,368` lines.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/operators/profile_response/system.py
+  sfincs_jax/residual.py sfincs_jax/constraint_projection.py
+  sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/transport_matrix/solve.py
+  tests/test_full_system_operator_jit.py tests/test_v3_system_cached_matvec.py`
+  passed.
+- `python -m ruff check sfincs_jax/operators/profile_response/system.py
+  sfincs_jax/residual.py sfincs_jax/constraint_projection.py
+  sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/transport_matrix/solve.py
+  tests/test_full_system_operator_jit.py tests/test_v3_system_cached_matvec.py`
+  passed.
+- `python -m pytest tests/test_domain_package_import_contracts.py
+  tests/test_full_system_operator_jit.py tests/test_v3_system_cached_matvec.py
+  tests/test_full_system_rhs_parity.py tests/test_full_system_residual_parity.py
+  tests/test_full_system_residual_jvp.py tests/test_full_system_matvec_parity.py
+  -q --tb=short` passed with `45 passed`.
+- `python -m pytest tests/test_transport_matrix_rhsmode2_parity.py
+  tests/test_transport_matrix_rhsmode3_parity.py
+  tests/test_transport_streaming_outputs.py -q --tb=short` passed with
+  `21 passed`.
+- `python -m pytest
+  tests/test_v3_sparse_pattern.py::test_conservative_sparse_pattern_covers_pas_fortran_matrix
+  tests/test_v3_sparse_pattern.py::test_conservative_sparse_pattern_covers_fp_fortran_matrix
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_operator_preserves_angular_coupling
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_solves_tiny_rhs1_system
+  tests/test_rhs1_device_operator.py -q --tb=short` passed with `7 passed`.
+
+Progress:
+
+- Lane 1 structural consolidation: about `88%`.
+- Sweep 0 freeze/delete/route: about `60%`; result contracts, sparse
+  structural patterns, f-block, and full-system operator are routed. The
+  remaining Sweep 0 decision is whether `v3.py` stays as a compatibility
+  facade or is split into geometry/grid domain owners.
+- Sweep 1 profile-response collapse: about `44%`.
+- Sweep 2 transport/output/root cleanup: about `20%`.
+- Sweep 3 solver/preconditioner family consolidation: about `25%`.
+- Sweep 4 public API/docs/tests/review gate: about `25%`.
+
+Next best steps:
+
+1. Finish Sweep 0 by auditing `v3.py` external/public usage and deciding
+   whether to keep it as a compatibility facade or move grids/geometry builders
+   to durable domain owners.
+2. If `v3.py` cannot be deleted safely, document it explicitly as a public
+   compatibility facade with deletion conditions and import-contract coverage.
+3. Resume Sweep 1 after that: move sparse finalization/progress normalization,
+   factor-preflight execution, and residual-correction execution out of
+   `profile_response/solve.py` without adding helper-only files.
