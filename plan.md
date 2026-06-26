@@ -4969,3 +4969,72 @@ Next best steps:
 3. After those stages are outside `solve.py`, decide whether
    `profile_response/handoff.py` or `sparse/finalization.py` can be merged or
    deleted without creating import cycles.
+
+## 2026-06-26 Batch A Direct-Tail Auto Preflight Retry Extraction
+
+Steps taken:
+
+1. Added `SparsePCAutoPreflightRetryStageContext`,
+   `SparsePCAutoPreflightRetryStageResult`, and
+   `run_sparse_pc_auto_preflight_retry_stage()` to the existing
+   `profile_response.sparse.handoff` owner.
+2. Moved the direct-tail structured-PC auto preflight retry candidate
+   selection, retry preconditioner build, residual check, acceptance policy,
+   progress messages, and retry metadata update out of
+   `profile_response/solve.py`.
+3. Kept builder injection explicit: `solve.py` still passes the current
+   active-projected structured preconditioner builder and structured factor
+   bundle adapter into the sparse stage, preserving monkeypatch/debug behavior
+   while moving the retry logic out of the driver.
+4. Fixed the extraction bug found by the full sparse-pattern shard: sparse
+   `_env_value()` returns an empty string for missing keys and does not accept a
+   `default=` keyword, so the stage now uses `(_env_value(...) or default)`.
+
+Results:
+
+- `profile_response/solve.py` decreased from `7,781` to `7,657` lines.
+- `profile_response/sparse/handoff.py` increased from `6,720` to `7,029`
+  lines because it now owns direct-tail auto retry execution.
+- Package file count stayed at `209`; package-root file count stayed at `44`.
+- Package source lines are now about `165,156`; source-line reduction remains a
+  downstream Batch B/C gate after micro-file merges and compatibility cleanup.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/handoff.py` passed.
+- `python -m pytest
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_solves_tiny_rhs1_system
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_structured_pc_preflight_can_fail_fast
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_explicit_structured_pc_rejection_is_fast
+  tests/test_rhs1_device_operator.py -q --tb=short` passed with `6 passed`.
+- `python -m pytest tests/test_domain_package_import_contracts.py -q
+  --tb=short` passed with `8 passed`.
+- `python -m pytest
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_auto_retries_active_lu_after_native_preflight_failure
+  -q --tb=short` passed after the `_env_value` fix.
+- `python -m pytest tests/test_v3_sparse_pattern.py -q --tb=short` passed
+  with `132 passed`.
+
+Progress:
+
+- Lane 1 structural consolidation: about `90%`.
+- Batch A profile-response collapse: about `51%`.
+- Batch B transport/output/root cleanup: about `20%`.
+- Batch C solver/preconditioner family consolidation: about `25%`.
+- Batch D public API/docs/tests/review gate: about `26%`.
+
+Next best steps:
+
+1. Continue Batch A with the remaining residual-correction stages:
+   true active submatrix/block/residual-block, true residual window, residual
+   coarse, and residual window.
+2. Prefer extracting a shared "candidate residual acceptance/update" helper
+   inside the existing sparse owner before moving each candidate family, so the
+   next move removes repeated accept/update boilerplate rather than only one
+   narrow block.
+3. After the residual-correction stages move, collapse final sparse payload
+   normalization and then revisit whether `sparse/finalization.py` can merge
+   into a lower shared sparse owner.

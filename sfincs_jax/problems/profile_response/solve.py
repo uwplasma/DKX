@@ -255,8 +255,7 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     SparsePCGenericBranchSetupContext,
     SparsePCFactorPreflightRunContext,
     SparsePCResidualCandidateAcceptanceContext,
-    SparsePCAutoPreflightRetrySelectionContext,
-    SparsePCAutoPreflightRetryEvaluationContext,
+    SparsePCAutoPreflightRetryStageContext,
     ExplicitSparseMinimumNormBranchContext,
     ExplicitSparseHostDirectBranchContext,
     RHS1FullSparseRetryStageContext,
@@ -296,9 +295,8 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     build_xblock_qi_stage_pipeline_context,
     evaluate_sparse_pc_residual_candidate_acceptance,
     evaluate_xblock_preflight_gate,
+    run_sparse_pc_auto_preflight_retry_stage,
     run_sparse_pc_factor_preflight,
-    select_sparse_pc_auto_preflight_retry_candidates,
-    evaluate_sparse_pc_auto_preflight_retry,
     complete_xblock_post_krylov_stage,
     resolve_sparse_pc_gmres_control_policy,
     prepare_xblock_initial_guess,
@@ -3168,191 +3166,69 @@ def solve_v3_full_system_linear_gmres(
                     f"max_target_ratio={float(factor_preflight_max_target_ratio):.6e} "
                     f"error={factor_preflight_error}"
                 )
-            auto_preflight_retry_selected = False
-            auto_preflight_retry_attempts: list[dict[str, object]] = []
-            auto_preflight_retry_enabled = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_AUTO_PREFLIGHT_RETRY",
-                default=True,
+            auto_preflight_retry_stage = run_sparse_pc_auto_preflight_retry_stage(
+                SparsePCAutoPreflightRetryStageContext(
+                    env=os.environ,
+                    structured_pc_ready=bool(structured_pc_ready),
+                    structured_pc_preflight_required=bool(structured_pc_preflight_required),
+                    factor_preflight_passed=factor_preflight_passed,
+                    direct_tail_structured_pc_requested=direct_tail_structured_pc_requested,
+                    direct_tail_operator_bundle=direct_tail_operator_bundle,
+                    direct_tail_structured_layout=direct_tail_structured_layout,
+                    direct_tail_structured_active_indices=direct_tail_structured_active_indices,
+                    direct_tail_structured_max_nbytes=direct_tail_structured_max_nbytes,
+                    direct_tail_structured_pc_selected=bool(direct_tail_structured_pc_selected),
+                    direct_tail_structured_pc_reason=direct_tail_structured_pc_reason,
+                    direct_tail_structured_pc_metadata=direct_tail_structured_pc_metadata,
+                    operator_bundle_pc=_operator_bundle_pc,
+                    factor_bundle_pc=factor_bundle_pc,
+                    pc_factor_s=float(pc_factor_s),
+                    pc_reg=float(pc_reg),
+                    preconditioner_x=int(preconditioner_x),
+                    preconditioner_xi=int(preconditioner_xi),
+                    preconditioner_species=int(preconditioner_species),
+                    preconditioner_x_min_l=int(preconditioner_x_min_l),
+                    sparse_pc_rhs=sparse_pc_rhs,
+                    sparse_pc_linear_size=int(sparse_pc_linear_size),
+                    structured_pc_preflight_required_min_size=int(structured_pc_preflight_required_min_size),
+                    factor_preflight_max_target_ratio=float(factor_preflight_max_target_ratio),
+                    factor_preflight_residual_before=factor_preflight_residual_before,
+                    factor_preflight_residual_after=factor_preflight_residual_after,
+                    factor_preflight_residual_diagnostics=factor_preflight_residual_diagnostics,
+                    factor_preflight_improvement_ratio=factor_preflight_improvement_ratio,
+                    factor_preflight_target_ratio=factor_preflight_target_ratio,
+                    factor_preflight_seed_enabled=bool(factor_preflight_seed_enabled),
+                    factor_preflight_seed_used=bool(factor_preflight_seed_used),
+                    residual_vec_current=residual_vec_current,
+                    target=float(target),
+                    matvec_no_count=_mv_true_no_count,
+                    diagnostics=_rhs1_active_reduced_residual_diagnostics,
+                    layout=RHS1BlockLayout.from_operator(op),
+                    active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    emit=emit,
+                    structured_preconditioner_builder=build_active_projected_rhs1_full_csr_preconditioner,
+                    factor_bundle_factory=_StructuredHostSparsePreconditionerBundle,
+                )
             )
-            if (
-                bool(auto_preflight_retry_enabled)
-                and bool(structured_pc_ready)
-                and bool(structured_pc_preflight_required)
-                and factor_preflight_passed is False
-                and str(direct_tail_structured_pc_requested or "").strip().lower().replace("-", "_")
-                in {"auto", "active_auto", "structured", "structured_auto"}
-                and direct_tail_operator_bundle is not None
-                and direct_tail_structured_layout is not None
-                and direct_tail_structured_max_nbytes is not None
-                and isinstance(direct_tail_structured_pc_metadata, dict)
-            ):
-                metadata_inner = direct_tail_structured_pc_metadata.get("metadata")
-                max_retry_candidates = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_AUTO_PREFLIGHT_MAX_CANDIDATES",
-                    default=2,
-                    minimum=1,
-                )
-                retry_selection = select_sparse_pc_auto_preflight_retry_candidates(
-                    SparsePCAutoPreflightRetrySelectionContext(
-                        metadata=metadata_inner if isinstance(metadata_inner, dict) else None,
-                        current_kind=str(getattr(factor_bundle_pc, "kind", "")),
-                        sparse_pc_linear_size=int(sparse_pc_linear_size),
-                        preflight_required_min_size=int(structured_pc_preflight_required_min_size),
-                        skip_large_kinds_raw=os.environ.get(
-                            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_AUTO_PREFLIGHT_SKIP_LARGE",
-                            "active_spilu,active_ilu,active_global_sparse_ilu,jacobi,diagonal",
-                        ),
-                        max_candidates=int(max_retry_candidates),
-                    )
-                )
-                for retry_candidate in retry_selection.retry_candidates:
-                    retry_start_s = sparse_timer.elapsed_s()
-                    try:
-                        retry_pc = build_active_projected_rhs1_full_csr_preconditioner(
-                            matrix=direct_tail_operator_bundle.matrix,
-                            layout=direct_tail_structured_layout,
-                            active_indices=direct_tail_structured_active_indices,
-                            kind=str(retry_candidate),
-                            max_factor_nbytes=int(direct_tail_structured_max_nbytes),
-                            regularization=float(pc_reg),
-                            preconditioner_x=int(preconditioner_x),
-                            preconditioner_xi=int(preconditioner_xi),
-                            preconditioner_species=int(preconditioner_species),
-                            preconditioner_x_min_l=int(preconditioner_x_min_l),
-                        )
-                    except Exception as exc:  # noqa: BLE001
-                        auto_preflight_retry_attempts.append(
-                            {
-                                "kind": str(retry_candidate),
-                                "selected": False,
-                                "reason": "exception",
-                                "error": f"{type(exc).__name__}: {exc}",
-                                "setup_s": float(sparse_timer.elapsed_s() - retry_start_s),
-                            }
-                        )
-                        continue
-                    retry_entry: dict[str, object] = {
-                        "kind": str(retry_candidate),
-                        "selected": bool(retry_pc.selected),
-                        "reason": str(retry_pc.reason),
-                        "setup_s": float(retry_pc.setup_s),
-                    }
-                    if not bool(retry_pc.selected) or retry_pc.operator is None:
-                        retry_entry["metadata"] = dict(retry_pc.metadata)
-                        auto_preflight_retry_attempts.append(retry_entry)
-                        continue
-                    retry_factor_nbytes = retry_pc.metadata.get("factor_nbytes_actual")
-                    if retry_factor_nbytes is None:
-                        retry_factor_nbytes = retry_pc.metadata.get("factor_nbytes_estimate")
-                    retry_bundle = _StructuredHostSparsePreconditionerBundle(
-                        preconditioner=retry_pc,
-                        operator=direct_tail_operator_bundle,
-                        kind=str(retry_pc.kind),
-                        factor_nbytes_estimate=None if retry_factor_nbytes is None else int(retry_factor_nbytes),
-                        factor_nnz_estimate=None,
-                        factor_s=float(retry_pc.setup_s),
-                    )
-                    try:
-                        retry_x = jnp.asarray(
-                            retry_bundle.solve(np.asarray(sparse_pc_rhs, dtype=np.float64)),
-                            dtype=jnp.float64,
-                        )
-                        retry_residual_vec = sparse_pc_rhs - jnp.asarray(_mv_true_no_count(retry_x), dtype=jnp.float64)
-                        retry_residual = float(jnp.linalg.norm(retry_residual_vec))
-                    except Exception as exc:  # noqa: BLE001
-                        retry_entry.update(
-                            {
-                                "preflight_error": f"{type(exc).__name__}: {exc}",
-                                "preflight_passed": False,
-                            }
-                        )
-                        auto_preflight_retry_attempts.append(retry_entry)
-                        continue
-                    retry_metadata = retry_pc.metadata if isinstance(retry_pc.metadata, dict) else {}
-                    retry_evaluation = evaluate_sparse_pc_auto_preflight_retry(
-                        SparsePCAutoPreflightRetryEvaluationContext(
-                            residual_after=float(retry_residual),
-                            target=float(target),
-                            max_target_ratio=float(factor_preflight_max_target_ratio),
-                            residual_before=factor_preflight_residual_before,
-                            sparse_pc_linear_size=int(sparse_pc_linear_size),
-                            preflight_required_min_size=int(structured_pc_preflight_required_min_size),
-                            retry_kind=str(retry_pc.kind),
-                            retry_metadata=retry_metadata,
-                        )
-                    )
-                    retry_entry.update(
-                        {
-                            "selected_kind": str(retry_pc.kind),
-                            "preflight_required": bool(retry_evaluation.required),
-                            "preflight_requires_metadata": bool(retry_evaluation.requires_metadata),
-                            "preflight_requires_size": bool(retry_evaluation.requires_size),
-                            "preflight_residual_after": float(retry_residual),
-                            "preflight_target_ratio": float(retry_evaluation.target_ratio),
-                            "preflight_passed": bool(retry_evaluation.preflight_passed),
-                            "preflight_policy_passed": bool(retry_evaluation.policy_passed),
-                            "factor_nbytes_estimate": (
-                                None if retry_factor_nbytes is None else int(retry_factor_nbytes)
-                            ),
-                        }
-                    )
-                    auto_preflight_retry_attempts.append(retry_entry)
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: auto preflight retry "
-                            f"kind={retry_candidate} residual={float(retry_residual):.6e} "
-                            f"target_ratio={float(retry_evaluation.target_ratio):.6e} "
-                            f"required={bool(retry_evaluation.required)} "
-                            f"passed={bool(retry_evaluation.preflight_passed)} "
-                            f"policy_passed={bool(retry_evaluation.policy_passed)}",
-                        )
-                    if bool(retry_evaluation.policy_passed):
-                        factor_bundle_pc = retry_bundle
-                        direct_tail_structured_pc_selected = True
-                        direct_tail_structured_pc_reason = (
-                            f"auto_preflight_selected:{retry_pc.reason}"
-                            if bool(retry_evaluation.required)
-                            else f"auto_retry_selected_no_required_preflight:{retry_pc.reason}"
-                        )
-                        direct_tail_structured_pc_metadata = retry_pc.to_dict()
-                        _operator_bundle_pc = direct_tail_operator_bundle
-                        pc_factor_s += float(retry_pc.setup_s)
-                        setup_s = sparse_timer.elapsed_s()
-                        residual_vec_current = retry_residual_vec
-                        factor_preflight_residual_after = float(retry_residual)
-                        factor_preflight_residual_diagnostics = _rhs1_active_reduced_residual_diagnostics(
-                            residual=retry_residual_vec,
-                            layout=RHS1BlockLayout.from_operator(op),
-                            active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                        )
-                        if factor_preflight_residual_before is not None and float(factor_preflight_residual_before) > 0.0:
-                            factor_preflight_improvement_ratio = float(factor_preflight_residual_before) / max(
-                                float(factor_preflight_residual_after),
-                                1.0e-300,
-                        )
-                        factor_preflight_target_ratio = float(retry_evaluation.target_ratio)
-                        factor_preflight_passed = True
-                        if bool(factor_preflight_seed_enabled):
-                            x0_sparse = retry_x
-                            factor_preflight_seed_used = True
-                        auto_preflight_retry_selected = True
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: auto preflight retry accepted "
-                                f"kind={retry_candidate} required={bool(retry_evaluation.required)}",
-                            )
-                        break
-            if auto_preflight_retry_attempts:
-                if isinstance(direct_tail_structured_pc_metadata, dict):
-                    metadata_inner = direct_tail_structured_pc_metadata.setdefault("metadata", {})
-                    if isinstance(metadata_inner, dict):
-                        metadata_inner["auto_preflight_retry_enabled"] = bool(auto_preflight_retry_enabled)
-                        metadata_inner["auto_preflight_retry_selected"] = bool(auto_preflight_retry_selected)
-                        metadata_inner["auto_preflight_retry_attempts"] = tuple(
-                            dict(entry) for entry in auto_preflight_retry_attempts
-                        )
+            factor_bundle_pc = auto_preflight_retry_stage.factor_bundle_pc
+            direct_tail_structured_pc_selected = auto_preflight_retry_stage.direct_tail_structured_pc_selected
+            direct_tail_structured_pc_reason = auto_preflight_retry_stage.direct_tail_structured_pc_reason
+            direct_tail_structured_pc_metadata = auto_preflight_retry_stage.direct_tail_structured_pc_metadata
+            _operator_bundle_pc = auto_preflight_retry_stage.operator_bundle_pc
+            pc_factor_s = float(auto_preflight_retry_stage.pc_factor_s)
+            setup_s = float(auto_preflight_retry_stage.setup_s)
+            residual_vec_current = auto_preflight_retry_stage.residual_vec_current
+            factor_preflight_residual_after = auto_preflight_retry_stage.factor_preflight_residual_after
+            factor_preflight_residual_diagnostics = (
+                auto_preflight_retry_stage.factor_preflight_residual_diagnostics
+            )
+            factor_preflight_improvement_ratio = auto_preflight_retry_stage.factor_preflight_improvement_ratio
+            factor_preflight_target_ratio = auto_preflight_retry_stage.factor_preflight_target_ratio
+            factor_preflight_passed = auto_preflight_retry_stage.factor_preflight_passed
+            factor_preflight_seed_used = auto_preflight_retry_stage.factor_preflight_seed_used
+            if auto_preflight_retry_stage.x0_sparse is not None:
+                x0_sparse = auto_preflight_retry_stage.x0_sparse
             if bool(structured_pc_ready) and bool(structured_pc_preflight_required) and factor_preflight_passed is False:
                 raise RuntimeError(
                     "direct-tail structured preconditioner preflight failed: "
