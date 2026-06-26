@@ -6,6 +6,9 @@ scripts and explains the physics and diagnostics in a notebook format.
 
 ## Recommended Order
 
+0. `00_start_here.ipynb`
+   Choose the right learning path, verify that the first-run assets exist, and
+   see a lightweight map from physics goals to example folders.
 1. `01_cli_outputs_and_plots.ipynb`
    Run a small input, write HDF5/NetCDF/NPZ outputs, inspect the datasets, and
    build a diagnostics PDF.
