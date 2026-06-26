@@ -6,6 +6,7 @@ import pytest
 import scipy.sparse as sp
 
 from sfincs_jax.solvers.explicit_sparse import (
+    SparseDecision,
     SparseOperatorBundle,
     admit_sparse_factor_against_operator,
     analyze_sparse_symbolic_structure,
@@ -15,6 +16,8 @@ from sfincs_jax.solvers.explicit_sparse import (
     build_operator_from_pattern,
     choose_storage_kind,
     color_pattern_columns,
+    csr_matvec,
+    deterministic_sparse_probe_matrix,
     estimate_csr_nbytes,
     estimate_dense_nbytes,
     estimate_multifrontal_direct_lu_nbytes,
@@ -27,6 +30,25 @@ from sfincs_jax.solvers.explicit_sparse import (
 def test_storage_estimates_are_consistent() -> None:
     assert estimate_dense_nbytes((3, 4), np.float64) == 3 * 4 * 8
     assert estimate_csr_nbytes((3, 4), 5, data_dtype=np.float64, index_dtype=np.int32) == 5 * 12 + 4 * 4
+
+
+def test_csr_matvec_matches_dense_and_rejects_invalid_shapes() -> None:
+    data = jnp.asarray([2.0, 3.0, -1.0])
+    indices = jnp.asarray([0, 2, 1], dtype=jnp.int32)
+    indptr = jnp.asarray([0, 2, 3], dtype=jnp.int32)
+    x = jnp.asarray([5.0, 7.0, 11.0])
+
+    y = csr_matvec(data=data, indices=indices, indptr=indptr, x=x, n_rows=2)
+    np.testing.assert_allclose(np.asarray(y), np.asarray([43.0, -7.0]))
+
+    with pytest.raises(ValueError, match="indptr must be 1D"):
+        csr_matvec(data=data, indices=indices, indptr=jnp.asarray([[0, 1]]), x=x)
+
+    with pytest.raises(ValueError, match="data and indices must be 1D"):
+        csr_matvec(data=jnp.asarray([[1.0]]), indices=indices, indptr=indptr, x=x)
+
+    with pytest.raises(ValueError, match="incompatible length"):
+        csr_matvec(data=data, indices=indices, indptr=indptr, x=x, n_rows=3)
 
 
 def test_multifrontal_direct_lu_estimate_tracks_profiled_fill() -> None:
@@ -133,6 +155,47 @@ def test_choose_storage_kind_falls_back_to_operator_only_when_budgets_exhausted(
     )
     assert decision.storage_kind == "linear_operator"
     assert "operator-only" in decision.reason
+
+
+def test_choose_storage_kind_force_paths_and_metadata_dict() -> None:
+    with pytest.raises(ValueError, match="force_dense and force_sparse"):
+        choose_storage_kind(shape=(2, 2), nnz_estimate=4, force_dense=True, force_sparse=True)
+
+    dense = choose_storage_kind(
+        shape=(2, 2),
+        nnz_estimate=4,
+        backend=None,
+        dense_max_mb=0.0,
+        csr_max_mb=0.0,
+        force_dense=True,
+        block_cols=3,
+        drop_tol=0.25,
+    )
+    assert dense.storage_kind == "dense"
+    assert dense.to_dict()["block_cols"] == 3
+    assert dense.to_dict()["drop_tol"] == pytest.approx(0.25)
+
+    sparse_rejected = choose_storage_kind(
+        shape=(2, 2),
+        nnz_estimate=4,
+        backend="cpu",
+        dense_max_mb=1.0,
+        csr_max_mb=0.0,
+        force_sparse=True,
+    )
+    assert sparse_rejected.storage_kind == "linear_operator"
+    assert "CSR budget unavailable" in sparse_rejected.reason
+
+
+def test_superlu_factor_storage_handles_dense_and_missing_factor_attributes() -> None:
+    class DenseFactors:
+        L = np.asarray([[1.0, 0.0], [2.0, 3.0]])
+        U = np.asarray([[4.0, 5.0], [0.0, 6.0]])
+
+    nbytes, nnz = estimate_superlu_factor_storage(DenseFactors())
+    assert nbytes == DenseFactors.L.nbytes + DenseFactors.U.nbytes
+    assert nnz == int(np.count_nonzero(DenseFactors.L) + np.count_nonzero(DenseFactors.U))
+    assert estimate_superlu_factor_storage(object()) == (None, None)
 
 
 def test_build_operator_from_dense_materializes_csr_and_tracks_metadata() -> None:
@@ -515,6 +578,44 @@ def test_symbolic_block_lu_admission_accepts_exact_block_factor() -> None:
     assert admission.max_relative_residual < 1.0e-13
     assert admission.probe_count == 4
     assert admission.to_dict()["accepted"] is True
+
+
+def test_sparse_factor_admission_rejects_missing_or_nonsquare_operator_and_bad_probes() -> None:
+    decision = SparseDecision(
+        storage_kind="linear_operator",
+        reason="test",
+        backend="cpu",
+        shape=(2, 2),
+        dense_nbytes=32,
+        csr_nbytes_estimate=32,
+        nnz_estimate=None,
+    )
+    missing_matrix_bundle = SparseOperatorBundle(
+        matrix=None,
+        operator=build_operator_from_dense(np.eye(2)).operator,
+        metadata=decision,
+    )
+    factor = factorize_host_sparse_operator(sp.eye(2, format="csr"), kind="jacobi")
+
+    missing = admit_sparse_factor_against_operator(missing_matrix_bundle, factor)
+    assert missing.accepted is False
+    assert missing.reason == "missing_operator_matrix"
+
+    nonsquare = admit_sparse_factor_against_operator(sp.csr_matrix(np.ones((2, 3))), factor)
+    assert nonsquare.accepted is False
+    assert nonsquare.reason == "operator_not_square"
+
+    with pytest.raises(ValueError, match="probe rows"):
+        admit_sparse_factor_against_operator(sp.eye(2, format="csr"), factor, probes=np.ones((3, 1)))
+
+
+def test_deterministic_sparse_probe_matrix_covers_empty_and_scalar_systems() -> None:
+    empty = deterministic_sparse_probe_matrix(0, count=2)
+    assert empty.shape == (0, 2)
+
+    scalar = deterministic_sparse_probe_matrix(1, count=4)
+    assert scalar.shape == (1, 4)
+    np.testing.assert_allclose(np.abs(scalar), np.ones((1, 4)))
 
 
 def test_symbolic_block_lu_admission_rejects_missing_offblock_coupling() -> None:
