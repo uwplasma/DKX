@@ -9,7 +9,7 @@ import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 
-from sfincs_jax.workflows.mapped_xgrid_objectives import (  # noqa: E402
+from sfincs_jax.workflows.mapped_xgrid import (  # noqa: E402
     brute_force_rational_tail_moment_baseline,
     maxwellian_speed_moment,
     rational_tail_transport_grid,

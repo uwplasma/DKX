@@ -13,7 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from sfincs_jax.workflows.mapped_xgrid_transport_evidence import (  # noqa: E402
+from sfincs_jax.workflows.mapped_xgrid import (  # noqa: E402
     copy_namelist_with_resolution,
     run_rational_tail_transport_comparison,
     write_transport_evidence_csv,

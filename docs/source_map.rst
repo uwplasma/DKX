@@ -381,6 +381,15 @@ checks. Historical ``optimization_*`` workflow modules now resolve through
 package-level compatibility aliases in ``sfincs_jax.workflows`` instead of
 separate implementation files.
 
+``sfincs_jax/workflows/mapped_xgrid.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Mapped speed-grid workflow owner. It contains differentiable Maxwellian moment
+objectives for rational-tail speed grids, bounded transport-matrix evidence
+reports, namelist patching for ``xGridScheme = 50``, CSV/JSON artifact writers,
+and solve-summary/error metrics. Historical mapped-x-grid objective/evidence
+modules now resolve through package-level compatibility aliases.
+
 ``sfincs_jax/validation/data_fetch.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
