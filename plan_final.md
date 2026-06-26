@@ -83,28 +83,20 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   caches (`docs/_build`, `.pytest_cache`, `.ruff_cache`, and `__pycache__`
   folders) were removed; ignored benchmark input caches remain local-only and
   are not part of a user clone or wheel.
-- A fresh xdist coverage audit on this branch measured `83.053%`
-  (`57,435 / 69,155` covered lines). The most recent local audit wrote
-  `.coverage` and `coverage.xml`, but local focused JAX coverage invocations
-  still sometimes abort with exit code `134` after the tests pass; use the
-  full-suite report as the authoritative local number for this tranche, so the
-  CI floor remains `80%` until the sharded GitHub Actions runtime is
-  verified and the measured coverage has enough margin above the next floor.
-  The target remains `95%` meaningful package coverage with GitHub Actions
-  under `10 min`; this requires targeted unit, numerical, and frozen-reference
-  tests, not slow full-solve CI jobs.
-- A post-twentieth-tranche local coverage attempt completed `959` tests in
-  `6:21` before hanging in JAX array teardown and was interrupted; a file-scoped
-  pytest-cov run for `outputs/writer.py` also aborted with exit code `134`.
-  Until the local coverage runner is stable, use normal fast pytest suites plus
-  GitHub Actions coverage as the acceptance signal and keep adding targeted
-  high-value tests from the static gap list.
+- A fresh xdist coverage audit on this branch completed successfully:
+  `3757 passed in 292.02 s` with `86%` package coverage. The CI floor remains
+  `80%` until the branch has enough measured margin to raise it safely, but the
+  target remains `95%` meaningful package coverage with GitHub Actions under
+  `10 min`. The gap must be closed with bounded unit, numerical,
+  frozen-reference, and policy tests rather than slow full-solve CI jobs.
 - The largest coverage gaps by missing executable lines are
-  `problems/profile_solve.py`, `problems/transport_solve.py`,
-  `operators/profile_system.py`, `outputs/writer.py`,
-  `solvers/preconditioner_transport_matrix.py`, `solvers/explicit_sparse.py`,
-  `operators/profile_sparse_pattern.py`, `solvers/preconditioner_schur_profile.py`,
-  and `operators/profile_true_operator_rescue.py`.
+  `problems/profile_solve.py`, `operators/profile_sparse_pattern.py`,
+  `problems/transport_solve.py`, `problems/transport_linear_system.py`,
+  `operators/profile_system.py`, `outputs/writer.py`, `problems/ambipolar.py`,
+  `problems/transport_diagnostics.py`,
+  `solvers/preconditioner_transport_matrix.py`,
+  `solvers/preconditioner_schur_profile.py`, and the larger QI/PAS
+  preconditioner families.
 - The first post-audit coverage tranche added bounded PAS x-block ILU tests for
   inapplicable-model fallback, tiny-fixture padded factor construction,
   environment normalization, cache reuse, and reduced-vector application. That
@@ -2608,20 +2600,20 @@ Current completion status:
   public import migration, and compatibility-shim locking are complete. The
   only remaining refactor work is the retained-boundary audit for the large
   profile/transport solve owners and final PR-body documentation.
-- Coverage and future-proof validation: progressing beyond the last measured
-  `83.053%` package-coverage audit through targeted fast tests; the exact new
-  percentage is pending a stable full coverage run or GitHub Actions coverage
-  report. The newest tests cover output streaming, periodic stencils,
+- Coverage and future-proof validation: the latest full local xdist coverage
+  audit completed `3757` tests in `292.02 s` and measured `86%` package
+  coverage. The newest tests cover output streaming, periodic stencils,
   release-data fetching, PETSc reference readers, upstream wrapper behavior,
   active full-FP kinetic block preconditioners, sparse-pattern helpers,
-  explicit-sparse settings, profile-system algebra helpers, RHSMode=2/3
-  transport block-preconditioner assembly, public solver/API facades, and
-  frozen-reference comparison semantics. Benchmark-artifact promotion policy
-  now also has fast gates for default-promotion evidence and canonical
+  explicit-sparse settings/materialization guards, profile-system algebra and
+  admission gates, RHSMode=2/3 transport block-preconditioner assembly and
+  admission gates, public solver/API facades, transport recycle-state reuse,
+  and frozen-reference comparison semantics. Benchmark-artifact promotion
+  policy also has fast gates for default-promotion evidence and canonical
   runtime/memory ordering. The next coverage work must focus on
-  profile/transport solve owners, explicit sparse assembly, Schur/profile
-  preconditioners, profile true-operator rescue paths, and output writer
-  branches while keeping CI below ten minutes.
+  profile/transport solve owners, sparse-pattern emission, Schur/profile
+  preconditioners, profile true-operator rescue paths, output writer branches,
+  and ambipolar derivative/root edge cases while keeping CI below ten minutes.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
