@@ -136,6 +136,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   classification, coupled-kinetic admission guards, and sparse residual-coarse
   base selection. These are fast numerical-policy gates for the production
   RHSMode=1 preconditioner defaults.
+- The eleventh post-audit coverage tranche added true-operator rescue tests for
+  residual-window additive/least-squares corrections, reusable one-hot action
+  cache bypass behavior, active-submatrix residual damping, and coupled coarse
+  LSQ correction algebra on identity systems. These tests directly exercise
+  residual-polish math without constructing a full kinetic operator.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.

@@ -10,7 +10,11 @@ from sfincs_jax.solvers.explicit_sparse import SparseDecision, SparseOperatorBun
 from sfincs_jax.operators.profile_layout import RHS1BlockLayout
 from sfincs_jax.operators.profile_true_operator_rescue import (
     _ResidualCoarseHostSparsePreconditionerBundle,
+    _ResidualWindowHostSparsePreconditionerBundle,
     _ReusableTrueActionColumnCache,
+    _TrueOperatorActiveSubmatrixPreconditionerBundle,
+    _TrueOperatorCoupledCoarseLSQPreconditionerBundle,
+    _TrueOperatorWindowLSQPreconditionerBundle,
     _expand_sparse_graph_positions,
     _parse_true_operator_window_specs,
     _rhs1_additive_rescue_nbytes,
@@ -37,6 +41,13 @@ class _HalfFactor:
 
     def solve(self, rhs):
         return 0.5 * np.asarray(rhs, dtype=np.float64)
+
+
+class _ZeroFactor:
+    factor_nbytes_estimate = 0
+
+    def solve(self, rhs):
+        return np.zeros_like(np.asarray(rhs, dtype=np.float64))
 
 
 def _layout_with_tail() -> RHS1BlockLayout:
@@ -85,6 +96,44 @@ def test_residual_coarse_bundle_solves_identity_residual() -> None:
     np.testing.assert_allclose(bundle.solve(np.asarray([1.0, -2.0, 3.0])), [1.0, -2.0, 3.0])
 
 
+def test_residual_window_bundle_supports_additive_and_lsq_modes() -> None:
+    matrix = sp.eye(3, format="csr")
+    operator = SparseOperatorBundle(
+        matrix=matrix,
+        operator=aslinearoperator(matrix),
+        metadata=SparseDecision(
+            storage_kind="csr",
+            reason="unit-test",
+            backend="cpu",
+            shape=(3, 3),
+            dense_nbytes=72,
+            csr_nbytes_estimate=64,
+            nnz_estimate=3,
+        ),
+    )
+
+    additive = _ResidualWindowHostSparsePreconditionerBundle(
+        base_factor=_ZeroFactor(),
+        operator=operator,
+        window_positions=(np.asarray([0, 2]),),
+        window_factors=(_IdentityFactor(),),
+        kind="window_additive",
+        coefficient_mode="additive",
+    )
+    np.testing.assert_allclose(additive.solve(np.asarray([1.0, -2.0, 3.0])), [1.0, 0.0, 3.0])
+
+    least_squares = _ResidualWindowHostSparsePreconditionerBundle(
+        base_factor=_ZeroFactor(),
+        operator=operator,
+        window_positions=(np.asarray([0, 2]),),
+        window_factors=(_IdentityFactor(),),
+        kind="window_lsq",
+        coefficient_mode="least_squares",
+        regularization=0.0,
+    )
+    np.testing.assert_allclose(least_squares.solve(np.asarray([1.0, -2.0, 3.0])), [1.0, 0.0, 3.0])
+
+
 def test_reusable_true_action_column_cache_reuses_one_hot_batches() -> None:
     matrix = np.asarray(
         [
@@ -121,6 +170,63 @@ def test_reusable_true_action_column_cache_reuses_one_hot_batches() -> None:
     assert metadata["stored_columns"] == 3
     assert metadata["batches"] == 2
     assert calls["matmat"] == 1
+
+
+def test_reusable_true_action_column_cache_bypasses_non_one_hot_or_disabled() -> None:
+    matrix = np.diag([2.0, 3.0, 4.0])
+    cache = _ReusableTrueActionColumnCache(
+        true_matvec=lambda x: matrix @ np.asarray(x, dtype=np.float64),
+        true_matmat=None,
+        n=3,
+        max_nbytes=0,
+        enabled=False,
+    )
+
+    dense = np.asarray([[1.0, 0.5], [0.0, 0.5], [0.0, 0.0]], dtype=np.float64)
+    np.testing.assert_allclose(cache.matmat(dense), matrix @ dense)
+    assert cache.metadata()["bypass_calls"] == 1
+    assert cache.metadata()["stored_columns"] == 0
+
+
+def test_true_operator_lsq_bundles_reduce_identity_residuals() -> None:
+    def true_matvec(x):
+        return np.asarray(x, dtype=np.float64)
+
+    z_basis = np.asarray([[1.0, 0.0], [0.0, 0.0], [0.0, 1.0]], dtype=np.float64)
+
+    window = _TrueOperatorWindowLSQPreconditionerBundle(
+        base_factor=_ZeroFactor(),
+        true_matvec=true_matvec,
+        window_positions=np.asarray([0, 2]),
+        a_window=z_basis,
+        inv_column_scale=np.ones(2, dtype=np.float64),
+        solve_normal=lambda rhs: np.asarray(rhs, dtype=np.float64),
+        kind="window_lsq",
+    )
+    np.testing.assert_allclose(window.solve(np.asarray([1.0, -2.0, 3.0])), [1.0, 0.0, 3.0])
+
+    active_block = _TrueOperatorActiveSubmatrixPreconditionerBundle(
+        base_factor=_ZeroFactor(),
+        true_matvec=true_matvec,
+        block_positions=np.asarray([0, 2]),
+        a_window=z_basis,
+        solve_block=lambda rhs: np.asarray(rhs, dtype=np.float64),
+        kind="active_block",
+        damping=True,
+    )
+    np.testing.assert_allclose(active_block.solve(np.asarray([1.0, -2.0, 3.0])), [1.0, 0.0, 3.0])
+
+    coupled = _TrueOperatorCoupledCoarseLSQPreconditionerBundle(
+        base_factor=_ZeroFactor(),
+        true_matvec=true_matvec,
+        z_basis=z_basis,
+        a_basis=z_basis,
+        inv_column_scale=np.ones(2, dtype=np.float64),
+        solve_normal=lambda rhs: np.asarray(rhs, dtype=np.float64),
+        kind="coupled_lsq",
+        damping=True,
+    )
+    np.testing.assert_allclose(coupled.solve(np.asarray([1.0, -2.0, 3.0])), [1.0, 0.0, 3.0])
 
 
 def test_rescue_budget_and_sparse_factor_memory_estimate() -> None:
