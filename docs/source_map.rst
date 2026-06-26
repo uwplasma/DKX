@@ -460,28 +460,15 @@ the historical private driver name and test the focused module directly. This ke
   regularized diagonal inversion. The package-level
   ``sfincs_jax.solvers.preconditioners.schur`` import re-exports this stable
   owner; the historical ``rhs1*`` Schur implementation files were removed.
-- ``sfincs_jax/problems/transport_matrix/direct_pmat.py``
-  (legacy alias: ``sfincs_jax/transport_direct_pmat.py``):
-  direct term-level RHSMode=2/3 reduced ``Pmat`` and exact active-operator
-  emission for full-FP transport preconditioners, plus the physics/source
-  coarse-basis columns used by symbolic Schur corrections. The module owns the
-  sparse matrix assembly; ``v3_driver.py`` still owns admission, factor choice,
-  fallback ordering, and solver orchestration.
-- ``sfincs_jax/problems/transport_matrix/direct_block_schur.py``
-  (legacy alias: ``sfincs_jax/transport_direct_block_schur.py``):
-  bounded-memory direct active block-Schur preconditioner setup for RHSMode=2/3
-  full-FP transport. It owns environment parsing, setup-time true-residual
-  admission, residual-coarse rescue, cache storage, and host callback
-  application, while the driver injects the current fallback preconditioner and
-  cache-key policy.
-- ``sfincs_jax/problems/transport_matrix/fortran_reduced_lu.py``
-  (legacy alias: ``sfincs_jax/transport_fortran_reduced_lu.py``):
-  global RHSMode=2/3 full-FP Fortran-reduced sparse-factor preconditioner. This
-  module owns the PETSc/Fortran-v3-style reduced ``Pmat`` sparse setup,
-  symbolic/BLR/ND/native factor policy, direct-``Pmat`` admission, exact-LU
-  rescue, physics coarse correction, and host sparse-factor callback apply.
-  ``v3_driver.py`` injects only the current fallback builder, cache-key policy,
-  explicit sparse builder seam, and host-memory callback.
+- ``sfincs_jax/problems/transport_matrix/linear_system.py``:
+  RHSMode=2/3 transport active-system owner. It owns active-DOF and dense-path
+  setup, active block ordering, bounded block-Schur factors, residual-coarse
+  admission, direct reduced-``Pmat`` and exact active-operator emission,
+  direct active block-Schur preconditioner setup, and the global full-FP
+  Fortran-reduced sparse-factor preconditioner. The old active-dense,
+  active-factor, direct-``Pmat``, direct block-Schur, and Fortran-reduced LU
+  implementation files were absorbed here so transport linear-system logic has
+  one review surface.
 - ``sfincs_jax/solvers/preconditioner_setup.py``:
   shared setup utilities for preconditioner construction: memory-bounded
   basis-column chunking, selected-row/selected-column matrix-free submatrix
@@ -908,14 +895,6 @@ the historical private driver name and test the focused module directly. This ke
   normalization, and CPU/GPU process-parallel worker requests. The driver emits
   the returned notes and keeps solve orchestration, while these pure setup rules
   are covered by direct unit tests.
-- ``sfincs_jax/problems/transport_matrix/active_dense.py``
-  (legacy alias: ``sfincs_jax/transport_active_dense_setup.py``):
-  combined RHSMode=2/3 active-DOF and dense-path setup. It resolves the initial
-  output/restart policy, active-index compaction state, dense fallback and dense
-  preconditioner admission, and ordered user-facing notes before the transport
-  loop builds matvecs or preconditioners. It also owns the active full-vector
-  DOF index helper used when the driver needs to mirror Fortran's reduced
-  active transport unknown layout.
 - ``sfincs_jax/outputs/transport.py``
   (legacy alias: ``sfincs_jax/transport_streaming_outputs.py``):
   RHSMode=2/3 transport output-schema helpers, host-side streaming
@@ -951,12 +930,6 @@ the historical private driver name and test the focused module directly. This ke
   ``host_gmres.py``, ``iteration_stats.py``, ``loop.py``,
   ``sparse_direct_solve.py``, and stale ``linear_solve.py`` entries have been
   absorbed here; focused tests import this owner directly.
-- ``sfincs_jax/problems/transport_matrix/active_factor.py``
-  (legacy alias: ``sfincs_jax/transport_active_factor.py``):
-  active-operator block-Schur and residual-coarse factors for RHSMode=2/3
-  transport. It owns symbolic active block ordering, bounded numerical block
-  inverses, source/constraint Schur closure, and setup-time true-residual
-  admission before any factor is eligible for production use.
 - ``sfincs_jax/problems/transport_matrix/finalize.py``
   (legacy alias: ``sfincs_jax/transport_solve_finalization.py``):
   sequential RHSMode=2/3 per-``whichRHS`` finalization after a solver branch has
