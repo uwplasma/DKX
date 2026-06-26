@@ -7,6 +7,7 @@ import numpy as np
 
 from sfincs_jax.solvers import preconditioner_transport_matrix as tm
 from sfincs_jax.solvers.preconditioning import (
+    _RHSMODE23_PRECOND_CACHE,
     _TRANSPORT_FP_LOCAL_GEOM_LINE_PRECOND_CACHE,
     _TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE,
     _TRANSPORT_FP_TZFFT_LINE_PRECOND_CACHE,
@@ -127,6 +128,7 @@ def _transport_operator(*, include_fp: bool = True) -> SimpleNamespace:
 
 
 def _clear_transport_caches() -> None:
+    _RHSMODE23_PRECOND_CACHE.clear()
     _TRANSPORT_PRECOND_CACHE.clear()
     _TRANSPORT_SXBLOCK_PRECOND_CACHE.clear()
     _TRANSPORT_SXBLOCK_LR_PRECOND_CACHE.clear()
@@ -235,6 +237,47 @@ def test_transport_xmg_preconditioner_uses_coarse_grid_and_reduced_projection(mo
     reduced_rhs = jnp.cos(0.17 * jnp.arange(active.size, dtype=jnp.float64))
     expected = reduce_full(full_preconditioner(expand_reduced(reduced_rhs)))
     np.testing.assert_allclose(np.asarray(reduced_preconditioner(reduced_rhs)), np.asarray(expected))
+
+
+def test_transport_block_preconditioner_assembles_active_local_and_tail_blocks(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PRECOND_BLOCK_REG", "0")
+    _clear_transport_caches()
+    op = _transport_operator()
+    vector = _vector(op)
+    calls: list[tuple[np.ndarray, np.ndarray, int, int]] = []
+
+    def fake_matvec_submatrix(op_pc, *, col_idx, row_idx, total_size, chunk_cols):
+        del op_pc
+        col = np.asarray(col_idx, dtype=np.int32)
+        row = np.asarray(row_idx, dtype=np.int32)
+        calls.append((col, row, int(total_size), int(chunk_cols)))
+        scale = 3.0 if bool(np.all(col >= op.f_size)) else 2.0
+        return scale * np.eye(col.size, dtype=np.float64)
+
+    monkeypatch.setattr(tm, "_build_transport_preconditioner_operator_point", lambda op_arg: op_arg)
+    monkeypatch.setattr(tm, "_matvec_submatrix", fake_matvec_submatrix)
+
+    preconditioner = tm.build_rhsmode23_block_preconditioner(op=op)
+    result = np.asarray(preconditioner(vector))
+
+    expected_f = np.zeros(op.fblock.f_shape, dtype=np.float64)
+    vector_f = np.asarray(vector[: op.f_size].reshape(op.fblock.f_shape))
+    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+    for species in range(op.n_species):
+        for ix in range(op.n_x):
+            for ell in range(int(nxi_for_x[ix])):
+                expected_f[species, ix, ell, :, :] = 0.5 * vector_f[species, ix, ell, :, :]
+    expected = np.zeros((op.total_size,), dtype=np.float64)
+    expected[: op.f_size] = expected_f.reshape((-1,))
+    expected[op.f_size :] = np.asarray(vector[op.f_size :]) / 3.0
+
+    np.testing.assert_allclose(result, expected)
+    assert len(_RHSMODE23_PRECOND_CACHE) == 1
+    assert len(calls) == op.n_species + 1
+    for col, row, total_size, chunk_cols in calls:
+        np.testing.assert_array_equal(col, row)
+        assert total_size == op.total_size
+        assert chunk_cols >= 1
 
 
 def test_transport_tzfft_and_fp_tzfft_preconditioners_are_finite_and_cached(monkeypatch) -> None:

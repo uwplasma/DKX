@@ -84,8 +84,8 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   (`57,435 / 69,155` covered lines). The most recent local audit wrote
   `.coverage` and `coverage.xml`, but local focused JAX coverage invocations
   still sometimes abort with exit code `134` after the tests pass; use the
-  full-suite report as the authoritative local number for this tranche.
-  so the CI floor remains `80%` until the sharded GitHub Actions runtime is
+  full-suite report as the authoritative local number for this tranche, so the
+  CI floor remains `80%` until the sharded GitHub Actions runtime is
   verified and the measured coverage has enough margin above the next floor.
   The target remains `95%` meaningful package coverage with GitHub Actions
   under `10 min`; this requires targeted unit, numerical, and frozen-reference
@@ -290,6 +290,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   theta/zeta/x padding utilities. These cover Fortran-style kinetic coupling
   and sharded-padding invariants directly without building full input-deck
   operators.
+- The thirty-fourth post-audit coverage tranche added RHSMode=2/3
+  block-preconditioner tests for local active-index block assembly, inactive
+  pitch masking, extra source/constraint block inversion, submatrix chunk
+  plumbing, and cache reuse. The test injects deterministic local submatrices,
+  so it protects the transport preconditioner owner without materializing a
+  production operator or adding slow transport solves to CI.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
@@ -2355,11 +2361,12 @@ Current completion status:
   owners and the review-lock validation pass.
 - Coverage and future-proof validation: about 85 percent by measured package
   coverage. The newest fast tests cover output streaming, periodic stencils,
-  release-data fetching, PETSc reference readers, upstream wrapper behavior, and
-  active full-FP kinetic block preconditioners. The next coverage work must
-  focus on profile/transport solve owners, output writers, explicit sparse
-  assembly, and profile true-operator rescue paths while keeping CI below ten
-  minutes.
+  release-data fetching, PETSc reference readers, upstream wrapper behavior,
+  active full-FP kinetic block preconditioners, sparse-pattern helpers,
+  explicit-sparse settings, profile-system algebra helpers, and RHSMode=2/3
+  transport block-preconditioner assembly. The next coverage work must focus on
+  profile/transport solve owners, output writers, explicit sparse assembly, and
+  profile true-operator rescue paths while keeping CI below ten minutes.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
@@ -2373,30 +2380,27 @@ Current completion status:
 
 Next ordered implementation steps:
 
-1. Finish the current coverage tranche: remove generated coverage artifacts,
-   run the focused tests added in this pass, run Sphinx `-W`, Ruff, and
-   `git diff --check`, then commit and push the plan refresh plus tests.
-2. Continue the coverage ramp with bounded tests for the highest-risk remaining
+1. Continue the coverage ramp with bounded tests for the highest-risk remaining
    modules: profile solve/system assembly, transport solve/output writer,
    explicit sparse assembly, Schur/profile preconditioners, and true-operator
    rescue. Prefer frozen references, algebraic invariants, and production-shape
    admission tests over slow full solves.
-3. Run the stale-import and layout scans: no top-level `rhs1_*` or
+2. Run the stale-import and layout scans: no top-level `rhs1_*` or
    `transport_*` files, no public example/script imports of `v3_driver`, no
    imports of deleted validation/workflow modules except compatibility aliases,
    and no tracked generated outputs or large temporary artifacts.
-4. Add examples/tutorial smoke coverage for the fast tutorial script and one
+3. Add examples/tutorial smoke coverage for the fast tutorial script and one
    canonical script per major workflow folder, keeping the CI example budget
    below ten minutes.
-5. Run the review-lock validation bundle: import-contract tests, CLI/output
+4. Run the review-lock validation bundle: import-contract tests, CLI/output
    tests, workflow/validation behavior tests, representative RHSMode 1/2/3,
    ambipolar, RHSMode 4/5 sensitivity, sparse-PC, QI, and differentiable
    linear-solve tests, plus Sphinx `-W`, Ruff, py_compile, and `git diff --check`.
-6. Regenerate release-facing benchmark, parity, runtime/memory, and
+5. Regenerate release-facing benchmark, parity, runtime/memory, and
    bootstrap-current figures only after the source/test structure is stable.
-7. Fix only real regressions found by these gates. Do not start another
+6. Fix only real regressions found by these gates. Do not start another
    performance or file-movement lane in this PR unless it blocks correctness.
-8. Commit and push the final validation evidence to the PR branch, update the
+7. Commit and push the final validation evidence to the PR branch, update the
    PR body with retained boundaries and validation status, then mark PR #8
    ready for review.
 
