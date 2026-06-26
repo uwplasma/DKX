@@ -13,13 +13,13 @@ API reference
 .. automodule:: sfincs_jax.geometry
    :members:
 
-.. automodule:: sfincs_jax.vmec_wout
+.. automodule:: sfincs_jax.geometry.vmec_wout
    :members:
 
-.. automodule:: sfincs_jax.vmec_geometry
+.. automodule:: sfincs_jax.geometry.vmec
    :members:
 
-.. automodule:: sfincs_jax.jax_geometry_adapters
+.. automodule:: sfincs_jax.geometry.jax_adapters
    :members:
 
 .. automodule:: sfincs_jax.diagnostics

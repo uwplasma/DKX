@@ -79,10 +79,12 @@ adding more flat ``rhs1_*`` or ``transport_*`` files.
    Introduce importable domain packages before moving logic:
    ``input``, ``physics``, ``discretization``, ``operators``, ``problems``,
    ``solvers``, ``parallel``, ``workflows``, ``validation``, ``benchmarks``,
-   and ``compat``. The ``geometry`` and ``io`` package names are reserved for a
-   later migration because ``sfincs_jax/geometry.py`` and ``sfincs_jax/io.py``
-   must keep their existing import paths until the move is complete. Import
-   tests should verify both the new package names and the legacy module paths.
+   and ``compat``. ``sfincs_jax.geometry`` is now a package owner for analytic
+   Boozer, Boozer-file, VMEC, and JAX-native geometry adapters. The ``io``
+   package name remains reserved for a later migration because
+   ``sfincs_jax/io.py`` must keep its existing import path until the move is
+   complete. Import tests should verify both the new package names and any
+   intentionally retained compatibility module paths.
 
 2. Problem packages
    Move RHSMode=2/3 orchestration into ``problems/transport_matrix`` and

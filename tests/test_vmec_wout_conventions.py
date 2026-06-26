@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.vmec_wout import VmecWout, _set_scale_factor, psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
+from sfincs_jax.geometry.vmec_wout import VmecWout, _set_scale_factor, psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
 
 
 def _minimal_wout(*, ns: int = 5) -> VmecWout:
