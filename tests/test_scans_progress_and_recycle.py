@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-import sfincs_jax.scans as scans
+import sfincs_jax.workflows.scans as scans
 from sfincs_jax.namelist import Namelist
 
 

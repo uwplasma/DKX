@@ -865,7 +865,7 @@ performance without changing the input file:
   now store a short history of prior solutions for recycling.
 
 - ``SFINCS_JAX_SCAN_RECYCLE``: enable automatic scan-level Krylov recycling in
-  :func:`sfincs_jax.scans.run_er_scan` by wiring ``SFINCS_JAX_STATE_IN/OUT`` between
+  :func:`sfincs_jax.workflows.scans.run_er_scan` by wiring ``SFINCS_JAX_STATE_IN/OUT`` between
   adjacent scan points (default: disabled).
 
 - ``SFINCS_JAX_FBLOCK_CACHE``: reuse geometry- and physics-dependent operator blocks

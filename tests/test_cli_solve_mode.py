@@ -987,7 +987,7 @@ def test_main_scan_er_forwards_structured_csr_solve_method(monkeypatch, tmp_path
         captured.update(kwargs)
         return SimpleNamespace()
 
-    monkeypatch.setattr("sfincs_jax.scans.run_er_scan", _fake_run_er_scan)
+    monkeypatch.setattr("sfincs_jax.workflows.scans.run_er_scan", _fake_run_er_scan)
 
     rc = cli.main(
         [
