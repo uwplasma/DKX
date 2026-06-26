@@ -125,33 +125,15 @@ facades.
    * - ``sensitivity.py``
      - public differentiation API
      - JVP/VJP, implicit, and adjoint certificates used by optimization workflows.
-   * - ``constrained_pas_branch.py``
-     - stable solver-policy kernel
-     - Constraint-aware PAS branch policy guarded by focused tests.
-   * - ``constraint_projection.py``
-     - stable numerical kernel
-     - Constraint projection used by RHSMode=1 and transport solves.
    * - ``diagnostics.py``
      - stable physics kernel
      - Flux-surface averages, moment integrals, and output diagnostics.
    * - ``grids.py``
      - public discretization API
      - Velocity/grid helpers used directly by docs and tests.
-   * - ``host_refinement.py``
-     - stable solver-policy kernel
-     - Host-side iterative refinement gates.
-   * - ``pas_smoother.py``
-     - stable preconditioner kernel
-     - PAS smoother formulas used by preconditioner owners.
    * - ``paths.py``
      - stable support utility
      - Repository/data path resolution helpers.
-   * - ``phi1_newton_linear.py``
-     - stable solver kernel
-     - Phi1 Newton linear-step orchestration.
-   * - ``phi1_newton_policy.py``
-     - stable solver-policy kernel
-     - Phi1 Newton admission and line-search policy.
    * - ``profiling.py``
      - stable support utility
      - Phase timing and optional memory profiling helpers.
@@ -211,33 +193,15 @@ tests.
    * - ``sensitivity.py``
      - package root differentiation API
      - keep at root
-   * - ``constrained_pas_branch.py``
-     - solvers/preconditioners PAS policy owner
-     - move in solver-policy group if no public shim is needed
-   * - ``constraint_projection.py``
-     - solvers constraint-projection owner
-     - move only after transport/profile imports use solver owner
    * - ``diagnostics.py``
      - physics/output diagnostics owner
      - defer until diagnostics API split is explicit
    * - ``grids.py``
      - discretization public grid owner
      - keep root public helper until discretization package exports are documented
-   * - ``host_refinement.py``
-     - solvers refinement policy owner
-     - move in solver-policy group if profile-response imports migrate
-   * - ``pas_smoother.py``
-     - solvers/preconditioners PAS smoother owner
-     - move in solver-preconditioner group
    * - ``paths.py``
      - package root path support utility
      - keep at root unless a support package is introduced with broad import rewrite
-   * - ``phi1_newton_linear.py``
-     - problems.profile_response Phi1 Newton owner
-     - move if it deletes root file without adding shim
-   * - ``phi1_newton_policy.py``
-     - problems.profile_response Phi1 policy owner
-     - move if it deletes root file without adding shim
    * - ``profiling.py``
      - solvers/validation profiling support
      - defer until profiling API boundary is explicit
@@ -579,15 +543,14 @@ the historical private driver name and test the focused module directly. This ke
   solver-JIT admission, diagonal/block-diagonal reductions, point/line/
   domain-decomposition/Fortran-reduced ``Pmat`` builders, memory-bounded
   setup-column chunking, selected submatrix probing, stable array hashes, and
-  RHSMode=1/transport preconditioner cache-key construction. The numerical
-  setup/apply routines still live in the family owners; this module is the
-  common state and shaping surface.
-- ``sfincs_jax/constraint_projection.py``:
+  RHSMode=1/transport preconditioner cache-key construction, and
   constraintScheme=1 nullspace/source-row projection used by RHSMode=1 and
-  RHSMode=2/3 solves after iterative branches. It builds the small
-  particle/energy source correction basis, applies the roundoff skip gate used
-  by transport solves, and returns either the corrected state or the corrected
-  residual through an injected operator action for direct numerical tests.
+  RHSMode=2/3 solves after iterative branches. The projection routines build
+  the small particle/energy source correction basis, apply the roundoff skip
+  gate used by transport solves, and return either the corrected state or the
+  corrected residual through an injected operator action for direct numerical
+  tests. The numerical setup/apply routines still live in the family owners;
+  this module is the common state and shaping surface.
 - ``sfincs_jax/solvers/sparse_triangular.py``:
   JAX-native triangular solves for padded and compact-CSR sparse factor rows,
   plus permutation inversion. These pure kernels are used by sparse
@@ -1092,10 +1055,11 @@ the historical private driver name and test the focused module directly. This ke
   RHSMode=1 host dense fallback, host sparse-direct, sparse-preconditioned
   GMRES rescue, factor-dtype, explicit sparse-helper policy, and automatic
   solver/fallback admission.
-- ``sfincs_jax/host_refinement.py``:
-  host direct-solve refinement and sparse-direct GMRES polish helpers. The
-  monotone refinement loops are NumPy-only, while the polish helper accepts the
-  JAX matvec and a host sparse factor so residual-polish behavior can be tested
+- ``sfincs_jax/solvers/explicit_sparse.py``:
+  explicit host-sparse operator assembly/factorization policy plus host
+  direct-solve refinement and sparse-direct GMRES polish helpers. The monotone
+  refinement loops are NumPy-only, while the polish helper accepts the JAX
+  matvec and a host sparse factor so residual-polish behavior can be tested
   without importing the full driver.
 - ``sfincs_jax/problems/profile_response/policies.py``
   (historical location: ``sfincs_jax/rhs1_large_cpu_policy.py``):
@@ -1208,16 +1172,13 @@ the historical private driver name and test the focused module directly. This ke
   or example-suite audits. It also owns the fail-closed schema validator for the
   Fortran-v3 vs SFINCS-JAX runtime/memory benchmark summary consumed by README/docs
   plots.
-- ``sfincs_jax/phi1_newton_policy.py``:
-  bounded nonlinear/Newton policy for Phi1 solves, including active-DOF mode
-  selection, restart sizing, frozen-Jacobian cache policy, and line-search policy.
-- ``sfincs_jax/phi1_newton_linear.py``:
-  bounded nonlinear linear-step orchestration for Phi1 solves, including reduced/full
-  routing, sparse-direct entry, KSP-history emission, and retry-without-preconditioner.
 - ``sfincs_jax/problems/profile_response/phi1_newton.py``:
-  accepted-iterate update logic and solve orchestration for the Newton path,
-  including PETSc-like backtracking, fixed-candidate ``best`` search, and
-  finite-state fallback handling.
+  Phi1 Newton policy, bounded nonlinear linear-step orchestration, accepted-
+  iterate update logic, and solve orchestration for the Newton path, including
+  active-DOF mode selection, restart sizing, frozen-Jacobian cache policy,
+  line-search policy, reduced/full routing, sparse-direct entry, KSP-history
+  emission, retry-without-preconditioner, PETSc-like backtracking,
+  fixed-candidate ``best`` search, and finite-state fallback handling.
 - ``sfincs_jax/solvers/diagnostics.py``:
   solver-neutral diagnostics and observability support: user-facing duration
   formatting, coarse runtime hints, one-shot large RHSMode=1 progress messages,
