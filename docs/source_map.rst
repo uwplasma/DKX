@@ -92,9 +92,6 @@ facades.
    * - ``compare.py``
      - public validation API
      - HDF5/output comparison helpers used by examples and validation tools.
-   * - ``data_fetch.py``
-     - public support workflow
-     - Release-hosted equilibrium fixture fetch/cache API used by tests and scripts.
    * - ``input_compat.py``
      - public compatibility API
      - Fortran-v3-compatible input normalization and equilibrium path handling.
@@ -107,12 +104,6 @@ facades.
    * - ``plotting.py``
      - public plotting API
      - Lightweight output plotting helpers used by CLI/examples.
-   * - ``postprocess_upstream.py``
-     - public support workflow
-     - Wrapper for upstream SFINCS utility scripts used by examples.
-   * - ``scans.py``
-     - public workflow API
-     - Documented electric-field scan helper; moving it now would break public imports.
    * - ``sensitivity.py``
      - public differentiation API
      - JVP/VJP, implicit, and adjoint certificates used by optimization workflows.
@@ -238,9 +229,6 @@ tests.
    * - ``compare.py``
      - validation comparison API
      - move only after examples/scripts use validation owner
-   * - ``data_fetch.py``
-     - validation/data fixture support
-     - move in Phase 2 if scripts/tests need no shim
    * - ``input_compat.py``
      - input compatibility owner
      - keep root public compatibility shim until input package exports cover callers
@@ -253,12 +241,6 @@ tests.
    * - ``plotting.py``
      - outputs/plotting public helper
      - keep root public helper unless API replacement is documented
-   * - ``postprocess_upstream.py``
-     - workflows upstream postprocess owner
-     - move in Phase 2 if example imports can migrate cleanly
-   * - ``scans.py``
-     - workflows scan owner
-     - move in Phase 2 only if public scan imports can migrate cleanly
    * - ``sensitivity.py``
      - package root differentiation API
      - keep at root
@@ -481,6 +463,45 @@ RHSMode=2/3 transport output-schema helpers:
   without keeping every diagnostic array resident in ``io.py``.
 - radial derivative conversion factors used when writing ``psiHat``,
   ``psiN``, ``rHat``, and ``rN`` transport-flux variants.
+
+``sfincs_jax/workflows/scans.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Electric-field scan workflow owner:
+
+- scan-directory materialization,
+- scan-point input patching,
+- optional scan-point parallelism,
+- progress and ETA reporting,
+- Krylov state recycling between adjacent scan points,
+- public ``run_er_scan`` helper used by CLI, examples, and validation scripts.
+
+This module replaces the former root ``sfincs_jax/scans.py`` implementation.
+
+``sfincs_jax/workflows/postprocess_upstream.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Upstream utility postprocessing wrapper:
+
+- locates vendored or user-provided SFINCS Fortran-v3 ``utils`` scripts,
+- runs plotting/postprocessing scripts in non-interactive mode,
+- forces a non-GUI matplotlib backend for scripted examples.
+
+This module replaces the former root ``sfincs_jax/postprocess_upstream.py``
+implementation.
+
+``sfincs_jax/validation/data_fetch.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Release-hosted external-equilibrium fixture owner:
+
+- reads the embedded equilibrium-data manifest,
+- downloads and verifies release-hosted VMEC/Boozer fixture archives,
+- resolves known equilibrium basenames from the user cache,
+- supports offline CI and examples without committing large fixtures to git.
+
+This module replaces the former root ``sfincs_jax/data_fetch.py``
+implementation.
 
 ``sfincs_jax/input_compat.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

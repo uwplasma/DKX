@@ -7,7 +7,7 @@ import numpy as np
 
 from sfincs_jax.ambipolar import radial_current_from_output, solve_ambipolar_from_scan_dir
 from sfincs_jax.io import read_sfincs_h5, write_sfincs_h5
-from sfincs_jax.scans import run_er_scan
+from sfincs_jax.workflows.scans import run_er_scan
 
 
 def _write_synthetic_scan_point(
