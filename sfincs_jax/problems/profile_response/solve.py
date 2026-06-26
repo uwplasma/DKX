@@ -123,7 +123,7 @@ from sfincs_jax.problems.profile_response.policies import (
 from sfincs_jax.problems.profile_response.policies import (
     rhs1_gpu_sparse_fallback_skip_allowed_current_backend as _rhs1_gpu_sparse_fallback_skip_allowed,
 )
-from sfincs_jax.solvers.preconditioners.schur.rhs1 import resolve_rhs1_schur_base_kind
+from sfincs_jax.solvers.preconditioners.schur.profile_response import resolve_rhs1_schur_base_kind
 from sfincs_jax.problems.profile_response.handoff import (
     RHS1KSPReplayState,
     RHS1SkipPrimaryKrylovSeedContext,
@@ -199,13 +199,28 @@ from sfincs_jax.problems.profile_response.preconditioner_build import (
     RHS1FullStrongRetryStageContext,
     RHS1ReducedPreconditionerBuildContext,
     RHS1ReducedStrongRetryStageContext,
+    _build_rhsmode1_block_preconditioner,
     _build_rhs1_preconditioner_from_kind,
     _build_rhs1_strong_preconditioner_full_from_kind,
     _build_rhs1_strong_preconditioner_reduced_from_kind,
     _build_rhsmode1_collision_preconditioner,
-    _build_rhsmode1_schur_preconditioner,
+    _build_rhsmode1_pas_hybrid_preconditioner,
+    _build_rhsmode1_pas_lite_preconditioner,
+    _build_rhsmode1_pas_schur_preconditioner,
+    _build_rhsmode1_pas_tokamak_theta_preconditioner,
+    _build_rhsmode1_pas_tz_preconditioner,
+    _build_rhsmode1_pas_xblock_ilu_preconditioner,
+    _build_rhsmode1_species_block_preconditioner,
+    _build_rhsmode1_sxblock_tz_preconditioner,
+    _build_rhsmode1_theta_dd_preconditioner,
+    _build_rhsmode1_theta_line_preconditioner,
+    _build_rhsmode1_theta_zeta_preconditioner,
+    _build_rhsmode1_xblock_tz_preconditioner,
     _build_rhsmode1_xblock_tz_lmax_preconditioner,
     _build_rhsmode1_xblock_tz_sparse_preconditioner,
+    _build_rhsmode1_xmg_preconditioner,
+    _build_rhsmode1_zeta_dd_preconditioner,
+    _build_rhsmode1_zeta_line_preconditioner,
     _build_rhsmode23_tzfft_preconditioner,
     _compute_rhsmode1_sxblock_tz_sparse_host_seed,
     build_rhs1_full_preconditioner,
@@ -1031,6 +1046,49 @@ _transport_precondition_side = _transport_precondition_side_impl
 _transport_sparse_direct_needs_float64_retry = (
     _transport_sparse_direct_needs_float64_retry_impl
 )
+
+
+def _build_rhsmode1_schur_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Compatibility wrapper that binds Schur builders from this module.
+
+    ``sfincs_jax.v3_driver`` aliases this module for legacy callers. Several
+    tests and downstream scripts monkeypatch the individual builder globals
+    here, so the wrapper must construct the Schur builder bundle from this
+    module's globals instead of using a closed-over bundle elsewhere.
+    """
+
+    builders = RHS1SchurPreconditionerBuilders(
+        pas_tokamak_theta_applicable=_pas_tokamak_theta_preconditioner_applicable,
+        pas_tz_applicable=_pas_tz_preconditioner_applicable,
+        theta_line_builder=_build_rhsmode1_theta_line_preconditioner,
+        theta_dd_builder=_build_rhsmode1_theta_dd_preconditioner,
+        species_block_builder=_build_rhsmode1_species_block_preconditioner,
+        sxblock_tz_builder=_build_rhsmode1_sxblock_tz_preconditioner,
+        xblock_tz_builder=_build_rhsmode1_xblock_tz_preconditioner,
+        xblock_tz_lmax_builder=_build_rhsmode1_xblock_tz_lmax_preconditioner,
+        pas_xblock_ilu_builder=_build_rhsmode1_pas_xblock_ilu_preconditioner,
+        xmg_builder=_build_rhsmode1_xmg_preconditioner,
+        pas_lite_builder=_build_rhsmode1_pas_lite_preconditioner,
+        pas_hybrid_builder=_build_rhsmode1_pas_hybrid_preconditioner,
+        pas_schur_builder=_build_rhsmode1_pas_schur_preconditioner,
+        pas_tokamak_theta_builder=_build_rhsmode1_pas_tokamak_theta_preconditioner,
+        pas_tz_builder=_build_rhsmode1_pas_tz_preconditioner,
+        theta_zeta_builder=_build_rhsmode1_theta_zeta_preconditioner,
+        zeta_line_builder=_build_rhsmode1_zeta_line_preconditioner,
+        zeta_dd_builder=_build_rhsmode1_zeta_dd_preconditioner,
+        block_builder=_build_rhsmode1_block_preconditioner,
+    )
+    return build_rhs1_schur_preconditioner(
+        op=op,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        builders=builders,
+    )
 
 
 def _gmres_solve_dispatch(*, distributed_axis: str | None = None, size_hint: int | None = None, **kwargs):

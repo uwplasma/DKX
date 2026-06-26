@@ -25,7 +25,7 @@ from sfincs_jax.operators.profile_response.compressed_layout import (
     infer_rhs1_compressed_pitch_layout_from_active_indices,
 )
 from sfincs_jax.solvers.preconditioners.symbolic_sparse.policy import resolve_active_fortran_v3_reduced_factor_policy
-from ..schur.rhs1_full_csr import RHS1StructuredFullCSRPreconditioner
+from ..schur.profile_response import RHS1StructuredFullCSRPreconditioner
 
 
 # Reduced-Pmat symbolic elimination plan.

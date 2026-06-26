@@ -17,18 +17,18 @@ import numpy as np
 import scipy.sparse as sp
 
 from sfincs_jax.operators.profile_response.layout import RHS1ActiveBlockLayout, RHS1BlockLayout
-from ..schur.rhs1_full_csr import (
+from ..schur.profile_response import (
     RHS1StructuredFullCSRPreconditioner,
     build_jacobi_preconditioner,
     safe_inverse_diagonal,
 )
-from ..schur.rhs1_coarse_basis import (
+from ..schur.profile_response import (
     append_adaptive_residual_basis_csc,
     build_active_native_xell_coarse_window_basis_csc,
     build_coarse_residual_basis_csc,
     coarse_residual_config,
 )
-from ..schur.rhs1_coarse_policy import resolve_active_native_stack_policy
+from ..schur.profile_response import resolve_active_native_stack_policy
 from ..symbolic_sparse.rhs1_fortran_reduced import (
     estimate_spilu_factor_nbytes,
     sparse_equilibration_scale,

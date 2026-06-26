@@ -762,7 +762,7 @@ solves.
 
 The RHSMode=1 full-CSR Schur extraction is covered by
 ``tests/test_rhs1_full_csr_schur_preconditioners.py``. These tests exercise the
-new ``sfincs_jax.solvers.preconditioners.schur.rhs1_full_csr`` implementation
+new ``sfincs_jax.solvers.preconditioners.schur.profile_response`` implementation
 directly: regularized Jacobi pivots, diagonal kinetic plus tail Schur exactness,
 zeta-line Schur exactness, pitch-line Schur exactness, radial-pitch Schur
 exactness, block-memory estimates, and legacy ``rhs1_full_assembly`` alias

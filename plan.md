@@ -3629,3 +3629,63 @@ Next best steps:
    `solver_diagnostics.py`, `diagnostics.py`, and sparse owners.
 3. Only after `solve.py` is much smaller should Tranche C transport/output
    consolidation begin.
+
+## 2026-06-25 Lane 1 Pass 3 Schur-Family Consolidation
+
+Steps taken:
+
+1. Consolidated the Schur RHSMode-1 implementation family into
+   `sfincs_jax.solvers.preconditioners.schur.profile_response`.
+2. Deleted the historical implementation files:
+   `schur/rhs1.py`, `schur/rhs1_coarse_basis.py`,
+   `schur/rhs1_coarse_policy.py`, and `schur/rhs1_full_csr.py`.
+3. Updated package exports, tests, source-map documentation, and dependent
+   x-block/symbolic-sparse imports to use the canonical Schur owner.
+4. Preserved the `sfincs_jax.v3_driver` compatibility behavior by keeping a
+   local Schur wrapper in `profile_response.solve` that binds builder globals
+   from that module, so existing monkeypatch/debug scripts still work without
+   recreating old implementation files.
+
+Results:
+
+- Package Python files decreased from `212` to `209`.
+- `solvers/preconditioners` Python files decreased from `50` to `47`.
+- `solvers/preconditioners/schur` now has two files:
+  `__init__.py` and `profile_response.py`.
+- No deleted Schur module paths remain in source, tests, docs, examples, or
+  scripts outside generated docs build artifacts.
+- `profile_response/solve.py` is `8,729` lines after the compatibility wrapper;
+  the next large reduction still needs the generic sparse-PC/factor-preflight
+  branch extraction from Lane 1 Pass 1.
+
+Validation:
+
+- `python -m ruff check` passed for the touched Schur, x-block,
+  symbolic-sparse, profile-response, and focused test files.
+- `python -m py_compile` passed for the touched Schur, profile-response,
+  x-block, symbolic-sparse, and operator modules.
+- `python -m pytest tests/test_rhs1_coarse_basis.py
+  tests/test_rhs1_coarse_policy.py
+  tests/test_rhs1_full_csr_schur_preconditioners.py
+  tests/test_rhs1_schur_policy.py -q --tb=short` passed with `19 passed`.
+- `python -m pytest tests/test_domain_package_import_contracts.py
+  tests/test_schur_precond_heuristic.py -q --tb=short` passed with
+  `31 passed`.
+- Broader Schur/dependency gate passed with `140 passed`.
+- Broader sparse/profile-response regression gate passed with `474 passed`.
+
+Completion:
+
+- Lane 1 Pass 3: about `20%`; Schur is consolidated, but QI, symbolic sparse,
+  x-block, PAS, and full-FP still need owner collapse.
+- Lane 1 overall: about `76%`.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Return to Lane 1 Pass 1 and extract the generic sparse-PC/factor-preflight
+   branch or result/progress normalization from `profile_response/solve.py`.
+2. Continue Pass 3 afterward by collapsing symbolic-sparse RHSMode-1 naming and
+   QI experiment-history files into role-based owners.
+3. Keep running focused owner tests plus import-contract and Sphinx checks after
+   each large consolidation batch.

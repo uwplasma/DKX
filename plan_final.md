@@ -374,10 +374,10 @@ extraction:
   `native_block_factor.py`, `preconditioner_caches.py`,
   `preconditioner_context.py`, `preconditioner_operators.py`, and
   `preconditioner_setup.py` under `sfincs_jax.solvers`.
-- Current concentration of complexity:
-  `problems/profile_response` has 21 files and 50,395 lines,
+- Current concentration of complexity after the Schur-family consolidation:
+  `problems/profile_response` has 21 files and 50,453 lines,
   `problems/transport_matrix` has 28 files and 15,026 lines,
-  `solvers/preconditioners` has 50 files and about 37k lines,
+  `solvers/preconditioners` has 47 files and about 37k lines,
   `operators/profile_response` has 11 files and about 14k lines, and
   `io.py` remains about 4.3k lines.
 
@@ -569,11 +569,11 @@ Current inventory from the 2026-06-25 consolidation review:
 | Area | Current state | Final target for this PR |
 | --- | --- | --- |
 | `sfincs_jax/v3_driver.py` | 47-line compatibility shim | Keep below 80 lines or delete after legacy imports migrate. |
-| Package source files | 212 Python files | At most 200 files, with lower total package lines than the current branch. |
+| Package source files | 209 Python files | At most 200 files, with lower total package lines than the current branch baseline. |
 | Package-root modules | 52 Python files | Keep at or below 55; no new root implementation modules. |
 | `problems/profile_response` | 21 files, 50,395 lines; `solve.py` is 8,671 lines and `policies.py` is 6,885 lines | At most 16 files; `solve.py` below 3,500 lines; policy/admission code split by stable owner, not by experiment. |
 | `problems/transport_matrix` | 28 files, 15,026 lines; `parallel/` has 5 files | At most 16 files; `parallel/` at most 3 implementation files; no policy/postsolve micro-files. |
-| `solvers/preconditioners` | 50 files, 37,043 lines; QI, Schur, symbolic, x-block, PAS, and full-FP families are over-fragmented | At most 32 files; no implementation file starts with `rhs1_` or `transport_`; QI files are role-based, not experiment-history based. |
+| `solvers/preconditioners` | 47 files, about 37k lines; QI, symbolic, x-block, PAS, and full-FP families are still over-fragmented after the Schur family was consolidated | At most 32 files; no implementation file starts with `rhs1_` or `transport_`; QI files are role-based, not experiment-history based. |
 | `io.py` / `outputs` | `io.py` is 4,263 lines while `outputs/` already owns formats, caches, RHSMode-1, and transport output | `io.py` below 800 lines as a shim, or gone; output implementation lives in `outputs`. |
 | Historical implementation names | `v3_system.py`, `v3_fblock.py`, `v3_sparse_pattern.py`, root physics helpers, and old direct imports still appear in tests/docs/examples | Canonical owners are used everywhere except focused shim-contract tests. |
 
@@ -1322,7 +1322,7 @@ Deliverables:
 
 Current completion status:
 
-- Lane 1 structural consolidation: about 74 percent. The compatibility-driver
+- Lane 1 structural consolidation: about 76 percent. The compatibility-driver
   boundary is done, the first profile-response ownership checkpoint deleted
   three profile-response files, the current RHSMode-1 preconditioner registry is
   owned by `profile_response/preconditioner_build.py`, sparse env parsing is
@@ -1339,10 +1339,13 @@ Current completion status:
   reducing package-root files to 60. The fourth root-disposition checkpoint moved
   eight solver/preconditioner implementation modules into `sfincs_jax.solvers`,
   reducing package-root files to 52 and meeting the root-count gate. The first
-  profile-response sparse checkpoint moved the x-block sparse-PC GMRES branch from
-  `profile_response/solve.py` into `profile_response/sparse/handoff.py`,
-  reducing `solve.py` to 8,671 lines. The remaining large blockers are the
-  generic sparse-PC/factor-preflight branch, final result/progress
+  profile-response sparse checkpoint moved the x-block sparse-PC GMRES branch
+  from `profile_response/solve.py` into `profile_response/sparse/handoff.py`.
+  The Schur-family consolidation then replaced four historical
+  `solvers/preconditioners/schur/rhs1*` implementation files with the canonical
+  `solvers/preconditioners/schur/profile_response.py` owner, reducing package
+  files to 209 and preconditioner files to 47. The remaining large blockers are
+  the generic sparse-PC/factor-preflight branch, final result/progress
   normalization, the rest of transport/output consolidation,
   solver/preconditioner naming, and `io.py` ownership. The next work follows
   Lane 1 Passes 0-4 only.

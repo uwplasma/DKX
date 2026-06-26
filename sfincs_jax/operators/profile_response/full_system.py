@@ -40,11 +40,11 @@ from sfincs_jax.solvers.preconditioners.symbolic_sparse.policy import (
     resolve_active_symbolic_block_schur_policy,
     resolve_active_symbolic_superblock_policy,
 )
-from sfincs_jax.solvers.preconditioners.schur.rhs1_coarse_policy import (
+from sfincs_jax.solvers.preconditioners.schur.profile_response import (
     resolve_active_native_field_split_sparse_coarse_policy,
     resolve_active_sparse_coarse_residual_policy,
 )
-from sfincs_jax.solvers.preconditioners.schur.rhs1_coarse_basis import (
+from sfincs_jax.solvers.preconditioners.schur.profile_response import (
     append_adaptive_residual_basis_csc as _append_adaptive_residual_basis_csc,
     build_active_native_xell_coarse_window_basis_csc as _build_active_native_xell_coarse_window_basis_csc,
     build_coarse_residual_basis_csc as _build_coarse_residual_basis_csc,
@@ -53,7 +53,7 @@ from sfincs_jax.solvers.preconditioners.schur.rhs1_coarse_basis import (
     estimate_xblock_tz_low_l_factor_nbytes as _estimate_xblock_tz_low_l_factor_nbytes,
     xblock_tz_low_l_config as _xblock_tz_low_l_config,
 )
-from sfincs_jax.solvers.preconditioners.schur.rhs1_full_csr import (
+from sfincs_jax.solvers.preconditioners.schur.profile_response import (
     RHS1StructuredFullCSRPreconditioner,
     build_block_schur_preconditioner as _build_block_schur_preconditioner,
     build_diagonal_schur_preconditioner as _build_diagonal_schur_preconditioner,
