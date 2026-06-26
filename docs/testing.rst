@@ -579,16 +579,17 @@ The sparse helper coverage in ``tests/test_v3_driver_sparse_helper_coverage.py``
 also protects the host full-FP x-block exact-LU cap. It verifies that only the
 non-differentiable full-FP x-block path defaults to the larger production-floor
 cap, while PAS and JAX-factor paths retain the lower memory-conservative cap.
-``tests/test_explicit_sparse_factor_policy.py`` now covers the typed
+``tests/test_explicit_sparse_factor_policy.py`` covers the typed
 ``ExplicitSparseFactorSettings`` bundle consumed by that sparse builder:
 defaults, environment overrides, bounds, factor-kind aliases, SuperLU
 permutation fallback, ILU options, monolithic LU/ILU guards, and symbolic
 Schur/frontal/ND/BLR knobs are checked without launching a large solve.
-``tests/test_explicit_sparse_factor_builder.py`` then tests the extracted
-builder itself with injected operator-build, pattern-build, backend, guard, and
-factorization callbacks. The existing driver sparse-helper tests remain in
-place to prove that monkeypatching the ``v3_driver`` compatibility seam still
-reaches the extracted implementation.
+``tests/test_explicit_sparse_factor_builder.py`` tests the same consolidated
+``sfincs_jax.solvers.explicit_sparse`` owner through the host-factor builder
+with injected operator-build, pattern-build, backend, guard, and factorization
+callbacks. The existing driver sparse-helper tests remain in place to prove
+that monkeypatching the ``v3_driver`` compatibility seam still reaches the
+consolidated implementation.
 The symbolic-sparse host-factor extraction is guarded by
 ``tests/test_sparse_assembly.py`` and the sparse-pattern checks in
 ``tests/test_v3_sparse_pattern.py``. These tests verify chunked matrix-free CSR
