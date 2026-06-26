@@ -18,7 +18,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
-from ..adaptive_maps import MappedXGrid
+from ..discretization.adaptive_maps import MappedXGrid
 from .mapped_xgrid_objectives import rational_tail_transport_grid, transport_moment_report
 from ..namelist import Namelist
 from ..problems.transport_matrix.finalize import V3TransportMatrixSolveResult

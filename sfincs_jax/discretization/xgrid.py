@@ -1,9 +1,11 @@
+"""SFINCS-v3-compatible speed-grid quadrature and differentiation."""
+
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Callable, Tuple
+from typing import Callable
 
 import numpy as np
 from scipy.integrate import quad

@@ -17,7 +17,7 @@ from sfincs_jax.magnetic_drifts import (
     apply_magnetic_drift_theta_v3,
     apply_magnetic_drift_zeta_v3,
 )
-from sfincs_jax.periodic_stencil import extract_sparse_row_stencil
+from sfincs_jax.discretization.periodic_stencil import extract_sparse_row_stencil
 
 
 def _periodic_first_derivative_matrix(n: int) -> np.ndarray:

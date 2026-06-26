@@ -1,7 +1,7 @@
 Differentiable adaptive speed grids
 ===================================
 
-``sfincs_jax.adaptive_maps`` contains opt-in research primitives for
+``sfincs_jax.discretization.adaptive_maps`` contains opt-in research primitives for
 differentiable maps of the normalized speed coordinate ``x = v / v_th``.
 They do not change the default SFINCS-v3-compatible grids or solver paths.
 

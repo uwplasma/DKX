@@ -33,7 +33,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.structured_velocity import (  # noqa: E402
+from sfincs_jax.discretization.structured_velocity import (  # noqa: E402
     block_tridiagonal_to_dense,
     factor_block_tridiagonal,
 )

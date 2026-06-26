@@ -18,7 +18,7 @@ from sfincs_jax.solvers.preconditioning import (
 from sfincs_jax.solvers.preconditioning import precond_dtype as _precond_dtype
 from sfincs_jax.solvers.preconditioning import rhs_mode1_precond_cache_key
 from sfincs_jax.solvers.preconditioners.pas.policy import build_pas_tz_memory_fallback
-from ....structured_velocity import factor_block_tridiagonal
+from sfincs_jax.discretization.structured_velocity import factor_block_tridiagonal
 from sfincs_jax.operators.profile_response.system import V3FullSystemOperator
 
 Preconditioner = Callable[[jnp.ndarray], jnp.ndarray]
@@ -875,5 +875,4 @@ def build_rhs1_pas_tz_preconditioner(
         return reduce_full(z_full)
 
     return _apply_reduced
-
 

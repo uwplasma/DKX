@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.adaptive_maps import (
+from sfincs_jax.discretization.adaptive_maps import (
     AffineXMap,
     RationalTailXMap,
     SoftplusCellXMap,

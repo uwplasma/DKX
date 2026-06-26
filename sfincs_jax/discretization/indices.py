@@ -1,3 +1,5 @@
+"""Fortran-v3-compatible active degree-of-freedom indexing."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -80,4 +82,3 @@ class V3Indexing:
         if len(out) != self.n_species * self.dke_size:
             raise AssertionError("Internal error building inverse map.")
         return out
-

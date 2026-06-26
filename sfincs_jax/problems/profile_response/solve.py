@@ -36,7 +36,7 @@ from sfincs_jax.solver import (
 from sfincs_jax.solver import (
     recycled_initial_guess as _recycled_initial_guess, small_regularized_lstsq as _small_regularized_lstsq,
 )
-from sfincs_jax.structured_velocity import factor_block_tridiagonal
+from sfincs_jax.discretization.structured_velocity import factor_block_tridiagonal
 from sfincs_jax.pas_smoother import adaptive_pas_smoother
 from sfincs_jax.solvers.explicit_sparse import (
     SparseDecision, SparseOperatorBundle, admit_sparse_factor_against_operator, analyze_sparse_symbolic_structure,

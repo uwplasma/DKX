@@ -125,7 +125,7 @@ a bounded block-tridiagonal proxy.
 **Implementation.**
 
 - Structured block solver:
-  ``sfincs_jax.structured_velocity.factor_block_tridiagonal``.
+  ``sfincs_jax.discretization.structured_velocity.factor_block_tridiagonal``.
 - Benchmark harness:
   ``examples/performance/benchmark_structured_solve.py``.
 - Focused tests:
@@ -1877,8 +1877,8 @@ schemes used in reduced-suite inputs).
 **Implementation.**
 
 - Sparse-row extraction and apply:
-  ``sfincs_jax.periodic_stencil.extract_sparse_row_stencil`` and
-  ``sfincs_jax.periodic_stencil.apply_sparse_row_stencil_gather``.
+  ``sfincs_jax.discretization.periodic_stencil.extract_sparse_row_stencil`` and
+  ``sfincs_jax.discretization.periodic_stencil.apply_sparse_row_stencil_gather``.
 - Collisionless operator fast path:
   ``sfincs_jax.collisionless.apply_collisionless_v3``.
 - Operator build wiring:

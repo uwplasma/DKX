@@ -1,3 +1,5 @@
+"""Structured velocity-space block factors used by solver preconditioners."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

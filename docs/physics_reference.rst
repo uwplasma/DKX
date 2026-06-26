@@ -206,7 +206,7 @@ strategy in ``sfincs_jax/collisions.py`` (see the field-particle assembly helper
 Code links:
 ``sfincs_jax/grids.py`` (polynomial grids and quadrature),
 ``sfincs_jax/collisions.py`` (PAS and FP operators),
-``sfincs_jax/xgrid.py`` (collocation-to-modal transforms).
+``sfincs_jax/discretization/xgrid.py`` (collocation-to-modal transforms).
 
 Phi1 and quasineutrality
 ------------------------
@@ -407,7 +407,7 @@ The table below summarizes where each term in the v3 drift-kinetic equation is i
 - Pitch-angle and speed derivatives (:math:`\partial_\xi f`, :math:`\partial_x f`):
   ``sfincs_jax/collisionless.py`` and ``sfincs_jax/collisionless_er.py``.
 - Collision operators (PAS and full FP):
-  ``sfincs_jax/collisions.py`` with modal transforms in ``sfincs_jax/xgrid.py``.
+  ``sfincs_jax/collisions.py`` with modal transforms in ``sfincs_jax/discretization/xgrid.py``.
 - Constraint rows/columns and Phi1 blocks:
   ``sfincs_jax/operators/profile_response/system.py`` and ``sfincs_jax/v3_driver.py``.
 - Diagnostics and flux assembly:

@@ -7,7 +7,7 @@ import jax.numpy as jnp
 
 from sfincs_jax.collisionless_exb import ExBThetaV3Operator, apply_exb_theta_v3
 from sfincs_jax.geometry import boozer_geometry_scheme4
-from sfincs_jax.indices import V3Indexing
+from sfincs_jax.discretization.indices import V3Indexing
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.petsc_binary import read_petsc_mat_aij
 from sfincs_jax.discretization.v3 import grids_from_namelist
@@ -111,4 +111,3 @@ def test_exb_theta_matvec_matches_fortran_matrix() -> None:
         y_jax_vec[g] = y_jax[s, ix, l, it, iz]
 
     np.testing.assert_allclose(y_jax_vec, y_ref, rtol=0, atol=1e-12)
-

@@ -4,7 +4,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
-from sfincs_jax.structured_velocity import (
+from sfincs_jax.discretization.structured_velocity import (
     apply_block_tridiagonal,
     block_tridiagonal_to_dense,
     factor_block_tridiagonal,

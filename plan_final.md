@@ -314,11 +314,12 @@ completed Batch A-D owner moves:
   consolidation, and Batch D solver-core consolidation. The historical
   symbolic-sparse `rhs1_*` filename has been removed, QI has durable owner
   modules, and the preconditioner file-count gate is met. Package source lines
-  are 165,779 after the Phase 2 workflow/data and geometry moves; this is
+  are 165,790 after the Phase 2 workflow/data, geometry, and discretization
+  kernel moves; this is
   above the previous line-count checkpoint but is
   justified by replacing many implementation shards with durable owner modules
   while preserving production behavior.
-- Package root: 35 Python files. No top-level `rhs1_*` or `transport_*`
+- Package root: 30 Python files. No top-level `rhs1_*` or `transport_*`
   implementation files remain.
 - `sfincs_jax/v3_driver.py`: 47-line compatibility shim. It must not regain
   implementation logic.
@@ -565,8 +566,8 @@ Current source inventory from the final consolidation audit:
 
 | Area | Current state | Review-ready target |
 | --- | --- | --- |
-| Whole package | 168 Python files, 165,779 package lines after the Phase 2 workflow/data and geometry moves. The file-count gate and stretch file-count target are met; the remaining line increase is explicitly justified by replacing multiple implementation shards with durable owner modules. | `<=190` Python files and below the previous 165,398-line checkpoint before review, or a documented line-count exception tied to deleted files plus clearer ownership. Stretch target `<=175` is met and must not be lost unless clarity improves. |
-| Package root | 35 Python files | `<=40` preferred, `<=44` maximum. Every remaining root file must be public API, stable physics kernel, or documented compatibility shim. |
+| Whole package | 168 Python files, 165,790 package lines after the Phase 2 workflow/data, geometry, and discretization kernel moves. The file-count gate and stretch file-count target are met; the remaining line increase is explicitly justified by replacing multiple implementation shards with durable owner modules. | `<=190` Python files and below the previous 165,398-line checkpoint before review, or a documented line-count exception tied to deleted files plus clearer ownership. Stretch target `<=175` is met and must not be lost unless clarity improves. |
+| Package root | 30 Python files | `<=40` preferred, `<=44` maximum. Every remaining root file must be public API, stable physics kernel, or documented compatibility shim. |
 | `v3_driver.py` | 47-line compatibility shim | Keep below 80 lines or delete after public imports migrate. It must not regain implementation logic. |
 | `io.py` and `outputs/` | `io.py` is a 64-line compatibility facade; `outputs/writer.py` owns the 4,264-line writer; `outputs/transport.py` owns transport output accumulation and streaming writes. | `io.py` gate is met. Output implementation belongs in `outputs`, not root. |
 | `problems/profile_response` | 18 files including `sparse/`; `solve.py` is 5,420 lines and `sparse/handoff.py` is 5,500 lines. | Review-ready line gates are restored. Do not add profile-response files. |
@@ -653,10 +654,10 @@ Closure baseline:
 
 | Area | Current audited state | Closure target |
 | --- | --- | --- |
-| Whole package | 168 Python files, 165,779 package lines | `<=150` Python files if compatibility allows; otherwise `<=155` with an explicit compatibility-debt note. No line-count increase. |
-| Package root | 35 Python files | `<=32` root files after geometry/workflow/kernel moves, or `<=36` if public compatibility requires temporary shims. |
+| Whole package | 168 Python files, 165,790 package lines | Keep `<=175` files unless a later merge demonstrably improves clarity; further file-count reductions must come from true file merges/deletions, not shims. |
+| Package root | 30 Python files | `<=32` root files after geometry/workflow/kernel moves. Gate met; do not add new root modules. |
 | `v3_driver.py` / `io.py` | 47-line and 64-line shims | Delete if all public imports migrate; otherwise keep below 80 lines each with deletion conditions. |
-| Geometry and input support | VMEC/Boozer/JAX-geometry helpers still live at root | One geometry package boundary with documented public exports and no duplicate root implementation modules. |
+| Geometry and input support | VMEC/Boozer/JAX-geometry helpers now live in `sfincs_jax.geometry`; discretization kernels now live in `sfincs_jax.discretization`. | Keep these package boundaries documented and forbid duplicate root implementation modules. |
 | Profile response | 18 files including `sparse/`, 52,546 lines | `<=14` files if sparse owners can merge cleanly; otherwise keep 18 but reduce duplicated policy/residual payload code by at least 2,000 lines. |
 | Solver preconditioners | 35 files, 37,496 lines | `<=28` files if x-block/QI/PAS/symbolic owners merge without cycles; otherwise keep current count and document why each family boundary is needed. |
 | Outputs | 6 files, writer at 4,268 lines | Keep output files count stable; reduce writer duplication through schema tables and helpers inside existing files only. |
@@ -710,7 +711,6 @@ Phase 1 root-module move/delete manifest:
 | `namelist.py` | input namelist owner | keep root public parser until input package exports are documented |
 | `plotting.py` | outputs/plotting public helper | keep root public helper unless API replacement is documented |
 | `sensitivity.py` | package root differentiation API | keep at root |
-| `adaptive_maps.py` | discretization speed-grid owner | move with grid/discretization kernel group |
 | `classical_transport.py` | physics classical transport owner | move only with physics API export tests |
 | `collisionless.py` | operators profile-response streaming owner | move with operator-kernel group |
 | `collisionless_er.py` | operators electric-field owner | move with operator-kernel group |
@@ -721,19 +721,15 @@ Phase 1 root-module move/delete manifest:
 | `diagnostics.py` | physics/output diagnostics owner | defer until diagnostics API split is explicit |
 | `grids.py` | discretization public grid owner | keep root public helper until discretization package exports are documented |
 | `host_refinement.py` | solvers refinement policy owner | move in solver-policy group if profile-response imports migrate |
-| `indices.py` | discretization layout owner | move with grid/discretization kernel group |
 | `magnetic_drifts.py` | operators magnetic-drift owner | move with operator-kernel group |
 | `pas_smoother.py` | solvers/preconditioners PAS smoother owner | move in solver-preconditioner group |
 | `paths.py` | package root path support utility | keep at root unless a support package is introduced with broad import rewrite |
-| `periodic_stencil.py` | discretization stencil owner | move with grid/discretization kernel group |
 | `phi1_newton_linear.py` | problems.profile_response Phi1 Newton owner | move if it deletes root file without adding shim |
 | `phi1_newton_policy.py` | problems.profile_response Phi1 policy owner | move if it deletes root file without adding shim |
 | `profiling.py` | solvers/validation profiling support | defer until profiling API boundary is explicit |
 | `residual.py` | operators residual/autodiff owner | move with operator-kernel group if docs imports migrate |
 | `solver.py` | solvers public contracts owner | keep root shim until solvers exports cover public contracts |
-| `structured_velocity.py` | discretization structured-velocity owner | move with grid/discretization kernel group |
 | `v3_driver.py` | compatibility shim to problem owners | delete after tests/examples stop importing sfincs_jax.v3_driver |
-| `xgrid.py` | discretization speed-grid owner | move with grid/discretization kernel group |
 
 #### Closure Phase 2 - Root-To-Domain Package Move
 
@@ -776,13 +772,20 @@ Status on 2026-06-26:
   submodule owners `boozer.py`, `vmec_wout.py`, `vmec.py`, and
   `jax_adapters.py`. Public `sfincs_jax.geometry` imports remain available as a
   package API, not a root implementation module.
-- Package-root Python files drop from 43 to 35 after the workflow/data and
-  geometry moves. Whole-package file count stays flat because these are
-  ownership cleanups, not new helper extractions.
-- The next Phase 2 candidate is a smaller discretization/operator-kernel move:
-  `adaptive_maps.py`, `indices.py`, `periodic_stencil.py`, `structured_velocity.py`,
-  and `xgrid.py` can move only if docs/examples/tests import the
-  `discretization` owners without shims.
+- Third Phase 2 move complete. The former root discretization kernels
+  `adaptive_maps.py`, `indices.py`, `periodic_stencil.py`,
+  `structured_velocity.py`, and `xgrid.py` moved to
+  `sfincs_jax.discretization` submodule owners without root compatibility
+  shims. Tests, examples, scripts, docs, and import-contract gates import the
+  package owners directly.
+- Package-root Python files drop from 43 to 30 after the workflow/data,
+  geometry, and discretization-kernel moves. Whole-package file count stays
+  flat because these are ownership cleanups, not new helper extractions.
+- The next Phase 2 candidate is the operator-kernel group:
+  `collisionless.py`, `collisionless_er.py`, `collisionless_exb.py`,
+  `magnetic_drifts.py`, and possibly `residual.py`. Move it only if it deletes
+  at least three root files, avoids compatibility shims, and leaves the
+  operator/autodiff parity tests readable.
 
 #### Closure Phase 3 - Problem/Solver/Output Owner Compression
 
@@ -1222,8 +1225,8 @@ Status on 2026-06-26:
   above. The second run repeated already-clean sections and was stopped after
   `486 passed`; no new failure was observed before interruption.
 - Current structural counts satisfy the Batch G hard gates:
-  168 package Python files, 35 package-root Python files,
-  165,779 package Python lines, `v3_driver.py` at 47 lines, `io.py` at
+  168 package Python files, 30 package-root Python files,
+  165,790 package Python lines, `v3_driver.py` at 47 lines, `io.py` at
   64 lines, `profile_response/solve.py` at 5,420 lines,
   `profile_response/sparse/handoff.py` at 5,500 lines, and no top-level
   `rhs1_*` or `transport_*` implementation files.

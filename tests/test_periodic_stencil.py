@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import pytest
 
 from sfincs_jax.grids import uniform_diff_matrices
-from sfincs_jax.periodic_stencil import (
+from sfincs_jax.discretization.periodic_stencil import (
     _sharding_active_hint,
     apply_periodic_stencil_roll,
     apply_periodic_stencil_halo,

@@ -16,7 +16,7 @@ from jax.scipy.special import erf
 from scipy import special as sp_special
 from scipy.integrate import quad
 
-from .xgrid import XGrid, make_x_grid
+from .discretization.xgrid import XGrid, make_x_grid
 
 
 _V3_PI = 3.14159265358979

@@ -60,6 +60,12 @@ of the active public code; the ``io`` package name is reserved for a later
 migration step that moves the implementation without shadowing or breaking
 existing imports.
 
+``sfincs_jax/discretization`` now also owns the former flat speed-grid,
+indexing, sparse-stencil, and structured velocity kernels:
+``adaptive_maps.py``, ``indices.py``, ``periodic_stencil.py``,
+``structured_velocity.py``, and ``xgrid.py``. Public examples and tests import
+these modules through the package owner, not through root compatibility shims.
+
 Root public surface classification
 ----------------------------------
 
@@ -109,9 +115,6 @@ facades.
    * - ``sensitivity.py``
      - public differentiation API
      - JVP/VJP, implicit, and adjoint certificates used by optimization workflows.
-   * - ``adaptive_maps.py``
-     - stable numerical kernel
-     - Mapped speed-grid construction shared by discretization and workflows.
    * - ``classical_transport.py``
      - stable physics kernel
      - Classical transport formulas and validation gates.
@@ -142,9 +145,6 @@ facades.
    * - ``host_refinement.py``
      - stable solver-policy kernel
      - Host-side iterative refinement gates.
-   * - ``indices.py``
-     - stable discretization kernel
-     - Shared index/layout helpers.
    * - ``magnetic_drifts.py``
      - stable operator kernel
      - Magnetic-drift coefficient and stencil construction.
@@ -154,9 +154,6 @@ facades.
    * - ``paths.py``
      - stable support utility
      - Repository/data path resolution helpers.
-   * - ``periodic_stencil.py``
-     - stable numerical kernel
-     - Periodic finite-difference stencil utilities.
    * - ``phi1_newton_linear.py``
      - stable solver kernel
      - Phi1 Newton linear-step orchestration.
@@ -172,15 +169,9 @@ facades.
    * - ``solver.py``
      - stable solver kernel
      - Krylov result contracts, XLA synchronization, and linear algebra utilities.
-   * - ``structured_velocity.py``
-     - stable numerical kernel
-     - Structured velocity-grid utilities.
    * - ``v3_driver.py``
      - compatibility shim
      - Historical import path; implementation lives in domain owners and this file must remain tiny.
-   * - ``xgrid.py``
-     - stable discretization kernel
-     - SFINCS-compatible speed-grid helpers.
 
 Closure move/delete manifest
 ----------------------------
@@ -231,9 +222,6 @@ tests.
    * - ``sensitivity.py``
      - package root differentiation API
      - keep at root
-   * - ``adaptive_maps.py``
-     - discretization speed-grid owner
-     - move with grid/discretization kernel group
    * - ``classical_transport.py``
      - physics classical transport owner
      - move only with physics API export tests
@@ -264,9 +252,6 @@ tests.
    * - ``host_refinement.py``
      - solvers refinement policy owner
      - move in solver-policy group if profile-response imports migrate
-   * - ``indices.py``
-     - discretization layout owner
-     - move with grid/discretization kernel group
    * - ``magnetic_drifts.py``
      - operators magnetic-drift owner
      - move with operator-kernel group
@@ -276,9 +261,6 @@ tests.
    * - ``paths.py``
      - package root path support utility
      - keep at root unless a support package is introduced with broad import rewrite
-   * - ``periodic_stencil.py``
-     - discretization stencil owner
-     - move with grid/discretization kernel group
    * - ``phi1_newton_linear.py``
      - problems.profile_response Phi1 Newton owner
      - move if it deletes root file without adding shim
@@ -294,15 +276,9 @@ tests.
    * - ``solver.py``
      - solvers public contracts owner
      - keep root shim until solvers exports cover public contracts
-   * - ``structured_velocity.py``
-     - discretization structured-velocity owner
-     - move with grid/discretization kernel group
    * - ``v3_driver.py``
      - compatibility shim to problem owners
      - delete after tests/examples stop importing sfincs_jax.v3_driver
-   * - ``xgrid.py``
-     - discretization speed-grid owner
-     - move with grid/discretization kernel group
 
 Core modules
 ------------
@@ -492,8 +468,8 @@ dependency; they normalize in-memory VMEC-like ``wout`` objects to the internal
 machine-readable VMEC/Boozer proxy workflow contract and the shared no-solve
 provenance gate used by the workflow status and autodiff examples.
 
-``sfincs_jax/grids.py`` and ``sfincs_jax/xgrid.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+``sfincs_jax/grids.py`` and ``sfincs_jax/discretization/xgrid.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Velocity-space discretization:
 
@@ -501,6 +477,12 @@ Velocity-space discretization:
 - quadrature weights,
 - modal transforms used by the collision operator,
 - special handling for monoenergetic ``RHSMode=3``.
+- mapped speed-grid research primitives in ``discretization/adaptive_maps.py``,
+- Fortran-v3 active indexing in ``discretization/indices.py``,
+- compact periodic stencil extraction/application in
+  ``discretization/periodic_stencil.py``,
+- block-tridiagonal velocity factors in
+  ``discretization/structured_velocity.py``.
 
 ``sfincs_jax/geometry/__init__.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

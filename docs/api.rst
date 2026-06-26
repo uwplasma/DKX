@@ -31,7 +31,7 @@ API reference
 .. automodule:: sfincs_jax.grids
    :members:
 
-.. automodule:: sfincs_jax.xgrid
+.. automodule:: sfincs_jax.discretization.xgrid
    :members:
 
 .. automodule:: sfincs_jax.collisionless
@@ -226,7 +226,7 @@ research workflows.
 .. automodule:: sfincs_jax.outputs.transport
    :members:
 
-.. automodule:: sfincs_jax.indices
+.. automodule:: sfincs_jax.discretization.indices
    :members:
 
 .. automodule:: sfincs_jax.validation.petsc_binary

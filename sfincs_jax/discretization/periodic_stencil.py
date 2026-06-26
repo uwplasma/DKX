@@ -1,3 +1,5 @@
+"""Sparse periodic derivative stencils for dense and sharded arrays."""
+
 from __future__ import annotations
 
 import os

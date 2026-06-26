@@ -11,7 +11,7 @@ from sfincs_jax.operators.profile_response.full_system import _source_basis_cons
 from sfincs_jax.problems.transport_matrix.diagnostics import f0_l0_v3_from_operator
 from sfincs_jax.operators.profile_response.system import full_system_operator_from_namelist
 from sfincs_jax.operators.profile_response.system import _source_basis_constraint_scheme_1
-from sfincs_jax.xgrid import make_x_grid
+from sfincs_jax.discretization.xgrid import make_x_grid
 
 
 @pytest.mark.parametrize("x_grid_k", [0.0, 2.0])

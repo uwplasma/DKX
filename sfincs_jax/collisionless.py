@@ -10,7 +10,7 @@ import jax
 import jax.numpy as jnp
 from jax import tree_util as jtu
 
-from .periodic_stencil import (
+from .discretization.periodic_stencil import (
     apply_periodic_stencil_halo,
     apply_periodic_stencil_roll,
     apply_sparse_row_stencil_gather,

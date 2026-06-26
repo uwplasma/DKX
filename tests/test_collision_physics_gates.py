@@ -17,7 +17,7 @@ from sfincs_jax.collisions import (
     polynomial_interpolation_matrix_np,
     rosenbluth_potential_terms_v3_np,
 )
-from sfincs_jax.xgrid import make_x_grid
+from sfincs_jax.discretization.xgrid import make_x_grid
 
 
 def _pas_operator():

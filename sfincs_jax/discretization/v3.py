@@ -14,7 +14,7 @@ _jax_config.update("jax_enable_x64", True)
 import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
 
-from sfincs_jax.adaptive_maps import (  # noqa: E402
+from sfincs_jax.discretization.adaptive_maps import (  # noqa: E402
     AffineXMap,
     RationalTailXMap,
     SoftplusCellXMap,
@@ -28,7 +28,7 @@ from sfincs_jax.namelist import Namelist  # noqa: E402
 from sfincs_jax.paths import resolve_existing_path  # noqa: E402
 from sfincs_jax.geometry.vmec import vmec_geometry_from_wout_file  # noqa: E402
 from sfincs_jax.geometry.vmec_wout import read_vmec_wout  # noqa: E402
-from sfincs_jax.xgrid import XGrid, make_x_grid, make_x_polynomial_diff_matrices  # noqa: E402
+from sfincs_jax.discretization.xgrid import XGrid, make_x_grid, make_x_polynomial_diff_matrices  # noqa: E402
 
 
 def _n_periods_from_bc_file(path: str, *, base_dir: Path | None = None) -> int:
