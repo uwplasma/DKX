@@ -74,10 +74,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
 - The largest coverage gaps by missing executable lines are
   `solvers/preconditioner_transport_matrix.py`, `problems/profile_solve.py`,
   `problems/transport_solve.py`, `operators/profile_system.py`,
-  `outputs/writer.py`, `solvers/preconditioner_pas_xblock_ilu.py`,
-  `solvers/preconditioner_pas_angular.py`,
+  `outputs/writer.py`, `solvers/preconditioner_pas_angular.py`,
   `solvers/preconditioner_full_fp_kinetic.py`, `solvers/explicit_sparse.py`,
   and `operators/profile_sparse_pattern.py`.
+- The first post-audit coverage tranche added bounded PAS x-block ILU tests for
+  inapplicable-model fallback, tiny-fixture padded factor construction,
+  environment normalization, cache reuse, and reduced-vector application. That
+  module is no longer a top coverage blocker.
 
 ### Target Package Shape
 
