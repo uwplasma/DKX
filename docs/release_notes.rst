@@ -161,7 +161,7 @@ Unreleased
 - Moved RHSMode=1 host sparse ILU/LU matvec assembly, CSR factorization, cached
   dense/JAX triangular-factor materialization, and the full-system
   matrix-free adapter into
-  ``sfincs_jax.solvers.preconditioners.symbolic_sparse.host_factor``. The
+  ``sfincs_jax.solvers.preconditioner_symbolic_host``. The
   historical ``v3_driver`` private helper names remain compatibility aliases,
   while the non-differentiable host-factor path now lives in the solver-domain
   package.
@@ -403,13 +403,13 @@ Unreleased
   coarse-basis source/constraint columns, direct block-Schur callback path, and
   Fortran-reduced LU symbolic/BLR/ND metadata.
 - Moved the RHSMode=1 full-FP sparse x-block/TZ preconditioner into
-  ``sfincs_jax.solvers.preconditioners.xblock.tz_sparse``. The module owns
+  ``sfincs_jax.solvers.preconditioner_xblock_tz_sparse``. The module owns
   host/JAX x-block factor setup, compact CSR and padded triangular apply,
   skipped-block diagonal fallback, and extra-variable Schur handling; the old
   top-level ``sfincs_jax.rhs1_xblock_tz_sparse`` alias was removed in the
   consolidation pass.
 - Moved the PAS-only RHSMode=1 sparse x-block ILU/LU preconditioner into
-  ``sfincs_jax.solvers.preconditioners.pas.xblock_ilu``. The module owns the
+  ``sfincs_jax.solvers.preconditioner_pas_xblock_ilu``. The module owns the
   per-``(species,x)`` Legendre/theta/zeta block assembly, PETSc-style
   ILU/exact-LU setup policy, padded triangular-factor apply, threaded factor
   build, cache storage, and extra-variable Schur solve; the old

@@ -37,7 +37,7 @@ from sfincs_jax.solver import (
     recycled_initial_guess as _recycled_initial_guess, small_regularized_lstsq as _small_regularized_lstsq,
 )
 from sfincs_jax.discretization.structured_velocity import factor_block_tridiagonal
-from sfincs_jax.solvers.preconditioners.pas.policy import adaptive_pas_smoother
+from sfincs_jax.solvers.preconditioner_pas_policy import adaptive_pas_smoother
 from sfincs_jax.solvers.explicit_sparse import (
     SparseDecision, SparseOperatorBundle, admit_sparse_factor_against_operator, analyze_sparse_symbolic_structure,
     build_operator_from_pattern, estimate_csr_nbytes, estimate_dense_nbytes, estimate_multifrontal_direct_lu_nbytes,
@@ -46,7 +46,7 @@ from sfincs_jax.solvers.explicit_sparse import (
 from sfincs_jax.operators.profile_device_sparse import (
     device_csr_from_matrix, validate_device_csr_matvec,
 )
-from sfincs_jax.solvers.preconditioners.domain_decomposition import (  # compatibility exports for legacy tests/debug scripts
+from sfincs_jax.solvers.preconditioner_domain_decomposition import (  # compatibility exports for legacy tests/debug scripts
     _dd_core_patch_ranges,
     _rhs1_dd_auto_block_size,
     _rhs1_dd_coarse_block_size,
@@ -54,7 +54,7 @@ from sfincs_jax.solvers.preconditioners.domain_decomposition import (  # compati
     _rhs1_dd_coarse_level_count,
 )
 from sfincs_jax.solvers.memory_model import estimate_sparse_pc_memory
-from sfincs_jax.solvers.preconditioners.pas.policy import (
+from sfincs_jax.solvers.preconditioner_pas_policy import (
     build_pas_tz_memory_fallback, estimate_rhs1_pas_tz_build_bytes as _estimate_rhs1_pas_tz_build_bytes,
     pas_tokamak_theta_preconditioner_applicable as _pas_tokamak_theta_preconditioner_applicable,
     pas_tz_preconditioner_applicable as _pas_tz_preconditioner_applicable,
@@ -70,7 +70,7 @@ from sfincs_jax.solvers.preconditioners.pas.policy import (
     rhs1_pas_small_near_zero_er_kind as _rhs1_pas_small_near_zero_er_kind, rhs1_pas_tz_guarded_strong_retry_from_env,
     rhs1_pas_tz_max_bytes as _rhs1_pas_tz_max_bytes,
 )
-from sfincs_jax.solvers.preconditioners.dispatch import (
+from sfincs_jax.solvers.preconditioner_dispatch import (
     build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,
 )
 from sfincs_jax.operators.profile_kinetic import (
@@ -107,7 +107,7 @@ from sfincs_jax.problems.profile_policies import (
 from sfincs_jax.problems.profile_policies import (
     rhs1_gpu_sparse_fallback_skip_allowed_current_backend as _rhs1_gpu_sparse_fallback_skip_allowed,
 )
-from sfincs_jax.solvers.preconditioners.schur.profile_response import (
+from sfincs_jax.solvers.preconditioner_schur_profile import (
     resolve_rhs1_schur_base_kind,
 )
 from sfincs_jax.problems.profile_solver_diagnostics import (
@@ -246,19 +246,21 @@ from sfincs_jax.problems.profile_setup import (
     resolve_rhs1_post_active_solve_policy_setup, resolve_rhs1_recycle_basis_setup,
     resolve_rhs1_reduced_mode_shape_setup,
 )
-from sfincs_jax.solvers.preconditioners.xblock import policy as _rhs1_xblock_policy
-from sfincs_jax.solvers.preconditioners.xblock import (
-    policy as _rhs1_xblock_sparse_host_policy,
-)
-from sfincs_jax.solvers.preconditioners.xblock.policy import (
+from sfincs_jax.solvers import preconditioner_xblock_policy as _rhs1_xblock_policy
+from sfincs_jax.solvers import preconditioner_xblock_policy as _rhs1_xblock_sparse_host_policy
+from sfincs_jax.solvers.preconditioner_xblock_policy import (
     resolve_rhs1_xblock_sparse_pc_policy,
 )
-from sfincs_jax.solvers.preconditioners.pas import (
+from sfincs_jax.solvers.preconditioner_pas_composite import (
     RHS1PasFamilyBuilders, compose_preconditioners as _compose_preconditioners,
 )
-from sfincs_jax.solvers.preconditioners.full_fp import (
+from sfincs_jax.solvers.preconditioner_full_fp_kinetic import (
     build_rhs1_block_preconditioner, build_rhs1_block_preconditioner_xdiag, build_rhs1_collision_preconditioner,
+)
+from sfincs_jax.solvers.preconditioner_full_fp_species import (
     build_rhs1_species_block_preconditioner, build_rhs1_species_xblock_preconditioner,
+)
+from sfincs_jax.solvers.preconditioner_full_fp_structured import (
     build_rhs1_structured_fblock_angular_jacobi_preconditioner,
     build_rhs1_structured_fblock_fp_coupled_moment_schur_preconditioner,
     build_rhs1_structured_fblock_fp_lowmode_schur_preconditioner,
@@ -267,12 +269,18 @@ from sfincs_jax.solvers.preconditioners.full_fp import (
     build_rhs1_structured_fblock_fp_tail_coupled_schur_preconditioner,
     build_rhs1_structured_fblock_jacobi_preconditioner, build_rhs1_structured_fblock_xi_angular_jacobi_preconditioner,
 )
-from sfincs_jax.solvers.preconditioners.xblock import (
+from sfincs_jax.solvers.preconditioner_xblock_block_jacobi import (
+    build_rhs1_sxblock_tz_preconditioner, build_rhs1_xblock_tz_lmax_preconditioner,
+    build_rhs1_xblock_tz_preconditioner,
+)
+from sfincs_jax.solvers.preconditioner_xblock_radial import (
+    build_rhs1_xmg_preconditioner, build_rhs1_xupwind_preconditioner,
+)
+from sfincs_jax.solvers.preconditioner_xblock_tz_sparse import (
     assemble_rhsmode1_fp_xblock_tz_sparse_matrix as _assemble_rhsmode1_fp_xblock_tz_sparse_matrix,
     assemble_selected_theta_tz_operator as _assemble_selected_theta_tz_operator,
-    assemble_selected_zeta_tz_operator as _assemble_selected_zeta_tz_operator, build_rhs1_sxblock_tz_preconditioner,
-    build_rhs1_sxblock_tz_sparse_host_preconditioner, build_rhs1_xmg_preconditioner,
-    build_rhs1_xupwind_preconditioner, build_rhs1_xblock_tz_lmax_preconditioner, build_rhs1_xblock_tz_preconditioner,
+    assemble_selected_zeta_tz_operator as _assemble_selected_zeta_tz_operator,
+    build_rhs1_sxblock_tz_sparse_host_preconditioner,
     build_rhs1_xblock_tz_sparse_preconditioner, compute_rhs1_sxblock_tz_sparse_host_seed,
     get_rhsmode1_fp_xblock_assembled_host_cache as _get_rhsmode1_fp_xblock_assembled_host_cache,
     rhsmode1_fp_xblock_assembled_host_allowed as _rhsmode1_fp_xblock_assembled_host_allowed,
@@ -283,10 +291,10 @@ from sfincs_jax.solvers.preconditioners.xblock import (
     rhsmode1_xblock_sparse_lu_default_max as _rhsmode1_xblock_sparse_lu_default_max,
     safe_inverse_diagonal_np as _safe_inverse_diagonal_np,
 )
-from sfincs_jax.solvers.preconditioners.schur import (
+from sfincs_jax.solvers.preconditioner_schur_profile import (
     RHS1SchurPreconditionerBuilders, build_rhs1_schur_preconditioner,
 )
-from sfincs_jax.solvers.preconditioners.transport_matrix import (
+from sfincs_jax.solvers.preconditioner_transport_matrix import (
     build_rhsmode23_block_preconditioner, build_rhsmode23_collision_preconditioner,
     build_rhsmode23_fp_local_geom_line_preconditioner, build_rhsmode23_fp_structured_fblock_lu_preconditioner,
     build_rhsmode23_fp_tzfft_line_preconditioner, build_rhsmode23_fp_tzfft_line_schur_preconditioner,
@@ -294,7 +302,7 @@ from sfincs_jax.solvers.preconditioners.transport_matrix import (
     build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner, build_rhsmode23_sxblock_preconditioner,
     build_rhsmode23_tzfft_preconditioner, build_rhsmode23_xmg_preconditioner,
 )
-from sfincs_jax.solvers.preconditioners.domain_decomposition import (
+from sfincs_jax.solvers.preconditioner_domain_decomposition import (
     build_rhs1_theta_dd_preconditioner, build_rhs1_theta_line_preconditioner, build_rhs1_theta_schwarz_preconditioner,
     build_rhs1_theta_line_xdiag_preconditioner, build_rhs1_theta_zeta_preconditioner,
     build_rhs1_zeta_dd_preconditioner, build_rhs1_zeta_line_preconditioner, build_rhs1_zeta_schwarz_preconditioner,
@@ -340,7 +348,7 @@ from sfincs_jax.problems.profile_solver_diagnostics import (
 from sfincs_jax.operators.profile_layout import (
     RHS1ActiveBlockLayout, RHS1ActiveFieldSplitOrdering, RHS1BlockLayout,
 )
-from sfincs_jax.solvers.preconditioners.xblock.coarse import (
+from sfincs_jax.solvers.preconditioner_xblock_coarse import (
     _rhs1_cap_lowmode_features, _rhs1_low_legendre_index_features, _rhs1_lowmode_angular_features,
     _rhs1_polynomial_moment_features,
 )
@@ -559,7 +567,7 @@ from sfincs_jax.solvers.preconditioning import (
     set_precond_size_hint as _set_precond_size_hint, sparse_structural_tol as _sparse_structural_tol,
     use_solver_jit as _use_solver_jit,
 )
-from sfincs_jax.solvers.preconditioners.symbolic_sparse import (
+from sfincs_jax.solvers.preconditioner_symbolic_host import (
     RHS1FullSystemMatrixFreeOperatorAdapter as _RHS1FullSystemMatrixFreeOperatorAdapter,
     build_sparse_ilu_from_matvec as _build_sparse_ilu_from_matvec,
     factorize_sparse_matrix_csr_host as _factorize_sparse_matrix_csr_host,

@@ -4,12 +4,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.solvers.preconditioners.qi.basis import orthonormalize_rhs1_qi_coarse_basis
-from sfincs_jax.solvers.preconditioners.qi.corrections import (
+from sfincs_jax.solvers.preconditioner_qi_basis import orthonormalize_rhs1_qi_coarse_basis
+from sfincs_jax.solvers.preconditioner_qi_corrections import (
     RHS1QICoupledResidualEquationConfig,
     setup_rhs1_qi_coupled_residual_equation,
 )
-from sfincs_jax.solvers.preconditioners.qi.device import (
+from sfincs_jax.solvers.preconditioner_qi_device import (
     RHS1QIDevicePreconditionerConfig,
     probe_rhs1_qi_device_preconditioner,
     setup_rhs1_qi_device_preconditioner,

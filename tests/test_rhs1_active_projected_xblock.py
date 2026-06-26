@@ -6,8 +6,8 @@ import numpy as np
 import scipy.sparse as sp
 
 import sfincs_jax.operators.profile_full_system as legacy
+import sfincs_jax.solvers.preconditioner_xblock_active as active_projected
 from sfincs_jax.operators.profile_layout import RHS1BlockLayout
-from sfincs_jax.solvers.preconditioners.xblock import active_projected
 
 
 def _layout() -> RHS1BlockLayout:

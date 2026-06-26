@@ -6,7 +6,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 import jax.numpy as jnp
-from sfincs_jax.solvers.preconditioners.qi.basis import (
+from sfincs_jax.solvers.preconditioner_qi_basis import (
     RHS1QICoarseBasis,
     RHS1QICoarseBlockLayout,
     orthonormalize_rhs1_qi_coarse_basis,
@@ -17,7 +17,7 @@ import numpy as np
 import math
 import os
 import time
-from sfincs_jax.solvers.preconditioners.qi.basis import (
+from sfincs_jax.solvers.preconditioner_qi_basis import (
     build_rhs1_xblock_global_coarse_basis,
     build_rhs1_xblock_global_coupling_load_basis,
 )

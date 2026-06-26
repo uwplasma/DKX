@@ -100,7 +100,7 @@ class RHS1PasFamilyBuilders:
     ) -> Preconditioner:
         """Build the tokamak-like PAS theta/L preconditioner."""
 
-        from .angular import build_rhs1_pas_tokamak_theta_preconditioner
+        from .preconditioner_pas_angular import build_rhs1_pas_tokamak_theta_preconditioner
 
         return build_rhs1_pas_tokamak_theta_preconditioner(
             op=op,
@@ -119,7 +119,7 @@ class RHS1PasFamilyBuilders:
     ) -> Preconditioner:
         """Build the PAS theta-zeta/L preconditioner with memory fallback."""
 
-        from .angular import build_rhs1_pas_tz_preconditioner
+        from .preconditioner_pas_angular import build_rhs1_pas_tz_preconditioner
 
         return build_rhs1_pas_tz_preconditioner(
             op=op,
@@ -199,7 +199,7 @@ class RHS1PasFamilyBuilders:
     ) -> Preconditioner:
         """Build the PAS x-block sparse ILU/LU preconditioner."""
 
-        from .xblock_ilu import build_rhs1_pas_xblock_ilu_preconditioner
+        from .preconditioner_pas_xblock_ilu import build_rhs1_pas_xblock_ilu_preconditioner
 
         return build_rhs1_pas_xblock_ilu_preconditioner(
             op=op,

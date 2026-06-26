@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.solvers.preconditioners.domain_decomposition import (
+from sfincs_jax.solvers.preconditioner_domain_decomposition import (
     _dd_core_patch_ranges,
     _rhs1_dd_auto_block_size,
     _rhs1_dd_coarse_block_size,

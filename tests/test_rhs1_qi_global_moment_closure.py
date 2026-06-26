@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.solvers.preconditioners.qi.basis import (
+from sfincs_jax.solvers.preconditioner_qi_basis import (
     RHS1QIGlobalMomentLayout,
     build_rhs1_qi_global_moment_candidates,
     build_rhs1_qi_global_moment_closure,

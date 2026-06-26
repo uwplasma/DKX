@@ -46,11 +46,11 @@ from ..solver import (
     gmres_solve_jit,
 )
 from ..solver import gmres_result_is_finite
-from ..solvers.preconditioners.full_fp.kinetic_blocks import (
+from ..solvers.preconditioner_full_fp_kinetic import (
     build_rhs1_block_preconditioner,
     build_rhs1_collision_preconditioner,
 )
-from ..solvers.preconditioners.symbolic_sparse import build_sparse_ilu_from_matvec
+from ..solvers.preconditioner_symbolic_host import build_sparse_ilu_from_matvec
 from sfincs_jax.operators.profile_system import (
     V3FullSystemOperator,
     apply_v3_full_system_jacobian_jit,

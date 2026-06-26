@@ -75,7 +75,8 @@ def test_source_tree_consolidation_target_is_stricter_than_current_tree() -> Non
 
     assert set(expected["target_root_modules"]) < set(expected["allowed_root_modules"])
     assert set(expected["target_root_packages"]) < set(expected["allowed_root_packages"])
-    assert expected["temporary_nested_packages"], "temporary nested packages should be reduced by later tranches"
+    assert expected["temporary_nested_packages"] == []
+    assert expected["temporary_init_only_packages"] == []
 
 
 def test_flattened_operator_legacy_imports_resolve_to_canonical_modules() -> None:
@@ -112,4 +113,43 @@ def test_flattened_transport_problem_legacy_imports_resolve_to_canonical_modules
     for name in ("runtime", "worker"):
         legacy = importlib.import_module(f"sfincs_jax.problems.transport_matrix.parallel.{name}")
         canonical = importlib.import_module(f"sfincs_jax.problems.transport_parallel_{name}")
+        assert legacy is canonical
+
+
+def test_flattened_preconditioner_legacy_imports_resolve_to_canonical_modules() -> None:
+    assert not (PACKAGE_ROOT / "solvers" / "preconditioners").exists()
+
+    aliases = {
+        "dispatch": "preconditioner_dispatch",
+        "transport_matrix": "preconditioner_transport_matrix",
+        "domain_decomposition": "preconditioner_domain_decomposition",
+        "full_fp.full_csr_kinetic": "preconditioner_full_fp_csr",
+        "full_fp.kinetic_blocks": "preconditioner_full_fp_kinetic",
+        "full_fp.species_blocks": "preconditioner_full_fp_species",
+        "full_fp.structured_fblock": "preconditioner_full_fp_structured",
+        "pas.angular": "preconditioner_pas_angular",
+        "pas.composite": "preconditioner_pas_composite",
+        "pas.matrix_free": "preconditioner_pas_matrix_free",
+        "pas.policy": "preconditioner_pas_policy",
+        "pas.xblock_ilu": "preconditioner_pas_xblock_ilu",
+        "qi.basis": "preconditioner_qi_basis",
+        "qi.corrections": "preconditioner_qi_corrections",
+        "qi.device": "preconditioner_qi_device",
+        "qi.policy": "preconditioner_qi_policy",
+        "schur.profile_response": "preconditioner_schur_profile",
+        "symbolic_sparse.active_factors": "preconditioner_symbolic_active",
+        "symbolic_sparse.host_factor": "preconditioner_symbolic_host",
+        "symbolic_sparse.policy": "preconditioner_symbolic_policy",
+        "symbolic_sparse.profile_response": "preconditioner_symbolic_profile",
+        "xblock.active_projected": "preconditioner_xblock_active",
+        "xblock.block_jacobi": "preconditioner_xblock_block_jacobi",
+        "xblock.coarse": "preconditioner_xblock_coarse",
+        "xblock.low_l_schur": "preconditioner_xblock_low_l_schur",
+        "xblock.policy": "preconditioner_xblock_policy",
+        "xblock.radial": "preconditioner_xblock_radial",
+        "xblock.tz_sparse": "preconditioner_xblock_tz_sparse",
+    }
+    for legacy_suffix, canonical_suffix in aliases.items():
+        legacy = importlib.import_module(f"sfincs_jax.solvers.preconditioners.{legacy_suffix}")
+        canonical = importlib.import_module(f"sfincs_jax.solvers.{canonical_suffix}")
         assert legacy is canonical

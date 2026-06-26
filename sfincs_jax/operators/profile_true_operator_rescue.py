@@ -2,8 +2,9 @@
 
 This file is intentionally large during consolidation because each rescue
 candidate shares the same true-action column cache, residual diagnostics, and
-admission gates. The safe future split is by candidate family once Iteration 3
-has moved all solver/preconditioner ownership under ``solvers.preconditioners``.
+admission gates. Future splits should stay in flat
+``sfincs_jax.solvers.preconditioner_*`` modules so the source tree remains
+one level deep.
 """
 
 from __future__ import annotations

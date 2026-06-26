@@ -100,12 +100,12 @@ adding more flat ``rhs1_*`` or ``transport_*`` files.
    constant-field, and order-condition/conservation tests where applicable.
 
 4. Solver and preconditioner architecture
-   Move reusable Krylov dispatch, residual gates, progress reporting, sparse
-   factors, recycling, checkpoints, and implicit-differentiation contracts into
-   ``solvers``. Move preconditioners under ``solvers/preconditioners`` by
-   numerical structure: PAS, full-FP, QI, Schur, domain decomposition, coarse
-   space, x-block, and symbolic sparse. Auto-selection remains a user-facing
-   default, but the implementation should return typed decisions with capability
+   Keep reusable Krylov dispatch, residual gates, progress reporting, sparse
+   factors, recycling, checkpoints, and implicit-differentiation contracts in
+   ``solvers``. Preconditioners live as flat ``preconditioner_*.py`` modules
+   named by numerical structure: PAS, full-FP, QI, Schur, domain decomposition,
+   x-block, symbolic sparse, and transport-matrix blocks. Auto-selection remains
+   a user-facing default, but the implementation should return typed decisions with capability
    metadata: CPU/GPU safe, differentiable/non-differentiable, setup memory
    estimate, and expected operator shape.
 

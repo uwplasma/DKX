@@ -1,10 +1,9 @@
 # sfincs_jax Source Layout
 
-This directory contains the importable `sfincs_jax` package. The package is
-being consolidated around a small public API and a one-level domain structure:
-root modules are for user-facing entry points, while domain folders own physics,
-geometry, discretization, operators, solvers, outputs, validation, and research
-workflows.
+This directory contains the importable `sfincs_jax` package. The package uses a
+small public API and a one-level domain structure: root modules are for
+user-facing entry points, while domain folders own physics, geometry,
+discretization, operators, solvers, outputs, validation, and research workflows.
 
 ## Where To Start
 
@@ -41,7 +40,9 @@ inside domain folders are for contributors and advanced research workflows.
   ambipolar root solves. `profile_response.py` and `transport_matrix.py` are
   compatibility shims for former nested import paths.
 - `solvers/`: Krylov dispatch, solver-path selection, sparse/native factors,
-  memory models, and preconditioners.
+  memory models, and flat `preconditioner_*.py` modules. `preconditioners.py`
+  is a compatibility index for former nested solver imports, not an
+  implementation folder.
 - `outputs/`: HDF5/NetCDF/NPZ schemas, writer logic, and post-solve
   diagnostics.
 - `validation/`: frozen-reference loading, parity checks, release-data fetching,

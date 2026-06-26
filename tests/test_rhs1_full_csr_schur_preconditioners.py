@@ -7,7 +7,7 @@ import numpy as np
 import scipy.sparse as sp
 
 import sfincs_jax.operators.profile_full_system as rhs1_full_assembly
-from sfincs_jax.solvers.preconditioners.schur.profile_response import (
+from sfincs_jax.solvers.preconditioner_schur_profile import (
     RHS1StructuredFullCSRPreconditioner,
     build_block_schur_preconditioner,
     build_diagonal_schur_preconditioner,

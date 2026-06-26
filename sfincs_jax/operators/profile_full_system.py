@@ -32,19 +32,19 @@ from sfincs_jax.operators.profile_kinetic import (
     select_structured_rhs1_fblock_csr_operator,
 )
 from sfincs_jax.problems.profile_policies import resolve_active_projected_preconditioner_auto_policy
-from sfincs_jax.solvers.preconditioners.symbolic_sparse.policy import (
+from sfincs_jax.solvers.preconditioner_symbolic_policy import (
     active_fortran_v3_reduced_permc_candidates,
 )
-from sfincs_jax.solvers.preconditioners.symbolic_sparse.policy import resolve_active_symbolic_frontal_policy
-from sfincs_jax.solvers.preconditioners.symbolic_sparse.policy import (
+from sfincs_jax.solvers.preconditioner_symbolic_policy import resolve_active_symbolic_frontal_policy
+from sfincs_jax.solvers.preconditioner_symbolic_policy import (
     resolve_active_symbolic_block_schur_policy,
     resolve_active_symbolic_superblock_policy,
 )
-from sfincs_jax.solvers.preconditioners.schur.profile_response import (
+from sfincs_jax.solvers.preconditioner_schur_profile import (
     resolve_active_native_field_split_sparse_coarse_policy,
     resolve_active_sparse_coarse_residual_policy,
 )
-from sfincs_jax.solvers.preconditioners.schur.profile_response import (
+from sfincs_jax.solvers.preconditioner_schur_profile import (
     append_adaptive_residual_basis_csc as _append_adaptive_residual_basis_csc,
     build_active_native_xell_coarse_window_basis_csc as _build_active_native_xell_coarse_window_basis_csc,
     build_coarse_residual_basis_csc as _build_coarse_residual_basis_csc,
@@ -53,7 +53,7 @@ from sfincs_jax.solvers.preconditioners.schur.profile_response import (
     estimate_xblock_tz_low_l_factor_nbytes as _estimate_xblock_tz_low_l_factor_nbytes,
     xblock_tz_low_l_config as _xblock_tz_low_l_config,
 )
-from sfincs_jax.solvers.preconditioners.schur.profile_response import (
+from sfincs_jax.solvers.preconditioner_schur_profile import (
     RHS1StructuredFullCSRPreconditioner,
     build_block_schur_preconditioner as _build_block_schur_preconditioner,
     build_diagonal_schur_preconditioner as _build_diagonal_schur_preconditioner,
@@ -64,13 +64,13 @@ from sfincs_jax.solvers.preconditioners.schur.profile_response import (
     estimate_xi_block_inverse_nbytes as _estimate_xi_block_inverse_nbytes,
     estimate_zeta_block_inverse_nbytes as _estimate_zeta_block_inverse_nbytes,
 )
-from sfincs_jax.solvers.preconditioners.symbolic_sparse import profile_response as _symbolic_profile_response_pc
-from sfincs_jax.solvers.preconditioners.symbolic_sparse.active_factors import (
+from sfincs_jax.solvers import preconditioner_symbolic_profile as _symbolic_profile_response_pc
+from sfincs_jax.solvers.preconditioner_symbolic_active import (
     build_active_filtered_sparse_factor_preconditioner as _build_active_projected_filtered_sparse_factor_preconditioner,
     build_active_global_sparse_factor_preconditioner as _build_active_global_sparse_factor_preconditioner,
     build_active_scaled_sparse_factor_preconditioner as _build_active_scaled_sparse_factor_preconditioner,
 )
-from sfincs_jax.solvers.preconditioners.xblock.active_projected import (
+from sfincs_jax.solvers.preconditioner_xblock_active import (
     active_positions_for_full_indices as _active_positions_for_full_indices,
     build_active_fortran_v3_reduced_native_stack_preconditioner as _build_active_fortran_v3_reduced_native_stack_preconditioner,
     build_active_projected_bounded_native_stack_preconditioner as _build_active_projected_bounded_native_stack_preconditioner,
@@ -82,7 +82,7 @@ from sfincs_jax.solvers.preconditioners.xblock.active_projected import (
     build_active_projected_overlap_schwarz_preconditioner as _build_active_projected_overlap_schwarz_preconditioner,
     build_active_projected_xblock_preconditioner as _build_active_projected_xblock_preconditioner,
 )
-from sfincs_jax.solvers.preconditioners.xblock.low_l_schur import (
+from sfincs_jax.solvers.preconditioner_xblock_low_l_schur import (
     build_native_xell_kinetic_preconditioner as _build_native_xell_kinetic_preconditioner,
     build_native_xell_tail_schur_preconditioner as _build_native_xell_tail_schur_preconditioner,
     build_xblock_tz_low_l_coarse_residual_preconditioner as _build_xblock_tz_low_l_coarse_residual_preconditioner,

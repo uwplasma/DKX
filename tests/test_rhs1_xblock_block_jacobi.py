@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.solvers.preconditioners.xblock import block_jacobi as xb
+import sfincs_jax.solvers.preconditioner_xblock_block_jacobi as xb
 
 
 def _op() -> SimpleNamespace:

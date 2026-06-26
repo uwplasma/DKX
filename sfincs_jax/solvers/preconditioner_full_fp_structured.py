@@ -15,7 +15,7 @@ from sfincs_jax.solvers.preconditioning import precond_dtype
 from sfincs_jax.solvers.preconditioning import rhs_mode1_structured_fblock_cache_key
 from sfincs_jax.problems.profile_residual import safe_preconditioner
 from sfincs_jax.operators.profile_kinetic import select_structured_rhs1_fblock_operator
-from sfincs_jax.solvers.preconditioners.xblock.coarse import (
+from sfincs_jax.solvers.preconditioner_xblock_coarse import (
     _build_rhs1_coupled_moment_matrix_free_correction,
     _build_rhs1_lowmode_angular_matrix_free_correction,
     _build_rhs1_moment_angular_matrix_free_correction,
@@ -23,7 +23,7 @@ from sfincs_jax.solvers.preconditioners.xblock.coarse import (
 )
 from sfincs_jax.problems.profile_policies import read_float_env as _rhs1_float_env
 from sfincs_jax.problems.profile_policies import read_int_env as _rhs1_int_env
-from ....solvers.preconditioners.symbolic_sparse import RHS1FullSystemMatrixFreeOperatorAdapter
+from sfincs_jax.solvers.preconditioner_symbolic_host import RHS1FullSystemMatrixFreeOperatorAdapter
 from sfincs_jax.operators.profile_system import V3FullSystemOperator, apply_v3_full_system_operator_cached
 
 Preconditioner = Callable[[jnp.ndarray], jnp.ndarray]

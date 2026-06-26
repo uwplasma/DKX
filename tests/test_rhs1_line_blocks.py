@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 import numpy as np
 
-import sfincs_jax.solvers.preconditioners.domain_decomposition as line_blocks
+import sfincs_jax.solvers.preconditioner_domain_decomposition as line_blocks
 
 
 def _op() -> SimpleNamespace:

@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.solvers.preconditioners.qi.corrections import (
+from sfincs_jax.solvers.preconditioner_qi_corrections import (
     build_rhs1_qi_residual_deflated_preconditioner,
     probe_rhs1_qi_deflated_correction,
     probe_rhs1_qi_deflated_minres_seed,

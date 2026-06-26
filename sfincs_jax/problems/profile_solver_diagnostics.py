@@ -13,7 +13,7 @@ from jax import tree_util as jtu
 import jax.numpy as jnp
 
 from sfincs_jax.solvers.krylov_dispatch import ksp_iteration_solver_label
-from sfincs_jax.solvers.preconditioners.pas.policy import rhs1_pas_schur_rescue_controls_from_env
+from sfincs_jax.solvers.preconditioner_pas_policy import rhs1_pas_schur_rescue_controls_from_env
 from sfincs_jax.solvers.selection_policy import (
     SolverAcceptanceCriteria,
     SolverCandidateMetrics,

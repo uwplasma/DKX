@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.solvers.preconditioners.full_fp import species_blocks as sb
+import sfincs_jax.solvers.preconditioner_full_fp_species as sb
 
 
 def _op(

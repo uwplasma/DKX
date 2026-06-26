@@ -30,7 +30,7 @@ from sfincs_jax.solvers.preconditioning import (
     transport_precond_cache_key,
 )
 from sfincs_jax.operators.profile_system import V3FullSystemOperator
-from .species_blocks import build_rhs1_species_xblock_preconditioner
+from .preconditioner_full_fp_species import build_rhs1_species_xblock_preconditioner
 
 Preconditioner = Callable[[jnp.ndarray], jnp.ndarray]
 

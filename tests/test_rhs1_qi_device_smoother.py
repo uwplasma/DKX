@@ -7,13 +7,13 @@ import pytest
 import scipy.sparse as sp
 
 from sfincs_jax.operators.profile_device_sparse import device_csr_from_scipy_csr
-from sfincs_jax.solvers.preconditioners.qi.basis import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata
-from sfincs_jax.solvers.preconditioners.qi.device import (
+from sfincs_jax.solvers.preconditioner_qi_basis import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata
+from sfincs_jax.solvers.preconditioner_qi_device import (
     build_rhs1_qi_device_jacobi_smoother,
     extract_device_csr_diagonal,
     probe_rhs1_qi_device_smoother_correction,
 )
-from sfincs_jax.solvers.preconditioners.qi.corrections import (
+from sfincs_jax.solvers.preconditioner_qi_corrections import (
     build_rhs1_qi_two_level_preconditioner,
     probe_rhs1_qi_two_level_correction,
 )

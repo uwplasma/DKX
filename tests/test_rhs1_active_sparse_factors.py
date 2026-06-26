@@ -5,7 +5,7 @@ import scipy.sparse as sp
 
 from sfincs_jax.operators.profile_layout import RHS1BlockLayout
 import sfincs_jax.operators.profile_full_system as rhs1_full_assembly
-from sfincs_jax.solvers.preconditioners.symbolic_sparse.active_factors import (
+from sfincs_jax.solvers.preconditioner_symbolic_active import (
     build_active_filtered_sparse_factor_preconditioner,
     build_active_global_sparse_factor_preconditioner,
     build_active_scaled_sparse_factor_preconditioner,

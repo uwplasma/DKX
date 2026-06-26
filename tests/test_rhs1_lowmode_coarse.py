@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.solvers.preconditioners.xblock.coarse import (
+from sfincs_jax.solvers.preconditioner_xblock_coarse import (
     _build_rhs1_coupled_moment_matrix_free_correction,
     _build_rhs1_lowmode_angular_matrix_free_correction,
     _build_rhs1_moment_angular_matrix_free_correction,

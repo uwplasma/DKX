@@ -30,7 +30,7 @@ from sfincs_jax.solvers.preconditioning import (
     _SparseJaxPrecondCache,
 )
 from sfincs_jax.solvers.preconditioning import matvec_submatrix as _matvec_submatrix_impl
-from sfincs_jax.solvers.preconditioners.xblock import (
+from sfincs_jax.solvers.preconditioner_xblock_tz_sparse import (
     rhsmode1_precond_cache_key as _rhsmode1_precond_cache_key,
 )
 from sfincs_jax.operators.profile_sparse_pattern import (

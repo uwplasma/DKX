@@ -1019,7 +1019,7 @@ def apply_fortran_reduced_xblock_global_coupling_stage(
         )
     try:
         if context.builder is None:
-            from sfincs_jax.solvers.preconditioners.qi.corrections import (
+            from sfincs_jax.solvers.preconditioner_qi_corrections import (
                 build_rhs1_xblock_smoothed_global_coupling_preconditioner,
             )
 

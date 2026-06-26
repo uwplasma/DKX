@@ -14,7 +14,7 @@ from sfincs_jax.problems.profile_residual import (
     compose_multilevel_residual_correction_preconditioner,
     compose_residual_correction_preconditioner,
 )
-import sfincs_jax.solvers.preconditioners.pas.policy as pas_policy
+import sfincs_jax.solvers.preconditioner_pas_policy as pas_policy
 import sfincs_jax.v3_driver as vd
 import sfincs_jax.problems.profile_preconditioner_build as pb
 

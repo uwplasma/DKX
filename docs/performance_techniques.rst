@@ -498,9 +498,9 @@ where :math:`P^{-1}` is the already-built PAS preconditioner application and
 **Implementation.**
 
 - Smoother kernel:
-  ``sfincs_jax.solvers.preconditioners.pas.policy.adaptive_pas_smoother``.
+  ``sfincs_jax.solvers.preconditioner_pas_policy.adaptive_pas_smoother``.
 - Driver gate:
-  ``sfincs_jax.solvers.preconditioners.pas.policy.adaptive_pas_smoother_allowed``.
+  ``sfincs_jax.solvers.preconditioner_pas_policy.adaptive_pas_smoother_allowed``.
 - Current integration point: immediately after the base PAS solve and before the
   strong-preconditioner tail in the linear RHSMode=1 driver.
 
@@ -1340,7 +1340,7 @@ Measured production-floor evidence:
 **Implementation.**
 
 - RHSMode=2/3 transport preconditioner builders in
-  ``sfincs_jax.solvers.preconditioners.transport_matrix``.
+  ``sfincs_jax.solvers.preconditioner_transport_matrix``.
 - Transport preconditioner selection and gating in
   ``sfincs_jax.problems.transport_policies``.
 - Controlled by ``SFINCS_JAX_TRANSPORT_PRECOND`` (``auto``, ``sxblock``, ``collision``, etc.).
@@ -1410,7 +1410,7 @@ improving and stops when either the single-step ratio or trailing log-slope
 crosses the configured worsening threshold. This provides a deterministic gate
 for the later PAS driver integration without hard-coding case-specific logic.
 
-Implementation: ``sfincs_jax.solvers.preconditioners.pas.policy``
+Implementation: ``sfincs_jax.solvers.preconditioner_pas_policy``
 (``append_residual``,
 ``summarize_residual_history``, ``decide_pas_smoother_action``,
 ``advance_pas_smoother``, ``adaptive_pas_smoother_allowed``, and
@@ -1479,7 +1479,7 @@ by recovering the diagonal Schur entries with a **single** base‑preconditioner
 column‑by‑column. This significantly reduces Schur setup time in tokamak‑like PAS runs
 with many :math:`x` points.
 
-Implementation: ``sfincs_jax.solvers.preconditioners.schur.profile_response``
+Implementation: ``sfincs_jax.solvers.preconditioner_schur_profile``
 with integration in ``sfincs_jax.problems.profile_preconditioner_build``.
 Controls: ``SFINCS_JAX_RHSMODE1_SCHUR_MODE`` and
 ``SFINCS_JAX_RHSMODE1_SCHUR_FULL_MAX``. The base preconditioner used inside the
@@ -1608,7 +1608,7 @@ forming the full species block, and it is selected automatically when
 :math:`L \times N_\theta \times N_\zeta` stays below
 ``SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX``.
 
-Implementation: ``sfincs_jax.solvers.preconditioners.xblock``.
+Implementation: flat ``sfincs_jax.solvers.preconditioner_xblock_*`` modules.
 
 These are cached to avoid recomputation. RHS-only gradients are excluded from the cache key
 so scan points can reuse the same preconditioner blocks. Controls:
@@ -1756,7 +1756,7 @@ medium DKES PAS systems, the default now prefers dense ``xblock_tz`` blocks when
 estimated dense memory stays within the configured cap, since that path is typically
 more robust and faster in practice.
 
-Implementation: ``sfincs_jax.solvers.preconditioners.pas.xblock_ilu``.
+Implementation: ``sfincs_jax.solvers.preconditioner_pas_xblock_ilu``.
 Key controls:
 
 - ``SFINCS_JAX_RHSMODE1_SCHUR_BASE=pas_ilu`` (force as Schur base for constraintScheme=2)
@@ -1788,7 +1788,7 @@ JAX. This avoids the expensive dense-matvec assembly that ``xblock_tz`` uses and
 reduces preconditioner build time and peak memory on 3D PAS cases with large
 angular blocks.
 
-Implementation: ``sfincs_jax.solvers.preconditioners.pas.angular``.
+Implementation: ``sfincs_jax.solvers.preconditioner_pas_angular``.
 
 Auto selection: for 3D PAS-only cases, ``auto`` selects ``pas_tz`` as the Schur
 base when :math:`L_{\max} N_\theta N_\zeta` exceeds ``SFINCS_JAX_RHSMODE1_PAS_TZ_MIN``

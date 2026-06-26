@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from sfincs_jax.operators.profile_layout import RHS1BlockLayout
-from sfincs_jax.solvers.preconditioners.schur.profile_response import (
+from sfincs_jax.solvers.preconditioner_schur_profile import (
     build_active_native_xell_coarse_window_basis_csc,
     build_coarse_residual_basis_csc,
     coarse_residual_config,

@@ -15,10 +15,10 @@ import numpy as np
 import scipy.sparse as sp
 
 from sfincs_jax.operators.profile_layout import RHS1BlockLayout
-from sfincs_jax.solvers.preconditioners.full_fp.full_csr_kinetic import build_rhs1_full_csr_kinetic_preconditioner
-from ..schur.profile_response import build_coarse_residual_basis_csc, coarse_surface_modes
-from ..schur.profile_response import RHS1StructuredFullCSRPreconditioner, safe_inverse_diagonal
-from ..symbolic_sparse.profile_response import sparse_lu_factor_nbytes
+from sfincs_jax.solvers.preconditioner_full_fp_csr import build_rhs1_full_csr_kinetic_preconditioner
+from .preconditioner_schur_profile import RHS1StructuredFullCSRPreconditioner, safe_inverse_diagonal
+from .preconditioner_schur_profile import build_coarse_residual_basis_csc, coarse_surface_modes
+from .preconditioner_symbolic_profile import sparse_lu_factor_nbytes
 
 __all__ = (
     "build_native_xell_kinetic_preconditioner",

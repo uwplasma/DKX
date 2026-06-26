@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import jax.numpy as jnp
 
-from sfincs_jax.solvers.preconditioners.pas import (
+from sfincs_jax.solvers.preconditioner_pas_composite import (
     RHS1PasCompositeBuilders,
     build_rhs1_pas_hybrid_preconditioner,
     build_rhs1_pas_lite_preconditioner,

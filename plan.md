@@ -329,13 +329,13 @@ deferred research lanes.
 - Active-projected diagonal-Schur, x-ell kinetic-line, angular-line, and native
   indexed Schwarz
   preconditioners moved from `rhs1_full_assembly.py` into
-  `sfincs_jax.solvers.preconditioners.xblock.active_projected`. The assembly
+  `sfincs_jax.solvers.preconditioner_xblock_active`. The assembly
   module now keeps compatibility aliases plus dispatch/admission logic for
   these builders.
 - Active-projected global field-split, multiline field-split, bounded native
   stack, and Fortran-v3-reduced native-stack preconditioners moved from
   `rhs1_full_assembly.py` into
-  `sfincs_jax.solvers.preconditioners.xblock.active_projected`. The extracted
+  `sfincs_jax.solvers.preconditioner_xblock_active`. The extracted
   module owns local base dispatch for x-block/angular/native-indexed bases, and
   `rhs1_full_assembly.py` injects its dispatcher only where a still-local base
   family is needed.
@@ -2559,15 +2559,15 @@ Next best steps:
 Steps taken:
 
 1. Merged x-block sparse-host policy helpers into
-   `sfincs_jax.solvers.preconditioners.xblock.policy`.
+   `sfincs_jax.solvers.preconditioner_xblock_policy`.
 2. Merged QI Galerkin probe-selection policy helpers into
    `sfincs_jax.solvers.preconditioners.qi.residual_galerkin`.
 3. Merged domain-decomposition patch/block-size policy helpers into
-   `sfincs_jax.solvers.preconditioners.domain_decomposition.line_blocks`.
+   `sfincs_jax.solvers.preconditioner_domain_decomposition.line_blocks`.
 4. Merged RHSMode-1 Schur policy resolution into
    `sfincs_jax.solvers.preconditioners.schur.rhs1`.
 5. Merged symbolic-sparse frontal/reduced-factor policy helpers into
-   `sfincs_jax.solvers.preconditioners.symbolic_sparse.policy`.
+   `sfincs_jax.solvers.preconditioner_symbolic_policy`.
 6. Merged reduced-Pmat elimination-plan helpers into
    `sfincs_jax.solvers.preconditioners.symbolic_sparse.rhs1_fortran_reduced`.
 7. Deleted the empty profile-response operator namespace initializer and
@@ -3785,7 +3785,7 @@ Next best steps:
 Steps taken:
 
 1. Consolidated the Schur RHSMode-1 implementation family into
-   `sfincs_jax.solvers.preconditioners.schur.profile_response`.
+   `sfincs_jax.solvers.preconditioner_schur_profile`.
 2. Deleted the historical implementation files:
    `schur/rhs1.py`, `schur/rhs1_coarse_basis.py`,
    `schur/rhs1_coarse_policy.py`, and `schur/rhs1_full_csr.py`.

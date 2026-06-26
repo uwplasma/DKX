@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from sfincs_jax import v3_driver as vd
-from sfincs_jax.solvers.preconditioners.qi.basis import (
+from sfincs_jax.solvers.preconditioner_qi_basis import (
     RHS1QICoarseBlockLayout,
     apply_rhs1_qi_galerkin_correction,
     apply_rhs1_qi_coarse_correction,

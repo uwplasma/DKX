@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.solvers.preconditioners.xblock import tz_sparse
+import sfincs_jax.solvers.preconditioner_xblock_tz_sparse as tz_sparse
 
 
 class _DiagonalFactor:

@@ -35,23 +35,26 @@ navigational surface, not create another layer of wrappers.
 ### Current Audit Snapshot
 
 Checked on 2026-06-26 from
-`refactor/rhs1-full-assembly-preconditioners` after the profile-response and
-transport-matrix problem-owner flattening tranches.
+`refactor/rhs1-full-assembly-preconditioners` after the profile-response,
+transport-matrix, and solver-preconditioner flattening tranches.
 
-- `sfincs_jax/` contains `149` Python files after adding one-file
+- `sfincs_jax/` contains `143` Python files after adding one-file
   compatibility shims for `operators/profile_response.py` and
-  `problems/profile_response.py` / `problems/transport_matrix.py`, flattening
-  the former nested operator modules into `operators/profile_*.py`, flattening
-  the RHSMode=1 problem modules into `problems/profile_*.py`, and flattening
-  RHSMode=2/3 transport modules into `problems/transport_*.py`.
+  `problems/profile_response.py` / `problems/transport_matrix.py`, adding a
+  one-file compatibility index at `solvers/preconditioners.py`, flattening the
+  former nested operator modules into `operators/profile_*.py`, flattening the
+  RHSMode=1 problem modules into `problems/profile_*.py`, flattening RHSMode=2/3
+  transport modules into `problems/transport_*.py`, and flattening all
+  preconditioner families into `solvers/preconditioner_*.py`.
 - Largest source domains by line count are `problems` (`69k` lines), `solvers`
   (`47k`), and `operators` (`21k`).
 - Empty root packages `sfincs_jax/benchmarks`, `sfincs_jax/compat`,
   `sfincs_jax/input`, and `sfincs_jax/parallel` were removed in the first
-  consolidation tranche. The empty nested
-  `sfincs_jax/solvers/preconditioners/coarse_space` directory was also removed
-  from the working tree.
-- Deep implementation paths remain in `sfincs_jax/solvers/preconditioners/*`.
+  consolidation tranche. The former nested
+  `sfincs_jax/solvers/preconditioners/*` tree was removed from the working
+  tree.
+- No nested source package directories remain below `sfincs_jax/`; the
+  source-tree guard keeps `temporary_nested_packages` empty.
 - `examples/` has many user-facing folders plus untracked `__pycache__`
   directories and tracked benchmark-summary JSON files under pedagogic example
   paths. Those JSON files are useful evidence, but they should not be the
@@ -105,7 +108,7 @@ Folders to remove or absorb:
   been removed; use `validation/`, `namelist.py`/`input_compat.py`, and the
   flat `problems/transport_parallel_runtime.py` / `transport_parallel_worker.py`
   owners for transport parallel code.
-- Remove empty `solvers/preconditioners/coarse_space`.
+- Remove empty `solvers/preconditioners/coarse_space`. Complete.
 - Flatten `operators/profile_response/*` into `operators/profile_*.py` files.
   This is complete; `operators/profile_response.py` is a compatibility shim.
 - Flatten `problems/profile_response/*` and
@@ -114,10 +117,9 @@ Folders to remove or absorb:
 - Flatten `problems/transport_matrix/*` and its `parallel/` subfolder into
   `problems/transport_*.py` files. This is complete; `transport_matrix.py` is
   a compatibility shim.
-- Flatten `solvers/preconditioners/*` into one-level solver files such as
-  `solvers/preconditioner_pas.py`, `solvers/preconditioner_xblock.py`,
-  `solvers/preconditioner_qi.py`, `solvers/preconditioner_symbolic.py`, and
-  `solvers/preconditioner_transport.py`.
+- Flatten `solvers/preconditioners/*` into one-level solver files named
+  `solvers/preconditioner_*.py`. Complete; `solvers/preconditioners.py`
+  preserves former nested import paths as a compatibility index.
 
 Compatibility policy:
 
@@ -137,7 +139,7 @@ Add `sfincs_jax/README.md` during the first tranche. It must explain:
 - which APIs are stable for users and which modules are internal;
 - how compatibility aliases work during this refactor;
 - where to look for CLI usage, Python solves, geometry loading, outputs,
-  solvers/preconditioners, autodiff, validation references, and examples;
+  solver preconditioners, autodiff, validation references, and examples;
 - the rule that package depth is normally one folder below `sfincs_jax/`;
 - where large reference data live and why they are not stored in the clone.
 
@@ -192,9 +194,9 @@ Tranche 4: flatten preconditioners without losing domain ownership.
 
 - Move `solvers/preconditioners/pas/*`, `xblock/*`, `qi/*`,
   `symbolic_sparse/*`, `full_fp/*`, and `schur/*` into one-level
-  `solvers/preconditioner_*.py` modules.
+  `solvers/preconditioner_*.py` modules. Complete.
 - Preserve solver-policy discoverability with docstrings and a single
-  `solvers/preconditioners.py` index if that improves navigation.
+  `solvers/preconditioners.py` compatibility index. Complete.
 - Acceptance: policy docstring tests pass; CPU/GPU solver-selection fixtures
   still select the same defaults; no new smoother-tuning-only code is added.
 
@@ -595,13 +597,12 @@ completed owner moves, and private-root deletion pass:
   shaping now lives in `preconditioning.py`; progress, Krylov state,
   solver-trace records, and compact Fortran/JAX solver-profile comparisons now
   live in `diagnostics.py`.
-- `sfincs_jax/solvers/preconditioners`: 35 files, about 38.1k lines. QI now has five durable
-  owner files: `basis.py`, `corrections.py`, `device.py`, `policy.py`, and
-  `__init__.py`. The empty `coarse_space` package was deleted, the QI device
-  smoother was merged into `qi/device.py`, the historical symbolic-sparse
-  `rhs1_fortran_reduced.py` file was renamed to
-  `symbolic_sparse/profile_response.py`, and the domain-decomposition line/block
-  implementation was merged into its package owner.
+- `sfincs_jax/solvers/preconditioner_*.py`: 28 flat files, about 38k lines.
+  QI now has four durable owner files:
+  `preconditioner_qi_basis.py`, `preconditioner_qi_corrections.py`,
+  `preconditioner_qi_device.py`, and `preconditioner_qi_policy.py`.
+  PAS, x-block, full-FP, Schur, symbolic-sparse, domain-decomposition, and
+  transport-matrix preconditioners use the same flat naming scheme.
 - `sfincs_jax/operators/profile_*.py`: 19 flattened profile-response operator
   files, about 20.6k lines, plus a one-file `profile_response.py`
   compatibility shim. `profile_full_system.py` is the largest owner. This
@@ -813,7 +814,7 @@ find sfincs_jax -name '*.py' -not -path '*/__pycache__/*' | wc -l
 find sfincs_jax -maxdepth 1 -name '*.py' | wc -l
 find sfincs_jax -name '*.py' -not -path '*/__pycache__/*' -print0 | xargs -0 wc -l | sort -nr | head -40
 find sfincs_jax -name '*.py' -type f | sed 's#/[^/]*$##' | sort | uniq -c | sort -nr | head -50
-find sfincs_jax/solvers/preconditioners -maxdepth 3 -type f -name '*.py' -print0 | xargs -0 wc -l | sort -nr
+find sfincs_jax/solvers -maxdepth 1 -type f -name 'preconditioner_*.py' -print0 | xargs -0 wc -l | sort -nr
 rg -n "sfincs_jax\.(v3_driver|problems\.transport_matrix\.postsolve_diagnostics|solvers\.preconditioners\.symbolic_sparse\.rhs1_fortran_reduced)" docs README.md examples tests sfincs_jax
 ```
 
@@ -821,12 +822,12 @@ Current source inventory from the 2026-06-26 consolidation audit:
 
 | Area | Current state | Review-ready target |
 | --- | --- | --- |
-| Whole package | 149 Python files, about 165,650 package lines | Keep `<=149` files unless a new durable owner deletes at least two old files in the same commit. Review target is no package-file increase and no line-count increase unless the change deletes files and simplifies ownership. |
+| Whole package | 143 Python files, about 165k package lines | Keep `<=143` files unless a new durable owner deletes at least two old files in the same commit. Review target is no package-file increase and no line-count increase unless the change deletes files and simplifies ownership. |
 | Package root | 17 Python files | Root gate is met. Root files now remain only when they are public API, CLI, compatibility, plotting/profiling helpers, or stable user-facing facades. |
 | `v3_driver.py` / `io.py` | 47-line and 64-line compatibility shims | Keep below 80 lines. Do not put implementation logic back into either file. Delete only after public docs, examples, scripts, and compatibility tests no longer need the shim. |
 | `problems/profile_*.py` | 17 flat implementation files plus `profile_response.py` compatibility shim; largest owners are `profile_sparse_xblock.py`, `profile_policies.py`, `profile_sparse_handoff.py`, `profile_solve.py`, `profile_sparse_qi.py`, and `profile_sparse_direct.py`. | Do not add profile-response files. Reduce complexity only by deleting duplicate policy branches or moving historical names into existing owners without creating a new monolith. |
 | `problems/transport_*.py` | 8 flat implementation files plus `transport_matrix.py` compatibility shim; direct reduced-`Pmat`, active factors, and block-Schur setup live in `transport_linear_system.py`; parallel policy/sharding lives in `transport_parallel_runtime.py`. | Keep `transport_parallel_worker.py` only as the subprocess entry point. Do not grow `transport_solve.py` into another monolith. |
-| `solvers/preconditioners` | 35 files, 37,495 lines; QI, PAS, x-block, full-FP, Schur, symbolic-sparse, and transport-matrix owners are explicit. | Keep mathematical family names. Merge only if one commit deletes at least three files and keeps ownership clearer. |
+| `solvers/preconditioner_*.py` | 28 flat files; QI, PAS, x-block, full-FP, Schur, symbolic-sparse, domain-decomposition, and transport-matrix owners are explicit. | Keep mathematical family names. Merge only if one commit deletes at least three files and keeps ownership clearer. |
 | `workflows` / `validation` | 16 files total. `validation.benchmark_artifacts` was merged into `validation.artifacts`; `validation.fortran_profile` was merged into `validation.fortran`; six `optimization_*` workflow implementation files were merged into `workflows.optimization`; and two mapped-x-grid files were merged into `workflows.mapped_xgrid`. Old workflow module imports are package-level compatibility aliases. | Further consolidation only when import graphs show this can delete files without file-level shims and without obscuring public workflow concepts. |
 | Docs/tests/examples/scripts | Public examples/scripts are being migrated off `sfincs_jax.v3_driver`; tests still intentionally cover compatibility imports. | Public-facing material uses `api`, `cli`, `outputs`, `validation`, `workflows`, or problem owners. Owner tests may keep private imports. |
 
@@ -933,7 +934,7 @@ Active consolidation passes:
    `problems/profile_policies.py`,
    `problems/profile_sparse_xblock.py`,
    `problems/profile_sparse_handoff.py`, and
-   `solvers/preconditioners/qi/device.py`. The audit found real domain
+   `solvers/preconditioner_qi_device.py`. The audit found real domain
    ownership in all four: policy/env resolution, x-block stage setup, sparse-PC
    orchestration, and device-compatible QI preconditioning. Edit them only if a
    single patch removes a repeated internal section of roughly 300 lines or more
@@ -1013,12 +1014,12 @@ Phase 1 root-module move/delete manifest:
 | `namelist.py` | input namelist owner | keep root public parser until input package exports are documented |
 | `plotting.py` | outputs/plotting public helper | keep root public helper unless API replacement is documented |
 | `sensitivity.py` | package root differentiation API | keep at root |
-| `constrained_pas_branch.py` | solvers/preconditioners PAS policy owner | move in solver-policy group if no public shim is needed |
+| `constrained_pas_branch.py` | `solvers/preconditioner_pas_policy.py` owner | move in solver-policy group if no public shim is needed |
 | `constraint_projection.py` | solvers constraint-projection owner | move only after transport/profile imports use solver owner |
 | `diagnostics.py` | physics/output diagnostics owner | defer until diagnostics API split is explicit |
 | `grids.py` | discretization public grid owner | keep root public helper until discretization package exports are documented |
 | `host_refinement.py` | solvers refinement policy owner | move in solver-policy group if profile-response imports migrate |
-| `pas_smoother.py` | solvers/preconditioners PAS smoother owner | move in solver-preconditioner group |
+| `pas_smoother.py` | `solvers/preconditioner_pas_policy.py` owner | move in solver-preconditioner group |
 | `paths.py` | package root path support utility | keep at root unless a support package is introduced with broad import rewrite |
 | `phi1_newton_linear.py` | `problems.profile_phi1_newton` owner | move if it deletes root file without adding shim |
 | `phi1_newton_policy.py` | `problems.profile_phi1_newton` owner | move if it deletes root file without adding shim |
@@ -1088,7 +1089,7 @@ Status on 2026-06-26:
   `constrained_pas_branch.py`, `constraint_projection.py`,
   `host_refinement.py`, `pas_smoother.py`, `phi1_newton_linear.py`, and
   `phi1_newton_policy.py` moved into existing owners
-  `sfincs_jax.solvers.preconditioners.pas.policy`,
+  `sfincs_jax.solvers.preconditioner_pas_policy`,
   `sfincs_jax.solvers.preconditioning`, `sfincs_jax.solvers.explicit_sparse`,
   and `sfincs_jax.problems.profile_phi1_newton`. No compatibility
   shims or helper-only files were added.
@@ -1107,7 +1108,7 @@ creating another monolith.
 Actions:
 
 1. Audit overlap between `problems/profile_response/sparse/*` and
-   `solvers/preconditioners/{xblock,qi,pas,symbolic_sparse,...}`. Move the
+   flat `solvers/preconditioner_{xblock,qi,pas,symbolic,...}.py` modules. Move the
    ownership boundary only if it deletes duplicate policy/residual/candidate
    code and does not introduce import cycles.
 2. Collapse profile-response sparse owners into fewer durable owner files only
@@ -1127,7 +1128,8 @@ Exit gates:
 
 - `profile_solve.py <=5,500` and
   `profile_sparse_handoff.py <=5,500` remain locked.
-- `solvers/preconditioners <=28` if achievable without worse names; otherwise
+- `solvers/preconditioner_*.py <=28` remains locked unless a later change
+  deletes more code than it adds; otherwise
   each retained family file has an owner note in the source map.
 - No `rhs1_*`, `transport_*`, `v3_*`, `*_handoff`, or campaign-specific
   implementation filename is introduced.
@@ -1293,7 +1295,7 @@ Exit gates:
 
 - `sfincs_jax/solvers` root file count decreases or the plan documents the
   import-cycle blocker.
-- `solvers/preconditioners <=35` remains true, with stretch `<=30` only if the
+- `solvers/preconditioner_*.py <=28` remains true, with stretch `<=24` only if the
   names stay clearer.
 - Solver-selection, explicit sparse, native factor, preconditioner setup,
   progress/trace, QI, PAS, x-block, Schur, symbolic-sparse, full-FP, and
@@ -1501,7 +1503,7 @@ Review-ready acceptance gates:
   `profile_response.py` compatibility shim.
 - `problems/transport_*.py` has 8 implementation files plus the
   `transport_matrix.py` compatibility shim.
-- `solvers/preconditioners` has `<=35` files.
+- `solvers/preconditioner_*.py` has `<=28` files.
 - No top-level `rhs1_*` or `transport_*` implementation files exist.
 - No broad package-level lint ignores exist; the only allowed exception is a
   documented, file-local compatibility re-export waiver in
@@ -1530,7 +1532,7 @@ Status on 2026-06-26:
   paths in regenerated release artifacts.
 - The research-lane manifest now points at the consolidated QI, transport
   parallel, and sparse handoff owners:
-  `solvers/preconditioners/qi/{basis,corrections,device}.py`,
+  `solvers/preconditioner_qi_{basis,corrections,device}.py`,
   `problems/transport_parallel_runtime.py`, and
   `problems/profile_sparse_handoff.py`.
 - Validation passed with the review-ready focused bundle:

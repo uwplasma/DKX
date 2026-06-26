@@ -25,12 +25,12 @@ from sfincs_jax.problems.profile_diagnostics import (
     SparsePCPatternMetadataContext,
     fortran_reduced_xblock_result_metadata,
 )
-from sfincs_jax.solvers.preconditioners.qi.basis import (
+from sfincs_jax.solvers.preconditioner_qi_basis import (
     RHS1QICoarseBasis,
     RHS1QICoarseBasisMetadata,
     RHS1QICoarseCorrection,
 )
-from sfincs_jax.solvers.preconditioners.qi.device import (
+from sfincs_jax.solvers.preconditioner_qi_device import (
     probe_rhs1_qi_device_preconditioner,
     setup_rhs1_qi_device_preconditioner,
 )
@@ -546,15 +546,15 @@ def test_xblock_qi_pipeline_context_factory_owns_default_builders() -> None:
         reduce_full=None,
     )
 
-    assert context.basis_builder.__module__ == "sfincs_jax.solvers.preconditioners.qi.basis"
+    assert context.basis_builder.__module__ == "sfincs_jax.solvers.preconditioner_qi_basis"
     assert context.device_setup_preconditioner.__module__ == (
-        "sfincs_jax.solvers.preconditioners.qi.device"
+        "sfincs_jax.solvers.preconditioner_qi_device"
     )
     assert context.deflated_preconditioner_builder.__module__ == (
-        "sfincs_jax.solvers.preconditioners.qi.corrections"
+        "sfincs_jax.solvers.preconditioner_qi_corrections"
     )
     assert context.parse_galerkin_modes.__module__ == (
-        "sfincs_jax.solvers.preconditioners.qi.corrections"
+        "sfincs_jax.solvers.preconditioner_qi_corrections"
     )
 
 

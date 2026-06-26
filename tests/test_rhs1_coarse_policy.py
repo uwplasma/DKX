@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.solvers.preconditioners.schur.profile_response import (
+from sfincs_jax.solvers.preconditioner_schur_profile import (
     resolve_active_native_field_split_sparse_coarse_policy,
     resolve_active_native_stack_policy,
     resolve_active_sparse_coarse_residual_policy,

@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 
 import sfincs_jax.v3_driver as v3_driver
-from sfincs_jax.solvers.preconditioners.xblock import (
+from sfincs_jax.solvers.preconditioner_xblock_tz_sparse import (
     assemble_rhsmode1_fp_xblock_tz_sparse_matrix,
     get_rhsmode1_fp_xblock_assembled_host_cache,
     rhsmode1_fp_xblock_tz_sparse_diagonal,

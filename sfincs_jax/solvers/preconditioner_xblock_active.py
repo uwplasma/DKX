@@ -17,24 +17,24 @@ import numpy as np
 import scipy.sparse as sp
 
 from sfincs_jax.operators.profile_layout import RHS1ActiveBlockLayout, RHS1BlockLayout
-from ..schur.profile_response import (
+from .preconditioner_schur_profile import (
     RHS1StructuredFullCSRPreconditioner,
     build_jacobi_preconditioner,
     safe_inverse_diagonal,
 )
-from ..schur.profile_response import (
+from .preconditioner_schur_profile import (
     append_adaptive_residual_basis_csc,
     build_active_native_xell_coarse_window_basis_csc,
     build_coarse_residual_basis_csc,
     coarse_residual_config,
 )
-from ..schur.profile_response import resolve_active_native_stack_policy
-from ..symbolic_sparse.profile_response import (
+from .preconditioner_schur_profile import resolve_active_native_stack_policy
+from .preconditioner_symbolic_profile import (
     estimate_spilu_factor_nbytes,
     sparse_equilibration_scale,
     sparse_lu_factor_nbytes,
 )
-from .low_l_schur import build_native_xell_kinetic_preconditioner, xblock_tz_low_l_indices
+from .preconditioner_xblock_low_l_schur import build_native_xell_kinetic_preconditioner, xblock_tz_low_l_indices
 
 __all__ = (
     "active_positions_for_full_indices",

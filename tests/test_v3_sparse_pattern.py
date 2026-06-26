@@ -11,7 +11,7 @@ import scipy.sparse as sp
 from scipy.sparse.linalg import aslinearoperator
 
 import sfincs_jax.io as io_module
-import sfincs_jax.solvers.preconditioners.qi.device as rhs1_qi_device_preconditioner_module
+import sfincs_jax.solvers.preconditioner_qi_device as rhs1_qi_device_preconditioner_module
 import sfincs_jax.v3_driver as v3_driver_module
 from sfincs_jax.solvers.explicit_sparse import SparseDecision, SparseOperatorBundle, build_operator_from_pattern
 from sfincs_jax.io import write_sfincs_jax_output_h5
@@ -22,7 +22,7 @@ from sfincs_jax.problems.profile_residual import (
     build_rhs1_xblock_post_coarse_directions,
 )
 from sfincs_jax.operators.profile_layout import RHS1BlockLayout
-from sfincs_jax.solvers.preconditioners.xblock.policy import resolve_rhs1_xblock_sparse_pc_policy
+from sfincs_jax.solvers.preconditioner_xblock_policy import resolve_rhs1_xblock_sparse_pc_policy
 from sfincs_jax.solver import FlexibleGMRESSolveResult
 from sfincs_jax.operators.profile_sparse_pattern import (
     estimate_v3_full_system_conservative_sparsity_summary,

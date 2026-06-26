@@ -12,11 +12,11 @@ import jax
 import jax.numpy as jnp
 
 from sfincs_jax.solvers.preconditioning import precond_policy_hints
-from sfincs_jax.solvers.preconditioners.dispatch import (
+from sfincs_jax.solvers.preconditioner_dispatch import (
     RHS1PreconditionerDispatchBuilders,
     build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,
 )
-from sfincs_jax.solvers.preconditioners.domain_decomposition import (
+from sfincs_jax.solvers.preconditioner_domain_decomposition import (
     build_rhs1_theta_dd_preconditioner,
     build_rhs1_theta_line_preconditioner,
     build_rhs1_theta_line_xdiag_preconditioner,
@@ -26,12 +26,16 @@ from sfincs_jax.solvers.preconditioners.domain_decomposition import (
     build_rhs1_zeta_line_preconditioner,
     build_rhs1_zeta_schwarz_preconditioner,
 )
-from sfincs_jax.solvers.preconditioners.full_fp import (
+from sfincs_jax.solvers.preconditioner_full_fp_kinetic import (
     build_rhs1_block_preconditioner,
     build_rhs1_block_preconditioner_xdiag,
     build_rhs1_collision_preconditioner,
+)
+from sfincs_jax.solvers.preconditioner_full_fp_species import (
     build_rhs1_species_block_preconditioner,
     build_rhs1_species_xblock_preconditioner,
+)
+from sfincs_jax.solvers.preconditioner_full_fp_structured import (
     build_rhs1_structured_fblock_angular_jacobi_preconditioner,
     build_rhs1_structured_fblock_fp_coupled_moment_schur_preconditioner,
     build_rhs1_structured_fblock_fp_lowmode_schur_preconditioner,
@@ -41,30 +45,34 @@ from sfincs_jax.solvers.preconditioners.full_fp import (
     build_rhs1_structured_fblock_jacobi_preconditioner,
     build_rhs1_structured_fblock_xi_angular_jacobi_preconditioner,
 )
-from sfincs_jax.solvers.preconditioners.pas import (
+from sfincs_jax.solvers.preconditioner_pas_composite import (
     RHS1PasFamilyBuilders,
     compose_preconditioners as _compose_preconditioners,
 )
-from sfincs_jax.solvers.preconditioners.pas.policy import (
+from sfincs_jax.solvers.preconditioner_pas_policy import (
     pas_tokamak_theta_preconditioner_applicable as _pas_tokamak_theta_preconditioner_applicable,
     pas_tz_preconditioner_applicable as _pas_tz_preconditioner_applicable,
     pas_tz_preconditioner_memory_safe as _pas_tz_preconditioner_memory_safe,
 )
-from sfincs_jax.solvers.preconditioners.schur import (
+from sfincs_jax.solvers.preconditioner_schur_profile import (
     RHS1SchurPreconditionerBuilders,
     build_rhs1_schur_preconditioner,
 )
-from sfincs_jax.solvers.preconditioners.transport_matrix import (
+from sfincs_jax.solvers.preconditioner_transport_matrix import (
     build_rhsmode23_tzfft_preconditioner,
 )
-from sfincs_jax.solvers.preconditioners.xblock import (
+from sfincs_jax.solvers.preconditioner_xblock_block_jacobi import (
     build_rhs1_sxblock_tz_preconditioner,
-    build_rhs1_sxblock_tz_sparse_host_preconditioner,
     build_rhs1_xblock_tz_lmax_preconditioner,
     build_rhs1_xblock_tz_preconditioner,
-    build_rhs1_xblock_tz_sparse_preconditioner,
+)
+from sfincs_jax.solvers.preconditioner_xblock_radial import (
     build_rhs1_xmg_preconditioner,
     build_rhs1_xupwind_preconditioner,
+)
+from sfincs_jax.solvers.preconditioner_xblock_tz_sparse import (
+    build_rhs1_sxblock_tz_sparse_host_preconditioner,
+    build_rhs1_xblock_tz_sparse_preconditioner,
     compute_rhs1_sxblock_tz_sparse_host_seed,
 )
 from sfincs_jax.operators.profile_system import V3FullSystemOperator, _matvec_shard_axis

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.solvers.preconditioners.qi.policy import QIRunEvidence, evaluate_qi_production_ladder_promotion
+from sfincs_jax.solvers.preconditioner_qi_policy import QIRunEvidence, evaluate_qi_production_ladder_promotion
 
 
 def test_qi_production_ladder_promotion_accepts_complete_cpu_gpu_evidence() -> None:

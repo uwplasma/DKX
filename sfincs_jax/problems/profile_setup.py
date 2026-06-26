@@ -1434,7 +1434,7 @@ def resolve_rhs1_domain_decomposition_setup(
 ) -> RHS1DomainDecompositionSetup:
     """Resolve RHSMode=1 domain-decomposition block and overlap settings."""
 
-    from sfincs_jax.solvers.preconditioners.domain_decomposition import (
+    from sfincs_jax.solvers.preconditioner_domain_decomposition import (
         _rhs1_dd_auto_block_size,
     )
 

@@ -7,7 +7,7 @@ from jax import jit
 
 from sfincs_jax.solvers.native_block_factor import apply_native_x_ell_kinetic_factor
 from sfincs_jax.operators.profile_layout import RHS1BlockLayout
-from sfincs_jax.solvers.preconditioners.full_fp.full_csr_kinetic import (
+from sfincs_jax.solvers.preconditioner_full_fp_csr import (
     build_rhs1_full_csr_kinetic_preconditioner,
     estimate_rhs1_full_csr_kinetic_preconditioner_nbytes,
     rhs1_full_csr_x_ell_block_indices,

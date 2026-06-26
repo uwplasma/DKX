@@ -31,18 +31,18 @@ from .profile_policies import (
     read_int_env as _rhs1_int_env,
     rhs1_qi_device_tail_block_required,
 )
-from sfincs_jax.solvers.preconditioners.qi.basis import (
+from sfincs_jax.solvers.preconditioner_qi_basis import (
     RHS1QICoarseBasis,
     build_rhs1_xblock_qi_coarse_basis as _rhs1_xblock_qi_coarse_basis,
     rhs1_xblock_qi_block_geometry_metadata,
 )
-from sfincs_jax.solvers.preconditioners.qi.device import (
+from sfincs_jax.solvers.preconditioner_qi_device import (
     RHS1QIDevicePreconditionerConfig,
     probe_rhs1_qi_device_preconditioner,
     setup_rhs1_qi_device_preconditioner,
 )
 from sfincs_jax.solver import GMRESSolveResult
-from sfincs_jax.solvers.preconditioners.qi.corrections import (
+from sfincs_jax.solvers.preconditioner_qi_corrections import (
     RHS1QIGalerkinProbeCandidate,
     select_rhs1_qi_galerkin_probe_candidate,
 )
@@ -3589,7 +3589,7 @@ def build_xblock_qi_stage_pipeline_context(
     orchestration layer to import every QI helper individually.
     """
 
-    from sfincs_jax.solvers.preconditioners.qi.basis import (
+    from sfincs_jax.solvers.preconditioner_qi_basis import (
         apply_rhs1_qi_coarse_correction,
         build_rhs1_xblock_global_coupling_load_basis,
         build_rhs1_xblock_qi_coarse_basis,
@@ -3597,21 +3597,21 @@ def build_xblock_qi_stage_pipeline_context(
         build_rhs1_qi_galerkin_preconditioner,
         orthonormalize_rhs1_qi_coarse_basis,
     )
-    from sfincs_jax.solvers.preconditioners.qi.corrections import (
+    from sfincs_jax.solvers.preconditioner_qi_corrections import (
         build_rhs1_qi_residual_deflated_preconditioner,
         probe_rhs1_qi_deflated_correction,
         probe_rhs1_qi_deflated_minres_seed,
     )
-    from sfincs_jax.solvers.preconditioners.qi.device import (
+    from sfincs_jax.solvers.preconditioner_qi_device import (
         probe_rhs1_qi_device_augmented_seed,
         probe_rhs1_qi_device_preconditioner,
         setup_rhs1_qi_device_preconditioner,
     )
-    from sfincs_jax.solvers.preconditioners.qi.corrections import (
+    from sfincs_jax.solvers.preconditioner_qi_corrections import (
         parse_rhs1_qi_galerkin_dampings,
         parse_rhs1_qi_galerkin_modes,
     )
-    from sfincs_jax.solvers.preconditioners.qi.corrections import build_rhs1_qi_two_level_preconditioner
+    from sfincs_jax.solvers.preconditioner_qi_corrections import build_rhs1_qi_two_level_preconditioner
 
     return XBlockQIStagePipelineContext(
         **context_kwargs,
