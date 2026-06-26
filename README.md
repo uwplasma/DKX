@@ -296,7 +296,7 @@ The QI ladder also has a `13 x 13 x 15 x 4` fixed-resolution CPU/GPU/Fortran
 artifact and a `15 x 15 x 17 x 4` CPU/Fortran rung. The `15x` rung selects
 `E_r = 2.2132389239` on CPU and agrees with SFINCS Fortran v3 to `9.2e-7`
 relative on the selected root, with all residual gates passing. GPU promotion at
-this resolution is intentionally not claimed yet: the next route is the new
+this resolution is intentionally not claimed: the candidate route is the
 matrix-free QI-device operator-reuse path, available behind explicit
 advanced controls. A bounded one-GPU rerun verifies route activation and local
 x-block factor skipping, but it remains fail-closed because the residual misses
@@ -304,7 +304,7 @@ the requested target; it is infrastructure evidence, not a public performance
 claim.
 
 A checked no-solve rollup records the QI `nfp=2` electron-root ladder from
-`7x` through `15x`. The latest root drift is `0.00210`, but the rollup remains
+`7x` through `15x`. The recorded root drift is `0.00210`, but the rollup remains
 `deferred` because the `15x` GPU rung and the full `25 x 51 x 100 x 4`
 production floor are still open.
 
@@ -312,13 +312,13 @@ The separate finite-beta QA convergence ladder extends the finite-beta QA
 artifact to `9 x 9 x 7 x 4` at the central surface and remains explicitly
 `deferred` because it does not meet the production floor.
 A follow-up medium-resolution solver-policy probe at `17 x 21 x 12 x 4`
-validated the older non-dense `xblock_sparse_pc_gmres` fallback route for the
+validated the non-dense `xblock_sparse_pc_gmres` fallback route for the
 same two-species finite-beta QA deck: the automatic CPU path converged in about
 7 s wall time, matched the written Fortran-v3 output to better than `1.6e-6`
 relative on the reported current/flux observables, and avoids dense matrix
 materialization. The next `21 x 25 x 14 x 4` rung also converged on CPU and GPU
 and matched the written Fortran-v3 output to better than `2.7e-6` relative on
-the same observables. A newer no-probe structured full-CSR RHSMode=1 route can
+the same observables. A no-probe structured full-CSR RHSMode=1 route can
 also solve the active projected transport system directly on the host, avoiding
 the matrix-free pattern probe that made some finite-beta QA/QH runs stall. In
 the QS-paper comparison script, the bounded runtime/non-autodiff lane uses
@@ -440,7 +440,7 @@ native stack fails its true-residual preflight. On the full archived
 `25 x 39 x 60 x 7` QA surface, the native stack built in `9.17 s` with a
 `5.09 GB` bounded factor estimate but worsened the one-apply residual, so
 `auto` accepted active LU without trying experimental native/coarse rescue by
-default. The latest guarded audit converged the true residual to `7.27e-16`
+default. The guarded audit converged the true residual to `7.27e-16`
 in `354.6 s` wall at `tol=1e-10` without requiring any solver environment
 variables.
 
@@ -636,7 +636,7 @@ without user environment variables. It tests the lower-memory
 `active_fortran_v3_reduced_native_stack` candidate under the same true-residual
 gate and falls back to the high-memory active LU reference route when that gate
 fails. The checked QA auto audit converged to `9.00e-13` residual in `343.5 s`
-wall after rejecting the native stack; earlier checked QA/QH active-LU reference
+wall after rejecting the native stack; checked QA/QH active-LU reference
 audits converge to `9.95e-13` and `8.71e-14` residual with a `13.3 GB` active LU
 factor. A stricter guarded rerun with `tol=1e-10` converged to `7.27e-16` in
 `354.6 s`. Native true-coupled, BLR/HSS, and nested-dissection rescue paths
@@ -673,7 +673,7 @@ field-split candidate uses a sparse exact Schur residual equation over the
 full-angle low-pitch active variables and the global tail; the low-pitch
 cutoff is controlled by
 `SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_LOW_L_SCHUR_LMAX`, and the sparse factor is
-bounded by `SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB`. The older
+bounded by `SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB`. The alternate
 `active_coarse` candidate remains available; it uses low-`l`/angular/tail modal
 coarse residual modes. Its default coarse equation is Galerkin;
 `SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COARSE_SOLVER=least_squares` or
@@ -737,7 +737,7 @@ python examples/publication_figures/generate_sfincs_paper_figs.py \
   --scan-only
 
 # The office dual-GPU LHD pilot for that point is residual-clean in
-# ~262 s, compared with ~345 s on one GPU and ~569 s on the older implicit path.
+# ~262 s, compared with ~345 s on one GPU and ~569 s on the implicit baseline path.
 # For the first W7-X FP high-nu point, use the bounded one-worker sparse-LU lane
 # below: it closes all three RHS residual gates in ~9.7 min on one office GPU
 # with sparse-helper factor reuse, compared with ~33.8 min before reuse.
@@ -809,7 +809,7 @@ Recommended parallel usage:
   still case-dependent.
 - The sharded RHSMode=1 CPU path uses a wider Schwarz patch rule plus a bounded
   multilevel residual correction to avoid the worst 4/8-device
-  fragmentation failures seen in earlier releases.
+  fragmentation failures.
 - Use one GPU per case or scan point for production throughput today.
 - Multi-GPU single-case sharding is available for benchmarking and very large
   runs, but it remains experimental and is not yet the default recommendation.
@@ -938,8 +938,8 @@ GPU audit source: `tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3
 - GPU strict status counts: `parity_ok=39`
 - CPU output-key coverage: `missing_total=0, extra_total=-, audited_cases=39, skipped_cases=0`
 - GPU output-key coverage: `missing_total=0, extra_total=-, audited_cases=39, skipped_cases=0`
-- CPU runtime drift watchlist: not applicable: production-floor reruns are not same-resolution with the older frozen smoke baseline
-- GPU runtime drift watchlist: not applicable: production-floor reruns are not same-resolution with the older frozen smoke baseline
+- CPU runtime drift watchlist: not applicable because production-floor reruns are not same-resolution with the frozen smoke baseline
+- GPU runtime drift watchlist: not applicable because production-floor reruns are not same-resolution with the frozen smoke baseline
 - Remaining cases: none
 - Additional example: `parity_ok` on CPU and `parity_ok` on GPU
 
