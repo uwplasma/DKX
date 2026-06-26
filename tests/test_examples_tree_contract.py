@@ -26,10 +26,7 @@ ALLOWED_EXAMPLE_FOLDERS = {
     "vmec_jax_finite_beta",
 }
 
-FOLDERS_REQUIRING_README = ALLOWED_EXAMPLE_FOLDERS - {
-    "data",
-    "utils",
-}
+FOLDERS_REQUIRING_README = ALLOWED_EXAMPLE_FOLDERS
 
 REQUIRED_TASK_ENTRYPOINTS = {
     "tutorials/00_start_here.ipynb",

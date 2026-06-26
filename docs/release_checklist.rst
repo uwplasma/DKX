@@ -35,8 +35,9 @@ What should still be stated carefully:
 - and remaining work is concentrated on runtime and memory optimization of the
   heaviest PAS and geometry-rich cases.
 
-Before shipping a release, make sure `README.md`, `docs/fortran_comparison.rst`, and
-the performance/parallelism pages accurately reflect the current state of the code.
+Before shipping a release, make sure `README.md`,
+`docs/fortran_comparison.rst`, and the performance/parallelism pages
+accurately reflect the supported behavior of the code.
 
 Local validation (recommended)
 ------------------------------
@@ -169,7 +170,7 @@ Release-facing full suite run (vendored upstream inputs):
      --runtime-baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
      --jax-profile-marks on
 
-Each suite run now writes:
+Each suite run writes:
 
 - ``suite_output_key_coverage.json``
 - ``suite_output_key_coverage_summary.json``
@@ -179,7 +180,7 @@ Each suite run now writes:
 For release promotion, require:
 
 - ``suite_output_key_coverage_summary.json`` reports ``missing_total = 0``
-- and the candidate runtime lane is audited against the previous frozen CPU lane.
+- and the candidate runtime lane is audited against the frozen CPU baseline lane.
 
 Manual audit commands:
 
@@ -200,7 +201,7 @@ Manual audit commands:
      --min-baseline-runtime-s 1.0
 
 Sync or regenerate the matching GPU lane against that CPU root before updating
-release-facing README or docs claims. The current GPU root is
+release-facing README or docs claims. The matching GPU root is
 ``tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas``.
 
 Bounded artifact refreshes
