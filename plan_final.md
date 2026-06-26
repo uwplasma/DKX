@@ -109,6 +109,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   also added profile-system support tests for sharding policy, JAX-transform
   cacheability, full-vector padding/unpadding, analytic source moments, and
   RHSMode 2/3 transport-drive updates.
+- The seventh post-audit coverage tranche added profile-solve refactor-boundary
+  tests for Krylov dispatch hooks, distributed-axis policy injection, cache-key
+  dtype injection, Schur builder wiring, transport FP preconditioner wiring, and
+  dense fallback delegation. These protect the extracted owner modules without
+  running slow RHSMode=1 production solves.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
