@@ -251,17 +251,17 @@ gradient with respect to a VMEC magnetic-spectrum scale parameter, a centered
 finite-difference check, a pass/fail numerical gradient gate for that proxy
 path, and a few gradient-descent steps.
 
-The current example validates the differentiable
+This example validates the differentiable
 ``VMEC-like spectral arrays -> booz_xform_jax -> sfincs_jax Boozer-spectrum
 objective`` graph.  File I/O and the default ``vmec_geometry_from_wout`` file
 adapter remain outside the differentiable graph.  Full VMEC-boundary-to-kinetic
 transport optimization is still a larger research workflow, but the public handoff
 has a fast, tested gradient gate.
 
-Current differentiability boundary
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Differentiability boundary
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The optional ``vmec_jax`` / ``booz_xform_jax`` lane should currently be read as a
+The optional ``vmec_jax`` / ``booz_xform_jax`` lane should be read as a
 geometry-handoff and objective-gradient lane, not as a complete transport
 optimization workflow.  The supported public pieces are:
 
@@ -390,8 +390,8 @@ operator assembly and differentiability tests use the internal layout directly.
 What is not a public geometry mode
 ----------------------------------
 
-There is currently no separate Miller-parameter public geometry interface in the CLI
-or Python API. For tokamak studies, the supported public path is the analytic
+The CLI and Python API do not expose a separate Miller-parameter public geometry
+interface. For tokamak studies, the supported public path is the analytic
 straight-field-line model family (primarily ``geometryScheme=1``). If a dedicated
 Miller workflow is added later, it should appear here as a first-class geometry mode,
 with explicit input definitions and examples.

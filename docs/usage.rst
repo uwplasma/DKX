@@ -171,7 +171,7 @@ Only force a solver when reproducing a benchmark, debugging a path choice, or
 running an expert study where the output ``linearSolver*`` diagnostics and
 ``--solver-trace`` sidecar will be inspected.
 
-The currently supported RHSMode=1 overrides are ``incremental``, ``dense``,
+Supported RHSMode=1 overrides are ``incremental``, ``dense``,
 ``sparse_host``, ``sparse_host_safe``, ``sparse_pc_gmres``,
 ``xblock_sparse_pc_gmres``, ``fortran_reduced_pc_gmres``,
 ``structured_csr``, ``host_structured_csr``, ``structured_full_csr``,

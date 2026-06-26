@@ -7,7 +7,12 @@ import numpy as np
 
 from sfincs_jax.solvers import preconditioner_transport_matrix as tm
 from sfincs_jax.solvers.preconditioning import (
+    _TRANSPORT_FP_LOCAL_GEOM_LINE_PRECOND_CACHE,
+    _TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE,
+    _TRANSPORT_FP_TZFFT_LINE_PRECOND_CACHE,
+    _TRANSPORT_FP_TZFFT_LINE_SCHUR_PRECOND_CACHE,
     _TRANSPORT_FP_TZFFT_PRECOND_CACHE,
+    _TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE,
     _TRANSPORT_PRECOND_CACHE,
     _TRANSPORT_SXBLOCK_LR_PRECOND_CACHE,
     _TRANSPORT_SXBLOCK_PRECOND_CACHE,
@@ -107,11 +112,16 @@ def _transport_operator(*, include_fp: bool = True) -> SimpleNamespace:
         b_hat_sub_zeta=jnp.ones((n_theta, n_zeta), dtype=jnp.float64),
         fsab_hat2=1.0,
         x=jnp.asarray(collisionless.x, dtype=jnp.float64),
+        x_weights=jnp.asarray([0.2, 0.5, 0.3], dtype=jnp.float64),
         t_hat=jnp.asarray([1.3, 0.9], dtype=jnp.float64),
         m_hat=jnp.asarray([2.0, 1.0], dtype=jnp.float64),
         alpha=1.0,
         delta=0.4,
         dphi_hat_dpsi_hat=0.0,
+        rhs_mode=2,
+        constraint_scheme=1,
+        point_at_x0=False,
+        include_phi1=False,
     )
 
 
@@ -122,6 +132,11 @@ def _clear_transport_caches() -> None:
     _TRANSPORT_XMG_PRECOND_CACHE.clear()
     _TRANSPORT_TZFFT_PRECOND_CACHE.clear()
     _TRANSPORT_FP_TZFFT_PRECOND_CACHE.clear()
+    _TRANSPORT_FP_TZFFT_LINE_PRECOND_CACHE.clear()
+    _TRANSPORT_FP_TZFFT_LINE_SCHUR_PRECOND_CACHE.clear()
+    _TRANSPORT_FP_LOCAL_GEOM_LINE_PRECOND_CACHE.clear()
+    _TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE.clear()
+    _TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE.clear()
 
 
 def _vector(op: SimpleNamespace) -> jnp.ndarray:
@@ -240,3 +255,146 @@ def test_transport_tzfft_and_fp_tzfft_preconditioners_are_finite_and_cached(monk
     assert fp_tzfft_result.shape == vector.shape
     assert bool(jnp.all(jnp.isfinite(fp_tzfft_result)))
     assert len(_TRANSPORT_FP_TZFFT_PRECOND_CACHE) == 1
+
+
+def test_transport_fp_preconditioners_respect_memory_caps_and_fallbacks(monkeypatch) -> None:
+    op = _transport_operator()
+    vector = _vector(op)
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_MAX_MB", "1e-12")
+    _clear_transport_caches()
+    fp_tzfft = tm.build_rhsmode23_fp_tzfft_preconditioner(op=op)
+    np.testing.assert_allclose(
+        np.asarray(fp_tzfft(vector)),
+        np.asarray(tm.build_rhsmode23_sxblock_preconditioner(op=op)(vector)),
+    )
+    assert len(_TRANSPORT_FP_TZFFT_PRECOND_CACHE) == 0
+    assert len(_TRANSPORT_SXBLOCK_PRECOND_CACHE) == 1
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_MAX_MB", "1e-12")
+    _clear_transport_caches()
+    line = tm.build_rhsmode23_fp_tzfft_line_preconditioner(op=op)
+    np.testing.assert_allclose(
+        np.asarray(line(vector)),
+        np.asarray(tm.build_rhsmode23_sxblock_preconditioner(op=op)(vector)),
+    )
+    assert len(_TRANSPORT_FP_TZFFT_LINE_PRECOND_CACHE) == 0
+    assert len(_TRANSPORT_SXBLOCK_PRECOND_CACHE) == 1
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_MAX_MB", "1e-12")
+    _clear_transport_caches()
+    local_line = tm.build_rhsmode23_fp_local_geom_line_preconditioner(op=op)
+    np.testing.assert_allclose(
+        np.asarray(local_line(vector)),
+        np.asarray(tm.build_rhsmode23_sxblock_preconditioner(op=op)(vector)),
+    )
+    assert len(_TRANSPORT_FP_LOCAL_GEOM_LINE_PRECOND_CACHE) == 0
+    assert len(_TRANSPORT_SXBLOCK_PRECOND_CACHE) == 1
+
+
+def test_transport_fp_line_and_local_geometry_factors_are_finite_and_cached(monkeypatch) -> None:
+    op = _transport_operator()
+    vector = _vector(op)
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_DTYPE", "float64")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_REG", "not-a-float")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_PINV_RCOND", "not-a-float")
+    _clear_transport_caches()
+    line = tm.build_rhsmode23_fp_tzfft_line_preconditioner(op=op)
+    line_result = line(vector)
+    assert line_result.shape == vector.shape
+    assert bool(jnp.all(jnp.isfinite(line_result)))
+    assert len(_TRANSPORT_FP_TZFFT_LINE_PRECOND_CACHE) == 1
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_DTYPE", "float32")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_REG", "not-a-float")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_PINV_RCOND", "not-a-float")
+    _clear_transport_caches()
+    local_line = tm.build_rhsmode23_fp_local_geom_line_preconditioner(op=op)
+    local_result = local_line(vector)
+    assert local_result.shape == vector.shape
+    assert bool(jnp.all(jnp.isfinite(local_result)))
+    assert len(_TRANSPORT_FP_LOCAL_GEOM_LINE_PRECOND_CACHE) == 1
+
+
+def test_transport_fp_schur_wrappers_disable_cleanly_and_support_reduced_view(monkeypatch) -> None:
+    op = _transport_operator()
+    vector = _vector(op)
+    active = jnp.arange(op.total_size, dtype=jnp.int32)[1::3]
+
+    def reduce_full(candidate: jnp.ndarray) -> jnp.ndarray:
+        return candidate[active]
+
+    def expand_reduced(candidate: jnp.ndarray) -> jnp.ndarray:
+        expanded = jnp.zeros((op.total_size,), dtype=jnp.float64)
+        return expanded.at[active].set(candidate)
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_MAX_COLS", "0")
+    _clear_transport_caches()
+    base = tm.build_rhsmode23_fp_tzfft_line_preconditioner(op=op)
+    schur_reduced = tm.build_rhsmode23_fp_tzfft_line_schur_preconditioner(
+        op=op,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
+    rhs_reduced = reduce_full(vector)
+    expected = reduce_full(base(expand_reduced(rhs_reduced)))
+    np.testing.assert_allclose(np.asarray(schur_reduced(rhs_reduced)), np.asarray(expected))
+    assert len(_TRANSPORT_FP_TZFFT_LINE_SCHUR_PRECOND_CACHE) == 0
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_MAX_COLS", "0")
+    _clear_transport_caches()
+    op.point_at_x0 = True
+    base_xblock = tm.build_rhsmode23_fp_xblock_tz_lu_preconditioner(op=op)
+    xblock_schur_reduced = tm.build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner(
+        op=op,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
+    expected_xblock = reduce_full(base_xblock(expand_reduced(rhs_reduced)))
+    np.testing.assert_allclose(np.asarray(xblock_schur_reduced(rhs_reduced)), np.asarray(expected_xblock))
+    assert len(_TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE) == 0
+
+
+def test_transport_structured_fblock_lu_uses_factor_metadata_and_memory_fallback(monkeypatch) -> None:
+    import scipy.sparse as sp
+
+    op = _transport_operator()
+    vector = _vector(op)
+
+    class _Selection:
+        selected = True
+        matrix = sp.eye(op.f_size, dtype=np.float64, format="csr")
+
+        def to_dict(self) -> dict[str, object]:
+            return {"selected": True, "nnz": int(self.matrix.nnz)}
+
+    class _Factor:
+        factor_nbytes_estimate = 512
+        factor_nnz_estimate = op.f_size
+        factor_s = 1.5e-3
+
+        def solve(self, rhs: np.ndarray) -> np.ndarray:
+            return 0.5 * np.asarray(rhs, dtype=np.float64)
+
+    monkeypatch.setattr(tm, "select_structured_rhs1_fblock_csr_operator", lambda *args, **kwargs: _Selection())
+    monkeypatch.setattr(tm, "factorize_host_sparse_operator", lambda *args, **kwargs: _Factor())
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_REG", "bad")
+    _clear_transport_caches()
+
+    preconditioner = tm.build_rhsmode23_fp_structured_fblock_lu_preconditioner(op=op)
+    result = np.asarray(preconditioner(vector))
+    np.testing.assert_allclose(result[: op.f_size], 0.5 * np.asarray(vector[: op.f_size]))
+    np.testing.assert_allclose(result[op.f_size :], np.asarray(vector[op.f_size :]))
+    cache = next(iter(_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE.values()))
+    assert cache.metadata["selection"] == {"selected": True, "nnz": op.f_size}
+    assert cache.metadata["factor_nbytes_estimate"] == 512
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_FACTOR_MAX_MB", "1e-12")
+    _clear_transport_caches()
+    fallback = tm.build_rhsmode23_fp_structured_fblock_lu_preconditioner(op=op)
+    np.testing.assert_allclose(
+        np.asarray(fallback(vector)),
+        np.asarray(tm.build_rhsmode23_sxblock_preconditioner(op=op)(vector)),
+    )
+    assert len(_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE) == 0

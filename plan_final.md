@@ -141,6 +141,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   cache bypass behavior, active-submatrix residual damping, and coupled coarse
   LSQ correction algebra on identity systems. These tests directly exercise
   residual-polish math without constructing a full kinetic operator.
+- The twelfth post-audit coverage tranche added RHSMode=2/3 transport
+  preconditioner admission tests for memory-cap fallbacks, bounded FP line
+  factors, Schur disable paths, reduced-view wrappers, and structured f-block
+  factor metadata. These tests protect production solver selection and memory
+  admission without materializing a production operator.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
@@ -260,6 +265,13 @@ Tranche 2: remove empty packages and root shims.
   and covered by source-tree tests.
 - Keep root shim aliases only where documented as stable public API. The only
   remaining root compatibility debt is `v3_driver.py`.
+- Keep the small one-file compatibility indexes
+  `operators/profile_response.py`, `problems/profile_response.py`,
+  `problems/transport_matrix.py`, and `solvers/preconditioners.py` through this
+  release cycle. A package-initializer alias experiment removed those files but
+  introduced circular imports during import-contract tests, especially through
+  solver preconditioner imports. Removing these shims is a later cleanup after
+  legacy imports are either dropped or implemented with a real lazy import hook.
 - Acceptance: source-tree test passes; import-contract tests verify old public
   imports; package root has at most the public modules listed above.
 
