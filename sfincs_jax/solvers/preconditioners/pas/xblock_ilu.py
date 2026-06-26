@@ -9,12 +9,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ....preconditioner_caches import (
+from sfincs_jax.solvers.preconditioner_caches import (
     _RHSMODE1_PRECOND_ILU_CACHE,
     _RHSMode1ILUBlockPrecondCache,
 )
-from ....preconditioner_context import precond_dtype
-from ....preconditioner_setup import (
+from sfincs_jax.solvers.preconditioner_context import precond_dtype
+from sfincs_jax.solvers.preconditioner_setup import (
     hash_array,
     matvec_submatrix_v3_unsharded,
     precond_chunk_cols,

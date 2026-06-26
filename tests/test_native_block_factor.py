@@ -9,7 +9,7 @@ import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 
-from sfincs_jax.native_block_factor import (  # noqa: E402
+from sfincs_jax.solvers.native_block_factor import (  # noqa: E402
     apply_dense_block_jacobi,
     apply_native_padded_indexed_block_factor,
     apply_two_field_schur,

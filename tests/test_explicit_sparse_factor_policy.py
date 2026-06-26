@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.explicit_sparse_factor_policy import (
+from sfincs_jax.solvers.explicit_sparse_factor_policy import (
     ExplicitSparseFactorSettings,
     canonical_explicit_sparse_factor_kind,
     explicit_sparse_factor_kind_from_env,

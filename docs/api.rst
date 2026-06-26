@@ -78,10 +78,10 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.solvers.sparse_triangular
    :members:
 
-.. automodule:: sfincs_jax.preconditioner_context
+.. automodule:: sfincs_jax.solvers.preconditioner_context
    :members:
 
-.. automodule:: sfincs_jax.preconditioner_operators
+.. automodule:: sfincs_jax.solvers.preconditioner_operators
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioners.pas.xblock_ilu
@@ -126,19 +126,19 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.problems.transport_matrix.postsolve_diagnostics
    :members:
 
-.. automodule:: sfincs_jax.preconditioner_setup
+.. automodule:: sfincs_jax.solvers.preconditioner_setup
    :members:
 
-.. automodule:: sfincs_jax.explicit_sparse_factor_policy
+.. automodule:: sfincs_jax.solvers.explicit_sparse_factor_policy
    :members:
 
-.. automodule:: sfincs_jax.explicit_sparse_factor_builder
+.. automodule:: sfincs_jax.solvers.explicit_sparse_factor_builder
    :members:
 
 .. automodule:: sfincs_jax.solvers.krylov_dispatch
    :members:
 
-.. automodule:: sfincs_jax.preconditioner_caches
+.. automodule:: sfincs_jax.solvers.preconditioner_caches
    :members:
 
 .. automodule:: sfincs_jax.v3_driver
@@ -334,7 +334,7 @@ research workflows.
 .. automodule:: sfincs_jax.petsc_binary
    :members:
 
-.. automodule:: sfincs_jax.explicit_sparse
+.. automodule:: sfincs_jax.solvers.explicit_sparse
    :members:
 
 .. automodule:: sfincs_jax.solvers.implicit

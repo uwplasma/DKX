@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.preconditioner_setup import (
+from sfincs_jax.solvers.preconditioner_setup import (
     hash_array,
     matvec_submatrix,
     precond_chunk_cols,

@@ -548,7 +548,7 @@ JAX-native performance patterns used in `sfincs_jax`
 Explicit sparse host/device split helper
 ----------------------------------------
 
-The reusable helper module ``sfincs_jax.explicit_sparse`` keeps the explicit sparse
+The reusable helper module ``sfincs_jax.solvers.explicit_sparse`` keeps the explicit sparse
 policy separate from the solver driver. It is intended for the performance-first
 CLI path and for future integration of sparse host-side rescues, not for the
 default differentiable reference path.
@@ -574,7 +574,7 @@ and for CSR,
    \text{csr bytes} \approx \text{nnz} \cdot (\text{data itemsize} + \text{index itemsize})
    + (N_{\text{rows}} + 1) \cdot \text{index itemsize}.
 
-Implementation: ``sfincs_jax.explicit_sparse``.
+Implementation: ``sfincs_jax.solvers.explicit_sparse``.
 
 Public entry points:
 

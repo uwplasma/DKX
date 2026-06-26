@@ -8,9 +8,9 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 
-from sfincs_jax.explicit_sparse import factorize_host_sparse_operator
+from sfincs_jax.solvers.explicit_sparse import factorize_host_sparse_operator
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax import preconditioner_operators as po
+from sfincs_jax.solvers import preconditioner_operators as po
 import sfincs_jax.problems.profile_response.sparse.direct as sparse_direct
 from sfincs_jax.v3_system import full_system_operator_from_namelist
 import sfincs_jax.v3_driver as vd

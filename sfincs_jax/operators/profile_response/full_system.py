@@ -2557,7 +2557,7 @@ def _admit_linear_operator_against_matrix(
 ) -> tuple[bool, dict[str, object]]:
     """Gate a preconditioner with deterministic true residual probes."""
 
-    from sfincs_jax.explicit_sparse import deterministic_sparse_probe_matrix  # noqa: PLC0415
+    from sfincs_jax.solvers.explicit_sparse import deterministic_sparse_probe_matrix  # noqa: PLC0415
 
     matrix_csr = matrix.tocsr()
     n_rows, n_cols = int(matrix_csr.shape[0]), int(matrix_csr.shape[1])
@@ -2645,7 +2645,7 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
 
     from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
 
-    from sfincs_jax.explicit_sparse import (  # noqa: PLC0415
+    from sfincs_jax.solvers.explicit_sparse import (  # noqa: PLC0415
         admit_sparse_factor_against_operator,
         analyze_sparse_symbolic_structure,
         factorize_host_sparse_operator,
@@ -2972,7 +2972,7 @@ def _build_active_projected_symbolic_superblock_lu_preconditioner(
 
     from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
 
-    from sfincs_jax.explicit_sparse import (  # noqa: PLC0415
+    from sfincs_jax.solvers.explicit_sparse import (  # noqa: PLC0415
         admit_sparse_factor_against_operator,
         analyze_sparse_symbolic_structure,
         factorize_host_sparse_operator,
@@ -3225,7 +3225,7 @@ def _build_active_projected_symbolic_block_schur_lu_preconditioner(
 
     from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
 
-    from sfincs_jax.explicit_sparse import (  # noqa: PLC0415
+    from sfincs_jax.solvers.explicit_sparse import (  # noqa: PLC0415
         admit_sparse_factor_against_operator,
         analyze_sparse_symbolic_structure,
         factorize_host_sparse_operator,
@@ -5568,7 +5568,7 @@ def _append_probe_residual_basis_csc(
 ) -> tuple[Any, dict[str, object]]:
     """Append bounded residual modes from deterministic setup probes."""
 
-    from sfincs_jax.explicit_sparse import deterministic_sparse_probe_matrix  # noqa: PLC0415
+    from sfincs_jax.solvers.explicit_sparse import deterministic_sparse_probe_matrix  # noqa: PLC0415
 
     enabled = _env_bool("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_PROBE_RESIDUAL_BASIS", bool(enabled_default))
     max_columns = max(0, int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_PROBE_RESIDUAL_MAX_COLUMNS", 32)))

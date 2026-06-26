@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-import sfincs_jax.preconditioner_caches as pc
+import sfincs_jax.solvers.preconditioner_caches as pc
 import sfincs_jax.v3_driver as vd
 
 

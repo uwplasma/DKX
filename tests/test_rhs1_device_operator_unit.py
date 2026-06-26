@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 
-from sfincs_jax.explicit_sparse import estimate_csr_nbytes
+from sfincs_jax.solvers.explicit_sparse import estimate_csr_nbytes
 from sfincs_jax.operators.profile_response.device_sparse import (
     assert_device_matvec_matches,
     device_csr_from_operator,

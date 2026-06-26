@@ -21,7 +21,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from sfincs_jax.petsc_binary import read_petsc_mat_aij, read_petsc_vec
 from sfincs_jax.solver import gmres_solve
-from sfincs_jax.explicit_sparse import csr_matvec
+from sfincs_jax.solvers.explicit_sparse import csr_matvec
 
 
 def _default_prefix() -> Path:

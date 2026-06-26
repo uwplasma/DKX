@@ -15,7 +15,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.preconditioner_caches import (
+from sfincs_jax.solvers.preconditioner_caches import (
     _RHSMODE23_PRECOND_CACHE,
     _TRANSPORT_FP_LOCAL_GEOM_LINE_PRECOND_CACHE,
     _TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE,
@@ -42,10 +42,10 @@ from sfincs_jax.preconditioner_caches import (
     _TransportXBlockPrecondCache,
     _TransportXmgPrecondCache,
 )
-from sfincs_jax.explicit_sparse import factorize_host_sparse_operator
-from sfincs_jax.preconditioner_context import precond_dtype as _precond_dtype
-from sfincs_jax.preconditioner_operators import _build_transport_preconditioner_operator_point
-from sfincs_jax.preconditioner_setup import (
+from sfincs_jax.solvers.explicit_sparse import factorize_host_sparse_operator
+from sfincs_jax.solvers.preconditioner_context import precond_dtype as _precond_dtype
+from sfincs_jax.solvers.preconditioner_operators import _build_transport_preconditioner_operator_point
+from sfincs_jax.solvers.preconditioner_setup import (
     hash_array as _hash_array,
     matvec_submatrix as _matvec_submatrix_impl,
     precond_chunk_cols as _precond_chunk_cols,

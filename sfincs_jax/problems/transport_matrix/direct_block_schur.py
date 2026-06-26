@@ -9,7 +9,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.preconditioner_caches import (
+from sfincs_jax.solvers.preconditioner_caches import (
     _TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_PRECOND_CACHE,
     _TransportFpDirectActiveBlockSchurPrecondCache,
 )

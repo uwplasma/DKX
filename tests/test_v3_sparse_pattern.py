@@ -13,7 +13,7 @@ from scipy.sparse.linalg import aslinearoperator
 import sfincs_jax.io as io_module
 import sfincs_jax.solvers.preconditioners.qi.device as rhs1_qi_device_preconditioner_module
 import sfincs_jax.v3_driver as v3_driver_module
-from sfincs_jax.explicit_sparse import SparseDecision, SparseOperatorBundle, build_operator_from_pattern
+from sfincs_jax.solvers.explicit_sparse import SparseDecision, SparseOperatorBundle, build_operator_from_pattern
 from sfincs_jax.io import write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.petsc_binary import read_petsc_mat_aij

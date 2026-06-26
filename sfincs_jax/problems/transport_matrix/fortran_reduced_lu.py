@@ -9,7 +9,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.explicit_sparse import (
+from sfincs_jax.solvers.explicit_sparse import (
     SparseOperatorBundle,
     admit_sparse_factor_against_operator,
     analyze_sparse_symbolic_structure,
@@ -17,11 +17,11 @@ from sfincs_jax.explicit_sparse import (
     factorize_host_sparse_operator,
     wrap_sparse_factor_with_coarse_correction,
 )
-from sfincs_jax.preconditioner_caches import (
+from sfincs_jax.solvers.preconditioner_caches import (
     _TRANSPORT_FP_FORTRAN_REDUCED_LU_PRECOND_CACHE,
     _TransportFpFortranReducedLuPrecondCache,
 )
-from sfincs_jax.preconditioner_operators import _build_transport_preconditioner_operator_fortran_reduced
+from sfincs_jax.solvers.preconditioner_operators import _build_transport_preconditioner_operator_fortran_reduced
 from sfincs_jax.problems.profile_response.policies import _hash_numpy_array_for_cache
 from sfincs_jax.problems.transport_matrix.direct_pmat import (
     _build_rhsmode23_direct_pmat_physics_coarse_basis,

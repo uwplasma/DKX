@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from sfincs_jax import preconditioner_context as pc
+from sfincs_jax.solvers import preconditioner_context as pc
 
 
 def teardown_function() -> None:
@@ -48,7 +48,7 @@ def test_context_preconditioner_dtype_uses_geom4_pas_policy(monkeypatch) -> None
     monkeypatch.delenv("SFINCS_JAX_PRECOND_DTYPE", raising=False)
     monkeypatch.delenv("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4", raising=False)
     monkeypatch.setenv("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4_MIN_SIZE", "100")
-    monkeypatch.setattr("sfincs_jax.preconditioner_context.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.solvers.preconditioner_context.jax.default_backend", lambda: "cpu")
     pc.set_precond_policy_hints(
         geom_scheme=4,
         use_dkes=False,

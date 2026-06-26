@@ -32,7 +32,7 @@ from ...phi1_newton_policy import (
     phi1_line_search_policy,
     phi1_use_active_dof_mode,
 )
-from ...preconditioner_context import (
+from ...solvers.preconditioner_context import (
     set_precond_policy_hints,
     set_precond_size_hint,
     use_solver_jit,

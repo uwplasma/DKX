@@ -8,14 +8,14 @@ import os
 import jax.numpy as jnp
 import numpy as np
 
-from ....preconditioner_caches import (
+from sfincs_jax.solvers.preconditioner_caches import (
     _RHSMODE1_PRECOND_CACHE,
     _RHSMODE1_PRECOND_GLOBAL_CACHE,
     _RHSMode1PrecondCache,
     _RHSMode1PrecondGlobalCache,
 )
-from ....preconditioner_context import precond_dtype
-from ....preconditioner_setup import (
+from sfincs_jax.solvers.preconditioner_context import precond_dtype
+from sfincs_jax.solvers.preconditioner_setup import (
     matvec_submatrix_v3_unsharded,
     precond_chunk_cols,
     rhs_mode1_precond_cache_key,

@@ -461,7 +461,7 @@ def build_active_projected_native_indexed_schwarz_preconditioner(
 
     import jax.numpy as jnp  # noqa: PLC0415
 
-    from ....native_block_factor import (  # noqa: PLC0415
+    from sfincs_jax.solvers.native_block_factor import (  # noqa: PLC0415
         apply_native_padded_indexed_block_factor,
         build_native_padded_indexed_block_factor,
     )

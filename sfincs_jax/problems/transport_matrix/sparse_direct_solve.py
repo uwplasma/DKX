@@ -11,7 +11,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.explicit_sparse import build_operator_from_matvec, estimate_csr_nbytes, factorize_host_sparse_operator
+from sfincs_jax.solvers.explicit_sparse import build_operator_from_matvec, estimate_csr_nbytes, factorize_host_sparse_operator
 from sfincs_jax.solver import GMRESSolveResult
 from sfincs_jax.v3_sparse_pattern import (
     summarize_v3_sparse_pattern,

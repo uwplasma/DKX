@@ -6,7 +6,7 @@ import numpy as np
 import scipy.sparse as sp
 from scipy.sparse.linalg import aslinearoperator
 
-from sfincs_jax.explicit_sparse import SparseDecision, SparseOperatorBundle
+from sfincs_jax.solvers.explicit_sparse import SparseDecision, SparseOperatorBundle
 from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
 from sfincs_jax.operators.profile_response.true_operator_rescue import (
     _ResidualCoarseHostSparsePreconditionerBundle,

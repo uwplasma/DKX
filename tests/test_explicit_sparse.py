@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import pytest
 import scipy.sparse as sp
 
-from sfincs_jax.explicit_sparse import (
+from sfincs_jax.solvers.explicit_sparse import (
     SparseOperatorBundle,
     admit_sparse_factor_against_operator,
     analyze_sparse_symbolic_structure,

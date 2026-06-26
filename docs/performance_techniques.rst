@@ -368,7 +368,7 @@ structural sparse pattern:
    and apply iterative refinement against the true sparse operator.
 
 The implementation lives in ``sfincs_jax.v3_sparse_pattern`` and
-``sfincs_jax.explicit_sparse.build_operator_from_pattern``. Tests verify that the
+``sfincs_jax.solvers.explicit_sparse.build_operator_from_pattern``. Tests verify that the
 conservative pattern covers frozen Fortran PETSc matrices for PAS, FP, and Phi1
 tiny systems, and that colored probing reconstructs the PAS tiny matrix to
 Fortran tolerances.
@@ -1273,7 +1273,7 @@ for end-to-end autodiff workflows.
 Implementation:
 
 - block-basis materialization and factorization helpers:
-  ``sfincs_jax.explicit_sparse.build_operator_from_matvec`` and
+  ``sfincs_jax.solvers.explicit_sparse.build_operator_from_matvec`` and
   ``factorize_host_sparse_operator``;
 - RHSMode=2/3 sparse-direct reuse:
   ``sfincs_jax.v3_driver.solve_v3_transport_matrix_linear_gmres``.

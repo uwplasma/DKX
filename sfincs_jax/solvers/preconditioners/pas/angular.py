@@ -9,14 +9,14 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ....preconditioner_caches import (
+from sfincs_jax.solvers.preconditioner_caches import (
     _PasTokamakThetaPrecondCache,
     _PasTzPrecondCache,
     _RHSMODE1_PAS_TOKAMAK_THETA_CACHE,
     _RHSMODE1_PAS_TZ_CACHE,
 )
-from ....preconditioner_context import precond_dtype as _precond_dtype
-from ....preconditioner_setup import rhs_mode1_precond_cache_key
+from sfincs_jax.solvers.preconditioner_context import precond_dtype as _precond_dtype
+from sfincs_jax.solvers.preconditioner_setup import rhs_mode1_precond_cache_key
 from sfincs_jax.solvers.preconditioners.pas.policy import build_pas_tz_memory_fallback
 from ....structured_velocity import factor_block_tridiagonal
 from ....v3_system import V3FullSystemOperator

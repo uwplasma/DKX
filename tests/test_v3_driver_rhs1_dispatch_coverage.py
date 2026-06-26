@@ -10,7 +10,7 @@ import sfincs_jax.v3_driver as vd
 import sfincs_jax.problems.profile_response.preconditioner_build as pb
 import sfincs_jax.problems.profile_response.sparse.direct as sparse_direct
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.preconditioner_caches import _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE
+from sfincs_jax.solvers.preconditioner_caches import _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE
 from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import jax.numpy as jnp
 
-from sfincs_jax.explicit_sparse import csr_matvec
+from sfincs_jax.solvers.explicit_sparse import csr_matvec
 
 
 def test_csr_matvec_matches_dense() -> None:

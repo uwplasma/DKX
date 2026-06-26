@@ -3067,7 +3067,7 @@ Steps taken:
 2. Moved GMRES result finite-state and XLA readiness helpers into the canonical
    Krylov owner, `sfincs_jax/solver.py`.
 3. Moved diagonal and block-diagonal matrix-reduction helpers into
-   `sfincs_jax/preconditioner_operators.py`, where simplified
+   `sfincs_jax/solvers/preconditioner_operators.py`, where simplified
    preconditioner-operator shaping already lives.
 4. Moved implicit/differentiable solve-mode selection into
    `sfincs_jax/problems/profile_response/policies.py`.
@@ -3090,7 +3090,7 @@ Validation:
 
 - `python -m ruff check
   sfincs_jax/solver.py
-  sfincs_jax/preconditioner_operators.py
+  sfincs_jax/solvers/preconditioner_operators.py
   sfincs_jax/problems/profile_response/policies.py
   sfincs_jax/problems/profile_response/solve.py
   sfincs_jax/problems/profile_response/phi1_newton.py
@@ -3105,7 +3105,7 @@ Validation:
   scripts/run_zenodo_vmec_parity_campaign.py` passed.
 - `python -m py_compile
   sfincs_jax/solver.py
-  sfincs_jax/preconditioner_operators.py
+  sfincs_jax/solvers/preconditioner_operators.py
   sfincs_jax/problems/profile_response/policies.py
   sfincs_jax/problems/profile_response/solve.py
   sfincs_jax/problems/profile_response/phi1_newton.py
@@ -3171,7 +3171,7 @@ Steps taken:
    `sfincs_jax/verbose.py`.
 2. Moved the differentiable tiny least-squares kernel and recycled Krylov
    initial-guess builder into `sfincs_jax/solver.py`.
-3. Moved the JAX-native CSR matvec into `sfincs_jax/explicit_sparse.py`, where
+3. Moved the JAX-native CSR matvec into `sfincs_jax/solvers/explicit_sparse.py`, where
    sparse operator/factor infrastructure already lives.
 4. Moved deterministic `make_emit` and `Timer` utilities into
    `sfincs_jax/profiling.py`.
@@ -3485,3 +3485,76 @@ Next best steps:
    family into `solvers`.
 2. Once root count reaches `<=55`, start Tranche B and cut
    `profile_response/solve.py`.
+
+## 2026-06-25 Lane 1 Tranche A Solver/Preconditioner Implementation Root Disposition
+
+Steps taken:
+
+1. Moved the remaining reusable root solver/preconditioner implementation
+   family into `sfincs_jax.solvers` without compatibility shims:
+   `explicit_sparse.py`, `explicit_sparse_factor_builder.py`,
+   `explicit_sparse_factor_policy.py`, `native_block_factor.py`,
+   `preconditioner_caches.py`, `preconditioner_context.py`,
+   `preconditioner_operators.py`, and `preconditioner_setup.py`.
+2. Rewrote source, tests, examples, scripts, and docs to use canonical
+   `sfincs_jax.solvers.*` imports and source paths.
+3. Fixed moved-module relative imports, including the lazy V3 full-system
+   operator import used by x-block sparse preconditioner setup.
+4. Updated `plan_final.md` so it remains the single authoritative plan:
+   package-root files are now below the review gate, and the next work starts
+   with Tranche B/E blockers rather than more root solver moves.
+
+Current inventory:
+
+- Package Python files: `212` (unchanged because files moved, not merged).
+- Package-root Python files: `52` (down from `60`; root-count gate met).
+- `sfincs_jax.solvers`: `19` top-level Python files including `__init__.py`,
+  plus preconditioner subpackages.
+- `problems/profile_response`: `13` package files, with `solve.py` still the
+  main blocker at `9,411` lines.
+- `problems/transport_matrix`: `23` package files.
+- `solvers/preconditioners`: `50` package files.
+
+Validation:
+
+- Scoped `ruff` passed for moved solver modules, profile-response owners,
+  transport-matrix owners, and focused tests.
+- `python -m py_compile` passed for moved solver modules, selected
+  preconditioner family modules, profile-response owners, and
+  transport-matrix owners.
+- Focused solver/preconditioner regression passed:
+  `python -m pytest tests/test_explicit_sparse.py
+  tests/test_explicit_sparse_factor_builder.py
+  tests/test_explicit_sparse_factor_policy.py
+  tests/test_preconditioner_context.py tests/test_preconditioner_setup.py
+  tests/test_preconditioner_caches.py tests/test_matrix_reductions.py
+  tests/test_native_block_factor.py tests/test_sparse_csr.py
+  tests/test_v3_sparse_pattern.py tests/test_rhs1_device_operator.py
+  tests/test_rhs1_device_operator_unit.py tests/test_rhs1_full_csr_kinetic_pc.py
+  tests/test_rhs1_true_operator_rescue.py
+  tests/test_fortran_reduced_preconditioner.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_profile_response_sparse_pc.py tests/test_transport_solve_setup.py
+  tests/test_transport_solve_policy.py
+  tests/test_transport_preconditioner_dispatch.py -q --tb=short`
+  with `695 passed in 164.02 s`.
+- Import-contract and policy-docstring tests passed with `11 passed in 0.93 s`.
+- Sphinx built with `-W`.
+- `git diff --check` passed.
+
+Current lane status:
+
+- Lane 1 Tranche A: complete for root solver/workflow/validation disposition;
+  only stale-import/source-map audit maintenance remains.
+- Lane 1 overall: about `71%`.
+- Root-count review gate: complete at `52 <= 55`.
+
+Next best steps:
+
+1. Start Tranche B as the next large refactor: move sparse branch
+   orchestration, sparse finalization, result payload assembly, progress replay,
+   and diagnostic normalization out of `profile_response/solve.py`.
+2. Do not add helper-only files; each Tranche B checkpoint should materially
+   reduce `profile_response/solve.py` or delete re-export-only owners.
+3. After Tranche B, execute transport/output consolidation and solver-domain
+   collapse, then run the final docs/API/tests review gate.

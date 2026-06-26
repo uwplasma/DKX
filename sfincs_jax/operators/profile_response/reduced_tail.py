@@ -17,7 +17,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.explicit_sparse import (
+from sfincs_jax.solvers.explicit_sparse import (
     SparseDecision,
     SparseOperatorBundle,
     build_operator_from_pattern,

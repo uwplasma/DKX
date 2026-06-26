@@ -9,7 +9,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ....preconditioner_caches import (
+from sfincs_jax.solvers.preconditioner_caches import (
     _RHSMODE1_PRECOND_CACHE,
     _RHSMODE1_SCHWARZ_PRECOND_CACHE,
     _RHSMODE1_THETA_LINE_DIAGX_CACHE,
@@ -17,14 +17,14 @@ from ....preconditioner_caches import (
     _RHSMode1SchwarzPrecondCache,
     _RHSMode1ThetaLineDiagXCache,
 )
-from ....preconditioner_context import precond_dtype
-from ....preconditioner_operators import (
+from sfincs_jax.solvers.preconditioner_context import precond_dtype
+from sfincs_jax.solvers.preconditioner_operators import (
     _build_rhsmode1_preconditioner_operator_theta_dd,
     _build_rhsmode1_preconditioner_operator_theta_line,
     _build_rhsmode1_preconditioner_operator_zeta_dd,
     _build_rhsmode1_preconditioner_operator_zeta_line,
 )
-from ....preconditioner_setup import (
+from sfincs_jax.solvers.preconditioner_setup import (
     matvec_submatrix_v3_unsharded,
     precond_chunk_cols,
     rhs_mode1_precond_cache_key,
