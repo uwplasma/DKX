@@ -34,6 +34,7 @@ FOLDERS_REQUIRING_README = ALLOWED_EXAMPLE_FOLDERS - {
 
 REQUIRED_TASK_ENTRYPOINTS = {
     "tutorials/00_start_here.ipynb",
+    "tutorials/04_geometry_validation_and_performance.ipynb",
     "tutorials/run_quick_output_and_plot.py",
     "getting_started/write_sfincs_output_cli.py",
     "getting_started/write_sfincs_output_python.py",
@@ -79,6 +80,7 @@ TUTORIAL_NOTEBOOK_REQUIREMENTS = {
     "01_cli_outputs_and_plots.ipynb": ("HDF5", "NetCDF", "diagnostics"),
     "02_transport_and_autodiff.ipynb": ("RHSMode=2/3", "Autodiff", "JAX"),
     "03_bootstrap_redl_and_optimization.ipynb": ("Redl", "bootstrap", "Optimization"),
+    "04_geometry_validation_and_performance.ipynb": ("VMEC", "SFINCS Fortran v3", "CPU/GPU"),
 }
 
 
