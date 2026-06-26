@@ -60,7 +60,7 @@ or, when the flux-surface-varying potential is included,
 
 The normalization conventions used for hats and dimensionless drives are summarized in
 :doc:`normalizations`. These conventions matter directly for the coefficients used in
-``sfincs_jax/operators/profile_response/system.py`` and the diagnostics written by ``sfincs_jax/io.py``.
+``sfincs_jax/operators/profile_system.py`` and the diagnostics written by ``sfincs_jax/io.py``.
 
 Geometry and guiding-center drifts
 ----------------------------------

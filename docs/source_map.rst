@@ -66,11 +66,12 @@ indexing, sparse-stencil, and structured velocity kernels:
 ``structured_velocity.py``, and ``xgrid.py``. Public examples and tests import
 these modules through the package owner, not through root compatibility shims.
 
-``sfincs_jax/operators/profile_response`` now owns the former flat
-profile-response operator kernels: collisionless streaming, radial electric
-field terms, ExB terms, magnetic drifts, and matrix-free linear-system
-residual wrappers. These are imported through the operator package, not through
-root compatibility shims.
+``sfincs_jax/operators/profile_*.py`` owns the profile-response operator
+kernels: collisionless streaming, radial electric-field terms, ExB terms,
+magnetic drifts, sparse layouts, full-system assembly, and matrix-free
+linear-system residual wrappers. The old
+``sfincs_jax.operators.profile_response`` import path is preserved by a
+one-file compatibility shim, not by a nested source folder.
 
 ``sfincs_jax/physics`` now owns the former flat collision and classical
 transport physics kernels. Operator assembly imports the physics package for
@@ -471,19 +472,19 @@ SFINCS-v3-compatible grid construction, mapped speed-grid construction,
 geometry loading, geometry cache keys, and the ``V3Grids`` data contract. This
 replaces the historical root ``sfincs_jax/v3.py`` owner.
 
-``sfincs_jax/operators/profile_response/collisionless.py``
+``sfincs_jax/operators/profile_collisionless.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Streaming and mirror-force contributions in the Legendre basis.
 
-``sfincs_jax/operators/profile_response/exb.py`` and ``electric_field.py``
+``sfincs_jax/operators/profile_exb.py`` and ``electric_field.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The :math:`E\times B` terms in the kinetic operator, including angular advection and
 the radial-electric-field contributions to :math:`\dot \xi` and :math:`\dot x` where
 supported.
 
-``sfincs_jax/operators/profile_response/magnetic_drifts.py``
+``sfincs_jax/operators/profile_magnetic_drifts.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Magnetic-drift coefficient construction, angular advection terms, upwinding masks, and
@@ -499,7 +500,7 @@ Collision models:
 - field-particle terms,
 - Phi1-modified collision coefficients.
 
-``sfincs_jax/operators/profile_response/system.py``
+``sfincs_jax/operators/profile_system.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 System construction:
@@ -510,7 +511,7 @@ System construction:
 - cached operator application,
 - system metadata used by the driver and diagnostics.
 
-``sfincs_jax/operators/profile_response/linear_systems.py``
+``sfincs_jax/operators/profile_linear_systems.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Residual and source-term helpers. This is where the thermodynamic drives and other RHS
@@ -729,7 +730,7 @@ domain owners replacing the old monolith are:
   through the profile-response solve owner and tiny driver shim so existing
   debug scripts can still clear the direct-tail cache or inspect the policy
   through the historical driver namespace.
-- ``sfincs_jax/operators/profile_response/reduced_tail.py``
+- ``sfincs_jax/operators/profile_reduced_tail.py``
   (historical location: ``sfincs_jax/rhs1_fortran_reduced_direct_tail.py``):
   RHSMode=1 Fortran-reduced constraintScheme=1 direct-tail sparse-operator
   materialization. The module emits source/tail columns and moment rows from the
@@ -763,14 +764,14 @@ domain owners replacing the old monolith are:
   safety factors, and admission probe thresholds; symbolic sparse analysis,
   host factorization, and true-residual admission live in the symbolic-sparse
   and profile-response sparse owners.
-- ``sfincs_jax/operators/profile_response/structured_csr.py``
+- ``sfincs_jax/operators/profile_structured_csr.py``
   (historical location: ``sfincs_jax/rhs1_structured_full_csr.py``):
   runtime/non-autodiff wrapper that adapts analytic RHSMode=1 full-CSR assembly
-  from ``sfincs_jax.operators.profile_response.full_system`` into the
+  from ``sfincs_jax.operators.profile_full_system`` into the
   ``SparseOperatorBundle`` contract used by sparse-PC solver paths. Unsupported
   or over-budget cases return ``None`` so callers can fall back to the
   established matrix-free or pattern-probed path.
-- ``sfincs_jax/operators/profile_response/true_operator_rescue.py``
+- ``sfincs_jax/operators/profile_true_operator_rescue.py``
   (historical location: ``sfincs_jax/rhs1_true_operator_rescue.py``):
   support bundles and low-level helpers for RHSMode=1 true-operator
   residual-window, active-submatrix, coupled-coarse, and residual-coarse rescue
@@ -868,12 +869,12 @@ domain owners replacing the old monolith are:
   Fortran-reduced sparse owners. This module is intentionally independent of
   x-block assembled-operator and QI-device setup so it can stay reusable and
   easy to test.
-- ``sfincs_jax/operators/profile_response/sparse_pattern.py``:
+- ``sfincs_jax/operators/profile_sparse_pattern.py``:
   conservative and Fortran-reduced sparse structural patterns for
   profile-response full-system operators, including active-index restricted
   patterns, sparse-pattern summaries, and memory-preflight estimates. This
   replaces the historical root ``sfincs_jax/v3_sparse_pattern.py`` owner.
-- ``sfincs_jax/operators/profile_response/fblock.py``:
+- ``sfincs_jax/operators/profile_fblock.py``:
   matrix-free kinetic f-block operator builder and matvec for RHSMode-1
   profile-response solves, including collisionless streaming, ExB, magnetic
   drift, Er, PAS, and Fokker-Planck terms. This replaces the historical root
@@ -975,7 +976,7 @@ domain owners replacing the old monolith are:
   non-finite/clipped preconditioner wrapping, and scalar preconditioned-minres
   polish. This keeps fail-closed residual-polish algebra testable without
   entering the production driver.
-- ``sfincs_jax/operators/profile_response/device_sparse.py``
+- ``sfincs_jax/operators/profile_device_sparse.py``
   (historical location: ``sfincs_jax/rhs1_device_operator.py``):
   bounded JAX-device CSR materialization, active-index slicing, sparse matvec
   closures, and host-vs-device validation utilities for opt-in RHSMode=1
@@ -1056,7 +1057,7 @@ domain owners replacing the old monolith are:
   measured solver-candidate gates, preserve the accepted residual vector, and
   update the KSP replay metadata only after a strict finite residual
   improvement.
-- ``sfincs_jax/operators/profile_response/sources.py``
+- ``sfincs_jax/operators/profile_sources.py``
   (historical location: ``sfincs_jax/rhs1_constraint_sources.py``):
   JAX kernels that convert between kinetic ``f`` blocks and constraint-source
   amplitudes for constraint schemes 1 and 2, including flux-surface averages,

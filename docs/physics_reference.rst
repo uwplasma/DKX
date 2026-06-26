@@ -61,8 +61,8 @@ and uses the standard :math:`E\times B` drift
    \mathbf{E} = -\nabla\Phi_0.
 
 Code links:
-``sfincs_jax/operators/profile_response/system.py`` (operator assembly),
-``sfincs_jax/operators/profile_response/linear_systems.py`` (source terms and residuals),
+``sfincs_jax/operators/profile_system.py`` (operator assembly),
+``sfincs_jax/operators/profile_linear_systems.py`` (source terms and residuals),
 ``sfincs_jax/problems/transport_matrix/diagnostics.py`` (RHSMode=2/3 forcing).
 
 Single-species baseline (20131220-04)
@@ -107,7 +107,7 @@ The same note writes the thermodynamic drive in the compact form
 
 with additional :math:`\Phi_1`-dependent pieces if flux-surface variation is enabled.
 In `sfincs_jax`, these drive terms are assembled in
-``sfincs_jax/operators/profile_response/linear_systems.py`` and combined with the transport-matrix forcing in
+``sfincs_jax/operators/profile_linear_systems.py`` and combined with the transport-matrix forcing in
 ``sfincs_jax/problems/transport_matrix/diagnostics.py``.
 
 Multi-species extension (20131219-01)
@@ -125,7 +125,7 @@ with test-particle and field-particle pieces that couple the Legendre modes acro
 species. This coupling is what makes the Fokker–Planck operator dense in speed space.
 `sfincs_jax` mirrors the v3 block structure in
 ``sfincs_jax/physics/collisions.py`` and assembles multi-species blocks in
-``sfincs_jax/operators/profile_response/system.py``.
+``sfincs_jax/operators/profile_system.py``.
 
 Numerical implications:
 
@@ -163,12 +163,12 @@ technical note (magnetic drift option ``\sigma_{\mathrm{mdo}}`` in
 
 Numerically, `sfincs_jax` uses the same coefficient forms as v3 for
 ``magneticDriftScheme=1`` and builds the corresponding angular derivative operators in
-``sfincs_jax/operators/profile_response/magnetic_drifts.py``.
+``sfincs_jax/operators/profile_magnetic_drifts.py``.
 
 Code links:
-``sfincs_jax/operators/profile_response/magnetic_drifts.py``,
-``sfincs_jax/operators/profile_response/collisionless.py``,
-``sfincs_jax/operators/profile_response/exb.py``.
+``sfincs_jax/operators/profile_magnetic_drifts.py``,
+``sfincs_jax/operators/profile_collisionless.py``,
+``sfincs_jax/operators/profile_exb.py``.
 
 Collision operators (PAS and full Fokker–Planck)
 ------------------------------------------------
@@ -237,7 +237,7 @@ Numerical challenges include:
   (``includePhi1InCollisionOperator``).
 
 Code links:
-``sfincs_jax/operators/profile_response/system.py`` (Phi1 block),
+``sfincs_jax/operators/profile_system.py`` (Phi1 block),
 ``sfincs_jax/io.py`` (Phi1 input handling),
 ``sfincs_jax/physics/collisions.py`` (Phi1-in-collisions),
 ``sfincs_jax/diagnostics.py`` (Phi1 output fields).
@@ -324,7 +324,7 @@ The SFINCS manual further notes that, for these runs, the input parameters
 
 In `sfincs_jax`, the mapping between ``nuPrime``/``EStar`` and the internal
 ``nu_n``/``dPhiHatdpsiHat`` parameters is handled in ``sfincs_jax/io.py`` and
-``sfincs_jax/operators/profile_response/fblock.py``, while geometry-dependent factors
+``sfincs_jax/operators/profile_fblock.py``, while geometry-dependent factors
 (:math:`B_0`, :math:`G`, :math:`I`) are computed in ``sfincs_jax/problems/transport_matrix/diagnostics.py``
 and ``sfincs_jax/diagnostics.py``.
 
@@ -342,7 +342,7 @@ Numerically, these constraints introduce near-nullspaces that require explicit p
 or block preconditioning to solve robustly.
 
 Code links:
-``sfincs_jax/operators/profile_response/system.py`` (constraint rows/columns),
+``sfincs_jax/operators/profile_system.py`` (constraint rows/columns),
 ``sfincs_jax/v3_driver.py`` (constraint projections and preconditioners),
 ``sfincs_jax/solver.py`` (nullspace-aware diagnostics).
 
@@ -390,7 +390,7 @@ by choosing the DKES trajectory model and PAS collisions. This is the basis for 
 monoenergetic transport-matrix benchmarking in ``RHSMode=3``.
 
 Code links:
-``sfincs_jax/operators/profile_response/system.py`` (trajectory switches),
+``sfincs_jax/operators/profile_system.py`` (trajectory switches),
 ``sfincs_jax/problems/transport_matrix/diagnostics.py`` (monoenergetic RHS construction).
 
 Equation-to-code map
@@ -399,19 +399,19 @@ Equation-to-code map
 The table below summarizes where each term in the v3 drift-kinetic equation is implemented:
 
 - Parallel streaming :math:`v_\parallel \mathbf{b}\cdot\nabla f_{s1}`:
-  ``sfincs_jax/operators/profile_response/collisionless.py``.
+  ``sfincs_jax/operators/profile_collisionless.py``.
 - :math:`E\times B` advection and associated drive terms:
-  ``sfincs_jax/operators/profile_response/exb.py`` and
-  ``sfincs_jax/operators/profile_response/electric_field.py``.
+  ``sfincs_jax/operators/profile_exb.py`` and
+  ``sfincs_jax/operators/profile_electric_field.py``.
 - Magnetic drifts (:math:`\mathbf{v}_m` terms and derivative couplings):
-  ``sfincs_jax/operators/profile_response/magnetic_drifts.py``.
+  ``sfincs_jax/operators/profile_magnetic_drifts.py``.
 - Pitch-angle and speed derivatives (:math:`\partial_\xi f`, :math:`\partial_x f`):
-  ``sfincs_jax/operators/profile_response/collisionless.py`` and
-  ``sfincs_jax/operators/profile_response/electric_field.py``.
+  ``sfincs_jax/operators/profile_collisionless.py`` and
+  ``sfincs_jax/operators/profile_electric_field.py``.
 - Collision operators (PAS and full FP):
   ``sfincs_jax/physics/collisions.py`` with modal transforms in ``sfincs_jax/discretization/xgrid.py``.
 - Constraint rows/columns and Phi1 blocks:
-  ``sfincs_jax/operators/profile_response/system.py`` and ``sfincs_jax/v3_driver.py``.
+  ``sfincs_jax/operators/profile_system.py`` and ``sfincs_jax/v3_driver.py``.
 - Diagnostics and flux assembly:
   ``sfincs_jax/diagnostics.py`` and
   ``sfincs_jax/problems/transport_matrix/diagnostics.py``.
