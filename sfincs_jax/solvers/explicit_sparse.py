@@ -4423,16 +4423,18 @@ def factorize_host_sparse_operator(
                 assert last_factor_error is not None
                 raise last_factor_error
         elif kind == "jacobi":
-            diagonal = np.asarray(matrix.diagonal(), dtype=np.float64)
+            matrix_dtype = np.dtype(matrix.dtype)
+            factor_dtype = np.dtype(matrix_dtype if np.issubdtype(matrix_dtype, np.floating) else np.float64)
+            diagonal = np.asarray(matrix.diagonal(), dtype=factor_dtype)
             if diagonal.size != int(matrix.shape[0]):
                 raise RuntimeError("Jacobi preconditioner requires a square matrix diagonal")
             if np.any(~np.isfinite(diagonal)):
                 raise RuntimeError("Jacobi preconditioner diagonal is non-finite")
             scale = max(1.0, float(np.max(np.abs(diagonal))) if diagonal.size else 1.0)
             floor = 1.0e-12 * scale
-            sign = np.where(diagonal < 0.0, -1.0, 1.0)
+            sign = np.where(diagonal < 0.0, -1.0, 1.0).astype(factor_dtype, copy=False)
             diagonal_safe = np.where(np.abs(diagonal) > floor, diagonal, sign * floor)
-            factor = _JacobiFactor(inverse_diagonal=1.0 / diagonal_safe)
+            factor = _JacobiFactor(inverse_diagonal=np.asarray(1.0 / diagonal_safe, dtype=factor_dtype))
         elif kind in {
             "symbolic_block_lu",
             "symbolic_block_lu_coarse",

@@ -138,6 +138,9 @@ def test_sparse_symbolic_analysis_reports_reusable_ordering_metadata() -> None:
     assert analysis.block_nnz_max > 0
     assert as_dict["pattern_hash"] == analysis.pattern_hash
     assert analysis.cache_key()[2] == analysis.pattern_hash
+    as_dict_with_permutation = analysis.to_dict(include_permutation=True)
+    assert as_dict_with_permutation["permutation"] == [4, 3, 2, 1, 0]
+    assert as_dict_with_permutation["inverse_permutation"] == [4, 3, 2, 1, 0]
 
 
 @pytest.mark.parametrize("ordering", ["nested_dissection", "mumps_like", "scotch", "parmetis", "metis"])
@@ -266,6 +269,22 @@ def test_build_operator_from_dense_materializes_csr_and_tracks_metadata() -> Non
     assert bundle.metadata.shape == (3, 3)
     assert bundle.metadata.nnz_estimate == 5
     np.testing.assert_allclose(bundle.matvec(np.array([1.0, 2.0, 3.0])), np.array([7.0, 6.0, 19.0]))
+
+
+def test_sparse_operator_and_factor_bundles_preserve_host_dtype() -> None:
+    dense = jnp.asarray([[2.0, 0.0], [0.0, 4.0]], dtype=jnp.float32)
+    bundle = build_operator_from_dense(dense, backend="cpu", force_sparse=True)
+    factor = factorize_host_sparse_operator(bundle, kind="jacobi")
+
+    metadata = bundle.metadata.to_dict()
+    assert metadata["storage_kind"] == "csr"
+    assert metadata["shape"] == (2, 2)
+    assert metadata["reason"]
+    np.testing.assert_allclose(bundle.matvec(jnp.asarray([1.0, 2.0], dtype=jnp.float32)), np.array([2.0, 8.0]))
+
+    solution = factor.solve(jnp.asarray([2.0, 8.0], dtype=jnp.float32))
+    assert solution.dtype == np.dtype(np.float32)
+    np.testing.assert_allclose(solution, np.asarray([1.0, 2.0], dtype=np.float32))
 
 
 def test_build_operator_from_blocks_assembles_sparse_matrix() -> None:
@@ -659,6 +678,24 @@ def test_sparse_factor_admission_rejects_missing_or_nonsquare_operator_and_bad_p
 
     with pytest.raises(ValueError, match="probe rows"):
         admit_sparse_factor_against_operator(sp.eye(2, format="csr"), factor, probes=np.ones((3, 1)))
+
+    class NonFiniteFactor:
+        def solve(self, rhs) -> np.ndarray:
+            rhs_np = np.asarray(rhs, dtype=np.float64)
+            return np.full_like(rhs_np, np.nan)
+
+    rejected = admit_sparse_factor_against_operator(
+        sp.eye(2, format="csr"),
+        NonFiniteFactor(),
+        probes=np.eye(2),
+        max_relative_residual=1.0e-12,
+    )
+    rejected_dict = rejected.to_dict()
+    assert rejected.accepted is False
+    assert rejected.reason == "residual_or_improvement_gate_failed"
+    assert rejected.probe_count == 2
+    assert rejected_dict["accepted"] is False
+    assert rejected_dict["max_relative_residual"] == float("inf")
 
 
 def test_deterministic_sparse_probe_matrix_covers_empty_and_scalar_systems() -> None:

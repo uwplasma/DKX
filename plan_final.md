@@ -315,6 +315,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   ambiguous Legendre-index locals in collision kernels. Focused physics,
   comparison, ambipolar, output, examples, and transport-preconditioner tests
   pass after the cleanup.
+- The thirty-eighth post-audit coverage/runtime tranche added explicit-sparse
+  metadata and admission tests for symbolic permutation serialization,
+  operator/factor bundle dtype behavior, and non-finite factor rejection. It
+  also fixed the host Jacobi sparse preconditioner to preserve floating matrix
+  dtype instead of silently promoting float32 operators to float64, which keeps
+  this fallback aligned with the memory-reduction goal while preserving the
+  strict residual-admission path.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
