@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (transport iteration-diagnostics coverage pass)
+Last updated: 2026-06-26 (output-coordinate parity coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -396,6 +396,14 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   solver kinds do not launch host-side replay or perturb the production solve.
   The focused transport iteration/progress/finalization suite reports
   `24 passed` in `1.31 s`, and Ruff passes for the touched test file.
+- The sixty-first post-audit coverage tranche expanded output-coordinate parity
+  gates. `tests/test_io_output_policy_coverage.py` now covers all four accepted
+  v3 radial-coordinate wish inputs (`psiHat`, `psiN`, `rHat`, and `rN`),
+  non-stellarator-symmetric Boozer Fourier basis/derivative conventions, and
+  the v3 sine-Nyquist exclusion. These are algebraic production-shape contracts
+  for CLI/output geometry correctness without large fixtures or solves. The
+  focused output-policy suite reports `34 passed` in `0.45 s`, and the current
+  review-lock subset reports `138 passed` in `6.71 s`.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.

@@ -285,19 +285,35 @@ def test_geometry_scheme4_radial_helpers_match_v3_conventions() -> None:
     assert psi_a_hat == pytest.approx(-0.384935)
     assert a_hat == pytest.approx(0.5109)
 
-    psi_hat, psi_n, r_hat, r_n = _set_input_radial_coordinate_wish(
-        input_radial_coordinate=3,
-        psi_a_hat=psi_a_hat,
-        a_hat=a_hat,
-        psi_hat_wish_in=0.0,
-        psi_n_wish_in=0.0,
-        r_hat_wish_in=0.0,
-        r_n_wish_in=0.5,
-    )
-    assert psi_hat == pytest.approx(0.25 * psi_a_hat)
-    assert psi_n == pytest.approx(0.25)
-    assert r_hat == pytest.approx(0.5 * a_hat)
-    assert r_n == pytest.approx(0.5)
+    target_psi_n = 0.25
+    target_r_n = np.sqrt(target_psi_n)
+    target_r_hat = target_r_n * a_hat
+    input_cases = {
+        # These four modes mirror v3 radialCoordinates.F90: psiHat, psiN,
+        # rHat, and rN are equivalent ways to name the same flux surface.
+        0: {"psi_hat_wish_in": target_psi_n * psi_a_hat},
+        1: {"psi_n_wish_in": target_psi_n},
+        2: {"r_hat_wish_in": target_r_hat},
+        3: {"r_n_wish_in": target_r_n},
+    }
+    for input_radial_coordinate, overrides in input_cases.items():
+        base = {
+            "psi_hat_wish_in": 0.0,
+            "psi_n_wish_in": 0.0,
+            "r_hat_wish_in": 0.0,
+            "r_n_wish_in": 0.0,
+        }
+        base.update(overrides)
+        psi_hat, psi_n, r_hat, r_n = _set_input_radial_coordinate_wish(
+            input_radial_coordinate=input_radial_coordinate,
+            psi_a_hat=psi_a_hat,
+            a_hat=a_hat,
+            **base,
+        )
+        assert psi_hat == pytest.approx(target_psi_n * psi_a_hat)
+        assert psi_n == pytest.approx(target_psi_n)
+        assert r_hat == pytest.approx(target_r_hat)
+        assert r_n == pytest.approx(target_r_n)
 
     dphi = _dphi_hat_dpsi_hat_from_er_geometry_scheme4(2.0)
     expected = a_hat / (2.0 * psi_a_hat * np.sqrt(0.25)) * (-2.0)
@@ -350,6 +366,68 @@ def test_boozer_fourier_derivative_evaluator_matches_analytic_modes() -> None:
     np.testing.assert_allclose(dzeta, 1.5 * np.sin(angle))
     np.testing.assert_allclose(ddz_dtheta, 1.5 * np.cos(angle))
     np.testing.assert_allclose(ddz_dzeta, -3.0 * np.cos(angle))
+
+
+def test_boozer_fourier_evaluator_handles_nonstellarator_symmetric_modes() -> None:
+    theta = np.linspace(0.0, 0.8 * np.pi, 5, dtype=np.float64)
+    zeta = np.linspace(0.0, 0.8 * np.pi, 5, dtype=np.float64)
+    m = np.asarray([1], dtype=np.int32)
+    n = np.asarray([1], dtype=np.int32)
+    parity = np.asarray([False])
+
+    r, dr_dtheta, dr_dzeta, z, dz_dtheta, dz_dzeta, dzeta, ddz_dtheta, ddz_dzeta = (
+        _evaluate_boozer_rzd_and_derivatives(
+            theta=theta,
+            zeta=zeta,
+            n_periods=3,
+            m=m,
+            n=n,
+            parity=parity,
+            r0=2.0,
+            r_amp=np.asarray([0.20]),
+            z_amp=np.asarray([0.30]),
+            dz_amp=np.asarray([0.40]),
+            dz_scale=-0.5,
+            chunk=1,
+        )
+    )
+
+    angle = theta[:, None] - 3.0 * zeta[None, :]
+    np.testing.assert_allclose(r, 2.0 + 0.20 * np.sin(angle))
+    np.testing.assert_allclose(dr_dtheta, 0.20 * np.cos(angle))
+    np.testing.assert_allclose(dr_dzeta, -0.60 * np.cos(angle))
+    np.testing.assert_allclose(z, 0.30 * np.cos(angle))
+    np.testing.assert_allclose(dz_dtheta, -0.30 * np.sin(angle))
+    np.testing.assert_allclose(dz_dzeta, 0.90 * np.sin(angle))
+    np.testing.assert_allclose(dzeta, -0.20 * np.cos(angle))
+    np.testing.assert_allclose(ddz_dtheta, 0.20 * np.sin(angle))
+    np.testing.assert_allclose(ddz_dzeta, -0.60 * np.sin(angle))
+
+
+def test_boozer_fourier_evaluator_drops_sine_nyquist_modes_like_v3() -> None:
+    theta = np.asarray([0.0, np.pi], dtype=np.float64)
+    zeta = np.asarray([0.0, np.pi], dtype=np.float64)
+    r, dr_dtheta, dr_dzeta, z, dz_dtheta, dz_dzeta, dzeta, ddz_dtheta, ddz_dzeta = (
+        _evaluate_boozer_rzd_and_derivatives(
+            theta=theta,
+            zeta=zeta,
+            n_periods=1,
+            m=np.asarray([0, 1], dtype=np.int32),
+            n=np.asarray([0, 1], dtype=np.int32),
+            parity=np.asarray([False, False]),
+            r0=4.0,
+            r_amp=np.asarray([10.0, 20.0]),
+            z_amp=np.asarray([30.0, 40.0]),
+            dz_amp=np.asarray([50.0, 60.0]),
+            dz_scale=1.0,
+            chunk=1,
+        )
+    )
+
+    expected_shape = (theta.size, zeta.size)
+    np.testing.assert_allclose(r, np.full(expected_shape, 4.0))
+    for derivative in (dr_dtheta, dr_dzeta, z, dz_dtheta, dz_dzeta, dzeta, ddz_dtheta, ddz_dzeta):
+        np.testing.assert_allclose(derivative, np.zeros(expected_shape))
 
 
 def test_export_f_config_returns_none_without_export_request() -> None:
