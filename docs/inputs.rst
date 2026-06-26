@@ -120,7 +120,7 @@ Transport-matrix modes (``RHSMode=2/3``)
 For ``RHSMode=2`` and ``RHSMode=3`` (transport-matrix modes), `sfincs_jax` runs a loop
 over ``whichRHS`` and overwrites the relevant drives internally before building each RHS.
 This behavior is exposed via
-:func:`sfincs_jax.v3_system.with_transport_rhs_settings` so parity fixtures can reproduce the v3 solver
+:func:`sfincs_jax.operators.profile_response.system.with_transport_rhs_settings` so parity fixtures can reproduce the v3 solver
 RHS exactly.
 
 For ``RHSMode=3`` (monoenergetic coefficients), v3 also overwrites the speed grid to a single point at
