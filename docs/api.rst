@@ -193,6 +193,9 @@ research workflows.
 .. automodule:: sfincs_jax.operators.profile_response.structured_csr
    :members:
 
+.. automodule:: sfincs_jax.operators.profile_response.sparse_pattern
+   :members:
+
 .. automodule:: sfincs_jax.operators.profile_response.true_operator_rescue
    :members:
 
