@@ -1,8 +1,8 @@
 ## Examples
 
-This directory is the learning surface for `sfincs_jax`. Start with the
-numbered path below if you are new to the code; jump to the topic folders if
-you already know which workflow you need. All first-pass examples avoid a local
+This directory is the learning surface for `sfincs_jax`. Start with
+`tutorials/` if you are new to the code; jump to the topic folders if you
+already know which workflow you need. All first-pass examples avoid a local
 SFINCS Fortran v3 executable. Parity and benchmark scripts use frozen
 references or optional local Fortran only when explicitly requested.
 
@@ -10,17 +10,17 @@ references or optional local Fortran only when explicitly requested.
 
 | Step | Goal | Start here |
 | --- | --- | --- |
-| 1 | Run the CLI, write an output file, and plot it | `getting_started/write_and_plot_multiple_formats.py` |
-| 2 | Understand grids, geometry, and one operator action | `getting_started/build_grids_and_geometry.py`, `getting_started/apply_collisionless_operator.py` |
-| 3 | Compute RHSMode=2/3 transport matrices | `transport/transport_matrix_rhsmode2_and_rhsmode3.py` |
-| 4 | Compare outputs with frozen SFINCS Fortran v3 references | `parity/output_parity_vs_fortran_fixture.py` |
-| 5 | Differentiate residuals, fluxes, and solve outputs | `autodiff/autodiff_gradient_nu_n_residual.py`, `autodiff/implicit_diff_through_gmres_solve_scheme5.py` |
-| 6 | Compute bootstrap-current and Redl comparisons for QA/QH VMEC cases | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` |
-| 7 | Add neoclassical objectives to stellarator optimization | `optimization/qa_nfp2_sfincs_jax_objectives.py` |
-| 8 | Profile CPU/GPU, JIT, output formats, and parallelism | `performance/benchmark_sharded_solve_scaling.py`, `performance/benchmark_output_formats.py` |
+| 1 | Run the CLI, write output files, and plot diagnostics | `tutorials/01_cli_outputs_and_plots.ipynb`, `tutorials/run_quick_output_and_plot.py` |
+| 2 | Compute transport matrices and see autodiff | `tutorials/02_transport_and_autodiff.ipynb` |
+| 3 | Compare bootstrap current with Redl and see optimization hooks | `tutorials/03_bootstrap_redl_and_optimization.ipynb` |
+| 4 | Understand grids, geometry, and one operator action | `getting_started/build_grids_and_geometry.py`, `getting_started/apply_collisionless_operator.py` |
+| 5 | Compare outputs with frozen SFINCS Fortran v3 references | `parity/output_parity_vs_fortran_fixture.py` |
+| 6 | Profile CPU/GPU, JIT, output formats, and parallelism | `performance/benchmark_sharded_solve_scaling.py`, `performance/benchmark_output_formats.py` |
 
 ### Folder Map
 
+- `tutorials/`: notebook-led learning path plus one fast script that writes
+  output files and a diagnostics panel.
 - `getting_started/`: minimal CLI and Python workflows, plotting, file formats,
   analytic tokamak geometry, and VMEC `wout_path` usage.
 - `transport/`: RHSMode=2/3 transport-matrix workflows, Krylov recycling, and
@@ -44,13 +44,13 @@ references or optional local Fortran only when explicitly requested.
 - `upstream/` and `additional_examples/`: curated reference inputs used by
   tests, docs, and validation lanes.
 
-### Notebook Plan
+### Notebook Guides
 
-The consolidation plan is to keep one runnable script and one pedagogic notebook
-per major learning step. The notebooks should show inputs, equations, code,
-plots, interpretation, convergence/error bars where relevant, and links to the
-matching documentation page. Until those notebooks are finalized, the scripts
-listed above are the canonical runnable examples.
+The tutorial notebooks are the recommended classroom/user-facing guides. They
+show commands, equations, code, plotting calls, interpretation notes, and links
+to the matching topic scripts. Heavy production and Fortran-overlay commands are
+shown explicitly but are not run automatically by CI; fast scripts and notebook
+structure are tested so the learning path stays usable.
 
 ### Setup
 
@@ -88,6 +88,8 @@ python examples/getting_started/build_grids_and_geometry.py
 
 Common entry points:
 
+- Tutorial notebook index: `examples/tutorials/README.md`
+- Fast tutorial output writer/plotter: `examples/tutorials/run_quick_output_and_plot.py`
 - Write `sfincsOutput.h5` via Python: `examples/getting_started/write_sfincs_output_python.py`
 - Write `sfincsOutput.h5` via CLI: `examples/getting_started/write_sfincs_output_cli.py`
 - Write `.h5`, `.nc`, and `.npz`, then build a PDF diagnostics panel: `examples/getting_started/write_and_plot_multiple_formats.py`
