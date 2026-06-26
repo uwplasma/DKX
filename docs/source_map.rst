@@ -660,10 +660,12 @@ the historical private driver name and test the focused module directly. This ke
   RHSMode=1/profile-response sparse-PC handoff layer. It owns the
   driver-facing sparse-PC attempt orchestration that depends on solve-local
   cache/replay/residual routing, generic sparse-PC Krylov execution, final
-  generic sparse-PC bundle assembly, and the compatibility import surface used
-  by the monolithic solve owner while Tranche B continues. X-block final
-  payload builders now live in ``sparse/xblock.py``; ``handoff.py`` only
-  re-exports them for compatibility. Optional two-level and global-coupling
+  generic sparse-PC bundle assembly, x-block sparse-PC branch orchestration,
+  and the compatibility import surface used by the monolithic solve owner while
+  Tranche B continues. X-block stage kernels and final payload builders live in
+  ``sparse/xblock.py``; ``handoff.py`` owns the solve-local branch wiring and
+  re-exports lower-level x-block names for compatibility. Optional two-level
+  and global-coupling
   stage contexts accept injected builders for tests, but resolve the canonical
   QI builders themselves in production so ``v3_driver.py`` no longer
   re-exports private QI builder aliases.
