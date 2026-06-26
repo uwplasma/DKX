@@ -75,12 +75,16 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   `solvers/preconditioner_transport_matrix.py`, `problems/profile_solve.py`,
   `problems/transport_solve.py`, `operators/profile_system.py`,
   `outputs/writer.py`, `solvers/preconditioner_pas_angular.py`,
-  `solvers/preconditioner_full_fp_kinetic.py`, `solvers/explicit_sparse.py`,
-  and `operators/profile_sparse_pattern.py`.
+  `solvers/explicit_sparse.py`, and `operators/profile_sparse_pattern.py`.
 - The first post-audit coverage tranche added bounded PAS x-block ILU tests for
   inapplicable-model fallback, tiny-fixture padded factor construction,
   environment normalization, cache reuse, and reduced-vector application. That
   module is no longer a top coverage blocker.
+- The second post-audit coverage tranche added synthetic full-FP kinetic
+  preconditioner tests for diagonal, x-block, species/x-block, low-rank,
+  environment-normalization, cache-reuse, and reduced-vector application paths.
+  These tests exercise the same collision-matrix algebra used by the production
+  solver without adding slow geometry solves to CI.
 
 ### Target Package Shape
 
