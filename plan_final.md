@@ -175,6 +175,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   precedence, and explicit gradient-coordinate overrides. These protect the
   CLI/Python input contract and Fortran-v3 namelist parity without launching
   solves.
+- The eighteenth post-audit coverage tranche added namelist-parser tests for
+  Fortran booleans, integer/`D`-exponent scalars, quoted comment markers,
+  vector values, one- and two-dimensional indexed assignments, missing-group
+  lookup, nested-group rejection, unterminated-group rejection, and indexed
+  multi-value rejection. These protect the parser used by every example and
+  CLI run without touching production solve budgets.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
