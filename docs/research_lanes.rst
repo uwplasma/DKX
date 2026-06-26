@@ -132,12 +132,10 @@ Relevant implementation:
   gate: every requested seed/backend pair must converge, write output and
   solver trace artifacts, satisfy residual/observable gates, and avoid host
   fallback for a true device-QI claim.
-- ``sfincs_jax/rhs1_qi_device_smoother.py`` provides the first standalone
-  device-local ``S_local`` candidate: a bounded CSR-backed Jacobi smoother with
-  fail-closed diagonal validation, an opt-in residual-minimizing step policy, and
-  a true-residual seed probe.
-- ``sfincs_jax/rhs1_qi_device_preconditioner.py`` provides the first
-  production-shaped device-QI state. It combines a device Jacobi smoother with
+- ``sfincs_jax/solvers/preconditioners/qi/device.py`` provides the standalone
+  device-local ``S_local`` candidate and the production-shaped device-QI state.
+  It combines a bounded CSR-backed Jacobi smoother with fail-closed diagonal
+  validation, an opt-in residual-minimizing step policy, seed probes, and
   a rank-gated coarse basis when device CSR is available, and also provides a
   matrix-free coarse-only path that builds just ``A Q`` by JAX matvec probes
   when full CSR materialization is too expensive. Both paths expose
