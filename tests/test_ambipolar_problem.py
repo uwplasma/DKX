@@ -6,18 +6,22 @@ from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from sfincs_jax.ambipolar import radial_current_from_output
 from sfincs_jax.io import read_sfincs_h5
 from sfincs_jax.namelist import read_sfincs_input
+import sfincs_jax.problems.ambipolar as ambipolar_problem
 from sfincs_jax.problems.ambipolar import (
     AmbipolarProblem,
     RadialCurrentDerivativeResult,
+    RHSMode1RadialCurrentResponse,
     SfincsJaxRadialCurrentEvaluator,
     brent_ambipolar_root,
     finite_difference_radial_current_derivative,
     matrix_free_radial_current_derivative_provider,
     newton_ambipolar_root,
+    rhsmode1_radial_current_response_from_namelist,
     safeguarded_newton_ambipolar_root,
     solve_ambipolar_brent,
     solve_ambipolar_newton,
@@ -89,6 +93,140 @@ def _newton_derivative_replay_provider(er_values: list[float], currents: list[fl
         raise AssertionError(f"Unexpected derivative evaluation {er}; known values are {sorted(derivatives)}")
 
     return derivative
+
+
+def test_ambipolar_problem_certificates_validate_and_freeze_metadata() -> None:
+    problem = AmbipolarProblem(
+        evaluate_radial_current=lambda er: er,
+        er_min=-1,
+        er_max=1,
+        metadata={"case": "metadata_freeze"},
+    )
+
+    assert problem.er_min == -1.0
+    assert problem.max_evaluations == 20
+    with pytest.raises(TypeError):
+        problem.metadata["case"] = "mutated"
+
+    with pytest.raises(ValueError, match="max_evaluations"):
+        AmbipolarProblem(lambda er: er, er_min=-1.0, er_max=1.0, max_evaluations=2)
+    with pytest.raises(ValueError, match="er_min"):
+        AmbipolarProblem(lambda er: er, er_min=1.0, er_max=1.0)
+    with pytest.raises(ValueError, match="current_tolerance"):
+        AmbipolarProblem(lambda er: er, er_min=-1.0, er_max=1.0, current_tolerance=0.0)
+    with pytest.raises(ValueError, match="step_tolerance"):
+        AmbipolarProblem(lambda er: er, er_min=-1.0, er_max=1.0, step_tolerance=0.0)
+
+    derivative = RadialCurrentDerivativeResult(
+        er=1,
+        derivative=2,
+        step=3,
+        scheme="unit",
+        evaluations=(),
+        metadata={"source": "test"},
+    )
+    assert derivative.er == 1.0
+    assert derivative.derivative == 2.0
+    with pytest.raises(TypeError):
+        derivative.metadata["source"] = "mutated"
+
+    with pytest.raises(ValueError, match="finite_difference_step"):
+        RHSMode1RadialCurrentResponse(lambda er: None, finite_difference_step=0.0)
+
+
+def test_ambipolar_fortran_sign_root_and_bracket_helpers_cover_endpoint_logic() -> None:
+    assert ambipolar_problem._same_fortran_sign(1.0, 2.0)
+    assert ambipolar_problem._same_fortran_sign(-1.0, -2.0)
+    assert not ambipolar_problem._same_fortran_sign(0.0, 2.0)
+    assert not ambipolar_problem._same_fortran_sign(-1.0, 2.0)
+
+    assert ambipolar_problem._root_type(None) == "unknown"
+    assert ambipolar_problem._root_type(0.0) == "ion"
+    assert ambipolar_problem._root_type(1.0) == "electron"
+    assert ambipolar_problem._root_type(-1.0) == "ion"
+
+    assert ambipolar_problem._bracket_from_values(a=-2.0, fa=1.0, c=2.0, fc=3.0, b=0.0, fb=-1.0) is None
+    assert ambipolar_problem._bracket_from_values(a=-2.0, fa=-1.0, c=2.0, fc=1.0, b=0.5, fb=0.25) == (
+        -2.0,
+        -1.0,
+        0.5,
+        0.25,
+    )
+    assert ambipolar_problem._bracket_from_values(a=-2.0, fa=-1.0, c=2.0, fc=1.0, b=-0.5, fb=-0.25) == (
+        -0.5,
+        -0.25,
+        2.0,
+        1.0,
+    )
+
+
+def test_ambipolar_temporary_env_restores_after_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_AMBIPOLAR_EXISTING", "outer")
+    monkeypatch.delenv("SFINCS_JAX_AMBIPOLAR_NEW", raising=False)
+
+    with pytest.raises(RuntimeError, match="trigger cleanup"):
+        with ambipolar_problem._temporary_env(
+            {
+                "SFINCS_JAX_AMBIPOLAR_EXISTING": "inner",
+                "SFINCS_JAX_AMBIPOLAR_NEW": "created",
+            }
+        ):
+            assert ambipolar_problem.os.environ["SFINCS_JAX_AMBIPOLAR_EXISTING"] == "inner"
+            assert ambipolar_problem.os.environ["SFINCS_JAX_AMBIPOLAR_NEW"] == "created"
+            raise RuntimeError("trigger cleanup")
+
+    assert ambipolar_problem.os.environ["SFINCS_JAX_AMBIPOLAR_EXISTING"] == "outer"
+    assert "SFINCS_JAX_AMBIPOLAR_NEW" not in ambipolar_problem.os.environ
+
+
+def test_finite_difference_derivative_schemes_and_validation_cover_one_sided_gates() -> None:
+    def current(er: float) -> float:
+        return 3.0 * er - 0.75
+
+    for scheme in ("centered", "central", "forward", "backward"):
+        result = finite_difference_radial_current_derivative(current, er=0.4, step=1.0e-4, scheme=scheme)
+        np.testing.assert_allclose(result.derivative, 3.0, rtol=0.0, atol=1.0e-10)
+        assert result.scheme == ("centered" if scheme == "central" else scheme)
+        assert len(result.evaluations) == 2
+
+    with pytest.raises(ValueError, match="step must be positive"):
+        finite_difference_radial_current_derivative(current, er=0.0, step=0.0)
+    with pytest.raises(ValueError, match="scheme must be"):
+        finite_difference_radial_current_derivative(current, er=0.0, step=1.0e-3, scheme="complex")
+
+
+def test_ambipolar_derivative_root_solvers_fail_closed_for_invalid_sensitivity_paths() -> None:
+    problem = AmbipolarProblem(
+        evaluate_radial_current=lambda er: er - 0.5,
+        er_min=-1.0,
+        er_max=1.0,
+        er_initial=0.0,
+        max_evaluations=8,
+        current_tolerance=1.0e-12,
+        step_tolerance=1.0e-12,
+    )
+
+    invalid_derivative = solve_ambipolar_safeguarded_newton(problem, lambda er: math.nan)
+    assert not invalid_derivative.converged
+    assert invalid_derivative.status == "invalid_derivative"
+    assert invalid_derivative.metadata["derivative_count"] == 0
+
+    out_of_bounds = solve_ambipolar_newton(problem, lambda er: 0.01)
+    assert not out_of_bounds.converged
+    assert out_of_bounds.status == "out_of_bounds"
+    assert out_of_bounds.root_radial_current is None
+    assert out_of_bounds.metadata["last_step"] > 1.0
+
+
+def test_rhsmode1_ambipolar_response_rejects_invalid_derivative_steps_before_setup() -> None:
+    with pytest.raises(ValueError, match="derivative_step"):
+        rhsmode1_radial_current_response_from_namelist(nml={}, derivative_step=0.0)
+    with pytest.raises(ValueError, match="finite_difference_step"):
+        rhsmode1_radial_current_response_from_namelist(
+            nml={},
+            derivative_step=1.0e-5,
+            finite_difference_step=-1.0,
+        )
 
 
 def test_brent_matches_fortran_v3_small_w7x_early_stop() -> None:

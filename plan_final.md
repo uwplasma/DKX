@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (public facade bootstrap coverage pass)
+Last updated: 2026-06-26 (ambipolar utility/admission coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -463,6 +463,15 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   runtime cases. This protects the top-level package import/API behavior used by
   CPU/GPU and multi-host workflows without starting a real distributed runtime.
   The focused API/package metadata suite reports `15 passed` in `0.35 s`.
+- The seventy-first post-audit coverage tranche added ambipolar utility and
+  admission gates. `tests/test_ambipolar_problem.py` now covers immutable
+  problem/derivative certificates, Fortran-sign bracket selection helpers,
+  exception-safe environment restoration, one-sided finite-difference
+  derivative schemes, fail-closed invalid derivative and out-of-bounds Newton
+  certificates, and RHSMode-1 response validation before expensive setup. This
+  strengthens option-1/2/3 ambipolar reliability without adding slow transport
+  solves to CI. The focused ambipolar suite reports `24 passed` in `23.25 s`;
+  the compact review-lock bundle reports `55 passed` in `25.47 s`.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
