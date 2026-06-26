@@ -19,7 +19,7 @@ from typing import Any
 
 from ..io import localize_equilibrium_file_in_place
 from ..namelist import read_sfincs_input
-from ..scans import ScanResult, _er_scan_var_name, _patch_scalar_in_group
+from .scans import ScanResult, _er_scan_var_name, _patch_scalar_in_group
 from ..validation.fortran import run_sfincs_fortran
 
 

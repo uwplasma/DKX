@@ -1,3 +1,5 @@
+"""Electric-field scan workflows with progress reporting and output writing."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
@@ -10,8 +12,8 @@ import time
 
 import numpy as np
 
-from .io import localize_equilibrium_file_in_place, write_sfincs_jax_output_h5
-from .namelist import Namelist, read_sfincs_input
+from ..io import localize_equilibrium_file_in_place, write_sfincs_jax_output_h5
+from ..namelist import Namelist, read_sfincs_input
 
 
 EmitFn = Callable[[int, str], None]

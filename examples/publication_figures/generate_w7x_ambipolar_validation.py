@@ -26,7 +26,7 @@ except Exception as exc:  # pragma: no cover
     raise SystemExit("This example requires matplotlib. Install with: pip install matplotlib") from exc
 
 from sfincs_jax.ambipolar import AmbipolarSolveResult, solve_ambipolar_from_scan_dir
-from sfincs_jax.scans import run_er_scan
+from sfincs_jax.workflows.scans import run_er_scan
 
 
 DEFAULT_W7X_INPUT = (

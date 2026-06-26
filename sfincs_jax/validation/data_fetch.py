@@ -1,3 +1,5 @@
+"""Fetch and verify release-hosted equilibrium fixtures for tests and examples."""
+
 from __future__ import annotations
 
 import hashlib
@@ -9,7 +11,7 @@ import tempfile
 from urllib.request import urlopen
 
 
-_MANIFEST_PATH = Path(__file__).resolve().parent / "data" / "equilibria_manifest.json"
+_MANIFEST_PATH = Path(__file__).resolve().parents[1] / "data" / "equilibria_manifest.json"
 
 
 def _load_manifest() -> dict:

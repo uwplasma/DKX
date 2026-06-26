@@ -18,7 +18,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     sys.path.insert(0, str(_repo_root()))
-    from sfincs_jax.data_fetch import ensure_external_equilibrium_data, external_data_manifest
+    from sfincs_jax.validation.data_fetch import ensure_external_equilibrium_data, external_data_manifest
 
     target = ensure_external_equilibrium_data(quiet=args.quiet)
     manifest = external_data_manifest()

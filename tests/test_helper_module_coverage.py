@@ -24,7 +24,7 @@ from sfincs_jax.indices import V3Indexing
 from sfincs_jax.namelist import Namelist
 from sfincs_jax.paths import _strip_quotes, resolve_existing_path
 from sfincs_jax.profiling import SimpleProfiler, _device_mem_mb, _rss_mb, maybe_profiler
-from sfincs_jax.scans import _er_scan_var_name, _patch_scalar_in_group, linspace_including_endpoints, run_er_scan
+from sfincs_jax.workflows.scans import _er_scan_var_name, _patch_scalar_in_group, linspace_including_endpoints, run_er_scan
 from sfincs_jax.problems.transport_matrix.parallel.worker import main as transport_worker_main
 from sfincs_jax.profiling import Timer, make_emit
 
@@ -341,8 +341,8 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
         )
         Path(kwargs["output_path"]).write_bytes(b"")
 
-    monkeypatch.setattr("sfincs_jax.scans.localize_equilibrium_file_in_place", _fake_localize)
-    monkeypatch.setattr("sfincs_jax.scans.write_sfincs_jax_output_h5", _fake_write)
+    monkeypatch.setattr("sfincs_jax.workflows.scans.localize_equilibrium_file_in_place", _fake_localize)
+    monkeypatch.setattr("sfincs_jax.workflows.scans.write_sfincs_jax_output_h5", _fake_write)
     emits: list[tuple[int, str]] = []
 
     result = run_er_scan(

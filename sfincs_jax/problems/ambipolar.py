@@ -298,7 +298,7 @@ class SfincsJaxRadialCurrentEvaluator:
         self.template_text = self.input_namelist.read_text()
         if variable is None:
             from ..namelist import read_sfincs_input  # noqa: PLC0415
-            from ..scans import _er_scan_var_name  # noqa: PLC0415
+            from ..workflows.scans import _er_scan_var_name  # noqa: PLC0415
 
             variable = _er_scan_var_name(nml=read_sfincs_input(self.input_namelist))
         self.variable = str(variable)
@@ -309,7 +309,7 @@ class SfincsJaxRadialCurrentEvaluator:
     def __call__(self, er: float) -> float:
         from ..ambipolar import radial_current_from_output  # noqa: PLC0415
         from ..io import localize_equilibrium_file_in_place, read_sfincs_h5, write_sfincs_jax_output_h5  # noqa: PLC0415
-        from ..scans import _patch_scalar_in_group  # noqa: PLC0415
+        from ..workflows.scans import _patch_scalar_in_group  # noqa: PLC0415
         from ..solvers.diagnostics import read_solver_trace_json  # noqa: PLC0415
         from ..solvers.diagnostics import read_krylov_state_signature  # noqa: PLC0415
 

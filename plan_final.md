@@ -314,11 +314,11 @@ completed Batch A-D owner moves:
   consolidation, and Batch D solver-core consolidation. The historical
   symbolic-sparse `rhs1_*` filename has been removed, QI has durable owner
   modules, and the preconditioner file-count gate is met. Package source lines
-  are 165,758 after the second Batch F sparse-owner cleanup; this is
+  are 165,763 after the first Phase 2 workflow/data root move; this is
   above the previous line-count checkpoint but is
   justified by replacing many implementation shards with durable owner modules
   while preserving production behavior.
-- Package root: 43 Python files. No top-level `rhs1_*` or `transport_*`
+- Package root: 40 Python files. No top-level `rhs1_*` or `transport_*`
   implementation files remain.
 - `sfincs_jax/v3_driver.py`: 47-line compatibility shim. It must not regain
   implementation logic.
@@ -565,8 +565,8 @@ Current source inventory from the final consolidation audit:
 
 | Area | Current state | Review-ready target |
 | --- | --- | --- |
-| Whole package | 168 Python files, 165,758 package lines after the second Batch F sparse-owner cleanup. The file-count gate and stretch file-count target are met; the remaining line increase is explicitly justified by replacing multiple implementation shards with durable owner modules. | `<=190` Python files and below the previous 165,398-line checkpoint before review, or a documented line-count exception tied to deleted files plus clearer ownership. Stretch target `<=175` is met and must not be lost unless clarity improves. |
-| Package root | 43 Python files | `<=40` preferred, `<=44` maximum. Every remaining root file must be public API, stable physics kernel, or documented compatibility shim. |
+| Whole package | 168 Python files, 165,763 package lines after the first Phase 2 workflow/data root move. The file-count gate and stretch file-count target are met; the remaining line increase is explicitly justified by replacing multiple implementation shards with durable owner modules. | `<=190` Python files and below the previous 165,398-line checkpoint before review, or a documented line-count exception tied to deleted files plus clearer ownership. Stretch target `<=175` is met and must not be lost unless clarity improves. |
+| Package root | 40 Python files | `<=40` preferred, `<=44` maximum. Every remaining root file must be public API, stable physics kernel, or documented compatibility shim. |
 | `v3_driver.py` | 47-line compatibility shim | Keep below 80 lines or delete after public imports migrate. It must not regain implementation logic. |
 | `io.py` and `outputs/` | `io.py` is a 64-line compatibility facade; `outputs/writer.py` owns the 4,264-line writer; `outputs/transport.py` owns transport output accumulation and streaming writes. | `io.py` gate is met. Output implementation belongs in `outputs`, not root. |
 | `problems/profile_response` | 18 files including `sparse/`; `solve.py` is 5,420 lines and `sparse/handoff.py` is 5,500 lines. | Review-ready line gates are restored. Do not add profile-response files. |
@@ -653,8 +653,8 @@ Closure baseline:
 
 | Area | Current audited state | Closure target |
 | --- | --- | --- |
-| Whole package | 168 Python files, 165,758 package lines | `<=150` Python files if compatibility allows; otherwise `<=155` with an explicit compatibility-debt note. No line-count increase. |
-| Package root | 43 Python files | `<=32` root files after geometry/workflow/kernel moves, or `<=36` if public compatibility requires temporary shims. |
+| Whole package | 168 Python files, 165,763 package lines | `<=150` Python files if compatibility allows; otherwise `<=155` with an explicit compatibility-debt note. No line-count increase. |
+| Package root | 40 Python files | `<=32` root files after geometry/workflow/kernel moves, or `<=36` if public compatibility requires temporary shims. |
 | `v3_driver.py` / `io.py` | 47-line and 64-line shims | Delete if all public imports migrate; otherwise keep below 80 lines each with deletion conditions. |
 | Geometry and input support | VMEC/Boozer/JAX-geometry helpers still live at root | One geometry package boundary with documented public exports and no duplicate root implementation modules. |
 | Profile response | 18 files including `sparse/`, 52,546 lines | `<=14` files if sparse owners can merge cleanly; otherwise keep 18 but reduce duplicated policy/residual payload code by at least 2,000 lines. |
@@ -705,13 +705,10 @@ Phase 1 root-module move/delete manifest:
 | `cli.py` | package root CLI entry point | keep at root |
 | `ambipolar.py` | problems.ambipolar via public API facade | keep root shim until public docs/examples migrate |
 | `compare.py` | validation comparison API | move only after examples/scripts use validation owner |
-| `data_fetch.py` | validation/data fixture support | move in Phase 2 if scripts/tests need no shim |
 | `input_compat.py` | input compatibility owner | keep root public compatibility shim until input package exports cover callers |
 | `io.py` | outputs writer/formats/cache owners | keep tiny root facade until public imports migrate |
 | `namelist.py` | input namelist owner | keep root public parser until input package exports are documented |
 | `plotting.py` | outputs/plotting public helper | keep root public helper unless API replacement is documented |
-| `postprocess_upstream.py` | workflows upstream postprocess owner | move in Phase 2 if example imports can migrate cleanly |
-| `scans.py` | workflows scan owner | move in Phase 2 only if public scan imports can migrate cleanly |
 | `sensitivity.py` | package root differentiation API | keep at root |
 | `adaptive_maps.py` | discretization speed-grid owner | move with grid/discretization kernel group |
 | `boozer_bc.py` | geometry package Boozer owner | move after geometry.py package migration is staged |
@@ -771,6 +768,20 @@ Exit gates:
 - No new root implementation file is created.
 - Public `api`, CLI, examples, geometry loading, output writing, plotting, and
   docs tests pass.
+
+Status on 2026-06-26:
+
+- First Phase 2 move complete. The former root workflow/data implementations
+  `scans.py`, `postprocess_upstream.py`, and `data_fetch.py` moved to durable
+  owners `workflows/scans.py`, `workflows/postprocess_upstream.py`, and
+  `validation/data_fetch.py` with no root compatibility shims.
+- Package-root Python files drop from 43 to 40 after this move. Whole-package
+  file count stays flat because the move is an ownership cleanup, not a new
+  helper extraction.
+- The next Phase 2 candidate is the larger geometry package migration:
+  convert `geometry.py` into a package owner and move `boozer_bc.py`,
+  `vmec_wout.py`, `vmec_geometry.py`, and `jax_geometry_adapters.py` under that
+  package in one dedicated pass.
 
 #### Closure Phase 3 - Problem/Solver/Output Owner Compression
 
@@ -1210,8 +1221,8 @@ Status on 2026-06-26:
   above. The second run repeated already-clean sections and was stopped after
   `486 passed`; no new failure was observed before interruption.
 - Current structural counts satisfy the Batch G hard gates:
-  168 package Python files, 43 package-root Python files,
-  165,758 package Python lines, `v3_driver.py` at 47 lines, `io.py` at
+  168 package Python files, 40 package-root Python files,
+  165,763 package Python lines, `v3_driver.py` at 47 lines, `io.py` at
   64 lines, `profile_response/solve.py` at 5,420 lines,
   `profile_response/sparse/handoff.py` at 5,500 lines, and no top-level
   `rhs1_*` or `transport_*` implementation files.

@@ -1,3 +1,5 @@
+"""Run vendored upstream SFINCS postprocessing utilities from Python workflows."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
@@ -29,7 +31,7 @@ def find_upstream_utils_dir(*, override: Path | None = None) -> Path:
             raise FileNotFoundError(f"SFINCS_JAX_UPSTREAM_UTILS_DIR does not exist: {p}")
         return p
 
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     candidate = repo_root / "examples" / "sfincs_examples" / "utils"
     if candidate.exists():
         return candidate
@@ -92,4 +94,3 @@ def run_upstream_util(
     if emit is not None:
         emit(0, f"postprocess-upstream: running {script_path.name} in {case_dir}")
     subprocess.run(cmd, cwd=str(case_dir), env=env, check=True)
-

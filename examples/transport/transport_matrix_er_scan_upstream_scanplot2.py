@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Transport-matrix scan + upstream plotting (publication-style PDF).
 
@@ -15,12 +13,14 @@ Requirements
 - A repo checkout (so `examples/sfincs_examples/utils` and `examples/sfincs_examples/globalVariables.F90` exist)
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 
 import numpy as np
 
-from sfincs_jax.postprocess_upstream import run_upstream_util
-from sfincs_jax.scans import run_er_scan
+from sfincs_jax.workflows.postprocess_upstream import run_upstream_util
+from sfincs_jax.workflows.scans import run_er_scan
 from sfincs_jax.profiling import make_emit
 
 

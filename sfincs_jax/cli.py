@@ -452,7 +452,7 @@ def _cmd_compare_h5(args: argparse.Namespace) -> int:
 
 def _cmd_scan_er(args: argparse.Namespace) -> int:
     t0 = _now()
-    from .scans import linspace_including_endpoints, run_er_scan  # noqa: PLC0415
+    from .workflows.scans import linspace_including_endpoints, run_er_scan  # noqa: PLC0415
 
     _emit("################################################################", level=0, args=args)
     _emit(" sfincs_jax scan-er", level=0, args=args)
@@ -1168,7 +1168,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def _cmd_postprocess_upstream(args: argparse.Namespace) -> int:
         t0 = _now()
-        from .postprocess_upstream import run_upstream_util  # noqa: PLC0415
+        from .workflows.postprocess_upstream import run_upstream_util  # noqa: PLC0415
 
         _emit("################################################################", level=0, args=args)
         _emit(" sfincs_jax postprocess-upstream", level=0, args=args)
