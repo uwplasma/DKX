@@ -307,10 +307,16 @@ or bridges a public debugging seam. Otherwise, import the extracted function und
 the historical private driver name and test the focused module directly. This keeps
 ``v3_driver.py`` shrinking without replacing monolithic code with wrapper clutter.
 
+- ``sfincs_jax/problems/profile_response/solver_diagnostics.py``:
+  RHSMode=1 linear-solve and Newton-Krylov result dataclasses, final
+  profile-response result wrapping, output-visible solver metadata, and bounded
+  PETSc-style KSP residual-history replay.
+- ``sfincs_jax/problems/transport_matrix/finalize.py``:
+  RHSMode=2/3 transport-matrix result dataclass plus per-RHS finalization,
+  constraint projection, residual bookkeeping, and KSP replay request contracts.
 - ``sfincs_jax/v3_results.py``:
-  typed solve-result dataclasses for linear, Newton-Krylov, and transport-matrix
-  v3-compatible workflows. Moving these data models out of the driver makes the
-  user-facing result contract explicit and easier to document.
+  small compatibility facade for historical result imports. It no longer owns
+  result implementation; new code should import from the problem owners above.
 - ``sfincs_jax/solver.py``:
   Krylov solve results, result finite-state checks, and XLA synchronization
   helpers around solver timing/profiling, plus small differentiable JAX-native
