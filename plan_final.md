@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (transport diagnostics algebra coverage pass)
+Last updated: 2026-06-26 (public facade bootstrap coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -456,6 +456,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   and RHSMode=1 output reductions. The focused diagnostics file reports
   `4 passed` in `0.91 s`, and the nearby transport diagnostics/output subset
   reports `27 passed` in `7.48 s`.
+- The seventieth post-audit coverage tranche added public facade bootstrap
+  gates. `tests/test_api_contracts.py` now exercises
+  `initialize_distributed_runtime_from_env` for disabled, missing-coordinator,
+  successful parsed multi-host, idempotent, and fail-closed JAX distributed
+  runtime cases. This protects the top-level package import/API behavior used by
+  CPU/GPU and multi-host workflows without starting a real distributed runtime.
+  The focused API/package metadata suite reports `15 passed` in `0.35 s`.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
