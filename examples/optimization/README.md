@@ -24,8 +24,8 @@ Examples:
   figure generated from the real VMEC-JAX QA optimization output. It
   plots the VMEC QA nfp=2 LCFS, `|B|`, finite-iota profile, and VMEC
   `J.B/sqrt(B.B)` current diagnostic, with an optional overlay from a second
-  `vmec_jax` result directory. The current panel is an equilibrium diagnostic
-  until promoted with completed `sfincs_jax scan-er` outputs.
+  `vmec_jax` result directory. This panel is an equilibrium diagnostic until
+  promoted with completed `sfincs_jax scan-er` outputs.
 - `QA_optimization_bootstrap_current.py` — editable `vmec_jax`-style QA
   optimization script with all knobs at the top. It is intentionally close to
   the VMEC-JAX QA optimization example, uses `MAX_MODE=3` for

@@ -8,11 +8,13 @@ Goals:
 
 - Let SFINCS users run the **same example inputs** with `sfincs_jax`.
 - Provide a convenient place to benchmark against the compiled Fortran v3 executable.
-- Keep the upstream plotting scripts available while `sfincs_jax` grows output parity.
+- Keep the upstream plotting scripts available for supported output-parity workflows.
 
 ## Supported Scope
 
-`sfincs_jax` does not yet match every upstream solve mode end-to-end in this folder.
+This folder includes more upstream modes than the first-pass public examples.
+The supported scope is the subset documented by the parity and Fortran-example
+audit pages.
 
 In general, you should expect:
 
@@ -20,7 +22,7 @@ In general, you should expect:
 - `sfincs_jax write-output --compute-transport-matrix` to work for the **RHSMode=2/3** examples used by the
   transport-matrix parity fixtures (small cases).
 
-For the current support matrix, see:
+For the support matrix, see:
 
 - `docs/parity.rst`
 - `docs/fortran_examples.rst` (auto-generated audit table)
