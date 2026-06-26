@@ -2762,6 +2762,15 @@ Current completion status:
   `problems/transport_diagnostics.py` (`79%`). These tests should continue to
   use bounded manufactured operators, frozen-reference data, and branch-policy
   checks rather than slow production solves.
+- Transport loop/helper coverage was expanded with manufactured dense LU
+  preconditioner/solver checks, host-GMRES progress and residual-admission
+  tests, optional KSP diagnostic skip/failure/success branches, dense batched
+  RHSMode 2/3 full and active streaming branches, matvec-cache and recycled
+  Krylov basis behavior, residual-gated loop progress, recycle-policy
+  environment/operator-variation checks, sparse-pattern budget/cache policy,
+  and float32-to-float64 sparse-direct retry logic. These tests exercise the
+  production branch policies and numerical invariants without adding slow
+  production solves to CI.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
