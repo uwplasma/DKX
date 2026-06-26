@@ -319,10 +319,6 @@ geometry routing:
 
 - `sfincs_jax/v3_driver.py`: 47 lines in the current consolidation worktree,
   acting as a compatibility shim for the domain-owned solve modules.
-- `sfincs_jax/v3_results.py`: 13-line compatibility facade. RHSMode-1 linear
-  and Newton-Krylov result contracts are now owned by
-  `problems/profile_response/solver_diagnostics.py`, and RHSMode-2/3 transport
-  result contracts are owned by `problems/transport_matrix/finalize.py`.
 - `sfincs_jax/operators/profile_response/sparse_pattern.py`: 1,191-line
   operator-domain owner for conservative and Fortran-reduced sparse structural
   patterns. The historical root file `sfincs_jax/v3_sparse_pattern.py` has
@@ -390,7 +386,7 @@ geometry routing:
 - Top-level `transport_*` modules: 0.
 - Top-level `rhs1_*` modules: 0. Solver-family implementation now lives under
   `solvers.preconditioners`.
-- Package total is 209 Python files, 44 package-root files, and about 165,156
+- Package total is 208 Python files, 43 package-root files, and about 165,475
   package lines after the first two root cleanup passes and the first
   transport-parallel consolidation, plus the validation-domain,
   workflow-domain, solver-utility, and solver/preconditioner implementation
@@ -633,12 +629,11 @@ Current source inventory from the 2026-06-26 consolidation audit:
 
 | Area | Current state | Review-ready target |
 | --- | --- | --- |
-| Whole package | 209 Python files, 165,156 package lines | `<=185` Python files and fewer package lines than this checkpoint. Stretch target: `<=175` files if compatibility shims can be deleted safely. |
-| Package root | 44 Python files | `<=40` preferred, `<=44` allowed only when every remaining root file is public API, stable physics kernel, or documented compatibility shim. No new root implementation modules. |
+| Whole package | 208 Python files, 165,475 package lines | `<=185` Python files and fewer package lines than this checkpoint. Stretch target: `<=175` files if compatibility shims can be deleted safely. |
+| Package root | 43 Python files | `<=40` preferred, `<=44` allowed only when every remaining root file is public API, stable physics kernel, or documented compatibility shim. No new root implementation modules. |
 | `v3_driver.py` | 47-line compatibility shim | Keep below 80 lines until external users migrate; delete only if all public imports and tests move to domain APIs. It must not regain implementation logic. |
-| `v3_results.py` | 13-line compatibility facade | Delete after tests/docs/examples import result contracts from `problems.profile_response.solver_diagnostics` and `problems.transport_matrix.finalize`, or keep with a documented deletion condition. |
-| Historical roots already routed | `v3_sparse_pattern.py`, `v3_fblock.py`, `v3_system.py`, and `v3.py` are deleted; canonical owners are `operators/profile_response/sparse_pattern.py`, `operators/profile_response/fblock.py`, `operators/profile_response/system.py`, and `discretization/v3.py` | Keep this state. Do not recreate historical roots. |
-| `problems/profile_response` | 21 files including `sparse/`; 52,127 lines; `solve.py` 7,657 lines; `policies.py` 6,885 lines; `sparse/handoff.py` 7,029 lines | `<=15` files including `sparse/`; `solve.py <=3,500` lines; `policies.py <=4,500` lines unless it is explicitly retained as a temporary single owner. |
+| Historical roots already routed | `v3_results.py`, `v3_sparse_pattern.py`, `v3_fblock.py`, `v3_system.py`, and `v3.py` are deleted; canonical owners are `problems/profile_response/solver_diagnostics.py`, `problems/transport_matrix/finalize.py`, `operators/profile_response/sparse_pattern.py`, `operators/profile_response/fblock.py`, `operators/profile_response/system.py`, and `discretization/v3.py` | Keep this state. Do not recreate historical roots. |
+| `problems/profile_response` | 21 files including `sparse/`; current `solve.py` 7,539 lines; `policies.py` 6,885 lines; `sparse/handoff.py` 7,479 lines | `<=15` files including `sparse/`; `solve.py <=3,500` lines; `policies.py <=4,500` lines unless it is explicitly retained as a temporary single owner. |
 | `problems/transport_matrix` | 28 files including `parallel/`; 15,049 lines; many files are 50-600 line shards | `<=14` files including `parallel/`; `parallel/ <=3` files. |
 | `solvers/preconditioners` | 47 files, 36,992 lines; QI has 13 implementation files; symbolic sparse still has `rhs1_fortran_reduced.py` | `<=30` files; QI `<=5` files including `__init__.py`; no implementation file starts with `rhs1_` or `transport_`. |
 | `operators/profile_response` | 14 files, 18,368 lines; `full_system.py` is 5,978 lines | No urgent split. Merge small term/layout files only if needed to meet file-count gates without hiding physics. Do not create more operator shards in this PR. |
@@ -677,7 +672,7 @@ Current source inventory from the 2026-06-26 consolidation audit:
 | Area | Keep as owner | Merge into owner | Delete or shim condition |
 | --- | --- | --- | --- |
 | Root public surface | `api.py`, `cli.py`, `namelist.py`, `input_compat.py`, `geometry.py`, `grids.py`, `sensitivity.py`, `plotting.py`, stable physics kernels | `postprocess_upstream.py` and `scans.py` move to `workflows` or `validation` unless proven public; `data_fetch.py` becomes public data helper or validation fixture fetcher | Delete no-op root shims after public imports migrate. |
-| Compatibility roots | `v3_driver.py` only as temporary import shim; `v3_results.py` only if external compatibility is still needed | Result tests/docs migrate to problem-owned result contracts | Delete `v3_results.py` if no non-test public compatibility need remains; never add implementation to `v3_driver.py`. |
+| Compatibility roots | `v3_driver.py` only as temporary import shim | Result tests/docs now import problem-owned result contracts directly | Never add implementation to `v3_driver.py`; delete it only if all public imports and tests move to domain APIs. |
 | Profile response orchestration | `setup.py`, `solve.py`, `policies.py`, `preconditioner_build.py`, `dense.py`, `residual.py`, `diagnostics.py`, `solver_diagnostics.py`, `phi1_newton.py`, `active_dof.py`, `sparse/` | Factor-preflight execution, direct-tail auto retry, true-coupled coarse execution, and shared residual-candidate accept/update are now moved; next move the remaining residual-correction family execution, progress replay, remaining retry bookkeeping, final payload normalization, and fallback summaries out of `solve.py` into existing sparse/dense/diagnostic owners | Merge/delete `profile_response/handoff.py` once its result-relay content moves to `solver_diagnostics.py`, `diagnostics.py`, or `solve.py`. Merge `sparse/finalization.py` into the sparse owner once import cycles are removed. |
 | Transport matrix problem | `solve.py`, `setup.py`, `diagnostics.py`, `finalize.py`, `policies.py`, one active-system owner, `parallel/runtime.py`, `parallel/worker.py`, optional `parallel/sharding.py` | Merge `dense_lu.py`, `dense_batch.py`, `host_gmres.py`, `loop.py`, `iteration_stats.py`, and `residual_quality.py` into `solve.py`; merge `solve_policy.py` and `handoff_policy.py` into `policies.py`; merge `postsolve_diagnostics.py` into `finalize.py`; merge `active_dense.py` and `active_factor.py` into one active-system owner | Delete tiny relay files after tests import the owner. Merge `parallel/policy.py` into `parallel/runtime.py` unless it remains an independently tested public policy owner. |
 | Outputs | `outputs/formats.py`, `outputs/cache.py`, `outputs/rhsmode1.py`, `outputs/transport.py` | Move solved-field schema assembly, output dictionary construction, HDF5/netCDF/NPZ writing, and precompile/output policy helpers from `io.py` into output owners | `io.py` becomes `<=800` line compatibility shim or is deleted after examples/tests use public output APIs. |
@@ -741,7 +736,7 @@ Steps:
 3. Move output implementation from `io.py` into `outputs/formats.py`,
    `outputs/cache.py`, `outputs/rhsmode1.py`, and `outputs/transport.py`.
 4. Resolve root candidates: `data_fetch.py`, `postprocess_upstream.py`,
-   `scans.py`, and `v3_results.py`.
+   and `scans.py`.
 5. Update imports in tests, examples, docs, scripts, and source maps in the
    same commits that move or delete files.
 
@@ -1420,9 +1415,9 @@ Current completion status:
   `profile_response/solve.py` to 7,539 lines and removing direct sparse
   residual-admission policy imports from the driver. The first Sweep 0
   historical-root routing checkpoint moved `v3_results.py` implementation
-  ownership into profile-response and transport-matrix problem owners while
-  keeping a 13-line compatibility facade, so package-internal code no longer
-  imports `sfincs_jax.v3_results`. The second Sweep 0 routing checkpoint moved
+  ownership into profile-response and transport-matrix problem owners, and the
+  later root-cleanup checkpoint deleted the compatibility facade after
+  tests/docs moved to the domain owners. The second Sweep 0 routing checkpoint moved
   sparse structural patterns to
   `operators/profile_response/sparse_pattern.py`, removed the historical
   `sfincs_jax/v3_sparse_pattern.py` root file, and fixed the x-block sparse-PC
@@ -1479,7 +1474,8 @@ Next ordered implementation steps:
 
 1. Treat historical root routing as complete for the former implementation roots
    (`v3_results.py`, `v3_sparse_pattern.py`, `v3_fblock.py`, `v3_system.py`,
-   and `v3.py`). Keep `docs/source_map.rst`, `docs/api.rst`, and
+   and `v3.py`). `v3_driver.py` is the only remaining historical root shim.
+   Keep `docs/source_map.rst`, `docs/api.rst`, and
    import-contract tests synchronized if any remaining package-root shim
    changes.
 2. Execute Batch A as the profile-response collapse. Move sparse

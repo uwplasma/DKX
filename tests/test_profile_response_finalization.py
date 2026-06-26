@@ -6,12 +6,12 @@ import jax.numpy as jnp
 
 from sfincs_jax.problems.profile_response.solver_diagnostics import (
     ProfileResponseLinearFinalizationContext,
+    V3LinearSolveResult,
     finalize_profile_response_linear_solve,
     profile_response_post_xblock_accept_floor,
 )
 from sfincs_jax.problems.profile_response.solver_diagnostics import RHS1KSPDiagnosticsContext
 from sfincs_jax.solver import GMRESSolveResult
-from sfincs_jax.v3_results import V3LinearSolveResult
 
 
 def _ksp_context(emit=None) -> RHS1KSPDiagnosticsContext:

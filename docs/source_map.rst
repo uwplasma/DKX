@@ -321,9 +321,6 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/problems/transport_matrix/finalize.py``:
   RHSMode=2/3 transport-matrix result dataclass plus per-RHS finalization,
   constraint projection, residual bookkeeping, and KSP replay request contracts.
-- ``sfincs_jax/v3_results.py``:
-  small compatibility facade for historical result imports. It no longer owns
-  result implementation; new code should import from the problem owners above.
 - ``sfincs_jax/solver.py``:
   Krylov solve results, result finite-state checks, and XLA synchronization
   helpers around solver timing/profiling, plus small differentiable JAX-native

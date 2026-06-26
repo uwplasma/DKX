@@ -5166,3 +5166,36 @@ Next best steps:
    `solve.py`.
 3. After Batch A reaches the line/file gates, switch to Batch B transport and
    output consolidation.
+
+## 2026-06-26 Iteration 1 v3 Results Root Facade Deletion
+
+Steps taken:
+
+1. Confirmed `sfincs_jax/v3_results.py` had no package-internal imports; only
+   docs and tests still used the 13-line compatibility facade.
+2. Rewrote `tests/test_v3_results.py` and
+   `tests/test_profile_response_finalization.py` to import result contracts
+   from their canonical problem owners:
+   `problems.profile_response.solver_diagnostics` and
+   `problems.transport_matrix.finalize`.
+3. Removed the `sfincs_jax.v3_results` API page entry and source-map entry.
+4. Deleted `sfincs_jax/v3_results.py`.
+5. Updated `plan_final.md` so `v3_results.py` is listed with the deleted
+   historical roots and `v3_driver.py` is the only remaining `v3_*` root shim.
+
+Results:
+
+- Package Python files decreased from `209` to `208`.
+- Package-root Python files decreased from `44` to `43`.
+- Only `sfincs_jax/v3_driver.py` remains under the package root matching
+  `v3_*.py`.
+- Top-level `rhs1_*` and `transport_*` aliases remain deleted.
+
+Validation to run next:
+
+1. `python -m pytest tests/test_v3_results.py
+   tests/test_profile_response_finalization.py -q --tb=short`
+2. `python -m pytest tests/test_domain_package_import_contracts.py -q
+   --tb=short`
+3. `python -m py_compile` and `ruff` on the touched docs/source code where
+   applicable.
