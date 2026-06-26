@@ -7,7 +7,6 @@ from types import ModuleType
 
 
 DOMAIN_PACKAGES = (
-    "sfincs_jax.input",
     "sfincs_jax.physics",
     "sfincs_jax.discretization",
     "sfincs_jax.geometry",
@@ -25,12 +24,9 @@ DOMAIN_PACKAGES = (
     "sfincs_jax.solvers.preconditioners.domain_decomposition",
     "sfincs_jax.solvers.preconditioners.xblock",
     "sfincs_jax.solvers.preconditioners.symbolic_sparse",
-    "sfincs_jax.parallel",
     "sfincs_jax.outputs",
     "sfincs_jax.workflows",
     "sfincs_jax.validation",
-    "sfincs_jax.benchmarks",
-    "sfincs_jax.compat",
 )
 
 ACTIVE_PACKAGE_EXPORTS = {

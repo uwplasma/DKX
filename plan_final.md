@@ -40,9 +40,11 @@ Checked on 2026-06-26 from
 - `sfincs_jax/` contains `154` Python files and `17` root-level Python modules.
 - Largest source domains by line count are `problems` (`69k` lines), `solvers`
   (`47k`), and `operators` (`21k`).
-- Empty or alias-only packages exist at `sfincs_jax/benchmarks`,
-  `sfincs_jax/compat`, `sfincs_jax/input`, `sfincs_jax/parallel`, and
-  `sfincs_jax/solvers/preconditioners/coarse_space`.
+- Empty root packages `sfincs_jax/benchmarks`, `sfincs_jax/compat`,
+  `sfincs_jax/input`, and `sfincs_jax/parallel` were removed in the first
+  consolidation tranche. The empty nested
+  `sfincs_jax/solvers/preconditioners/coarse_space` directory was also removed
+  from the working tree.
 - Deep paths remain in `sfincs_jax/operators/profile_response`,
   `sfincs_jax/problems/profile_response/sparse`,
   `sfincs_jax/problems/transport_matrix/parallel`, and
@@ -96,12 +98,10 @@ Domain folders to keep:
 
 Folders to remove or absorb:
 
-- Move `benchmarks/__init__.py` behavior into `validation/` or delete if unused.
-- Move `compat/` aliases into `__init__.py` plus tested import shims, then
-  remove the folder.
-- Move `input/` aliases into `namelist.py`/`input_compat.py` or delete after
-  import tests pass.
-- Move `parallel/` aliases into `workflows/` or `solvers/parallel.py`.
+- `benchmarks/`, `compat/`, `input/`, and `parallel/` empty package stubs have
+  been removed; use `validation/`, `namelist.py`/`input_compat.py`, and the
+  concrete `problems/transport_matrix/parallel` owner while the transport
+  parallel code is still being flattened.
 - Remove empty `solvers/preconditioners/coarse_space`.
 - Flatten `operators/profile_response/*` into `operators/profile_*.py` files.
 - Flatten `problems/profile_response/*` and
