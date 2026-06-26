@@ -238,6 +238,12 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   Fortran-v3 metric formulas, mode filtering, and radial interpolation branches
   used in production HDF5 output without adding large equilibrium fixtures or
   slow solves to CI.
+- The twenty-sixth post-audit documentation tranche tightened release-facing
+  docs wording in the validation matrix, performance page, paper-figure page,
+  and release checklist. The front-page README already has no matches for the
+  review-blocked progress phrases; remaining chronological/status wording is
+  kept in release notes, roadmaps, research-lane pages, or implementation-detail
+  docs where chronology and claim boundaries are the point.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.

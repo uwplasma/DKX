@@ -66,7 +66,8 @@ The performance summary is:
 - the differentiable path is available from Python when gradients are needed,
 - the CPU runtime drift watchlist is clean against the promoted CPU reference lane,
 - the GPU runtime drift watchlist is clean against the promoted GPU reference lane,
-- and the remaining work is to reduce runtime and memory on a small number of heavy PAS and geometry-rich cases.
+- and the heaviest PAS and geometry-rich cases are tracked as bounded
+  optimization lanes rather than correctness blockers.
 
 Production-resolution benchmark tier
 ------------------------------------

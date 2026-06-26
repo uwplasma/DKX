@@ -27,9 +27,10 @@ Generate the frozen CPU/GPU Fortran-suite runtime and memory comparison with
    python examples/publication_figures/generate_fortran_suite_benchmark_summary.py
 
 The default figure filters to reference-runtime-window rows whose Fortran v3
-runtime is at least ``10 s``. The summary JSON records which previous frozen rows
-still need full production-resolution reruns. Use ``--min-fortran-runtime-s 0``
-only for all-case CI/smoke diagnostics, not for public performance claims.
+runtime is at least ``10 s``. The summary JSON records which frozen rows are
+excluded from public performance claims until matching production-resolution
+reruns exist. Use ``--min-fortran-runtime-s 0`` only for all-case CI/smoke
+diagnostics, not for public performance claims.
 
 Generate the autodiff/sensitivity validation figures with
 
