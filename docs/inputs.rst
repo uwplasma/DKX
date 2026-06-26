@@ -82,8 +82,9 @@ Geometry examples you can run immediately:
 - VMEC ``geometryScheme=5``:
   ``examples/getting_started/write_sfincs_output_vmec.py``
 
-There is not currently a separate public Miller-parameter geometry interface. Tokamak
-examples therefore use the supported analytic straight-field-line model family.
+The public geometry interfaces do not include a separate Miller-parameter
+surface input. Tokamak examples therefore use the supported analytic
+straight-field-line model family.
 
 Practical notes for users
 -------------------------
