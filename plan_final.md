@@ -85,6 +85,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   environment-normalization, cache-reuse, and reduced-vector application paths.
   These tests exercise the same collision-matrix algebra used by the production
   solver without adding slow geometry solves to CI.
+- The third post-audit coverage tranche added synthetic PAS angular
+  preconditioner tests for tokamak theta-line and 3D theta-zeta line
+  block-Thomas paths. The tests cover inactive pitch masking, structured-tail
+  factors, memory/fallback admission, cache reuse, and reduced/full projection
+  consistency while keeping CI execution below a few seconds.
 
 ### Target Package Shape
 
