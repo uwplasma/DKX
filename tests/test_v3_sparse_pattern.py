@@ -1283,6 +1283,99 @@ def test_active_sparse_pattern_fallback_matches_full_slice_for_partial_angular_s
     assert reduced.nnz <= active_pattern.nnz
 
 
+def test_active_sparse_pattern_structured_path_matches_full_slice_for_complete_blocks() -> None:
+    op = _synthetic_sparse_pattern_op(
+        n_species=1,
+        n_x=2,
+        n_xi=3,
+        n_theta=2,
+        n_zeta=2,
+        include_phi1=True,
+        include_phi1_in_kinetic=True,
+        constraint_scheme=1,
+        fp=object(),
+        er_xdot=object(),
+    )
+    n_tz = op.n_theta * op.n_zeta
+    active_velocity_blocks = np.asarray([0, 1, 3], dtype=np.int32)
+    active_f = (
+        active_velocity_blocks[:, None].astype(np.int64) * n_tz
+        + np.arange(n_tz, dtype=np.int64)[None, :]
+    ).reshape((-1,))
+    active_tail = np.arange(op.f_size, op.total_size, dtype=np.int64)
+    active = np.concatenate([active_f, active_tail]).astype(np.int32)
+
+    full_slice = v3_full_system_conservative_sparsity_pattern(op)[active, :][:, active].tocsr()
+    active_pattern = v3_full_system_conservative_sparsity_pattern_for_indices(op, active)
+
+    assert active_pattern.shape == full_slice.shape
+    assert (active_pattern != full_slice).nnz == 0
+    assert active_pattern.nnz > 0
+
+
+def test_fortran_reduced_active_sparse_pattern_matches_full_reduced_slice_for_complete_blocks() -> None:
+    op = _synthetic_sparse_pattern_op(
+        n_species=2,
+        n_x=2,
+        n_xi=4,
+        n_theta=2,
+        n_zeta=2,
+        include_phi1=True,
+        include_phi1_in_kinetic=True,
+        constraint_scheme=2,
+        point_at_x0=True,
+        fp=object(),
+        er_xdot=object(),
+    )
+    n_tz = op.n_theta * op.n_zeta
+    active_velocity_blocks = np.asarray([0, 1, 5, 8], dtype=np.int32)
+    active_f = (
+        active_velocity_blocks[:, None].astype(np.int64) * n_tz
+        + np.arange(n_tz, dtype=np.int64)[None, :]
+    ).reshape((-1,))
+    active_tail = np.arange(op.f_size, op.total_size, dtype=np.int64)
+    active = np.concatenate([active_f, active_tail]).astype(np.int32)
+
+    kwargs = dict(
+        preconditioner_x=3,
+        preconditioner_xi=1,
+        preconditioner_species=1,
+        preconditioner_x_min_l=2,
+    )
+    full_reduced = v3_full_system_fortran_reduced_preconditioner_sparsity_pattern(op, **kwargs)
+    active_reduced = sparse_pattern_module.v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices(
+        op,
+        active,
+        **kwargs,
+    )
+    conservative_active = v3_full_system_conservative_sparsity_pattern_for_indices(op, active)
+
+    assert active_reduced.shape == (active.size, active.size)
+    assert (active_reduced != full_reduced[active, :][:, active].tocsr()).nnz == 0
+    assert active_reduced.nnz <= conservative_active.nnz
+
+
+def test_sparse_pattern_unsupported_constraint_scheme_fails_closed() -> None:
+    op = _synthetic_sparse_pattern_op(
+        n_x=1,
+        n_xi=1,
+        n_theta=1,
+        n_zeta=1,
+        constraint_scheme=9,
+    )
+    active = np.arange(op.total_size, dtype=np.int32)
+
+    with pytest.raises(NotImplementedError, match="constraintScheme=9"):
+        v3_full_system_conservative_sparsity_pattern(op)
+    with pytest.raises(NotImplementedError, match="constraintScheme=9"):
+        v3_full_system_conservative_sparsity_pattern_for_indices(op, active)
+    with pytest.raises(NotImplementedError, match="constraintScheme=9"):
+        sparse_pattern_module.v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices(
+            op,
+            active,
+        )
+
+
 def test_conservative_sparse_pattern_covers_pas_fortran_matrix() -> None:
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "pas_1species_PAS_noEr_tiny_scheme1.input.namelist")

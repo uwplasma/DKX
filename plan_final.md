@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (transport parallel planning coverage pass)
+Last updated: 2026-06-26 (sparse-pattern structural coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -504,6 +504,16 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   and compiled-reuse paths fail-closed unless a measured residual/runtime/memory
   artifact supports promotion. The focused transport parallel suite reports
   `33 passed` in `0.57 s`, and Ruff passes on the changed test module.
+- The seventy-fifth post-audit coverage tranche added sparse-pattern
+  structural equivalence gates. `tests/test_v3_sparse_pattern.py` now covers
+  complete active velocity-block structured assembly against direct full-pattern
+  slicing, Fortran-v3 reduced active-pattern assembly against direct reduced
+  full-pattern slicing, and unsupported constraint-scheme fail-closed behavior
+  for conservative and reduced active builders. These are production-shape
+  memory-safety checks for assembled/operator-reuse paths and run on synthetic
+  operators without launching full transport solves. The focused sparse-pattern
+  suite reports `141 passed` in `108.45 s`, and Ruff passes on the changed test
+  module.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
