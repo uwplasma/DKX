@@ -2,37 +2,43 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from sfincs_jax.v3_driver import (
-    _rhs1_pas_auto_large_base_kind,
-    _rhsmode1_pas_fast_accept,
-    _rhsmode1_constraint0_dense_fallback_allowed,
-    _rhsmode1_constraint0_petsc_compat,
-    _rhsmode1_host_sparse_direct_allowed,
-    _rhsmode1_host_dense_shortcut_allowed,
-    _rhsmode1_sparse_operator_preconditioned_rescue_allowed,
-    _rhsmode1_host_factor_probe_ok,
-    _rhsmode1_constraint0_sparse_first,
-    _rhsmode1_fp_xblock_assembled_host_allowed,
-    _rhsmode1_fp_targeted_polish_allowed,
-    _rhsmode1_fast_post_xblock_polish_allowed,
-    _rhsmode1_skip_global_sparse_after_xblock_allowed,
-    _rhsmode1_large_cpu_xblock_skip_primary_allowed,
-    _rhsmode1_large_cpu_sparse_rescue_allowed,
-    _rhsmode1_large_cpu_sparse_exact_lu_allowed,
-    _rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed,
-    _rhsmode1_large_cpu_sparse_rescue_first,
-    _rhsmode1_prefer_sparse_over_dense_shortcut,
-    _rhsmode1_sparse_prefer_skips_stage2,
-    _resolve_use_implicit,
-    _rhsmode1_sparse_sxblock_rescue_allowed,
-    _rhsmode1_sparse_exact_lu_requested,
-    _rhsmode1_sparse_xblock_rescue_allowed,
-    _rhsmode1_pas_adaptive_smoother_allowed,
-    _rhsmode1_explicit_sparse_host_direct_allowed,
-)
 from sfincs_jax.problems.profile_policies import (
+    resolve_use_implicit as _resolve_use_implicit,
+    rhs1_constraint0_dense_fallback_allowed as _rhsmode1_constraint0_dense_fallback_allowed,
+    rhs1_constraint0_petsc_compat as _rhsmode1_constraint0_petsc_compat,
+    rhs1_explicit_sparse_host_direct_allowed as _rhsmode1_explicit_sparse_host_direct_allowed,
+    rhs1_host_sparse_direct_allowed as _rhsmode1_host_sparse_direct_allowed,
+    rhs1_large_cpu_sparse_exact_lu_allowed as _rhsmode1_large_cpu_sparse_exact_lu_allowed,
+    rhs1_large_cpu_sparse_rescue_first as _rhsmode1_large_cpu_sparse_rescue_first,
+    rhs1_pas_auto_large_base_kind as _rhs1_pas_auto_large_base_kind,
+    rhs1_prefer_sparse_over_dense_shortcut as _rhsmode1_prefer_sparse_over_dense_shortcut,
+    rhs1_sparse_prefer_skips_stage2 as _rhsmode1_sparse_prefer_skips_stage2,
+    rhsmode1_constraint0_sparse_first_current_backend as _rhsmode1_constraint0_sparse_first,
+    rhsmode1_fast_post_xblock_polish_allowed_current_backend as _rhsmode1_fast_post_xblock_polish_allowed,
+    rhsmode1_fp_targeted_polish_allowed_current_backend as _rhsmode1_fp_targeted_polish_allowed,
+    rhsmode1_host_dense_shortcut_allowed_current_backend as _rhsmode1_host_dense_shortcut_allowed,
+    rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed_current_backend
+    as _rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed,
+    rhsmode1_large_cpu_sparse_rescue_allowed_current_backend as _rhsmode1_large_cpu_sparse_rescue_allowed,
+    rhsmode1_large_cpu_xblock_skip_primary_allowed_current_backend
+    as _rhsmode1_large_cpu_xblock_skip_primary_allowed,
+    rhsmode1_pas_fast_accept_current_backend as _rhsmode1_pas_fast_accept,
     rhsmode1_scipy_rescue_abs_floor_after_xblock_current_backend
     as _rhsmode1_scipy_rescue_abs_floor_after_xblock,
+    rhsmode1_skip_global_sparse_after_xblock_allowed_current_backend
+    as _rhsmode1_skip_global_sparse_after_xblock_allowed,
+    rhsmode1_sparse_exact_lu_requested_current_backend as _rhsmode1_sparse_exact_lu_requested,
+    rhsmode1_sparse_operator_preconditioned_rescue_allowed_current_backend
+    as _rhsmode1_sparse_operator_preconditioned_rescue_allowed,
+    rhsmode1_sparse_sxblock_rescue_allowed_current_backend as _rhsmode1_sparse_sxblock_rescue_allowed,
+    rhsmode1_sparse_xblock_rescue_allowed_current_backend as _rhsmode1_sparse_xblock_rescue_allowed,
+)
+from sfincs_jax.solvers.preconditioner_pas_policy import (
+    rhs1_pas_adaptive_smoother_allowed as _rhsmode1_pas_adaptive_smoother_allowed,
+)
+from sfincs_jax.solvers.preconditioner_xblock_tz_sparse import (
+    rhsmode1_fp_xblock_assembled_host_allowed as _rhsmode1_fp_xblock_assembled_host_allowed,
+    rhsmode1_host_factor_probe_ok as _rhsmode1_host_factor_probe_ok,
 )
 
 
@@ -66,7 +72,7 @@ def _pas_op(*, constraint_scheme: int = 1, has_phi1: bool = False, rhs_mode: int
 
 def test_constraint0_sparse_first_enabled_for_fp_auto_path(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_CS0_SPARSE_FIRST", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert _rhsmode1_constraint0_sparse_first(
         op=_op(constraint_scheme=0),
         solve_method_kind="incremental",
@@ -81,7 +87,7 @@ def test_host_dense_shortcut_enabled_for_small_accelerator_fp(monkeypatch) -> No
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_MAX", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert _rhsmode1_host_dense_shortcut_allowed(
         op=_op(constraint_scheme=1),
         active_size=404,
@@ -178,7 +184,7 @@ def test_host_dense_shortcut_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_MAX", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert not _rhsmode1_host_dense_shortcut_allowed(
         op=_op(constraint_scheme=1),
         active_size=901,
@@ -214,7 +220,7 @@ def test_host_dense_shortcut_respects_guards(monkeypatch) -> None:
 
 def test_constraint0_sparse_first_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_CS0_SPARSE_FIRST", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert not _rhsmode1_constraint0_sparse_first(
         op=_op(constraint_scheme=1),
         solve_method_kind="incremental",
@@ -254,7 +260,7 @@ def test_constraint0_sparse_first_respects_guards(monkeypatch) -> None:
 
 def test_constraint0_sparse_first_disabled_by_default_on_cpu(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_CS0_SPARSE_FIRST", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert not _rhsmode1_constraint0_sparse_first(
         op=_op(constraint_scheme=0),
         solve_method_kind="incremental",
@@ -277,7 +283,7 @@ def test_constraint0_sparse_first_can_be_disabled(monkeypatch) -> None:
 
 def test_constraint0_petsc_compat_disabled_by_default_on_cpu(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert not _rhsmode1_constraint0_petsc_compat(
         op=_op(constraint_scheme=0),
         solve_method_kind="incremental",
@@ -289,7 +295,7 @@ def test_constraint0_petsc_compat_disabled_by_default_on_cpu(monkeypatch) -> Non
 
 def test_constraint0_petsc_compat_disabled_by_default_on_gpu(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert not _rhsmode1_constraint0_petsc_compat(
         op=_op(constraint_scheme=0),
         solve_method_kind="incremental",
@@ -301,7 +307,7 @@ def test_constraint0_petsc_compat_disabled_by_default_on_gpu(monkeypatch) -> Non
 
 def test_constraint0_petsc_compat_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert not _rhsmode1_constraint0_petsc_compat(
         op=_op(constraint_scheme=1),
         solve_method_kind="incremental",
@@ -374,7 +380,7 @@ def test_constraint0_dense_fallback_can_be_enabled(monkeypatch) -> None:
 
 def test_sparse_operator_preconditioned_rescue_enabled_for_cpu_fp_constraint1(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert _rhsmode1_sparse_operator_preconditioned_rescue_allowed(
         op=_op(constraint_scheme=1),
         sparse_exact_lu=True,
@@ -384,7 +390,7 @@ def test_sparse_operator_preconditioned_rescue_enabled_for_cpu_fp_constraint1(mo
 
 def test_sparse_operator_preconditioned_rescue_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert not _rhsmode1_sparse_operator_preconditioned_rescue_allowed(
         op=_op(constraint_scheme=0),
         sparse_exact_lu=True,
@@ -405,7 +411,7 @@ def test_sparse_operator_preconditioned_rescue_respects_guards(monkeypatch) -> N
         sparse_exact_lu=True,
         host_sparse_direct_wanted=False,
     )
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert not _rhsmode1_sparse_operator_preconditioned_rescue_allowed(
         op=_op(constraint_scheme=1),
         sparse_exact_lu=True,
@@ -435,7 +441,7 @@ def test_pas_fast_accept_enabled_for_large_explicit_cpu_pas(monkeypatch) -> None
     monkeypatch.delenv("SFINCS_JAX_PAS_FAST_ACCEPT_MIN", raising=False)
     monkeypatch.delenv("SFINCS_JAX_PAS_FAST_ACCEPT_RATIO", raising=False)
     monkeypatch.delenv("SFINCS_JAX_PAS_FAST_ACCEPT_ABS", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     op = _op(constraint_scheme=1, has_fp=False)
     op.fblock.pas = object()
     assert _rhsmode1_pas_fast_accept(
@@ -448,7 +454,7 @@ def test_pas_fast_accept_enabled_for_large_explicit_cpu_pas(monkeypatch) -> None
 
 
 def test_pas_fast_accept_env_overrides_and_invalid_parsing(monkeypatch) -> None:
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     op = _op(constraint_scheme=1, has_fp=False)
     op.fblock.pas = object()
 
@@ -477,7 +483,7 @@ def test_pas_fast_accept_env_overrides_and_invalid_parsing(monkeypatch) -> None:
 
 def test_pas_fast_accept_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_PAS_FAST_ACCEPT", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     op = _op(constraint_scheme=1, has_fp=False)
     op.fblock.pas = object()
     assert not _rhsmode1_pas_fast_accept(
@@ -501,7 +507,7 @@ def test_pas_fast_accept_respects_guards(monkeypatch) -> None:
         target=4.8e-10,
         use_implicit=True,
     )
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert not _rhsmode1_pas_fast_accept(
         op=op,
         active_size=41561,
@@ -528,7 +534,7 @@ def test_sparse_exact_lu_auto_enables_on_small_gpu_fp_case(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU_MAX", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU_ACCEL_SMALL_MAX", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert _rhsmode1_sparse_exact_lu_requested(
         op=_op(constraint_scheme=1),
         solve_method_kind="incremental",
@@ -542,7 +548,7 @@ def test_sparse_exact_lu_auto_enables_on_small_gpu_fp_case(monkeypatch) -> None:
 def test_sparse_exact_lu_auto_respects_accel_small_cap(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU", raising=False)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU_ACCEL_SMALL_MAX", "2000")
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert not _rhsmode1_sparse_exact_lu_requested(
         op=_op(constraint_scheme=1),
         solve_method_kind="incremental",
@@ -555,7 +561,7 @@ def test_sparse_exact_lu_auto_respects_accel_small_cap(monkeypatch) -> None:
 
 def test_sparse_exact_lu_auto_stays_off_on_cpu_without_full_x(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert not _rhsmode1_sparse_exact_lu_requested(
         op=_op(constraint_scheme=1),
         solve_method_kind="incremental",
@@ -568,19 +574,19 @@ def test_sparse_exact_lu_auto_stays_off_on_cpu_without_full_x(monkeypatch) -> No
 
 def test_host_sparse_direct_default_on_gpu_for_exact_lu(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_HOST", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert _rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True, use_implicit=False)
 
 
 def test_host_sparse_direct_default_on_cpu_for_explicit_exact_lu(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_HOST", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert _rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True, use_implicit=False)
 
 
 def test_host_sparse_direct_stays_off_for_implicit_exact_lu(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_HOST", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert not _rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True, use_implicit=True)
 
 
@@ -604,7 +610,7 @@ def test_host_factor_probe_rejects_unbounded_factor(monkeypatch) -> None:
 
 def test_large_cpu_xblock_skip_primary_enabled_for_auto_cpu_lane(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_LARGE_CPU_XBLOCK_SKIP_PRIMARY", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert _rhsmode1_large_cpu_xblock_skip_primary_allowed(
         op=_op(constraint_scheme=1),
         solve_method_kind="incremental",
@@ -622,7 +628,7 @@ def test_large_cpu_xblock_skip_primary_enabled_for_auto_cpu_lane(monkeypatch) ->
 
 def test_large_cpu_xblock_skip_primary_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_LARGE_CPU_XBLOCK_SKIP_PRIMARY", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert not _rhsmode1_large_cpu_xblock_skip_primary_allowed(
         op=_op(constraint_scheme=1),
         solve_method_kind="dense",
@@ -708,7 +714,7 @@ def test_fast_post_xblock_polish_enabled_for_large_bad_shortcut_residual(monkeyp
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_MIN", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_RATIO", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_ABS", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert _rhsmode1_fast_post_xblock_polish_allowed(
         op=_op(constraint_scheme=1),
         active_size=68670,
@@ -721,7 +727,7 @@ def test_fast_post_xblock_polish_enabled_for_large_bad_shortcut_residual(monkeyp
 
 def test_fast_post_xblock_polish_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert not _rhsmode1_fast_post_xblock_polish_allowed(
         op=_op(constraint_scheme=1),
         active_size=68670,
@@ -769,7 +775,7 @@ def test_fp_targeted_polish_enabled_for_medium_large_cpu_fp(monkeypatch) -> None
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_TARGETED_POLISH_MIN", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_TARGETED_POLISH_RATIO", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_TARGETED_POLISH_ABS", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert _rhsmode1_fp_targeted_polish_allowed(
         op=_op(constraint_scheme=1),
         active_size=68670,
@@ -782,7 +788,7 @@ def test_fp_targeted_polish_enabled_for_medium_large_cpu_fp(monkeypatch) -> None
 
 def test_fp_targeted_polish_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_TARGETED_POLISH", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert not _rhsmode1_fp_targeted_polish_allowed(
         op=_op(constraint_scheme=1),
         active_size=8000,
@@ -815,7 +821,7 @@ def test_fp_targeted_polish_respects_guards(monkeypatch) -> None:
         rhs1_precond_kind="xmg",
         use_implicit=True,
     )
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert not _rhsmode1_fp_targeted_polish_allowed(
         op=_op(constraint_scheme=1),
         active_size=68670,
@@ -831,7 +837,7 @@ def test_skip_global_sparse_after_good_xblock_enabled(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK_MIN", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK_RATIO", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK_ABS", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert _rhsmode1_skip_global_sparse_after_xblock_allowed(
         op=_op(constraint_scheme=1),
         active_size=68670,
@@ -861,7 +867,7 @@ def test_scipy_rescue_abs_floor_after_large_xblock_seed(monkeypatch) -> None:
 
 def test_skip_global_sparse_after_xblock_respects_guards(monkeypatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK", "1")
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert not _rhsmode1_skip_global_sparse_after_xblock_allowed(
         op=_op(constraint_scheme=1),
         active_size=8000,
@@ -907,7 +913,7 @@ def test_skip_global_sparse_after_xblock_respects_guards(monkeypatch) -> None:
         used_explicit_fp_xblock_seed=True,
         use_implicit=True,
     )
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert not _rhsmode1_skip_global_sparse_after_xblock_allowed(
         op=_op(constraint_scheme=1),
         active_size=68670,
@@ -921,7 +927,7 @@ def test_skip_global_sparse_after_xblock_respects_guards(monkeypatch) -> None:
 
 def test_skip_global_sparse_after_xblock_enabled_by_default_and_opt_out(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     kwargs = dict(
         op=_op(constraint_scheme=1),
         active_size=68670,
@@ -941,7 +947,7 @@ def test_large_cpu_sparse_exact_lu_promoted_after_good_xblock_seed(monkeypatch) 
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_XBLOCK_MAX", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_XBLOCK_RATIO", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_XBLOCK_ABS", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert _rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed(
         op=_op(constraint_scheme=1),
         active_size=68670,
@@ -956,7 +962,7 @@ def test_large_cpu_sparse_exact_lu_promoted_after_good_xblock_seed(monkeypatch) 
 
 def test_large_cpu_sparse_exact_lu_xblock_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_XBLOCK", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert not _rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed(
         op=_op(constraint_scheme=1),
         active_size=80000,
@@ -1021,7 +1027,7 @@ def test_large_cpu_sparse_exact_lu_xblock_respects_guards(monkeypatch) -> None:
 
 def test_sparse_sxblock_rescue_enabled_for_large_cpu_fp_multispecies(monkeypatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_SXBLOCK_RESCUE", "1")
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     op = _op(constraint_scheme=1)
     op.n_species = 2
     assert _rhsmode1_sparse_sxblock_rescue_allowed(
@@ -1038,7 +1044,7 @@ def test_sparse_sxblock_rescue_enabled_for_large_cpu_fp_multispecies(monkeypatch
 
 def test_sparse_sxblock_rescue_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_SXBLOCK_RESCUE", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     op = _op(constraint_scheme=1)
     op.n_species = 2
     assert not _rhsmode1_sparse_sxblock_rescue_allowed(
@@ -1108,20 +1114,20 @@ def test_sparse_sxblock_rescue_respects_guards(monkeypatch) -> None:
 
 def test_host_sparse_direct_off_without_exact_lu(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_HOST", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert not _rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=False, use_implicit=False)
 
 
 def test_host_sparse_direct_can_be_forced_on_cpu(monkeypatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_HOST", "1")
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert _rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True, use_implicit=False)
 
 
 def test_sparse_exact_lu_can_exceed_sparse_ilu_cap_on_gpu_dkes(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU_MAX", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert _rhsmode1_sparse_exact_lu_requested(
         op=_op(constraint_scheme=1),
         solve_method_kind="incremental",
@@ -1201,7 +1207,7 @@ def test_large_cpu_sparse_rescue_enabled_for_large_fullx_fp_failures(monkeypatch
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_MAX", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_RATIO", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_FULLX_MIN", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert _rhsmode1_large_cpu_sparse_rescue_allowed(
         op=_op(constraint_scheme=1),
         solve_method_kind="incremental",
@@ -1218,7 +1224,7 @@ def test_large_cpu_sparse_rescue_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_FULLX_MIN", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE", raising=False)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_MAX", "12000")
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert not _rhsmode1_large_cpu_sparse_rescue_allowed(
         op=_op(constraint_scheme=1),
         solve_method_kind="incremental",
@@ -1246,7 +1252,7 @@ def test_large_cpu_sparse_rescue_respects_guards(monkeypatch) -> None:
         residual_norm=1.0,
         target=1.0e-6,
     )
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE", "0")
     assert not _rhsmode1_large_cpu_sparse_rescue_allowed(
         op=_op(constraint_scheme=1),
@@ -1264,7 +1270,7 @@ def test_large_cpu_sparse_rescue_can_depend_on_active_dof_size(monkeypatch) -> N
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_MAX", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_FULLX_MIN", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     op = _op(constraint_scheme=1)
     assert _rhsmode1_large_cpu_sparse_rescue_allowed(
         op=op,
@@ -1292,7 +1298,7 @@ def test_large_cpu_sparse_rescue_allows_moderate_fullx_fp_when_exact_lu_is_avail
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_FULLX_MIN", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_MAX", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert _rhsmode1_large_cpu_sparse_rescue_allowed(
         op=_op(constraint_scheme=1),
         solve_method_kind="incremental",
@@ -1334,7 +1340,7 @@ def test_sparse_xblock_rescue_enabled_for_large_fullx_fp_defaults(monkeypatch) -
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE_MIN", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE_MAX", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE_RATIO", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert _rhsmode1_sparse_xblock_rescue_allowed(
         op=_op(constraint_scheme=1),
         solve_method_kind="incremental",
@@ -1350,7 +1356,7 @@ def test_sparse_xblock_rescue_enabled_for_large_fullx_fp_defaults(monkeypatch) -
 
 def test_sparse_xblock_rescue_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert not _rhsmode1_sparse_xblock_rescue_allowed(
         op=_op(constraint_scheme=1),
         solve_method_kind="incremental",
@@ -1366,7 +1372,7 @@ def test_sparse_xblock_rescue_respects_guards(monkeypatch) -> None:
 
 def test_fp_xblock_assembled_host_enabled_for_explicit_cpu_fp(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert _rhsmode1_fp_xblock_assembled_host_allowed(
         op=_op(constraint_scheme=1),
         preconditioner_species=1,
@@ -1377,7 +1383,7 @@ def test_fp_xblock_assembled_host_enabled_for_explicit_cpu_fp(monkeypatch) -> No
 
 def test_fp_xblock_assembled_host_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert not _rhsmode1_fp_xblock_assembled_host_allowed(
         op=_op(constraint_scheme=1, has_fp=False),
         preconditioner_species=1,
@@ -1414,7 +1420,7 @@ def test_fp_xblock_assembled_host_respects_guards(monkeypatch) -> None:
 
 def test_fp_xblock_assembled_host_allows_fortran_species_coupling_flag_for_one_species(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert _rhsmode1_fp_xblock_assembled_host_allowed(
         op=_op(constraint_scheme=1, n_species=1),
         preconditioner_species=0,
@@ -1425,7 +1431,7 @@ def test_fp_xblock_assembled_host_allows_fortran_species_coupling_flag_for_one_s
 
 def test_fp_xblock_assembled_host_disabled_off_cpu(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert not _rhsmode1_fp_xblock_assembled_host_allowed(
         op=_op(constraint_scheme=1),
         preconditioner_species=1,
@@ -1438,7 +1444,7 @@ def test_fp_xblock_assembled_host_allows_bounded_accelerator_with_size(monkeypat
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE_MAX", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert _rhsmode1_fp_xblock_assembled_host_allowed(
         op=_op(constraint_scheme=1),
         preconditioner_species=1,
@@ -1464,7 +1470,7 @@ def test_fp_xblock_assembled_host_allows_bounded_accelerator_with_size(monkeypat
         residual_norm=1.0,
         target=1.0e-6,
     )
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     assert not _rhsmode1_sparse_xblock_rescue_allowed(
         op=_op(constraint_scheme=1),
         solve_method_kind="incremental",

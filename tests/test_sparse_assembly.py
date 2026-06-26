@@ -5,17 +5,15 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 import numpy as np
 
-import sfincs_jax.v3_driver as v3_driver
+import sfincs_jax.problems.profile_solve as profile_solve
+from sfincs_jax.solvers.preconditioner_symbolic_host import build_sparse_ilu_from_matvec
 from sfincs_jax.solvers.preconditioner_xblock_tz_sparse import (
+    assemble_selected_theta_tz_operator,
     assemble_rhsmode1_fp_xblock_tz_sparse_matrix,
+    assemble_selected_zeta_tz_operator,
     get_rhsmode1_fp_xblock_assembled_host_cache,
     rhsmode1_fp_xblock_tz_sparse_diagonal,
-)
-from sfincs_jax.v3_driver import (
-    _assemble_selected_theta_tz_operator,
-    _assemble_selected_zeta_tz_operator,
-    _build_sparse_ilu_from_matvec,
-    _safe_inverse_diagonal_np,
+    safe_inverse_diagonal_np,
 )
 
 
@@ -35,7 +33,7 @@ def test_chunked_sparse_assembly_matches_dense_operator(monkeypatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ASSEMBLE_BLOCK", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ASSEMBLE_BLOCK_MIN", "1")
 
-    a_csr_full, a_csr_drop, ilu, a_dense, l_dense, u_dense, l_unit_diag = _build_sparse_ilu_from_matvec(
+    a_csr_full, a_csr_drop, ilu, a_dense, l_dense, u_dense, l_unit_diag = build_sparse_ilu_from_matvec(
         matvec=lambda x: a @ x,
         n=6,
         dtype=jnp.float64,
@@ -64,11 +62,11 @@ def test_chunked_sparse_assembly_matches_dense_operator(monkeypatch) -> None:
 
 
 def test_safe_inverse_diagonal_uses_floor_and_rejects_nonfinite() -> None:
-    inv = _safe_inverse_diagonal_np(np.asarray([2.0, 0.0, -1.0e-12]), floor=1.0e-6)
+    inv = safe_inverse_diagonal_np(np.asarray([2.0, 0.0, -1.0e-12]), floor=1.0e-6)
     assert inv is not None
     np.testing.assert_allclose(inv, np.asarray([0.5, 1.0e6, -1.0e6]))
-    assert _safe_inverse_diagonal_np(np.asarray([1.0, np.nan]), floor=1.0e-6) is None
-    assert _safe_inverse_diagonal_np(np.asarray([1.0, 0.0]), floor=0.0) is None
+    assert safe_inverse_diagonal_np(np.asarray([1.0, np.nan]), floor=1.0e-6) is None
+    assert safe_inverse_diagonal_np(np.asarray([1.0, 0.0]), floor=0.0) is None
 
 
 def test_chunked_sparse_assembly_applies_fortran_structural_threshold(monkeypatch) -> None:
@@ -85,7 +83,7 @@ def test_chunked_sparse_assembly_applies_fortran_structural_threshold(monkeypatc
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ASSEMBLE_BLOCK_MIN", "1")
     monkeypatch.setenv("SFINCS_JAX_SPARSE_STRUCTURAL_TOL", "1e-12")
 
-    a_csr_full, a_csr_drop, ilu, a_dense, l_dense, u_dense, l_unit_diag = _build_sparse_ilu_from_matvec(
+    a_csr_full, a_csr_drop, ilu, a_dense, l_dense, u_dense, l_unit_diag = build_sparse_ilu_from_matvec(
         matvec=lambda x: a @ x,
         n=3,
         dtype=jnp.float64,
@@ -125,7 +123,7 @@ def test_selected_theta_tz_operator_matches_expected_rows() -> None:
     dd_minus = np.asarray([[-1.0, -2.0], [-3.0, -4.0]], dtype=np.float64)
     use_plus = np.asarray([[True, False, True], [False, True, False]])
 
-    op = _assemble_selected_theta_tz_operator(dd_plus=dd_plus, dd_minus=dd_minus, use_plus=use_plus)
+    op = assemble_selected_theta_tz_operator(dd_plus=dd_plus, dd_minus=dd_minus, use_plus=use_plus)
     expected = np.asarray(
         [
             [1.0, 0.0, 0.0, 2.0, 0.0, 0.0],
@@ -145,7 +143,7 @@ def test_selected_zeta_tz_operator_matches_expected_rows() -> None:
     dd_minus = np.asarray([[-1.0, -2.0, 0.0], [-3.0, -4.0, -5.0], [0.0, -6.0, -7.0]], dtype=np.float64)
     use_plus = np.asarray([[True, False, True], [False, True, False]])
 
-    op = _assemble_selected_zeta_tz_operator(dd_plus=dd_plus, dd_minus=dd_minus, use_plus=use_plus)
+    op = assemble_selected_zeta_tz_operator(dd_plus=dd_plus, dd_minus=dd_minus, use_plus=use_plus)
     expected = np.asarray(
         [
             [1.0, 2.0, 0.0, 0.0, 0.0, 0.0],
@@ -225,9 +223,9 @@ def test_explicit_fp_xblock_matrix_and_diagonal_share_domain_implementation() ->
         ),
     )
 
-    assert v3_driver._get_rhsmode1_fp_xblock_assembled_host_cache is get_rhsmode1_fp_xblock_assembled_host_cache
-    assert v3_driver._assemble_rhsmode1_fp_xblock_tz_sparse_matrix is assemble_rhsmode1_fp_xblock_tz_sparse_matrix
-    assert v3_driver._rhsmode1_fp_xblock_tz_sparse_diagonal is rhsmode1_fp_xblock_tz_sparse_diagonal
+    assert profile_solve._get_rhsmode1_fp_xblock_assembled_host_cache is get_rhsmode1_fp_xblock_assembled_host_cache
+    assert profile_solve._assemble_rhsmode1_fp_xblock_tz_sparse_matrix is assemble_rhsmode1_fp_xblock_tz_sparse_matrix
+    assert profile_solve._rhsmode1_fp_xblock_tz_sparse_diagonal is rhsmode1_fp_xblock_tz_sparse_diagonal
 
     host = get_rhsmode1_fp_xblock_assembled_host_cache(op=op)
     matrix = assemble_rhsmode1_fp_xblock_tz_sparse_matrix(

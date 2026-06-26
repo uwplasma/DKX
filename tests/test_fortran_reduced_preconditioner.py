@@ -13,7 +13,7 @@ from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.solvers import preconditioning as po
 import sfincs_jax.problems.profile_sparse_direct as sparse_direct
 from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
-import sfincs_jax.v3_driver as vd
+import sfincs_jax.problems.profile_solve as vd
 
 
 @dataclass(frozen=True)

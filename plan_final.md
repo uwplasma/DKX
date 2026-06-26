@@ -2810,6 +2810,15 @@ Current completion status:
   sparse-exact-LU policy tests import `sfincs_jax.problems.profile_policies`.
   This leaves `v3_driver` usage increasingly concentrated in explicit
   compatibility tests and reduces accidental reliance on the facade.
+- The next canonical-import tranche migrated distributed-GMRES, sparse assembly,
+  RHSMode=1 policy, device-operator, Schwarz-routing, and Fortran-reduced
+  preconditioner tests away from `sfincs_jax.v3_driver`. These tests now target
+  the actual `problems.profile_solve`, `problems.profile_policies`,
+  `solvers.preconditioner_symbolic_host`,
+  `solvers.preconditioner_xblock_tz_sparse`, and related owner modules. The
+  remaining `v3_driver` references are intentionally concentrated in
+  compatibility/facade tests or legacy monkeypatch surfaces that need a separate
+  careful pass.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
