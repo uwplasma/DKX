@@ -1,18 +1,18 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (final consolidation-pass plan refresh)
+Last updated: 2026-06-26 (post-review source/examples consolidation plan)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
 Review surface: PR #8, `refactor/v3-driver-architecture`, review-ready after
-the Lane 1 closure plan below is either completed or explicitly deferred with
-tests and documentation.
+the consolidation pass below is completed and the remaining non-blocking
+production-performance lanes are explicitly documented.
 
 Status: this file is the controlling completion plan. `plan.md` remains the
-execution log and historical record. The Lane 1 consolidation plan below is the
-only refactor plan to follow; older iteration/tranche notes are historical.
-Avoid one-helper refactor commits, new implementation shards, and new root
-modules unless the same commit deletes or merges a larger owner.
+execution log and historical record. The package/examples consolidation plan
+below supersedes older iteration/tranche notes. Avoid one-helper refactor
+commits, new implementation shards, and new root modules unless the same commit
+deletes or merges a larger owner.
 
 ## One-Sentence Goal
 
@@ -22,6 +22,244 @@ accurate CPU/GPU results with automatic robust solver selection, while Python
 users can opt into end-to-end differentiable residual, flux, ambipolar, and
 optimization workflows with parity against SFINCS Fortran v3 wherever the
 physics models overlap.
+
+## Authoritative Consolidation Pass
+
+This is the only active refactor plan for making PR #8 reviewable. The prior
+`v3_driver.py` split is functionally complete enough to proceed: the driver is
+a thin compatibility entry point, but the package tree still exposes too many
+intermediate folders, empty packages, generated example artifacts, and
+history-oriented README/docs text. The next work must therefore reduce the
+navigational surface, not create another layer of wrappers.
+
+### Current Audit Snapshot
+
+Checked on 2026-06-26 from
+`refactor/rhs1-full-assembly-preconditioners` at `a775be0d`.
+
+- `sfincs_jax/` contains `154` Python files and `17` root-level Python modules.
+- Largest source domains by line count are `problems` (`69k` lines), `solvers`
+  (`47k`), and `operators` (`21k`).
+- Empty or alias-only packages exist at `sfincs_jax/benchmarks`,
+  `sfincs_jax/compat`, `sfincs_jax/input`, `sfincs_jax/parallel`, and
+  `sfincs_jax/solvers/preconditioners/coarse_space`.
+- Deep paths remain in `sfincs_jax/operators/profile_response`,
+  `sfincs_jax/problems/profile_response/sparse`,
+  `sfincs_jax/problems/transport_matrix/parallel`, and
+  `sfincs_jax/solvers/preconditioners/*`.
+- `examples/` has many user-facing folders plus untracked `__pycache__`
+  directories and tracked benchmark-summary JSON files under pedagogic example
+  paths. Those JSON files are useful evidence, but they should not be the
+  primary learning surface for new users.
+- The root README still contains branch-history/progress language such as
+  "On the current main branch", "now", "previous", "new benchmark", and
+  "production benchmark manifest". That content belongs in documentation or
+  release notes, not in the first-page project pitch.
+- The documented coverage audit is about `72-74%`. The target remains `95%`
+  meaningful package coverage with GitHub Actions under `10 min`; this requires
+  targeted unit, numerical, and frozen-reference tests, not slow full-solve
+  CI jobs.
+
+### Target Package Shape
+
+The source package should have a small set of root modules for public entry
+points and a single level of domain folders. No new folder should be nested
+inside another folder under `sfincs_jax/` unless a short justification is added
+to `sfincs_jax/README.md` and the import surface is tested.
+
+Root modules to keep:
+
+- `api.py`: stable Python API.
+- `cli.py` and `__main__.py`: executable entry points.
+- `solver.py`: high-level solve orchestration and public solver result types.
+- `ambipolar.py`: public ambipolar convenience API.
+- `sensitivity.py`: public JVP/VJP/implicit sensitivity API.
+- `plotting.py`, `compare.py`, `io.py`, `namelist.py`, `paths.py`: user-facing
+  I/O, comparison, plotting, and path utilities.
+- `__init__.py`: exports only stable public contracts and compatibility aliases.
+
+Domain folders to keep:
+
+- `discretization/`: grids, stencils, active indexing, coordinate maps.
+- `geometry/`: analytic, VMEC, Boozer, and JAX geometry adapters.
+- `operators/`: drift-kinetic operator terms and assembled/matrix-free actions.
+- `problems/`: RHSMode-specific problem owners, ambipolar roots, transport
+  matrix solves, and profile-response solves.
+- `solvers/`: Krylov dispatch, linear-solve policy, sparse/native factors, and
+  preconditioner implementations.
+- `outputs/`: HDF5/NetCDF/NPZ writer, output schemas, and post-solve diagnostics.
+- `physics/`: collision, classical, bootstrap, and normalization formulas.
+- `validation/`: frozen references, parity summaries, release-data fetching,
+  and figure-generation helpers.
+- `workflows/`: optional research workflows that call the public API and are
+  not required by the CLI.
+
+Folders to remove or absorb:
+
+- Move `benchmarks/__init__.py` behavior into `validation/` or delete if unused.
+- Move `compat/` aliases into `__init__.py` plus tested import shims, then
+  remove the folder.
+- Move `input/` aliases into `namelist.py`/`input_compat.py` or delete after
+  import tests pass.
+- Move `parallel/` aliases into `workflows/` or `solvers/parallel.py`.
+- Remove empty `solvers/preconditioners/coarse_space`.
+- Flatten `operators/profile_response/*` into `operators/profile_*.py` files.
+- Flatten `problems/profile_response/*` and
+  `problems/profile_response/sparse/*` into `problems/profile_*.py` files.
+- Flatten `problems/transport_matrix/*` and its `parallel/` subfolder into
+  `problems/transport_*.py` files.
+- Flatten `solvers/preconditioners/*` into one-level solver files such as
+  `solvers/preconditioner_pas.py`, `solvers/preconditioner_xblock.py`,
+  `solvers/preconditioner_qi.py`, `solvers/preconditioner_symbolic.py`, and
+  `solvers/preconditioner_transport.py`.
+
+Compatibility policy:
+
+- Public old imports keep working through one release cycle using explicit
+  `sys.modules` alias registration and direct import-contract tests.
+- Internal imports must move to the new one-level domain modules in the same
+  commit that introduces the alias.
+- The docs/API pages should point to the new canonical modules. A separate
+  compatibility appendix can list old paths.
+
+### Source README Deliverable
+
+Add `sfincs_jax/README.md` during the first tranche. It must explain:
+
+- what each root module is for;
+- what each retained domain folder owns;
+- which APIs are stable for users and which modules are internal;
+- how compatibility aliases work during this refactor;
+- where to look for CLI usage, Python solves, geometry loading, outputs,
+  solvers/preconditioners, autodiff, validation references, and examples;
+- the rule that package depth is normally one folder below `sfincs_jax/`;
+- where large reference data live and why they are not stored in the clone.
+
+### Finite Refactor Tranches
+
+Tranche 0: lock the inventory and import map.
+
+- Add a generated-but-checked text summary under `docs/source_map.rst` or a
+  compact JSON under `tests/fixtures/source_tree_expected.json` that records
+  allowed root modules, allowed domain folders, and allowed compatibility
+  aliases.
+- Add a test that fails on new nested folders, new root modules, or empty
+  `__init__.py`-only packages unless the allow-list is updated deliberately.
+- Acceptance: no source moves yet, but the future target is enforced.
+
+Tranche 1: README and docs cleanup.
+
+- Add `sfincs_jax/README.md`.
+- Rewrite the root README opening so it is self-contained and free of branch
+  history. Move detailed production-gate caveats to docs pages.
+- Replace user-facing "now", "previous", "new version", and "current main"
+  language outside `docs/release_notes.rst` and `docs/development_roadmap.rst`.
+- Acceptance: strict docs build passes; root README has no progress-language
+  matches except links to release notes.
+
+Tranche 2: remove empty packages and root shims.
+
+- Delete or absorb `benchmarks`, `compat`, `input`, `parallel`, and empty
+  preconditioner subpackages.
+- Move root helpers that are not public entry points into their domain owners:
+  `grids.py` into `discretization/`, `input_compat.py` into `namelist.py` or
+  `discretization/`, and non-public `solver.py` helpers into `solvers/`.
+- Keep root shim aliases only where documented as stable public API.
+- Acceptance: source-tree test passes; import-contract tests verify old public
+  imports; package root has at most the public modules listed above.
+
+Tranche 3: flatten operators and problems.
+
+- Move `operators/profile_response/*` into one-level `operators/profile_*.py`
+  modules.
+- Move `problems/profile_response/*`,
+  `problems/profile_response/sparse/*`, and `problems/transport_matrix/*`
+  into one-level `problems/profile_*.py` and `problems/transport_*.py`
+  modules.
+- Rename only when the new name is more domain-descriptive; avoid broad
+  `rhs1_*` names except inside compatibility aliases.
+- Acceptance: `v3_driver.py` stays below `75` lines; API docs import canonical
+  modules; focused RHSMode 1/2/3 parity and policy tests pass.
+
+Tranche 4: flatten preconditioners without losing domain ownership.
+
+- Move `solvers/preconditioners/pas/*`, `xblock/*`, `qi/*`,
+  `symbolic_sparse/*`, `full_fp/*`, and `schur/*` into one-level
+  `solvers/preconditioner_*.py` modules.
+- Preserve solver-policy discoverability with docstrings and a single
+  `solvers/preconditioners.py` index if that improves navigation.
+- Acceptance: policy docstring tests pass; CPU/GPU solver-selection fixtures
+  still select the same defaults; no new smoother-tuning-only code is added.
+
+Tranche 5: examples redesign.
+
+- Replace the current examples surface with an indexed learning path:
+  `01_getting_started`, `02_transport`, `03_geometry`, `04_bootstrap_redl`,
+  `05_autodiff`, `06_optimization`, and `07_performance_validation`.
+- Each folder gets a short README, one runnable script, and one notebook when
+  plots or derivations are pedagogically useful.
+- Move raw upstream SFINCS decks and benchmark-output JSON out of the learning
+  path into `benchmarks/` or `validation/` evidence folders; keep only small
+  input decks needed by examples.
+- Add notebooks for bootstrap current vs Redl, QA/QH finite-beta profile
+  currents, ambipolar `E_r`, autodiff sensitivities, VMEC/Boozer geometry, and
+  optimization objectives.
+- Acceptance: example index tells users which file to run for each application;
+  smoke execution of one script per folder stays below the CI example budget.
+
+Tranche 6: coverage ramp to 95%.
+
+- First run `pytest --cov=sfincs_jax --cov-report=json` and rank uncovered
+  modules by executable lines and user risk.
+- Add fast, literature-anchored tests before adding broad coverage-only tests:
+  Onsager symmetry and positivity for transport matrices, pitch-angle collision
+  conservation/nullspace checks, finite-difference stencil exactness on
+  low-order polynomials, Simakov-Helander high-collisionality trend checks,
+  Redl/bootstrap-current normalization fixtures, ambipolar root replay for
+  options 1/2/3, adjoint dot-product/JVP/VJP consistency, and CPU/GPU numerical
+  equivalence on bounded fixtures.
+- Use frozen SFINCS Fortran v3 HDF5/JSON references in CI instead of running
+  Fortran. Keep small references in `tests/fixtures`; fetch larger references
+  from GitHub releases through `sfincs_jax.validation.data_fetch`.
+- Add production-shape fast tests that exercise large-resolution sizing,
+  policy admission, memory estimates, output schemas, and residual gates without
+  solving the full production system.
+- Raise coverage in gates: `80%`, `87%`, `92%`, then `95%`. Do not raise a gate
+  until Linux CI remains below `10 min`.
+- Acceptance: coverage floor reaches `95%`, no multi-megabyte fixture bloat,
+  and CI stays below the time budget.
+
+Tranche 7: benchmark and validation regeneration.
+
+- After source moves and coverage gates pass, rerun all fast examples and the
+  production benchmark manifest.
+- Rerun CPU and office-GPU runtime/memory gates and regenerate README/docs
+  plots, parity tables, bootstrap-current QA/QH comparisons, and runtime/memory
+  comparisons with SFINCS Fortran v3.
+- If a production run is still not promoted, describe it once in docs and keep
+  the README focused on supported behavior.
+- Acceptance: generated figures/tables come from the current branch, use
+  same-resolution CPU/GPU/Fortran comparisons where claimed, and the release
+  checker passes.
+
+### Completion Gates
+
+The consolidation pass is complete only when all of the following are true:
+
+- package depth is one level below `sfincs_jax/` except explicitly allowed
+  compatibility aliases;
+- root modules are only the stable public entry points listed above;
+- `sfincs_jax/README.md`, root README, examples README, docs API pages, and
+  testing docs all describe the same canonical structure;
+- examples are organized by user task and include both scripts and notebooks
+  for the major workflows;
+- CI is under `10 min` and enforces the current coverage floor;
+- coverage reaches `95%` through meaningful unit, numerical, physics, parity,
+  and regression tests;
+- benchmark/runtime/memory/parity figures are regenerated after the final
+  source move;
+- the PR contains one coherent refactor story and no generated cache/output
+  clutter.
 
 ## Evidence Reviewed
 
