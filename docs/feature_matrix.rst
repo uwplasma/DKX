@@ -133,8 +133,8 @@ Fortran v3 feature ownership
      - ``geometry.F90``, ``radialCoordinates.F90``, ``updateBoozerGeometry.F90``
      - Fortran supports analytic, Boozer, VMEC-derived, and related geometry
        schemes, with RHSMode>3 restricted to Boozer coordinates.
-     - ``sfincs_jax.geometry``, ``sfincs_jax.vmec_geometry``,
-       ``sfincs_jax.jax_geometry_adapters``: implemented with gates. VMEC and
+     - ``sfincs_jax.geometry``, ``sfincs_jax.geometry.vmec``,
+       ``sfincs_jax.geometry.jax_adapters``: implemented with gates. VMEC and
        differentiable adapters are supported; broader QI and scheme-13
        production promotion remains documented research work.
    * - Phi1/quasineutrality

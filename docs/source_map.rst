@@ -53,10 +53,12 @@ skeleton packages are:
 - ``sfincs_jax/compat`` for legacy import shims and external-code comparison
   helpers.
 
-``sfincs_jax/geometry.py`` and ``sfincs_jax/io.py`` intentionally remain modules
-for now because those import paths are already part of the active code. The
-``geometry`` and ``io`` package names are reserved for a later migration step
-that moves the implementation without shadowing or breaking existing imports.
+``sfincs_jax/geometry`` is now a real package owner for analytic Boozer,
+Boozer-file, VMEC, and JAX-native geometry adapters. ``sfincs_jax/io.py``
+intentionally remains a module for now because that import path is already part
+of the active public code; the ``io`` package name is reserved for a later
+migration step that moves the implementation without shadowing or breaking
+existing imports.
 
 Root public surface classification
 ----------------------------------
@@ -110,9 +112,6 @@ facades.
    * - ``adaptive_maps.py``
      - stable numerical kernel
      - Mapped speed-grid construction shared by discretization and workflows.
-   * - ``boozer_bc.py``
-     - stable geometry kernel
-     - Boozer ``.bc`` parsing/evaluation support.
    * - ``classical_transport.py``
      - stable physics kernel
      - Classical transport formulas and validation gates.
@@ -137,9 +136,6 @@ facades.
    * - ``diagnostics.py``
      - stable physics kernel
      - Flux-surface averages, moment integrals, and output diagnostics.
-   * - ``geometry.py``
-     - public geometry API
-     - Existing flat geometry import path reserved until a non-breaking package migration.
    * - ``grids.py``
      - public discretization API
      - Velocity/grid helpers used directly by docs and tests.
@@ -149,9 +145,6 @@ facades.
    * - ``indices.py``
      - stable discretization kernel
      - Shared index/layout helpers.
-   * - ``jax_geometry_adapters.py``
-     - public geometry workflow API
-     - Optional VMEC-JAX/Boozer-JAX in-memory geometry adapters.
    * - ``magnetic_drifts.py``
      - stable operator kernel
      - Magnetic-drift coefficient and stencil construction.
@@ -185,12 +178,6 @@ facades.
    * - ``v3_driver.py``
      - compatibility shim
      - Historical import path; implementation lives in domain owners and this file must remain tiny.
-   * - ``vmec_geometry.py``
-     - stable geometry kernel
-     - VMEC ``geometryScheme=5`` evaluator.
-   * - ``vmec_wout.py``
-     - stable geometry kernel
-     - VMEC ``wout`` reader/data contract.
    * - ``xgrid.py``
      - stable discretization kernel
      - SFINCS-compatible speed-grid helpers.
@@ -247,9 +234,6 @@ tests.
    * - ``adaptive_maps.py``
      - discretization speed-grid owner
      - move with grid/discretization kernel group
-   * - ``boozer_bc.py``
-     - geometry package Boozer owner
-     - move after geometry.py package migration is staged
    * - ``classical_transport.py``
      - physics classical transport owner
      - move only with physics API export tests
@@ -274,9 +258,6 @@ tests.
    * - ``diagnostics.py``
      - physics/output diagnostics owner
      - defer until diagnostics API split is explicit
-   * - ``geometry.py``
-     - future geometry package public owner
-     - convert from module to package only in one dedicated Phase 2 move
    * - ``grids.py``
      - discretization public grid owner
      - keep root public helper until discretization package exports are documented
@@ -286,9 +267,6 @@ tests.
    * - ``indices.py``
      - discretization layout owner
      - move with grid/discretization kernel group
-   * - ``jax_geometry_adapters.py``
-     - geometry package JAX-adapter owner
-     - move after geometry.py package migration is staged
    * - ``magnetic_drifts.py``
      - operators magnetic-drift owner
      - move with operator-kernel group
@@ -322,12 +300,6 @@ tests.
    * - ``v3_driver.py``
      - compatibility shim to problem owners
      - delete after tests/examples stop importing sfincs_jax.v3_driver
-   * - ``vmec_geometry.py``
-     - geometry package VMEC evaluator owner
-     - move after geometry.py package migration is staged
-   * - ``vmec_wout.py``
-     - geometry package VMEC wout owner
-     - move after geometry.py package migration is staged
    * - ``xgrid.py``
      - discretization speed-grid owner
      - move with grid/discretization kernel group
@@ -510,7 +482,7 @@ Compatibility and search-order logic for equilibrium files, input normalization,
 user overrides. This is the module to inspect first when a case fails to find a VMEC or
 Boozer file.
 
-``sfincs_jax/jax_geometry_adapters.py``
+``sfincs_jax/geometry/jax_adapters.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Optional structural adapters for JAX-native geometry producers such as ``vmec_jax``
@@ -530,8 +502,8 @@ Velocity-space discretization:
 - modal transforms used by the collision operator,
 - special handling for monoenergetic ``RHSMode=3``.
 
-``sfincs_jax/geometry.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+``sfincs_jax/geometry/__init__.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Geometry loading and normalized coefficient generation:
 
@@ -540,7 +512,17 @@ Geometry loading and normalized coefficient generation:
 - Boozer ``.bc`` evaluation,
 - surface metrics and scalar geometry diagnostics.
 
-``sfincs_jax/vmec_geometry.py``
+``sfincs_jax/geometry/vmec_wout.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+VMEC ``wout`` reader and radial interpolation contracts:
+
+- netCDF ``wout`` parsing,
+- mode/radius array convention normalization,
+- half/full-mesh interpolation rules,
+- SFINCS-compatible ``psiAHat`` and ripple-scale helpers.
+
+``sfincs_jax/geometry/vmec.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 VMEC ``geometryScheme=5`` Fourier-sum evaluator. The public file path

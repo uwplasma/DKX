@@ -10,6 +10,7 @@ DOMAIN_PACKAGES = (
     "sfincs_jax.input",
     "sfincs_jax.physics",
     "sfincs_jax.discretization",
+    "sfincs_jax.geometry",
     "sfincs_jax.operators",
     "sfincs_jax.problems",
     "sfincs_jax.problems.profile_response",
@@ -33,6 +34,13 @@ DOMAIN_PACKAGES = (
 )
 
 ACTIVE_PACKAGE_EXPORTS = {
+    "sfincs_jax.geometry": (
+        "BoozerGeometry",
+        "boozer_geometry_from_bc_file",
+        "boozer_geometry_scheme1",
+        "boozer_geometry_scheme2",
+        "boozer_geometry_scheme4",
+    ),
     "sfincs_jax.problems": (
         "AmbipolarIteration",
         "AmbipolarProblem",
@@ -244,11 +252,28 @@ LEGACY_MODULES_THAT_KEEP_THEIR_IMPORT_PATHS = (
 )
 
 RESERVED_MODULE_NAMES_UNTIL_MIGRATION = (
-    "sfincs_jax.geometry",
     "sfincs_jax.io",
 )
 
 MOVED_ROOT_MODULE_OWNERS = {
+    "sfincs_jax.geometry.boozer": (
+        "read_boozer_bc_header",
+        "read_boozer_bc_bracketing_surfaces",
+        "selected_r_n_from_bc",
+    ),
+    "sfincs_jax.geometry.jax_adapters": (
+        "geometry_proxy_workflow_contract",
+        "vmec_wout_from_wout_like",
+    ),
+    "sfincs_jax.geometry.vmec": (
+        "vmec_geometry_from_wout",
+        "vmec_geometry_from_wout_file",
+    ),
+    "sfincs_jax.geometry.vmec_wout": (
+        "VmecWout",
+        "read_vmec_wout",
+        "vmec_interpolation",
+    ),
     "sfincs_jax.validation.data_fetch": (
         "ensure_external_equilibrium_data",
         "external_data_manifest",
@@ -271,7 +296,6 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "adaptive_maps.py": "stable numerical kernel",
     "ambipolar.py": "public physics API",
     "api.py": "public API",
-    "boozer_bc.py": "stable geometry kernel",
     "classical_transport.py": "stable physics kernel",
     "cli.py": "public entry point",
     "collisionless.py": "stable operator kernel",
@@ -282,13 +306,11 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "constrained_pas_branch.py": "stable solver-policy kernel",
     "constraint_projection.py": "stable numerical kernel",
     "diagnostics.py": "stable physics kernel",
-    "geometry.py": "public geometry API",
     "grids.py": "public discretization API",
     "host_refinement.py": "stable solver-policy kernel",
     "indices.py": "stable discretization kernel",
     "input_compat.py": "public compatibility API",
     "io.py": "compatibility facade",
-    "jax_geometry_adapters.py": "public geometry workflow API",
     "magnetic_drifts.py": "stable operator kernel",
     "namelist.py": "public input API",
     "pas_smoother.py": "stable preconditioner kernel",
@@ -303,8 +325,6 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "solver.py": "stable solver kernel",
     "structured_velocity.py": "stable numerical kernel",
     "v3_driver.py": "compatibility shim",
-    "vmec_geometry.py": "stable geometry kernel",
-    "vmec_wout.py": "stable geometry kernel",
     "xgrid.py": "stable discretization kernel",
 }
 
@@ -314,7 +334,6 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "adaptive_maps.py": ("discretization speed-grid owner", "move with grid/discretization kernel group"),
     "ambipolar.py": ("problems.ambipolar via public API facade", "keep root shim until public docs/examples migrate"),
     "api.py": ("package root public API", "keep at root"),
-    "boozer_bc.py": ("geometry package Boozer owner", "move after geometry.py package migration is staged"),
     "classical_transport.py": ("physics classical transport owner", "move only with physics API export tests"),
     "cli.py": ("package root CLI entry point", "keep at root"),
     "collisionless.py": ("operators profile-response streaming owner", "move with operator-kernel group"),
@@ -325,13 +344,11 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "constrained_pas_branch.py": ("solvers/preconditioners PAS policy owner", "move in solver-policy group if no public shim is needed"),
     "constraint_projection.py": ("solvers constraint-projection owner", "move only after transport/profile imports use solver owner"),
     "diagnostics.py": ("physics/output diagnostics owner", "defer until diagnostics API split is explicit"),
-    "geometry.py": ("future geometry package public owner", "convert from module to package only in one dedicated Phase 2 move"),
     "grids.py": ("discretization public grid owner", "keep root public helper until discretization package exports are documented"),
     "host_refinement.py": ("solvers refinement policy owner", "move in solver-policy group if profile-response imports migrate"),
     "indices.py": ("discretization layout owner", "move with grid/discretization kernel group"),
     "input_compat.py": ("input compatibility owner", "keep root public compatibility shim until input package exports cover callers"),
     "io.py": ("outputs writer/formats/cache owners", "keep tiny root facade until public imports migrate"),
-    "jax_geometry_adapters.py": ("geometry package JAX-adapter owner", "move after geometry.py package migration is staged"),
     "magnetic_drifts.py": ("operators magnetic-drift owner", "move with operator-kernel group"),
     "namelist.py": ("input namelist owner", "keep root public parser until input package exports are documented"),
     "pas_smoother.py": ("solvers/preconditioners PAS smoother owner", "move in solver-preconditioner group"),
@@ -346,8 +363,6 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "solver.py": ("solvers public contracts owner", "keep root shim until solvers exports cover public contracts"),
     "structured_velocity.py": ("discretization structured-velocity owner", "move with grid/discretization kernel group"),
     "v3_driver.py": ("compatibility shim to problem owners", "delete after tests/examples stop importing sfincs_jax.v3_driver"),
-    "vmec_geometry.py": ("geometry package VMEC evaluator owner", "move after geometry.py package migration is staged"),
-    "vmec_wout.py": ("geometry package VMEC wout owner", "move after geometry.py package migration is staged"),
     "xgrid.py": ("discretization speed-grid owner", "move with grid/discretization kernel group"),
 }
 
@@ -828,7 +843,15 @@ def test_moved_root_workflow_modules_have_domain_owners() -> None:
         for export_name in expected_exports:
             assert hasattr(module, export_name), f"{module_name}.{export_name}"
 
-    for deleted_root in ("sfincs_jax.data_fetch", "sfincs_jax.postprocess_upstream", "sfincs_jax.scans"):
+    for deleted_root in (
+        "sfincs_jax.boozer_bc",
+        "sfincs_jax.data_fetch",
+        "sfincs_jax.jax_geometry_adapters",
+        "sfincs_jax.postprocess_upstream",
+        "sfincs_jax.scans",
+        "sfincs_jax.vmec_geometry",
+        "sfincs_jax.vmec_wout",
+    ):
         try:
             _import_module(deleted_root)
         except ModuleNotFoundError:
