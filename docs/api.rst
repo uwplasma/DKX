@@ -69,7 +69,7 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.solvers.memory_model
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.solver_diagnostics
+.. automodule:: sfincs_jax.problems.profile_solver_diagnostics
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.finalize
@@ -127,16 +127,16 @@ to live inside the large driver. They are included here because they are part of
 the maintainable public source structure for debugging, testing, and downstream
 research workflows.
 
-.. automodule:: sfincs_jax.problems.profile_response.policies
+.. automodule:: sfincs_jax.problems.profile_policies
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.setup
+.. automodule:: sfincs_jax.problems.profile_setup
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.phi1_newton
+.. automodule:: sfincs_jax.problems.profile_phi1_newton
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.preconditioner_build
+.. automodule:: sfincs_jax.problems.profile_preconditioner_build
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.coarse
@@ -184,25 +184,25 @@ research workflows.
 .. automodule:: sfincs_jax.solvers.preconditioners.qi.policy
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.residual
+.. automodule:: sfincs_jax.problems.profile_residual
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.sparse.direct
+.. automodule:: sfincs_jax.problems.profile_sparse_direct
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.sparse.finalization
+.. automodule:: sfincs_jax.problems.profile_sparse_finalization
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.sparse.fortran_reduced
+.. automodule:: sfincs_jax.problems.profile_sparse_fortran_reduced
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.sparse.handoff
+.. automodule:: sfincs_jax.problems.profile_sparse_handoff
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.sparse.qi
+.. automodule:: sfincs_jax.problems.profile_sparse_qi
    :members:
 
-.. automodule:: sfincs_jax.problems.profile_response.sparse.xblock
+.. automodule:: sfincs_jax.problems.profile_sparse_xblock
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.policy

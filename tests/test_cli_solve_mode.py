@@ -109,7 +109,7 @@ def test_cmd_solve_v3_forces_explicit_mode(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
     monkeypatch.setattr(
-        "sfincs_jax.problems.profile_response.solve.solve_v3_full_system_linear_gmres",
+        "sfincs_jax.problems.profile_solve.solve_v3_full_system_linear_gmres",
         _fake_solve,
     )
 
@@ -682,7 +682,7 @@ def test_cmd_solve_v3_applies_equilibrium_override(monkeypatch, tmp_path: Path) 
         return SimpleNamespace(x=np.zeros((2,), dtype=np.float64), residual_norm=np.float64(0.0))
 
     monkeypatch.setattr(
-        "sfincs_jax.problems.profile_response.solve.solve_v3_full_system_linear_gmres",
+        "sfincs_jax.problems.profile_solve.solve_v3_full_system_linear_gmres",
         _fake_solve,
     )
 
