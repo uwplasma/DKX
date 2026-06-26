@@ -5810,3 +5810,66 @@ Next best steps:
    back below the pre-Batch-A `165,398` checkpoint before review.
 3. Then proceed to Batch B output/root compression and Batch C
    preconditioner-family compression.
+
+## 2026-06-26 Batch A Handoff Export Paydown
+
+Steps taken:
+
+1. Kept the large sparse-PC branch in the existing
+   `sfincs_jax/problems/profile_response/sparse/handoff.py` owner, but
+   replaced its duplicated 364-entry literal re-export list with owner-module
+   export composition plus explicit local and diagnostics compatibility
+   exports.
+2. Verified the new `__all__` has the exact same exported symbol set as the
+   pre-change `HEAD` handoff module: `364` old symbols, `364` new symbols,
+   no missing names, and no extra names.
+3. Added a documented file-local `F401,F811` ruff waiver for the handoff
+   compatibility facade. This is limited to the re-export and driver-scope
+   shadowing behavior in that file and is tracked in `plan_final.md` for
+   Batch E review.
+4. Refreshed `plan_final.md` so Batch A now records both review-ready gates:
+   `profile_response/solve.py <=5,500` and
+   `profile_response/sparse/handoff.py <=5,500`.
+
+Results:
+
+- `profile_response/sparse/handoff.py` decreased from `5,780` lines after the
+  previous solve-sequencer move to `5,498` lines, meeting the Batch A handoff
+  review gate.
+- `profile_response/solve.py` remains `5,358` lines, still under the Batch A
+  solve-sequencer gate.
+- Package Python files remain `195`.
+- Package source lines decreased from `165,653` to `165,371`, back below the
+  pre-Batch-A `165,398` checkpoint.
+- No top-level `rhs1_*` or `transport_*` modules exist.
+
+Validation:
+
+- Exact handoff export-set comparison against `HEAD` passed with no missing or
+  extra symbols.
+- `python -m py_compile sfincs_jax/problems/profile_response/sparse/handoff.py sfincs_jax/problems/profile_response/solve.py sfincs_jax/problems/profile_response/policies.py` passed.
+- `python -m ruff check sfincs_jax/problems/profile_response/sparse/handoff.py sfincs_jax/problems/profile_response/solve.py sfincs_jax/problems/profile_response/policies.py` passed.
+- `python -m pytest tests/test_profile_response_sparse_pc.py tests/test_profile_response_dense.py tests/test_rhs1_solver_policy.py tests/test_v3_sparse_pattern.py -q --tb=short` passed with `510 passed in 103.81s`.
+- `python -m pytest tests/test_domain_package_import_contracts.py tests/test_profile_response_finalization.py tests/test_profile_response_linear_solve.py tests/test_profile_response_auto_solve.py -q --tb=short` passed with `29 passed in 1.98s`.
+
+Progress:
+
+- Lane 1 structural consolidation: about `95%`.
+- Batch A profile-response collapse: about `92%`. The formal review-ready
+  size gates are now met; only stretch cleanup remains unless new failures
+  appear.
+- Batch B transport/output/root cleanup: about `45%`; next required work is
+  output/root compression, especially `io.py`.
+- Batch C solver/preconditioner family consolidation: about `25%`.
+- Batch D public API/docs/tests/review gate: about `30%`.
+
+Next best steps:
+
+1. Move to Batch B instead of continuing handoff churn: reduce `io.py` from
+   `4,264` lines to `<=1,200` by moving concrete output implementation into
+   `sfincs_jax/outputs`.
+2. Merge only obvious transport/output relay files where the owner is clearer;
+   do not add new helper shards.
+3. After Batch B, execute Batch C solver/preconditioner-family compression,
+   targeting `solvers/preconditioners <=35` files and removal of the remaining
+   historical `symbolic_sparse/rhs1_fortran_reduced.py` filename.
