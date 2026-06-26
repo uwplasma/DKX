@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 from types import ModuleType
 
 
@@ -754,3 +755,13 @@ def test_profile_response_package_moves_preserve_legacy_imports() -> None:
             assert public_name in legacy_module.__all__
         if hasattr(new_module, "__all__"):
             assert public_name in new_module.__all__
+
+
+def test_sparse_handoff_compatibility_waiver_is_documented() -> None:
+    """The sparse handoff lint waiver must remain a documented compatibility seam."""
+
+    source = Path("sfincs_jax/problems/profile_response/sparse/handoff.py").read_text()
+    assert "# ruff: noqa: F401,F811" in source
+    assert "dynamic re-export surface" in source
+    assert "Delete this waiver" in source
+    assert "solve.py and owner tests import the concrete sparse owners directly" in source
