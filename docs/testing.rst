@@ -347,13 +347,13 @@ pytree round-trips, diagnostic metadata retention, finite-result rejection,
 local-coupling preservation, small differentiable regularized least-squares
 solves, sparse triangular factor solves, mutable
 solver-hint state, dtype policy, and sparse structural-tolerance handling.
-``preconditioner_setup.py`` adds direct tests for setup chunk sizing,
+``preconditioning.py`` adds direct tests for setup chunk sizing,
 stable cache-key array hashing, injected matrix-free submatrix probing, and
 RHSMode=1/transport cache-key stability for dtype, Phi1, PAS, and FP
 signatures.
 ``solvers/krylov_dispatch.py`` adds direct tests
 for host-only method rejection, JIT/plain/distributed dispatch, diagnostic
-labels, and distributed-axis environment policy. ``preconditioner_caches.py``
+labels, and distributed-axis environment policy. ``preconditioning.py``
 adds direct tests for representative RHSMode=1, transport, sparse-ILU, Schur,
 and PAS cache containers, plus identity checks proving that legacy
 ``v3_driver`` cache names still refer to the same registry objects.
@@ -598,7 +598,7 @@ diagonal regularization for singular local factors, and the preserved
 ``v3_driver`` compatibility aliases for the RHSMode=1 non-differentiable host
 ILU/LU path.
 ``tests/test_fortran_reduced_preconditioner.py`` now also exercises the
-``preconditioner_operators.py`` module directly for the Fortran-reduced
+``preconditioning.py`` module directly for the Fortran-reduced
 operator-shaping contract, including the radial-x simplification and the
 preserved driver compatibility alias.
 The same file now protects the extracted
