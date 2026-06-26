@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (frozen-reference comparison coverage guard pass)
+Last updated: 2026-06-26 (benchmark-promotion policy coverage guard pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -308,6 +308,13 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   suite reports `22 passed` in `0.51 s` and Ruff passes for the touched file.
   These tests strengthen Fortran-v3 parity validation semantics without adding
   large HDF5 fixtures or requiring Fortran in CI.
+- The fifty-first post-audit coverage tranche added release-artifact policy
+  tests for default-solver promotion evidence, quantitative baseline gates,
+  completed-row residual/memory/stall/solver-path gates, excluded-low-runtime
+  rows, sorted summary rows, and canonical CPU/GPU benchmark ordering. The
+  benchmark-policy/doc suite reports `44 passed` in `0.13 s` and Ruff passes
+  for the touched file. These tests prevent incomplete production benchmark
+  evidence from being promoted into README/docs plots.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
@@ -2478,7 +2485,9 @@ Current completion status:
   active full-FP kinetic block preconditioners, sparse-pattern helpers,
   explicit-sparse settings, profile-system algebra helpers, RHSMode=2/3
   transport block-preconditioner assembly, public solver/API facades, and
-  frozen-reference comparison semantics. The next coverage work must focus on
+  frozen-reference comparison semantics. Benchmark-artifact promotion policy
+  now also has fast gates for default-promotion evidence and canonical
+  runtime/memory ordering. The next coverage work must focus on
   profile/transport solve owners, explicit sparse assembly, Schur/profile
   preconditioners, profile true-operator rescue paths, and output writer
   branches while keeping CI below ten minutes.
