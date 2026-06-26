@@ -131,6 +131,11 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   encoding, geometryScheme=4 radial-coordinate conversion, and Boozer
   Fourier-derivative evaluation. These tests pin output semantics and
   geometry algebra without launching full solves.
+- The tenth post-audit coverage tranche added Schur/coarse policy tests for
+  active-native stack memory budgeting, field-split sparse-coarse family
+  classification, coupled-kinetic admission guards, and sparse residual-coarse
+  base selection. These are fast numerical-policy gates for the production
+  RHSMode=1 preconditioner defaults.
 - The CI coverage floor is `80%`. The next planned gate is `85%`, once the
   branch has a stable margin above `85%` and the sharded CI wall time remains
   below ten minutes.
