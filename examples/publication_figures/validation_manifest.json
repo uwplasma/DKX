@@ -546,7 +546,7 @@
     ],
     "source_code": [
       "sfincs_jax/solvers/implicit.py",
-      "sfincs_jax/geometry.py",
+      "sfincs_jax/geometry/__init__.py",
       "sfincs_jax/validation/artifacts.py",
       "examples/publication_figures/generate_autodiff_sensitivity_validation.py"
     ],
