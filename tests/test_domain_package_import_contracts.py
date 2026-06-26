@@ -540,6 +540,16 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "sfincs_jax.problems.profile_response.preconditioner_build",
         "requested_rhs1_strong_preconditioner_kind",
     ),
+    (
+        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "FortranReducedXBlockBackendContext",
+    ),
+    (
+        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "sfincs_jax.problems.profile_response.sparse.handoff",
+        "solve_fortran_reduced_xblock_backend",
+    ),
 )
 
 
