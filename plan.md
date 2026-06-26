@@ -15,12 +15,29 @@ Authoritative plan: `plan_final.md`. This file is the execution log and
 historical record only; if this file conflicts with `plan_final.md`, follow
 `plan_final.md`.
 
-Latest controlling update: `plan_final.md` now defines Lane 1 as four
-consolidation batches only: Batch A profile-response collapse, Batch B
-transport/output/root cleanup, Batch C solver/preconditioner family
-consolidation, and Batch D public API/docs/tests/review gate. Older sweep,
-tranche, iteration, pass, and batch labels in this execution log are historical
-context, not instructions to follow.
+Latest controlling update: `plan_final.md` now defines Lane 1 as five
+consolidation phases only: Phase 1 profile-response collapse, Phase 2
+transport/output/root cleanup, Phase 3 solver/preconditioner family
+consolidation, Phase 4 public API/docs/tests/source-map cleanup, and Phase 5
+review-ready validation. Older sweep, tranche, iteration, pass, and batch
+labels in this execution log are historical context, not instructions to
+follow.
+
+Latest execution checkpoint:
+
+- Phase 1 deleted `sfincs_jax/problems/profile_response/handoff.py` by moving
+  accepted-candidate replay, solver-candidate residual gates, and Krylov
+  replay-state updates into
+  `sfincs_jax/problems/profile_response/solver_diagnostics.py`.
+- `sfincs_jax/problems/profile_response/solve.py`, focused tests, source maps,
+  and docs now import the canonical `solver_diagnostics.py` owner for those
+  helpers.
+- Current counts after this checkpoint: 207 package Python files, 43 package
+  root files, 20 `problems/profile_response` files including `sparse`,
+  `profile_response/solve.py` at 7,014 lines,
+  `profile_response/solver_diagnostics.py` at 2,114 lines,
+  `profile_response/sparse/handoff.py` at 4,438 lines, and 165,647 package
+  Python lines.
 
 ## One-Sentence Plan
 
@@ -5370,8 +5387,8 @@ Results:
   the single x-block setup/orchestration owner for this PR.
 - `profile_response/solve.py` remains `7,014` lines.
 - `problems/profile_response` remains `21` files and is now `52,672` lines.
-- Package file count remains `208`; package-root file count remains `43`;
-  package source lines are currently `165,688`.
+- At that checkpoint, package file count remained `208`, package-root file
+  count remained `43`, and package source lines were `165,688`.
 
 Validation:
 

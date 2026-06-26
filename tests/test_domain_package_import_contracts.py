@@ -491,8 +491,8 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "rhs1_constraint0_sparse_first",
     ),
     (
-        "sfincs_jax.problems.profile_response.handoff",
-        "sfincs_jax.problems.profile_response.handoff",
+        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "sfincs_jax.problems.profile_response.solver_diagnostics",
         "rhs1_accept_candidate",
     ),
     (

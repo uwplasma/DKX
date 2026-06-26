@@ -1154,9 +1154,10 @@ the historical private driver name and test the focused module directly. This ke
   compatibility facade for historical RHSMode=1 strong-preconditioner fallback
   imports. The implementation owner is now
   ``sfincs_jax/problems/profile_response/preconditioner_build.py``.
-- ``sfincs_jax/problems/profile_response/handoff.py``
-  (legacy alias: ``sfincs_jax/rhs1_handoff.py``):
-  accepted-candidate handoff and Krylov replay-state updates. This is the
+- ``sfincs_jax/problems/profile_response/solver_diagnostics.py``
+  (absorbed owner for former ``profile_response/handoff.py``):
+  accepted-candidate replay, Krylov replay-state updates, final RHSMode=1
+  solver diagnostics, and final linear-solve metadata. This is the
   source-mapped seam for the repeated RHSMode=1 driver pattern: compare a
   rescue/refinement candidate against the incumbent residual, apply optional
   measured solver-candidate gates, preserve the accepted residual vector, and

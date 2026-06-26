@@ -124,7 +124,7 @@ from sfincs_jax.problems.profile_response.policies import (
     rhs1_gpu_sparse_fallback_skip_allowed_current_backend as _rhs1_gpu_sparse_fallback_skip_allowed,
 )
 from sfincs_jax.solvers.preconditioners.schur.profile_response import resolve_rhs1_schur_base_kind
-from sfincs_jax.problems.profile_response.handoff import (
+from sfincs_jax.problems.profile_response.solver_diagnostics import (
     RHS1KSPReplayState,
     RHS1SkipPrimaryKrylovSeedContext,
     rhs1_accept_candidate_and_update_replay,

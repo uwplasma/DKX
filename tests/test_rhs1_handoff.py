@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from sfincs_jax.problems.profile_response.handoff import (
+from sfincs_jax.problems.profile_response.solver_diagnostics import (
     RHS1KSPHandoffState,
     RHS1KSPReplayState,
     RHS1SkipPrimaryKrylovSeedContext,
