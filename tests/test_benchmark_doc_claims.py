@@ -27,7 +27,14 @@ PUBLIC_STANDALONE_DOCS = [
     REPO_ROOT / "docs" / "usage.rst",
     REPO_ROOT / "docs" / "method.rst",
     REPO_ROOT / "docs" / "geometry.rst",
+    REPO_ROOT / "docs" / "inputs.rst",
+    REPO_ROOT / "docs" / "outputs.rst",
     REPO_ROOT / "docs" / "performance.rst",
+    REPO_ROOT / "docs" / "parity.rst",
+    REPO_ROOT / "docs" / "optimization.rst",
+    REPO_ROOT / "docs" / "testing.rst",
+    REPO_ROOT / "docs" / "source_map.rst",
+    REPO_ROOT / "docs" / "api.rst",
 ]
 PUBLIC_STALE_FRAGMENTS = (
     "On the current",
@@ -47,7 +54,10 @@ PUBLIC_STALE_FRAGMENTS = (
     "latest guarded audit",
     "latest root drift",
 )
-PUBLIC_STALE_PATTERNS = tuple(re.compile(rf"\b{re.escape(word)}\b") for word in ("now", "older", "newer"))
+PUBLIC_STALE_PATTERNS = tuple(
+    re.compile(rf"\b{re.escape(word)}\b")
+    for word in ("now", "older", "newer", "previous", "currently")
+)
 
 
 def _summary() -> dict[str, object]:

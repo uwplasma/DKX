@@ -1066,7 +1066,7 @@ paths we use to guide performance work:
 - **Use ahead-of-time (AOT) compilation** for stable-shape kernels that dominate wall time;
   this reduces JIT latency during interactive or production runs. [#jax-aot]_
 - **Prefer short-recurrence Krylov methods** (e.g., BiCGStab/IDR(s)) when GMRES memory growth
-  becomes dominant, since GMRES stores all previous Krylov vectors. [#gmres-memory]_
+  becomes dominant, since GMRES stores all retained Krylov vectors. [#gmres-memory]_
 
 These sources inform our memory and compilation roadmap; any algorithmic change is still
 validated against unit tests, physics checks, and the CPU/GPU example-suite parity artifacts before it becomes a default.

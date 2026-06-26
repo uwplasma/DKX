@@ -952,10 +952,10 @@ performance without changing the input file:
 - ``SFINCS_JAX_OUTPUT_CACHE_DIR``: override the output cache directory
   (default: ``~/.cache/sfincs_jax/output_cache``).
 
-- ``SFINCS_JAX_TRANSPORT_RECYCLE_K``: recycle up to ``k`` previous Krylov solution vectors across
+- ``SFINCS_JAX_TRANSPORT_RECYCLE_K``: recycle up to ``k`` Krylov solution vectors across
   successive ``whichRHS`` solves in transport-matrix runs. Set to ``0`` to disable.
 
-- ``SFINCS_JAX_RHSMODE1_RECYCLE_K``: recycle up to ``k`` previous RHSMode=1 solution vectors
+- ``SFINCS_JAX_RHSMODE1_RECYCLE_K``: recycle up to ``k`` RHSMode=1 solution vectors
   (via least-squares deflation) when ``SFINCS_JAX_STATE_IN`` is provided. Set to ``0`` to
   disable (default: ``4``).
 

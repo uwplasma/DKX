@@ -13,6 +13,7 @@ import sfincs_jax.operators.profile_system as profile_system
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.operators.profile_system import (
     V3FullSystemOperator,
+    apply_v3_full_system_operator,
     apply_v3_full_system_jacobian,
     _fs_average_factor,
     _get_bool,
@@ -52,6 +53,98 @@ def _deterministic_vector(size: int) -> jnp.ndarray:
 def _tiny_phi1_scheme2_operator():
     nml = read_sfincs_input(REF / "include_phi1_linear_subset_tiny.input.namelist")
     return full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+
+
+@pytest.mark.parametrize(
+    ("fixture", "expected_active"),
+    [
+        (
+            "er_xdot_1species_tiny.input.namelist",
+            {
+                "er_xdot",
+                "pas",
+                "exb_theta",
+                "exb_zeta",
+            },
+        ),
+        (
+            "er_xidot_1species_tiny.input.namelist",
+            {
+                "er_xidot",
+                "pas",
+                "exb_theta",
+                "exb_zeta",
+            },
+        ),
+        (
+            "exb_theta_1species_tiny.input.namelist",
+            {
+                "pas",
+                "exb_theta",
+                "exb_zeta",
+            },
+        ),
+        (
+            "magdrift_1species_tiny.input.namelist",
+            {
+                "magdrift_theta",
+                "magdrift_zeta",
+                "magdrift_xidot",
+                "pas",
+                "exb_theta",
+                "exb_zeta",
+            },
+        ),
+        (
+            "fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision.input.namelist",
+            {
+                "fp_phi1",
+                "exb_theta",
+                "exb_zeta",
+            },
+        ),
+    ],
+)
+def test_full_system_operator_optional_physics_terms_apply_on_tiny_v3_fixtures(
+    fixture: str, expected_active: set[str]
+) -> None:
+    """Exercise optional v3 physics branches without launching a linear solve."""
+    nml = read_sfincs_input(REF / fixture)
+    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0, keep_zero_er_terms=True)
+    fblock = op.fblock
+    active_terms = {
+        "er_xdot": fblock.er_xdot is not None,
+        "er_xidot": fblock.er_xidot is not None,
+        "magdrift_theta": fblock.magdrift_theta is not None,
+        "magdrift_zeta": fblock.magdrift_zeta is not None,
+        "magdrift_xidot": fblock.magdrift_xidot is not None,
+        "pas": fblock.pas is not None,
+        "fp": fblock.fp is not None,
+        "fp_phi1": fblock.fp_phi1 is not None,
+        "exb_theta": fblock.exb_theta is not None,
+        "exb_zeta": fblock.exb_zeta is not None,
+    }
+
+    assert {name for name, is_active in active_terms.items() if is_active} == expected_active
+    assert op.total_size > op.f_size
+    if "fp_phi1" in expected_active:
+        assert op.include_phi1 is True
+        assert op.phi1_size == op.n_theta * op.n_zeta + 1
+    else:
+        assert op.include_phi1 is False
+
+    vector = _deterministic_vector(op.total_size)
+    y_jac = apply_v3_full_system_operator(op, vector, include_jacobian_terms=True)
+    y_residual_operator = apply_v3_full_system_operator(op, vector, include_jacobian_terms=False)
+    residual = residual_v3_full_system(op, vector)
+
+    assert y_jac.shape == (op.total_size,)
+    assert y_residual_operator.shape == (op.total_size,)
+    assert residual.shape == (op.total_size,)
+    assert np.all(np.isfinite(np.asarray(y_jac)))
+    assert np.all(np.isfinite(np.asarray(y_residual_operator)))
+    assert np.all(np.isfinite(np.asarray(residual)))
+    assert float(jnp.linalg.norm(y_jac)) > 0.0
 
 
 def test_shard_pad_policy_and_context_restore_global_state(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-26 (profiling public-helper coverage pass)
+Last updated: 2026-06-26 (standalone-docs and optional-profile-physics coverage pass)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -343,6 +343,15 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   examples contract suite reports `25 passed` in `2.27 s`, Ruff passes for
   `sfincs_jax/profiling.py` and the touched test file, and `git diff --check`
   passes.
+- The fifty-fifth post-audit coverage/docs tranche expanded the release-facing
+  standalone-docs guard to cover inputs, outputs, parity, optimization,
+  testing, source-map, and API pages in addition to the README surfaces. It
+  also added tiny-v3-fixture profile-system tests that activate Er x-dot,
+  Er xi-dot, ExB, magnetic-drift, PAS, and FP+Phi1 collision branches and apply
+  the full-system operator/residual without launching a linear solve. The
+  focused profile-system and benchmark-doc suite reports `27 passed` in
+  `8.10 s`, Ruff passes for the touched tests, and the scoped README/docs
+  stale-wording scan reports no matches.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.

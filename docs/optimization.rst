@@ -697,7 +697,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
       :math:`N_\theta=25`, :math:`N_\zeta=51`, :math:`N_\xi=100`,
       :math:`N_L=4`, :math:`N_x=4`.
 
-   A follow-up medium-resolution solver-policy probe now covers the next
+   A medium-resolution solver-policy probe covers the next
    non-dense rung for this same finite-beta QA deck.  At
    :math:`N_\theta=17`, :math:`N_\zeta=21`, :math:`N_\xi=12`,
    :math:`N_L=4`, :math:`N_x=4` with two species, ``solve_method="auto"``
@@ -725,7 +725,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    was better than :math:`2.7\times10^{-8}` relative on current and flux
    observables; GPU/Fortran-v3 agreement was better than
    :math:`2.7\times10^{-6}` relative.  The default multispecies non-dense
-   x-block policy is now bounded to this measured window
+   x-block policy is bounded to this measured window
    (:math:`30{,}000 \le n_\mathrm{active} \le 60{,}000`,
    :math:`12 \le N_\xi \le 14`) and intentionally does not cover the
    million-unknown production floor.
@@ -746,7 +746,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    on those observables.  Since this path uses host sparse factors, it is a
    correctness-safe GPU route but not a GPU-performance claim at this size; the
    CPU path is faster for this rung.  The default multispecies non-dense
-   x-block policy is now bounded to
+   x-block policy is bounded to
    :math:`30{,}000 \le n_\mathrm{active} \le 100{,}000`,
    :math:`12 \le N_\xi \le 16`.
 
@@ -810,7 +810,7 @@ agreement when the input is in the shared model scope.
 First bounded QI kinetic promotion artifact
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The first QI ``nfp=2`` kinetic artifact is now checked in as a bounded
+The first QI ``nfp=2`` kinetic artifact is checked in as a bounded
 low-resolution promotion, not as a production-resolution optimization claim.
 It starts from ``examples/additional_examples/input.namelist``, converts that
 one-species QI seed into a two-species ion/electron kinetic scan, and runs
@@ -948,7 +948,7 @@ It was added after profiling exposed a mid-size RHSMode=1 full-FP policy cliff:
 the old automatic path crossed the dense cutoff, entered a slower generic
 fallback, and took about ``326 s`` for the CPU scan even though the active dense
 operator was small enough for the checked workstation/GPU hosts.  The default
-full-FP dense policy now covers active sizes up to ``8000`` and ``scan-er``
+full-FP dense policy covers active sizes up to ``8000`` and ``scan-er``
 writes a per-point ``sfincsOutput.solver_trace.json`` sidecar so this kind of
 solver-path change is auditable.
 
@@ -986,7 +986,7 @@ The next bounded CPU rung uses
 solver-policy failures: one-device matrix-free Krylov was slower and refused
 output because the residual missed the write gate, while explicit full-system
 sparse-host routes attempted to factor a much larger system than needed.  The
-current default CPU policy now skips directly to the accepted active-DOF
+default CPU policy skips directly to the accepted active-DOF
 sparse-LU rescue for this mid-size RHSMode=1 full-FP shape.
 
 The resulting eight-point CPU scan completes in ``263.1 s``.  The mean
@@ -1028,12 +1028,12 @@ Fourth QI refinement: ``15 x 15 x 17 x 4`` CPU/Fortran rung
 The next CPU/Fortran rung increases the kinetic grid to
 :math:`N_\theta=15`, :math:`N_\zeta=15`, :math:`N_\xi=17`,
 :math:`N_L=4`, :math:`N_x=4`.  This run exposed a solver-policy cliff rather
-than a physics mismatch.  The previous automatic policy built sparse x-block
+than a physics mismatch.  The superseded automatic policy built sparse x-block
 rescue factors for the :math:`E_r=0.3` point and then still fell through to the
 exact active sparse-LU solve.  That redundant setup took about ``316.9 s``.
 The current default raises the sparse x-block rescue threshold above the direct
 sparse skip-primary cap, so this mid-size RHSMode=1 system goes directly to the
-accepted active sparse-LU route.  The same point now takes about ``69.4 s`` with
+accepted active sparse-LU route.  The same point takes about ``69.4 s`` with
 the same residual, :math:`6.5\times10^{-18}` against a target of
 :math:`1.7\times10^{-11}`, and unchanged key observables.
 
@@ -1064,7 +1064,7 @@ The checked machine-readable artifact for this rung is:
 Device-QI operator-reuse route
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The first guarded route for the next GPU timing gate is now available for
+The first guarded route for the next GPU timing gate is available for
 explicit advanced use.  It targets RHSMode=1, full-FP, three-dimensional QI-like
 runs with no ``Phi1`` solve, an explicit x-block Krylov method, and the
 matrix-free QI-device preconditioner installed inside Krylov.  Under those
@@ -1125,7 +1125,7 @@ failure-safe trace writing, coupled-residual setup, and device-cycle
 iteration/matvec accounting.  The same artifact marks residual convergence as
 ``fail`` and leaves production GPU QI performance ``deferred``.
 
-The ladder rollup is now machine-readable as
+The ladder rollup is machine-readable as
 ``docs/_static/figures/optimization/qi_nfp2_electron_root_convergence_ladder.json``
 with the companion configuration
 ``docs/_static/figures/optimization/qi_nfp2_electron_root_ladder_config.json``.
