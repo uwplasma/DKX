@@ -19,7 +19,7 @@ from sfincs_jax.ambipolar import (
     radial_current_from_output,
 )
 from sfincs_jax.diagnostics import b0_over_bbar, fsab_hat2, g_hat_i_hat, u_hat, u_hat_np, vprime_hat
-from sfincs_jax.fortran import default_fortran_exe, run_sfincs_fortran
+from sfincs_jax.validation.fortran import default_fortran_exe, run_sfincs_fortran
 from sfincs_jax.indices import V3Indexing
 from sfincs_jax.namelist import Namelist
 from sfincs_jax.paths import _strip_quotes, resolve_existing_path
@@ -251,7 +251,7 @@ def test_fortran_wrapper_and_entrypoint_helpers(tmp_path: Path, monkeypatch: pyt
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr("sfincs_jax.io.localize_equilibrium_file_in_place", _fake_localize)
-    monkeypatch.setattr("sfincs_jax.fortran.subprocess.run", _fake_run)
+    monkeypatch.setattr("sfincs_jax.validation.fortran.subprocess.run", _fake_run)
 
     out = run_sfincs_fortran(
         input_namelist=input_path,
@@ -270,7 +270,7 @@ def test_fortran_wrapper_and_entrypoint_helpers(tmp_path: Path, monkeypatch: pyt
         stdout.write("MPI_Finalize failed\n")
         return SimpleNamespace(returncode=143)
 
-    monkeypatch.setattr("sfincs_jax.fortran.subprocess.run", _fake_finalize_failure)
+    monkeypatch.setattr("sfincs_jax.validation.fortran.subprocess.run", _fake_finalize_failure)
     out = run_sfincs_fortran(input_namelist=input_path, exe=exe, workdir=workdir)
     assert out == workdir / "sfincsOutput.h5"
 
@@ -279,7 +279,7 @@ def test_fortran_wrapper_and_entrypoint_helpers(tmp_path: Path, monkeypatch: pyt
         stdout.write("MPI_Finalize failed\n")
         return SimpleNamespace(returncode=2)
 
-    monkeypatch.setattr("sfincs_jax.fortran.subprocess.run", _fake_real_failure)
+    monkeypatch.setattr("sfincs_jax.validation.fortran.subprocess.run", _fake_real_failure)
     with pytest.raises(subprocess.CalledProcessError):
         run_sfincs_fortran(input_namelist=input_path, exe=exe, workdir=workdir)
 
