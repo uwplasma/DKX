@@ -108,7 +108,10 @@ def test_cmd_solve_v3_forces_explicit_mode(monkeypatch, tmp_path: Path) -> None:
         return SimpleNamespace(x=np.zeros((2,), dtype=np.float64), residual_norm=np.float64(0.0))
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.v3_driver.solve_v3_full_system_linear_gmres", _fake_solve)
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_response.solve.solve_v3_full_system_linear_gmres",
+        _fake_solve,
+    )
 
     args = Namespace(
         input=str(tmp_path / "input.namelist"),
@@ -140,7 +143,10 @@ def test_cmd_transport_matrix_v3_forces_explicit_mode(monkeypatch, tmp_path: Pat
         )
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=2))
-    monkeypatch.setattr("sfincs_jax.v3_driver.solve_v3_transport_matrix_linear_gmres", _fake_transport)
+    monkeypatch.setattr(
+        "sfincs_jax.problems.transport_matrix.solve.solve_v3_transport_matrix_linear_gmres",
+        _fake_transport,
+    )
 
     args = Namespace(
         input=str(tmp_path / "input.namelist"),
@@ -675,7 +681,10 @@ def test_cmd_solve_v3_applies_equilibrium_override(monkeypatch, tmp_path: Path) 
         captured.update(kwargs)
         return SimpleNamespace(x=np.zeros((2,), dtype=np.float64), residual_norm=np.float64(0.0))
 
-    monkeypatch.setattr("sfincs_jax.v3_driver.solve_v3_full_system_linear_gmres", _fake_solve)
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_response.solve.solve_v3_full_system_linear_gmres",
+        _fake_solve,
+    )
 
     args = Namespace(
         input=str(input_path),
