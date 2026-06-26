@@ -16,12 +16,14 @@ historical record only; if this file conflicts with `plan_final.md`, follow
 `plan_final.md`.
 
 Latest controlling update: `plan_final.md` now defines Lane 1 as locked
-completed checkpoints plus five active consolidation batches only: Batch 1
-transport/output/root payback, Batch 2 solver/preconditioner family
-compression, Batch 3 compatibility-waiver/profile-response freeze, Batch 4
-public API/docs/tests/source-map cleanup, and Batch 5 review-ready validation.
-Older phase, sweep, tranche, iteration, and pass labels in this execution log
-are historical context, not instructions to follow.
+completed checkpoints plus seven active consolidation batches only: Batch A
+gate repair and compatibility freeze, Batch B transport linear-system owner
+consolidation, Batch C transport-parallel runtime consolidation, Batch D solver
+core and preconditioner-surface consolidation, Batch E root/public-surface and
+workflow classification, Batch F profile-response internal line paydown, and
+Batch G docs/tests/source-map/review validation. Older phase, sweep, tranche,
+iteration, and pass labels in this execution log are historical context, not
+instructions to follow.
 
 Latest execution checkpoint:
 
@@ -38,11 +40,14 @@ Latest execution checkpoint:
   root files, 18 `problems/profile_response` files including `sparse`, 16
   `problems/transport_matrix` files including `parallel`, 35
   `solvers/preconditioners` files, 5 QI preconditioner files, `v3_driver.py` at
-  47 lines, `io.py` at 49 lines, and 166,356 package Python lines. The line
-  count is above the previous checkpoint because the AST-safe QI merge expanded
-  compact helper formatting; this is explicitly justified by deleting ten QI
-  implementation shards plus one domain-decomposition shard and reaching the
-  planned owner boundaries.
+  47 lines, `io.py` at 64 lines, `profile_response/solve.py` at 5,733 lines,
+  `profile_response/sparse/handoff.py` at 5,498 lines, and 166,356 package
+  Python lines. The line count is above the previous checkpoint because the
+  AST-safe QI merge expanded compact helper formatting; this is explicitly
+  justified by deleting ten QI implementation shards plus one
+  domain-decomposition shard and reaching the planned owner boundaries. The
+  `profile_response/solve.py <=5,500` gate is reopened and is the first Batch A
+  blocker.
 - Validation passed:
   `python -m pytest tests/test_rhs1_qi_*.py
   tests/test_rhs1_device_operator_unit.py tests/test_profile_response_sparse_pc.py
@@ -52,6 +57,19 @@ Latest execution checkpoint:
   tests/test_policy_module_docstrings.py -q --tb=short` with 11 passed, and
   scoped `ruff check`/`py_compile` for the merged QI and domain-decomposition
   owners passed.
+
+Next ordered implementation sequence:
+
+1. Batch A: repair the `profile_response/solve.py <=5,500` gate and document
+   or remove the `sparse/handoff.py` compatibility waiver.
+2. Batch B-C: consolidate transport active/direct/factor files into one
+   linear-system owner, then collapse internal transport-parallel helpers into
+   runtime ownership if imports allow.
+3. Batch D-E: consolidate solver-core support files by durable owner, then
+   classify or migrate root workflow/public-surface modules without creating
+   shims.
+4. Batch F-G: reduce oversized profile-response owners internally, refresh
+   docs/tests/source maps, and run the review-ready validation set.
 
 
 ## One-Sentence Plan
