@@ -12,16 +12,13 @@ Release scope
 - the full audited 39-case example suite runs cleanly on CPU and GPU,
 - the default CLI and ``write-output`` path are validated across the release-facing scope with no practical or strict mismatches,
 - the Python API can switch to differentiable solve paths when end-to-end sensitivities are needed,
-- and the remaining open work is performance and memory tuning on the heaviest cases, not correctness of the documented workflows.
+- and performance or memory limitations on the heaviest optional cases are documented with explicit claim boundaries.
 
-The repository also contains bounded research-lane evidence for mapped speed
-grids, QI seed robustness, solver-policy extraction, optimization promotion,
-and single-case sharding. These artifacts are documented with explicit claim
-boundaries: mapped-grid tests cover PAS RHSMode=2 smoke/reduced comparisons, the
-QI kinetic lane has a low-resolution CPU/GPU/Fortran promotion artifact plus
-two bounded refined CPU/GPU/Fortran rungs, and production-resolution QI, true
-device-QI, and single-case multi-GPU strong scaling remain research lanes until
-their promotion gates pass.
+The repository also contains bounded evidence for mapped speed grids, QI seed
+robustness, solver-policy extraction, optimization promotion, and single-case
+sharding. These artifacts are documented with explicit claim boundaries so
+quick examples, regression scaffolds, production workflows, and publication
+claims are not conflated.
 
 What this documentation covers
 ------------------------------
