@@ -125,4 +125,4 @@ RHS exactly.
 
 For ``RHSMode=3`` (monoenergetic coefficients), v3 also overwrites the speed grid to a single point at
 ``x=1`` with ``xWeights=exp(1)`` (see v3 ``createGrids.F90``). `sfincs_jax` matches this behavior in
-:func:`sfincs_jax.v3.grids_from_namelist`.
+:func:`sfincs_jax.discretization.v3.grids_from_namelist`.

@@ -23,7 +23,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from sfincs_jax.collisionless import CollisionlessV3Operator, apply_collisionless_v3, apply_collisionless_v3_jit
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist
+from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 
 
 def _default_input() -> Path:

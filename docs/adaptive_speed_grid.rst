@@ -17,7 +17,7 @@ The first implementation is intentionally standalone. It provides:
 - smoothness, width-ratio, and tail diagnostics;
 - automatic-differentiation checks against finite differences in tests.
 
-The current production grid construction in ``sfincs_jax.v3`` remains unchanged.
+The current production grid construction in ``sfincs_jax.discretization.v3`` remains unchanged.
 An opt-in research construction path is available through ``xGridScheme = 50``.
 This path only changes the speed grid when explicitly requested in the namelist.
 It does not change the default SFINCS-v3-compatible grids.
