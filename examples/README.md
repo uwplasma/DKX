@@ -57,8 +57,10 @@ references or optional local Fortran only when explicitly requested.
 - `sfincs_examples/`: vendored upstream SFINCS v3 example inputs plus helpers
   used for parity and benchmark-suite audits, not the recommended starting
   point for first-time users.
-- `upstream/` and `additional_examples/`: curated reference inputs used by
-  tests, docs, and validation lanes.
+- `additional_examples/`: named QI/VMEC reference input used by scaled-suite
+  audits and QI robustness validation.
+- `upstream/`: curated upstream SFINCS v3 inputs used by tests, docs, and
+  validation lanes.
 - `data/`: small input data needed by public examples.
 - `utils/`: helper code shared by example scripts; users normally call the
   topic scripts rather than importing this folder directly.
