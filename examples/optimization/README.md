@@ -47,7 +47,7 @@ Examples:
   ready to launch the high-fidelity scan.
 - `materialize_qi_nfp2_promotion_input.py` — writes a low-resolution
   two-species QI `nfp=2` input derived from
-  `examples/additional_examples/input.namelist` plus JSON provenance. This is
+  `examples/data/qi_nfp2_reference.input.namelist` plus JSON provenance. This is
   only a kinetic promotion candidate; electron-root claims require completed
   CPU/GPU/Fortran scan and comparison gates. The documentation records the
   low-resolution CPU/GPU/Fortran artifact, the refined `9 x 9 x 11 x 4` rung,
