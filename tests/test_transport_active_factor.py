@@ -56,6 +56,24 @@ def test_active_block_ordering_supports_reusable_layouts() -> None:
     assert plane.block_size_max == 24
 
 
+def test_active_block_ordering_supports_complete_angular_planes() -> None:
+    ordering = build_active_block_ordering(
+        kinetic_size=24,
+        tail_size=3,
+        n_theta=3,
+        n_zeta=4,
+        block_kind="angular_plane",
+        max_block_size=12,
+    )
+
+    assert ordering.block_kind == "angular_plane"
+    assert ordering.active_size == 27
+    assert ordering.tail_size == 3
+    assert len(ordering.blocks) == 2
+    np.testing.assert_array_equal(ordering.blocks[0], np.arange(12, dtype=np.int64))
+    np.testing.assert_array_equal(ordering.blocks[1], np.arange(12, 24, dtype=np.int64))
+
+
 def test_active_block_ordering_rejects_oversized_blocks() -> None:
     with pytest.raises(MemoryError):
         build_active_block_ordering(
@@ -137,6 +155,30 @@ def test_active_block_schur_factor_rejects_bad_shape_and_memory_budget() -> None
 
     with pytest.raises(MemoryError, match="active block-Schur factor estimate"):
         build_active_block_schur_factor(sp.eye(5, format="csr"), ordering, max_mb=1.0e-9)
+
+
+def test_active_block_schur_factor_sanitizes_nonfinite_tail_outputs() -> None:
+    ordering = build_active_block_ordering(
+        kinetic_size=1,
+        tail_size=1,
+        n_theta=1,
+        n_zeta=1,
+        block_kind="zeta_line",
+        max_block_size=1,
+    )
+    factor = tls.ActiveBlockSchurFactor(
+        ordering=ordering,
+        block_inverse=(np.eye(1, dtype=np.float64),),
+        c_tail=sp.csr_matrix([[0.0]], dtype=np.float64),
+        mb_tail=np.asarray([[0.0]], dtype=np.float64),
+        schur_inverse=np.asarray([[np.inf]], dtype=np.float64),
+        dtype=np.dtype(np.float64),
+        metadata={},
+    )
+
+    actual = factor.apply(np.ones((2,), dtype=np.float64))
+
+    np.testing.assert_allclose(actual, np.zeros((2,), dtype=np.float64))
 
 
 def test_active_block_schur_admission_rejects_missing_strong_offblock_couplings() -> None:
@@ -274,6 +316,104 @@ def test_residual_coarse_factor_rejects_bad_or_rank_deficient_probes() -> None:
             np.eye(4, dtype=np.float64),
             max_mb=1.0,
         )
+
+
+def test_residual_coarse_factor_rejects_memory_budget_after_candidate_build() -> None:
+    matrix = sp.csr_matrix(
+        np.asarray(
+            [
+                [3.0, 0.0, 2.5, 0.0],
+                [0.0, 3.0, 0.0, 2.5],
+                [2.5, 0.0, 3.0, 0.0],
+                [0.0, 2.5, 0.0, 3.0],
+            ],
+            dtype=np.float64,
+        )
+    )
+    ordering = build_active_block_ordering(
+        kinetic_size=4,
+        tail_size=0,
+        n_theta=1,
+        n_zeta=2,
+        block_kind="zeta_line",
+        max_block_size=2,
+    )
+    factor = build_active_block_schur_factor(matrix, ordering, reg=0.0, max_mb=1.0)
+
+    with pytest.raises(MemoryError, match="residual coarse estimate"):
+        build_active_block_schur_residual_coarse_factor(
+            matrix,
+            factor,
+            np.eye(4, dtype=np.float64),
+            max_cols=4,
+            max_mb=1.0e-12,
+        )
+
+
+def test_residual_coarse_factor_sanitizes_nonfinite_corrections() -> None:
+    ordering = build_active_block_ordering(
+        kinetic_size=2,
+        tail_size=0,
+        n_theta=1,
+        n_zeta=2,
+        block_kind="zeta_line",
+        max_block_size=2,
+    )
+    base = build_active_block_schur_factor(sp.eye(2, format="csr"), ordering, reg=0.0, max_mb=1.0)
+    coarse = tls.ActiveBlockSchurResidualCoarseFactor(
+        base=base,
+        matrix=sp.eye(2, format="csr"),
+        coarse_basis=np.eye(2, 1, dtype=np.float64),
+        action_basis=np.eye(2, 1, dtype=np.float64),
+        normal_inverse=np.asarray([[np.inf]], dtype=np.float64),
+        damping=1.0,
+        ordering=ordering,
+        dtype=np.dtype(np.float64),
+        metadata={},
+    )
+
+    actual = coarse.apply(np.asarray([1.0, 0.0], dtype=np.float64))
+
+    np.testing.assert_allclose(actual, np.zeros((2,), dtype=np.float64))
+
+
+def test_deterministic_probe_matrix_includes_stable_moments_tail_and_random_fill() -> None:
+    probes = deterministic_probe_matrix(active_size=6, kinetic_size=4, tail_size=2, count=5)
+    probes_again = deterministic_probe_matrix(active_size=6, kinetic_size=4, tail_size=2, count=5)
+
+    assert probes.shape == (6, 5)
+    np.testing.assert_allclose(probes, probes_again)
+    np.testing.assert_allclose(np.linalg.norm(probes, axis=0), np.ones((5,)))
+    np.testing.assert_allclose(probes[:4, 0], 0.5 * np.ones((4,)))
+    np.testing.assert_allclose(probes[4:, 0], np.zeros((2,)))
+    np.testing.assert_allclose(probes[4:, 2], np.asarray([1.0, 0.0]))
+    np.testing.assert_allclose(probes[4:, 3], np.asarray([0.0, 1.0]))
+    assert np.count_nonzero(probes[:, 4]) > 2
+
+
+def test_active_block_schur_admission_accepts_one_dimensional_probe() -> None:
+    matrix = 2.0 * sp.eye(4, format="csr")
+    ordering = build_active_block_ordering(
+        kinetic_size=4,
+        tail_size=0,
+        n_theta=1,
+        n_zeta=2,
+        block_kind="zeta_line",
+        max_block_size=2,
+    )
+    factor = build_active_block_schur_factor(matrix, ordering, reg=0.0, max_mb=1.0)
+
+    admission = admit_active_block_schur_factor(
+        matrix,
+        factor,
+        probes=np.ones((4,), dtype=np.float64),
+        max_relative_residual=1.0e-12,
+        min_improvement_vs_identity=1.0e12,
+    )
+
+    assert admission.accepted
+    assert admission.probe_count == 1
+    assert admission.max_relative_residual == 0.0
 
 
 class _ToyProjectedFBlock:

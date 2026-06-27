@@ -2877,6 +2877,12 @@ Current completion status:
   preconditioner metadata, and no-tail diagonal-Schur fallback behavior. The
   focused Schur/coarse suite and source-layout/readme/domain guards pass without
   production solves.
+- RHSMode 2/3 active transport factor coverage was strengthened with bounded
+  algebraic tests for complete angular-plane symbolic ordering, nonfinite-safe
+  tail/coarse corrections, deterministic setup-probe invariants, residual-coarse
+  memory admission, and one-dimensional setup-probe admission. The expanded
+  active-factor suite reports `27 passed`, and the transport preconditioner
+  guard bundle reports `137 passed` without production solves.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
