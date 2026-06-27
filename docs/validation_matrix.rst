@@ -551,7 +551,7 @@ Current smoke artifact:
 Scope and status:
 
 - The runner materializes deterministic neighboring QI cases from
-  ``examples/additional_examples/input.namelist``.
+  ``examples/data/qi_nfp2_reference.input.namelist``.
 - Each generated case localizes the VMEC equilibrium beside the generated
   ``input.namelist`` and records seed-specific ``nu_n`` / ``Er`` perturbations.
 - Optional ``--execute`` mode runs ``sfincs_jax write-output`` and records stdout,
