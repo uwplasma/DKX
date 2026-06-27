@@ -5,9 +5,8 @@ import os
 import re
 import shutil
 import time
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Sequence
+from typing import Any, Callable, Dict, Sequence
 
 import numpy as np
 
@@ -72,28 +71,6 @@ from ..geometry.vmec_wout import _set_scale_factor, psi_a_hat_from_wout, read_vm
 from sfincs_jax.discretization.v3 import V3Grids, geometry_from_namelist, grids_from_namelist
 
 
-@dataclass(frozen=True)
-class ExportFConfig:
-    export_full_f: bool
-    export_delta_f: bool
-    theta_option: int
-    zeta_option: int
-    x_option: int
-    xi_option: int
-    export_theta: np.ndarray
-    export_zeta: np.ndarray
-    export_x: np.ndarray
-    export_xi: Optional[np.ndarray]
-    n_export_theta: int
-    n_export_zeta: int
-    n_export_x: int
-    n_export_xi: int
-    map_theta: np.ndarray
-    map_zeta: np.ndarray
-    map_x: np.ndarray
-    map_xi: np.ndarray
-
-
 _OUTPUT_GEOM_CACHE = _output_cache.OUTPUT_GEOM_CACHE
 _OUTPUT_GEOM_CACHE_VERSION = _output_cache.OUTPUT_GEOM_CACHE_VERSION
 _OUTPUT_CACHE_FIELDS = _output_cache.OUTPUT_CACHE_FIELDS
@@ -107,7 +84,12 @@ _equilibrium_cache_identity = _output_cache.equilibrium_cache_identity
 _load_output_cache = _output_cache.load_output_cache
 _save_output_cache = _output_cache.save_output_cache
 _decode_if_bytes = _output_formats.decode_if_bytes
+ExportFConfig = _output_formats.ExportFConfig
+_apply_export_f_maps = _output_formats._apply_export_f_maps
+_as_1d_float = _output_formats._as_1d_float
+_export_f_config = _output_formats._export_f_config
 _fortran_h5_layout = _output_formats.fortran_h5_layout
+_legendre_matrix = _output_formats._legendre_matrix
 _netcdf_safe_name = _output_formats.netcdf_safe_name
 _output_file_format = _output_formats.output_file_format
 _to_numpy_for_h5 = _output_formats.to_numpy_for_h5
@@ -266,221 +248,6 @@ def _output_geom_cache_key(*, nml: Namelist, grids: V3Grids) -> tuple[object, ..
         get_int=_get_int,
         resolve_equilibrium_file=_resolve_equilibrium_file_from_namelist,
     )
-
-def _as_1d_float(group: dict, key: str, *, default: float | None = None) -> np.ndarray:
-    k = key.upper()
-    if k not in group:
-        if default is None:
-            raise KeyError(key)
-        return np.atleast_1d(np.asarray([default], dtype=np.float64))
-    v = group[k]
-    return np.atleast_1d(np.asarray(v, dtype=np.float64))
-
-
-def _legendre_matrix(xi: np.ndarray, *, n_l: int) -> np.ndarray:
-    """Evaluate P_0..P_{n_l-1} at xi (vectorized)."""
-    xi = np.asarray(xi, dtype=np.float64).reshape(-1)
-    if n_l < 1:
-        raise ValueError("n_l must be >= 1")
-    out = np.zeros((xi.size, n_l), dtype=np.float64)
-    out[:, 0] = 1.0
-    if n_l == 1:
-        return out
-    out[:, 1] = xi
-    for ell in range(2, n_l):
-        out[:, ell] = ((2 * ell - 1) * xi * out[:, ell - 1] - (ell - 1) * out[:, ell - 2]) / float(ell)
-    return out
-
-
-def _export_f_config(*, nml: Namelist, grids: V3Grids, geom: Any) -> ExportFConfig | None:
-    export_f = nml.group("export_f")
-    export_full_f = bool(export_f.get("EXPORT_FULL_F", False))
-    export_delta_f = bool(export_f.get("EXPORT_DELTA_F", False))
-    if not (export_full_f or export_delta_f):
-        return None
-
-    # Fortran defaults from export_f.F90:
-    theta_option = _get_int(export_f, "EXPORT_F_THETA_OPTION", 2)
-    zeta_option = _get_int(export_f, "EXPORT_F_ZETA_OPTION", 2)
-    xi_option = _get_int(export_f, "EXPORT_F_XI_OPTION", 1)
-    x_option = _get_int(export_f, "EXPORT_F_X_OPTION", 0)
-
-    export_theta = _as_1d_float(export_f, "EXPORT_F_THETA", default=0.0)
-    export_zeta = _as_1d_float(export_f, "EXPORT_F_ZETA", default=0.0)
-    export_xi = _as_1d_float(export_f, "EXPORT_F_XI", default=0.0)
-    export_x = _as_1d_float(export_f, "EXPORT_F_X", default=1.0)
-
-    theta = np.asarray(grids.theta, dtype=np.float64)
-    zeta = np.asarray(grids.zeta, dtype=np.float64)
-    x = np.asarray(grids.x, dtype=np.float64)
-
-    n_theta = int(theta.size)
-    n_zeta = int(zeta.size)
-    n_x = int(x.size)
-    n_xi = int(grids.n_xi)
-
-    # Theta mapping.
-    if theta_option == 0:
-        export_theta = theta.copy()
-        map_theta = np.eye(n_theta, dtype=np.float64)
-    elif theta_option == 1:
-        export_theta = np.mod(export_theta, 2.0 * math.pi)
-        map_theta = np.zeros((export_theta.size, n_theta), dtype=np.float64)
-        for j, val in enumerate(export_theta):
-            idx1 = int(math.floor(val * n_theta / (2.0 * math.pi))) + 1
-            if idx1 < 1:
-                raise ValueError(f"Invalid export_f_theta index for value {val}")
-            if idx1 == n_theta + 1:
-                idx1 = n_theta
-                idx2 = 1
-            elif idx1 == n_theta:
-                idx2 = 1
-            elif idx1 > n_theta + 1:
-                raise ValueError(f"Invalid export_f_theta index for value {val}")
-            else:
-                idx2 = idx1 + 1
-            weight1 = idx1 - val * n_theta / (2.0 * math.pi)
-            weight2 = 1.0 - weight1
-            map_theta[j, idx1 - 1] = weight1
-            map_theta[j, idx2 - 1] = weight2
-    elif theta_option == 2:
-        export_theta = np.mod(export_theta, 2.0 * math.pi)
-        include = np.zeros((n_theta,), dtype=bool)
-        for val in export_theta:
-            err = np.minimum.reduce(
-                [(val - theta) ** 2, (val - theta - 2.0 * math.pi) ** 2, (val - theta + 2.0 * math.pi) ** 2]
-            )
-            include[int(np.argmin(err))] = True
-        export_theta = theta[include].copy()
-        map_theta = np.zeros((export_theta.size, n_theta), dtype=np.float64)
-        rows = np.where(include)[0]
-        for row_idx, j in enumerate(rows):
-            map_theta[row_idx, j] = 1.0
-    else:
-        raise ValueError("Invalid export_f_theta_option")
-
-    # Zeta mapping.
-    if n_zeta == 1:
-        export_zeta = np.asarray([0.0], dtype=np.float64)
-        map_zeta = np.ones((1, 1), dtype=np.float64)
-    else:
-        zeta_period = 2.0 * math.pi / float(geom.n_periods)
-        if zeta_option == 0:
-            export_zeta = zeta.copy()
-            map_zeta = np.eye(n_zeta, dtype=np.float64)
-        elif zeta_option == 1:
-            export_zeta = np.mod(export_zeta, zeta_period)
-            map_zeta = np.zeros((export_zeta.size, n_zeta), dtype=np.float64)
-            for j, val in enumerate(export_zeta):
-                idx1 = int(math.floor(val * n_zeta / zeta_period)) + 1
-                if idx1 < 1:
-                    raise ValueError(f"Invalid export_f_zeta index for value {val}")
-                if idx1 == n_zeta + 1:
-                    idx1 = n_zeta
-                    idx2 = 1
-                elif idx1 == n_zeta:
-                    idx2 = 1
-                elif idx1 > n_zeta + 1:
-                    raise ValueError(f"Invalid export_f_zeta index for value {val}")
-                else:
-                    idx2 = idx1 + 1
-                weight1 = idx1 - val * n_zeta / zeta_period
-                weight2 = 1.0 - weight1
-                map_zeta[j, idx1 - 1] = weight1
-                map_zeta[j, idx2 - 1] = weight2
-        elif zeta_option == 2:
-            export_zeta = np.mod(export_zeta, zeta_period)
-            include = np.zeros((n_zeta,), dtype=bool)
-            for val in export_zeta:
-                err = np.minimum.reduce(
-                    [(val - zeta) ** 2, (val - zeta - zeta_period) ** 2, (val - zeta + zeta_period) ** 2]
-                )
-                include[int(np.argmin(err))] = True
-            export_zeta = zeta[include].copy()
-            map_zeta = np.zeros((export_zeta.size, n_zeta), dtype=np.float64)
-            rows = np.where(include)[0]
-            for row_idx, j in enumerate(rows):
-                map_zeta[row_idx, j] = 1.0
-        else:
-            raise ValueError("Invalid export_f_zeta_option")
-
-    # X mapping.
-    if x_option == 0:
-        export_x = x.copy()
-        map_x = np.eye(n_x, dtype=np.float64)
-    elif x_option == 1:
-        from ..physics.collisions import polynomial_interpolation_matrix_np  # noqa: PLC0415
-
-        other = nml.group("otherNumericalParameters")
-        x_grid_scheme = _get_int(other, "XGRIDSCHEME", _get_int(other, "xGridScheme", 5))
-        x_grid_k = float(_get_float(other, "xGrid_k", 0.0))
-        if x_grid_scheme not in {1, 2, 5, 6}:
-            raise NotImplementedError(
-                f"export_f_x_option=1 is only implemented for xGridScheme in {{1,2,5,6}} (got {x_grid_scheme})."
-            )
-        alpxk = np.exp(-(x * x)) * (x**x_grid_k)
-        alpx = np.exp(-(export_x * export_x)) * (export_x**x_grid_k)
-        map_x = polynomial_interpolation_matrix_np(xk=x, x=export_x, alpxk=alpxk, alpx=alpx)
-    elif x_option == 2:
-        include = np.zeros((n_x,), dtype=bool)
-        for val in export_x:
-            err = (val - x) ** 2
-            include[int(np.argmin(err))] = True
-        export_x = x[include].copy()
-        map_x = np.zeros((export_x.size, n_x), dtype=np.float64)
-        rows = np.where(include)[0]
-        for row_idx, j in enumerate(rows):
-            map_x[row_idx, j] = 1.0
-    else:
-        raise ValueError("Invalid export_f_x_option")
-
-    # Xi mapping.
-    if xi_option == 0:
-        map_xi = np.eye(n_xi, dtype=np.float64)
-        export_xi_out: Optional[np.ndarray] = None
-        n_export_xi = n_xi
-    elif xi_option == 1:
-        map_xi = _legendre_matrix(export_xi, n_l=n_xi)
-        export_xi_out = export_xi.copy()
-        n_export_xi = int(export_xi.size)
-    else:
-        raise ValueError("Invalid export_f_xi_option")
-
-    return ExportFConfig(
-        export_full_f=export_full_f,
-        export_delta_f=export_delta_f,
-        theta_option=int(theta_option),
-        zeta_option=int(zeta_option),
-        x_option=int(x_option),
-        xi_option=int(xi_option),
-        export_theta=np.asarray(export_theta, dtype=np.float64),
-        export_zeta=np.asarray(export_zeta, dtype=np.float64),
-        export_x=np.asarray(export_x, dtype=np.float64),
-        export_xi=export_xi_out,
-        n_export_theta=int(export_theta.size),
-        n_export_zeta=int(export_zeta.size),
-        n_export_x=int(export_x.size),
-        n_export_xi=int(n_export_xi),
-        map_theta=map_theta,
-        map_zeta=map_zeta,
-        map_x=map_x,
-        map_xi=map_xi,
-    )
-
-
-def _apply_export_f_maps(f: np.ndarray, cfg: ExportFConfig) -> np.ndarray:
-    """Apply export_f mapping matrices to a distribution function in (S,X,L,T,Z) order."""
-    f = np.asarray(f, dtype=np.float64)
-    # X: (S,X,L,T,Z) -> (S,Xe,L,T,Z)
-    f = np.einsum("ax,sxltz->saltz", cfg.map_x, f, optimize=True)
-    # Xi: (S,Xe,L,T,Z) -> (S,Xe,Xie,T,Z)
-    f = np.einsum("bl,saltz->sabtz", cfg.map_xi, f, optimize=True)
-    # Theta: (S,Xe,Xie,T,Z) -> (S,Xe,Xie,Te,Z)
-    f = np.einsum("ct,sabtz->sabcz", cfg.map_theta, f, optimize=True)
-    # Zeta: (S,Xe,Xie,Te,Z) -> (S,Xe,Xie,Te,Ze)
-    f = np.einsum("dz,sabcz->sabcd", cfg.map_zeta, f, optimize=True)
-    return f
-
 
 def _get_float(group: dict, key: str, default: float) -> float:
     v = group.get(key.upper(), default)

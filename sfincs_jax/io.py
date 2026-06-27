@@ -12,6 +12,7 @@ import sys
 from types import ModuleType
 
 from .outputs.formats import (
+    ExportFConfig,
     read_sfincs_h5,
     read_sfincs_output_file,
     write_sfincs_h5,
@@ -21,8 +22,8 @@ from .outputs.formats import (
 )
 from .outputs import writer as _writer
 from .outputs import rhsmode1 as _rhsmode1
+from .outputs import formats as _formats
 from .outputs.writer import (
-    ExportFConfig,
     _resolve_equilibrium_file_from_namelist,
     localize_equilibrium_file_in_place,
     sfincs_jax_output_dict,
@@ -39,7 +40,10 @@ def __getattr__(name: str):
         try:
             return getattr(_rhsmode1, name)
         except AttributeError:
-            raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
+            try:
+                return getattr(_formats, name)
+            except AttributeError:
+                raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
 
 
 class _IOFacadeModule(ModuleType):
@@ -50,6 +54,8 @@ class _IOFacadeModule(ModuleType):
             setattr(_writer, name, value)
         elif hasattr(_rhsmode1, name):
             setattr(_rhsmode1, name, value)
+        elif hasattr(_formats, name):
+            setattr(_formats, name, value)
         super().__setattr__(name, value)
 
 

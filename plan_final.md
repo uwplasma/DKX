@@ -127,6 +127,13 @@ The main structural refactor is functionally complete:
   validation passed: `tests/test_io_output_policy_coverage.py` as
   `69 passed in 1.88 s`; the broader output bundle passed as
   `152 passed in 8.20 s`.
+- The Fortran-compatible `export_f` output-grid mapping and distribution
+  projection machinery is now owned by `outputs/formats.py` as
+  `ExportFConfig`, `_export_f_config`, and `_apply_export_f_maps`; `writer.py`
+  keeps compatibility aliases only. Focused validation passed:
+  `tests/test_io_export_and_h5_coverage.py tests/test_io_output_policy_coverage.py`
+  as `84 passed in 1.78 s`. This reduced `outputs/writer.py` to `3275`
+  lines without adding source files.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -154,7 +161,8 @@ The largest coverage blockers from the fresh audit are:
 - `solvers/preconditioner_schur_profile.py`: `84%`, 185 missing lines.
 - `solver.py`: `86%`, 183 missing lines.
 - `outputs/rhsmode1.py`: `77%`, 172 missing lines.
-- `outputs/writer.py`: `92%`, 171 missing lines.
+- `outputs/writer.py`: `92%`, 171 missing lines before the export-f owner
+  move.
 
 ## Source Structure Rules
 
@@ -221,9 +229,9 @@ Latest AST audit:
 - The remaining structural blocker is owner size. The largest retained owners
   are `problems/profile_solve.py` (`4745` lines, with
   `solve_v3_full_system_linear_gmres` spanning `3836` lines),
-  `outputs/writer.py` (`3508` lines, with `write_sfincs_jax_output_h5`
-  spanning `1852` lines), `solvers/explicit_sparse.py` (`5056` lines), and
-  `problems/transport_solve.py` (`3191` lines).
+  `outputs/writer.py` (`3275` lines, with `write_sfincs_jax_output_h5`
+  spanning roughly `1852` lines), `solvers/explicit_sparse.py` (`5056`
+  lines), and `problems/transport_solve.py` (`3191` lines).
 - The active-DOF/PAS-projection reduced-system setup has been extracted from
   the driver into `problems/profile_setup.py`. This is a safe first reduction
   and gives the solver driver a tested setup seam, but it is not enough by
@@ -281,12 +289,10 @@ Remaining work:
 - Completed Tranche 8: RHSMode=1 NTV diagnostic recomputation extraction into
   `outputs/rhsmode1.py`, covering geometryScheme=5 and non-axisymmetric L=2
   paths with tiny numerical tests.
-- Tranche 9: continue `write_sfincs_jax_output_h5` phase orchestration
-  extraction into existing `outputs/rhsmode1.py`, `outputs/transport.py`, and
-  `outputs/formats.py` only where code can be deleted from `outputs/writer.py`.
-  Acceptance for the next cut: move a complete diagnostics/output-field write
-  phase, drop `writer.py` by at least `200` more lines, and keep output
-  schema/parity tests passing.
+- Completed Tranche 9: moved the complete `export_f` output-grid mapping and
+  distribution projection phase into existing `outputs/formats.py`, dropped
+  `outputs/writer.py` by `233` lines, preserved the compatibility aliases used
+  by `sfincs_jax.io`, and kept export/HDF5/output-policy tests passing.
 - Tranche 10: retain `explicit_sparse.py` as one owner unless a patch can move a
   complete symbolic-factor family into an existing solver owner while deleting
   more code than it adds. Do not fragment sparse factor code into many small

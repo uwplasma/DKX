@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .formats import (
+    ExportFConfig,
     decode_if_bytes,
     fortran_h5_layout,
     output_file_format,
@@ -21,7 +22,6 @@ from .transport import (
     write_transport_h5_streaming,
 )
 from .writer import (
-    ExportFConfig,
     localize_equilibrium_file_in_place,
     sfincs_jax_output_dict,
     write_sfincs_jax_output_h5,
