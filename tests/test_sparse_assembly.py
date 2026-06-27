@@ -6,6 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 
 import sfincs_jax.problems.profile_solve as profile_solve
+import sfincs_jax.solvers.preconditioner_xblock_tz_sparse as tz_sparse
 from sfincs_jax.solvers.preconditioner_symbolic_host import build_sparse_ilu_from_matvec
 from sfincs_jax.solvers.preconditioner_xblock_tz_sparse import (
     assemble_selected_theta_tz_operator,
@@ -65,6 +66,8 @@ def test_safe_inverse_diagonal_uses_floor_and_rejects_nonfinite() -> None:
     inv = safe_inverse_diagonal_np(np.asarray([2.0, 0.0, -1.0e-12]), floor=1.0e-6)
     assert inv is not None
     np.testing.assert_allclose(inv, np.asarray([0.5, 1.0e6, -1.0e6]))
+    assert safe_inverse_diagonal_np(np.asarray([], dtype=np.float64), floor=1.0e-6) is None
+    assert safe_inverse_diagonal_np(np.asarray([1.0, np.inf]), floor=1.0e-6) is None
     assert safe_inverse_diagonal_np(np.asarray([1.0, np.nan]), floor=1.0e-6) is None
     assert safe_inverse_diagonal_np(np.asarray([1.0, 0.0]), floor=0.0) is None
 
@@ -138,6 +141,27 @@ def test_selected_theta_tz_operator_matches_expected_rows() -> None:
     np.testing.assert_allclose(np.asarray(op.toarray()), expected, rtol=0.0, atol=0.0)
 
 
+def test_selected_theta_tz_operator_drops_structural_noise_and_handles_empty_rows(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_SPARSE_STRUCTURAL_TOL", "1e-8")
+    dd_plus = np.asarray([[1.0e-10, 0.0], [0.0, 0.0]], dtype=np.float64)
+    dd_minus = np.asarray([[0.0, -2.0], [3.0e-10, 0.0]], dtype=np.float64)
+    use_plus = np.asarray([[True, False], [False, True]])
+
+    op = assemble_selected_theta_tz_operator(dd_plus=dd_plus, dd_minus=dd_minus, use_plus=use_plus)
+    expected = np.zeros((4, 4), dtype=np.float64)
+    expected[1, 3] = -2.0
+
+    np.testing.assert_allclose(np.asarray(op.toarray()), expected, rtol=0.0, atol=0.0)
+
+    empty = assemble_selected_theta_tz_operator(
+        dd_plus=np.zeros((2, 2), dtype=np.float64),
+        dd_minus=np.zeros((2, 2), dtype=np.float64),
+        use_plus=np.ones((2, 2), dtype=bool),
+    )
+    assert empty.nnz == 0
+    assert empty.shape == (4, 4)
+
+
 def test_selected_zeta_tz_operator_matches_expected_rows() -> None:
     dd_plus = np.asarray([[1.0, 2.0, 0.0], [3.0, 4.0, 5.0], [0.0, 6.0, 7.0]], dtype=np.float64)
     dd_minus = np.asarray([[-1.0, -2.0, 0.0], [-3.0, -4.0, -5.0], [0.0, -6.0, -7.0]], dtype=np.float64)
@@ -156,6 +180,83 @@ def test_selected_zeta_tz_operator_matches_expected_rows() -> None:
         dtype=np.float64,
     )
     np.testing.assert_allclose(np.asarray(op.toarray()), expected, rtol=0.0, atol=0.0)
+
+
+def test_selected_zeta_tz_operator_drops_structural_noise_and_handles_empty_rows(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_SPARSE_STRUCTURAL_TOL", "1e-8")
+    dd_plus = np.asarray([[0.0, 1.0e-10], [5.0, 0.0]], dtype=np.float64)
+    dd_minus = np.asarray([[0.0, -4.0], [2.0e-10, 0.0]], dtype=np.float64)
+    use_plus = np.asarray([[True, False], [False, True]])
+
+    op = assemble_selected_zeta_tz_operator(dd_plus=dd_plus, dd_minus=dd_minus, use_plus=use_plus)
+    expected = np.zeros((4, 4), dtype=np.float64)
+    expected[2, 3] = -4.0
+    expected[3, 2] = 5.0
+
+    np.testing.assert_allclose(np.asarray(op.toarray()), expected, rtol=0.0, atol=0.0)
+
+    empty = assemble_selected_zeta_tz_operator(
+        dd_plus=np.zeros((2, 2), dtype=np.float64),
+        dd_minus=np.zeros((2, 2), dtype=np.float64),
+        use_plus=np.ones((2, 2), dtype=bool),
+    )
+    assert empty.nnz == 0
+    assert empty.shape == (4, 4)
+
+
+def test_xblock_sparse_policy_wrappers_preserve_species_and_lu_defaults() -> None:
+    fp_op = SimpleNamespace(fblock=SimpleNamespace(fp=object(), pas=None))
+    pas_op = SimpleNamespace(fblock=SimpleNamespace(fp=object(), pas=object()))
+
+    assert tz_sparse.rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+        op=SimpleNamespace(n_species=1),
+        preconditioner_species=0,
+    )
+    assert not tz_sparse.rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+        op=SimpleNamespace(n_species=2),
+        preconditioner_species=0,
+    )
+    assert tz_sparse.rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+        op=SimpleNamespace(n_species=2),
+        preconditioner_species=1,
+    )
+    assert tz_sparse.rhsmode1_xblock_sparse_lu_default_max(fp_op, build_jax_factors=False) == 30000
+    assert tz_sparse.rhsmode1_xblock_sparse_lu_default_max(fp_op, build_jax_factors=True) == 2000
+    assert tz_sparse.rhsmode1_xblock_sparse_lu_default_max(pas_op, build_jax_factors=False) == 2000
+
+
+def test_sxblock_active_indices_follow_v3_flattening_and_skip_inactive_x() -> None:
+    indices_l0 = tz_sparse._sxblock_active_indices_for_l(
+        n_species=2,
+        n_x=3,
+        n_l=4,
+        n_theta=2,
+        n_zeta=2,
+        nxi_for_x=np.asarray([1, 3, 0], dtype=np.int32),
+        ell=0,
+    )
+    indices_l2 = tz_sparse._sxblock_active_indices_for_l(
+        n_species=2,
+        n_x=3,
+        n_l=4,
+        n_theta=2,
+        n_zeta=2,
+        nxi_for_x=np.asarray([1, 3, 0], dtype=np.int32),
+        ell=2,
+    )
+    indices_l3 = tz_sparse._sxblock_active_indices_for_l(
+        n_species=2,
+        n_x=3,
+        n_l=4,
+        n_theta=2,
+        n_zeta=2,
+        nxi_for_x=np.asarray([1, 3, 0], dtype=np.int32),
+        ell=3,
+    )
+
+    np.testing.assert_array_equal(indices_l0, np.asarray([0, 1, 2, 3, 16, 17, 18, 19, 48, 49, 50, 51, 64, 65, 66, 67]))
+    np.testing.assert_array_equal(indices_l2, np.asarray([24, 25, 26, 27, 72, 73, 74, 75]))
+    assert indices_l3.size == 0
 
 
 def test_explicit_fp_xblock_matrix_and_diagonal_share_domain_implementation() -> None:

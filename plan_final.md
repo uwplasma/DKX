@@ -41,9 +41,9 @@ The main structural refactor is functionally complete:
 - `examples/README.md` and `docs/examples.rst` provide task-oriented example
   navigation, including tutorial notebooks and runnable scripts.
 - The latest local xdist coverage audit measured `88%` package coverage:
-  `4015 passed in 303.12 s` with `8198` missing executable lines. The latest
-  coverage tranches reduced missing executable lines by `146` while keeping the
-  full audit close to five minutes.
+  `4031 passed in 283.48 s` with `8089` missing executable lines. The latest
+  explicit-sparse and true-operator rescue tranches reduced missing executable
+  lines by `109` while keeping the full audit below five minutes.
 - The latest bounded coverage tranches added RHSMode-1 Schur/coarse fallback
   tests, output-gradient coordinate contract tests, default
   preconditioner-selection tests, radial-preconditioner guard tests,
@@ -258,6 +258,14 @@ The main structural refactor is functionally complete:
   validation passed: `tests/test_rhs1_true_operator_rescue.py` as
   `18 passed in 0.27 s`, and the adjacent RHSMode=1 sparse-rescue bundle
   passed as `368 passed in 3.41 s`.
+- RHSMode=1 x-block sparse coverage now includes structural-threshold dropping
+  for selected theta and zeta sparse operators, empty sparse operator assembly,
+  non-finite and empty diagonal rejection, active pitch-index flattening across
+  species and speed-grid points, species-decoupling policy wrappers, and FP/PAS
+  sparse-LU cap defaults. Focused validation passed:
+  `tests/test_sparse_assembly.py tests/test_rhs1_sxblock_tz_sparse_host.py` as
+  `15 passed in 0.71 s`, and the adjacent xblock/host-policy bundle passed as
+  `45 passed in 0.79 s`.
 - The examples tree has been re-audited for navigation and repository size:
   every top-level task folder has a README, examples contract tests passed as
   `26 passed in 20.66 s`, and the nested `output/`, `artifacts/`,
@@ -280,10 +288,9 @@ The main structural refactor is functionally complete:
 The largest coverage blockers from the fresh audit are:
 
 - `problems/profile_solve.py`: `68%`, 318 missing lines.
-- `solvers/explicit_sparse.py`: `87%`, 313 missing lines.
+- `solvers/explicit_sparse.py`: `88%`, 286 missing lines.
 - `operators/profile_full_system.py`: `84%`, 279 missing lines.
 - `problems/profile_policies.py`: `89%`, 276 missing lines.
-- `operators/profile_true_operator_rescue.py`: `81%`, 259 missing lines.
 - `problems/profile_sparse_handoff.py`: `85%`, 258 missing lines.
 - `solvers/preconditioner_xblock_tz_sparse.py`: `76%`, 251 missing lines.
 - `problems/transport_solve.py`: `71%`, 251 missing lines. The remaining
@@ -292,6 +299,7 @@ The largest coverage blockers from the fresh audit are:
   production-only paths.
 - `problems/transport_parallel_runtime.py`: `86%`, 250 missing lines.
 - `solvers/preconditioner_qi_corrections.py`: `88%`, 247 missing lines.
+- `operators/profile_true_operator_rescue.py`: `82%`, 247 missing lines.
 - `solvers/preconditioner_qi_device.py`: `89%`, 235 missing lines.
 - `operators/profile_system.py`: `77%`, 234 missing lines.
 - `problems/transport_linear_system.py`: `83%`, 229 missing lines.
@@ -301,7 +309,8 @@ The largest coverage blockers from the fresh audit are:
 - `solver.py`: `86%`, 183 missing lines.
 - `outputs/writer.py`: `91%`, 162 missing lines.
 - `problems/profile_dense.py`: `87%`, 162 missing lines.
-- `outputs/rhsmode1.py`: `81%`, 151 missing lines.
+- `solvers/preconditioner_xblock_active.py`: `83%`, 154 missing lines.
+- `problems/profile_sparse_qi.py`: `89%`, 153 missing lines.
 
 ## Source Structure Rules
 
