@@ -58,6 +58,11 @@ The main structural refactor is functionally complete:
   `tests/test_discretization_v3_contracts.py` passed in `0.90 s`; adjacent
   mapped-grid tests plus the new contracts passed as `29 passed in 1.58 s`;
   source-tree and import-contract guards passed as `26 passed in 2.78 s`.
+- The full local regression after the discretization tranche passed:
+  `3965 passed in 595.09 s`. This is within the 10-minute target but leaves
+  little room for additional slow solve tests; the 95% coverage push should use
+  bounded unit, policy, schema, and frozen-fixture tests or delete obsolete
+  code rather than adding expensive production solves to default CI.
 - The CI coverage floor remains lower than the final target until measured
   margin is available; the review target is `95%` meaningful package coverage
   while keeping GitHub Actions under 10 minutes.
@@ -141,17 +146,39 @@ Goal: finish the PR with a smaller, clearer source tree without changing
 physics, outputs, tolerances, solver defaults, differentiable Python paths,
 non-autodiff CLI fast paths, CPU/GPU behavior, or parity gates.
 
+Latest AST audit:
+
+- Folder depth is no longer the blocker: the package has one-level domain
+  folders only and no `__init__.py`-only source packages.
+- The remaining structural blocker is owner size. The largest retained owners
+  are `problems/profile_solve.py` (`5428` lines, with
+  `solve_v3_full_system_linear_gmres` spanning `4521` lines),
+  `outputs/writer.py` (`4268` lines, with `write_sfincs_jax_output_h5`
+  spanning `2559` lines), `solvers/explicit_sparse.py` (`5056` lines), and
+  `problems/transport_solve.py` (`3191` lines).
+- The next consolidation pass must reduce those owner sizes using existing
+  domain files. Do not add more package folders or helper-only files.
+
 Remaining work:
 
-- Run one retained-boundary audit over the large owners:
-  `problems/profile_solve.py`, `problems/profile_policies.py`,
-  `problems/profile_sparse_xblock.py`,
-  `problems/profile_sparse_handoff.py`,
-  `problems/transport_solve.py`, `solvers/preconditioner_qi_device.py`, and
-  `outputs/writer.py`.
-- Edit a large owner only if a patch removes a repeated internal section of at
-  least about 300 lines, deletes files, or clearly simplifies a public boundary.
-  Otherwise document the retained boundary and stop refactor churn.
+- Tranche 1: extract the route/preconditioner-selection setup region from
+  `solve_v3_full_system_linear_gmres` into existing `problems/profile_policies.py`
+  or an existing profile-sparse owner. Acceptance: `profile_solve.py` drops by
+  at least `300` lines, no new files, no behavior changes, focused profile
+  policy/sparse/dense tests pass.
+- Tranche 2: extract the active-DOF reduced-system construction and recycled
+  initial-guess setup from `solve_v3_full_system_linear_gmres` into an existing
+  profile owner. Acceptance: `profile_solve.py` drops by another `300` lines,
+  PAS projection and active-DOF tests pass, and full-system parity fixtures are
+  unchanged.
+- Tranche 3: extract `write_sfincs_jax_output_h5` phase orchestration into
+  existing `outputs/rhsmode1.py`, `outputs/transport.py`, and `outputs/formats.py`
+  only where code can be deleted from `outputs/writer.py`. Acceptance:
+  `writer.py` drops by at least `300` lines and output schema/parity tests pass.
+- Tranche 4: retain `explicit_sparse.py` as one owner unless a patch can move a
+  complete symbolic-factor family into an existing solver owner while deleting
+  more code than it adds. Do not fragment sparse factor code into many small
+  files.
 - Keep `v3_driver.py` and `io.py` below 80 lines and implementation-free.
 - Run source-layout, import-contract, docs, examples, and CLI/output guards.
 
