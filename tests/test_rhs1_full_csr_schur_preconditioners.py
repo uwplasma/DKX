@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 import time
 
 import numpy as np
@@ -85,6 +86,40 @@ def test_jacobi_preconditioner_records_regularized_diagonal_metadata() -> None:
     assert pc.metadata["requested_kind"] == "unit_test_jacobi"
     assert pc.metadata["diagonal_regularized_count"] == 1
     np.testing.assert_allclose(pc.operator.matvec(np.ones(3)), np.array([2.5, 0.5, -0.25]))
+
+
+def test_structured_full_csr_preconditioner_to_dict_is_json_friendly() -> None:
+    pc = build_jacobi_preconditioner(
+        matrix=sp.diags([1.0, 2.0], format="csr"),
+        requested_kind="unit_test",
+        regularization=0.0,
+        t0=time.perf_counter(),
+        reason="metadata_smoke",
+    )
+
+    payload = pc.to_dict()
+
+    assert payload["selected"] is True
+    assert payload["kind"] == "jacobi"
+    assert payload["reason"] == "metadata_smoke"
+    assert isinstance(payload["setup_s"], float)
+    assert payload["metadata"]["requested_kind"] == "unit_test"
+
+
+def test_diagonal_schur_without_tail_degrades_to_jacobi() -> None:
+    matrix = sp.diags([1.0, 0.0, -4.0], format="csr")
+    pc = build_diagonal_schur_preconditioner(
+        matrix=matrix,
+        layout=SimpleNamespace(f_size=3, total_size=3),
+        requested_kind="unit_test_no_tail",
+        regularization=0.25,
+        t0=time.perf_counter(),
+    )
+
+    assert pc.kind == "jacobi"
+    assert pc.reason == "no_global_tail"
+    assert pc.metadata["requested_kind"] == "unit_test_no_tail"
+    np.testing.assert_allclose(pc.operator.matvec(np.ones(3)), np.array([1.0, 1.0, -0.25]))
 
 
 def test_full_csr_schur_builders_are_exact_for_diagonal_kinetic_block() -> None:

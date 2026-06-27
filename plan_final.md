@@ -2870,6 +2870,13 @@ Current completion status:
   without full solves; local `pytest --cov` for this slice still aborts with the
   known no-traceback JAX/coverage exit 134, so CI coverage shards remain the
   authoritative coverage signal.
+- RHSMode 1 Schur/coarse preconditioner coverage was strengthened with cheap
+  algebraic tests for duplicate low-mode removal on tiny flux surfaces,
+  no-tail coarse bases, x-ell coarse-window invalid/capped requests, adaptive
+  residual-basis total caps and tiny-residual skips, JSON-safe structured
+  preconditioner metadata, and no-tail diagonal-Schur fallback behavior. The
+  focused Schur/coarse suite and source-layout/readme/domain guards pass without
+  production solves.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.

@@ -83,6 +83,47 @@ def test_coarse_residual_basis_has_expected_columns_and_normalized_modes() -> No
     assert np.allclose(np.asarray(basis[layout.f_size :, -layout.extra_size :].toarray()), np.eye(layout.extra_size))
 
 
+def test_coarse_residual_basis_drops_duplicate_tiny_surface_modes_without_tail() -> None:
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=2,
+        n_xi=3,
+        n_theta=1,
+        n_zeta=1,
+        f_size=1 * 2 * 3 * 1 * 1,
+        phi1_size=0,
+        extra_size=0,
+        total_size=1 * 2 * 3 * 1 * 1,
+        constraint_scheme=1,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    config = {
+        "coarse_lmax": 2,
+        "coarse_include_tail": False,
+        "coarse_angular_mmax": 3,
+        "coarse_angular_nmax": 3,
+        "coarse_helical_mmax": 3,
+        "coarse_helical_nmax": 3,
+    }
+
+    modes = coarse_surface_modes(layout=layout, config=config)
+    basis = build_coarse_residual_basis_csc(layout=layout, config=config)
+
+    assert [name for name, _values in modes] == ["constant"]
+    assert basis.shape == (layout.total_size, layout.n_species * layout.n_x * config["coarse_lmax"])
+    expected_rows = [
+        layout.kinetic_flat_index(species=0, x=0, ell=0, theta=0, zeta=0),
+        layout.kinetic_flat_index(species=0, x=0, ell=1, theta=0, zeta=0),
+        layout.kinetic_flat_index(species=0, x=1, ell=0, theta=0, zeta=0),
+        layout.kinetic_flat_index(species=0, x=1, ell=1, theta=0, zeta=0),
+    ]
+    expected = np.zeros((layout.total_size, basis.shape[1]), dtype=np.float64)
+    expected[np.asarray(expected_rows), np.arange(basis.shape[1])] = 1.0
+    np.testing.assert_allclose(np.asarray(basis.toarray()), expected)
+
+
 def test_active_native_xell_window_basis_respects_specs_and_column_cap(monkeypatch) -> None:
     layout = _layout()
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_WINDOW_SPECS", "bad,all:1:2")
@@ -98,6 +139,29 @@ def test_active_native_xell_window_basis_respects_specs_and_column_cap(monkeypat
     assert metadata["window_basis_columns"] == 5
     assert metadata["window_basis_skipped_specs"] == 1
     assert metadata["window_basis_truncated"] is True
+
+
+def test_active_native_xell_window_basis_returns_empty_for_disabled_or_invalid_specs(monkeypatch) -> None:
+    layout = _layout()
+
+    disabled, disabled_metadata = build_active_native_xell_coarse_window_basis_csc(layout=layout)
+    assert disabled.shape == (layout.total_size, 0)
+    assert disabled_metadata["window_basis_requested"] is False
+
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_WINDOW_SPECS", "9:1:1,bad,0:9:1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_WINDOW_MAX_COLUMNS", "10")
+    invalid, invalid_metadata = build_active_native_xell_coarse_window_basis_csc(layout=layout)
+    assert invalid.shape == (layout.total_size, 0)
+    assert invalid_metadata["window_basis_requested"] is True
+    assert invalid_metadata["window_basis_skipped_specs"] == 3
+    assert invalid_metadata["window_basis_truncated"] is False
+
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_WINDOW_SPECS", "all:all:all")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_WINDOW_MAX_COLUMNS", "0")
+    zero_cap, zero_cap_metadata = build_active_native_xell_coarse_window_basis_csc(layout=layout)
+    assert zero_cap.shape == (layout.total_size, 0)
+    assert zero_cap_metadata["window_basis_requested"] is True
+    assert zero_cap_metadata["window_basis_max_columns"] == 0
 
 
 def test_adaptive_residual_basis_appends_bounded_true_residual_columns(monkeypatch) -> None:
@@ -131,6 +195,53 @@ def test_adaptive_residual_basis_appends_bounded_true_residual_columns(monkeypat
     appended = np.asarray(combined[:, -1].toarray()).reshape((-1,))
     assert np.count_nonzero(appended) <= 3
     assert np.linalg.norm(appended) == np.float64(1.0)
+
+
+def test_adaptive_residual_basis_honors_total_cap_before_work(monkeypatch) -> None:
+    layout = _layout()
+    matrix = sp.eye(layout.total_size, format="csr")
+    basis = sp.eye(layout.total_size, 2, format="csc")
+
+    class ExplodingBaseOperator:
+        def matvec(self, z: np.ndarray) -> np.ndarray:
+            raise AssertionError("total-column cap should short-circuit adaptive residual work")
+
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_BASIS", "true")
+    capped, metadata = append_adaptive_residual_basis_csc(
+        matrix=matrix,
+        base_operator=ExplodingBaseOperator(),
+        basis=basis,
+        max_total_columns=2,
+    )
+
+    assert capped.shape == basis.shape
+    assert metadata["adaptive_residual_basis_enabled"] is True
+    assert metadata["adaptive_residual_basis_truncated_by_total_cap"] is True
+    assert metadata["adaptive_residual_basis_columns"] == 0
+
+
+def test_adaptive_residual_basis_skips_tiny_relative_residuals(monkeypatch) -> None:
+    layout = _layout()
+    matrix = sp.eye(layout.total_size, format="csr")
+    basis = sp.eye(layout.total_size, 2, format="csc")
+
+    class NearlyExactBaseOperator:
+        def matvec(self, z: np.ndarray) -> np.ndarray:
+            return 0.999999999 * np.asarray(z, dtype=np.float64)
+
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_BASIS", "yes")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_MIN_REL_NORM", "1e-6")
+    skipped, metadata = append_adaptive_residual_basis_csc(
+        matrix=matrix,
+        base_operator=NearlyExactBaseOperator(),
+        basis=basis,
+        max_total_columns=4,
+    )
+
+    assert skipped.shape == basis.shape
+    assert metadata["adaptive_residual_basis_columns"] == 0
+    assert metadata["adaptive_residual_basis_skipped_small"] == 2
+    assert metadata["adaptive_residual_basis_skipped_zero"] == 0
 
 
 def test_adaptive_residual_basis_noops_when_disabled_or_base_is_exact(monkeypatch) -> None:
