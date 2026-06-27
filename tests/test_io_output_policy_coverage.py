@@ -33,6 +33,7 @@ from sfincs_jax.io import (
 )
 from sfincs_jax.geometry.boozer import BoozerBCHeader, BoozerBCSurface
 from sfincs_jax.namelist import Namelist, read_sfincs_input
+from sfincs_jax.outputs import rhsmode1 as rhsmode1_output
 from sfincs_jax.outputs import writer as output_writer
 from sfincs_jax.outputs.cache import output_cache_dir, output_cache_path
 from sfincs_jax.outputs.rhsmode1 import (
@@ -41,6 +42,10 @@ from sfincs_jax.outputs.rhsmode1 import (
     _maybe_apply_constraint0_fortran_gauge,
     _maybe_apply_pas_no_phi1_output_scale,
     select_rhsmode1_solve_method,
+    write_rhsmode1_core_diagnostics_to_data,
+    write_rhsmode1_electric_drift_diagnostics_to_data,
+    write_rhsmode1_flux_coordinate_variants_to_data,
+    write_rhsmode1_phi1_diagnostics_to_data,
 )
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 
@@ -336,6 +341,210 @@ def test_pas_no_phi1_flow_alignment_uses_bounded_fortran_reference(
     np.testing.assert_allclose(aligned["FSABFlow"], [[3.0]])
     np.testing.assert_allclose(aligned["FSABjHat"], [6.0])
     np.testing.assert_allclose(aligned["densityPerturbation"], [5.0])
+
+
+def test_write_rhsmode1_flux_coordinate_variants_to_data_scales_coordinates() -> None:
+    data: dict[str, np.ndarray] = {}
+    values = np.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)
+    conversion_factors = {
+        "ddpsiN2ddpsiHat": 10.0,
+        "ddrHat2ddpsiHat": 20.0,
+        "ddrN2ddpsiHat": 30.0,
+    }
+
+    write_rhsmode1_flux_coordinate_variants_to_data(
+        data=data,
+        base="particleFlux_vm_psiHat",
+        values_sN=values,
+        conversion_factors=conversion_factors,
+        fortran_h5_layout=lambda array: np.asarray(array, dtype=np.float64),
+    )
+
+    np.testing.assert_allclose(data["particleFlux_vm_psiHat"], values)
+    np.testing.assert_allclose(data["particleFlux_vm_psiN"], values * 10.0)
+    np.testing.assert_allclose(data["particleFlux_vm_rHat"], values * 20.0)
+    np.testing.assert_allclose(data["particleFlux_vm_rN"], values * 30.0)
+
+
+def test_write_rhsmode1_core_diagnostics_to_data_writes_schema_layouts() -> None:
+    n_iter, n_species, n_theta, n_zeta, n_x = 2, 2, 3, 4, 5
+    diag_arrays: dict[str, np.ndarray] = {}
+
+    for offset, key in enumerate(rhsmode1_output._RHSMODE1_CORE_GRID_MOMENT_KEYS):
+        diag_arrays[key] = np.arange(
+            n_iter * n_species * n_theta * n_zeta,
+            dtype=np.float64,
+        ).reshape((n_iter, n_species, n_theta, n_zeta)) + 1000.0 * offset
+
+    for offset, key in enumerate(rhsmode1_output._RHSMODE1_FLUX_SURFACE_AVERAGE_KEYS):
+        diag_arrays[key] = (
+            np.arange(n_iter * n_species, dtype=np.float64).reshape((n_iter, n_species))
+            + 2000.0 * offset
+        )
+
+    for offset, key in enumerate(rhsmode1_output._RHSMODE1_VELOCITY_SPACE_KEYS):
+        diag_arrays[key] = (
+            np.arange(n_iter * n_x * n_species, dtype=np.float64).reshape((n_iter, n_x, n_species))
+            + 3000.0 * offset
+        )
+
+    diag_arrays["sources"] = np.arange(
+        n_iter * n_x * n_species,
+        dtype=np.float64,
+    ).reshape((n_iter, n_x, n_species)) + 4000.0
+    diag_arrays["jHat"] = np.arange(
+        n_iter * n_theta * n_zeta,
+        dtype=np.float64,
+    ).reshape((n_iter, n_theta, n_zeta)) + 5000.0
+
+    for offset, key in enumerate(rhsmode1_output._RHSMODE1_CURRENT_KEYS):
+        diag_arrays[key] = np.arange(n_iter, dtype=np.float64) + 6000.0 + 10.0 * offset
+
+    for offset, key in enumerate(rhsmode1_output._RHSMODE1_VM_FLUX_KEYS):
+        diag_arrays[key] = (
+            np.arange(n_iter * n_species, dtype=np.float64).reshape((n_iter, n_species))
+            + 7000.0 * offset
+        )
+
+    data: dict[str, np.ndarray] = {}
+    conversion_factors = {
+        "ddpsiN2ddpsiHat": 2.0,
+        "ddrHat2ddpsiHat": 3.0,
+        "ddrN2ddpsiHat": 4.0,
+    }
+    def identity_layout(array: np.ndarray) -> np.ndarray:
+        return np.asarray(array, dtype=np.float64)
+
+    write_rhsmode1_core_diagnostics_to_data(
+        data=data,
+        diag_arrays=diag_arrays,
+        conversion_factors=conversion_factors,
+        fortran_h5_layout=identity_layout,
+    )
+
+    np.testing.assert_allclose(
+        data["densityPerturbation"],
+        np.transpose(diag_arrays["densityPerturbation"], (3, 2, 1, 0)),
+    )
+    np.testing.assert_allclose(
+        data["FSABFlow"],
+        np.transpose(diag_arrays["FSABFlow"], (1, 0)),
+    )
+    np.testing.assert_allclose(
+        data["jHat"],
+        np.transpose(diag_arrays["jHat"], (2, 1, 0)),
+    )
+    np.testing.assert_allclose(
+        data["sources"],
+        np.transpose(diag_arrays["sources"], (1, 2, 0)),
+    )
+    np.testing.assert_allclose(data["FSABjHatOverRootFSAB2"], diag_arrays["FSABjHatOverRootFSAB2"])
+    np.testing.assert_allclose(
+        data["heatFlux_vm_psiHat"],
+        np.transpose(diag_arrays["heatFlux_vm_psiHat"], (1, 0)),
+    )
+    np.testing.assert_allclose(
+        data["heatFlux_vm_rN"],
+        np.transpose(diag_arrays["heatFlux_vm_psiHat"], (1, 0)) * 4.0,
+    )
+
+
+def test_write_rhsmode1_phi1_diagnostics_to_data_writes_fields_and_qn_debug() -> None:
+    phi1_list = [
+        np.arange(6, dtype=np.float64).reshape((2, 3)),
+        np.arange(6, 12, dtype=np.float64).reshape((2, 3)),
+    ]
+    dtheta_list = [array + 100.0 for array in phi1_list]
+    dzeta_list = [array + 200.0 for array in phi1_list]
+    qn_from_f_list = [array + 300.0 for array in phi1_list]
+    qn_nonlin_list = [array + 400.0 for array in phi1_list]
+    qn_diag_list = [array + 500.0 for array in phi1_list]
+    data: dict[str, np.ndarray] = {}
+
+    def identity_layout(array: np.ndarray) -> np.ndarray:
+        return np.asarray(array, dtype=np.float64)
+
+    write_rhsmode1_phi1_diagnostics_to_data(
+        data=data,
+        phi1_list=phi1_list,
+        dphi1_dtheta_list=dtheta_list,
+        dphi1_dzeta_list=dzeta_list,
+        lambda_list=[1.25, 2.5],
+        qn_from_f_list=qn_from_f_list,
+        qn_nonlin_list=qn_nonlin_list,
+        qn_diag_list=qn_diag_list,
+        write_qn_debug=True,
+        fortran_h5_layout=identity_layout,
+    )
+
+    expected_phi1 = np.stack([np.transpose(array, (1, 0)) for array in phi1_list], axis=-1)
+    np.testing.assert_allclose(data["Phi1Hat"], expected_phi1)
+    np.testing.assert_allclose(
+        data["dPhi1Hatdtheta"],
+        np.stack([np.transpose(array, (1, 0)) for array in dtheta_list], axis=-1),
+    )
+    np.testing.assert_allclose(
+        data["QN_diag"],
+        np.stack([np.transpose(array, (1, 0)) for array in qn_diag_list], axis=-1),
+    )
+    np.testing.assert_allclose(data["lambda"], [1.25, 2.5])
+
+
+def test_write_rhsmode1_electric_drift_diagnostics_to_data_writes_derived_fluxes() -> None:
+    n_species, n_theta, n_zeta, n_iter = 2, 2, 3, 2
+    before = [
+        np.arange(n_species * n_theta * n_zeta, dtype=np.float64).reshape((n_species, n_theta, n_zeta)),
+        np.arange(n_species * n_theta * n_zeta, 2 * n_species * n_theta * n_zeta, dtype=np.float64).reshape(
+            (n_species, n_theta, n_zeta)
+        ),
+    ]
+    flux_series = [
+        np.asarray([1.0, 2.0], dtype=np.float64),
+        np.asarray([3.0, 4.0], dtype=np.float64),
+    ]
+    data: dict[str, np.ndarray] = {}
+    for flux in ("particleFlux", "heatFlux", "momentumFlux"):
+        data[f"{flux}_vm_psiHat"] = np.ones((n_species, n_iter), dtype=np.float64)
+
+    conversion_factors = {
+        "ddpsiN2ddpsiHat": 2.0,
+        "ddrHat2ddpsiHat": 3.0,
+        "ddrN2ddpsiHat": 4.0,
+    }
+
+    def identity_layout(array: np.ndarray) -> np.ndarray:
+        return np.asarray(array, dtype=np.float64)
+
+    write_rhsmode1_electric_drift_diagnostics_to_data(
+        data=data,
+        before_surface_integral_stz={
+            "particleFluxBeforeSurfaceIntegral_vE": before,
+            "NTVBeforeSurfaceIntegral": before,
+        },
+        fluxes_s={
+            "particleFlux_vE0_psiHat": flux_series,
+            "particleFlux_vE_psiHat": [value + 10.0 for value in flux_series],
+            "heatFlux_vE0_psiHat": flux_series,
+            "heatFlux_vE_psiHat": [value + 20.0 for value in flux_series],
+            "momentumFlux_vE0_psiHat": flux_series,
+            "momentumFlux_vE_psiHat": [value + 30.0 for value in flux_series],
+        },
+        ntv_list=flux_series,
+        conversion_factors=conversion_factors,
+        fortran_h5_layout=identity_layout,
+    )
+
+    expected_before = np.stack([np.transpose(array, (2, 1, 0)) for array in before], axis=-1)
+    expected_vE0 = np.stack(flux_series, axis=-1)
+    np.testing.assert_allclose(data["particleFluxBeforeSurfaceIntegral_vE"], expected_before)
+    np.testing.assert_allclose(data["particleFlux_vE0_psiHat"], expected_vE0)
+    np.testing.assert_allclose(data["particleFlux_vE0_rN"], expected_vE0 * 4.0)
+    np.testing.assert_allclose(data["NTV"], expected_vE0)
+    np.testing.assert_allclose(data["particleFlux_vd1_psiHat"], np.ones((n_species, n_iter)) + expected_vE0)
+    np.testing.assert_allclose(
+        data["heatFlux_withoutPhi1_psiHat"],
+        np.ones((n_species, n_iter)) + (5.0 / 3.0) * expected_vE0,
+    )
 
 
 def test_select_phi1_newton_linear_solve_method_env_override_wins() -> None:

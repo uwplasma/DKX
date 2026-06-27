@@ -91,6 +91,14 @@ The main structural refactor is functionally complete:
   validation passed: output/CLI/HDF5 policy checks as `114 passed in 6.86 s`.
   This reduced `outputs/writer.py` to `3734` lines and
   `write_sfincs_jax_output_h5` to `2083` lines without adding files.
+- RHSMode=1 core diagnostic, Phi1 scalar, and electric-drift output schema
+  writes are now owned by `outputs/rhsmode1.py`, including coordinate-converted
+  flux variants, quasineutrality debug arrays, `vd`/`vd1` totals, and
+  `heatFlux_withoutPhi1` fields. Focused validation passed:
+  `tests/test_io_output_policy_coverage.py` as `61 passed in 0.90 s`, and the
+  broader output/profile/source-tree bundle passed as `220 passed in 13.92 s`.
+  This reduced `outputs/writer.py` to `3639` lines and
+  `write_sfincs_jax_output_h5` to `1985` lines without adding files.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -101,7 +109,8 @@ The main structural refactor is functionally complete:
 The largest coverage blockers from the fresh audit are:
 
 - `problems/profile_solve.py`: `58%`, 568 missing lines.
-- `outputs/writer.py`: `85%`, 384 missing lines.
+- `outputs/writer.py`: `85%`, 384 missing lines in the previous coverage
+  audit; remeasure after the RHSMode=1 output schema extraction.
 - `problems/transport_solve.py`: `73%`, 326 missing lines.
 - `solvers/explicit_sparse.py`: `87%`, 310 missing lines.
 - `solvers/preconditioner_transport_matrix.py`: `83%`, 296 missing lines.
@@ -184,8 +193,8 @@ Latest AST audit:
 - The remaining structural blocker is owner size. The largest retained owners
   are `problems/profile_solve.py` (`4821` lines, with
   `solve_v3_full_system_linear_gmres` spanning `3912` lines),
-  `outputs/writer.py` (`3734` lines, with `write_sfincs_jax_output_h5`
-  spanning `2083` lines), `solvers/explicit_sparse.py` (`5056` lines), and
+  `outputs/writer.py` (`3639` lines, with `write_sfincs_jax_output_h5`
+  spanning `1985` lines), `solvers/explicit_sparse.py` (`5056` lines), and
   `problems/transport_solve.py` (`3191` lines).
 - The active-DOF/PAS-projection reduced-system setup has been extracted from
   the driver into `problems/profile_setup.py`. This is a safe first reduction
@@ -200,6 +209,10 @@ Latest AST audit:
 - RHSMode=1 output correction helpers have been extracted from the HDF5 writer
   into `outputs/rhsmode1.py`, leaving those optional parity/debug corrections
   unit-testable without running an output solve.
+- RHSMode=1 output schema writes for vm-only diagnostics, Phi1 scalar fields,
+  electric-drift fluxes, and derived flux totals have been extracted from the
+  HDF5 writer into `outputs/rhsmode1.py`, giving the HDF5 schema a direct,
+  fast regression seam.
 - The next consolidation pass must reduce those owner sizes using existing
   domain files. Do not add more package folders or helper-only files.
 
@@ -218,13 +231,19 @@ Remaining work:
   `outputs/rhsmode1.py`.
 - Completed Tranche 5: RHSMode=1 output correction helper extraction into
   `outputs/rhsmode1.py`.
-- Tranche 6: continue `write_sfincs_jax_output_h5` phase orchestration
+- Completed Tranche 6: RHSMode=1 core diagnostic, Phi1 scalar, and
+  electric-drift output schema extraction into `outputs/rhsmode1.py`. This
+  phase dropped `write_sfincs_jax_output_h5` below 2000 lines and added direct
+  HDF5-schema tests, but it was intentionally smaller than the earlier 200-line
+  target because the remaining electric-drift computation is still entangled
+  with operator internals.
+- Tranche 7: continue `write_sfincs_jax_output_h5` phase orchestration
   extraction into existing `outputs/rhsmode1.py`, `outputs/transport.py`, and
   `outputs/formats.py` only where code can be deleted from `outputs/writer.py`.
   Acceptance for the next cut: move a complete diagnostics/output-field write
   phase, drop `writer.py` by at least `200` more lines, and keep output
   schema/parity tests passing.
-- Tranche 7: retain `explicit_sparse.py` as one owner unless a patch can move a
+- Tranche 8: retain `explicit_sparse.py` as one owner unless a patch can move a
   complete symbolic-factor family into an existing solver owner while deleting
   more code than it adds. Do not fragment sparse factor code into many small
   files.
