@@ -32,7 +32,7 @@ gradients remain deferred.  Both workflow examples use the same shared
 ``sfincs_jax.geometry.jax_adapters`` gate, so the skip-safe status path and the
 file-backed proxy-gradient summary enforce the same scalar-contract boundary.
 
-The same payload now also carries ``kinetic_transport_scalar_contract`` and a
+The same payload carries ``kinetic_transport_scalar_contract`` and a
 copy of its gate in
 ``no_solve_provenance_gate.kinetic_transport_scalar_contract_gate``. This is the
 forward contract for a future VMEC/Boozer-to-kinetic-transport scalar.  It lists
