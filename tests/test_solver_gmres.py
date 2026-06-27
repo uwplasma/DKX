@@ -53,6 +53,45 @@ def test_gmres_solve_matches_numpy_for_spd_matrix() -> None:
     assert float(result.residual_norm) < 1e-8
 
 
+def test_solver_result_wrappers_are_jax_pytrees() -> None:
+    """Solver result dataclasses must remain transform-safe public contracts."""
+
+    flexible = solver_module.FlexibleGMRESSolveResult(
+        x=jnp.asarray([1.0, -2.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(1.0e-8, dtype=jnp.float64),
+        residual_history=jnp.asarray([1.0, 1.0e-8], dtype=jnp.float64),
+        n_iterations=jnp.asarray(1, dtype=jnp.int32),
+        n_restarts=jnp.asarray(0, dtype=jnp.int32),
+        converged=jnp.asarray(True),
+    )
+    bicgstab = solver_module.BiCGSTABSolveResult(
+        x=flexible.x,
+        residual_norm=flexible.residual_norm,
+        residual_history=flexible.residual_history,
+        n_iterations=flexible.n_iterations,
+        converged=flexible.converged,
+    )
+    tfqmr = solver_module.TFQMRSolveResult(
+        x=flexible.x,
+        residual_norm=flexible.residual_norm,
+        residual_history=flexible.residual_history,
+        n_iterations=flexible.n_iterations,
+        converged=flexible.converged,
+    )
+
+    for result in (flexible, bicgstab, tfqmr):
+        leaves, treedef = jax.tree_util.tree_flatten(result)
+        rebuilt = jax.tree_util.tree_unflatten(treedef, leaves)
+        np.testing.assert_allclose(np.asarray(rebuilt.x), np.asarray(result.x), rtol=0.0, atol=0.0)
+        np.testing.assert_allclose(
+            np.asarray(rebuilt.residual_history),
+            np.asarray(result.residual_history),
+            rtol=0.0,
+            atol=0.0,
+        )
+        assert bool(rebuilt.converged) is True
+
+
 def test_gcrotmk_solve_with_history_scipy_matches_numpy_for_small_system() -> None:
     a = np.array(
         [
@@ -115,6 +154,78 @@ def test_dense_solve_from_matrix_regularizes_singular_system() -> None:
     assert float(rn) < 1e-8
 
 
+def test_dense_solve_modes_and_shape_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin dense direct-solve guardrails without running production systems."""
+
+    with pytest.raises(ValueError, match="square matrix"):
+        dense_solve_from_matrix(a=jnp.ones((2, 3), dtype=jnp.float64), b=jnp.ones(2, dtype=jnp.float64))
+    with pytest.raises(ValueError, match="b.ndim"):
+        dense_solve_from_matrix(a=jnp.eye(2, dtype=jnp.float64), b=jnp.ones((2, 1, 1), dtype=jnp.float64))
+    with pytest.raises(ValueError, match="shape mismatch"):
+        dense_solve_from_matrix(a=jnp.eye(3, dtype=jnp.float64), b=jnp.ones(2, dtype=jnp.float64))
+    with pytest.raises(ValueError, match="square matrix"):
+        solver_module.dense_solve_from_matrix_row_scaled(
+            a=jnp.ones((2, 3), dtype=jnp.float64),
+            b=jnp.ones(2, dtype=jnp.float64),
+        )
+
+    singular = jnp.asarray([[1.0, 1.0], [2.0, 2.0]], dtype=jnp.float64)
+    rhs = jnp.asarray([2.0, 4.0], dtype=jnp.float64)
+
+    monkeypatch.setenv("SFINCS_JAX_DENSE_FORCE_REG", "1")
+    monkeypatch.setenv("SFINCS_JAX_DENSE_REG", "1e-8")
+    x_reg, rn_reg = dense_solve_from_matrix(a=singular, b=rhs)
+    assert np.isfinite(np.asarray(x_reg)).all()
+    assert float(rn_reg) < 1.0e-6
+
+    monkeypatch.delenv("SFINCS_JAX_DENSE_FORCE_REG", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_DENSE_SINGULAR_MODE", "lstsq")
+    x_lstsq, rn_lstsq = dense_solve_from_matrix(a=singular, b=rhs)
+    assert np.isfinite(np.asarray(x_lstsq)).all()
+    assert float(rn_lstsq) < 1.0e-8
+
+
+def test_gmres_dense_dispatch_and_size_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Dense and row-scaled dense dispatch must remain explicit and bounded."""
+
+    a = np.asarray(
+        [
+            [2.0, -1.0, 0.25],
+            [0.5, 3.0, -0.75],
+            [0.0, 0.5, 2.5],
+        ],
+        dtype=np.float64,
+    )
+    b = np.asarray([1.0, -2.0, 0.5], dtype=np.float64)
+    x_ref = np.linalg.solve(a, b)
+    a_j = jnp.asarray(a)
+
+    def mv(x):
+        return a_j @ x
+
+    for method in ("dense", "dense_row_scaled"):
+        result, residual = gmres_solve_with_residual(
+            matvec=mv,
+            b=jnp.asarray(b),
+            solve_method=method,
+        )
+        np.testing.assert_allclose(np.asarray(result.x), x_ref, rtol=1.0e-10, atol=1.0e-10)
+        np.testing.assert_allclose(np.asarray(residual), b - a @ np.asarray(result.x), rtol=1.0e-12, atol=1.0e-12)
+        assert float(result.residual_norm) < 1.0e-10
+
+    monkeypatch.setenv("SFINCS_JAX_DENSE_MAX", "2")
+    with pytest.raises(ValueError, match="too large"):
+        gmres_solve_with_residual(
+            matvec=mv,
+            b=jnp.asarray(b),
+            solve_method="dense",
+        )
+
+    monkeypatch.setenv("SFINCS_JAX_DENSE_MAX", "bad")
+    result = gmres_solve(matvec=mv, b=jnp.asarray(b), solve_method="dense")
+    assert float(result.residual_norm) < 1.0e-10
+
+
 def test_dense_krylov_solve_from_matrix_matches_numpy() -> None:
     rng = np.random.default_rng(5)
     n = 20
@@ -134,6 +245,42 @@ def test_dense_krylov_solve_from_matrix_matches_numpy() -> None:
 
     np.testing.assert_allclose(np.asarray(x), x_ref, rtol=1e-8, atol=1e-8)
     assert float(rn) < 1e-8
+
+
+def test_dense_krylov_env_shape_and_row_scaled_contracts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Row-scaled Krylov solves disable incompatible user preconditioners."""
+
+    with pytest.raises(ValueError, match="square matrix"):
+        solver_module.dense_krylov_solve_from_matrix_with_residual(
+            a=jnp.ones((2, 3), dtype=jnp.float64),
+            b=jnp.ones(2, dtype=jnp.float64),
+        )
+    with pytest.raises(ValueError, match="b.shape"):
+        solver_module.dense_krylov_solve_from_matrix_with_residual(
+            a=jnp.eye(3, dtype=jnp.float64),
+            b=jnp.ones((3, 1), dtype=jnp.float64),
+        )
+
+    monkeypatch.setenv("SFINCS_JAX_DENSE_KRYLOV_RESTART", "bad")
+    monkeypatch.setenv("SFINCS_JAX_DENSE_KRYLOV_MAXITER", "bad")
+    a = jnp.diag(jnp.asarray([1.0e-8, 2.0, 5.0e3], dtype=jnp.float64))
+    b = jnp.asarray([2.0e-8, -4.0, 1.0e4], dtype=jnp.float64)
+
+    def forbidden_preconditioner(x):
+        raise AssertionError("row-scaled dense Krylov must ignore external preconditioners")
+
+    result, residual = solver_module.dense_krylov_solve_from_matrix_with_residual(
+        a=a,
+        b=b,
+        preconditioner=forbidden_preconditioner,
+        row_scaled=True,
+        tol=1.0e-12,
+        solve_method="incremental",
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), np.asarray([2.0, -2.0, 2.0]), rtol=1.0e-8, atol=1.0e-8)
+    np.testing.assert_allclose(np.asarray(residual), np.zeros(3), atol=1.0e-8)
+    assert float(result.residual_norm) < 1.0e-8
 
 
 def test_dense_krylov_lgmres_matches_numpy_on_nonsymmetric_matrix() -> None:
