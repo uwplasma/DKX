@@ -84,7 +84,8 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   folders) were removed; ignored benchmark input caches remain local-only and
   are not part of a user clone or wheel.
 - A fresh xdist coverage audit on this branch completed successfully:
-  `3896 passed in 294.00 s` with `87%` package coverage. The audit command was
+  `3903 passed in 310.94 s` with `87%` package coverage and `8810` missing
+  executable lines. The audit command was
   `python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax
   --cov-report=term-missing --cov-report=json:coverage.json`. The CI floor
   remains `80%` until the branch has enough measured margin to raise it safely,
@@ -94,7 +95,7 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   counted implementation code, rather than slow full-solve CI jobs.
 - The largest measured coverage gaps by missing executable lines are
   `problems/profile_solve.py` (`58%`, `568` missing),
-  `outputs/writer.py` (`84%`, `392` missing),
+  `outputs/writer.py` (`84%`, `391` missing),
   `problems/transport_solve.py` (`73%`, `326` missing),
   `solvers/explicit_sparse.py` (`87%`, `310` missing),
   `solvers/preconditioner_transport_matrix.py` (`83%`, `296` missing),
@@ -853,8 +854,9 @@ Tranche 5: examples redesign.
 Tranche 6: coverage ramp to 95%.
 
 - Status: the latest full local xdist coverage audit measured `87%` package
-  coverage (`3896 passed in 294.00 s`). The exact percentage remains below the
-  `95%` target; do not advertise older intermediate figures. The next
+  coverage (`3903 passed in 310.94 s`, `8810` missing executable lines). The
+  exact percentage remains below the `95%` target; do not advertise older
+  intermediate figures. The next
   increment should target large user-risk modules rather than helper edges:
   `problems/profile_solve.py`, `outputs/writer.py`,
   `problems/transport_solve.py`, `solvers/explicit_sparse.py`,
@@ -2742,10 +2744,10 @@ Current completion status:
   only remaining refactor work is the retained-boundary audit for the large
   profile/transport solve owners and final PR-body documentation.
 - Coverage and future-proof validation: the latest full local coverage
-  audit completed `3896` tests in `294.00 s` and measured
-  `87%` package coverage. The local command used xdist load-scope sharding for
-  a clean package-wide measurement; CI must continue using bounded shards so
-  GitHub runtime stays below ten minutes. The newest tests cover output streaming, periodic
+  audit completed `3903` tests in `310.94 s` and measured `87%` package
+  coverage with `8810` missing executable lines. The local command used xdist
+  load-scope sharding for a clean package-wide measurement; CI must continue
+  using bounded shards so GitHub runtime stays below ten minutes. The newest tests cover output streaming, periodic
   stencils, release-data fetching, PETSc reference readers, upstream wrapper
   behavior, active full-FP kinetic block preconditioners, sparse-pattern
   helpers, explicit-sparse settings/materialization guards, profile-system
