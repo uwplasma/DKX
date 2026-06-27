@@ -127,7 +127,7 @@ diagnostics, residual norms, elapsed time, and transport-matrix error,
 
 This layer is intentionally conservative. It is designed to test whether the
 cheap moment objective predicts a useful transport-matrix grid, not to replace
-the transport solve itself. It currently targets the PAS path because mapped
+the transport solve itself. It targets the PAS path because mapped
 ``xGridScheme = 50`` is not yet compatible with the full-FP collision
 precompute assumptions.
 

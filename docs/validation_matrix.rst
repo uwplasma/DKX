@@ -366,11 +366,11 @@ Current open lane board
   introduce genuinely new constraint/nullspace/error-mode information and must
   write HDF5 plus solver-trace metadata before any production-resolution QI
   ladder is launched.
-  The latest implementation push adds three such coarse-space families but does
+  The implementation includes three such coarse-space families but does
   not promote them yet: pitch/xi moments in the multilevel angular-radial
   hierarchy, current/constraint tail moments, and an adjoint-normal Krylov space
   built from ``A^T r`` and bounded ``(A^T A)^k A^T r`` vectors. Unit tests show
-  these families reduce synthetic errors that the previous coarse families
+  these families reduce synthetic errors that the baseline coarse families
   miss; scale-0.60 evidence shows they still do not close the production hard
   seed. Promotion still requires HDF5 output and solver trace.
   The solver now also has an opt-in augmented-FGMRES operator-reuse hook that
@@ -571,8 +571,8 @@ Scope and status:
   ``25 x 51 x 100 x 4`` seed-0 CPU/GPU timeout probe with estimated total size
   ``510002``. A bounded CPU scale-0.60 seed-3
   probe-coarse artifact, the QI coarse-seed CPU artifact, and the
-  residual-weighted angular probe-coarse CPU artifact now pass. The matching
-  one-GPU probe-coarse and QI coarse-seed artifacts still time out. The latest
+  residual-weighted angular probe-coarse CPU artifact pass. The matching
+  one-GPU probe-coarse and QI coarse-seed artifacts still time out. The
   no-LGMRES GPU-compatible follow-up reaches ``925`` matvecs by ``409.9 s`` but
   still writes no HDF5/trace. The active-pattern GPU follow-up observes the new
   residual-selected chunked coarse path and finishes in ``231.7 s`` but stalls
@@ -744,14 +744,14 @@ Literature anchors:
 
 Closed branch evidence:
 
-- corrected bounded LHD and W7-X fast reruns resolve FP/PAS separation on the same
-  four-point ``\\nu'`` ladders that previously collapsed onto identical stored outputs
-- audited full LHD and W7-X collisionality summaries now resolve both FP and PAS labels
+- bounded LHD and W7-X fast reruns resolve FP/PAS separation on the same
+  four-point ``\\nu'`` ladders without label collapse in the stored outputs
+- audited full LHD and W7-X collisionality summaries resolve both FP and PAS labels
   on seven-point ``\\nu'`` ladders
-- a checked-in trend proxy now records high-collisionality tail slopes from those
+- a checked-in trend proxy records high-collisionality tail slopes from those
   corrected artifacts:
   ``examples/publication_figures/artifacts/sfincs_jax_high_collisionality_trend_proxy_summary.json``
-- a checked-in Simakov-Helander normalization audit now records the Appendix-B
+- a checked-in Simakov-Helander normalization audit records the Appendix-B
   geometry ingredients, ``FSABHat2`` recomputation, inverse-``nu`` slope gates, and
   explicit readiness status:
   ``examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json``
@@ -777,7 +777,7 @@ Closed branch evidence:
    confirms that checked-in ``sfincsOutput.h5`` files contain the geometry quantities
    needed for an Appendix-B comparison, but it keeps the full analytic-limit
    reproduction closed because the current full collisionality summaries stop near
-   ``nu'=10`` rather than a wider ``nu' >> 1`` range. The JSON summary now also
+   ``nu'=10`` rather than a wider ``nu' >> 1`` range. The JSON summary also
    carries a recommended logarithmic high-``nu'`` extension grid for each case,
    ending near ``nu'`` of ``100``, so the next heavy run is pinned and reviewable.
 
@@ -789,7 +789,7 @@ Post-release acceptance criteria:
 - use
   ``examples/publication_figures/artifacts/sfincs_jax_simakov_helander_high_nu_run_plan.json``
   as the executable high-``nu'`` extension plan; it is generated from the audit
-  and currently pins LHD and W7-X extension commands ending near ``nu'=100``,
+  and pins LHD and W7-X extension commands ending near ``nu'=100``,
 - run each plan entry's ``pilot_command`` first; the first LHD FP pilot at
   ``nu'=17.78`` on the office GPU took about ``569 s`` for one transport point,
   so the complete FP/PAS LHD+W7-X extension is a nightly/workstation campaign,
@@ -830,11 +830,11 @@ Validation goal:
 - make any profile reconstruction assumptions explicit,
 - use this lane only if the reconstructed input set is scientifically defensible.
 
-Current scaffold:
+Executable workflow:
 
 - ``examples/publication_figures/generate_w7x_ambipolar_validation.py``
 
-This script now exists as the executable lane scaffold. It defaults to the existing
+This script is the executable validation workflow. It defaults to the
 ``filteredW7XNetCDF_2species_magneticDrifts_withEr`` example input, runs an
 ``E_r`` scan, postprocesses the scan with ``sfincs_jax.ambipolar.solve_ambipolar_from_scan_dir``,
 and writes both a metadata-rich JSON summary and a publication-style figure.
@@ -842,7 +842,7 @@ It also supports ``--skip-existing`` plus ``--index/--stride`` split execution, 
 the heavy reference scan can be resumed or distributed across devices before the final
 ambipolar postprocess/figure pass.
 
-The summary JSON now includes explicit ``acceptance_gates``:
+The summary JSON includes explicit ``acceptance_gates``:
 
 - finite distinct ``E_r``/current scan points,
 - finite ambipolar roots,

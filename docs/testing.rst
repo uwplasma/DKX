@@ -659,8 +659,8 @@ closure therefore requires a cheaper exact/block-Schur application or a
 different residual-reducing coarse operator, not another scaling or restart-only
 knob.
 
-The latest QI coarse-seed follow-up adds bounded liveness evidence for that
-same one-GPU hard seed. The CPU artifact
+The QI coarse-seed follow-up provides bounded liveness evidence for that same
+one-GPU hard seed. The CPU artifact
 ``docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_cpu_2026_05_14.json``
 passes at ``15 x 31 x 60 x 5`` with an accepted residual ratio below
 ``1.4e-3``. The matching GPU heartbeat artifact
@@ -676,7 +676,7 @@ plain GMRES, probe-coarse improves the seed to ``2.83e-6``, and the solve reache
 because it writes no output or solver trace.
 
 ``docs/_static/qi_seed_robustness_evidence_manifest.json`` rolls those artifacts
-into the current production-readiness gate. It records the production target
+into the production-readiness gate. It records the production target
 ``25 x 51 x 100 x 4`` with estimated total size ``510002``, the largest checked
 passing bounded grid ``139502``, the largest attempted grid ``510002``,
 32 passing artifacts and 80 non-passing blocker artifacts, a ``60%``
@@ -705,12 +705,12 @@ pitch/angular/radial/species coarse path, but the solve still refuses output at
 residual ``1.622338e-5`` against the hard-seed write gate. It is tracked so the
 negative result is reproducible and not promoted accidentally.
 
-The next non-smoother probe is ``coupled-residual-device-qi``. It asks the
+The non-smoother probe ``coupled-residual-device-qi`` asks the
 driver to build multilevel, residual-snapshot, block-Schur, and flat coarse
 sources, then solve one joint cached ``A Q`` residual equation. If the coupled
 stage is internally accepted but the seed probe is too weak, the opt-in preset
 can install the stage as the Krylov preconditioner without changing ``x0``.
-This is the current reviewer-facing test of the Schur/coarse-residual
+This is the reviewer-facing test of the Schur/coarse-residual
 hypothesis: a passing artifact must report
 ``xblock_qi_device_preconditioner_coupled_residual_equation=True``, write HDF5
 and solver trace, satisfy the residual gate, and remain on the device-QI path
@@ -734,7 +734,7 @@ artifact,
 records the same hook and reduces ``2.450895e-05 -> 2.142936e-05``. The gate
 remains open until a CPU and GPU artifact write converged HDF5 plus solver trace
 metadata.
-For the current release documentation this is a scoped research result, not a
+For release documentation this is a scoped research result, not a
 production claim: this hard seed is below ``3e-5`` on CPU and GPU, while
 additional algorithmic work is still required to reach the production write
 tolerance.
@@ -764,7 +764,7 @@ x-block factors, and requires fail-closed artifacts to refuse nonconverged
 outputs. Legacy fail-closed GPU blocker artifacts may use the ``gpu0``/``gpu1``
 file name as provenance only when they write no output and fail their gates.
 
-The latest residual-weighted angular probe-coarse artifact
+The residual-weighted angular probe-coarse artifact
 ``docs/_static/qi_seed_robustness_scale060_probe_coarse_angular_residual_seed3_cpu_2026_05_14.json``
 is the accepted CPU hard-seed reference for this bounded scale: it passes in
 ``170.7 s`` with residual ratio ``2.14e-3``. The enriched QI basis,
