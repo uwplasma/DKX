@@ -42,6 +42,10 @@ The main structural refactor is functionally complete:
   navigation, including tutorial notebooks and runnable scripts.
 - A fresh local xdist coverage audit measured `87%` package coverage:
   `3907 passed in 279.01 s` with `8763` missing executable lines.
+- Subsequent bounded coverage tranches added RHSMode-1 Schur/coarse fallback
+  tests, output-gradient coordinate contract tests, and default
+  preconditioner-selection tests. A full non-coverage regression check after
+  these tranches passed: `3925 passed in 247.02 s`.
 - The CI coverage floor remains lower than the final target until measured
   margin is available; the review target is `95%` meaningful package coverage
   while keeping GitHub Actions under 10 minutes.
