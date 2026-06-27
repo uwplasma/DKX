@@ -170,10 +170,10 @@ When an equilibrium override is supplied, ``sfincs_jax`` updates the embedded
 configuration. Use ``sfincs_jax.io.read_sfincs_output_file(...)`` to load HDF5,
 NetCDF, or NPZ outputs with the same dictionary interface.
 
-Current coverage
-----------------
+Supported output coverage
+-------------------------
 
-At the moment, `sfincs_jax` output writing supports:
+`sfincs_jax` output writing supports:
 
 - ``geometryScheme = 4`` (simplified W7-X Boozer model)
 - ``geometryScheme = 5`` (VMEC ``wout_*.nc`` netCDF workflow)
