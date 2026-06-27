@@ -246,10 +246,40 @@ def _rhsmode1_selector_context(**updates) -> RHSMode1SolveMethodSelectionContext
     return RHSMode1SolveMethodSelectionContext(**values)
 
 
+def _disable_rhsmode1_selector_auto_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in (
+        "rhs1_structured_full_csr_auto_allowed",
+        "rhs1_tokamak_pas_er_sparse_pc_auto_allowed",
+        "rhs1_tokamak_er_dense_auto_allowed",
+        "rhs1_tokamak_pas_noer_sparse_pc_auto_allowed",
+        "rhs1_tokamak_fp_er_sparse_pc_auto_allowed",
+        "rhs1_tokamak_fp_noer_sparse_pc_auto_allowed",
+        "rhs1_fp_3d_xblock_sparse_pc_auto_allowed",
+        "rhs1_fp_3d_sparse_pc_auto_allowed",
+        "rhs1_constrained_pas_sparse_pc_auto_allowed",
+    ):
+        monkeypatch.setattr(rhsmode1_output, name, lambda **_kwargs: False)
+
+
 def test_rhsmode1_selector_promotes_small_fp_to_dense() -> None:
     method = select_rhsmode1_solve_method(_rhsmode1_selector_context())
 
     assert method == "dense"
+
+
+def test_rhsmode1_selector_keeps_explicit_env_override() -> None:
+    messages: list[str] = []
+
+    method = select_rhsmode1_solve_method(
+        _rhsmode1_selector_context(
+            solve_method_env="sparse_pc_gmres",
+            emit=lambda _level, message: messages.append(str(message)),
+        )
+    )
+
+    assert method == "sparse_pc_gmres"
+    assert any("forced by env" in message for message in messages)
+    assert any("keeping explicit solve_method=sparse_pc_gmres" in message for message in messages)
 
 
 def test_rhsmode1_selector_force_krylov_wins_over_small_fp_dense() -> None:
@@ -261,6 +291,84 @@ def test_rhsmode1_selector_force_krylov_wins_over_small_fp_dense() -> None:
     )
 
     assert method == "incremental"
+
+
+def test_rhsmode1_selector_uses_tokamak_pas_er_sparse_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    _disable_rhsmode1_selector_auto_policy(monkeypatch)
+    monkeypatch.setattr(
+        rhsmode1_output,
+        "rhs1_tokamak_pas_er_sparse_pc_auto_allowed",
+        lambda **_kwargs: True,
+    )
+
+    method = select_rhsmode1_solve_method(
+        _rhsmode1_selector_context(
+            op=_rhsmode1_selector_op(has_fp=False, has_pas=True),
+            active_total_size=50_000,
+            dense_fp_cutoff=1,
+            er_abs=0.2,
+        )
+    )
+
+    assert method == "sparse_pc_gmres"
+
+
+def test_rhsmode1_selector_uses_tokamak_er_dense_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    _disable_rhsmode1_selector_auto_policy(monkeypatch)
+    monkeypatch.setattr(
+        rhsmode1_output,
+        "rhs1_tokamak_er_dense_auto_allowed",
+        lambda **_kwargs: True,
+    )
+
+    method = select_rhsmode1_solve_method(
+        _rhsmode1_selector_context(
+            op=_rhsmode1_selector_op(has_fp=False),
+            active_total_size=1024,
+            dense_fp_cutoff=1,
+            er_abs=0.1,
+        )
+    )
+
+    assert method == "dense"
+
+
+def test_rhsmode1_selector_uses_3d_fp_xblock_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    _disable_rhsmode1_selector_auto_policy(monkeypatch)
+    monkeypatch.setattr(
+        rhsmode1_output,
+        "rhs1_fp_3d_xblock_sparse_pc_auto_allowed",
+        lambda **_kwargs: True,
+    )
+
+    method = select_rhsmode1_solve_method(
+        _rhsmode1_selector_context(
+            active_total_size=50_000,
+            dense_fp_cutoff=1,
+            eparallel_abs=0.0,
+        )
+    )
+
+    assert method == "xblock_sparse_pc_gmres"
+
+
+def test_rhsmode1_selector_uses_constrained_pas_sparse_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    _disable_rhsmode1_selector_auto_policy(monkeypatch)
+    monkeypatch.setattr(
+        rhsmode1_output,
+        "rhs1_constrained_pas_sparse_pc_auto_allowed",
+        lambda **_kwargs: True,
+    )
+
+    method = select_rhsmode1_solve_method(
+        _rhsmode1_selector_context(
+            op=_rhsmode1_selector_op(has_fp=False, has_pas=True),
+            active_total_size=50_000,
+            dense_pas_cutoff=1,
+        )
+    )
+
+    assert method == "sparse_pc_gmres"
 
 
 def test_constraint0_fortran_gauge_helper_is_fail_closed(monkeypatch) -> None:

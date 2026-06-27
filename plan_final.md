@@ -121,6 +121,12 @@ The main structural refactor is functionally complete:
   broader output/profile/source-tree bundle passed as `224 passed in 17.89 s`.
   This reduced `outputs/writer.py` to `3508` lines and
   `write_sfincs_jax_output_h5` to `1852` lines without adding files.
+- RHSMode=1 output solve-method selector branch coverage now includes explicit
+  environment overrides, tokamak PAS+Er sparse-PC, tokamak Er dense, 3D
+  full-FP x-block, and constrained-PAS sparse-PC policy branches. Focused
+  validation passed: `tests/test_io_output_policy_coverage.py` as
+  `69 passed in 1.88 s`; the broader output bundle passed as
+  `152 passed in 8.20 s`.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
