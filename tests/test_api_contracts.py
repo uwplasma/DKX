@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError, is_dataclass
+import importlib
 from pathlib import Path
 
 import jax.distributed as jax_distributed
@@ -110,6 +111,52 @@ def test_contracts_are_reexported_from_top_level_package() -> None:
     assert "write_output" in sfincs_jax.__all__
     assert "read_output" in sfincs_jax.__all__
     assert "run_ambipolar_brent" in sfincs_jax.__all__
+    assert "initialize_distributed_runtime_from_env" in sfincs_jax.__all__
+    assert isinstance(sfincs_jax.__version__, str)
+    assert sfincs_jax.__version__
+
+
+def test_import_env_controls_cpu_devices_and_compilation_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache_dir = tmp_path / "jax-cache"
+    monkeypatch.setenv("SFINCS_JAX_CORES", "2")
+    monkeypatch.setenv("SFINCS_JAX_XLA_THREADS", "yes")
+    monkeypatch.delenv("SFINCS_JAX_SHARD", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_CPU_DEVICES", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_COMPILATION_CACHE_DIR", str(cache_dir))
+    monkeypatch.delenv("JAX_COMPILATION_CACHE_DIR", raising=False)
+    monkeypatch.setenv("XLA_FLAGS", "")
+
+    reloaded = importlib.reload(sfincs_jax)
+
+    assert reloaded is sfincs_jax
+    assert sfincs_jax.os.environ["SFINCS_JAX_CPU_DEVICES"] == "2"
+    assert sfincs_jax.os.environ["SFINCS_JAX_MATVEC_SHARD_AXIS"] == "auto"
+    assert sfincs_jax.os.environ["SFINCS_JAX_AUTO_SHARD"] == "1"
+    assert "--xla_cpu_parallelism_threads=2" in sfincs_jax.os.environ["XLA_FLAGS"]
+    assert "--xla_force_host_platform_device_count=2" in sfincs_jax.os.environ["XLA_FLAGS"]
+    assert sfincs_jax.os.environ["JAX_COMPILATION_CACHE_DIR"] == str(cache_dir)
+    assert cache_dir.is_dir()
+
+    monkeypatch.delenv("SFINCS_JAX_CORES", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_XLA_THREADS", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_COMPILATION_CACHE_DIR", raising=False)
+    monkeypatch.delenv("JAX_COMPILATION_CACHE_DIR", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_DISABLE_COMPILATION_CACHE", "1")
+    importlib.reload(sfincs_jax)
+
+
+def test_import_env_invalid_cpu_controls_are_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_CORES", "not-an-int")
+    monkeypatch.setenv("SFINCS_JAX_CPU_DEVICES", "not-an-int")
+    monkeypatch.setenv("SFINCS_JAX_DISABLE_COMPILATION_CACHE", "1")
+    monkeypatch.setenv("XLA_FLAGS", "")
+
+    importlib.reload(sfincs_jax)
+
+    assert sfincs_jax.os.environ["XLA_FLAGS"] == ""
 
 
 def test_distributed_runtime_env_bootstrap_is_safe_and_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -161,6 +208,10 @@ def test_distributed_runtime_env_bootstrap_fails_closed(monkeypatch: pytest.Monk
     monkeypatch.setenv("SFINCS_JAX_DISTRIBUTED", "yes")
     monkeypatch.setenv("SFINCS_JAX_COORDINATOR_ADDRESS", "127.0.0.1")
 
+    assert sfincs_jax.initialize_distributed_runtime_from_env() is False
+    assert sfincs_jax._distributed_runtime_initialized is False
+
+    monkeypatch.setenv("SFINCS_JAX_COORDINATOR_PORT", "not-an-int")
     assert sfincs_jax.initialize_distributed_runtime_from_env() is False
     assert sfincs_jax._distributed_runtime_initialized is False
 
