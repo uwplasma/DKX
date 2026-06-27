@@ -84,7 +84,7 @@ from sfincs_jax.operators.profile_structured_csr import (
     _try_build_structured_rhs1_full_csr_operator_bundle,
 )
 from sfincs_jax.problems.profile_policies import (
-    RHS1DefaultPreconditionerSelectionContext,
+    RHS1PreconditionerRouteSetupContext,
     canonical_rhs1_preconditioner_kind as _canonical_rhs1_preconditioner_kind,
     pas_auto_skip_strong_retry as _pas_auto_skip_strong_retry,
     rhs1_fp_dkes_default_kind as _rhs1_fp_dkes_default_kind,
@@ -102,7 +102,7 @@ from sfincs_jax.problems.profile_policies import (
     rhs1_pas_tokamak_gpu_xblock_preferred as _rhs1_pas_tokamak_gpu_xblock_preferred,
     rhs1_pas_weak_auto_override_kind as _rhs1_pas_weak_auto_override_kind,
     rhs1_sharded_line_override_allowed as _rhs1_sharded_line_override_allowed,
-    resolve_rhs1_default_preconditioner_selection,
+    resolve_rhs1_preconditioner_route_setup,
 )
 from sfincs_jax.problems.profile_policies import (
     rhs1_gpu_sparse_fallback_skip_allowed_current_backend as _rhs1_gpu_sparse_fallback_skip_allowed,
@@ -1261,519 +1261,41 @@ def solve_v3_full_system_linear_gmres(
             rhs=rhs,
             payload=sparse_host_direct_payload,
         )
-    rhs1_precond_env = (
-        os.environ.get("SFINCS_JAX_RHSMODE1_PRECONDITIONER", "").strip().lower()
+    rhs1_route_setup = resolve_rhs1_preconditioner_route_setup(
+        RHS1PreconditionerRouteSetupContext({**globals(), **locals()})
     )
-    rhs1_precond_env_user = rhs1_precond_env
-    rhs1_bicgstab_env = (
-        os.environ.get("SFINCS_JAX_RHSMODE1_BICGSTAB_PRECOND", "").strip().lower()
+    er_abs = rhs1_route_setup["er_abs"]
+    max_l = rhs1_route_setup["max_l"]
+    nxi_for_x = rhs1_route_setup["nxi_for_x"]
+    pas_auto_strong_ratio = rhs1_route_setup["pas_auto_strong_ratio"]
+    pre_theta = rhs1_route_setup["pre_theta"]
+    pre_zeta = rhs1_route_setup["pre_zeta"]
+    restart = int(rhs1_route_setup["restart"])
+    maxiter = rhs1_route_setup["maxiter"]
+    rhs1_bicgstab_env = rhs1_route_setup["rhs1_bicgstab_env"]
+    rhs1_bicgstab_env_user = rhs1_route_setup["rhs1_bicgstab_env_user"]
+    rhs1_dd_setup = rhs1_route_setup["rhs1_dd_setup"]
+    rhs1_gpu_tokamak_pas_tight_gmres = rhs1_route_setup[
+        "rhs1_gpu_tokamak_pas_tight_gmres"
+    ]
+    rhs1_precond_enabled = bool(rhs1_route_setup["rhs1_precond_enabled"])
+    rhs1_precond_env = rhs1_route_setup["rhs1_precond_env"]
+    rhs1_precond_env_user = rhs1_route_setup["rhs1_precond_env_user"]
+    rhs1_precond_kind = rhs1_route_setup["rhs1_precond_kind"]
+    rhs1_precond_kind_requested = rhs1_route_setup["rhs1_precond_kind_requested"]
+    rhs1_xblock_tz_lmax = rhs1_route_setup["rhs1_xblock_tz_lmax"]
+    schur_er_min = rhs1_route_setup["schur_er_min"]
+    structured_fblock_precond_requested = bool(
+        rhs1_route_setup["structured_fblock_precond_requested"]
     )
-    rhs1_bicgstab_env_user = rhs1_bicgstab_env
-    rhs1_precond_env = _rhs1_fp_dkes_env_preconditioner_kind(
-        rhs1_precond_env=rhs1_precond_env,
-        rhs_mode=int(op.rhs_mode),
-        include_phi1=bool(op.include_phi1),
-        has_fp=op.fblock.fp is not None,
-        use_dkes=bool(use_dkes),
-        total_size=int(op.total_size),
-        n_theta=int(op.n_theta),
-        n_zeta=int(op.n_zeta),
-        max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
-    )
-    try:
-        pre_theta = int(precond_opts.get("PRECONDITIONER_THETA", 0) or 0)
-    except (TypeError, ValueError):
-        pre_theta = 0
-    try:
-        pre_zeta = int(precond_opts.get("PRECONDITIONER_ZETA", 0) or 0)
-    except (TypeError, ValueError):
-        pre_zeta = 0
-    rhs1_precond_kind: str | None
-    rhs1_xblock_tz_lmax: int | None = None
-    rhs1_gpu_tokamak_pas_tight_gmres = False
-    rhs1_dd_setup = resolve_rhs1_domain_decomposition_setup(
-        n_theta=int(op.n_theta),
-        n_zeta=int(op.n_zeta),
-        sum_nxi=int(np.sum(nxi_for_x)) if nxi_for_x.size else 1,
-        distributed_env=os.environ.get("SFINCS_JAX_GMRES_DISTRIBUTED", ""),
-        device_count=int(jax.device_count()),
-        auto_axis=_matvec_shard_axis(op),
-        theta_block_env=os.environ.get("SFINCS_JAX_RHSMODE1_DD_BLOCK_T", ""),
-        zeta_block_env=os.environ.get("SFINCS_JAX_RHSMODE1_DD_BLOCK_Z", ""),
-        theta_overlap_env=os.environ.get("SFINCS_JAX_RHSMODE1_DD_OVERLAP_T", ""),
-        zeta_overlap_env=os.environ.get("SFINCS_JAX_RHSMODE1_DD_OVERLAP_Z", ""),
-        overlap_env=os.environ.get("SFINCS_JAX_RHSMODE1_DD_OVERLAP", ""),
-        patch_dof_target_env=os.environ.get(
-            "SFINCS_JAX_RHSMODE1_SCHWARZ_PATCH_DOF_TARGET", ""
-        ),
-    )
-
-    pas_auto_strong_ratio_env = os.environ.get(
-        "SFINCS_JAX_PAS_AUTO_STRONG_RATIO", ""
-    ).strip()
-    try:
-        pas_auto_strong_ratio = (
-            float(pas_auto_strong_ratio_env) if pas_auto_strong_ratio_env else 10.0
-        )
-    except ValueError:
-        pas_auto_strong_ratio = 10.0
-    er_abs = 0.0
-    schur_er_min = 1.0e-12
-
-    rhs1_default_precond_selection = resolve_rhs1_default_preconditioner_selection(
-        RHS1DefaultPreconditionerSelectionContext({**globals(), **locals()})
-    )
-    if "er_abs" in rhs1_default_precond_selection:
-        er_abs = rhs1_default_precond_selection["er_abs"]
-    if "lmax_use" in rhs1_default_precond_selection:
-        lmax_use = rhs1_default_precond_selection["lmax_use"]
-    if "max_l" in rhs1_default_precond_selection:
-        max_l = rhs1_default_precond_selection["max_l"]
-    if "nxi_for_x" in rhs1_default_precond_selection:
-        nxi_for_x = rhs1_default_precond_selection["nxi_for_x"]
-    if "rhs1_gpu_tokamak_pas_tight_gmres" in rhs1_default_precond_selection:
-        rhs1_gpu_tokamak_pas_tight_gmres = rhs1_default_precond_selection[
-            "rhs1_gpu_tokamak_pas_tight_gmres"
-        ]
-    if "rhs1_precond_env" in rhs1_default_precond_selection:
-        rhs1_precond_env = rhs1_default_precond_selection["rhs1_precond_env"]
-    if "rhs1_precond_kind" in rhs1_default_precond_selection:
-        rhs1_precond_kind = rhs1_default_precond_selection["rhs1_precond_kind"]
-    if "rhs1_xblock_tz_lmax" in rhs1_default_precond_selection:
-        rhs1_xblock_tz_lmax = rhs1_default_precond_selection["rhs1_xblock_tz_lmax"]
-    if "schur_er_min" in rhs1_default_precond_selection:
-        schur_er_min = rhs1_default_precond_selection["schur_er_min"]
-    if "tokamak_like" in rhs1_default_precond_selection:
-        tokamak_like = rhs1_default_precond_selection["tokamak_like"]
-    if "use_collision_precond" in rhs1_default_precond_selection:
-        use_collision_precond = rhs1_default_precond_selection["use_collision_precond"]
-    if "xblock_tz_max" in rhs1_default_precond_selection:
-        xblock_tz_max = rhs1_default_precond_selection["xblock_tz_max"]
-    if (
-        (not rhs1_precond_env)
-        and int(op.rhs_mode) == 1
-        and (not bool(op.include_phi1))
-        and op.fblock.pas is not None
-        and rhs1_precond_kind
-        in {
-            None,
-            "collision",
-            "point",
-            "xmg",
-            "theta_line",
-            "zeta_line",
-            "theta_zeta",
-            "xblock_tz",
-            "xblock_tz_lmax",
-            "theta_line_xdiag",
-        }
-        and not rhs1_gpu_tokamak_pas_tight_gmres
-    ):
-        # PAS runs can stagnate with weak preconditioners; use the
-        # PAS hybrid (line + x-coarse) preconditioner by default. For large systems,
-        # prefer a lighter PAS preconditioner to keep setup cost down. The PAS probe
-        # can still downgrade to a collision preconditioner if it suffices.
-        max_l_local = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
-        rhs1_precond_kind = _rhs1_pas_weak_auto_override_kind(
-            rhs1_precond_env=rhs1_precond_env,
-            rhs_mode=int(op.rhs_mode),
-            include_phi1=bool(op.include_phi1),
-            has_pas=op.fblock.pas is not None,
-            current_kind=rhs1_precond_kind,
-            active_size=int(active_size),
-            n_theta=int(op.n_theta),
-            n_zeta=int(op.n_zeta),
-            max_l=int(max_l_local),
-        )
-        if rhs1_precond_kind == "xblock_tz" and _rhs1_pas_dkes_pas_tz_preferred(
-            has_pas=op.fblock.pas is not None,
-            use_dkes=bool(use_dkes),
-            backend=jax.default_backend(),
-            n_theta=int(op.n_theta),
-            n_zeta=int(op.n_zeta),
-            max_l=int(max_l_local),
-            active_size=int(active_size),
-        ):
-            rhs1_precond_kind = "pas_tz"
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: PAS DKES "
-                    "weak-auto override -> pas_tz preconditioner",
-                )
-    tokamak_like = bool(geom_scheme == 1 or int(op.n_zeta) <= 5)
-    rhs1_precond_kind = _rhs1_pas_family_refinement_kind(
-        rhs1_precond_env=rhs1_precond_env,
-        has_pas=op.fblock.pas is not None,
-        has_fp=op.fblock.fp is not None,
-        current_kind=rhs1_precond_kind,
-        active_size=int(active_size),
-        n_zeta=int(op.n_zeta),
-        geom_scheme=int(geom_scheme),
-        pas_tz_applicable=_pas_tz_preconditioner_applicable(op),
-        pas_tokamak_theta_applicable=_pas_tokamak_theta_preconditioner_applicable(op),
-    )
-    if (
-        rhs1_precond_env in {"", "auto", "default"}
-        and rhs1_precond_kind == "schur"
-        and _rhs1_pas_full_pas_tz_preferred(
-            has_pas=op.fblock.pas is not None,
-            has_fp=op.fblock.fp is not None,
-            use_dkes=bool(use_dkes),
-            backend=jax.default_backend(),
-            geom_scheme=int(geom_scheme),
-            n_theta=int(op.n_theta),
-            n_zeta=int(op.n_zeta),
-            max_l=int(max_l),
-            active_size=int(active_size),
-            pas_tz_applicable=_pas_tz_preconditioner_applicable(op),
-        )
-    ):
-        rhs1_precond_kind = "pas_tz"
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: full-trajectory PAS "
-                "auto -> pas_tz preconditioner",
-            )
-    if _rhs1_geometry4_pas_memory_pas_tz_preferred(
-        rhs1_precond_env=rhs1_precond_env,
-        current_kind=rhs1_precond_kind,
-        has_pas=op.fblock.pas is not None,
-        has_fp=op.fblock.fp is not None,
-        use_dkes=bool(use_dkes),
-        geom_scheme=int(geom_scheme),
-        n_theta=int(op.n_theta),
-        n_zeta=int(op.n_zeta),
-        max_l=int(max_l),
-        active_size=int(active_size),
-        er_abs=float(er_abs),
-        schur_er_min=float(schur_er_min),
-        pas_tz_applicable=_pas_tz_preconditioner_applicable(op),
-    ):
-        rhs1_precond_kind = "pas_tz"
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: geometry4 PAS memory "
-                "auto -> pas_tz preconditioner",
-            )
-    if (
-        tokamak_like
-        and rhs1_precond_env in {"", "auto", "default"}
-        and rhs1_precond_kind
-        in {
-            "pas_lite",
-            "pas_hybrid",
-            "pas_tokamak_theta",
-            "pas_tz",
-            "xmg",
-            "collision",
-            "point",
-        }
-        and op.fblock.pas is not None
-        and op.fblock.fp is None
-        and (not _pas_tz_preconditioner_applicable(op))
-        and (not _pas_tokamak_theta_preconditioner_applicable(op))
-        and (
-            not _rhs1_pas_tokamak_gpu_theta_allowed(
-                has_pas=op.fblock.pas is not None,
-                has_fp=op.fblock.fp is not None,
-                backend=jax.default_backend(),
-                tokamak_like=tokamak_like,
-                active_size=int(active_size),
-                er_abs=float(er_abs),
-                schur_er_min=float(schur_er_min),
-                has_magdrift=(
-                    op.fblock.magdrift_theta is not None
-                    or op.fblock.magdrift_zeta is not None
-                    or op.fblock.magdrift_xidot is not None
-                ),
-                has_collisionless=op.fblock.collisionless is not None,
-            )
-        )
-    ):
-        if _rhs1_pas_tokamak_cpu_xblock_preferred(
-            has_pas=op.fblock.pas is not None,
-            has_fp=op.fblock.fp is not None,
-            backend=jax.default_backend(),
-            tokamak_like=tokamak_like,
-            active_size=int(active_size),
-            er_abs=float(er_abs),
-            schur_er_min=float(schur_er_min),
-            has_magdrift=(
-                op.fblock.magdrift_theta is not None
-                or op.fblock.magdrift_zeta is not None
-                or op.fblock.magdrift_xidot is not None
-            ),
-            has_collisionless=op.fblock.collisionless is not None,
-            n_theta=int(op.n_theta),
-            n_zeta=int(op.n_zeta),
-            max_l=int(max_l),
-            xblock_tz_limit=max(1, int(xblock_tz_max)),
-        ):
-            rhs1_precond_kind = "xblock_tz"
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: CPU PAS tokamak "
-                    "auto -> xblock_tz preconditioner",
-                )
-        else:
-            rhs1_precond_kind = "pas_schur"
-    if (
-        rhs1_precond_env == ""
-        and int(op.rhs_mode) == 1
-        and (not bool(op.include_phi1))
-        and op.fblock.fp is not None
-        and op.fblock.pas is None
-        and float(er_abs) <= float(schur_er_min)
-    ):
-        rhs1_precond_kind_override = _rhs1_large_fp_near_zero_er_override_kind(
-            rhs1_precond_env=rhs1_precond_env,
-            rhs_mode=int(op.rhs_mode),
-            include_phi1=bool(op.include_phi1),
-            has_fp=op.fblock.fp is not None,
-            has_pas=op.fblock.pas is not None,
-            current_kind=rhs1_precond_kind,
-            total_size=int(op.total_size),
-            er_abs=float(er_abs),
-            schur_er_min=float(schur_er_min),
-        )
-        if rhs1_precond_kind_override != rhs1_precond_kind:
-            rhs1_precond_kind = rhs1_precond_kind_override
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: large FP near-zero-Er "
-                    "auto override -> xmg preconditioner",
-                )
-    if (
-        rhs1_precond_env == ""
-        and int(op.rhs_mode) == 1
-        and op.fblock.pas is not None
-        and rhs1_precond_kind in {None, "collision", "point"}
-        and not rhs1_gpu_tokamak_pas_tight_gmres
-    ):
-        pas_strong_max_env = os.environ.get("SFINCS_JAX_PAS_STRONG_MAX", "").strip()
-        try:
-            pas_strong_max = int(pas_strong_max_env) if pas_strong_max_env else 25000
-        except ValueError:
-            pas_strong_max = 25000
-        if int(active_size) <= max(1, int(pas_strong_max)):
-            rhs1_precond_kind = "pas_hybrid"
-    if (
-        rhs1_precond_env == ""
-        and int(op.rhs_mode) == 1
-        and (not bool(op.include_phi1))
-        and op.fblock.pas is not None
-        and int(op.n_species) >= 2
-        and (geom_scheme == 1 or int(op.n_zeta) <= 9)
-        and rhs1_precond_kind in {"theta_line", "zeta_line", "theta_zeta"}
-    ):
-        # Multi-species PAS tokamak-like runs are prone to stagnation with pure line
-        # preconditioners; prefer Schur by default for robustness/parity.
-        rhs1_precond_kind = "schur"
-    rhs1_precond_kind_requested = rhs1_precond_kind
-    if rhs1_precond_env == "" and rhs1_precond_kind == "point" and use_pas_projection:
-        # PAS tokamak-like cases benefit from a stronger line preconditioner by default.
-        rhs1_precond_kind = (
-            "theta_line" if int(op.n_theta) >= int(op.n_zeta) else "zeta_line"
-        )
-    if rhs1_precond_env == "":
-        shard_axis = _matvec_shard_axis(op)
-        if shard_axis in {"theta", "zeta"} and jax.device_count() > 1:
-            pas_tz_estimate = _estimate_rhs1_pas_tz_build_bytes(op)
-            pas_tz_max_bytes = _rhs1_pas_tz_max_bytes()
-            pas_shard_xmg_min_env = os.environ.get(
-                "SFINCS_JAX_RHSMODE1_PAS_SHARD_XMG_MIN", ""
-            ).strip()
-            try:
-                pas_shard_xmg_min = (
-                    int(pas_shard_xmg_min_env) if pas_shard_xmg_min_env else 80000
-                )
-            except ValueError:
-                pas_shard_xmg_min = 80000
-            fp_shard_xmg_min_env = os.environ.get(
-                "SFINCS_JAX_RHSMODE1_FP_SHARD_XMG_MIN", ""
-            ).strip()
-            try:
-                fp_shard_xmg_min = (
-                    int(fp_shard_xmg_min_env) if fp_shard_xmg_min_env else 120000
-                )
-            except ValueError:
-                fp_shard_xmg_min = 120000
-            keep_xmg_for_large_pas_er = bool(
-                rhs1_precond_kind == "xmg"
-                and op.fblock.pas is not None
-                and int(op.total_size) >= max(1, int(pas_shard_xmg_min))
-            )
-            keep_xmg_for_large_fp = bool(
-                rhs1_precond_kind == "xmg"
-                and op.fblock.fp is not None
-                and int(op.total_size) >= max(1, int(fp_shard_xmg_min))
-            )
-            schwarz_auto_min_env = os.environ.get(
-                "SFINCS_JAX_RHSMODE1_SCHWARZ_AUTO_MIN", ""
-            ).strip()
-            try:
-                schwarz_auto_min = (
-                    int(schwarz_auto_min_env) if schwarz_auto_min_env else 120000
-                )
-            except ValueError:
-                schwarz_auto_min = 120000
-            force_schwarz = bool(schwarz_auto_min_env) and int(schwarz_auto_min) <= 0
-            if force_schwarz:
-                rhs1_precond_kind = (
-                    "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
-                )
-            elif _rhs1_sharded_line_override_allowed(rhs1_precond_kind):
-                # Preserve dedicated PAS preconditioners on sharded runs. Demoting
-                # pas_tz/pas_tokamak_theta/pas_ilu to pure line blocks can turn a
-                # parity-clean moderate PAS solve into a long line-preconditioned
-                # Krylov run with no robustness benefit.
-                if (
-                    rhs1_precond_kind in {"theta_line", "zeta_line"}
-                    and rhs1_precond_kind != f"{shard_axis}_line"
-                ):
-                    pass
-                elif keep_xmg_for_large_pas_er or keep_xmg_for_large_fp:
-                    pass
-                elif op.fblock.pas is not None and pas_tz_estimate > max(
-                    0, int(pas_tz_max_bytes)
-                ):
-                    rhs1_precond_kind = (
-                        "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
-                    )
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: sharded PAS large pas_tz "
-                            f"(est={pas_tz_estimate / 2**30:.2f} GiB > cap={pas_tz_max_bytes / 2**30:.2f} GiB) -> "
-                            f"{rhs1_precond_kind}",
-                        )
-                elif int(op.total_size) >= max(1, int(schwarz_auto_min)):
-                    rhs1_precond_kind = (
-                        "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
-                    )
-                else:
-                    rhs1_precond_kind = (
-                        "theta_line" if shard_axis == "theta" else "zeta_line"
-                    )
-    if (
-        rhs1_precond_env == ""
-        and rhs1_precond_kind == "schur"
-        and op.fblock.pas is not None
-        and (not bool(op.include_phi1))
-    ):
-        # In sharded multi-device PAS runs, the global Schur preconditioner can dominate
-        # wall time for moderate-size systems. Prefer shard-local Schwarz blocks when
-        # Er is near zero, where this branch is typically more than sufficient.
-        shard_axis = _matvec_shard_axis(op)
-        if shard_axis in {"theta", "zeta"} and jax.device_count() > 1:
-            schur_shard_max_env = os.environ.get(
-                "SFINCS_JAX_RHSMODE1_SCHUR_SHARD_MAX", ""
-            ).strip()
-            try:
-                schur_shard_max = (
-                    int(schur_shard_max_env) if schur_shard_max_env else 30000
-                )
-            except ValueError:
-                schur_shard_max = 30000
-            schur_shard_er_env = os.environ.get(
-                "SFINCS_JAX_RHSMODE1_SCHUR_SHARD_ER_MAX", ""
-            ).strip()
-            try:
-                schur_shard_er_max = (
-                    float(schur_shard_er_env) if schur_shard_er_env else 1.0e-8
-                )
-            except ValueError:
-                schur_shard_er_max = 1.0e-8
-            if int(op.total_size) <= max(1, int(schur_shard_max)) and float(
-                er_abs
-            ) <= max(0.0, float(schur_shard_er_max)):
-                rhs1_precond_kind = (
-                    "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
-                )
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: sharded PAS near-zero-Er -> "
-                        f"{rhs1_precond_kind} preconditioner",
-                    )
-    if str(solve_method).strip().lower() in {"dense", "dense_ksp", "dense_row_scaled"}:
-        rhs1_precond_kind = None
-    pas_tokamak_gpu_tol = _rhs1_pas_tokamak_gpu_tight_tol(
-        enabled=rhs1_gpu_tokamak_pas_tight_gmres
-        or rhs1_precond_kind == "pas_tokamak_theta",
-        has_pas=op.fblock.pas is not None,
-        has_fp=op.fblock.fp is not None,
-        backend=jax.default_backend(),
-        tokamak_like=tokamak_like,
-        active_size=int(active_size),
-        er_abs=float(er_abs),
-        schur_er_min=float(schur_er_min),
-        has_magdrift=(
-            op.fblock.magdrift_theta is not None
-            or op.fblock.magdrift_zeta is not None
-            or op.fblock.magdrift_xidot is not None
-        ),
-        has_collisionless=op.fblock.collisionless is not None,
-    )
-    if pas_tokamak_gpu_tol is not None:
-        tol_old = float(tol)
-        tol = min(float(tol), float(pas_tokamak_gpu_tol))
-        if emit is not None and float(tol) < tol_old:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: GPU PAS tokamak "
-                f"tol tightened {tol_old:.1e} -> {float(tol):.1e}",
-            )
-    if (
-        (not rhs1_precond_env)
-        and maxiter_env == ""
-        and int(op.rhs_mode) == 1
-        and (not bool(op.include_phi1))
-        and op.fblock.fp is not None
-        and op.fblock.pas is None
-        and rhs1_precond_kind == "xmg"
-        and int(op.total_size) >= 120000
-    ):
-        # Keep large full-trajectory FP cases inside the regression budget by
-        # capping default Krylov work when xmg is selected automatically.
-        #
-        # Use the same cap on single- and multi-device runs. The tighter multi-device
-        # cap can under-converge large FP systems.
-        fp_auto_maxiter = 800
-        maxiter = min(
-            int(maxiter if maxiter is not None else 400), int(fp_auto_maxiter)
-        )
-        fp_auto_restart_max = 160
-        restart = max(80, min(int(restart), int(fp_auto_restart_max)))
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: large FP auto-tune "
-                f"(precond=xmg restart={int(restart)} maxiter={int(maxiter)})",
-            )
-    structured_fblock_precond_requested = str(rhs1_precond_kind or "").startswith(
-        "structured_fblock_"
-    )
-    rhs1_precond_enabled = (
-        rhs1_precond_kind is not None
-        and int(op.rhs_mode) == 1
-        and ((not bool(op.include_phi1)) or bool(structured_fblock_precond_requested))
-    )
-    _set_precond_policy_hints(
-        geom_scheme=geom_scheme,
-        use_dkes=bool(use_dkes),
-        rhs1_precond_kind=rhs1_precond_kind,
-        has_pas=getattr(op.fblock, "pas", None) is not None,
-        has_fp=getattr(op.fblock, "fp", None) is not None,
-        include_phi1=bool(op.include_phi1),
-        rhs_mode=int(op.rhs_mode),
-        er_abs=float(er_abs),
-    )
+    tokamak_like = bool(rhs1_route_setup["tokamak_like"])
+    tol = float(rhs1_route_setup["tol"])
+    if "lmax_use" in rhs1_route_setup:
+        lmax_use = rhs1_route_setup["lmax_use"]
+    if "use_collision_precond" in rhs1_route_setup:
+        use_collision_precond = rhs1_route_setup["use_collision_precond"]
+    if "xblock_tz_max" in rhs1_route_setup:
+        xblock_tz_max = rhs1_route_setup["xblock_tz_max"]
     if rhs1_bicgstab_env in {"0", "false", "no", "off"}:
         rhs1_bicgstab_kind = None
     elif rhs1_bicgstab_env in {"rhs1", "same", "preconditioner"}:

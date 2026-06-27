@@ -71,6 +71,14 @@ The main structural refactor is functionally complete:
   profile/recycle bundle as `27 passed in 5.38 s`, and the combined focused
   tranche as `73 passed in 8.38 s`. `ruff`, `compileall`, and `git diff
   --check` also passed for the changed files.
+- The RHSMode=1 preconditioner route setup used by the driver is now owned by
+  `problems/profile_policies.py` as
+  `resolve_rhs1_preconditioner_route_setup`. Focused validation passed:
+  `tests/test_rhs1_preconditioner_auto_policy.py` as `29 passed in 0.16 s`,
+  the profile/recycle driver bundle as `27 passed in 6.09 s`, and the
+  source-tree/setup/import-contract bundle as `46 passed in 3.73 s`. This
+  tranche reduced `problems/profile_solve.py` to `4821` lines and
+  `solve_v3_full_system_linear_gmres` to `3912` lines without adding files.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -151,7 +159,7 @@ adding implementation complexity.
 
 ### Lane 1 - Review-Ready Refactor
 
-Status: 98.5%.
+Status: 99%.
 
 Goal: finish the PR with a smaller, clearer source tree without changing
 physics, outputs, tolerances, solver defaults, differentiable Python paths,
@@ -162,8 +170,8 @@ Latest AST audit:
 - Folder depth is no longer the blocker: the package has one-level domain
   folders only and no `__init__.py`-only source packages.
 - The remaining structural blocker is owner size. The largest retained owners
-  are `problems/profile_solve.py` (`5299` lines, with
-  `solve_v3_full_system_linear_gmres` spanning `4390` lines),
+  are `problems/profile_solve.py` (`4821` lines, with
+  `solve_v3_full_system_linear_gmres` spanning `3912` lines),
   `outputs/writer.py` (`4268` lines, with `write_sfincs_jax_output_h5`
   spanning `2559` lines), `solvers/explicit_sparse.py` (`5056` lines), and
   `problems/transport_solve.py` (`3191` lines).
@@ -171,26 +179,28 @@ Latest AST audit:
   the driver into `problems/profile_setup.py`. This is a safe first reduction
   and gives the solver driver a tested setup seam, but it is not enough by
   itself to make the driver review-sized.
+- The RHSMode=1 route/preconditioner-selection setup has been extracted from
+  the driver into `problems/profile_policies.py`. This is the second safe
+  reduction and gives solver auto-selection a direct unit-test seam.
 - The next consolidation pass must reduce those owner sizes using existing
   domain files. Do not add more package folders or helper-only files.
 
 Remaining work:
 
-- Tranche 1: extract the route/preconditioner-selection setup region from
-  `solve_v3_full_system_linear_gmres` into existing `problems/profile_policies.py`
-  or an existing profile-sparse owner. Acceptance: `profile_solve.py` drops by
-  at least `300` lines, no new files, no behavior changes, focused profile
-  policy/sparse/dense tests pass.
-- Tranche 2: continue active-system consolidation only if a second coherent
+- Completed Tranche 1: active reduced-system setup extraction into
+  `problems/profile_setup.py`.
+- Completed Tranche 2: route/preconditioner-selection setup extraction into
+  `problems/profile_policies.py`.
+- Tranche 3: continue profile-solve consolidation only if a second coherent
   setup seam can delete more code from `profile_solve.py` than it adds to
   `profile_setup.py`. The completed subtranche already covers active compaction,
   PAS projection, reduced operator closures, recycled initial guesses, and
   reduced residual targets.
-- Tranche 3: extract `write_sfincs_jax_output_h5` phase orchestration into
+- Tranche 4: extract `write_sfincs_jax_output_h5` phase orchestration into
   existing `outputs/rhsmode1.py`, `outputs/transport.py`, and `outputs/formats.py`
   only where code can be deleted from `outputs/writer.py`. Acceptance:
   `writer.py` drops by at least `300` lines and output schema/parity tests pass.
-- Tranche 4: retain `explicit_sparse.py` as one owner unless a patch can move a
+- Tranche 5: retain `explicit_sparse.py` as one owner unless a patch can move a
   complete symbolic-factor family into an existing solver owner while deleting
   more code than it adds. Do not fragment sparse factor code into many small
   files.

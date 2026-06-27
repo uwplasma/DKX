@@ -6,6 +6,7 @@ import numpy as np
 
 from sfincs_jax.problems.profile_policies import (
     RHS1DefaultPreconditionerSelectionContext,
+    RHS1PreconditionerRouteSetupContext,
     canonical_rhs1_preconditioner_kind,
     pas_auto_skip_strong_retry,
     rhs1_gpu_sparse_fallback_skip_allowed,
@@ -29,6 +30,7 @@ from sfincs_jax.problems.profile_policies import (
     rhs1_pas_weak_auto_override_kind,
     rhs1_sharded_line_override_allowed,
     resolve_rhs1_default_preconditioner_selection,
+    resolve_rhs1_preconditioner_route_setup,
 )
 from sfincs_jax.solvers.selection_policy import SolverCandidateMetrics
 
@@ -922,6 +924,28 @@ def _default_selection_context(**updates) -> RHS1DefaultPreconditionerSelectionC
     return RHS1DefaultPreconditionerSelectionContext(values=values)
 
 
+def _route_setup_context(**updates) -> tuple[RHS1PreconditionerRouteSetupContext, list[dict]]:
+    hints: list[dict] = []
+    values = dict(_default_selection_context(**updates).values)
+    values.setdefault("precond_opts", {})
+    values.setdefault("max_l", 8)
+    values.setdefault("nxi_for_x", np.asarray([6, 8], dtype=np.int32))
+    values.setdefault("tol", 1.0e-9)
+    values.setdefault("restart", 80)
+    values.setdefault("maxiter", 400)
+    values.setdefault("solve_method", "gmres")
+    values.setdefault("use_pas_projection", False)
+    values.setdefault("_pas_tokamak_theta_preconditioner_applicable", lambda _op: False)
+    values.setdefault("_estimate_rhs1_pas_tz_build_bytes", lambda _op: 0)
+    values.setdefault("_rhs1_pas_tz_max_bytes", lambda: 2**40)
+    values["_set_precond_policy_hints"] = lambda **kwargs: hints.append(kwargs)
+    values.setdefault(
+        "resolve_rhs1_domain_decomposition_setup",
+        lambda **kwargs: SimpleNamespace(**kwargs),
+    )
+    return RHS1PreconditionerRouteSetupContext(values=values), hints
+
+
 def test_default_preconditioner_selection_honors_explicit_and_theta_zeta_controls() -> None:
     explicit = resolve_rhs1_default_preconditioner_selection(
         _default_selection_context(rhs1_precond_env="theta")
@@ -989,3 +1013,51 @@ def test_default_preconditioner_selection_delegates_fp_dkes_default() -> None:
     )
 
     assert result["rhs1_precond_kind"] == "fp_dkes_default"
+
+
+def test_route_setup_disables_rhs1_preconditioner_for_dense_solve(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PRECONDITIONER", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_BICGSTAB_PRECOND", raising=False)
+
+    context, hints = _route_setup_context(
+        op=_default_selection_op(has_pas=True, total_size=500),
+        solve_method="dense",
+        precond_opts={"PRECONDITIONER_THETA": "1"},
+    )
+
+    result = resolve_rhs1_preconditioner_route_setup(context)
+
+    assert result["pre_theta"] == 1
+    assert result["rhs1_precond_kind"] is None
+    assert result["rhs1_precond_enabled"] is False
+    assert hints[-1]["rhs1_precond_kind"] is None
+    assert hints[-1]["has_pas"] is True
+
+
+def test_route_setup_uses_shard_local_line_for_moderate_fp_multidevice(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PRECONDITIONER", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_BICGSTAB_PRECOND", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCHWARZ_AUTO_MIN", raising=False)
+
+    jax_stub = SimpleNamespace(default_backend=lambda: "cpu", device_count=lambda: 2)
+    context, hints = _route_setup_context(
+        op=_default_selection_op(
+            has_fp=True,
+            has_pas=False,
+            n_theta=7,
+            n_zeta=5,
+            total_size=2000,
+        ),
+        active_size=2000,
+        jax=jax_stub,
+        _matvec_shard_axis=lambda _op: "theta",
+    )
+
+    result = resolve_rhs1_preconditioner_route_setup(context)
+
+    assert result["rhs1_precond_kind"] == "theta_line"
+    assert result["rhs1_precond_enabled"] is True
+    assert result["rhs1_dd_setup"].auto_axis == "theta"
+    assert hints[-1]["rhs1_precond_kind"] == "theta_line"
