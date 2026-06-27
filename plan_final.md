@@ -40,12 +40,14 @@ The main structural refactor is functionally complete:
   rules.
 - `examples/README.md` and `docs/examples.rst` provide task-oriented example
   navigation, including tutorial notebooks and runnable scripts.
-- The latest local xdist coverage audit measured `87%` package coverage:
-  `3925 passed in 272.20 s` with `8701` missing executable lines.
+- The latest local xdist coverage audit measured `88%` package coverage:
+  `3938 passed in 271.76 s` with `8633` missing executable lines.
 - The latest bounded coverage tranches added RHSMode-1 Schur/coarse fallback
-  tests, output-gradient coordinate contract tests, and default
-  preconditioner-selection tests. A full non-coverage regression check after
-  these tranches passed: `3925 passed in 247.02 s`.
+  tests, output-gradient coordinate contract tests, default
+  preconditioner-selection tests, radial-preconditioner guard tests,
+  differentiability-boundary tests, and RHSMode-1 output-trace contract tests.
+  A full non-coverage regression check after the first bundle passed:
+  `3925 passed in 247.02 s`.
 - The CI coverage floor remains lower than the final target until measured
   margin is available; the review target is `95%` meaningful package coverage
   while keeping GitHub Actions under 10 minutes.
@@ -145,7 +147,7 @@ Remaining work:
 
 ### Lane 2 - Coverage And Future-Proof Tests
 
-Status: 87% measured package coverage.
+Status: 88% measured package coverage.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 
