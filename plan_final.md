@@ -2888,6 +2888,10 @@ Current completion status:
   and for fail-fast behavior when sparse factors are unavailable. The adjacent
   transport solve/parallel/dense/iteration suite reports `59 passed` without
   adding production-size solves to CI.
+- Public README/docs/examples wording was tightened so first-pass pages describe
+  stable supported capabilities rather than branch-history or time-relative
+  status. The examples stale-wording guard now rejects `At the moment`, and the
+  focused examples/doc-claims suite reports `13 passed`.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.

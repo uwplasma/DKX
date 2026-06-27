@@ -19,9 +19,9 @@ sfincs_jax run-fortran --input examples/upstream/fortran_v3/quick_2species_FPCol
 
 ## Running supported parts with `sfincs_jax`
 
-At the moment, `sfincs_jax` does **not** implement end-to-end solves for the full upstream suite.
-However, several building blocks (grids, some geometries, selected operator terms, output writing)
-are parity-tested.
+`sfincs_jax` does **not** claim end-to-end solve coverage for the full upstream suite.
+Several building blocks are parity-tested instead: grids, supported geometries,
+selected operator terms, and output writing.
 
 Some inputs require equilibrium files (e.g. `geometryScheme=11` `.bc` files). You can point
 `sfincs_jax` at one or more equilibrium directories using:
@@ -35,4 +35,3 @@ Then you can, for example, write a `sfincsOutput.h5` for supported geometries:
 ```bash
 sfincs_jax write-output --input tests/ref/output_scheme4_1species_tiny.input.namelist --out sfincsOutput.h5
 ```
-

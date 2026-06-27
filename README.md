@@ -811,7 +811,7 @@ Recommended parallel usage:
 - The sharded RHSMode=1 CPU path uses a wider Schwarz patch rule plus a bounded
   multilevel residual correction to avoid the worst 4/8-device
   fragmentation failures.
-- Use one GPU per case or scan point for production throughput today.
+- Use one GPU per case or scan point for production throughput.
 - Multi-GPU single-case sharding is available for benchmarking and very large
   runs, but it remains experimental and is not yet the default recommendation.
 - The sharded-solve benchmark helper supports both `--backend cpu` and
@@ -819,7 +819,7 @@ Recommended parallel usage:
   preallocation in the subprocess, with `cuda_malloc_async` enabled for the
   benchmark subprocess allocator, so one-node GPU scaling experiments are more
   reproducible.
-- For practical multi-GPU usage today, the strongest measured path is
+- For practical multi-GPU usage, the strongest measured path is
   transport-worker parallelism with one worker per GPU on RHSMode=2/3 runs.
   On the fresh office 2-GPU rerun of
   `examples/performance/transport_parallel_2min.input.namelist`, this path
