@@ -41,7 +41,7 @@ The main structural refactor is functionally complete:
 - `examples/README.md` and `docs/examples.rst` provide task-oriented example
   navigation, including tutorial notebooks and runnable scripts.
 - A fresh local xdist coverage audit measured `87%` package coverage:
-  `3903 passed in 310.94 s` with `8810` missing executable lines.
+  `3907 passed in 279.01 s` with `8763` missing executable lines.
 - The CI coverage floor remains lower than the final target until measured
   margin is available; the review target is `95%` meaningful package coverage
   while keeping GitHub Actions under 10 minutes.
@@ -59,8 +59,13 @@ The largest coverage blockers from the fresh audit are:
 - `problems/profile_policies.py`: `89%`, 253 missing lines.
 - `solvers/preconditioner_xblock_tz_sparse.py`: `76%`, 251 missing lines.
 - `problems/transport_parallel_runtime.py`: `86%`, 250 missing lines.
+- `solvers/preconditioner_qi_corrections.py`: `88%`, 247 missing lines.
+- `solvers/preconditioner_qi_device.py`: `89%`, 235 missing lines.
 - `operators/profile_system.py`: `77%`, 234 missing lines.
-- `solver.py`: `83%`, 230 missing lines.
+- `problems/transport_linear_system.py`: `81%`, 224 missing lines.
+- `solvers/preconditioner_schur_profile.py`: `80%`, 224 missing lines.
+- `solvers/preconditioner_qi_basis.py`: `89%`, 194 missing lines.
+- `solver.py`: `86%`, 183 missing lines.
 
 ## Source Structure Rules
 
