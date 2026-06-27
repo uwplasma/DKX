@@ -224,6 +224,13 @@ The main structural refactor is functionally complete:
   `tests/test_transport_matrix_preconditioners.py` as `16 passed in 4.81 s`,
   and the broader transport preconditioner/policy bundle passed as
   `59 passed in 4.72 s`.
+- RHSMode=1 output policy coverage now includes the remaining automatic
+  solve-method branches for tokamak full-FP no-Er sparse-PC, 3D full-FP
+  sparse-PC, host dense shortcut reporting, dense-auto skip reporting,
+  E_parallel BiCGStab, small PAS incremental, and includePhi1 linear
+  dense/incremental selection. Focused validation passed:
+  `tests/test_io_output_policy_coverage.py` as `76 passed in 1.85 s`; the
+  broader output bundle passed as `95 passed in 7.28 s`.
 - The examples tree has been re-audited for navigation and repository size:
   every top-level task folder has a README, examples contract tests passed as
   `26 passed in 20.66 s`, and the nested `output/`, `artifacts/`,

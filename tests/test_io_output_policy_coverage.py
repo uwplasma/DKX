@@ -352,6 +352,99 @@ def test_rhsmode1_selector_uses_3d_fp_xblock_branch(monkeypatch: pytest.MonkeyPa
     assert method == "xblock_sparse_pc_gmres"
 
 
+def test_rhsmode1_selector_uses_tokamak_fp_noer_sparse_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    _disable_rhsmode1_selector_auto_policy(monkeypatch)
+    monkeypatch.setattr(
+        rhsmode1_output,
+        "rhs1_tokamak_fp_noer_sparse_pc_auto_allowed",
+        lambda **_kwargs: True,
+    )
+
+    method = select_rhsmode1_solve_method(
+        _rhsmode1_selector_context(
+            active_total_size=50_000,
+            dense_fp_cutoff=1,
+            er_abs=0.0,
+            use_dkes=False,
+        )
+    )
+
+    assert method == "xblock_sparse_pc_gmres"
+
+
+def test_rhsmode1_selector_uses_3d_fp_sparse_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    _disable_rhsmode1_selector_auto_policy(monkeypatch)
+    monkeypatch.setattr(
+        rhsmode1_output,
+        "rhs1_fp_3d_sparse_pc_auto_allowed",
+        lambda **_kwargs: True,
+    )
+
+    method = select_rhsmode1_solve_method(
+        _rhsmode1_selector_context(
+            active_total_size=50_000,
+            dense_fp_cutoff=1,
+            eparallel_abs=0.0,
+        )
+    )
+
+    assert method == "sparse_pc_gmres"
+
+
+def test_rhsmode1_selector_records_host_dense_shortcut_when_accelerator_dense_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_rhsmode1_selector_auto_policy(monkeypatch)
+    messages: list[str] = []
+
+    method = select_rhsmode1_solve_method(
+        _rhsmode1_selector_context(
+            dense_auto_ok=False,
+            dense_auto_backend="gpu",
+            rhsmode1_host_dense_shortcut_allowed=lambda **_kwargs: True,
+            emit=lambda _level, message: messages.append(str(message)),
+        )
+    )
+
+    assert method == "auto"
+    assert any("host dense shortcut on backend=gpu" in message for message in messages)
+
+
+def test_rhsmode1_selector_reports_dense_auto_skip_when_shortcut_is_disallowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_rhsmode1_selector_auto_policy(monkeypatch)
+    messages: list[str] = []
+
+    method = select_rhsmode1_solve_method(
+        _rhsmode1_selector_context(
+            dense_auto_ok=False,
+            dense_auto_backend="gpu",
+            rhsmode1_host_dense_shortcut_allowed=lambda **_kwargs: False,
+            emit=lambda _level, message: messages.append(str(message)),
+        )
+    )
+
+    assert method == "auto"
+    assert any("skipping dense auto mode on backend=gpu" in message for message in messages)
+
+
+def test_rhsmode1_selector_uses_bicgstab_for_eparallel_full_fp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_rhsmode1_selector_auto_policy(monkeypatch)
+
+    method = select_rhsmode1_solve_method(
+        _rhsmode1_selector_context(
+            active_total_size=50_000,
+            dense_fp_cutoff=1,
+            eparallel_abs=0.25,
+        )
+    )
+
+    assert method == "bicgstab"
+
+
 def test_rhsmode1_selector_uses_constrained_pas_sparse_branch(monkeypatch: pytest.MonkeyPatch) -> None:
     _disable_rhsmode1_selector_auto_policy(monkeypatch)
     monkeypatch.setattr(
@@ -369,6 +462,62 @@ def test_rhsmode1_selector_uses_constrained_pas_sparse_branch(monkeypatch: pytes
     )
 
     assert method == "sparse_pc_gmres"
+
+
+def test_rhsmode1_selector_uses_small_pas_incremental_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    _disable_rhsmode1_selector_auto_policy(monkeypatch)
+
+    method = select_rhsmode1_solve_method(
+        _rhsmode1_selector_context(
+            op=_rhsmode1_selector_op(has_fp=False, has_pas=True),
+            active_total_size=120,
+            dense_pas_cutoff=2500,
+        )
+    )
+
+    assert method == "incremental"
+
+
+def test_rhsmode1_selector_include_phi1_linear_mode_chooses_dense_or_incremental(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_rhsmode1_selector_auto_policy(monkeypatch)
+
+    dense = select_rhsmode1_solve_method(
+        _rhsmode1_selector_context(
+            include_phi1=True,
+            include_phi1_in_kinetic=False,
+            quasineutrality_option=2,
+            active_total_size=128,
+            dense_active_cutoff=256,
+            dense_auto_ok=True,
+        )
+    )
+    incremental = select_rhsmode1_solve_method(
+        _rhsmode1_selector_context(
+            include_phi1=True,
+            include_phi1_in_kinetic=False,
+            quasineutrality_option=2,
+            active_total_size=128,
+            dense_active_cutoff=256,
+            dense_auto_ok=False,
+            dense_auto_backend="gpu",
+        )
+    )
+    large = select_rhsmode1_solve_method(
+        _rhsmode1_selector_context(
+            include_phi1=True,
+            include_phi1_in_kinetic=False,
+            quasineutrality_option=2,
+            active_total_size=1024,
+            dense_active_cutoff=256,
+            dense_auto_ok=True,
+        )
+    )
+
+    assert dense == "dense"
+    assert incremental == "incremental"
+    assert large == "incremental"
 
 
 def test_constraint0_fortran_gauge_helper_is_fail_closed(monkeypatch) -> None:
