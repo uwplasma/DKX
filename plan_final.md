@@ -99,6 +99,13 @@ The main structural refactor is functionally complete:
   broader output/profile/source-tree bundle passed as `220 passed in 13.92 s`.
   This reduced `outputs/writer.py` to `3639` lines and
   `write_sfincs_jax_output_h5` to `1985` lines without adding files.
+- RHSMode=1 per-iteration classical flux output is now owned by
+  `outputs/rhsmode1.py`, including Phi1-history evaluation and coordinate
+  variants for classical particle and heat fluxes. Focused validation passed:
+  `tests/test_io_output_policy_coverage.py` as `62 passed in 1.60 s`, and the
+  broader output/profile/source-tree bundle passed as `221 passed in 14.43 s`.
+  This reduced `outputs/writer.py` to `3570` lines and
+  `write_sfincs_jax_output_h5` to `1915` lines without adding files.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -110,7 +117,8 @@ The largest coverage blockers from the fresh audit are:
 
 - `problems/profile_solve.py`: `58%`, 568 missing lines.
 - `outputs/writer.py`: `85%`, 384 missing lines in the previous coverage
-  audit; remeasure after the RHSMode=1 output schema extraction.
+  audit; remeasure after the RHSMode=1 output schema and classical-flux
+  extractions.
 - `problems/transport_solve.py`: `73%`, 326 missing lines.
 - `solvers/explicit_sparse.py`: `87%`, 310 missing lines.
 - `solvers/preconditioner_transport_matrix.py`: `83%`, 296 missing lines.
@@ -193,8 +201,8 @@ Latest AST audit:
 - The remaining structural blocker is owner size. The largest retained owners
   are `problems/profile_solve.py` (`4821` lines, with
   `solve_v3_full_system_linear_gmres` spanning `3912` lines),
-  `outputs/writer.py` (`3639` lines, with `write_sfincs_jax_output_h5`
-  spanning `1985` lines), `solvers/explicit_sparse.py` (`5056` lines), and
+  `outputs/writer.py` (`3570` lines, with `write_sfincs_jax_output_h5`
+  spanning `1915` lines), `solvers/explicit_sparse.py` (`5056` lines), and
   `problems/transport_solve.py` (`3191` lines).
 - The active-DOF/PAS-projection reduced-system setup has been extracted from
   the driver into `problems/profile_setup.py`. This is a safe first reduction
@@ -213,6 +221,10 @@ Latest AST audit:
   electric-drift fluxes, and derived flux totals have been extracted from the
   HDF5 writer into `outputs/rhsmode1.py`, giving the HDF5 schema a direct,
   fast regression seam.
+- RHSMode=1 per-iteration classical flux output has been extracted from the
+  HDF5 writer into `outputs/rhsmode1.py`, keeping the Fortran-style progress
+  printout arrays available while giving the classical Phi1/no-Phi1 branches
+  direct tests.
 - The next consolidation pass must reduce those owner sizes using existing
   domain files. Do not add more package folders or helper-only files.
 
@@ -237,13 +249,16 @@ Remaining work:
   HDF5-schema tests, but it was intentionally smaller than the earlier 200-line
   target because the remaining electric-drift computation is still entangled
   with operator internals.
-- Tranche 7: continue `write_sfincs_jax_output_h5` phase orchestration
+- Completed Tranche 7: RHSMode=1 classical flux output extraction into
+  `outputs/rhsmode1.py`, covering both no-Phi1 and Phi1-history branches with
+  tiny real-formula tests.
+- Tranche 8: continue `write_sfincs_jax_output_h5` phase orchestration
   extraction into existing `outputs/rhsmode1.py`, `outputs/transport.py`, and
   `outputs/formats.py` only where code can be deleted from `outputs/writer.py`.
   Acceptance for the next cut: move a complete diagnostics/output-field write
   phase, drop `writer.py` by at least `200` more lines, and keep output
   schema/parity tests passing.
-- Tranche 8: retain `explicit_sparse.py` as one owner unless a patch can move a
+- Tranche 9: retain `explicit_sparse.py` as one owner unless a patch can move a
   complete symbolic-factor family into an existing solver owner while deleting
   more code than it adds. Do not fragment sparse factor code into many small
   files.

@@ -813,6 +813,105 @@ def write_rhsmode1_core_diagnostics_to_data(
         )
 
 
+def write_rhsmode1_classical_fluxes_to_data(
+    *,
+    data: dict[str, Any],
+    op: Any,
+    phi1_list: list[np.ndarray],
+    n_iter: int,
+    conversion_factors: dict[str, float],
+    fortran_h5_layout: Callable[[np.ndarray], np.ndarray],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute and write per-iteration classical fluxes for RHSMode=1 output."""
+
+    from jax import vmap  # noqa: PLC0415
+
+    from ..physics.classical_transport import classical_flux_v3  # noqa: PLC0415
+
+    theta_weights = jnp.asarray(op.theta_weights, dtype=jnp.float64)
+    zeta_weights = jnp.asarray(op.zeta_weights, dtype=jnp.float64)
+    d_hat = jnp.asarray(op.d_hat, dtype=jnp.float64)
+    gpsipsi = jnp.asarray(data["gpsiHatpsiHat"], dtype=jnp.float64)
+    b_hat = jnp.asarray(op.b_hat, dtype=jnp.float64)
+    vprime_hat = jnp.asarray(data["VPrimeHat"], dtype=jnp.float64)
+
+    alpha = jnp.asarray(data["alpha"], dtype=jnp.float64)
+    delta = jnp.asarray(data["Delta"], dtype=jnp.float64)
+    nu_n = jnp.asarray(data["nu_n"], dtype=jnp.float64)
+    z_s = jnp.asarray(data["Zs"], dtype=jnp.float64)
+    m_hat = jnp.asarray(data["mHats"], dtype=jnp.float64)
+    t_hat = jnp.asarray(data["THats"], dtype=jnp.float64)
+    n_hat = jnp.asarray(data["nHats"], dtype=jnp.float64)
+    dn_hat_dpsi_hat = jnp.asarray(data["dnHatdpsiHat"], dtype=jnp.float64)
+    dt_hat_dpsi_hat = jnp.asarray(data["dTHatdpsiHat"], dtype=jnp.float64)
+
+    if not phi1_list:
+        particle_flux, heat_flux = classical_flux_v3(
+            use_phi1=False,
+            theta_weights=theta_weights,
+            zeta_weights=zeta_weights,
+            d_hat=d_hat,
+            gpsipsi=gpsipsi,
+            b_hat=b_hat,
+            vprime_hat=vprime_hat,
+            alpha=alpha,
+            phi1_hat=jnp.zeros_like(b_hat),
+            delta=delta,
+            nu_n=nu_n,
+            z_s=z_s,
+            m_hat=m_hat,
+            t_hat=t_hat,
+            n_hat=n_hat,
+            dn_hat_dpsi_hat=dn_hat_dpsi_hat,
+            dt_hat_dpsi_hat=dt_hat_dpsi_hat,
+        )
+        classical_pf = np.repeat(np.asarray(particle_flux, dtype=np.float64)[:, None], int(n_iter), axis=1)
+        classical_hf = np.repeat(np.asarray(heat_flux, dtype=np.float64)[:, None], int(n_iter), axis=1)
+    else:
+        phi1_stack = jnp.asarray(np.stack(phi1_list, axis=0), dtype=jnp.float64)
+
+        def _classical_with_phi1(phi1_hat: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+            return classical_flux_v3(
+                use_phi1=True,
+                theta_weights=theta_weights,
+                zeta_weights=zeta_weights,
+                d_hat=d_hat,
+                gpsipsi=gpsipsi,
+                b_hat=b_hat,
+                vprime_hat=vprime_hat,
+                alpha=alpha,
+                phi1_hat=phi1_hat,
+                delta=delta,
+                nu_n=nu_n,
+                z_s=z_s,
+                m_hat=m_hat,
+                t_hat=t_hat,
+                n_hat=n_hat,
+                dn_hat_dpsi_hat=dn_hat_dpsi_hat,
+                dt_hat_dpsi_hat=dt_hat_dpsi_hat,
+            )
+
+        classical_pf_n_s, classical_hf_n_s = vmap(_classical_with_phi1, in_axes=0, out_axes=0)(phi1_stack)
+        classical_pf = np.asarray(classical_pf_n_s, dtype=np.float64).T
+        classical_hf = np.asarray(classical_hf_n_s, dtype=np.float64).T
+
+    write_rhsmode1_flux_coordinate_variants_to_data(
+        data=data,
+        base="classicalParticleFlux_psiHat",
+        values_sN=classical_pf,
+        conversion_factors=conversion_factors,
+        fortran_h5_layout=fortran_h5_layout,
+    )
+    write_rhsmode1_flux_coordinate_variants_to_data(
+        data=data,
+        base="classicalHeatFlux_psiHat",
+        values_sN=classical_hf,
+        conversion_factors=conversion_factors,
+        fortran_h5_layout=fortran_h5_layout,
+    )
+    return classical_pf, classical_hf
+
+
 def _stack_stz_to_ztsN(arrays: list[np.ndarray]) -> np.ndarray:
     zts = [np.transpose(np.asarray(array, dtype=np.float64), (2, 1, 0)) for array in arrays]
     return np.stack(zts, axis=-1)
@@ -1751,6 +1850,7 @@ __all__ = (
     "_solver_trace_memory_estimate",
     "_select_rhsmode1_linear_solve_method",
     "select_rhsmode1_solve_method",
+    "write_rhsmode1_classical_fluxes_to_data",
     "write_rhsmode1_core_diagnostics_to_data",
     "write_rhsmode1_electric_drift_diagnostics_to_data",
     "write_rhsmode1_flux_coordinate_variants_to_data",

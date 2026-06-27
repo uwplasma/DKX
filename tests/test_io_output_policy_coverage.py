@@ -42,6 +42,7 @@ from sfincs_jax.outputs.rhsmode1 import (
     _maybe_apply_constraint0_fortran_gauge,
     _maybe_apply_pas_no_phi1_output_scale,
     select_rhsmode1_solve_method,
+    write_rhsmode1_classical_fluxes_to_data,
     write_rhsmode1_core_diagnostics_to_data,
     write_rhsmode1_electric_drift_diagnostics_to_data,
     write_rhsmode1_flux_coordinate_variants_to_data,
@@ -364,6 +365,70 @@ def test_write_rhsmode1_flux_coordinate_variants_to_data_scales_coordinates() ->
     np.testing.assert_allclose(data["particleFlux_vm_psiN"], values * 10.0)
     np.testing.assert_allclose(data["particleFlux_vm_rHat"], values * 20.0)
     np.testing.assert_allclose(data["particleFlux_vm_rN"], values * 30.0)
+
+
+def test_write_rhsmode1_classical_fluxes_to_data_repeats_no_phi1_and_writes_coordinates() -> None:
+    op = SimpleNamespace(
+        theta_weights=np.asarray([0.4, 0.6], dtype=np.float64),
+        zeta_weights=np.asarray([0.25, 0.35, 0.40], dtype=np.float64),
+        d_hat=np.full((2, 3), 1.7, dtype=np.float64),
+        b_hat=np.asarray([[1.0, 1.1, 1.2], [1.3, 1.4, 1.5]], dtype=np.float64),
+    )
+    data: dict[str, np.ndarray | float] = {
+        "gpsiHatpsiHat": np.full((2, 3), 0.8, dtype=np.float64),
+        "VPrimeHat": 1.9,
+        "alpha": 0.7,
+        "Delta": 0.02,
+        "nu_n": 0.1,
+        "Zs": np.asarray([1.0, -1.0], dtype=np.float64),
+        "mHats": np.asarray([2.0, 1.0 / 1836.0], dtype=np.float64),
+        "THats": np.asarray([1.2, 0.9], dtype=np.float64),
+        "nHats": np.asarray([1.0, 1.1], dtype=np.float64),
+        "dnHatdpsiHat": np.asarray([-0.2, -0.3], dtype=np.float64),
+        "dTHatdpsiHat": np.asarray([-0.1, -0.15], dtype=np.float64),
+    }
+    conversion_factors = {
+        "ddpsiN2ddpsiHat": 2.0,
+        "ddrHat2ddpsiHat": 3.0,
+        "ddrN2ddpsiHat": 4.0,
+    }
+
+    def identity_layout(array: np.ndarray) -> np.ndarray:
+        return np.asarray(array, dtype=np.float64)
+
+    particle_flux, heat_flux = write_rhsmode1_classical_fluxes_to_data(
+        data=data,
+        op=op,
+        phi1_list=[],
+        n_iter=3,
+        conversion_factors=conversion_factors,
+        fortran_h5_layout=identity_layout,
+    )
+
+    assert particle_flux.shape == (2, 3)
+    assert heat_flux.shape == (2, 3)
+    np.testing.assert_allclose(particle_flux[:, 0], particle_flux[:, 1])
+    np.testing.assert_allclose(data["classicalParticleFlux_psiHat"], particle_flux)
+    np.testing.assert_allclose(data["classicalParticleFlux_rN"], particle_flux * 4.0)
+    assert np.all(np.isfinite(heat_flux))
+
+    phi1_data = dict(data)
+    particle_flux_phi1, heat_flux_phi1 = write_rhsmode1_classical_fluxes_to_data(
+        data=phi1_data,
+        op=op,
+        phi1_list=[
+            np.zeros((2, 3), dtype=np.float64),
+            np.full((2, 3), 0.05, dtype=np.float64),
+        ],
+        n_iter=2,
+        conversion_factors=conversion_factors,
+        fortran_h5_layout=identity_layout,
+    )
+
+    assert particle_flux_phi1.shape == (2, 2)
+    assert heat_flux_phi1.shape == (2, 2)
+    np.testing.assert_allclose(phi1_data["classicalHeatFlux_psiN"], heat_flux_phi1 * 2.0)
+    assert np.all(np.isfinite(particle_flux_phi1))
 
 
 def test_write_rhsmode1_core_diagnostics_to_data_writes_schema_layouts() -> None:

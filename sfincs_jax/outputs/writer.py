@@ -55,6 +55,7 @@ from .rhsmode1 import (
     _solver_metadata_dict,
     _solver_trace_memory_estimate,
     select_rhsmode1_solve_method,
+    write_rhsmode1_classical_fluxes_to_data,
     write_rhsmode1_core_diagnostics_to_data,
     write_rhsmode1_electric_drift_diagnostics_to_data,
     write_rhsmode1_phi1_diagnostics_to_data,
@@ -2647,84 +2648,14 @@ def write_sfincs_jax_output_h5(
         )
 
         # Classical fluxes (v3 `classicalTransport.F90:calculateClassicalFlux`) written per-iteration.
-        from ..physics.classical_transport import classical_flux_v3  # noqa: PLC0415
-
-        theta_w = jnp.asarray(result.op.theta_weights, dtype=jnp.float64)
-        zeta_w = jnp.asarray(result.op.zeta_weights, dtype=jnp.float64)
-        d_hat = jnp.asarray(result.op.d_hat, dtype=jnp.float64)
-        gpsipsi = jnp.asarray(data["gpsiHatpsiHat"], dtype=jnp.float64)
-        b_hat = jnp.asarray(result.op.b_hat, dtype=jnp.float64)
-        vprime_hat = jnp.asarray(data["VPrimeHat"], dtype=jnp.float64)
-
-        alpha = jnp.asarray(data["alpha"], dtype=jnp.float64)
-        delta = jnp.asarray(data["Delta"], dtype=jnp.float64)
-        nu_n = jnp.asarray(data["nu_n"], dtype=jnp.float64)
-        z_s = jnp.asarray(data["Zs"], dtype=jnp.float64)
-        m_hat = jnp.asarray(data["mHats"], dtype=jnp.float64)
-        t_hat = jnp.asarray(data["THats"], dtype=jnp.float64)
-        n_hat = jnp.asarray(data["nHats"], dtype=jnp.float64)
-        dn_hat_dpsi_hat = jnp.asarray(data["dnHatdpsiHat"], dtype=jnp.float64)
-        dt_hat_dpsi_hat = jnp.asarray(data["dTHatdpsiHat"], dtype=jnp.float64)
-
-        if not phi1_list:
-            pf_j, hf_j = classical_flux_v3(
-                use_phi1=False,
-                theta_weights=theta_w,
-                zeta_weights=zeta_w,
-                d_hat=d_hat,
-                gpsipsi=gpsipsi,
-                b_hat=b_hat,
-                vprime_hat=vprime_hat,
-                alpha=alpha,
-                phi1_hat=jnp.zeros_like(b_hat),
-                delta=delta,
-                nu_n=nu_n,
-                z_s=z_s,
-                m_hat=m_hat,
-                t_hat=t_hat,
-                n_hat=n_hat,
-                dn_hat_dpsi_hat=dn_hat_dpsi_hat,
-                dt_hat_dpsi_hat=dt_hat_dpsi_hat,
-            )
-            classical_pf = np.repeat(np.asarray(pf_j, dtype=np.float64)[:, None], n_iter, axis=1)
-            classical_hf = np.repeat(np.asarray(hf_j, dtype=np.float64)[:, None], n_iter, axis=1)
-        else:
-            from jax import vmap
-
-            phi1_stack = jnp.asarray(np.stack(phi1_list, axis=0), dtype=jnp.float64)
-
-            def _classical_with_phi1(phi1_hat: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
-                return classical_flux_v3(
-                    use_phi1=True,
-                    theta_weights=theta_w,
-                    zeta_weights=zeta_w,
-                    d_hat=d_hat,
-                    gpsipsi=gpsipsi,
-                    b_hat=b_hat,
-                    vprime_hat=vprime_hat,
-                    alpha=alpha,
-                    phi1_hat=phi1_hat,
-                    delta=delta,
-                    nu_n=nu_n,
-                    z_s=z_s,
-                    m_hat=m_hat,
-                    t_hat=t_hat,
-                    n_hat=n_hat,
-                    dn_hat_dpsi_hat=dn_hat_dpsi_hat,
-                    dt_hat_dpsi_hat=dt_hat_dpsi_hat,
-                )
-
-            classical_pf_n_s, classical_hf_n_s = vmap(_classical_with_phi1, in_axes=0, out_axes=0)(phi1_stack)
-            classical_pf = np.asarray(classical_pf_n_s, dtype=np.float64).T
-            classical_hf = np.asarray(classical_hf_n_s, dtype=np.float64).T
-        data["classicalParticleFlux_psiHat"] = _fortran_h5_layout(classical_pf)
-        data["classicalHeatFlux_psiHat"] = _fortran_h5_layout(classical_hf)
-        data["classicalParticleFlux_psiN"] = _fortran_h5_layout(classical_pf * float(conv["ddpsiN2ddpsiHat"]))
-        data["classicalHeatFlux_psiN"] = _fortran_h5_layout(classical_hf * float(conv["ddpsiN2ddpsiHat"]))
-        data["classicalParticleFlux_rHat"] = _fortran_h5_layout(classical_pf * float(conv["ddrHat2ddpsiHat"]))
-        data["classicalHeatFlux_rHat"] = _fortran_h5_layout(classical_hf * float(conv["ddrHat2ddpsiHat"]))
-        data["classicalParticleFlux_rN"] = _fortran_h5_layout(classical_pf * float(conv["ddrN2ddpsiHat"]))
-        data["classicalHeatFlux_rN"] = _fortran_h5_layout(classical_hf * float(conv["ddrN2ddpsiHat"]))
+        classical_pf, classical_hf = write_rhsmode1_classical_fluxes_to_data(
+            data=data,
+            op=result.op,
+            phi1_list=phi1_list,
+            n_iter=n_iter,
+            conversion_factors=conv,
+            fortran_h5_layout=_fortran_h5_layout,
+        )
 
         # Fortran-style diagnostics printout (per species, last iteration).
         if emit is not None and n_iter > 0:
