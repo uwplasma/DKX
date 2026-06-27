@@ -1362,12 +1362,19 @@ class _SymbolicNDFrontalNode:
         return np.asarray(out[:, 0] if was_vector else out, dtype=self.dtype)
 
     def solve(self, rhs) -> np.ndarray:
-        rhs_np = np.asarray(rhs, dtype=self.dtype).reshape((int(self.global_size),))
+        rhs_np = np.asarray(rhs, dtype=self.dtype)
+        was_vector = rhs_np.ndim == 1
+        if was_vector:
+            rhs_2d = rhs_np.reshape((int(self.global_size), 1))
+        else:
+            rhs_2d = rhs_np.reshape((int(self.global_size), -1))
         idx = np.asarray(self.indices, dtype=np.int64)
-        local_solution = np.asarray(self.solve_local(rhs_np[idx]), dtype=self.dtype).reshape((idx.size,))
-        out = np.zeros((int(self.global_size),), dtype=self.dtype)
-        out[idx] = local_solution
-        return out
+        local_solution = np.asarray(self.solve_local(rhs_2d[idx, :]), dtype=self.dtype)
+        if local_solution.ndim == 1:
+            local_solution = local_solution.reshape((idx.size, 1))
+        out = np.zeros((int(self.global_size), int(rhs_2d.shape[1])), dtype=self.dtype)
+        out[idx, :] = local_solution
+        return np.asarray(out[:, 0] if was_vector else out, dtype=self.dtype)
 
 
 @dataclass(frozen=True)

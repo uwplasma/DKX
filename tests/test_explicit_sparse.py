@@ -1303,6 +1303,51 @@ def test_symbolic_nd_frontal_schur_lu_blr_separator_updates_preserve_solution() 
     assert admission.accepted is True
 
 
+def test_symbolic_nd_frontal_schur_lu_residual_polish_preserves_true_residual_gate() -> None:
+    matrix = _nested_dissection_tridiagonal_matrix()
+    rhs = np.linspace(-0.75, 1.25, matrix.shape[0], dtype=np.float64)
+    rhs_batch = np.column_stack([rhs, rhs[::-1]])
+
+    factor = factorize_host_sparse_operator(
+        matrix,
+        kind="symbolic_nd_frontal_schur_lu",
+        symbolic_ordering_kind="natural",
+        symbolic_block_size=3,
+        symbolic_nd_max_leaf_size=3,
+        symbolic_nd_max_depth=4,
+        symbolic_nd_separator_width=2,
+        symbolic_nd_max_separator_cols=3,
+        symbolic_nd_high_degree_cols=0,
+        symbolic_nd_regularization_rel=0.0,
+        symbolic_nd_residual_polish_steps=2,
+        symbolic_nd_residual_polish_damping=1.0,
+    )
+    admission = admit_sparse_factor_against_operator(
+        factor.operator,
+        factor,
+        max_relative_residual=1.0e-11,
+        min_improvement_vs_identity=1.0,
+    )
+
+    assert factor.kind == "symbolic_nd_frontal_schur_lu"
+    assert factor.factor.metadata["architecture"] == "symbolic_nd_frontal_schur_lu"
+    assert factor.factor.metadata["residual_polish_steps"] == 2
+    assert factor.factor.metadata["residual_polish_damping"] == pytest.approx(1.0)
+    np.testing.assert_allclose(
+        factor.solve(rhs),
+        np.linalg.solve(matrix.toarray(), rhs),
+        rtol=1.0e-11,
+        atol=1.0e-11,
+    )
+    np.testing.assert_allclose(
+        factor.solve(rhs_batch),
+        np.linalg.solve(matrix.toarray(), rhs_batch),
+        rtol=1.0e-11,
+        atol=1.0e-11,
+    )
+    assert admission.accepted is True
+
+
 def test_symbolic_nd_frontal_schur_lu_rejects_dense_update_child_budget() -> None:
     matrix = _nested_dissection_tridiagonal_matrix()
 

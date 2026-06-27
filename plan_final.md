@@ -202,6 +202,13 @@ The main structural refactor is functionally complete:
   `21 passed in 7.35 s`; the broader dense/host/sparse transport support bundle
   passed as `118 passed in 13.31 s`. This is a real numerical branch gate, not
   a smoke test.
+- The native explicit-sparse nested-dissection factor now supports batched
+  right-hand sides at the top-level solve wrapper, matching its local
+  multi-RHS implementation and avoiding an identity fallback during residual
+  polish probes. A bounded residual-polish gate in `tests/test_explicit_sparse.py`
+  checks vector and batched true-residual parity against a dense reference;
+  focused validation passed as `105 passed in 3.82 s`, with the adjacent
+  explicit-sparse coverage slice improving from `81%` to `82%`.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
