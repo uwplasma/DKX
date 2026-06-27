@@ -219,6 +219,41 @@ def test_reusable_true_action_column_cache_bypasses_non_one_hot_or_disabled() ->
     assert cache.metadata()["stored_columns"] == 0
 
 
+def test_reusable_true_action_column_cache_falls_back_when_batched_shape_is_invalid() -> None:
+    matrix = np.asarray(
+        [
+            [2.0, 0.1, 0.0],
+            [0.0, 3.0, -0.2],
+            [0.4, 0.0, 4.0],
+        ],
+        dtype=np.float64,
+    )
+    calls = 0
+
+    def true_matmat(x):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return np.zeros((2, x.shape[1]), dtype=np.float64)
+        return matrix @ np.asarray(x, dtype=np.float64)
+
+    cache = _ReusableTrueActionColumnCache(
+        true_matvec=lambda x: matrix @ np.asarray(x, dtype=np.float64),
+        true_matmat=true_matmat,
+        n=3,
+        max_nbytes=1024,
+        enabled=True,
+    )
+    basis = np.zeros((3, 2), dtype=np.float64)
+    basis[[0, 2], [0, 1]] = 1.0
+
+    np.testing.assert_allclose(cache.matmat(basis), matrix @ basis)
+    metadata = cache.metadata()
+    assert metadata["bypass_calls"] == 1
+    assert metadata["stored_columns"] == 0
+    assert calls == 2
+
+
 def test_true_operator_lsq_bundles_reduce_identity_residuals() -> None:
     def true_matvec(x):
         return np.asarray(x, dtype=np.float64)
@@ -258,6 +293,77 @@ def test_true_operator_lsq_bundles_reduce_identity_residuals() -> None:
         damping=True,
     )
     np.testing.assert_allclose(coupled.solve(np.asarray([1.0, -2.0, 3.0])), [1.0, 0.0, 3.0])
+
+
+def test_true_operator_lsq_bundles_handle_degenerate_damping_and_lsq_fallback(monkeypatch) -> None:
+    def true_matvec_zero(x):
+        return np.zeros_like(np.asarray(x, dtype=np.float64))
+
+    def fail_solve(*_args, **_kwargs):
+        raise np.linalg.LinAlgError("synthetic singular normal equations")
+
+    monkeypatch.setattr(np.linalg, "solve", fail_solve)
+
+    matrix = sp.eye(3, format="csr")
+    operator = SparseOperatorBundle(
+        matrix=matrix,
+        operator=aslinearoperator(matrix),
+        metadata=SparseDecision(
+            storage_kind="csr",
+            reason="unit-test",
+            backend="cpu",
+            shape=(3, 3),
+            dense_nbytes=72,
+            csr_nbytes_estimate=64,
+            nnz_estimate=3,
+        ),
+    )
+    least_squares = _ResidualWindowHostSparsePreconditionerBundle(
+        base_factor=_ZeroFactor(),
+        operator=operator,
+        window_positions=(np.asarray([0, 2]),),
+        window_factors=(_IdentityFactor(),),
+        kind="window_lsq",
+        coefficient_mode="normal_equations",
+        regularization=0.0,
+    )
+    np.testing.assert_allclose(least_squares.solve(np.asarray([1.0, -2.0, 3.0])), [1.0, 0.0, 3.0])
+
+    z_basis = np.asarray([[1.0, 0.0], [0.0, 0.0], [0.0, 1.0]], dtype=np.float64)
+    window = _TrueOperatorWindowLSQPreconditionerBundle(
+        base_factor=_ZeroFactor(),
+        true_matvec=true_matvec_zero,
+        window_positions=np.asarray([0, 2]),
+        a_window=z_basis,
+        inv_column_scale=np.ones(2, dtype=np.float64),
+        solve_normal=lambda rhs: np.asarray(rhs, dtype=np.float64),
+        kind="window_lsq",
+        damping=True,
+    )
+    active = _TrueOperatorActiveSubmatrixPreconditionerBundle(
+        base_factor=_ZeroFactor(),
+        true_matvec=true_matvec_zero,
+        block_positions=np.asarray([0, 2]),
+        a_window=np.zeros_like(z_basis),
+        solve_block=lambda rhs: np.asarray(rhs, dtype=np.float64),
+        kind="active_block",
+        damping=True,
+    )
+    coupled = _TrueOperatorCoupledCoarseLSQPreconditionerBundle(
+        base_factor=_ZeroFactor(),
+        true_matvec=true_matvec_zero,
+        z_basis=z_basis,
+        a_basis=z_basis,
+        inv_column_scale=np.ones(2, dtype=np.float64),
+        solve_normal=lambda rhs: np.asarray(rhs, dtype=np.float64),
+        kind="coupled_lsq",
+        damping=True,
+    )
+
+    rhs = np.asarray([1.0, -2.0, 3.0])
+    np.testing.assert_allclose(window.solve(rhs), np.zeros(3))
+    np.testing.assert_allclose(active.solve(rhs), np.zeros(3))
+    np.testing.assert_allclose(coupled.solve(rhs), np.zeros(3))
 
 
 def test_rescue_budget_and_sparse_factor_memory_estimate() -> None:
@@ -306,6 +412,35 @@ def test_graph_expansion_and_window_selection_are_layout_aware() -> None:
     assert metadata[0]["species"] == 0
     assert metadata[0]["x_center"] == 0
     assert metadata[0]["ell_center"] == 1
+
+
+def test_window_selection_rejects_shape_mismatch_and_tail_only_residuals() -> None:
+    layout = _layout_with_tail()
+
+    positions, metadata = _true_operator_window_positions_from_residual(
+        residual=np.asarray([1.0, 2.0]),
+        layout=layout,
+        active_indices=np.arange(layout.total_size, dtype=np.int64),
+        max_windows=2,
+        x_radius=0,
+        ell_radius=0,
+        include_tail=True,
+    )
+    assert positions.size == 0
+    assert metadata == ()
+
+    active_tail_only = np.asarray([layout.f_size, layout.f_size + 1], dtype=np.int64)
+    positions, metadata = _true_operator_window_positions_from_residual(
+        residual=np.asarray([3.0, -4.0]),
+        layout=layout,
+        active_indices=active_tail_only,
+        max_windows=2,
+        x_radius=0,
+        ell_radius=0,
+        include_tail=True,
+    )
+    assert positions.size == 0
+    assert metadata == ()
 
 
 def test_residual_coarse_builder_corrects_failed_identity_factor() -> None:
@@ -398,6 +533,48 @@ def test_true_operator_residual_window_builder_rejects_memory_budget() -> None:
     )
 
     assert bundle is None
+
+
+def test_true_operator_residual_window_builder_rejects_invalid_or_dropped_columns() -> None:
+    layout = _layout_with_tail()
+
+    invalid_shape = _try_build_true_operator_residual_window_lsq_preconditioner(
+        true_matvec=lambda x: np.asarray(x, dtype=np.float64),
+        true_matmat=lambda x: np.zeros((layout.total_size - 1, x.shape[1]), dtype=np.float64),
+        factor_bundle=_ZeroFactor(),
+        residual=np.ones((layout.total_size,), dtype=np.float64),
+        layout=layout,
+        active_indices=None,
+        max_windows=1,
+        x_radius=0,
+        ell_radius=0,
+        max_nbytes=1024 * 1024,
+        regularization=0.0,
+        max_window_size=layout.total_size,
+        column_batch=2,
+        drop_tol=0.0,
+        include_tail=False,
+    )
+    assert invalid_shape is None
+
+    dropped = _try_build_true_operator_residual_window_lsq_preconditioner(
+        true_matvec=lambda x: np.asarray(x, dtype=np.float64),
+        true_matmat=lambda x: np.asarray(x, dtype=np.float64),
+        factor_bundle=_ZeroFactor(),
+        residual=np.ones((layout.total_size,), dtype=np.float64),
+        layout=layout,
+        active_indices=None,
+        max_windows=1,
+        x_radius=0,
+        ell_radius=0,
+        max_nbytes=1024 * 1024,
+        regularization=0.0,
+        max_window_size=layout.total_size,
+        column_batch=2,
+        drop_tol=2.0,
+        include_tail=False,
+    )
+    assert dropped is None
 
 
 def test_true_operator_active_block_builders_correct_small_identity_operator() -> None:

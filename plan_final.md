@@ -250,6 +250,14 @@ The main structural refactor is functionally complete:
   validation passed: `tests/test_explicit_sparse.py` as `78 passed in 0.63 s`,
   and the adjacent explicit-sparse/transport sparse-direct bundle passed as
   `158 passed in 21.71 s`.
+- True-operator RHSMode=1 rescue coverage now includes one-hot cache
+  fail-closed fallback for malformed batched true actions, residual-window
+  least-squares pseudo-inverse fallback, degenerate damping behavior for
+  window/active/coupled corrections, residual-window shape and tail-only
+  rejection, and invalid or fully dropped true-action columns. Focused
+  validation passed: `tests/test_rhs1_true_operator_rescue.py` as
+  `18 passed in 0.27 s`, and the adjacent RHSMode=1 sparse-rescue bundle
+  passed as `368 passed in 3.41 s`.
 - The examples tree has been re-audited for navigation and repository size:
   every top-level task folder has a README, examples contract tests passed as
   `26 passed in 20.66 s`, and the nested `output/`, `artifacts/`,
