@@ -105,51 +105,30 @@ uses a simplified global preconditioner matrix, keeps the true residual gate on
 the full operator, and avoids the slower structured-CSR research path unless the
 user explicitly asks for it.
 
-Production benchmark inputs use research-scale grids and are managed separately
-from quick-start examples. The public runtime figure below filters to rows with
+Production benchmark inputs use research-scale grids and are separate from
+quick-start examples. The public runtime figure below includes rows with
 matching SFINCS Fortran v3 references and a measured Fortran runtime of at least
-`10 s`; smaller rows remain useful for CI, regression, and parity checks.
+`10 s`, so startup overhead does not dominate the comparison.
 
 ## Runtime and Memory Summary
 
 ![Runtime and memory comparison against SFINCS Fortran v3](docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png)
 
-The release benchmark above compares SFINCS Fortran v3, `sfincs_jax` CPU cold,
-`sfincs_jax` CPU warm, `sfincs_jax` GPU cold, and `sfincs_jax` GPU warm only for
-reference-runtime-window rows whose Fortran v3 reference runtime is at least
-`10 s`; rows below that floor are kept as CI or regression evidence rather than
-public performance claims.
-The left panel shows wall-clock runtime and the right panel shows active solver
-memory, both on log axes. Fortran memory is process maximum RSS; JAX memory uses
-profiler RSS deltas over the fixed Python/JAX/XLA runtime baseline, while the
-full process peak remains in the JSON reports as `jax_max_rss_mb`. Cold is the
-first external suite command. Warm runtime
-uses `jax_runtime_s_warm` when reports were generated with `--jax-repeats >= 2`;
-otherwise it falls back to the CLI `jax_logged_elapsed_s` field. Cases are
-ordered by best warm `sfincs_jax` speedup over the Fortran v3 runtime, so the
-strongest JAX wins appear first. The plot and README runtime/memory table are
-checked against the same canonical filtered rows emitted by the benchmark-summary
-generator. Regenerate the plot with
-`python examples/publication_figures/generate_fortran_suite_benchmark_summary.py`.
+The comparison covers SFINCS Fortran v3, `sfincs_jax` CPU cold, `sfincs_jax`
+CPU warm, `sfincs_jax` GPU cold, and `sfincs_jax` GPU warm. The left panel shows
+wall-clock runtime and the right panel shows active solver memory, both on log
+axes. Fortran memory is process maximum RSS; JAX memory uses profiler RSS
+deltas over the fixed Python/JAX/XLA runtime baseline, with full process peaks
+stored in the JSON reports. Cold means the first external suite command; warm
+means a repeated run after JIT compilation. Cases are ordered by best warm
+`sfincs_jax` speedup over the Fortran v3 runtime.
 
-Scope note: the full 39-case frozen suite remains the parity and CI smoke audit,
-but sub-`10 s` Fortran rows are not shown as public performance comparisons. They
-must either be rerun from the higher-resolution benchmark tier in
-`benchmarks/production_resolution_inputs_2026-05-04` or remain CI/regression
-checks only. The production tier enforces `25 x 51 x 4 x 100` 3D grids and
-`33 x 1 x 12 x 140` tokamak grids, with `89 x 1 x 24 x 300` for RHSMode=1
-PAS/no-`E_r` tokamak rows, including public examples and optional user-supplied
-production-resolution workloads. The manual GitHub workflow
-`Production Benchmark Inputs` validates and uploads the production input tree
-without running expensive solves; full CPU/GPU/Fortran runtime and memory sweeps
-should be launched on local, `office`, or cluster hardware with explicit
-resource budgets.
-
-Calibration policy: RHSMode=1 PAS/no-`E_r` tokamak benchmark rows use
-`89 x 1 x 24 x 300`; standard tokamak rows use `33 x 1 x 12 x 140`; 3D rows use
-`25 x 51 x 4 x 100`. Regenerated public plots should replace the checked-in
-figures only when each promoted row passes parity, runtime-budget, and
-memory-budget gates on the same inputs used for the table.
+Benchmark grids are selected to represent research use rather than tutorial
+smoke tests: RHSMode=1 PAS/no-`E_r` tokamak rows use `89 x 1 x 24 x 300`,
+standard tokamak rows use `33 x 1 x 12 x 140`, and 3D rows use
+`25 x 51 x 4 x 100`. Detailed parity tables, benchmark provenance, regeneration
+commands, and lower-resolution CI evidence live in the documentation pages for
+performance, parity, and Fortran examples.
 
 ## Optimization Lane
 
