@@ -2792,14 +2792,17 @@ Current completion status:
   also has fast gates for
   default-promotion evidence and canonical runtime/memory ordering. The next
   coverage work must focus on the measured low files from this audit:
-  `problems/profile_solve.py` (`58%`), `problems/transport_solve.py` (`72%`),
-  `solvers/preconditioner_schur_profile.py` (`75%`),
-  `solvers/preconditioner_pas_angular.py` (`76%`),
-  `solvers/preconditioner_xblock_tz_sparse.py` (`74%`),
-  `problems/transport_linear_system.py` (`78%`), and
-  `problems/transport_diagnostics.py` (`79%`). These tests should continue to
-  use bounded manufactured operators, frozen-reference data, and branch-policy
-  checks rather than slow production solves.
+  `problems/profile_solve.py` (`58%`), `outputs/writer.py` (`84%`),
+  `problems/transport_solve.py` (`73%`), `solvers/explicit_sparse.py` (`87%`),
+  `solvers/preconditioner_transport_matrix.py` (`83%`),
+  `operators/profile_full_system.py` (`84%`),
+  `operators/profile_true_operator_rescue.py` (`81%`),
+  `problems/profile_sparse_handoff.py` (`85%`),
+  `solvers/preconditioner_xblock_tz_sparse.py` (`76%`),
+  `problems/transport_parallel_runtime.py` (`86%`),
+  `operators/profile_system.py` (`77%`), and `solver.py` (`83%`). These tests
+  should continue to use bounded manufactured operators, frozen-reference data,
+  and branch-policy checks rather than slow production solves.
 - Transport loop/helper coverage was expanded with manufactured dense LU
   preconditioner/solver checks, host-GMRES progress and residual-admission
   tests, optional KSP diagnostic skip/failure/success branches, dense batched
@@ -2963,6 +2966,13 @@ Current completion status:
   focused implicit file passed (`9 passed in 3.47 s`), the autodiff bundle
   passed (`51 passed in 53.19 s`), and the source/import/docs-claim guard passed
   (`32 passed in 2.58 s`).
+- The latest output-writer tranche strengthened Fortran-compatible export and
+  cache contracts: `tests/test_io_output_policy_coverage.py` now covers the
+  single-zeta export axis used by one-field-period reductions, fail-closed
+  interpolated-`x` export on unsupported velocity grids, and geometry-output
+  cache reuse/completion for cached `VPrimeHat`, `FSABHat2`, `gpsiHatpsiHat`,
+  `BDotCurlB`, `diotadpsiHat`, classical fluxes, and computed `uHat`. The
+  focused output-policy suite passed (`43 passed in 0.80 s`).
 
 Next ordered implementation steps:
 

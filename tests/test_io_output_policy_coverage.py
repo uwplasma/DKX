@@ -631,6 +631,49 @@ def test_export_f_config_option_one_interpolates_all_requested_axes() -> None:
     assert np.all(np.isfinite(cfg.map_xi))
 
 
+def test_export_f_config_single_zeta_plane_keeps_fortran_axis_contract() -> None:
+    grids, geom = _toy_export_grid_and_geometry()
+    grids = SimpleNamespace(**{**vars(grids), "zeta": np.asarray([0.0], dtype=np.float64)})
+    cfg = _export_f_config(
+        nml=_toy_export_namelist(
+            {
+                "EXPORT_F_THETA_OPTION": 0,
+                "EXPORT_F_ZETA_OPTION": 2,
+                "EXPORT_F_X_OPTION": 0,
+                "EXPORT_F_XI_OPTION": 0,
+                "EXPORT_F_ZETA": [0.25, 0.5],
+            }
+        ),
+        grids=grids,
+        geom=geom,
+    )
+
+    assert cfg is not None
+    np.testing.assert_allclose(cfg.export_zeta, [0.0])
+    np.testing.assert_allclose(cfg.map_zeta, [[1.0]])
+    assert cfg.n_export_zeta == 1
+
+
+def test_export_f_config_rejects_interpolated_x_for_unsupported_grid_scheme() -> None:
+    grids, geom = _toy_export_grid_and_geometry()
+    nml = _toy_export_namelist(
+        {
+            "EXPORT_F_THETA_OPTION": 0,
+            "EXPORT_F_ZETA_OPTION": 0,
+            "EXPORT_F_X_OPTION": 1,
+            "EXPORT_F_XI_OPTION": 0,
+            "EXPORT_F_X": [1.0],
+        }
+    )
+    nml.group("otherNumericalParameters")["XGRIDSCHEME"] = 3
+    with pytest.raises(NotImplementedError, match="xGridScheme"):
+        _export_f_config(
+            nml=nml,
+            grids=grids,
+            geom=geom,
+        )
+
+
 @pytest.mark.parametrize(
     ("updates", "message"),
     [
@@ -1058,6 +1101,75 @@ def test_output_dict_scheme2_writes_v3_flags_species_and_geometry(
     np.testing.assert_allclose(out["uHat"], np.full((2, 2), 0.3))
     np.testing.assert_allclose(out["BHat"], geom.b_hat)
     assert out["classicalParticleFluxNoPhi1_psiHat"].shape == (2,)
+
+
+def test_output_dict_reuses_and_completes_geometry_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_OUTPUT_CACHE", "1")
+    monkeypatch.setattr(output_writer, "_OUTPUT_GEOM_CACHE", {})
+    monkeypatch.setattr(output_writer, "_output_cache_enabled", lambda: True)
+    monkeypatch.setattr(output_writer, "_output_geom_cache_key", lambda *, nml, grids: ("toy-output-cache",))
+
+    shape = (2, 2)
+    cached_payload = {
+        "VPrimeHat": np.asarray(9.0),
+        "FSABHat2": np.asarray(8.0),
+        "gpsiHatpsiHat": np.full(shape, 0.7),
+        "BDotCurlB": np.full(shape, 0.6),
+        "diotadpsiHat": np.asarray(0.125),
+        "classicalParticleFluxNoPhi1_psiHat": np.asarray([0.1, 0.2]),
+        "classicalParticleFluxNoPhi1_psiN": np.asarray([0.3, 0.4]),
+        "classicalParticleFluxNoPhi1_rHat": np.asarray([0.5, 0.6]),
+        "classicalParticleFluxNoPhi1_rN": np.asarray([0.7, 0.8]),
+        "classicalHeatFluxNoPhi1_psiHat": np.asarray([1.1, 1.2]),
+        "classicalHeatFluxNoPhi1_psiN": np.asarray([1.3, 1.4]),
+        "classicalHeatFluxNoPhi1_rHat": np.asarray([1.5, 1.6]),
+        "classicalHeatFluxNoPhi1_rN": np.asarray([1.7, 1.8]),
+    }
+    saved_payloads: list[dict[str, np.ndarray]] = []
+    monkeypatch.setattr(output_writer, "_load_output_cache", lambda key: dict(cached_payload))
+    monkeypatch.setattr(
+        output_writer,
+        "_save_output_cache",
+        lambda key, payload: saved_payloads.append(dict(payload)),
+    )
+    monkeypatch.setattr(
+        output_writer,
+        "vprime_hat_jax",
+        lambda *, grids, geom: (_ for _ in ()).throw(AssertionError("cached VPrimeHat not used")),
+    )
+    monkeypatch.setattr(
+        output_writer,
+        "fsab_hat2_jax",
+        lambda *, grids, geom: (_ for _ in ()).throw(AssertionError("cached FSABHat2 not used")),
+    )
+    monkeypatch.setattr(output_writer, "u_hat_np", lambda *, grids, geom: np.full(shape, 0.33))
+
+    grids, geom = _toy_output_grids_and_geometry()
+    nml = Namelist(
+        groups={
+            "geometryparameters": {"GEOMETRYSCHEME": 2, "INPUTRADIALCOORDINATE": 3, "RN_WISH": 0.5},
+            "physicsparameters": {"COLLISIONOPERATOR": 1, "ER": 0.0, "INCLUDEPHI1": False},
+            "speciesparameters": {"ZS": [1.0, -1.0], "MHATS": [2.0, 5.4e-4], "THATS": [1.0, 1.0], "NHATS": [1.0, 1.0]},
+            "othernumericalparameters": {"XGRIDSCHEME": 5},
+            "resolutionparameters": {},
+            "preconditioneroptions": {},
+            "general": {"RHSMODE": 1},
+        },
+        indexed={},
+    )
+
+    out = sfincs_jax_output_dict(nml=nml, grids=grids, geom=geom)
+
+    np.testing.assert_allclose(out["VPrimeHat"], 9.0)
+    np.testing.assert_allclose(out["FSABHat2"], 8.0)
+    np.testing.assert_allclose(out["gpsiHatpsiHat"], np.full(shape, 0.7))
+    np.testing.assert_allclose(out["BDotCurlB"], np.full(shape, 0.6))
+    np.testing.assert_allclose(out["diotadpsiHat"], 0.125)
+    np.testing.assert_allclose(out["uHat"], np.full(shape, 0.33))
+    np.testing.assert_allclose(out["classicalParticleFluxNoPhi1_psiHat"], [0.1, 0.2])
+    assert saved_payloads
+    np.testing.assert_allclose(saved_payloads[-1]["uHat"], np.full(shape, 0.33))
+    assert output_writer._OUTPUT_GEOM_CACHE[("toy-output-cache",)]["uHat"].shape == shape
 
 
 def test_output_dict_rejects_unsupported_geometry_and_singular_monoenergetic() -> None:
