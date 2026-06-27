@@ -152,6 +152,10 @@ The main structural refactor is functionally complete:
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
+- The public stale-wording scan is clean for README, source-layout README,
+  examples README, and non-historical docs. The archived NTX handoff page uses
+  standalone solver-policy wording rather than progress-log phrasing; focused
+  examples/benchmark docs validation passed as `13 passed in 0.14 s`.
 - The CI coverage floor remains lower than the final target until measured
   margin is available; the review target is `95%` meaningful package coverage
   while keeping GitHub Actions under 10 minutes.
