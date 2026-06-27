@@ -236,6 +236,12 @@ The main structural refactor is functionally complete:
   gauge-adjustment path that changes only the kinetic distribution and
   preserves the state-vector tail. Focused validation passed:
   `tests/test_io_output_policy_coverage.py` as `78 passed in 2.04 s`.
+- Validation artifact coverage now includes suite-report wrapper parsing,
+  no-runtime-floor filtering, non-object autodiff-summary rejection, malformed
+  gradient-check rejection, and mixed valid/invalid suite-row filtering. Focused
+  validation passed: `tests/test_validation_policy_coverage.py` as
+  `8 passed in 0.04 s`, and the adjacent validation artifact bundle passed as
+  `42 passed in 1.38 s`.
 - The examples tree has been re-audited for navigation and repository size:
   every top-level task folder has a README, examples contract tests passed as
   `26 passed in 20.66 s`, and the nested `output/`, `artifacts/`,
