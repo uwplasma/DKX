@@ -35,6 +35,10 @@ from sfincs_jax.geometry.boozer import BoozerBCHeader, BoozerBCSurface
 from sfincs_jax.namelist import Namelist, read_sfincs_input
 from sfincs_jax.outputs import writer as output_writer
 from sfincs_jax.outputs.cache import output_cache_dir, output_cache_path
+from sfincs_jax.outputs.rhsmode1 import (
+    RHSMode1SolveMethodSelectionContext,
+    select_rhsmode1_solve_method,
+)
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 
 
@@ -184,6 +188,69 @@ def test_write_output_solver_policy_helpers_are_fail_closed() -> None:
         solve_method="dense",
         env_value="off",
     ) is False
+
+
+def _rhsmode1_selector_op(*, has_fp: bool, has_pas: bool = False) -> SimpleNamespace:
+    return SimpleNamespace(
+        constraint_scheme=2,
+        include_phi1=False,
+        n_theta=7,
+        n_zeta=5,
+        rhs_mode=1,
+        total_size=120,
+        fblock=SimpleNamespace(
+            fp=object() if has_fp else None,
+            pas=object() if has_pas else None,
+        ),
+    )
+
+
+def _rhsmode1_selector_context(**updates) -> RHSMode1SolveMethodSelectionContext:
+    values = {
+        "active_total_size": 120,
+        "dense_auto_accelerator_fp_window": False,
+        "dense_auto_backend": "cpu",
+        "dense_auto_ok": True,
+        "dense_active_cutoff": 8000,
+        "dense_fp_cutoff": 8000,
+        "dense_pas_cutoff": 2500,
+        "differentiable": False,
+        "eparallel_abs": 0.0,
+        "er_abs": 0.0,
+        "force_krylov": False,
+        "include_electric_field_xi": False,
+        "include_phi1": False,
+        "include_phi1_in_kinetic": False,
+        "include_xdot": False,
+        "op": _rhsmode1_selector_op(has_fp=True),
+        "quasineutrality_option": 1,
+        "solve_method": "auto",
+        "solve_method_arg_forced": False,
+        "solve_method_env": "",
+        "use_dkes": False,
+        "emit": None,
+        "resolve_use_implicit": lambda *, differentiable: bool(differentiable),
+        "rhsmode1_host_dense_shortcut_allowed": lambda **_kwargs: False,
+    }
+    values.update(updates)
+    return RHSMode1SolveMethodSelectionContext(**values)
+
+
+def test_rhsmode1_selector_promotes_small_fp_to_dense() -> None:
+    method = select_rhsmode1_solve_method(_rhsmode1_selector_context())
+
+    assert method == "dense"
+
+
+def test_rhsmode1_selector_force_krylov_wins_over_small_fp_dense() -> None:
+    method = select_rhsmode1_solve_method(
+        _rhsmode1_selector_context(
+            force_krylov=True,
+            op=_rhsmode1_selector_op(has_fp=False),
+        )
+    )
+
+    assert method == "incremental"
 
 
 def test_select_phi1_newton_linear_solve_method_env_override_wins() -> None:

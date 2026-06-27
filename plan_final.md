@@ -79,6 +79,12 @@ The main structural refactor is functionally complete:
   source-tree/setup/import-contract bundle as `46 passed in 3.73 s`. This
   tranche reduced `problems/profile_solve.py` to `4821` lines and
   `solve_v3_full_system_linear_gmres` to `3912` lines without adding files.
+- The RHSMode=1 output solve-method selector used by
+  `write_sfincs_jax_output_h5` is now owned by `outputs/rhsmode1.py` as
+  `select_rhsmode1_solve_method`. Focused validation passed:
+  output/CLI policy tests as `103 passed in 1.32 s`, and HDF5/transport output
+  checks as `8 passed in 5.83 s`. This reduced `outputs/writer.py` to `3971`
+  lines and `write_sfincs_jax_output_h5` to `2323` lines without adding files.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -172,8 +178,8 @@ Latest AST audit:
 - The remaining structural blocker is owner size. The largest retained owners
   are `problems/profile_solve.py` (`4821` lines, with
   `solve_v3_full_system_linear_gmres` spanning `3912` lines),
-  `outputs/writer.py` (`4268` lines, with `write_sfincs_jax_output_h5`
-  spanning `2559` lines), `solvers/explicit_sparse.py` (`5056` lines), and
+  `outputs/writer.py` (`3971` lines, with `write_sfincs_jax_output_h5`
+  spanning `2323` lines), `solvers/explicit_sparse.py` (`5056` lines), and
   `problems/transport_solve.py` (`3191` lines).
 - The active-DOF/PAS-projection reduced-system setup has been extracted from
   the driver into `problems/profile_setup.py`. This is a safe first reduction
@@ -182,6 +188,9 @@ Latest AST audit:
 - The RHSMode=1 route/preconditioner-selection setup has been extracted from
   the driver into `problems/profile_policies.py`. This is the second safe
   reduction and gives solver auto-selection a direct unit-test seam.
+- The RHSMode=1 output solve-method selection has been extracted from the HDF5
+  writer into `outputs/rhsmode1.py`. This removes policy branching from the
+  writer while preserving the legacy private `sfincs_jax.io` selector alias.
 - The next consolidation pass must reduce those owner sizes using existing
   domain files. Do not add more package folders or helper-only files.
 
@@ -196,11 +205,15 @@ Remaining work:
   `profile_setup.py`. The completed subtranche already covers active compaction,
   PAS projection, reduced operator closures, recycled initial guesses, and
   reduced residual targets.
-- Tranche 4: extract `write_sfincs_jax_output_h5` phase orchestration into
-  existing `outputs/rhsmode1.py`, `outputs/transport.py`, and `outputs/formats.py`
-  only where code can be deleted from `outputs/writer.py`. Acceptance:
-  `writer.py` drops by at least `300` lines and output schema/parity tests pass.
-- Tranche 5: retain `explicit_sparse.py` as one owner unless a patch can move a
+- Completed Tranche 4: RHSMode=1 output solve-method selection extraction into
+  `outputs/rhsmode1.py`.
+- Tranche 5: continue `write_sfincs_jax_output_h5` phase orchestration
+  extraction into existing `outputs/rhsmode1.py`, `outputs/transport.py`, and
+  `outputs/formats.py` only where code can be deleted from `outputs/writer.py`.
+  Acceptance for the next cut: move a complete diagnostics/output-field write
+  phase, drop `writer.py` by at least `250` more lines, and keep output
+  schema/parity tests passing.
+- Tranche 6: retain `explicit_sparse.py` as one owner unless a patch can move a
   complete symbolic-factor family into an existing solver owner while deleting
   more code than it adds. Do not fragment sparse factor code into many small
   files.

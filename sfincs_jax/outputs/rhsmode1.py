@@ -8,16 +8,406 @@ an explicit sidecar trace before the main diagnostic file is refused.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 import os
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
+from sfincs_jax.problems.profile_policies import (
+    rhs1_constrained_pas_sparse_pc_auto_allowed,
+    rhs1_fp_3d_sparse_pc_auto_allowed,
+    rhs1_fp_3d_xblock_sparse_pc_auto_allowed,
+    rhs1_structured_full_csr_auto_allowed,
+    rhs1_tokamak_er_dense_auto_allowed,
+    rhs1_tokamak_fp_er_sparse_pc_auto_allowed,
+    rhs1_tokamak_fp_noer_sparse_pc_auto_allowed,
+    rhs1_tokamak_pas_er_sparse_pc_auto_allowed,
+    rhs1_tokamak_pas_noer_sparse_pc_auto_allowed,
+)
+
 from ..solvers.memory_model import estimate_linear_solve_memory
 from ..solvers.diagnostics import SolverTrace, write_solver_trace_json
+
+
+@dataclass(frozen=True)
+class RHSMode1SolveMethodSelectionContext:
+    """Inputs needed to choose the RHSMode=1 solve method before the solve."""
+
+    active_total_size: int
+    dense_auto_accelerator_fp_window: bool
+    dense_auto_backend: str
+    dense_auto_ok: bool
+    dense_active_cutoff: int
+    dense_fp_cutoff: int
+    dense_pas_cutoff: int
+    differentiable: bool | None
+    eparallel_abs: float
+    er_abs: float
+    force_krylov: bool
+    include_electric_field_xi: bool
+    include_phi1: bool
+    include_phi1_in_kinetic: bool
+    include_xdot: bool
+    op: Any
+    quasineutrality_option: int
+    solve_method: str
+    solve_method_arg_forced: bool
+    solve_method_env: str
+    use_dkes: bool
+    emit: Callable[[int, str], None] | None
+    resolve_use_implicit: Callable[..., bool]
+    rhsmode1_host_dense_shortcut_allowed: Callable[..., bool]
+
+
+def _select_rhsmode1_linear_solve_method(
+    *,
+    default_method: str,
+    env_override: str,
+    emit=None,
+) -> str:
+    """Apply explicit RHSMode=1 solve-method environment overrides."""
+
+    allowed = {
+        "auto",
+        "bicgstab",
+        "dense",
+        "dense_row_scaled",
+        "dense_ksp",
+        "incremental",
+        "batched",
+        "lgmres",
+        "lgmres_scipy",
+        "sparse_host",
+        "sparse_host_safe",
+        "safe_sparse_host",
+        "sparse_host_or_petsc_compat",
+        "host_sparse",
+        "sparse_host_lu",
+        "sparse_pc_gmres",
+        "xblock_sparse_pc_gmres",
+        "sparse_xblock_pc_gmres",
+        "xblock_host_pc_gmres",
+        "host_xblock_pc_gmres",
+        "structured_csr",
+        "structured_full_csr",
+        "host_structured_csr",
+        "host_full_csr",
+        "no_probe_csr",
+        "full_csr_host_gmres",
+        "structured_full_csr_host_gmres",
+        "sparse_host_gmres",
+        "sparse_host_pc",
+        "host_sparse_pc_gmres",
+        "petsc_host",
+        "petsc_host_gmres",
+        "sparse_lsmr",
+        "sparse_host_lsmr",
+        "sparse_lsqr",
+        "sparse_host_lsqr",
+        "minimum_norm",
+        "sparse_minimum_norm",
+        "petsc_compat",
+        "sparse_petsc_compat",
+        "petsc_minimum_norm",
+    }
+    method = str(default_method).strip().lower()
+    override = str(env_override).strip().lower()
+    if override in allowed:
+        method = override
+        if emit is not None:
+            emit(1, f"write_sfincs_jax_output_h5: solve method forced by env -> {method}")
+    return method
+
+
+def select_rhsmode1_solve_method(
+    context: RHSMode1SolveMethodSelectionContext,
+) -> str:
+    """Choose the RHSMode=1 solve method from problem size, physics, and backend."""
+
+    op = context.op
+    emit = context.emit
+    solve_method = _select_rhsmode1_linear_solve_method(
+        default_method=context.solve_method,
+        env_override=context.solve_method_env,
+        emit=emit,
+    )
+    use_implicit = bool(
+        context.resolve_use_implicit(differentiable=context.differentiable)
+    )
+    solve_method_forced = bool(context.solve_method_arg_forced) or (
+        bool(context.solve_method_env) and solve_method == context.solve_method_env
+    )
+    if solve_method_forced:
+        if emit is not None:
+            emit(1, f"write_sfincs_jax_output_h5: keeping explicit solve_method={solve_method}")
+    elif (
+        (not context.force_krylov)
+        and rhs1_structured_full_csr_auto_allowed(
+            op=op,
+            active_size=int(context.active_total_size),
+            use_implicit=use_implicit,
+            solve_method_kind=solve_method,
+            backend=str(context.dense_auto_backend),
+            eparallel_abs=float(context.eparallel_abs),
+        )
+    ):
+        if emit is not None:
+            emit(
+                1,
+                "write_sfincs_jax_output_h5: 3D full-FP RHSMode=1 "
+                "-> trying no-probe structured full-CSR host solve",
+            )
+    elif (
+        (not context.force_krylov)
+        and rhs1_tokamak_pas_er_sparse_pc_auto_allowed(
+            op=op,
+            active_size=int(context.active_total_size),
+            use_implicit=use_implicit,
+            solve_method_kind=solve_method,
+            backend=str(context.dense_auto_backend),
+            er_abs=float(context.er_abs),
+            use_dkes=bool(context.use_dkes),
+            include_xdot=bool(context.include_xdot),
+            include_electric_field_xi=bool(context.include_electric_field_xi),
+        )
+    ):
+        solve_method = "sparse_pc_gmres"
+        if emit is not None:
+            emit(
+                1,
+                "write_sfincs_jax_output_h5: tokamak PAS+Er RHSMode=1 "
+                "-> using sparse-PC GMRES host solve",
+            )
+    elif (
+        (not context.force_krylov)
+        and rhs1_tokamak_er_dense_auto_allowed(
+            op=op,
+            active_size=int(context.active_total_size),
+            use_implicit=use_implicit,
+            solve_method_kind=solve_method,
+            backend=str(context.dense_auto_backend),
+            use_dkes=bool(context.use_dkes),
+            er_abs=float(context.er_abs),
+            include_xdot=bool(context.include_xdot),
+            include_electric_field_xi=bool(context.include_electric_field_xi),
+        )
+    ):
+        solve_method = "dense"
+        if emit is not None:
+            emit(
+                1,
+                "write_sfincs_jax_output_h5: bounded tokamak Er RHSMode=1 "
+                "-> using dense CPU solve",
+            )
+    elif (
+        (not context.force_krylov)
+        and rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(
+            op=op,
+            active_size=int(context.active_total_size),
+            use_implicit=use_implicit,
+            solve_method_kind=solve_method,
+            backend=str(context.dense_auto_backend),
+            er_abs=float(context.er_abs),
+        )
+    ):
+        solve_method = "sparse_pc_gmres"
+        if emit is not None:
+            emit(
+                1,
+                "write_sfincs_jax_output_h5: tokamak PAS no-Er RHSMode=1 "
+                "-> using sparse-PC GMRES host solve",
+            )
+    elif (
+        (not context.force_krylov)
+        and rhs1_tokamak_fp_er_sparse_pc_auto_allowed(
+            op=op,
+            active_size=int(context.active_total_size),
+            use_implicit=use_implicit,
+            solve_method_kind=solve_method,
+            backend=str(context.dense_auto_backend),
+            er_abs=float(context.er_abs),
+            use_dkes=bool(context.use_dkes),
+            include_xdot=bool(context.include_xdot),
+            include_electric_field_xi=bool(context.include_electric_field_xi),
+        )
+    ):
+        solve_method = "xblock_sparse_pc_gmres"
+        if emit is not None:
+            emit(
+                1,
+                "write_sfincs_jax_output_h5: tokamak full-FP+Er RHSMode=1 "
+                "-> using x-block sparse-PC GMRES host solve",
+            )
+    elif (
+        (not context.force_krylov)
+        and rhs1_tokamak_fp_noer_sparse_pc_auto_allowed(
+            op=op,
+            active_size=int(context.active_total_size),
+            use_implicit=use_implicit,
+            solve_method_kind=solve_method,
+            backend=str(context.dense_auto_backend),
+            er_abs=float(context.er_abs),
+            use_dkes=bool(context.use_dkes),
+            include_xdot=bool(context.include_xdot),
+            include_electric_field_xi=bool(context.include_electric_field_xi),
+        )
+    ):
+        solve_method = "xblock_sparse_pc_gmres"
+        if emit is not None:
+            emit(
+                1,
+                "write_sfincs_jax_output_h5: tokamak full-FP no-Er RHSMode=1 "
+                "-> using x-block sparse-PC GMRES host solve",
+            )
+    elif (
+        (not context.force_krylov)
+        and rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
+            op=op,
+            active_size=int(context.active_total_size),
+            use_implicit=use_implicit,
+            solve_method_kind=solve_method,
+            backend=str(context.dense_auto_backend),
+            eparallel_abs=float(context.eparallel_abs),
+        )
+    ):
+        solve_method = "xblock_sparse_pc_gmres"
+        if emit is not None:
+            emit(
+                1,
+                "write_sfincs_jax_output_h5: bounded 3D full-FP RHSMode=1 "
+                "-> using x-block sparse-PC GMRES host solve",
+            )
+    elif (
+        (not context.force_krylov)
+        and rhs1_fp_3d_sparse_pc_auto_allowed(
+            op=op,
+            active_size=int(context.active_total_size),
+            use_implicit=use_implicit,
+            solve_method_kind=solve_method,
+            backend=str(context.dense_auto_backend),
+            eparallel_abs=float(context.eparallel_abs),
+        )
+    ):
+        solve_method = "sparse_pc_gmres"
+        if emit is not None:
+            emit(
+                1,
+                "write_sfincs_jax_output_h5: 3D full-FP RHSMode=1 "
+                "-> using sparse-PC GMRES host solve",
+            )
+    elif (
+        op.fblock.fp is not None
+        and (not context.include_phi1)
+        and int(context.active_total_size) <= int(context.dense_fp_cutoff)
+        and (not context.force_krylov)
+        and (context.dense_auto_ok or context.dense_auto_accelerator_fp_window)
+    ):
+        solve_method = "dense"
+        if emit is not None:
+            msg = "write_sfincs_jax_output_h5: FP RHSMode=1 small system -> using dense solve"
+            if context.dense_auto_accelerator_fp_window:
+                msg += f" on backend={context.dense_auto_backend}"
+            emit(1, msg)
+    elif (
+        op.fblock.fp is not None
+        and (not context.include_phi1)
+        and int(context.active_total_size) <= int(context.dense_fp_cutoff)
+        and (not context.force_krylov)
+        and (not context.dense_auto_ok)
+    ):
+        host_dense_shortcut = context.rhsmode1_host_dense_shortcut_allowed(
+            op=op,
+            active_size=int(context.active_total_size),
+            use_implicit=use_implicit,
+            solve_method_kind="incremental",
+        )
+        if host_dense_shortcut:
+            if emit is not None:
+                emit(
+                    1,
+                    "write_sfincs_jax_output_h5: FP RHSMode=1 small system -> "
+                    f"using host dense shortcut on backend={context.dense_auto_backend}",
+                )
+        elif emit is not None:
+            emit(
+                1,
+                "write_sfincs_jax_output_h5: FP RHSMode=1 small system -> skipping dense auto mode on "
+                f"backend={context.dense_auto_backend}; falling through to Krylov policy",
+            )
+    elif op.fblock.fp is not None and (not context.include_phi1):
+        if float(context.eparallel_abs) > 0.0:
+            solve_method = "bicgstab"
+            if emit is not None:
+                emit(
+                    1,
+                    "write_sfincs_jax_output_h5: E_parallel FP case -> using BiCGStab "
+                    "(GMRES fallback enabled)",
+                )
+    elif rhs1_constrained_pas_sparse_pc_auto_allowed(
+        op=op,
+        active_size=int(context.active_total_size),
+        use_implicit=use_implicit,
+        solve_method_kind=solve_method,
+    ):
+        solve_method = "sparse_pc_gmres"
+        if emit is not None:
+            emit(
+                1,
+                "write_sfincs_jax_output_h5: large constrained PAS RHSMode=1 "
+                "-> using sparse-PC GMRES host solve",
+            )
+    elif (
+        (not context.include_phi1)
+        and int(op.constraint_scheme) == 2
+        and (op.fblock.fp is None)
+        and op.fblock.pas is not None
+        and int(context.active_total_size) <= int(context.dense_pas_cutoff)
+        and (not context.force_krylov)
+    ):
+        solve_method = "incremental"
+    elif context.include_phi1 and (not context.include_phi1_in_kinetic) and (
+        int(context.quasineutrality_option) != 1
+    ):
+        if (
+            int(context.active_total_size) <= int(context.dense_active_cutoff)
+            and context.dense_auto_ok
+        ):
+            solve_method = "dense"
+            if emit is not None:
+                emit(1, "write_sfincs_jax_output_h5: includePhi1 linear mode -> using dense solve")
+        else:
+            solve_method = "incremental"
+            if emit is not None:
+                if (
+                    int(context.active_total_size) <= int(context.dense_active_cutoff)
+                    and not context.dense_auto_ok
+                ):
+                    emit(
+                        1,
+                        "write_sfincs_jax_output_h5: includePhi1 linear mode -> skipping dense auto mode on "
+                        f"backend={context.dense_auto_backend}; using incremental GMRES",
+                    )
+                else:
+                    emit(1, "write_sfincs_jax_output_h5: includePhi1 linear mode -> using incremental GMRES")
+    elif context.force_krylov:
+        solve_method = "incremental"
+        if emit is not None:
+            emit(
+                1,
+                "write_sfincs_jax_output_h5: forced Krylov mode for RHSMode=1 "
+                "(SFINCS_JAX_RHSMODE1_FORCE_KRYLOV=1)",
+            )
+    elif emit is not None:
+        emit(
+            1,
+            "write_sfincs_jax_output_h5: defaulting to Krylov GMRES (incremental) for RHSMode=1 "
+            f"(active_n={int(context.active_total_size)}, total_n={int(op.total_size)})",
+        )
+    return solve_method
 
 
 def _rhs1_active_size_for_trace(op: Any) -> int | None:
@@ -845,6 +1235,7 @@ def _write_nonconverged_rhsmode1_solver_trace_json(
 
 
 __all__ = (
+    "RHSMode1SolveMethodSelectionContext",
     "_add_rhsmode1_solver_diagnostics",
     "_compact_json_metadata",
     "_metadata_float",
@@ -856,5 +1247,7 @@ __all__ = (
     "_should_fail_nonconverged_rhsmode1_output",
     "_solver_metadata_dict",
     "_solver_trace_memory_estimate",
+    "_select_rhsmode1_linear_solve_method",
+    "select_rhsmode1_solve_method",
     "_write_nonconverged_rhsmode1_solver_trace_json",
 )
