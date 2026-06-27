@@ -106,6 +106,13 @@ The main structural refactor is functionally complete:
   broader output/profile/source-tree bundle passed as `221 passed in 14.43 s`.
   This reduced `outputs/writer.py` to `3570` lines and
   `write_sfincs_jax_output_h5` to `1915` lines without adding files.
+- RHSMode=1 NTV diagnostic recomputation is now owned by `outputs/rhsmode1.py`,
+  including the geometryScheme=5 zero path and the non-axisymmetric L=2
+  recomputation path. Focused validation passed:
+  `tests/test_io_output_policy_coverage.py` as `64 passed in 1.85 s`, and the
+  broader output/profile/source-tree bundle passed as `224 passed in 17.89 s`.
+  This reduced `outputs/writer.py` to `3508` lines and
+  `write_sfincs_jax_output_h5` to `1852` lines without adding files.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -200,8 +207,8 @@ Latest AST audit:
 - The remaining structural blocker is owner size. The largest retained owners
   are `problems/profile_solve.py` (`4821` lines, with
   `solve_v3_full_system_linear_gmres` spanning `3912` lines),
-  `outputs/writer.py` (`3570` lines, with `write_sfincs_jax_output_h5`
-  spanning `1915` lines), `solvers/explicit_sparse.py` (`5056` lines), and
+  `outputs/writer.py` (`3508` lines, with `write_sfincs_jax_output_h5`
+  spanning `1852` lines), `solvers/explicit_sparse.py` (`5056` lines), and
   `problems/transport_solve.py` (`3191` lines).
 - The active-DOF/PAS-projection reduced-system setup has been extracted from
   the driver into `problems/profile_setup.py`. This is a safe first reduction
@@ -224,6 +231,9 @@ Latest AST audit:
   HDF5 writer into `outputs/rhsmode1.py`, keeping the Fortran-style progress
   printout arrays available while giving the classical Phi1/no-Phi1 branches
   direct tests.
+- RHSMode=1 NTV diagnostic recomputation has been extracted from the HDF5
+  writer into `outputs/rhsmode1.py`, keeping the Fortran v3 `NTVKernel`
+  convention and adding direct zero/non-axisymmetric branch tests.
 - The next consolidation pass must reduce those owner sizes using existing
   domain files. Do not add more package folders or helper-only files.
 
@@ -251,13 +261,16 @@ Remaining work:
 - Completed Tranche 7: RHSMode=1 classical flux output extraction into
   `outputs/rhsmode1.py`, covering both no-Phi1 and Phi1-history branches with
   tiny real-formula tests.
-- Tranche 8: continue `write_sfincs_jax_output_h5` phase orchestration
+- Completed Tranche 8: RHSMode=1 NTV diagnostic recomputation extraction into
+  `outputs/rhsmode1.py`, covering geometryScheme=5 and non-axisymmetric L=2
+  paths with tiny numerical tests.
+- Tranche 9: continue `write_sfincs_jax_output_h5` phase orchestration
   extraction into existing `outputs/rhsmode1.py`, `outputs/transport.py`, and
   `outputs/formats.py` only where code can be deleted from `outputs/writer.py`.
   Acceptance for the next cut: move a complete diagnostics/output-field write
   phase, drop `writer.py` by at least `200` more lines, and keep output
   schema/parity tests passing.
-- Tranche 9: retain `explicit_sparse.py` as one owner unless a patch can move a
+- Tranche 10: retain `explicit_sparse.py` as one owner unless a patch can move a
   complete symbolic-factor family into an existing solver owner while deleting
   more code than it adds. Do not fragment sparse factor code into many small
   files.

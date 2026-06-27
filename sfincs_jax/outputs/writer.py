@@ -58,6 +58,7 @@ from .rhsmode1 import (
     write_rhsmode1_classical_fluxes_to_data,
     write_rhsmode1_core_diagnostics_to_data,
     write_rhsmode1_electric_drift_diagnostics_to_data,
+    write_rhsmode1_ntv_diagnostics_to_data,
     write_rhsmode1_phi1_diagnostics_to_data,
     _write_nonconverged_rhsmode1_solver_trace_json,
 )
@@ -2691,77 +2692,14 @@ def write_sfincs_jax_output_h5(
             fsab_j = float(np.asarray(diag_arrays["FSABjHat"][iter_idx], dtype=np.float64))
             emit(0, f" FSABjHat (bootstrap current): {_fmt_fortran_e(fsab_j)}")
 
-        # NTV (non-stellarator-symmetric torque) parity:
-        #
-        # v3 computes NTV using an `NTVKernel` derived from geometry arrays (including `uHat`) and the
-        # L=2 component of the solved delta-f. Earlier parity fixtures (tokamak-like scheme1) have
-        # vanishing NTV and can tolerate a 0 placeholder, but non-axisymmetric `.bc` cases (scheme11/12)
-        # have nonzero NTV and require a real implementation for end-to-end parity.
-        geometry_scheme = int(np.asarray(data["geometryScheme"]))
-        compute_ntv = geometry_scheme != 5  # matches v3 behavior
-        if compute_ntv:
-            bh = jnp.asarray(data["BHat"], dtype=jnp.float64)
-            dbt = jnp.asarray(data["dBHatdtheta"], dtype=jnp.float64)
-            dbz = jnp.asarray(data["dBHatdzeta"], dtype=jnp.float64)
-            uhat = jnp.asarray(data["uHat"], dtype=jnp.float64)
-            # v3 geometry defines invFSA_BHat2 as 1 / FSABHat2 (not <1/BHat^2>).
-            inv_fsa_b2 = 1.0 / jnp.asarray(float(data["FSABHat2"]), dtype=jnp.float64)
-            ghat = jnp.asarray(float(data["GHat"]), dtype=jnp.float64)
-            ihat = jnp.asarray(float(data["IHat"]), dtype=jnp.float64)
-            iota = jnp.asarray(float(data["iota"]), dtype=jnp.float64)
-            ntv_kernel = (2.0 / 5.0) / bh * (
-                (uhat - ghat * inv_fsa_b2) * (iota * dbt + dbz) + iota * (1.0 / (bh * bh)) * (ghat * dbt - ihat * dbz)
-            )
-        else:
-            ntv_kernel = jnp.zeros_like(jnp.asarray(data["BHat"], dtype=jnp.float64))
-
-        w2d = jnp.asarray(result.op.theta_weights, dtype=jnp.float64)[:, None] * jnp.asarray(result.op.zeta_weights, dtype=jnp.float64)[
-            None, :
-        ]
-        vprime_hat = jnp.sum(w2d / jnp.asarray(result.op.d_hat, dtype=jnp.float64))
-        x = jnp.asarray(result.op.x, dtype=jnp.float64)
-        xw = jnp.asarray(result.op.x_weights, dtype=jnp.float64)
-        w_ntv = xw * (x**4)
-
-        z_s = jnp.asarray(result.op.z_s, dtype=jnp.float64)
-        t_hat = jnp.asarray(result.op.t_hat, dtype=jnp.float64)
-        m_hat = jnp.asarray(result.op.m_hat, dtype=jnp.float64)
-        sqrt_t = jnp.sqrt(t_hat)
-        sqrt_m = jnp.sqrt(m_hat)
-
-        ntv_before_nstz: jnp.ndarray
-        ntv_n_s: jnp.ndarray
-        if compute_ntv and int(result.op.n_xi) > 2:
-            if x_stack is None:
-                f_delta = jnp.asarray(xs[0][: result.op.f_size], dtype=jnp.float64).reshape(result.op.fblock.f_shape)
-                sum_ntv_nstz = jnp.einsum("x,sxtz->stz", w_ntv, f_delta[:, :, 2, :, :])[None, :, :, :]
-            else:
-                f_delta_stack = jnp.asarray(x_stack[:, : result.op.f_size], dtype=jnp.float64).reshape(
-                    (
-                        n_iter,
-                        int(result.op.n_species),
-                        int(result.op.n_x),
-                        int(result.op.n_xi),
-                        int(result.op.n_theta),
-                        int(result.op.n_zeta),
-                    )
-                )
-                sum_ntv_nstz = jnp.einsum("x,nsxtz->nstz", w_ntv, f_delta_stack[:, :, :, 2, :, :])
-            ntv_before_nstz = (
-                (4.0 * jnp.pi * (t_hat * t_hat) * sqrt_t / (m_hat * sqrt_m * vprime_hat))[None, :, None, None]
-                * ntv_kernel[None, None, :, :]
-                * sum_ntv_nstz
-            )
-            ntv_n_s = jnp.einsum("tz,nstz->ns", w2d, ntv_before_nstz)
-        else:
-            ntv_before_nstz = jnp.zeros(
-                (n_iter, int(result.op.n_species), int(result.op.n_theta), int(result.op.n_zeta)),
-                dtype=jnp.float64,
-            )
-            ntv_n_s = jnp.zeros((n_iter, int(result.op.n_species)), dtype=jnp.float64)
-
-        data["NTVBeforeSurfaceIntegral"] = _fortran_h5_layout(np.transpose(np.asarray(ntv_before_nstz, dtype=np.float64), (3, 2, 1, 0)))
-        data["NTV"] = _fortran_h5_layout(np.transpose(np.asarray(ntv_n_s, dtype=np.float64), (1, 0)))
+        write_rhsmode1_ntv_diagnostics_to_data(
+            data=data,
+            op=result.op,
+            xs=xs,
+            x_stack=x_stack,
+            n_iter=n_iter,
+            fortran_h5_layout=_fortran_h5_layout,
+        )
 
         # Phi1 outputs + vE/NTV diagnostics:
         if phi1_list:

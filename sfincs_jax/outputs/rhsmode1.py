@@ -912,6 +912,94 @@ def write_rhsmode1_classical_fluxes_to_data(
     return classical_pf, classical_hf
 
 
+def write_rhsmode1_ntv_diagnostics_to_data(
+    *,
+    data: dict[str, Any],
+    op: Any,
+    xs: list[Any],
+    x_stack: Any | None,
+    n_iter: int,
+    fortran_h5_layout: Callable[[np.ndarray], np.ndarray],
+) -> None:
+    """Recompute and write RHSMode=1 NTV diagnostics from the solved distribution."""
+
+    geometry_scheme = int(np.asarray(data["geometryScheme"]))
+    compute_ntv = geometry_scheme != 5
+    if compute_ntv:
+        b_hat = jnp.asarray(data["BHat"], dtype=jnp.float64)
+        d_b_dtheta = jnp.asarray(data["dBHatdtheta"], dtype=jnp.float64)
+        d_b_dzeta = jnp.asarray(data["dBHatdzeta"], dtype=jnp.float64)
+        u_hat = jnp.asarray(data["uHat"], dtype=jnp.float64)
+        # v3 geometry defines invFSA_BHat2 as 1 / FSABHat2 (not <1/BHat^2>).
+        inv_fsa_b2 = 1.0 / jnp.asarray(float(data["FSABHat2"]), dtype=jnp.float64)
+        g_hat = jnp.asarray(float(data["GHat"]), dtype=jnp.float64)
+        i_hat = jnp.asarray(float(data["IHat"]), dtype=jnp.float64)
+        iota = jnp.asarray(float(data["iota"]), dtype=jnp.float64)
+        ntv_kernel = (2.0 / 5.0) / b_hat * (
+            (u_hat - g_hat * inv_fsa_b2) * (iota * d_b_dtheta + d_b_dzeta)
+            + iota * (1.0 / (b_hat * b_hat)) * (g_hat * d_b_dtheta - i_hat * d_b_dzeta)
+        )
+    else:
+        ntv_kernel = jnp.zeros_like(jnp.asarray(data["BHat"], dtype=jnp.float64))
+
+    weights_2d = jnp.asarray(op.theta_weights, dtype=jnp.float64)[:, None] * jnp.asarray(
+        op.zeta_weights,
+        dtype=jnp.float64,
+    )[None, :]
+    vprime_hat = jnp.sum(weights_2d / jnp.asarray(op.d_hat, dtype=jnp.float64))
+    x = jnp.asarray(op.x, dtype=jnp.float64)
+    x_weights = jnp.asarray(op.x_weights, dtype=jnp.float64)
+    ntv_velocity_weight = x_weights * (x**4)
+
+    t_hat = jnp.asarray(op.t_hat, dtype=jnp.float64)
+    m_hat = jnp.asarray(op.m_hat, dtype=jnp.float64)
+    sqrt_t = jnp.sqrt(t_hat)
+    sqrt_m = jnp.sqrt(m_hat)
+
+    if compute_ntv and int(op.n_xi) > 2:
+        if x_stack is None:
+            f_delta = jnp.asarray(xs[0][: op.f_size], dtype=jnp.float64).reshape(op.fblock.f_shape)
+            sum_ntv_nstz = jnp.einsum("x,sxtz->stz", ntv_velocity_weight, f_delta[:, :, 2, :, :])[
+                None,
+                :,
+                :,
+                :,
+            ]
+        else:
+            f_delta_stack = jnp.asarray(x_stack[:, : op.f_size], dtype=jnp.float64).reshape(
+                (
+                    int(n_iter),
+                    int(op.n_species),
+                    int(op.n_x),
+                    int(op.n_xi),
+                    int(op.n_theta),
+                    int(op.n_zeta),
+                )
+            )
+            sum_ntv_nstz = jnp.einsum(
+                "x,nsxtz->nstz",
+                ntv_velocity_weight,
+                f_delta_stack[:, :, :, 2, :, :],
+            )
+        ntv_before_nstz = (
+            (4.0 * jnp.pi * (t_hat * t_hat) * sqrt_t / (m_hat * sqrt_m * vprime_hat))[None, :, None, None]
+            * ntv_kernel[None, None, :, :]
+            * sum_ntv_nstz
+        )
+        ntv_n_s = jnp.einsum("tz,nstz->ns", weights_2d, ntv_before_nstz)
+    else:
+        ntv_before_nstz = jnp.zeros(
+            (int(n_iter), int(op.n_species), int(op.n_theta), int(op.n_zeta)),
+            dtype=jnp.float64,
+        )
+        ntv_n_s = jnp.zeros((int(n_iter), int(op.n_species)), dtype=jnp.float64)
+
+    data["NTVBeforeSurfaceIntegral"] = fortran_h5_layout(
+        np.transpose(np.asarray(ntv_before_nstz, dtype=np.float64), (3, 2, 1, 0))
+    )
+    data["NTV"] = fortran_h5_layout(np.transpose(np.asarray(ntv_n_s, dtype=np.float64), (1, 0)))
+
+
 def _stack_stz_to_ztsN(arrays: list[np.ndarray]) -> np.ndarray:
     zts = [np.transpose(np.asarray(array, dtype=np.float64), (2, 1, 0)) for array in arrays]
     return np.stack(zts, axis=-1)
@@ -1854,6 +1942,7 @@ __all__ = (
     "write_rhsmode1_core_diagnostics_to_data",
     "write_rhsmode1_electric_drift_diagnostics_to_data",
     "write_rhsmode1_flux_coordinate_variants_to_data",
+    "write_rhsmode1_ntv_diagnostics_to_data",
     "write_rhsmode1_phi1_diagnostics_to_data",
     "_write_nonconverged_rhsmode1_solver_trace_json",
 )

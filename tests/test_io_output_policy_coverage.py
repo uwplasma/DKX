@@ -46,6 +46,7 @@ from sfincs_jax.outputs.rhsmode1 import (
     write_rhsmode1_core_diagnostics_to_data,
     write_rhsmode1_electric_drift_diagnostics_to_data,
     write_rhsmode1_flux_coordinate_variants_to_data,
+    write_rhsmode1_ntv_diagnostics_to_data,
     write_rhsmode1_phi1_diagnostics_to_data,
 )
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
@@ -429,6 +430,87 @@ def test_write_rhsmode1_classical_fluxes_to_data_repeats_no_phi1_and_writes_coor
     assert heat_flux_phi1.shape == (2, 2)
     np.testing.assert_allclose(phi1_data["classicalHeatFlux_psiN"], heat_flux_phi1 * 2.0)
     assert np.all(np.isfinite(particle_flux_phi1))
+
+
+def test_write_rhsmode1_ntv_diagnostics_to_data_zeros_vmec_geometry_scheme() -> None:
+    op = SimpleNamespace(
+        theta_weights=np.asarray([0.5, 0.5], dtype=np.float64),
+        zeta_weights=np.asarray([0.25, 0.75], dtype=np.float64),
+        d_hat=np.ones((2, 2), dtype=np.float64),
+        x=np.asarray([0.2, 0.8], dtype=np.float64),
+        x_weights=np.asarray([0.4, 0.6], dtype=np.float64),
+        t_hat=np.asarray([1.0], dtype=np.float64),
+        m_hat=np.asarray([2.0], dtype=np.float64),
+        n_species=1,
+        n_x=2,
+        n_xi=3,
+        n_theta=2,
+        n_zeta=2,
+        f_size=24,
+    )
+    data: dict[str, np.ndarray | float | int] = {
+        "geometryScheme": 5,
+        "BHat": np.ones((2, 2), dtype=np.float64),
+    }
+
+    write_rhsmode1_ntv_diagnostics_to_data(
+        data=data,
+        op=op,
+        xs=[np.ones(24, dtype=np.float64)],
+        x_stack=None,
+        n_iter=1,
+        fortran_h5_layout=lambda array: np.asarray(array, dtype=np.float64),
+    )
+
+    np.testing.assert_allclose(data["NTVBeforeSurfaceIntegral"], np.zeros((2, 2, 1, 1)))
+    np.testing.assert_allclose(data["NTV"], np.zeros((1, 1)))
+
+
+def test_write_rhsmode1_ntv_diagnostics_to_data_recomputes_nonaxisymmetric_l2() -> None:
+    f_shape = (1, 2, 3, 2, 2)
+    f_delta = np.zeros(f_shape, dtype=np.float64)
+    f_delta[:, :, 2, :, :] = 0.25
+    op = SimpleNamespace(
+        theta_weights=np.asarray([0.5, 0.5], dtype=np.float64),
+        zeta_weights=np.asarray([0.25, 0.75], dtype=np.float64),
+        d_hat=np.ones((2, 2), dtype=np.float64),
+        x=np.asarray([0.2, 0.8], dtype=np.float64),
+        x_weights=np.asarray([0.4, 0.6], dtype=np.float64),
+        t_hat=np.asarray([1.0], dtype=np.float64),
+        m_hat=np.asarray([2.0], dtype=np.float64),
+        n_species=1,
+        n_x=2,
+        n_xi=3,
+        n_theta=2,
+        n_zeta=2,
+        f_size=int(np.prod(f_shape)),
+        fblock=SimpleNamespace(f_shape=f_shape),
+    )
+    data: dict[str, np.ndarray | float | int] = {
+        "geometryScheme": 11,
+        "BHat": np.asarray([[1.0, 1.1], [1.2, 1.3]], dtype=np.float64),
+        "dBHatdtheta": np.asarray([[0.1, 0.2], [0.3, 0.4]], dtype=np.float64),
+        "dBHatdzeta": np.asarray([[0.2, 0.1], [0.4, 0.3]], dtype=np.float64),
+        "uHat": np.asarray([[0.5, 0.6], [0.7, 0.8]], dtype=np.float64),
+        "FSABHat2": 1.4,
+        "GHat": 0.2,
+        "IHat": 0.1,
+        "iota": 0.8,
+    }
+
+    write_rhsmode1_ntv_diagnostics_to_data(
+        data=data,
+        op=op,
+        xs=[f_delta.reshape((-1,))],
+        x_stack=None,
+        n_iter=1,
+        fortran_h5_layout=lambda array: np.asarray(array, dtype=np.float64),
+    )
+
+    assert data["NTVBeforeSurfaceIntegral"].shape == (2, 2, 1, 1)
+    assert data["NTV"].shape == (1, 1)
+    assert np.all(np.isfinite(data["NTV"]))
+    assert float(np.abs(data["NTV"]).max()) > 0.0
 
 
 def test_write_rhsmode1_core_diagnostics_to_data_writes_schema_layouts() -> None:
