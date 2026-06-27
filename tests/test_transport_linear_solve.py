@@ -7,11 +7,18 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+import sfincs_jax.problems.transport_linear_system as transport_linear_system
 import sfincs_jax.problems.transport_solve as transport_linear
-from sfincs_jax.problems.transport_solve import (
-    TransportDenseBatchContext,
+from sfincs_jax.problems.transport_linear_system import (
     TransportLinearSolveCallbacks,
     TransportLinearSolveContext,
+    solve_transport_linear,
+    solve_transport_linear_with_residual,
+    transport_restart_for_method,
+    transport_solver_kind,
+)
+from sfincs_jax.problems.transport_solve import (
+    TransportDenseBatchContext,
     TransportLoopProgress,
     TransportMatvecCache,
     TransportRecycleState,
@@ -20,14 +27,10 @@ from sfincs_jax.problems.transport_solve import (
     dense_solver_for_matvec,
     emit_transport_ksp_iteration_stats,
     resolve_transport_recycle_k,
-    solve_transport_linear,
-    solve_transport_linear_with_residual,
     solve_transport_dense_batch,
     transport_host_gmres_solve,
-    transport_restart_for_method,
     transport_sparse_direct_pattern_for_solve,
     transport_sparse_direct_solve,
-    transport_solver_kind,
 )
 
 
@@ -63,8 +66,8 @@ def test_solve_transport_linear_uses_nonjit_or_jit_gmres(monkeypatch) -> None:
         calls.append(f"jit:{kwargs['solve_method']}")
         return "jit"
 
-    monkeypatch.setattr(transport_linear, "gmres_solve", fake_gmres)
-    monkeypatch.setattr(transport_linear, "gmres_solve_jit", fake_gmres_jit)
+    monkeypatch.setattr(transport_linear_system, "gmres_solve", fake_gmres)
+    monkeypatch.setattr(transport_linear_system, "gmres_solve_jit", fake_gmres_jit)
     args = dict(
         matvec_fn=lambda x: x,
         b_vec=jnp.ones((2,)),
@@ -89,7 +92,7 @@ def test_transport_linear_solve_callbacks_bind_context(monkeypatch) -> None:
         captured.update(kwargs)
         return "bound"
 
-    monkeypatch.setattr(transport_linear, "gmres_solve", fake_gmres)
+    monkeypatch.setattr(transport_linear_system, "gmres_solve", fake_gmres)
     callbacks = TransportLinearSolveCallbacks(context=_context(use_solver_jit=False))
 
     result = callbacks.solve(
@@ -117,7 +120,7 @@ def test_solve_transport_linear_implicit_routes_to_custom_solve(monkeypatch) -> 
         captured.update(kwargs)
         return "implicit"
 
-    monkeypatch.setattr(transport_linear, "linear_custom_solve", fake_custom)
+    monkeypatch.setattr(transport_linear_system, "linear_custom_solve", fake_custom)
 
     assert (
         solve_transport_linear(
@@ -148,7 +151,9 @@ def test_solve_transport_linear_with_residual_bicgstab_route(monkeypatch) -> Non
         captured.update(kwargs)
         return SimpleNamespace(residual_norm=jnp.asarray(0.0)), jnp.zeros((2,))
 
-    monkeypatch.setattr(transport_linear, "bicgstab_solve_with_residual", fake_bicgstab)
+    monkeypatch.setattr(
+        transport_linear_system, "bicgstab_solve_with_residual", fake_bicgstab
+    )
     result, residual = solve_transport_linear_with_residual(
         context=_context(use_solver_jit=False),
         matvec_fn=lambda x: x,
@@ -176,7 +181,9 @@ def test_solve_transport_linear_with_residual_implicit_routes_to_custom_solve(mo
         captured.update(kwargs)
         return SimpleNamespace(residual_norm=jnp.asarray(0.0)), jnp.zeros((2,))
 
-    monkeypatch.setattr(transport_linear, "linear_custom_solve_with_residual", fake_custom)
+    monkeypatch.setattr(
+        transport_linear_system, "linear_custom_solve_with_residual", fake_custom
+    )
 
     result, residual = solve_transport_linear_with_residual(
         context=_context(use_implicit=True, size_hint=23),
@@ -211,8 +218,12 @@ def test_solve_transport_linear_with_residual_uses_plain_or_jit_gmres(monkeypatc
         calls.append(f"jit:{kwargs['solve_method']}")
         return SimpleNamespace(residual_norm=jnp.asarray(2.0)), 2.0 * jnp.ones((2,))
 
-    monkeypatch.setattr(transport_linear, "gmres_solve_with_residual", fake_gmres)
-    monkeypatch.setattr(transport_linear, "gmres_solve_with_residual_jit", fake_gmres_jit)
+    monkeypatch.setattr(
+        transport_linear_system, "gmres_solve_with_residual", fake_gmres
+    )
+    monkeypatch.setattr(
+        transport_linear_system, "gmres_solve_with_residual_jit", fake_gmres_jit
+    )
     args = dict(
         matvec_fn=lambda x: x,
         b_vec=jnp.ones((2,)),
@@ -247,8 +258,14 @@ def test_solve_transport_linear_with_residual_distributed_axis_routes(monkeypatc
         calls.append(dict(kwargs))
         return SimpleNamespace(residual_norm=jnp.asarray(0.0)), jnp.zeros((2,))
 
-    monkeypatch.setattr(transport_linear, "sharding_constraints", fake_sharding_constraints)
-    monkeypatch.setattr(transport_linear, "gmres_solve_with_residual_distributed", fake_distributed)
+    monkeypatch.setattr(
+        transport_linear_system, "sharding_constraints", fake_sharding_constraints
+    )
+    monkeypatch.setattr(
+        transport_linear_system,
+        "gmres_solve_with_residual_distributed",
+        fake_distributed,
+    )
 
     solve_transport_linear_with_residual(
         context=_context(distributed_axis="theta"),
@@ -288,7 +305,9 @@ def test_transport_linear_solve_callbacks_bind_residual_context(monkeypatch) -> 
         captured.update(kwargs)
         return SimpleNamespace(residual_norm=jnp.asarray(0.0)), jnp.zeros((2,))
 
-    monkeypatch.setattr(transport_linear, "bicgstab_solve_with_residual", fake_bicgstab)
+    monkeypatch.setattr(
+        transport_linear_system, "bicgstab_solve_with_residual", fake_bicgstab
+    )
     callbacks = TransportLinearSolveCallbacks(context=_context(use_solver_jit=False))
 
     result, residual = callbacks.solve_with_residual(

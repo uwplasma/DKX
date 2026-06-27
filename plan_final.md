@@ -160,6 +160,17 @@ The main structural refactor is functionally complete:
   broader source/profile/policy bundle passed as `143 passed in 3.91 s`. This
   reduced `problems/profile_solve.py` to `4402` lines and
   `solve_v3_full_system_linear_gmres` to `3494` lines without adding files.
+- The RHSMode=2/3 transport linear-solve dispatch layer is now owned by
+  `problems/transport_linear_system.py`, including
+  `TransportLinearSolveContext`, `TransportLinearSolveCallbacks`,
+  `solve_transport_linear`, `solve_transport_linear_with_residual`,
+  `transport_solver_kind`, and `transport_restart_for_method`.
+  `problems/transport_solve.py` keeps compatibility re-exports and now focuses
+  on whichRHS orchestration. Focused validation passed:
+  `tests/test_transport_linear_solve.py` as `20 passed in 2.16 s`, source-tree
+  and import-contract guards as `26 passed in 2.93 s`, plus Ruff and compile
+  checks. This reduced `problems/transport_solve.py` to `2949` lines without
+  adding files.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -259,9 +270,11 @@ Latest AST audit:
 - The remaining structural blocker is owner size. The largest retained owners
   are `problems/profile_solve.py` (`4402` lines, with
   `solve_v3_full_system_linear_gmres` spanning `3494` lines),
+  `solvers/explicit_sparse.py` (`5056` lines),
+  `problems/transport_linear_system.py` (`3393` lines),
   `outputs/writer.py` (`3250` lines, with `write_sfincs_jax_output_h5`
-  spanning roughly `1852` lines), `solvers/explicit_sparse.py` (`5056`
-  lines), and `problems/transport_solve.py` (`3191` lines).
+  spanning roughly `1852` lines), and `problems/transport_solve.py` (`2949`
+  lines).
 - The active-DOF/PAS-projection reduced-system setup has been extracted from
   the driver into `problems/profile_setup.py`. This is a safe first reduction
   and gives the solver driver a tested setup seam, but it is not enough by
@@ -330,7 +343,12 @@ Remaining work:
   `problems/profile_residual.py`, keeping policy parsing in the driver and
   preserving all stage gates through explicit callback injection. This lowered
   the profile driver to `4402` lines and added bounded residual-stage tests.
-- Tranche 11: retain `explicit_sparse.py` as one owner unless a patch can move a
+- Completed Tranche 11: moved the RHSMode=2/3 transport linear solve context,
+  callbacks, solve-kind policy, and direct/JIT/implicit residual-returning
+  dispatch helpers into existing `problems/transport_linear_system.py`. This
+  lowered `problems/transport_solve.py` to `2949` lines while keeping
+  compatibility imports from the transport solve module.
+- Tranche 12: retain `explicit_sparse.py` as one owner unless a patch can move a
   complete symbolic-factor family into an existing solver owner while deleting
   more code than it adds. Do not fragment sparse factor code into many small
   files.
