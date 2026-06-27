@@ -41,7 +41,7 @@ The main structural refactor is functionally complete:
 - `examples/README.md` and `docs/examples.rst` provide task-oriented example
   navigation, including tutorial notebooks and runnable scripts.
 - The latest local xdist coverage audit measured `88%` package coverage:
-  `3979 passed in 278.79 s` with `8441` missing executable lines.
+  `3991 passed in 286.00 s` with `8436` missing executable lines.
 - The latest bounded coverage tranches added RHSMode-1 Schur/coarse fallback
   tests, output-gradient coordinate contract tests, default
   preconditioner-selection tests, radial-preconditioner guard tests,
@@ -148,7 +148,7 @@ The main structural refactor is functionally complete:
 
 The largest coverage blockers from the fresh audit are:
 
-- `problems/profile_solve.py`: `62%`, 420 missing lines.
+- `problems/profile_solve.py`: `62%`, 419 missing lines.
 - `problems/transport_solve.py`: `73%`, 326 missing lines.
 - `solvers/explicit_sparse.py`: `87%`, 310 missing lines.
 - `problems/profile_policies.py`: `88%`, 300 missing lines.
@@ -165,9 +165,9 @@ The largest coverage blockers from the fresh audit are:
 - `solvers/preconditioner_qi_basis.py`: `89%`, 194 missing lines.
 - `solvers/preconditioner_schur_profile.py`: `84%`, 185 missing lines.
 - `solver.py`: `86%`, 183 missing lines.
-- `outputs/rhsmode1.py`: `77%`, 172 missing lines.
-- `outputs/writer.py`: `92%`, 171 missing lines before the export-f owner
-  move.
+- `outputs/rhsmode1.py`: `79%`, 164 missing lines.
+- `outputs/writer.py`: `91%`, 162 missing lines.
+- `problems/profile_dense.py`: `87%`, 162 missing lines.
 
 ## Source Structure Rules
 
