@@ -31,7 +31,7 @@ solve on the implicit-differentiation path and intentionally disables host-only
 direct-rescue shortcuts.
 
 .. note::
-   The export‑f grid currently uses the **full internal grids**. ``sfincsPlotF``
+   The export‑f grid uses the **full internal grids**. ``sfincsPlotF``
    expects ``export_delta_f`` or ``export_full_f`` to be enabled in the input
    namelist.
 

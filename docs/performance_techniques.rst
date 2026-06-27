@@ -1318,7 +1318,7 @@ Controls:
 Measured production-floor evidence:
 
 - The ``monoenergetic_geometryScheme11`` row at
-  ``25 x 51 x 4 x 100`` previously failed on GPU by entering sparse direct
+  ``25 x 51 x 4 x 100`` can fail on GPU if sparse direct is entered
   without a pattern and attempting a dense ``127501 x 127501`` materialization
   (about ``121 GiB``), then falling back to matrix-free Krylov until timeout.
 - Sparse-pattern host LU fixed correctness first: the conservative pattern had
@@ -1403,7 +1403,7 @@ and a trailing log-slope over the last :math:`m` ratios,
 
    s_m = \frac{1}{m} \sum_{i=k-m+1}^{k} \log\left(\frac{r_i}{r_{i-1}}\right).
 
-The helper accepts a candidate smoother state when the latest residual is still
+The helper accepts a candidate smoother state while the residual is still
 improving and stops when either the single-step ratio or trailing log-slope
 crosses the configured worsening threshold. This provides a deterministic gate
 for the later PAS driver integration without hard-coding case-specific logic.

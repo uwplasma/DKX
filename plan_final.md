@@ -41,7 +41,9 @@ The main structural refactor is functionally complete:
 - `examples/README.md` and `docs/examples.rst` provide task-oriented example
   navigation, including tutorial notebooks and runnable scripts.
 - The latest local xdist coverage audit measured `88%` package coverage:
-  `4001 passed in 281.89 s` with `8344` missing executable lines.
+  `4005 passed in 291.29 s` with `8280` missing executable lines. The latest
+  coverage tranches reduced missing executable lines by `64` while keeping the
+  full audit below five minutes.
 - The latest bounded coverage tranches added RHSMode-1 Schur/coarse fallback
   tests, output-gradient coordinate contract tests, default
   preconditioner-selection tests, radial-preconditioner guard tests,
@@ -215,6 +217,13 @@ The main structural refactor is functionally complete:
   residual handling. Focused validation passed:
   `tests/test_transport_linear_solve.py` as `23 passed in 7.21 s`, and the
   broader transport-policy/source bundle passed as `78 passed in 12.01 s`.
+- Transport preconditioner coverage now includes reduced-view equivalence for
+  collision, species-x, angular FFT, and FP line factors; singular collision
+  and x-grid coarse pseudo-inverse fallbacks; and ExB/DKES angular branches for
+  both PAS and full-FP Fourier preconditioners. Focused validation passed:
+  `tests/test_transport_matrix_preconditioners.py` as `16 passed in 4.81 s`,
+  and the broader transport preconditioner/policy bundle passed as
+  `59 passed in 4.72 s`.
 - The examples tree has been re-audited for navigation and repository size:
   every top-level task folder has a README, examples contract tests passed as
   `26 passed in 20.66 s`, and the nested `output/`, `artifacts/`,
@@ -226,9 +235,10 @@ The main structural refactor is functionally complete:
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
 - The public stale-wording scan is clean for README, source-layout README,
-  examples README, and non-historical docs. The archived NTX handoff page uses
-  standalone solver-policy wording rather than progress-log phrasing; focused
-  examples/benchmark docs validation passed as `13 passed in 0.14 s`.
+  examples README, non-historical docs, and user-facing example prose. The
+  archived NTX handoff page uses standalone solver-policy wording rather than
+  progress-log phrasing; focused examples/benchmark docs validation passed as
+  `13 passed in 0.11 s`.
 - The CI coverage floor remains lower than the final target until measured
   margin is available; the review target is `95%` meaningful package coverage
   while keeping GitHub Actions under 10 minutes.
@@ -236,23 +246,22 @@ The main structural refactor is functionally complete:
 The largest coverage blockers from the fresh audit are:
 
 - `problems/profile_solve.py`: `68%`, 318 missing lines.
-- After the latest transport refactor audit, `problems/transport_solve.py` has
-  `858` executable statements, `312` missing lines, and `64%` coverage; its
-  remaining uncovered code is concentrated in retry/rescue branches that should
-  be covered through bounded branch-specific tests or kept as honest
-  production-only paths.
-- `solvers/explicit_sparse.py`: `87%`, 310 missing lines.
-- `solvers/preconditioner_transport_matrix.py`: `83%`, 296 missing lines.
+- `solvers/explicit_sparse.py`: `87%`, 313 missing lines.
+- `solvers/preconditioner_transport_matrix.py`: `83%`, 294 missing lines.
 - `operators/profile_full_system.py`: `84%`, 279 missing lines.
 - `problems/profile_policies.py`: `89%`, 276 missing lines.
 - `operators/profile_true_operator_rescue.py`: `81%`, 259 missing lines.
 - `problems/profile_sparse_handoff.py`: `85%`, 258 missing lines.
 - `solvers/preconditioner_xblock_tz_sparse.py`: `76%`, 251 missing lines.
+- `problems/transport_solve.py`: `71%`, 251 missing lines. The remaining
+  uncovered code is concentrated in retry/rescue branches that should be
+  covered through bounded branch-specific tests or kept as honest
+  production-only paths.
 - `problems/transport_parallel_runtime.py`: `86%`, 250 missing lines.
 - `solvers/preconditioner_qi_corrections.py`: `88%`, 247 missing lines.
 - `solvers/preconditioner_qi_device.py`: `89%`, 235 missing lines.
 - `operators/profile_system.py`: `77%`, 234 missing lines.
-- `problems/transport_linear_system.py`: `81%`, 225 missing lines.
+- `problems/transport_linear_system.py`: `83%`, 229 missing lines.
 - `solvers/preconditioner_qi_basis.py`: `89%`, 194 missing lines.
 - `solvers/preconditioner_schur_profile.py`: `84%`, 185 missing lines.
 - `solver.py`: `86%`, 183 missing lines.
@@ -642,9 +651,12 @@ python -m pytest -q -n auto --dist=loadscope \
 Use the public wording scan before review:
 
 ```bash
-rg -n "On the current main branch|not replacements for the production-resolution gates|The production benchmark manifest|not a public performance row|current main|new benchmarks|At the moment" \
-  README.md sfincs_jax/README.md examples/README.md docs \
-  --glob '!docs/release_notes.rst' --glob '!docs/upstream/**'
+rg -n "On the current main branch|not replacements for the production-resolution gates|The production benchmark manifest|not a public performance row|current main|new benchmarks|At the moment|new version|previous version|\\bpreviously\\b|now supports|now has|now includes|\\bcurrently\\b" \
+  README.md sfincs_jax/README.md examples docs \
+  --glob '!docs/release_notes.rst' --glob '!docs/upstream/**' \
+  --glob '!docs/_static/**' --glob '!docs/ntx_*.rst' \
+  --glob '!examples/sfincs_examples/**' --glob '!examples/**/output/**' \
+  --glob '!examples/**/artifacts/**' --glob '!examples/**/provenance/**'
 ```
 
 ## Completion Gates

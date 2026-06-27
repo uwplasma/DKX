@@ -37,7 +37,7 @@ claims.
 True device-QI
 --------------
 
-Current state
+Evidence State
 ~~~~~~~~~~~~~
 
 The large-QI production escape hatch is closed for users who do not need
@@ -45,12 +45,12 @@ end-to-end differentiation: explicit large RHSMode=1 QI requests can enter the
 non-autodiff host x-block fallback and record that choice in solver metadata.
 The true differentiable/device lane remains open because the scale-0.60 hard
 seed does not yet pass the production output/write gate on GPU. The CPU hard
-seed now has a bounded orchestration path that writes HDF5 and solver trace
-output at ``15 x 31 x 60 x 5`` without entering the old strong-preconditioner or
-SciPy-rescue time sinks. The best checked GPU installed-solver evidence is now
+seed has a bounded orchestration path that writes HDF5 and solver trace output
+at ``15 x 31 x 60 x 5`` without entering host strong-preconditioner or
+SciPy-rescue time sinks. The best checked GPU installed-solver evidence is
 the 2026-05-20 recycled augmented-Krylov/operator-reuse probe in combined mode.
 It keeps the run on device, preserves the reusable QI coarse/operator action in
-the FGMRES least-squares problem, avoids the old transpose/CUDA crash, and
+the FGMRES least-squares problem, avoids the transpose/CUDA crash, and
 reduces the true residual from the public-auto ``3.949394e-5`` and earlier
 augmented-Krylov ``2.218202e-5`` artifacts to ``7.336295e-6`` in ``158.6 s``.
 It still misses the production write gate by roughly five orders of magnitude
@@ -66,7 +66,7 @@ but the final residual was still ``2.450895e-5`` against the
 artifact is
 ``docs/_static/qi_seed_robustness_scale060_coupled_residual_krylov_install_device_qi_gpu1.json``.
 The lower-resolution ``13 x 13 x 15 x 4`` QI ``nfp=2`` operator-reuse route is
-now also checked as a bounded office-GPU artifact:
+checked as a bounded office-GPU artifact:
 ``docs/_static/figures/optimization/qi_nfp2_electron_root_res13_gpu_operator_reuse_coupled_failclosed.json``.
 That rerun activated matrix-free operator reuse, skipped local x-block factors,
 kept host fallback disabled, wrote fail-safe solver-trace evidence, and records
@@ -75,14 +75,14 @@ It finished in ``21.44 s`` wall time with peak trace RSS ``1384 MB``, but the
 residual was ``9.707076e-6`` against target ``1.466182e-11``. This closes the
 route/accounting evidence for the mid-size rung and keeps production true
 device-QI convergence explicitly open.
-The current source tree also includes the next fail-closed residual-learning
+The source tree also includes the fail-closed residual-learning
 hook:
 ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION``. It builds a bounded
 JAX least-squares equation from the final true Krylov residual, optional cached
 QI ``(U, A U)`` columns, and fresh physics residual directions. This is
 infrastructure for learning from the error mode that Krylov actually leaves
 behind; the matching runner preset is ``post-residual-equation-device-qi``. It
-now has one checked scale-0.60 CPU artifact:
+has one checked scale-0.60 CPU artifact:
 ``docs/_static/qi_seed_robustness_scale060_post_residual_equation_device_qi_cpu_2026_05_22.json``.
 That artifact reaches the hook and accepts one correction, reducing the final
 true residual from ``2.362283e-05`` to ``2.105918e-05`` using ``89`` directions
@@ -163,17 +163,17 @@ projected-smoother, or Krylov-label change. Compact CSR factors,
 diagonal/one-sided factor applies, simple Galerkin rank-32 corrections,
 LGMRES/GMRES toggles, device global-coupling QR, rank-deficient moment-Schur
 pseudo-inverse, and a multiplicative base-plus-QI composition either fail to
-reduce the true residual or make the residual/runtime worse. The current best
+reduce the true residual or make the residual/runtime worse. The best
 checked path changes the coarse architecture with installed depth-64
 operator-Krylov plus multilevel coarse reuse, but the small rank increase
 (``12`` to ``13``) shows that the remaining error is not captured by the
-current angular/radial/global-load basis. The source tree now includes the
+angular/radial/global-load basis. The source tree includes the
 first true augmented-Krylov replacement path: the stored QI coarse basis and
 its operator action can be coupled directly to the restart least-squares
 problem, ``min ||r - [A U, A Z] c||_2``. The checked
 ``recycled-augmented-device-qi`` hard-seed artifact is the best GPU evidence so
 far, but its slow residual decay shows that a larger Krylov budget alone cannot
-close the production tolerance. The current source tree also includes
+close the production tolerance. The source tree also includes
 three non-smoother candidate spaces for bounded evidence runs: pitch/xi moments
 in the multilevel coarse hierarchy, current/constraint tail moments for
 flow/bootstrap-current/nullspace error, and an adjoint-normal Krylov basis
@@ -183,7 +183,7 @@ multilevel did not change the GPU final residual, current/constraint moments
 worsened the GPU residual and runtime, and CPU adjoint-normal depth-2 worsened
 the final residual and runtime. None of these variants is promoted. The next
 promotable algorithm must change the physics/error space captured by the coarse
-solve, not simply add more restart cycles or smoother sweeps. The new
+solve, not simply add more restart cycles or smoother sweeps. The
 post-residual-equation hook is the intended bounded probe for that idea: it
 reuses final residual modes and stored operator actions, then fails closed if
 the true residual does not decrease.
@@ -218,13 +218,13 @@ apply cheap local solves, then correct global low-dimensional coupling. It
 should be tested first as a preconditioner action on physics load bases before
 launching long Krylov solves.
 
-The standalone device-Jacobi smoother is now available as the minimal
+The standalone device-Jacobi smoother is available as the minimal
 operator-reuse ``S_local`` prototype. It deliberately validates diagonal
 coverage before construction and performs only JAX CSR matvecs during
 application, so it can probe whether a weaker but genuinely device-resident
 smoother is preferable to host x-block LU/ILU for the hard GPU seed.
 
-The standalone device-QI preconditioner state is now available on top of that
+The standalone device-QI preconditioner state is available on top of that
 smoother. It implements the same local-plus-coarse equation above with ``A_c``
 assembled by device matvec probes. When full device CSR is rejected by the memory
 preflight, a second explicit fallback can build only the coarse ``A Q`` matrix
@@ -241,7 +241,7 @@ matrix-free seed-only fallback is separately enabled with::
 
      SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1
 
-The matrix-free path now has an optional residual enrichment that adds bounded
+The matrix-free path has an optional residual enrichment that adds bounded
 correction-space Krylov vectors without materializing CSR::
 
      SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT=1
@@ -278,12 +278,12 @@ This appends the residual left after the current coarse correction,
 ``r - A Q (A Q)^+ r``, as a new rank-gated candidate direction. It is a
 bounded GCRO-style seed construction, not a production Krylov replacement.
 
-The same matrix-free path now has an opt-in residual-polynomial local smoother::
+The same matrix-free path has an opt-in residual-polynomial local smoother::
 
      SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_minres
      SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=2
 
-This applies a fixed number of pure-JAX sweeps using the current residual as the
+This applies a fixed number of pure-JAX sweeps using the residual as the
 local direction and the scalar that minimizes ``||r - alpha A r||_2``. The
 operation is bounded, device-compatible, and still guarded by the same
 true-residual acceptance gate.
@@ -306,7 +306,7 @@ This augments the local projected space with radial-x and species aggregate
 residual directions, giving the least-squares correction a small global-coupling
 handle while keeping the matvec count bounded by ``MAX_GROUPS``.
 
-The latest CPU hard-seed evidence uses this early hook plus the guarded
+The CPU hard-seed evidence uses this early hook plus the guarded
 ``SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK=1`` path. It writes output
 with residual ``7.80e-10`` and acceptance criterion
 ``post_xblock_abs_floor``. This is a bounded CPU orchestration result, not a true
@@ -551,7 +551,7 @@ until real scale-0.60 CPU/GPU hard-seed artifacts pass the gate below. A
 post-enrichment bounded rerun showed that the remaining active blocker is path
 ordering in the large active-DOF RHSMode=1 FP branch: the expensive host x-block
 rescue can dominate before a bounded QI-device probe produces evidence.
-The latest production-floor follow-up keeps that branch fail-closed but makes it
+The production-floor follow-up keeps that branch fail-closed but makes it
 more bounded and more observable. Host sparse x-block rescue now skips local
 blocks above the default ``30000``-unknown cap instead of repeatedly attempting
 singular high-fill ILU on the largest speed block, escalates local diagonal
@@ -792,15 +792,15 @@ Promotion gate
 Production-resolution QI ladders
 --------------------------------
 
-Current state
+Evidence State
 ~~~~~~~~~~~~~
 
 Bounded QI evidence is strong up to the scale-0.55 CPU/GPU seed-robustness
 ladders, selected scale-0.60 probes, and the first QI ``nfp=2`` kinetic
-promotion artifacts. The checked kinetic lane now includes a two-species
+promotion artifacts. The checked kinetic lane includes a two-species
 ``7 x 7 x 7 x 4`` CPU/GPU/Fortran electron-root artifact and a refined
 ``9 x 9 x 11 x 4`` CPU/GPU/Fortran rung. A second bounded
-``11 x 11 x 13 x 4`` CPU/GPU/Fortran rung now exercises the fixed mid-size
+``11 x 11 x 13 x 4`` CPU/GPU/Fortran rung exercises the fixed mid-size
 RHSMode=1 full-FP dense policy and preserves CPU/GPU/Fortran root agreement at
 fixed resolution. The low-to-refined and refined-to-next-refined root drifts
 remain visible, so these rungs are persistence and solver-policy evidence

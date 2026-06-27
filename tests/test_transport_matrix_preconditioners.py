@@ -146,6 +146,29 @@ def _transport_operator(*, include_fp: bool = True) -> SimpleNamespace:
     )
 
 
+def _attach_exb_terms(op: SimpleNamespace, *, use_dkes: bool) -> None:
+    shape = (int(op.n_theta), int(op.n_zeta))
+    ones = jnp.ones(shape, dtype=jnp.float64)
+    exb_common = dict(
+        use_dkes_exb_drift=bool(use_dkes),
+        d_hat=op.d_hat,
+        b_hat=op.b_hat,
+        b_hat_sub_theta=op.b_hat_sub_theta,
+        b_hat_sub_zeta=op.b_hat_sub_zeta,
+        fsab_hat2=jnp.asarray(op.fsab_hat2, dtype=jnp.float64),
+        alpha=jnp.asarray(1.2, dtype=jnp.float64),
+        delta=jnp.asarray(0.35, dtype=jnp.float64),
+        dphi_hat_dpsi_hat=jnp.asarray(0.8, dtype=jnp.float64),
+    )
+    op.fblock.exb_theta = SimpleNamespace(**exb_common)
+    op.fblock.exb_zeta = SimpleNamespace(**exb_common)
+    op.fblock.exb_theta.b_hat_sub_zeta = 0.9 * ones
+    op.fblock.exb_zeta.b_hat_sub_theta = 1.1 * ones
+    op.alpha = 1.2
+    op.delta = 0.35
+    op.dphi_hat_dpsi_hat = 0.8
+
+
 def _clear_transport_caches() -> None:
     _RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST_CACHE.clear()
     _RHSMODE23_PRECOND_CACHE.clear()
@@ -165,6 +188,19 @@ def _clear_transport_caches() -> None:
 
 def _vector(op: SimpleNamespace) -> jnp.ndarray:
     return jnp.sin(0.11 * jnp.arange(op.total_size, dtype=jnp.float64)) + 0.05
+
+
+def _reduction_pair(op: SimpleNamespace, stride: int = 3):
+    active = jnp.arange(op.total_size, dtype=jnp.int32)[1::stride]
+
+    def reduce_full(candidate: jnp.ndarray) -> jnp.ndarray:
+        return candidate[active]
+
+    def expand_reduced(candidate: jnp.ndarray) -> jnp.ndarray:
+        expanded = jnp.zeros((op.total_size,), dtype=jnp.float64)
+        return expanded.at[active].set(candidate)
+
+    return active, reduce_full, expand_reduced
 
 
 def test_transport_collision_diag_matches_fp_pas_formula_and_masks_inactive_l(monkeypatch) -> None:
@@ -199,6 +235,29 @@ def test_transport_collision_diag_matches_fp_pas_formula_and_masks_inactive_l(mo
     assert len(_TRANSPORT_PRECOND_CACHE) == 1
 
 
+def test_transport_preconditioner_reduced_views_match_full_projection(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PRECOND_REG", "0")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_LOW_RANK_K", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_TZFFT_REG", "0.2")
+    _clear_transport_caches()
+    op = _transport_operator()
+    vector = _vector(op)
+    _, reduce_full, expand_reduced = _reduction_pair(op)
+    reduced_rhs = reduce_full(vector)
+
+    builders = (
+        tm.build_rhsmode23_collision_preconditioner,
+        tm.build_rhsmode23_sxblock_preconditioner,
+        tm.build_rhsmode23_tzfft_preconditioner,
+        tm.build_rhsmode23_fp_tzfft_line_preconditioner,
+    )
+    for builder in builders:
+        full = builder(op=op)
+        reduced = builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+        expected = reduce_full(full(expand_reduced(reduced_rhs)))
+        np.testing.assert_allclose(np.asarray(reduced(reduced_rhs)), np.asarray(expected), rtol=3e-6, atol=3e-6)
+
+
 def test_transport_sxblock_exact_low_rank_and_no_fp_fallback(monkeypatch) -> None:
     op = _transport_operator()
     vector = _vector(op)
@@ -225,6 +284,37 @@ def test_transport_sxblock_exact_low_rank_and_no_fp_fallback(monkeypatch) -> Non
     fallback = tm.build_rhsmode23_sxblock_preconditioner(op=no_fp)
     no_fp_vector = _vector(no_fp)
     np.testing.assert_allclose(np.asarray(fallback(no_fp_vector)), np.asarray(collision(no_fp_vector)))
+
+
+def test_transport_singular_collision_blocks_use_pseudoinverse_fallback(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PRECOND_REG", "0")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_LOW_RANK_K", "0")
+    _clear_transport_caches()
+    op = _transport_operator()
+    op.fblock.identity_shift = 0.0
+    op.fblock.pas = None
+    op.fblock.fp = SimpleNamespace(mat=jnp.zeros_like(op.fblock.fp.mat))
+    vector = _vector(op)
+
+    sxblock = tm.build_rhsmode23_sxblock_preconditioner(op=op)
+    sxblock_result = np.asarray(sxblock(vector))
+    assert np.all(np.isfinite(sxblock_result))
+    np.testing.assert_allclose(sxblock_result[op.f_size :], np.asarray(vector[op.f_size :]))
+
+    real_inv = np.linalg.inv
+
+    def raise_for_coarse_blocks(matrix: np.ndarray) -> np.ndarray:
+        if np.asarray(matrix).shape == (2, 2):
+            raise np.linalg.LinAlgError("synthetic coarse singularity")
+        return real_inv(matrix)
+
+    op.fblock.identity_shift = 0.5
+    monkeypatch.setattr(tm.np.linalg, "inv", raise_for_coarse_blocks)
+    _clear_transport_caches()
+    xmg = tm.build_rhsmode23_xmg_preconditioner(op=op)
+    xmg_result = np.asarray(xmg(vector))
+    assert np.all(np.isfinite(xmg_result))
+    np.testing.assert_allclose(xmg_result[op.f_size :], np.asarray(vector[op.f_size :]))
 
 
 def test_transport_xmg_preconditioner_uses_coarse_grid_and_reduced_projection(monkeypatch) -> None:
@@ -320,6 +410,28 @@ def test_transport_tzfft_and_fp_tzfft_preconditioners_are_finite_and_cached(monk
     assert fp_tzfft_result.shape == vector.shape
     assert bool(jnp.all(jnp.isfinite(fp_tzfft_result)))
     assert len(_TRANSPORT_FP_TZFFT_PRECOND_CACHE) == 1
+
+
+def test_transport_fft_preconditioners_include_exb_and_dkes_branches(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_TZFFT_REG", "0.25")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_MAX_MB", "128")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_MAX_MB", "128")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_DTYPE", "float64")
+
+    for use_dkes in (False, True):
+        _clear_transport_caches()
+        op = _transport_operator()
+        _attach_exb_terms(op, use_dkes=use_dkes)
+        vector = _vector(op)
+
+        tzfft = tm.build_rhsmode23_tzfft_preconditioner(op=op)
+        fp_tzfft = tm.build_rhsmode23_fp_tzfft_preconditioner(op=op)
+        fp_line = tm.build_rhsmode23_fp_tzfft_line_preconditioner(op=op)
+
+        for preconditioner in (tzfft, fp_tzfft, fp_line):
+            result = preconditioner(vector)
+            assert result.shape == vector.shape
+            assert bool(jnp.all(jnp.isfinite(result)))
 
 
 def test_transport_fp_preconditioners_respect_memory_caps_and_fallbacks(monkeypatch) -> None:

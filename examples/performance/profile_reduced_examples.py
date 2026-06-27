@@ -211,7 +211,7 @@ def main() -> int:
 
     out_json = Path(args.out_json)
     out_json.parent.mkdir(parents=True, exist_ok=True)
-    # Deduplicate by input path to keep the latest result.
+    # Deduplicate by input path to keep the most recent result.
     merged: dict[str, dict[str, object]] = {}
     for entry in results:
         if isinstance(entry, dict) and "input" in entry:
