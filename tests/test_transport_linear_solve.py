@@ -372,9 +372,9 @@ def test_transport_host_gmres_left_preconditioned_progress(monkeypatch) -> None:
         kwargs["progress_callback"](1, 0.25)
         return np.asarray([1.0, 2.0]), 10.0, 0.0, [0.25]
 
-    monkeypatch.setattr(transport_linear, "explicit_left_preconditioned_gmres_scipy", fake_left_gmres)
+    monkeypatch.setattr(transport_linear_system, "explicit_left_preconditioned_gmres_scipy", fake_left_gmres)
     monkeypatch.setattr(
-        transport_linear,
+        transport_linear_system,
         "transport_host_gmres_accepts_preconditioned_residual",
         lambda **_kwargs: True,
     )
@@ -404,7 +404,7 @@ def test_transport_host_gmres_plain_path_uses_true_residual(monkeypatch) -> None
     def fake_gmres(**_kwargs):
         return np.asarray([2.0, -1.0]), 1.5, [1.5]
 
-    monkeypatch.setattr(transport_linear, "gmres_solve_with_history_scipy", fake_gmres)
+    monkeypatch.setattr(transport_linear_system, "gmres_solve_with_history_scipy", fake_gmres)
     result, residual = transport_host_gmres_solve(
         op=SimpleNamespace(rhs_mode=3),
         matvec_fn=lambda x: 2.0 * x,
