@@ -531,6 +531,76 @@ def test_transport_sparse_direct_solve_uses_sparse_ilu_refinement_path(monkeypat
     assert float(result.residual_norm) == 0.0
 
 
+def test_transport_sparse_direct_solve_retries_float64_when_float32_true_residual_fails(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_PATTERN", "0")
+    factor_dtypes: list[np.dtype] = []
+
+    def fake_sparse_ilu_from_matvec(**kwargs):
+        factor_dtype = np.dtype(kwargs["factor_dtype"])
+        factor_dtypes.append(factor_dtype)
+        return np.eye(2), None, {"factor_dtype": factor_dtype.name}, None, None, None, None
+
+    def fake_refined_solve(*, rhs_vec, factor_dtype, **_kwargs):
+        rhs = np.asarray(rhs_vec, dtype=np.float64)
+        if np.dtype(factor_dtype) == np.dtype(np.float32):
+            return np.zeros_like(rhs), 10.0
+        return rhs.copy(), 0.0
+
+    context = _context(
+        build_sparse_ilu_from_matvec=fake_sparse_ilu_from_matvec,
+        host_sparse_direct_solve_with_refinement=fake_refined_solve,
+        sparse_factor_dtype=lambda **_kwargs: np.dtype(np.float32),
+        sparse_direct_needs_float64_retry=lambda *, factor_dtype, residual_norm, target_true: (
+            np.dtype(factor_dtype) == np.dtype(np.float32) and float(residual_norm) > float(target_true)
+        ),
+    )
+    rhs = jnp.asarray([1.0, -2.0], dtype=jnp.float64)
+
+    result = transport_sparse_direct_solve(
+        context=context,
+        matvec_fn=lambda x: x,
+        b_vec=rhs,
+        n=2,
+        dtype=jnp.float64,
+        cache_key=("retry",),
+        active_indices_np=None,
+        tol_val=1.0e-10,
+        atol_val=1.0e-12,
+        restart_val=10,
+        maxiter_val=20,
+        precondition_side_val="left",
+    )
+
+    assert factor_dtypes == [np.dtype(np.float32), np.dtype(np.float64)]
+    np.testing.assert_allclose(np.asarray(result.x), np.asarray(rhs), rtol=1.0e-12, atol=1.0e-12)
+    assert float(result.residual_norm) == 0.0
+
+
+def test_transport_sparse_direct_solve_fails_fast_when_sparse_factors_are_unavailable(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_PATTERN", "0")
+
+    def no_factors(**_kwargs):
+        return np.eye(2), None, None, None, None, None, None
+
+    context = _context(build_sparse_ilu_from_matvec=no_factors)
+
+    with np.testing.assert_raises(RuntimeError):
+        transport_sparse_direct_solve(
+            context=context,
+            matvec_fn=lambda x: x,
+            b_vec=jnp.ones((2,), dtype=jnp.float64),
+            n=2,
+            dtype=jnp.float64,
+            cache_key=("missing-factor",),
+            active_indices_np=None,
+            tol_val=1.0e-10,
+            atol_val=1.0e-12,
+            restart_val=10,
+            maxiter_val=20,
+            precondition_side_val="left",
+        )
+
+
 def test_transport_sparse_direct_context_solve_method_uses_true_residual_gate(monkeypatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_PATTERN", "0")
     context = _context()

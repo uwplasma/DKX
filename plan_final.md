@@ -2883,6 +2883,11 @@ Current completion status:
   memory admission, and one-dimensional setup-probe admission. The expanded
   active-factor suite reports `27 passed`, and the transport preconditioner
   guard bundle reports `137 passed` without production solves.
+- RHSMode 2/3 sparse-direct solve coverage was strengthened with deterministic
+  tests for float32-factor true-residual rejection followed by float64 retry,
+  and for fail-fast behavior when sparse factors are unavailable. The adjacent
+  transport solve/parallel/dense/iteration suite reports `59 passed` without
+  adding production-size solves to CI.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
