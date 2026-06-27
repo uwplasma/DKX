@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.problems.profile_setup import (
     ProfileResponseLinearProblemSetupContext,
+    RHS1ActiveReducedSystemSetupContext,
     SPARSE_HOST_SAFE_SOLVE_METHODS,
+    build_rhs1_active_reduced_system_setup,
     equilibrium_name_hint_from_namelist,
     geometry_scheme_hint_from_namelist,
     materialize_profile_response_linear_problem,
@@ -40,6 +43,13 @@ class FakeFBlock:
 
 
 @dataclass(frozen=True)
+class FakeActiveFBlock:
+    fp: object | None
+    pas: object | None
+    f_shape: tuple[int, int, int, int, int]
+
+
+@dataclass(frozen=True)
 class FakeOperator:
     rhs_mode: int
     include_phi1: bool
@@ -50,6 +60,21 @@ class FakeOperator:
     n_zeta: int = 1
     n_species: int = 1
     f_size: int = 0
+
+
+@dataclass(frozen=True)
+class FakeActiveOperator:
+    rhs_mode: int
+    include_phi1: bool
+    total_size: int
+    f_size: int
+    extra_size: int
+    n_x: int
+    point_at_x0: bool
+    theta_weights: jnp.ndarray
+    zeta_weights: jnp.ndarray
+    d_hat: jnp.ndarray
+    fblock: FakeActiveFBlock
 
 
 class FakeTimer:
@@ -481,6 +506,109 @@ def test_rhs1_recycle_basis_setup_filters_shape_and_keeps_latest_vectors() -> No
         asarray=np.asarray,
     )
     assert disabled.basis == ()
+
+
+def test_rhs1_active_reduced_system_setup_compacts_full_operator() -> None:
+    op = FakeActiveOperator(
+        rhs_mode=1,
+        include_phi1=False,
+        total_size=5,
+        f_size=5,
+        extra_size=0,
+        n_x=1,
+        point_at_x0=False,
+        theta_weights=jnp.ones((1,), dtype=jnp.float64),
+        zeta_weights=jnp.ones((1,), dtype=jnp.float64),
+        d_hat=jnp.ones((1, 1), dtype=jnp.float64),
+        fblock=FakeActiveFBlock(fp=object(), pas=None, f_shape=(1, 1, 5, 1, 1)),
+    )
+    active_idx = jnp.asarray([0, 2, 4], dtype=jnp.int32)
+    full_to_active = jnp.asarray([1, 0, 2, 0, 3], dtype=jnp.int32)
+    rhs = jnp.asarray([1.0, 2.0, 3.0, 4.0, 5.0], dtype=jnp.float64)
+    x0 = jnp.asarray([10.0, 11.0, 12.0, 13.0, 14.0], dtype=jnp.float64)
+
+    setup = build_rhs1_active_reduced_system_setup(
+        RHS1ActiveReducedSystemSetupContext(
+            op=op,
+            rhs=rhs,
+            x0=x0,
+            mv=lambda x: 2.0 * x + 1.0,
+            active_idx_jnp=active_idx,
+            full_to_active_jnp=full_to_active,
+            active_size=3,
+            use_pas_projection=False,
+            recycle_basis=(),
+            tol=1.0e-1,
+            atol=0.0,
+        )
+    )
+
+    np.testing.assert_allclose(np.asarray(setup.rhs_reduced), [1.0, 3.0, 5.0])
+    np.testing.assert_allclose(np.asarray(setup.x0_reduced), [10.0, 12.0, 14.0])
+    np.testing.assert_allclose(
+        np.asarray(setup.expand_reduced(jnp.asarray([7.0, 8.0, 9.0]))),
+        [7.0, 0.0, 8.0, 0.0, 9.0],
+    )
+    np.testing.assert_allclose(
+        np.asarray(setup.mv_reduced(jnp.asarray([7.0, 8.0, 9.0]))),
+        [15.0, 17.0, 19.0],
+    )
+    assert np.isclose(setup.target_reduced, 1.0e-1 * np.sqrt(35.0))
+    assert np.isclose(setup.target_stage2, 1.0e-1)
+
+
+def test_rhs1_active_reduced_system_setup_projects_pas_flux_surface_average() -> None:
+    op = FakeActiveOperator(
+        rhs_mode=1,
+        include_phi1=False,
+        total_size=9,
+        f_size=8,
+        extra_size=1,
+        n_x=2,
+        point_at_x0=False,
+        theta_weights=jnp.ones((2,), dtype=jnp.float64),
+        zeta_weights=jnp.ones((2,), dtype=jnp.float64),
+        d_hat=jnp.ones((2, 2), dtype=jnp.float64),
+        fblock=FakeActiveFBlock(fp=None, pas=object(), f_shape=(1, 2, 1, 2, 2)),
+    )
+    active_idx = jnp.arange(8, dtype=jnp.int32)
+    full_to_active = jnp.arange(1, 9, dtype=jnp.int32)
+    rhs = jnp.arange(1.0, 10.0, dtype=jnp.float64)
+
+    setup = build_rhs1_active_reduced_system_setup(
+        RHS1ActiveReducedSystemSetupContext(
+            op=op,
+            rhs=rhs,
+            x0=None,
+            mv=lambda x: x,
+            active_idx_jnp=active_idx,
+            full_to_active_jnp=full_to_active,
+            active_size=8,
+            use_pas_projection=True,
+            recycle_basis=(rhs,),
+            tol=1.0e-3,
+            atol=0.0,
+        )
+    )
+
+    expected_projected = np.asarray(
+        [-1.5, -0.5, 0.5, 1.5, -1.5, -0.5, 0.5, 1.5]
+    )
+    np.testing.assert_allclose(np.asarray(setup.rhs_reduced), expected_projected)
+    np.testing.assert_allclose(
+        np.asarray(setup.mv_reduced(jnp.asarray(rhs[:8]))), expected_projected
+    )
+    expanded = np.asarray(setup.expand_reduced(jnp.asarray(rhs[:8])))
+    np.testing.assert_allclose(expanded[:8], np.asarray(rhs[:8]))
+    assert expanded[8] == 0.0
+
+    projected_precond = setup.wrap_pas_preconditioner(lambda v: v + 2.0)
+    np.testing.assert_allclose(
+        np.asarray(projected_precond(jnp.asarray(setup.rhs_reduced))),
+        expected_projected,
+    )
+    assert setup.x0_reduced is not None
+    np.testing.assert_allclose(np.asarray(setup.x0_reduced), expected_projected)
 
 
 def test_rhs1_reduced_mode_shape_setup_detects_truncated_pitch_grid() -> None:

@@ -63,6 +63,17 @@ The main structural refactor is functionally complete:
   little room for additional slow solve tests; the 95% coverage push should use
   bounded unit, policy, schema, and frozen-fixture tests or delete obsolete
   code rather than adding expensive production solves to default CI.
+- The active reduced-system setup used by RHSMode=1 active-DOF and PAS
+  projection solves is now owned by `problems/profile_setup.py` as
+  `build_rhs1_active_reduced_system_setup`. Focused validation passed:
+  `tests/test_profile_response_setup.py` as `20 passed in 1.26 s`, the
+  source-tree/import-contract bundle as `46 passed in 3.35 s`, the driver-level
+  profile/recycle bundle as `27 passed in 5.38 s`, and the combined focused
+  tranche as `73 passed in 8.38 s`. `ruff`, `compileall`, and `git diff
+  --check` also passed for the changed files.
+- The root README runtime/memory summary no longer carries branch-history or
+  benchmark-process phrasing; detailed audit and regeneration procedures belong
+  in the performance, parity, and Fortran-example docs.
 - The CI coverage floor remains lower than the final target until measured
   margin is available; the review target is `95%` meaningful package coverage
   while keeping GitHub Actions under 10 minutes.
@@ -140,7 +151,7 @@ adding implementation complexity.
 
 ### Lane 1 - Review-Ready Refactor
 
-Status: 98%.
+Status: 98.5%.
 
 Goal: finish the PR with a smaller, clearer source tree without changing
 physics, outputs, tolerances, solver defaults, differentiable Python paths,
@@ -151,11 +162,15 @@ Latest AST audit:
 - Folder depth is no longer the blocker: the package has one-level domain
   folders only and no `__init__.py`-only source packages.
 - The remaining structural blocker is owner size. The largest retained owners
-  are `problems/profile_solve.py` (`5428` lines, with
-  `solve_v3_full_system_linear_gmres` spanning `4521` lines),
+  are `problems/profile_solve.py` (`5299` lines, with
+  `solve_v3_full_system_linear_gmres` spanning `4390` lines),
   `outputs/writer.py` (`4268` lines, with `write_sfincs_jax_output_h5`
   spanning `2559` lines), `solvers/explicit_sparse.py` (`5056` lines), and
   `problems/transport_solve.py` (`3191` lines).
+- The active-DOF/PAS-projection reduced-system setup has been extracted from
+  the driver into `problems/profile_setup.py`. This is a safe first reduction
+  and gives the solver driver a tested setup seam, but it is not enough by
+  itself to make the driver review-sized.
 - The next consolidation pass must reduce those owner sizes using existing
   domain files. Do not add more package folders or helper-only files.
 
@@ -166,11 +181,11 @@ Remaining work:
   or an existing profile-sparse owner. Acceptance: `profile_solve.py` drops by
   at least `300` lines, no new files, no behavior changes, focused profile
   policy/sparse/dense tests pass.
-- Tranche 2: extract the active-DOF reduced-system construction and recycled
-  initial-guess setup from `solve_v3_full_system_linear_gmres` into an existing
-  profile owner. Acceptance: `profile_solve.py` drops by another `300` lines,
-  PAS projection and active-DOF tests pass, and full-system parity fixtures are
-  unchanged.
+- Tranche 2: continue active-system consolidation only if a second coherent
+  setup seam can delete more code from `profile_solve.py` than it adds to
+  `profile_setup.py`. The completed subtranche already covers active compaction,
+  PAS projection, reduced operator closures, recycled initial guesses, and
+  reduced residual targets.
 - Tranche 3: extract `write_sfincs_jax_output_h5` phase orchestration into
   existing `outputs/rhsmode1.py`, `outputs/transport.py`, and `outputs/formats.py`
   only where code can be deleted from `outputs/writer.py`. Acceptance:

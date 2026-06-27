@@ -240,8 +240,10 @@ from sfincs_jax.problems.profile_setup import (
     SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS as _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS,
     STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS as _STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS,
     ProfileResponseLinearProblemSetupContext, build_rhs1_active_dof_state as _build_rhs1_active_dof_state_compat,
-    expand_reduced_with_map, fp_pitch_mode_active_indices, materialize_profile_response_linear_problem,
-    project_pas_constraint_f, reduce_full_with_indices, resolve_rhs1_active_problem_setup,
+    RHS1ActiveReducedSystemSetupContext, build_rhs1_active_reduced_system_setup,
+    expand_reduced_with_map, fp_pitch_mode_active_indices,
+    materialize_profile_response_linear_problem, reduce_full_with_indices,
+    resolve_rhs1_active_problem_setup,
     resolve_rhs1_domain_decomposition_setup, resolve_rhs1_initial_route_setup,
     resolve_rhs1_post_active_solve_policy_setup, resolve_rhs1_recycle_basis_setup,
     resolve_rhs1_reduced_mode_shape_setup,
@@ -577,7 +579,7 @@ from sfincs_jax.problems.transport_linear_system import (
     _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle,
 )
 from sfincs_jax.operators.profile_system import (
-    _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1, _matvec_shard_axis, sharding_constraints,
+    _source_basis_constraint_scheme_1, _matvec_shard_axis, sharding_constraints,
 )
 from sfincs_jax.profiling import Timer
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
@@ -2045,161 +2047,30 @@ def solve_v3_full_system_linear_gmres(
     if use_active_dof_mode:
         assert active_idx_jnp is not None
         assert full_to_active_jnp is not None
-
-        def reduce_full(v_full: jnp.ndarray) -> jnp.ndarray:
-            return reduce_full_with_indices(v_full, active_idx_jnp)
-
-        def _wrap_pas_precond(
-            precond_fn: Callable[[jnp.ndarray], jnp.ndarray],
-        ) -> Callable[[jnp.ndarray], jnp.ndarray]:
-            return precond_fn
-
-        if use_pas_projection:
-            fs_factor = _fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat)
-            fs_sum = jnp.sum(fs_factor)
-            fs_sum_safe = jnp.where(
-                fs_sum != 0, fs_sum, jnp.asarray(1.0, dtype=jnp.float64)
+        reduced_system_setup = build_rhs1_active_reduced_system_setup(
+            RHS1ActiveReducedSystemSetupContext(
+                op=op,
+                rhs=rhs,
+                x0=x0,
+                mv=mv,
+                active_idx_jnp=active_idx_jnp,
+                full_to_active_jnp=full_to_active_jnp,
+                active_size=int(active_size),
+                use_pas_projection=bool(use_pas_projection),
+                recycle_basis=tuple(recycle_basis_use),
+                tol=float(tol),
+                atol=float(atol),
             )
-            ix0 = _ix_min(bool(op.point_at_x0))
-            mask_x = (jnp.arange(int(op.n_x)) >= ix0).astype(jnp.float64)
-
-            def _project_pas_f(f_flat: jnp.ndarray) -> jnp.ndarray:
-                return project_pas_constraint_f(
-                    f_flat,
-                    f_shape=op.fblock.f_shape,
-                    fs_factor=fs_factor,
-                    fs_sum_safe=fs_sum_safe,
-                    mask_x=mask_x,
-                )
-
-            def _expand_active_f(v_reduced: jnp.ndarray) -> jnp.ndarray:
-                return expand_reduced_with_map(v_reduced, full_to_active_jnp)
-
-            def _project_reduced(v_reduced: jnp.ndarray) -> jnp.ndarray:
-                f_full = _expand_active_f(v_reduced)
-                f_proj = _project_pas_f(f_full)
-                return reduce_full(f_proj)
-
-            def _wrap_pas_precond(
-                precond_fn: Callable[[jnp.ndarray], jnp.ndarray],
-            ) -> Callable[[jnp.ndarray], jnp.ndarray]:
-                def _apply(v_reduced: jnp.ndarray) -> jnp.ndarray:
-                    z_reduced = precond_fn(v_reduced)
-                    return _project_reduced(z_reduced)
-
-                return _apply
-
-            def expand_reduced(v_reduced: jnp.ndarray) -> jnp.ndarray:
-                f_full = _expand_active_f(v_reduced)
-                if int(op.extra_size) > 0:
-                    zeros_e = jnp.zeros((int(op.extra_size),), dtype=v_reduced.dtype)
-                    return jnp.concatenate([f_full, zeros_e], axis=0)
-                return f_full
-
-            zeros_extra = jnp.zeros((int(op.extra_size),), dtype=jnp.float64)
-
-            def mv_reduced(x_reduced: jnp.ndarray) -> jnp.ndarray:
-                f_full = _expand_active_f(x_reduced)
-                f_proj = _project_pas_f(f_full)
-                x_full = (
-                    jnp.concatenate([f_proj, zeros_extra], axis=0)
-                    if int(op.extra_size) > 0
-                    else f_proj
-                )
-                y_full = mv(x_full)
-                y_f = y_full[: op.f_size]
-                y_proj = _project_pas_f(y_f)
-                return reduce_full(y_proj)
-
-            rhs_f = rhs[: op.f_size]
-            rhs_proj = _project_pas_f(rhs_f)
-            rhs_reduced = reduce_full(rhs_proj)
-            x0_reduced = None
-            if x0 is not None:
-                x0_arr = jnp.asarray(x0)
-                if x0_arr.shape == (active_size,):
-                    x0_reduced = _project_reduced(x0_arr)
-                elif x0_arr.shape == (op.total_size,):
-                    f0_proj = _project_pas_f(x0_arr[: op.f_size])
-                    x0_reduced = reduce_full(f0_proj)
-                elif x0_arr.shape == (op.f_size,):
-                    f0_proj = _project_pas_f(x0_arr)
-                    x0_reduced = reduce_full(f0_proj)
-            if recycle_basis_use:
-                basis_reduced: list[jnp.ndarray] = []
-                for vec in recycle_basis_use:
-                    if vec.shape != (op.total_size,):
-                        continue
-                    f_proj = _project_pas_f(vec[: op.f_size])
-                    basis_reduced.append(reduce_full(f_proj))
-                if basis_reduced:
-                    basis_au = [mv_reduced(b) for b in basis_reduced]
-                    x0_recycled = _recycled_initial_guess(
-                        rhs_reduced, basis_reduced, basis_au
-                    )
-                    if x0_recycled is not None:
-                        if x0_reduced is None:
-                            x0_reduced = x0_recycled
-                        else:
-                            r0 = jnp.linalg.norm(mv_reduced(x0_reduced) - rhs_reduced)
-                            r1 = jnp.linalg.norm(mv_reduced(x0_recycled) - rhs_reduced)
-                            if jnp.isfinite(r1) and (
-                                not jnp.isfinite(r0) or float(r1) < float(r0)
-                            ):
-                                x0_reduced = x0_recycled
-        else:
-
-            def expand_reduced(v_reduced: jnp.ndarray) -> jnp.ndarray:
-                return expand_reduced_with_map(v_reduced, full_to_active_jnp)
-
-            def mv_reduced(x_reduced: jnp.ndarray) -> jnp.ndarray:
-                return reduce_full(mv(expand_reduced(x_reduced)))
-
-            rhs_reduced = reduce_full(rhs)
-            x0_reduced = None
-            if x0 is not None:
-                x0_arr = jnp.asarray(x0)
-                if x0_arr.shape == (active_size,):
-                    x0_reduced = x0_arr
-                elif x0_arr.shape == (op.total_size,):
-                    x0_reduced = reduce_full(x0_arr)
-                elif use_pas_projection and x0_arr.shape == (op.f_size,):
-                    x0_reduced = reduce_full(x0_arr)
-            if recycle_basis_use:
-                basis_reduced = []
-                for vec in recycle_basis_use:
-                    if vec.shape != (op.total_size,):
-                        continue
-                    basis_reduced.append(reduce_full(vec))
-                if basis_reduced:
-                    basis_au = [mv_reduced(b) for b in basis_reduced]
-                    x0_recycled = _recycled_initial_guess(
-                        rhs_reduced, basis_reduced, basis_au
-                    )
-                    if x0_recycled is not None:
-                        if x0_reduced is None:
-                            x0_reduced = x0_recycled
-                        else:
-                            r0 = jnp.linalg.norm(mv_reduced(x0_reduced) - rhs_reduced)
-                            r1 = jnp.linalg.norm(mv_reduced(x0_recycled) - rhs_reduced)
-                            if jnp.isfinite(r1) and (
-                                not jnp.isfinite(r0) or float(r1) < float(r0)
-                            ):
-                                x0_reduced = x0_recycled
-        target_reduced = max(
-            float(atol), float(tol) * float(jnp.linalg.norm(rhs_reduced))
         )
-        target_stage2 = float(target_reduced)
+        reduce_full = reduced_system_setup.reduce_full
+        expand_reduced = reduced_system_setup.expand_reduced
+        mv_reduced = reduced_system_setup.mv_reduced
+        _wrap_pas_precond = reduced_system_setup.wrap_pas_preconditioner
+        rhs_reduced = reduced_system_setup.rhs_reduced
+        x0_reduced = reduced_system_setup.x0_reduced
+        target_reduced = float(reduced_system_setup.target_reduced)
+        target_stage2 = float(reduced_system_setup.target_stage2)
         res_reduced: GMRESSolveResult | None = None
-        if (
-            op.fblock.fp is not None
-            and op.fblock.pas is None
-            and (not bool(op.include_phi1))
-        ):
-            # FP RHS can have large norms; enforce a stricter absolute target for
-            # stage2/strong-preconditioner decisions to avoid premature convergence
-            # with loose relative norms.
-            target_stage2 = min(float(target_stage2), max(float(atol), float(tol)))
         dense_fallback_max = _rhsmode1_dense_fallback_max(op)
         dense_backend_allowed = _rhsmode1_dense_backend_allowed()
         host_dense_fallback_allowed = _rhsmode1_host_dense_fallback_allowed()
