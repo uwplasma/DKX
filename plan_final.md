@@ -2863,6 +2863,13 @@ Current completion status:
   example folders still reports pre-existing E402/import-order debt from
   executable `sys.path` bootstraps; keep that as a scoped examples-style cleanup
   rather than mixing it into solver/module refactoring.
+- Transport finalization coverage was strengthened with bounded deterministic
+  tests for constraint projection policy, full/reduced RHS finalization
+  bookkeeping, recycle/streaming side effects, streamed diagnostics, and
+  chunked non-streamed postsolve diagnostics. The focused transport guard passed
+  without full solves; local `pytest --cov` for this slice still aborts with the
+  known no-traceback JAX/coverage exit 134, so CI coverage shards remain the
+  authoritative coverage signal.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
