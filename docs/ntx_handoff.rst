@@ -72,11 +72,11 @@ profiler-finalization hook fails.
 What Is Closed
 --------------
 
-- Output writes now include solver metadata fields such as
+- Output writes include solver metadata fields such as
   ``linearSolverMethod``, ``linearSolverResidualNorm``,
   ``linearSolverResidualTarget``, ``linearSolverConverged``, and
   ``linearSolverAccepted``.
-- Sparse-PC outputs and solver-trace sidecars now also expose setup time, solve
+- Sparse-PC outputs and solver-trace sidecars expose setup time, solve
   time, total elapsed time, matvec count, sparse-pattern nonzeros, sparse-pattern
   row-density counters, sparse-pattern build time, and sparse preconditioner
   factorization time.  This makes NTX profile-current handoffs auditable without
