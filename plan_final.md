@@ -538,6 +538,15 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   examples READMEs, `docs/parallelism.rst`, and `docs/release_checklist.rst`.
   The examples/import/source/doc-claim guard reports `37 passed` in `1.88 s`,
   and Ruff passes on the changed contract test.
+- The seventy-eighth post-audit coverage tranche added public sensitivity
+  admission gates. `tests/test_sensitivity.py` now covers dense observable
+  evaluation with custom solvers, immutable certificate metadata, dense
+  derivative shape failures, finite-difference-step validation, matrix-free
+  size guards, bad solve-vector length rejection, bad derivative-action length
+  rejection, and bad transpose-solve length rejection. These tests protect the
+  RHSMode 4/5 and ambipolar derivative API used by optimization workflows
+  without running production solves. The focused sensitivity suite reports
+  `32 passed` in `36.95 s`, and Ruff passes on the touched test module.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.

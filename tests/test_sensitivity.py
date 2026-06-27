@@ -32,11 +32,13 @@ from sfincs_jax.sensitivity import (
     LinearObservableSystem,
     MatrixFreeLinearObservableSystem,
     adjoint_dot_product_check,
+    evaluate_linear_observable,
     evaluate_matrix_free_linear_observable,
     fortran_v3_adjoint_sensitivity_output_fields,
     fortran_v3_adjoint_sensitivity_output_ranks,
     implicit_linear_observable_derivative,
     implicit_linear_observable_derivative_from_builder,
+    implicit_matrix_free_linear_observable_derivative,
     implicit_matrix_free_linear_observable_derivative_from_builder,
     probe_linear_observable_vector,
     validate_fortran_v3_adjoint_sensitivity_constraints,
@@ -1139,3 +1141,114 @@ def test_implicit_linear_observable_derivative_rejects_incompatible_shapes() -> 
             rhs_derivative=bp,
             observable_vector=c0,
         )
+
+    with pytest.raises(ValueError, match="matrix and matrix_derivative"):
+        implicit_linear_observable_derivative(
+            matrix=a0 + p0 * ap,
+            rhs=b0,
+            matrix_derivative=ap[:2, :2],
+            rhs_derivative=bp,
+            observable_vector=c0,
+        )
+
+    with pytest.raises(ValueError, match="rhs_derivative length"):
+        implicit_linear_observable_derivative(
+            matrix=a0 + p0 * ap,
+            rhs=b0,
+            matrix_derivative=ap,
+            rhs_derivative=bp[:2],
+            observable_vector=c0,
+        )
+
+    with pytest.raises(ValueError, match="observable_vector_derivative length"):
+        implicit_linear_observable_derivative(
+            matrix=a0 + p0 * ap,
+            rhs=b0,
+            matrix_derivative=ap,
+            rhs_derivative=bp,
+            observable_vector=c0,
+            observable_vector_derivative=c0[:2],
+        )
+
+    with pytest.raises(ValueError, match="finite_difference_step"):
+        implicit_linear_observable_derivative(
+            matrix=a0 + p0 * ap,
+            rhs=b0,
+            matrix_derivative=ap,
+            rhs_derivative=bp,
+            observable_vector=c0,
+            finite_difference_observable=lambda value: float(value),
+            finite_difference_step=-1.0,
+        )
+
+
+def test_evaluate_linear_observable_uses_custom_solve_and_rejects_bad_shapes() -> None:
+    matrix = jnp.asarray([[2.0, 0.0], [0.0, 4.0]], dtype=jnp.float64)
+    rhs = jnp.asarray([2.0, 8.0], dtype=jnp.float64)
+    observable = jnp.asarray([3.0, -1.0], dtype=jnp.float64)
+    system = LinearObservableSystem(
+        parameter=0.0,
+        matrix=matrix,
+        rhs=rhs,
+        matrix_derivative=jnp.zeros_like(matrix),
+        rhs_derivative=jnp.zeros_like(rhs),
+        observable_vector=observable,
+        observable_offset=0.5,
+        metadata={"gate": "dense_observable_shape_contract"},
+    )
+    calls: list[tuple[tuple[int, ...], tuple[int, ...]]] = []
+
+    def custom_solve(a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
+        calls.append((tuple(a.shape), tuple(b.shape)))
+        return jnp.asarray([1.0, 2.0], dtype=jnp.float64)
+
+    value = evaluate_linear_observable(system, solve=custom_solve)
+
+    assert calls == [((2, 2), (2,))]
+    np.testing.assert_allclose(value, 1.5, rtol=0.0, atol=0.0)
+    with pytest.raises(TypeError):
+        system.metadata["gate"] = "mutated"
+
+    with pytest.raises(ValueError, match="square 2D matrix"):
+        evaluate_linear_observable(replace(system, matrix=jnp.ones((2, 3), dtype=jnp.float64)))
+    with pytest.raises(ValueError, match="observable_vector length"):
+        evaluate_linear_observable(replace(system, observable_vector=observable[:1]))
+
+
+def test_matrix_free_linear_observable_rejects_shape_mismatches() -> None:
+    matrix = jnp.asarray([[2.0, 0.25], [0.0, 1.5]], dtype=jnp.float64)
+    rhs = jnp.asarray([1.0, -0.5], dtype=jnp.float64)
+    rhs_derivative = jnp.asarray([0.1, 0.2], dtype=jnp.float64)
+    observable = jnp.asarray([0.4, -0.3], dtype=jnp.float64)
+
+    def system_with(**overrides) -> MatrixFreeLinearObservableSystem:
+        values = {
+            "parameter": 0.0,
+            "size": 2,
+            "rhs": rhs,
+            "rhs_derivative": rhs_derivative,
+            "apply": lambda x: matrix @ x,
+            "transpose_apply": lambda x: matrix.T @ x,
+            "derivative_apply": lambda x: jnp.asarray([0.0, 0.0], dtype=jnp.float64),
+            "solve": lambda b: jnp.linalg.solve(matrix, b),
+            "transpose_solve": lambda b: jnp.linalg.solve(matrix.T, b),
+            "observable_vector": observable,
+            "metadata": {"gate": "matrix_free_shape_contract"},
+        }
+        values.update(overrides)
+        return MatrixFreeLinearObservableSystem(**values)
+
+    value = evaluate_matrix_free_linear_observable(system_with(observable_offset=0.25))
+    expected = float(jnp.vdot(observable, jnp.linalg.solve(matrix, rhs)) + 0.25)
+    np.testing.assert_allclose(value, expected, rtol=0.0, atol=1.0e-12)
+
+    with pytest.raises(ValueError, match="size must be positive"):
+        system_with(size=0)
+    with pytest.raises(ValueError, match="solve\\(rhs\\) length"):
+        evaluate_matrix_free_linear_observable(system_with(solve=lambda b: b[:1]))
+    with pytest.raises(ValueError, match="derivative_apply\\(solution\\) length"):
+        implicit_matrix_free_linear_observable_derivative(
+            system_with(derivative_apply=lambda x: jnp.asarray([1.0], dtype=jnp.float64))
+        )
+    with pytest.raises(ValueError, match="transpose_solve\\(observable_vector\\) length"):
+        implicit_matrix_free_linear_observable_derivative(system_with(transpose_solve=lambda b: b[:1]))
