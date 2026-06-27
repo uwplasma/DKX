@@ -2892,6 +2892,11 @@ Current completion status:
   stable supported capabilities rather than branch-history or time-relative
   status. The examples stale-wording guard now rejects `At the moment`, and the
   focused examples/doc-claims suite reports `13 passed`.
+- Review-lock validation after the latest source/docs/examples tranches passed
+  the focused source/docs/output bundle (`77 passed`), Sphinx `-W` for all `44`
+  documentation pages, the getting-started/tutorial examples suite
+  (`19 passed`), and the auto-selection/finite-beta examples suite
+  (`25 passed`). Generated docs build artifacts were removed after the build.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
