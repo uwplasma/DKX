@@ -116,7 +116,9 @@ def test_scalar_and_legendre_helpers_cover_defaults_and_errors() -> None:
         _as_1d_float(group, "MISSING")
 
     assert _get_float({"A": [2.5]}, "A", 0.0) == pytest.approx(2.5)
+    assert _get_float({"A": []}, "A", 1.25) == pytest.approx(1.25)
     assert _get_int({"B": [4]}, "B", 0) == 4
+    assert _get_int({"B": []}, "B", 6) == 6
     assert _get_int({}, "B", 6) == 6
 
     xi = np.asarray([-1.0, 0.0, 1.0], dtype=np.float64)
@@ -1044,6 +1046,39 @@ def _toy_output_grids_and_geometry() -> tuple[SimpleNamespace, SimpleNamespace]:
     return grids, geom
 
 
+def _minimal_scheme2_output_namelist(
+    *,
+    physics: dict[str, object] | None = None,
+    species: dict[str, object] | None = None,
+) -> Namelist:
+    return Namelist(
+        groups={
+            "geometryparameters": {
+                "GEOMETRYSCHEME": 2,
+                "INPUTRADIALCOORDINATE": 3,
+                "RN_WISH": 0.5,
+            },
+            "physicsparameters": {
+                "COLLISIONOPERATOR": 1,
+                "INCLUDEPHI1": False,
+                **(physics or {}),
+            },
+            "speciesparameters": {
+                "ZS": [1.0, -1.0],
+                "MHATS": [2.0, 5.446170214e-4],
+                "THATS": [1.0, 1.1],
+                "NHATS": [0.9, 0.8],
+                **(species or {}),
+            },
+            "othernumericalparameters": {"XGRIDSCHEME": 5},
+            "resolutionparameters": {},
+            "preconditioneroptions": {},
+            "general": {"RHSMODE": 1},
+        },
+        indexed={},
+    )
+
+
 def test_output_dict_scheme2_writes_v3_flags_species_and_geometry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1101,6 +1136,78 @@ def test_output_dict_scheme2_writes_v3_flags_species_and_geometry(
     np.testing.assert_allclose(out["uHat"], np.full((2, 2), 0.3))
     np.testing.assert_allclose(out["BHat"], geom.b_hat)
     assert out["classicalParticleFluxNoPhi1_psiHat"].shape == (2,)
+
+
+@pytest.mark.parametrize(
+    ("physics_key", "output_key"),
+    [
+        ("DPHIHATDPSIHAT", "dPhiHatdpsiHat"),
+        ("DPHIHATDPSIN", "dPhiHatdpsiN"),
+        ("DPHIHATDRHAT", "dPhiHatdrHat"),
+        ("DPHIHATDRN", "dPhiHatdrN"),
+    ],
+)
+def test_output_dict_preserves_user_phi_gradient_coordinate(
+    physics_key: str,
+    output_key: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SFINCS_JAX_OUTPUT_CACHE", "0")
+    monkeypatch.setattr(output_writer, "vprime_hat_jax", lambda *, grids, geom: 4.0)
+    monkeypatch.setattr(output_writer, "fsab_hat2_jax", lambda *, grids, geom: 1.25)
+    monkeypatch.setattr(output_writer, "u_hat_np", lambda *, grids, geom: np.full((2, 2), 0.3))
+    grids, geom = _toy_output_grids_and_geometry()
+
+    out = sfincs_jax_output_dict(
+        nml=_minimal_scheme2_output_namelist(physics={physics_key: 1.75}),
+        grids=grids,
+        geom=geom,
+    )
+
+    assert float(np.asarray(out[output_key]).reshape(())) == pytest.approx(1.75)
+
+
+@pytest.mark.parametrize(
+    ("species_update", "density_key", "temperature_key"),
+    [
+        ({"DNHATDPSIHATS": [0.1, 0.2], "DTHATDPSIHATS": [0.3, 0.4]}, "dnHatdpsiHat", "dTHatdpsiHat"),
+        ({"DNHATDPSINS": [0.1, 0.2], "DTHATDPSINS": [0.3, 0.4]}, "dnHatdpsiN", "dTHatdpsiN"),
+        ({"DNHATDRHATS": [0.1, 0.2], "DTHATDRHATS": [0.3, 0.4]}, "dnHatdrHat", "dTHatdrHat"),
+        ({"DNHATDRNS": [0.1, 0.2], "DTHATDRNS": [0.3, 0.4]}, "dnHatdrN", "dTHatdrN"),
+    ],
+)
+def test_output_dict_preserves_user_species_gradient_coordinate(
+    species_update: dict[str, object],
+    density_key: str,
+    temperature_key: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SFINCS_JAX_OUTPUT_CACHE", "0")
+    monkeypatch.setattr(output_writer, "vprime_hat_jax", lambda *, grids, geom: 4.0)
+    monkeypatch.setattr(output_writer, "fsab_hat2_jax", lambda *, grids, geom: 1.25)
+    monkeypatch.setattr(output_writer, "u_hat_np", lambda *, grids, geom: np.full((2, 2), 0.3))
+    grids, geom = _toy_output_grids_and_geometry()
+
+    out = sfincs_jax_output_dict(
+        nml=_minimal_scheme2_output_namelist(species=species_update),
+        grids=grids,
+        geom=geom,
+    )
+
+    np.testing.assert_allclose(out[density_key], [0.1, 0.2])
+    np.testing.assert_allclose(out[temperature_key], [0.3, 0.4])
+
+
+def test_output_dict_rejects_unsupported_gradient_coordinate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SFINCS_JAX_OUTPUT_CACHE", "0")
+    grids, geom = _toy_output_grids_and_geometry()
+    nml = _minimal_scheme2_output_namelist()
+    nml.group("geometryParameters")["INPUTRADIALCOORDINATEFORGRADIENTS"] = 99
+
+    with pytest.raises(NotImplementedError, match="inputRadialCoordinateForGradients"):
+        sfincs_jax_output_dict(nml=nml, grids=grids, geom=geom)
 
 
 def test_output_dict_reuses_and_completes_geometry_cache(monkeypatch: pytest.MonkeyPatch) -> None:
