@@ -6,6 +6,37 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 
+def record_structured_fblock_preconditioner_metadata(
+    *,
+    target: dict[str, object],
+    preconditioner: object,
+) -> None:
+    """Append structured f-block preconditioner diagnostics when available."""
+
+    metadata = getattr(preconditioner, "_sfincs_jax_structured_fblock_metadata", None)
+    if not isinstance(metadata, dict):
+        return
+    assembly = metadata.get("assembly", {})
+    if not isinstance(assembly, dict):
+        assembly = {}
+    target.update(
+        {
+            "structured_fblock_preconditioner_enabled": True,
+            "structured_fblock_preconditioner_selected": bool(
+                metadata.get("selected", False)
+            ),
+            "structured_fblock_preconditioner_reason": str(metadata.get("reason", "")),
+            "structured_fblock_preconditioner_nnz_blocks": int(
+                assembly.get("nnz_blocks", 0) or 0
+            ),
+            "structured_fblock_preconditioner_data_nbytes": int(
+                assembly.get("data_nbytes", 0) or 0
+            ),
+            "structured_fblock_preconditioner_metadata": metadata,
+        }
+    )
+
+
 @dataclass(frozen=True)
 class SparseRescueTailMetadataContext:
     """Explicit inputs for final RHSMode=1 sparse-rescue tail metadata."""

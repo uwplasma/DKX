@@ -19,6 +19,7 @@ from sfincs_jax.problems.profile_diagnostics import (
     XBlockSideProbeDiagnosticsContext,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
+    record_structured_fblock_preconditioner_metadata,
     sparse_pc_direct_tail_result_metadata,
     sparse_pc_direct_tail_result_metadata_from_context,
     sparse_pc_factor_preflight_result_metadata,
@@ -46,6 +47,42 @@ from sfincs_jax.problems.profile_solver_diagnostics import (
     RHS1CachedQICorrectionBasis,
     prepare_cached_qi_correction_basis,
 )
+
+
+def test_record_structured_fblock_preconditioner_metadata_ignores_missing_metadata() -> None:
+    metadata: dict[str, object] = {"existing": True}
+
+    record_structured_fblock_preconditioner_metadata(
+        target=metadata,
+        preconditioner=object(),
+    )
+
+    assert metadata == {"existing": True}
+
+
+def test_record_structured_fblock_preconditioner_metadata_records_assembly_summary() -> None:
+    metadata: dict[str, object] = {}
+
+    def preconditioner(x):
+        return x
+
+    preconditioner._sfincs_jax_structured_fblock_metadata = {
+        "selected": True,
+        "reason": "unit-test",
+        "assembly": {"nnz_blocks": 7, "data_nbytes": 128},
+    }
+
+    record_structured_fblock_preconditioner_metadata(
+        target=metadata,
+        preconditioner=preconditioner,
+    )
+
+    assert metadata["structured_fblock_preconditioner_enabled"] is True
+    assert metadata["structured_fblock_preconditioner_selected"] is True
+    assert metadata["structured_fblock_preconditioner_reason"] == "unit-test"
+    assert metadata["structured_fblock_preconditioner_nnz_blocks"] == 7
+    assert metadata["structured_fblock_preconditioner_data_nbytes"] == 128
+    assert metadata["structured_fblock_preconditioner_metadata"] is preconditioner._sfincs_jax_structured_fblock_metadata
 
 
 def test_prepare_cached_qi_correction_basis_skips_inactive_or_disabled() -> None:

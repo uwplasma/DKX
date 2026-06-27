@@ -122,17 +122,16 @@ from sfincs_jax.problems.profile_solver_diagnostics import (
     rhs1_seed_skip_primary_krylov_and_update_replay, rhs1_skip_primary_krylov_reason,
 )
 from sfincs_jax.problems.profile_dense import (
-    HostDenseFullSolveContext, HostDenseReducedSolveContext, ProfileLinearSolveContext, RHS1AutoHostSolveContext,
+    HostDenseFullSolveContext, HostDenseReducedSolveContext, RHS1AutoHostSolveContext,
     RHS1Constraint0PETScCompatSolveContext, RHS1DenseKSPFullSolveContext, RHS1DenseKSPReducedSolveContext,
     RHS1FullDenseFallbackContext, RHS1FullDenseFallbackStageContext, RHS1FullHostDenseShortcutContext,
     RHS1DenseProbeStageContext, RHS1PostKrylovDenseShortcutEvaluationContext,
     RHS1ReducedDenseFallbackAdmissionStageContext, RHS1ReducedDenseFallbackCandidateContext,
     RHS1ReducedDenseFallbackStageContext, RHS1ReducedHostDenseShortcutContext, RHS1ScipyRescueStageContext,
-    RHS1SparseHostSafeSolveContext, RHS1StructuredCSRSolveContext, profile_solver_kind,
+    RHS1SparseHostSafeSolveContext, RHS1StructuredCSRSolveContext, build_profile_linear_solve_dispatch,
     rhs1_dense_shortcut_setup_from_env, rhs1_early_dense_shortcut_decision, rhs1_evaluate_post_krylov_dense_shortcut,
     rhs1_fp_preconditioner_probe_kind_from_env, rhs1_small_gmres_max_from_env, run_rhs1_scipy_rescue_stage,
-    solve_rhs1_structured_full_csr_explicit, solve_profile_linear, solve_profile_linear_with_residual,
-    solve_rhs1_constraint0_petsc_compat, solve_rhs1_dense_ksp_full, solve_rhs1_dense_ksp_reduced,
+    solve_rhs1_structured_full_csr_explicit, solve_rhs1_constraint0_petsc_compat, solve_rhs1_dense_ksp_full, solve_rhs1_dense_ksp_reduced,
     solve_v3_full_system_structured_csr, try_rhs1_auto_host_solve, try_rhs1_sparse_host_safe_solve,
     run_rhs1_dense_probe_stage, run_rhs1_full_dense_fallback_stage, run_rhs1_full_host_dense_shortcut_stage,
     run_rhs1_reduced_dense_fallback_admission_stage, run_rhs1_reduced_host_dense_shortcut_stage,
@@ -170,7 +169,8 @@ from sfincs_jax.problems.profile_sparse_direct import (
     rhsmode1_sparse_cache_key as _rhsmode1_sparse_cache_key, sparse_factor_cache_key as _sparse_factor_cache_key,
 )
 from sfincs_jax.problems.profile_diagnostics import (
-    SparseRescueTailMetadataContext, sparse_rescue_tail_metadata_from_context,
+    SparseRescueTailMetadataContext, record_structured_fblock_preconditioner_metadata,
+    sparse_rescue_tail_metadata_from_context,
 )
 from sfincs_jax.problems.profile_sparse_handoff import (
     FortranReducedXBlockBackendContext, RequestedSparsePCGMRESBranchContext, SparsePCDirectTailFactorSetupContext,
@@ -1099,32 +1099,10 @@ def solve_v3_full_system_linear_gmres(
     pas_tz_guarded_correction_metadata: dict[str, object] = {}
     rhsmode1_general_metadata: dict[str, object] = {}
 
-    def _record_structured_fblock_preconditioner_metadata(
-        precond: Callable[[jnp.ndarray], jnp.ndarray],
-    ) -> None:
-        metadata = getattr(precond, "_sfincs_jax_structured_fblock_metadata", None)
-        if not isinstance(metadata, dict):
-            return
-        assembly = metadata.get("assembly", {})
-        if not isinstance(assembly, dict):
-            assembly = {}
-        rhsmode1_general_metadata.update(
-            {
-                "structured_fblock_preconditioner_enabled": True,
-                "structured_fblock_preconditioner_selected": bool(
-                    metadata.get("selected", False)
-                ),
-                "structured_fblock_preconditioner_reason": str(
-                    metadata.get("reason", "")
-                ),
-                "structured_fblock_preconditioner_nnz_blocks": int(
-                    assembly.get("nnz_blocks", 0) or 0
-                ),
-                "structured_fblock_preconditioner_data_nbytes": int(
-                    assembly.get("data_nbytes", 0) or 0
-                ),
-                "structured_fblock_preconditioner_metadata": metadata,
-            }
+    def _record_structured_fblock_preconditioner_metadata(precond: object) -> None:
+        record_structured_fblock_preconditioner_metadata(
+            target=rhsmode1_general_metadata,
+            preconditioner=precond,
         )
 
     cpu_large_xblock_shortcut = False
@@ -1468,7 +1446,7 @@ def solve_v3_full_system_linear_gmres(
                 f"(size={int(active_size)})",
             )
 
-    profile_linear_context = ProfileLinearSolveContext(
+    linear_solve_dispatch = build_profile_linear_solve_dispatch(
         rhs_mode=int(op.rhs_mode),
         total_size=int(op.total_size),
         use_implicit=bool(use_implicit),
@@ -1478,13 +1456,10 @@ def solve_v3_full_system_linear_gmres(
         small_gmres_max=rhs1_small_gmres_max_from_env(),
     )
 
-    def _solver_kind(method: str) -> tuple[str, str]:
-        return profile_solver_kind(method, context=profile_linear_context)
-
     stage2_admission = rhs1_stage2_admission_controls_from_env(
         rhs_mode=int(op.rhs_mode),
         include_phi1=bool(op.include_phi1),
-        solver_kind_default=_solver_kind(solve_method)[0],
+        solver_kind_default=linear_solve_dispatch.solver_kind(solve_method)[0],
         pas_large_bicgstab_fastpath=bool(pas_large_bicgstab_fastpath),
         tokamak_pas=bool(tokamak_pas),
         has_fp=op.fblock.fp is not None,
@@ -1493,60 +1468,9 @@ def solve_v3_full_system_linear_gmres(
     )
     stage2_enabled = bool(stage2_admission.enabled)
     stage2_time_cap_s = float(stage2_admission.time_cap_s)
-
-    def _solve_linear(
-        *,
-        matvec_fn,
-        b_vec: jnp.ndarray,
-        precond_fn,
-        x0_vec: jnp.ndarray | None,
-        tol_val: float,
-        atol_val: float,
-        restart_val: int,
-        maxiter_val: int | None,
-        solve_method_val: str,
-        precond_side: str,
-    ):
-        return solve_profile_linear(
-            context=profile_linear_context,
-            matvec_fn=matvec_fn,
-            b_vec=b_vec,
-            precond_fn=precond_fn,
-            x0_vec=x0_vec,
-            tol_val=tol_val,
-            atol_val=atol_val,
-            restart_val=restart_val,
-            maxiter_val=maxiter_val,
-            solve_method_val=solve_method_val,
-            precond_side=precond_side,
-        )
-
-    def _solve_linear_with_residual(
-        *,
-        matvec_fn,
-        b_vec: jnp.ndarray,
-        precond_fn,
-        x0_vec: jnp.ndarray | None,
-        tol_val: float,
-        atol_val: float,
-        restart_val: int,
-        maxiter_val: int | None,
-        solve_method_val: str,
-        precond_side: str,
-    ) -> tuple[GMRESSolveResult, jnp.ndarray]:
-        return solve_profile_linear_with_residual(
-            context=profile_linear_context,
-            matvec_fn=matvec_fn,
-            b_vec=b_vec,
-            precond_fn=precond_fn,
-            x0_vec=x0_vec,
-            tol_val=tol_val,
-            atol_val=atol_val,
-            restart_val=restart_val,
-            maxiter_val=maxiter_val,
-            solve_method_val=solve_method_val,
-            precond_side=precond_side,
-        )
+    _solver_kind = linear_solve_dispatch.solver_kind
+    _solve_linear = linear_solve_dispatch.solve
+    _solve_linear_with_residual = linear_solve_dispatch.solve_with_residual
 
     ksp_diagnostics_controls = rhs1_ksp_diagnostics_controls_from_env(emit=emit)
 

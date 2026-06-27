@@ -63,6 +63,103 @@ class ProfileLinearSolveContext:
 
 
 @dataclass(frozen=True)
+class ProfileLinearSolveDispatch:
+    """Callable solve helpers bound to one profile linear-solve context."""
+
+    context: ProfileLinearSolveContext
+
+    def solver_kind(self, method: str) -> tuple[str, str]:
+        """Return the concrete Krylov family for a requested solve method."""
+
+        return profile_solver_kind(method, context=self.context)
+
+    def solve(
+        self,
+        *,
+        matvec_fn: Callable[[jnp.ndarray], jnp.ndarray],
+        b_vec: jnp.ndarray,
+        precond_fn: Callable[[jnp.ndarray], jnp.ndarray] | None,
+        x0_vec: jnp.ndarray | None,
+        tol_val: float,
+        atol_val: float,
+        restart_val: int,
+        maxiter_val: int | None,
+        solve_method_val: str,
+        precond_side: str,
+    ) -> GMRESSolveResult:
+        """Solve without returning an explicit residual vector."""
+
+        return solve_profile_linear(
+            context=self.context,
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
+            precond_fn=precond_fn,
+            x0_vec=x0_vec,
+            tol_val=tol_val,
+            atol_val=atol_val,
+            restart_val=restart_val,
+            maxiter_val=maxiter_val,
+            solve_method_val=solve_method_val,
+            precond_side=precond_side,
+        )
+
+    def solve_with_residual(
+        self,
+        *,
+        matvec_fn: Callable[[jnp.ndarray], jnp.ndarray],
+        b_vec: jnp.ndarray,
+        precond_fn: Callable[[jnp.ndarray], jnp.ndarray] | None,
+        x0_vec: jnp.ndarray | None,
+        tol_val: float,
+        atol_val: float,
+        restart_val: int,
+        maxiter_val: int | None,
+        solve_method_val: str,
+        precond_side: str,
+    ) -> tuple[GMRESSolveResult, jnp.ndarray]:
+        """Solve and return the explicit residual vector."""
+
+        return solve_profile_linear_with_residual(
+            context=self.context,
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
+            precond_fn=precond_fn,
+            x0_vec=x0_vec,
+            tol_val=tol_val,
+            atol_val=atol_val,
+            restart_val=restart_val,
+            maxiter_val=maxiter_val,
+            solve_method_val=solve_method_val,
+            precond_side=precond_side,
+        )
+
+
+def build_profile_linear_solve_dispatch(
+    *,
+    rhs_mode: int,
+    total_size: int,
+    use_implicit: bool,
+    use_solver_jit: bool,
+    distributed_axis: str | None,
+    distributed_auto_solver: str,
+    small_gmres_max: int,
+) -> ProfileLinearSolveDispatch:
+    """Build the profile linear-solve dispatch used by the profile driver."""
+
+    return ProfileLinearSolveDispatch(
+        ProfileLinearSolveContext(
+            rhs_mode=int(rhs_mode),
+            total_size=int(total_size),
+            use_implicit=bool(use_implicit),
+            use_solver_jit=bool(use_solver_jit),
+            distributed_axis=distributed_axis,
+            distributed_auto_solver=str(distributed_auto_solver),
+            small_gmres_max=int(small_gmres_max),
+        )
+    )
+
+
+@dataclass(frozen=True)
 class RHS1ScipyRescueContext:
     """Host-only SciPy rescue solve inputs for stalled RHSMode=1 systems."""
 

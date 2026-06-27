@@ -79,6 +79,14 @@ The main structural refactor is functionally complete:
   source-tree/setup/import-contract bundle as `46 passed in 3.73 s`. This
   tranche reduced `problems/profile_solve.py` to `4821` lines and
   `solve_v3_full_system_linear_gmres` to `3912` lines without adding files.
+- The profile linear-solve dispatch setup is now owned by
+  `problems/profile_dense.py` as `ProfileLinearSolveDispatch`, and structured
+  f-block preconditioner metadata recording is now owned by
+  `problems/profile_diagnostics.py`. Focused validation passed:
+  profile diagnostics/linear tests as `30 passed in 1.89 s`, and the broader
+  profile/refactor bundle passed as `132 passed in 10.01 s`. This reduced
+  `problems/profile_solve.py` to `4745` lines and
+  `solve_v3_full_system_linear_gmres` to `3836` lines without adding files.
 - The RHSMode=1 output solve-method selector used by
   `write_sfincs_jax_output_h5` is now owned by `outputs/rhsmode1.py` as
   `select_rhsmode1_solve_method`. Focused validation passed:
@@ -205,8 +213,8 @@ Latest AST audit:
 - Folder depth is no longer the blocker: the package has one-level domain
   folders only and no `__init__.py`-only source packages.
 - The remaining structural blocker is owner size. The largest retained owners
-  are `problems/profile_solve.py` (`4821` lines, with
-  `solve_v3_full_system_linear_gmres` spanning `3912` lines),
+  are `problems/profile_solve.py` (`4745` lines, with
+  `solve_v3_full_system_linear_gmres` spanning `3836` lines),
   `outputs/writer.py` (`3508` lines, with `write_sfincs_jax_output_h5`
   spanning `1852` lines), `solvers/explicit_sparse.py` (`5056` lines), and
   `problems/transport_solve.py` (`3191` lines).
@@ -217,6 +225,9 @@ Latest AST audit:
 - The RHSMode=1 route/preconditioner-selection setup has been extracted from
   the driver into `problems/profile_policies.py`. This is the second safe
   reduction and gives solver auto-selection a direct unit-test seam.
+- Profile linear-solve dispatch setup has been extracted from the driver into
+  `problems/profile_dense.py`, and structured f-block preconditioner metadata
+  recording has been extracted into `problems/profile_diagnostics.py`.
 - The RHSMode=1 output solve-method selection has been extracted from the HDF5
   writer into `outputs/rhsmode1.py`. This removes policy branching from the
   writer while preserving the legacy private `sfincs_jax.io` selector alias.
@@ -243,11 +254,11 @@ Remaining work:
   `problems/profile_setup.py`.
 - Completed Tranche 2: route/preconditioner-selection setup extraction into
   `problems/profile_policies.py`.
-- Tranche 3: continue profile-solve consolidation only if a second coherent
-  setup seam can delete more code from `profile_solve.py` than it adds to
-  `profile_setup.py`. The completed subtranche already covers active compaction,
-  PAS projection, reduced operator closures, recycled initial guesses, and
-  reduced residual targets.
+- Completed Tranche 3: profile-solve consolidation of active reduced-system
+  setup, preconditioner-route setup, linear-solve dispatch setup, and
+  structured f-block metadata recording into existing owners. Continue this
+  lane only when a complete solve/setup phase can move to an existing owner
+  without adding helper-only files.
 - Completed Tranche 4: RHSMode=1 output solve-method selection extraction into
   `outputs/rhsmode1.py`.
 - Completed Tranche 5: RHSMode=1 output correction helper extraction into
