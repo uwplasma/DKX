@@ -143,6 +143,12 @@ The main structural refactor is functionally complete:
   bounded unit coverage through `tests/test_rhs1_host_policy.py`, validating
   CPU/GPU-sensitive wrapper delegation without running a solve. Focused policy
   validation passed as `122 passed in 0.43 s`.
+- The RHSMode=1 policy environment readers and post-solve correction policies
+  now have direct bounded coverage for Fortran-style boolean tokens,
+  lower-bound clamps, disabled-step behavior, and namespaced coarse/residual
+  correction controls. This also removed duplicate private env-reader
+  definitions from `problems/profile_policies.py`; focused policy validation
+  passed as `158 passed in 0.71 s`.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.

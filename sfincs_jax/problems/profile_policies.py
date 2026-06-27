@@ -4955,29 +4955,6 @@ def rhs1_explicit_sparse_host_direct_allowed(
 
 # Consolidated large explicit-FP host-rescue policy section
 
-_TRUE_VALUES = {"1", "true", "yes", "on"}
-_FALSE_VALUES = {"0", "false", "no", "off"}
-
-
-def _env_token(name: str) -> str:
-    return str(os.environ.get(name, "")).strip().lower()
-
-
-def _env_int(name: str, default: int) -> int:
-    raw = str(os.environ.get(name, "")).strip()
-    try:
-        return int(raw) if raw else int(default)
-    except ValueError:
-        return int(default)
-
-
-def _env_float(name: str, default: float) -> float:
-    raw = str(os.environ.get(name, "")).strip()
-    try:
-        return float(raw) if raw else float(default)
-    except ValueError:
-        return float(default)
-
 
 def _is_explicit_rhs1_fp(op: Any) -> bool:
     return int(op.rhs_mode) == 1 and (not bool(op.include_phi1)) and op.fblock.fp is not None
@@ -5474,29 +5451,6 @@ _RHS1_PRECONDITIONER_KIND_ALIASES = {
     "block_coo_fp_tail_coupled_schur": "structured_fblock_fp_tail_coupled_schur",
     "block_coo_fp_tail_coupled_minres": "structured_fblock_fp_tail_coupled_schur",
 }
-
-
-def _env_int(name: str, default: int) -> int:
-    env = os.environ.get(name, "").strip()
-    try:
-        return int(env) if env else int(default)
-    except ValueError:
-        return int(default)
-
-
-def _env_float(name: str, default: float) -> float:
-    env = os.environ.get(name, "").strip()
-    try:
-        return float(env) if env else float(default)
-    except ValueError:
-        return float(default)
-
-
-def _env_token(name: str) -> str:
-    return os.environ.get(name, "").strip().lower()
-
-
-_FALSE_VALUES = {"0", "false", "no", "off"}
 
 
 @dataclass(frozen=True)

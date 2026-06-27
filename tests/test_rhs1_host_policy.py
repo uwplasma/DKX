@@ -8,6 +8,15 @@ from sfincs_jax.problems.profile_policies import (
     host_sparse_direct_refine_steps,
     host_sparse_factor_dtype_current_backend,
     host_sparse_factor_dtype,
+    read_bool_env,
+    read_float_env,
+    read_int_env,
+    read_post_coarse_policy,
+    read_post_minres_policy,
+    read_post_residual_equation_policy,
+    read_post_solve_correction_policy,
+    read_probe_coarse_policy,
+    read_subspace_correction_policy,
     rhsmode1_constraint0_sparse_first_current_backend,
     rhsmode1_dense_backend_allowed_current_backend,
     rhsmode1_fast_post_xblock_polish_allowed_current_backend,
@@ -49,6 +58,104 @@ from sfincs_jax.problems.profile_policies import (
     rhs1_tokamak_pas_er_sparse_pc_auto_allowed,
     rhs1_tokamak_pas_noer_sparse_pc_auto_allowed,
 )
+
+
+def test_policy_env_readers_accept_fortran_tokens_and_clamp_invalid_values() -> None:
+    env = {
+        "BOOL_TRUE": ".true.",
+        "BOOL_FALSE": ".f.",
+        "BOOL_INVALID": "maybe",
+        "INT_VALUE": "-4",
+        "INT_INVALID": "large",
+        "FLOAT_VALUE": "-2.5",
+        "FLOAT_INVALID": "tiny",
+    }
+
+    assert read_bool_env("BOOL_TRUE", env=env)
+    assert not read_bool_env("BOOL_FALSE", default=True, env=env)
+    assert read_bool_env("BOOL_INVALID", default=True, env=env)
+    assert not read_bool_env("BOOL_MISSING", default=False, env=env)
+    assert read_int_env("INT_VALUE", default=7, minimum=2, env=env) == 2
+    assert read_int_env("INT_INVALID", default=7, minimum=2, env=env) == 7
+    assert read_float_env("FLOAT_VALUE", default=3.0, minimum=0.25, env=env) == 0.25
+    assert read_float_env("FLOAT_INVALID", default=3.0, minimum=0.25, env=env) == 3.0
+
+
+def test_post_solve_correction_policy_readers_are_bounded_and_namespaced() -> None:
+    env = {
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS": "3",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_ALPHA_CLIP": "0.5",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_MIN_IMPROVEMENT": "0.01",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_STEPS": "2",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS": "6",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_EXTRA_UNITS": "4",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_FSAVG_LMAX": "3",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ANGULAR_LMAX": "2",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ANGULAR_RESIDUAL": "on",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_INCLUDE_RAW": "off",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ALPHA_CLIP": "1.25",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_RCOND": "1e-9",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MIN_IMPROVEMENT": "0.02",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_INCLUDE_POST_COARSE": "0",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_INCLUDE_QI_BASIS": ".false.",
+    }
+
+    minres = read_post_minres_policy(env=env)
+    assert minres.steps_requested == 3
+    assert minres.alpha_clip == 0.5
+    assert minres.min_improvement == 0.01
+
+    probe = read_probe_coarse_policy(env=env)
+    assert probe.steps_requested == 2
+    assert probe.max_directions == 6
+    assert probe.max_extra_units == 4
+    assert probe.fsavg_lmax == 3
+    assert probe.angular_lmax == 2
+    assert probe.include_angular_residual
+    assert not probe.include_raw
+    assert probe.alpha_clip == 1.25
+    assert probe.rcond == 1.0e-9
+    assert probe.min_improvement == 0.02
+    assert not probe.include_post_coarse
+    assert not probe.include_qi_basis
+
+
+def test_post_solve_correction_policy_defaults_and_disabled_steps() -> None:
+    custom = read_subspace_correction_policy(
+        "CUSTOM",
+        enabled_default=False,
+        steps_default=5,
+        max_directions_default=0,
+        max_extra_units_default=-3,
+        fsavg_lmax_default=-2,
+        angular_lmax_default=-5,
+        alpha_clip_default=-1.0,
+        rcond_default=-1.0,
+        min_improvement_default=-1.0,
+        env={},
+    )
+    assert custom.steps_requested == 0
+    assert custom.max_directions == 1
+    assert custom.max_extra_units == 0
+    assert custom.fsavg_lmax == 0
+    assert custom.angular_lmax == -1
+    assert custom.alpha_clip == 0.0
+    assert custom.rcond == 0.0
+    assert custom.min_improvement == 0.0
+
+    post_coarse = read_post_coarse_policy(env={})
+    post_residual = read_post_residual_equation_policy(env={})
+    combined = read_post_solve_correction_policy(env={})
+    assert post_coarse.steps_requested == 0
+    assert post_coarse.max_directions == 16
+    assert post_residual.steps_requested == 0
+    assert post_residual.max_directions == 64
+    assert post_residual.fsavg_lmax == 4
+    assert post_residual.angular_lmax == 1
+    assert post_residual.include_angular_residual
+    assert combined.post_coarse == post_coarse
+    assert combined.post_residual_equation == post_residual
 
 
 def _op(
