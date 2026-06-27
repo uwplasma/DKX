@@ -555,6 +555,14 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   tests protect production output/plotting and non-stellarator-symmetric Boozer
   workflows without adding large fixtures. The focused output-policy suite
   reports `40 passed` in `0.94 s`, and Ruff passes on the touched test module.
+- The eightieth post-audit coverage tranche added a transport active-DOF
+  environment-admission gate. `tests/test_transport_active_dense_setup.py` now
+  checks that `resolve_transport_active_dense_setup` reads
+  `SFINCS_JAX_TRANSPORT_ACTIVE_DOF` when no explicit override is supplied and
+  can promote a normally full-size fixture into compact active-DOF mode. This
+  protects CLI/default solver-policy behavior without running transport
+  solves. The focused active-dense setup suite reports `8 passed` in `0.29 s`,
+  and Ruff passes on the touched test module.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.

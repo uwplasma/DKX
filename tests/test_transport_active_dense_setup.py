@@ -87,6 +87,35 @@ def test_active_dense_setup_reports_disabled_active_hint(monkeypatch) -> None:
     assert any("active-DOF mode disabled" in message for _, message in setup.active_notes)
 
 
+def test_active_dense_setup_reads_active_dof_env_when_no_explicit_override(monkeypatch) -> None:
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_ACTIVE_DOF", "1")
+
+    setup = resolve_transport_active_dense_setup(
+        op=_op(total_size=100, nxi_for_x=(4, 4)),
+        rhs_mode=2,
+        n_rhs=2,
+        solve_method="auto",
+        restart=60,
+        maxiter=None,
+        backend="cpu",
+        geometry_scheme=1,
+        dense_accelerator_auto_allowed=False,
+        dense_backend_policy_allowed=True,
+        state_out_requested=False,
+        force_stream_diagnostics=None,
+        force_store_state=None,
+        subset_mode=False,
+        active_dof_indices=lambda _op: np.arange(20, dtype=np.int32),
+        active_dof_env=None,
+    )
+
+    assert setup.use_active_dof_mode
+    assert setup.active_size == 20
+    np.testing.assert_array_equal(setup.active_idx_np, np.arange(20, dtype=np.int32))
+    assert setup.active_dof_decision.reason == "env"
+
+
 def test_active_dense_setup_reports_dense_preconditioner_memory_guard(monkeypatch) -> None:
     _clear_env(monkeypatch)
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FORCE_KRYLOV", "1")
