@@ -84,19 +84,30 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   folders) were removed; ignored benchmark input caches remain local-only and
   are not part of a user clone or wheel.
 - A fresh xdist coverage audit on this branch completed successfully:
-  `3620 passed, 168 skipped in 255.85 s` with `84%` package coverage. The CI floor remains
-  `80%` until the branch has enough measured margin to raise it safely, but the
-  target remains `95%` meaningful package coverage with GitHub Actions under
-  `10 min`. The gap must be closed with bounded unit, numerical,
-  frozen-reference, and policy tests rather than slow full-solve CI jobs.
-- The largest coverage gaps by missing executable lines are
-  `problems/profile_solve.py`, `operators/profile_sparse_pattern.py`,
-  `problems/transport_solve.py`, `problems/transport_linear_system.py`,
-  `operators/profile_system.py`, `outputs/writer.py`, `problems/ambipolar.py`,
-  `problems/transport_diagnostics.py`,
-  `solvers/preconditioner_transport_matrix.py`,
-  `solvers/preconditioner_schur_profile.py`, and the larger QI/PAS
-  preconditioner families.
+  `3896 passed in 294.00 s` with `87%` package coverage. The audit command was
+  `python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax
+  --cov-report=term-missing --cov-report=json:coverage.json`. The CI floor
+  remains `80%` until the branch has enough measured margin to raise it safely,
+  but the target remains `95%` meaningful package coverage with GitHub Actions
+  under `10 min`. The gap must be closed with bounded unit, numerical,
+  frozen-reference, and policy tests, plus removal or consolidation of obsolete
+  counted implementation code, rather than slow full-solve CI jobs.
+- The largest measured coverage gaps by missing executable lines are
+  `problems/profile_solve.py` (`58%`, `568` missing),
+  `outputs/writer.py` (`84%`, `392` missing),
+  `problems/transport_solve.py` (`73%`, `326` missing),
+  `solvers/explicit_sparse.py` (`87%`, `310` missing),
+  `solvers/preconditioner_transport_matrix.py` (`83%`, `296` missing),
+  `operators/profile_full_system.py` (`84%`, `279` missing),
+  `operators/profile_true_operator_rescue.py` (`81%`, `259` missing),
+  `problems/profile_sparse_handoff.py` (`85%`, `258` missing),
+  `problems/profile_policies.py` (`89%`, `253` missing),
+  `solvers/preconditioner_xblock_tz_sparse.py` (`76%`, `251` missing),
+  `problems/transport_parallel_runtime.py` (`86%`, `250` missing),
+  `solvers/preconditioner_qi_corrections.py` (`88%`, `247` missing),
+  `solvers/preconditioner_qi_device.py` (`89%`, `235` missing),
+  `operators/profile_system.py` (`77%`, `234` missing), and
+  `solver.py` (`83%`, `230` missing).
 - The first post-audit coverage tranche added bounded PAS x-block ILU tests for
   inapplicable-model fallback, tiny-fixture padded factor construction,
   environment normalization, cache reuse, and reduced-vector application. That
@@ -841,17 +852,19 @@ Tranche 5: examples redesign.
 
 Tranche 6: coverage ramp to 95%.
 
-- Status: the latest full local xdist coverage audit measured `84%` package
-  coverage (`3620 passed, 168 skipped in 255.85 s`). The exact percentage
-  remains below the `95%` target; do not advertise the older `85.003%` figure
-  from a prior intermediate run.
-  The next increment should target large user-risk modules rather than helper
-  edges: `problems/profile_solve.py`, `problems/transport_solve.py`,
-  `operators/profile_system.py`, `outputs/writer.py`,
-  `solvers/preconditioner_transport_matrix.py`, `solvers/explicit_sparse.py`,
-  `operators/profile_sparse_pattern.py`,
-  `solvers/preconditioner_schur_profile.py`, and
-  `operators/profile_true_operator_rescue.py`.
+- Status: the latest full local xdist coverage audit measured `87%` package
+  coverage (`3896 passed in 294.00 s`). The exact percentage remains below the
+  `95%` target; do not advertise older intermediate figures. The next
+  increment should target large user-risk modules rather than helper edges:
+  `problems/profile_solve.py`, `outputs/writer.py`,
+  `problems/transport_solve.py`, `solvers/explicit_sparse.py`,
+  `solvers/preconditioner_transport_matrix.py`,
+  `operators/profile_full_system.py`,
+  `operators/profile_true_operator_rescue.py`,
+  `problems/profile_sparse_handoff.py`,
+  `solvers/preconditioner_xblock_tz_sparse.py`,
+  `problems/transport_parallel_runtime.py`, `operators/profile_system.py`, and
+  `solver.py`.
 - Add fast, literature-anchored tests before adding broad coverage-only tests:
   Onsager symmetry and positivity for transport matrices, pitch-angle collision
   conservation/nullspace checks, finite-difference stencil exactness on
@@ -2729,10 +2742,10 @@ Current completion status:
   only remaining refactor work is the retained-boundary audit for the large
   profile/transport solve owners and final PR-body documentation.
 - Coverage and future-proof validation: the latest full local coverage
-  audit completed `3814` tests in `838.53 s` and measured
-  `87%` package coverage. The local command was intentionally unsharded for a
-  clean measurement; CI must continue using bounded shards so GitHub runtime
-  stays below ten minutes. The newest tests cover output streaming, periodic
+  audit completed `3896` tests in `294.00 s` and measured
+  `87%` package coverage. The local command used xdist load-scope sharding for
+  a clean package-wide measurement; CI must continue using bounded shards so
+  GitHub runtime stays below ten minutes. The newest tests cover output streaming, periodic
   stencils, release-data fetching, PETSc reference readers, upstream wrapper
   behavior, active full-FP kinetic block preconditioners, sparse-pattern
   helpers, explicit-sparse settings/materialization guards, profile-system
@@ -2943,6 +2956,13 @@ Current completion status:
   and Sphinx `-W` for all `44` documentation pages. The newest CI run has
   build and external-data smoke passing; coverage/example/optional jobs were
   still pending at the last check.
+- The latest bounded autodiff tranche strengthened implicit-solver coverage:
+  `tests/test_implicit_linear_solve_grad.py` now covers solver-JIT admission
+  from environment and size hints, pytree behavior of implicit result wrappers,
+  transpose-preconditioner routing during VJP, and residual-vector return. The
+  focused implicit file passed (`9 passed in 3.47 s`), the autodiff bundle
+  passed (`51 passed in 53.19 s`), and the source/import/docs-claim guard passed
+  (`32 passed in 2.58 s`).
 
 Next ordered implementation steps:
 
