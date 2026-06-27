@@ -178,6 +178,13 @@ The main structural refactor is functionally complete:
   dense/host/linear/loop transport tests as `50 passed in 2.42 s`, plus Ruff on
   the touched modules. This reduced `problems/transport_solve.py` to `2811`
   lines without adding files.
+- The RHSMode=2/3 dense batched whichRHS fallback is now owned by
+  `problems/transport_linear_system.py` with compatibility imports preserved
+  from `transport_solve.py`. Focused validation passed:
+  dense/host/linear/loop tests as `50 passed in 2.40 s`, the broader
+  dense/host/sparse transport support bundle as `117 passed in 12.07 s`, and
+  source/import guards as `26 passed in 2.59 s`. This reduced
+  `problems/transport_solve.py` to `2589` lines without adding files.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -278,9 +285,9 @@ Latest AST audit:
   are `problems/profile_solve.py` (`4402` lines, with
   `solve_v3_full_system_linear_gmres` spanning `3494` lines),
   `solvers/explicit_sparse.py` (`5056` lines),
-  `problems/transport_linear_system.py` (`3543` lines),
+  `problems/transport_linear_system.py` (`3770` lines),
   `outputs/writer.py` (`3250` lines, with `write_sfincs_jax_output_h5`
-  spanning roughly `1852` lines), and `problems/transport_solve.py` (`2811`
+  spanning roughly `1852` lines), and `problems/transport_solve.py` (`2589`
   lines).
 - The active-DOF/PAS-projection reduced-system setup has been extracted from
   the driver into `problems/profile_setup.py`. This is a safe first reduction
@@ -360,7 +367,12 @@ Remaining work:
   `problems/transport_linear_system.py`. This lowered
   `problems/transport_solve.py` to `2811` lines while preserving public
   compatibility imports and existing dense/host transport tests.
-- Tranche 13: retain `explicit_sparse.py` as one owner unless a patch can move a
+- Completed Tranche 13: moved RHSMode=2/3 dense batched whichRHS solve support
+  into existing `problems/transport_linear_system.py`. This lowered
+  `problems/transport_solve.py` to `2589` lines while preserving the public
+  dense-batch API from `transport_solve.py` and updating tests to patch the
+  canonical owner.
+- Tranche 14: retain `explicit_sparse.py` as one owner unless a patch can move a
   complete symbolic-factor family into an existing solver owner while deleting
   more code than it adds. Do not fragment sparse factor code into many small
   files.

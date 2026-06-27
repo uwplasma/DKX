@@ -467,8 +467,8 @@ def test_transport_dense_batch_solves_full_and_rejects_varying_operators(monkeyp
     elapsed = np.zeros(2)
     emitted: list[tuple[int, str]] = []
 
-    monkeypatch.setattr(transport_linear, "apply_v3_full_system_operator_cached", lambda op, x: op.matrix @ x)
-    monkeypatch.setattr(transport_linear, "_operator_signature_cached", lambda op: (op.signature,))
+    monkeypatch.setattr(transport_linear_system, "apply_v3_full_system_operator_cached", lambda op, x: op.matrix @ x)
+    monkeypatch.setattr(transport_linear_system, "_operator_signature_cached", lambda op: (op.signature,))
 
     context = TransportDenseBatchContext(
         dense_backend_allowed=True,
@@ -521,8 +521,8 @@ def test_transport_dense_batch_solves_full_and_rejects_varying_operators(monkeyp
 
 def test_transport_dense_batch_active_streaming_requires_collector(monkeypatch) -> None:
     matrix = jnp.eye(2, dtype=jnp.float64)
-    monkeypatch.setattr(transport_linear, "apply_v3_full_system_operator_cached", lambda op, x: op.matrix @ x)
-    monkeypatch.setattr(transport_linear, "_operator_signature_cached", lambda op: (op.signature,))
+    monkeypatch.setattr(transport_linear_system, "apply_v3_full_system_operator_cached", lambda op, x: op.matrix @ x)
+    monkeypatch.setattr(transport_linear_system, "_operator_signature_cached", lambda op: (op.signature,))
     context = TransportDenseBatchContext(
         dense_backend_allowed=True,
         dense_use_mixed=True,
