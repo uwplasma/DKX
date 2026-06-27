@@ -2852,6 +2852,11 @@ Current completion status:
   now exercise `problems.profile_solve` directly; retained legacy import strings
   are explicit compatibility-shim checks rather than hidden behavior
   dependencies.
+- The source-tree consolidation tests now whitelist the only test files allowed
+  to import `sfincs_jax.v3_driver`: compatibility contracts for Newton-Krylov,
+  preconditioner caches, QI alias removal, fallback-initial-guess aliases, and
+  the small least-squares alias. Any new behavior test that imports the shim
+  fails the refactor guard.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.

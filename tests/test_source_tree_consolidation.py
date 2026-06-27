@@ -140,6 +140,37 @@ def test_package_sources_do_not_import_v3_driver_internally() -> None:
     assert offenders == []
 
 
+def test_test_suite_v3_driver_imports_are_explicit_compatibility_contracts() -> None:
+    """Keep ordinary behavior tests on domain modules instead of the shim."""
+
+    allowed = {
+        "tests/test_full_system_newton_krylov.py",
+        "tests/test_preconditioner_caches.py",
+        "tests/test_rhs1_qi_coarse.py",
+        "tests/test_rhs1_qi_two_level.py",
+        "tests/test_rhs1_xblock_fallback_initial_guess.py",
+        "tests/test_small_regularized_lstsq.py",
+    }
+
+    offenders: list[str] = []
+    for path in sorted((REPO_ROOT / "tests").glob("test_*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                if any(alias.name == "sfincs_jax.v3_driver" for alias in node.names):
+                    offenders.append(rel)
+            elif isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                imports_driver = module == "sfincs_jax.v3_driver" or (
+                    module == "sfincs_jax" and any(alias.name == "v3_driver" for alias in node.names)
+                )
+                if imports_driver:
+                    offenders.append(rel)
+
+    assert sorted(set(offenders)) == sorted(allowed)
+
+
 def test_flattened_operator_legacy_imports_resolve_to_canonical_modules() -> None:
     assert not (PACKAGE_ROOT / "operators" / "profile_response").exists()
 
