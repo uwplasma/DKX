@@ -215,6 +215,13 @@ The main structural refactor is functionally complete:
   residual handling. Focused validation passed:
   `tests/test_transport_linear_solve.py` as `23 passed in 7.21 s`, and the
   broader transport-policy/source bundle passed as `78 passed in 12.01 s`.
+- The examples tree has been re-audited for navigation and repository size:
+  every top-level task folder has a README, examples contract tests passed as
+  `26 passed in 20.66 s`, and the nested `output/`, `artifacts/`,
+  `provenance/`, and `reference/` folders contain only small checked JSON
+  summaries used by tests/docs. The performance and publication-figure READMEs
+  describe these as checked summary data and stable workflows, not branch
+  history.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
