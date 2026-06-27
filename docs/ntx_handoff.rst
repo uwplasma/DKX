@@ -19,12 +19,12 @@ Status on 2026-05-01
 
 The collaborator-reported runtime cliff for finite-beta RHSMode=1 constrained
 PAS profile-current decks is closed for the validated non-differentiable CPU
-lane.  Large constrained-PAS decks in the validated size window now route from
+lane.  Large constrained-PAS decks in the validated size window route from
 ``solve_method=auto`` to sparse-preconditioned GMRES instead of the older
 matrix-free/PAS fallback that could stall near an ``O(1e-2)`` true residual.
 
-The validated NTX ``17 x 21 x 12, Nx=5`` deck now completes through the
-default CLI path in about ``7 s`` on the local CPU, with peak RSS about
+The validated NTX ``17 x 21 x 12, Nx=5`` deck completes through the default
+CLI path in about ``7 s`` on the local CPU, with peak RSS about
 ``1.6 GB`` and output metadata
 
 .. code-block:: text
@@ -36,8 +36,9 @@ default CLI path in about ``7 s`` on the local CPU, with peak RSS about
    linearSolverResidualTarget = 1.09e-09
    FSABjHat = -1.2981550371185984
 
-This replaces the previous default matrix-free path, which took hundreds of
-seconds on the same deck and still stopped near a ``1.9e-2`` residual.
+The archived matrix-free/PAS fallback audit for the same deck took hundreds of
+seconds and stopped near a ``1.9e-2`` residual, which is why the documented
+operational path is sparse-preconditioned GMRES.
 
 Recommended NTX command pattern
 -------------------------------
