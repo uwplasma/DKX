@@ -114,6 +114,89 @@ def _patch_schur_dispatch_cache_key(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _constrained_schur_op(*, point_at_x0: bool = False) -> SimpleNamespace:
+    f_shape = (1, 2, 1, 2, 2)
+    f_size = int(np.prod(f_shape))
+    fblock = SimpleNamespace(
+        f_shape=f_shape,
+        collisionless=SimpleNamespace(n_xi_for_x=np.asarray([1, 1], dtype=np.int32)),
+        exb_theta=None,
+        exb_zeta=None,
+        pas=None,
+        fp=None,
+        er_xdot=None,
+        er_xidot=None,
+    )
+    return SimpleNamespace(
+        rhs_mode=1,
+        constraint_scheme=2,
+        phi1_size=0,
+        extra_size=2,
+        f_size=f_size,
+        total_size=f_size + 2,
+        n_species=1,
+        n_x=2,
+        n_theta=2,
+        n_zeta=2,
+        point_at_x0=point_at_x0,
+        theta_weights=np.ones(2, dtype=np.float64),
+        zeta_weights=np.ones(2, dtype=np.float64),
+        d_hat=np.ones((2, 2), dtype=np.float64),
+        fblock=fblock,
+    )
+
+
+def _identity_schur_builders(
+    calls: list[str],
+    *,
+    cache_block_for_diag: bool = False,
+) -> RHS1SchurPreconditionerBuilders:
+    def identity_builder(name: str):
+        def builder(**kwargs):
+            op = kwargs["op"]
+            calls.append(name)
+            if cache_block_for_diag and name == "block":
+                key = schur_profile._rhsmode1_precond_cache_key(op, "point")
+                schur_profile._RHSMODE1_PRECOND_CACHE[key] = SimpleNamespace(
+                    block_inv_jnp=jnp.eye(int(op.n_x), dtype=jnp.float64)[None, :, :]
+                )
+            return lambda vector: jnp.asarray(vector, dtype=jnp.float64)
+
+        return builder
+
+    return RHS1SchurPreconditionerBuilders(
+        pas_tokamak_theta_applicable=lambda _op: False,
+        pas_tz_applicable=lambda _op: False,
+        theta_line_builder=identity_builder("theta_line"),
+        theta_dd_builder=identity_builder("theta_dd"),
+        species_block_builder=identity_builder("species_block"),
+        sxblock_tz_builder=identity_builder("sxblock_tz"),
+        xblock_tz_builder=identity_builder("xblock_tz"),
+        xblock_tz_lmax_builder=identity_builder("xblock_tz_lmax"),
+        pas_xblock_ilu_builder=identity_builder("pas_ilu"),
+        xmg_builder=identity_builder("xmg"),
+        pas_lite_builder=identity_builder("pas_lite"),
+        pas_hybrid_builder=identity_builder("pas_hybrid"),
+        pas_schur_builder=identity_builder("pas_schur"),
+        pas_tokamak_theta_builder=identity_builder("pas_tokamak_theta"),
+        pas_tz_builder=identity_builder("pas_tz"),
+        theta_zeta_builder=identity_builder("theta_zeta"),
+        zeta_line_builder=identity_builder("zeta_line"),
+        zeta_dd_builder=identity_builder("zeta_dd"),
+        block_builder=identity_builder("block"),
+    )
+
+
+def _expected_identity_constraint2_schur(op: SimpleNamespace, vector: np.ndarray) -> np.ndarray:
+    f = np.asarray(vector[: op.f_size], dtype=np.float64).reshape(op.fblock.f_shape).copy()
+    r_e = np.asarray(vector[op.f_size :], dtype=np.float64).reshape((op.n_species, op.n_x))
+    c_y = np.sum(f[:, :, 0, :, :], axis=(-2, -1))
+    x_e = (c_y - r_e) / 4.0
+    f_corr = np.zeros_like(f)
+    f_corr[:, :, 0, :, :] = x_e[:, :, None, None]
+    return np.concatenate(((f - f_corr).reshape((-1,)), x_e.reshape((-1,))))
+
+
 def test_canonical_schur_base_kind_aliases() -> None:
     assert canonical_schur_base_kind("theta") == "theta_line"
     assert canonical_schur_base_kind("xblock_theta_zeta") == "xblock_tz"
@@ -172,6 +255,83 @@ def test_build_rhs1_schur_preconditioner_dispatches_explicit_base_builders(
         assert calls[0][1]["lmax"] == 0
     if expected_builder in {"theta_dd", "zeta_dd"}:
         assert calls[0][1]["block"] == 8
+
+
+def test_build_rhs1_schur_preconditioner_full_mode_uses_constraint2_schur_shortcut(monkeypatch) -> None:
+    calls: list[str] = []
+    op = _constrained_schur_op()
+    _patch_schur_dispatch_cache_key(monkeypatch)
+    schur_profile._RHSMODE1_SCHUR_CACHE.clear()
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCHUR_BASE", "theta")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCHUR_MODE", "full")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCHUR_REG", "0")
+
+    preconditioner = build_rhs1_schur_preconditioner(
+        op=op,
+        builders=_identity_schur_builders(calls),
+    )
+    vector = np.linspace(-0.5, 1.0, op.total_size)
+
+    np.testing.assert_allclose(
+        np.asarray(preconditioner(jnp.asarray(vector))),
+        _expected_identity_constraint2_schur(op, vector),
+        rtol=1e-12,
+        atol=1e-12,
+    )
+    # The shortcut should keep the selected base builder unchanged; the
+    # constraint algebra is checked by the closed-form expected vector above.
+    assert calls == ["theta_line"]
+
+
+def test_build_rhs1_schur_preconditioner_dense_mode_can_build_column_schur(monkeypatch) -> None:
+    calls: list[str] = []
+    op = _constrained_schur_op()
+    _patch_schur_dispatch_cache_key(monkeypatch)
+    schur_profile._RHSMODE1_SCHUR_CACHE.clear()
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCHUR_BASE", "xmg")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCHUR_MODE", "dense")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCHUR_REG", "0")
+
+    preconditioner = build_rhs1_schur_preconditioner(
+        op=op,
+        builders=_identity_schur_builders(calls),
+    )
+    vector = np.linspace(-0.25, 0.75, op.total_size)
+
+    np.testing.assert_allclose(
+        np.asarray(preconditioner(jnp.asarray(vector))),
+        _expected_identity_constraint2_schur(op, vector),
+        rtol=1e-12,
+        atol=1e-12,
+    )
+    assert calls == ["xmg"]
+
+
+def test_build_rhs1_schur_preconditioner_diag_mode_and_reduced_wrapper(monkeypatch) -> None:
+    calls: list[str] = []
+    op = _constrained_schur_op()
+    _patch_schur_dispatch_cache_key(monkeypatch)
+    schur_profile._RHSMODE1_SCHUR_CACHE.clear()
+    schur_profile._RHSMODE1_PRECOND_CACHE.clear()
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCHUR_BASE", "theta")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCHUR_MODE", "not-a-mode")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCHUR_EPS", "0")
+
+    preconditioner = build_rhs1_schur_preconditioner(
+        op=op,
+        reduce_full=lambda vector: jnp.asarray(vector, dtype=jnp.float64),
+        expand_reduced=lambda vector: jnp.asarray(vector, dtype=jnp.float64),
+        builders=_identity_schur_builders(calls, cache_block_for_diag=True),
+    )
+    vector = np.linspace(0.1, 1.1, op.total_size)
+
+    np.testing.assert_allclose(
+        np.asarray(preconditioner(jnp.asarray(vector))),
+        _expected_identity_constraint2_schur(op, vector),
+        rtol=1e-12,
+        atol=1e-12,
+    )
+    assert calls == ["theta_line", "block"]
 
 
 def test_build_rhs1_schur_preconditioner_adi_composes_theta_and_zeta(monkeypatch) -> None:

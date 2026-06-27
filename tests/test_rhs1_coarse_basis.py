@@ -124,6 +124,23 @@ def test_coarse_residual_basis_drops_duplicate_tiny_surface_modes_without_tail()
     np.testing.assert_allclose(np.asarray(basis.toarray()), expected)
 
 
+def test_coarse_residual_basis_can_be_empty_when_no_modes_or_tail() -> None:
+    layout = _layout()
+    config = {
+        "coarse_lmax": 0,
+        "coarse_include_tail": False,
+        "coarse_angular_mmax": 0,
+        "coarse_angular_nmax": 0,
+        "coarse_helical_mmax": 0,
+        "coarse_helical_nmax": 0,
+    }
+
+    basis = build_coarse_residual_basis_csc(layout=layout, config=config)
+
+    assert basis.shape == (layout.total_size, 0)
+    assert basis.nnz == 0
+
+
 def test_active_native_xell_window_basis_respects_specs_and_column_cap(monkeypatch) -> None:
     layout = _layout()
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_WINDOW_SPECS", "bad,all:1:2")
@@ -195,6 +212,44 @@ def test_adaptive_residual_basis_appends_bounded_true_residual_columns(monkeypat
     appended = np.asarray(combined[:, -1].toarray()).reshape((-1,))
     assert np.count_nonzero(appended) <= 3
     assert np.linalg.norm(appended) == np.float64(1.0)
+
+
+def test_adaptive_residual_basis_reports_zero_and_small_residual_skips(monkeypatch) -> None:
+    layout = _layout()
+    matrix = sp.eye(layout.total_size, format="csr")
+    basis = sp.eye(layout.total_size, 2, format="csc")
+
+    class IdentityBaseOperator:
+        def matvec(self, z: np.ndarray) -> np.ndarray:
+            return np.asarray(z, dtype=np.float64)
+
+    class ZeroBaseOperator:
+        def matvec(self, z: np.ndarray) -> np.ndarray:
+            return np.zeros_like(np.asarray(z, dtype=np.float64))
+
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_BASIS", "yes")
+    zero_combined, zero_metadata = append_adaptive_residual_basis_csc(
+        matrix=matrix,
+        base_operator=IdentityBaseOperator(),
+        basis=basis,
+        max_total_columns=4,
+    )
+    assert zero_combined.shape == basis.shape
+    assert zero_metadata["adaptive_residual_basis_seed_columns"] == 2
+    assert zero_metadata["adaptive_residual_basis_skipped_zero"] == 2
+    assert zero_metadata["adaptive_residual_basis_columns"] == 0
+
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_MIN_REL_NORM", "2")
+    small_combined, small_metadata = append_adaptive_residual_basis_csc(
+        matrix=matrix,
+        base_operator=ZeroBaseOperator(),
+        basis=basis,
+        max_total_columns=4,
+    )
+    assert small_combined.shape == basis.shape
+    assert small_metadata["adaptive_residual_basis_seed_columns"] == 2
+    assert small_metadata["adaptive_residual_basis_skipped_small"] == 2
+    assert small_metadata["adaptive_residual_basis_columns"] == 0
 
 
 def test_adaptive_residual_basis_honors_total_cap_before_work(monkeypatch) -> None:
