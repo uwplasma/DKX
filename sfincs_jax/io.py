@@ -20,6 +20,7 @@ from .outputs.formats import (
     write_sfincs_output_file,
 )
 from .outputs import writer as _writer
+from .outputs import rhsmode1 as _rhsmode1
 from .outputs.writer import (
     ExportFConfig,
     _resolve_equilibrium_file_from_namelist,
@@ -30,20 +31,25 @@ from .outputs.writer import (
 
 
 def __getattr__(name: str):
-    """Delegate legacy private ``sfincs_jax.io`` names to the output writer."""
+    """Delegate legacy private ``sfincs_jax.io`` names to output owners."""
 
     try:
         return getattr(_writer, name)
     except AttributeError as exc:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
+        try:
+            return getattr(_rhsmode1, name)
+        except AttributeError:
+            raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
 
 
 class _IOFacadeModule(ModuleType):
-    """Forward legacy private monkeypatches to the output-writer owner."""
+    """Forward legacy private monkeypatches to output owner modules."""
 
     def __setattr__(self, name: str, value: object) -> None:
         if hasattr(_writer, name):
             setattr(_writer, name, value)
+        elif hasattr(_rhsmode1, name):
+            setattr(_rhsmode1, name, value)
         super().__setattr__(name, value)
 
 
