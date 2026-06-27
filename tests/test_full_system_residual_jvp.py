@@ -5,10 +5,15 @@ from pathlib import Path
 import numpy as np
 import jax
 import jax.numpy as jnp
+from jax import tree_util as jtu
 
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.petsc_binary import read_petsc_vec
-from sfincs_jax.operators.profile_linear_systems import V3FullLinearSystem
+from sfincs_jax.operators.profile_linear_systems import (
+    V3FullLinearSystem,
+    jacobian_matvec_v3_full_system_jit,
+    residual_v3_full_system_jit,
+)
 from sfincs_jax.operators.profile_system import apply_v3_full_system_operator, full_system_operator_from_namelist
 
 
@@ -34,3 +39,17 @@ def test_full_system_residual_and_jvp_pas_tiny() -> None:
 
     np.testing.assert_allclose(np.asarray(r0), 0.0, rtol=0, atol=1e-12)
     np.testing.assert_allclose(np.asarray(jvp), np.asarray(sys.jacobian_matvec(v)), rtol=0, atol=1e-12)
+
+    children, aux = sys.tree_flatten()
+    rebuilt_direct = V3FullLinearSystem.tree_unflatten(aux, children)
+    rebuilt_tree = jtu.tree_unflatten(jtu.tree_structure(sys), jtu.tree_leaves(sys))
+
+    np.testing.assert_allclose(np.asarray(rebuilt_direct.residual(x_ref)), 0.0, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(np.asarray(rebuilt_tree.jacobian_matvec(v)), np.asarray(jvp), rtol=0, atol=1e-12)
+    np.testing.assert_allclose(np.asarray(residual_v3_full_system_jit(sys, x_ref)), 0.0, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(
+        np.asarray(jacobian_matvec_v3_full_system_jit(sys, v)),
+        np.asarray(jvp),
+        rtol=0,
+        atol=1e-12,
+    )
