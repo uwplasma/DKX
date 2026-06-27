@@ -41,7 +41,7 @@ The main structural refactor is functionally complete:
 - `examples/README.md` and `docs/examples.rst` provide task-oriented example
   navigation, including tutorial notebooks and runnable scripts.
 - The latest local xdist coverage audit measured `88%` package coverage:
-  `4001 passed in 286.42 s` with `8344` missing executable lines.
+  `4001 passed in 281.89 s` with `8344` missing executable lines.
 - The latest bounded coverage tranches added RHSMode-1 Schur/coarse fallback
   tests, output-gradient coordinate contract tests, default
   preconditioner-selection tests, radial-preconditioner guard tests,
@@ -195,6 +195,13 @@ The main structural refactor is functionally complete:
   source/import guards as `26 passed in 2.56 s`, plus Ruff, compile, and diff
   checks. This reduced `problems/transport_solve.py` to `2326` lines without
   adding files.
+- A bounded active-DOF transport Krylov regression now compares the active and
+  full transport solve paths on the tiny SFINCS Fortran v3 reference fixture,
+  forcing non-dense Krylov behavior and checking residual-clean state-vector
+  parity. Focused validation passed: `tests/test_transport_linear_solve.py` as
+  `21 passed in 7.35 s`; the broader dense/host/sparse transport support bundle
+  passed as `118 passed in 13.31 s`. This is a real numerical branch gate, not
+  a smoke test.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -208,8 +215,12 @@ The main structural refactor is functionally complete:
 
 The largest coverage blockers from the fresh audit are:
 
-- `problems/transport_solve.py`: `72%`, 325 missing lines.
 - `problems/profile_solve.py`: `68%`, 318 missing lines.
+- After the latest transport refactor audit, `problems/transport_solve.py` has
+  `858` executable statements, `312` missing lines, and `64%` coverage; its
+  remaining uncovered code is concentrated in retry/rescue branches that should
+  be covered through bounded branch-specific tests or kept as honest
+  production-only paths.
 - `solvers/explicit_sparse.py`: `87%`, 310 missing lines.
 - `solvers/preconditioner_transport_matrix.py`: `83%`, 296 missing lines.
 - `operators/profile_full_system.py`: `84%`, 279 missing lines.

@@ -7,6 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from sfincs_jax.namelist import read_sfincs_input
 import sfincs_jax.problems.transport_linear_system as transport_linear_system
 import sfincs_jax.problems.transport_solve as transport_linear
 from sfincs_jax.problems.transport_linear_system import (
@@ -775,3 +776,44 @@ def test_transport_sparse_direct_solve_retries_float64_after_float32_gate(monkey
     assert calls == ["float32", "float64"]
     assert jnp.allclose(result.x, jnp.asarray([1.0, 2.0], dtype=jnp.float64))
     assert float(result.residual_norm) == 0.0
+
+
+def test_transport_active_dof_krylov_matches_full_tiny_reference(monkeypatch) -> None:
+    """Active-DOF compaction should preserve the full transport solution."""
+    nml = read_sfincs_input("tests/ref/transportMatrix_PAS_tiny_rhsMode2_scheme2.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_FORTRAN_STDOUT", "0")
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "0")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FORCE_KRYLOV", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_DENSE_RETRY_MAX", "0")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_ACTIVE_DOF", "0")
+
+    full = transport_linear.solve_v3_transport_matrix_linear_gmres(
+        nml=nml,
+        tol=1.0e-10,
+        maxiter=30,
+        which_rhs_values=[1],
+        collect_transport_output_fields=False,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_ACTIVE_DOF", "1")
+    active = transport_linear.solve_v3_transport_matrix_linear_gmres(
+        nml=nml,
+        tol=1.0e-10,
+        maxiter=30,
+        which_rhs_values=[1],
+        collect_transport_output_fields=False,
+    )
+
+    assert not full.use_active_dof_mode
+    assert active.use_active_dof_mode
+    assert int(active.active_size) == int(active.op0.total_size)
+    assert full.solver_kinds_by_rhs[1] == "bicgstab"
+    assert active.solver_kinds_by_rhs[1] == "bicgstab"
+    assert float(np.asarray(full.residual_norms_by_rhs[1])) < 1.0e-8
+    assert float(np.asarray(active.residual_norms_by_rhs[1])) < 1.0e-8
+    np.testing.assert_allclose(
+        np.asarray(active.state_vectors_by_rhs[1]),
+        np.asarray(full.state_vectors_by_rhs[1]),
+        rtol=1.0e-8,
+        atol=1.0e-10,
+    )
