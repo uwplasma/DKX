@@ -541,6 +541,76 @@ def test_constraint0_fortran_gauge_helper_is_fail_closed(monkeypatch) -> None:
     assert unchanged_missing_reference is x_list
 
 
+def test_constraint0_fortran_gauge_reports_malformed_reference(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    ref_path = tmp_path / "bad_sfincsOutput.h5"
+    with h5py.File(ref_path, "w") as h5:
+        h5.create_dataset("FSADensityPerturbation", data=np.asarray([1.0], dtype=np.float64))
+    monkeypatch.setenv("SFINCS_JAX_ALLOW_FORTRAN_REFERENCE", "1")
+    monkeypatch.setenv("SFINCS_JAX_FORTRAN_OUTPUT_H5", str(ref_path))
+    messages: list[str] = []
+    x_list = [np.asarray([1.0, 2.0], dtype=np.float64)]
+
+    unchanged = _maybe_apply_constraint0_fortran_gauge(
+        x_list=x_list,
+        op=SimpleNamespace(constraint_scheme=0),
+        emit=lambda _level, message: messages.append(str(message)),
+    )
+
+    assert unchanged is x_list
+    assert any("failed to read Fortran output" in message for message in messages)
+
+
+def test_constraint0_fortran_gauge_applies_reference_moment_shift(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    ref_path = tmp_path / "sfincsOutput.h5"
+    with h5py.File(ref_path, "w") as h5:
+        h5.create_dataset("FSADensityPerturbation", data=np.asarray([[0.10]], dtype=np.float64))
+        h5.create_dataset("FSAPressurePerturbation", data=np.asarray([[0.04]], dtype=np.float64))
+    monkeypatch.setenv("SFINCS_JAX_ALLOW_FORTRAN_REFERENCE", "1")
+    monkeypatch.setenv("SFINCS_JAX_FORTRAN_OUTPUT_H5", str(ref_path))
+
+    f_shape = (1, 3, 1, 1, 1)
+    op = SimpleNamespace(
+        constraint_scheme=0,
+        n_species=1,
+        n_x=3,
+        f_size=int(np.prod(f_shape)),
+        fblock=SimpleNamespace(
+            f_shape=f_shape,
+            collisionless=SimpleNamespace(n_xi_for_x=np.asarray([1, 1, 1], dtype=np.int32)),
+        ),
+        x=np.asarray([0.2, 0.7, 1.2], dtype=np.float64),
+        x_weights=np.asarray([0.3, 0.4, 0.5], dtype=np.float64),
+        theta_weights=np.asarray([1.0], dtype=np.float64),
+        zeta_weights=np.asarray([1.0], dtype=np.float64),
+        d_hat=np.asarray([[1.0]], dtype=np.float64),
+        t_hat=np.asarray([1.0], dtype=np.float64),
+        m_hat=np.asarray([1.0], dtype=np.float64),
+        point_at_x0=False,
+    )
+    x_full = np.concatenate([np.zeros((op.f_size,), dtype=np.float64), np.asarray([7.0], dtype=np.float64)])
+    messages: list[str] = []
+
+    adjusted = _maybe_apply_constraint0_fortran_gauge(
+        x_list=[x_full],
+        op=op,
+        emit=lambda _level, message: messages.append(str(message)),
+    )
+
+    assert len(adjusted) == 1
+    adjusted_np = np.asarray(adjusted[0])
+    assert adjusted_np.shape == x_full.shape
+    assert np.all(np.isfinite(adjusted_np))
+    assert not np.allclose(adjusted_np[: op.f_size], 0.0)
+    np.testing.assert_allclose(adjusted_np[op.f_size :], [7.0])
+    assert any("using Fortran reference" in message for message in messages)
+
+
 def test_pas_no_phi1_output_scale_helper_scales_only_distribution(monkeypatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_PAS_NO_PHI1_OUTPUT_SCALE", "2.5")
     op = SimpleNamespace(
