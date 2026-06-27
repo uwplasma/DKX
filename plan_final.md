@@ -50,6 +50,14 @@ The main structural refactor is functionally complete:
   `3925 passed in 247.02 s`.
 - A full non-coverage regression check after the current coverage/docs/import
   bundle passed: `3940 passed in 241.53 s`.
+- The next fast coverage tranche added 25 `discretization.v3` contract tests
+  for Boozer `.bc` header parsing, VMEC `.txt -> .nc` path fallback, content
+  identities, persistent geometry-cache round trips, stale-cache rejection,
+  Fortran-style odd grid sizing, RHSMode=3 monoenergetic x-grid overrides,
+  `Nxi_for_x` policies, and fail-closed unsupported knobs. Focused validation:
+  `tests/test_discretization_v3_contracts.py` passed in `0.90 s`; adjacent
+  mapped-grid tests plus the new contracts passed as `29 passed in 1.58 s`;
+  source-tree and import-contract guards passed as `26 passed in 2.78 s`.
 - The CI coverage floor remains lower than the final target until measured
   margin is available; the review target is `95%` meaningful package coverage
   while keeping GitHub Actions under 10 minutes.
