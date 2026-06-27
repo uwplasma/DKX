@@ -32,6 +32,7 @@ references or optional local Fortran only when explicitly requested.
 | choose geometry, validate outputs, and benchmark CPU/GPU | `tutorials/04_geometry_validation_and_performance.ipynb` | `getting_started/write_sfincs_output_vmec.py`, `performance/benchmark_transport_parallel_scaling.py` |
 | check CPU/GPU performance or output formats | `performance/benchmark_output_formats.py` | `performance/benchmark_sharded_solve_scaling.py` |
 | validate against frozen SFINCS Fortran v3 data | `parity/output_parity_vs_fortran_fixture.py` | `publication_figures/` and `sfincs_examples/` |
+| reproduce the QI benchmark input used in validation reports | `data/qi_nfp2_reference.input.namelist` | `optimization/materialize_qi_nfp2_promotion_input.py` |
 
 ### Canonical Workflow Catalog
 
@@ -76,11 +77,10 @@ heavier workflow when you need release-quality evidence.
 - `sfincs_examples/`: vendored upstream SFINCS v3 example inputs plus helpers
   used for parity and benchmark-suite audits, not the recommended starting
   point for first-time users.
-- `additional_examples/`: named QI/VMEC reference input used by scaled-suite
-  audits and QI robustness validation.
 - `upstream/`: curated upstream SFINCS v3 inputs used by tests, docs, and
   validation lanes.
-- `data/`: small input data needed by public examples.
+- `data/`: small input data needed by public examples, including the QI/VMEC
+  reference namelist used by validation and benchmark scripts.
 - `utils/`: helper code shared by example scripts; users normally call the
   topic scripts rather than importing this folder directly.
 
