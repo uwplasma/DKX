@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import pytest
 import scipy.sparse as sp
 
+import sfincs_jax.solvers.explicit_sparse as explicit_sparse
 from sfincs_jax.solvers.explicit_sparse import (
     SparseDecision,
     SparseOperatorBundle,
@@ -625,6 +626,36 @@ def test_factorize_host_sparse_operator_supports_jacobi_factor() -> None:
     assert factor.factor_s is not None and factor.factor_s >= 0.0
 
 
+def test_factorize_host_sparse_operator_rejects_invalid_materialization_and_kind() -> None:
+    metadata = SparseDecision(
+        storage_kind="linear_operator",
+        reason="operator only",
+        backend="cpu",
+        shape=(2, 2),
+        dense_nbytes=32,
+        csr_nbytes_estimate=0,
+        nnz_estimate=None,
+    )
+    operator_only = SparseOperatorBundle(
+        matrix=None,
+        operator=build_operator_from_dense(np.eye(2)).operator,
+        metadata=metadata,
+    )
+
+    with pytest.raises(ValueError, match="requires a materialized matrix"):
+        factorize_host_sparse_operator(operator_only, kind="jacobi")
+
+    with pytest.raises(ValueError, match="unknown factorization kind"):
+        factorize_host_sparse_operator(sp.eye(2, format="csr"), kind="not_a_factor")
+
+
+def test_factorize_host_sparse_operator_jacobi_rejects_nonfinite_diagonal() -> None:
+    matrix = sp.csr_matrix([[1.0, 0.0], [0.0, np.nan]])
+
+    with pytest.raises(RuntimeError, match="diagonal is non-finite"):
+        factorize_host_sparse_operator(matrix, kind="jacobi")
+
+
 def test_factorize_host_sparse_operator_symbolic_block_lu_solves_block_diagonal() -> None:
     matrix = sp.block_diag(
         [
@@ -646,6 +677,40 @@ def test_factorize_host_sparse_operator_symbolic_block_lu_solves_block_diagonal(
     assert factor.factor_nbytes_estimate is not None and factor.factor_nbytes_estimate > 0
     assert factor.factor_nnz_estimate is not None and factor.factor_nnz_estimate > 0
     assert factor.factor.analysis.block_count == 2
+
+
+def test_symbolic_block_lu_uses_finite_jacobi_fallback_for_singular_local_blocks() -> None:
+    matrix = sp.csr_matrix([[0.0, 0.0], [0.0, 4.0]], dtype=np.float64)
+    factor = factorize_host_sparse_operator(
+        matrix,
+        kind="symbolic_block_lu",
+        symbolic_ordering_kind="natural",
+        symbolic_block_size=1,
+    )
+    rhs = np.asarray([1.0, 8.0])
+    solution = factor.solve(rhs)
+
+    assert factor.kind == "symbolic_block_lu"
+    assert factor.factor_nbytes_estimate is not None and factor.factor_nbytes_estimate > 0
+    assert np.isfinite(solution).all()
+    assert solution[0] > 1.0e10
+    assert solution[1] == pytest.approx(2.0)
+
+
+def test_symbolic_block_lu_coarse_handles_empty_operator() -> None:
+    matrix = sp.csr_matrix((0, 0), dtype=np.float64)
+    factor = factorize_host_sparse_operator(
+        matrix,
+        kind="symbolic_block_lu_coarse",
+        symbolic_ordering_kind="natural",
+        symbolic_block_size=2,
+    )
+
+    out = factor.solve(np.asarray([], dtype=np.float64))
+    assert out.shape == (0,)
+    assert factor.factor.coarse_size == 0
+    assert factor.factor_nbytes_estimate == 0
+    assert factor.factor_nnz_estimate == 0
 
 
 def test_symbolic_block_lu_admission_accepts_exact_block_factor() -> None:
@@ -721,6 +786,24 @@ def test_sparse_factor_admission_rejects_missing_or_nonsquare_operator_and_bad_p
     assert rejected.probe_count == 2
     assert rejected_dict["accepted"] is False
     assert rejected_dict["max_relative_residual"] == float("inf")
+
+
+def test_sparse_factor_admission_rejects_solver_exceptions_and_vector_probes() -> None:
+    class RaisingFactor:
+        def solve(self, _rhs) -> np.ndarray:
+            raise FloatingPointError("synthetic factor failure")
+
+    rejected = admit_sparse_factor_against_operator(
+        sp.eye(3, format="csr"),
+        RaisingFactor(),
+        probes=np.asarray([1.0, 0.0, -1.0]),
+        max_relative_residual=1.0e-12,
+    )
+
+    assert rejected.accepted is False
+    assert rejected.reason == "residual_or_improvement_gate_failed"
+    assert rejected.probe_count == 1
+    assert rejected.max_relative_residual == float("inf")
 
 
 def test_deterministic_sparse_probe_matrix_covers_empty_and_scalar_systems() -> None:
@@ -1657,6 +1740,28 @@ def test_wrap_sparse_factor_with_coarse_correction_noops_for_invalid_basis() -> 
     assert wrap_sparse_factor_with_coarse_correction(factor_without_matrix, sp.eye(2, format="csr")) is factor_without_matrix
 
 
+def test_wrap_sparse_factor_with_coarse_correction_uses_dense_inverse_when_coarse_lu_fails(
+    monkeypatch,
+) -> None:
+    factor = factorize_host_sparse_operator(sp.diags([2.0, 3.0], format="csr"), kind="jacobi")
+
+    def fail_splu(*_args, **_kwargs):
+        raise RuntimeError("synthetic coarse singularity")
+
+    monkeypatch.setattr(explicit_sparse, "splu", fail_splu)
+    wrapped = wrap_sparse_factor_with_coarse_correction(
+        factor,
+        sp.csr_matrix(np.ones((2, 1), dtype=np.float64)),
+        damping=0.5,
+    )
+    out = wrapped.solve(np.asarray([2.0, 3.0]))
+
+    assert wrapped is not factor
+    assert wrapped.factor_nbytes_estimate is not None
+    assert wrapped.factor_nbytes_estimate > factor.factor_nbytes_estimate
+    assert np.isfinite(out).all()
+
+
 def test_factorize_host_sparse_operator_jacobi_floors_zero_diagonal() -> None:
     matrix = sp.csr_matrix([[0.0, 1.0], [2.0, 4.0]])
     factor = factorize_host_sparse_operator(matrix, kind="jacobi")
@@ -1728,6 +1833,46 @@ def test_host_direct_refinement_keeps_only_residual_improving_steps() -> None:
     np.testing.assert_allclose(x_worse, np.asarray([0.5, 1.5]))
     assert residual_worse == pytest.approx(np.linalg.norm(rhs - matrix @ x_worse))
     assert len(calls) == 2
+
+
+def test_host_refinement_stops_on_nonfinite_initial_or_trial_residual() -> None:
+    matrix = np.diag([2.0, 4.0])
+    rhs = np.asarray([2.0, 8.0])
+
+    x_nan, residual_nan = host_direct_solve_with_refinement(
+        factor_solve=lambda _load: np.asarray([np.nan, 0.0]),
+        operator_matrix=matrix,
+        rhs_vec=rhs,
+        factor_dtype=np.dtype(np.float64),
+        refine_steps=3,
+    )
+    assert np.isnan(x_nan[0])
+    assert not np.isfinite(residual_nan)
+
+    calls = 0
+
+    def nonfinite_sparse_solve(load: np.ndarray) -> np.ndarray:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return np.asarray([0.5, 1.5])
+        return np.asarray([np.inf, 0.0])
+
+    class _Factor:
+        def solve(self, load: np.ndarray) -> np.ndarray:
+            return nonfinite_sparse_solve(load)
+
+    x_sparse, residual_sparse = host_sparse_direct_solve_with_refinement(
+        ilu=_Factor(),
+        a_csr_full=sp.csr_matrix(matrix),
+        rhs_vec=rhs,
+        factor_dtype=np.dtype(np.float64),
+        refine_steps=2,
+    )
+
+    np.testing.assert_allclose(x_sparse, np.asarray([0.5, 1.5]))
+    assert residual_sparse == pytest.approx(np.linalg.norm(rhs - matrix @ x_sparse))
+    assert calls == 2
 
 
 def test_host_sparse_direct_refinement_and_polish_callbacks() -> None:

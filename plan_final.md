@@ -242,6 +242,14 @@ The main structural refactor is functionally complete:
   validation passed: `tests/test_validation_policy_coverage.py` as
   `8 passed in 0.04 s`, and the adjacent validation artifact bundle passed as
   `42 passed in 1.38 s`.
+- Explicit sparse-factor coverage now includes materialization and unknown-kind
+  fail-closed checks, non-finite Jacobi diagonals, finite Jacobi fallback inside
+  singular symbolic blocks, empty symbolic block-coarse factors, solver
+  exception rejection in true-residual admission, dense-inverse coarse fallback
+  when a coarse LU fails, and non-finite refinement-stop behavior. Focused
+  validation passed: `tests/test_explicit_sparse.py` as `78 passed in 0.63 s`,
+  and the adjacent explicit-sparse/transport sparse-direct bundle passed as
+  `158 passed in 21.71 s`.
 - The examples tree has been re-audited for navigation and repository size:
   every top-level task folder has a README, examples contract tests passed as
   `26 passed in 20.66 s`, and the nested `output/`, `artifacts/`,
