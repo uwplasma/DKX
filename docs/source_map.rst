@@ -664,13 +664,16 @@ replacing the old monolith are:
   alias; the canonical owner is this flat module.
 - ``sfincs_jax/problems/transport_linear_system.py``:
   RHSMode=2/3 transport active-system owner. It owns active-DOF and dense-path
-  setup, active block ordering, bounded block-Schur factors, residual-coarse
-  admission, direct reduced-``Pmat`` and exact active-operator emission,
-  direct active block-Schur preconditioner setup, and the global full-FP
-  Fortran-reduced sparse-factor preconditioner. The old active-dense,
-  active-factor, direct-``Pmat``, direct block-Schur, and Fortran-reduced LU
-  implementation files were absorbed here so transport linear-system logic has
-  one review surface.
+  setup, dense-LU solver/preconditioner construction for bounded fallback
+  paths, all-RHS dense-batch solves, host SciPy GMRES first-attempt/rescue
+  solves, linear solve dispatch for explicit/JIT/implicit modes, active block
+  ordering, bounded block-Schur factors, residual-coarse admission, direct
+  reduced-``Pmat`` and exact active-operator emission, direct active
+  block-Schur preconditioner setup, and the global full-FP Fortran-reduced
+  sparse-factor preconditioner. The old active-dense, dense-LU, dense-batch,
+  host-GMRES, active-factor, direct-``Pmat``, direct block-Schur, and
+  Fortran-reduced LU implementation files are represented by this single
+  linear-system owner.
 - ``sfincs_jax/solvers/explicit_sparse.py``:
   explicit-sparse host-factor environment parsing, canonical factor-kind alias
   resolution, monolithic LU/ILU guard sizing, and the typed
@@ -825,24 +828,18 @@ replacing the old monolith are:
   preconditioner reuse. It also owns RHSMode=1 strong-preconditioner family
   mapping, full/reduced strong fallback builders, PAS-Schur to PAS-hybrid build
   adjustment, ADI sweep parsing, and x-block TZ low-``l`` controls. It is also
-  the canonical owner of the current RHSMode=1 preconditioner registry and
+  the canonical owner of the RHSMode=1 preconditioner registry and
   legacy binding layer for dispatch, PAS-family builders, Schur binding,
   transport ``tzfft`` reuse, x-block builders, and strong fallback binding; the
-  solve owner imports these names only as compatibility seams while Tranche 1
-  continues.
+  solve owner imports these names only as compatibility seams.
 - ``sfincs_jax/problems/profile_sparse_handoff.py``:
   RHSMode=1/profile-response sparse-PC handoff layer. It owns the
   driver-facing sparse-PC attempt orchestration that depends on solve-local
   cache/replay/residual routing, generic sparse-PC retry execution, direct-tail
-  correction admission, and the compatibility import surface used by the
-  monolithic solve owner while Batch A continues. Sparse GMRES finalization
-  lives in ``sparse/finalization.py`` and x-block branch orchestration
-  lives in ``sparse/xblock.py``; ``handoff.py`` only re-exports those names for
-  compatibility until the public internal imports are fully migrated. Its local
-  ``F401,F811`` Ruff waiver is intentional: the module composes dynamic
-  ``__all__`` lists from sparse owner modules and carries a few shadowed
-  compatibility aliases. Delete the waiver only after ``solve.py`` and owner
-  tests import the concrete sparse owners directly.
+  correction admission, finalization, and x-block sparse branch orchestration.
+  The module provides a stable compatibility import surface for the profile
+  solve owner while keeping sparse branch behavior covered by owner-level
+  tests.
 - ``sfincs_jax/problems/profile_sparse_policy.py``:
   generic sparse-PC policy and admission helpers: active-DOF map construction,
   entry classification, sparse factor policy, conservative-pattern setup,
@@ -1098,9 +1095,11 @@ replacing the old monolith are:
   (historical location: ``sfincs_jax/transport_solve_setup.py``):
   side-effect-light RHSMode=2/3 setup resolution for transport max-iteration
   overrides, optional Krylov state-file loading/merging, ``whichRHS`` subset
-  normalization, and CPU/GPU process-parallel worker requests. The driver emits
-  the returned notes and keeps solve orchestration, while these pure setup rules
-  are covered by direct unit tests.
+  normalization, CPU/GPU process-parallel worker requests, loop-local
+  full/reduced matvec caches, bounded Krylov recycle bases, recycle-size
+  admission, and sequential residual-gate/ETA progress bookkeeping. The driver
+  emits the returned notes and keeps solve orchestration, while these setup and
+  loop-state rules are covered by direct unit tests.
 - ``sfincs_jax/outputs/transport.py``
   (historical location: ``sfincs_jax/transport_streaming_outputs.py``):
   RHSMode=2/3 transport output-schema helpers, host-side streaming
@@ -1123,19 +1122,16 @@ replacing the old monolith are:
   transport-matrix assembly, strict Fortran-order reductions, and cached
   geometry/species diagnostic precomputes.
 - ``sfincs_jax/problems/transport_solve.py``:
-  public RHSMode=2/3 transport solve orchestration, transport-specific Krylov
-  dispatch, dense-LU solver/preconditioner construction for bounded fallback
-  paths, host SciPy GMRES first-attempt/rescue solves, and optional small-system
-  SciPy Krylov-history diagnostics. It also owns all-RHS dense-batch solves,
-  loop-local full/reduced matvec caches, bounded Krylov recycle bases,
-  sequential residual-gate/ETA progress bookkeeping, and RHSMode=2/3
-  sparse-direct rescue implementation, including sparse-pattern admission,
-  direct active FP operator factors, explicit sparse helper materialization,
-  fallback sparse-ILU setup, host iterative refinement, float32 polish, and
-  float64 retry. The former ``dense_lu.py``, ``dense_batch.py``,
-  ``host_gmres.py``, ``iteration_stats.py``, ``loop.py``,
-  ``sparse_direct_solve.py``, and stale ``linear_solve.py`` entries have been
-  absorbed here; focused tests import this owner directly.
+  public RHSMode=2/3 transport solve orchestration. It builds one operator per
+  requested ``whichRHS``, chooses active/full-space solve routing, calls the
+  linear-system and preconditioner owners, applies retry/rescue policy, and
+  finalizes accepted states and diagnostics. The module still owns the
+  RHSMode=2/3 sparse-direct rescue implementation, including sparse-pattern
+  admission, direct active FP operator factors, explicit sparse helper
+  materialization, fallback sparse-ILU setup, host iterative refinement,
+  float32 polish, and float64 retry. Dense-LU, host-GMRES, dense-batch, and
+  loop-state support live in ``transport_linear_system.py`` and
+  ``transport_setup.py``.
 - ``sfincs_jax/problems/transport_finalize.py``
   (historical location: ``sfincs_jax/transport_solve_finalization.py``):
   sequential RHSMode=2/3 per-``whichRHS`` finalization after a solver branch has
