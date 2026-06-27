@@ -40,9 +40,9 @@ The main structural refactor is functionally complete:
   rules.
 - `examples/README.md` and `docs/examples.rst` provide task-oriented example
   navigation, including tutorial notebooks and runnable scripts.
-- A fresh local xdist coverage audit measured `87%` package coverage:
-  `3907 passed in 279.01 s` with `8763` missing executable lines.
-- Subsequent bounded coverage tranches added RHSMode-1 Schur/coarse fallback
+- The latest local xdist coverage audit measured `87%` package coverage:
+  `3925 passed in 272.20 s` with `8701` missing executable lines.
+- The latest bounded coverage tranches added RHSMode-1 Schur/coarse fallback
   tests, output-gradient coordinate contract tests, and default
   preconditioner-selection tests. A full non-coverage regression check after
   these tranches passed: `3925 passed in 247.02 s`.
@@ -53,22 +53,22 @@ The main structural refactor is functionally complete:
 The largest coverage blockers from the fresh audit are:
 
 - `problems/profile_solve.py`: `58%`, 568 missing lines.
-- `outputs/writer.py`: `84%`, 391 missing lines.
+- `outputs/writer.py`: `85%`, 384 missing lines.
 - `problems/transport_solve.py`: `73%`, 326 missing lines.
 - `solvers/explicit_sparse.py`: `87%`, 310 missing lines.
 - `solvers/preconditioner_transport_matrix.py`: `83%`, 296 missing lines.
 - `operators/profile_full_system.py`: `84%`, 279 missing lines.
 - `operators/profile_true_operator_rescue.py`: `81%`, 259 missing lines.
 - `problems/profile_sparse_handoff.py`: `85%`, 258 missing lines.
-- `problems/profile_policies.py`: `89%`, 253 missing lines.
 - `solvers/preconditioner_xblock_tz_sparse.py`: `76%`, 251 missing lines.
 - `problems/transport_parallel_runtime.py`: `86%`, 250 missing lines.
 - `solvers/preconditioner_qi_corrections.py`: `88%`, 247 missing lines.
+- `problems/profile_policies.py`: `90%`, 243 missing lines.
 - `solvers/preconditioner_qi_device.py`: `89%`, 235 missing lines.
 - `operators/profile_system.py`: `77%`, 234 missing lines.
 - `problems/transport_linear_system.py`: `81%`, 224 missing lines.
-- `solvers/preconditioner_schur_profile.py`: `80%`, 224 missing lines.
 - `solvers/preconditioner_qi_basis.py`: `89%`, 194 missing lines.
+- `solvers/preconditioner_schur_profile.py`: `84%`, 185 missing lines.
 - `solver.py`: `86%`, 183 missing lines.
 
 ## Source Structure Rules
