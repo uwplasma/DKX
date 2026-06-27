@@ -595,6 +595,42 @@ def test_export_f_config_option_two_snaps_to_nearest_native_points() -> None:
     np.testing.assert_allclose(cfg.map_xi[:, 0], 1.0)
 
 
+def test_export_f_config_option_one_interpolates_all_requested_axes() -> None:
+    grids, geom = _toy_export_grid_and_geometry()
+    cfg = _export_f_config(
+        nml=_toy_export_namelist(
+            {
+                "EXPORT_F_THETA_OPTION": 1,
+                "EXPORT_F_ZETA_OPTION": 1,
+                "EXPORT_F_X_OPTION": 1,
+                "EXPORT_F_XI_OPTION": 1,
+                "EXPORT_F_THETA": [0.25 * np.pi],
+                "EXPORT_F_ZETA": [0.125 * np.pi],
+                "EXPORT_F_X": [1.0, 2.0],
+                "EXPORT_F_XI": [-0.5, 0.5],
+            }
+        ),
+        grids=grids,
+        geom=geom,
+    )
+
+    assert cfg is not None
+    assert cfg.theta_option == 1
+    assert cfg.zeta_option == 1
+    assert cfg.x_option == 1
+    assert cfg.xi_option == 1
+    np.testing.assert_allclose(cfg.export_theta, [0.25 * np.pi])
+    np.testing.assert_allclose(cfg.export_zeta, [0.125 * np.pi])
+    np.testing.assert_allclose(cfg.export_x, [1.0, 2.0])
+    np.testing.assert_allclose(cfg.export_xi, [-0.5, 0.5])
+    np.testing.assert_allclose(cfg.map_theta, [[0.5, 0.5, 0.0, 0.0]])
+    np.testing.assert_allclose(cfg.map_zeta, [[0.5, 0.5, 0.0, 0.0]])
+    assert cfg.map_x.shape == (2, grids.x.size)
+    assert cfg.map_xi.shape == (2, grids.n_xi)
+    assert np.all(np.isfinite(cfg.map_x))
+    assert np.all(np.isfinite(cfg.map_xi))
+
+
 @pytest.mark.parametrize(
     ("updates", "message"),
     [
@@ -704,6 +740,29 @@ def test_localize_equilibrium_file_patches_unquoted_vmec_path(tmp_path: Path) ->
     assert localized == run_dir / "wout_toy.nc"
     assert localized.read_bytes() == b"toy vmec netcdf bytes"
     assert 'equilibriumFile = "wout_toy.nc"' in input_path.read_text(encoding="utf-8")
+
+
+def test_localize_equilibrium_file_handles_nonstellarator_symmetric_boozer_alias(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    run_dir = tmp_path / "run"
+    source_dir.mkdir()
+    run_dir.mkdir()
+    source = source_dir / "toy_nonstel.bc"
+    source.write_text("non-stellarator-symmetric boozer content\n", encoding="utf-8")
+    input_path = run_dir / "input.namelist"
+    input_path.write_text(
+        "&geometryParameters\n"
+        "  geometryScheme = 12\n"
+        "  JGboozer_file_NonStelSym = '../source/toy_nonstel.bc'\n"
+        "/\n",
+        encoding="utf-8",
+    )
+
+    localized = localize_equilibrium_file_in_place(input_namelist=input_path)
+
+    assert localized == run_dir / "toy_nonstel.bc"
+    assert localized.read_text(encoding="utf-8") == "non-stellarator-symmetric boozer content\n"
+    assert "JGboozer_file_NonStelSym = 'toy_nonstel.bc'" in input_path.read_text(encoding="utf-8")
 
 
 def test_resolve_equilibrium_file_contracts_cover_missing_vmec_fallback_and_nonvmec_ascii(

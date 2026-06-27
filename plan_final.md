@@ -547,6 +547,14 @@ transport-matrix, solver-preconditioner, and tutorial/examples tranches.
   RHSMode 4/5 and ambipolar derivative API used by optimization workflows
   without running production solves. The focused sensitivity suite reports
   `32 passed` in `36.95 s`, and Ruff passes on the touched test module.
+- The seventy-ninth post-audit coverage tranche added output-writer geometry
+  and export-policy gates. `tests/test_io_output_policy_coverage.py` now pins
+  Fortran-v3 `export_f` option-1 interpolation over theta, zeta, speed, and
+  pitch axes, and it covers geometryScheme=12
+  `JGboozer_file_NonStelSym` localization into run-local namelist decks. These
+  tests protect production output/plotting and non-stellarator-symmetric Boozer
+  workflows without adding large fixtures. The focused output-policy suite
+  reports `40 passed` in `0.94 s`, and Ruff passes on the touched test module.
 - The thirtieth post-audit consolidation tranche removed the last internal
   source import from `sfincs_jax.v3_driver`: the HDF5 writer now imports
   RHSMode-1 solve helpers directly from `sfincs_jax.problems.profile_solve`.
