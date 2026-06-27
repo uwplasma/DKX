@@ -2857,6 +2857,12 @@ Current completion status:
   preconditioner caches, QI alias removal, fallback-initial-guess aliases, and
   the small least-squares alias. Any new behavior test that imports the shim
   fails the refactor guard.
+- Existing examples/workflow smoke tests pass after the refactor imports:
+  getting-started scripts, tutorial quick plot, VMEC workflow status/pipeline
+  checks, and optimization public-script CLI checks. A broad Ruff pass over all
+  example folders still reports pre-existing E402/import-order debt from
+  executable `sys.path` bootstraps; keep that as a scoped examples-style cleanup
+  rather than mixing it into solver/module refactoring.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
