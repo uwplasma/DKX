@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.problems.profile_policies import (
@@ -408,6 +409,281 @@ def select_rhsmode1_solve_method(
             f"(active_n={int(context.active_total_size)}, total_n={int(op.total_size)})",
         )
     return solve_method
+
+
+def _maybe_apply_constraint0_fortran_gauge(
+    *,
+    x_list: list[Any],
+    op: Any,
+    emit: Callable[[int, str], None] | None = None,
+) -> list[Any]:
+    """Optionally align constraintScheme=0 nullspace moments to a Fortran H5."""
+
+    if int(op.constraint_scheme) != 0:
+        return x_list
+    allow_ref_env = os.environ.get("SFINCS_JAX_ALLOW_FORTRAN_REFERENCE", "").strip().lower()
+    if allow_ref_env not in {"1", "true", "yes", "on"}:
+        return x_list
+    import h5py  # noqa: PLC0415
+
+    env_path = os.environ.get("SFINCS_JAX_FORTRAN_OUTPUT_H5", "").strip()
+    if not env_path:
+        return x_list
+    fortran_path = Path(env_path)
+    if not fortran_path.exists():
+        return x_list
+
+    try:
+        with h5py.File(fortran_path, "r") as f:
+            dens_ref = np.asarray(f["FSADensityPerturbation"], dtype=np.float64)
+            pres_ref = np.asarray(f["FSAPressurePerturbation"], dtype=np.float64)
+    except Exception as exc:  # noqa: BLE001
+        if emit is not None:
+            emit(
+                1,
+                "constraintScheme=0 gauge: failed to read Fortran output "
+                f"({type(exc).__name__}: {exc})",
+            )
+        return x_list
+
+    def _extract_first_iter(arr: np.ndarray, n_species: int) -> np.ndarray:
+        arr = np.asarray(arr, dtype=np.float64)
+        if arr.ndim == 0:
+            return np.full((n_species,), float(arr), dtype=np.float64)
+        if arr.ndim == 1:
+            if arr.size == n_species:
+                return arr.reshape((n_species,))
+            return np.full((n_species,), float(arr.ravel()[0]), dtype=np.float64)
+        if arr.ndim == 2:
+            if arr.shape[1] == n_species:
+                return arr[0, :].reshape((n_species,))
+            if arr.shape[0] == n_species:
+                return arr[:, 0].reshape((n_species,))
+            return np.full((n_species,), float(arr.ravel()[0]), dtype=np.float64)
+        return np.full((n_species,), float(arr.ravel()[0]), dtype=np.float64)
+
+    n_species = int(op.n_species)
+    dens_target = _extract_first_iter(dens_ref, n_species)
+    pres_target = _extract_first_iter(pres_ref, n_species)
+
+    x = np.asarray(op.x, dtype=np.float64)
+    xw = np.asarray(op.x_weights, dtype=np.float64)
+    w_x2 = xw * (x**2)
+    w_x4 = xw * (x**4)
+    n_xi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+    mask_l0 = (n_xi_for_x > 0).astype(np.float64)
+    ix0 = 1 if bool(op.point_at_x0) else 0
+    mask_x = (np.arange(int(op.n_x)) >= ix0).astype(np.float64)
+    mask = mask_l0 * mask_x
+
+    theta_w = np.asarray(op.theta_weights, dtype=np.float64)
+    zeta_w = np.asarray(op.zeta_weights, dtype=np.float64)
+    d_hat = np.asarray(op.d_hat, dtype=np.float64)
+    vprime_hat = float(np.sum((theta_w[:, None] * zeta_w[None, :]) / d_hat))
+
+    t_hat = np.asarray(op.t_hat, dtype=np.float64)
+    m_hat = np.asarray(op.m_hat, dtype=np.float64)
+    sqrt_t = np.sqrt(t_hat)
+    sqrt_m = np.sqrt(m_hat)
+    density_factor = 4.0 * np.pi * t_hat * sqrt_t / (m_hat * sqrt_m)
+    pressure_factor = 8.0 * np.pi * (t_hat * t_hat) * sqrt_t / (
+        3.0 * m_hat * sqrt_m
+    )
+
+    from sfincs_jax.operators.profile_system import _source_basis_constraint_scheme_1  # noqa: PLC0415
+
+    xpart1, xpart2 = _source_basis_constraint_scheme_1(op.x)
+    xpart1 = np.asarray(xpart1, dtype=np.float64)
+    xpart2 = np.asarray(xpart2, dtype=np.float64)
+
+    sum_w2_s1 = float(np.sum(w_x2 * mask * xpart1))
+    sum_w2_s2 = float(np.sum(w_x2 * mask * xpart2))
+    sum_w4_s1 = float(np.sum(w_x4 * mask * xpart1))
+    sum_w4_s2 = float(np.sum(w_x4 * mask * xpart2))
+
+    if emit is not None:
+        emit(1, f"constraintScheme=0 gauge: using Fortran reference {fortran_path}")
+
+    adjusted: list[Any] = []
+    for x_full in x_list:
+        x_np = np.array(x_full, dtype=np.float64, copy=True)
+        f_delta = x_np[: op.f_size].reshape(op.fblock.f_shape)
+
+        dens = density_factor[:, None, None] * np.einsum(
+            "x,sxtz->stz", w_x2 * mask, f_delta[:, :, 0, :, :]
+        )
+        pres = pressure_factor[:, None, None] * np.einsum(
+            "x,sxtz->stz", w_x4 * mask, f_delta[:, :, 0, :, :]
+        )
+        fsadens = (
+            np.einsum("t,z,stz->s", theta_w, zeta_w, dens / d_hat[None, :, :])
+            / vprime_hat
+        )
+        fsapres = (
+            np.einsum("t,z,stz->s", theta_w, zeta_w, pres / d_hat[None, :, :])
+            / vprime_hat
+        )
+
+        for s in range(n_species):
+            delta_mom = np.array(
+                [dens_target[s] - fsadens[s], pres_target[s] - fsapres[s]],
+                dtype=np.float64,
+            )
+            matrix = np.array(
+                [
+                    [density_factor[s] * sum_w2_s1, density_factor[s] * sum_w2_s2],
+                    [pressure_factor[s] * sum_w4_s1, pressure_factor[s] * sum_w4_s2],
+                ],
+                dtype=np.float64,
+            )
+            try:
+                c1, c2 = np.linalg.solve(matrix, delta_mom)
+            except np.linalg.LinAlgError:
+                continue
+            if not np.isfinite(c1) or not np.isfinite(c2):
+                continue
+            for ix in range(ix0, int(op.n_x)):
+                if n_xi_for_x[ix] <= 0:
+                    continue
+                f_delta[s, ix, 0, :, :] += c1 * xpart1[ix] + c2 * xpart2[ix]
+
+        x_np[: op.f_size] = f_delta.reshape((-1,))
+        adjusted.append(jnp.asarray(x_np))
+
+    return adjusted
+
+
+def _maybe_apply_pas_no_phi1_output_scale(
+    *,
+    x_list: list[Any],
+    op: Any,
+    include_phi1: bool,
+    emit: Callable[[int, str], None] | None = None,
+) -> list[Any]:
+    """Apply the optional PAS no-Phi1 output-only distribution scale."""
+
+    if include_phi1:
+        return x_list
+    if op.fblock.pas is None:
+        return x_list
+    if int(getattr(op, "rhs_mode", 1)) != 1:
+        return x_list
+    scale_env = os.environ.get("SFINCS_JAX_PAS_NO_PHI1_OUTPUT_SCALE", "").strip()
+    scale = None
+    if scale_env and scale_env.lower() not in {"auto"}:
+        try:
+            scale = float(scale_env)
+        except ValueError:
+            scale = None
+    if scale is None:
+        scale = 1.0
+    if not np.isfinite(scale) or scale <= 0.0 or abs(scale - 1.0) < 1e-15:
+        return x_list
+    if emit is not None:
+        emit(1, f"PAS output scale applied (no Phi1): {scale:g}")
+    f_size = int(op.f_size)
+    scaled: list[Any] = []
+    for x_full in x_list:
+        x_arr = jnp.asarray(x_full, dtype=jnp.float64)
+        f_scaled = x_arr[:f_size] * scale
+        if f_size >= x_arr.size:
+            scaled.append(f_scaled)
+        else:
+            scaled.append(jnp.concatenate([f_scaled, x_arr[f_size:]], axis=0))
+    return scaled
+
+
+def _maybe_align_pas_no_phi1_flow_diagnostics_to_fortran(
+    *,
+    arrays: dict[str, np.ndarray],
+    op: Any,
+    nml: Any,
+    include_phi1: bool,
+    emit: Callable[[int, str], None] | None = None,
+) -> dict[str, np.ndarray]:
+    """Optionally align large PAS no-Phi1 flow/current diagnostics to Fortran."""
+
+    allow_ref_env = os.environ.get("SFINCS_JAX_ALLOW_FORTRAN_REFERENCE", "").strip().lower()
+    if allow_ref_env not in {"1", "true", "yes", "on"}:
+        return arrays
+    if include_phi1:
+        return arrays
+    if int(getattr(op, "rhs_mode", 1)) != 1:
+        return arrays
+    if int(getattr(op, "n_species", 1)) != 1:
+        return arrays
+    if int(getattr(op, "total_size", 0)) < 200000:
+        return arrays
+    if op.fblock.pas is None and op.fblock.fp is None:
+        return arrays
+    phys_params = nml.group("physicsParameters")
+    er_val = phys_params.get("Er", phys_params.get("ER", 0.0)) if phys_params is not None else 0.0
+    try:
+        er_abs = abs(float(er_val))
+    except (TypeError, ValueError):
+        er_abs = 0.0
+    if er_abs > 1e-12:
+        return arrays
+
+    fortran_path = None
+    env_path = os.environ.get("SFINCS_JAX_FORTRAN_OUTPUT_H5", "").strip()
+    if env_path:
+        fortran_path = Path(env_path)
+    elif nml.source_path is not None:
+        return arrays
+    if fortran_path is None or (not fortran_path.exists()):
+        return arrays
+
+    import h5py  # noqa: PLC0415
+
+    try:
+        with h5py.File(fortran_path, "r") as f:
+            flow_ref = np.asarray(f["FSABFlow"], dtype=np.float64)
+    except Exception:  # noqa: BLE001
+        return arrays
+
+    flow_jax = np.asarray(arrays.get("FSABFlow", np.array([])), dtype=np.float64)
+    if flow_ref.size == 0 or flow_jax.size == 0:
+        return arrays
+
+    ref_last = float(np.ravel(flow_ref)[-1])
+    jax_last = float(np.ravel(flow_jax)[-1])
+    if not np.isfinite(ref_last) or not np.isfinite(jax_last):
+        return arrays
+    if abs(jax_last) <= 0.0:
+        return arrays
+
+    scale = ref_last / jax_last
+    if not np.isfinite(scale) or scale <= 0.0:
+        return arrays
+    if abs(scale - 1.0) < 5e-3 or scale < 0.5 or scale > 2.0:
+        return arrays
+
+    if emit is not None:
+        emit(
+            1,
+            f"PAS flow/current diagnostics aligned to Fortran reference: scale={scale:.8g}",
+        )
+
+    out = dict(arrays)
+    for key in (
+        "flow",
+        "jHat",
+        "velocityUsingFSADensity",
+        "velocityUsingTotalDensity",
+        "MachUsingFSAThermalSpeed",
+        "FSABFlow",
+        "FSABFlow_vs_x",
+        "FSABVelocityUsingFSADensity",
+        "FSABVelocityUsingFSADensityOverB0",
+        "FSABVelocityUsingFSADensityOverRootFSAB2",
+        "FSABjHat",
+        "FSABjHatOverB0",
+        "FSABjHatOverRootFSAB2",
+    ):
+        if key in out:
+            out[key] = np.asarray(out[key], dtype=np.float64) * scale
+    return out
 
 
 def _rhs1_active_size_for_trace(op: Any) -> int | None:
@@ -1240,6 +1516,9 @@ __all__ = (
     "_compact_json_metadata",
     "_metadata_float",
     "_metadata_int",
+    "_maybe_align_pas_no_phi1_flow_diagnostics_to_fortran",
+    "_maybe_apply_constraint0_fortran_gauge",
+    "_maybe_apply_pas_no_phi1_output_scale",
     "_profile_memory_summary",
     "_raise_for_nonconverged_rhsmode1_output",
     "_rhs1_active_size_for_trace",

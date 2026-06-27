@@ -37,6 +37,9 @@ from sfincs_jax.outputs import writer as output_writer
 from sfincs_jax.outputs.cache import output_cache_dir, output_cache_path
 from sfincs_jax.outputs.rhsmode1 import (
     RHSMode1SolveMethodSelectionContext,
+    _maybe_align_pas_no_phi1_flow_diagnostics_to_fortran,
+    _maybe_apply_constraint0_fortran_gauge,
+    _maybe_apply_pas_no_phi1_output_scale,
     select_rhsmode1_solve_method,
 )
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
@@ -251,6 +254,88 @@ def test_rhsmode1_selector_force_krylov_wins_over_small_fp_dense() -> None:
     )
 
     assert method == "incremental"
+
+
+def test_constraint0_fortran_gauge_helper_is_fail_closed(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_ALLOW_FORTRAN_REFERENCE", raising=False)
+    x_list = [np.asarray([1.0, 2.0], dtype=np.float64)]
+
+    unchanged = _maybe_apply_constraint0_fortran_gauge(
+        x_list=x_list,
+        op=SimpleNamespace(constraint_scheme=0),
+    )
+
+    assert unchanged is x_list
+
+    monkeypatch.setenv("SFINCS_JAX_ALLOW_FORTRAN_REFERENCE", "1")
+    monkeypatch.setenv("SFINCS_JAX_FORTRAN_OUTPUT_H5", "/does/not/exist.h5")
+    unchanged_missing_reference = _maybe_apply_constraint0_fortran_gauge(
+        x_list=x_list,
+        op=SimpleNamespace(constraint_scheme=0),
+    )
+
+    assert unchanged_missing_reference is x_list
+
+
+def test_pas_no_phi1_output_scale_helper_scales_only_distribution(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_PAS_NO_PHI1_OUTPUT_SCALE", "2.5")
+    op = SimpleNamespace(
+        f_size=3,
+        rhs_mode=1,
+        fblock=SimpleNamespace(pas=object()),
+    )
+
+    scaled = _maybe_apply_pas_no_phi1_output_scale(
+        x_list=[np.asarray([1.0, 2.0, 3.0, 4.0], dtype=np.float64)],
+        op=op,
+        include_phi1=False,
+    )
+
+    np.testing.assert_allclose(np.asarray(scaled[0]), [2.5, 5.0, 7.5, 4.0])
+
+    unscaled = _maybe_apply_pas_no_phi1_output_scale(
+        x_list=[np.asarray([1.0, 2.0, 3.0, 4.0], dtype=np.float64)],
+        op=op,
+        include_phi1=True,
+    )
+    np.testing.assert_allclose(np.asarray(unscaled[0]), [1.0, 2.0, 3.0, 4.0])
+
+
+def test_pas_no_phi1_flow_alignment_uses_bounded_fortran_reference(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    ref_path = tmp_path / "sfincsOutput.h5"
+    with h5py.File(ref_path, "w") as h5:
+        h5.create_dataset("FSABFlow", data=np.asarray([[3.0]], dtype=np.float64))
+    monkeypatch.setenv("SFINCS_JAX_ALLOW_FORTRAN_REFERENCE", "1")
+    monkeypatch.setenv("SFINCS_JAX_FORTRAN_OUTPUT_H5", str(ref_path))
+    op = SimpleNamespace(
+        rhs_mode=1,
+        n_species=1,
+        total_size=200000,
+        fblock=SimpleNamespace(pas=object(), fp=None),
+    )
+    nml = SimpleNamespace(
+        source_path=None,
+        group=lambda name: {"Er": 0.0} if name == "physicsParameters" else {},
+    )
+    arrays = {
+        "FSABFlow": np.asarray([[2.0]], dtype=np.float64),
+        "FSABjHat": np.asarray([4.0], dtype=np.float64),
+        "densityPerturbation": np.asarray([5.0], dtype=np.float64),
+    }
+
+    aligned = _maybe_align_pas_no_phi1_flow_diagnostics_to_fortran(
+        arrays=arrays,
+        op=op,
+        nml=nml,
+        include_phi1=False,
+    )
+
+    np.testing.assert_allclose(aligned["FSABFlow"], [[3.0]])
+    np.testing.assert_allclose(aligned["FSABjHat"], [6.0])
+    np.testing.assert_allclose(aligned["densityPerturbation"], [5.0])
 
 
 def test_select_phi1_newton_linear_solve_method_env_override_wins() -> None:
