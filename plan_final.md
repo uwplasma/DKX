@@ -2925,16 +2925,24 @@ Current completion status:
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.
-- RHSMode 4/5 sensitivity contracts: about 75 percent. Small fixture contracts
-  and derivative identities are implemented; production-grid parity refresh
+- RHSMode 4/5 sensitivity contracts: about 82 percent. Small fixture contracts,
+  derivative identities, dense-observable gates, matrix-free shape gates, and
+  adjoint dot-product checks are implemented; production-grid parity refresh
   remains a release benchmark.
-- Public docs/API stabilization for the refactor PR: about 98 percent. Source
+- Public docs/API stabilization for the refactor PR: about 99 percent. Source
   maps, import contracts, README/docs, artifact metadata, Sphinx, source Ruff,
   and CI pass for the consolidated layout in focused checks; the examples
   landing page and Fortran-example status page now keep first-pass navigation
-  separate from release-audit runbooks, and every retained non-data top-level
-  examples folder has README navigation. Rerun the review-lock bundle after
-  this plan refresh.
+  separate from release-audit runbooks, and every retained top-level examples
+  folder has README navigation.
+- Latest review-lock validation after the sensitivity/output/transport
+  coverage tranches passed: sensitivity plus ambipolar (`54 passed`), focused
+  sensitivity (`32 passed`), output policy (`40 passed`), source/docs/output
+  guard (`79 passed`), transport active/dense/source guard (`60 passed`),
+  examples/tutorials (`19 passed`), source/import/docs claims (`32 passed`),
+  and Sphinx `-W` for all `44` documentation pages. The newest CI run has
+  build and external-data smoke passing; coverage/example/optional jobs were
+  still pending at the last check.
 
 Next ordered implementation steps:
 
@@ -2950,10 +2958,11 @@ Next ordered implementation steps:
 3. Add examples/tutorial smoke coverage for the fast tutorial script and one
    canonical script per major workflow folder, keeping the CI example budget
    below ten minutes.
-4. Run the review-lock validation bundle: import-contract tests, CLI/output
-   tests, workflow/validation behavior tests, representative RHSMode 1/2/3,
-   ambipolar, RHSMode 4/5 sensitivity, sparse-PC, QI, and differentiable
-   linear-solve tests, plus Sphinx `-W`, Ruff, py_compile, and `git diff --check`.
+4. Run the review-lock validation bundle again after the next code tranche:
+   import-contract tests, CLI/output tests, workflow/validation behavior tests,
+   representative RHSMode 1/2/3, ambipolar, RHSMode 4/5 sensitivity, sparse-PC,
+   QI, and differentiable linear-solve tests, plus Sphinx `-W`, Ruff,
+   py_compile, and `git diff --check`.
 5. Regenerate release-facing benchmark, parity, runtime/memory, and
    bootstrap-current figures only after the source/test structure is stable.
 6. Fix only real regressions found by these gates. Do not start another
