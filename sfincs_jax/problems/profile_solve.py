@@ -355,16 +355,15 @@ from sfincs_jax.solvers.preconditioner_xblock_coarse import (
     _rhs1_polynomial_moment_features,
 )
 from sfincs_jax.problems.profile_residual import (
-    apply_damped_preconditioned_residual_polish as _apply_damped_preconditioned_residual_polish,
     apply_device_subspace_residual_equation_correction as _apply_device_subspace_residual_equation_correction,
     apply_preconditioned_minres_correction as _apply_preconditioned_minres_correction,
-    apply_projected_residual_polish as _apply_projected_residual_polish,
     apply_subspace_minres_correction as _apply_subspace_minres_correction,
     build_rhs1_xblock_post_coarse_directions as _rhs1_xblock_post_coarse_directions,
     compose_multilevel_minres_correction_preconditioner as _compose_multilevel_minres_correction_preconditioner,
     compose_multilevel_residual_correction_preconditioner as _compose_multilevel_residual_correction_preconditioner,
     compose_residual_correction_preconditioner as _compose_residual_correction_preconditioner,
     l2_norm_float as rhs1_l2_norm_float, recompute_true_residual_result as rhs1_recompute_true_residual_result,
+    RHS1FPPostSolvePolishContext, run_rhs1_fp_post_solve_polish,
     replay_left_preconditioned_residual_norms as rhs1_replay_left_preconditioned_residual_norms,
     residual_converged as rhs1_residual_converged, residual_target as rhs1_residual_target,
     result_with_true_residual as rhs1_result_with_true_residual, safe_preconditioner as _safe_preconditioner,
@@ -3520,381 +3519,39 @@ def solve_v3_full_system_linear_gmres(
                 solve_linear=_solve_linear,
                 emit=emit,
             )
-        # Cheap post-solve polish for large FP systems:
-        # Apply a few damped preconditioned-residual correction steps to improve
-        # low-order moments (flow/Mach/jHat) without paying for a full second GMRES pass.
-        if (
-            int(op.rhs_mode) == 1
-            and (not bool(op.include_phi1))
-            and op.fblock.fp is not None
-            and op.fblock.pas is None
-            and rhs1_precond_kind == "xmg"
-            and preconditioner_reduced is not None
-        ):
-            fp_polish_controls = rhs1_fp_residual_polish_controls_from_env()
-            fp_targeted_polish = _rhsmode1_fp_targeted_polish_allowed(
+        res_reduced = run_rhs1_fp_post_solve_polish(
+            RHS1FPPostSolvePolishContext(
                 op=op,
+                result=res_reduced,
+                rhs=rhs_reduced,
+                matvec=mv_reduced,
+                preconditioner=preconditioner_reduced,
                 active_size=int(active_size),
-                residual_norm=float(res_reduced.residual_norm),
                 target=float(target_reduced),
+                tol=float(tol),
+                atol=float(atol),
+                restart=int(restart),
+                maxiter=maxiter,
+                precondition_side=gmres_precond_side,
                 rhs1_precond_kind=rhs1_precond_kind,
                 use_implicit=bool(use_implicit),
+                use_active_dof_mode=bool(use_active_dof_mode),
+                full_to_active=full_to_active_jnp,
+                reduce_full=reduce_full,
+                expand_reduced=expand_reduced,
+                read_residual_controls=rhs1_fp_residual_polish_controls_from_env,
+                read_low_l_controls=rhs1_fp_low_l_polish_controls_from_env,
+                read_l1_controls=rhs1_fp_l1_polish_controls_from_env,
+                read_global_low_l_controls=rhs1_fp_global_low_l_polish_controls_from_env,
+                read_bicgstab_controls=rhs1_fp_bicgstab_polish_controls_from_env,
+                targeted_polish_allowed=_rhsmode1_fp_targeted_polish_allowed,
+                build_collision_preconditioner=_build_rhsmode1_collision_preconditioner,
+                build_lmax_preconditioner=_build_rhsmode1_xblock_tz_lmax_preconditioner,
+                pitch_mode_active_indices=fp_pitch_mode_active_indices,
+                solve_linear=_solve_linear,
+                emit=emit,
             )
-            polish_precond = preconditioner_reduced
-            lmax_precond_for_l1: Callable[[jnp.ndarray], jnp.ndarray] | None = None
-            need_hybrid_fp_precond = fp_targeted_polish or (
-                fp_polish_controls.steps > 0
-                and int(active_size) >= fp_polish_controls.min_size
-            )
-            if fp_polish_controls.hybrid and need_hybrid_fp_precond:
-                precond_collision = _build_rhsmode1_collision_preconditioner(
-                    op=op,
-                    reduce_full=reduce_full,
-                    expand_reduced=expand_reduced,
-                )
-
-                def _hybrid_precond(v: jnp.ndarray) -> jnp.ndarray:
-                    z0 = preconditioner_reduced(v)
-                    r1 = v - mv_reduced(z0)
-                    z1 = precond_collision(r1)
-                    return z0 + z1
-
-                polish_precond = _hybrid_precond
-
-            if (
-                fp_polish_controls.steps > 0
-                and int(active_size) >= fp_polish_controls.min_size
-            ):
-                polish_base_residual = float(res_reduced.residual_norm)
-                res_polish, polish_improved = (
-                    _apply_damped_preconditioned_residual_polish(
-                        current_result=res_reduced,
-                        rhs=rhs_reduced,
-                        matvec=mv_reduced,
-                        preconditioner=polish_precond,
-                        target=float(target_reduced),
-                        steps=int(fp_polish_controls.steps),
-                        omega=float(fp_polish_controls.omega),
-                        backtrack=int(fp_polish_controls.backtrack),
-                    )
-                )
-                if polish_improved:
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: FP polish improved residual "
-                            f"{polish_base_residual:.3e} -> {float(res_polish.residual_norm):.3e}",
-                        )
-                    res_reduced = res_polish
-            # Optional FP-specific angular/x preconditioner polish (low-L blocks).
-            fp_lmax_controls = rhs1_fp_low_l_polish_controls_from_env(
-                has_fp=op.fblock.fp is not None,
-                has_pas=op.fblock.pas is not None,
-                n_theta=int(op.n_theta),
-                n_zeta=int(op.n_zeta),
-            )
-            if fp_targeted_polish and float(res_reduced.residual_norm) > target_reduced:
-                nxi_for_x_np = np.asarray(
-                    op.fblock.collisionless.n_xi_for_x, dtype=np.int32
-                )
-                max_l = int(np.max(nxi_for_x_np)) if nxi_for_x_np.size else 0
-                lmax_use = max(0, min(int(max_l), int(fp_lmax_controls.lmax_default)))
-                block_size = int(lmax_use) * int(op.n_theta) * int(op.n_zeta)
-                if (
-                    lmax_use > 0
-                    and block_size > 0
-                    and block_size <= int(fp_lmax_controls.block_max)
-                ):
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: FP low-L polish "
-                            f"(lmax={int(lmax_use)} block={block_size} restart={int(fp_lmax_controls.restart)} "
-                            f"maxiter={int(fp_lmax_controls.maxiter)})",
-                        )
-                    try:
-                        lmax_precond = _build_rhsmode1_xblock_tz_lmax_preconditioner(
-                            op=op,
-                            lmax=int(lmax_use),
-                            reduce_full=reduce_full,
-                            expand_reduced=expand_reduced,
-                        )
-                        lmax_precond_for_l1 = lmax_precond
-                        res_lmax = _solve_linear(
-                            matvec_fn=mv_reduced,
-                            b_vec=rhs_reduced,
-                            precond_fn=lmax_precond,
-                            x0_vec=res_reduced.x,
-                            tol_val=tol,
-                            atol_val=atol,
-                            restart_val=int(fp_lmax_controls.restart),
-                            maxiter_val=int(fp_lmax_controls.maxiter),
-                            solve_method_val="incremental",
-                            precond_side=gmres_precond_side,
-                        )
-                        if float(res_lmax.residual_norm) < float(
-                            res_reduced.residual_norm
-                        ):
-                            if emit is not None:
-                                emit(
-                                    1,
-                                    "solve_v3_full_system_linear_gmres: FP low-L polish improved residual "
-                                    f"{float(res_reduced.residual_norm):.3e} -> {float(res_lmax.residual_norm):.3e}",
-                                )
-                            res_reduced = res_lmax
-                    except Exception as exc:  # noqa: BLE001
-                        if emit is not None:
-                            emit(
-                                1,
-                                f"solve_v3_full_system_linear_gmres: FP low-L polish failed ({type(exc).__name__}: {exc})",
-                            )
-            # L=1 targeted polish (flow channel): solve a small projected system
-            # on the L=1 active modes only. This is a cheap way to improve flow/Mach
-            # parity when the full-system solve stalls above the strict target.
-            l1_polish_controls = rhs1_fp_l1_polish_controls_from_env()
-            if fp_targeted_polish and l1_polish_controls.enabled:
-                nxi_for_x_np = np.asarray(
-                    op.fblock.collisionless.n_xi_for_x, dtype=np.int32
-                )
-                l1_active_idx_np = fp_pitch_mode_active_indices(
-                    n_species=int(op.n_species),
-                    n_x=int(op.n_x),
-                    n_xi=int(op.n_xi),
-                    n_theta=int(op.n_theta),
-                    n_zeta=int(op.n_zeta),
-                    nxi_for_x=nxi_for_x_np,
-                    l_min=1,
-                    l_max=1,
-                    full_to_active=(
-                        full_to_active_jnp
-                        if use_active_dof_mode and full_to_active_jnp is not None
-                        else None
-                    ),
-                )
-
-                if int(l1_active_idx_np.size) > 0:
-                    l1_idx_jnp = jnp.asarray(
-                        np.unique(l1_active_idx_np), dtype=jnp.int32
-                    )
-                    l1_n = int(l1_idx_jnp.shape[0])
-
-                    def _pre_l1_full(v: jnp.ndarray) -> jnp.ndarray:
-                        if lmax_precond_for_l1 is not None:
-                            return lmax_precond_for_l1(v)
-                        return polish_precond(v)
-
-                    try:
-                        l1_outcome = _apply_projected_residual_polish(
-                            current_result=res_reduced,
-                            rhs=rhs_reduced,
-                            matvec=mv_reduced,
-                            projected_indices=l1_idx_jnp,
-                            active_size=int(active_size),
-                            solve_linear=_solve_linear,
-                            preconditioner=_pre_l1_full,
-                            tol=l1_polish_controls.tol,
-                            restart=int(l1_polish_controls.restart),
-                            maxiter=int(l1_polish_controls.maxiter),
-                            precond_side=gmres_precond_side,
-                            target=float(target_reduced),
-                            threshold_ratio=float(l1_polish_controls.ratio),
-                            abs_threshold=float(l1_polish_controls.abs_threshold),
-                            full_accept_ratio=float(
-                                l1_polish_controls.full_accept_ratio
-                            ),
-                            require_full_improvement=False,
-                        )
-                        if (
-                            emit is not None
-                            and np.isfinite(l1_outcome.projected_residual_before)
-                            and l1_outcome.projected_residual_before
-                            > max(
-                                float(target_reduced)
-                                * max(1.0, float(l1_polish_controls.ratio)),
-                                float(l1_polish_controls.abs_threshold),
-                            )
-                        ):
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: FP L1 polish "
-                                f"(size={l1_n} restart={l1_polish_controls.restart} "
-                                f"maxiter={l1_polish_controls.maxiter} "
-                                f"b_norm={l1_outcome.projected_residual_before:.3e})",
-                            )
-                        if l1_outcome.accepted:
-                            if emit is not None:
-                                emit(
-                                    1,
-                                    "solve_v3_full_system_linear_gmres: FP L1 polish improved residual "
-                                    f"full {l1_outcome.full_residual_before:.3e} -> "
-                                    f"{float(l1_outcome.full_residual_after):.3e}; "
-                                    f"L1 {l1_outcome.projected_residual_before:.3e} -> "
-                                    f"{float(l1_outcome.projected_residual_after):.3e}",
-                                )
-                            res_reduced = l1_outcome.result
-                    except Exception as exc:  # noqa: BLE001
-                        if emit is not None:
-                            emit(
-                                1,
-                                f"solve_v3_full_system_linear_gmres: FP L1 polish failed ({type(exc).__name__}: {exc})",
-                            )
-            # Low-L global polish: solve a projected system on the lowest L modes across all
-            # species/x/(theta,zeta). This is more expensive than the L1 polish but can be
-            # significantly more effective at improving flow/current parity when the full
-            # solve stalls above the strict target (especially for FP+Er).
-            global_low_l_controls = rhs1_fp_global_low_l_polish_controls_from_env(
-                n_xi=int(op.n_xi),
-            )
-            if (
-                fp_targeted_polish
-                and global_low_l_controls.enabled
-                and float(res_reduced.residual_norm) > target_reduced
-            ):
-                if (
-                    float(res_reduced.residual_norm)
-                    > float(target_reduced) * float(global_low_l_controls.ratio)
-                    and global_low_l_controls.lmax > 0
-                ):
-                    nxi_for_x_np = np.asarray(
-                        op.fblock.collisionless.n_xi_for_x, dtype=np.int32
-                    )
-                    low_active_idx_np = fp_pitch_mode_active_indices(
-                        n_species=int(op.n_species),
-                        n_x=int(op.n_x),
-                        n_xi=int(op.n_xi),
-                        n_theta=int(op.n_theta),
-                        n_zeta=int(op.n_zeta),
-                        nxi_for_x=nxi_for_x_np,
-                        l_min=0,
-                        l_max=int(global_low_l_controls.lmax),
-                        full_to_active=(
-                            full_to_active_jnp
-                            if use_active_dof_mode and full_to_active_jnp is not None
-                            else None
-                        ),
-                    )
-
-                    if int(low_active_idx_np.size) > 0:
-                        low_idx_jnp = jnp.asarray(
-                            np.unique(low_active_idx_np), dtype=jnp.int32
-                        )
-                        low_n = int(low_idx_jnp.shape[0])
-                    else:
-                        low_n = 0
-                        low_idx_jnp = None
-
-                    if low_n > 0 and (
-                        global_low_l_controls.max_size <= 0
-                        or low_n <= global_low_l_controls.max_size
-                    ):
-                        assert low_idx_jnp is not None
-
-                        def _pre_low_full(v: jnp.ndarray) -> jnp.ndarray:
-                            if lmax_precond_for_l1 is not None:
-                                return lmax_precond_for_l1(v)
-                            return polish_precond(v)
-
-                        try:
-                            low_outcome = _apply_projected_residual_polish(
-                                current_result=res_reduced,
-                                rhs=rhs_reduced,
-                                matvec=mv_reduced,
-                                projected_indices=low_idx_jnp,
-                                active_size=int(active_size),
-                                solve_linear=_solve_linear,
-                                preconditioner=_pre_low_full,
-                                tol=float(global_low_l_controls.tol),
-                                restart=int(global_low_l_controls.restart),
-                                maxiter=int(global_low_l_controls.maxiter),
-                                precond_side=gmres_precond_side,
-                                target=float(target_reduced),
-                                threshold_ratio=float(
-                                    global_low_l_controls.threshold_ratio
-                                ),
-                                abs_threshold=float(
-                                    global_low_l_controls.abs_threshold
-                                ),
-                                full_accept_ratio=float(
-                                    global_low_l_controls.full_accept_ratio
-                                ),
-                                require_full_improvement=True,
-                            )
-                            if (
-                                emit is not None
-                                and np.isfinite(low_outcome.projected_residual_before)
-                                and low_outcome.projected_residual_before
-                                > max(
-                                    float(target_reduced)
-                                    * float(global_low_l_controls.threshold_ratio),
-                                    float(global_low_l_controls.abs_threshold),
-                                )
-                            ):
-                                emit(
-                                    1,
-                                    "solve_v3_full_system_linear_gmres: FP global low-L polish "
-                                    f"(lmax={int(global_low_l_controls.lmax)} size={int(low_n)} "
-                                    f"restart={int(global_low_l_controls.restart)} "
-                                    f"maxiter={int(global_low_l_controls.maxiter)} "
-                                    f"b_norm={low_outcome.projected_residual_before:.3e})",
-                                )
-                            if low_outcome.accepted:
-                                if emit is not None:
-                                    emit(
-                                        1,
-                                        "solve_v3_full_system_linear_gmres: FP global low-L polish improved residual "
-                                        f"full {low_outcome.full_residual_before:.3e} -> "
-                                        f"{float(low_outcome.full_residual_after):.3e}; "
-                                        f"low-L {low_outcome.projected_residual_before:.3e} -> "
-                                        f"{float(low_outcome.projected_residual_after):.3e}",
-                                    )
-                                res_reduced = low_outcome.result
-                        except Exception as exc:  # noqa: BLE001
-                            if emit is not None:
-                                emit(
-                                    1,
-                                    "solve_v3_full_system_linear_gmres: FP global low-L polish failed "
-                                    f"({type(exc).__name__}: {exc})",
-                                )
-                # Optional BiCGStab polish for large FP systems: short-recurrence Krylov
-                # can reduce residuals further when restarted GMRES stagnates.
-                fp_bi_controls = rhs1_fp_bicgstab_polish_controls_from_env(
-                    tol=float(tol),
-                    atol=float(atol),
-                )
-                if (
-                    fp_bi_controls.enabled
-                    and int(active_size) >= int(fp_bi_controls.min_size)
-                    and float(res_reduced.residual_norm) > target_reduced
-                ):
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: FP BiCGStab polish "
-                            f"(maxiter={fp_bi_controls.maxiter} tol={fp_bi_controls.tol:.1e})",
-                        )
-                    precond_bi = preconditioner_reduced
-                    if precond_bi is None and fp_polish_controls.hybrid:
-                        precond_bi = polish_precond
-                    res_bi = _solve_linear(
-                        matvec_fn=mv_reduced,
-                        b_vec=rhs_reduced,
-                        precond_fn=precond_bi,
-                        x0_vec=res_reduced.x,
-                        tol_val=fp_bi_controls.tol,
-                        atol_val=fp_bi_controls.atol,
-                        restart_val=restart,
-                        maxiter_val=fp_bi_controls.maxiter,
-                        solve_method_val="bicgstab",
-                        precond_side=gmres_precond_side,
-                    )
-                    if float(res_bi.residual_norm) < float(res_reduced.residual_norm):
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: FP BiCGStab polish improved residual "
-                                f"{float(res_reduced.residual_norm):.3e} -> {float(res_bi.residual_norm):.3e}",
-                            )
-                        res_reduced = res_bi
+        )
         if not bool(sparse_enabled):
             sparse_xblock_rescue_reason = "sparse_disabled"
         elif float(res_reduced.residual_norm) <= float(target_reduced) and not bool(

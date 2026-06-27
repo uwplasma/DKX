@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from sfincs_jax.problems.profile_residual import (
@@ -14,6 +16,8 @@ from sfincs_jax.problems.profile_residual import (
     residual_converged,
     residual_target,
     result_with_true_residual,
+    RHS1FPPostSolvePolishContext,
+    run_rhs1_fp_post_solve_polish,
     safe_ratio,
     true_residual_norm_or_inf,
 )
@@ -341,3 +345,248 @@ def test_replay_left_preconditioned_residual_norms_preserves_current_check_when_
     assert residual_vec is not None
     assert true_norm == math.inf
     assert check_norm == 7.0
+
+
+def _tiny_fp_op() -> SimpleNamespace:
+    return SimpleNamespace(
+        rhs_mode=1,
+        include_phi1=False,
+        fblock=SimpleNamespace(
+            fp=object(),
+            pas=None,
+            collisionless=SimpleNamespace(n_xi_for_x=np.asarray([3], dtype=np.int32)),
+        ),
+        n_species=1,
+        n_x=1,
+        n_xi=3,
+        n_theta=1,
+        n_zeta=1,
+    )
+
+
+def _fp_post_solve_context(
+    *,
+    result: GMRESSolveResult,
+    rhs: jnp.ndarray,
+    matvec,
+    preconditioner=None,
+    target: float = 1.0e-12,
+    residual_controls=None,
+    low_l_controls=None,
+    l1_controls=None,
+    global_controls=None,
+    bicgstab_controls=None,
+    targeted=True,
+    solve_linear=None,
+    emit=None,
+) -> RHS1FPPostSolvePolishContext:
+    def _raise_collision(**_kwargs):
+        raise AssertionError("collision preconditioner should not be built")
+
+    def _raise_lmax(**_kwargs):
+        raise AssertionError("low-L preconditioner should not be built")
+
+    def _raise_solve(**_kwargs):
+        raise AssertionError("Krylov polish should not be called")
+
+    return RHS1FPPostSolvePolishContext(
+        op=_tiny_fp_op(),
+        result=result,
+        rhs=rhs,
+        matvec=matvec,
+        preconditioner=preconditioner,
+        active_size=int(rhs.size),
+        target=float(target),
+        tol=1.0e-10,
+        atol=0.0,
+        restart=5,
+        maxiter=5,
+        precondition_side="left",
+        rhs1_precond_kind="xmg",
+        use_implicit=False,
+        use_active_dof_mode=False,
+        full_to_active=None,
+        reduce_full=None,
+        expand_reduced=None,
+        read_residual_controls=lambda: residual_controls
+        or SimpleNamespace(min_size=999, steps=0, hybrid=False, omega=1.0, backtrack=0),
+        read_low_l_controls=lambda **_kwargs: low_l_controls
+        or SimpleNamespace(lmax_default=0, block_max=0, restart=5, maxiter=5),
+        read_l1_controls=lambda: l1_controls
+        or SimpleNamespace(
+            enabled=False,
+            restart=5,
+            maxiter=5,
+            ratio=1.0,
+            abs_threshold=0.0,
+            tol=1.0e-10,
+            full_accept_ratio=1.2,
+        ),
+        read_global_low_l_controls=lambda **_kwargs: global_controls
+        or SimpleNamespace(
+            enabled=False,
+            lmax=0,
+            max_size=0,
+            ratio=1.0,
+            restart=5,
+            maxiter=5,
+            abs_threshold=0.0,
+            full_accept_ratio=1.2,
+            tol=1.0e-10,
+            threshold_ratio=1.0,
+        ),
+        read_bicgstab_controls=lambda **_kwargs: bicgstab_controls
+        or SimpleNamespace(
+            enabled=False,
+            min_size=1,
+            maxiter=5,
+            tol=1.0e-10,
+            atol=0.0,
+        ),
+        targeted_polish_allowed=lambda **_kwargs: bool(targeted),
+        build_collision_preconditioner=_raise_collision,
+        build_lmax_preconditioner=_raise_lmax,
+        pitch_mode_active_indices=lambda **kwargs: np.asarray(
+            [idx for idx in range(int(kwargs["l_min"]), int(kwargs["l_max"]) + 1)],
+            dtype=np.int32,
+        ),
+        solve_linear=solve_linear or _raise_solve,
+        emit=emit,
+        label="test_rhs1",
+    )
+
+
+def test_rhs1_fp_post_solve_polish_noops_when_gate_is_closed() -> None:
+    result = GMRESSolveResult(
+        x=jnp.zeros(3, dtype=jnp.float64),
+        residual_norm=jnp.asarray(3.0, dtype=jnp.float64),
+    )
+
+    polished = run_rhs1_fp_post_solve_polish(
+        _fp_post_solve_context(
+            result=result,
+            rhs=jnp.ones(3, dtype=jnp.float64),
+            matvec=lambda x: x,
+            preconditioner=None,
+        )
+    )
+
+    assert polished is result
+
+
+def test_rhs1_fp_post_solve_polish_accepts_damped_residual_correction() -> None:
+    messages: list[str] = []
+    result = GMRESSolveResult(
+        x=jnp.zeros(2, dtype=jnp.float64),
+        residual_norm=jnp.asarray(5.0, dtype=jnp.float64),
+    )
+
+    polished = run_rhs1_fp_post_solve_polish(
+        _fp_post_solve_context(
+            result=result,
+            rhs=jnp.asarray([3.0, 4.0], dtype=jnp.float64),
+            matvec=lambda x: 2.0 * x,
+            preconditioner=lambda r: r,
+            target=1.0e-12,
+            residual_controls=SimpleNamespace(
+                min_size=1,
+                steps=1,
+                hybrid=False,
+                omega=1.0,
+                backtrack=2,
+            ),
+            targeted=False,
+            emit=lambda _level, message: messages.append(message),
+        )
+    )
+
+    assert polished is not result
+    assert float(polished.residual_norm) < float(result.residual_norm)
+    assert any("FP polish improved residual" in message for message in messages)
+
+
+def test_rhs1_fp_post_solve_polish_accepts_projected_l1_correction() -> None:
+    result = GMRESSolveResult(
+        x=jnp.zeros(3, dtype=jnp.float64),
+        residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+    )
+
+    def solve_linear(**kwargs):
+        assert kwargs["solve_method_val"] == "incremental"
+        return GMRESSolveResult(
+            x=kwargs["b_vec"],
+            residual_norm=jnp.asarray(0.0, dtype=jnp.float64),
+        )
+
+    polished = run_rhs1_fp_post_solve_polish(
+        _fp_post_solve_context(
+            result=result,
+            rhs=jnp.asarray([0.0, 2.0, 0.0], dtype=jnp.float64),
+            matvec=lambda x: x,
+            preconditioner=lambda r: r,
+            target=1.0e-12,
+            l1_controls=SimpleNamespace(
+                enabled=True,
+                restart=5,
+                maxiter=5,
+                ratio=1.0,
+                abs_threshold=0.0,
+                tol=1.0e-10,
+                full_accept_ratio=1.2,
+            ),
+            solve_linear=solve_linear,
+        )
+    )
+
+    assert polished is not result
+    assert polished.x.tolist() == pytest.approx([0.0, 2.0, 0.0])
+    assert float(polished.residual_norm) == pytest.approx(0.0)
+
+
+def test_rhs1_fp_post_solve_polish_can_run_bicgstab_after_global_gate() -> None:
+    calls: list[str] = []
+    result = GMRESSolveResult(
+        x=jnp.zeros(3, dtype=jnp.float64),
+        residual_norm=jnp.asarray(10.0, dtype=jnp.float64),
+    )
+
+    def solve_linear(**kwargs):
+        calls.append(kwargs["solve_method_val"])
+        return GMRESSolveResult(
+            x=jnp.ones(3, dtype=jnp.float64),
+            residual_norm=jnp.asarray(1.0, dtype=jnp.float64),
+        )
+
+    polished = run_rhs1_fp_post_solve_polish(
+        _fp_post_solve_context(
+            result=result,
+            rhs=jnp.ones(3, dtype=jnp.float64),
+            matvec=lambda x: x,
+            preconditioner=lambda r: r,
+            target=1.0e-12,
+            global_controls=SimpleNamespace(
+                enabled=True,
+                lmax=0,
+                max_size=0,
+                ratio=1.0,
+                restart=5,
+                maxiter=5,
+                abs_threshold=0.0,
+                full_accept_ratio=1.2,
+                tol=1.0e-10,
+                threshold_ratio=1.0,
+            ),
+            bicgstab_controls=SimpleNamespace(
+                enabled=True,
+                min_size=1,
+                maxiter=7,
+                tol=1.0e-10,
+                atol=0.0,
+            ),
+            solve_linear=solve_linear,
+        )
+    )
+
+    assert calls == ["bicgstab"]
+    assert polished is not result
+    assert float(polished.residual_norm) == pytest.approx(1.0)

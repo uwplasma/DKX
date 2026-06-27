@@ -149,6 +149,16 @@ The main structural refactor is functionally complete:
   correction controls. This also removed duplicate private env-reader
   definitions from `problems/profile_policies.py`; focused policy validation
   passed as `158 passed in 0.71 s`.
+- The RHSMode=1 full-FP post-Krylov residual-polish ladder is now owned by
+  `problems/profile_residual.py` as `run_rhs1_fp_post_solve_polish`, with the
+  profile driver passing solver/preconditioner builders as explicit
+  dependencies. Focused validation covered no-op gates, damped residual
+  improvement, projected L=1 correction, and BiCGStab polish admission as
+  `tests/test_rhs1_residual.py` (`21 passed in 0.68 s`) and
+  `tests/test_profile_solve_module_wrappers.py` (`13 passed in 0.63 s`); the
+  broader source/profile/policy bundle passed as `143 passed in 3.91 s`. This
+  reduced `problems/profile_solve.py` to `4402` lines and
+  `solve_v3_full_system_linear_gmres` to `3494` lines without adding files.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -246,8 +256,8 @@ Latest AST audit:
 - Folder depth is no longer the blocker: the package has one-level domain
   folders only and no `__init__.py`-only source packages.
 - The remaining structural blocker is owner size. The largest retained owners
-  are `problems/profile_solve.py` (`4745` lines, with
-  `solve_v3_full_system_linear_gmres` spanning `3836` lines),
+  are `problems/profile_solve.py` (`4402` lines, with
+  `solve_v3_full_system_linear_gmres` spanning `3494` lines),
   `outputs/writer.py` (`3250` lines, with `write_sfincs_jax_output_h5`
   spanning roughly `1852` lines), `solvers/explicit_sparse.py` (`5056`
   lines), and `problems/transport_solve.py` (`3191` lines).
@@ -314,7 +324,12 @@ Remaining work:
   writes in the same owner. `outputs/writer.py` is down to `3250` lines, the
   compatibility aliases used by `sfincs_jax.io` are preserved, and the
   export/HDF5/output-policy tests pass.
-- Tranche 10: retain `explicit_sparse.py` as one owner unless a patch can move a
+- Completed Tranche 10: moved the complete RHSMode=1 full-FP post-Krylov
+  residual-polish ladder from `problems/profile_solve.py` into existing
+  `problems/profile_residual.py`, keeping policy parsing in the driver and
+  preserving all stage gates through explicit callback injection. This lowered
+  the profile driver to `4402` lines and added bounded residual-stage tests.
+- Tranche 11: retain `explicit_sparse.py` as one owner unless a patch can move a
   complete symbolic-factor family into an existing solver owner while deleting
   more code than it adds. Do not fragment sparse factor code into many small
   files.
