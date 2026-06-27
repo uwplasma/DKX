@@ -21,7 +21,7 @@ Examples:
 - `generate_autodiff_sensitivity_validation.py`
 - `generate_w7x_high_nu_performance.py`
 
-Pinned fixed-case runs on the refactor branch:
+Reference trajectory-sweep figure commands:
 
 ```bash
 python examples/publication_figures/generate_er_trajectory_sweep.py \
@@ -42,13 +42,13 @@ python examples/publication_figures/generate_er_trajectory_sweep.py \
   --stem sfincs_jax_er_trajectory_sweep_stellarator_fast_reference
 ```
 
-Those pinned runs are checked in as:
+The corresponding checked summaries and figures are:
 - `examples/publication_figures/artifacts/er_sweep_tokamak_reference_summary.json`
 - `examples/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json`
 - `docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_tokamak_reference.png`
 - `docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.png`
 
-Corrected bounded collisionality branch artifact:
+Bounded collisionality regression artifact:
 
 ```bash
 python examples/publication_figures/generate_sfincs_paper_figs.py \
@@ -104,23 +104,22 @@ When ``--skip-existing`` is used, the generator keeps completed scan points and
 prunes only stale subdirectories that do not contain ``sfincsOutput.h5`` before
 rerunning the missing points.
 
-The corrected bounded LHD rerun is pinned as:
+The bounded LHD regression artifact is checked in as:
 - `examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json`
 - `docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png`
 
-The corrected bounded W7-X rerun is pinned as:
+The bounded W7-X regression artifact is checked in as:
 - `examples/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json`
 - `docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality_reaudit_fast.png`
 
-The full collisionality figure family has also been regenerated and pinned from the
-fixed script:
+The full collisionality figure family is checked in as:
 - `examples/publication_figures/artifacts/lhd_collisionality_summary.json`
 - `docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality.png`
 - `examples/publication_figures/artifacts/w7x_collisionality_summary.json`
 - `docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality.png`
 
-The full artifacts are the validation-facing collisionality lane. The fast artifacts
-remain useful as cheap branch-level regression scaffolds.
+The full artifacts are the validation-facing collisionality lane. The bounded
+artifacts are cheap regression inputs for branch-level checks.
 
 Simakov-Helander high-collisionality audit:
 
@@ -141,7 +140,7 @@ Pinned outputs:
 - `docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.pdf`
 - `examples/publication_figures/artifacts/sfincs_jax_simakov_helander_high_nu_run_plan.json`
 
-Launch high-`nu` pilots before full FP/PAS scans:
+Launch high-`nu` pilots before widening to full FP/PAS scans:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0,1 \
@@ -169,10 +168,10 @@ run plan uses a bounded sparse-direct cap and strict absolute/relative residual
 gates. LHD FP is accepted only with clean residuals. W7-X FP high-`nu'` has
 a residual-clean sparse-LU route with float32 host factors, exact matrix-free
 residual verification, block-basis sparse-helper materialization, and
-within-solve factor reuse across transport RHS solves. The first full-resolution
-W7-X point takes about 582 s on one office GPU, down from about 2028 s
-before factor reuse, with the same transport matrix and residual diagnostics.
-Those residual thresholds are also wired as fail-fast aborts for new runs.
+within-solve factor reuse across transport RHS solves. The checked performance
+summary records the representative full-resolution W7-X point, its residual
+diagnostics, and the solver provenance needed to reproduce the figure. Those
+residual thresholds are also wired as fail-fast aborts for benchmark runs.
 
 Generate the W7-X high-`nu'` performance figure from the checked summary:
 
@@ -202,7 +201,7 @@ Pinned outputs:
 - `docs/_static/figures/paper/sfincs_jax_autodiff_gradient_check.png`
 - `docs/_static/figures/paper/sfincs_jax_autodiff_sensitivity_map.png`
 
-W7-X ambipolar validation scaffold:
+W7-X ambipolar validation workflow:
 
 ```bash
 python examples/publication_figures/generate_w7x_ambipolar_validation.py \
@@ -213,11 +212,11 @@ python examples/publication_figures/generate_w7x_ambipolar_validation.py \
   --out-dir docs/_static/figures/paper
 ```
 
-This lane ships as an executable scaffold with a metadata-rich JSON summary
-and figure writer, but it is not promoted to a checked-in W7-X literature artifact
-until the heavier reference input is rerun and audited.
+This lane is an executable workflow with a metadata-rich JSON summary and
+figure writer. A W7-X literature-validation claim requires a documented
+equilibrium/profile provenance file and audited reference-input run.
 
-The ambipolar scaffold supports restart and split execution as well:
+The ambipolar workflow supports restart and split execution as well:
 
 ```bash
 python examples/publication_figures/generate_w7x_ambipolar_validation.py \
