@@ -35,10 +35,11 @@
 &physicsParameters
 
 
-  ! We change Delta, alpha, nu_n, or Er because changing T_a is not workign at the moment.
+  ! This reference deck varies Delta, alpha, nu_n, or Er while keeping THat fixed
+  ! so benchmark reports share the same normalization contract.
   Delta = 4.5694e-3  !Defines the temperature and mass, B_bar=1, R_bar=1 for VMEC inputs
   alpha = 1.0     !Defines units of Electric field, related with temperature
-  nu_n= 8.330e-3     !Defnes units of species parameters
+  nu_n= 8.330e-3     !Defines units of species parameters
   Er = 0.0        !in fraction of given temperature in ev
 
 

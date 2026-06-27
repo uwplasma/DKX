@@ -273,6 +273,13 @@ The main structural refactor is functionally complete:
   summaries used by tests/docs. The performance and publication-figure READMEs
   describe these as checked summary data and stable workflows, not branch
   history.
+- Phase B example cleanup removed the vague tracked
+  `examples/additional_examples/` learning-surface folder. Its only small
+  namelist moved to `examples/data/qi_nfp2_reference.input.namelist`; benchmark
+  and QI robustness tooling still labels the case `additional_examples` for
+  report continuity. Focused examples and benchmark-default validation passed
+  as `43 passed in 0.45 s`, and a direct scaled-suite probe confirmed the moved
+  file maps to the historical case label.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -445,8 +452,9 @@ Target examples shape for the review PR:
   reference fixtures, not first-run examples. Their READMEs must say this
   clearly, and tutorial/example navigation must not send new users there
   first.
-- Review `additional_examples/`; either fold it into `data/` or document it as
-  a named validation input. It should not remain a vague top-level folder.
+- The former `additional_examples/` input belongs in `data/` as
+  `qi_nfp2_reference.input.namelist`; keep benchmark labels in reports, not as
+  a top-level examples folder.
 - For each public task folder, keep one "start here" script and one README
   table that maps user goals to scripts. Move specialized promotion or audit
   scripts to `publication_figures/`, `performance/`, or `scripts/` if they are
@@ -740,9 +748,10 @@ Acceptance:
    `solvers/preconditioners.py`.
 2. Delete facades whose public imports are no longer used. For retained
    facades, add a one-release compatibility comment and a direct import test.
-3. Review `examples/additional_examples/`, `examples/sfincs_examples/`, and
-   `examples/upstream/`. Move vague or archival navigation out of the
-   first-run path and make the README wording explicit.
+3. Keep the former `examples/additional_examples/` namelist in `examples/data/`
+   and preserve its benchmark label in scripts. Review `examples/sfincs_examples/`
+   and `examples/upstream/` so archival navigation stays out of the first-run
+   path and README wording remains explicit.
 4. Keep the tutorial notebooks and task folders as the public learning surface.
    Add or update notebook/script pointers only if a move changes paths.
 5. Run source-layout, import-contract, example-tree, benchmark-doc, and stale

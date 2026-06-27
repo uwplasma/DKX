@@ -75,7 +75,9 @@ def test_reduced_suite_can_disable_reduced_seed_for_production_inputs(
 
 def test_scaled_suite_suppresses_default_extra_input_for_production_manifest() -> None:
     assert _default_extra_inputs_for_run(Path("benchmarks/production_inputs/manifest.json")) == []
-    assert _default_extra_inputs_for_run(None) == [Path("examples") / "additional_examples" / "input.namelist"]
+    assert _default_extra_inputs_for_run(None) == [
+        Path("examples") / "data" / "qi_nfp2_reference.input.namelist"
+    ]
 
 
 def test_solver_trace_parser_prefers_realized_solver_metadata(tmp_path: Path) -> None:

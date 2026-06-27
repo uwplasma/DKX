@@ -13,7 +13,8 @@ DEFAULT_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_release_cpu_2026-
 DEFAULT_GPU_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas"
 BASELINE_REPORT = REPO_ROOT / "tests" / "scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix" / "suite_report.json"
 EXAMPLES_ROOT = REPO_ROOT / "examples" / "sfincs_examples"
-EXTRA_INPUT = REPO_ROOT / "examples" / "additional_examples" / "input.namelist"
+EXTRA_INPUT = REPO_ROOT / "examples" / "data" / "qi_nfp2_reference.input.namelist"
+EXTRA_CASE_NAME = "additional_examples"
 DEFAULT_PUBLIC_MIN_FORTRAN_RUNTIME_S = 10.0
 
 BEGIN = "<!-- BEGIN FAST_BRANCH_AUDIT -->"
@@ -44,6 +45,12 @@ def _case_names_for_inputs(inputs: list[Path], *, base_root: Path | None = None)
 
     names: dict[Path, str] = {}
     for input_path in inputs:
+        try:
+            if input_path.resolve() == EXTRA_INPUT.resolve():
+                names[input_path] = EXTRA_CASE_NAME
+                continue
+        except Exception:  # noqa: BLE001
+            pass
         parent_name = input_path.parent.name
         if parent_counts[parent_name] == 1:
             names[input_path] = parent_name

@@ -10,7 +10,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_ROOT = REPO_ROOT / "examples"
 
 ALLOWED_EXAMPLE_FOLDERS = {
-    "additional_examples",
     "autodiff",
     "data",
     "getting_started",

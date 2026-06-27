@@ -16,7 +16,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from sfincs_jax.namelist import read_sfincs_input  # noqa: E402
 
-_DEFAULT_SOURCE = _REPO_ROOT / "examples" / "additional_examples" / "input.namelist"
+_DEFAULT_SOURCE = _REPO_ROOT / "examples" / "data" / "qi_nfp2_reference.input.namelist"
 _DEFAULT_STEM = "qi_nfp2_two_species_lowres_promotion"
 _CLAIM_BOUNDARY = (
     "This is a low-resolution two-species QI nfp=2 kinetic promotion candidate, "

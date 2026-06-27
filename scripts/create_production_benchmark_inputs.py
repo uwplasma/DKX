@@ -20,7 +20,7 @@ from typing import Iterable
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUT_ROOT = REPO_ROOT / "benchmarks" / "production_resolution_inputs_2026-05-04"
 DEFAULT_EXAMPLES_ROOT = REPO_ROOT / "examples" / "sfincs_examples"
-DEFAULT_ADDITIONAL_INPUT = REPO_ROOT / "examples" / "additional_examples" / "input.namelist"
+DEFAULT_ADDITIONAL_INPUT = REPO_ROOT / "examples" / "data" / "qi_nfp2_reference.input.namelist"
 # Archived downstream NTX decks can still be imported explicitly for local
 # reproduction, but the production benchmark tier is SFINCS_JAX-owned by
 # default and should not depend on another repository.

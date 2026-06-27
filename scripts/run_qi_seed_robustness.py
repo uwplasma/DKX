@@ -24,7 +24,7 @@ from typing import Iterable
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_QI_INPUT = REPO_ROOT / "examples" / "additional_examples" / "input.namelist"
+DEFAULT_QI_INPUT = REPO_ROOT / "examples" / "data" / "qi_nfp2_reference.input.namelist"
 DEFAULT_OUT_ROOT = REPO_ROOT / "tests" / "qi_seed_robustness"
 DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_smoke.json",

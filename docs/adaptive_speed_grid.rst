@@ -141,7 +141,7 @@ QI seed-robustness smoke
 ------------------------
 
 ``scripts/run_qi_seed_robustness.py`` materializes deterministic neighboring
-cases from ``examples/additional_examples/input.namelist``. Each case localizes
+cases from ``examples/data/qi_nfp2_reference.input.namelist``. Each case localizes
 the QI VMEC equilibrium beside its generated ``input.namelist``, applies
 seed-derived ``nu_n`` and ``Er`` perturbations, and records the exact
 ``sfincs_jax write-output`` command in ``manifest.json``.

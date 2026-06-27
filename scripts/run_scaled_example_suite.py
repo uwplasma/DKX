@@ -41,7 +41,8 @@ _RUN_RECOMMENDATION_ORDER = {
     "bounded_remote": 1,
     "remote_or_cluster_only": 2,
 }
-DEFAULT_EXTRA_INPUT = Path("examples") / "additional_examples" / "input.namelist"
+DEFAULT_EXTRA_INPUT = Path("examples") / "data" / "qi_nfp2_reference.input.namelist"
+DEFAULT_EXTRA_CASE_NAME = "additional_examples"
 
 
 def _gather_jax_env() -> dict[str, object]:
@@ -94,10 +95,11 @@ def _load_production_manifest_cases(
 def _default_extra_inputs_for_run(production_manifest_path: Path | None) -> list[Path]:
     """Return implicit extra inputs for a suite run.
 
-    The normal upstream-suite run includes ``examples/additional_examples`` as a
-    convenience. Generated production input trees already contain that case, so
-    adding it again creates duplicate work and can accidentally launch the wrong
-    row when filtering by a broad pattern.
+    The normal upstream-suite run includes the QI/VMEC reference input as a
+    convenience and keeps the historical ``additional_examples`` case label for
+    report comparability. Generated production input trees already contain that
+    case, so adding it again creates duplicate work and can accidentally launch
+    the wrong row when filtering by a broad pattern.
     """
 
     if production_manifest_path is not None:
@@ -156,12 +158,24 @@ def _filter_inputs_by_production_recommendation(
 
 
 def _case_names_for_inputs(inputs: list[Path], *, base_root: Path | None = None) -> dict[Path, str]:
+    try:
+        default_extra_resolved = (REPO_ROOT / DEFAULT_EXTRA_INPUT).resolve()
+    except Exception:  # noqa: BLE001
+        default_extra_resolved = None
+
     parent_counts: dict[str, int] = {}
     for input_path in inputs:
         parent_counts[input_path.parent.name] = parent_counts.get(input_path.parent.name, 0) + 1
 
     names: dict[Path, str] = {}
     for input_path in inputs:
+        if default_extra_resolved is not None:
+            try:
+                if input_path.resolve() == default_extra_resolved:
+                    names[input_path] = DEFAULT_EXTRA_CASE_NAME
+                    continue
+            except Exception:  # noqa: BLE001
+                pass
         parent_name = input_path.parent.name
         if parent_counts[parent_name] == 1:
             names[input_path] = parent_name
@@ -673,7 +687,7 @@ def main() -> int:
         default=None,
         help=(
             "Extra input.namelist to include outside --examples-root. Repeatable. "
-            "If omitted, examples/additional_examples is included for normal example runs "
+            "If omitted, examples/data/qi_nfp2_reference.input.namelist is included for normal example runs "
             "and suppressed for generated production input trees."
         ),
     )

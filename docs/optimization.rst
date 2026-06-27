@@ -812,7 +812,7 @@ First bounded QI kinetic promotion artifact
 
 The first QI ``nfp=2`` kinetic artifact is checked in as a bounded
 low-resolution promotion, not as a production-resolution optimization claim.
-It starts from ``examples/additional_examples/input.namelist``, converts that
+It starts from ``examples/data/qi_nfp2_reference.input.namelist``, converts that
 one-species QI seed into a two-species ion/electron kinetic scan, and runs
 the same electric-field grid on CPU, one office GPU, and SFINCS Fortran v3:
 
