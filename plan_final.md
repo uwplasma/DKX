@@ -153,8 +153,9 @@ The main structural refactor is functionally complete:
   `problems/profile_residual.py` as `run_rhs1_fp_post_solve_polish`, with the
   profile driver passing solver/preconditioner builders as explicit
   dependencies. Focused validation covered no-op gates, damped residual
-  improvement, projected L=1 correction, and BiCGStab polish admission as
-  `tests/test_rhs1_residual.py` (`21 passed in 0.68 s`) and
+  improvement, low-L block admission, projected L=1 correction, global low-L
+  projected correction, and BiCGStab polish admission as
+  `tests/test_rhs1_residual.py` (`23 passed in 0.69 s`) and
   `tests/test_profile_solve_module_wrappers.py` (`13 passed in 0.63 s`); the
   broader source/profile/policy bundle passed as `143 passed in 3.91 s`. This
   reduced `problems/profile_solve.py` to `4402` lines and

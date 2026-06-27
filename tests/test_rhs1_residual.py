@@ -377,6 +377,7 @@ def _fp_post_solve_context(
     global_controls=None,
     bicgstab_controls=None,
     targeted=True,
+    build_lmax=None,
     solve_linear=None,
     emit=None,
 ) -> RHS1FPPostSolvePolishContext:
@@ -445,7 +446,7 @@ def _fp_post_solve_context(
         ),
         targeted_polish_allowed=lambda **_kwargs: bool(targeted),
         build_collision_preconditioner=_raise_collision,
-        build_lmax_preconditioner=_raise_lmax,
+        build_lmax_preconditioner=build_lmax or _raise_lmax,
         pitch_mode_active_indices=lambda **kwargs: np.asarray(
             [idx for idx in range(int(kwargs["l_min"]), int(kwargs["l_max"]) + 1)],
             dtype=np.int32,
@@ -540,6 +541,88 @@ def test_rhs1_fp_post_solve_polish_accepts_projected_l1_correction() -> None:
 
     assert polished is not result
     assert polished.x.tolist() == pytest.approx([0.0, 2.0, 0.0])
+    assert float(polished.residual_norm) == pytest.approx(0.0)
+
+
+def test_rhs1_fp_post_solve_polish_accepts_low_l_block_result() -> None:
+    result = GMRESSolveResult(
+        x=jnp.zeros(3, dtype=jnp.float64),
+        residual_norm=jnp.asarray(4.0, dtype=jnp.float64),
+    )
+
+    def build_lmax(**kwargs):
+        assert kwargs["lmax"] == 2
+        return lambda r: r
+
+    def solve_linear(**kwargs):
+        assert kwargs["solve_method_val"] == "incremental"
+        assert kwargs["precond_fn"] is not None
+        return GMRESSolveResult(
+            x=jnp.ones(3, dtype=jnp.float64),
+            residual_norm=jnp.asarray(1.0, dtype=jnp.float64),
+        )
+
+    polished = run_rhs1_fp_post_solve_polish(
+        _fp_post_solve_context(
+            result=result,
+            rhs=jnp.ones(3, dtype=jnp.float64),
+            matvec=lambda x: x,
+            preconditioner=lambda r: r,
+            target=1.0e-12,
+            low_l_controls=SimpleNamespace(
+                lmax_default=2,
+                block_max=10,
+                restart=6,
+                maxiter=7,
+            ),
+            build_lmax=build_lmax,
+            solve_linear=solve_linear,
+        )
+    )
+
+    assert polished is not result
+    assert polished.x.tolist() == pytest.approx([1.0, 1.0, 1.0])
+    assert float(polished.residual_norm) == pytest.approx(1.0)
+
+
+def test_rhs1_fp_post_solve_polish_accepts_global_low_l_projected_result() -> None:
+    result = GMRESSolveResult(
+        x=jnp.zeros(3, dtype=jnp.float64),
+        residual_norm=jnp.asarray(math.sqrt(5.0), dtype=jnp.float64),
+    )
+
+    def solve_linear(**kwargs):
+        assert kwargs["solve_method_val"] == "incremental"
+        return GMRESSolveResult(
+            x=kwargs["b_vec"],
+            residual_norm=jnp.asarray(0.0, dtype=jnp.float64),
+        )
+
+    polished = run_rhs1_fp_post_solve_polish(
+        _fp_post_solve_context(
+            result=result,
+            rhs=jnp.asarray([1.0, 2.0, 0.0], dtype=jnp.float64),
+            matvec=lambda x: x,
+            preconditioner=lambda r: r,
+            target=1.0e-12,
+            global_controls=SimpleNamespace(
+                enabled=True,
+                lmax=1,
+                max_size=3,
+                ratio=1.0,
+                restart=8,
+                maxiter=9,
+                abs_threshold=0.0,
+                full_accept_ratio=1.2,
+                tol=1.0e-10,
+                threshold_ratio=1.0,
+            ),
+            solve_linear=solve_linear,
+        )
+    )
+
+    assert polished is not result
+    assert polished.x.tolist() == pytest.approx([1.0, 2.0, 0.0])
     assert float(polished.residual_norm) == pytest.approx(0.0)
 
 
