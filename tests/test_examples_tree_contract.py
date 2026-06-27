@@ -77,6 +77,7 @@ DISALLOWED_TRACKED_SUFFIXES = {
 
 MAX_TRACKED_EXAMPLE_BYTES = 2 * 1024 * 1024
 README_STALE_FRAGMENTS = (
+    "At the moment",
     "What works today",
     "checked docs now contain",
     "For the current support matrix",
