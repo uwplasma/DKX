@@ -17,6 +17,7 @@ from sfincs_jax.io import (
     write_sfincs_output_file,
 )
 from sfincs_jax.namelist import Namelist
+from sfincs_jax.outputs.formats import write_export_f_state_vectors_to_data
 from sfincs_jax.outputs.rhsmode1 import (
     _add_rhsmode1_solver_diagnostics,
     _compact_json_metadata,
@@ -532,6 +533,73 @@ def test_export_f_config_builds_identity_like_maps_and_preserves_constant_distri
     mapped = _apply_export_f_maps(f, cfg)
     assert mapped.shape == (2, 2, 3, 2, 2)
     np.testing.assert_allclose(mapped, 1.0)
+
+
+def test_write_export_f_state_vectors_to_data_writes_delta_and_full_iterations() -> None:
+    nml = _minimal_namelist(
+        {
+            "export_f": {
+                "EXPORT_FULL_F": True,
+                "EXPORT_DELTA_F": True,
+                "EXPORT_F_THETA_OPTION": 0,
+                "EXPORT_F_ZETA_OPTION": 0,
+                "EXPORT_F_X_OPTION": 0,
+                "EXPORT_F_XI_OPTION": 0,
+            },
+            "otherNumericalParameters": {},
+        }
+    )
+    grids = SimpleNamespace(
+        theta=np.asarray([0.0, np.pi]),
+        zeta=np.asarray([0.0]),
+        x=np.asarray([0.4]),
+        n_xi=2,
+    )
+    geom = SimpleNamespace(n_periods=5)
+    cfg = _export_f_config(nml=nml, grids=grids, geom=geom)
+    assert cfg is not None
+
+    f_shape = (1, 1, 2, 2, 1)
+    f0_l0 = np.asarray([[[[10.0], [20.0]]]])
+    state0 = np.arange(np.prod(f_shape), dtype=np.float64)
+    state1 = state0 + 100.0
+    data = {"export_full_f": np.int32(1), "export_delta_f": np.int32(1)}
+
+    write_export_f_state_vectors_to_data(
+        data=data,
+        state_vectors=[state0, state1],
+        f_size=state0.size,
+        f_shape=f_shape,
+        f0_l0=f0_l0,
+        export_cfg=cfg,
+        fortran_h5_layout_fn=lambda x: x,
+    )
+
+    assert data["delta_f"].shape == (1, 2, 1, 2, 1, 2)
+    assert data["full_f"].shape == data["delta_f"].shape
+    np.testing.assert_allclose(data["delta_f"][0, 0, 0, :, 0, 0], np.asarray([0.0, 1.0]))
+    np.testing.assert_allclose(data["full_f"][0, 0, 0, :, 0, 0], np.asarray([10.0, 21.0]))
+    np.testing.assert_allclose(data["full_f"][0, 0, 0, :, 0, 1], np.asarray([110.0, 121.0]))
+
+
+def test_write_export_f_state_vectors_to_data_noops_without_enabled_export() -> None:
+    cfg = SimpleNamespace(
+        map_x=np.eye(1),
+        map_xi=np.eye(1),
+        map_theta=np.eye(1),
+        map_zeta=np.eye(1),
+    )
+    data = {"export_full_f": np.int32(-1), "export_delta_f": np.int32(-1)}
+    write_export_f_state_vectors_to_data(
+        data=data,
+        state_vectors=[np.asarray([1.0])],
+        f_size=1,
+        f_shape=(1, 1, 1, 1, 1),
+        f0_l0=np.ones((1, 1, 1, 1)),
+        export_cfg=cfg,
+    )
+
+    assert set(data) == {"export_full_f", "export_delta_f"}
 
 
 def test_export_f_config_nearest_neighbor_x_and_invalid_theta_option() -> None:

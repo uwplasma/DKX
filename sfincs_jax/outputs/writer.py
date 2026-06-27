@@ -93,6 +93,7 @@ _legendre_matrix = _output_formats._legendre_matrix
 _netcdf_safe_name = _output_formats.netcdf_safe_name
 _output_file_format = _output_formats.output_file_format
 _to_numpy_for_h5 = _output_formats.to_numpy_for_h5
+_write_export_f_state_vectors_to_data = _output_formats.write_export_f_state_vectors_to_data
 read_sfincs_h5 = _output_formats.read_sfincs_h5
 read_sfincs_output_file = _output_formats.read_sfincs_output_file
 write_sfincs_h5 = _output_formats.write_sfincs_h5
@@ -2261,33 +2262,19 @@ def write_sfincs_jax_output_h5(
         if include_phi1:
             data["didNonlinearCalculationConverge"] = _fortran_logical(True)
 
-        export_full_f = int(np.asarray(data.get("export_full_f", 0)).reshape(())) == 1
-        export_delta_f = int(np.asarray(data.get("export_delta_f", 0)).reshape(())) == 1
-        if export_full_f or export_delta_f:
+        if export_cfg is not None:
             from ..problems.transport_diagnostics import f0_l0_v3_from_operator  # noqa: PLC0415
 
             op_use = result.op
-            f0_l0 = f0_l0_v3_from_operator(op_use)
-            delta_list: list[np.ndarray] = []
-            full_list: list[np.ndarray] = []
-            for x_full in xs:
-                f_delta = jnp.asarray(x_full[: op_use.f_size], dtype=jnp.float64).reshape(op_use.fblock.f_shape)
-                if export_delta_f:
-                    delta_np = np.asarray(f_delta, dtype=np.float64)
-                    if export_cfg is not None:
-                        delta_np = _apply_export_f_maps(delta_np, export_cfg)
-                    delta_list.append(np.transpose(delta_np, (1, 2, 4, 3, 0)))
-                if export_full_f:
-                    f_full = f_delta.at[:, :, 0, :, :].add(f0_l0)
-                    full_np = np.asarray(f_full, dtype=np.float64)
-                    if export_cfg is not None:
-                        full_np = _apply_export_f_maps(full_np, export_cfg)
-                    full_list.append(np.transpose(full_np, (1, 2, 4, 3, 0)))
-
-            if export_delta_f:
-                data["delta_f"] = _fortran_h5_layout(np.stack(delta_list, axis=-1))
-            if export_full_f:
-                data["full_f"] = _fortran_h5_layout(np.stack(full_list, axis=-1))
+            _write_export_f_state_vectors_to_data(
+                data=data,
+                state_vectors=xs,
+                f_size=int(op_use.f_size),
+                f_shape=tuple(op_use.fblock.f_shape),
+                f0_l0=f0_l0_v3_from_operator(op_use),
+                export_cfg=export_cfg,
+                fortran_h5_layout_fn=_fortran_h5_layout,
+            )
 
         # Coordinate conversion factors (d/dpsiHat -> other coordinates).
         conv = _conversion_factors_to_from_dpsi_hat(
@@ -2776,33 +2763,21 @@ def write_sfincs_jax_output_h5(
                     chunk_size=diag_chunk,
                 )
 
-            export_full_f = int(np.asarray(data.get("export_full_f", 0)).reshape(())) == 1
-            export_delta_f = int(np.asarray(data.get("export_delta_f", 0)).reshape(())) == 1
-            if (export_full_f or export_delta_f) and result.state_vectors_by_rhs:
+            if export_cfg is not None and result.state_vectors_by_rhs:
                 from ..problems.transport_diagnostics import f0_l0_v3_from_operator  # noqa: PLC0415
 
-                f0_l0 = f0_l0_v3_from_operator(result.op0)
-                delta_list: list[np.ndarray] = []
-                full_list: list[np.ndarray] = []
-                for which_rhs in sorted(result.state_vectors_by_rhs):
-                    x_full = result.state_vectors_by_rhs[int(which_rhs)]
-                    f_delta = jnp.asarray(x_full[: result.op0.f_size], dtype=jnp.float64).reshape(result.op0.fblock.f_shape)
-                    if export_delta_f:
-                        delta_np = np.asarray(f_delta, dtype=np.float64)
-                        if export_cfg is not None:
-                            delta_np = _apply_export_f_maps(delta_np, export_cfg)
-                        delta_list.append(np.transpose(delta_np, (1, 2, 4, 3, 0)))
-                    if export_full_f:
-                        f_full = f_delta.at[:, :, 0, :, :].add(f0_l0)
-                        full_np = np.asarray(f_full, dtype=np.float64)
-                        if export_cfg is not None:
-                            full_np = _apply_export_f_maps(full_np, export_cfg)
-                        full_list.append(np.transpose(full_np, (1, 2, 4, 3, 0)))
-
-                if export_delta_f and delta_list:
-                    data["delta_f"] = _fortran_h5_layout(np.stack(delta_list, axis=-1))
-                if export_full_f and full_list:
-                    data["full_f"] = _fortran_h5_layout(np.stack(full_list, axis=-1))
+                _write_export_f_state_vectors_to_data(
+                    data=data,
+                    state_vectors=[
+                        result.state_vectors_by_rhs[int(which_rhs)]
+                        for which_rhs in sorted(result.state_vectors_by_rhs)
+                    ],
+                    f_size=int(result.op0.f_size),
+                    f_shape=tuple(result.op0.fblock.f_shape),
+                    f0_l0=f0_l0_v3_from_operator(result.op0),
+                    export_cfg=export_cfg,
+                    fortran_h5_layout_fn=_fortran_h5_layout,
+                )
 
             # Add transportMatrix (Fortran reads it transposed vs mathematical row/col).
             fields["transportMatrix"] = np.asarray(result.transport_matrix, dtype=np.float64).T

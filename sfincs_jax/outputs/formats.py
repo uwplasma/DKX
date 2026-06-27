@@ -328,6 +328,50 @@ def _apply_export_f_maps(f: np.ndarray, cfg: ExportFConfig) -> np.ndarray:
     return f
 
 
+def write_export_f_state_vectors_to_data(
+    *,
+    data: dict[str, Any],
+    state_vectors: list[Any] | tuple[Any, ...],
+    f_size: int,
+    f_shape: tuple[int, ...],
+    f0_l0: Any,
+    export_cfg: ExportFConfig | None,
+    fortran_h5_layout_fn=fortran_h5_layout,
+) -> None:
+    """Write ``delta_f`` and ``full_f`` datasets for solved state vectors.
+
+    The input distribution is in solver order ``(species, x, ell, theta, zeta)``.
+    The stored pre-layout order matches the SFINCS Fortran readback convention:
+    ``(x_export, xi_export, zeta_export, theta_export, species, iteration)``.
+    """
+
+    if export_cfg is None:
+        return
+    export_full_f = int(np.asarray(data.get("export_full_f", 0)).reshape(())) == 1
+    export_delta_f = int(np.asarray(data.get("export_delta_f", 0)).reshape(())) == 1
+    if not (export_full_f or export_delta_f) or not state_vectors:
+        return
+
+    f0_l0_arr = np.asarray(f0_l0, dtype=np.float64)
+    delta_list: list[np.ndarray] = []
+    full_list: list[np.ndarray] = []
+    for x_full in state_vectors:
+        f_delta = np.asarray(x_full[: int(f_size)], dtype=np.float64).reshape(f_shape)
+        if export_delta_f:
+            delta_np = _apply_export_f_maps(f_delta, export_cfg)
+            delta_list.append(np.transpose(delta_np, (1, 2, 4, 3, 0)))
+        if export_full_f:
+            f_full = np.array(f_delta, dtype=np.float64, copy=True)
+            f_full[:, :, 0, :, :] += f0_l0_arr
+            full_np = _apply_export_f_maps(f_full, export_cfg)
+            full_list.append(np.transpose(full_np, (1, 2, 4, 3, 0)))
+
+    if export_delta_f and delta_list:
+        data["delta_f"] = fortran_h5_layout_fn(np.stack(delta_list, axis=-1))
+    if export_full_f and full_list:
+        data["full_f"] = fortran_h5_layout_fn(np.stack(full_list, axis=-1))
+
+
 def write_sfincs_h5(
     *,
     path: Path,
@@ -574,6 +618,7 @@ __all__ = (
     "read_sfincs_output_file",
     "to_numpy_for_h5",
     "write_sfincs_h5",
+    "write_export_f_state_vectors_to_data",
     "write_sfincs_netcdf",
     "write_sfincs_npz",
     "write_sfincs_output_file",

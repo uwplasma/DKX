@@ -134,6 +134,11 @@ The main structural refactor is functionally complete:
   `tests/test_io_export_and_h5_coverage.py tests/test_io_output_policy_coverage.py`
   as `84 passed in 1.78 s`. This reduced `outputs/writer.py` to `3275`
   lines without adding source files.
+- The duplicated RHSMode=1 and transport `export_f` state-vector HDF5 dataset
+  writes now share `outputs/formats.py::write_export_f_state_vectors_to_data`.
+  Focused validation passed as `86 passed in 1.87 s`, and the broader
+  output/source guard passed as `180 passed in 9.86 s`. This reduced
+  `outputs/writer.py` to `3250` lines.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -229,7 +234,7 @@ Latest AST audit:
 - The remaining structural blocker is owner size. The largest retained owners
   are `problems/profile_solve.py` (`4745` lines, with
   `solve_v3_full_system_linear_gmres` spanning `3836` lines),
-  `outputs/writer.py` (`3275` lines, with `write_sfincs_jax_output_h5`
+  `outputs/writer.py` (`3250` lines, with `write_sfincs_jax_output_h5`
   spanning roughly `1852` lines), `solvers/explicit_sparse.py` (`5056`
   lines), and `problems/transport_solve.py` (`3191` lines).
 - The active-DOF/PAS-projection reduced-system setup has been extracted from
@@ -290,9 +295,11 @@ Remaining work:
   `outputs/rhsmode1.py`, covering geometryScheme=5 and non-axisymmetric L=2
   paths with tiny numerical tests.
 - Completed Tranche 9: moved the complete `export_f` output-grid mapping and
-  distribution projection phase into existing `outputs/formats.py`, dropped
-  `outputs/writer.py` by `233` lines, preserved the compatibility aliases used
-  by `sfincs_jax.io`, and kept export/HDF5/output-policy tests passing.
+  distribution projection phase into existing `outputs/formats.py`, then
+  centralized the RHSMode=1 and transport state-vector `delta_f`/`full_f`
+  writes in the same owner. `outputs/writer.py` is down to `3250` lines, the
+  compatibility aliases used by `sfincs_jax.io` are preserved, and the
+  export/HDF5/output-policy tests pass.
 - Tranche 10: retain `explicit_sparse.py` as one owner unless a patch can move a
   complete symbolic-factor family into an existing solver owner while deleting
   more code than it adds. Do not fragment sparse factor code into many small
