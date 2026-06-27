@@ -209,6 +209,12 @@ The main structural refactor is functionally complete:
   checks vector and batched true-residual parity against a dense reference;
   focused validation passed as `105 passed in 3.82 s`, with the adjacent
   explicit-sparse coverage slice improving from `81%` to `82%`.
+- Transport linear-system coverage now includes the non-transport default
+  solver route, dense direct-solver cache reuse, left-preconditioned host GMRES
+  rejection of preconditioned-only convergence, and non-finite reported
+  residual handling. Focused validation passed:
+  `tests/test_transport_linear_solve.py` as `23 passed in 7.21 s`, and the
+  broader transport-policy/source bundle passed as `78 passed in 12.01 s`.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.

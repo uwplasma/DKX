@@ -50,6 +50,7 @@ def _context(**overrides) -> TransportLinearSolveContext:
 def test_transport_solver_kind_and_restart_policy() -> None:
     assert transport_solver_kind("auto", rhs_mode=2) == ("bicgstab", "batched")
     assert transport_solver_kind("bicgstab_jax", rhs_mode=3) == ("bicgstab", "batched")
+    assert transport_solver_kind("default", rhs_mode=1) == ("bicgstab", "batched")
     assert transport_solver_kind("incremental", rhs_mode=2) == ("gmres", "incremental")
 
     assert transport_restart_for_method("auto", rhs_mode=2, gmres_restart=30, restart=80) == 80
@@ -363,6 +364,16 @@ def test_dense_matvec_lu_helpers_cache_and_solve() -> None:
         key=("toy-solver", 2),
     )
     assert jnp.allclose(solver(rhs), expected)
+    assert (
+        dense_solver_for_matvec(
+            matvec_fn=lambda x: 2.0 * x,
+            n=2,
+            dtype=jnp.float64,
+            cache=solver_cache,
+            key=("toy-solver", 2),
+        )
+        is solver
+    )
 
 
 def test_transport_host_gmres_left_preconditioned_progress(monkeypatch) -> None:
@@ -404,6 +415,66 @@ def test_transport_host_gmres_left_preconditioned_progress(monkeypatch) -> None:
 def test_transport_host_gmres_plain_path_uses_true_residual(monkeypatch) -> None:
     def fake_gmres(**_kwargs):
         return np.asarray([2.0, -1.0]), 1.5, [1.5]
+
+    monkeypatch.setattr(transport_linear_system, "gmres_solve_with_history_scipy", fake_gmres)
+    result, residual = transport_host_gmres_solve(
+        op=SimpleNamespace(rhs_mode=3),
+        matvec_fn=lambda x: 2.0 * x,
+        b_vec=jnp.asarray([4.0, -2.0], dtype=jnp.float64),
+        x0_vec=None,
+        preconditioner_fn=None,
+        tol_val=1.0e-8,
+        atol_val=1.0e-12,
+        restart_val=5,
+        maxiter_val=10,
+        precondition_side_val="right",
+    )
+
+    assert float(result.residual_norm) == 0.0
+    assert jnp.allclose(residual, jnp.zeros((2,), dtype=jnp.float64))
+
+
+def test_transport_host_gmres_left_preconditioned_rejects_preconditioned_report(
+    monkeypatch,
+) -> None:
+    b_vec = jnp.asarray([1.0, 2.0], dtype=jnp.float64)
+    progress: list[tuple[int, str]] = []
+
+    def fake_left_gmres(**kwargs):
+        kwargs["progress_callback"](2, 0.25)
+        return np.zeros((2,), dtype=np.float64), 3.0, 0.0, [0.25]
+
+    monkeypatch.setattr(transport_linear_system, "explicit_left_preconditioned_gmres_scipy", fake_left_gmres)
+    monkeypatch.setattr(
+        transport_linear_system,
+        "transport_host_gmres_accepts_preconditioned_residual",
+        lambda **_kwargs: False,
+    )
+
+    result, residual = transport_host_gmres_solve(
+        op=SimpleNamespace(rhs_mode=2),
+        matvec_fn=lambda x: x,
+        b_vec=b_vec,
+        x0_vec=None,
+        preconditioner_fn=lambda x: x,
+        tol_val=1.0e-8,
+        atol_val=1.0e-12,
+        restart_val=5,
+        maxiter_val=10,
+        precondition_side_val="left",
+        emit=lambda level, message: progress.append((level, message)),
+        which_rhs=2,
+        progress_every=10,
+    )
+
+    assert float(result.residual_norm) == pytest.approx(float(jnp.linalg.norm(b_vec)))
+    assert jnp.allclose(residual, b_vec)
+    assert progress == []
+
+
+def test_transport_host_gmres_plain_path_ignores_nonfinite_reported_residual(monkeypatch) -> None:
+    def fake_gmres(**_kwargs):
+        return np.asarray([2.0, -1.0]), float("nan"), []
 
     monkeypatch.setattr(transport_linear_system, "gmres_solve_with_history_scipy", fake_gmres)
     result, residual = transport_host_gmres_solve(
