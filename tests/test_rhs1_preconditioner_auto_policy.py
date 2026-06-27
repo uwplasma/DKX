@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import numpy as np
+
 from sfincs_jax.problems.profile_policies import (
+    RHS1DefaultPreconditionerSelectionContext,
     canonical_rhs1_preconditioner_kind,
     pas_auto_skip_strong_retry,
     rhs1_gpu_sparse_fallback_skip_allowed,
@@ -23,6 +28,7 @@ from sfincs_jax.problems.profile_policies import (
     rhs1_pas_tokamak_gpu_xblock_preferred,
     rhs1_pas_weak_auto_override_kind,
     rhs1_sharded_line_override_allowed,
+    resolve_rhs1_default_preconditioner_selection,
 )
 from sfincs_jax.solvers.selection_policy import SolverCandidateMetrics
 
@@ -845,3 +851,141 @@ def test_sharded_line_override_policy_preserves_dedicated_pas_preconditioners() 
     assert not rhs1_sharded_line_override_allowed("pas_tz")
     assert not rhs1_sharded_line_override_allowed("pas_tokamak_theta")
     assert not rhs1_sharded_line_override_allowed("pas_ilu")
+
+
+def _default_selection_op(
+    *,
+    has_fp: bool = False,
+    has_pas: bool = False,
+    rhs_mode: int = 1,
+    include_phi1: bool = False,
+    constraint_scheme: int = 2,
+    extra_size: int = 2,
+    n_theta: int = 8,
+    n_zeta: int = 1,
+    total_size: int = 500,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        rhs_mode=rhs_mode,
+        include_phi1=include_phi1,
+        constraint_scheme=constraint_scheme,
+        extra_size=extra_size,
+        total_size=total_size,
+        n_theta=n_theta,
+        n_zeta=n_zeta,
+        n_species=1,
+        n_x=2,
+        fblock=SimpleNamespace(
+            fp=object() if has_fp else None,
+            pas=object() if has_pas else None,
+            collisionless=SimpleNamespace(n_xi_for_x=np.asarray([6, 8], dtype=np.int32)),
+            magdrift_theta=None,
+            magdrift_zeta=None,
+            magdrift_xidot=None,
+        ),
+    )
+
+
+def _default_selection_context(**updates) -> RHS1DefaultPreconditionerSelectionContext:
+    op = updates.pop("op", _default_selection_op())
+    physics = updates.pop("physics", {})
+    values = {
+        "_canonical_rhs1_preconditioner_kind": canonical_rhs1_preconditioner_kind,
+        "_matvec_shard_axis": lambda _op: None,
+        "_pas_tz_preconditioner_applicable": lambda _op: True,
+        "_rhs1_fp_dkes_default_kind": lambda **_kwargs: "fp_dkes_default",
+        "_rhs1_pas_auto_large_base_kind": rhs1_pas_auto_large_base_kind,
+        "_rhs1_pas_dkes_pas_tz_preferred": lambda **_kwargs: False,
+        "_rhs1_pas_dkes_xblock_allowed": lambda **_kwargs: False,
+        "_rhs1_pas_small_near_zero_er_kind": lambda **_kwargs: "pas_small_near_zero",
+        "_rhs1_pas_tokamak_gpu_theta_allowed": lambda **_kwargs: False,
+        "_rhs1_pas_tokamak_gpu_xblock_preferred": lambda **_kwargs: False,
+        "active_size": 500,
+        "emit": None,
+        "full_precond_requested": False,
+        "geom_scheme": 2,
+        "jax": SimpleNamespace(default_backend=lambda: "cpu", device_count=lambda: 1),
+        "nml": SimpleNamespace(group=lambda name: physics if name.lower() == "physicsparameters" else {}),
+        "np": np,
+        "op": op,
+        "os": __import__("os"),
+        "pre_theta": 0,
+        "pre_zeta": 0,
+        "er_abs": 0.0,
+        "rhs1_gpu_tokamak_pas_tight_gmres": False,
+        "rhs1_precond_env": "",
+        "rhs1_xblock_tz_lmax": 0,
+        "schur_er_min": 1.0e-12,
+        "use_dkes": False,
+    }
+    values.update(updates)
+    return RHS1DefaultPreconditionerSelectionContext(values=values)
+
+
+def test_default_preconditioner_selection_honors_explicit_and_theta_zeta_controls() -> None:
+    explicit = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(rhs1_precond_env="theta")
+    )
+    assert explicit["rhs1_precond_kind"] == "theta_line"
+
+    adi = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(pre_theta=1, pre_zeta=1)
+    )
+    assert adi["rhs1_precond_kind"] == "adi"
+
+    theta = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(pre_theta=1, pre_zeta=0)
+    )
+    assert theta["rhs1_precond_kind"] == "theta_line"
+
+    zeta = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(pre_theta=0, pre_zeta=1)
+    )
+    assert zeta["rhs1_precond_kind"] == "zeta_line"
+
+
+def test_default_preconditioner_selection_prefers_xmg_for_moderate_fp_near_zero_er() -> None:
+    result = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(has_fp=True, has_pas=False, n_theta=7, n_zeta=5, total_size=2000),
+            active_size=2000,
+        )
+    )
+
+    assert result["rhs1_precond_kind"] == "xmg"
+    assert result["er_abs"] == 0.0
+    assert result["max_l"] == 8
+
+
+def test_default_preconditioner_selection_bounds_tokamak_pas_full_preconditioner_by_size() -> None:
+    small = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(has_pas=True, total_size=500, n_theta=8, n_zeta=1),
+            full_precond_requested=True,
+            geom_scheme=1,
+        )
+    )
+    large = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(has_pas=True, total_size=9000, n_theta=8, n_zeta=1),
+            active_size=9000,
+            full_precond_requested=True,
+            geom_scheme=1,
+        )
+    )
+
+    assert small["rhs1_precond_kind"] == "xblock_tz"
+    assert small["tokamak_like"] is True
+    assert large["rhs1_precond_kind"] == "pas_hybrid"
+
+
+def test_default_preconditioner_selection_delegates_fp_dkes_default() -> None:
+    result = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(has_fp=True, n_theta=7, n_zeta=5, total_size=3000),
+            active_size=3000,
+            use_dkes=True,
+        )
+    )
+
+    assert result["rhs1_precond_kind"] == "fp_dkes_default"
