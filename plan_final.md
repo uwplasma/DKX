@@ -2845,6 +2845,13 @@ Current completion status:
   behavior. Its full local gate passed after the move, so the remaining
   `v3_driver` imports are increasingly limited to explicit compatibility-shim
   tests.
+- Six behavior suites were renamed and migrated from `test_v3_driver_*` to
+  profile/PAS-owned names: profile solve policy helpers, sparse helper coverage,
+  PAS preconditioner policy, profile solve policy coverage, profile
+  domain-decomposition reduction, and RHSMode=1 dispatch coverage. These tests
+  now exercise `problems.profile_solve` directly; retained legacy import strings
+  are explicit compatibility-shim checks rather than hidden behavior
+  dependencies.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.

@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-import sfincs_jax.v3_driver as vd
+import sfincs_jax.problems.profile_solve as profile_solve
 import sfincs_jax.problems.profile_preconditioner_build as pb
 import sfincs_jax.problems.profile_sparse_direct as sparse_direct
 from sfincs_jax.namelist import read_sfincs_input
@@ -608,7 +608,7 @@ def test_structured_fblock_preconditioner_env_is_honored_for_phi1_solve(monkeypa
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_BICGSTAB_PRECOND", "off")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PRECONDITIONER", "structured_fblock_fp_radial_jacobi")
 
-    result = vd.solve_v3_full_system_linear_gmres(
+    result = profile_solve.solve_v3_full_system_linear_gmres(
         nml=nml,
         tol=1.0e-8,
         restart=20,
@@ -636,7 +636,7 @@ def test_matvec_submatrix_uses_unsharded_operator_inside_vmap(monkeypatch) -> No
         assert allow_sharding is False
         return 2.0 * vector + jnp.arange(vector.shape[0], dtype=vector.dtype)
 
-    monkeypatch.setattr(vd, "apply_v3_full_system_operator_cached", _cached_matvec)
+    monkeypatch.setattr(profile_solve, "apply_v3_full_system_operator_cached", _cached_matvec)
     monkeypatch.setattr(sparse_direct, "apply_v3_full_system_operator", _unsharded_matvec)
 
     submatrix = sparse_direct.matvec_submatrix(
@@ -651,7 +651,7 @@ def test_matvec_submatrix_uses_unsharded_operator_inside_vmap(monkeypatch) -> No
 
 
 def test_rhs1_dkes_gmres_budget_respects_explicit_limits() -> None:
-    restart, maxiter, restart_defaulted, maxiter_defaulted = vd._rhs1_dkes_gmres_budget(
+    restart, maxiter, restart_defaulted, maxiter_defaulted = profile_solve._rhs1_dkes_gmres_budget(
         restart=20,
         maxiter=20,
         restart_forced=True,
@@ -665,7 +665,7 @@ def test_rhs1_dkes_gmres_budget_respects_explicit_limits() -> None:
 
 
 def test_rhs1_dkes_gmres_budget_applies_defaults_when_unforced() -> None:
-    restart, maxiter, restart_defaulted, maxiter_defaulted = vd._rhs1_dkes_gmres_budget(
+    restart, maxiter, restart_defaulted, maxiter_defaulted = profile_solve._rhs1_dkes_gmres_budget(
         restart=20,
         maxiter=20,
         restart_forced=False,
@@ -679,7 +679,7 @@ def test_rhs1_dkes_gmres_budget_applies_defaults_when_unforced() -> None:
 
 
 def test_rhs1_dkes_gmres_budget_caps_unforced_restart() -> None:
-    restart, maxiter, restart_defaulted, maxiter_defaulted = vd._rhs1_dkes_gmres_budget(
+    restart, maxiter, restart_defaulted, maxiter_defaulted = profile_solve._rhs1_dkes_gmres_budget(
         restart=200,
         maxiter=None,
         restart_forced=False,
@@ -693,14 +693,14 @@ def test_rhs1_dkes_gmres_budget_caps_unforced_restart() -> None:
 
 
 def test_rhs1_pas_tz_guarded_structured_levels_parse_aliases() -> None:
-    assert vd._rhs1_pas_tz_guarded_structured_levels("") == ()
-    assert vd._rhs1_pas_tz_guarded_structured_levels("off") == ()
-    assert vd._rhs1_pas_tz_guarded_structured_levels("structured") == ("xmg", "collision")
-    assert vd._rhs1_pas_tz_guarded_structured_levels("x+coll+x") == ("xmg", "collision")
-    assert vd._rhs1_pas_tz_guarded_structured_levels("unknown,collision_diag") == ("collision",)
+    assert profile_solve._rhs1_pas_tz_guarded_structured_levels("") == ()
+    assert profile_solve._rhs1_pas_tz_guarded_structured_levels("off") == ()
+    assert profile_solve._rhs1_pas_tz_guarded_structured_levels("structured") == ("xmg", "collision")
+    assert profile_solve._rhs1_pas_tz_guarded_structured_levels("x+coll+x") == ("xmg", "collision")
+    assert profile_solve._rhs1_pas_tz_guarded_structured_levels("unknown,collision_diag") == ("collision",)
 
 
 def test_ksp_iteration_solver_label_reports_lgmres_method() -> None:
-    assert vd._ksp_iteration_solver_label(solver_kind="gmres", solve_method="incremental") == "gmres"
-    assert vd._ksp_iteration_solver_label(solver_kind="gmres", solve_method="lgmres") == "lgmres"
-    assert vd._ksp_iteration_solver_label(solver_kind="bicgstab", solve_method="lgmres") == "bicgstab"
+    assert profile_solve._ksp_iteration_solver_label(solver_kind="gmres", solve_method="incremental") == "gmres"
+    assert profile_solve._ksp_iteration_solver_label(solver_kind="gmres", solve_method="lgmres") == "lgmres"
+    assert profile_solve._ksp_iteration_solver_label(solver_kind="bicgstab", solve_method="lgmres") == "bicgstab"

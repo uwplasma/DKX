@@ -8,7 +8,7 @@ import pytest
 from scipy import sparse
 
 import sfincs_jax.problems.profile_sparse_direct as sparse_direct
-import sfincs_jax.v3_driver as v3_driver
+import sfincs_jax.problems.profile_solve as profile_solve
 
 
 class _HalfSolve:
@@ -33,40 +33,40 @@ def test_rhsmode1_xblock_sparse_lu_default_max_targets_full_fp_host_path() -> No
     pas_op = SimpleNamespace(fblock=SimpleNamespace(fp=None, pas=object()))
     generic_op = SimpleNamespace(fblock=SimpleNamespace(fp=None, pas=None))
 
-    assert v3_driver._rhsmode1_xblock_sparse_lu_default_max(full_fp_op, build_jax_factors=False) == 30000
-    assert v3_driver._rhsmode1_xblock_sparse_lu_default_max(full_fp_op, build_jax_factors=True) == 2000
-    assert v3_driver._rhsmode1_xblock_sparse_lu_default_max(pas_op, build_jax_factors=False) == 2000
-    assert v3_driver._rhsmode1_xblock_sparse_lu_default_max(generic_op, build_jax_factors=False) == 2000
+    assert profile_solve._rhsmode1_xblock_sparse_lu_default_max(full_fp_op, build_jax_factors=False) == 30000
+    assert profile_solve._rhsmode1_xblock_sparse_lu_default_max(full_fp_op, build_jax_factors=True) == 2000
+    assert profile_solve._rhsmode1_xblock_sparse_lu_default_max(pas_op, build_jax_factors=False) == 2000
+    assert profile_solve._rhsmode1_xblock_sparse_lu_default_max(generic_op, build_jax_factors=False) == 2000
 
 
 def test_rhsmode1_fp_xblock_host_species_decoupling_equivalence() -> None:
     one_species = SimpleNamespace(n_species=1)
     two_species = SimpleNamespace(n_species=2)
 
-    assert v3_driver._rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+    assert profile_solve._rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
         op=one_species,
         preconditioner_species=0,
     )
-    assert v3_driver._rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+    assert profile_solve._rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
         op=two_species,
         preconditioner_species=1,
     )
-    assert not v3_driver._rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+    assert not profile_solve._rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
         op=two_species,
         preconditioner_species=0,
     )
 
 
 def test_host_sparse_direct_allowed_and_sparse_pc_rescue_policy(monkeypatch) -> None:
-    assert not v3_driver._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=False)
-    assert not v3_driver._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True, use_implicit=True)
+    assert not profile_solve._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=False)
+    assert not profile_solve._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True, use_implicit=True)
 
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_HOST", raising=False)
-    assert v3_driver._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True)
+    assert profile_solve._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_HOST", "0")
-    assert not v3_driver._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True)
+    assert not profile_solve._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_HOST", "1")
-    assert v3_driver._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True)
+    assert profile_solve._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True)
 
     op = SimpleNamespace(
         rhs_mode=1,
@@ -74,13 +74,13 @@ def test_host_sparse_direct_allowed_and_sparse_pc_rescue_policy(monkeypatch) -> 
         constraint_scheme=1,
         fblock=SimpleNamespace(fp=object(), pas=None),
     )
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_solve.jax.default_backend", lambda: "cpu")
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES", raising=False)
-    assert v3_driver._rhsmode1_sparse_operator_preconditioned_rescue_allowed(
+    assert profile_solve._rhsmode1_sparse_operator_preconditioned_rescue_allowed(
         op=op, sparse_exact_lu=True, host_sparse_direct_wanted=True
     )
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES", "off")
-    assert not v3_driver._rhsmode1_sparse_operator_preconditioned_rescue_allowed(
+    assert not profile_solve._rhsmode1_sparse_operator_preconditioned_rescue_allowed(
         op=op, sparse_exact_lu=True, host_sparse_direct_wanted=True
     )
 
@@ -88,52 +88,52 @@ def test_host_sparse_direct_allowed_and_sparse_pc_rescue_policy(monkeypatch) -> 
 def test_host_sparse_factor_dtype_and_cache_key(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_HOST_SPARSE_FACTOR_DTYPE", raising=False)
     monkeypatch.delenv("SFINCS_JAX_HOST_SPARSE_FACTOR_FLOAT32_MIN", raising=False)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
-    assert v3_driver._host_sparse_factor_dtype(size=20_000, factorization="lu", use_implicit=False) == np.dtype(np.float32)
-    assert v3_driver._host_sparse_factor_dtype(size=1_000, factorization="ilu", use_implicit=False) == np.dtype(np.float64)
-    assert v3_driver._host_sparse_factor_dtype(size=20_000, factorization="lu", use_implicit=True) == np.dtype(np.float64)
+    monkeypatch.setattr("sfincs_jax.problems.profile_solve.jax.default_backend", lambda: "cpu")
+    assert profile_solve._host_sparse_factor_dtype(size=20_000, factorization="lu", use_implicit=False) == np.dtype(np.float32)
+    assert profile_solve._host_sparse_factor_dtype(size=1_000, factorization="ilu", use_implicit=False) == np.dtype(np.float64)
+    assert profile_solve._host_sparse_factor_dtype(size=20_000, factorization="lu", use_implicit=True) == np.dtype(np.float64)
 
     monkeypatch.setenv("SFINCS_JAX_HOST_SPARSE_FACTOR_DTYPE", "fp64")
-    assert v3_driver._host_sparse_factor_dtype(size=20_000, factorization="lu", use_implicit=False) == np.dtype(np.float64)
+    assert profile_solve._host_sparse_factor_dtype(size=20_000, factorization="lu", use_implicit=False) == np.dtype(np.float64)
     monkeypatch.setenv("SFINCS_JAX_HOST_SPARSE_FACTOR_DTYPE", "32")
-    assert v3_driver._host_sparse_factor_dtype(size=1, factorization="lu", use_implicit=False) == np.dtype(np.float32)
+    assert profile_solve._host_sparse_factor_dtype(size=1, factorization="lu", use_implicit=False) == np.dtype(np.float32)
 
-    key = v3_driver._sparse_factor_cache_key(("a", 1), np.dtype(np.float32))
+    key = profile_solve._sparse_factor_cache_key(("a", 1), np.dtype(np.float32))
     assert key == ("a", 1, np.dtype(np.float32).str)
 
 
 def test_host_sparse_refine_step_parsing_and_skip_dense_ratio(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_SKIP_DENSE_RATIO", raising=False)
-    assert v3_driver._rhsmode1_host_sparse_skip_dense_ratio() == pytest.approx(1.0e4)
+    assert profile_solve._rhsmode1_host_sparse_skip_dense_ratio() == pytest.approx(1.0e4)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_SKIP_DENSE_RATIO", "bad")
-    assert v3_driver._rhsmode1_host_sparse_skip_dense_ratio() == pytest.approx(1.0e4)
+    assert profile_solve._rhsmode1_host_sparse_skip_dense_ratio() == pytest.approx(1.0e4)
 
     monkeypatch.delenv("MY_REFINE_STEPS", raising=False)
-    assert v3_driver._host_sparse_direct_refine_steps("MY_REFINE_STEPS", default=3) == 3
+    assert profile_solve._host_sparse_direct_refine_steps("MY_REFINE_STEPS", default=3) == 3
     monkeypatch.setenv("MY_REFINE_STEPS", "bad")
-    assert v3_driver._host_sparse_direct_refine_steps("MY_REFINE_STEPS", default=2) == 2
+    assert profile_solve._host_sparse_direct_refine_steps("MY_REFINE_STEPS", default=2) == 2
     monkeypatch.setenv("MY_REFINE_STEPS", "-4")
-    assert v3_driver._host_sparse_direct_refine_steps("MY_REFINE_STEPS", default=2) == 0
+    assert profile_solve._host_sparse_direct_refine_steps("MY_REFINE_STEPS", default=2) == 0
 
 
 def test_rhs1_residual_rescue_uses_small_target_slack(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_RESCUE_TARGET_SLACK", raising=False)
-    assert not v3_driver._rhs1_residual_needs_rescue(1.006e-12, 1.0e-12)
-    assert v3_driver._rhs1_residual_needs_rescue(1.02e-12, 1.0e-12)
-    assert v3_driver._rhs1_residual_needs_rescue(1.006e-12, 1.0e-12, force=True)
+    assert not profile_solve._rhs1_residual_needs_rescue(1.006e-12, 1.0e-12)
+    assert profile_solve._rhs1_residual_needs_rescue(1.02e-12, 1.0e-12)
+    assert profile_solve._rhs1_residual_needs_rescue(1.006e-12, 1.0e-12, force=True)
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_RESCUE_TARGET_SLACK", "0")
-    assert v3_driver._rhs1_residual_needs_rescue(1.006e-12, 1.0e-12)
+    assert profile_solve._rhs1_residual_needs_rescue(1.006e-12, 1.0e-12)
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_RESCUE_TARGET_SLACK", "bad")
-    assert not v3_driver._rhs1_residual_needs_rescue(1.006e-12, 1.0e-12)
+    assert not profile_solve._rhs1_residual_needs_rescue(1.006e-12, 1.0e-12)
 
 
 def test_host_direct_refinement_helpers_improve_residual() -> None:
     rhs = jnp.asarray([2.0, -4.0], dtype=jnp.float64)
     ident = np.eye(2, dtype=np.float64)
 
-    x_direct, rn_direct = v3_driver._host_direct_solve_with_refinement(
+    x_direct, rn_direct = profile_solve._host_direct_solve_with_refinement(
         factor_solve=lambda v: 0.5 * np.asarray(v, dtype=np.float64),
         operator_matrix=ident,
         rhs_vec=rhs,
@@ -143,7 +143,7 @@ def test_host_direct_refinement_helpers_improve_residual() -> None:
     np.testing.assert_allclose(x_direct, np.asarray([1.875, -3.75]))
     assert rn_direct < np.linalg.norm(np.asarray(rhs) - 0.5 * np.asarray(rhs))
 
-    x_sparse, rn_sparse = v3_driver._host_sparse_direct_solve_with_refinement(
+    x_sparse, rn_sparse = profile_solve._host_sparse_direct_solve_with_refinement(
         ilu=_HalfSolve(),
         a_csr_full=sparse.csr_matrix(ident),
         rhs_vec=rhs,
@@ -183,24 +183,24 @@ def test_host_sparse_direct_polish_uses_preconditioner_and_reports_residual(monk
 def test_explicit_sparse_host_direct_allowed_and_env_bounds(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER_MAX", raising=False)
-    assert v3_driver._rhsmode1_explicit_sparse_host_direct_allowed(
+    assert profile_solve._rhsmode1_explicit_sparse_host_direct_allowed(
         sparse_exact_lu=True,
         use_implicit=False,
         active_size=10_000,
     )
-    assert not v3_driver._rhsmode1_explicit_sparse_host_direct_allowed(
+    assert not profile_solve._rhsmode1_explicit_sparse_host_direct_allowed(
         sparse_exact_lu=False,
         use_implicit=False,
         active_size=10_000,
     )
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER_MAX", "bad")
-    assert v3_driver._rhsmode1_explicit_sparse_host_direct_allowed(
+    assert profile_solve._rhsmode1_explicit_sparse_host_direct_allowed(
         sparse_exact_lu=True,
         use_implicit=False,
         active_size=10_000,
     )
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER", "off")
-    assert not v3_driver._rhsmode1_explicit_sparse_host_direct_allowed(
+    assert not profile_solve._rhsmode1_explicit_sparse_host_direct_allowed(
         sparse_exact_lu=True,
         use_implicit=False,
         active_size=10_000,
@@ -452,9 +452,9 @@ def test_large_fortran_reduced_sparse_pc_defaults_to_ilu_but_env_override_wins(m
     factor_defaults: list[str] = []
     color_batch_defaults: list[int] = []
 
-    monkeypatch.setattr(v3_driver, "rhs_v3_full_system", lambda _op: jnp.zeros((size,), dtype=jnp.float64))
+    monkeypatch.setattr(profile_solve, "rhs_v3_full_system", lambda _op: jnp.zeros((size,), dtype=jnp.float64))
     monkeypatch.setattr(
-        v3_driver,
+        profile_solve,
         "build_rhs1_active_dof_state",
         lambda **kwargs: SimpleNamespace(
             active_idx_jnp=None,
@@ -463,22 +463,22 @@ def test_large_fortran_reduced_sparse_pc_defaults_to_ilu_but_env_override_wins(m
         ),
     )
     monkeypatch.setattr(
-        v3_driver,
+        profile_solve,
         "_build_rhsmode1_preconditioner_operator_fortran_reduced",
         lambda op_arg, **_kwargs: op_arg,
     )
     monkeypatch.setattr(
-        v3_driver,
+        profile_solve,
         "v3_full_system_fortran_reduced_preconditioner_sparsity_pattern",
         lambda *_args, **_kwargs: sparse.eye(1, format="csr"),
     )
     monkeypatch.setattr(
-        v3_driver,
+        profile_solve,
         "summarize_v3_sparse_pattern",
         lambda _op, _pattern: SimpleNamespace(nnz=1, avg_row_nnz=1.0, max_row_nnz=1),
     )
     monkeypatch.setattr(
-        v3_driver,
+        profile_solve,
         "apply_v3_full_system_operator_cached",
         lambda _op, x: jnp.zeros_like(x),
     )
@@ -499,15 +499,15 @@ def test_large_fortran_reduced_sparse_pc_defaults_to_ilu_but_env_override_wins(m
         return np.zeros_like(np.asarray(kwargs["b"], dtype=np.float64)), 0.0, [0.0]
 
     monkeypatch.setattr(
-        v3_driver,
+        profile_solve,
         "_build_host_sparse_direct_factor_from_matvec",
         fake_build_host_sparse_direct_factor_from_matvec,
     )
-    monkeypatch.setattr(v3_driver, "gmres_solve_with_history_scipy", fake_gmres_solve_with_history_scipy)
+    monkeypatch.setattr(profile_solve, "gmres_solve_with_history_scipy", fake_gmres_solve_with_history_scipy)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND", "global")
     monkeypatch.delenv("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", raising=False)
 
-    default_result = v3_driver.solve_v3_full_system_linear_gmres(
+    default_result = profile_solve.solve_v3_full_system_linear_gmres(
         nml=_FakeNamelist(),
         op=op,
         solve_method="fortran_reduced_pc_gmres",
@@ -516,7 +516,7 @@ def test_large_fortran_reduced_sparse_pc_defaults_to_ilu_but_env_override_wins(m
     )
 
     monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", "lu")
-    override_result = v3_driver.solve_v3_full_system_linear_gmres(
+    override_result = profile_solve.solve_v3_full_system_linear_gmres(
         nml=_FakeNamelist(),
         op=op,
         solve_method="fortran_reduced_pc_gmres",
