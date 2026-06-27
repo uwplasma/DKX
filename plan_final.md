@@ -139,6 +139,10 @@ The main structural refactor is functionally complete:
   Focused validation passed as `86 passed in 1.87 s`, and the broader
   output/source guard passed as `180 passed in 9.86 s`. This reduced
   `outputs/writer.py` to `3250` lines.
+- The RHSMode=1 current-backend preconditioner-policy wrapper layer now has
+  bounded unit coverage through `tests/test_rhs1_host_policy.py`, validating
+  CPU/GPU-sensitive wrapper delegation without running a solve. Focused policy
+  validation passed as `122 passed in 0.43 s`.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
