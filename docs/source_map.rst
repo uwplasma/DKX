@@ -573,17 +573,13 @@ replacing the old monolith are:
   PETSc-style ILU/exact-LU cutoff policy, padded triangular-factor conversion,
   threaded block factor setup, and extra-variable Schur solve. PAS-hybrid
   fallback injection lives in the profile-response solve owner.
-- ``sfincs_jax/solvers/preconditioner_full_fp_species.py``:
-  species-block and species-by-``(x,L)`` block-Jacobi preconditioners for
-  RHSMode=1. The module owns the active block index maps, chunked unsharded
-  operator probing, block inverse construction, extra-variable tail inverse,
-  and JAX apply kernels. Historical driver access is a compatibility alias, not
-  an implementation owner.
 - ``sfincs_jax/solvers/preconditioner_full_fp_kinetic.py``:
-  RHSMode=1 collision-based, point-xdiag, and point-block kinetic
-  preconditioners. The module owns PAS/FP diagonal collision inverses, FP
-  species-``x`` and ``x`` block collision factors, low-rank FP collision
-  correction, PETSc-style point block probing, extra-variable tail solves, and
+  RHSMode=1 collision-based, species-block, species-by-``(x,L)``,
+  point-xdiag, and point-block kinetic preconditioners. The module owns PAS/FP
+  diagonal collision inverses, FP species-``x`` and ``x`` block collision
+  factors, full-species active block index maps, chunked unsharded operator
+  probing, low-rank FP collision correction, PETSc-style point block probing,
+  extra-variable tail solves, and
   reduced/full apply wrappers. Historical driver access is a compatibility
   alias, not an implementation owner.
 - ``sfincs_jax/solvers/preconditioner_full_fp_structured.py``:

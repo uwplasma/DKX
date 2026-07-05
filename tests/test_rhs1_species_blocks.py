@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 import numpy as np
 
-import sfincs_jax.solvers.preconditioner_full_fp_species as sb
+import sfincs_jax.solvers.preconditioner_full_fp_kinetic as sb
 
 
 def _op(
@@ -32,7 +32,7 @@ def _patch_cache_and_probe(monkeypatch, diag_by_index: dict[int, float]) -> None
     sb._RHSMODE1_PRECOND_CACHE.clear()
     sb._RHSMODE1_PRECOND_GLOBAL_CACHE.clear()
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PRECOND_REG", "0")
-    monkeypatch.setattr(sb, "_cache_key", lambda _op, kind: ("unit", kind, id(_op)))
+    monkeypatch.setattr(sb, "_species_cache_key", lambda _op, kind: ("unit", kind, id(_op)))
 
     def _probe(_op, *, col_idx, row_idx, total_size, chunk_cols):
         col_idx = np.asarray(col_idx, dtype=np.int32)
@@ -44,7 +44,7 @@ def _patch_cache_and_probe(monkeypatch, diag_by_index: dict[int, float]) -> None
                     out[i, j] = float(diag_by_index[int(col)])
         return out
 
-    monkeypatch.setattr(sb, "matvec_submatrix_v3_unsharded", _probe)
+    monkeypatch.setattr(sb, "_matvec_submatrix", _probe)
 
 
 def test_species_block_builder_inverts_each_species_block(monkeypatch) -> None:

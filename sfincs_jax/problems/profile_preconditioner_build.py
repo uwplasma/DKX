@@ -30,8 +30,6 @@ from sfincs_jax.solvers.preconditioner_full_fp_kinetic import (
     build_rhs1_block_preconditioner,
     build_rhs1_block_preconditioner_xdiag,
     build_rhs1_collision_preconditioner,
-)
-from sfincs_jax.solvers.preconditioner_full_fp_species import (
     build_rhs1_species_block_preconditioner,
     build_rhs1_species_xblock_preconditioner,
 )

@@ -495,7 +495,7 @@ Current source inventory:
   `v3_driver.py` must remain implementation-free and below `80` lines.
 - Domain folders: `discretization/` (`6` files), `geometry/` (`5`),
   `operators/` (`19`), `outputs/` (`5`), `physics/` (`3`),
-  `problems/` (`26`), `solvers/` (`35`), `validation/` (`6`), and
+  `problems/` (`26`), `solvers/` (`34`), `validation/` (`6`), and
   `workflows/` (`4`).
 - The complexity hotspots are not nested folders; they are many
   same-family files in `problems/`, `solvers/`, and `operators/`.
@@ -509,12 +509,12 @@ Target source shape for the review PR:
   `tests/fixtures/source_tree_expected.json`; delete or hide compatibility
   facades only when docs, examples, scripts, and compatibility tests have moved
   to canonical imports.
-- Reduce `problems/` from `28` files toward `16-20` durable files by merging
+- Reduce `problems/` from the current `26` files toward `16-20` durable files by merging
   setup, policy, diagnostics, sparse-handoff, and finalization helpers into
   coherent problem owners. The final names should describe physics/problem
   ownership: `profile_*`, `transport_*`, and `ambipolar.py` are acceptable;
   campaign, handoff, promotion, and temporary solver-path names are not.
-- Reduce `solvers/` from `40` files toward `24-30` durable files by merging
+- Reduce `solvers/` from the current `34` files toward `24-30` durable files by merging
   same-family preconditioners. Use physics/numerics families as the naming
   boundary: PAS, full-FP, x-block, QI, symbolic/native sparse factors,
   transport-matrix, Krylov dispatch, memory model, and path selection.
@@ -637,7 +637,7 @@ Latest AST audit:
 
 - Folder depth is no longer the blocker: the package has one-level domain
   folders only and no `__init__.py`-only source packages.
-- The source tree has 126 Python files, 17 package-root modules, and one-level
+- The source tree has 125 Python files, 17 package-root modules, and one-level
   domain folders only. The remaining structural blockers are file-family sprawl
   and owner size.
   The largest retained owners are `problems/profile_policies.py` (`7936`
@@ -783,6 +783,12 @@ Completed work:
   and updated the checker script/tests to the canonical validation-artifact
   owner. This reduces `validation/` to `6` source files while preserving the
   release-lane evidence gate.
+- Tranche 22: moved RHSMode=1 full-FP species-block and species-by-``(x,L)``
+  preconditioners into existing `solvers/preconditioner_full_fp_kinetic.py`,
+  deleted helper-only `solvers/preconditioner_full_fp_species.py`, and updated
+  profile solve/setup imports, focused species-block tests, and the source map
+  to the canonical full-FP kinetic owner. This reduces `solvers/` to `34`
+  source files while preserving the same block inverse algorithms and caches.
 
 Remaining consolidation steps:
 

@@ -255,10 +255,11 @@ from sfincs_jax.solvers.preconditioner_pas_composite import (
     RHS1PasFamilyBuilders, compose_preconditioners as _compose_preconditioners,
 )
 from sfincs_jax.solvers.preconditioner_full_fp_kinetic import (
-    build_rhs1_block_preconditioner, build_rhs1_block_preconditioner_xdiag, build_rhs1_collision_preconditioner,
-)
-from sfincs_jax.solvers.preconditioner_full_fp_species import (
-    build_rhs1_species_block_preconditioner, build_rhs1_species_xblock_preconditioner,
+    build_rhs1_block_preconditioner,
+    build_rhs1_block_preconditioner_xdiag,
+    build_rhs1_collision_preconditioner,
+    build_rhs1_species_block_preconditioner,
+    build_rhs1_species_xblock_preconditioner,
 )
 from sfincs_jax.solvers.preconditioner_full_fp_structured import (
     build_rhs1_structured_fblock_angular_jacobi_preconditioner,

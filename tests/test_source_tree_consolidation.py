@@ -236,6 +236,15 @@ def test_deleted_qi_promotion_policy_solver_facade_is_absent() -> None:
     assert hasattr(module, "evaluate_qi_production_ladder_promotion")
 
 
+def test_deleted_full_fp_species_preconditioner_facade_is_absent() -> None:
+    """Full-FP species block preconditioners belong to the kinetic owner."""
+
+    assert not (PACKAGE_ROOT / "solvers" / "preconditioner_full_fp_species.py").exists()
+    module = importlib.import_module("sfincs_jax.solvers.preconditioner_full_fp_kinetic")
+    assert hasattr(module, "build_rhs1_species_block_preconditioner")
+    assert hasattr(module, "build_rhs1_species_xblock_preconditioner")
+
+
 def test_canonical_flat_domain_modules_are_importable() -> None:
     """Canonical owners replace the deleted compatibility import paths."""
 
