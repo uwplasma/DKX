@@ -1723,6 +1723,15 @@ Completed work:
   requested test filename; the corrected shard passed. This leaves the review
   bundle green except for the separate full coverage audit and fresh
   CPU/GPU/Fortran benchmark evidence generation.
+- Tranche 109: expanded `tests/test_profiling.py` to cover `Timer`, resource
+  fallback RSS, peak-RSS failure, and JAX device-memory parsing without solver
+  imports. Focused validation passed `8/8`, Ruff passed, `compileall` passed,
+  and `git diff --check` passed. Direct `coverage.py` reporting for
+  `sfincs_jax/profiling.py` improved from `73%` to `98%` using
+  `coverage run -m pytest tests/test_profiling.py` followed by
+  `coverage report --include='sfincs_jax/profiling.py'`; the generated
+  `.coverage` file was removed. Package-wide coverage remains pinned to the
+  latest successful full audit until the full suite can run stably.
 
 Remaining consolidation steps:
 
