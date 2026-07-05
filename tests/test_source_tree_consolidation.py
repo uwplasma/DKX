@@ -44,6 +44,22 @@ def test_source_tree_does_not_gain_new_root_modules_or_packages() -> None:
     assert root_packages == expected["allowed_root_packages"]
 
 
+def test_domain_packages_do_not_gain_unplanned_modules() -> None:
+    """Keep domain packages from drifting back into many ad-hoc helper files."""
+
+    expected = _expected_tree()
+    actual = {
+        package: sorted(
+            path.name
+            for path in (PACKAGE_ROOT / package).glob("*.py")
+            if path.name != "__init__.py"
+        )
+        for package in expected["allowed_root_packages"]
+    }
+
+    assert actual == expected["allowed_domain_modules"]
+
+
 def test_source_tree_nested_packages_are_explicit_refactor_debt() -> None:
     expected = _expected_tree()
 

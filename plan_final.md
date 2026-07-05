@@ -1323,6 +1323,13 @@ Completed work:
   geometryScheme=5, RHSMode=1, full-FP, full-trajectory comparisons. Focused
   validation passed: `tests/test_compare_reference_corruption.py` as `21 passed
   in 0.48 s`; Ruff passed.
+- Tranche 69: tightened source-tree architecture guardrails by adding an
+  explicit per-domain module inventory to `source_tree_expected.json` and a
+  test that fails if a domain package gains unplanned helper files. This keeps
+  the refactor moving toward a small, intentional source tree instead of
+  drifting back into file proliferation. Focused validation passed:
+  `tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py`
+  as `38 passed in 3.27 s`; Ruff passed and the fixture remained valid JSON.
 
 Remaining consolidation steps:
 
