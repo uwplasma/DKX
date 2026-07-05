@@ -924,7 +924,7 @@ comparison figure used in ``README.md`` and the docs index:
 By default this uses frozen Fortran fixtures from ``tests/ref`` (no local Fortran runtime required).
 If a local Fortran executable is available, pass ``--fortran-exe /path/to/sfincs`` for live runs.
 
-Latest fixture-based snapshot (4 repeats, compile excluded for JAX):
+Reference fixture benchmark (4 repeats, compile excluded for JAX):
 
 .. list-table::
    :header-rows: 1
@@ -971,7 +971,7 @@ To separate compile cost from steady solve time with the JAX persistent cache:
 
    For each case, compile estimate = cold first call - warm first call; steady solve is the warm repeated runtime.
 
-Latest snapshot (3 repeats):
+Reference compile/runtime benchmark (3 repeats):
 
 .. list-table::
    :header-rows: 1

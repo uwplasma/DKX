@@ -1,10 +1,10 @@
 Open research lanes
 ===================
 
-The current release-facing workflows are parity-clean across the documented
-example suite. The lanes below are intentionally not release blockers; they are
-the next algorithmic targets for larger, more memory-limited, and more strongly
-parallel research workloads.
+The documented release-facing workflows are parity-clean across the example
+suite. The lanes below are intentionally not release blockers; they are the
+algorithmic targets for larger, more memory-limited, and more strongly parallel
+research workloads.
 
 Release decision on the native production-preconditioner lane
 -------------------------------------------------------------
@@ -477,11 +477,11 @@ is negative evidence: the seed correction improves only
 ``2.275188e-5`` in ``267 s`` before refusing nonconverged output. This is worse
 than the residual-snapshot CPU path, so it is kept as a tested research
 primitive and not promoted to GPU.
-The later GPU0 best-of artifact
+The GPU0 best-of artifact
 ``qi_seed_robustness_scale060_block_schur_bestof_device_qi_gpu0_2026_05_20.json``
-improves the final hard-seed residual to ``1.992464e-5`` in ``292 s``. It was
-the previous best one-GPU residual before the recycled augmented-Krylov rerun,
-but it still misses the production write gate and remains fail-closed evidence.
+improves the final hard-seed residual to ``1.992464e-5`` in ``292 s``. It is a
+bounded one-GPU residual-reduction artifact, but it still misses the production
+write gate and remains fail-closed evidence.
 The composite coarse-closure GPU1 artifact
 ``qi_seed_robustness_scale060_composite_closure_device_qi_gpu1_2026_05_20.json``
 combines residual snapshots, residual-Galerkin/operator-image stages, and
