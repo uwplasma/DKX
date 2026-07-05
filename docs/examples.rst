@@ -28,6 +28,50 @@ For a guided classroom-style path, open the notebooks in
 - ``02_transport_and_autodiff.ipynb``: RHSMode=2/3 transport matrices and JAX differentiation.
 - ``03_bootstrap_redl_and_optimization.ipynb``: bootstrap-current/Redl comparisons and optimization objectives.
 
+One-command start points
+------------------------
+
+These entries are the shortest useful commands for common workflows. They avoid
+a local SFINCS Fortran v3 executable unless the command explicitly says it is a
+frozen-reference or benchmark workflow.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 36 36
+
+   * - Goal
+     - Entry script
+     - Typical command
+   * - Write output files and a diagnostics panel
+     - ``examples/tutorials/run_quick_output_and_plot.py``
+     - ``python examples/tutorials/run_quick_output_and_plot.py --out-dir tutorial_output``
+   * - Inspect HDF5, NetCDF, NPZ, and plotting
+     - ``examples/getting_started/write_and_plot_multiple_formats.py``
+     - ``python examples/getting_started/write_and_plot_multiple_formats.py``
+   * - Load VMEC geometry through ``wout_path``
+     - ``examples/getting_started/write_sfincs_output_vmec.py``
+     - ``python examples/getting_started/write_sfincs_output_vmec.py``
+   * - Compute a RHSMode=2/3 transport matrix
+     - ``examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py``
+     - ``python examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py``
+   * - Differentiate a residual with JAX
+     - ``examples/autodiff/autodiff_gradient_nu_n_residual.py``
+     - ``python examples/autodiff/autodiff_gradient_nu_n_residual.py``
+   * - Compare kinetic bootstrap current with Redl
+     - ``examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py``
+     - ``python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py --case QA --quick --jax-vs-redl --solve-method auto``
+   * - Time output formats and memory behavior
+     - ``examples/performance/benchmark_output_formats.py``
+     - ``python examples/performance/benchmark_output_formats.py --repeats 2``
+   * - Check a frozen Fortran-v3 output fixture
+     - ``examples/parity/output_parity_vs_fortran_fixture.py``
+     - ``python examples/parity/output_parity_vs_fortran_fixture.py``
+
+Fast tutorial, getting-started, and frozen-fixture parity entries are designed
+for seconds-scale laptop CPU runs. VMEC, Redl, optimization, and performance
+entries may take longer; use ``--quick`` where available and inspect generated
+solver metadata before treating a result as quantitative evidence.
+
 Application recipe map
 ----------------------
 
