@@ -93,6 +93,9 @@ def _pas_tz_op(
 
 def test_pas_tokamak_theta_preconditioner_applicable_on_zeta_invariant_multizeta(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_PAS_TOKAMAK_TZ_TOL", raising=False)
+    assert pas_policy.pas_tokamak_theta_preconditioner_applicable(
+        _pas_tokamak_like_op(n_zeta=3, zeta_varying=False)
+    )
     assert profile_solve._pas_tokamak_theta_preconditioner_applicable(_pas_tokamak_like_op(n_zeta=3, zeta_varying=False))
 
 
@@ -113,6 +116,8 @@ def test_pas_tokamak_theta_builder_falls_back_to_block_preconditioner(monkeypatc
 
 
 def test_pas_tz_preconditioner_applicable_positive_and_negative_cases() -> None:
+    assert pas_policy.pas_tz_preconditioner_applicable(_pas_tz_op())
+    assert not pas_policy.pas_tz_preconditioner_applicable(_pas_tz_op(with_fp=True))
     assert profile_solve._pas_tz_preconditioner_applicable(_pas_tz_op())
     assert not profile_solve._pas_tz_preconditioner_applicable(_pas_tz_op(rhs_mode=2))
     assert not profile_solve._pas_tz_preconditioner_applicable(_pas_tz_op(n_theta=4, n_zeta=4))
@@ -123,6 +128,7 @@ def test_pas_tz_preconditioner_applicable_positive_and_negative_cases() -> None:
 
 
 def test_rhs1_pas_tz_max_bytes_invalid_env_falls_back() -> None:
+    assert pas_policy.rhs1_pas_tz_max_bytes() > 0
     assert profile_solve._rhs1_pas_tz_max_bytes() > 0
 
 

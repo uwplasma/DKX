@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 import numpy as np
 import scipy.sparse as sp
+import scipy.sparse.linalg as spla
 
 import sfincs_jax.operators.profile_full_system as rfa
 import sfincs_jax.solvers.preconditioner_symbolic_profile as rfr
@@ -237,6 +238,65 @@ def test_fortran_reduced_permc_candidates_match_superlu_and_rcm_contract() -> No
         "COLAMD",
     )
     assert active_fortran_v3_reduced_permc_candidates(requested="", factor_kind="ilu") == ("COLAMD",)
+
+
+def test_symbolic_profile_support_mode_and_sparse_memory_helpers() -> None:
+    modes = {
+        "preconditioner_x": 1,
+        "preconditioner_xi": 1,
+        "preconditioner_species": 0,
+        "preconditioner_x_min_l": 0,
+    }
+
+    rfr.apply_active_fortran_v3_support_mode_token(modes, "x=0")
+    rfr.apply_active_fortran_v3_support_mode_token(modes, "xi2")
+    rfr.apply_active_fortran_v3_support_mode_token(modes, "species=1")
+    rfr.apply_active_fortran_v3_support_mode_token(modes, "x_min_l=3")
+
+    assert modes == {
+        "preconditioner_x": 0,
+        "preconditioner_xi": 2,
+        "preconditioner_species": 1,
+        "preconditioner_x_min_l": 3,
+    }
+    assert rfr.active_fortran_v3_support_mode_dropped_no_entries(
+        {"dropped_entries": {"x": 0, "xi": "0"}}
+    )
+    assert not rfr.active_fortran_v3_support_mode_dropped_no_entries({"dropped_entries": {"x": 1}})
+
+    matrix = sp.csr_matrix(
+        np.asarray(
+            [
+                [2.0, 0.0, -1.0],
+                [0.0, 4.0, 0.0],
+                [3.0, 0.0, 0.0],
+            ],
+            dtype=np.float64,
+        )
+    )
+    estimate = rfr.estimate_spilu_factor_nbytes(matrix=matrix, fill_factor=2.0)
+    assert estimate >= 2 * matrix.nnz * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize)
+
+    row_scale, row_meta = rfr.sparse_equilibration_scale(
+        matrix,
+        axis=1,
+        norm="l1",
+        max_scale=10.0,
+    )
+    col_scale, col_meta = rfr.sparse_equilibration_scale(
+        matrix,
+        axis=0,
+        norm="max",
+        max_scale=10.0,
+    )
+
+    np.testing.assert_allclose(row_scale, np.asarray([1.0 / 3.0, 1.0 / 4.0, 1.0 / 3.0]))
+    np.testing.assert_allclose(col_scale, np.asarray([1.0 / 3.0, 1.0 / 4.0, 1.0]))
+    assert row_meta["axis"] == "row"
+    assert col_meta["axis"] == "column"
+
+    factor = spla.splu(matrix.tocsc())
+    assert rfr.sparse_lu_factor_nbytes(factor) >= matrix.data.nbytes
 
 
 def test_symbolic_frontal_policy_keeps_default_frontal_controls() -> None:

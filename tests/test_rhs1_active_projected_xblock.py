@@ -7,6 +7,7 @@ import scipy.sparse as sp
 
 import sfincs_jax.operators.profile_full_system as legacy
 import sfincs_jax.solvers.preconditioner_xblock_active as active_projected
+import sfincs_jax.solvers.preconditioner_xblock_policy as xblock_policy
 from sfincs_jax.operators.profile_layout import RHS1BlockLayout
 
 
@@ -114,6 +115,39 @@ def test_active_projected_low_level_policy_helpers_fail_closed(monkeypatch) -> N
 
     monkeypatch.delenv("SFINCS_JAX_UNIT_TEST_BOOL", raising=False)
     assert active_projected._env_bool("SFINCS_JAX_UNIT_TEST_BOOL", True) is True
+
+
+def test_xblock_policy_tuning_parsers_fail_closed_and_accept_overrides() -> None:
+    tuning = xblock_policy.rhs1_xblock_local_solve_tuning(
+        drop_tol_env_value="bad",
+        drop_rel_env_value="0.125",
+        ilu_drop_tol_env_value="1e-4",
+        fill_factor_env_value="0.25",
+        row_nnz_cap_env_value="-1",
+        compact_row_nnz_cap_env_value="17",
+    )
+    lower = xblock_policy.rhs1_xblock_lower_fill_local_solve_tuning(
+        drop_tol_env_value="2e-3",
+        drop_rel_env_value="bad",
+        ilu_drop_tol_env_value="3e-4",
+        fill_factor_env_value="2.5",
+        row_nnz_cap_env_value="19",
+        compact_row_nnz_cap_env_value="bad",
+    )
+
+    assert tuning.drop_rel == 0.125
+    assert tuning.ilu_drop_tol == 1.0e-4
+    assert tuning.fill_factor >= 1.0
+    assert tuning.row_nnz_cap >= 0
+    assert tuning.compact_row_nnz_cap == 17
+    assert lower.drop_tol == 2.0e-3
+    assert lower.ilu_drop_tol == 3.0e-4
+    assert lower.fill_factor == 2.5
+    assert lower.row_nnz_cap == 19
+    assert xblock_policy.rhs1_xblock_side_probe_min_active_size("") > 0
+    assert xblock_policy.rhs1_xblock_side_probe_min_active_size("bad") > 0
+    assert xblock_policy.rhs1_xblock_side_probe_min_active_size("-5") == 0
+    assert xblock_policy.rhs1_xblock_side_probe_min_active_size("42") == 42
 
 
 def test_active_projected_xblock_solves_exact_block_system(monkeypatch) -> None:

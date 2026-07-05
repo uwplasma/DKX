@@ -155,6 +155,16 @@ The main structural refactor is functionally complete:
   `validation/data_fetch.py`, and `validation/qi_device.py` report zero
   production-used public helpers without direct tests. Focused validation
   passed as `110 passed in 62.60 s`.
+- PAS policy, symbolic sparse-profile, and x-block policy coverage now
+  includes direct owner tests for PAS applicability and memory ceilings,
+  Fortran-v3 support-mode parsing, sparse ILU/LU byte estimates, sparse row and
+  column equilibration, x-block local-factor tuning, and side-probe active-size
+  floors. Source/test audits for `solvers/preconditioner_pas_policy.py`,
+  `solvers/preconditioner_symbolic_profile.py`, and
+  `solvers/preconditioner_xblock_policy.py` report zero production-used public
+  helpers without direct tests. Focused validation passed as
+  `17 passed in 0.87 s`, with the remaining LU-size helper test passing as
+  `1 passed in 0.81 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -983,6 +993,10 @@ Completed work:
   modules.
 - Tranche 39: added direct structured-velocity, transport-policy, sensitivity,
   and validation API tests, then reran source/test audits showing no
+  production-used public helpers without direct tests in those targeted
+  modules.
+- Tranche 40: added direct PAS-policy, symbolic sparse-profile, and x-block
+  policy parser/memory tests, then reran source/test audits showing no
   production-used public helpers without direct tests in those targeted
   modules.
 
