@@ -9,6 +9,7 @@ from sfincs_jax.solvers.memory_model import gmres_basis_nbytes
 from sfincs_jax.solver import (
     _distributed_krylov_preference,
     _distributed_gmres_axis,
+    _materialize_distributed_input,
     _maybe_limit_restart,
     _normalize_krylov_method,
     _preconditioner_accepts_iteration,
@@ -36,6 +37,23 @@ def test_normalize_krylov_method_and_restart_limit_env(monkeypatch: pytest.Monke
 
     monkeypatch.setenv("SFINCS_JAX_GMRES_AUTO_RESTART", "off")
     assert _maybe_limit_restart(1000, 500, jnp.float64) == 500
+
+    monkeypatch.setenv("SFINCS_JAX_GMRES_AUTO_RESTART", "on")
+    monkeypatch.setenv("SFINCS_JAX_GMRES_MAX_MB", "bad")
+    assert _maybe_limit_restart(0, 500, jnp.float64) == 500
+    assert _maybe_limit_restart(1000, 1, jnp.float64) == 1
+    assert _maybe_limit_restart(1000, 500, jnp.float64) == 500
+
+
+def test_materialize_distributed_input_returns_host_array_with_requested_dtype() -> None:
+    assert _materialize_distributed_input(None) is None
+
+    arr = jnp.asarray([1.0, 2.0, 3.0], dtype=jnp.float32)
+    materialized = _materialize_distributed_input(arr, dtype=jnp.float64)
+
+    assert materialized is not None
+    assert materialized.dtype == jnp.float64
+    np.testing.assert_allclose(np.asarray(materialized), np.asarray([1.0, 2.0, 3.0]), rtol=0.0, atol=0.0)
 
 
 def test_distributed_axis_and_enablement_follow_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -277,3 +295,37 @@ def test_bicgstab_history_scipy_returns_solution_and_history() -> None:
     np.testing.assert_allclose(x, x_ref, rtol=1e-10, atol=1e-10)
     assert rn < 1e-10
     assert history
+
+
+def test_bicgstab_history_scipy_right_preconditioning_uses_physical_x0() -> None:
+    a = np.array(
+        [
+            [3.0, -0.5, 0.0],
+            [0.25, 2.0, -0.25],
+            [0.0, 0.5, 2.5],
+        ],
+        dtype=np.float64,
+    )
+    b = np.array([1.0, 0.25, -0.75], dtype=np.float64)
+    x_ref = np.linalg.solve(a, b)
+    inv_diag = 1.0 / np.diag(a)
+    a_j = jnp.asarray(a)
+
+    def mv(x):
+        return a_j @ x
+
+    def precond(x):
+        return jnp.asarray(inv_diag, dtype=jnp.float64) * x
+
+    x, rn, _history = bicgstab_solve_with_history_scipy(
+        matvec=mv,
+        b=jnp.asarray(b),
+        preconditioner=precond,
+        x0=jnp.asarray(x_ref),
+        tol=1e-12,
+        maxiter=1,
+        precondition_side="right",
+    )
+
+    np.testing.assert_allclose(x, x_ref, rtol=1e-12, atol=1e-12)
+    assert rn < 1e-12

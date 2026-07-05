@@ -96,6 +96,12 @@ The main structural refactor is functionally complete:
   protect the CPU/GPU matvec infrastructure without adding production solves.
   Focused validation passed:
   `tests/test_full_system_operator_jit.py` as `5 passed in 6.93 s`.
+- The public solver-kernel helper tests now cover restart memory-policy
+  fail-closed branches, distributed-input host materialization, and
+  right-preconditioned BiCGStab physical-initial-guess semantics. These checks
+  protect user-facing CLI/Python solver behavior without adding slow transport
+  solves. Focused validation passed:
+  `tests/test_solver_heavy_helper_coverage.py` as `11 passed in 0.50 s`.
 - The latest local xdist coverage audit measured `88%` package coverage:
   `4031 passed in 283.48 s` with `8089` missing executable lines. The latest
   explicit-sparse and true-operator rescue tranches reduced missing executable
