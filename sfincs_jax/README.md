@@ -39,9 +39,9 @@ inside domain folders are for contributors and advanced research workflows.
   coordinate maps.
 - `geometry/`: analytic magnetic geometries, VMEC `wout` loading, Boozer data,
   and JAX geometry adapters.
-- `operators/`: drift-kinetic operator terms, matrix-free actions, sparse
-  operator helpers, and profile-response operator assembly. Profile-response
-  owners use flat `profile_*.py` names.
+- `operators/`: drift-kinetic operator terms, profile-response layouts,
+  matrix-free actions, sparse operator helpers, and full-system assembly.
+  Profile-response owners use flat `profile_*.py` names.
 - `physics/`: collision, classical-transport, bootstrap-current, and
   normalization formulas.
 - `problems/`: physical problem owners, including flat RHSMode-1
@@ -56,6 +56,43 @@ inside domain folders are for contributors and advanced research workflows.
   validation-figure helpers.
 - `workflows/`: optional research workflows that combine public APIs into
   scans, optimization tasks, and reusable evidence-generation tasks.
+
+## Main Implementation Owners
+
+Use this map before adding a file or following an internal import:
+
+- `operators/profile_system.py`: RHSMode-1 full-system operator, RHS assembly,
+  matrix-free residual and JVP wrappers, and constraint-source moment kernels.
+- `operators/profile_layout.py`: RHSMode-1 full, active, field-split, and
+  Fortran-style compressed pitch-space layouts.
+- `operators/profile_fblock.py`: kinetic distribution-function block assembly.
+- `operators/profile_full_system.py`: explicit sparse/full-system assembly and
+  reduced-Pmat helpers.
+- `problems/profile_solve.py`: RHSMode-1 solve orchestration.
+- `problems/profile_policies.py`: RHSMode-1 automatic solver, fallback, and
+  environment-policy decisions.
+- `problems/profile_residual.py`: RHSMode-1 post-Krylov residual correction and
+  polish stages.
+- `problems/transport_solve.py`: RHSMode-2/3 transport solve orchestration.
+- `problems/transport_linear_system.py`: transport linear-system construction,
+  batched RHS solves, and dense/host/JAX dispatch helpers.
+- `solvers/preconditioning.py`: shared preconditioner caches, projection
+  helpers, and RHSMode-1 preconditioner dispatch.
+- `solvers/preconditioner_full_fp_kinetic.py`: full-FP RHSMode-1 kinetic,
+  species-block, and collision preconditioners.
+- `solvers/preconditioner_schur_profile.py`: RHSMode-1 Schur/coarse
+  preconditioners and active sparse-coarse policies.
+- `outputs/writer.py`: public output-write orchestration.
+- `outputs/formats.py`: HDF5/NetCDF/NPZ schemas, output cache persistence, and
+  `export_f` mapping helpers.
+- `outputs/rhsmode1.py`: RHSMode-1 output diagnostics and output-path policy.
+- `validation/artifacts.py`: validation artifact manifests and research-lane
+  evidence gates.
+
+Do not reintroduce helper-only modules for residual wrappers, constraint-source
+kernels, compressed pitch layouts, full-FP species preconditioners, output
+caches, preconditioner dispatch, or research-lane manifests. Those concepts are
+owned by the canonical modules listed above and guarded by source-tree tests.
 
 ## Design Rules
 

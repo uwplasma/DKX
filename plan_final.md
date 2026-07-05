@@ -37,7 +37,9 @@ The main structural refactor is functionally complete:
   `tests/test_source_tree_consolidation.py`.
 - `sfincs_jax/README.md` documents the source layout, user-facing root modules,
   domain owners, compatibility policy, large-data policy, and contributor move
-  rules.
+  rules. It also carries a guarded implementation-owner map for the main
+  operator, problem, solver, output, and validation files so contributors can
+  find canonical owners without following historical helper modules.
 - `examples/README.md` and `docs/examples.rst` provide task-oriented example
   navigation, including tutorial notebooks and runnable scripts.
 - `examples/README.md` includes an application-recipe map for the most common
@@ -813,6 +815,12 @@ Completed work:
   tests, source map, and source-tree guard. This reduces `operators/` to `16`
   source files while keeping full, active, field-split, and compressed layout
   concepts in one owner.
+- Tranche 26: expanded `sfincs_jax/README.md` with a guarded implementation
+  owner map for the consolidated operator, problem, solver, output, and
+  validation files. The source-tree guard now checks that the README names the
+  canonical owners for profile-system residual/source kernels, profile layouts,
+  preconditioning dispatch, output formats, and validation artifacts, and that
+  helper-only modules are not treated as valid navigation targets.
 
 Remaining consolidation steps:
 
