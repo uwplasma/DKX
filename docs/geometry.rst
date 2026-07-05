@@ -169,7 +169,7 @@ Minimal adapter workflow:
    zeta = np.linspace(0.0, 2.0 * np.pi / wout.nfp, 16, endpoint=False)
    geom = vmec_geometry_from_wout(w=wout, theta=theta, zeta=zeta, psi_n_wish=0.25)
 
-The public optional JAX-native handoff example is:
+The public optional JAX-native workflow example is:
 
 .. code-block:: bash
 
@@ -255,14 +255,14 @@ This example validates the differentiable
 ``VMEC-like spectral arrays -> booz_xform_jax -> sfincs_jax Boozer-spectrum
 objective`` graph.  File I/O and the default ``vmec_geometry_from_wout`` file
 adapter remain outside the differentiable graph.  Full VMEC-boundary-to-kinetic
-transport optimization is still a larger research workflow, but the public handoff
+transport optimization is still a larger research workflow, but the public interface
 has a fast, tested gradient gate.
 
 Differentiability boundary
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The optional ``vmec_jax`` / ``booz_xform_jax`` lane should be read as a
-geometry-handoff and objective-gradient lane, not as a complete transport
+geometry-interface and objective-gradient lane, not as a complete transport
 optimization workflow.  The supported public pieces are:
 
 - shallow optional-backend discovery through
@@ -310,7 +310,7 @@ This finite-beta example is a primal transport workflow.  It records radial
 profile provenance in its summary JSON, including the requested ``r_N`` surfaces,
 the plotted :math:`\psi_N = r_N^2` values, the all-roots versus selected-branch
 policy, and the convergence-overlay status.  It does not claim gradients through
-the VMEC file handoff, scheme-5 geometry evaluation, SFINCS kinetic solve, or
+the VMEC file boundary, scheme-5 geometry evaluation, SFINCS kinetic solve, or
 radial postprocessing.
 
 Boozer ``.bc`` workflow

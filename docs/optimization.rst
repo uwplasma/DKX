@@ -64,7 +64,7 @@ Available objective presets are:
 Bootstrap-Current Comparison Example
 ------------------------------------
 
-The most direct way to teach the geometry-to-transport handoff is to start from
+The most direct way to teach the geometry-to-transport workflow is to start from
 the real ``vmec_jax`` QA optimization output, verify that the VMEC equilibrium
 has the intended finite rotational transform, and then use that equilibrium as
 the input to kinetic ``sfincs_jax`` promotion scans.  The checked figure below
@@ -417,7 +417,7 @@ not a kinetic solve.  It can rank candidates and record a gradient/provenance
 gate, but it cannot by itself establish ambipolar roots, bootstrap-current
 accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
 
-1. Run the optional VMEC/Boozer preflight and proxy-gradient handoff.
+1. Run the optional VMEC/Boozer preflight and proxy-gradient workflow.
 
    The status command is safe when optional geometry packages are absent:
 

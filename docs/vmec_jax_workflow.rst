@@ -91,7 +91,7 @@ The status scaffold should then report both optional backends as available.
 Proxy-gradient gate
 -------------------
 
-Run the documented file-backed handoff with an explicit ``wout`` file:
+Run the documented file-backed workflow with an explicit ``wout`` file:
 
 .. code-block:: bash
 

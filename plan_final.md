@@ -62,6 +62,11 @@ The main structural refactor is functionally complete:
   progress-log phrasing from README-facing docs pages. The active-doc scan only
   retains false positives for "concurrently"; Sphinx `-W` and docs contract
   tests passed after the edit.
+- The 2026-07-05 architecture-wording pass removed public "handoff" and
+  deleted-driver phrasing from active README/docs/examples prose. The optional
+  VMEC/Boozer path is now described as a workflow/interface, and the
+  finite-beta example records the VMEC file boundary explicitly in its
+  differentiability contract.
 - `docs/examples.rst` carries the same application-recipe map as the examples
   README, with `tests/test_examples_tree_contract.py` checking that the README
   and ReadTheDocs entry points stay synchronized. The docs-sync focused guard
@@ -1527,6 +1532,18 @@ Completed work:
   Focused validation passed:
   `tests/test_output_formats.py tests/test_io_output_policy_coverage.py tests/test_geometry_grid_helper_coverage.py tests/test_solver_trace_output_formats.py`
   as `114 passed in 4.60 s`; Ruff and py_compile passed.
+- Tranche 89: removed public "handoff" wording from README/docs/example
+  navigation and changed the finite-beta VMEC-JAX example contract key from a
+  file-handoff label to a file-boundary label. This keeps public prose focused
+  on the present workflow/interface model while leaving release-note and NTX
+  archival pages untouched. The active stale-wording scan over README, docs,
+  examples, and the example-contract test exited with no matches; the
+  review-lock bundle
+  `tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `64 passed in 3.81 s`; the focused source/docs bundle
+  `tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py tests/test_source_tree_consolidation.py`
+  passed as `50 passed in 3.68 s`; Ruff, py_compile, notebook JSON parsing,
+  and `git diff --check` passed.
 
 Remaining consolidation steps:
 

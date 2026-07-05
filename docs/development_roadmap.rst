@@ -73,7 +73,7 @@ Refactoring Plan
 
 The main code-health target is to keep implementation ownership in one level of
 domain folders below ``sfincs_jax/`` with only public entry points and stable
-facades at package root. The historical ``v3_driver.py`` monolith has been
+facades at package root. The monolithic transport driver has been
 retired; refactor work should remain behavior-preserving, tested in gated
 slices, and should avoid new historical helper names such as top-level
 ``rhs1_*`` files.

@@ -7,7 +7,7 @@ proxy transport objective, checks the gradient against a centered finite
 difference, and takes a few scalar optimization steps.
 
 The optimized scalar is a bounded geometry/transport proxy, not a full kinetic solve.
-It is the public handoff point for fully JAX-native geometry workflows while the full
+It is the public interface point for fully JAX-native geometry workflows while the full
 VMEC-boundary-to-transport-solve objective remains a larger research lane.
 
 Only the in-memory spectral scaling, ``booz_xform_jax`` call, and

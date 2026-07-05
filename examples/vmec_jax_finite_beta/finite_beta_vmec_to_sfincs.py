@@ -725,7 +725,7 @@ def _finite_beta_workflow_contract() -> dict[str, Any]:
         "contract_version": 1,
         "differentiability": {
             "vmec_jax_fixed_boundary_run": "primal_setup_not_differentiated_by_this_example",
-            "vmec_wout_file_handoff": "file_handoff_not_differentiated",
+            "vmec_wout_file_boundary": "file_boundary_not_differentiated",
             "sfincs_geometry_scheme5": "primal_geometry_evaluation_not_differentiated",
             "sfincs_kinetic_transport_solve": "primal_solve_only_not_differentiated",
             "radial_profile_postprocessing": "postprocessing_not_differentiated",

@@ -89,7 +89,7 @@ APPLICATION_RECIPE_LABELS = {
     "Bootstrap current vs Redl",
     "Ambipolar electric-field scan",
     "Differentiable residual or flux",
-    "VMEC/Boozer/JAX handoff",
+    "VMEC/Boozer/JAX workflow",
     "QA/QI optimization objective",
     "CPU/GPU timing and output I/O",
     "Frozen Fortran-v3 parity check",

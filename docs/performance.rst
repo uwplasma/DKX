@@ -402,7 +402,7 @@ differentiate objectives with respect to them. For example:
 - Differentiate a residual norm w.r.t. ``nu_n`` (see ``examples/autodiff/autodiff_sensitivity_nu_n_scheme5.py``).
 - Differentiate a diagnostics functional w.r.t. a differentiable geometry parameter in ``geometryScheme=4`` optimization demos.
 - Differentiate a Boozer-spectrum proxy transport objective through the optional
-  ``vmec_jax -> booz_xform_jax -> sfincs_jax`` handoff in
+  ``vmec_jax -> booz_xform_jax -> sfincs_jax`` workflow in
   ``examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py``.
 - Differentiate **through a linear solve** via implicit differentiation (see
   ``examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py``).
@@ -412,7 +412,7 @@ you can request implicit differentiation through the solve using ``differentiabl
 or the corresponding lower-level solve configuration. When the differentiable path is active,
 linear solves use implicit differentiation (``jax.lax.custom_linear_solve``).
 
-The VMEC/Boozer handoff example differentiates through JAX arrays and the
+The VMEC/Boozer workflow example differentiates through JAX arrays and the
 ``booz_xform_jax`` transform, not through file I/O.  The file-based
 ``wout`` and ``.bc`` readers remain provenance and parity tools; JAX-native
 producers are the route for geometry sensitivities.
