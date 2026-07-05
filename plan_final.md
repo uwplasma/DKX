@@ -181,6 +181,12 @@ The main structural refactor is functionally complete:
   `solvers/preconditioner_symbolic_host.py` report zero production-used public
   helpers without direct tests. Focused validation passed as
   `5 passed in 1.17 s`.
+- Profile f-block operator-construction coverage now includes direct reduced
+  fixture tests for collisionless, PAS, FP, and Phi1 FP from-namelist builders,
+  plus the RHSMode-1 f-block layout adapter. Source/test audits for
+  `operators/profile_fblock.py` and `operators/profile_kinetic.py` report zero
+  production-used public helpers without direct tests. Focused validation
+  passed as `1 passed in 1.72 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -1022,6 +1028,10 @@ Completed work:
   host sparse-factor, and bounded x-block-TZ builder tests, then reran
   source/test audits showing no production-used public helpers without direct
   tests in those targeted modules.
+- Tranche 43: added direct profile f-block from-namelist constructor and
+  f-block layout-adapter tests, then reran source/test audits showing no
+  production-used public helpers without direct tests in those targeted
+  operator modules.
 
 Remaining consolidation steps:
 
