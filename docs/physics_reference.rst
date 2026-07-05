@@ -451,7 +451,7 @@ Code links:
 ``sfincs_jax/solver.py`` (Krylov wrappers),
 ``sfincs_jax/problems/profile_solve.py`` (RHSMode-1 solve orchestration),
 ``sfincs_jax/problems/profile_preconditioner_build.py`` and
-``sfincs_jax/solvers/preconditioner_dispatch.py`` (preconditioners and
+``sfincs_jax/solvers/preconditioning.py`` (preconditioners and
 projections).
 
 References (vendored)
