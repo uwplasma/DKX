@@ -64,7 +64,7 @@ convergence, or profiling detail.
    * - Differentiable residual or flux
      - ``examples/autodiff/autodiff_gradient_nu_n_residual.py``
      - ``examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py``
-   * - VMEC/Boozer/JAX handoff
+   * - VMEC/Boozer/JAX workflow
      - ``examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py``
      - ``examples/tutorials/04_geometry_validation_and_performance.ipynb``
    * - QA/QI optimization objective
@@ -136,9 +136,9 @@ The radial-profile x-axis is normalized toroidal flux,
 The direct VMEC path does not require a Boozer transform: ``sfincs_jax`` consumes
 the generated ``wout`` through the same scheme-5 geometry implementation used by
 file-based VMEC runs.  ``booz_xform_jax`` remains useful for the separate
-differentiable Boozer-spectrum handoff described below.  This finite-beta script
+differentiable Boozer-spectrum workflow described below.  This finite-beta script
 is a primal transport example: it does not differentiate through the VMEC-JAX
-fixed-boundary run, the ``wout`` file handoff, scheme-5 geometry evaluation, the
+fixed-boundary run, the ``wout`` file boundary, scheme-5 geometry evaluation, the
 SFINCS kinetic solve, or radial postprocessing.  Its summary JSON records that
 boundary in a workflow-contract block, plus radial-profile provenance for the
 ``r_N`` surfaces, plotted :math:`\psi_N = r_N^2` values, selected ambipolar branch,
@@ -611,11 +611,11 @@ based on `jax.lax.custom_linear_solve` and demonstrates it here:
    python examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py --solver gmres
    python examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py --solver bicgstab
 
-VMEC-to-Boozer differentiable geometry handoff
+VMEC-to-Boozer Differentiable Geometry Workflow
 ----------------------------------------------
 
 For optional ``vmec_jax`` and ``booz_xform_jax`` installations, this example
-checks a public differentiable geometry handoff into ``sfincs_jax``:
+checks a public differentiable geometry workflow into ``sfincs_jax``:
 
 .. code-block:: bash
 
