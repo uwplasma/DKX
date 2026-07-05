@@ -568,6 +568,10 @@ Latest AST audit:
   `solvers/path_policy.py` and the separate `solvers/selection_policy.py`
   module has been deleted. Solver route policy, rescue/JIT policy, and
   measured candidate promotion rules now share one policy owner.
+- QI production-ladder promotion gates have moved from the solver package into
+  `validation/qi_device.py`, and `solvers/preconditioner_qi_policy.py` has
+  been deleted. QI evidence policy now lives with QI artifact validation rather
+  than numerical preconditioner implementations.
 - The next consolidation pass must reduce those owner sizes using existing
   domain files. Do not add more package folders or helper-only files.
 

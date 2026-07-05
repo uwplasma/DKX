@@ -179,9 +179,6 @@ research workflows.
 .. automodule:: sfincs_jax.solvers.preconditioner_qi_device
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioner_qi_policy
-   :members:
-
 .. automodule:: sfincs_jax.problems.profile_residual
    :members:
 
