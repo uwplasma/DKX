@@ -363,7 +363,10 @@ Optimization-facing workflow owner. It contains the differentiable
 neoclassical proxy objectives, high-fidelity scan-promotion gates,
 candidate-scan plan builders, promotion evidence campaign builders,
 CPU/GPU/Fortran promotion comparison gates, and finite-beta convergence-ladder
-checks. Historical ``optimization_*`` workflow modules resolve through
+checks. Fixed-artifact QI device campaign ingestion belongs to
+``sfincs_jax/validation/qi_device.py`` so workflow code stays focused on
+reusable execution and evidence-generation tasks. Historical ``optimization_*``
+workflow modules resolve through
 package-level compatibility aliases in ``sfincs_jax.workflows`` instead of
 separate implementation files.
 
@@ -388,6 +391,17 @@ Release-hosted external-equilibrium fixture owner:
 
 This module replaces the former root ``sfincs_jax/data_fetch.py``
 implementation.
+
+``sfincs_jax/validation/qi_device.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+QI device evidence owner:
+
+- checks route-level QI device artifacts for fail-closed metadata,
+- rejects GPU evidence that lacks backend/provenance fields,
+- gates bounded QI ``15x`` GPU campaign JSON against residual and
+  CPU/Fortran root-agreement criteria,
+- keeps campaign-specific promotion policy out of reusable workflow modules.
 
 ``sfincs_jax/input_compat.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

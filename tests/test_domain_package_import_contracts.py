@@ -120,6 +120,17 @@ ACTIVE_MODULE_EXPORTS = {
         "validate_fortran_v3_adjoint_sensitivity_output_surface",
         "vjp_flux",
     ),
+    "sfincs_jax.validation.qi_device": (
+        "DEFAULT_GPU_CPU_ROOT_ATOL",
+        "DEFAULT_GPU_FORTRAN_ROOT_ATOL",
+        "QIDeviceArtifactCheck",
+        "check_qi_device_artifact_file",
+        "check_qi_device_artifact_files",
+        "evaluate_qi_res15_gpu_campaign",
+        "evaluate_qi_res15_gpu_campaign_files",
+        "load_json_object",
+        "qi_device_artifact_errors",
+    ),
 }
 
 LEGACY_MODULES_THAT_KEEP_THEIR_IMPORT_PATHS = (

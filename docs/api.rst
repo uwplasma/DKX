@@ -224,6 +224,9 @@ research workflows.
 .. automodule:: sfincs_jax.validation.petsc_binary
    :members:
 
+.. automodule:: sfincs_jax.validation.qi_device
+   :members:
+
 .. automodule:: sfincs_jax.solvers.implicit
    :members:
 
