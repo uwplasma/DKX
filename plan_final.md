@@ -156,6 +156,14 @@ The main structural refactor is functionally complete:
   (`ImportError: cannot load module more than once per process`), so the
   package-wide coverage percentage remains the last successful CI-mode
   measurement below until the next full coverage run.
+- CI coverage recovery now keeps the fast RHSMode=2/3 transport preconditioner
+  unit tests active in CI while continuing to skip only the slower
+  transport-matrix parity and write-output integration files. The previous
+  broad `test_transport_matrix_` CI skip hid direct owner tests for
+  `solvers/preconditioner_transport_matrix.py`; the narrowed skip keeps
+  `tests/test_transport_matrix_preconditioners.py` active. Focused validation
+  passed under CI mode as `16 passed, 26 skipped in 5.24 s`; standalone
+  validation of the recovered test file passed as `16 passed in 5.25 s`.
 - Structured velocity, transport policy, sensitivity, and validation coverage
   now includes direct tests for block-tridiagonal solves, structured tz-FFT
   first-attempt policy/budget/environment thresholds, JVP/VJP flux wrappers,

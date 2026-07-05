@@ -126,6 +126,7 @@ facades.
    * - ``solver.py``
      - stable solver kernel
      - Krylov result contracts, XLA synchronization, and linear algebra utilities.
+
 Closure move/delete manifest
 ----------------------------
 
@@ -190,6 +191,7 @@ tests.
    * - ``solver.py``
      - solvers public contracts owner
      - keep root shim until solvers exports cover public contracts
+
 Core modules
 ------------
 

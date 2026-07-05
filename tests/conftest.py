@@ -39,7 +39,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     # Skip only the heaviest end-to-end tests in CI; keep unit + fast parity checks.
     slow_mark = pytest.mark.skip(reason="Skipped slow integration test in CI mode.")
     slow_patterns = (
-        "test_transport_matrix_",
+        "tests/test_transport_matrix_rhsmode2_parity.py::",
+        "tests/test_transport_matrix_rhsmode3_parity.py::",
+        "tests/test_transport_matrix_write_output_end_to_end.py::",
         "tests/test_transport_parallel.py::",
         "test_state_recycle_parity",
         "test_er_scan_and_ambipolar",
