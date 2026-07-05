@@ -201,6 +201,14 @@ def test_deleted_tiny_validation_facades_are_absent() -> None:
     assert hasattr(module, "read_petsc_mat_aij")
 
 
+def test_deleted_sparse_handoff_filename_is_absent() -> None:
+    """RHSMode-1 sparse-PC orchestration should use the canonical solve owner."""
+
+    assert not (PACKAGE_ROOT / "problems" / "profile_sparse_handoff.py").exists()
+    module = importlib.import_module("sfincs_jax.problems.profile_sparse_solve")
+    assert hasattr(module, "build_sparse_pc_generic_branch_setup")
+
+
 def test_canonical_flat_domain_modules_are_importable() -> None:
     """Canonical owners replace the deleted compatibility import paths."""
 
