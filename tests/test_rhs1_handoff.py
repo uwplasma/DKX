@@ -32,7 +32,7 @@ from sfincs_jax.problems.profile_solver_diagnostics import (
     rhs1_skip_primary_krylov_reason,
     rhs1_solver_candidate_metrics,
 )
-from sfincs_jax.solvers.selection_policy import SolverCandidateMetrics
+from sfincs_jax.solvers.path_policy import SolverCandidateMetrics
 
 
 def _result(residual_norm: float, x: object = None):

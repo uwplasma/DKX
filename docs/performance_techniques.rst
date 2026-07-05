@@ -2830,7 +2830,7 @@ where :math:`n` is the active unknown count, :math:`r` is the GMRES restart,
 :math:`M_\mathrm{pc}` / :math:`M_\mathrm{tmp}` are preconditioner and compiled
 temporary estimates when available. The GMRES restart cap in
 ``sfincs_jax.solver`` uses this shared model, and
-``sfincs_jax.solvers.selection_policy`` can compare candidate routes using paired
+``sfincs_jax.solvers.path_policy`` can compare candidate routes using paired
 memory metrics in priority order: device peak memory, active RSS, compiled
 temporary memory, and finally legacy process peak RSS. This avoids promoting a
 route by comparing GPU device memory against CPU process RSS or by hiding a true

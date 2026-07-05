@@ -564,6 +564,10 @@ Latest AST audit:
   `compare.py` API and the `validation/h5_parity.py` helper has been deleted.
   Scripts and tests now use one public comparison owner instead of a
   validation-only facade.
+- Measured solver-candidate admission gates have been folded into
+  `solvers/path_policy.py` and the separate `solvers/selection_policy.py`
+  module has been deleted. Solver route policy, rescue/JIT policy, and
+  measured candidate promotion rules now share one policy owner.
 - The next consolidation pass must reduce those owner sizes using existing
   domain files. Do not add more package folders or helper-only files.
 

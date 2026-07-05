@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sfincs_jax.solvers.selection_policy import (
+from sfincs_jax.solvers.path_policy import (
     SolverAcceptanceCriteria,
     SolverCandidateMetrics,
     choose_solver_candidate,

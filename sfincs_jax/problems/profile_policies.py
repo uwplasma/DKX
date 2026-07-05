@@ -18,7 +18,7 @@ from ..solvers.preconditioner_pas_policy import (
     rhs1_pas_small_near_zero_er_kind,
 )
 from sfincs_jax.solvers.explicit_sparse import SparseOperatorBundle
-from sfincs_jax.solvers.selection_policy import (
+from sfincs_jax.solvers.path_policy import (
     SolverAcceptanceCriteria,
     SolverCandidateGate,
     SolverCandidateMetrics,

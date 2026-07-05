@@ -14,7 +14,7 @@ import jax.numpy as jnp
 
 from sfincs_jax.solvers.krylov_dispatch import ksp_iteration_solver_label
 from sfincs_jax.solvers.preconditioner_pas_policy import rhs1_pas_schur_rescue_controls_from_env
-from sfincs_jax.solvers.selection_policy import (
+from sfincs_jax.solvers.path_policy import (
     SolverAcceptanceCriteria,
     SolverCandidateMetrics,
     solver_candidate_gate,

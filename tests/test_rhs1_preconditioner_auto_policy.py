@@ -32,7 +32,7 @@ from sfincs_jax.problems.profile_policies import (
     resolve_rhs1_default_preconditioner_selection,
     resolve_rhs1_preconditioner_route_setup,
 )
-from sfincs_jax.solvers.selection_policy import SolverCandidateMetrics
+from sfincs_jax.solvers.path_policy import SolverCandidateMetrics
 
 
 def test_canonical_rhs1_preconditioner_kind_preserves_driver_aliases() -> None:
