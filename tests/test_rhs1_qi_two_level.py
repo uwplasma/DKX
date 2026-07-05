@@ -6,7 +6,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-import sfincs_jax.v3_driver as v3_driver
 from sfincs_jax.solvers.preconditioner_qi_basis import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata
 from sfincs_jax.solvers.preconditioner_qi_corrections import (
     RHS1QITwoLevelMetadata,
@@ -255,7 +254,6 @@ def test_xblock_two_level_wrapper_records_metadata_without_driver_alias() -> Non
     assert stats["applies"] == 1
     assert stats["coarse_applies"] == 1
     assert np.all(np.isfinite(np.asarray(out)))
-    assert not hasattr(v3_driver, "_build_rhs1_xblock_two_level_preconditioner")
 
 
 def test_host_global_coupling_wrapper_records_metadata_and_stats(monkeypatch) -> None:
@@ -299,10 +297,6 @@ def test_host_global_coupling_wrapper_records_metadata_and_stats(monkeypatch) ->
     assert stats["applies"] == 1
     assert stats["coarse_applies"] == 1
     assert np.all(np.isfinite(np.asarray(out)))
-    assert not hasattr(
-        v3_driver,
-        "_build_rhs1_xblock_smoothed_global_coupling_preconditioner",
-    )
 
 
 def test_device_global_coupling_wrapper_supports_qr_and_normal_equations(
@@ -358,8 +352,3 @@ def test_device_global_coupling_wrapper_supports_qr_and_normal_equations(
         assert stats["applies"] == 1
         assert stats["coarse_applies"] == 1
         assert np.all(np.isfinite(np.asarray(out)))
-
-    assert not hasattr(
-        v3_driver,
-        "_build_rhs1_xblock_device_global_coupling_preconditioner",
-    )

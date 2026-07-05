@@ -7,11 +7,6 @@ import numpy as np
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.fortran import read_petsc_vec
 import sfincs_jax.problems.profile_phi1_newton as phi1_newton
-from sfincs_jax.v3_driver import solve_v3_full_system_newton_krylov
-
-
-def test_v3_driver_newton_krylov_name_is_profile_response_facade() -> None:
-    assert solve_v3_full_system_newton_krylov is phi1_newton.solve_v3_full_system_newton_krylov
 
 
 def test_newton_krylov_converges_for_pas_tiny_phi1_in_kinetic_fixture() -> None:

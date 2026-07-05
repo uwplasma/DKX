@@ -101,9 +101,3 @@ def test_recycled_initial_guess_handles_empty_or_nonfinite_basis() -> None:
         [jnp.asarray([jnp.nan, 0.0], dtype=jnp.float64)],
         [jnp.asarray([1.0, 0.0], dtype=jnp.float64)],
     ) is None
-
-
-def test_v3_driver_keeps_small_lstsq_compatibility_alias() -> None:
-    from sfincs_jax import v3_driver as vd
-
-    assert vd._small_regularized_lstsq is small_regularized_lstsq

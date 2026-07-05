@@ -4,7 +4,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax import v3_driver as vd
 from sfincs_jax.problems.profile_policies import (
     parse_rhs1_pas_tz_guarded_structured_levels,
     rhs1_qi_device_extra_coarse_controls,
@@ -24,32 +23,9 @@ from sfincs_jax.problems.profile_policies import (
 )
 
 
-def test_driver_private_policy_helpers_only_keep_active_compatibility_aliases():
-    assert (
-        vd._rhs1_pas_tz_guarded_structured_levels
-        is parse_rhs1_pas_tz_guarded_structured_levels
-    )
-    assert vd._rhs1_xblock_fallback_initial_guess is rhs1_xblock_fallback_initial_guess
-
-    removed_qi_policy_aliases = (
-        "_rhs1_qi_device_extra_coarse_controls",
-        "_rhs1_qi_device_extra_coarse_setup_kwargs",
-        "_rhs1_qi_device_extra_coarse_metadata",
-        "_rhs1_qi_device_coupled_install_on_reject_requested",
-        "_rhs1_qi_device_probe_uses_minres_step",
-        "_rhs1_qi_device_progress_messages",
-        "_rhs1_qi_device_residual_correction_controls",
-        "_rhs1_qi_device_residual_correction_setup_kwargs",
-        "_rhs1_qi_device_residual_correction_metadata",
-        "_rhs1_qi_device_setup_summary",
-        "_rhs1_qi_device_status_fields",
-        "_rhs1_qi_device_tail_block_required",
-        "_rhs1_qi_device_rank_budget",
-    )
-    assert all(not hasattr(vd, name) for name in removed_qi_policy_aliases)
-
-
 def test_qi_device_policy_helpers_live_in_profile_response_policy_module():
+    assert callable(parse_rhs1_pas_tz_guarded_structured_levels)
+    assert callable(rhs1_xblock_fallback_initial_guess)
     assert callable(rhs1_qi_device_extra_coarse_controls)
     assert callable(rhs1_qi_device_extra_coarse_setup_kwargs)
     assert callable(rhs1_qi_device_extra_coarse_metadata)

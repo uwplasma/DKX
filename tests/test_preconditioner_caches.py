@@ -1,24 +1,7 @@
 import jax.numpy as jnp
 import numpy as np
-import pytest
 
 import sfincs_jax.solvers.preconditioning as pc
-import sfincs_jax.v3_driver as vd
-
-
-@pytest.mark.parametrize(
-    ("driver_name", "module_name"),
-    [
-        ("_RHSMODE1_PRECOND_CACHE", "_RHSMODE1_PRECOND_CACHE"),
-        ("_RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE", "_RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE"),
-        ("_RHSMODE1_SPARSE_ILU_CACHE", "_RHSMODE1_SPARSE_ILU_CACHE"),
-        ("_RHSMODE1_PAS_TOKAMAK_THETA_CACHE", "_RHSMODE1_PAS_TOKAMAK_THETA_CACHE"),
-        ("_TRANSPORT_FP_TZFFT_LINE_SCHUR_PRECOND_CACHE", "_TRANSPORT_FP_TZFFT_LINE_SCHUR_PRECOND_CACHE"),
-        ("_TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE", "_TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE"),
-    ],
-)
-def test_v3_driver_reexports_preconditioner_cache_registries_by_identity(driver_name, module_name):
-    assert getattr(vd, driver_name) is getattr(pc, module_name)
 
 
 def test_rhsmode1_cache_containers_are_lightweight_data_models():

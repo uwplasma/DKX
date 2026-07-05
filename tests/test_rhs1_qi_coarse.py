@@ -7,7 +7,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax import v3_driver as vd
 from sfincs_jax.solvers.preconditioner_qi_basis import (
     RHS1QIGalerkinPreconditioner,
     RHS1QIGalerkinPreconditionerMetadata,
@@ -277,8 +276,6 @@ def test_xblock_qi_block_geometry_metadata_tracks_tail_block_and_canonical_owner
     assert metadata["qi_block_f_size"] == 32
     assert metadata["qi_block_tail_size"] == 5
     assert metadata["qi_block_tail_included"] is True
-    assert not hasattr(vd, "_rhs1_xblock_qi_coarse_basis")
-    assert not hasattr(vd, "_rhs1_xblock_qi_block_geometry_metadata")
 
 
 def test_global_coarse_and_load_bases_cover_tail_source_and_moments() -> None:
@@ -302,7 +299,6 @@ def test_global_coarse_and_load_bases_cover_tail_source_and_moments() -> None:
     assert "constraint1_source_s0_0" in coarse_labels
     assert "fsavg_s0_x0_l0" in coarse_labels
     assert all(vector.shape == (op.total_size,) for _, vector in coarse)
-    assert not hasattr(vd, "_rhs1_xblock_global_coarse_basis")
 
     loads = build_rhs1_xblock_global_coupling_load_basis(
         op=op,
@@ -321,7 +317,6 @@ def test_global_coarse_and_load_bases_cover_tail_source_and_moments() -> None:
     assert "fsavg_s0_x1_l1" in load_labels
     assert any(label.startswith("angular_s0_allx_l0_m1_n0_") for label in load_labels)
     assert all(vector.shape == (op.total_size,) for _, vector in loads)
-    assert not hasattr(vd, "_rhs1_xblock_global_coupling_load_basis")
 
 
 def test_smoothed_load_qi_basis_rank_gates_and_records_metadata() -> None:
@@ -350,7 +345,6 @@ def test_smoothed_load_qi_basis_rank_gates_and_records_metadata() -> None:
     assert all(
         label.startswith("smoothed_load:") for label in basis.metadata.accepted_labels
     )
-    assert not hasattr(vd, "_rhs1_xblock_smoothed_load_qi_basis")
 
 
 def test_qi_coarse_correction_reduces_residual_for_block_slow_mode() -> None:

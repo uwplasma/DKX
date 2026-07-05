@@ -1134,13 +1134,20 @@ Completed work:
   sparse metadata. The direct-reference audit now reports
   `modules_with_missing 0`; the measured coverage floor still needs the next
   branch/line coverage run before it can be raised.
+- Tranche 50: migrated behavior tests away from the `sfincs_jax.v3_driver`
+  compatibility shim and removed compatibility-only private-alias assertions.
+  The source-tree guard now expects zero test-suite imports of `v3_driver`;
+  the explicit domain import-contract test remains the single shim guard.
+  Focused validation passed as `100 passed in 14.08 s`; Ruff and
+  `git diff --check` passed.
 
 Remaining consolidation steps:
 
-1. Compatibility cleanup: audit and either delete or explicitly retain the four
-   compatibility facades listed in the Final Consolidation Target. Update docs,
-   examples, imports, and compatibility tests in the same patch. Success is a
-   smaller source tree or a documented one-release compatibility boundary.
+1. Compatibility cleanup: audit and either delete or explicitly retain the
+   remaining public compatibility facades listed in the Final Consolidation
+   Target. Behavior tests should keep importing canonical domain owners; only
+   explicit public-compatibility tests may import facades. Success is a smaller
+   source tree or a documented one-release compatibility boundary.
 2. Problem-family consolidation: remove "handoff" and production-campaign
    names from implementation files by merging RHSMode-1 sparse setup/rescue
    owners into canonical profile sparse owners. Success is fewer problem files,

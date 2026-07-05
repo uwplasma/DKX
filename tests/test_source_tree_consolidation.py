@@ -155,14 +155,7 @@ def test_package_sources_do_not_import_v3_driver_internally() -> None:
 def test_test_suite_v3_driver_imports_are_explicit_compatibility_contracts() -> None:
     """Keep ordinary behavior tests on domain modules instead of the shim."""
 
-    allowed = {
-        "tests/test_full_system_newton_krylov.py",
-        "tests/test_preconditioner_caches.py",
-        "tests/test_rhs1_qi_coarse.py",
-        "tests/test_rhs1_qi_two_level.py",
-        "tests/test_rhs1_xblock_fallback_initial_guess.py",
-        "tests/test_small_regularized_lstsq.py",
-    }
+    allowed: set[str] = set()
 
     offenders: list[str] = []
     for path in sorted((REPO_ROOT / "tests").glob("test_*.py")):
