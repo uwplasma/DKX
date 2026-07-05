@@ -295,6 +295,80 @@ def test_run_transport_parallel_gpu_subprocesses_rejects_short_worker_arrays(
         )
 
 
+def test_run_transport_parallel_gpu_subprocesses_reports_periodic_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    messages: list[str] = []
+    perf_values = iter([0.0, 0.2, 0.4])
+
+    class _FakeProc:
+        returncode = 0
+
+        def __init__(self, cmd, **_kwargs):
+            self.poll_count = 0
+            output_path = Path(cmd[cmd.index("--output") + 1])
+            np.savez(
+                output_path,
+                which_rhs_values=np.asarray([1], dtype=np.int32),
+                state_vectors=np.ones((1, 2), dtype=np.float64),
+                residual_norms=np.full((1,), 1.0e-12, dtype=np.float64),
+                rhs_norms=np.ones((1,), dtype=np.float64),
+                elapsed_time_s=np.full((1,), 0.25, dtype=np.float64),
+            )
+
+        def poll(self):
+            self.poll_count += 1
+            return None if self.poll_count == 1 else self.returncode
+
+        def communicate(self):
+            return "", ""
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_STATUS_INTERVAL", "0.1")
+    monkeypatch.setattr("sfincs_jax.problems.transport_parallel_runtime.subprocess.Popen", _FakeProc)
+    monkeypatch.setattr("sfincs_jax.problems.transport_parallel_runtime.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        "sfincs_jax.problems.transport_parallel_runtime.time.perf_counter",
+        lambda: next(perf_values),
+    )
+
+    results = run_transport_parallel_gpu_subprocesses(
+        payloads=[{"which_rhs_values": [1]}],
+        parallel_workers=1,
+        visible_gpu_ids=lambda _workers: ["0"],
+        gpu_worker_env=lambda gpu_id: {"CUDA_VISIBLE_DEVICES": str(gpu_id)},
+        emit=lambda _level, message: messages.append(message),
+    )
+
+    assert results[0]["which_rhs_values"] == [1]
+    assert any("GPU transport workers running" in message for message in messages)
+
+
+def test_run_transport_parallel_gpu_subprocesses_reports_non_residual_worker_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeProc:
+        returncode = 2
+
+        def __init__(self, _cmd, **_kwargs):
+            pass
+
+        def poll(self):
+            return self.returncode
+
+        def communicate(self):
+            return "ordinary stdout", "ordinary stderr"
+
+    monkeypatch.setattr("sfincs_jax.problems.transport_parallel_runtime.subprocess.Popen", _FakeProc)
+
+    with pytest.raises(RuntimeError, match="GPU transport worker failed .*code=2"):
+        run_transport_parallel_gpu_subprocesses(
+            payloads=[{"which_rhs_values": [1]}],
+            parallel_workers=1,
+            visible_gpu_ids=lambda _workers: ["0"],
+            gpu_worker_env=lambda gpu_id: {"CUDA_VISIBLE_DEVICES": str(gpu_id)},
+        )
+
+
 def test_run_transport_parallel_gpu_subprocesses_rejects_invalid_worker_count() -> None:
     with pytest.raises(ValueError, match="GPU transport worker count must be >= 1; got 0"):
         run_transport_parallel_gpu_subprocesses(
@@ -460,6 +534,60 @@ def test_gpu_subprocess_plan_handles_empty_payloads_and_rejects_missing_gpus() -
             payloads=[{"which_rhs_values": [1]}],
             parallel_workers=1,
             visible_gpu_ids=["", " "],
+        )
+
+
+def test_transport_scaling_audit_rejects_malformed_evidence() -> None:
+    with pytest.raises(ValueError, match="release_scaling_claim must be a boolean"):
+        transport_parallel_runtime.audit_transport_parallel_scaling_summary(
+            {
+                "backend": "cpu",
+                "rhs_count": 2,
+                "release_scaling_claim": "maybe",
+                "results": [
+                    {"workers": 1, "mean_s": 2.0},
+                    {"workers": 2, "mean_s": 1.0},
+                ],
+                "payloads": [
+                    {"which_rhs_values": [1]},
+                    {"which_rhs_values": [2]},
+                ],
+            }
+        )
+
+    with pytest.raises(ValueError, match="payloads\\[0\\] must include which_rhs_values"):
+        transport_parallel_runtime.audit_transport_parallel_scaling_summary(
+            {
+                "backend": "cpu",
+                "rhs_count": 2,
+                "results": [
+                    {"workers": 1, "mean_s": 2.0},
+                    {"workers": 2, "mean_s": 1.0},
+                ],
+                "payloads": [{}],
+            }
+        )
+
+    with pytest.raises(ValueError, match="compile_amortization_gate.notes"):
+        transport_parallel_runtime.audit_transport_parallel_scaling_summary(
+            {
+                "backend": "cpu",
+                "rhs_count": 2,
+                "timing_semantics": "warm",
+                "results": [
+                    {"workers": 1, "mean_s": 2.0},
+                    {"workers": 2, "mean_s": 1.0},
+                ],
+                "payloads": [
+                    {"which_rhs_values": [1]},
+                    {"which_rhs_values": [2]},
+                ],
+                "compile_amortization_gate": {
+                    "passes": True,
+                    "timing_semantics": "warm",
+                    "notes": 1,
+                },
+            }
         )
 
 

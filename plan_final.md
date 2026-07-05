@@ -166,6 +166,14 @@ The main structural refactor is functionally complete:
   (`ImportError: cannot load module more than once per process`), so the
   package-wide coverage percentage remains the last successful CI-mode
   measurement below until the next full coverage run.
+- Transport parallel-runtime coverage now additionally exercises periodic
+  GPU-worker progress logging, non-residual GPU subprocess failure reporting,
+  malformed release-scaling boolean provenance, malformed payload coverage, and
+  malformed compile-amortization notes. Focused validation passed as
+  `84 passed in 0.46 s` with user-site packages disabled and
+  `30 passed in 0.36 s` for the touched runtime owner under the standard local
+  pytest invocation. Exact coverage deltas remain delegated to CI because
+  local `coverage run` still aborts after NumPy reload on this machine.
 - CI coverage recovery now keeps the fast RHSMode=2/3 transport preconditioner
   unit tests active in CI while continuing to skip only the slower
   transport-matrix parity and write-output integration files. The previous
