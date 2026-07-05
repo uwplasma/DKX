@@ -1425,6 +1425,15 @@ Completed work:
   `tests/test_source_tree_consolidation.py tests/test_rhs1_device_operator.py`
   as `35 passed in 6.18 s`; the compact owner bundle passed as
   `137 passed in 31.34 s`; Ruff, `compileall`, and `git diff --check` passed.
+- Tranche 80: moved structured full-CSR documentation tests off the
+  `profile_solve.py` compatibility alias for method names. The docs test now
+  imports `STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS` from
+  `problems/profile_setup.py`, where the setup policy is defined, and a
+  source-tree guard keeps that docs test off solve orchestration. Focused
+  validation passed:
+  `tests/test_source_tree_consolidation.py tests/test_structured_csr_docs.py`
+  as `38 passed in 3.27 s`; the compact owner bundle passed as
+  `143 passed in 31.30 s`; Ruff, `compileall`, and `git diff --check` passed.
 
 Remaining consolidation steps:
 

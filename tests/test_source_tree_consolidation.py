@@ -285,6 +285,17 @@ def test_device_operator_tests_use_active_layout_and_xblock_policy_owners() -> N
     assert "sfincs_jax.solvers.preconditioner_xblock_policy" in text
 
 
+def test_structured_csr_docs_tests_use_profile_setup_owner() -> None:
+    """Structured-CSR method constants belong to profile setup."""
+
+    text = (REPO_ROOT / "tests" / "test_structured_csr_docs.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "profile_solve" not in text
+    assert "sfincs_jax.problems.profile_setup" in text
+
+
 def test_test_filenames_do_not_reintroduce_deleted_v3_driver_label() -> None:
     """Keep test modules named after the canonical behavior they protect."""
 
