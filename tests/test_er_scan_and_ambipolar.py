@@ -4,6 +4,7 @@ from pathlib import Path
 import pickle
 
 import numpy as np
+import pytest
 
 from sfincs_jax.ambipolar import radial_current_from_output, solve_ambipolar_from_scan_dir
 from sfincs_jax.io import read_sfincs_h5, write_sfincs_h5
@@ -82,6 +83,42 @@ def _write_synthetic_scan(
             current_vd=j_vd,
             include_phi1=include_phi1,
         )
+
+
+def _write_named_scan_point(
+    scan_dir: Path,
+    *,
+    var_name: str,
+    var_value: float,
+    er: float,
+    radial_current: float,
+    rhs_mode: int = 1,
+) -> Path:
+    """Write a minimal scan point for parser-only ambipolar tests."""
+    run_dir = scan_dir / f"{var_name}{var_value:+.3f}".replace("+", "p").replace("-", "m")
+    run_dir.mkdir(parents=True, exist_ok=True)
+    write_sfincs_h5(
+        path=run_dir / "sfincsOutput.h5",
+        data={
+            "RHSMode": np.asarray(rhs_mode, dtype=np.int32),
+            var_name: np.asarray(var_value, dtype=np.float64),
+            "Er": np.asarray(er, dtype=np.float64),
+            "rN": np.asarray(0.5, dtype=np.float64),
+            "Nspecies": np.asarray(1, dtype=np.int32),
+            "includePhi1": np.asarray(0, dtype=np.int32),
+            "Zs": np.asarray([1.0], dtype=np.float64),
+            "FSABFlow": np.asarray([[100.0, 0.25 + var_value]], dtype=np.float64),
+            "particleFlux_vm_rHat": np.asarray([[100.0, radial_current]], dtype=np.float64),
+            "heatFlux_vm_rHat": np.asarray([[100.0, 0.5 + var_value]], dtype=np.float64),
+            "sources": np.asarray([[100.0, 0.01], [200.0, 0.02]], dtype=np.float64),
+            "FSABjHat": np.asarray([100.0, -0.75], dtype=np.float64),
+            "nHats": np.asarray([1.0], dtype=np.float64),
+            "THats": np.asarray([1.0], dtype=np.float64),
+        },
+        fortran_layout=False,
+        overwrite=True,
+    )
+    return run_dir / "sfincsOutput.h5"
 
 
 def test_er_scan_writes_outputs_and_ambipolar_solve_runs(tmp_path: Path) -> None:
@@ -213,3 +250,64 @@ def test_synthetic_ambipolar_roots_are_bracketed_zero_current_and_ion_typed(tmp_
 
     radial_current_index = res.outputs_labels.index("radial current")
     np.testing.assert_allclose(res.outputs_at_roots[radial_current_index], np.asarray([0.0]), atol=1e-12)
+
+
+def test_ambipolar_scan_parser_handles_non_er_scan_variables(tmp_path: Path) -> None:
+    """A scan over SFINCS' normalized electric-field input is converted back to Er."""
+    scan_dir = tmp_path / "dphi_scan"
+    scan_dir.mkdir()
+    scan_dir.joinpath("input.namelist").write_text(
+        "!ss dPhiHatdrNMin = -1\n!ss dPhiHatdrNMax = 1\n",
+        encoding="utf-8",
+    )
+    _write_named_scan_point(scan_dir, var_name="dPhiHatdrN", var_value=-1.0, er=-2.0, radial_current=-1.0)
+    _write_named_scan_point(scan_dir, var_name="dPhiHatdrN", var_value=1.0, er=2.0, radial_current=1.0)
+
+    res = solve_ambipolar_from_scan_dir(scan_dir=scan_dir, write_pickle=True, write_json=True, n_fine=50)
+
+    assert res.var_name == "dPhiHatdrN"
+    np.testing.assert_allclose(res.roots_var, np.asarray([0.0]), atol=1e-12)
+    np.testing.assert_allclose(res.roots_er, np.asarray([0.0]), atol=1e-12)
+    assert res.root_types == ["ion"]
+    assert res.radius_actual == pytest.approx(0.5)
+    payload = pickle.loads((scan_dir / "ambipolarSolutions.dat").read_bytes())
+    assert payload["numQuantities"] == len(res.outputs_labels)
+
+
+def test_ambipolar_scan_parser_reports_no_root_without_fake_extrapolation(tmp_path: Path) -> None:
+    """Same-sign radial-current scans produce an empty, explicit root set."""
+    scan_dir = tmp_path / "no_root_scan"
+    _write_synthetic_scan(
+        scan_dir,
+        er_values=[-1.0, 0.0, 1.0],
+        current_vm=[1.0, 1.5, 2.0],
+        current_vd=[9.0, 9.0, 9.0],
+        include_phi1=False,
+    )
+
+    res = solve_ambipolar_from_scan_dir(scan_dir=scan_dir, write_pickle=False, write_json=False, n_fine=50)
+
+    assert res.roots_var.size == 0
+    assert res.roots_er.size == 0
+    assert res.root_types == []
+    assert all(values.shape == (0,) for values in res.outputs_at_roots)
+
+
+def test_ambipolar_scan_parser_failures_are_explicit(tmp_path: Path) -> None:
+    """Malformed or incomplete scan directories fail before producing misleading roots."""
+    with pytest.raises(FileNotFoundError, match="Missing scan input"):
+        solve_ambipolar_from_scan_dir(scan_dir=tmp_path / "missing", write_pickle=False, write_json=False)
+
+    empty_scan = tmp_path / "empty_scan"
+    empty_scan.mkdir()
+    empty_scan.joinpath("input.namelist").write_text("!ss ErMin = -1\n!ss ErMax = 1\n", encoding="utf-8")
+    with pytest.raises(FileNotFoundError, match="No run directories"):
+        solve_ambipolar_from_scan_dir(scan_dir=empty_scan, write_pickle=False, write_json=False)
+
+    wrong_rhs = tmp_path / "wrong_rhs"
+    wrong_rhs.mkdir()
+    wrong_rhs.joinpath("input.namelist").write_text("!ss ErMin = -1\n!ss ErMax = 1\n", encoding="utf-8")
+    _write_named_scan_point(wrong_rhs, var_name="Er", var_value=-1.0, er=-1.0, radial_current=-1.0, rhs_mode=2)
+    _write_named_scan_point(wrong_rhs, var_name="Er", var_value=1.0, er=1.0, radial_current=1.0, rhs_mode=2)
+    with pytest.raises(RuntimeError, match="Need at least 2 completed runs"):
+        solve_ambipolar_from_scan_dir(scan_dir=wrong_rhs, write_pickle=False, write_json=False)
