@@ -311,8 +311,8 @@ Current open lane board
   device-Krylov research lane. The
   device CSR operator, device QR coarse correction, rank-gated moment-Schur
   guard, cycle-JIT/recycled-cycle FGMRES infrastructure, and row/column
-  assembled-operator equilibration now run without the old timeout/OOM failure
-  modes. The remaining open point is mathematical: row scaling, two-sided
+  assembled-operator equilibration run without the old timeout/OOM failure
+  modes. The mathematical blocker is that row scaling, two-sided
   scaling, larger ILU padding, device QR coarse correction, and short-recurrence
   Krylov do not reduce the true hard-seed residual. The closest GPU analogue of
   the CPU-closing exact x-block LU path reaches the intended factors but times
@@ -379,7 +379,7 @@ Current open lane board
   ``augmented-krylov-device-qi`` preset. The first bounded CPU and GPU0
   artifacts are nonpassing but improve the hard-seed residual to
   ``2.218300e-5`` in ``174 s`` on CPU and ``2.218202e-5`` in ``145 s`` on GPU0,
-  compared with ``2.306911e-5`` in ``279 s`` for the previous best checked GPU
+  compared with ``2.306911e-5`` in ``279 s`` for the checked GPU
   installed operator-Krylov/multilevel route. This is improvement evidence, not
   promotion evidence, because output and solver traces are still absent.
   The follow-up ``recycled-augmented-device-qi`` GPU0 probe keeps the same
@@ -867,11 +867,11 @@ Start from
 it is intentionally incomplete and should be copied/finalized for a specific
 equilibrium/profile reconstruction before any literature-facing W7-X claim.
 
-Current closure note:
+Closure note:
 
 - the script and focused tests are in place,
 - the checked-in literature artifact is still intentionally absent,
-- this lane is closed for the current release as ``deferred_post_release`` until a
+- this lane is classified as ``deferred_post_release`` until a
   defensible W7-X input reconstruction is run and its summary/figure are pinned in
   the repository.
 

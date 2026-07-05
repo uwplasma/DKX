@@ -1081,10 +1081,10 @@ Controls:
   explicit-sparse equivalents are
   ``SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_COMPRESS_UPDATES`` and
   ``SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_PARALLEL_UPDATE_WORKERS``.
-  These BLR/HSS and nested-dissection controls are intentionally not promoted
-  into ``auto`` for the current release: production ``geom11`` probes still
-  reject the path on setup-time grounds before admission, so this remains a
-  deferred optimization lane rather than a release-blocking correctness issue.
+  These BLR/HSS and nested-dissection controls are opt-in rather than part of
+  the default ``auto`` policy: production ``geom11`` probes reject the path on
+  setup-time grounds before admission, so this is documented as an optimization
+  lane rather than a correctness path required for robust solves.
 - ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLOCK_OVERLAP``
   extends each symbolic block by a fixed number of neighboring unknowns before
   factorization and restricts the local solution back to the owned block. This
