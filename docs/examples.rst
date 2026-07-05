@@ -612,7 +612,7 @@ based on `jax.lax.custom_linear_solve` and demonstrates it here:
    python examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py --solver bicgstab
 
 VMEC-to-Boozer Differentiable Geometry Workflow
-----------------------------------------------
+-----------------------------------------------
 
 For optional ``vmec_jax`` and ``booz_xform_jax`` installations, this example
 checks a public differentiable geometry workflow into ``sfincs_jax``:
