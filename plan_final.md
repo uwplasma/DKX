@@ -1685,6 +1685,16 @@ Completed work:
   wording. Validation: `pytest tests/test_examples_tree_contract.py
   tests/test_benchmark_doc_claims.py` passed `14/14`, Ruff passed,
   `compileall` passed, `git diff --check` passed, and Sphinx `-W` passed.
+- Tranche 105: added deterministic profiling coverage for the user-facing
+  progress/timing layer. `tests/test_profiling.py` now verifies structured
+  emission, quiet/verbosity behavior, environment-gated profiler activation,
+  device-memory opt-in policy, and phase accounting for elapsed time, RSS,
+  peak RSS, and device-memory metadata. Validation: `pytest
+  tests/test_profiling.py` passed `5/5`, Ruff passed, `compileall` passed, and
+  `git diff --check` passed. A focused pytest-cov invocation for this module
+  still exited with code `134` before producing a report, so the measured
+  package coverage percentage remains pinned to the latest successful full
+  coverage audit until CI or a stable local coverage run updates it.
 
 Remaining consolidation steps:
 
