@@ -533,7 +533,8 @@ replacing the old monolith are:
   linear algebra kernels such as the regularized tiny least-squares solve and
   recycled Krylov initial-guess builder used by RHSMode=1 and transport solves.
 - ``sfincs_jax/solvers/preconditioning.py``:
-  shared preconditioning state, setup utilities, and operator-shaping helpers.
+  shared preconditioning state, setup utilities, RHSMode=1 preconditioner
+  dispatch, and operator-shaping helpers.
   It owns passive cache dataclasses/global registries for RHSMode=1 and
   RHSMode=2/3 preconditioners, mutable solve-context hints for automatic
   preconditioner selection, sparse structural tolerance, factor dtype and

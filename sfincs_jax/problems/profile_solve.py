@@ -70,7 +70,7 @@ from sfincs_jax.solvers.preconditioner_pas_policy import (
     rhs1_pas_small_near_zero_er_kind as _rhs1_pas_small_near_zero_er_kind, rhs1_pas_tz_guarded_strong_retry_from_env,
     rhs1_pas_tz_max_bytes as _rhs1_pas_tz_max_bytes,
 )
-from sfincs_jax.solvers.preconditioner_dispatch import (
+from sfincs_jax.solvers.preconditioning import (
     build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,
 )
 from sfincs_jax.operators.profile_kinetic import (

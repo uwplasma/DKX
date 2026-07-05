@@ -12,7 +12,7 @@ from sfincs_jax.solvers.preconditioner_pas_composite import (
     build_rhs1_pas_lite_preconditioner,
     build_rhs1_pas_schur_preconditioner,
 )
-from sfincs_jax.solvers.preconditioner_dispatch import (
+from sfincs_jax.solvers.preconditioning import (
     RHS1PreconditionerDispatchBuilders,
     build_rhs1_preconditioner_from_kind,
 )

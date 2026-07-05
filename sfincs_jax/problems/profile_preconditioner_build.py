@@ -11,10 +11,10 @@ import os
 import jax
 import jax.numpy as jnp
 
-from sfincs_jax.solvers.preconditioning import precond_policy_hints
-from sfincs_jax.solvers.preconditioner_dispatch import (
+from sfincs_jax.solvers.preconditioning import (
     RHS1PreconditionerDispatchBuilders,
     build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,
+    precond_policy_hints,
 )
 from sfincs_jax.solvers.preconditioner_domain_decomposition import (
     build_rhs1_theta_dd_preconditioner,

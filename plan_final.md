@@ -490,7 +490,7 @@ Current source inventory:
   `v3_driver.py` must remain implementation-free and below `80` lines.
 - Domain folders: `discretization/` (`6` files), `geometry/` (`5`),
   `operators/` (`19`), `outputs/` (`5`), `physics/` (`3`),
-  `problems/` (`26`), `solvers/` (`36`), `validation/` (`7`), and
+  `problems/` (`26`), `solvers/` (`35`), `validation/` (`7`), and
   `workflows/` (`4`).
 - The complexity hotspots are not nested folders; they are many
   same-family files in `problems/`, `solvers/`, and `operators/`.
@@ -632,7 +632,7 @@ Latest AST audit:
 
 - Folder depth is no longer the blocker: the package has one-level domain
   folders only and no `__init__.py`-only source packages.
-- The source tree has 128 Python files, 17 package-root modules, and one-level
+- The source tree has 127 Python files, 17 package-root modules, and one-level
   domain folders only. The remaining structural blockers are file-family sprawl
   and owner size.
   The largest retained owners are `problems/profile_policies.py` (`7936`
@@ -768,6 +768,11 @@ Completed work:
   HDF5/NetCDF/NPZ schemas, output-file dispatch, and output-cache persistence
   in one durable output-format owner, reduces `outputs/` to `5` source files,
   and preserves the writer compatibility aliases used by `sfincs_jax.io`.
+- Tranche 20: moved the RHSMode=1 preconditioner dispatch builder bundle and
+  kind-to-builder ladder into existing `solvers/preconditioning.py`, deleted
+  helper-only `solvers/preconditioner_dispatch.py`, and updated API/docs/tests
+  to the canonical preconditioning owner. This reduces `solvers/` to `35`
+  source files without changing solver defaults or public CLI behavior.
 
 Remaining consolidation steps:
 

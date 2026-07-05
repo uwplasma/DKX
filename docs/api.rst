@@ -161,9 +161,6 @@ research workflows.
 .. automodule:: sfincs_jax.solvers.preconditioner_pas_policy
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioner_dispatch
-   :members:
-
 .. automodule:: sfincs_jax.solvers.preconditioner_qi_basis
    :members:
 
