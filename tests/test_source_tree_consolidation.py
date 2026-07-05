@@ -73,11 +73,11 @@ def test_source_tree_init_only_packages_are_explicit_refactor_debt() -> None:
     assert init_only_packages == expected["temporary_init_only_packages"]
 
 
-def test_source_tree_consolidation_target_is_stricter_than_current_tree() -> None:
+def test_source_tree_consolidation_target_matches_current_tree() -> None:
     expected = _expected_tree()
 
-    assert set(expected["target_root_modules"]) < set(expected["allowed_root_modules"])
-    assert set(expected["target_root_packages"]) <= set(expected["allowed_root_packages"])
+    assert expected["target_root_modules"] == expected["allowed_root_modules"]
+    assert expected["target_root_packages"] == expected["allowed_root_packages"]
     assert expected["temporary_nested_packages"] == []
     assert expected["temporary_init_only_packages"] == []
 
@@ -92,8 +92,6 @@ def test_package_readme_describes_current_source_layout() -> None:
         assert f"`{package}/`" in text
     for module in expected["target_root_modules"]:
         assert f"`{module}`" in text or f"`{module.removesuffix('.py')}`" in text
-    for module in sorted(set(expected["allowed_root_modules"]) - set(expected["target_root_modules"])):
-        assert f"`{module}`" in text
     canonical_owner_phrases = (
         "`operators/profile_system.py`: RHSMode-1 full-system operator",
         "`operators/profile_layout.py`: RHSMode-1 full, active, field-split",
@@ -131,8 +129,8 @@ def test_source_map_doc_describes_current_one_level_layout() -> None:
     assert offenders == []
 
 
-def test_package_sources_do_not_import_v3_driver_internally() -> None:
-    """Keep ``v3_driver.py`` as a user-compatibility shim, not an internal owner."""
+def test_package_sources_do_not_import_deleted_v3_driver() -> None:
+    """Keep source imports on canonical problem owners, not deleted driver aliases."""
 
     offenders: list[str] = []
     for path in sorted(PACKAGE_ROOT.rglob("*.py")):
@@ -152,8 +150,8 @@ def test_package_sources_do_not_import_v3_driver_internally() -> None:
     assert offenders == []
 
 
-def test_test_suite_v3_driver_imports_are_explicit_compatibility_contracts() -> None:
-    """Keep ordinary behavior tests on domain modules instead of the shim."""
+def test_test_suite_does_not_import_deleted_v3_driver() -> None:
+    """Keep behavior tests on domain modules instead of deleted driver aliases."""
 
     allowed: set[str] = set()
 
@@ -180,6 +178,7 @@ def test_deleted_nonroot_compatibility_facades_are_absent() -> None:
     """The flat source tree should not keep package-like one-file facades."""
 
     deleted_facades = (
+        PACKAGE_ROOT / "v3_driver.py",
         PACKAGE_ROOT / "operators" / "profile_response.py",
         PACKAGE_ROOT / "problems" / "profile_response.py",
         PACKAGE_ROOT / "problems" / "transport_matrix.py",

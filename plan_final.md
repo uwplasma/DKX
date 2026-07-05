@@ -22,10 +22,8 @@ models overlap.
 
 The main structural refactor is functionally complete:
 
-- `sfincs_jax/v3_driver.py` is a 47-line compatibility facade with no physics
-  or solver implementation.
 - The package root contains only public entry points, stable support APIs, and
-  compatibility facades.
+  documented compatibility facades.
 - The implementation tree has one level of domain folders below `sfincs_jax/`.
   There are no nested source package directories and no `__init__.py`-only
   package stubs.
@@ -53,9 +51,9 @@ The main structural refactor is functionally complete:
   `tests/test_source_tree_consolidation.py`,
   `tests/test_domain_package_import_contracts.py`, and
   `tests/test_examples_tree_contract.py` as `37 passed in 3.42 s`. The package
-  tree has `17` allowed root modules, `9` one-level domain folders, no nested
-  packages, and no `__init__.py`-only package stubs. The only target-root delta
-  is the public compatibility facade `v3_driver.py`.
+  tree has `16` allowed root modules, `9` one-level domain folders, no nested
+  packages, and no `__init__.py`-only package stubs. The target and allowed
+  root-module lists now match.
 - The 2026-07-05 example/docs wording guard passed:
   `tests/test_examples_tree_contract.py` and
   `tests/test_benchmark_doc_claims.py` as `13 passed in 0.15 s`.
@@ -602,8 +600,7 @@ The main structural refactor is functionally complete:
   `operators/profile_response.py`, `problems/profile_response.py`,
   `problems/transport_matrix.py`, and `solvers/preconditioners.py`. Canonical
   flat owners are now the only supported implementation imports for those
-  families; `v3_driver.py` remains the single root compatibility shim. Focused
-  source/import validation passed as `24 passed in 3.02 s`.
+  families. Focused source/import validation passed as `24 passed in 3.02 s`.
 - Phase C workflow cleanup moved bounded QI `15x` GPU campaign-gating policy
   from the campaign-specific `workflows/qi_res15_gpu_campaign.py` module into
   the durable `validation/qi_device.py` owner, then deleted the workflow module.
@@ -698,9 +695,9 @@ physics, solver defaults, outputs, or differentiability contracts.
 
 Current source inventory:
 
-- Root package: `17` Python files and `8632` lines. This is acceptable because
-  the files are public entry points or compatibility facades, but
-  `v3_driver.py` must remain implementation-free and below `80` lines.
+- Root package: `16` Python files and `8585` lines. This is acceptable because
+  the files are public entry points, stable helper APIs, or documented
+  compatibility facades such as `io.py`.
 - Domain folders: `discretization/` (`6` files), `geometry/` (`5`),
   `operators/` (`16`), `outputs/` (`5`), `physics/` (`3`),
   `problems/` (`25`), `solvers/` (`34`), `validation/` (`6`), and
@@ -745,9 +742,8 @@ Files and families to review in order:
 1. Compatibility facades:
    `operators/profile_response.py`, `problems/profile_response.py`,
    `problems/transport_matrix.py`, `solvers/preconditioners.py`, and
-   `v3_driver.py`. Keep only if public compatibility tests prove they are still
-   required for this release. Otherwise delete the facade and update docs,
-   examples, and imports to the canonical owner.
+   `v3_driver.py` have been deleted. Keep import-contract tests in place so
+   these aliases are not reintroduced.
 2. RHSMode-1 profile problem helpers:
    `profile_sparse_solve.py`, `profile_sparse_direct.py`,
    `profile_sparse_fortran_reduced.py`, `profile_sparse_finalization.py`,
@@ -820,16 +816,11 @@ Root modules retained for this PR:
   utilities.
 - `diagnostics.py`, `grids.py`, and `profiling.py` for stable scientific and
   support APIs used by examples, docs, tests, and benchmark tooling.
-- `v3_driver.py` as the only root compatibility facade.
 
-Compatibility shim retained after the Phase B audit:
-
-- `sfincs_jax.v3_driver`.
-
-This shim is intentionally small and tested. Non-root compatibility facades for
-operators, problems, transport-matrix helpers, and preconditioner families have
-been deleted; public docs, examples, scripts, and tests should import canonical
-flat owners directly.
+Compatibility facades for the former monolithic driver, non-root
+profile-response imports, transport-matrix helpers, and preconditioner families
+have been deleted; public docs, examples, scripts, and tests should import
+canonical flat owners directly.
 
 ## Open Lanes And Status
 
@@ -1140,14 +1131,17 @@ Completed work:
   the explicit domain import-contract test remains the single shim guard.
   Focused validation passed as `100 passed in 14.08 s`; Ruff and
   `git diff --check` passed.
+- Tranche 51: deleted the final root `sfincs_jax/v3_driver.py` shim and updated
+  the source-tree fixture, source-tree guard, import-contract guard, package
+  README, source-map docs, and this plan so `sfincs_jax.v3_driver` is treated
+  as a deleted root alias. Canonical profile/transport problem owners are now
+  the only implementation import paths for those solve APIs.
 
 Remaining consolidation steps:
 
-1. Compatibility cleanup: audit and either delete or explicitly retain the
-   remaining public compatibility facades listed in the Final Consolidation
-   Target. Behavior tests should keep importing canonical domain owners; only
-   explicit public-compatibility tests may import facades. Success is a smaller
-   source tree or a documented one-release compatibility boundary.
+1. Compatibility cleanup: keep deleted-facade tests and stale-import scans in
+   place. Behavior tests should import canonical domain owners; no
+   `sfincs_jax.v3_driver` imports are allowed.
 2. Problem-family consolidation: remove "handoff" and production-campaign
    names from implementation files by merging RHSMode-1 sparse setup/rescue
    owners into canonical profile sparse owners. Success is fewer problem files,
@@ -1158,9 +1152,9 @@ Remaining consolidation steps:
 4. Operator cleanup: merge small profile-response term helpers only when
    equation-to-file mapping remains clear in docs and tests. Otherwise retain
    them as pedagogical owners.
-5. Review lock: keep `v3_driver.py` and `io.py` below `80` lines and
-   implementation-free, update `sfincs_jax/README.md`, and run source-layout,
-   import-contract, docs, examples, CLI/output, and focused behavior guards.
+5. Review lock: keep `io.py` below `80` lines and implementation-free, update
+   `sfincs_jax/README.md`, and run source-layout, import-contract, docs,
+   examples, CLI/output, and focused behavior guards.
 
 ### Lane 2 - Coverage And Future-Proof Tests
 
@@ -1276,8 +1270,7 @@ Acceptance:
 - No nested packages.
 - No unexpected root files.
 - No public examples/scripts importing `v3_driver`.
-- The remaining root compatibility shim resolves to canonical owners; deleted
-  non-root facades stay absent.
+- Deleted root and non-root compatibility facades stay absent.
 - The baseline identifies which files will be deleted, merged, or retained.
 
 ### Phase B - Compatibility And Example Surface Cleanup
@@ -1286,9 +1279,8 @@ Acceptance:
    `v3_driver.py`, `operators/profile_response.py`,
    `problems/profile_response.py`, `problems/transport_matrix.py`, and
    `solvers/preconditioners.py`.
-2. Delete facades whose public imports are no longer used. Retain only the
-   root `v3_driver.py` shim with a one-release compatibility comment and a
-   direct import test.
+2. Keep the deleted-facade import tests and docs synchronized with canonical
+   profile, transport, and solver owners.
 3. Keep the former `examples/additional_examples/` namelist in `examples/data/`
    and preserve its benchmark label in scripts. Review `examples/sfincs_examples/`
    and `examples/upstream/` so archival navigation stays out of the first-run

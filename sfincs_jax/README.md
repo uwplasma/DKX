@@ -25,11 +25,6 @@ discretization, operators, solvers, outputs, validation, and research workflows.
 - `profiling.py`: lightweight timers and memory probes used by CLI, examples,
   and benchmark paths.
 
-Compatibility facades are intentionally small:
-
-- `v3_driver.py`: facade for historical monolithic imports; it should stay
-  small and contain no physics or solver implementation.
-
 Normal users should use these public modules or the CLI. Implementation modules
 inside domain folders are for contributors and advanced research workflows.
 

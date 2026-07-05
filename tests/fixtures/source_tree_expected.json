@@ -15,8 +15,7 @@
     "plotting.py",
     "profiling.py",
     "sensitivity.py",
-    "solver.py",
-    "v3_driver.py"
+    "solver.py"
   ],
   "target_root_modules": [
     "__init__.py",

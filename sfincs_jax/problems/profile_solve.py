@@ -718,12 +718,11 @@ def _build_rhsmode1_schur_preconditioner(
     reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
     expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper that binds Schur builders from this module.
+    """Build the RHSMode=1 Schur preconditioner from canonical module globals.
 
-    ``sfincs_jax.v3_driver`` aliases this module for legacy callers. Several
-    tests and downstream scripts monkeypatch the individual builder globals
-    here, so the wrapper must construct the Schur builder bundle from this
-    module's globals instead of using a closed-over bundle elsewhere.
+    Tests and advanced scripts may monkeypatch individual builder globals on
+    this canonical owner, so the wrapper constructs the Schur builder bundle
+    from this module's globals instead of using a closed-over bundle elsewhere.
     """
 
     builders = RHS1SchurPreconditionerBuilders(

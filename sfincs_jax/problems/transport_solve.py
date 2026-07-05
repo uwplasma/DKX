@@ -1,8 +1,9 @@
 """Top-level RHSMode=2/3 transport-matrix solve entry points.
 
-This module owns the public transport solve orchestration that historically
-lived in ``sfincs_jax.v3_driver``. The implementation is moved mechanically so
-Iteration 4 changes ownership without changing numerical algorithms.
+This module owns the public transport solve orchestration for RHSMode=2/3
+transport-matrix calculations. It delegates setup, linear-system construction,
+parallel RHS execution, and post-solve diagnostics to neighboring transport
+problem modules.
 """
 
 from __future__ import annotations
