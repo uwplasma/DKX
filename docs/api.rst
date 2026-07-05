@@ -149,9 +149,6 @@ research workflows.
 .. automodule:: sfincs_jax.operators.profile_reduced_tail
    :members:
 
-.. automodule:: sfincs_jax.operators.profile_structured_csr
-   :members:
-
 .. automodule:: sfincs_jax.operators.profile_sparse_pattern
    :members:
 
