@@ -34,6 +34,26 @@ references or optional local Fortran only when explicitly requested.
 | validate against frozen SFINCS Fortran v3 data | `parity/output_parity_vs_fortran_fixture.py` | `publication_figures/` and `sfincs_examples/` |
 | reproduce the QI benchmark input used in validation reports | `data/qi_nfp2_reference.input.namelist` | `optimization/materialize_qi_nfp2_promotion_input.py` |
 
+### Application Recipes
+
+Use this table when you know the physics or software task, but not the folder
+name. The first command is the smallest useful run; the follow-up points to the
+script or notebook that adds the technical detail needed for research workflows.
+
+| Application | Smallest useful entry point | Research workflow |
+| --- | --- | --- |
+| CLI output and diagnostics panel | `tutorials/run_quick_output_and_plot.py` | `getting_started/write_and_plot_multiple_formats.py` |
+| Analytic tokamak input | `getting_started/write_sfincs_output_tokamak.py` | `sfincs_examples/tokamak_1species_FPCollisions_noEr/input.namelist` |
+| VMEC `wout_path` input | `getting_started/write_sfincs_output_vmec.py` | `vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py` |
+| RHSMode=2/3 transport matrix | `transport/transport_matrix_rhsmode2_and_rhsmode3.py` | `transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py` |
+| Bootstrap current vs Redl | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` | `tutorials/03_bootstrap_redl_and_optimization.ipynb` |
+| Ambipolar electric-field scan | `vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py` | `optimization/evaluate_sfincs_jax_promotion_scan.py` |
+| Differentiable residual or flux | `autodiff/autodiff_gradient_nu_n_residual.py` | `autodiff/implicit_diff_through_gmres_solve_scheme5.py` |
+| VMEC/Boozer/JAX handoff | `autodiff/vmec_jax_to_boozer_sfincs_pipeline.py` | `tutorials/04_geometry_validation_and_performance.ipynb` |
+| QA/QI optimization objective | `optimization/qa_nfp2_sfincs_jax_objectives.py` | `optimization/QA_optimization_bootstrap_current.py` |
+| CPU/GPU timing and output I/O | `performance/benchmark_output_formats.py` | `performance/benchmark_transport_parallel_scaling.py` |
+| Frozen Fortran-v3 parity check | `parity/output_parity_vs_fortran_fixture.py` | `publication_figures/generate_fortran_suite_benchmark_summary.py` |
+
 ### Canonical Workflow Catalog
 
 These are the recommended first examples for each major capability. They are
