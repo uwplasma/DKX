@@ -508,6 +508,57 @@ def test_compare_applies_rhs1_fulltraj_fp_fsa_pressure_floor(tmp_path: Path) -> 
     assert all(result.ok for result in results), results
 
 
+def test_compare_applies_vmec_fulltraj_fp_total_density_floor(tmp_path: Path) -> None:
+    ref_path = tmp_path / "fortran_rhs1_vmec_fulltraj_fp.h5"
+    jax_path = tmp_path / "jax_rhs1_vmec_fulltraj_fp.h5"
+
+    _write_compare_case_h5(
+        ref_path,
+        rhs_mode=1,
+        constraint_scheme=1,
+        geometry_scheme=5,
+        collision_operator=0,
+        fields={
+            "useDKESExBDrift": np.asarray(0, dtype=np.int32),
+            "includeXDotTerm": np.asarray(1, dtype=np.int32),
+            "includeElectricFieldTermInXiDot": np.asarray(1, dtype=np.int32),
+            "totalDensity": np.asarray([1.0], dtype=np.float64),
+            "particleFluxBeforeSurfaceIntegral_vm": np.asarray([1.0e-6], dtype=np.float64),
+        },
+    )
+    _write_compare_case_h5(
+        jax_path,
+        rhs_mode=1,
+        constraint_scheme=1,
+        geometry_scheme=5,
+        collision_operator=0,
+        fields={
+            "useDKESExBDrift": np.asarray(0, dtype=np.int32),
+            "includeXDotTerm": np.asarray(1, dtype=np.int32),
+            "includeElectricFieldTermInXiDot": np.asarray(1, dtype=np.int32),
+            "totalDensity": np.asarray([1.0003], dtype=np.float64),
+            "particleFluxBeforeSurfaceIntegral_vm": np.asarray([1.0015e-6], dtype=np.float64),
+        },
+    )
+
+    results = compare_sfincs_outputs(
+        a_path=jax_path,
+        b_path=ref_path,
+        keys=[
+            "totalDensity",
+            "particleFluxBeforeSurfaceIntegral_vm",
+            "useDKESExBDrift",
+            "includeXDotTerm",
+            "includeElectricFieldTermInXiDot",
+        ],
+        rtol=5.0e-4,
+        atol=1.0e-9,
+        tolerances=None,
+    )
+
+    assert all(result.ok for result in results), results
+
+
 def test_compare_applies_rhs1_fulltraj_pas_heatflux_rtol(tmp_path: Path) -> None:
     ref_path = tmp_path / "fortran_rhs1_fulltraj_pas.h5"
     jax_path = tmp_path / "jax_rhs1_fulltraj_pas.h5"
