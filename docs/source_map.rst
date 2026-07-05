@@ -52,9 +52,9 @@ not by historical helper prefixes. The importable package folders are:
 The root modules are the stable user-facing surface: ``api.py``, ``cli.py``,
 ``solver.py``, ``ambipolar.py``, ``sensitivity.py``, ``plotting.py``,
 ``compare.py``, ``io.py``, ``namelist.py``, ``input_compat.py``, ``grids.py``,
-``diagnostics.py``, ``paths.py``, and ``profiling.py``. ``v3_driver.py`` is a
-small compatibility facade for historical imports; it must not own physics,
-operator, or solver implementation.
+``diagnostics.py``, ``paths.py``, and ``profiling.py``. Historical monolithic
+driver imports have been retired; use the profile and transport problem owners
+directly.
 
 The source tree does not contain nested implementation packages or non-root
 one-file facades for profile-response, transport-matrix, or preconditioner
@@ -126,10 +126,6 @@ facades.
    * - ``solver.py``
      - stable solver kernel
      - Krylov result contracts, XLA synchronization, and linear algebra utilities.
-   * - ``v3_driver.py``
-     - compatibility shim
-     - Historical import path; implementation lives in domain owners and this file must remain tiny.
-
 Closure move/delete manifest
 ----------------------------
 
@@ -194,10 +190,6 @@ tests.
    * - ``solver.py``
      - solvers public contracts owner
      - keep root shim until solvers exports cover public contracts
-   * - ``v3_driver.py``
-     - compatibility shim to problem owners
-     - keep tiny shim until the compatibility deprecation window closes; public examples and scripts should not import it
-
 Core modules
 ------------
 
@@ -507,18 +499,6 @@ metadata. This is where Fortran-style active ``Nxi_for_x`` pitch prefixes,
 tail blocks, active-to-full maps, block-COO storage, and layout preflight
 helpers live before solver policies choose a numerical path.
 
-``sfincs_jax/v3_driver.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Compatibility shim for the former monolithic driver. It imports
-``sfincs_jax.problems.profile_solve`` and
-``sfincs_jax.problems.transport_solve``, exposes moved public and
-legacy-private names for existing users, and aliases ``import
-sfincs_jax.v3_driver`` to the profile-response solve owner so old monkeypatch
-tests still mutate the globals used by moved functions. It intentionally
-contains no physics equations, solver algorithms, output assembly, or
-preconditioner setup logic.
-
 When a solve behaves differently on CPU and GPU, inspect the problem owner
 first: ``sfincs_jax.problems.profile_solve`` for RHSMode 1 and
 ``sfincs_jax.problems.transport_solve`` for RHSMode 2/3. The domain owners
@@ -559,9 +539,8 @@ replacing the old monolith are:
   angular/TZ applicability, line/truncated-:math:`L` selection, ``Er`` x-upwind
   routing, x-coarse correction, collision smoothing, the safety wrapper, and
   the ``RHS1PasFamilyBuilders`` dependency bundle used to build all public
-  PAS-family variants. Legacy access through the historical driver namespace is
-  provided by the tiny ``sfincs_jax.v3_driver`` shim, while this package remains
-  the numerical owner.
+  PAS-family variants. This package is the numerical owner; callers should use
+  the profile-solve and solver-family modules directly.
 - ``sfincs_jax/solvers/preconditioner_pas_angular.py``:
   PAS-only RHSMode=1 angular block-tridiagonal factors, including the
   tokamak-like theta/:math:`L` builder and the geometry-rich theta-zeta/:math:`L`
@@ -569,7 +548,7 @@ replacing the old monolith are:
   ``L=0,1`` singularity handling, optional structured velocity tail factors,
   PAS-TZ memory fallback invocation, cache population, and reduced/full apply
   wrappers. Fallback-builder wiring lives in the profile-response solve
-  owner; ``v3_driver.py`` only exposes the compatibility import path.
+  owner.
 - ``sfincs_jax/solvers/preconditioner_pas_xblock_ilu.py``
   (historical location: ``sfincs_jax/rhs1_pas_xblock_ilu.py``):
   sparse block-Jacobi ILU/LU setup for PAS-only RHSMode=1 operators. This
@@ -681,10 +660,9 @@ replacing the old monolith are:
   assembly, padded and compact-CSR JAX triangular-factor apply kernels,
   permutation inversion, logging, monolithic preflight guard, and factorization
   orchestration. Profile-response and transport solve owners pass the concrete
-  operator/factor callbacks; ``v3_driver.py`` only exposes the compatibility
-  import path. The old explicit-sparse policy, builder support, and triangular
-  solve helper files were absorbed here so the explicit sparse host-factor lane
-  has one review surface.
+  operator/factor callbacks. The old explicit-sparse policy, builder support,
+  and triangular solve helper files were absorbed here so the explicit sparse
+  host-factor lane has one review surface.
 - ``sfincs_jax/solvers/preconditioner_symbolic_host.py``:
   RHSMode=1 host sparse ILU/LU factor setup used by non-differentiable
   CLI-oriented rescue paths. The module owns matrix-free column assembly,
@@ -798,8 +776,8 @@ replacing the old monolith are:
   post-minres, post-coarse, post-residual-equation, bounded sparse-polish,
   host x-block factorization, current-backend dense/sparse admission wrappers,
   override semantics, and fail-closed high-resolution behavior. This keeps
-  environment parsing and correction-policy defaults out of ``v3_driver.py``
-  and out of the solve entry point.
+  environment parsing and correction-policy defaults out of the solve entry
+  point.
 - ``sfincs_jax/problems/profile_setup.py``:
   pure setup helpers for RHSMode=1/profile-response solves: GMRES restart and
   max-iteration environment overrides, geometry/equilibrium progress hints,
@@ -1013,7 +991,7 @@ replacing the old monolith are:
   post-x-block polish, large-PAS fast acceptance, host factor probes, and
   constraint-scheme-0 sparse/dense routing. It also owns current-backend
   wrappers used by the solve owner and small x-block/QI
-  control helpers that used to live in ``v3_driver.py``: guarded PAS-TZ
+  control helpers: guarded PAS-TZ
   structured-level parsing, QI device extra-coarse environment controls,
   QI probe minres-step selection, and safe x-block fallback initial-guess
   admission.
