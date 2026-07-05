@@ -6,7 +6,7 @@ import numpy as np
 import jax.numpy as jnp
 import pytest
 
-from sfincs_jax.discretization.indices import V3Indexing
+from sfincs_jax.discretization.v3 import V3Indexing
 from sfincs_jax.operators.profile_magnetic_drifts import (
     MagneticDriftThetaV3Operator,
     MagneticDriftZetaV3Operator,
@@ -57,15 +57,15 @@ def _load_geom_npz(path: Path) -> dict[str, np.ndarray]:
 
 def _pack_f(inv: list[tuple[int, int, int, int, int]], indexing: V3Indexing, x_vec: np.ndarray) -> np.ndarray:
     f = np.zeros((indexing.n_species, indexing.n_x, indexing.n_xi_max, indexing.n_theta, indexing.n_zeta), dtype=np.float64)
-    for g, (s, ix, l, it, iz) in enumerate(inv):
-        f[s, ix, l, it, iz] = x_vec[g]
+    for g, (s, ix, ell, it, iz) in enumerate(inv):
+        f[s, ix, ell, it, iz] = x_vec[g]
     return f
 
 
 def _unpack_f(inv: list[tuple[int, int, int, int, int]], y: np.ndarray) -> np.ndarray:
     y_vec = np.zeros((len(inv),), dtype=np.float64)
-    for g, (s, ix, l, it, iz) in enumerate(inv):
-        y_vec[g] = y[s, ix, l, it, iz]
+    for g, (s, ix, ell, it, iz) in enumerate(inv):
+        y_vec[g] = y[s, ix, ell, it, iz]
     return y_vec
 
 
@@ -270,8 +270,6 @@ def test_magnetic_drift_diag_theta_zeta_offdiag2_matches_fortran() -> None:
     t_hat = float(np.atleast_1d(np.asarray(species["THATS"], dtype=np.float64))[0])
     z = float(np.atleast_1d(np.asarray(species["ZS"], dtype=np.float64))[0])
 
-    ddtheta = np.asarray(grids.ddtheta, dtype=np.float64)
-    ddzeta = np.asarray(grids.ddzeta, dtype=np.float64)
     ddtheta_plus = np.asarray(grids.ddtheta_magdrift_plus, dtype=np.float64)
     ddtheta_minus = np.asarray(grids.ddtheta_magdrift_minus, dtype=np.float64)
     ddzeta_plus = np.asarray(grids.ddzeta_magdrift_plus, dtype=np.float64)

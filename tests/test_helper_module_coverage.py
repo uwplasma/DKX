@@ -20,7 +20,7 @@ from sfincs_jax.ambipolar import (
 )
 from sfincs_jax.diagnostics import b0_over_bbar, fsab_hat2, g_hat_i_hat, u_hat, u_hat_np, vprime_hat
 from sfincs_jax.validation.fortran import default_fortran_exe, run_sfincs_fortran
-from sfincs_jax.discretization.indices import V3Indexing
+from sfincs_jax.discretization.v3 import V3Indexing
 from sfincs_jax.namelist import Namelist
 from sfincs_jax.paths import _strip_quotes, resolve_existing_path
 from sfincs_jax.profiling import SimpleProfiler, _device_mem_mb, _rss_mb, maybe_profiler
