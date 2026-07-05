@@ -1088,10 +1088,9 @@ replacing the old monolith are:
 - ``sfincs_jax/solvers/path_policy.py``:
   pure solver/preconditioner path policy for JIT admission, RHSMode=1 rescue
   slack, DKES GMRES budget defaults, sparse-PC defaults, preconditioner dtype,
-  and backend resource-exhaustion classification.
-- ``sfincs_jax/solvers/selection_policy.py``:
-  measured candidate acceptance gates used by automatic solver/preconditioner
-  promotions, including residual/parity checks and paired runtime/memory
+  backend resource-exhaustion classification, and measured candidate
+  acceptance gates used by automatic solver/preconditioner promotions.
+  Candidate gates require residual/parity checks and paired runtime/memory
   comparisons against an incumbent path.
 - ``sfincs_jax/problems/transport_policies.py``
   (historical location: ``sfincs_jax/transport_policy.py``):
