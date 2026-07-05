@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from sfincs_jax.input_compat import (
+    _resolve_equilibrium_file_from_namelist,
     bool_config_values,
     canonical_equilibrium_override,
     config_bool,
@@ -19,11 +20,12 @@ from sfincs_jax.input_compat import (
     infer_phi_input_radial_coordinate_for_gradients,
     infer_input_radial_coordinate_for_gradients,
     infer_species_input_radial_coordinate_for_gradients,
+    localize_equilibrium_file_in_place,
     lookup_config_value,
     render_input_with_equilibrium_override,
     with_equilibrium_override,
 )
-from sfincs_jax.io import _resolve_equilibrium_file_from_namelist, localize_equilibrium_file_in_place, sfincs_jax_output_dict
+from sfincs_jax.io import sfincs_jax_output_dict
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.discretization.v3 import grids_from_namelist
 from sfincs_jax.operators.profile_fblock import _dphi_hat_dpsi_hat_from_er
