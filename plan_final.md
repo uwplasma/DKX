@@ -57,6 +57,10 @@ The main structural refactor is functionally complete:
 - The 2026-07-05 example/docs wording guard passed:
   `tests/test_examples_tree_contract.py` and
   `tests/test_benchmark_doc_claims.py` as `13 passed in 0.15 s`.
+- `docs/examples.rst` carries the same application-recipe map as the examples
+  README, with `tests/test_examples_tree_contract.py` checking that the README
+  and ReadTheDocs entry points stay synchronized. The docs-sync focused guard
+  passed as `14 passed in 0.12 s`.
 - The latest local xdist coverage audit measured `88%` package coverage:
   `4031 passed in 283.48 s` with `8089` missing executable lines. The latest
   explicit-sparse and true-operator rescue tranches reduced missing executable

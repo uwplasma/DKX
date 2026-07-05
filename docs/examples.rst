@@ -28,6 +28,55 @@ For a guided classroom-style path, open the notebooks in
 - ``02_transport_and_autodiff.ipynb``: RHSMode=2/3 transport matrices and JAX differentiation.
 - ``03_bootstrap_redl_and_optimization.ipynb``: bootstrap-current/Redl comparisons and optimization objectives.
 
+Application recipe map
+----------------------
+
+Use this table when you know the physics or software task, but not the folder
+name. The first entry point is the smallest useful run; the research workflow
+points to the script or notebook that adds production-style validation,
+convergence, or profiling detail.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 36 36
+
+   * - Application
+     - Smallest useful entry point
+     - Research workflow
+   * - CLI output and diagnostics panel
+     - ``examples/tutorials/run_quick_output_and_plot.py``
+     - ``examples/getting_started/write_and_plot_multiple_formats.py``
+   * - Analytic tokamak input
+     - ``examples/getting_started/write_sfincs_output_tokamak.py``
+     - ``examples/sfincs_examples/tokamak_1species_FPCollisions_noEr/input.namelist``
+   * - VMEC ``wout_path`` input
+     - ``examples/getting_started/write_sfincs_output_vmec.py``
+     - ``examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py``
+   * - RHSMode=2/3 transport matrix
+     - ``examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py``
+     - ``examples/transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py``
+   * - Bootstrap current vs Redl
+     - ``examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py``
+     - ``examples/tutorials/03_bootstrap_redl_and_optimization.ipynb``
+   * - Ambipolar electric-field scan
+     - ``examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py``
+     - ``examples/optimization/evaluate_sfincs_jax_promotion_scan.py``
+   * - Differentiable residual or flux
+     - ``examples/autodiff/autodiff_gradient_nu_n_residual.py``
+     - ``examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py``
+   * - VMEC/Boozer/JAX handoff
+     - ``examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py``
+     - ``examples/tutorials/04_geometry_validation_and_performance.ipynb``
+   * - QA/QI optimization objective
+     - ``examples/optimization/qa_nfp2_sfincs_jax_objectives.py``
+     - ``examples/optimization/QA_optimization_bootstrap_current.py``
+   * - CPU/GPU timing and output I/O
+     - ``examples/performance/benchmark_output_formats.py``
+     - ``examples/performance/benchmark_transport_parallel_scaling.py``
+   * - Frozen Fortran-v3 parity check
+     - ``examples/parity/output_parity_vs_fortran_fixture.py``
+     - ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``
+
 Some geometry examples reference public W7-X/HSX/QI equilibrium fixtures by
 basename. Those multi-megabyte files are fetched from the
 ``sfincs-jax-data-v1`` release into the local `sfincs_jax` data cache on first
