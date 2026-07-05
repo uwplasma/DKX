@@ -499,6 +499,14 @@ System construction:
 - constraint-source moment kernels for constraint schemes 1 and 2,
 - system metadata used by the driver and diagnostics.
 
+``sfincs_jax/operators/profile_layout.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+RHSMode=1 full, active, field-split, and compressed pitch-space layout
+metadata. This is where Fortran-style active ``Nxi_for_x`` pitch prefixes,
+tail blocks, active-to-full maps, block-COO storage, and layout preflight
+helpers live before solver policies choose a numerical path.
+
 ``sfincs_jax/v3_driver.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

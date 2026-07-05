@@ -263,6 +263,15 @@ def test_deleted_profile_sources_facade_is_absent() -> None:
     assert hasattr(module, "constraint_scheme2_source_from_f")
 
 
+def test_deleted_profile_compressed_layout_facade_is_absent() -> None:
+    """Compressed RHSMode=1 pitch layouts belong to the profile-layout owner."""
+
+    assert not (PACKAGE_ROOT / "operators" / "profile_compressed_layout.py").exists()
+    module = importlib.import_module("sfincs_jax.operators.profile_layout")
+    assert hasattr(module, "RHS1CompressedPitchLayout")
+    assert hasattr(module, "build_rhs1_compressed_pitch_layout")
+
+
 def test_canonical_flat_domain_modules_are_importable() -> None:
     """Canonical owners replace the deleted compatibility import paths."""
 

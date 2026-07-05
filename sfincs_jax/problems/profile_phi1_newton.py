@@ -27,7 +27,7 @@ from ..solvers.preconditioning import (
     set_precond_size_hint,
     use_solver_jit,
 )
-from sfincs_jax.operators.profile_compressed_layout import build_rhs1_compressed_pitch_layout
+from sfincs_jax.operators.profile_layout import build_rhs1_compressed_pitch_layout
 from sfincs_jax.problems.profile_policies import (
     host_sparse_direct_refine_steps,
     host_sparse_factor_dtype,

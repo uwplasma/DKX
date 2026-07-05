@@ -16,7 +16,7 @@ import jax
 import jax.numpy as jnp
 import jax.scipy.linalg as jla
 import numpy as np
-from sfincs_jax.operators.profile_compressed_layout import build_rhs1_compressed_pitch_layout
+from sfincs_jax.operators.profile_layout import build_rhs1_compressed_pitch_layout
 from sfincs_jax.problems.transport_policies import (
     TransportActiveDOFDecision,
     TransportActiveDOFState,

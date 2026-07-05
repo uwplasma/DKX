@@ -26,8 +26,11 @@ import jax
 import numpy as np
 import scipy.sparse as sp
 
-from sfincs_jax.operators.profile_layout import RHS1ActiveFieldSplitOrdering, RHS1BlockLayout
-from sfincs_jax.operators.profile_compressed_layout import infer_rhs1_compressed_pitch_layout_from_active_indices
+from sfincs_jax.operators.profile_layout import (
+    RHS1ActiveFieldSplitOrdering,
+    RHS1BlockLayout,
+    infer_rhs1_compressed_pitch_layout_from_active_indices,
+)
 from sfincs_jax.operators.profile_kinetic import (
     RHS1StructuredFBlockCSRSelection,
     clear_structured_rhs1_fblock_csr_cache,

@@ -1386,7 +1386,7 @@ def _dense_validation_linear_algebra_for_operator(
     import jax.numpy as jnp  # noqa: PLC0415
     import numpy as np  # noqa: PLC0415
 
-    from sfincs_jax.operators.profile_compressed_layout import build_rhs1_compressed_pitch_layout  # noqa: PLC0415
+    from sfincs_jax.operators.profile_layout import build_rhs1_compressed_pitch_layout  # noqa: PLC0415
     from ..solver import assemble_dense_matrix_from_matvec  # noqa: PLC0415
     from sfincs_jax.operators.profile_system import apply_v3_full_system_operator_cached  # noqa: PLC0415
 
