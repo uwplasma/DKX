@@ -8,11 +8,13 @@ import jax.numpy as jnp
 import numpy as np
 
 import sfincs_jax.problems.profile_solve as profile_solve
+import sfincs_jax.solvers.preconditioner_xblock_policy as xblock_policy
 from sfincs_jax.solvers.explicit_sparse import build_operator_from_pattern
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.operators.profile_device_sparse import device_csr_from_matrix, validate_device_csr_matvec
 from sfincs_jax.operators.profile_sparse_pattern import v3_full_system_conservative_sparsity_pattern_for_indices
 from sfincs_jax.operators.profile_system import apply_v3_full_system_operator, full_system_operator_from_namelist
+from sfincs_jax.problems.transport_linear_system import transport_active_dof_indices
 
 
 def _tiny_full_fp_namelist():
@@ -29,7 +31,7 @@ def _tiny_full_fp_namelist():
 def _active_tiny_full_fp_operator():
     nml = _tiny_full_fp_namelist()
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active_idx = np.asarray(profile_solve._transport_active_dof_indices(op), dtype=np.int32)
+    active_idx = np.asarray(transport_active_dof_indices(op), dtype=np.int32)
     active_idx_jnp = jnp.asarray(active_idx, dtype=jnp.int32)
 
     def active_matvec(x):
@@ -107,7 +109,7 @@ def test_xblock_side_probe_switch_keeps_physical_left_probe_seed_for_right_pc(mo
         lambda **_kwargs: (lambda v: jnp.asarray(v, dtype=jnp.float64)),
     )
     monkeypatch.setattr(
-        profile_solve._rhs1_xblock_policy,
+        xblock_policy,
         "rhs1_xblock_side_probe_should_switch",
         lambda *, residual_ratio, switch_ratio_env_value: True,
     )

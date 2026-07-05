@@ -1415,6 +1415,16 @@ Completed work:
   `tests/test_source_tree_consolidation.py tests/test_sparse_assembly.py` as
   `43 passed in 3.70 s`; the compact owner bundle passed as
   `133 passed in 28.70 s`; Ruff, `compileall`, and `git diff --check` passed.
+- Tranche 79: moved RHSMode-1 device-operator helper dependencies off
+  `profile_solve.py` aliases where they are not solve-driver integration
+  seams. Active-DOF selection now imports from
+  `problems/transport_linear_system.py`, and the side-probe policy monkeypatch
+  uses `solvers/preconditioner_xblock_policy.py`. The test still runs the
+  high-level solve through `profile_solve.py`, and a source-tree guard prevents
+  these two helper aliases from returning. Focused validation passed:
+  `tests/test_source_tree_consolidation.py tests/test_rhs1_device_operator.py`
+  as `35 passed in 6.18 s`; the compact owner bundle passed as
+  `137 passed in 31.34 s`; Ruff, `compileall`, and `git diff --check` passed.
 
 Remaining consolidation steps:
 
