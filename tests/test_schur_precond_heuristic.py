@@ -3,12 +3,17 @@ from __future__ import annotations
 from pathlib import Path
 import re
 from types import SimpleNamespace
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from sfincs_jax.io import write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
+import sfincs_jax.problems.profile_policies as profile_policies
+import sfincs_jax.problems.profile_preconditioner_build as preconditioner_build
 import sfincs_jax.problems.profile_solve as profile_solve
+import sfincs_jax.solvers.path_policy as path_policy
+import sfincs_jax.solvers.preconditioning as preconditioning
 from sfincs_jax.operators.profile_system import full_system_operator_from_namelist, rhs_v3_full_system
 
 
@@ -152,18 +157,18 @@ def test_pas_tokamak_structured_tail_matches_legacy(tmp_path: Path, monkeypatch)
     op = full_system_operator_from_namelist(nml=nml)
     rhs = rhs_v3_full_system(op)
 
-    profile_solve._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.clear()
+    preconditioning._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.clear()
     monkeypatch.setenv("SFINCS_JAX_PAS_TOKAMAK_STRUCTURED", "0")
-    legacy_precond = profile_solve._build_rhsmode1_pas_tokamak_theta_preconditioner(op=op)
+    legacy_precond = preconditioner_build._build_rhsmode1_pas_tokamak_theta_preconditioner(op=op)
     legacy_state = legacy_precond(rhs)
-    legacy_cache = next(iter(profile_solve._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.values()))
+    legacy_cache = next(iter(preconditioning._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.values()))
     assert legacy_cache.tail_factors is None
 
-    profile_solve._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.clear()
+    preconditioning._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.clear()
     monkeypatch.setenv("SFINCS_JAX_PAS_TOKAMAK_STRUCTURED", "1")
-    structured_precond = profile_solve._build_rhsmode1_pas_tokamak_theta_preconditioner(op=op)
+    structured_precond = preconditioner_build._build_rhsmode1_pas_tokamak_theta_preconditioner(op=op)
     structured_state = structured_precond(rhs)
-    structured_cache = next(iter(profile_solve._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.values()))
+    structured_cache = next(iter(preconditioning._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.values()))
     assert structured_cache.tail_factors is not None
     assert structured_cache.tail_factors[0][0] is not None
 
@@ -192,9 +197,9 @@ def test_pas_tokamak_structured_tail_is_opt_in_by_default(tmp_path: Path, monkey
     nml = read_sfincs_input(patched)
     op = full_system_operator_from_namelist(nml=nml)
 
-    profile_solve._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.clear()
-    _ = profile_solve._build_rhsmode1_pas_tokamak_theta_preconditioner(op=op)
-    cache = next(iter(profile_solve._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.values()))
+    preconditioning._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.clear()
+    _ = preconditioner_build._build_rhsmode1_pas_tokamak_theta_preconditioner(op=op)
+    cache = next(iter(preconditioning._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.values()))
     assert cache.tail_factors is None
 
 
@@ -219,10 +224,14 @@ def test_schur_base_prefers_pas_tokamak_theta_for_tokamak_pas_noer(
     def _unexpected_xblock(**_kwargs):
         raise AssertionError("xblock_tz base should not be selected before pas_tokamak_theta")
 
-    monkeypatch.setattr(profile_solve, "_build_rhsmode1_pas_tokamak_theta_preconditioner", _tokamak_theta_builder)
-    monkeypatch.setattr(profile_solve, "_build_rhsmode1_xblock_tz_preconditioner", _unexpected_xblock)
+    monkeypatch.setattr(
+        preconditioner_build,
+        "_build_rhsmode1_pas_tokamak_theta_preconditioner",
+        _tokamak_theta_builder,
+    )
+    monkeypatch.setattr(preconditioner_build, "_build_rhsmode1_xblock_tz_preconditioner", _unexpected_xblock)
 
-    _ = profile_solve._build_rhsmode1_schur_preconditioner(op=op)
+    _ = preconditioner_build._build_rhsmode1_schur_preconditioner(op=op)
 
     assert called == ["pas_tokamak_theta"]
 
@@ -241,13 +250,17 @@ def test_schur_base_prefers_pas_tz_for_geometry4_pas_offender(monkeypatch: pytes
 
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCHUR_BASE", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MIN", raising=False)
-    monkeypatch.setattr(profile_solve, "_build_rhsmode1_pas_tz_preconditioner", _pas_tz_builder)
-    monkeypatch.setattr(profile_solve, "_build_rhsmode1_xblock_tz_preconditioner", _unexpected_builder)
-    monkeypatch.setattr(profile_solve, "_build_rhsmode1_species_block_preconditioner", _unexpected_builder)
-    monkeypatch.setattr(profile_solve, "_build_rhsmode1_pas_schur_preconditioner", _unexpected_builder)
-    monkeypatch.setattr(profile_solve, "_build_rhsmode1_theta_zeta_preconditioner", _unexpected_builder)
+    monkeypatch.setattr(preconditioner_build, "_build_rhsmode1_pas_tz_preconditioner", _pas_tz_builder)
+    monkeypatch.setattr(preconditioner_build, "_build_rhsmode1_xblock_tz_preconditioner", _unexpected_builder)
+    monkeypatch.setattr(
+        preconditioner_build,
+        "_build_rhsmode1_species_block_preconditioner",
+        _unexpected_builder,
+    )
+    monkeypatch.setattr(preconditioner_build, "_build_rhsmode1_pas_schur_preconditioner", _unexpected_builder)
+    monkeypatch.setattr(preconditioner_build, "_build_rhsmode1_theta_zeta_preconditioner", _unexpected_builder)
 
-    _ = profile_solve._build_rhsmode1_schur_preconditioner(op=op)
+    _ = preconditioner_build._build_rhsmode1_schur_preconditioner(op=op)
 
     assert called == ["pas_tz"]
 
@@ -277,15 +290,19 @@ def test_schur_base_small_pas_fallback_uses_geom_hint_without_nameerror(
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPECIES_BLOCK_MAX", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TZ_PRECOND_MAX", "0")
-    monkeypatch.setattr(profile_solve, "_build_rhsmode1_pas_schur_preconditioner", _pas_schur_builder)
-    monkeypatch.setattr(profile_solve, "_build_rhsmode1_species_block_preconditioner", _unexpected_builder)
-    monkeypatch.setattr(profile_solve, "_build_rhsmode1_xblock_tz_preconditioner", _unexpected_builder)
-    monkeypatch.setattr(profile_solve, "_build_rhsmode1_theta_zeta_preconditioner", _unexpected_builder)
-    profile_solve._set_precond_policy_hints(geom_scheme=4)
+    monkeypatch.setattr(preconditioner_build, "_build_rhsmode1_pas_schur_preconditioner", _pas_schur_builder)
+    monkeypatch.setattr(
+        preconditioner_build,
+        "_build_rhsmode1_species_block_preconditioner",
+        _unexpected_builder,
+    )
+    monkeypatch.setattr(preconditioner_build, "_build_rhsmode1_xblock_tz_preconditioner", _unexpected_builder)
+    monkeypatch.setattr(preconditioner_build, "_build_rhsmode1_theta_zeta_preconditioner", _unexpected_builder)
+    preconditioning.set_precond_policy_hints(geom_scheme=4)
     try:
-        _ = profile_solve._build_rhsmode1_schur_preconditioner(op=op)
+        _ = preconditioner_build._build_rhsmode1_schur_preconditioner(op=op)
     finally:
-        profile_solve._set_precond_policy_hints()
+        preconditioning.set_precond_policy_hints()
 
     assert called == ["pas_schur"]
 
@@ -326,7 +343,7 @@ def test_schur_auto_min_for_pas(tmp_path: Path, monkeypatch) -> None:
 
 def test_pas_auto_strong_retry_skips_after_strong_base(tmp_path: Path, monkeypatch) -> None:
     """PAS auto strong retry should skip after already-strong base preconditioners."""
-    assert profile_solve._pas_auto_skip_strong_retry(
+    assert profile_policies.pas_auto_skip_strong_retry(
         has_pas=True,
         strong_precond_env="auto",
         rhs1_precond_kind="schur",
@@ -334,7 +351,7 @@ def test_pas_auto_strong_retry_skips_after_strong_base(tmp_path: Path, monkeypat
         target=1.0,
         ratio=10.0,
     )
-    assert not profile_solve._pas_auto_skip_strong_retry(
+    assert not profile_policies.pas_auto_skip_strong_retry(
         has_pas=True,
         strong_precond_env="auto",
         rhs1_precond_kind="schur",
@@ -342,7 +359,7 @@ def test_pas_auto_strong_retry_skips_after_strong_base(tmp_path: Path, monkeypat
         target=1.0,
         ratio=10.0,
     )
-    assert not profile_solve._pas_auto_skip_strong_retry(
+    assert not profile_policies.pas_auto_skip_strong_retry(
         has_pas=True,
         strong_precond_env="auto",
         rhs1_precond_kind="theta_line",
@@ -350,7 +367,7 @@ def test_pas_auto_strong_retry_skips_after_strong_base(tmp_path: Path, monkeypat
         target=1.0,
         ratio=10.0,
     )
-    assert not profile_solve._pas_auto_skip_strong_retry(
+    assert not profile_policies.pas_auto_skip_strong_retry(
         has_pas=False,
         strong_precond_env="auto",
         rhs1_precond_kind="schur",
@@ -365,8 +382,8 @@ def test_precond_dtype_auto_promotes_geom4_pas_schur_cpu(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4", raising=False)
     monkeypatch.delenv("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4_MIN_SIZE", raising=False)
     monkeypatch.delenv("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4_ER_MAX", raising=False)
-    monkeypatch.setattr("sfincs_jax.problems.profile_solve.jax.default_backend", lambda: "cpu")
-    profile_solve._set_precond_policy_hints(
+    monkeypatch.setattr("sfincs_jax.solvers.preconditioning.jax.default_backend", lambda: "cpu")
+    preconditioning.set_precond_policy_hints(
         geom_scheme=4,
         use_dkes=False,
         rhs1_precond_kind="schur",
@@ -376,17 +393,17 @@ def test_precond_dtype_auto_promotes_geom4_pas_schur_cpu(monkeypatch) -> None:
         rhs_mode=1,
         er_abs=0.0,
     )
-    profile_solve._set_precond_size_hint(30000)
-    assert profile_solve._precond_dtype() == profile_solve.jnp.float32
-    profile_solve._set_precond_policy_hints()
-    profile_solve._set_precond_size_hint(None)
+    preconditioning.set_precond_size_hint(30000)
+    assert preconditioning.precond_dtype() == jnp.float32
+    preconditioning.set_precond_policy_hints()
+    preconditioning.set_precond_size_hint(None)
 
 
 def test_precond_dtype_auto_keeps_fp64_for_pas_dkes(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_PRECOND_DTYPE", raising=False)
     monkeypatch.delenv("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4", raising=False)
-    monkeypatch.setattr("sfincs_jax.problems.profile_solve.jax.default_backend", lambda: "cpu")
-    profile_solve._set_precond_policy_hints(
+    monkeypatch.setattr("sfincs_jax.solvers.preconditioning.jax.default_backend", lambda: "cpu")
+    preconditioning.set_precond_policy_hints(
         geom_scheme=11,
         use_dkes=True,
         rhs1_precond_kind="schur",
@@ -396,10 +413,10 @@ def test_precond_dtype_auto_keeps_fp64_for_pas_dkes(monkeypatch) -> None:
         rhs_mode=1,
         er_abs=0.0,
     )
-    profile_solve._set_precond_size_hint(30000)
-    assert profile_solve._precond_dtype() == profile_solve.jnp.float64
-    profile_solve._set_precond_policy_hints()
-    profile_solve._set_precond_size_hint(None)
+    preconditioning.set_precond_size_hint(30000)
+    assert preconditioning.precond_dtype() == jnp.float64
+    preconditioning.set_precond_policy_hints()
+    preconditioning.set_precond_size_hint(None)
 
 
 @pytest.mark.parametrize("forced_precond", ["schur", "xblock_tz"])
@@ -444,7 +461,7 @@ def test_forced_rhs1_preconditioner_does_not_crash_before_er_is_computed(
 
 
 def test_pas_dkes_xblock_allowed_only_for_moderate_blocks() -> None:
-    assert profile_solve._rhs1_pas_dkes_xblock_allowed(
+    assert profile_policies.rhs1_pas_dkes_xblock_allowed(
         has_pas=True,
         use_dkes=True,
         backend="gpu",
@@ -453,7 +470,7 @@ def test_pas_dkes_xblock_allowed_only_for_moderate_blocks() -> None:
         max_l=21,
         xblock_tz_limit=2500,
     )
-    assert profile_solve._rhs1_pas_dkes_xblock_allowed(
+    assert profile_policies.rhs1_pas_dkes_xblock_allowed(
         has_pas=True,
         use_dkes=True,
         backend="cpu",
@@ -462,7 +479,7 @@ def test_pas_dkes_xblock_allowed_only_for_moderate_blocks() -> None:
         max_l=21,
         xblock_tz_limit=2500,
     )
-    assert not profile_solve._rhs1_pas_dkes_xblock_allowed(
+    assert not profile_policies.rhs1_pas_dkes_xblock_allowed(
         has_pas=True,
         use_dkes=True,
         backend="gpu",
@@ -471,7 +488,7 @@ def test_pas_dkes_xblock_allowed_only_for_moderate_blocks() -> None:
         max_l=36,
         xblock_tz_limit=2500,
     )
-    assert not profile_solve._rhs1_pas_dkes_xblock_allowed(
+    assert not profile_policies.rhs1_pas_dkes_xblock_allowed(
         has_pas=False,
         use_dkes=True,
         backend="gpu",
@@ -483,7 +500,7 @@ def test_pas_dkes_xblock_allowed_only_for_moderate_blocks() -> None:
 
 
 def test_pas_tokamak_gpu_theta_allowed_only_for_small_er_tokamak_pas() -> None:
-    assert profile_solve._rhs1_pas_tokamak_gpu_theta_allowed(
+    assert profile_policies.rhs1_pas_tokamak_gpu_theta_allowed(
         has_pas=True,
         has_fp=False,
         backend="gpu",
@@ -498,7 +515,7 @@ def test_pas_tokamak_gpu_theta_allowed_only_for_small_er_tokamak_pas() -> None:
 
 def test_pas_tokamak_gpu_xblock_preferred_only_for_small_tokamak_blocks(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", raising=False)
-    assert not profile_solve._rhs1_pas_tokamak_gpu_xblock_preferred(
+    assert not profile_policies.rhs1_pas_tokamak_gpu_xblock_preferred(
         has_pas=True,
         has_fp=False,
         backend="gpu",
@@ -513,7 +530,7 @@ def test_pas_tokamak_gpu_xblock_preferred_only_for_small_tokamak_blocks(monkeypa
         max_l=14,
         xblock_tz_limit=1200,
     )
-    assert profile_solve._rhs1_pas_tokamak_gpu_xblock_preferred(
+    assert profile_policies.rhs1_pas_tokamak_gpu_xblock_preferred(
         has_pas=True,
         has_fp=False,
         backend="gpu",
@@ -528,7 +545,7 @@ def test_pas_tokamak_gpu_xblock_preferred_only_for_small_tokamak_blocks(monkeypa
         max_l=31,
         xblock_tz_limit=1200,
     )
-    assert not profile_solve._rhs1_pas_tokamak_gpu_xblock_preferred(
+    assert not profile_policies.rhs1_pas_tokamak_gpu_xblock_preferred(
         has_pas=True,
         has_fp=False,
         backend="cpu",
@@ -543,7 +560,7 @@ def test_pas_tokamak_gpu_xblock_preferred_only_for_small_tokamak_blocks(monkeypa
         max_l=14,
         xblock_tz_limit=1200,
     )
-    assert not profile_solve._rhs1_pas_tokamak_gpu_xblock_preferred(
+    assert not profile_policies.rhs1_pas_tokamak_gpu_xblock_preferred(
         has_pas=True,
         has_fp=False,
         backend="gpu",
@@ -558,7 +575,7 @@ def test_pas_tokamak_gpu_xblock_preferred_only_for_small_tokamak_blocks(monkeypa
         max_l=14,
         xblock_tz_limit=1200,
     )
-    assert not profile_solve._rhs1_pas_tokamak_gpu_xblock_preferred(
+    assert not profile_policies.rhs1_pas_tokamak_gpu_xblock_preferred(
         has_pas=True,
         has_fp=False,
         backend="gpu",
@@ -576,10 +593,10 @@ def test_pas_tokamak_gpu_xblock_preferred_only_for_small_tokamak_blocks(monkeypa
 
 
 def test_resource_exhausted_error_detection() -> None:
-    assert profile_solve._is_resource_exhausted_error(RuntimeError("RESOURCE_EXHAUSTED: Out of memory"))
-    assert profile_solve._is_resource_exhausted_error(RuntimeError("Allocator ran out of memory"))
-    assert not profile_solve._is_resource_exhausted_error(RuntimeError("shape mismatch"))
-    assert not profile_solve._rhs1_pas_tokamak_gpu_theta_allowed(
+    assert path_policy.is_resource_exhausted_error(RuntimeError("RESOURCE_EXHAUSTED: Out of memory"))
+    assert path_policy.is_resource_exhausted_error(RuntimeError("Allocator ran out of memory"))
+    assert not path_policy.is_resource_exhausted_error(RuntimeError("shape mismatch"))
+    assert not profile_policies.rhs1_pas_tokamak_gpu_theta_allowed(
         has_pas=True,
         has_fp=False,
         backend="cpu",
@@ -590,7 +607,7 @@ def test_resource_exhausted_error_detection() -> None:
         has_magdrift=False,
         has_collisionless=True,
     )
-    assert not profile_solve._rhs1_pas_tokamak_gpu_theta_allowed(
+    assert not profile_policies.rhs1_pas_tokamak_gpu_theta_allowed(
         has_pas=True,
         has_fp=True,
         backend="gpu",
@@ -601,7 +618,7 @@ def test_resource_exhausted_error_detection() -> None:
         has_magdrift=False,
         has_collisionless=True,
     )
-    assert not profile_solve._rhs1_pas_tokamak_gpu_theta_allowed(
+    assert not profile_policies.rhs1_pas_tokamak_gpu_theta_allowed(
         has_pas=True,
         has_fp=False,
         backend="gpu",
@@ -653,7 +670,7 @@ def test_gpu_pas_tokamak_er_path_does_not_promote_to_pas_schur(tmp_path: Path, m
     assert "building RHSMode=1 preconditioner=pas_tokamak_theta" not in joined
     assert "building RHSMode=1 preconditioner=xblock_tz" not in joined
     assert "building RHSMode=1 preconditioner=pas_schur" not in joined
-    assert not profile_solve._rhs1_pas_tokamak_gpu_theta_allowed(
+    assert not profile_policies.rhs1_pas_tokamak_gpu_theta_allowed(
         has_pas=True,
         has_fp=False,
         backend="gpu",
@@ -706,7 +723,7 @@ def test_cpu_pas_tokamak_er_path_prefers_xblock_tz(tmp_path: Path, monkeypatch) 
 
 
 def test_pas_tokamak_cpu_xblock_allowed_only_for_bounded_cases() -> None:
-    assert profile_solve._rhs1_pas_tokamak_cpu_xblock_preferred(
+    assert profile_policies.rhs1_pas_tokamak_cpu_xblock_preferred(
         has_pas=True,
         has_fp=False,
         backend="cpu",
@@ -721,7 +738,7 @@ def test_pas_tokamak_cpu_xblock_allowed_only_for_bounded_cases() -> None:
         max_l=14,
         xblock_tz_limit=6000,
     )
-    assert not profile_solve._rhs1_pas_tokamak_cpu_xblock_preferred(
+    assert not profile_policies.rhs1_pas_tokamak_cpu_xblock_preferred(
         has_pas=True,
         has_fp=False,
         backend="cpu",
@@ -736,7 +753,7 @@ def test_pas_tokamak_cpu_xblock_allowed_only_for_bounded_cases() -> None:
         max_l=14,
         xblock_tz_limit=6000,
     )
-    assert not profile_solve._rhs1_pas_tokamak_cpu_xblock_preferred(
+    assert not profile_policies.rhs1_pas_tokamak_cpu_xblock_preferred(
         has_pas=True,
         has_fp=False,
         backend="gpu",
@@ -755,20 +772,20 @@ def test_pas_tokamak_cpu_xblock_allowed_only_for_bounded_cases() -> None:
 
 def test_gpu_sparse_fallback_skip_allowed_for_bounded_pas_schur_accept(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_GPU_SPARSE_SKIP_RATIO", raising=False)
-    monkeypatch.setattr("sfincs_jax.problems.profile_solve.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     op = SimpleNamespace(
         rhs_mode=1,
         include_phi1=False,
         fblock=SimpleNamespace(pas=object()),
     )
-    assert profile_solve._rhs1_gpu_sparse_fallback_skip_allowed(
+    assert profile_policies.rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
         op=op,
         rhs1_precond_kind="schur",
         use_active_dof_mode=True,
         residual_norm=4.0e-10,
         target=1.0e-10,
     )
-    assert not profile_solve._rhs1_gpu_sparse_fallback_skip_allowed(
+    assert not profile_policies.rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
         op=op,
         rhs1_precond_kind="xblock_tz",
         use_active_dof_mode=True,
@@ -784,23 +801,23 @@ def test_gpu_sparse_fallback_skip_rejects_cpu_or_large_residual(monkeypatch) -> 
         include_phi1=False,
         fblock=SimpleNamespace(pas=object()),
     )
-    monkeypatch.setattr("sfincs_jax.problems.profile_solve.jax.default_backend", lambda: "cpu")
-    assert not profile_solve._rhs1_gpu_sparse_fallback_skip_allowed(
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
+    assert not profile_policies.rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
         op=op,
         rhs1_precond_kind="schur",
         use_active_dof_mode=True,
         residual_norm=4.0e-10,
         target=1.0e-10,
     )
-    monkeypatch.setattr("sfincs_jax.problems.profile_solve.jax.default_backend", lambda: "gpu")
-    assert not profile_solve._rhs1_gpu_sparse_fallback_skip_allowed(
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
+    assert not profile_policies.rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
         op=op,
         rhs1_precond_kind="schur",
         use_active_dof_mode=False,
         residual_norm=4.0e-10,
         target=1.0e-10,
     )
-    assert not profile_solve._rhs1_gpu_sparse_fallback_skip_allowed(
+    assert not profile_policies.rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
         op=op,
         rhs1_precond_kind="schur",
         use_active_dof_mode=True,
@@ -810,8 +827,8 @@ def test_gpu_sparse_fallback_skip_rejects_cpu_or_large_residual(monkeypatch) -> 
 
 
 def test_sharded_line_override_preserves_dedicated_pas_preconditioners() -> None:
-    assert profile_solve._rhs1_sharded_line_override_allowed("zeta_line")
-    assert profile_solve._rhs1_sharded_line_override_allowed("pas_hybrid")
-    assert not profile_solve._rhs1_sharded_line_override_allowed("pas_tz")
-    assert not profile_solve._rhs1_sharded_line_override_allowed("pas_tokamak_theta")
-    assert not profile_solve._rhs1_sharded_line_override_allowed("pas_ilu")
+    assert profile_policies.rhs1_sharded_line_override_allowed("zeta_line")
+    assert profile_policies.rhs1_sharded_line_override_allowed("pas_hybrid")
+    assert not profile_policies.rhs1_sharded_line_override_allowed("pas_tz")
+    assert not profile_policies.rhs1_sharded_line_override_allowed("pas_tokamak_theta")
+    assert not profile_policies.rhs1_sharded_line_override_allowed("pas_ilu")

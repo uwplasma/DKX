@@ -1374,6 +1374,18 @@ Completed work:
   `profile_solve._*` helper assertions. Focused validation passed:
   `tests/test_source_tree_consolidation.py tests/test_profile_sparse_helper_coverage.py`
   as `43 passed in 3.49 s`; Ruff passed.
+- Tranche 75: moved Schur/PAS heuristic unit assertions off private
+  `profile_solve._*` aliases and onto canonical policy/preconditioner owners.
+  The heuristic tests now use `problems/profile_preconditioner_build.py` for
+  Schur and PAS builder seams, `solvers/preconditioning.py` for shared caches
+  and dtype/policy hints, `problems/profile_policies.py` for solver-route
+  predicates, and `solvers/path_policy.py` for resource-exhaustion detection.
+  High-level solve-driver integration remains on `profile_solve.py`, but a
+  source-tree guard prevents unit assertions from drifting back to dotted
+  private solve aliases. Focused validation passed:
+  `tests/test_source_tree_consolidation.py tests/test_schur_precond_heuristic.py`
+  as `51 passed in 27.59 s`; the broader refactor/owner bundle passed as
+  `192 passed in 37.63 s`; Ruff, `compileall`, and `git diff --check` passed.
 
 Remaining consolidation steps:
 
