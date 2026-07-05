@@ -268,6 +268,23 @@ def test_sparse_assembly_tests_use_sparse_preconditioner_owner() -> None:
     assert "sfincs_jax.solvers.preconditioner_xblock_tz_sparse" in text
 
 
+def test_device_operator_tests_use_active_layout_and_xblock_policy_owners() -> None:
+    """Device-operator tests may run solves but should not test helper aliases."""
+
+    text = (REPO_ROOT / "tests" / "test_rhs1_device_operator.py").read_text(
+        encoding="utf-8"
+    )
+
+    forbidden = (
+        "profile_solve._transport_active_dof_indices",
+        "profile_solve._rhs1_xblock_policy",
+    )
+    for fragment in forbidden:
+        assert fragment not in text
+    assert "sfincs_jax.problems.transport_linear_system" in text
+    assert "sfincs_jax.solvers.preconditioner_xblock_policy" in text
+
+
 def test_test_filenames_do_not_reintroduce_deleted_v3_driver_label() -> None:
     """Keep test modules named after the canonical behavior they protect."""
 
