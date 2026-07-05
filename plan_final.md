@@ -1275,6 +1275,14 @@ Completed work:
   validation passed:
   `tests/test_vmec_wout_conventions.py tests/test_output_formats.py tests/test_io_output_policy_coverage.py tests/test_geometry_grid_helper_coverage.py tests/test_domain_package_import_contracts.py`
   as `129 passed in 3.82 s`; Ruff and `git diff --check` passed.
+- Tranche 62: removed the last package-source prose references to the deleted
+  `v3_driver` architecture and added a source-tree guard that prevents package
+  docstrings/comments from reintroducing it. The same tranche added bounded
+  numerical tests for the symbolic host sparse-factor owner: row-nnz cap
+  parsing, regularization retry defaults/fail-closed behavior, and equivalent
+  dense/CSR drop-plus-diagonal-regularization paths. Focused validation passed:
+  `tests/test_sparse_assembly.py tests/test_source_tree_consolidation.py`
+  as `34 passed in 3.23 s`; Ruff, compileall, and `git diff --check` passed.
 
 Remaining consolidation steps:
 

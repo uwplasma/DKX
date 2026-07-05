@@ -150,6 +150,18 @@ def test_package_sources_do_not_import_deleted_v3_driver() -> None:
     assert offenders == []
 
 
+def test_package_sources_do_not_document_deleted_v3_driver_as_architecture() -> None:
+    """Keep production source prose centered on canonical domain owners."""
+
+    offenders = [
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in sorted(PACKAGE_ROOT.rglob("*.py"))
+        if "__pycache__" not in path.parts and "v3_driver" in path.read_text(encoding="utf-8")
+    ]
+
+    assert offenders == []
+
+
 def test_test_suite_does_not_import_deleted_v3_driver() -> None:
     """Keep behavior tests on domain modules instead of deleted driver aliases."""
 

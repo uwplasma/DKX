@@ -1,8 +1,8 @@
 """Host sparse factorization helpers for SFINCS-JAX preconditioners.
 
 This module owns the non-differentiable sparse assembly/factor setup used by
-CLI-oriented RHSMode=1 preconditioner paths. Keeping it outside ``v3_driver``
-makes the solver orchestration easier to read while preserving the JAX
+CLI-oriented RHSMode=1 preconditioner paths. Keeping host factorization in one
+solver owner makes the orchestration easier to read while preserving the JAX
 matrix-free path used by differentiable Python workflows.
 """
 

@@ -4,9 +4,12 @@ from types import SimpleNamespace
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
+import scipy.sparse as sp
 
 import sfincs_jax.problems.profile_solve as profile_solve
 import sfincs_jax.solvers.preconditioner_xblock_tz_sparse as tz_sparse
+import sfincs_jax.solvers.preconditioner_symbolic_host as symbolic_host
 from sfincs_jax.solvers.preconditioner_symbolic_host import build_sparse_ilu_from_matvec
 from sfincs_jax.solvers.preconditioner_xblock_tz_sparse import (
     assemble_selected_theta_tz_operator,
@@ -119,6 +122,66 @@ def test_chunked_sparse_assembly_applies_fortran_structural_threshold(monkeypatc
     assert l_dense is None
     assert u_dense is None
     assert l_unit_diag is True
+
+
+def test_symbolic_host_row_cap_and_regularization_settings_fail_closed(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ROW_NNZ_MAX", raising=False)
+    assert symbolic_host._row_nnz_cap(None) == 256
+    assert symbolic_host._row_nnz_cap(3) == 3
+    assert symbolic_host._row_nnz_cap(-5) == 0
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ROW_NNZ_MAX", "bad")
+    assert symbolic_host._row_nnz_cap(None) == 256
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ROW_NNZ_MAX", "-9")
+    assert symbolic_host._row_nnz_cap(None) == 0
+
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_REG", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_SINGULAR_REG_REL", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ATTEMPTS", raising=False)
+    reg, singular_reg_rel, attempts = symbolic_host._regularization_settings(2.0)
+    assert reg == pytest.approx(2.0e-12)
+    assert singular_reg_rel == pytest.approx(1.0e-10)
+    assert attempts == 3
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_REG", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_SINGULAR_REG_REL", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ATTEMPTS", "bad")
+    reg, singular_reg_rel, attempts = symbolic_host._regularization_settings(4.0)
+    assert reg == pytest.approx(4.0e-12)
+    assert singular_reg_rel == pytest.approx(1.0e-10)
+    assert attempts == 3
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_REG", "-1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_SINGULAR_REG_REL", "-2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ATTEMPTS", "0")
+    reg, singular_reg_rel, attempts = symbolic_host._regularization_settings(4.0)
+    assert reg == 0.0
+    assert singular_reg_rel == 0.0
+    assert attempts == 1
+
+
+def test_symbolic_host_drop_and_regularize_matches_dense_and_csr_paths() -> None:
+    matrix_np = np.asarray([[1.0, 0.1], [0.2, 2.0]], dtype=np.float64)
+    matrix_csr = sp.csr_matrix(matrix_np)
+
+    dense_path = symbolic_host._drop_and_regularize_csr(
+        a_csr_full=matrix_csr,
+        a_np_full=matrix_np,
+        factor_dtype=np.dtype(np.float64),
+        thresh=0.15,
+        reg=0.5,
+    )
+    csr_path = symbolic_host._drop_and_regularize_csr(
+        a_csr_full=matrix_csr,
+        a_np_full=None,
+        factor_dtype=np.dtype(np.float64),
+        thresh=0.15,
+        reg=0.5,
+    )
+    expected = np.asarray([[1.5, 0.0], [0.2, 2.5]], dtype=np.float64)
+
+    np.testing.assert_allclose(np.asarray(dense_path.toarray()), expected)
+    np.testing.assert_allclose(np.asarray(csr_path.toarray()), expected)
 
 
 def test_selected_theta_tz_operator_matches_expected_rows() -> None:

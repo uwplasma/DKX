@@ -2,8 +2,8 @@
 
 The direct-tail materializer replaces expensive color probing of dense
 constraint rows with term-level source/moment formulas matching the v3
-matrix-free operator. It is kept outside ``v3_driver`` so solver orchestration
-can depend on a focused assembly helper instead of owning the sparse block
+matrix-free operator. Keeping this assembly in the operator layer lets solver
+orchestration depend on a focused helper instead of owning sparse block
 construction details.
 """
 
