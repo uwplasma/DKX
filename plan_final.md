@@ -1713,6 +1713,16 @@ Completed work:
   that intentional example-script pattern. Validation: the script ran, Ruff
   passed, `compileall` passed, `git diff --check` passed, and the affected
   examples tests passed `17/17` before the waiver-only patch.
+- Tranche 108: ran the Phase-G focused validation bundle after the examples and
+  profiling tranches. Passed shards: source/import/examples/benchmark-doc
+  guards `67/67`, CLI/output/API `97/97`, ambipolar/sensitivity/implicit-grad
+  `41/41`, representative RHSMode/sparse/preconditioner policy `82/82`,
+  I/O/output/artifact policy `158/158`, validation manifest/math/figure/policy
+  `47/47`, generated validation/solver-path artifact tests `33/33`, and QI
+  artifact-policy tests `47/47`. One I/O shard was rerun after a typo in the
+  requested test filename; the corrected shard passed. This leaves the review
+  bundle green except for the separate full coverage audit and fresh
+  CPU/GPU/Fortran benchmark evidence generation.
 
 Remaining consolidation steps:
 
