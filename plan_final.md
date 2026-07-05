@@ -135,6 +135,16 @@ The main structural refactor is functionally complete:
   Source/test audits for `geometry/boozer.py` and `outputs/formats.py` report
   zero production-used public helpers without direct tests. Focused validation
   passed as `81 passed in 2.18 s`.
+- Output-writer orchestration coverage now includes bounded owner tests for the
+  geometry-only writer path with `wout_path`, extension-selected output format,
+  solver-trace sidecar metadata, and `return_results`, plus the RHSMode=2/3
+  streaming-HDF5 path with temporary environment restoration. These tests
+  monkeypatch geometry construction and transport solves, so they cover the
+  public writer routing without adding production solve time to CI. Focused
+  validation passed as `83 passed in 2.40 s`; the broader output/trace bundle
+  passed as `108 passed in 8.13 s`. The exact package-coverage delta is left to
+  the next CI coverage shards because local pytest-cov still aborts before
+  startup on this machine.
 - Transport runtime, profile setup, sparse-direct, and diagnostics coverage now
   includes direct tests for worker-count validation, GPU subprocess policy
   injection, persistent-pool helpers, solve-method normalization, explicit

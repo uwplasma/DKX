@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -62,6 +63,7 @@ from sfincs_jax.outputs.rhsmode1 import (
     write_rhsmode1_phi1_diagnostics_to_data,
 )
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
+from sfincs_jax.solvers.diagnostics import read_solver_trace_json
 
 
 def test_output_cache_dir_prefers_xdg_cache_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -70,6 +72,183 @@ def test_output_cache_dir_prefers_xdg_cache_home(tmp_path: Path, monkeypatch: py
     cache_dir = output_cache_dir()
     assert cache_dir == tmp_path / "xdg" / "sfincs_jax" / "output_cache"
     assert cache_dir.is_dir()
+
+
+def _minimal_writer_input(tmp_path: Path, *, rhs_mode: int = 1, geometry_scheme: int = 5) -> Path:
+    input_path = tmp_path / f"writer_rhs{rhs_mode}_geom{geometry_scheme}.namelist"
+    input_path.write_text(
+        "&general\n"
+        f"  RHSMode = {int(rhs_mode)}\n"
+        "/\n"
+        "&geometryParameters\n"
+        f"  geometryScheme = {int(geometry_scheme)}\n"
+        "  equilibriumFile = 'missing_equilibrium.nc'\n"
+        "/\n"
+        "&speciesParameters\n"
+        "  Zs = 1.0\n"
+        "/\n"
+        "&physicsParameters\n"
+        "  collisionOperator = 0\n"
+        "/\n"
+        "&resolutionParameters\n"
+        "  solverTolerance = 1.0e-7\n"
+        "/\n"
+        "&otherNumericalParameters\n"
+        "/\n"
+        "&preconditionerOptions\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    return input_path
+
+
+def _minimal_writer_grids() -> SimpleNamespace:
+    return SimpleNamespace(
+        theta=np.asarray([0.0, np.pi], dtype=np.float64),
+        zeta=np.asarray([0.0, np.pi], dtype=np.float64),
+        x=np.asarray([0.25, 0.75], dtype=np.float64),
+        n_xi=3,
+        n_l=3,
+        n_xi_for_x=np.asarray([3, 2], dtype=np.int32),
+    )
+
+
+def test_write_output_geometry_only_trace_return_results_and_wout_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Geometry-only writer orchestration should be cheap and metadata-complete."""
+
+    input_path = _minimal_writer_input(tmp_path, rhs_mode=1, geometry_scheme=5)
+    wout_path = tmp_path / "owned_wout.nc"
+    wout_path.write_bytes(b"owned vmec fixture")
+    trace_path = tmp_path / "solver_trace.json"
+    output_path = tmp_path / "sfincsOutput.npz"
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(output_writer, "grids_from_namelist", lambda _nml: _minimal_writer_grids())
+    monkeypatch.setattr(output_writer, "geometry_from_namelist", lambda **_kwargs: SimpleNamespace())
+    monkeypatch.setattr(output_writer, "_export_f_config", lambda **_kwargs: None)
+
+    def _fake_output_dict(*, nml, grids, geom, export_cfg):
+        captured["equilibrium_override"] = nml.group("geometryParameters")["EQUILIBRIUMFILE"]
+        captured["grid_shape"] = (int(grids.theta.size), int(grids.zeta.size), int(grids.x.size))
+        captured["geom"] = geom
+        captured["export_cfg"] = export_cfg
+        return {
+            "RHSMode": np.asarray(1, dtype=np.int32),
+            "geometryScheme": np.asarray(5, dtype=np.int32),
+            "constraintScheme": np.asarray(1, dtype=np.int32),
+            "psiAHat": np.asarray(1.0, dtype=np.float64),
+            "aHat": np.asarray(1.0, dtype=np.float64),
+        }
+
+    def _fake_write_output_file(*, path, data, fortran_layout, overwrite):
+        captured["write_path"] = Path(path)
+        captured["write_data"] = dict(data)
+        captured["fortran_layout"] = bool(fortran_layout)
+        captured["overwrite"] = bool(overwrite)
+
+    monkeypatch.setattr(output_writer, "sfincs_jax_output_dict", _fake_output_dict)
+    monkeypatch.setattr(output_writer, "write_sfincs_output_file", _fake_write_output_file)
+
+    resolved, data = output_writer.write_sfincs_jax_output_h5(
+        input_namelist=input_path,
+        output_path=output_path,
+        wout_path=wout_path,
+        verbose=False,
+        solver_trace_path=trace_path,
+        return_results=True,
+    )
+
+    assert resolved == output_path.resolve()
+    assert int(np.asarray(data["RHSMode"]).reshape(())) == 1
+    assert int(np.asarray(captured["write_data"]["RHSMode"]).reshape(())) == 1
+    assert captured["write_path"] == output_path
+    assert captured["fortran_layout"] is True
+    assert captured["overwrite"] is True
+    assert captured["grid_shape"] == (2, 2, 2)
+    assert captured["equilibrium_override"] == str(wout_path)
+    assert str(wout_path) in str(data["input.namelist"])
+
+    trace = read_solver_trace_json(trace_path)
+    assert trace.selected_path == "geometry_only"
+    assert trace.rhs_mode == 1
+    assert trace.geometry_scheme == 5
+    assert trace.metadata["output_format"] == "npz"
+    assert trace.metadata["compute_solution"] is False
+    assert trace.metadata["compute_transport_matrix"] is False
+
+
+def test_write_output_transport_streaming_restores_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Transport streaming should avoid the full in-memory diagnostics writer."""
+
+    input_path = _minimal_writer_input(tmp_path, rhs_mode=2, geometry_scheme=4)
+    output_path = tmp_path / "sfincsOutput.h5"
+    captured: dict[str, object] = {}
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_STREAM_H5", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_STORE_STATE", "old-store")
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_STREAM_DIAGNOSTICS", raising=False)
+    monkeypatch.setattr(output_writer, "grids_from_namelist", lambda _nml: _minimal_writer_grids())
+    monkeypatch.setattr(output_writer, "geometry_from_namelist", lambda **_kwargs: SimpleNamespace())
+    monkeypatch.setattr(output_writer, "_export_f_config", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        output_writer,
+        "sfincs_jax_output_dict",
+        lambda **_kwargs: {
+            "RHSMode": np.asarray(2, dtype=np.int32),
+            "geometryScheme": np.asarray(4, dtype=np.int32),
+            "constraintScheme": np.asarray(1, dtype=np.int32),
+            "psiAHat": np.asarray(1.0, dtype=np.float64),
+            "aHat": np.asarray(1.0, dtype=np.float64),
+        },
+    )
+    monkeypatch.setattr(
+        output_writer,
+        "write_sfincs_output_file",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("streaming path should write directly")),
+    )
+
+    import sfincs_jax.problems.transport_solve as transport_solve
+
+    def _fake_transport_solve(**kwargs):
+        captured["force_store_state"] = kwargs["force_store_state"]
+        captured["store_state_during_solve"] = os.environ.get("SFINCS_JAX_TRANSPORT_STORE_STATE")
+        captured["stream_diag_during_solve"] = os.environ.get("SFINCS_JAX_TRANSPORT_STREAM_DIAGNOSTICS")
+        return SimpleNamespace(
+            op0=SimpleNamespace(),
+            state_vectors_by_rhs={},
+            transport_matrix=np.eye(3),
+            elapsed_time_s=np.asarray([0.1, 0.2, 0.3]),
+        )
+
+    def _fake_stream_h5(**kwargs):
+        captured["stream_output_path"] = Path(kwargs["output_path"])
+        captured["stream_data"] = kwargs["data"]
+        captured["stream_result"] = kwargs["result"]
+
+    monkeypatch.setattr(transport_solve, "solve_v3_transport_matrix_linear_gmres", _fake_transport_solve)
+    monkeypatch.setattr(output_writer, "_write_transport_h5_streaming", _fake_stream_h5)
+
+    resolved = output_writer.write_sfincs_jax_output_h5(
+        input_namelist=input_path,
+        output_path=output_path,
+        compute_transport_matrix=True,
+        verbose=False,
+    )
+
+    assert resolved == output_path.resolve()
+    assert captured["force_store_state"] is None
+    assert captured["store_state_during_solve"] == "1"
+    assert captured["stream_diag_during_solve"] == "0"
+    assert captured["stream_output_path"] == output_path
+    assert int(np.asarray(captured["stream_data"]["RHSMode"]).reshape(())) == 2
+    assert os.environ.get("SFINCS_JAX_TRANSPORT_STORE_STATE") == "old-store"
+    assert "SFINCS_JAX_TRANSPORT_STREAM_DIAGNOSTICS" not in os.environ
 
 
 def test_output_cache_path_is_stable_and_key_sensitive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
