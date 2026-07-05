@@ -21,8 +21,8 @@ from .transport import (
     transport_solver_diagnostic_arrays,
     write_transport_h5_streaming,
 )
+from ..input_compat import localize_equilibrium_file_in_place
 from .writer import (
-    localize_equilibrium_file_in_place,
     sfincs_jax_output_dict,
     write_sfincs_jax_output_h5,
 )

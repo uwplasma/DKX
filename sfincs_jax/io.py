@@ -23,39 +23,36 @@ from .outputs.formats import (
 from .outputs import writer as _writer
 from .outputs import rhsmode1 as _rhsmode1
 from .outputs import formats as _formats
-from .outputs.writer import (
+from . import input_compat as _input_compat
+from .input_compat import (
     _resolve_equilibrium_file_from_namelist,
     localize_equilibrium_file_in_place,
+)
+from .outputs.writer import (
     sfincs_jax_output_dict,
     write_sfincs_jax_output_h5,
 )
+
+_LEGACY_OWNER_MODULES = (_writer, _rhsmode1, _formats, _input_compat)
 
 
 def __getattr__(name: str):
     """Delegate legacy private ``sfincs_jax.io`` names to output owners."""
 
-    try:
-        return getattr(_writer, name)
-    except AttributeError as exc:
-        try:
-            return getattr(_rhsmode1, name)
-        except AttributeError:
-            try:
-                return getattr(_formats, name)
-            except AttributeError:
-                raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
+    for module in _LEGACY_OWNER_MODULES:
+        if hasattr(module, name):
+            return getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 class _IOFacadeModule(ModuleType):
     """Forward legacy private monkeypatches to output owner modules."""
 
     def __setattr__(self, name: str, value: object) -> None:
-        if hasattr(_writer, name):
-            setattr(_writer, name, value)
-        elif hasattr(_rhsmode1, name):
-            setattr(_rhsmode1, name, value)
-        elif hasattr(_formats, name):
-            setattr(_formats, name, value)
+        for module in _LEGACY_OWNER_MODULES:
+            if hasattr(module, name):
+                setattr(module, name, value)
+                break
         super().__setattr__(name, value)
 
 

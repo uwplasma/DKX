@@ -902,12 +902,12 @@ Latest AST audit:
   The largest retained owners are `problems/profile_policies.py` (`7936`
   lines), `problems/profile_sparse_xblock.py` (`7681` lines),
   `operators/profile_full_system.py` (`6130` lines),
-  `problems/profile_sparse_solve.py` (`5500` lines),
+  `problems/profile_sparse_solve.py` (`5168` lines),
   `solvers/preconditioner_qi_device.py` (`5433` lines),
   `solvers/explicit_sparse.py` (`5198` lines),
   `problems/profile_sparse_qi.py` (`4873` lines),
   `problems/profile_solve.py` (`4351` lines), and
-  `outputs/writer.py` (`3129` lines).
+  `outputs/writer.py` (`3040` lines).
 - The final consolidation pass should reduce file count and improve ownership
   before further line-by-line extraction. A patch that only moves a few
   functions but leaves the same number of files is not sufficient unless it
@@ -1240,6 +1240,16 @@ Completed work:
   `tests/test_phi1_history_alignment.py tests/test_cli_solve_mode.py tests/test_io_output_policy_coverage.py`
   as `136 passed in 2.53 s`; Ruff passed. This reduced
   `outputs/writer.py` from `3250` to `3129` lines without adding source files.
+- Tranche 58: moved SFINCS-v3 equilibrium path resolution and staged-run
+  equilibrium localization from `outputs/writer.py` into existing
+  `input_compat.py`, updated `io.py` and `outputs.__init__` compatibility
+  exports, and converted input-compat tests to import the moved helpers from
+  their canonical owner. The `io.py` facade was simplified to a loop-based
+  legacy owner delegation and remains implementation-free at `74` lines.
+  Focused validation passed:
+  `tests/test_input_compat.py tests/test_io_output_policy_coverage.py tests/test_api_contracts.py tests/test_domain_package_import_contracts.py tests/test_source_tree_consolidation.py`
+  as `164 passed in 7.54 s`; Ruff and `git diff --check` passed. This reduced
+  `outputs/writer.py` from `3129` to `3040` lines without adding source files.
 
 Remaining consolidation steps:
 

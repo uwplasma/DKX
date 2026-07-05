@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import math
 import os
-import re
-import shutil
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict
@@ -22,6 +20,7 @@ from ..input_compat import (
     effective_use_iterative_linear_solver,
     infer_input_radial_coordinate_for_gradients,
     infer_phi_input_radial_coordinate_for_gradients,
+    _resolve_equilibrium_file_from_namelist,
     with_equilibrium_override,
 )
 from ..namelist import Namelist, read_sfincs_input
@@ -162,94 +161,6 @@ def _fortran_logical(x: bool) -> np.int32:
     Many v3 HDF5 outputs store logicals as int32 with `-1` for false and `+1` for true.
     """
     return np.int32(1 if bool(x) else -1)
-
-
-def _resolve_equilibrium_file_from_namelist(*, nml: Namelist) -> Path:
-    geom_params = nml.group("geometryParameters")
-    equilibrium_file = effective_equilibrium_file(geom_params=geom_params)
-    if equilibrium_file is None:
-        raise ValueError("Missing geometryParameters.equilibriumFile")
-    base_dir = nml.source_path.parent if nml.source_path is not None else None
-    repo_root = Path(__file__).resolve().parents[1]
-    extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
-    geometry_scheme = int(_get_int(geom_params, "geometryScheme", -1))
-
-    raw = str(equilibrium_file).strip().strip('"').strip("'")
-    p = Path(raw)
-    # For VMEC geometry, prefer netCDF if a sibling exists, even when an ASCII file
-    # is present. This keeps Fortran/JAX parity in mixed upstream distributions.
-    if geometry_scheme == 5 and p.suffix.lower() in {".txt", ".dat"}:
-        p_nc = p.with_suffix(".nc")
-        try:
-            return resolve_existing_path(str(p_nc), base_dir=base_dir, extra_search_dirs=extra).path
-        except FileNotFoundError:
-            pass
-    return resolve_existing_path(raw, base_dir=base_dir, extra_search_dirs=extra).path
-
-
-def localize_equilibrium_file_in_place(*, input_namelist: Path, overwrite: bool = False) -> Path | None:
-    """Copy `equilibriumFile` next to `input.namelist` and patch it to a local basename.
-
-    This helper is useful for running the vendored upstream example suite: many upstream v3
-    example `input.namelist` files set `equilibriumFile` relative to the *upstream SFINCS repo*,
-    not relative to the run directory. When a case is copied into a scratch directory, the
-    compiled Fortran executable would otherwise fail to find the equilibrium file.
-
-    Parameters
-    ----------
-    input_namelist:
-      Path to `input.namelist` to patch.
-    overwrite:
-      If true, overwrite any existing local copy next to `input.namelist`.
-
-    Returns
-    -------
-    The path to the localized equilibrium file (next to `input.namelist`) if the namelist has
-    an `equilibriumFile` entry, otherwise `None`.
-    """
-    input_namelist = Path(input_namelist).resolve()
-    nml = read_sfincs_input(input_namelist)
-    geom_params = nml.group("geometryParameters")
-    equilibrium_file = effective_equilibrium_file(geom_params=geom_params)
-    if equilibrium_file is None:
-        return None
-
-    resolved = _resolve_equilibrium_file_from_namelist(nml=nml)
-    dst = input_namelist.parent / resolved.name
-    if overwrite or (not dst.exists()):
-        shutil.copyfile(resolved, dst)
-
-    # Patch the namelist to use the local basename (keeps paths short and run-directory relative).
-    txt = input_namelist.read_text()
-    geometry_scheme = int(_get_int(geom_params, "geometryScheme", -1))
-    if geometry_scheme == 10:
-        key_candidates = ("fort996boozer_file", "equilibriumFile")
-    elif geometry_scheme == 11:
-        key_candidates = ("JGboozer_file", "equilibriumFile")
-    elif geometry_scheme == 12:
-        key_candidates = ("JGboozer_file_NonStelSym", "equilibriumFile")
-    else:
-        key_candidates = ("equilibriumFile",)
-
-    txt2 = txt
-    for key_name in key_candidates:
-        pat = re.compile(rf"(?im)^\s*{re.escape(key_name)}\s*=\s*(['\"])(.*?)\1\s*$")
-        m = pat.search(txt)
-        if m is not None:
-            quote = m.group(1)
-            new_line = f"  {key_name} = {quote}{dst.name}{quote}"
-            txt2 = txt.replace(m.group(0), new_line)
-            break
-        pat2 = re.compile(rf"(?im)^\s*{re.escape(key_name)}\s*=\s*([^!\n\r]+)\s*$")
-        m2 = pat2.search(txt)
-        if m2 is not None:
-            new_line = f'  {key_name} = "{dst.name}"'
-            txt2 = txt.replace(m2.group(0), new_line)
-            break
-
-    if txt2 != txt:
-        input_namelist.write_text(txt2)
-    return dst
 
 
 def _scheme4_radial_constants() -> tuple[float, float]:

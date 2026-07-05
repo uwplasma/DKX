@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import shutil
 from typing import Any, Mapping
 
-from .namelist import Namelist
+from .namelist import Namelist, read_sfincs_input
+from .paths import resolve_existing_path
 
 
 def _group_get(group: Mapping[str, Any], *keys: str) -> Any | None:
@@ -95,6 +97,84 @@ def effective_equilibrium_file(*, geom_params: Mapping[str, Any]) -> Any | None:
     if geometry_scheme == 12:
         return _group_get(geom_params, "JGboozer_file_NonStelSym")
     return None
+
+
+def _resolve_equilibrium_file_from_namelist(*, nml: Namelist) -> Path:
+    """Resolve the effective VMEC/Boozer equilibrium referenced by a namelist.
+
+    The resolver follows SFINCS-v3 input conventions, including the legacy
+    Boozer alias keys and the VMEC ASCII-to-NetCDF sibling preference used by
+    mixed upstream benchmark directories.
+    """
+
+    geom_params = nml.group("geometryParameters")
+    equilibrium_file = effective_equilibrium_file(geom_params=geom_params)
+    if equilibrium_file is None:
+        raise ValueError("Missing geometryParameters.equilibriumFile")
+    base_dir = nml.source_path.parent if nml.source_path is not None else None
+    repo_root = Path(__file__).resolve().parents[1]
+    extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
+    geometry_scheme = int(_group_get(geom_params, "geometryScheme") or -1)
+
+    raw = str(equilibrium_file).strip().strip('"').strip("'")
+    p = Path(raw)
+    if geometry_scheme == 5 and p.suffix.lower() in {".txt", ".dat"}:
+        p_nc = p.with_suffix(".nc")
+        try:
+            return resolve_existing_path(str(p_nc), base_dir=base_dir, extra_search_dirs=extra).path
+        except FileNotFoundError:
+            pass
+    return resolve_existing_path(raw, base_dir=base_dir, extra_search_dirs=extra).path
+
+
+def localize_equilibrium_file_in_place(*, input_namelist: Path, overwrite: bool = False) -> Path | None:
+    """Copy the effective equilibrium next to an input file and patch the input.
+
+    Example and benchmark decks often refer to equilibria relative to an
+    upstream source tree. Localizing keeps a staged run directory self-contained
+    for both SFINCS_JAX and SFINCS Fortran v3 comparisons.
+    """
+
+    input_namelist = Path(input_namelist).resolve()
+    nml = read_sfincs_input(input_namelist)
+    geom_params = nml.group("geometryParameters")
+    equilibrium_file = effective_equilibrium_file(geom_params=geom_params)
+    if equilibrium_file is None:
+        return None
+
+    resolved = _resolve_equilibrium_file_from_namelist(nml=nml)
+    dst = input_namelist.parent / resolved.name
+    if overwrite or (not dst.exists()):
+        shutil.copyfile(resolved, dst)
+
+    txt = input_namelist.read_text()
+    geometry_scheme = int(_group_get(geom_params, "geometryScheme") or -1)
+    if geometry_scheme == 10:
+        key_candidates = ("fort996boozer_file", "equilibriumFile")
+    elif geometry_scheme == 11:
+        key_candidates = ("JGboozer_file", "equilibriumFile")
+    elif geometry_scheme == 12:
+        key_candidates = ("JGboozer_file_NonStelSym", "equilibriumFile")
+    else:
+        key_candidates = ("equilibriumFile",)
+
+    txt2 = txt
+    for key_name in key_candidates:
+        pat = re.compile(rf"(?im)^\s*{re.escape(key_name)}\s*=\s*(['\"])(.*?)\1\s*$")
+        m = pat.search(txt)
+        if m is not None:
+            quote = m.group(1)
+            txt2 = txt.replace(m.group(0), f"  {key_name} = {quote}{dst.name}{quote}")
+            break
+        pat2 = re.compile(rf"(?im)^\s*{re.escape(key_name)}\s*=\s*([^!\n\r]+)\s*$")
+        m2 = pat2.search(txt)
+        if m2 is not None:
+            txt2 = txt.replace(m2.group(0), f'  {key_name} = "{dst.name}"')
+            break
+
+    if txt2 != txt:
+        input_namelist.write_text(txt2)
+    return dst
 
 
 def canonical_equilibrium_override(
