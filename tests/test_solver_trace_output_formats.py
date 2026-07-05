@@ -22,10 +22,12 @@ from sfincs_jax.outputs.rhsmode1 import (
     _solver_metadata_dict,
     _solver_trace_memory_estimate,
     _write_nonconverged_rhsmode1_solver_trace_json,
+    write_output_solver_trace_json,
 )
 from sfincs_jax.solvers.diagnostics import (
     SolverTrace,
     SolverTraceCandidate,
+    read_solver_trace_json,
     read_solver_trace_h5,
 )
 
@@ -399,3 +401,63 @@ def test_write_nonconverged_rhsmode1_solver_trace_json_records_failure_context(t
     assert payload["residual_target"] == pytest.approx(5.0e-4)
     assert payload["metadata"]["failure_reason"] == "nonconverged_rhsmode1_output"
     assert payload["metadata"]["memory_estimate"]["gmres_basis_nbytes"] > 0
+
+
+def test_write_output_solver_trace_json_records_transport_matrix_context(tmp_path: Path) -> None:
+    trace_path = tmp_path / "solver_trace.json"
+    input_path = tmp_path / "input.namelist"
+    output_path = tmp_path / "sfincsOutput.nc"
+    input_path.write_text("&general\n RHSMode = 2\n/\n", encoding="utf-8")
+    op = _rhs1_trace_op(total_size=2048, constraint_scheme=1, include_phi1=False, has_pas=True)
+    result = SimpleNamespace(
+        op0=op,
+        residual_norms_by_rhs={2: np.asarray(2.0e-8), 1: np.asarray(1.0e-8)},
+        rhs_norms_by_rhs={2: np.asarray(20.0), 1: np.asarray(10.0)},
+        elapsed_time_s=np.asarray([0.1, 0.2]),
+        solver_kinds_by_rhs={2: "lgmres", 1: "gmres"},
+        solve_methods_by_rhs={2: "tzfft", 1: "sxblock"},
+        preconditioner_kind="sxblock",
+        strong_preconditioner_kind="xmg",
+        metadata={
+            "solver_kind": "transport_gmres",
+            "sparse_pattern_nnz": 256,
+            "setup_s": 0.1,
+            "solve_s": 0.2,
+            "matvecs": 7,
+        },
+    )
+    nml = SimpleNamespace(group=lambda _name: {"COLLISIONOPERATOR": 0})
+
+    write_output_solver_trace_json(
+        solver_trace_path=trace_path,
+        input_namelist=input_path,
+        output_path=output_path,
+        output_format="netcdf",
+        rhs_mode=2,
+        geom_scheme_hint=5,
+        compute_solution=False,
+        compute_transport_matrix=True,
+        differentiable=False,
+        result=result,
+        nml=nml,
+        solver_tol=1.0e-6,
+        solve_method=None,
+        run_t0=0.0,
+        profiler=None,
+    )
+
+    trace = read_solver_trace_json(trace_path)
+    assert trace.selected_path == "transport_matrix"
+    assert trace.solve_method == "transport_gmres"
+    assert trace.residual_norm == pytest.approx(2.0e-8)
+    assert trace.residual_target == pytest.approx(2.0e-5)
+    assert trace.converged is True
+    assert trace.preconditioner is None
+    assert trace.matvec_count == 7
+    assert trace.metadata["residual_norms_by_rhs"] == [2.0e-8, 1.0e-8]
+    assert trace.metadata["rhs_norms_by_rhs"] == [20.0, 10.0]
+    assert trace.metadata["solver_kinds_by_rhs"] == {"1": "gmres", "2": "lgmres"}
+    assert trace.metadata["solve_methods_by_rhs"] == {"1": "sxblock", "2": "tzfft"}
+    assert trace.metadata["preconditioner_kind"] == "sxblock"
+    assert trace.metadata["strong_preconditioner_kind"] == "xmg"
+    assert trace.metadata["memory_estimate"]["csr_operator_nbytes"] > 0

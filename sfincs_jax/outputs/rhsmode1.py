@@ -2033,6 +2033,243 @@ def _write_nonconverged_rhsmode1_solver_trace_json(
     write_solver_trace_json(solver_trace_path, trace)
 
 
+def write_output_solver_trace_json(
+    *,
+    solver_trace_path: Path,
+    input_namelist: Path,
+    output_path: Path,
+    output_format: str,
+    rhs_mode: int,
+    geom_scheme_hint: int | None,
+    compute_solution: bool,
+    compute_transport_matrix: bool,
+    differentiable: bool | None,
+    result: Any,
+    nml: Any,
+    solver_tol: float,
+    solve_method: str | None,
+    run_t0: float,
+    profiler: Any | None = None,
+) -> None:
+    """Write the final solver-trace sidecar for geometry, RHSMode=1, and transport runs."""
+
+    try:
+        import jax  # noqa: PLC0415
+
+        backend = str(jax.default_backend())
+        device_count = len(jax.devices())
+    except Exception:
+        backend = "unknown"
+        device_count = None
+
+    if bool(compute_transport_matrix):
+        selected_path = "transport_matrix"
+    elif bool(compute_solution):
+        selected_path = "rhsmode1_solution"
+    else:
+        selected_path = "geometry_only"
+
+    trace_op = None
+    trace_residual_norm = None
+    trace_residual_target = None
+    trace_converged = None
+    trace_metadata: dict[str, object] = {
+        "input_namelist": str(input_namelist.resolve()),
+        "output_path": str(output_path.resolve()),
+        "output_format": str(output_format),
+        "compute_solution": bool(compute_solution),
+        "compute_transport_matrix": bool(compute_transport_matrix),
+        "differentiable": None if differentiable is None else bool(differentiable),
+    }
+
+    if result is not None:
+        solver_metadata = _solver_metadata_dict(result)
+        if solver_metadata:
+            trace_metadata["solver_metadata"] = solver_metadata
+            if "accepted_converged" in solver_metadata:
+                trace_metadata["accepted_converged"] = bool(
+                    solver_metadata["accepted_converged"]
+                )
+            if "acceptance_criterion" in solver_metadata:
+                trace_metadata["acceptance_criterion"] = str(
+                    solver_metadata["acceptance_criterion"]
+                )
+        trace_op = getattr(result, "op", None)
+        if trace_op is None:
+            trace_op = getattr(result, "op0", None)
+        if hasattr(result, "residual_norm"):
+            try:
+                trace_residual_norm = float(np.asarray(getattr(result, "residual_norm")))
+            except Exception:
+                trace_residual_norm = None
+        rhs_vec = getattr(result, "rhs", None)
+        if rhs_vec is not None:
+            try:
+                trace_residual_target = max(
+                    0.0,
+                    float(solver_tol) * float(np.linalg.norm(np.asarray(rhs_vec))),
+                )
+            except Exception:
+                trace_residual_target = None
+        residuals_by_rhs = getattr(result, "residual_norms_by_rhs", None)
+        if isinstance(residuals_by_rhs, dict) and residuals_by_rhs:
+            vals = []
+            for val in residuals_by_rhs.values():
+                try:
+                    vals.append(float(np.asarray(val)))
+                except Exception:
+                    continue
+            if vals:
+                trace_metadata["residual_norms_by_rhs"] = vals
+                trace_residual_norm = max(vals)
+        rhs_norms_by_rhs = getattr(result, "rhs_norms_by_rhs", None)
+        if isinstance(rhs_norms_by_rhs, dict) and rhs_norms_by_rhs:
+            rhs_vals = []
+            for val in rhs_norms_by_rhs.values():
+                try:
+                    rhs_vals.append(float(np.asarray(val)))
+                except Exception:
+                    continue
+            if rhs_vals:
+                trace_metadata["rhs_norms_by_rhs"] = rhs_vals
+                trace_residual_target = max(0.0, float(solver_tol) * max(rhs_vals))
+        elapsed_by_rhs = getattr(result, "elapsed_time_s", None)
+        if elapsed_by_rhs is not None:
+            try:
+                trace_metadata["elapsed_time_s_by_rhs"] = [
+                    float(v) for v in np.asarray(elapsed_by_rhs).reshape((-1,))
+                ]
+            except Exception:
+                pass
+        solver_kinds_by_rhs = getattr(result, "solver_kinds_by_rhs", None)
+        if isinstance(solver_kinds_by_rhs, dict) and solver_kinds_by_rhs:
+            trace_metadata["solver_kinds_by_rhs"] = {
+                str(int(k)): str(v)
+                for k, v in sorted(solver_kinds_by_rhs.items(), key=lambda item: int(item[0]))
+            }
+        solve_methods_by_rhs = getattr(result, "solve_methods_by_rhs", None)
+        if isinstance(solve_methods_by_rhs, dict) and solve_methods_by_rhs:
+            trace_metadata["solve_methods_by_rhs"] = {
+                str(int(k)): str(v)
+                for k, v in sorted(solve_methods_by_rhs.items(), key=lambda item: int(item[0]))
+            }
+        preconditioner_kind = getattr(result, "preconditioner_kind", None)
+        if preconditioner_kind is not None:
+            trace_metadata["preconditioner_kind"] = str(preconditioner_kind)
+        strong_preconditioner_kind = getattr(result, "strong_preconditioner_kind", None)
+        if strong_preconditioner_kind is not None:
+            trace_metadata["strong_preconditioner_kind"] = str(strong_preconditioner_kind)
+
+    if trace_residual_norm is not None and trace_residual_target is not None:
+        trace_converged = bool(float(trace_residual_norm) <= float(trace_residual_target))
+        trace_metadata["converged"] = trace_converged
+    if profiler is not None and getattr(profiler, "entries", None):
+        trace_metadata["profile_entries"] = list(getattr(profiler, "entries"))
+
+    trace_total_size = None
+    trace_active_size = None
+    trace_collision_operator = None
+    if trace_op is not None:
+        try:
+            trace_total_size = int(getattr(trace_op, "total_size"))
+        except Exception:
+            trace_total_size = None
+        trace_active_size = _rhs1_active_size_for_trace(trace_op)
+        if trace_active_size is None:
+            try:
+                trace_active_size = int(getattr(trace_op, "active_size"))
+            except Exception:
+                trace_active_size = trace_total_size
+        try:
+            trace_collision_operator = str(getattr(trace_op, "collision_operator"))
+        except Exception:
+            try:
+                trace_collision_operator = str(nml.group("physicsParameters").get("COLLISIONOPERATOR"))
+            except Exception:
+                trace_collision_operator = None
+
+    try:
+        from ..profiling import _peak_rss_mb, _rss_mb  # noqa: PLC0415
+
+        peak_rss_mb = _peak_rss_mb()
+        if peak_rss_mb is None:
+            peak_rss_mb = _rss_mb()
+    except Exception:
+        peak_rss_mb = None
+    active_rss_mb = None
+    device_peak_mb = None
+    if profiler is not None and getattr(profiler, "entries", None):
+        active_rss_mb, device_peak_mb, profiler_peak_rss_mb = _profile_memory_summary(profiler)
+        if profiler_peak_rss_mb is not None:
+            peak_rss_mb = profiler_peak_rss_mb
+
+    trace_solver_metadata = _solver_metadata_dict(result) if result is not None else {}
+    trace_memory_estimate = _solver_trace_memory_estimate(
+        total_size=trace_total_size,
+        active_size=trace_active_size,
+        solver_metadata=trace_solver_metadata,
+        device_count=device_count,
+    )
+    if trace_memory_estimate is not None:
+        trace_metadata["memory_estimate"] = trace_memory_estimate
+    trace_setup_s = (
+        float(trace_solver_metadata["setup_s"])
+        if "setup_s" in trace_solver_metadata
+        else None
+    )
+    trace_solve_s = (
+        float(trace_solver_metadata["solve_s"])
+        if "solve_s" in trace_solver_metadata
+        else None
+    )
+    trace_solve_method = (
+        str(solve_method)
+        if solve_method is not None
+        else str(trace_solver_metadata.get("solver_kind", "auto"))
+    )
+    trace = SolverTrace(
+        backend=backend,
+        rhs_mode=int(rhs_mode),
+        selected_path=selected_path,
+        solve_method=trace_solve_method,
+        preconditioner=(
+            None
+            if "preconditioner_kind" not in trace_solver_metadata
+            else str(trace_solver_metadata["preconditioner_kind"])
+        ),
+        geometry_scheme=int(geom_scheme_hint) if geom_scheme_hint is not None else None,
+        collision_operator=trace_collision_operator,
+        total_size=trace_total_size,
+        active_size=trace_active_size,
+        device_count=device_count,
+        residual_norm=trace_residual_norm,
+        residual_target=trace_residual_target,
+        converged=trace_converged,
+        elapsed_s=float(time.perf_counter() - run_t0),
+        setup_s=trace_setup_s,
+        solve_s=trace_solve_s,
+        peak_rss_mb=peak_rss_mb,
+        active_rss_mb=active_rss_mb,
+        device_peak_mb=device_peak_mb,
+        estimated_dense_nbytes=(
+            None
+            if trace_memory_estimate is None
+            else int(trace_memory_estimate["dense_operator_nbytes"])
+        ),
+        estimated_csr_nbytes=(
+            None
+            if trace_memory_estimate is None or trace_memory_estimate["csr_operator_nbytes"] is None
+            else int(trace_memory_estimate["csr_operator_nbytes"])
+        ),
+        estimated_gmres_basis_nbytes=(
+            None if trace_memory_estimate is None else int(trace_memory_estimate["gmres_basis_nbytes"])
+        ),
+        matvec_count=_metadata_int(trace_solver_metadata, "matvecs"),
+        metadata=trace_metadata,
+    )
+    write_solver_trace_json(solver_trace_path, trace)
+
+
 __all__ = (
     "RHSMode1SolveMethodSelectionContext",
     "_add_rhsmode1_solver_diagnostics",
@@ -2061,5 +2298,6 @@ __all__ = (
     "write_rhsmode1_flux_coordinate_variants_to_data",
     "write_rhsmode1_ntv_diagnostics_to_data",
     "write_rhsmode1_phi1_diagnostics_to_data",
+    "write_output_solver_trace_json",
     "_write_nonconverged_rhsmode1_solver_trace_json",
 )

@@ -907,7 +907,7 @@ Latest AST audit:
   `solvers/explicit_sparse.py` (`5198` lines),
   `problems/profile_sparse_qi.py` (`4873` lines),
   `problems/profile_solve.py` (`4351` lines), and
-  `outputs/writer.py` (`2675` lines).
+  `outputs/writer.py` (`2490` lines).
 - The final consolidation pass should reduce file count and improve ownership
   before further line-by-line extraction. A patch that only moves a few
   functions but leaves the same number of files is not sufficient unless it
@@ -939,6 +939,10 @@ Latest AST audit:
 - RHSMode=1 NTV diagnostic recomputation has been extracted from the HDF5
   writer into `outputs/rhsmode1.py`, keeping the Fortran v3 `NTVKernel`
   convention and adding direct zero/non-axisymmetric branch tests.
+- Final solver-trace sidecar assembly has been extracted from the HDF5 writer
+  into `outputs/rhsmode1.py`, keeping solver provenance, residual targets,
+  per-RHS transport diagnostics, and memory estimates on the RHSMode-aware
+  output owner while leaving `outputs/writer.py` as orchestration.
 - Strict numeric HDF5 parity has been folded into the root public
   `compare.py` API and the `validation/h5_parity.py` helper has been deleted.
   Scripts and tests now use one public comparison owner instead of a
@@ -1499,6 +1503,18 @@ Completed work:
   Focused validation passed:
   `tests/test_transport_parallel_execution.py tests/test_transport_policy_coverage.py tests/test_transport_parallel_sharding.py`
   as `58 passed in 0.48 s`; Ruff passed for the touched tests.
+- Tranche 87: moved final solver-trace sidecar assembly from
+  `outputs/writer.py` into existing `outputs/rhsmode1.py`, so the writer now
+  calls `write_output_solver_trace_json` instead of owning duplicated
+  provenance/residual/memory-estimate assembly. This reduced
+  `outputs/writer.py` from `2675` to `2490` lines without adding source files.
+  A direct trace test now covers transport-matrix selected path, metadata
+  solver-method fallback, per-RHS residual/rhs norms, convergence, solver
+  kind/method maps, and memory estimates. Focused validation passed:
+  `tests/test_solver_trace_output_formats.py` as `12 passed in 0.35 s`; the
+  broader output/CLI bundle
+  `tests/test_solver_trace_output_formats.py tests/test_io_output_policy_coverage.py tests/test_io_export_and_h5_coverage.py tests/test_cli_solve_mode.py`
+  as `161 passed in 2.91 s`; Ruff, py_compile, and `git diff --check` passed.
 
 Remaining consolidation steps:
 
