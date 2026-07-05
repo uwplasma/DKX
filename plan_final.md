@@ -205,6 +205,21 @@ The main structural refactor is functionally complete:
   owner rather than compatibility aliases. A source/test audit for that module
   reports zero production-used public helpers without direct tests. Focused
   validation passed as `8 passed in 15.08 s`.
+- Active x-block preconditioner coverage now includes direct fail-closed
+  admission tests for the global field-split Schur, multiline field split,
+  bounded native stack, Fortran-v3 reduced native stack, diagonal Schur, x-ell
+  kinetic line, and angular-line builders. It also checks identity-system
+  application for the native x-ell and angular line builders. A direct-reference
+  audit for `solvers/preconditioner_xblock_active.py` reports zero remaining
+  untested public builder entry points. Focused validation passed as
+  `14 passed in 0.87 s`.
+- QI sparse-pipeline coverage now includes a direct default-disabled
+  orchestration test for `run_xblock_qi_preconditioner_pipeline`, verifying
+  that the complete optional QI lane preserves the base preconditioner and
+  diagnostics without constructing coarse/device stages. A direct-reference
+  audit for `problems/profile_sparse_qi.py` reports no remaining untested public
+  pipeline entry point from the current audit slice. Focused validation passed
+  with the active x-block tranche as `16 passed in 1.78 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -1062,6 +1077,15 @@ Completed work:
   tests to direct canonical builder calls, then reran the source/test audit
   showing no production-used public helpers in that solver module without
   direct tests.
+- Tranche 47: added direct active x-block builder tests for global Schur,
+  multiline field split, bounded native stack, Fortran-v3 reduced native stack,
+  diagonal Schur, x-ell kinetic-line, and angular-line entry points, then reran
+  the direct-reference audit showing no remaining missing functions in that
+  audit slice.
+- Tranche 48: added a direct default-disabled QI sparse-pipeline orchestration
+  test for `run_xblock_qi_preconditioner_pipeline`, then reran the
+  direct-reference audit showing the QI pipeline wrapper is covered without
+  adding a slow solve.
 
 Remaining consolidation steps:
 

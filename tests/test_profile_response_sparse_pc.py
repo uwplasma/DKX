@@ -1085,6 +1085,53 @@ def test_xblock_qi_pipeline_context_factory_owns_default_builders() -> None:
     )
 
 
+def test_run_xblock_qi_preconditioner_pipeline_preserves_base_when_disabled() -> None:
+    """The full QI orchestration lane should be a cheap no-op by default."""
+
+    def identity(x: jnp.ndarray) -> jnp.ndarray:
+        return jnp.asarray(x)
+
+    context = build_xblock_qi_stage_pipeline_context(
+        op=object(),
+        rhs=jnp.zeros(1),
+        x0_full=None,
+        xblock_rhs=jnp.zeros(1),
+        xblock_rhs_norm=0.0,
+        base_preconditioner=identity,
+        matvec=identity,
+        true_matvec_no_count=identity,
+        direction_projector=None,
+        active_dof=False,
+        linear_size=1,
+        host_fallback_used=False,
+        precondition_side="left",
+        assembled_device_operator=None,
+        assembled_operator_metadata={},
+        assembled_operator_enabled=False,
+        assembled_operator_built=False,
+        assembled_operator_device_resident=False,
+        assembled_operator_device_error=None,
+        elapsed_s=lambda: 0.0,
+        emit=None,
+        env={},
+        reduce_full=None,
+    )
+
+    result = sparse_qi_module.run_xblock_qi_preconditioner_pipeline(context)
+
+    np.testing.assert_allclose(result.preconditioner(jnp.asarray([2.0])), np.asarray([2.0]))
+    assert result.x0_full is None
+    assert result.basis_for_galerkin is None
+    assert result.pc_factor_s == 0.0
+    assert result.qi_coarse_seed_enabled is False
+    assert result.qi_galerkin_preconditioner_enabled is False
+    assert result.qi_two_level_preconditioner_enabled is False
+    assert result.qi_device_preconditioner_enabled is False
+    assert result.qi_deflated_preconditioner_enabled is False
+    assert result.qi_device_stats == {"applies": 0}
+    assert result.diagnostic_scope()["qi_seed_max_rank"] == 0
+
+
 def test_sparse_direct_module_reexports_match_compat_layer() -> None:
     """The split sparse direct module keeps legacy sparse_pc imports stable."""
 

@@ -245,6 +245,128 @@ def test_active_projected_overlap_schwarz_rejects_too_small_factor_budget(monkey
     assert preconditioner.metadata["max_factor_nbytes"] == 1
 
 
+def test_active_field_split_stack_builders_fail_closed_on_active_size_mismatch() -> None:
+    layout = _layout()
+    matrix = sp.eye(2, format="csr", dtype=np.float64)
+    active_indices = np.asarray([0], dtype=np.int64)
+
+    global_schur = active_projected.build_active_projected_global_field_split_schur_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active_indices,
+        requested_kind="active_global_field_split_schur",
+        regularization=0.0,
+        max_factor_nbytes=1_000_000,
+        t0=time.perf_counter(),
+    )
+    diagonal_schur = active_projected.build_active_projected_diagonal_schur_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active_indices,
+        requested_kind="active_diagonal_schur",
+        regularization=0.0,
+        max_factor_nbytes=1_000_000,
+        t0=time.perf_counter(),
+    )
+    multiline = active_projected.build_active_projected_multiline_field_split_base_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active_indices,
+        regularization=0.0,
+        max_factor_nbytes=1_000_000,
+        t0=time.perf_counter(),
+    )
+    bounded_stack = active_projected.build_active_projected_bounded_native_stack_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active_indices,
+        requested_kind="active_bounded_native_stack",
+        regularization=0.0,
+        max_factor_nbytes=1_000_000,
+        t0=time.perf_counter(),
+    )
+    fortran_named_stack = active_projected.build_active_fortran_v3_reduced_native_stack_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active_indices,
+        requested_kind="active_fortran_v3_reduced_native_stack",
+        regularization=0.0,
+        max_factor_nbytes=1_000_000,
+        t0=time.perf_counter(),
+    )
+
+    assert global_schur.selected is False
+    assert global_schur.reason == "active_index_size_mismatch"
+    assert diagonal_schur.selected is False
+    assert diagonal_schur.reason == "active_index_size_mismatch"
+    assert multiline.selected is False
+    assert multiline.reason.startswith("active_multiline_base_failed:")
+    assert bounded_stack.selected is False
+    assert bounded_stack.reason == "active_index_size_mismatch"
+    assert fortran_named_stack.selected is False
+    assert fortran_named_stack.reason == "active_index_size_mismatch"
+    assert fortran_named_stack.metadata["production_candidate"] is True
+
+
+def test_active_line_builders_solve_identity_system_and_reject_bad_active_size() -> None:
+    layout = _layout()
+    matrix = sp.eye(int(layout.total_size), format="csr", dtype=np.float64)
+    active_indices = np.arange(int(layout.total_size), dtype=np.int64)
+    rhs = np.linspace(-1.0, 1.0, int(layout.total_size), dtype=np.float64)
+
+    xell = active_projected.build_active_projected_xell_kinetic_line_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_kinetic_indices=active_indices,
+        requested_kind="active_native_xell",
+        regularization=0.0,
+        max_factor_nbytes=1_000_000,
+        t0=time.perf_counter(),
+    )
+    angular = active_projected.build_active_projected_angular_line_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_kinetic_indices=active_indices,
+        requested_kind="active_angular_line",
+        regularization=0.0,
+        max_factor_nbytes=1_000_000,
+        t0=time.perf_counter(),
+    )
+
+    assert xell.selected, xell.to_dict()
+    assert angular.selected, angular.to_dict()
+    assert xell.operator is not None
+    assert angular.operator is not None
+    np.testing.assert_allclose(xell.operator.matvec(rhs), rhs, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(angular.operator.matvec(rhs), rhs, rtol=0.0, atol=0.0)
+    assert xell.metadata["fixed_axes"] == ("species", "theta", "zeta")
+    assert angular.metadata["fixed_axes"] == ("species", "x", "ell")
+
+    bad_indices = np.asarray([0], dtype=np.int64)
+    xell_bad = active_projected.build_active_projected_xell_kinetic_line_preconditioner(
+        matrix=sp.eye(2, format="csr", dtype=np.float64),
+        layout=layout,
+        active_kinetic_indices=bad_indices,
+        requested_kind="active_native_xell",
+        regularization=0.0,
+        max_factor_nbytes=1_000_000,
+        t0=time.perf_counter(),
+    )
+    angular_bad = active_projected.build_active_projected_angular_line_preconditioner(
+        matrix=sp.eye(2, format="csr", dtype=np.float64),
+        layout=layout,
+        active_kinetic_indices=bad_indices,
+        requested_kind="active_angular_line",
+        regularization=0.0,
+        max_factor_nbytes=1_000_000,
+        t0=time.perf_counter(),
+    )
+    assert xell_bad.selected is False
+    assert xell_bad.reason == "active_kinetic_index_size_mismatch"
+    assert angular_bad.selected is False
+    assert angular_bad.reason == "active_index_size_mismatch"
+
+
 def test_active_native_indexed_schwarz_solves_diagonal_active_system(monkeypatch) -> None:
     layout = _layout()
     diagonal = 2.0 + 0.25 * np.arange(int(layout.total_size), dtype=np.float64)
