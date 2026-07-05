@@ -551,20 +551,6 @@ def resolve_active_symbolic_frontal_policy(
     )
 
 
-def _env_int(env: Mapping[str, str], name: str, default: int) -> int:
-    try:
-        return int(str(env.get(name, "")).strip() or int(default))
-    except ValueError:
-        return int(default)
-
-
-def _env_float(env: Mapping[str, str], name: str, default: float) -> float:
-    try:
-        return float(str(env.get(name, "")).strip() or float(default))
-    except ValueError:
-        return float(default)
-
-
 # Consolidated from reduced_policy.py.
 @dataclass(frozen=True)
 class ActiveFortranV3ReducedFactorPolicy:
@@ -707,20 +693,6 @@ def active_fortran_v3_reduced_permc_candidates(*, requested: str, factor_kind: s
     if str(factor_kind).strip().lower() == "lu":
         return ("NATURAL", "COLAMD")
     return ("COLAMD",)
-
-
-def _env_int(env: Mapping[str, str], name: str, default: int) -> int:
-    try:
-        return int(str(env.get(name, "")).strip() or int(default))
-    except ValueError:
-        return int(default)
-
-
-def _env_float(env: Mapping[str, str], name: str, default: float) -> float:
-    try:
-        return float(str(env.get(name, "")).strip() or float(default))
-    except ValueError:
-        return float(default)
 
 
 def _env_bool(env: Mapping[str, str], name: str, default: bool) -> bool:

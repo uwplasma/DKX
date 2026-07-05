@@ -2809,14 +2809,6 @@ def _solve_rhs1_reduced_dense_fallback_host_candidate(
 _FALSE_TOKENS = {"0", "false", "no", "off"}
 
 
-def _env_int(name: str, default: int) -> int:
-    raw = os.environ.get(name, "").strip()
-    try:
-        return int(raw) if raw else int(default)
-    except ValueError:
-        return int(default)
-
-
 @dataclass(frozen=True)
 class RHS1AutoHostSolveContext:
     """Inputs needed to try non-autodiff RHSMode=1 host solver shortcuts."""
@@ -2883,14 +2875,6 @@ class RHS1SparseHostSafeSolveContext:
     solve_driver: Callable[..., Any]
     solve_method_kind_explicit: str
     requested: bool
-
-
-def _env_float(name: str, default: float) -> float:
-    raw = os.environ.get(name, "").strip()
-    try:
-        return float(raw) if raw else float(default)
-    except ValueError:
-        return float(default)
 
 
 def _annotate_auto_result(result: Any, metadata_updates: dict[str, Any]) -> Any:

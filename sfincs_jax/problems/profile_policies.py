@@ -4192,10 +4192,6 @@ def rhs1_stage2_retry_admission_decision(
 
 # Consolidated host/dense/sparse policy section
 
-_TRUE_VALUES = {"1", "true", "yes", "on"}
-_FALSE_VALUES = {"0", "false", "no", "off"}
-
-
 def _env_bool(name: str) -> bool | None:
     env = str(os.environ.get(name, "")).strip().lower()
     if env in _TRUE_VALUES:
@@ -4203,22 +4199,6 @@ def _env_bool(name: str) -> bool | None:
     if env in _FALSE_VALUES:
         return False
     return None
-
-
-def _env_int(name: str, default: int) -> int:
-    env = str(os.environ.get(name, "")).strip()
-    try:
-        return int(env) if env else int(default)
-    except ValueError:
-        return int(default)
-
-
-def _env_float(name: str, default: float) -> float:
-    env = str(os.environ.get(name, "")).strip()
-    try:
-        return float(env) if env else float(default)
-    except ValueError:
-        return float(default)
 
 
 def rhs1_dense_backend_allowed(*, backend: str) -> bool:

@@ -1453,6 +1453,18 @@ Completed work:
   `tests/test_source_tree_consolidation.py tests/test_profile_solve_module_wrappers.py`
   as `46 passed in 3.92 s`; the broader owner/wrapper bundle passed as
   `193 passed in 76.71 s`; Ruff, `compileall`, and `git diff --check` passed.
+- Tranche 83: removed duplicated top-level environment helper definitions from
+  `problems/profile_policies.py`, `problems/profile_dense.py`, and
+  `solvers/preconditioner_symbolic_policy.py`. This cut stale duplicate helper
+  blocks from large owner files without changing policy behavior. A source-tree
+  guard now scans every package module for repeated top-level function or class
+  definitions so duplicate helper blocks cannot silently return. Focused
+  validation passed:
+  `tests/test_source_tree_consolidation.py tests/test_profile_solve_policy_helpers.py tests/test_profile_response_linear_solve.py tests/test_profile_response_sparse_pc.py tests/test_fortran_reduced_preconditioner.py`
+  as `435 passed in 24.48 s`; the broader sparse/preconditioner policy bundle
+  passed as `450 passed in 20.33 s`; the broader source/policy/docs-adjacent
+  bundle passed as `581 passed in 25.07 s`; Ruff, `compileall`, and
+  `git diff --check` passed.
 
 Remaining consolidation steps:
 
