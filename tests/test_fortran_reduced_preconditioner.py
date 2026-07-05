@@ -12,6 +12,10 @@ from sfincs_jax.solvers.explicit_sparse import factorize_host_sparse_operator
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.solvers import preconditioning as po
 import sfincs_jax.problems.profile_sparse_direct as sparse_direct
+from sfincs_jax.problems.profile_setup import (
+    SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS,
+    SPARSE_HOST_PC_GMRES_SOLVE_METHODS,
+)
 import sfincs_jax.problems.transport_solve as transport_solve
 from sfincs_jax.operators.profile_system import (
     apply_v3_full_system_operator_cached,
@@ -23,7 +27,6 @@ from sfincs_jax.problems.transport_linear_system import (
     _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle,
     transport_active_dof_indices,
 )
-import sfincs_jax.problems.profile_solve as vd
 
 
 @dataclass(frozen=True)
@@ -99,9 +102,6 @@ def _fake_rhs1_op() -> _Op:
 def test_fortran_reduced_operator_diagonalizes_only_radial_x_drift() -> None:
     op = _fake_rhs1_op()
 
-    assert vd._build_rhsmode1_preconditioner_operator_fortran_reduced is (
-        po._build_rhsmode1_preconditioner_operator_fortran_reduced
-    )
     reduced = po._build_rhsmode1_preconditioner_operator_fortran_reduced(
         op,
         preconditioner_x=1,
@@ -139,7 +139,7 @@ def test_fortran_reduced_operator_diagonalizes_only_radial_x_drift() -> None:
 def test_fortran_reduced_operator_respects_preconditioner_x_gate() -> None:
     op = _fake_rhs1_op()
 
-    reduced = vd._build_rhsmode1_preconditioner_operator_fortran_reduced(
+    reduced = po._build_rhsmode1_preconditioner_operator_fortran_reduced(
         op,
         preconditioner_x=0,
         preconditioner_xi=0,
@@ -174,7 +174,7 @@ def test_fortran_reduced_operator_drops_l2_terms_when_preconditioner_xi_is_enabl
         ),
     )
 
-    reduced = vd._build_rhsmode1_preconditioner_operator_fortran_reduced(
+    reduced = po._build_rhsmode1_preconditioner_operator_fortran_reduced(
         op,
         preconditioner_x=1,
         preconditioner_xi=1,
@@ -187,7 +187,7 @@ def test_fortran_reduced_operator_drops_l2_terms_when_preconditioner_xi_is_enabl
     assert reduced.fblock.er_xidot.drop_l2_couplings is True
     assert reduced.fblock.er_xdot.drop_l2_couplings is True
 
-    unreduced_xi = vd._build_rhsmode1_preconditioner_operator_fortran_reduced(
+    unreduced_xi = po._build_rhsmode1_preconditioner_operator_fortran_reduced(
         op,
         preconditioner_x=1,
         preconditioner_xi=0,
@@ -217,7 +217,7 @@ def test_fortran_reduced_operator_respects_preconditioner_x_min_l_for_fp_tensor(
         ),
     )
 
-    reduced = vd._build_rhsmode1_preconditioner_operator_fortran_reduced(
+    reduced = po._build_rhsmode1_preconditioner_operator_fortran_reduced(
         fp_op,
         preconditioner_x=1,
         preconditioner_xi=1,
@@ -235,14 +235,14 @@ def test_fortran_reduced_operator_is_rhs1_only() -> None:
     op = _fake_rhs1_op()
     rhs2_op = _Op(rhs_mode=2, fblock=op.fblock)
 
-    assert vd._build_rhsmode1_preconditioner_operator_fortran_reduced(rhs2_op) is rhs2_op
+    assert po._build_rhsmode1_preconditioner_operator_fortran_reduced(rhs2_op) is rhs2_op
 
 
 def test_transport_fortran_reduced_operator_applies_to_rhs2_and_keeps_default_angular() -> None:
     op = _fake_rhs1_op()
     rhs2_op = _Op(rhs_mode=2, fblock=op.fblock)
 
-    reduced = vd._build_transport_preconditioner_operator_fortran_reduced(rhs2_op)
+    reduced = po._build_transport_preconditioner_operator_fortran_reduced(rhs2_op)
 
     assert reduced is not rhs2_op
     assert reduced.rhs_mode == 2
@@ -264,7 +264,7 @@ def test_transport_fortran_reduced_operator_can_drop_angular_couplings() -> None
     op = _fake_rhs1_op()
     rhs3_op = _Op(rhs_mode=3, fblock=op.fblock)
 
-    reduced = vd._build_transport_preconditioner_operator_fortran_reduced(
+    reduced = po._build_transport_preconditioner_operator_fortran_reduced(
         rhs3_op,
         keep_theta_zeta=False,
     )
@@ -295,7 +295,7 @@ def test_host_sparse_builder_accepts_symbolic_frontal_default(monkeypatch: pytes
     def _matvec(x: jnp.ndarray) -> jnp.ndarray:
         return jnp.asarray(a) @ x
 
-    _operator, factor = vd._build_host_sparse_direct_factor_from_matvec(
+    _operator, factor = sparse_direct.build_host_sparse_direct_factor_from_matvec(
         matvec=_matvec,
         n=4,
         dtype=jnp.float64,
@@ -332,7 +332,7 @@ def test_host_sparse_builder_env_accepts_symbolic_superblock(monkeypatch: pytest
     def _matvec(x: jnp.ndarray) -> jnp.ndarray:
         return jnp.asarray(a) @ x
 
-    _operator, factor = vd._build_host_sparse_direct_factor_from_matvec(
+    _operator, factor = sparse_direct.build_host_sparse_direct_factor_from_matvec(
         matvec=_matvec,
         n=4,
         dtype=jnp.float64,
@@ -367,7 +367,7 @@ def test_host_sparse_builder_env_accepts_symbolic_nd_frontal(monkeypatch: pytest
     def _matvec(x: jnp.ndarray) -> jnp.ndarray:
         return jnp.asarray(a) @ x
 
-    _operator, factor = vd._build_host_sparse_direct_factor_from_matvec(
+    _operator, factor = sparse_direct.build_host_sparse_direct_factor_from_matvec(
         matvec=_matvec,
         n=n,
         dtype=jnp.float64,
@@ -403,7 +403,7 @@ def test_host_sparse_builder_env_accepts_symbolic_nd_frontal(monkeypatch: pytest
 def test_transport_direct_reduced_pmat_matches_matrix_free_active_operator(input_path: Path) -> None:
     nml = read_sfincs_input(input_path)
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    op_pc = vd._build_transport_preconditioner_operator_fortran_reduced(
+    op_pc = po._build_transport_preconditioner_operator_fortran_reduced(
         op,
         preconditioner_x=1,
         preconditioner_xi=1,
@@ -943,7 +943,7 @@ def test_transport_fortran_reduced_lu_admits_nd_frontal_residual_polish_on_reduc
 def test_transport_direct_pmat_physics_coarse_basis_includes_constraint_modes() -> None:
     nml = read_sfincs_input("tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    op_pc = vd._build_transport_preconditioner_operator_fortran_reduced(
+    op_pc = po._build_transport_preconditioner_operator_fortran_reduced(
         op,
         preconditioner_x=1,
         preconditioner_xi=1,
@@ -1076,5 +1076,5 @@ def test_fortran_reduced_pc_gmres_aliases_are_classified_as_sparse_host_pc() -> 
         "petsc_like_pc_gmres",
     }
 
-    assert expected_aliases == vd._SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS
-    assert expected_aliases <= vd._SPARSE_HOST_PC_GMRES_SOLVE_METHODS
+    assert expected_aliases == SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS
+    assert expected_aliases <= SPARSE_HOST_PC_GMRES_SOLVE_METHODS

@@ -1628,6 +1628,15 @@ Completed work:
   `tests/test_v3_sparse_pattern.py` as `141 passed in 138.04 s`;
   `tests/test_source_tree_consolidation.py` as `39 passed in 4.49 s`; Ruff and
   py_compile passed.
+- Tranche 98: removed the remaining `profile_solve` private-helper dependency
+  from `tests/test_fortran_reduced_preconditioner.py`. The test now imports
+  RHSMode-1/RHSMode-2/3 preconditioner-operator builders from
+  `solvers/preconditioning.py`, direct sparse factor construction from
+  `problems/profile_sparse_direct.py`, and sparse-host solve-method
+  classifications from `problems/profile_setup.py`. Focused validation passed:
+  `tests/test_fortran_reduced_preconditioner.py` as `29 passed in 16.89 s`;
+  `tests/test_source_tree_consolidation.py` as `39 passed in 4.61 s`; Ruff and
+  py_compile passed.
 
 Remaining consolidation steps:
 
