@@ -1,6 +1,6 @@
 """Build v3 grids + simplified Boozer geometry (geometryScheme=4).
 
-This example does *not* require the Fortran code. It demonstrates the current sfincs_jax
+This example does *not* require the Fortran code. It demonstrates the supported sfincs_jax
 Python API surface:
 
 - Parse an `input.namelist`
@@ -9,6 +9,8 @@ Python API surface:
 """
 
 from __future__ import annotations
+
+# ruff: noqa: E402
 
 import argparse
 import sys
