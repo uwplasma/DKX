@@ -7,7 +7,7 @@ from pathlib import Path
 from scripts.check_research_lanes import main as check_research_lanes_main
 import pytest
 
-from sfincs_jax.validation.research_lanes import (
+from sfincs_jax.validation.artifacts import (
     ResearchLanePolicyError,
     check_research_lane_completion_file,
     research_lane_completion_errors,
