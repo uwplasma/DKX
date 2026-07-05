@@ -56,6 +56,44 @@ CANONICAL_WORKFLOW_ENTRYPOINTS = {
     "performance/benchmark_transport_parallel_scaling.py",
 }
 
+APPLICATION_RECIPE_ENTRYPOINTS = {
+    "tutorials/run_quick_output_and_plot.py",
+    "getting_started/write_and_plot_multiple_formats.py",
+    "getting_started/write_sfincs_output_tokamak.py",
+    "sfincs_examples/tokamak_1species_FPCollisions_noEr/input.namelist",
+    "getting_started/write_sfincs_output_vmec.py",
+    "vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py",
+    "transport/transport_matrix_rhsmode2_and_rhsmode3.py",
+    "transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py",
+    "vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py",
+    "tutorials/03_bootstrap_redl_and_optimization.ipynb",
+    "optimization/evaluate_sfincs_jax_promotion_scan.py",
+    "autodiff/autodiff_gradient_nu_n_residual.py",
+    "autodiff/implicit_diff_through_gmres_solve_scheme5.py",
+    "autodiff/vmec_jax_to_boozer_sfincs_pipeline.py",
+    "tutorials/04_geometry_validation_and_performance.ipynb",
+    "optimization/qa_nfp2_sfincs_jax_objectives.py",
+    "optimization/QA_optimization_bootstrap_current.py",
+    "performance/benchmark_output_formats.py",
+    "performance/benchmark_transport_parallel_scaling.py",
+    "parity/output_parity_vs_fortran_fixture.py",
+    "publication_figures/generate_fortran_suite_benchmark_summary.py",
+}
+
+APPLICATION_RECIPE_LABELS = {
+    "CLI output and diagnostics panel",
+    "Analytic tokamak input",
+    "VMEC `wout_path` input",
+    "RHSMode=2/3 transport matrix",
+    "Bootstrap current vs Redl",
+    "Ambipolar electric-field scan",
+    "Differentiable residual or flux",
+    "VMEC/Boozer/JAX handoff",
+    "QA/QI optimization objective",
+    "CPU/GPU timing and output I/O",
+    "Frozen Fortran-v3 parity check",
+}
+
 DISALLOWED_TRACKED_PARTS = {
     "__pycache__",
     ".ipynb_checkpoints",
@@ -124,6 +162,7 @@ def test_examples_readme_is_a_complete_user_navigation_map() -> None:
     readme = (EXAMPLES_ROOT / "README.md").read_text(encoding="utf-8")
     assert "### Learning Path" in readme
     assert "### Choose By Task" in readme
+    assert "### Application Recipes" in readme
     assert "### Canonical Workflow Catalog" in readme
     assert "### Folder Map" in readme
 
@@ -138,6 +177,13 @@ def test_examples_readme_is_a_complete_user_navigation_map() -> None:
         assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
 
     for entrypoint in sorted(CANONICAL_WORKFLOW_ENTRYPOINTS):
+        assert f"`{entrypoint}`" in readme, entrypoint
+        assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
+
+    for label in sorted(APPLICATION_RECIPE_LABELS):
+        assert label in readme, label
+
+    for entrypoint in sorted(APPLICATION_RECIPE_ENTRYPOINTS):
         assert f"`{entrypoint}`" in readme, entrypoint
         assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
 
