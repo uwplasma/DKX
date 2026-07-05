@@ -1590,6 +1590,14 @@ Completed work:
   as `293 passed in 205.62 s`; source-tree guard
   `tests/test_source_tree_consolidation.py` passed as `38 passed in 3.75 s`;
   Ruff, py_compile, and `git diff --check` passed.
+- Tranche 94: added a source-tree regression guard that prevents RHSMode=2/3
+  helper tests from importing transport active-DOF or reduced-Pmat builders
+  through `profile_solve` aliases. The guard deliberately exempts
+  `test_profile_solve_module_wrappers.py`, which is the compatibility-facade
+  test by design, while requiring all other behavior tests to use the transport
+  owners directly. Focused validation passed:
+  `tests/test_source_tree_consolidation.py` as `39 passed in 4.61 s`; Ruff,
+  py_compile, and `git diff --check` passed.
 
 Remaining consolidation steps:
 
