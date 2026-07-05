@@ -97,6 +97,7 @@ def test_package_readme_describes_current_source_layout() -> None:
     canonical_owner_phrases = (
         "`operators/profile_system.py`: RHSMode-1 full-system operator",
         "`operators/profile_layout.py`: RHSMode-1 full, active, field-split",
+        "`problems/transport_parallel_runtime.py`: RHSMode-2/3 whichRHS",
         "`solvers/preconditioning.py`: shared preconditioner caches",
         "`outputs/formats.py`: HDF5/NetCDF/NPZ schemas",
         "`validation/artifacts.py`: validation artifact manifests",
