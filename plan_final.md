@@ -1662,6 +1662,13 @@ Completed work:
   `examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json`.
   The next Lane-4 step is fresh CPU/GPU/Fortran evidence generation, not script
   repair.
+- Tranche 102: ran a bounded Zenodo QS bootstrap-current reference audit with
+  `run_zenodo_vmec_parity_campaign.py --mode reference-only --max-cases 2`
+  against the local QS-paper Zenodo tree. The report completed with
+  `reference_ok=2` and read full Fortran reference HDF5 files, including
+  `FSABjHat`, `FSABjHatOverRootFSAB2`, particle-flux, heat-flux, and
+  `NIterations` datasets. This verifies the QA/QH parity runner inputs before
+  launching fresh candidate solves.
 
 Remaining consolidation steps:
 
