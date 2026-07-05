@@ -1581,6 +1581,15 @@ Completed work:
   passed as `118 passed in 19.94 s`; direct import of
   `sfincs_jax.problems.transport_solve` succeeded; Ruff, py_compile, and
   `git diff --check` passed.
+- Tranche 93: moved transport active-DOF and RHSMode=2/3 reduced-Pmat test
+  checks off `profile_solve` private aliases and onto `transport_solve` /
+  `transport_linear_system` owners. RHSMode=1 compatibility checks remain on
+  `profile_solve` where they intentionally test the solve-orchestration facade.
+  Focused validation passed:
+  `tests/test_fortran_reduced_preconditioner.py tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py`
+  as `293 passed in 205.62 s`; source-tree guard
+  `tests/test_source_tree_consolidation.py` passed as `38 passed in 3.75 s`;
+  Ruff, py_compile, and `git diff --check` passed.
 
 Remaining consolidation steps:
 

@@ -22,6 +22,7 @@ from sfincs_jax.problems.profile_residual import (
     apply_device_subspace_residual_equation_correction,
     build_rhs1_xblock_post_coarse_directions,
 )
+from sfincs_jax.problems.transport_linear_system import transport_active_dof_indices
 from sfincs_jax.operators.profile_layout import RHS1BlockLayout
 from sfincs_jax.solvers.preconditioner_xblock_policy import resolve_rhs1_xblock_sparse_pc_policy
 from sfincs_jax.solver import FlexibleGMRESSolveResult
@@ -3223,7 +3224,7 @@ def test_sparse_pc_gmres_active_dof_reduces_truncated_pas_system(monkeypatch) ->
     assert result.metadata["sparse_pc_active_dof"] is True
     assert result.metadata["sparse_pattern_scope"] == "active_dof"
     assert result.metadata["sparse_pc_linear_size"] < result.metadata["sparse_pc_full_size"]
-    active_idx = profile_solve_module._transport_active_dof_indices(result.op)
+    active_idx = transport_active_dof_indices(result.op)
     inactive_idx = np.setdiff1d(np.arange(int(result.op.total_size), dtype=np.int32), active_idx)
     assert np.allclose(np.asarray(result.x)[inactive_idx], 0.0)
     residual = result.rhs[active_idx] - apply_v3_full_system_operator(result.op, result.x)[active_idx]
@@ -4139,7 +4140,7 @@ def test_xblock_sparse_pc_assembled_operator_active_dof_uses_sliced_budget(monke
     nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
 
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active_idx = profile_solve_module._transport_active_dof_indices(op)
+    active_idx = transport_active_dof_indices(op)
     full_summary = estimate_v3_full_system_conservative_sparsity_summary(op)
     full_csr_nbytes = int(full_summary.nnz * 12 + (full_summary.shape[0] + 1) * 4)
     full_sliced_pattern = v3_full_system_conservative_sparsity_pattern(op)[active_idx, :][:, active_idx].tocsr()

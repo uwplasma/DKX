@@ -15,6 +15,7 @@ from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.problems.profile_policies import (
     resolve_active_projected_preconditioner_auto_policy,
 )
+from sfincs_jax.problems.transport_linear_system import transport_active_dof_indices
 from sfincs_jax.solvers.preconditioner_symbolic_policy import (
     active_fortran_v3_reduced_permc_candidates,
     resolve_active_fortran_v3_reduced_factor_policy,
@@ -572,7 +573,7 @@ def test_driver_structured_full_csr_bundle_matches_full_and_active_operator() ->
     expected_full = np.asarray(apply_v3_full_system_operator(op, jnp.asarray(x)))
     np.testing.assert_allclose(full_bundle.matvec(x), expected_full, rtol=1.0e-12, atol=1.0e-12)
 
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     active_bundle = vd._try_build_structured_rhs1_full_csr_operator_bundle(
         op=op,
         active_indices=active,
@@ -723,7 +724,7 @@ def test_structured_full_csr_active_direct_solve_reaches_true_residual() -> None
     nml = read_sfincs_input(REF / "quick_2species_FPCollisions_noEr.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     rhs = rhs_v3_full_system(op)
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
 
     result = solve_structured_rhs1_full_csr(
         op,
@@ -755,7 +756,7 @@ def test_active_projected_spilu_preconditioner_is_memory_gated() -> None:
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsc()
 
     rejected = build_active_projected_rhs1_full_csr_preconditioner(
@@ -871,7 +872,7 @@ def test_active_fortran_v3_reduced_lu_preconditioner_drops_default_couplings(mon
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsc()
 
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_FACTOR_KIND", "lu")
@@ -1245,7 +1246,7 @@ def test_direct_reduced_pmat_emission_matches_legacy_active_csr_reduction() -> N
     nml = read_sfincs_input(REF / "quick_2species_FPCollisions_noEr.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
     layout = RHS1BlockLayout.from_operator(op)
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
 
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
@@ -1281,7 +1282,7 @@ def test_direct_reduced_pmat_preconditioner_solves_small_exact_pmat(monkeypatch)
     clear_structured_rhs1_full_csr_cache(clear_fblock_cache=True)
     nml = read_sfincs_input(REF / "quick_2species_FPCollisions_noEr.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_X", "0")
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_XI", "0")
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_SPECIES", "0")
@@ -1664,7 +1665,7 @@ def test_active_fortran_v3_reduced_preconditioner_is_memory_gated(monkeypatch) -
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsc()
 
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_FACTOR_KIND", "lu")
@@ -1688,7 +1689,7 @@ def test_active_xblock_preconditioner_can_scale_local_blocks(monkeypatch) -> Non
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsc()
 
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_XBLOCK_SCALE", "1")
@@ -1718,7 +1719,7 @@ def test_active_xblock_ilu_preconditioner_builds_bounded_partial_blocks(monkeypa
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsc()
 
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_XBLOCK_FACTOR_KIND", "ilu")
@@ -1753,7 +1754,7 @@ def test_active_ell_band_schur_preconditioner_builds_coupled_pitch_band(monkeypa
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsc()
 
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ELL_BAND_CENTER", "2")
@@ -1786,7 +1787,7 @@ def test_active_projected_auto_ladder_can_select_ell_band(monkeypatch) -> None:
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsc()
 
     monkeypatch.setenv(
@@ -1817,7 +1818,7 @@ def test_active_projected_default_auto_ladder_avoids_tail_sparse_path(monkeypatc
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsc()
 
     monkeypatch.delenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_CANDIDATES", raising=False)
@@ -1914,7 +1915,7 @@ def test_active_schwarz_sparse_coarse_preconditioner_builds_two_level_candidate(
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsc()
 
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SCHWARZ_LMAX", "2")
@@ -1949,7 +1950,7 @@ def test_active_projected_auto_ladder_can_select_schwarz_sparse_coarse(monkeypat
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsc()
 
     monkeypatch.setenv(
@@ -1981,7 +1982,7 @@ def test_active_global_sparse_lu_preconditioner_solves_active_csr(monkeypatch) -
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsc()
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_GLOBAL_FACTOR_MAX_SIZE", "1000000")
 
@@ -2011,7 +2012,7 @@ def test_active_global_sparse_factor_is_memory_gated(monkeypatch) -> None:
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsc()
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_GLOBAL_FACTOR_MAX_SIZE", "1000000")
 
@@ -2035,7 +2036,7 @@ def test_active_xell_window_lsq_schur_preconditioner_builds_and_applies(monkeypa
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsc()
 
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_XELL_WINDOW_SPEC", "0:0:2")
@@ -2067,7 +2068,7 @@ def test_active_xell_window_lsq_schur_preconditioner_is_memory_gated(monkeypatch
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsc()
 
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_XELL_WINDOW_SPEC", "0:0:2")
@@ -2401,7 +2402,7 @@ def test_active_global_field_split_schur_builds_and_applies_on_quick_active_csr(
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsc()
 
     pc = build_active_projected_rhs1_full_csr_preconditioner(
@@ -3948,7 +3949,7 @@ def test_structured_full_csr_active_global_field_split_schur_gmres_reaches_true_
     nml = read_sfincs_input(REF / "quick_2species_FPCollisions_noEr.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
     rhs = rhs_v3_full_system(op)
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
 
     result = solve_structured_rhs1_full_csr(
         op,
@@ -4095,7 +4096,7 @@ def test_active_projected_coarse_residual_improves_physical_one_step_residual() 
     nml = read_sfincs_input(REF / "quick_2species_FPCollisions_noEr.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     rhs = np.asarray(rhs_v3_full_system(op), dtype=np.float64)
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
     active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsr()
@@ -4131,7 +4132,7 @@ def test_structured_full_csr_active_ilu_and_coarse_lgmres_reach_shifted_true_res
     nml = read_sfincs_input(REF / "quick_2species_FPCollisions_noEr.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
     rhs = rhs_v3_full_system(op)
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
 
     ilu_result = solve_structured_rhs1_full_csr(
         op,
@@ -4196,7 +4197,7 @@ def test_structured_full_csr_active_low_l_schur_gmres_reaches_physical_true_resi
     nml = read_sfincs_input(REF / "quick_2species_FPCollisions_noEr.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     rhs = rhs_v3_full_system(op)
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
 
     result = solve_structured_rhs1_full_csr(
         op,
@@ -4235,7 +4236,7 @@ def test_structured_full_csr_active_overlap_schwarz_gmres_reaches_shifted_true_r
     nml = read_sfincs_input(REF / "quick_2species_FPCollisions_noEr.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
     rhs = rhs_v3_full_system(op)
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
 
     result = solve_structured_rhs1_full_csr(
         op,
@@ -4276,7 +4277,7 @@ def test_structured_full_csr_active_overlap_schwarz_is_memory_gated(monkeypatch)
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
     selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
     assert selection.selected and selection.matrix is not None
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
 
     rejected = build_active_projected_rhs1_full_csr_preconditioner(
         matrix=selection.matrix[active[:, None], active],

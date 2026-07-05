@@ -12,7 +12,17 @@ from sfincs_jax.solvers.explicit_sparse import factorize_host_sparse_operator
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.solvers import preconditioning as po
 import sfincs_jax.problems.profile_sparse_direct as sparse_direct
-from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
+import sfincs_jax.problems.transport_solve as transport_solve
+from sfincs_jax.operators.profile_system import (
+    apply_v3_full_system_operator_cached,
+    full_system_operator_from_namelist,
+)
+from sfincs_jax.problems.transport_linear_system import (
+    _build_rhsmode23_direct_pmat_physics_coarse_basis,
+    _try_build_rhsmode23_fp_direct_active_operator_bundle,
+    _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle,
+    transport_active_dof_indices,
+)
 import sfincs_jax.problems.profile_solve as vd
 
 
@@ -400,10 +410,10 @@ def test_transport_direct_reduced_pmat_matches_matrix_free_active_operator(input
         preconditioner_species=1,
         keep_theta_zeta=True,
     )
-    active = vd._transport_active_dof_indices(op_pc)
+    active = transport_active_dof_indices(op_pc)
     shift = 1.0e-10
 
-    result = vd._try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle(
+    result = _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle(
         op_pc=op_pc,
         active_indices=active,
         factor_dtype=np.dtype(np.float64),
@@ -423,7 +433,7 @@ def test_transport_direct_reduced_pmat_matches_matrix_free_active_operator(input
         x_reduced = rng.normal(size=int(active.size))
         x_full = np.zeros((int(op_pc.total_size),), dtype=np.float64)
         x_full[np.asarray(active, dtype=np.int64)] = x_reduced
-        y_true_full = vd.apply_v3_full_system_operator_cached(op_pc, jnp.asarray(x_full, dtype=jnp.float64))
+        y_true_full = apply_v3_full_system_operator_cached(op_pc, jnp.asarray(x_full, dtype=jnp.float64))
         y_true = np.asarray(y_true_full, dtype=np.float64)[np.asarray(active, dtype=np.int64)] + shift * x_reduced
         y_direct = bundle.matvec(x_reduced)
         np.testing.assert_allclose(y_direct, y_true, rtol=2e-11, atol=2e-10)
@@ -438,7 +448,7 @@ def test_transport_fortran_reduced_lu_attaches_symbolic_metadata(monkeypatch) ->
 
     nml = read_sfincs_input("tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active = np.asarray(vd._transport_active_dof_indices(op), dtype=np.int64)
+    active = np.asarray(transport_active_dof_indices(op), dtype=np.int64)
     active_jnp = jnp.asarray(active, dtype=jnp.int32)
     full_to_active = np.zeros((int(op.total_size) + 1,), dtype=np.int32)
     full_to_active[active + 1] = np.arange(1, int(active.size) + 1, dtype=np.int32)
@@ -451,7 +461,7 @@ def test_transport_fortran_reduced_lu_attaches_symbolic_metadata(monkeypatch) ->
         padded = jnp.concatenate([jnp.zeros((1,), dtype=v_reduced.dtype), v_reduced], axis=0)
         return padded[full_to_active_jnp[1:]]
 
-    preconditioner = vd._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
+    preconditioner = transport_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         op=op,
         reduce_full=_reduce_full,
         expand_reduced=_expand_reduced,
@@ -483,7 +493,7 @@ def test_transport_fortran_reduced_lu_defaults_to_mumps_like_symbolic_ordering(m
 
     nml = read_sfincs_input("tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active = np.asarray(vd._transport_active_dof_indices(op), dtype=np.int64)
+    active = np.asarray(transport_active_dof_indices(op), dtype=np.int64)
     active_jnp = jnp.asarray(active, dtype=jnp.int32)
     full_to_active = np.zeros((int(op.total_size) + 1,), dtype=np.int32)
     full_to_active[active + 1] = np.arange(1, int(active.size) + 1, dtype=np.int32)
@@ -496,7 +506,7 @@ def test_transport_fortran_reduced_lu_defaults_to_mumps_like_symbolic_ordering(m
         padded = jnp.concatenate([jnp.zeros((1,), dtype=v_reduced.dtype), v_reduced], axis=0)
         return padded[full_to_active_jnp[1:]]
 
-    preconditioner = vd._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
+    preconditioner = transport_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         op=op,
         reduce_full=_reduce_full,
         expand_reduced=_expand_reduced,
@@ -524,7 +534,7 @@ def test_transport_fortran_reduced_lu_accepts_symbolic_block_schur_metadata(monk
 
     nml = read_sfincs_input("tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active = np.asarray(vd._transport_active_dof_indices(op), dtype=np.int64)
+    active = np.asarray(transport_active_dof_indices(op), dtype=np.int64)
     active_jnp = jnp.asarray(active, dtype=jnp.int32)
     full_to_active = np.zeros((int(op.total_size) + 1,), dtype=np.int32)
     full_to_active[active + 1] = np.arange(1, int(active.size) + 1, dtype=np.int32)
@@ -537,7 +547,7 @@ def test_transport_fortran_reduced_lu_accepts_symbolic_block_schur_metadata(monk
         padded = jnp.concatenate([jnp.zeros((1,), dtype=v_reduced.dtype), v_reduced], axis=0)
         return padded[full_to_active_jnp[1:]]
 
-    preconditioner = vd._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
+    preconditioner = transport_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         op=op,
         reduce_full=_reduce_full,
         expand_reduced=_expand_reduced,
@@ -572,7 +582,7 @@ def test_transport_fortran_reduced_symbolic_prefill_guard_skips_factorization(mo
 
     nml = read_sfincs_input("tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active = np.asarray(vd._transport_active_dof_indices(op), dtype=np.int64)
+    active = np.asarray(transport_active_dof_indices(op), dtype=np.int64)
     active_jnp = jnp.asarray(active, dtype=jnp.int32)
     full_to_active = np.zeros((int(op.total_size) + 1,), dtype=np.int32)
     full_to_active[active + 1] = np.arange(1, int(active.size) + 1, dtype=np.int32)
@@ -585,7 +595,7 @@ def test_transport_fortran_reduced_symbolic_prefill_guard_skips_factorization(mo
         padded = jnp.concatenate([jnp.zeros((1,), dtype=v_reduced.dtype), v_reduced], axis=0)
         return padded[full_to_active_jnp[1:]]
 
-    preconditioner = vd._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
+    preconditioner = transport_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         op=op,
         reduce_full=_reduce_full,
         expand_reduced=_expand_reduced,
@@ -620,7 +630,7 @@ def test_transport_fortran_reduced_nd_setup_guard_skips_pattern_probe(monkeypatc
 
     nml = read_sfincs_input("tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active = np.asarray(vd._transport_active_dof_indices(op), dtype=np.int64)
+    active = np.asarray(transport_active_dof_indices(op), dtype=np.int64)
     active_jnp = jnp.asarray(active, dtype=jnp.int32)
     full_to_active = np.zeros((int(op.total_size) + 1,), dtype=np.int32)
     full_to_active[active + 1] = np.arange(1, int(active.size) + 1, dtype=np.int32)
@@ -633,7 +643,7 @@ def test_transport_fortran_reduced_nd_setup_guard_skips_pattern_probe(monkeypatc
         padded = jnp.concatenate([jnp.zeros((1,), dtype=v_reduced.dtype), v_reduced], axis=0)
         return padded[full_to_active_jnp[1:]]
 
-    preconditioner = vd._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
+    preconditioner = transport_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         op=op,
         reduce_full=_reduce_full,
         expand_reduced=_expand_reduced,
@@ -664,7 +674,7 @@ def test_transport_fortran_reduced_auto_exact_rescue_after_symbolic_prefill_guar
 
     nml = read_sfincs_input("tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active = np.asarray(vd._transport_active_dof_indices(op), dtype=np.int64)
+    active = np.asarray(transport_active_dof_indices(op), dtype=np.int64)
     active_jnp = jnp.asarray(active, dtype=jnp.int32)
     full_to_active = np.zeros((int(op.total_size) + 1,), dtype=np.int32)
     full_to_active[active + 1] = np.arange(1, int(active.size) + 1, dtype=np.int32)
@@ -677,7 +687,7 @@ def test_transport_fortran_reduced_auto_exact_rescue_after_symbolic_prefill_guar
         padded = jnp.concatenate([jnp.zeros((1,), dtype=v_reduced.dtype), v_reduced], axis=0)
         return padded[full_to_active_jnp[1:]]
 
-    preconditioner = vd._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
+    preconditioner = transport_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         op=op,
         reduce_full=_reduce_full,
         expand_reduced=_expand_reduced,
@@ -713,11 +723,11 @@ def test_transport_fortran_reduced_auto_exact_rescue_factor_entry_guard(monkeypa
     def fail_factor_build(*_args, **_kwargs):
         raise AssertionError("factor-entry guard should reject exact rescue before factorization")
 
-    monkeypatch.setattr(vd, "_build_host_sparse_direct_factor_from_matvec", fail_factor_build)
+    monkeypatch.setattr(transport_solve, "_build_host_sparse_direct_factor_from_matvec", fail_factor_build)
 
     nml = read_sfincs_input("tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active = np.asarray(vd._transport_active_dof_indices(op), dtype=np.int64)
+    active = np.asarray(transport_active_dof_indices(op), dtype=np.int64)
     active_jnp = jnp.asarray(active, dtype=jnp.int32)
     full_to_active = np.zeros((int(op.total_size) + 1,), dtype=np.int32)
     full_to_active[active + 1] = np.arange(1, int(active.size) + 1, dtype=np.int32)
@@ -730,7 +740,7 @@ def test_transport_fortran_reduced_auto_exact_rescue_factor_entry_guard(monkeypa
         padded = jnp.concatenate([jnp.zeros((1,), dtype=v_reduced.dtype), v_reduced], axis=0)
         return padded[full_to_active_jnp[1:]]
 
-    preconditioner = vd._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
+    preconditioner = transport_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         op=op,
         reduce_full=_reduce_full,
         expand_reduced=_expand_reduced,
@@ -759,7 +769,7 @@ def test_transport_fortran_reduced_lu_rescues_rejected_symbolic_factor_with_dire
 
     nml = read_sfincs_input("tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active = np.asarray(vd._transport_active_dof_indices(op), dtype=np.int64)
+    active = np.asarray(transport_active_dof_indices(op), dtype=np.int64)
     active_jnp = jnp.asarray(active, dtype=jnp.int32)
     full_to_active = np.zeros((int(op.total_size) + 1,), dtype=np.int32)
     full_to_active[active + 1] = np.arange(1, int(active.size) + 1, dtype=np.int32)
@@ -772,7 +782,7 @@ def test_transport_fortran_reduced_lu_rescues_rejected_symbolic_factor_with_dire
         padded = jnp.concatenate([jnp.zeros((1,), dtype=v_reduced.dtype), v_reduced], axis=0)
         return padded[full_to_active_jnp[1:]]
 
-    preconditioner = vd._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
+    preconditioner = transport_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         op=op,
         reduce_full=_reduce_full,
         expand_reduced=_expand_reduced,
@@ -822,7 +832,7 @@ def test_transport_fortran_reduced_lu_admits_blr_frontal_schur_on_reduced_geomet
 
     nml = read_sfincs_input(input_path)
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active = np.asarray(vd._transport_active_dof_indices(op), dtype=np.int64)
+    active = np.asarray(transport_active_dof_indices(op), dtype=np.int64)
     active_jnp = jnp.asarray(active, dtype=jnp.int32)
     full_to_active = np.zeros((int(op.total_size) + 1,), dtype=np.int32)
     full_to_active[active + 1] = np.arange(1, int(active.size) + 1, dtype=np.int32)
@@ -835,7 +845,7 @@ def test_transport_fortran_reduced_lu_admits_blr_frontal_schur_on_reduced_geomet
         padded = jnp.concatenate([jnp.zeros((1,), dtype=v_reduced.dtype), v_reduced], axis=0)
         return padded[full_to_active_jnp[1:]]
 
-    preconditioner = vd._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
+    preconditioner = transport_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         op=op,
         reduce_full=_reduce_full,
         expand_reduced=_expand_reduced,
@@ -889,7 +899,7 @@ def test_transport_fortran_reduced_lu_admits_nd_frontal_residual_polish_on_reduc
 
     nml = read_sfincs_input(input_path)
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active = np.asarray(vd._transport_active_dof_indices(op), dtype=np.int64)
+    active = np.asarray(transport_active_dof_indices(op), dtype=np.int64)
     active_jnp = jnp.asarray(active, dtype=jnp.int32)
     full_to_active = np.zeros((int(op.total_size) + 1,), dtype=np.int32)
     full_to_active[active + 1] = np.arange(1, int(active.size) + 1, dtype=np.int32)
@@ -902,7 +912,7 @@ def test_transport_fortran_reduced_lu_admits_nd_frontal_residual_polish_on_reduc
         padded = jnp.concatenate([jnp.zeros((1,), dtype=v_reduced.dtype), v_reduced], axis=0)
         return padded[full_to_active_jnp[1:]]
 
-    preconditioner = vd._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
+    preconditioner = transport_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         op=op,
         reduce_full=_reduce_full,
         expand_reduced=_expand_reduced,
@@ -940,8 +950,8 @@ def test_transport_direct_pmat_physics_coarse_basis_includes_constraint_modes() 
         preconditioner_species=1,
         keep_theta_zeta=True,
     )
-    active = np.asarray(vd._transport_active_dof_indices(op_pc), dtype=np.int64)
-    result = vd._try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle(
+    active = np.asarray(transport_active_dof_indices(op_pc), dtype=np.int64)
+    result = _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle(
         op_pc=op_pc,
         active_indices=active,
         factor_dtype=np.dtype(np.float64),
@@ -957,7 +967,7 @@ def test_transport_direct_pmat_physics_coarse_basis_includes_constraint_modes() 
         symbolic_block_size=128,
     )
 
-    basis, names = vd._build_rhsmode23_direct_pmat_physics_coarse_basis(
+    basis, names = _build_rhsmode23_direct_pmat_physics_coarse_basis(
         op=op_pc,
         active_indices=active,
         max_cols=64,
@@ -983,9 +993,9 @@ def test_transport_direct_pmat_physics_coarse_basis_includes_constraint_modes() 
 def test_transport_direct_active_true_operator_matches_matrix_free_active_operator(input_path: Path) -> None:
     nml = read_sfincs_input(input_path)
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active = vd._transport_active_dof_indices(op)
+    active = transport_active_dof_indices(op)
 
-    result = vd._try_build_rhsmode23_fp_direct_active_operator_bundle(
+    result = _try_build_rhsmode23_fp_direct_active_operator_bundle(
         op=op,
         active_indices=active,
         factor_dtype=np.dtype(np.float64),
@@ -1005,7 +1015,7 @@ def test_transport_direct_active_true_operator_matches_matrix_free_active_operat
         x_reduced = rng.normal(size=int(active.size))
         x_full = np.zeros((int(op.total_size),), dtype=np.float64)
         x_full[active_i64] = x_reduced
-        y_true_full = vd.apply_v3_full_system_operator_cached(op, jnp.asarray(x_full, dtype=jnp.float64))
+        y_true_full = apply_v3_full_system_operator_cached(op, jnp.asarray(x_full, dtype=jnp.float64))
         y_true = np.asarray(y_true_full, dtype=np.float64)[active_i64]
         y_direct = bundle.matvec(x_reduced)
         np.testing.assert_allclose(y_direct, y_true, rtol=2e-11, atol=2e-10)
@@ -1015,7 +1025,7 @@ def test_transport_direct_active_block_schur_closes_true_tail_residual(monkeypat
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_ADMISSION", "0")
     nml = read_sfincs_input("tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active = np.asarray(vd._transport_active_dof_indices(op), dtype=np.int64)
+    active = np.asarray(transport_active_dof_indices(op), dtype=np.int64)
     active_jnp = jnp.asarray(active, dtype=jnp.int32)
     full_to_active = np.zeros((int(op.total_size) + 1,), dtype=np.int32)
     full_to_active[active + 1] = np.arange(1, int(active.size) + 1, dtype=np.int32)
@@ -1028,7 +1038,7 @@ def test_transport_direct_active_block_schur_closes_true_tail_residual(monkeypat
         padded = jnp.concatenate([jnp.zeros((1,), dtype=v_reduced.dtype), v_reduced], axis=0)
         return padded[full_to_active_jnp[1:]]
 
-    result = vd._try_build_rhsmode23_fp_direct_active_operator_bundle(
+    result = _try_build_rhsmode23_fp_direct_active_operator_bundle(
         op=op,
         active_indices=active,
         factor_dtype=np.dtype(np.float64),
@@ -1039,7 +1049,7 @@ def test_transport_direct_active_block_schur_closes_true_tail_residual(monkeypat
     tail_size = int(metadata["direct_pmat_tail_size"])
     assert tail_size > 0
 
-    preconditioner = vd._build_rhsmode23_fp_direct_active_block_schur_preconditioner(
+    preconditioner = transport_solve._build_rhsmode23_fp_direct_active_block_schur_preconditioner(
         op=op,
         reduce_full=_reduce_full,
         expand_reduced=_expand_reduced,
