@@ -1643,6 +1643,13 @@ Completed work:
   passed after excluding generated `docs/_build` artifacts. The documented scan
   command now excludes `docs/_build/**` so generated HTML/download text from
   upstream source PDFs does not mask source-documentation regressions.
+- Tranche 100: ran the bounded public-interface validation sweep after the
+  owner cleanup. CLI mode/plotting/output-format/API tests passed as
+  `97 passed in 2.67 s`; I/O cache/export/output-policy/precompile and
+  write-output return-result tests passed as `111 passed in 3.16 s`. Ruff
+  passed on the touched Python owners and test files. `sfincs_jax/io.py`
+  remains a small compatibility wrapper at `73` lines, below the review-lock
+  `80`-line cap.
 
 Remaining consolidation steps:
 
