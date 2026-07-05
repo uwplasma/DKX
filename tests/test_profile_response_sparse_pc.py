@@ -528,6 +528,518 @@ def test_run_xblock_sparse_pc_branch_disabled_context_returns_none() -> None:
     assert result is None
 
 
+class _DefaultSparseSolveValues(dict):
+    def __getitem__(self, key):
+        return self.get(key, None)
+
+
+def test_requested_sparse_pc_gmres_branch_returns_none_when_method_not_requested() -> None:
+    values = _DefaultSparseSolveValues(
+        {
+            "_SPARSE_HOST_PC_GMRES_SOLVE_METHODS": frozenset({"sparse_pc_gmres"}),
+            "_SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS": frozenset({"xblock_sparse_pc_gmres"}),
+            "solve_method_kind_explicit": "gmres",
+        }
+    )
+
+    result = sparse_pc_module.try_run_requested_sparse_pc_gmres_branch(
+        sparse_pc_module.RequestedSparsePCGMRESBranchContext(values=values)
+    )
+
+    assert result is None
+
+
+def test_sparse_pc_factor_preflight_reports_real_residual_and_seed() -> None:
+    emits: list[str] = []
+    rhs = jnp.asarray([2.0, 0.0], dtype=jnp.float64)
+
+    result = sparse_pc_module.run_sparse_pc_factor_preflight(
+        sparse_pc_module.SparsePCFactorPreflightRunContext(
+            rhs=rhs,
+            rhs_norm=2.0,
+            target=1.5,
+            preconditioner=lambda vec: 0.5 * vec,
+            matvec=lambda vec: vec,
+            diagnostics=lambda **_kwargs: {"selected": False},
+            layout=None,
+            active_indices=None,
+            seed_enabled=True,
+            max_target_ratio=1.0,
+            emit=lambda _level, message: emits.append(message),
+        )
+    )
+
+    assert result.residual_before == 2.0
+    assert result.residual_after == pytest.approx(1.0)
+    assert result.improvement_ratio == pytest.approx(2.0)
+    assert result.target_ratio == pytest.approx(2.0 / 3.0)
+    assert result.passed
+    assert result.seed_used
+    assert result.x0_seed is not None
+    assert any("factor preflight" in message for message in emits)
+
+
+def test_sparse_pc_auto_preflight_retry_noop_preserves_state() -> None:
+    factor = SimpleNamespace(kind="active_fortran_v3_reduced_lu")
+    residual = jnp.asarray([1.0], dtype=jnp.float64)
+
+    result = sparse_pc_module.run_sparse_pc_auto_preflight_retry_stage(
+        sparse_pc_module.SparsePCAutoPreflightRetryStageContext(
+            env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_AUTO_PREFLIGHT_RETRY": "0"},
+            structured_pc_ready=True,
+            structured_pc_preflight_required=True,
+            factor_preflight_passed=False,
+            direct_tail_structured_pc_requested="auto",
+            direct_tail_operator_bundle=SimpleNamespace(matrix=None),
+            direct_tail_structured_layout=object(),
+            direct_tail_structured_active_indices=np.asarray([0], dtype=np.int64),
+            direct_tail_structured_max_nbytes=1024,
+            direct_tail_structured_pc_selected=False,
+            direct_tail_structured_pc_reason=None,
+            direct_tail_structured_pc_metadata={},
+            operator_bundle_pc=None,
+            factor_bundle_pc=factor,
+            pc_factor_s=1.0,
+            pc_reg=1.0e-12,
+            preconditioner_x=0,
+            preconditioner_xi=0,
+            preconditioner_species=0,
+            preconditioner_x_min_l=0,
+            sparse_pc_rhs=residual,
+            sparse_pc_linear_size=1,
+            structured_pc_preflight_required_min_size=1,
+            factor_preflight_max_target_ratio=10.0,
+            factor_preflight_residual_before=2.0,
+            factor_preflight_residual_after=1.0,
+            factor_preflight_residual_diagnostics=None,
+            factor_preflight_improvement_ratio=2.0,
+            factor_preflight_target_ratio=1.0,
+            factor_preflight_seed_enabled=True,
+            factor_preflight_seed_used=False,
+            residual_vec_current=residual,
+            target=1.0,
+            matvec_no_count=lambda vec: vec,
+            diagnostics=lambda **_kwargs: {},
+            layout=None,
+            active_indices=None,
+            elapsed_s=lambda: 3.0,
+            emit=None,
+            structured_preconditioner_builder=lambda **_kwargs: None,
+            factor_bundle_factory=lambda **_kwargs: None,
+        )
+    )
+
+    assert not result.selected
+    assert result.attempts == ()
+    assert result.factor_bundle_pc is factor
+    assert result.pc_factor_s == pytest.approx(1.0)
+    assert result.setup_s == pytest.approx(3.0)
+    assert result.residual_vec_current is residual
+
+
+def test_sparse_pc_residual_candidate_update_accepts_improving_candidate() -> None:
+    old_factor = SimpleNamespace(kind="old", factor_s=0.0)
+    new_factor = SimpleNamespace(kind="new", factor_s=0.25, metadata={"coarse_size": 2})
+    candidate_x = jnp.asarray([1.0], dtype=jnp.float64)
+    residual_vec = jnp.asarray([0.5], dtype=jnp.float64)
+    diagnostics_calls: list[jnp.ndarray] = []
+
+    result = sparse_pc_module.apply_sparse_pc_residual_candidate_update(
+        sparse_pc_module.SparsePCResidualCandidateUpdateContext(
+            label="candidate",
+            metadata_count_key="coarse_size",
+            metadata_count_label="coarse_size",
+            bundle=new_factor,
+            candidate_x=candidate_x,
+            candidate_residual_vec=residual_vec,
+            candidate_residual_after=0.5,
+            candidate_metadata=dict(new_factor.metadata),
+            factor_bundle_pc=old_factor,
+            pc_factor_s=1.0,
+            setup_s=2.0,
+            factor_preflight_residual_before=4.0,
+            factor_preflight_residual_after=2.0,
+            factor_preflight_residual_diagnostics=None,
+            factor_preflight_improvement_ratio=2.0,
+            factor_preflight_target_ratio=2.0,
+            factor_preflight_passed=False,
+            factor_preflight_seed_enabled=True,
+            factor_preflight_seed_used=False,
+            target=1.0,
+            max_target_ratio=1.0,
+            residual_vec_current=jnp.asarray([2.0], dtype=jnp.float64),
+            x0_sparse=None,
+            diagnostics=lambda **kwargs: diagnostics_calls.append(kwargs["residual"]) or {"ok": True},
+            layout=None,
+            active_indices=None,
+            elapsed_s=lambda: 3.0,
+            emit=None,
+        )
+    )
+
+    assert result.accepted
+    assert result.factor_bundle_pc is new_factor
+    assert result.pc_factor_s == pytest.approx(1.25)
+    assert result.setup_s == pytest.approx(3.0)
+    assert result.factor_preflight_residual_after == pytest.approx(0.5)
+    assert result.factor_preflight_target_ratio == pytest.approx(0.5)
+    assert result.factor_preflight_passed
+    assert result.factor_preflight_seed_used
+    assert result.x0_sparse is candidate_x
+    assert diagnostics_calls == [residual_vec]
+    assert result.metadata["base_residual_after"] == pytest.approx(2.0)
+
+
+def test_sparse_pc_residual_correction_stage_noop_preserves_state() -> None:
+    factor = SimpleNamespace(kind="active_fortran_v3_reduced_lu")
+    residual = jnp.asarray([1.0], dtype=jnp.float64)
+    values = {
+        dataclass_field.name: None
+        for dataclass_field in fields(sparse_pc_module.SparsePCResidualCorrectionStageContext)
+    }
+    values.update(
+        factor_bundle_pc=factor,
+        operator_bundle_pc=None,
+        structured_pc_ready=False,
+        pc_factor_s=1.0,
+        setup_s=2.0,
+        sparse_pc_rhs=residual,
+        sparse_pc_linear_size=1,
+        target=1.0,
+        factor_preflight_residual_before=2.0,
+        factor_preflight_residual_after=1.0,
+        factor_preflight_residual_diagnostics=None,
+        factor_preflight_improvement_ratio=2.0,
+        factor_preflight_target_ratio=1.0,
+        factor_preflight_passed=True,
+        factor_preflight_seed_enabled=True,
+        factor_preflight_seed_used=False,
+        factor_preflight_max_target_ratio=10.0,
+        residual_vec_current=residual,
+        x0_sparse=None,
+        matvec=lambda vec: vec,
+        matvec_no_count=lambda vec: vec,
+        matmat=lambda mat: mat,
+        diagnostics=lambda **_kwargs: {},
+        layout=None,
+        active_indices=None,
+        elapsed_s=lambda: 3.0,
+        emit=None,
+        additive_rescue_nbytes=lambda _bundle, _mb: 0,
+        true_action_column_cache_factory=lambda **_kwargs: None,
+        true_active_submatrix_builder=lambda **_kwargs: None,
+        true_active_block_builder=lambda **_kwargs: None,
+        true_active_residual_block_builder=lambda **_kwargs: None,
+        true_window_builder=lambda **_kwargs: None,
+        residual_coarse_builder=lambda **_kwargs: None,
+        residual_window_builder=lambda **_kwargs: None,
+        continue_after_base_improvement=False,
+        true_coupled_base_improvement_override_used=False,
+        true_active_submatrix_requested=False,
+        true_active_block_requested=False,
+        true_active_residual_block_requested=False,
+        true_window_requested=False,
+        residual_coarse_requested=False,
+        residual_window_requested=False,
+        true_active_column_cache_requested=False,
+        true_active_column_cache_max_mb=0.0,
+    )
+
+    result = sparse_pc_module.run_sparse_pc_residual_correction_stage(
+        sparse_pc_module.SparsePCResidualCorrectionStageContext(**values)
+    )
+
+    assert result.factor_bundle_pc is factor
+    assert result.pc_factor_s == pytest.approx(1.0)
+    assert result.setup_s == pytest.approx(2.0)
+    assert not result.true_active_submatrix_selected
+    assert not result.true_active_block_selected
+    assert not result.true_active_residual_block_selected
+    assert not result.true_window_selected
+    assert not result.residual_coarse_selected
+    assert not result.residual_window_selected
+
+
+def test_sparse_pc_true_coupled_coarse_stage_noop_preserves_state() -> None:
+    factor = SimpleNamespace(kind="point", factor_s=0.0)
+    residual = jnp.asarray([1.0], dtype=jnp.float64)
+
+    result = sparse_pc_module.run_sparse_pc_true_coupled_coarse_stage(
+        sparse_pc_module.SparsePCTrueCoupledCoarseStageContext(
+            factor_bundle_pc=factor,
+            pc_factor_s=1.0,
+            setup_s=2.0,
+            sparse_pc_rhs=residual,
+            sparse_pc_linear_size=1,
+            target=1.0,
+            factor_preflight_residual_before=2.0,
+            factor_preflight_residual_after=1.0,
+            factor_preflight_residual_diagnostics=None,
+            factor_preflight_improvement_ratio=2.0,
+            factor_preflight_target_ratio=1.0,
+            factor_preflight_passed=True,
+            factor_preflight_seed_enabled=True,
+            factor_preflight_seed_used=False,
+            factor_preflight_max_target_ratio=10.0,
+            residual_vec_current=residual,
+            x0_sparse=None,
+            matvec_no_count=lambda vec: vec,
+            matmat=lambda mat: mat,
+            diagnostics=lambda **_kwargs: {},
+            op=SimpleNamespace(),
+            layout=None,
+            active_indices=None,
+            elapsed_s=lambda: 3.0,
+            emit=None,
+            builder=lambda **_kwargs: None,
+            additive_rescue_nbytes=lambda _bundle, _mb: 0,
+            explicit_requested=False,
+            auto_enabled=False,
+            auto_native_enabled=False,
+            auto_target_ratio=1.0,
+            auto_min_size=1,
+            max_windows=0,
+            x_radius=0,
+            ell_radius=0,
+            max_mb=0.0,
+            regularization=0.0,
+            max_size=0,
+            column_batch=1,
+            drop_tol=0.0,
+            low_lmax=0,
+            profile_moment_count=0,
+            angular_lmax=0,
+            angular_mode_max=0,
+            max_tail_units=0,
+            include_tail=False,
+            include_constraint_sources=False,
+            include_fsavg=False,
+            include_window_residual=False,
+            include_profile_moments=False,
+            include_angular_residual=False,
+            include_angular_basis=False,
+            include_preconditioned_loads=False,
+            preconditioned_load_max_columns=0,
+            preconditioned_load_max_nnz=0,
+            preconditioned_load_drop_tol=0.0,
+            damping=False,
+            beta_max=1.0,
+            accept_base_improvement=False,
+        )
+    )
+
+    assert not result.requested
+    assert not result.auto_selected
+    assert not result.selected
+    assert result.factor_bundle_pc is factor
+    assert result.pc_factor_s == pytest.approx(1.0)
+    assert result.residual_vec_current is residual
+
+
+def test_sparse_pc_generic_branch_setup_defers_xblock_backend_pattern_build() -> None:
+    op = SimpleNamespace(
+        rhs_mode=1,
+        constraint_scheme=1,
+        phi1_size=0,
+        include_phi1=False,
+        total_size=2,
+        n_species=1,
+        fblock=SimpleNamespace(fp=object(), pas=None),
+    )
+    rhs = jnp.asarray([1.0, -1.0], dtype=jnp.float64)
+
+    result = sparse_pc_module.build_sparse_pc_generic_branch_setup(
+        sparse_pc_module.SparsePCGenericBranchSetupContext(
+            op=op,
+            rhs=rhs,
+            sparse_pc_use_active_dof=False,
+            active_dof_indices=lambda _op: np.asarray([0], dtype=np.int32),
+            reduce_full_with_indices=lambda vec, idx: vec[idx],
+            expand_reduced_with_map=lambda vec, _map: vec,
+            fortran_reduced_sparse_pc=True,
+            preconditioner_x=0,
+            preconditioner_x_min_l=0,
+            preconditioner_xi=0,
+            preconditioner_species=0,
+            sparse_pc_fp_dense_velocity_block=None,
+            constrained_pas_pc=False,
+            tokamak_pas_er_pc=False,
+            tokamak_fp_pc=False,
+            pc_maxiter=4,
+            pc_restart=4,
+            host_sparse_factor_dtype=np.dtype(np.float64),
+            sparse_timer=SimpleNamespace(elapsed_s=lambda: 0.0),
+            emit=None,
+            env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND": "xblock"},
+            default_permc_spec=lambda **_kwargs: "COLAMD",
+            build_fortran_reduced_operator=lambda op_in, **_kwargs: SimpleNamespace(source=op_in),
+            build_point_operator=lambda op_in: op_in,
+            fortran_reduced_pattern_for_indices=lambda **_kwargs: None,
+            fortran_reduced_pattern=lambda **_kwargs: None,
+            conservative_pattern_for_indices=lambda **_kwargs: None,
+            conservative_pattern=lambda **_kwargs: None,
+            summarize_pattern=lambda _pattern: None,
+            estimate_sparse_pc_memory=lambda **_kwargs: 0,
+            device_count=1,
+        )
+    )
+
+    assert result.linear_size == 2
+    assert result.preconditioner_operator == "fortran_reduced_global"
+    assert result.fortran_reduced_sparse_pc_backend == "xblock"
+    assert result.sparse_pattern_scope == "fortran_reduced_xblock_deferred"
+    assert result.pattern is None
+    assert result.factor_policy is None
+    np.testing.assert_allclose(np.asarray(result.reduce_full(rhs)), np.asarray(rhs))
+
+
+def test_sparse_pc_direct_tail_factor_setup_falls_back_to_host_factor(monkeypatch) -> None:
+    materialization = sparse_pc_module.DirectTailMaterializationResult(
+        direct_tail_default=False,
+        enabled=False,
+        built=False,
+        error=None,
+        operator_bundle=None,
+        pc_env="off",
+        direct_reduced_pmat_requested=False,
+    )
+    admission = sparse_pc_module.DirectTailStructuredAdmissionResult(
+        pc_env="off",
+        requested=None,
+        auto_default=False,
+        fail_closed_size=0,
+        auto_large_fail_closed=False,
+        required=False,
+        setup_allowed=False,
+        max_mb_auto=False,
+        max_mb=1.0,
+        regularization=1.0e-12,
+    )
+    operator_bundle = SimpleNamespace(kind="operator")
+    factor_bundle = SimpleNamespace(kind="host_factor")
+
+    monkeypatch.setattr(
+        sparse_pc_module,
+        "build_direct_tail_materialization_setup",
+        lambda _context: materialization,
+    )
+    monkeypatch.setattr(
+        sparse_pc_module,
+        "resolve_direct_tail_structured_admission",
+        lambda _context: admission,
+    )
+
+    result = sparse_pc_module.build_sparse_pc_direct_tail_factor_setup(
+        sparse_pc_module.SparsePCDirectTailFactorSetupContext(
+            env={},
+            op=SimpleNamespace(),
+            op_pc=SimpleNamespace(),
+            rhs_dtype=jnp.float64,
+            pattern=SimpleNamespace(nnz=1),
+            active_indices=None,
+            sparse_pc_use_active_dof=False,
+            reduce_full=lambda vec: vec,
+            expand_reduced=lambda vec: vec,
+            factor_matvec=lambda vec: vec,
+            pc_shift=0.0,
+            factor_dtype_initial=np.dtype(np.float64),
+            factorization="lu",
+            default_factor_kind="lu",
+            default_ilu_fill_factor=1.0,
+            default_ilu_drop_tol=0.0,
+            default_pattern_color_batch=1,
+            default_permc_spec="COLAMD",
+            permc_spec="COLAMD",
+            sparse_pc_linear_size=1,
+            constrained_pas_pc=False,
+            tokamak_fp_pc=False,
+            fortran_reduced_sparse_pc=False,
+            preconditioner_x=0,
+            preconditioner_x_min_l=0,
+            preconditioner_xi=0,
+            preconditioner_species=0,
+            sparse_timer=SimpleNamespace(elapsed_s=lambda: 2.0),
+            emit=None,
+            default_direct_tail_max_mb=lambda **_kwargs: 1.0,
+            is_direct_reduced_pmat_pc_kind=lambda _kind: False,
+            build_direct_tail_bundle=lambda **_kwargs: None,
+            build_structured_full_csr_operator_bundle=lambda **_kwargs: None,
+            layout_from_operator=lambda _op: None,
+            build_direct_active_preconditioner=lambda **_kwargs: None,
+            build_active_projected_preconditioner=lambda **_kwargs: None,
+            structured_cache={},
+            structured_cache_key=lambda **_kwargs: (),
+            structured_cache_metadata=lambda _value: None,
+            structured_factor_bundle_factory=lambda **_kwargs: None,
+            host_factor_builder=lambda **_kwargs: (operator_bundle, factor_bundle),
+        )
+    )
+
+    assert result.materialization is materialization
+    assert not result.structured_pc_ready
+    assert result.operator_bundle_pc is operator_bundle
+    assert result.factor_bundle_pc is factor_bundle
+    assert result.direct_tail_pc_env == "off"
+    assert result.pc_max_mb == pytest.approx(1.0)
+
+
+def test_sparse_pc_direct_tail_rescue_policy_setup_defaults_without_support_preflight() -> None:
+    factor = SimpleNamespace(kind="host_factor")
+    result = sparse_pc_module.build_sparse_pc_direct_tail_rescue_policy_setup(
+        sparse_pc_module.SparsePCDirectTailRescuePolicySetupContext(
+            env={},
+            op=SimpleNamespace(),
+            rhs_dtype=jnp.float64,
+            sparse_pc_rhs=jnp.asarray([1.0], dtype=jnp.float64),
+            sparse_pc_linear_size=1,
+            fortran_reduced_sparse_pc=False,
+            factor_bundle_pc=factor,
+            structured_pc_ready=False,
+            direct_tail_operator_bundle=None,
+            direct_tail_structured_layout=None,
+            direct_tail_structured_active_indices=None,
+            direct_tail_structured_max_nbytes=None,
+            direct_tail_structured_pc_selected=False,
+            direct_tail_structured_pc_reason=None,
+            direct_tail_structured_pc_metadata=None,
+            pc_reg=0.0,
+            preconditioner_x=0,
+            preconditioner_xi=0,
+            preconditioner_species=0,
+            preconditioner_x_min_l=0,
+            emit=None,
+            true_matvec=lambda vec: vec,
+            support_mode_selector=lambda **_kwargs: None,
+            structured_factor_bundle_factory=lambda **_kwargs: None,
+            layout_from_operator=lambda _op: None,
+            parse_true_operator_window_specs=lambda *_args, **_kwargs: (),
+        )
+    )
+
+    assert result.factor_bundle_pc is factor
+    assert not result.direct_tail_support_mode_preflight_requested
+    assert not result.direct_tail_support_mode_preflight_selected
+    assert result.factor_preflight_passed is None
+    assert "direct_tail_residual_coarse_requested" in result.rescue_values
+
+
+def test_solve_fortran_reduced_xblock_backend_rejects_non_full_fp_pc() -> None:
+    values = {
+        dataclass_field.name: None
+        for dataclass_field in fields(sparse_pc_module.FortranReducedXBlockBackendContext)
+    }
+    values.update(
+        op=SimpleNamespace(),
+        op_pc=SimpleNamespace(fblock=SimpleNamespace(fp=None, pas=None)),
+        sparse_timer=SimpleNamespace(elapsed_s=lambda: 0.0),
+    )
+
+    with pytest.raises(NotImplementedError, match="full-FP RHSMode=1"):
+        sparse_pc_module.solve_fortran_reduced_xblock_backend(
+            sparse_pc_module.FortranReducedXBlockBackendContext(**values)
+        )
+
+
 def test_xblock_qi_pipeline_context_factory_owns_default_builders() -> None:
     """Production QI builder wiring belongs to the QI sparse domain module."""
 

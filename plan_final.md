@@ -114,6 +114,15 @@ The main structural refactor is functionally complete:
   point. A source/test audit for `problems/profile_sparse_xblock.py` reports
   zero production-used public helpers without direct tests. The broader
   sparse-PC/source-guard bundle passed as `365 passed in 5.86 s`.
+- RHSMode=1 sparse-solve orchestration coverage now includes direct bounded
+  tests for requested sparse-PC GMRES dispatch, factor preflight residual/seed
+  bookkeeping, auto-preflight retry no-op state preservation, residual
+  candidate acceptance, residual-correction no-op routing, true-coupled coarse
+  no-op routing, generic x-block backend deferral, direct-tail host-factor
+  fallback, direct-tail rescue-policy defaults, and the Fortran-reduced x-block
+  capability guard. A source/test audit for `problems/profile_sparse_solve.py`
+  reports zero production-used public helpers without direct tests. The broader
+  sparse-PC/source-guard bundle passed as `375 passed in 5.80 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -920,6 +929,12 @@ Completed work:
   `problems/profile_sparse_xblock.py::run_xblock_sparse_pc_branch`, then reran
   the source/test audit showing no production-used public helpers in that
   module without direct tests.
+- Tranche 35: added direct bounded sparse-solve orchestration tests for
+  `problems/profile_sparse_solve.py`, covering dispatch no-op, preflight
+  residual math, residual candidate acceptance, no-op rescue stages, x-block
+  backend deferral, direct-tail fallback/policy setup, and the x-block backend
+  capability guard. The source/test audit now shows no production-used public
+  helpers in that module without direct tests.
 
 Remaining consolidation steps:
 
