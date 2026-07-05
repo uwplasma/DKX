@@ -6,7 +6,7 @@ import numpy as np
 import jax.numpy as jnp
 
 from sfincs_jax.operators.profile_collisionless import CollisionlessV3Operator, apply_collisionless_v3
-from sfincs_jax.discretization.indices import V3Indexing
+from sfincs_jax.discretization.v3 import V3Indexing
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.fortran import read_petsc_mat_aij, read_petsc_vec
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
@@ -71,8 +71,8 @@ def test_collisionless_offdiag_xi_matvec_matches_fortran_matrix() -> None:
         ),
         dtype=np.float64,
     )
-    for g, (s, ix, l, it, iz) in enumerate(inv):
-        f[s, ix, l, it, iz] = x_full[g]
+    for g, (s, ix, ell, it, iz) in enumerate(inv):
+        f[s, ix, ell, it, iz] = x_full[g]
 
     # JAX result (collisionless only, offdiag in L only).
     y_jax = np.asarray(apply_collisionless_v3(op, jnp.asarray(f)))
@@ -98,6 +98,6 @@ def test_collisionless_offdiag_xi_matvec_matches_fortran_matrix() -> None:
         y_ref[row] = acc
 
     y_jax_vec = np.zeros((n_f,), dtype=np.float64)
-    for g, (s, ix, l, it, iz) in enumerate(inv):
-        y_jax_vec[g] = y_jax[s, ix, l, it, iz]
+    for g, (s, ix, ell, it, iz) in enumerate(inv):
+        y_jax_vec[g] = y_jax[s, ix, ell, it, iz]
     np.testing.assert_allclose(y_jax_vec, y_ref, rtol=0, atol=1e-12)

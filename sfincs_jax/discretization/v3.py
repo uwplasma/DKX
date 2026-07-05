@@ -31,6 +31,80 @@ from sfincs_jax.geometry.vmec_wout import read_vmec_wout  # noqa: E402
 from sfincs_jax.discretization.xgrid import XGrid, make_x_grid, make_x_polynomial_diff_matrices  # noqa: E402
 
 
+@dataclass(frozen=True)
+class V3Indexing:
+    """Fortran-v3-compatible active degree-of-freedom indexing.
+
+    The distribution-function block follows the ordering in SFINCS v3
+    ``indices.F90``. Public indices are 0-based, matching PETSc/JAX arrays
+    rather than Fortran's 1-based loop counters.
+    """
+
+    n_species: int
+    n_x: int
+    n_theta: int
+    n_zeta: int
+    n_xi_max: int
+    n_xi_for_x: np.ndarray
+
+    def __post_init__(self) -> None:
+        n_xi_for_x = np.asarray(self.n_xi_for_x, dtype=int)
+        if n_xi_for_x.shape != (self.n_x,):
+            raise ValueError(f"n_xi_for_x must have shape ({self.n_x},), got {n_xi_for_x.shape}")
+        if np.any(n_xi_for_x < 1):
+            raise ValueError("n_xi_for_x entries must be >= 1")
+        object.__setattr__(self, "n_xi_for_x", n_xi_for_x)
+
+    @property
+    def dke_size(self) -> int:
+        return int(np.sum(self.n_xi_for_x) * self.n_theta * self.n_zeta)
+
+    @property
+    def first_index_for_x(self) -> np.ndarray:
+        out = np.zeros((self.n_x,), dtype=int)
+        out[0] = 0
+        for ix in range(1, self.n_x):
+            out[ix] = out[ix - 1] + int(self.n_xi_for_x[ix - 1])
+        return out
+
+    def f_index(self, *, i_species: int, i_x: int, i_xi: int, i_theta: int, i_zeta: int) -> int:
+        """Return the global distribution-function index for one active point."""
+
+        if not (0 <= i_species < self.n_species):
+            raise ValueError("i_species out of range")
+        if not (0 <= i_x < self.n_x):
+            raise ValueError("i_x out of range")
+        if not (0 <= i_xi < int(self.n_xi_for_x[i_x])):
+            raise ValueError("i_xi out of range for this i_x")
+        if not (0 <= i_theta < self.n_theta):
+            raise ValueError("i_theta out of range")
+        if not (0 <= i_zeta < self.n_zeta):
+            raise ValueError("i_zeta out of range")
+
+        first = int(self.first_index_for_x[i_x])
+        return (
+            i_species * self.dke_size
+            + first * self.n_theta * self.n_zeta
+            + i_xi * self.n_theta * self.n_zeta
+            + i_theta * self.n_zeta
+            + i_zeta
+        )
+
+    def build_inverse_f_map(self) -> list[tuple[int, int, int, int, int]]:
+        """Return ``global_index -> (species, x, xi, theta, zeta)`` for ``BLOCK_F``."""
+
+        out: list[tuple[int, int, int, int, int]] = []
+        for i_species in range(self.n_species):
+            for i_x in range(self.n_x):
+                for i_xi in range(int(self.n_xi_for_x[i_x])):
+                    for i_theta in range(self.n_theta):
+                        for i_zeta in range(self.n_zeta):
+                            out.append((i_species, i_x, i_xi, i_theta, i_zeta))
+        if len(out) != self.n_species * self.dke_size:
+            raise AssertionError("Internal error building inverse map.")
+        return out
+
+
 def _n_periods_from_bc_file(path: str, *, base_dir: Path | None = None) -> int:
     """Read `NPeriods` from a Boozer `.bc` file header used by v3 geometryScheme=11/12.
 

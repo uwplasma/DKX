@@ -7,7 +7,7 @@ from typing import Iterable
 
 import numpy as np
 
-from sfincs_jax.discretization.indices import V3Indexing
+from sfincs_jax.discretization.v3 import V3Indexing
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.fortran import read_petsc_mat_aij, read_petsc_vec
 from sfincs_jax.problems.transport_linear_system import transport_active_dof_indices as _transport_active_dof_indices
@@ -51,8 +51,8 @@ def _build_fblock_l_map(op) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _build_fullshape_l_map(op) -> tuple[np.ndarray, np.ndarray]:
-    s, x, l, t, z = op.fblock.f_shape
-    grid = np.indices((s, x, l, t, z), dtype=np.int32)
+    n_species, n_x, n_ell, n_theta, n_zeta = op.fblock.f_shape
+    grid = np.indices((n_species, n_x, n_ell, n_theta, n_zeta), dtype=np.int32)
     s_map = grid[0].ravel()
     l_map = grid[2].ravel()
     return l_map, s_map
@@ -60,14 +60,14 @@ def _build_fullshape_l_map(op) -> tuple[np.ndarray, np.ndarray]:
 
 def _summarize_by_l(label: str, diff: np.ndarray, l_map: np.ndarray, n_xi: int) -> None:
     print(f"{label}:")
-    for l in range(n_xi):
-        mask = l_map == l
+    for ell in range(n_xi):
+        mask = l_map == ell
         if not np.any(mask):
             continue
         vals = diff[mask]
         max_abs = float(np.max(np.abs(vals)))
         l2 = float(np.linalg.norm(vals))
-        print(f"  L={l}: max_abs={max_abs:.6e} l2={l2:.6e}")
+        print(f"  L={ell}: max_abs={max_abs:.6e} l2={l2:.6e}")
 
 
 def _summarize_by_species(label: str, diff: np.ndarray, s_map: np.ndarray, n_species: int) -> None:
@@ -244,13 +244,13 @@ def main(argv: Iterable[str] | None = None) -> int:
     )
 
     basis_species = args.basis_species
-    for l in (0, 1, 2):
-        print(f"Comparing with L={l} unit vector...")
-        x_l = _vector_with_l(op, l, species=basis_species)
+    for ell in (0, 1, 2):
+        print(f"Comparing with L={ell} unit vector...")
+        x_l = _vector_with_l(op, ell, species=basis_species)
         y_fortran = matvec_fortran(x_l)
         y_jax = matvec_jax(x_l)
         _summary(
-            f"L{l}",
+            f"L{ell}",
             y_fortran,
             y_jax,
             op,

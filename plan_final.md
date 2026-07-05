@@ -365,6 +365,12 @@ The main structural refactor is functionally complete:
   data path used by docs, examples, and CI. Focused validation passed:
   `tests/test_data_fetch.py` as `13 passed in 0.06 s`, with the
   source/import structure guard passing as `30 passed in 3.20 s`.
+- Fortran-v3 active indexing is now owned by `discretization/v3.py::V3Indexing`
+  alongside grids and geometry loading; the helper-only
+  `discretization/indices.py` file was deleted, and parity examples/tests now
+  import the canonical SFINCS-v3 discretization owner. Focused validation
+  passed: operator/indexing parity plus source/import guards as
+  `49 passed in 9.12 s`.
 - The examples tree has been re-audited for navigation and repository size:
   every top-level task folder has a README, examples contract tests passed as
   `26 passed in 20.66 s`, and the nested `output/`, `artifacts/`,
@@ -482,7 +488,7 @@ Current source inventory:
 - Root package: `17` Python files and `8403` lines. This is acceptable because
   the files are public entry points or compatibility facades, but
   `v3_driver.py` must remain implementation-free and below `80` lines.
-- Domain folders: `discretization/` (`7` files), `geometry/` (`5`),
+- Domain folders: `discretization/` (`6` files), `geometry/` (`5`),
   `operators/` (`20`), `outputs/` (`6`), `physics/` (`3`),
   `problems/` (`26`), `solvers/` (`37`), `validation/` (`7`), and
   `workflows/` (`4`).
@@ -627,7 +633,7 @@ Latest AST audit:
 
 - Folder depth is no longer the blocker: the package has one-level domain
   folders only and no `__init__.py`-only source packages.
-- The source tree has 130 Python files, 17 package-root modules, and one-level
+- The source tree has 129 Python files, 17 package-root modules, and one-level
   domain folders only. The remaining structural blockers are file-family sprawl
   and owner size.
   The largest retained owners are `problems/profile_policies.py` (`7936`

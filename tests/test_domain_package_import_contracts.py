@@ -216,8 +216,11 @@ MOVED_ROOT_MODULE_OWNERS = {
         "RationalTailXMap",
         "make_reference_eta_grid",
     ),
-    "sfincs_jax.discretization.indices": (
+    "sfincs_jax.discretization.v3": (
+        "V3Grids",
         "V3Indexing",
+        "geometry_from_namelist",
+        "grids_from_namelist",
     ),
     "sfincs_jax.discretization.periodic_stencil": (
         "apply_periodic_stencil_roll",

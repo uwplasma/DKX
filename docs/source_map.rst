@@ -423,7 +423,7 @@ Velocity-space discretization:
 - modal transforms used by the collision operator,
 - special handling for monoenergetic ``RHSMode=3``.
 - mapped speed-grid research primitives in ``discretization/adaptive_maps.py``,
-- Fortran-v3 active indexing in ``discretization/indices.py``,
+- Fortran-v3 active indexing in ``discretization/v3.py::V3Indexing``,
 - compact periodic stencil extraction/application in
   ``discretization/periodic_stencil.py``,
 - block-tridiagonal velocity factors in
