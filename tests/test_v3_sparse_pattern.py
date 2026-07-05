@@ -11,9 +11,14 @@ import scipy.sparse as sp
 from scipy.sparse.linalg import aslinearoperator
 
 import sfincs_jax.io as io_module
+import sfincs_jax.operators.profile_full_system as profile_full_system_module
 import sfincs_jax.operators.profile_sparse_pattern as sparse_pattern_module
 import sfincs_jax.operators.profile_true_operator_rescue as true_operator_rescue_module
+import sfincs_jax.problems.profile_policies as profile_policies_module
 import sfincs_jax.solvers.preconditioner_qi_device as rhs1_qi_device_preconditioner_module
+import sfincs_jax.solvers.preconditioner_symbolic_host as symbolic_host_module
+import sfincs_jax.solvers.preconditioning as preconditioning_module
+from sfincs_jax.solvers import preconditioner_xblock_policy as rhs1_xblock_policy_module
 import sfincs_jax.problems.profile_solve as profile_solve_module
 from sfincs_jax.solvers.explicit_sparse import SparseDecision, SparseOperatorBundle, build_operator_from_pattern
 from sfincs_jax.io import write_sfincs_jax_output_h5
@@ -912,12 +917,12 @@ def test_residual_window_host_preconditioner_can_combine_windows() -> None:
 
 
 def test_sparse_host_ilu_escalates_regularization_after_singular_factor(monkeypatch) -> None:
-    profile_solve_module._RHSMODE1_SPARSE_ILU_CACHE.clear()
+    preconditioning_module._RHSMODE1_SPARSE_ILU_CACHE.clear()
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_REG", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ATTEMPTS", "2")
     messages: list[str] = []
 
-    _a_full, _a_drop, ilu = profile_solve_module._factorize_sparse_matrix_csr_host(
+    _a_full, _a_drop, ilu = symbolic_host_module.factorize_sparse_matrix_csr_host(
         a_csr_full=sp.csr_matrix([[0.0, 0.0], [0.0, 1.0]]),
         cache_key=("singular-regularization-test",),
         drop_tol=0.0,
@@ -1523,8 +1528,8 @@ def test_fortran_reduced_pc_operator_preserves_angular_coupling() -> None:
     nml.group("resolutionParameters")["NX"] = 3
 
     op = full_system_operator_from_namelist(nml=nml)
-    point = profile_solve_module._build_rhsmode1_preconditioner_operator_point(op)
-    reduced = profile_solve_module._build_rhsmode1_preconditioner_operator_fortran_reduced(
+    point = preconditioning_module._build_rhsmode1_preconditioner_operator_point(op)
+    reduced = preconditioning_module._build_rhsmode1_preconditioner_operator_fortran_reduced(
         op,
         preconditioner_x=1,
         preconditioner_xi=1,
@@ -1558,8 +1563,8 @@ def test_fortran_reduced_pc_pattern_keeps_global_coupling() -> None:
     nml.group("resolutionParameters")["NX"] = 3
 
     op = full_system_operator_from_namelist(nml=nml)
-    point = profile_solve_module._build_rhsmode1_preconditioner_operator_point(op)
-    reduced = profile_solve_module._build_rhsmode1_preconditioner_operator_fortran_reduced(
+    point = preconditioning_module._build_rhsmode1_preconditioner_operator_point(op)
+    reduced = preconditioning_module._build_rhsmode1_preconditioner_operator_fortran_reduced(
         op,
         preconditioner_x=1,
         preconditioner_xi=1,
@@ -1944,7 +1949,7 @@ def test_fortran_reduced_direct_pmat_preconditioner_skips_active_csr_materializa
 def test_fortran_reduced_direct_tail_auto_retries_active_lu_after_native_preflight_failure(
     monkeypatch,
 ) -> None:
-    profile_solve_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
+    profile_policies_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     nml.group("resolutionParameters")["NTHETA"] = 5
@@ -2006,7 +2011,7 @@ def test_fortran_reduced_direct_tail_auto_retries_active_lu_after_native_preflig
 def test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback(
     monkeypatch,
 ) -> None:
-    profile_solve_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
+    profile_policies_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     nml.group("resolutionParameters")["NTHETA"] = 5
@@ -2049,7 +2054,7 @@ def test_structured_direct_tail_uses_actual_csr_budget_instead_of_preflight() ->
     op = full_system_operator_from_namelist(nml=nml)
     messages: list[str] = []
 
-    bundle = profile_solve_module._try_build_structured_rhs1_full_csr_operator_bundle(
+    bundle = profile_full_system_module._try_build_structured_rhs1_full_csr_operator_bundle(
         op=op,
         active_indices=None,
         csr_max_mb=1.0e-4,
@@ -2074,7 +2079,7 @@ def test_structured_direct_tail_skips_large_project_after_build(monkeypatch) -> 
     messages: list[str] = []
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRUCTURED_FULL_CSR_PROJECT_AFTER_BUILD_MAX_SIZE", "1")
 
-    bundle = profile_solve_module._try_build_structured_rhs1_full_csr_operator_bundle(
+    bundle = profile_full_system_module._try_build_structured_rhs1_full_csr_operator_bundle(
         op=op,
         active_indices=active,
         csr_max_mb=100.0,
@@ -2712,7 +2717,7 @@ def test_fortran_reduced_pc_gmres_direct_tail_sparse_coarse_solves_tiny_rhs1_sys
 
 
 def test_fortran_reduced_direct_tail_structured_pc_cache_reuses_candidate(monkeypatch) -> None:
-    profile_solve_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
+    profile_policies_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     nml.group("resolutionParameters")["NTHETA"] = 5
@@ -2919,31 +2924,31 @@ def test_fortran_reduced_direct_tail_pc_default_cap_is_adaptive_for_active_lu(mo
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_MAX_MB", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_MB_PER_UNKNOWN", raising=False)
 
-    small = profile_solve_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    small = profile_policies_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=604,
     )
-    mid = profile_solve_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    mid = profile_policies_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=110_000,
     )
-    production = profile_solve_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    production = profile_policies_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=900_000,
     )
-    fullgrid_qa_qh = profile_solve_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    fullgrid_qa_qh = profile_policies_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=507_004,
     )
-    upper_midgrid = profile_solve_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    upper_midgrid = profile_policies_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=169_264,
     )
-    auto_upper_midgrid = profile_solve_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    auto_upper_midgrid = profile_policies_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="auto",
         active_size=169_264,
     )
-    non_exact = profile_solve_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    non_exact = profile_policies_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_xblock",
         active_size=900_000,
     )
@@ -2987,7 +2992,7 @@ def test_fortran_reduced_direct_tail_explicit_structured_pc_rejection_is_fast(mo
 
 
 def test_fortran_reduced_direct_tail_required_pc_forces_global_backend(monkeypatch) -> None:
-    profile_solve_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
+    profile_policies_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     nml.group("resolutionParameters")["NTHETA"] = 5
@@ -3019,7 +3024,7 @@ def test_fortran_reduced_direct_tail_required_pc_forces_global_backend(monkeypat
     assert result.metadata["sparse_pc_fortran_reduced_direct_tail_built"] is True
     assert result.metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_required"] is True
     assert result.metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb_auto"] is True
-    expected_cap_mb = profile_solve_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    expected_cap_mb = profile_policies_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=int(result.metadata["sparse_pc_linear_size"]),
     )
@@ -3708,10 +3713,6 @@ def test_xblock_sparse_pc_probe_coarse_uses_active_projected_directions(monkeypa
 
 
 def test_xblock_post_coarse_directions_can_include_angular_modes() -> None:
-    assert (
-        profile_solve_module._rhs1_xblock_post_coarse_directions
-        is build_rhs1_xblock_post_coarse_directions
-    )
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
@@ -3767,10 +3768,6 @@ def test_xblock_post_coarse_directions_can_include_residual_weighted_angular_mod
 
 
 def test_device_subspace_residual_equation_reuses_cached_operator_basis() -> None:
-    assert (
-        profile_solve_module._apply_device_subspace_residual_equation_correction
-        is apply_device_subspace_residual_equation_correction
-    )
     operator_matrix = jnp.asarray([[1.0, 1.0], [0.0, 1.0]], dtype=jnp.float64)
     rhs = jnp.asarray([0.0, 1.0], dtype=jnp.float64)
     cached_basis = jnp.asarray([[1.0], [0.0]], dtype=jnp.float64)
@@ -4083,7 +4080,7 @@ def test_xblock_side_probe_switch_preserves_physical_seed_for_right_pc(monkeypat
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_RESTART", "4")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE", "0")
     monkeypatch.setattr(
-        profile_solve_module._rhs1_xblock_policy,
+        rhs1_xblock_policy_module,
         "rhs1_xblock_side_probe_should_switch",
         lambda *, residual_ratio, switch_ratio_env_value: True,
     )

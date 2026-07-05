@@ -1615,6 +1615,19 @@ Completed work:
   passed: `tests/test_rhs1_full_assembly.py` as `123 passed in 50.27 s`;
   `tests/test_source_tree_consolidation.py` as `39 passed in 4.92 s`; Ruff and
   py_compile passed.
+- Tranche 97: finished the helper-owner cleanup in
+  `tests/test_v3_sparse_pattern.py` by moving sparse ILU cache/factorization
+  checks to solver owners, RHSMode-1 preconditioner-operator checks to
+  `solvers/preconditioning.py`, structured full-CSR checks to
+  `operators/profile_full_system.py`, direct-tail policy/cache checks to
+  `problems/profile_policies.py`, residual helper checks to
+  `problems/profile_residual.py`, and x-block monkeypatching to the x-block
+  policy module. The remaining `profile_solve_module` uses in that file are
+  solve-orchestration monkeypatches or compatibility-path module arguments, not
+  private helper-owner assertions. Focused validation passed:
+  `tests/test_v3_sparse_pattern.py` as `141 passed in 138.04 s`;
+  `tests/test_source_tree_consolidation.py` as `39 passed in 4.49 s`; Ruff and
+  py_compile passed.
 
 Remaining consolidation steps:
 
