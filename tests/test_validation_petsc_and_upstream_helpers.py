@@ -6,7 +6,7 @@ import subprocess
 import numpy as np
 import pytest
 
-from sfincs_jax.validation.petsc_binary import read_petsc_mat_aij, read_petsc_vec
+from sfincs_jax.validation.fortran import read_petsc_mat_aij, read_petsc_vec
 from sfincs_jax.workflows.postprocess_upstream import find_upstream_utils_dir, run_upstream_util
 
 
