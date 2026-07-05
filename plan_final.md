@@ -1637,6 +1637,12 @@ Completed work:
   `tests/test_fortran_reduced_preconditioner.py` as `29 passed in 16.89 s`;
   `tests/test_source_tree_consolidation.py` as `39 passed in 4.61 s`; Ruff and
   py_compile passed.
+- Tranche 99: ran the first post-owner-cleanup review-lock validation sweep.
+  Source-layout, domain-import, examples-tree, and benchmark-claim guards passed
+  as `67 passed in 4.87 s`; Sphinx `-W` passed; the public stale-wording scan
+  passed after excluding generated `docs/_build` artifacts. The documented scan
+  command now excludes `docs/_build/**` so generated HTML/download text from
+  upstream source PDFs does not mask source-documentation regressions.
 
 Remaining consolidation steps:
 
@@ -1940,6 +1946,7 @@ Use the public wording scan before review:
 ```bash
 rg -n "On the current main branch|not replacements for the production-resolution gates|The production benchmark manifest|not a public performance row|current main|new benchmarks|At the moment|new version|previous version|\\bpreviously\\b|now supports|now has|now includes|\\bcurrently\\b" \
   README.md sfincs_jax/README.md examples docs \
+  --glob '!docs/_build/**' \
   --glob '!docs/release_notes.rst' --glob '!docs/upstream/**' \
   --glob '!docs/_static/**' --glob '!docs/ntx_*.rst' \
   --glob '!examples/sfincs_examples/**' --glob '!examples/**/output/**' \
