@@ -679,8 +679,8 @@ def compare_sfincs_outputs(
                         merged = dict(local_tolerances.get(k, {}))
                         merged.update(v)
                         local_tolerances[k] = merged
-                else:
-                    local_tolerances[k] = dict(v)
+                    else:
+                        local_tolerances[k] = dict(v)
     if rhs_mode_a == 1 and rhs_mode_b == 1 and constraint_a == 0 and constraint_b == 0:
         # constraintScheme=0 leaves the FSA density/pressure gauge unconstrained, so compare
         # gauge-invariant local structure and allow small absolute floors on near-zero flux

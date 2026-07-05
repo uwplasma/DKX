@@ -1316,6 +1316,13 @@ Completed work:
   CLI/parity audit path without shipping larger frozen outputs. Focused
   validation passed: `tests/test_compare_reference_corruption.py` as `20 passed
   in 0.33 s`; Ruff passed.
+- Tranche 68: fixed a VMEC full-trajectory FP parity-tolerance bug in
+  `compare.py` where a `for/else` indentation skipped the `totalDensity`
+  tolerance unless the key already existed. Added a regression test that gates
+  `totalDensity` and `particleFluxBeforeSurfaceIntegral_vm` for
+  geometryScheme=5, RHSMode=1, full-FP, full-trajectory comparisons. Focused
+  validation passed: `tests/test_compare_reference_corruption.py` as `21 passed
+  in 0.48 s`; Ruff passed.
 
 Remaining consolidation steps:
 
