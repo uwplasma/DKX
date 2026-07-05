@@ -755,11 +755,10 @@ replacing the old monolith are:
   safety factors, and admission probe thresholds; symbolic sparse analysis,
   host factorization, and true-residual admission live in the symbolic-sparse
   and profile-response sparse owners.
-- ``sfincs_jax/operators/profile_structured_csr.py``
+- ``sfincs_jax/operators/profile_full_system.py``
   (historical location: ``sfincs_jax/rhs1_structured_full_csr.py``):
-  runtime/non-autodiff wrapper that adapts analytic RHSMode=1 full-CSR assembly
-  from ``sfincs_jax.operators.profile_full_system`` into the
-  ``SparseOperatorBundle`` contract used by sparse-PC solver paths. Unsupported
+  analytic RHSMode=1 full-CSR assembly plus the runtime/non-autodiff
+  ``SparseOperatorBundle`` adapter used by sparse-PC solver paths. Unsupported
   or over-budget cases return ``None`` so callers can fall back to the
   established matrix-free or pattern-probed path.
 - ``sfincs_jax/operators/profile_true_operator_rescue.py``
