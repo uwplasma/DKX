@@ -497,7 +497,7 @@ Current source inventory:
   `v3_driver.py` must remain implementation-free and below `80` lines.
 - Domain folders: `discretization/` (`6` files), `geometry/` (`5`),
   `operators/` (`16`), `outputs/` (`5`), `physics/` (`3`),
-  `problems/` (`26`), `solvers/` (`34`), `validation/` (`6`), and
+  `problems/` (`25`), `solvers/` (`34`), `validation/` (`6`), and
   `workflows/` (`4`).
 - The complexity hotspots are not nested folders; they are many
   same-family files in `problems/`, `solvers/`, and `operators/`.
@@ -511,7 +511,7 @@ Target source shape for the review PR:
   `tests/fixtures/source_tree_expected.json`; delete or hide compatibility
   facades only when docs, examples, scripts, and compatibility tests have moved
   to canonical imports.
-- Reduce `problems/` from the current `26` files toward `16-20` durable files by merging
+- Reduce `problems/` from the current `25` files toward `16-20` durable files by merging
   setup, policy, diagnostics, sparse-handoff, and finalization helpers into
   coherent problem owners. The final names should describe physics/problem
   ownership: `profile_*`, `transport_*`, and `ambipolar.py` are acceptable;
@@ -639,7 +639,7 @@ Latest AST audit:
 
 - Folder depth is no longer the blocker: the package has one-level domain
   folders only and no `__init__.py`-only source packages.
-- The source tree has 122 Python files, 17 package-root modules, and one-level
+- The source tree has 121 Python files, 17 package-root modules, and one-level
   domain folders only. The remaining structural blockers are file-family sprawl
   and owner size.
   The largest retained owners are `problems/profile_policies.py` (`7936`
@@ -821,6 +821,13 @@ Completed work:
   canonical owners for profile-system residual/source kernels, profile layouts,
   preconditioning dispatch, output formats, and validation artifacts, and that
   helper-only modules are not treated as valid navigation targets.
+- Tranche 27: folded the GPU transport subprocess worker CLI into
+  `problems/transport_parallel_runtime.py`, deleted
+  `problems/transport_parallel_worker.py`, updated the internal subprocess
+  launch path to `python -m sfincs_jax.problems.transport_parallel_runtime`,
+  and added a source-tree guard so transport parallelism has one runtime owner.
+  This reduces `problems/` to `25` source files without changing the worker
+  payload schema, merge-ready NPZ output, or parent-side transport solve API.
 
 Remaining consolidation steps:
 

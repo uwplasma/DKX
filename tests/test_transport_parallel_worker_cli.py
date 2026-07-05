@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 import sfincs_jax.namelist as namelist_module
-import sfincs_jax.problems.transport_parallel_worker as worker_cli
+import sfincs_jax.problems.transport_parallel_runtime as worker_cli
 import sfincs_jax.problems.transport_solve as transport_solve
 
 
@@ -66,8 +66,8 @@ def test_transport_parallel_worker_main_writes_npz_schema_and_creates_parent(
         captured.update(kwargs)
         return _result_fixture()
 
-    monkeypatch.setattr(worker_cli, "read_sfincs_input", _read_input)
-    monkeypatch.setattr(worker_cli, "solve_v3_transport_matrix_linear_gmres", _solve_transport)
+    monkeypatch.setattr(worker_cli, "_read_worker_input", _read_input)
+    monkeypatch.setattr(worker_cli, "_solve_worker_transport", _solve_transport)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -117,10 +117,10 @@ def test_transport_parallel_worker_module_entrypoint_exits_zero(
         "argv",
         ["transport_parallel_worker", "--payload", str(payload_path), "--output", str(output_path)],
     )
-    monkeypatch.delitem(sys.modules, "sfincs_jax.problems.transport_parallel_worker", raising=False)
+    monkeypatch.delitem(sys.modules, "sfincs_jax.problems.transport_parallel_runtime", raising=False)
 
     with pytest.raises(SystemExit) as exc:
-        runpy.run_module("sfincs_jax.problems.transport_parallel_worker", run_name="__main__")
+        runpy.run_module("sfincs_jax.problems.transport_parallel_runtime", run_name="__main__")
 
     assert exc.value.code == 0
     with np.load(output_path) as data:

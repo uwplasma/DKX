@@ -198,9 +198,6 @@ research workflows.
 .. automodule:: sfincs_jax.problems.transport_parallel_runtime
    :members:
 
-.. automodule:: sfincs_jax.problems.transport_parallel_worker
-   :members:
-
 .. automodule:: sfincs_jax.outputs.transport
    :members:
 

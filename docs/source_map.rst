@@ -1143,11 +1143,12 @@ replacing the old monolith are:
   single-case sharded-solve planning metadata. This module absorbed the old
   policy, sharding, payload, pool, execution, solve, and validation micro-files
   so transport parallelism has one canonical runtime owner.
-- ``sfincs_jax/problems/transport_parallel_worker.py``
-  (historical executable wrapper: ``sfincs_jax/transport_parallel_worker.py``):
-  command-line worker entry point used by GPU transport subprocesses. The old
-  ``python -m sfincs_jax.problems.transport_parallel_worker`` path remains supported and
-  delegates to this implementation.
+- ``sfincs_jax/problems/transport_parallel_runtime.py``
+  (worker CLI entry point):
+  command-line worker entry point used by GPU transport subprocesses. The
+  maintained path is ``python -m sfincs_jax.problems.transport_parallel_runtime``,
+  which reads a worker payload, runs the transport solve lazily, and writes the
+  merge-ready NPZ schema.
 - ``sfincs_jax/validation/artifacts.py``:
   lightweight loaders and physics metrics for checked-in publication artifacts. This
   module is independent of the heavy solver path, so documentation and CI can verify

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 from collections.abc import Callable, Iterator
 import contextlib
 from dataclasses import dataclass
@@ -2609,7 +2610,7 @@ def run_transport_parallel_gpu_subprocesses(
             cmd = [
                 sys.executable,
                 "-m",
-                "sfincs_jax.problems.transport_parallel_worker",
+                "sfincs_jax.problems.transport_parallel_runtime",
                 "--payload",
                 str(payload_path),
                 "--output",
@@ -3056,6 +3057,54 @@ def transport_parallel_result_to_npz_arrays(result: dict[str, object]) -> dict[s
         "rhs_norms": rhs_norms,
         "elapsed_time_s": elapsed_time_s,
     }
+
+
+def _read_worker_input(path: Path) -> Namelist:
+    """Read a worker input file lazily to avoid transport-solve import cycles."""
+
+    from sfincs_jax.namelist import read_sfincs_input  # noqa: PLC0415
+
+    return read_sfincs_input(path)
+
+
+def _solve_worker_transport(**kwargs: object) -> object:
+    """Run the transport solve lazily for subprocess worker execution."""
+
+    from sfincs_jax.problems.transport_solve import (  # noqa: PLC0415
+        solve_v3_transport_matrix_linear_gmres,
+    )
+
+    return solve_v3_transport_matrix_linear_gmres(**kwargs)
+
+
+def main() -> int:
+    """CLI entry point for GPU transport whichRHS subprocess workers."""
+
+    parser = argparse.ArgumentParser(description="GPU transport whichRHS worker.")
+    parser.add_argument("--payload", type=Path, required=True, help="Path to worker payload JSON.")
+    parser.add_argument("--output", type=Path, required=True, help="Path to output NPZ.")
+    args = parser.parse_args()
+
+    payload = json.loads(args.payload.read_text(encoding="utf-8"))
+
+    def _emit(_level: int, message: str) -> None:
+        print(message, flush=True)
+
+    result = solve_transport_parallel_payload(
+        payload,
+        read_input=_read_worker_input,
+        solve_transport=_solve_worker_transport,
+        emit=_emit,
+    )
+    arrays = transport_parallel_result_to_npz_arrays(result)
+
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(args.output, **arrays)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
 
 
 # Parent-side execution policy helpers.

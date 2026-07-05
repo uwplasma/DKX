@@ -145,7 +145,7 @@ path; outputs are merged deterministically by column.
 
 - `sfincs_jax.problems.transport_solve.solve_v3_transport_matrix_linear_gmres`
 - `sfincs_jax.problems.transport_parallel_runtime`
-- `sfincs_jax.problems.transport_parallel_worker`
+- `python -m sfincs_jax.problems.transport_parallel_runtime`
 
 **How it works**
 
