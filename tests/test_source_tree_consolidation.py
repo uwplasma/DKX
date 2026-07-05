@@ -308,6 +308,24 @@ def test_rhs1_dispatch_coverage_uses_canonical_helper_owners() -> None:
     assert "sfincs_jax.solvers.path_policy" in text
 
 
+def test_profile_solve_private_test_usage_is_limited_to_wrapper_contracts() -> None:
+    """Only explicit wrapper-contract tests may touch profile_solve private seams."""
+
+    allowed = {
+        "tests/test_profile_solve_module_wrappers.py",
+        "tests/test_source_tree_consolidation.py",
+    }
+    offenders = []
+    for path in sorted((REPO_ROOT / "tests").glob("test_*.py")):
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        if rel in allowed:
+            continue
+        if "profile_solve._" in path.read_text(encoding="utf-8"):
+            offenders.append(rel)
+
+    assert offenders == []
+
+
 def test_test_filenames_do_not_reintroduce_deleted_v3_driver_label() -> None:
     """Keep test modules named after the canonical behavior they protect."""
 
