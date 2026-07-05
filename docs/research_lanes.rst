@@ -121,7 +121,7 @@ Relevant implementation:
 - ``sfincs_jax/solvers/preconditioner_qi_corrections.py`` owns the
   device-compatible two-level, block-Schur, residual-deflated, multilevel,
   residual-Galerkin, and coupled residual-equation correction primitives.
-- ``sfincs_jax/solvers/preconditioner_qi_policy.py`` defines the production
+- ``sfincs_jax/validation/qi_device.py`` defines the production
   ladder promotion gate: every requested seed/backend pair must converge,
   write output and solver trace artifacts, satisfy residual/observable gates,
   and avoid host fallback for a true device-QI claim.
@@ -838,7 +838,7 @@ trace, run:
 - parity and residual audits against the current host fallback and Fortran v3
   reference outputs where available.
 
-The checked promotion helper in ``sfincs_jax/solvers/preconditioner_qi_policy.py`` should be
+The checked promotion helper in ``sfincs_jax/validation/qi_device.py`` should be
 used for every ladder artifact. A production-resolution claim is not a loose
 collection of successful runs; it requires complete CPU/GPU seed coverage,
 convergence, output and trace provenance, residual gates, observable gates, and

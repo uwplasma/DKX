@@ -997,11 +997,12 @@ replacing the old monolith are:
   device-local QI preconditioner and smoother primitives, including
   CSR-backed Jacobi, matrix-free residual-minimizing steps, fail-closed seed
   probes, and the production-shaped device-QI local-plus-coarse state.
-- ``sfincs_jax/solvers/preconditioner_qi_policy.py``:
-  pure promotion gates for QI hard-seed and production-ladder evidence. It
-  requires complete seed/backend coverage, convergence, output and trace
-  provenance, residual/observable bounds, and no host fallback before a true
-  device-QI claim can be promoted.
+- ``sfincs_jax/validation/qi_device.py``:
+  QI device and production-ladder evidence policy. It checks fail-closed
+  QI-device artifacts, bounded GPU-campaign provenance, and production
+  promotion evidence requiring complete seed/backend coverage, convergence,
+  output and trace provenance, residual/observable bounds, and no host fallback
+  before a true device-QI claim can be promoted.
 - ``sfincs_jax/problems/profile_setup.py``
   (historical location: ``sfincs_jax/rhs1_preconditioner_dispatch.py``):
   shared RHSMode=1 preconditioner-kind dispatch.

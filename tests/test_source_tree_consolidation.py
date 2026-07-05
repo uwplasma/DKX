@@ -227,6 +227,15 @@ def test_deleted_solver_selection_policy_facade_is_absent() -> None:
     assert hasattr(module, "solver_candidate_gate")
 
 
+def test_deleted_qi_promotion_policy_solver_facade_is_absent() -> None:
+    """QI promotion evidence gates belong to validation, not solver kernels."""
+
+    assert not (PACKAGE_ROOT / "solvers" / "preconditioner_qi_policy.py").exists()
+    module = importlib.import_module("sfincs_jax.validation.qi_device")
+    assert hasattr(module, "QIRunEvidence")
+    assert hasattr(module, "evaluate_qi_production_ladder_promotion")
+
+
 def test_canonical_flat_domain_modules_are_importable() -> None:
     """Canonical owners replace the deleted compatibility import paths."""
 
