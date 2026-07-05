@@ -1557,6 +1557,14 @@ Completed work:
   `tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py`
   passed as `50 passed in 3.60 s`; Ruff, py_compile, and `git diff --check`
   passed.
+- Tranche 91: added a source-tree regression guard that forbids
+  `driver_state`, `driver_scope`, `driver-state`, `driver-scope`,
+  `from_driver_state`, and `from_driver_scope` in active package sources. This
+  locks the Tranche-90 cleanup to the current solve-state vocabulary and keeps
+  future sparse-solve helpers from drifting back toward monolith-era naming.
+  Focused validation passed:
+  `tests/test_source_tree_consolidation.py tests/test_profile_response_sparse_pc.py tests/test_profile_response_diagnostics.py tests/test_rhs1_solver_diagnostics.py`
+  as `415 passed in 6.71 s`; Ruff, py_compile, and `git diff --check` passed.
 
 Remaining consolidation steps:
 

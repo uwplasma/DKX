@@ -178,6 +178,29 @@ def test_package_sources_do_not_document_deleted_v3_driver_as_architecture() -> 
     assert offenders == []
 
 
+def test_package_sources_do_not_use_monolith_state_terms() -> None:
+    """Keep active sparse-solve APIs named around solve state, not driver state."""
+
+    forbidden_terms = (
+        "driver_state",
+        "driver_scope",
+        "driver-state",
+        "driver-scope",
+        "from_driver_state",
+        "from_driver_scope",
+    )
+    offenders: list[tuple[str, str]] = []
+    for path in sorted(PACKAGE_ROOT.rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for term in forbidden_terms:
+            if term in text:
+                offenders.append((path.relative_to(REPO_ROOT).as_posix(), term))
+
+    assert offenders == []
+
+
 def test_package_sources_do_not_repeat_top_level_defs() -> None:
     """Repeated top-level definitions hide stale helpers in large owner files."""
 
