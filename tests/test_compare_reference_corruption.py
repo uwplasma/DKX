@@ -4,8 +4,9 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import pytest
 
-from sfincs_jax.compare import compare_sfincs_outputs
+from sfincs_jax.compare import compare_h5_outputs, compare_sfincs_outputs
 
 
 def _write_minimal_compare_h5(path: Path, *, gpsi: np.ndarray, dtheta: np.ndarray) -> None:
@@ -43,6 +44,109 @@ def _write_rhs1_compare_h5(path: Path, *, density: np.ndarray, constraint_scheme
         constraint_scheme=constraint_scheme,
         fields={"densityPerturbation": density},
     )
+
+
+def _write_strict_h5(path: Path, datasets: dict[str, object]) -> None:
+    with h5py.File(path, "w") as f:
+        for key, value in datasets.items():
+            if isinstance(value, str):
+                f[key] = value
+            else:
+                f[key] = np.asarray(value)
+
+
+def test_strict_h5_compare_reports_output_contract_failures(tmp_path: Path) -> None:
+    reference = tmp_path / "reference.h5"
+    candidate = tmp_path / "candidate.h5"
+    _write_strict_h5(
+        reference,
+        {
+            "same": np.asarray([1.0, 2.0]),
+            "mismatch": np.asarray([1.0, 2.0]),
+            "shape": np.asarray([[1.0, 2.0]]),
+            "missing_in_candidate": np.asarray([5.0]),
+            "nonnumeric": "reference metadata",
+        },
+    )
+    _write_strict_h5(
+        candidate,
+        {
+            "same": np.asarray([1.0, 2.0]),
+            "mismatch": np.asarray([1.0, 2.2]),
+            "shape": np.asarray([1.0, 2.0]),
+            "extra_in_candidate": np.asarray([9.0]),
+            "nonnumeric": "candidate metadata",
+        },
+    )
+
+    payload = compare_h5_outputs(
+        reference_path=reference,
+        candidate_path=candidate,
+        atol=1.0e-12,
+        rtol=0.0,
+    )
+
+    assert payload["overall_status"] == "fail"
+    assert payload["numeric_reference_dataset_count"] == 4
+    assert payload["numeric_candidate_dataset_count"] == 4
+    assert payload["compared_dataset_count"] == 2
+    assert payload["failing_dataset_count"] == 3
+    assert payload["status_counts"] == {
+        "extra_in_candidate": 1,
+        "missing_in_candidate": 1,
+        "ok": 1,
+        "shape_mismatch": 1,
+        "value_mismatch": 1,
+    }
+    by_key = {row["key"]: row for row in payload["datasets"]}
+    assert by_key["same"]["status"] == "ok"
+    assert by_key["mismatch"]["status"] == "value_mismatch"
+    assert by_key["mismatch"]["max_abs"] == pytest.approx(0.2)
+    assert by_key["shape"]["status"] == "shape_mismatch"
+    assert by_key["shape"]["reference_shape"] == [1, 2]
+    assert by_key["shape"]["candidate_shape"] == [2]
+    assert by_key["missing_in_candidate"]["status"] == "missing_in_candidate"
+    assert by_key["extra_in_candidate"]["status"] == "extra_in_candidate"
+    assert "nonnumeric" not in by_key
+
+
+def test_strict_h5_compare_honors_key_selection_tolerances_and_ignore_list(tmp_path: Path) -> None:
+    reference = tmp_path / "reference.h5"
+    candidate = tmp_path / "candidate.h5"
+    _write_strict_h5(
+        reference,
+        {
+            "close": np.asarray([1.0, 2.0]),
+            "ignored": np.asarray([0.0]),
+        },
+    )
+    _write_strict_h5(
+        candidate,
+        {
+            "close": np.asarray([1.0, 2.05]),
+            "candidate_only": np.asarray([3.0]),
+            "ignored": np.asarray([99.0]),
+        },
+    )
+
+    payload = compare_h5_outputs(
+        reference_path=reference,
+        candidate_path=candidate,
+        keys=["close", "candidate_only", "ignored"],
+        ignore_keys=["ignored"],
+        include_extra=False,
+        atol=1.0e-12,
+        rtol=0.0,
+        tolerances={"close": {"atol": 0.1, "rtol": 0.0}},
+    )
+
+    assert payload["overall_status"] == "fail"
+    assert payload["status_counts"] == {"missing_in_reference": 1, "ok": 1}
+    by_key = {row["key"]: row for row in payload["datasets"]}
+    assert by_key["close"]["status"] == "ok"
+    assert by_key["close"]["atol"] == 0.1
+    assert by_key["candidate_only"]["status"] == "missing_in_reference"
+    assert "ignored" not in by_key
 
 
 def test_compare_masks_vmec_reference_corruption_outliers(tmp_path: Path) -> None:
