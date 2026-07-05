@@ -235,6 +235,17 @@ def test_schur_heuristic_tests_use_canonical_policy_and_preconditioner_owners() 
         assert owner in text
 
 
+def test_pas_policy_tests_use_pas_policy_owner_not_profile_solve() -> None:
+    """PAS applicability and memory tests belong to the PAS policy owner."""
+
+    text = (REPO_ROOT / "tests" / "test_pas_preconditioner_policy.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "profile_solve" not in text
+    assert "sfincs_jax.solvers.preconditioner_pas_policy" in text
+
+
 def test_test_filenames_do_not_reintroduce_deleted_v3_driver_label() -> None:
     """Keep test modules named after the canonical behavior they protect."""
 

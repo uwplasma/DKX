@@ -5,7 +5,6 @@ from types import SimpleNamespace
 import numpy as np
 
 import sfincs_jax.solvers.preconditioner_pas_policy as pas_policy
-import sfincs_jax.problems.profile_solve as profile_solve
 import sfincs_jax.problems.profile_preconditioner_build as pb
 
 
@@ -96,16 +95,17 @@ def test_pas_tokamak_theta_preconditioner_applicable_on_zeta_invariant_multizeta
     assert pas_policy.pas_tokamak_theta_preconditioner_applicable(
         _pas_tokamak_like_op(n_zeta=3, zeta_varying=False)
     )
-    assert profile_solve._pas_tokamak_theta_preconditioner_applicable(_pas_tokamak_like_op(n_zeta=3, zeta_varying=False))
 
 
 def test_pas_tokamak_theta_preconditioner_applicable_rejects_zeta_variation_and_drifts(monkeypatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_PAS_TOKAMAK_TZ_TOL", "bad")
-    assert not profile_solve._pas_tokamak_theta_preconditioner_applicable(_pas_tokamak_like_op(n_zeta=3, zeta_varying=True))
+    assert not pas_policy.pas_tokamak_theta_preconditioner_applicable(
+        _pas_tokamak_like_op(n_zeta=3, zeta_varying=True)
+    )
 
     op = _pas_tokamak_like_op(n_zeta=1, zeta_varying=False)
     op.fblock.exb_theta = object()
-    assert not profile_solve._pas_tokamak_theta_preconditioner_applicable(op)
+    assert not pas_policy.pas_tokamak_theta_preconditioner_applicable(op)
 
 
 def test_pas_tokamak_theta_builder_falls_back_to_block_preconditioner(monkeypatch) -> None:
@@ -118,31 +118,29 @@ def test_pas_tokamak_theta_builder_falls_back_to_block_preconditioner(monkeypatc
 def test_pas_tz_preconditioner_applicable_positive_and_negative_cases() -> None:
     assert pas_policy.pas_tz_preconditioner_applicable(_pas_tz_op())
     assert not pas_policy.pas_tz_preconditioner_applicable(_pas_tz_op(with_fp=True))
-    assert profile_solve._pas_tz_preconditioner_applicable(_pas_tz_op())
-    assert not profile_solve._pas_tz_preconditioner_applicable(_pas_tz_op(rhs_mode=2))
-    assert not profile_solve._pas_tz_preconditioner_applicable(_pas_tz_op(n_theta=4, n_zeta=4))
-    assert not profile_solve._pas_tz_preconditioner_applicable(_pas_tz_op(n_xi=1))
-    assert not profile_solve._pas_tz_preconditioner_applicable(_pas_tz_op(with_pas=False))
-    assert not profile_solve._pas_tz_preconditioner_applicable(_pas_tz_op(with_fp=True))
-    assert profile_solve._pas_tz_preconditioner_applicable(_pas_tz_op(with_drift=True))
+    assert not pas_policy.pas_tz_preconditioner_applicable(_pas_tz_op(rhs_mode=2))
+    assert not pas_policy.pas_tz_preconditioner_applicable(_pas_tz_op(n_theta=4, n_zeta=4))
+    assert not pas_policy.pas_tz_preconditioner_applicable(_pas_tz_op(n_xi=1))
+    assert not pas_policy.pas_tz_preconditioner_applicable(_pas_tz_op(with_pas=False))
+    assert not pas_policy.pas_tz_preconditioner_applicable(_pas_tz_op(with_fp=True))
+    assert pas_policy.pas_tz_preconditioner_applicable(_pas_tz_op(with_drift=True))
 
 
 def test_rhs1_pas_tz_max_bytes_invalid_env_falls_back() -> None:
     assert pas_policy.rhs1_pas_tz_max_bytes() > 0
-    assert profile_solve._rhs1_pas_tz_max_bytes() > 0
 
 
 def test_pas_tz_build_bytes_zero_for_inapplicable_and_positive_for_valid(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_LMAX", raising=False)
-    assert profile_solve._estimate_rhs1_pas_tz_build_bytes(_pas_tz_op(rhs_mode=2)) == 0
-    assert profile_solve._estimate_rhs1_pas_tz_build_bytes(_pas_tz_op()) > 0
+    assert pas_policy.estimate_rhs1_pas_tz_build_bytes(_pas_tz_op(rhs_mode=2)) == 0
+    assert pas_policy.estimate_rhs1_pas_tz_build_bytes(_pas_tz_op()) > 0
 
 
 def test_pas_tz_build_bytes_include_live_copies_and_headroom(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_LMAX", raising=False)
     op = _pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)
 
-    estimate = profile_solve._estimate_rhs1_pas_tz_build_bytes(op)
+    estimate = pas_policy.estimate_rhs1_pas_tz_build_bytes(op)
 
     tz = int(op.n_theta * op.n_zeta)
     twotz = int(2 * tz)
@@ -160,9 +158,9 @@ def test_pas_tz_build_bytes_include_live_copies_and_headroom(monkeypatch) -> Non
 def test_pas_tz_memory_safe_respects_env_override(monkeypatch) -> None:
     op = _pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)
     monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 1)
-    assert not profile_solve._pas_tz_preconditioner_memory_safe(op)
+    assert not pas_policy.pas_tz_preconditioner_memory_safe(op)
     monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 10**12)
-    assert profile_solve._pas_tz_preconditioner_memory_safe(op)
+    assert pas_policy.pas_tz_preconditioner_memory_safe(op)
 
 
 def test_pas_tz_builder_falls_back_to_hybrid_when_inapplicable(monkeypatch) -> None:

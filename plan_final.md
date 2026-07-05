@@ -1386,6 +1386,16 @@ Completed work:
   `tests/test_source_tree_consolidation.py tests/test_schur_precond_heuristic.py`
   as `51 passed in 27.59 s`; the broader refactor/owner bundle passed as
   `192 passed in 37.63 s`; Ruff, `compileall`, and `git diff --check` passed.
+- Tranche 76: moved PAS applicability and memory-policy tests entirely onto
+  `solvers/preconditioner_pas_policy.py`, removing duplicate assertions
+  against private `profile_solve._*` policy aliases. The PAS builder tests
+  still exercise `problems/profile_preconditioner_build.py`, but the pure
+  policy tests now import no solve-orchestration module. A source-tree guard
+  keeps `tests/test_pas_preconditioner_policy.py` on the PAS policy owner.
+  Focused validation passed:
+  `tests/test_source_tree_consolidation.py tests/test_pas_preconditioner_policy.py`
+  as `44 passed in 3.18 s`; the broader refactor/owner bundle passed as
+  `193 passed in 37.62 s`; Ruff, `compileall`, and `git diff --check` passed.
 
 Remaining consolidation steps:
 
