@@ -252,6 +252,141 @@ def test_strong_preconditioner_family_reduced_unknown_kind_uses_adi(monkeypatch)
     assert seen["adi_sweeps"] == 2
 
 
+def test_preconditioner_threshold_readers_use_defaults_overrides_and_invalid_fallbacks(monkeypatch) -> None:
+    keys = (
+        "SFINCS_JAX_PAS_LITE_MIN",
+        "SFINCS_JAX_RHSMODE1_TZ_PRECOND_MAX",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX",
+        "SFINCS_JAX_RHSMODE1_SCHWARZ_AUTO_MIN",
+        "SFINCS_JAX_RHSMODE1_PAS_XMG_MIN",
+        "SFINCS_JAX_RHSMODE1_THETA_LINE_MAX",
+        "SFINCS_JAX_PAS_STRONG_LMAX",
+    )
+    for key in keys:
+        monkeypatch.delenv(key, raising=False)
+
+    assert pb.rhs1_pas_lite_min() == 20000
+    assert pb.rhs1_tz_precond_max() == 128
+    assert pb.rhs1_xblock_tz_max(default=321) == 321
+    assert pb.rhs1_schwarz_auto_min() == 4000
+    assert pb.rhs1_pas_xmg_min() == 50000
+    assert pb.rhs1_theta_line_max() == 0
+    assert pb.rhs1_pas_strong_lmax() == 2
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_LITE_MIN", "123")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TZ_PRECOND_MAX", "456")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "789")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCHWARZ_AUTO_MIN", "111")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_XMG_MIN", "222")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_THETA_LINE_MAX", "333")
+    monkeypatch.setenv("SFINCS_JAX_PAS_STRONG_LMAX", "4")
+
+    assert pb.rhs1_pas_lite_min() == 123
+    assert pb.rhs1_tz_precond_max() == 456
+    assert pb.rhs1_xblock_tz_max(default=321) == 789
+    assert pb.rhs1_schwarz_auto_min() == 111
+    assert pb.rhs1_pas_xmg_min() == 222
+    assert pb.rhs1_theta_line_max() == 333
+    assert pb.rhs1_pas_strong_lmax() == 4
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "not-an-int")
+    assert pb.rhs1_xblock_tz_max(default=654) == 654
+
+
+def test_direct_strong_preconditioner_build_functions_cover_none_and_pas_adjustment(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    def dispatch(**kwargs):
+        seen.update(kwargs)
+        return "preconditioner"
+
+    assert (
+        pb.resolve_rhs1_strong_preconditioner_kind_for_build(
+            "schur",
+            has_pas=True,
+            base_preconditioner_kind="pas_hybrid",
+            residual_norm=1.0,
+        )
+        == "pas_hybrid"
+    )
+    assert (
+        pb.resolve_rhs1_strong_preconditioner_kind_for_build(
+            "schur",
+            has_pas=True,
+            base_preconditioner_kind="point",
+            residual_norm=1.0,
+        )
+        == "schur"
+    )
+
+    assert (
+        pb.build_rhs1_strong_preconditioner_reduced_from_kind(
+            op=FakeOperator(fblock=FakeFBlock()),
+            strong_precond_kind=None,
+            reduce_full=lambda x: x,
+            expand_reduced=lambda x: x,
+            rhs1_xblock_tz_lmax=None,
+            dd_block_theta=1,
+            dd_overlap_theta=2,
+            dd_block_zeta=3,
+            dd_overlap_zeta=4,
+            dispatch_builder=dispatch,
+        )
+        is None
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX", "5")
+    reduced = pb.build_rhs1_strong_preconditioner_reduced_from_kind(
+        op=FakeOperator(fblock=FakeFBlock()),
+        strong_precond_kind="xblock_tz_lmax",
+        reduce_full=lambda x: x,
+        expand_reduced=lambda x: x,
+        rhs1_xblock_tz_lmax=None,
+        dd_block_theta=1,
+        dd_overlap_theta=2,
+        dd_block_zeta=3,
+        dd_overlap_zeta=4,
+        dispatch_builder=dispatch,
+    )
+    assert reduced == "preconditioner"
+    assert seen["rhs1_precond_kind"] == "xblock_tz_lmax"
+    assert seen["rhs1_xblock_tz_lmax"] == 5
+    assert seen["dd_block_theta"] == 1
+    assert seen["dd_overlap_zeta"] == 4
+
+    seen.clear()
+    kind, full = pb.build_rhs1_strong_preconditioner_full_from_kind(
+        op=FakeOperator(fblock=FakeFBlock(pas=object())),
+        strong_precond_kind="schur",
+        base_preconditioner_kind="pas_lite",
+        residual_norm=1.0,
+        rhs1_xblock_tz_lmax=7,
+        dd_block_theta=8,
+        dd_overlap_theta=9,
+        dd_block_zeta=10,
+        dd_overlap_zeta=11,
+        dispatch_builder=dispatch,
+        adi_sweeps=0,
+    )
+    assert (kind, full) == ("pas_hybrid", "preconditioner")
+    assert seen["rhs1_precond_kind"] == "pas_hybrid"
+    assert seen["rhs1_xblock_tz_lmax"] == 7
+    assert seen["adi_sweeps"] == 1
+
+    assert pb.build_rhs1_strong_preconditioner_full_from_kind(
+        op=FakeOperator(fblock=FakeFBlock()),
+        strong_precond_kind=None,
+        base_preconditioner_kind=None,
+        residual_norm=1.0,
+        rhs1_xblock_tz_lmax=None,
+        dd_block_theta=0,
+        dd_overlap_theta=0,
+        dd_block_zeta=0,
+        dd_overlap_zeta=0,
+        dispatch_builder=dispatch,
+    ) == (None, None)
+
+
 def test_pas_tz_guarded_overlay_uses_structured_correction(monkeypatch) -> None:
     calls: dict[str, object] = {}
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_LEVELS", "collision")

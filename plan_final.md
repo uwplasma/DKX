@@ -90,6 +90,13 @@ The main structural refactor is functionally complete:
   `problems/profile_policies.py` reports zero production-used public policy
   helpers without direct tests. Focused validation passed:
   `tests/test_rhs1_preconditioner_auto_policy.py` as `30 passed in 0.20 s`.
+- RHSMode=1 preconditioner-build coverage now includes direct tests for
+  automatic threshold environment readers and direct strong-preconditioner
+  reduced/full builder functions. A source/test audit for
+  `problems/profile_preconditioner_build.py` reports zero production-used
+  public helpers without direct tests. Focused validation passed:
+  `tests/test_profile_response_preconditioner_build.py` as
+  `20 passed in 0.44 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -879,6 +886,10 @@ Completed work:
   `rhs1_gpu_sparse_fallback_skip_allowed_current_backend` policy wrapper and
   reran a source/test audit showing no production-used public helpers in
   `problems/profile_policies.py` without direct tests.
+- Tranche 31: added direct bounded coverage for
+  `problems/profile_preconditioner_build.py` threshold readers and strong
+  preconditioner builder functions, then reran the source/test audit showing no
+  production-used public helpers in that module without direct tests.
 
 Remaining consolidation steps:
 
