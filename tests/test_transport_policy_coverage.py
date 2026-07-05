@@ -7,6 +7,8 @@ import numpy as np
 import pytest
 
 from sfincs_jax.problems.transport_parallel_runtime import (
+    audit_multi_gpu_case_throughput_summary,
+    audit_parallel_scaling_claim_scope,
     audit_sharded_solve_scaling_summary,
     audit_transport_parallel_scaling_summary,
     rewrite_xla_flags,
@@ -598,6 +600,118 @@ def test_sharded_scaling_audit_stays_non_release_but_ci_gateable() -> None:
     assert audit.timing_semantics == "hot_solve"
     assert audit.operator_reuse_gate
     assert any("not a release scaling claim" in note for note in audit.notes)
+
+
+def test_parallel_claim_scope_rejects_plan_only_release_and_measured_mix() -> None:
+    audit = audit_parallel_scaling_claim_scope(
+        {
+            "benchmark_kind": "transport_worker_scaling",
+            "backend": "cpu",
+            "rhs_count": 2,
+            "workers": [1, 2],
+            "artifact_kind": "benchmark_plan",
+            "launches_solves": False,
+            "release_scaling_claim": True,
+            "results": [{"workers": 1, "mean_s": 4.0}],
+        }
+    )
+
+    assert not audit.release_scaling_supported
+    assert audit.plan_only_scope_evidence
+    assert any("plan-only" in failure for failure in audit.failures)
+    assert any("transport-worker scaling is independent" in note for note in audit.notes)
+
+
+def test_parallel_claim_scope_keeps_single_case_sharding_experimental() -> None:
+    audit = audit_parallel_scaling_claim_scope(
+        {
+            "benchmark_kind": "single_case_sharded_solve",
+            "backend": "gpu",
+            "devices": [1, 2],
+            "experimental_single_case_scaling": True,
+            "timing_semantics": "warm",
+            "results": [{"devices": 1, "mean_s": 3.0}, {"devices": 2, "mean_s": 2.2}],
+        }
+    )
+
+    assert audit.claim_scope == "single_case_sharded_solve_experimental"
+    assert audit.claim_scope_release_eligible
+    assert audit.release_scaling_supported is False
+    assert audit.unsupported_single_case_strong_scaling
+    assert any("never promotes single-case" in note for note in audit.notes)
+
+
+def test_multi_gpu_case_throughput_audit_accepts_warm_nonrelease_evidence() -> None:
+    audit = audit_multi_gpu_case_throughput_summary(
+        {
+            "benchmark_kind": "gpu_case_throughput",
+            "backend": "gpu",
+            "timing_semantics": "cache_warm",
+            "required_gpu_count": 2,
+            "sequential_one_gpu": {"wall_s": 10.0},
+            "parallel_two_gpu": {"wall_s": 5.0},
+        },
+        min_throughput_speedup=1.5,
+    )
+
+    assert audit.ci_gate_pass
+    assert audit.release_scaling_claim is False
+    assert audit.throughput_speedup == pytest.approx(2.0)
+    assert any("not single-case strong scaling" in note for note in audit.notes)
+
+
+def test_multi_gpu_case_throughput_audit_fails_closed_on_release_and_bad_ratio() -> None:
+    audit = audit_multi_gpu_case_throughput_summary(
+        {
+            "benchmark_kind": "multi_gpu_case_throughput",
+            "backend": "cpu",
+            "timing_semantics": "cold_start",
+            "required_gpu_count": 1,
+            "release_scaling_claim": True,
+            "sequential_one_gpu": {"wall_s": 10.0},
+            "parallel_two_gpu": {"wall_s": 8.0},
+            "throughput_speedup": 3.0,
+        },
+        min_throughput_speedup=1.5,
+    )
+
+    assert not audit.ci_gate_pass
+    assert any("must not set release_scaling_claim=true" in failure for failure in audit.failures)
+    assert any("backend must be 'gpu'" in failure for failure in audit.failures)
+    assert any("required_gpu_count=1" in failure for failure in audit.failures)
+    assert any("timing semantics 'cold_start'" in failure for failure in audit.failures)
+    assert any("does not match wall-time ratio" in failure for failure in audit.failures)
+
+
+def test_sharded_scaling_deterministic_gate_rejects_missing_digest() -> None:
+    audit = audit_sharded_solve_scaling_summary(
+        {
+            "benchmark_kind": "single_case_sharded_solve",
+            "backend": "gpu",
+            "device_count": 2,
+            "timing_semantics": "warm",
+            "experimental_single_case_scaling": True,
+            "results": [{"devices": 1, "mean_s": 6.0}, {"devices": 2, "mean_s": 4.0}],
+            "operator_reuse_gate": {
+                "passes": True,
+                "timing_semantics": "warm",
+                "compile_in_timed_region": False,
+                "warm_run_amortization_pass": True,
+                "timed_repeats": 2,
+            },
+            "deterministic_output_probe_requested": True,
+            "deterministic_output_gate": {
+                "passes": True,
+                "residual_tolerance": 1.0e-9,
+                "max_relative_residual_norm": 1.0e-12,
+            },
+        }
+    )
+
+    assert not audit.ci_gate_pass
+    assert audit.deterministic_output_gate is False
+    assert any("requires output_digest" in failure for failure in audit.failures)
+    assert any("requested deterministic output probe did not pass" in failure for failure in audit.failures)
 
 
 def test_rewrite_xla_flags_replaces_stale_thread_and_device_caps() -> None:

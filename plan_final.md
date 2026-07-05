@@ -343,6 +343,12 @@ The main structural refactor is functionally complete:
   `tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py
   tests/test_structured_csr_docs.py tests/test_source_tree_consolidation.py` as
   `284 passed in 164.86 s`.
+- Transport parallel-scaling coverage now includes pure audit gates for
+  plan-only artifacts, single-case sharded-solve non-release scope,
+  multi-GPU independent-case throughput, cold/release fail-closed behavior, and
+  deterministic-output digest requirements. Focused validation passed:
+  `tests/test_transport_policy_coverage.py` as `18 passed in 0.45 s`; the
+  adjacent parallel runtime/validation bundle passed as `49 passed in 0.42 s`.
 - The examples tree has been re-audited for navigation and repository size:
   every top-level task folder has a README, examples contract tests passed as
   `26 passed in 20.66 s`, and the nested `output/`, `artifacts/`,
