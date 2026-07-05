@@ -264,11 +264,11 @@ function rather than an assembled sparse matrix. For the linear kinetic block th
 
 where :math:`A` is represented by a matrix-free matvec and :math:`b` is a right-hand side.
 
-In `sfincs_jax`, the residual interface lives in `sfincs_jax.operators.profile_linear_systems`:
+In `sfincs_jax`, the residual interface lives in `sfincs_jax.operators.profile_system`:
 
-- :class:`sfincs_jax.operators.profile_linear_systems.V3FBlockLinearSystem` computes ``residual(x)`` and
+- :class:`sfincs_jax.operators.profile_system.V3FBlockLinearSystem` computes ``residual(x)`` and
   provides a matrix-free Jacobian matvec ``jacobian_matvec(v)``.
-- :class:`sfincs_jax.operators.profile_linear_systems.V3FullLinearSystem` provides the same interface for the
+- :class:`sfincs_jax.operators.profile_system.V3FullLinearSystem` provides the same interface for the
   profile-response linear system operator.
 - For linear operators, the Jacobian matvec is identical to the operator matvec; for nonlinear
   residuals later in the port, `jax.jvp` provides an efficient Jacobian-vector product (JVP)

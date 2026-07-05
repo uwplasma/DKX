@@ -61,10 +61,8 @@ API reference
 .. automodule:: sfincs_jax.problems.transport_diagnostics
    :members:
 
-Transport-matrix helpers are documented through their maintained domain module.
-
-.. automodule:: sfincs_jax.operators.profile_linear_systems
-   :members:
+Transport-matrix and profile residual helpers are documented through their
+maintained domain modules.
 
 .. automodule:: sfincs_jax.validation.artifacts
    :members:
