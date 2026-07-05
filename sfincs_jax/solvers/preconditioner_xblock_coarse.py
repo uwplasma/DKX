@@ -1,9 +1,9 @@
 """Low-mode, moment, and tail coarse spaces for RHSMode=1 residual corrections.
 
-The RHSMode=1 driver uses these helpers to build compact Galerkin residual
-equations on top of structured f-block preconditioners.  Keeping this code out
-of ``v3_driver.py`` makes the coarse-space algebra directly testable without
-constructing a full SFINCS solve.
+The RHSMode=1 profile solve owner uses these helpers to build compact Galerkin
+residual equations on top of structured f-block preconditioners. Keeping this
+code in a solver module makes the coarse-space algebra directly testable
+without constructing a full SFINCS solve.
 """
 
 from __future__ import annotations

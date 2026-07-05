@@ -3,8 +3,8 @@
 This module holds the small, pure policy functions that decide whether the
 specialized PAS tokamak-theta and PAS-TZ preconditioners are eligible to run.
 They are intentionally isolated from the large solve orchestration in
-``v3_driver.py`` so they can be tested directly and reused from multiple
-dispatch paths without duplicating logic.
+``problems.profile_solve`` so they can be tested directly and reused from
+multiple dispatch paths without duplicating logic.
 """
 
 from __future__ import annotations

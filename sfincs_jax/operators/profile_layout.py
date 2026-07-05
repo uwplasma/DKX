@@ -10,7 +10,7 @@ This file is intentionally larger than the usual module target during the
 consolidation pass because layout metadata, block-COO storage, and reusable
 symbolic active-ordering caches must evolve together. A safe future split is to
 separate pure data layouts from executable block-operator kernels after
-``v3_driver.py`` no longer owns solve orchestration.
+profile-solve orchestration is fully stable.
 """
 
 from __future__ import annotations

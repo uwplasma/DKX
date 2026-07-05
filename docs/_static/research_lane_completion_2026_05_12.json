@@ -264,7 +264,7 @@
         },
         {
           "claim": "Production PAS-TZ guarded-correction metadata now records the blocker that minres still requires full residual/full-direction work arrays, preventing an unsafe streamed-correction promotion.",
-          "path": "sfincs_jax/v3_driver.py"
+          "path": "sfincs_jax/problems/profile_preconditioner_build.py"
         }
       ],
       "gates": [
@@ -490,7 +490,7 @@
       ],
       "id": "refactor_coverage_ci",
       "next_actions": [
-        "Continue extracting pure solver/path/diagnostic helpers from v3_driver.py with fast focused tests before raising the package-wide fail-under threshold; profiling.py is now fully exercised by no-solve helper tests.",
+        "Continue hardening canonical profile, transport, solver, and output owners with fast focused tests before raising the package-wide fail-under threshold; profiling.py is fully exercised by no-solve helper tests.",
         "Keep the sharded CI coverage gate green and use future coverage reports to choose real low-cost invariants, not slow full-solve padding."
       ],
       "second_push_delta_percent": 33,

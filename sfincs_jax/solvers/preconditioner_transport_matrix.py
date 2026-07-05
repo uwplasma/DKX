@@ -1,9 +1,8 @@
 """RHSMode=2/3 transport-matrix preconditioner builders.
 
 This module owns the reusable numerical kernels for the common transport
-preconditioners.  ``v3_driver.py`` keeps compatibility wrappers with the
-historical private names so tests and debug scripts can still monkeypatch the
-old driver facade while the implementation lives in a domain module.
+preconditioners. Transport problem owners import these kernels directly, which
+keeps preconditioner behavior testable without compatibility driver wrappers.
 """
 
 from __future__ import annotations

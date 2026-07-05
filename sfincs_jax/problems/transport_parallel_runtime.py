@@ -3392,9 +3392,9 @@ def maybe_run_transport_parallel_solve(
     """Run the parent-side parallel whichRHS branch, or return ``None``.
 
     The worker payload format and process/GPU execution helpers live in the
-    transport-parallel modules. This function owns the parent orchestration that
-    was historically embedded in ``v3_driver.py``: partitioning, worker launch,
-    result merge, transport diagnostic assembly, and early result construction.
+    transport-parallel modules. This function owns the parent orchestration for
+    partitioning, worker launch, result merge, transport diagnostic assembly,
+    and early result construction.
     """
 
     if not should_run_transport_parallel(

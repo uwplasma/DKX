@@ -224,11 +224,12 @@ gap-finding metric, not as the final quality metric.
 
 The staged path is:
 
-1. **Refactor before raising the floor.** Continue extracting ``v3_driver.py`` and
-   large I/O branches into pure policy, residual, normalization, output-schema,
-   and preconditioner modules. Each extracted module must land with module-level
-   docstrings, source-map documentation, direct unit tests, and one driver-wrapper
-   regression so behavior stays unchanged.
+1. **Refactor before raising the floor.** Continue simplifying the canonical
+   profile, transport, solver, and output owners into pure policy, residual,
+   normalization, output-schema, and preconditioner modules. Each extracted
+   module must land with module-level docstrings, source-map documentation,
+   direct unit tests, and an orchestration regression so behavior stays
+   unchanged.
 2. **Add cheap physics oracles.** Prefer tests based on conservation, symmetry,
    limiting behavior, and normalization identities: PAS ``L=0`` null modes,
    collision positivity/symmetry where applicable, zero-drive flux limits,

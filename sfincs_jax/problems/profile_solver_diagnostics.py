@@ -181,14 +181,14 @@ def rhs1_accept_candidate(
     baseline_metrics: SolverCandidateMetrics | None = None,
     criteria: SolverAcceptanceCriteria | None = None,
 ) -> tuple[Any, Any, RHS1KSPHandoffState | None, bool]:
-    """Accept a candidate result and return the updated driver handoff state.
+    """Accept a candidate result and return the updated replay state.
 
-    The return shape intentionally matches the existing ``v3_driver.py`` call
-    sites: accepted result, accepted residual vector, optional KSP replay state,
-    and a boolean flag. Measured solver-candidate metrics are consulted only
-    after the raw residual comparison passes, preserving the driver contract
-    that a non-improving solve cannot become accepted because it has favorable
-    runtime or memory metadata.
+    The return shape is intentionally compact for profile-solve orchestration:
+    accepted result, accepted residual vector, optional KSP replay state, and a
+    boolean flag. Measured solver-candidate metrics are consulted only after the
+    raw residual comparison passes, preserving the contract that a
+    non-improving solve cannot become accepted because it has favorable runtime
+    or memory metadata.
     """
     current_residual = float(current_result.residual_norm)
     candidate_residual = float(candidate_result.residual_norm)
@@ -1589,7 +1589,7 @@ def build_rhs1_xblock_correction_metadata(
 ) -> dict[str, object]:
     """Build solver-trace metadata for x-block correction hooks.
 
-    Keeping this field assembly out of ``v3_driver.py`` makes output/trace
+    Keeping this field assembly outside the main solve loop makes output/trace
     compatibility independently testable. The returned keys intentionally match
     the historical solver metadata names.
     """

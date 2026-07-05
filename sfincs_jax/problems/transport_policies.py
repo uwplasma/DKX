@@ -513,9 +513,9 @@ class TransportRuntimePolicy:
 
     The pure helpers above take explicit backend and dtype-provider inputs so
     tests and downstream tools can reason about decisions deterministically.
-    The CLI/driver needs the same decisions bound to the current JAX backend.
-    Keeping that binding here avoids private wrapper functions in
-    ``v3_driver.py`` while preserving the same testable policy behavior.
+    The CLI and transport solve owner need the same decisions bound to the
+    current JAX backend. Keeping that binding here avoids private wrapper
+    functions while preserving the same testable policy behavior.
     """
 
     backend: Callable[[], str]

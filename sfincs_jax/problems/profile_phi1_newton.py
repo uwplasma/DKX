@@ -1,8 +1,8 @@
 """Nonlinear Phi1 Newton-Krylov solves for RHSMode=1 profile response.
 
-This module owns the nonlinear Phi1 solve loop that used to live in
-``v3_driver.py``.  It keeps the production/non-autodiff sparse-direct rescue
-explicit while preserving the JAX-native Newton and linearization path used by
+This module owns the nonlinear Phi1 solve loop for the profile-response
+problem. It keeps the production/non-autodiff sparse-direct rescue explicit
+while preserving the JAX-native Newton and linearization path used by
 differentiable Python workflows.
 """
 

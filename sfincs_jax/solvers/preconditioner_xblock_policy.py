@@ -1132,7 +1132,7 @@ def resolve_rhs1_xblock_sparse_pc_policy(
     include_xdot: bool,
     include_electric_field_xi: bool,
 ) -> RHS1XBlockSparsePCPolicy:
-    """Resolve the full x-block sparse-PC policy used by ``v3_driver.py``."""
+    """Resolve the full x-block sparse-PC policy for profile-response solves."""
     precondition_side, default_right_preconditioned = rhs1_xblock_precondition_side(
         env_value=precondition_side_env_value,
         tokamak_fp_er_pc=tokamak_fp_er_pc,

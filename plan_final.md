@@ -297,6 +297,13 @@ The main structural refactor is functionally complete:
   `4031 passed in 283.48 s` with `8089` missing executable lines. The latest
   explicit-sparse and true-operator rescue tranches reduced missing executable
   lines by `109` while keeping the full audit below five minutes.
+- A serial CI-mode coverage audit after deleting the driver shim measured
+  `86%` package coverage and wrote a complete term-missing table before manual
+  interrupt during JAX teardown: `3938 passed, 195 skipped, 5 failed in
+  1042.11 s`. The failures were all stale release/research manifest paths that
+  still referenced `sfincs_jax/v3_driver.py`; follow-up release/research-lane
+  validation passed as `21 passed in 0.22 s` after updating those paths to
+  canonical owners.
 - The latest bounded coverage tranches added RHSMode-1 Schur/coarse fallback
   tests, output-gradient coordinate contract tests, default
   preconditioner-selection tests, radial-preconditioner guard tests,
@@ -637,28 +644,28 @@ The main structural refactor is functionally complete:
 
 The largest coverage blockers from the fresh audit are:
 
+- `problems/transport_parallel_runtime.py`: `56%`, 797 missing lines.
+- `solvers/preconditioner_transport_matrix.py`: `57%`, 742 missing lines.
+- `outputs/writer.py`: `74%`, 491 missing lines.
 - `problems/profile_solve.py`: `68%`, 318 missing lines.
-- `solvers/explicit_sparse.py`: `88%`, 286 missing lines.
-- `operators/profile_full_system.py`: `84%`, 279 missing lines.
-- `problems/profile_policies.py`: `89%`, 276 missing lines.
-- `problems/profile_sparse_solve.py`: `85%`, 258 missing lines.
-- `solvers/preconditioner_xblock_tz_sparse.py`: `76%`, 251 missing lines.
-- `problems/transport_solve.py`: `71%`, 251 missing lines. The remaining
+- `solvers/explicit_sparse.py`: `88%`, 288 missing lines.
+- `operators/profile_full_system.py`: `85%`, 286 missing lines.
+- `problems/profile_policies.py`: `89%`, 280 missing lines.
+- `problems/transport_solve.py`: `68%`, 271 missing lines. The remaining
   uncovered code is concentrated in retry/rescue branches that should be
   covered through bounded branch-specific tests or kept as honest
   production-only paths.
-- `problems/transport_parallel_runtime.py`: `86%`, 250 missing lines.
+- `operators/profile_system.py`: `78%`, 255 missing lines.
 - `solvers/preconditioner_qi_corrections.py`: `88%`, 247 missing lines.
 - `operators/profile_true_operator_rescue.py`: `82%`, 247 missing lines.
+- `solvers/preconditioner_xblock_tz_sparse.py`: `77%`, 238 missing lines.
 - `solvers/preconditioner_qi_device.py`: `89%`, 235 missing lines.
-- `operators/profile_system.py`: `77%`, 234 missing lines.
-- `problems/transport_linear_system.py`: `83%`, 229 missing lines.
-- `solvers/preconditioner_transport_matrix.py`: `87%`, 225 missing lines.
-- `solvers/preconditioner_qi_basis.py`: `89%`, 194 missing lines.
-- `solvers/preconditioner_schur_profile.py`: `84%`, 185 missing lines.
-- `solver.py`: `86%`, 183 missing lines.
-- `outputs/writer.py`: `91%`, 162 missing lines.
+- `problems/profile_sparse_solve.py`: `86%`, 226 missing lines.
+- `problems/transport_linear_system.py`: `84%`, 225 missing lines.
+- `solvers/preconditioner_qi_basis.py`: `89%`, 190 missing lines.
+- `solvers/preconditioner_schur_profile.py`: `84%`, 176 missing lines.
 - `problems/profile_dense.py`: `87%`, 162 missing lines.
+- `solver.py`: `88%`, 156 missing lines.
 - `solvers/preconditioner_xblock_active.py`: `83%`, 154 missing lines.
 - `problems/profile_sparse_qi.py`: `89%`, 153 missing lines.
 
@@ -1156,6 +1163,11 @@ Completed work:
   profile/transport owners and the review-gated architecture state instead of
   active legacy driver shims. Lightweight docs/source guards passed as
   `49 passed in 3.03 s`; `git diff --check` passed.
+- Tranche 55: fixed stale validation/research manifest source paths left by
+  deleting `v3_driver.py`, updated active testing/research-lane prose, and
+  cleaned source docstrings that described the retired file as an active
+  integration point. Focused release/research/docs/source guards passed as
+  `70 passed in 3.20 s`; Ruff and `git diff --check` passed.
 
 Remaining consolidation steps:
 
@@ -1182,8 +1194,9 @@ Remaining consolidation steps:
 ### Lane 2 - Coverage And Future-Proof Tests
 
 Status: 86% local CI-mode measured package coverage
-(`3954 passed, 187 skipped in 4:55` on 2026-07-05) with the direct public
-contract audit closed at `modules_with_missing 0`.
+(`3938 passed, 195 skipped, 5 stale-manifest failures before the manifest-path
+fix, in 17:22` on 2026-07-05) with the direct public contract audit closed at
+`modules_with_missing 0`.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 

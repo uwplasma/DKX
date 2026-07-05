@@ -3908,8 +3908,8 @@ def setup_rhs1_qi_device_preconditioner(
     """Build a device-resident QI preconditioner state.
 
     The returned state is intentionally standalone and does not change any
-    production solver defaults.  It can be closed over by JAX transforms and later
-    wired into ``v3_driver.py`` behind an explicit opt-in.
+    production solver defaults. It can be closed over by JAX transforms and
+    used by profile-response solve policies behind an explicit opt-in.
     """
 
     config_use = RHS1QIDevicePreconditionerConfig() if config is None else config
