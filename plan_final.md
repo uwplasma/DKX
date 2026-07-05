@@ -1289,6 +1289,12 @@ Completed work:
   against reintroducing deleted-driver terminology in test filenames. The tests
   still protect the same RHSMode-1 strong-preconditioner fallback policy
   contracts; no source files or runtime paths changed.
+- Tranche 64: hardened the Fortran/PETSc validation owner by making PETSc
+  vector and AIJ-matrix readers reject negative dimensions and truncated binary
+  payloads before NumPy creates views. This protects frozen Fortran-v3 parity
+  fixtures without requiring Fortran to run in CI. Focused validation passed:
+  `tests/test_validation_petsc_and_upstream_helpers.py` as `8 passed in
+  0.61 s`; Ruff, compileall, and `git diff --check` passed.
 
 Remaining consolidation steps:
 

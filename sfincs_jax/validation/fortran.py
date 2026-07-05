@@ -15,6 +15,16 @@ _VEC_CLASSID = 1211214
 _MAT_CLASSID = 1211216
 
 
+def _require_binary_size(*, payload: bytes, expected_bytes: int, label: str) -> None:
+    """Fail closed before NumPy views a truncated PETSc binary payload."""
+
+    if len(payload) < int(expected_bytes):
+        raise ValueError(
+            f"Invalid PETSc {label}: expected at least {int(expected_bytes)} bytes, "
+            f"found {len(payload)}."
+        )
+
+
 @dataclass(frozen=True)
 class PetscVec:
     """PETSc binary vector read from a SFINCS Fortran-v3 fixture."""
@@ -63,6 +73,9 @@ def read_petsc_vec(path: str | Path) -> PetscVec:
     classid, n = (int(header[0]), int(header[1]))
     if classid != _VEC_CLASSID:
         raise ValueError(f"Unexpected PETSc Vec classid={classid} (expected {_VEC_CLASSID}).")
+    if n < 0:
+        raise ValueError(f"Invalid PETSc Vec: negative size n={n}.")
+    _require_binary_size(payload=b, expected_bytes=2 * 4 + int(n) * 8, label="Vec")
     values = np.frombuffer(b, dtype=">f8", offset=2 * 4, count=n).astype(np.float64, copy=False)
     return PetscVec(values=values)
 
@@ -83,12 +96,17 @@ def read_petsc_mat_aij(path: str | Path) -> PetscCSRMatrix:
     classid, m, n, nnz = (int(header[0]), int(header[1]), int(header[2]), int(header[3]))
     if classid != _MAT_CLASSID:
         raise ValueError(f"Unexpected PETSc Mat classid={classid} (expected {_MAT_CLASSID}).")
+    if m < 0 or n < 0 or nnz < 0:
+        raise ValueError(f"Invalid PETSc Mat: negative dimension/count m={m}, n={n}, nnz={nnz}.")
 
     offset = 4 * 4
+    _require_binary_size(payload=b, expected_bytes=offset + int(m) * 4, label="Mat row counts")
     row_nnz = np.frombuffer(b, dtype=">i4", offset=offset, count=m).astype(np.int32, copy=False)
     offset += m * 4
+    _require_binary_size(payload=b, expected_bytes=offset + int(nnz) * 4, label="Mat column indices")
     col_ind = np.frombuffer(b, dtype=">i4", offset=offset, count=nnz).astype(np.int32, copy=False)
     offset += nnz * 4
+    _require_binary_size(payload=b, expected_bytes=offset + int(nnz) * 8, label="Mat values")
     data = np.frombuffer(b, dtype=">f8", offset=offset, count=nnz).astype(np.float64, copy=False)
 
     row_ptr = np.zeros((m + 1,), dtype=np.int64)
