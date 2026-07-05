@@ -212,9 +212,6 @@ research workflows.
 .. automodule:: sfincs_jax.outputs.transport
    :members:
 
-.. automodule:: sfincs_jax.discretization.indices
-   :members:
-
 .. automodule:: sfincs_jax.validation.fortran
    :members:
 
