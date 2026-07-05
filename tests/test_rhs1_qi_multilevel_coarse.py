@@ -15,6 +15,10 @@ from sfincs_jax.solvers.preconditioner_qi_device import (
 )
 from sfincs_jax.solvers.preconditioner_qi_corrections import (
     RHS1QIMultilevelCoarseConfig,
+    RHS1QIMultilevelCoarseLevelMetadata,
+    RHS1QIMultilevelCoarseMetadata,
+    RHS1QIMultilevelCoarsePreconditioner,
+    RHS1QIMultilevelCoarseProbe,
     build_rhs1_qi_multilevel_coarse_basis,
     build_rhs1_qi_multilevel_coarse_candidates,
     build_rhs1_qi_multilevel_coarse_preconditioner,
@@ -126,6 +130,7 @@ def test_multilevel_coarse_candidates_are_deterministic_and_hierarchical() -> No
     assert candidates.shape == (layout.total_size, len(labels))
     assert labels == repeated_labels
     assert len(levels) == 3
+    assert all(isinstance(level, RHS1QIMultilevelCoarseLevelMetadata) for level in levels)
     assert tuple(level.aggregate_size for level in levels) == (1, 2, 4)
     assert levels[1].block_groups == ((0, 1), (2, 3))
     assert levels[2].block_groups == ((0, 1, 2, 3),)
@@ -180,6 +185,9 @@ def test_multilevel_coarse_reduces_coupled_low_frequency_error_missed_by_local_b
         min_relative_improvement=0.1,
     )
 
+    assert isinstance(preconditioner, RHS1QIMultilevelCoarsePreconditioner)
+    assert isinstance(preconditioner.metadata, RHS1QIMultilevelCoarseMetadata)
+    assert isinstance(probe, RHS1QIMultilevelCoarseProbe)
     assert probe.accepted is True
     assert probe.reason == "residual_reduced"
     assert probe.metadata.reason == "built_with_multilevel_coarse"

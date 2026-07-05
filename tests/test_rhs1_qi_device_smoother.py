@@ -9,11 +9,16 @@ import scipy.sparse as sp
 from sfincs_jax.operators.profile_device_sparse import device_csr_from_scipy_csr
 from sfincs_jax.solvers.preconditioner_qi_basis import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata
 from sfincs_jax.solvers.preconditioner_qi_device import (
+    RHS1QIDeviceJacobiSmoother,
+    RHS1QIDeviceJacobiSmootherMetadata,
+    RHS1QIDeviceSmootherProbe,
     build_rhs1_qi_device_jacobi_smoother,
     extract_device_csr_diagonal,
     probe_rhs1_qi_device_smoother_correction,
 )
 from sfincs_jax.solvers.preconditioner_qi_corrections import (
+    RHS1QITwoLevelPreconditioner,
+    RHS1QITwoLevelProbe,
     build_rhs1_qi_two_level_preconditioner,
     probe_rhs1_qi_two_level_correction,
 )
@@ -68,6 +73,8 @@ def test_device_jacobi_smoother_reuses_csr_operator_and_is_jittable() -> None:
     eager = smoother.apply(residual)
     compiled = jax.jit(smoother.as_preconditioner())(residual)
 
+    assert isinstance(smoother, RHS1QIDeviceJacobiSmoother)
+    assert isinstance(smoother.metadata, RHS1QIDeviceJacobiSmootherMetadata)
     assert smoother.metadata.device_resident is True
     assert smoother.metadata.reason == "built"
     assert smoother.metadata.valid_diagonal_count == 3
@@ -149,6 +156,8 @@ def test_device_jacobi_residual_minimizing_policy_reduces_and_fails_closed() -> 
 
     assert stationary.metadata.step_policy == "stationary"
     assert minres.metadata.step_policy == "residual_minimizing"
+    assert isinstance(probe, RHS1QIDeviceSmootherProbe)
+    assert isinstance(rejected_probe, RHS1QIDeviceSmootherProbe)
     assert stationary_residual_norm == pytest.approx(2.0)
     assert probe.accepted is True
     assert probe.reason == "residual_reduced"
@@ -197,6 +206,8 @@ def test_device_jacobi_smoother_feeds_two_level_qi_probe() -> None:
         min_relative_improvement=0.05,
     )
 
+    assert isinstance(preconditioner, RHS1QITwoLevelPreconditioner)
+    assert isinstance(probe, RHS1QITwoLevelProbe)
     assert probe.accepted is True
     assert probe.residual_after_norm < 0.75 * local_residual_norm
     assert probe.metadata.rank == 1

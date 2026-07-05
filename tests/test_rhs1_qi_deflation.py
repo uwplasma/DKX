@@ -5,6 +5,9 @@ import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.solvers.preconditioner_qi_corrections import (
+    RHS1QIDeflatedPreconditioner,
+    RHS1QIDeflationMetadata,
+    RHS1QIDeflationProbe,
     build_rhs1_qi_residual_deflated_preconditioner,
     probe_rhs1_qi_deflated_correction,
     probe_rhs1_qi_deflated_minres_seed,
@@ -42,6 +45,9 @@ def test_residual_deflation_reduces_coupled_slow_mode() -> None:
         min_relative_improvement=0.05,
     )
 
+    assert isinstance(preconditioner, RHS1QIDeflatedPreconditioner)
+    assert isinstance(preconditioner.metadata, RHS1QIDeflationMetadata)
+    assert isinstance(probe, RHS1QIDeflationProbe)
     assert preconditioner.metadata.rank >= 2
     assert probe.accepted is True
     assert probe.reason == "residual_reduced"

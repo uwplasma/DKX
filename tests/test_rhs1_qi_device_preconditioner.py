@@ -9,7 +9,15 @@ import scipy.sparse as sp
 from sfincs_jax.operators.profile_device_sparse import device_csr_from_scipy_csr
 from sfincs_jax.solvers.preconditioner_qi_basis import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata, RHS1QICoarseBlockLayout
 from sfincs_jax.solvers.preconditioner_qi_device import (
+    RHS1QIDeviceAugmentedSeedProbe,
     RHS1QIDevicePreconditionerConfig,
+    RHS1QIDevicePreconditionerMetadata,
+    RHS1QIDevicePreconditionerProbe,
+    RHS1QIDevicePreconditionerState,
+    RHS1QIMatrixFreeProjectedResidualSmoother,
+    RHS1QIMatrixFreeProjectedResidualSmootherMetadata,
+    RHS1QIMatrixFreeResidualSmoother,
+    RHS1QIMatrixFreeResidualSmootherMetadata,
     probe_rhs1_qi_device_augmented_seed,
     probe_rhs1_qi_device_preconditioner,
     setup_rhs1_qi_device_preconditioner,
@@ -95,6 +103,8 @@ def test_device_preconditioner_builds_field_split_state_and_metadata() -> None:
     coefficients = state.solve_coarse(remaining)
     expected = local + basis.vectors @ coefficients
 
+    assert isinstance(state, RHS1QIDevicePreconditionerState)
+    assert isinstance(state.metadata, RHS1QIDevicePreconditionerMetadata)
     assert state.metadata.reason == "built_with_coarse"
     assert state.metadata.rank == 1
     assert state.metadata.operator_source == "device_csr"
@@ -155,6 +165,9 @@ def test_device_preconditioner_probe_accepts_true_residual_drop_and_fails_closed
     )
 
     assert local_probe.accepted is True
+    assert isinstance(local_probe, RHS1QIDevicePreconditionerProbe)
+    assert isinstance(probe, RHS1QIDevicePreconditionerProbe)
+    assert isinstance(rejected_probe, RHS1QIDevicePreconditionerProbe)
     assert probe.accepted is True
     assert probe.reason == "residual_reduced"
     assert probe.residual_after_norm < 0.5 * local_probe.residual_after_norm
@@ -872,6 +885,8 @@ def test_device_preconditioner_matrix_free_residual_smoother_reduces_residual() 
     assert state.metadata.operator_source == "matrix_free"
     assert state.metadata.local_smoother_kind == "matrix_free_residual"
     assert state.metadata.local_smoother_reason == "built"
+    assert isinstance(state.local_smoother, RHS1QIMatrixFreeResidualSmoother)
+    assert isinstance(state.local_smoother.metadata, RHS1QIMatrixFreeResidualSmootherMetadata)
     assert probe.accepted is True
     assert probe.reason == "residual_reduced"
     assert probe.residual_after_norm < probe.residual_before_norm
@@ -934,6 +949,8 @@ def test_device_preconditioner_matrix_free_block_smoother_solves_projected_group
     assert state.metadata.reason == "built_local_only"
     assert state.metadata.local_smoother_kind == "matrix_free_block_minres"
     assert state.local_smoother is not None
+    assert isinstance(state.local_smoother, RHS1QIMatrixFreeProjectedResidualSmoother)
+    assert isinstance(state.local_smoother.metadata, RHS1QIMatrixFreeProjectedResidualSmootherMetadata)
     assert state.local_smoother.metadata.block_count == 2
     assert state.local_smoother.metadata.group_count == 2
     assert probe.accepted is True
@@ -1923,6 +1940,7 @@ def test_device_augmented_seed_probe_returns_rank_gated_correction_space() -> No
         residual_minimizing_step=True,
     )
 
+    assert isinstance(result, RHS1QIDeviceAugmentedSeedProbe)
     assert result.probe.accepted is True
     assert result.probe.reason == "augmented_residual_reduced"
     assert result.rank == 1
@@ -1954,6 +1972,7 @@ def test_device_augmented_seed_probe_fails_closed_without_residual_reduction() -
         max_rank=2,
     )
 
+    assert isinstance(result, RHS1QIDeviceAugmentedSeedProbe)
     assert result.probe.accepted is False
     assert result.reason == "residual_not_reduced"
     assert result.rank == 0

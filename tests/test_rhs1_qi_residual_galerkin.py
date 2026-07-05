@@ -7,6 +7,8 @@ import pytest
 
 from sfincs_jax.solvers.preconditioner_qi_corrections import (
     RHS1QIResidualGalerkinConfig,
+    RHS1QIResidualGalerkinMetadata,
+    RHS1QIResidualGalerkinState,
     setup_rhs1_qi_residual_galerkin,
 )
 
@@ -52,6 +54,8 @@ def test_residual_derived_stages_recover_modes_missed_by_fixed_global_basis() ->
         ),
     )
 
+    assert isinstance(state, RHS1QIResidualGalerkinState)
+    assert isinstance(state.metadata, RHS1QIResidualGalerkinMetadata)
     assert fixed_after == pytest.approx(residual_before)
     assert state.metadata.accepted is True
     assert state.metadata.reason == "residual_reduced"

@@ -8,7 +8,10 @@ import scipy.sparse as sp
 import sfincs_jax.solvers.explicit_sparse as explicit_sparse
 from sfincs_jax.solvers.explicit_sparse import (
     SparseDecision,
+    SparseFactorAdmission,
+    SparseFactorBundle,
     SparseOperatorBundle,
+    SparseSymbolicAnalysis,
     admit_sparse_factor_against_operator,
     analyze_sparse_symbolic_structure,
     build_operator_from_blocks,
@@ -127,6 +130,7 @@ def test_sparse_symbolic_analysis_reports_reusable_ordering_metadata() -> None:
     analysis = analyze_sparse_symbolic_structure(matrix, ordering_kind="rcm", block_size_target=2)
     as_dict = analysis.to_dict()
 
+    assert isinstance(analysis, SparseSymbolicAnalysis)
     assert analysis.shape == (5, 5)
     assert analysis.nnz == matrix.nnz
     assert analysis.pattern_hash
@@ -277,6 +281,7 @@ def test_sparse_operator_and_factor_bundles_preserve_host_dtype() -> None:
     bundle = build_operator_from_dense(dense, backend="cpu", force_sparse=True)
     factor = factorize_host_sparse_operator(bundle, kind="jacobi")
 
+    assert isinstance(factor, SparseFactorBundle)
     metadata = bundle.metadata.to_dict()
     assert metadata["storage_kind"] == "csr"
     assert metadata["shape"] == (2, 2)
@@ -735,6 +740,7 @@ def test_symbolic_block_lu_admission_accepts_exact_block_factor() -> None:
         min_improvement_vs_identity=1.0,
     )
 
+    assert isinstance(admission, SparseFactorAdmission)
     assert admission.accepted is True
     assert admission.max_relative_residual < 1.0e-13
     assert admission.probe_count == 4

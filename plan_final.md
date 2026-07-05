@@ -220,6 +220,20 @@ The main structural refactor is functionally complete:
   audit for `problems/profile_sparse_qi.py` reports no remaining untested public
   pipeline entry point from the current audit slice. Focused validation passed
   with the active x-block tranche as `16 passed in 1.78 s`.
+- Sparse/QI result-contract coverage now directly exercises explicit sparse
+  factor metadata, QI global-moment basis/closure state, sparse x-block result
+  containers, QI pipeline context/result containers, matrix-free QI seed
+  setup/attempt containers, device-QI smoothers/preconditioner states/probes,
+  QI block-Schur/coupled-residual/deflation/multilevel/residual-Galerkin/
+  Galerkin-selection/two-level contracts, and transport active-dense/
+  active-block admission containers. A direct-reference audit for
+  `problems/profile_sparse_xblock.py`, `problems/profile_sparse_qi.py`,
+  `solvers/explicit_sparse.py`, `solvers/preconditioner_qi_basis.py`,
+  `solvers/preconditioner_qi_device.py`,
+  `solvers/preconditioner_qi_corrections.py`, and
+  `problems/transport_linear_system.py` reports zero untested public
+  definitions in this audited slice. Focused validation passed as
+  `137 passed in 24.21 s`; Ruff passed on all touched files.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This

@@ -6,6 +6,8 @@ import jax.numpy as jnp
 
 from sfincs_jax.problems.profile_sparse_qi import (
     MatrixFreeQIDeviceSeedContext,
+    MatrixFreeQIDeviceSeedAttempt,
+    MatrixFreeQIDeviceSeedSetup,
     attempt_matrixfree_qi_device_seed,
     attempt_matrixfree_qi_device_seed_if_requested,
     build_matrixfree_qi_device_seed_setup,
@@ -72,6 +74,7 @@ def test_matrixfree_qi_device_seed_setup_resolves_driver_gates(monkeypatch) -> N
         rhsmode1_general_metadata=metadata,
     )
 
+    assert isinstance(setup, MatrixFreeQIDeviceSeedSetup)
     assert setup.early_enabled is True
     assert setup.skip_strong is True
     assert setup.pre_sparse_enabled is True
@@ -103,6 +106,7 @@ def test_matrixfree_qi_device_seed_if_requested_keeps_disabled_path_noop() -> No
         enabled=False,
     )
 
+    assert isinstance(attempt, MatrixFreeQIDeviceSeedAttempt)
     assert attempt.result is result
     assert attempt.attempted is False
     assert attempt.improved is False

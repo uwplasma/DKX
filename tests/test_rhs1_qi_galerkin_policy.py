@@ -4,6 +4,7 @@ import pytest
 
 from sfincs_jax.solvers.preconditioner_qi_corrections import (
     RHS1QIGalerkinProbeCandidate,
+    RHS1QIGalerkinProbeSelection,
     parse_rhs1_qi_galerkin_dampings,
     parse_rhs1_qi_galerkin_modes,
     select_rhs1_qi_galerkin_probe_candidate,
@@ -37,6 +38,7 @@ def test_qi_galerkin_probe_selection_accepts_best_residual_reducer() -> None:
         ],
     )
 
+    assert isinstance(selection, RHS1QIGalerkinProbeSelection)
     assert selection.accepted is True
     assert selection.reason == "probe_reduced"
     assert selection.selected_index == 1

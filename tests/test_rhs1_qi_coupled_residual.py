@@ -7,6 +7,8 @@ import numpy as np
 from sfincs_jax.solvers.preconditioner_qi_basis import orthonormalize_rhs1_qi_coarse_basis
 from sfincs_jax.solvers.preconditioner_qi_corrections import (
     RHS1QICoupledResidualEquationConfig,
+    RHS1QICoupledResidualEquationMetadata,
+    RHS1QICoupledResidualEquationState,
     setup_rhs1_qi_coupled_residual_equation,
 )
 from sfincs_jax.solvers.preconditioner_qi_device import (
@@ -52,6 +54,8 @@ def test_coupled_residual_equation_updates_earlier_stage_coefficients() -> None:
     compiled = jax.jit(state.apply)(rhs)
     tangent = jax.vjp(state.apply, rhs)[1](rhs)[0]
 
+    assert isinstance(state, RHS1QICoupledResidualEquationState)
+    assert isinstance(state.metadata, RHS1QICoupledResidualEquationMetadata)
     assert jnp.linalg.norm(staged_residual) > 1.0e-1
     assert state.metadata.accepted is True
     assert state.metadata.rank == 2

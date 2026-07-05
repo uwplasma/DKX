@@ -9,6 +9,9 @@ import numpy as np
 import sfincs_jax.v3_driver as v3_driver
 from sfincs_jax.solvers.preconditioner_qi_basis import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata
 from sfincs_jax.solvers.preconditioner_qi_corrections import (
+    RHS1QITwoLevelMetadata,
+    RHS1QITwoLevelPreconditioner,
+    RHS1QITwoLevelProbe,
     build_rhs1_xblock_device_global_coupling_preconditioner,
     build_rhs1_xblock_smoothed_global_coupling_preconditioner,
     build_rhs1_xblock_two_level_preconditioner,
@@ -94,6 +97,9 @@ def test_two_level_qi_preconditioner_reduces_low_rank_residual() -> None:
         preconditioner=preconditioner,
     )
 
+    assert isinstance(preconditioner, RHS1QITwoLevelPreconditioner)
+    assert isinstance(preconditioner.metadata, RHS1QITwoLevelMetadata)
+    assert isinstance(probe, RHS1QITwoLevelProbe)
     assert probe.accepted is True
     assert probe.reason == "residual_reduced"
     assert probe.metadata.rank == 1

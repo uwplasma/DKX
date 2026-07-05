@@ -6,6 +6,9 @@ import numpy as np
 import pytest
 
 from sfincs_jax.solvers.preconditioner_qi_corrections import (
+    RHS1QIBlockSchurMetadata,
+    RHS1QIBlockSchurPreconditioner,
+    RHS1QIBlockSchurProbe,
     build_rhs1_qi_block_schur_basis,
     build_rhs1_qi_block_schur_candidates,
     build_rhs1_qi_block_schur_preconditioner,
@@ -63,6 +66,9 @@ def test_block_schur_qi_reduces_coupled_angular_radial_global_residual() -> None
         preconditioner=preconditioner,
     )
 
+    assert isinstance(preconditioner, RHS1QIBlockSchurPreconditioner)
+    assert isinstance(preconditioner.metadata, RHS1QIBlockSchurMetadata)
+    assert isinstance(probe, RHS1QIBlockSchurProbe)
     assert probe.accepted is True
     assert probe.reason == "residual_reduced"
     assert probe.metadata.rank == basis.metadata.rank

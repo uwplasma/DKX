@@ -9,9 +9,18 @@ import pytest
 
 from sfincs_jax import v3_driver as vd
 from sfincs_jax.solvers.preconditioner_qi_basis import (
+    RHS1QIGalerkinPreconditioner,
+    RHS1QIGalerkinPreconditionerMetadata,
     RHS1QICoarseBlockLayout,
+    RHS1QIGlobalMomentBasis,
+    RHS1QIGlobalMomentBasisMetadata,
+    RHS1QIGlobalMomentClosure,
+    RHS1QIGlobalMomentClosureMetadata,
+    RHS1QIGlobalMomentLayout,
     apply_rhs1_qi_galerkin_correction,
     apply_rhs1_qi_coarse_correction,
+    build_rhs1_qi_global_moment_basis,
+    build_rhs1_qi_global_moment_closure,
     build_rhs1_xblock_global_coarse_basis,
     build_rhs1_xblock_global_coupling_load_basis,
     build_rhs1_xblock_qi_coarse_basis,
@@ -79,6 +88,46 @@ def test_qi_global_moment_basis_is_deterministic_and_discards_dependent_columns(
     assert basis.metadata.discarded_count == 1
     assert basis.metadata.accepted_labels == ("density", "flow")
     np.testing.assert_allclose(np.asarray(basis.vectors.T @ basis.vectors), np.eye(2), atol=1.0e-13)
+
+
+def test_qi_global_moment_basis_and_closure_reduce_block_residual() -> None:
+    layout = RHS1QIGlobalMomentLayout(
+        block_sizes=(3, 3),
+        block_x=(0.0, 1.0),
+        block_species=(0, 1),
+    )
+    basis = build_rhs1_qi_global_moment_basis(
+        layout,
+        max_rank=4,
+        include_current=True,
+        include_profile=True,
+        include_constraint=True,
+        include_cross_moments=False,
+    )
+    rhs = jnp.asarray([2.0, 2.0, 2.0, -1.0, -1.0, -1.0], dtype=jnp.float64)
+
+    solution, closure = build_rhs1_qi_global_moment_closure(
+        operator=jnp.eye(layout.total_size, dtype=jnp.float64),
+        rhs=rhs,
+        layout=layout,
+        max_rank=4,
+        include_current=True,
+        include_profile=True,
+        include_constraint=True,
+        include_cross_moments=False,
+        regularization_rcond=0.0,
+    )
+
+    assert isinstance(basis, RHS1QIGlobalMomentBasis)
+    assert isinstance(basis.metadata, RHS1QIGlobalMomentBasisMetadata)
+    assert isinstance(closure, RHS1QIGlobalMomentClosure)
+    assert isinstance(closure.metadata, RHS1QIGlobalMomentClosureMetadata)
+    assert closure.metadata.accepted
+    assert closure.metadata.reason == "residual_reduced"
+    assert closure.metadata.rank <= 4
+    assert closure.metadata.to_dict()["accepted"] is True
+    np.testing.assert_allclose(solution, rhs, atol=1.0e-12)
+    np.testing.assert_allclose(closure.apply(rhs), rhs, atol=1.0e-12)
 
 
 def test_xblock_hard_seed_basis_is_deterministic_bounded_and_rank_gated() -> None:
@@ -447,6 +496,8 @@ def test_qi_galerkin_preconditioner_reuses_coarse_operator_and_eliminates_coarse
     )
     jitted_correction = jax.jit(preconditioner.as_preconditioner())(rhs)
 
+    assert isinstance(preconditioner, RHS1QIGalerkinPreconditioner)
+    assert isinstance(preconditioner.metadata, RHS1QIGalerkinPreconditionerMetadata)
     assert preconditioner.metadata.rank == basis.metadata.rank
     assert preconditioner.metadata.coarse_operator_shape == (
         basis.metadata.rank,

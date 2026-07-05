@@ -515,6 +515,91 @@ def test_sparse_qi_module_reexports_match_compat_layer() -> None:
         assert getattr(sparse_pc_module, name) is getattr(sparse_qi_module, name)
 
 
+def test_sparse_xblock_result_containers_preserve_orchestration_contract() -> None:
+    """Sparse x-block stages exchange small result dataclasses, not driver scope."""
+
+    result = GMRESSolveResult(x=jnp.asarray([1.0]), residual_norm=jnp.asarray(0.25))
+    residual_vec = jnp.asarray([0.5])
+
+    build = sparse_xblock_module.SparseXBlockRescueBuildResult(
+        preconditioner=lambda value: value,
+        preconditioner_xi=2,
+        force_assembled_host_fp=True,
+    )
+    explicit_seed = sparse_xblock_module.SparseXBlockExplicitSeedResult(
+        result=result,
+        seed_residual=0.2,
+        seed_improvement_ratio=0.5,
+        seed_accept_ratio=0.25,
+        refine_steps=3,
+        refines_performed=2,
+        reason="accepted",
+    )
+    solve = sparse_xblock_module.SparseXBlockRescueSolveResult(
+        result=result,
+        reason="candidate",
+        candidate_residual=0.25,
+        seed_residual=0.2,
+        seed_improvement_ratio=0.5,
+        seed_accept_ratio=0.25,
+        seed_refine_steps=3,
+        seed_refines_performed=2,
+    )
+    acceptance = sparse_xblock_module.SparseXBlockRescueAcceptanceResult(
+        result=result,
+        accepted=True,
+        reason="accepted",
+        candidate_residual=0.25,
+        explicit_seed_used=True,
+    )
+    sxblock = sparse_xblock_module.SparseSXBlockRescueResult(
+        result=result,
+        accepted=True,
+        polished=False,
+        error=None,
+        seed_residual=0.3,
+        polish_residual=None,
+        polish_restart=None,
+        polish_maxiter=None,
+    )
+    global_correction = sparse_xblock_module.FPXBlockGlobalCorrectionResult(
+        result=result,
+        residual_vec=residual_vec,
+        accepted=True,
+        reason="accepted",
+        error=None,
+        preconditioner_label="unit",
+        steps=2,
+        accepted_steps=1,
+        residual_before=1.0,
+        residual_after=0.25,
+        improvement_ratio=0.25,
+        elapsed_s=0.1,
+    )
+    highx = sparse_xblock_module.FPXBlockHighXCorrectionResult(
+        result=result,
+        residual_vec=residual_vec,
+        accepted=True,
+        reason="accepted",
+        error=None,
+        residual_before=1.0,
+        residual_after=0.5,
+        improvement_ratio=0.5,
+        elapsed_s=0.2,
+        direction_count=2,
+        direction_names=("x0", "x1"),
+    )
+
+    assert build.preconditioner_xi == 2
+    assert build.force_assembled_host_fp
+    assert explicit_seed.refines_performed == 2
+    assert solve.seed_accept_ratio == pytest.approx(0.25)
+    assert acceptance.explicit_seed_used
+    assert sxblock.seed_residual == pytest.approx(0.3)
+    assert global_correction.accepted_steps == 1
+    assert highx.direction_names == ("x0", "x1")
+
+
 def test_run_xblock_sparse_pc_branch_disabled_context_returns_none() -> None:
     values = {
         dataclass_field.name: None
@@ -1073,6 +1158,7 @@ def test_xblock_qi_pipeline_context_factory_owns_default_builders() -> None:
         reduce_full=None,
     )
 
+    assert isinstance(context, sparse_qi_module.XBlockQIStagePipelineContext)
     assert context.basis_builder.__module__ == "sfincs_jax.solvers.preconditioner_qi_basis"
     assert context.device_setup_preconditioner.__module__ == (
         "sfincs_jax.solvers.preconditioner_qi_device"
@@ -1119,6 +1205,7 @@ def test_run_xblock_qi_preconditioner_pipeline_preserves_base_when_disabled() ->
 
     result = sparse_qi_module.run_xblock_qi_preconditioner_pipeline(context)
 
+    assert isinstance(result, sparse_qi_module.XBlockQIStagePipelineResult)
     np.testing.assert_allclose(result.preconditioner(jnp.asarray([2.0])), np.asarray([2.0]))
     assert result.x0_full is None
     assert result.basis_for_galerkin is None

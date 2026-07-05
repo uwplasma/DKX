@@ -9,6 +9,8 @@ import scipy.sparse as sp
 
 import sfincs_jax.problems.transport_linear_system as tls
 from sfincs_jax.problems.transport_linear_system import (
+    ActiveBlockAdmission,
+    ActiveBlockOrdering,
     admit_active_block_schur_factor,
     build_active_block_ordering,
     build_active_block_schur_factor,
@@ -29,6 +31,7 @@ def test_active_block_ordering_supports_reusable_layouts() -> None:
         block_kind="zeta_line",
         max_block_size=4,
     )
+    assert isinstance(zeta, ActiveBlockOrdering)
     assert zeta.block_kind == "zeta_line"
     assert len(zeta.blocks) == 6
     assert zeta.block_size_max == 4
@@ -222,6 +225,7 @@ def test_active_block_schur_factor_solves_exact_block_tail_system() -> None:
         max_relative_residual=1.0e-10,
         min_improvement_vs_identity=1.0,
     )
+    assert isinstance(admission, ActiveBlockAdmission)
     assert admission.accepted
     assert admission.max_relative_residual < 1.0e-10
 

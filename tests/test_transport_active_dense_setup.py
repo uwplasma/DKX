@@ -4,7 +4,10 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from sfincs_jax.problems.transport_linear_system import resolve_transport_active_dense_setup
+from sfincs_jax.problems.transport_linear_system import (
+    TransportActiveDenseSetup,
+    resolve_transport_active_dense_setup,
+)
 
 
 def _op(*, total_size: int = 2000, n_xi: int = 4, nxi_for_x=(4, 2)):
@@ -67,6 +70,7 @@ def _resolve(monkeypatch, *, op=None, active_dof_env: str | None = ""):
 def test_active_dense_setup_compacts_active_dofs_and_auto_selects_dense(monkeypatch) -> None:
     setup = _resolve(monkeypatch)
 
+    assert isinstance(setup, TransportActiveDenseSetup)
     assert setup.use_active_dof_mode
     assert setup.active_size == 20
     assert setup.active_idx_np.tolist() == list(range(20))
