@@ -283,6 +283,15 @@ def test_deleted_profile_compressed_layout_facade_is_absent() -> None:
     assert hasattr(module, "build_rhs1_compressed_pitch_layout")
 
 
+def test_deleted_transport_parallel_worker_wrapper_is_absent() -> None:
+    """Transport subprocess worker CLI belongs to the parallel runtime owner."""
+
+    assert not (PACKAGE_ROOT / "problems" / "transport_parallel_worker.py").exists()
+    module = importlib.import_module("sfincs_jax.problems.transport_parallel_runtime")
+    assert hasattr(module, "main")
+    assert hasattr(module, "transport_parallel_result_to_npz_arrays")
+
+
 def test_canonical_flat_domain_modules_are_importable() -> None:
     """Canonical owners replace the deleted compatibility import paths."""
 
@@ -302,7 +311,6 @@ def test_canonical_flat_domain_modules_are_importable() -> None:
         "sfincs_jax.problems.transport_linear_system",
         "sfincs_jax.problems.transport_policies",
         "sfincs_jax.problems.transport_parallel_runtime",
-        "sfincs_jax.problems.transport_parallel_worker",
         "sfincs_jax.solvers.preconditioner_pas_xblock_ilu",
         "sfincs_jax.solvers.preconditioner_xblock_tz_sparse",
         "sfincs_jax.solvers.preconditioner_full_fp_kinetic",
