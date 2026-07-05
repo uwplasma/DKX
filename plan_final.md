@@ -1715,7 +1715,7 @@ Coverage ramp:
 
 ### Lane 3 - Documentation And Examples
 
-Status: 90%.
+Status: 92%.
 
 Goal: make the public docs, README files, examples, and notebooks self-contained
 and understandable for new users.
@@ -1734,7 +1734,10 @@ Remaining work:
 
 ### Lane 4 - Benchmark, Parity, Runtime, And Memory Regeneration
 
-Status: blocked until the source/test structure is stable.
+Status: ready for fresh evidence generation from the current refactor branch.
+The source-layout, docs, examples, CLI/output, and helper-owner guards have
+passed after the latest cleanup; benchmark regeneration should use reports
+created from this branch state, not older pre-refactor artifacts.
 
 Goal: regenerate release-facing figures and tables from the final branch state.
 
