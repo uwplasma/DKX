@@ -13,7 +13,6 @@ DOMAIN_PACKAGES = (
     "sfincs_jax.operators",
     "sfincs_jax.problems",
     "sfincs_jax.solvers",
-    "sfincs_jax.solvers.preconditioners",
     "sfincs_jax.outputs",
     "sfincs_jax.workflows",
     "sfincs_jax.validation",
@@ -62,74 +61,6 @@ ACTIVE_PACKAGE_EXPORTS = {
         "solve_sfincs_jax_ambipolar_brent",
         "validate_fortran_v3_ambipolar_constraints",
     ),
-    "sfincs_jax.solvers.preconditioners": (
-        "dispatch",
-        "domain_decomposition",
-        "full_fp",
-        "pas",
-        "qi",
-        "schur",
-        "symbolic_sparse",
-        "transport_matrix",
-        "xblock",
-    ),
-    "sfincs_jax.solvers.preconditioners.pas": (
-        "RHS1PasCompositeBuilders",
-        "RHS1PasFamilyBuilders",
-        "build_rhs1_pas_hybrid_preconditioner",
-        "build_rhs1_pas_lite_preconditioner",
-        "build_rhs1_pas_schur_preconditioner",
-        "build_rhs1_pas_tokamak_theta_preconditioner",
-        "build_rhs1_pas_tz_preconditioner",
-        "build_rhs1_pas_xblock_ilu_preconditioner",
-        "compose_preconditioners",
-        "rhsmode1_pas_xblock_precond_cache_key",
-    ),
-    "sfincs_jax.solvers.preconditioners.full_fp": (
-        "build_rhs1_block_preconditioner",
-        "build_rhs1_block_preconditioner_xdiag",
-        "build_rhs1_collision_preconditioner",
-        "build_rhs1_species_block_preconditioner",
-        "build_rhs1_species_xblock_preconditioner",
-        "build_rhs1_structured_fblock_angular_jacobi_preconditioner",
-        "build_rhs1_structured_fblock_fp_coupled_moment_schur_preconditioner",
-        "build_rhs1_structured_fblock_fp_lowmode_schur_preconditioner",
-        "build_rhs1_structured_fblock_fp_moment_schur_preconditioner",
-        "build_rhs1_structured_fblock_fp_radial_jacobi_preconditioner",
-        "build_rhs1_structured_fblock_fp_tail_coupled_schur_preconditioner",
-        "build_rhs1_structured_fblock_jacobi_preconditioner",
-        "build_rhs1_structured_fblock_xi_angular_jacobi_preconditioner",
-    ),
-    "sfincs_jax.solvers.preconditioners.schur": (
-        "ActiveNativeFieldSplitSparseCoarsePolicy",
-        "ActiveNativeStackPolicy",
-        "ActiveSparseCoarseResidualPolicy",
-        "RHS1SchurPreconditionerBuilders",
-        "RHS1StructuredFullCSRPreconditioner",
-        "append_adaptive_residual_basis_csc",
-        "build_active_native_xell_coarse_window_basis_csc",
-        "build_block_schur_preconditioner",
-        "build_coarse_residual_basis_csc",
-        "build_diagonal_schur_preconditioner",
-        "build_jacobi_preconditioner",
-        "build_rhs1_schur_preconditioner",
-        "build_x_xi_block_schur_preconditioner",
-        "build_xi_block_schur_preconditioner",
-        "canonical_schur_base_kind",
-        "coarse_residual_config",
-        "coarse_surface_mode_count",
-        "coarse_surface_modes",
-        "estimate_coarse_residual_nbytes",
-        "estimate_x_xi_block_inverse_nbytes",
-        "estimate_xblock_tz_low_l_factor_nbytes",
-        "estimate_xi_block_inverse_nbytes",
-        "estimate_zeta_block_inverse_nbytes",
-        "resolve_active_native_field_split_sparse_coarse_policy",
-        "resolve_active_native_stack_policy",
-        "resolve_active_sparse_coarse_residual_policy",
-        "safe_inverse_diagonal",
-        "xblock_tz_low_l_config",
-    ),
     "sfincs_jax.solvers.preconditioner_domain_decomposition": (
         "build_rhs1_theta_dd_preconditioner",
         "build_rhs1_theta_line_preconditioner",
@@ -139,58 +70,6 @@ ACTIVE_PACKAGE_EXPORTS = {
         "build_rhs1_zeta_dd_preconditioner",
         "build_rhs1_zeta_line_preconditioner",
         "build_rhs1_zeta_schwarz_preconditioner",
-    ),
-    "sfincs_jax.solvers.preconditioners.xblock": (
-        "active_positions_for_full_indices",
-        "assemble_rhsmode1_fp_xblock_tz_sparse_matrix",
-        "assemble_selected_theta_tz_operator",
-        "assemble_selected_zeta_tz_operator",
-        "build_active_fortran_v3_reduced_native_stack_preconditioner",
-        "build_active_projected_bounded_native_stack_preconditioner",
-        "build_active_projected_global_field_split_schur_preconditioner",
-        "build_active_projected_multiline_field_split_base_preconditioner",
-        "build_active_projected_angular_line_preconditioner",
-        "build_active_projected_diagonal_schur_preconditioner",
-        "build_active_projected_native_indexed_schwarz_preconditioner",
-        "build_active_projected_overlap_schwarz_preconditioner",
-        "build_active_projected_xell_kinetic_line_preconditioner",
-        "build_active_projected_xblock_preconditioner",
-        "build_rhs1_sxblock_tz_preconditioner",
-        "build_rhs1_sxblock_tz_sparse_host_preconditioner",
-        "build_rhs1_xmg_preconditioner",
-        "build_rhs1_xupwind_preconditioner",
-        "build_rhs1_xblock_tz_lmax_preconditioner",
-        "build_rhs1_xblock_tz_preconditioner",
-        "build_rhs1_xblock_tz_sparse_preconditioner",
-        "build_native_xell_kinetic_preconditioner",
-        "build_native_xell_tail_schur_preconditioner",
-        "build_xblock_tz_low_l_coarse_residual_preconditioner",
-        "build_xblock_tz_low_l_schur_preconditioner",
-        "compute_rhs1_sxblock_tz_sparse_host_seed",
-        "get_rhsmode1_fp_xblock_assembled_host_cache",
-        "rhsmode1_fp_xblock_assembled_host_allowed",
-        "rhsmode1_fp_xblock_species_decoupled_for_host_assembly",
-        "rhsmode1_fp_xblock_tz_sparse_diagonal",
-        "rhsmode1_host_factor_probe_ok",
-        "rhsmode1_precond_cache_key",
-        "rhsmode1_xblock_sparse_lu_default_max",
-        "safe_inverse_diagonal_np",
-        "xblock_tz_low_l_indices",
-    ),
-    "sfincs_jax.solvers.preconditioners.symbolic_sparse": (
-        "RHS1FullSystemMatrixFreeOperatorAdapter",
-        "active_fortran_v3_reduced_preconditioner_matrix",
-        "build_active_filtered_sparse_factor_preconditioner",
-        "build_active_global_sparse_factor_preconditioner",
-        "build_active_scaled_sparse_factor_preconditioner",
-        "build_sparse_ilu_from_matvec",
-        "build_active_fortran_v3_reduced_sparse_factor_preconditioner",
-        "estimate_spilu_factor_nbytes",
-        "factorize_sparse_matrix_csr_host",
-        "parse_active_fortran_v3_support_mode_candidates",
-        "select_active_fortran_v3_reduced_support_mode_preconditioner",
-        "sparse_equilibration_scale",
-        "sparse_lu_factor_nbytes",
     ),
     "sfincs_jax.outputs": (
         "ExportFConfig",
@@ -453,32 +332,32 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
 
 TRANSPORT_COMPATIBILITY_IMPORTS = (
     (
-        "sfincs_jax.problems.transport_matrix.diagnostics",
+        "sfincs_jax.problems.transport_diagnostics",
         "sfincs_jax.problems.transport_diagnostics",
         "v3_transport_matrix_from_state_vectors",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.setup",
+        "sfincs_jax.problems.transport_setup",
         "sfincs_jax.problems.transport_setup",
         "resolve_transport_which_rhs_setup",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.linear_system",
+        "sfincs_jax.problems.transport_linear_system",
         "sfincs_jax.problems.transport_linear_system",
         "resolve_transport_active_dense_setup",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.solve",
+        "sfincs_jax.problems.transport_solve",
         "sfincs_jax.problems.transport_solve",
         "resolve_transport_recycle_k",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.finalize",
+        "sfincs_jax.problems.transport_finalize",
         "sfincs_jax.problems.transport_finalize",
         "finalize_full_transport_rhs",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.finalize",
+        "sfincs_jax.problems.transport_finalize",
         "sfincs_jax.problems.transport_finalize",
         "V3TransportMatrixSolveResult",
     ),
@@ -488,127 +367,127 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "TransportStreamingOutputAccumulator",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.finalize",
+        "sfincs_jax.problems.transport_finalize",
         "sfincs_jax.problems.transport_finalize",
         "compute_transport_postsolve_diagnostics",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.policies",
+        "sfincs_jax.problems.transport_policies",
         "sfincs_jax.problems.transport_policies",
         "transport_dense_backend_allowed",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.policies",
+        "sfincs_jax.problems.transport_policies",
         "sfincs_jax.problems.transport_policies",
         "resolve_transport_initial_solve_policy",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.solve",
+        "sfincs_jax.problems.transport_solve",
         "sfincs_jax.problems.transport_solve",
         "solve_transport_linear_with_residual",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.solve",
+        "sfincs_jax.problems.transport_solve",
         "sfincs_jax.problems.transport_solve",
         "transport_host_gmres_solve",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.policies",
+        "sfincs_jax.problems.transport_policies",
         "sfincs_jax.problems.transport_policies",
         "transport_polish_config_from_env",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.policies",
+        "sfincs_jax.problems.transport_policies",
         "sfincs_jax.problems.transport_policies",
         "transport_residual_gate_failure",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.solve",
+        "sfincs_jax.problems.transport_solve",
         "sfincs_jax.problems.transport_solve",
         "emit_transport_ksp_iteration_stats",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.solve",
+        "sfincs_jax.problems.transport_solve",
         "sfincs_jax.problems.transport_solve",
         "dense_solver_for_matvec",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.solve",
+        "sfincs_jax.problems.transport_solve",
         "sfincs_jax.problems.transport_solve",
         "solve_transport_dense_batch",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.linear_system",
+        "sfincs_jax.problems.transport_linear_system",
         "sfincs_jax.problems.transport_linear_system",
         "build_active_block_schur_factor",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.solve",
+        "sfincs_jax.problems.transport_solve",
         "sfincs_jax.problems.transport_solve",
         "transport_sparse_direct_solve",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.policies",
+        "sfincs_jax.problems.transport_policies",
         "sfincs_jax.problems.transport_policies",
         "build_transport_preconditioner_from_kind",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.linear_system",
+        "sfincs_jax.problems.transport_linear_system",
         "sfincs_jax.problems.transport_linear_system",
         "_try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.linear_system",
+        "sfincs_jax.problems.transport_linear_system",
         "sfincs_jax.problems.transport_linear_system",
         "build_transport_fp_direct_active_block_schur_preconditioner",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.linear_system",
+        "sfincs_jax.problems.transport_linear_system",
         "sfincs_jax.problems.transport_linear_system",
         "build_transport_fp_fortran_reduced_lu_preconditioner",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "sfincs_jax.problems.transport_parallel_runtime",
         "sfincs_jax.problems.transport_parallel_runtime",
         "transport_parallel_backend",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "sfincs_jax.problems.transport_parallel_runtime",
         "sfincs_jax.problems.transport_parallel_runtime",
         "merge_transport_parallel_results",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "sfincs_jax.problems.transport_parallel_runtime",
         "sfincs_jax.problems.transport_parallel_runtime",
         "solve_transport_parallel_payload",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "sfincs_jax.problems.transport_parallel_runtime",
         "sfincs_jax.problems.transport_parallel_runtime",
         "TransportParallelPoolCache",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "sfincs_jax.problems.transport_parallel_runtime",
         "sfincs_jax.problems.transport_parallel_runtime",
         "run_transport_parallel_payloads",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "sfincs_jax.problems.transport_parallel_runtime",
         "sfincs_jax.problems.transport_parallel_runtime",
         "maybe_run_transport_parallel_solve",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "sfincs_jax.problems.transport_parallel_runtime",
         "sfincs_jax.problems.transport_parallel_runtime",
         "validate_transport_worker_result_payload",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "sfincs_jax.problems.transport_parallel_runtime",
         "sfincs_jax.problems.transport_parallel_runtime",
         "plan_single_case_operator_coarse_reuse",
     ),
     (
-        "sfincs_jax.problems.transport_matrix.parallel.worker",
+        "sfincs_jax.problems.transport_parallel_worker",
         "sfincs_jax.problems.transport_parallel_worker",
         "main",
     ),
@@ -616,42 +495,42 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
 
 PRECONDITIONER_COMPATIBILITY_IMPORTS = (
     (
-        "sfincs_jax.solvers.preconditioners.pas.xblock_ilu",
+        "sfincs_jax.solvers.preconditioner_pas_xblock_ilu",
         "sfincs_jax.solvers.preconditioner_pas_xblock_ilu",
         "build_rhs1_pas_xblock_ilu_preconditioner",
     ),
     (
-        "sfincs_jax.solvers.preconditioners.xblock.tz_sparse",
+        "sfincs_jax.solvers.preconditioner_xblock_tz_sparse",
         "sfincs_jax.solvers.preconditioner_xblock_tz_sparse",
         "build_rhs1_xblock_tz_sparse_preconditioner",
     ),
     (
-        "sfincs_jax.solvers.preconditioners.full_fp.kinetic_blocks",
+        "sfincs_jax.solvers.preconditioner_full_fp_kinetic",
         "sfincs_jax.solvers.preconditioner_full_fp_kinetic",
         "build_rhs1_collision_preconditioner",
     ),
     (
-        "sfincs_jax.solvers.preconditioners.qi.basis",
+        "sfincs_jax.solvers.preconditioner_qi_basis",
         "sfincs_jax.solvers.preconditioner_qi_basis",
         "build_rhs1_qi_coarse_basis",
     ),
     (
-        "sfincs_jax.solvers.preconditioners.qi.corrections",
+        "sfincs_jax.solvers.preconditioner_qi_corrections",
         "sfincs_jax.solvers.preconditioner_qi_corrections",
         "build_rhs1_qi_two_level_preconditioner",
     ),
     (
-        "sfincs_jax.solvers.preconditioners.qi.device",
+        "sfincs_jax.solvers.preconditioner_qi_device",
         "sfincs_jax.solvers.preconditioner_qi_device",
         "setup_rhs1_qi_device_preconditioner",
     ),
     (
-        "sfincs_jax.solvers.preconditioners.schur.profile_response",
+        "sfincs_jax.solvers.preconditioner_schur_profile",
         "sfincs_jax.solvers.preconditioner_schur_profile",
         "build_rhs1_schur_preconditioner",
     ),
     (
-        "sfincs_jax.solvers.preconditioners.symbolic_sparse.profile_response",
+        "sfincs_jax.solvers.preconditioner_symbolic_profile",
         "sfincs_jax.solvers.preconditioner_symbolic_profile",
         "build_active_fortran_v3_reduced_sparse_factor_preconditioner",
     ),
@@ -710,77 +589,77 @@ PRECONDITIONER_IMPLEMENTATION_IMPORTS = (
 
 PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
     (
-        "sfincs_jax.problems.profile_response.policies",
+        "sfincs_jax.problems.profile_policies",
         "sfincs_jax.problems.profile_policies",
         "rhs1_pas_fast_accept",
     ),
     (
-        "sfincs_jax.problems.profile_response.setup",
+        "sfincs_jax.problems.profile_setup",
         "sfincs_jax.problems.profile_setup",
         "resolve_rhs1_active_dof_mode",
     ),
     (
-        "sfincs_jax.problems.profile_response.setup",
+        "sfincs_jax.problems.profile_setup",
         "sfincs_jax.problems.profile_setup",
         "reduce_full_with_indices",
     ),
     (
-        "sfincs_jax.problems.profile_response.policies",
+        "sfincs_jax.problems.profile_policies",
         "sfincs_jax.problems.profile_policies",
         "rhs1_constraint0_sparse_first",
     ),
     (
-        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "sfincs_jax.problems.profile_solver_diagnostics",
         "sfincs_jax.problems.profile_solver_diagnostics",
         "rhs1_accept_candidate",
     ),
     (
-        "sfincs_jax.problems.profile_response.policies",
+        "sfincs_jax.problems.profile_policies",
         "sfincs_jax.problems.profile_policies",
         "rhs1_fast_post_xblock_polish_allowed",
     ),
     (
-        "sfincs_jax.problems.profile_response.residual",
+        "sfincs_jax.problems.profile_residual",
         "sfincs_jax.problems.profile_residual",
         "residual_target",
     ),
     (
-        "sfincs_jax.problems.profile_response.policies",
+        "sfincs_jax.problems.profile_policies",
         "sfincs_jax.problems.profile_policies",
         "rhs1_sparse_exact_lu_requested",
     ),
     (
-        "sfincs_jax.problems.profile_response.policies",
+        "sfincs_jax.problems.profile_policies",
         "sfincs_jax.problems.profile_policies",
         "rhs1_polish_enabled",
     ),
     (
-        "sfincs_jax.problems.profile_response.policies",
+        "sfincs_jax.problems.profile_policies",
         "sfincs_jax.problems.profile_policies",
         "rhs1_sparse_kind_use",
     ),
     (
-        "sfincs_jax.problems.profile_response.policies",
+        "sfincs_jax.problems.profile_policies",
         "sfincs_jax.problems.profile_policies",
         "rhs1_stage2_trigger",
     ),
     (
-        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "sfincs_jax.problems.profile_solver_diagnostics",
         "sfincs_jax.problems.profile_solver_diagnostics",
         "build_rhs1_xblock_correction_metadata",
     ),
     (
-        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "sfincs_jax.problems.profile_solver_diagnostics",
         "sfincs_jax.problems.profile_solver_diagnostics",
         "V3LinearSolveResult",
     ),
     (
-        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "sfincs_jax.problems.profile_solver_diagnostics",
         "sfincs_jax.problems.profile_solver_diagnostics",
         "V3NewtonKrylovResult",
     ),
     (
-        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "sfincs_jax.problems.profile_solver_diagnostics",
         "sfincs_jax.problems.profile_solver_diagnostics",
         "v3_linear_solve_result_from_payload",
     ),
@@ -1044,23 +923,20 @@ def test_source_map_does_not_advertise_deleted_flat_aliases() -> None:
     assert live_deleted_root_owner.search(source_map) is None
 
 
-def test_transport_matrix_package_moves_preserve_legacy_imports() -> None:
-    """Moved implementation modules must remain reachable through old names."""
+def test_transport_matrix_canonical_modules_expose_expected_symbols() -> None:
+    """Transport implementation modules should use only canonical flat owners."""
 
-    for legacy_name, new_name, public_name in TRANSPORT_COMPATIBILITY_IMPORTS:
-        legacy_module = _import_module(legacy_name)
+    for _, new_name, public_name in TRANSPORT_COMPATIBILITY_IMPORTS:
         new_module = _import_module(new_name)
-        assert getattr(legacy_module, public_name) is getattr(new_module, public_name)
+        assert hasattr(new_module, public_name), f"{new_name}.{public_name}"
 
 
-def test_preconditioner_package_moves_preserve_legacy_imports() -> None:
-    """Moved preconditioner modules must remain reachable through old names."""
+def test_preconditioner_canonical_modules_expose_expected_symbols() -> None:
+    """Preconditioner implementation modules should use only canonical owners."""
 
-    for legacy_name, new_name, public_name in PRECONDITIONER_COMPATIBILITY_IMPORTS:
-        legacy_module = _import_module(legacy_name)
+    for _, new_name, public_name in PRECONDITIONER_COMPATIBILITY_IMPORTS:
         new_module = _import_module(new_name)
-        assert legacy_module is new_module
-        assert getattr(legacy_module, public_name) is getattr(new_module, public_name)
+        assert hasattr(new_module, public_name), f"{new_name}.{public_name}"
 
 
 def test_preconditioner_implementation_modules_expose_expected_builders() -> None:
@@ -1072,16 +948,12 @@ def test_preconditioner_implementation_modules_expose_expected_builders() -> Non
         assert hasattr(module, public_name), f"{module_name}.{public_name}"
 
 
-def test_profile_response_package_moves_preserve_legacy_imports() -> None:
-    """Moved profile-response modules must remain reachable through old names."""
+def test_profile_response_canonical_modules_expose_expected_symbols() -> None:
+    """Profile-response implementation modules should use canonical flat owners."""
 
-    for legacy_name, new_name, public_name in PROFILE_RESPONSE_COMPATIBILITY_IMPORTS:
-        legacy_module = _import_module(legacy_name)
+    for _, new_name, public_name in PROFILE_RESPONSE_COMPATIBILITY_IMPORTS:
         new_module = _import_module(new_name)
-        assert legacy_module is new_module
-        assert getattr(legacy_module, public_name) is getattr(new_module, public_name)
-        if hasattr(legacy_module, "__all__"):
-            assert public_name in legacy_module.__all__
+        assert hasattr(new_module, public_name), f"{new_name}.{public_name}"
         if hasattr(new_module, "__all__"):
             assert public_name in new_module.__all__
 
