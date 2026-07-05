@@ -87,12 +87,23 @@ def test_package_readme_describes_current_source_layout() -> None:
     text = PACKAGE_README.read_text(encoding="utf-8")
 
     assert "one-level domain structure" in text
+    assert "Main Implementation Owners" in text
     for package in expected["allowed_root_packages"]:
         assert f"`{package}/`" in text
     for module in expected["target_root_modules"]:
         assert f"`{module}`" in text or f"`{module.removesuffix('.py')}`" in text
     for module in sorted(set(expected["allowed_root_modules"]) - set(expected["target_root_modules"])):
         assert f"`{module}`" in text
+    canonical_owner_phrases = (
+        "`operators/profile_system.py`: RHSMode-1 full-system operator",
+        "`operators/profile_layout.py`: RHSMode-1 full, active, field-split",
+        "`solvers/preconditioning.py`: shared preconditioner caches",
+        "`outputs/formats.py`: HDF5/NetCDF/NPZ schemas",
+        "`validation/artifacts.py`: validation artifact manifests",
+        "Do not reintroduce helper-only modules",
+    )
+    for phrase in canonical_owner_phrases:
+        assert phrase in text
 
 
 def test_source_map_doc_describes_current_one_level_layout() -> None:
