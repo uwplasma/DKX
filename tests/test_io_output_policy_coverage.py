@@ -35,7 +35,7 @@ from sfincs_jax.geometry.boozer import BoozerBCHeader, BoozerBCSurface
 from sfincs_jax.namelist import Namelist, read_sfincs_input
 from sfincs_jax.outputs import rhsmode1 as rhsmode1_output
 from sfincs_jax.outputs import writer as output_writer
-from sfincs_jax.outputs.cache import output_cache_dir, output_cache_path
+from sfincs_jax.outputs.formats import output_cache_dir, output_cache_path
 from sfincs_jax.outputs.rhsmode1 import (
     RHSMode1SolveMethodSelectionContext,
     _maybe_align_pas_no_phi1_flow_diagnostics_to_fortran,

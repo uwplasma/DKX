@@ -5,20 +5,18 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.outputs.cache import (
+from sfincs_jax.outputs.formats import (
     OUTPUT_CACHE_FIELDS,
+    decode_if_bytes,
     equilibrium_cache_identity,
     file_content_identity,
+    fortran_h5_layout,
     group_subset_key,
     hashable_value,
     load_output_cache,
     output_cache_enabled,
     output_cache_path,
     save_output_cache,
-)
-from sfincs_jax.outputs.formats import (
-    decode_if_bytes,
-    fortran_h5_layout,
     to_numpy_for_h5,
 )
 

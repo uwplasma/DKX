@@ -32,7 +32,6 @@ from sfincs_jax.problems.profile_policies import (
     rhs1_dense_backend_allowed,
 )
 from . import formats as _output_formats
-from . import cache as _output_cache
 from . import rhsmode1 as _rhsmode1_outputs
 from .transport import (
     conversion_factors_to_from_dpsi_hat as _conversion_factors_to_from_dpsi_hat,
@@ -71,18 +70,18 @@ from ..geometry.vmec_wout import _set_scale_factor, psi_a_hat_from_wout, read_vm
 from sfincs_jax.discretization.v3 import V3Grids, geometry_from_namelist, grids_from_namelist
 
 
-_OUTPUT_GEOM_CACHE = _output_cache.OUTPUT_GEOM_CACHE
-_OUTPUT_GEOM_CACHE_VERSION = _output_cache.OUTPUT_GEOM_CACHE_VERSION
-_OUTPUT_CACHE_FIELDS = _output_cache.OUTPUT_CACHE_FIELDS
-_output_cache_enabled = _output_cache.output_cache_enabled
-_output_cache_dir = _output_cache.output_cache_dir
-_output_cache_path = _output_cache.output_cache_path
-_hashable_value = _output_cache.hashable_value
-_group_subset_key = _output_cache.group_subset_key
-_file_content_identity = _output_cache.file_content_identity
-_equilibrium_cache_identity = _output_cache.equilibrium_cache_identity
-_load_output_cache = _output_cache.load_output_cache
-_save_output_cache = _output_cache.save_output_cache
+_OUTPUT_GEOM_CACHE = _output_formats.OUTPUT_GEOM_CACHE
+_OUTPUT_GEOM_CACHE_VERSION = _output_formats.OUTPUT_GEOM_CACHE_VERSION
+_OUTPUT_CACHE_FIELDS = _output_formats.OUTPUT_CACHE_FIELDS
+_output_cache_enabled = _output_formats.output_cache_enabled
+_output_cache_dir = _output_formats.output_cache_dir
+_output_cache_path = _output_formats.output_cache_path
+_hashable_value = _output_formats.hashable_value
+_group_subset_key = _output_formats.group_subset_key
+_file_content_identity = _output_formats.file_content_identity
+_equilibrium_cache_identity = _output_formats.equilibrium_cache_identity
+_load_output_cache = _output_formats.load_output_cache
+_save_output_cache = _output_formats.save_output_cache
 _decode_if_bytes = _output_formats.decode_if_bytes
 ExportFConfig = _output_formats.ExportFConfig
 _apply_export_f_maps = _output_formats._apply_export_f_maps
@@ -243,7 +242,7 @@ def _align_phi1_history_for_output(
 
 
 def _output_geom_cache_key(*, nml: Namelist, grids: V3Grids) -> tuple[object, ...] | None:
-    return _output_cache.output_geom_cache_key(
+    return _output_formats.output_geom_cache_key(
         nml=nml,
         grids=grids,
         get_int=_get_int,

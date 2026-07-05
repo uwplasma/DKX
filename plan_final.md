@@ -485,12 +485,12 @@ physics, solver defaults, outputs, or differentiability contracts.
 
 Current source inventory:
 
-- Root package: `17` Python files and `8403` lines. This is acceptable because
+- Root package: `17` Python files and `8632` lines. This is acceptable because
   the files are public entry points or compatibility facades, but
   `v3_driver.py` must remain implementation-free and below `80` lines.
 - Domain folders: `discretization/` (`6` files), `geometry/` (`5`),
-  `operators/` (`20`), `outputs/` (`6`), `physics/` (`3`),
-  `problems/` (`26`), `solvers/` (`37`), `validation/` (`7`), and
+  `operators/` (`19`), `outputs/` (`5`), `physics/` (`3`),
+  `problems/` (`26`), `solvers/` (`36`), `validation/` (`7`), and
   `workflows/` (`4`).
 - The complexity hotspots are not nested folders; they are many
   same-family files in `problems/`, `solvers/`, and `operators/`.
@@ -519,9 +519,8 @@ Target source shape for the review PR:
   full-system assembly, and true-operator actions, not historical extraction
   phases.
 - Keep `outputs/` small. `writer.py` should keep shrinking, but the durable
-  owners are `writer.py`, `formats.py`, `rhsmode1.py`, `transport.py`,
-  `cache.py`, and output-schema helpers. Do not create one output file per
-  diagnostic.
+  owners are `writer.py`, `formats.py`, `rhsmode1.py`, `transport.py`, and
+  output-schema helpers. Do not create one output file per diagnostic.
 - Move or delete campaign-specific workflow modules once their behavior is
   represented by public examples, docs, tests, or validation owners.
   `workflows/` should contain reusable workflows, not historical validation
@@ -633,7 +632,7 @@ Latest AST audit:
 
 - Folder depth is no longer the blocker: the package has one-level domain
   folders only and no `__init__.py`-only source packages.
-- The source tree has 129 Python files, 17 package-root modules, and one-level
+- The source tree has 128 Python files, 17 package-root modules, and one-level
   domain folders only. The remaining structural blockers are file-family sprawl
   and owner size.
   The largest retained owners are `problems/profile_policies.py` (`7936`
@@ -644,7 +643,7 @@ Latest AST audit:
   `solvers/explicit_sparse.py` (`5198` lines),
   `problems/profile_sparse_qi.py` (`4873` lines),
   `problems/profile_solve.py` (`4402` lines), and
-  `outputs/writer.py` (`3250` lines).
+  `outputs/writer.py` (`3249` lines).
 - The final consolidation pass should reduce file count and improve ownership
   before further line-by-line extraction. A patch that only moves a few
   functions but leaves the same number of files is not sufficient unless it
@@ -764,6 +763,11 @@ Completed work:
   `solvers/preconditioner_qi_policy.py` into `validation/qi_device.py`, deleted
   the solver-policy file, and documented that QI evidence gates are validation
   policy rather than numerical preconditioners.
+- Tranche 19: moved geometry-output cache helpers into existing
+  `outputs/formats.py` and deleted helper-only `outputs/cache.py`. This keeps
+  HDF5/NetCDF/NPZ schemas, output-file dispatch, and output-cache persistence
+  in one durable output-format owner, reduces `outputs/` to `5` source files,
+  and preserves the writer compatibility aliases used by `sfincs_jax.io`.
 
 Remaining consolidation steps:
 
