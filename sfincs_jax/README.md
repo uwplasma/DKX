@@ -41,17 +41,14 @@ inside domain folders are for contributors and advanced research workflows.
   and JAX geometry adapters.
 - `operators/`: drift-kinetic operator terms, matrix-free actions, sparse
   operator helpers, and profile-response operator assembly. Profile-response
-  owners use flat `profile_*.py` names; `profile_response.py` is a small import
-  facade for compatibility.
+  owners use flat `profile_*.py` names.
 - `physics/`: collision, classical-transport, bootstrap-current, and
   normalization formulas.
 - `problems/`: physical problem owners, including flat RHSMode-1
   `profile_*.py` modules, flat RHSMode-2/3 `transport_*.py` modules, and
-  ambipolar root solves. `profile_response.py` and `transport_matrix.py` are
-  small import facades for compatibility.
+  ambipolar root solves.
 - `solvers/`: Krylov dispatch, solver-path selection, sparse/native factors,
-  memory models, and flat `preconditioner_*.py` modules. `preconditioners.py`
-  is a compatibility index, not an implementation folder.
+  memory models, and flat `preconditioner_*.py` modules.
 - `outputs/`: HDF5/NetCDF/NPZ schemas, writer logic, and post-solve
   diagnostics.
 - `validation/`: frozen-reference loading, parity checks, the release-data
@@ -71,9 +68,9 @@ inside domain folders are for contributors and advanced research workflows.
 - Prefer descriptive domain names over historical names. For example, use
   `profile_*`, `transport_*`, or `preconditioner_*` names only when they point
   to the physics or numerical role of the module.
-- Preserve public imports through compatibility aliases when they are part of
-  documented user workflows, but keep internal imports pointed at the canonical
-  domain modules.
+- Preserve public imports through compatibility aliases only when they are
+  documented user workflows. Internal imports should point at the canonical
+  domain modules, and deleted non-root facades should not be reintroduced.
 - Keep large validation data out of the git clone and wheel. Small frozen
   references can live in `tests/fixtures`; large equilibria or benchmark outputs
   should be fetched through `validation.data_fetch` from release assets. The

@@ -171,77 +171,46 @@ def test_test_suite_v3_driver_imports_are_explicit_compatibility_contracts() -> 
     assert sorted(set(offenders)) == sorted(allowed)
 
 
-def test_flattened_operator_legacy_imports_resolve_to_canonical_modules() -> None:
-    assert not (PACKAGE_ROOT / "operators" / "profile_response").exists()
+def test_deleted_nonroot_compatibility_facades_are_absent() -> None:
+    """The flat source tree should not keep package-like one-file facades."""
 
-    for name in ("collisionless", "fblock", "full_system", "layout", "system"):
-        legacy = importlib.import_module(f"sfincs_jax.operators.profile_response.{name}")
-        canonical = importlib.import_module(f"sfincs_jax.operators.profile_{name}")
-        assert legacy is canonical
-
-
-def test_flattened_profile_problem_legacy_imports_resolve_to_canonical_modules() -> None:
-    assert not (PACKAGE_ROOT / "problems" / "profile_response").exists()
-
-    for name in ("solve", "policies", "residual", "dense", "solver_diagnostics"):
-        legacy = importlib.import_module(f"sfincs_jax.problems.profile_response.{name}")
-        canonical = importlib.import_module(f"sfincs_jax.problems.profile_{name}")
-        assert legacy is canonical
-
-    for name in ("direct", "finalization", "fortran_reduced", "handoff", "policy", "qi", "xblock"):
-        legacy = importlib.import_module(f"sfincs_jax.problems.profile_response.sparse.{name}")
-        canonical = importlib.import_module(f"sfincs_jax.problems.profile_sparse_{name}")
-        assert legacy is canonical
+    deleted_facades = (
+        PACKAGE_ROOT / "operators" / "profile_response.py",
+        PACKAGE_ROOT / "problems" / "profile_response.py",
+        PACKAGE_ROOT / "problems" / "transport_matrix.py",
+        PACKAGE_ROOT / "solvers" / "preconditioners.py",
+    )
+    for path in deleted_facades:
+        assert not path.exists(), path
 
 
-def test_flattened_transport_problem_legacy_imports_resolve_to_canonical_modules() -> None:
-    assert not (PACKAGE_ROOT / "problems" / "transport_matrix").exists()
+def test_canonical_flat_domain_modules_are_importable() -> None:
+    """Canonical owners replace the deleted compatibility import paths."""
 
-    for name in ("diagnostics", "finalize", "linear_system", "policies", "setup", "solve"):
-        legacy = importlib.import_module(f"sfincs_jax.problems.transport_matrix.{name}")
-        canonical = importlib.import_module(f"sfincs_jax.problems.transport_{name}")
-        assert legacy is canonical
-
-    for name in ("runtime", "worker"):
-        legacy = importlib.import_module(f"sfincs_jax.problems.transport_matrix.parallel.{name}")
-        canonical = importlib.import_module(f"sfincs_jax.problems.transport_parallel_{name}")
-        assert legacy is canonical
-
-
-def test_flattened_preconditioner_legacy_imports_resolve_to_canonical_modules() -> None:
-    assert not (PACKAGE_ROOT / "solvers" / "preconditioners").exists()
-
-    aliases = {
-        "dispatch": "preconditioner_dispatch",
-        "transport_matrix": "preconditioner_transport_matrix",
-        "domain_decomposition": "preconditioner_domain_decomposition",
-        "full_fp.full_csr_kinetic": "preconditioner_full_fp_csr",
-        "full_fp.kinetic_blocks": "preconditioner_full_fp_kinetic",
-        "full_fp.species_blocks": "preconditioner_full_fp_species",
-        "full_fp.structured_fblock": "preconditioner_full_fp_structured",
-        "pas.angular": "preconditioner_pas_angular",
-        "pas.composite": "preconditioner_pas_composite",
-        "pas.matrix_free": "preconditioner_pas_matrix_free",
-        "pas.policy": "preconditioner_pas_policy",
-        "pas.xblock_ilu": "preconditioner_pas_xblock_ilu",
-        "qi.basis": "preconditioner_qi_basis",
-        "qi.corrections": "preconditioner_qi_corrections",
-        "qi.device": "preconditioner_qi_device",
-        "qi.policy": "preconditioner_qi_policy",
-        "schur.profile_response": "preconditioner_schur_profile",
-        "symbolic_sparse.active_factors": "preconditioner_symbolic_active",
-        "symbolic_sparse.host_factor": "preconditioner_symbolic_host",
-        "symbolic_sparse.policy": "preconditioner_symbolic_policy",
-        "symbolic_sparse.profile_response": "preconditioner_symbolic_profile",
-        "xblock.active_projected": "preconditioner_xblock_active",
-        "xblock.block_jacobi": "preconditioner_xblock_block_jacobi",
-        "xblock.coarse": "preconditioner_xblock_coarse",
-        "xblock.low_l_schur": "preconditioner_xblock_low_l_schur",
-        "xblock.policy": "preconditioner_xblock_policy",
-        "xblock.radial": "preconditioner_xblock_radial",
-        "xblock.tz_sparse": "preconditioner_xblock_tz_sparse",
-    }
-    for legacy_suffix, canonical_suffix in aliases.items():
-        legacy = importlib.import_module(f"sfincs_jax.solvers.preconditioners.{legacy_suffix}")
-        canonical = importlib.import_module(f"sfincs_jax.solvers.{canonical_suffix}")
-        assert legacy is canonical
+    canonical_modules = (
+        "sfincs_jax.operators.profile_collisionless",
+        "sfincs_jax.operators.profile_fblock",
+        "sfincs_jax.operators.profile_full_system",
+        "sfincs_jax.operators.profile_layout",
+        "sfincs_jax.operators.profile_system",
+        "sfincs_jax.problems.profile_solve",
+        "sfincs_jax.problems.profile_policies",
+        "sfincs_jax.problems.profile_residual",
+        "sfincs_jax.problems.profile_dense",
+        "sfincs_jax.problems.profile_sparse_xblock",
+        "sfincs_jax.problems.transport_diagnostics",
+        "sfincs_jax.problems.transport_finalize",
+        "sfincs_jax.problems.transport_linear_system",
+        "sfincs_jax.problems.transport_policies",
+        "sfincs_jax.problems.transport_parallel_runtime",
+        "sfincs_jax.problems.transport_parallel_worker",
+        "sfincs_jax.solvers.preconditioner_pas_xblock_ilu",
+        "sfincs_jax.solvers.preconditioner_xblock_tz_sparse",
+        "sfincs_jax.solvers.preconditioner_full_fp_kinetic",
+        "sfincs_jax.solvers.preconditioner_qi_basis",
+        "sfincs_jax.solvers.preconditioner_schur_profile",
+        "sfincs_jax.solvers.preconditioner_symbolic_profile",
+    )
+    for module_name in canonical_modules:
+        module = importlib.import_module(module_name)
+        assert module.__name__ == module_name

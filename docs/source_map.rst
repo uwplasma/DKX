@@ -56,9 +56,11 @@ The root modules are the stable user-facing surface: ``api.py``, ``cli.py``,
 small compatibility facade for historical imports; it must not own physics,
 operator, or solver implementation.
 
-Compatibility imports such as ``sfincs_jax.operators.profile_response`` and
-``sfincs_jax.problems.transport_matrix`` resolve through one-file facades. The
-source tree does not contain nested implementation packages for those names.
+The source tree does not contain nested implementation packages or non-root
+one-file facades for profile-response, transport-matrix, or preconditioner
+families. Use the flat canonical owners directly: ``operators/profile_*.py``,
+``problems/profile_*.py``, ``problems/transport_*.py``, and
+``solvers/preconditioner_*.py``.
 
 Root public surface classification
 ----------------------------------
@@ -659,9 +661,8 @@ replacing the old monolith are:
   bases, targeted ``(species,x,L)`` window bases, full-CSR structured Schur
   result objects, Jacobi fallback, diagonal tail-Schur, zeta-line Schur,
   pitch-line Schur, radial-pitch Schur builders, block memory estimates, and
-  regularized diagonal inversion. The historical
-  ``sfincs_jax.solvers.preconditioners.schur`` import remains a compatibility
-  alias; the canonical owner is this flat module.
+  regularized diagonal inversion. This flat module is the canonical owner for
+  Schur and coarse profile-response preconditioners.
 - ``sfincs_jax/problems/transport_linear_system.py``:
   RHSMode=2/3 transport active-system owner. It owns active-DOF and dense-path
   setup, dense-LU solver/preconditioner construction for bounded fallback

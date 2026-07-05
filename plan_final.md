@@ -280,6 +280,12 @@ The main structural refactor is functionally complete:
   report continuity. Focused examples and benchmark-default validation passed
   as `43 passed in 0.45 s`, and a direct scaled-suite probe confirmed the moved
   file maps to the historical case label.
+- Phase B compatibility cleanup deleted the non-root one-file facades
+  `operators/profile_response.py`, `problems/profile_response.py`,
+  `problems/transport_matrix.py`, and `solvers/preconditioners.py`. Canonical
+  flat owners are now the only supported implementation imports for those
+  families; `v3_driver.py` remains the single root compatibility shim. Focused
+  source/import validation passed as `24 passed in 3.02 s`.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -475,25 +481,20 @@ Root modules retained for this PR:
   support APIs used by examples, docs, tests, and benchmark tooling.
 - `v3_driver.py` as the only root compatibility facade.
 
-Compatibility shims pending the Phase B audit:
+Compatibility shim retained after the Phase B audit:
 
 - `sfincs_jax.v3_driver`.
-- `sfincs_jax.operators.profile_response`.
-- `sfincs_jax.problems.profile_response`.
-- `sfincs_jax.problems.transport_matrix`.
-- `sfincs_jax.solvers.preconditioners`.
 
-These shims are intentionally small and tested. During Phase B, delete any shim
-whose legacy import path is no longer needed by public docs, examples, scripts,
-or compatibility tests. Retain a shim for one release cycle only when removing
-it would break a documented user import path or require a lazy alias mechanism
-that is more complex than the shim itself.
+This shim is intentionally small and tested. Non-root compatibility facades for
+operators, problems, transport-matrix helpers, and preconditioner families have
+been deleted; public docs, examples, scripts, and tests should import canonical
+flat owners directly.
 
 ## Open Lanes And Status
 
 ### Lane 1 - Review-Ready Refactor
 
-Status: 90% for final review readiness.
+Status: 92% for final review readiness.
 
 Goal: finish the PR with a smaller, clearer source tree without changing
 physics, outputs, tolerances, solver defaults, differentiable Python paths,
@@ -737,7 +738,8 @@ Acceptance:
 - No nested packages.
 - No unexpected root files.
 - No public examples/scripts importing `v3_driver`.
-- Compatibility imports still resolve to canonical owners.
+- The remaining root compatibility shim resolves to canonical owners; deleted
+  non-root facades stay absent.
 - The baseline identifies which files will be deleted, merged, or retained.
 
 ### Phase B - Compatibility And Example Surface Cleanup
@@ -746,8 +748,9 @@ Acceptance:
    `v3_driver.py`, `operators/profile_response.py`,
    `problems/profile_response.py`, `problems/transport_matrix.py`, and
    `solvers/preconditioners.py`.
-2. Delete facades whose public imports are no longer used. For retained
-   facades, add a one-release compatibility comment and a direct import test.
+2. Delete facades whose public imports are no longer used. Retain only the
+   root `v3_driver.py` shim with a one-release compatibility comment and a
+   direct import test.
 3. Keep the former `examples/additional_examples/` namelist in `examples/data/`
    and preserve its benchmark label in scripts. Review `examples/sfincs_examples/`
    and `examples/upstream/` so archival navigation stays out of the first-run

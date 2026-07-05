@@ -91,10 +91,9 @@ top-level ``rhs1_*`` files.
    RHSMode=1 profile-current/bootstrap-current orchestration belongs to flat
    ``problems/profile_*.py`` modules. RHSMode=2/3 transport-matrix and
    monoenergetic-response orchestration belongs to flat
-   ``problems/transport_*.py`` modules. Compatibility facades such as
-   ``sfincs_jax.problems.profile_response`` and
-   ``sfincs_jax.problems.transport_matrix`` may remain as one-file import
-   shims, but they should not own implementation logic.
+   ``problems/transport_*.py`` modules. Do not reintroduce non-root
+   compatibility facades for profile-response or transport-matrix owners; user
+   and contributor imports should point to canonical owners directly.
 
 3. Physics, discretization, and operators
    Model terms, grids, quadrature, active layouts, residual construction, and
