@@ -165,6 +165,11 @@ The main structural refactor is functionally complete:
   helpers without direct tests. Focused validation passed as
   `17 passed in 0.87 s`, with the remaining LU-size helper test passing as
   `1 passed in 0.81 s`.
+- Public Krylov wrapper coverage now includes direct tests for BiCGStab,
+  TFQMR, and distributed-GMRES host fallback entry points on tiny linear
+  systems. A source/test audit for `solver.py` reports zero production-used
+  public helpers without direct tests. Focused validation passed as
+  `3 passed in 1.50 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -999,6 +1004,9 @@ Completed work:
   policy parser/memory tests, then reran source/test audits showing no
   production-used public helpers without direct tests in those targeted
   modules.
+- Tranche 41: added direct public Krylov wrapper tests for BiCGStab, TFQMR,
+  and distributed-GMRES fallback APIs, then reran the source/test audit showing
+  no production-used public helpers in `solver.py` without direct tests.
 
 Remaining consolidation steps:
 

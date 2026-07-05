@@ -14,6 +14,7 @@ from sfincs_jax.solver import (
     _materialize_distributed_input,
     _distributed_solver_kind,
     assemble_dense_matrix_from_matvec,
+    bicgstab_solve,
     bicgstab_solve_with_residual,
     dense_krylov_solve_from_matrix,
     dense_solve_from_matrix,
@@ -22,11 +23,14 @@ from sfincs_jax.solver import (
     fgmres_solve_with_residual,
     fgmres_solve_with_residual_jit,
     gcrotmk_solve_with_history_scipy,
+    gmres_solve_distributed,
     gmres_solve_with_history_scipy,
     gmres_solve_jit,
     gmres_solve,
     gmres_solve_with_residual,
+    gmres_solve_with_residual_distributed,
     lgmres_solve_with_history_scipy,
+    tfqmr_solve,
     tfqmr_solve_with_residual,
     tfqmr_solve_with_residual_jit,
 )
@@ -903,6 +907,22 @@ def test_bicgstab_solve_with_residual_matches_matvec() -> None:
     assert bool(result.converged)
 
 
+def test_bicgstab_solve_wrapper_matches_numpy_for_diagonal_system() -> None:
+    diagonal = jnp.asarray([2.0, 3.0, 5.0, 7.0], dtype=jnp.float64)
+    b = jnp.asarray([1.0, -2.0, 4.0, 0.5], dtype=jnp.float64)
+
+    result = bicgstab_solve(
+        matvec=lambda x: diagonal * x,
+        b=b,
+        tol=1.0e-12,
+        maxiter=20,
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), np.asarray(b / diagonal), rtol=1.0e-10, atol=1.0e-10)
+    assert float(result.residual_norm) < 1.0e-10
+    assert bool(result.converged)
+
+
 def test_bicgstab_right_preconditioning_preserves_physical_initial_guess() -> None:
     a = np.array(
         [
@@ -971,6 +991,22 @@ def test_tfqmr_solve_with_residual_matches_numpy_for_nonsymmetric_matrix() -> No
     np.testing.assert_allclose(np.asarray(result.x), x_ref, rtol=1.0e-8, atol=1.0e-8)
     np.testing.assert_allclose(np.asarray(residual), b - a @ np.asarray(result.x), rtol=1.0e-10, atol=1.0e-10)
     assert float(result.residual_norm) < 1.0e-8
+    assert bool(result.converged)
+
+
+def test_tfqmr_solve_wrapper_matches_numpy_for_diagonal_system() -> None:
+    diagonal = jnp.asarray([2.5, 4.0, 6.0, 9.0], dtype=jnp.float64)
+    b = jnp.asarray([1.5, -1.0, 3.0, -4.5], dtype=jnp.float64)
+
+    result = tfqmr_solve(
+        matvec=lambda x: diagonal * x,
+        b=b,
+        tol=1.0e-12,
+        maxiter=20,
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), np.asarray(b / diagonal), rtol=1.0e-10, atol=1.0e-10)
+    assert float(result.residual_norm) < 1.0e-10
     assert bool(result.converged)
 
 
@@ -1458,6 +1494,43 @@ def test_distributed_solver_pjit_factories_reuse_wrappers() -> None:
     assert solver_module._get_distributed_solve_with_residual_pjit(
         "p"
     ) is solver_module._get_distributed_solve_with_residual_pjit("p")
+
+
+def test_distributed_gmres_wrappers_fall_back_to_host_without_axis() -> None:
+    a = jnp.asarray(
+        [
+            [3.0, 0.5, 0.0],
+            [0.25, 4.0, -0.5],
+            [0.0, 1.0, 2.5],
+        ],
+        dtype=jnp.float64,
+    )
+    b = jnp.asarray([1.0, -2.0, 0.5], dtype=jnp.float64)
+    ref = np.linalg.solve(np.asarray(a), np.asarray(b))
+
+    def mv(x):
+        return a @ x
+
+    result = gmres_solve_distributed(
+        matvec=mv,
+        b=b,
+        axis_name=None,
+        tol=1.0e-12,
+        restart=4,
+        maxiter=20,
+    )
+    result_with_residual, residual = gmres_solve_with_residual_distributed(
+        matvec=mv,
+        b=b,
+        axis_name=None,
+        tol=1.0e-12,
+        restart=4,
+        maxiter=20,
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), ref, rtol=1.0e-8, atol=1.0e-8)
+    np.testing.assert_allclose(np.asarray(result_with_residual.x), ref, rtol=1.0e-8, atol=1.0e-8)
+    np.testing.assert_allclose(np.asarray(residual), np.asarray(b - mv(result_with_residual.x)), rtol=1.0e-10)
 
 
 def test_distributed_solver_sharded_jit_smoke_two_cpu_devices() -> None:
