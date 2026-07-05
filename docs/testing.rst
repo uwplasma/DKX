@@ -181,12 +181,11 @@ Coverage audits use the full test suite with package instrumentation:
 
    pytest -q --cov=sfincs_jax --cov-report=term --cov-report=xml
 
-The exact collected-test count changes as targeted regression tests are added, so
-release notes cite a dated local/CI artifact rather than hard-code a permanent
-number here. The audited coverage artifact associated with this refactor records
-``84.31%`` line coverage (``58,304 / 69,151`` covered lines in ``5:51`` on the
-local xdist suite). The research-grade target is ``95%`` meaningful package
-coverage with CI wall time below ten minutes.
+The exact collected-test count changes as targeted regression tests are added,
+so release notes and the refactor plan cite dated local/CI artifacts rather
+than hard-code a permanent collected-test count here. The active refactor lane
+records ``88%`` measured package coverage, with ``95%`` meaningful package
+coverage as the research-grade target and CI wall time kept below ten minutes.
 
 The coverage gap is concentrated in large, risk-bearing owners rather than in
 trivial helper functions: high-level solver orchestration, output-format and

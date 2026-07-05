@@ -464,7 +464,7 @@ Current open lane board
   package-wide ``95%`` target still requires more owner-module tests for
   profile solves, transport solves, operator assembly, output writing, and a
   JAX-safe coverage environment.
-- VMEC/Boozer workflow: current checks cover workflow provenance, optional
+- VMEC/Boozer workflow: validation checks cover workflow provenance, optional
   ecosystem gates, and proxy-gradient consistency. Full VMEC-boundary-to-SFINCS
   kinetic transport gradients remain deferred.
 - Deferred validations: W7-X ambipolar validation, high-``nu`` analytic-limit
