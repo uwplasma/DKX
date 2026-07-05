@@ -257,6 +257,17 @@ def test_distributed_gmres_axis_tests_use_krylov_dispatch_owner() -> None:
     assert "sfincs_jax.solvers.krylov_dispatch" in text
 
 
+def test_sparse_assembly_tests_use_sparse_preconditioner_owner() -> None:
+    """Sparse assembly tests should not assert profile_solve alias plumbing."""
+
+    text = (REPO_ROOT / "tests" / "test_sparse_assembly.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "profile_solve" not in text
+    assert "sfincs_jax.solvers.preconditioner_xblock_tz_sparse" in text
+
+
 def test_test_filenames_do_not_reintroduce_deleted_v3_driver_label() -> None:
     """Keep test modules named after the canonical behavior they protect."""
 
