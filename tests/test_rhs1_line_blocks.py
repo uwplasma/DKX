@@ -6,6 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 
 import sfincs_jax.solvers.preconditioner_domain_decomposition as line_blocks
+from sfincs_jax.solvers.preconditioning import matvec_submatrix_v3_unsharded
 
 
 def _op() -> SimpleNamespace:
@@ -65,6 +66,34 @@ def _patch_line_block_probe(monkeypatch) -> None:
         return out
 
     monkeypatch.setattr(line_blocks, "matvec_submatrix_v3_unsharded", _probe)
+
+
+def test_matvec_submatrix_v3_unsharded_uses_unsharded_operator_apply(monkeypatch) -> None:
+    matrix = jnp.asarray(
+        [
+            [2.0, 0.0, 1.0],
+            [-1.0, 3.0, 0.5],
+            [0.0, 4.0, -2.0],
+        ],
+        dtype=jnp.float64,
+    )
+
+    def fake_apply(_op, vector, *, include_jacobian_terms, allow_sharding):
+        assert include_jacobian_terms is True
+        assert allow_sharding is False
+        return matrix @ vector
+
+    monkeypatch.setattr("sfincs_jax.operators.profile_system.apply_v3_full_system_operator", fake_apply)
+
+    sub = matvec_submatrix_v3_unsharded(
+        object(),
+        col_idx=np.asarray([0, 2], dtype=np.int32),
+        row_idx=np.asarray([1, 2], dtype=np.int32),
+        total_size=3,
+        chunk_cols=1,
+    )
+
+    np.testing.assert_allclose(sub, np.asarray(matrix)[np.ix_([1, 2], [0, 2])].T)
 
 
 def test_zeta_line_builder_inverts_each_theta_line(monkeypatch) -> None:

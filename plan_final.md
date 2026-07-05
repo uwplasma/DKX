@@ -187,6 +187,12 @@ The main structural refactor is functionally complete:
   `operators/profile_fblock.py` and `operators/profile_kinetic.py` report zero
   production-used public helpers without direct tests. Focused validation
   passed as `1 passed in 1.72 s`.
+- Optimization and preconditioning wrapper coverage now includes direct tests
+  for QA neoclassical proxy components, promotion-pair comparison metrics, and
+  unsharded V3 submatrix probing through the public preconditioning helper.
+  Source/test audits for `workflows/optimization.py` and
+  `solvers/preconditioning.py` report zero production-used public helpers
+  without direct tests. Focused validation passed as `2 passed in 1.89 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -1032,6 +1038,10 @@ Completed work:
   f-block layout-adapter tests, then reran source/test audits showing no
   production-used public helpers without direct tests in those targeted
   operator modules.
+- Tranche 44: added direct optimization proxy/comparison and unsharded
+  submatrix-probe wrapper tests, then reran source/test audits showing no
+  production-used public helpers without direct tests in those targeted
+  workflow/preconditioning modules.
 
 Remaining consolidation steps:
 
