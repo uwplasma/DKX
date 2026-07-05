@@ -8,7 +8,7 @@ import jax.numpy as jnp
 from sfincs_jax.operators.profile_collisionless import CollisionlessV3Operator, apply_collisionless_v3
 from sfincs_jax.discretization.indices import V3Indexing
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.validation.petsc_binary import read_petsc_mat_aij, read_petsc_vec
+from sfincs_jax.validation.fortran import read_petsc_mat_aij, read_petsc_vec
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 
 

@@ -11,7 +11,7 @@ import numpy as np
 
 from sfincs_jax.io import read_sfincs_h5, sfincs_jax_output_dict
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.validation.petsc_binary import read_petsc_vec
+from sfincs_jax.validation.fortran import read_petsc_vec
 from sfincs_jax.problems.transport_diagnostics import v3_rhsmode1_output_fields_vm_only
 from sfincs_jax.discretization.v3 import grids_from_namelist
 from sfincs_jax.problems.transport_linear_system import transport_active_dof_indices as _transport_active_dof_indices

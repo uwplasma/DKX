@@ -192,6 +192,15 @@ def test_deleted_campaign_specific_workflow_module_is_absent() -> None:
     assert hasattr(module, "evaluate_qi_res15_gpu_campaign_files")
 
 
+def test_deleted_tiny_validation_facades_are_absent() -> None:
+    """Keep Fortran/PETSc fixture readers in one validation owner."""
+
+    assert not (PACKAGE_ROOT / "validation" / "petsc_binary.py").exists()
+    module = importlib.import_module("sfincs_jax.validation.fortran")
+    assert hasattr(module, "read_petsc_vec")
+    assert hasattr(module, "read_petsc_mat_aij")
+
+
 def test_canonical_flat_domain_modules_are_importable() -> None:
     """Canonical owners replace the deleted compatibility import paths."""
 

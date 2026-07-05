@@ -1179,6 +1179,11 @@ replacing the old monolith are:
   or example-suite audits. It also owns the fail-closed schema validator for the
   Fortran-v3 vs SFINCS-JAX runtime/memory benchmark summary consumed by README/docs
   plots.
+- ``sfincs_jax/validation/fortran.py``:
+  Fortran-v3 execution/profiling helpers and PETSc binary fixture readers used by
+  parity tests, diagnostic comparison scripts, and pedagogical examples. Keeping
+  ``read_petsc_vec`` and ``read_petsc_mat_aij`` beside the Fortran runner makes
+  frozen-reference ownership explicit and avoids a separate tiny validation module.
 - ``sfincs_jax/problems/profile_phi1_newton.py``:
   Phi1 Newton policy, bounded nonlinear linear-step orchestration, accepted-
   iterate update logic, and solve orchestration for the Newton path, including

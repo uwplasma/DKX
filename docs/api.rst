@@ -221,7 +221,7 @@ research workflows.
 .. automodule:: sfincs_jax.discretization.indices
    :members:
 
-.. automodule:: sfincs_jax.validation.petsc_binary
+.. automodule:: sfincs_jax.validation.fortran
    :members:
 
 .. automodule:: sfincs_jax.validation.qi_device

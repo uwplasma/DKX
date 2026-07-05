@@ -6,7 +6,7 @@ import numpy as np
 import jax.numpy as jnp
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.validation.petsc_binary import read_petsc_mat_aij, read_petsc_vec
+from sfincs_jax.validation.fortran import read_petsc_mat_aij, read_petsc_vec
 from sfincs_jax.discretization.v3 import grids_from_namelist
 from sfincs_jax.operators.profile_fblock import fblock_operator_from_namelist, matvec_v3_fblock_flat
 from sfincs_jax.discretization.indices import V3Indexing

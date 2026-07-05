@@ -9,7 +9,7 @@ from sfincs_jax.operators.profile_exb import ExBThetaV3Operator, apply_exb_theta
 from sfincs_jax.geometry import boozer_geometry_scheme4
 from sfincs_jax.discretization.indices import V3Indexing
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.validation.petsc_binary import read_petsc_mat_aij
+from sfincs_jax.validation.fortran import read_petsc_mat_aij
 from sfincs_jax.discretization.v3 import grids_from_namelist
 
 

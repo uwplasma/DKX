@@ -8,7 +8,7 @@ import jax.numpy as jnp
 from jax import tree_util as jtu
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.validation.petsc_binary import read_petsc_vec
+from sfincs_jax.validation.fortran import read_petsc_vec
 from sfincs_jax.operators.profile_linear_systems import (
     V3FullLinearSystem,
     jacobian_matvec_v3_full_system_jit,

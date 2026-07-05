@@ -291,6 +291,10 @@ The main structural refactor is functionally complete:
   the durable `validation/qi_device.py` owner, then deleted the workflow module.
   The public example script remains available, but fixed-artifact claim gates
   now live under validation rather than workflow implementation files.
+- Phase C validation cleanup moved PETSc binary fixture readers from the tiny
+  `validation/petsc_binary.py` module into `validation/fortran.py`, then
+  deleted the helper file. Fortran-v3 execution, profiling, and frozen PETSc
+  reference readers now have one canonical validation owner.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -368,7 +372,7 @@ Current source inventory:
   `v3_driver.py` must remain implementation-free and below `80` lines.
 - Domain folders: `discretization/` (`7` files), `geometry/` (`5`),
   `operators/` (`21`), `outputs/` (`6`), `physics/` (`3`),
-  `problems/` (`28`), `solvers/` (`40`), `validation/` (`10`), and
+  `problems/` (`28`), `solvers/` (`40`), `validation/` (`9`), and
   `workflows/` (`5`).
 - The complexity hotspots are not nested folders; they are many
   same-family files in `problems/`, `solvers/`, and `operators/`.

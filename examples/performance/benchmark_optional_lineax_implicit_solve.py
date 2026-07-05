@@ -47,7 +47,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from sfincs_jax.solvers.implicit import linear_custom_solve  # noqa: E402
 from sfincs_jax.namelist import read_sfincs_input  # noqa: E402
-from sfincs_jax.validation.petsc_binary import read_petsc_vec  # noqa: E402
+from sfincs_jax.validation.fortran import read_petsc_vec  # noqa: E402
 from sfincs_jax.operators.profile_system import (  # noqa: E402
     apply_v3_full_system_operator,
     full_system_operator_from_namelist,
