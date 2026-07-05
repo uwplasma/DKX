@@ -1309,6 +1309,13 @@ Completed work:
   and tracked payload-mismatch artifacts fail closed with explicit statuses.
   Focused validation passed: `tests/test_validation_figures.py` as `9 passed in
   0.08 s`; Ruff passed.
+- Tranche 67: added strict HDF5 output-comparison contract tests for missing
+  candidate datasets, missing reference datasets selected by key, shape
+  mismatches, value mismatches, extra candidate datasets, nonnumeric metadata
+  skips, ignore lists, and per-key tolerance overrides. These tests protect the
+  CLI/parity audit path without shipping larger frozen outputs. Focused
+  validation passed: `tests/test_compare_reference_corruption.py` as `20 passed
+  in 0.33 s`; Ruff passed.
 
 Remaining consolidation steps:
 
