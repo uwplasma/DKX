@@ -13,6 +13,7 @@ import sfincs_jax.solvers.preconditioner_symbolic_profile as rfr
 import sfincs_jax.problems.profile_solve as vd
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.problems.profile_policies import (
+    _direct_tail_structured_pc_cache_key,
     resolve_active_projected_preconditioner_auto_policy,
 )
 from sfincs_jax.problems.transport_linear_system import transport_active_dof_indices
@@ -556,12 +557,12 @@ def test_structured_full_csr_rejects_phi1_in_kinetic_fail_closed() -> None:
     assert selection.reason == "unsupported_phi1_in_kinetic"
 
 
-def test_driver_structured_full_csr_bundle_matches_full_and_active_operator() -> None:
+def test_structured_full_csr_bundle_matches_full_and_active_operator() -> None:
     clear_structured_rhs1_full_csr_cache(clear_fblock_cache=True)
     nml = read_sfincs_input(REF / "quick_2species_FPCollisions_noEr.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
 
-    full_bundle = vd._try_build_structured_rhs1_full_csr_operator_bundle(
+    full_bundle = rfa._try_build_structured_rhs1_full_csr_operator_bundle(
         op=op,
         active_indices=None,
         csr_max_mb=100.0,
@@ -574,7 +575,7 @@ def test_driver_structured_full_csr_bundle_matches_full_and_active_operator() ->
     np.testing.assert_allclose(full_bundle.matvec(x), expected_full, rtol=1.0e-12, atol=1.0e-12)
 
     active = transport_active_dof_indices(op)
-    active_bundle = vd._try_build_structured_rhs1_full_csr_operator_bundle(
+    active_bundle = rfa._try_build_structured_rhs1_full_csr_operator_bundle(
         op=op,
         active_indices=active,
         csr_max_mb=100.0,
@@ -1637,7 +1638,7 @@ def test_direct_tail_cache_key_includes_fortran_support_modes() -> None:
     matrix = sp.eye(layout.total_size, format="csr", dtype=np.float64)
     active = np.arange(layout.total_size, dtype=np.int64)
 
-    key_default = vd._direct_tail_structured_pc_cache_key(
+    key_default = _direct_tail_structured_pc_cache_key(
         matrix=matrix,
         layout=layout,
         active_indices=active,
@@ -1646,7 +1647,7 @@ def test_direct_tail_cache_key_includes_fortran_support_modes() -> None:
         regularization=1.0e-12,
         support_modes=(1, 1, 1, 0),
     )
-    key_radial_dense = vd._direct_tail_structured_pc_cache_key(
+    key_radial_dense = _direct_tail_structured_pc_cache_key(
         matrix=matrix,
         layout=layout,
         active_indices=active,

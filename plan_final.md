@@ -1607,6 +1607,14 @@ Completed work:
   Focused validation passed: `tests/test_v3_sparse_pattern.py` as
   `141 passed in 138.06 s`; `tests/test_source_tree_consolidation.py` as
   `39 passed in 4.50 s`; Ruff and py_compile passed.
+- Tranche 96: moved structured RHSMode-1 full-CSR bundle and direct-tail
+  structured preconditioner cache-key tests off `profile_solve` private aliases
+  and onto `operators/profile_full_system.py` and `problems/profile_policies.py`.
+  The remaining `profile_solve` usages in `tests/test_rhs1_full_assembly.py`
+  are solve-entry checks rather than helper-owner tests. Focused validation
+  passed: `tests/test_rhs1_full_assembly.py` as `123 passed in 50.27 s`;
+  `tests/test_source_tree_consolidation.py` as `39 passed in 4.92 s`; Ruff and
+  py_compile passed.
 
 Remaining consolidation steps:
 
