@@ -234,6 +234,13 @@ The main structural refactor is functionally complete:
   `problems/transport_linear_system.py` reports zero untested public
   definitions in this audited slice. Focused validation passed as
   `137 passed in 24.21 s`; Ruff passed on all touched files.
+- RHSMode=1 policy/sparse-result contract coverage now directly exercises the
+  remaining public policy dataclasses in `problems/profile_policies.py`, the
+  sparse-PC stage result containers in `problems/profile_sparse_solve.py`, and
+  the structured full-CSR selection/solve-result serialization contract in
+  `operators/profile_full_system.py`. The direct-reference audit for those
+  three large owners reports zero untested public definitions. Focused
+  validation passed as `4 passed in 0.55 s`; Ruff passed for the new test file.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
