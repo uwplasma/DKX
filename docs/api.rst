@@ -7,6 +7,9 @@ API reference
 .. automodule:: sfincs_jax.namelist
    :members:
 
+.. automodule:: sfincs_jax.compare
+   :members:
+
 .. automodule:: sfincs_jax.discretization.v3
    :members:
 
