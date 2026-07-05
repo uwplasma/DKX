@@ -3,16 +3,19 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from sfincs_jax.discretization.adaptive_maps import (
     AffineXMap,
     RationalTailXMap,
     SoftplusCellXMap,
     SplineDensityXMap,
+    barycentric_diff_matrix,
     barycentric_diff_matrices,
     chain_rule_diff_matrices,
     make_reference_eta_grid,
     maxwellian_tail_integral_proxy,
+    mapped_grid_regularization,
 )
 
 
@@ -59,6 +62,29 @@ def test_barycentric_and_chain_rule_derivatives_agree_for_affine_map():
 
     np.testing.assert_allclose(np.asarray(d_chain), np.asarray(d_bary), rtol=1.0e-11, atol=1.0e-11)
     np.testing.assert_allclose(np.asarray(d2_chain), np.asarray(d2_bary), rtol=1.0e-9, atol=1.0e-9)
+
+
+def test_barycentric_diff_matrix_differentiates_polynomials_on_irregular_nodes():
+    x = jnp.asarray([0.0, 0.2, 0.7, 1.3, 2.0], dtype=jnp.float64)
+    d = barycentric_diff_matrix(x)
+
+    f = x**3 - 2.0 * x + 1.0
+    expected = 3.0 * x**2 - 2.0
+
+    np.testing.assert_allclose(np.asarray(d @ f), np.asarray(expected), rtol=1.0e-11, atol=1.0e-11)
+
+
+def test_mapped_grid_regularization_reports_spacing_and_tail_metrics():
+    x = jnp.asarray([0.0, 0.25, 0.75, 1.5], dtype=jnp.float64)
+    jac = jnp.asarray([0.25, 0.25, 0.5, 0.75], dtype=jnp.float64)
+
+    reg = mapped_grid_regularization(x, jac)
+
+    assert reg["min_dx"] == pytest.approx(0.25)
+    assert reg["width_ratio"] == pytest.approx(3.0)
+    assert float(reg["smoothness"]) >= 0.0
+    assert float(reg["jac_roughness"]) >= 0.0
+    np.testing.assert_allclose(float(reg["tail_mass_proxy"]), np.exp(-(1.5**2)), rtol=1.0e-14)
 
 
 def test_rational_tail_map_is_monotone_and_differentiable():

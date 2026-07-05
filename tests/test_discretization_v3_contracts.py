@@ -8,6 +8,12 @@ import numpy as np
 import pytest
 
 from sfincs_jax.discretization import v3
+from sfincs_jax.discretization.xgrid import (
+    make_x_polynomial_diff_matrices,
+    x_weight_d1_over_weight_np,
+    x_weight_d2_over_weight_np,
+    x_weight_np,
+)
 from sfincs_jax.geometry import boozer_geometry_scheme1
 from sfincs_jax.namelist import Namelist
 
@@ -80,6 +86,32 @@ def test_bc_header_period_parser_uses_run_directory_and_skips_column_header(tmp_
     )
 
     assert v3._n_periods_from_bc_file("synthetic.bc", base_dir=tmp_path) == 7
+
+
+def test_xgrid_weight_formulas_and_polynomial_diff_matrix_shape_contract() -> None:
+    x = np.asarray([0.0, 0.5, 1.5, 2.0], dtype=np.float64)
+    k = 2.0
+
+    weights = x_weight_np(x, k)
+    d1_over_w = x_weight_d1_over_weight_np(x, k)
+    d2_over_w = x_weight_d2_over_weight_np(x, k)
+    x_matrix = np.asarray([0.2, 0.5, 1.5, 2.0], dtype=np.float64)
+    ddx, d2dx2 = make_x_polynomial_diff_matrices(x_matrix, k=k)
+
+    np.testing.assert_allclose(weights, np.exp(-(x * x)) * (x**k), rtol=1.0e-15, atol=1.0e-15)
+    assert d1_over_w[0] == 0.0
+    np.testing.assert_allclose(d1_over_w[1:], k / x[1:] - 2.0 * x[1:], rtol=1.0e-15, atol=1.0e-15)
+    assert d2_over_w[0] == -2.0
+    np.testing.assert_allclose(
+        d2_over_w[1:],
+        k * (k - 1.0) / (x[1:] * x[1:]) - 2.0 * (2.0 * k + 1.0) + 4.0 * x[1:] * x[1:],
+        rtol=1.0e-15,
+        atol=1.0e-15,
+    )
+    assert ddx.shape == (x_matrix.size, x_matrix.size)
+    assert d2dx2.shape == (x_matrix.size, x_matrix.size)
+    assert np.isfinite(ddx).all()
+    assert np.isfinite(d2dx2).all()
 
 
 def test_bc_header_period_parser_fails_closed_on_malformed_files(tmp_path: Path) -> None:

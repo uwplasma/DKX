@@ -10,9 +10,12 @@ import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 
 from sfincs_jax.workflows.mapped_xgrid import (  # noqa: E402
+    analytic_maxwellian_moments,
     brute_force_rational_tail_moment_baseline,
     maxwellian_speed_moment,
+    mapped_maxwellian_moments,
     rational_tail_transport_grid,
+    relative_moment_errors,
     transport_moment_objective,
     transport_moment_report,
 )
@@ -26,6 +29,19 @@ def test_analytic_maxwellian_speed_moments():
     np.testing.assert_allclose(float(maxwellian_speed_moment(0.0)), 0.5 * np.sqrt(np.pi), rtol=1.0e-14)
     np.testing.assert_allclose(float(maxwellian_speed_moment(1.0)), 0.5, rtol=1.0e-14)
     np.testing.assert_allclose(float(maxwellian_speed_moment(2.0)), 0.25 * np.sqrt(np.pi), rtol=1.0e-14)
+
+
+def test_vector_maxwellian_moment_helpers_are_consistent():
+    powers = jnp.asarray([0.0, 2.0, 4.0], dtype=jnp.float64)
+    grid = rational_tail_transport_grid(18, log_length=-0.3)
+
+    references = analytic_maxwellian_moments(powers)
+    moments = mapped_maxwellian_moments(grid, powers)
+    errors = relative_moment_errors(grid, powers)
+
+    np.testing.assert_allclose(np.asarray(references), np.asarray([0.5 * np.sqrt(np.pi), 0.25 * np.sqrt(np.pi), 0.375 * np.sqrt(np.pi)]), rtol=1.0e-14)
+    np.testing.assert_allclose(np.asarray(errors), np.asarray((moments - references) / references), rtol=1.0e-14, atol=1.0e-14)
+    assert bool(jnp.all(jnp.isfinite(moments)))
 
 
 def test_transport_moment_report_shapes_and_regularization():

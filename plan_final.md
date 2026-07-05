@@ -123,6 +123,14 @@ The main structural refactor is functionally complete:
   capability guard. A source/test audit for `problems/profile_sparse_solve.py`
   reports zero production-used public helpers without direct tests. The broader
   sparse-PC/source-guard bundle passed as `375 passed in 5.80 s`.
+- Speed-grid and mapped-grid numerics coverage now includes direct tests for
+  SFINCS-v3 x-grid weights/derivative-ratio formulas, mapped barycentric
+  differentiation, mapped-grid regularization diagnostics, vector Maxwellian
+  moment helpers, relative moment errors, and dtype byte accounting. Source/test
+  audits for `discretization/adaptive_maps.py`, `discretization/xgrid.py`,
+  `workflows/mapped_xgrid.py`, and `solvers/memory_model.py` report zero
+  production-used public helpers without direct tests. Focused validation
+  passed as `48 passed in 14.06 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -935,6 +943,11 @@ Completed work:
   backend deferral, direct-tail fallback/policy setup, and the x-block backend
   capability guard. The source/test audit now shows no production-used public
   helpers in that module without direct tests.
+- Tranche 36: added direct numerics tests for mapped-grid differentiation,
+  SFINCS-v3 x-grid weight formulas, Maxwellian speed-moment helpers, and memory
+  dtype byte accounting, then reran source/test audits showing no
+  production-used public helpers without direct tests in the targeted
+  discretization/workflow/memory modules.
 
 Remaining consolidation steps:
 
