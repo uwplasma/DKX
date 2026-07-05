@@ -34,6 +34,8 @@ def test_fortran_bool_and_radial_current_helpers() -> None:
     assert _fortran_bool_to_py(np.bool_(False)) is False
     assert _fortran_bool_to_py(np.asarray([1])) is True
     assert _fortran_bool_to_py(np.asarray(0)) is False
+    assert _fortran_bool_to_py("nonempty-token") is True
+    assert _fortran_bool_to_py("") is False
 
     include_phi1 = {
         "includePhi1": 1,
@@ -51,7 +53,14 @@ def test_fortran_bool_and_radial_current_helpers() -> None:
     assert radial_current_from_output(no_phi1) == pytest.approx(5.0)
 
 
-def test_scanplot2_helpers_cover_single_and_multi_species() -> None:
+def test_scanplot2_helpers_cover_single_and_multi_species(tmp_path: Path) -> None:
+    scan_input = tmp_path / "input.namelist"
+    scan_input.write_text("!ss dPhiHatdpsiNMin = -1\n!ss dPhiHatdpsiNMax = 1\n", encoding="utf-8")
+    assert _infer_var_name_from_scan_input(scan_input) == "dPhiHatdpsiN"
+    fallback_input = tmp_path / "fallback.input.namelist"
+    fallback_input.write_text("&general\n/\n", encoding="utf-8")
+    assert _infer_var_name_from_scan_input(fallback_input) == "Er"
+
     labels = _scanplot2_labels(n_species=1, include_phi1=False)
     assert labels[-1] == "radial current"
     assert "source 1" in labels
@@ -81,6 +90,20 @@ def test_scanplot2_helpers_cover_single_and_multi_species() -> None:
     out_single = _scanplot2_outputs_for_run(single)
     np.testing.assert_allclose(out_single, np.asarray([2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 6.0]))
 
+    single_phi1 = {
+        "Nspecies": 1,
+        "includePhi1": 1,
+        "FSABFlow": np.asarray([[9.0, 2.0]]),
+        "particleFlux_vm_rHat": np.asarray([[9.0, 3.0]]),
+        "particleFlux_vd_rHat": np.asarray([[9.0, 4.0]]),
+        "heatFlux_vm_rHat": np.asarray([[9.0, 5.0]]),
+        "heatFlux_withoutPhi1_rHat": np.asarray([[9.0, 6.0]]),
+        "FSABjHat": np.asarray([9.0, 7.0]),
+        "Zs": np.asarray([2.0]),
+    }
+    out_single_phi1 = _scanplot2_outputs_for_run(single_phi1)
+    np.testing.assert_allclose(out_single_phi1, np.asarray([2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]))
+
     multi = {
         "Nspecies": 2,
         "includePhi1": 1,
@@ -92,6 +115,18 @@ def test_scanplot2_helpers_cover_single_and_multi_species() -> None:
     }
     out_multi = _scanplot2_outputs_for_run(multi)
     np.testing.assert_allclose(out_multi, np.asarray([1.0, 3.0, 5.0, 2.0, 4.0, 6.0, 7.0, -1.0]))
+
+    with pytest.raises(ValueError, match="Unexpected dataset rank"):
+        _scanplot2_outputs_for_run(
+            {
+                "Nspecies": 1,
+                "includePhi1": 0,
+                "FSABFlow": np.zeros((1, 1, 1)),
+                "particleFlux_vm_rHat": np.asarray([1.0]),
+                "heatFlux_vm_rHat": np.asarray([1.0]),
+                "Zs": np.asarray([1.0]),
+            }
+        )
 
 
 def test_diagnostics_flux_surface_averages_for_constant_geometry() -> None:
