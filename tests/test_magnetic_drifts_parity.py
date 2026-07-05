@@ -17,7 +17,7 @@ from sfincs_jax.operators.profile_magnetic_drifts import (
 )
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.namelist import Namelist
-from sfincs_jax.validation.petsc_binary import read_petsc_mat_aij
+from sfincs_jax.validation.fortran import read_petsc_mat_aij
 from sfincs_jax.discretization.v3 import V3Grids
 from sfincs_jax.discretization.v3 import grids_from_namelist
 
