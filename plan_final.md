@@ -349,6 +349,14 @@ The main structural refactor is functionally complete:
   deterministic-output digest requirements. Focused validation passed:
   `tests/test_transport_policy_coverage.py` as `18 passed in 0.45 s`; the
   adjacent parallel runtime/validation bundle passed as `49 passed in 0.42 s`.
+- Collisionality scan math for Simakov-Helander and FP/PAS validation artifacts
+  is now owned directly by `validation/artifacts.py`; the helper-only
+  `validation/math.py` file was deleted and tests now import the canonical
+  validation artifact owner. Focused validation passed:
+  `tests/test_validation_math.py tests/test_validation_artifacts.py
+  tests/test_validation_policy_coverage.py tests/test_research_lane_policy.py`
+  as `42 passed in 0.23 s`, and the source/import structure guard passed as
+  `30 passed in 2.87 s`.
 - The examples tree has been re-audited for navigation and repository size:
   every top-level task folder has a README, examples contract tests passed as
   `26 passed in 20.66 s`, and the nested `output/`, `artifacts/`,
@@ -468,7 +476,7 @@ Current source inventory:
   `v3_driver.py` must remain implementation-free and below `80` lines.
 - Domain folders: `discretization/` (`7` files), `geometry/` (`5`),
   `operators/` (`20`), `outputs/` (`6`), `physics/` (`3`),
-  `problems/` (`26`), `solvers/` (`37`), `validation/` (`8`), and
+  `problems/` (`26`), `solvers/` (`37`), `validation/` (`7`), and
   `workflows/` (`4`).
 - The complexity hotspots are not nested folders; they are many
   same-family files in `problems/`, `solvers/`, and `operators/`.
@@ -601,7 +609,7 @@ flat owners directly.
 
 ### Lane 1 - Review-Ready Refactor
 
-Status: 96% for final review readiness.
+Status: 97% for final review readiness.
 
 Goal: finish the PR with a smaller, clearer source tree without changing
 physics, outputs, tolerances, solver defaults, differentiable Python paths,
@@ -611,7 +619,7 @@ Latest AST audit:
 
 - Folder depth is no longer the blocker: the package has one-level domain
   folders only and no `__init__.py`-only source packages.
-- The source tree has 131 Python files, 17 package-root modules, and one-level
+- The source tree has 130 Python files, 17 package-root modules, and one-level
   domain folders only. The remaining structural blockers are file-family sprawl
   and owner size.
   The largest retained owners are `problems/profile_policies.py` (`7936`
