@@ -686,7 +686,7 @@ Repository examples that map directly onto common first tasks:
 - plot an output file: `python examples/getting_started/plot_sfincs_output.py`
 - write HDF5/NetCDF/NPZ and plot a PDF panel: `python examples/getting_started/write_and_plot_multiple_formats.py`
 - run autodiff examples: `python examples/autodiff/autodiff_gradient_nu_n_residual.py`
-- run the optional VMEC/Boozer differentiable geometry handoff: `python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --wout /path/to/wout.nc`
+- run the optional VMEC/Boozer differentiable geometry workflow: `python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --wout /path/to/wout.nc`
 - benchmark CPU/GPU parallel solves: `python examples/performance/benchmark_sharded_solve_scaling.py --backend cpu --devices 1 2 --inner-warmup-solves 1 --sample-timeout-s 300 ...`
 
 Parallel CLI controls are first-class:
