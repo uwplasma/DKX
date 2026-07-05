@@ -554,11 +554,6 @@ replacing the old monolith are:
   corrected residual through an injected operator action for direct numerical
   tests. The numerical setup/apply routines still live in the family owners;
   this module is the common state and shaping surface.
-- ``sfincs_jax/solvers/sparse_triangular.py``:
-  JAX-native triangular solves for padded and compact-CSR sparse factor rows,
-  plus permutation inversion. These pure kernels are used by sparse
-  preconditioner apply paths and are directly tested against dense triangular
-  references.
 - ``sfincs_jax/solvers/preconditioner_pas_composite.py``:
   PAS-family RHSMode=1 composite preconditioner policy. It owns the
   ``pas_lite``, ``pas_hybrid``, and ``pas_schur`` composition rules, including
@@ -688,11 +683,13 @@ replacing the old monolith are:
   ``ExplicitSparseFactorSettings`` bundle, dense/CSR storage decisions,
   pattern-color probing, symbolic Schur/frontal/ND/BLR settings, SuperLU
   pivot/permutation options, ILU options, host explicit-sparse operator
-  assembly, logging, monolithic preflight guard, and factorization
+  assembly, padded and compact-CSR JAX triangular-factor apply kernels,
+  permutation inversion, logging, monolithic preflight guard, and factorization
   orchestration. Profile-response and transport solve owners pass the concrete
   operator/factor callbacks; ``v3_driver.py`` only exposes the compatibility
-  import path. The old explicit-sparse policy and builder support files were
-  absorbed here so the explicit sparse host-factor lane has one review surface.
+  import path. The old explicit-sparse policy, builder support, and triangular
+  solve helper files were absorbed here so the explicit sparse host-factor lane
+  has one review surface.
 - ``sfincs_jax/solvers/preconditioner_symbolic_host.py``:
   RHSMode=1 host sparse ILU/LU factor setup used by non-differentiable
   CLI-oriented rescue paths. The module owns matrix-free column assembly,

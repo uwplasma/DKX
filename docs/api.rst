@@ -81,9 +81,6 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.solver
    :members:
 
-.. automodule:: sfincs_jax.solvers.sparse_triangular
-   :members:
-
 .. automodule:: sfincs_jax.solvers.preconditioning
    :members:
 
