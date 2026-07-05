@@ -76,6 +76,9 @@ Use this map before adding a file or following an internal import:
 - `problems/transport_solve.py`: RHSMode-2/3 transport solve orchestration.
 - `problems/transport_linear_system.py`: transport linear-system construction,
   batched RHS solves, and dense/host/JAX dispatch helpers.
+- `problems/transport_parallel_runtime.py`: RHSMode-2/3 whichRHS
+  parallelism, GPU subprocess worker CLI, worker payload schemas, and result
+  merging.
 - `solvers/preconditioning.py`: shared preconditioner caches, projection
   helpers, and RHSMode-1 preconditioner dispatch.
 - `solvers/preconditioner_full_fp_kinetic.py`: full-FP RHSMode-1 kinetic,
