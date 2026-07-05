@@ -40,7 +40,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     slow_mark = pytest.mark.skip(reason="Skipped slow integration test in CI mode.")
     slow_patterns = (
         "test_transport_matrix_",
-        "test_transport_parallel",
+        "tests/test_transport_parallel.py::",
         "test_state_recycle_parity",
         "test_er_scan_and_ambipolar",
         "test_upstream_scanplot2_smoke",

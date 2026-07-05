@@ -1168,6 +1168,14 @@ Completed work:
   cleaned source docstrings that described the retired file as an active
   integration point. Focused release/research/docs/source guards passed as
   `70 passed in 3.20 s`; Ruff and `git diff --check` passed.
+- Tranche 56: narrowed the CI slow-test skip from every
+  `test_transport_parallel*` node to only the genuinely slow
+  `tests/test_transport_parallel.py` integration file. The fast transport
+  parallel runtime, payload, sharding, solve, validation, worker-CLI, and
+  artifact tests now run under `SFINCS_JAX_CI=1`, recovering coverage for the
+  largest current blocker without duplicating tests. CI-mode validation for
+  the transport-parallel group passed as `85 passed, 18 skipped in 0.78 s`;
+  Ruff and `git diff --check` passed.
 
 Remaining consolidation steps:
 
