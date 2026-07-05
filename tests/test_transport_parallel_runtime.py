@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -12,13 +13,18 @@ from sfincs_jax.problems.transport_parallel_runtime import (
     plan_transport_parallel_gpu_subprocesses,
     merge_transport_parallel_results,
     partition_transport_rhs,
+    pack_transport_parallel_result,
     run_transport_parallel_gpu_subprocesses,
+    run_transport_parallel_gpu_subprocesses_with_policy,
     run_transport_parallel_payloads,
+    solve_transport_parallel_payload,
     summarize_transport_worker_output,
     transport_parallel_result_to_npz_arrays,
     transport_worker_subprocess_env,
     validate_complete_transport_worker_rhs_coverage,
+    validate_gpu_transport_worker_arrays,
     validate_transport_worker_result_payload,
+    validate_transport_parallel_worker_count,
 )
 
 
@@ -299,6 +305,47 @@ def test_run_transport_parallel_gpu_subprocesses_rejects_invalid_worker_count() 
         )
 
 
+def test_transport_parallel_validation_helpers_reject_bad_scalars() -> None:
+    with pytest.raises(ValueError, match="worker count must be an integer"):
+        validate_transport_parallel_worker_count("bad")
+
+    with pytest.raises(RuntimeError, match="state_vectors=0"):
+        validate_gpu_transport_worker_arrays(
+            requested_rhs_values=[1, 2],
+            output_rhs_values=[1, 2],
+            state_vectors=np.asarray(1.0),
+            residual_norms=np.ones((2,), dtype=np.float64),
+            rhs_norms=np.ones((2,), dtype=np.float64),
+            elapsed_time_s=np.ones((2,), dtype=np.float64),
+            gpu_id="0",
+        )
+
+
+def test_gpu_subprocess_policy_wrapper_wires_standard_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, object]] = []
+
+    def _fake_gpu_runner(**kwargs):
+        calls.append(kwargs)
+        assert kwargs["visible_gpu_ids"] is transport_parallel_runtime.transport_parallel_visible_gpu_ids
+        assert kwargs["gpu_worker_env"] is transport_parallel_runtime.transport_parallel_gpu_worker_env
+        return [{"which_rhs_values": [1], "state_vectors_by_rhs": {}, "residual_norms_by_rhs": {}}]
+
+    monkeypatch.setattr(
+        transport_parallel_runtime,
+        "run_transport_parallel_gpu_subprocesses",
+        _fake_gpu_runner,
+    )
+
+    result = run_transport_parallel_gpu_subprocesses_with_policy(
+        payloads=[{"which_rhs_values": [1]}],
+        parallel_workers=2,
+        emit=lambda _level, _message: None,
+    )
+
+    assert result == [{"which_rhs_values": [1], "state_vectors_by_rhs": {}, "residual_norms_by_rhs": {}}]
+    assert calls[0]["parallel_workers"] == 2
+
+
 def test_gpu_subprocesses_deduplicates_visible_ids_and_reports_plan_cap(
     monkeypatch,
 ) -> None:
@@ -488,6 +535,108 @@ def test_run_transport_parallel_payloads_falls_back_when_persistent_pool_breaks(
     assert calls == {"get_pool": 2, "worker": 2, "shutdown": 1}
     assert any("persistent transport pool broke" in message for message in messages)
     assert any("falling back to sequential whichRHS" in message for message in messages)
+
+
+def test_run_transport_parallel_payloads_falls_back_when_one_shot_pool_unavailable() -> None:
+    messages: list[str] = []
+    payloads = [{"which_rhs_values": [1]}, {"which_rhs_values": [2]}]
+
+    class _Env:
+        def __enter__(self):
+            return None
+
+        def __exit__(self, *_exc):
+            return False
+
+    def _executor_class(**_kwargs):
+        raise OSError("process pool unavailable")
+
+    results = run_transport_parallel_payloads(
+        payloads=payloads,
+        parallel_workers=2,
+        parallel_backend="cpu",
+        run_gpu_subprocesses=lambda **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected GPU path")),
+        persistent_pool_enabled=False,
+        get_pool=lambda **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected persistent pool")),
+        shutdown_pool=lambda: None,
+        worker=lambda payload: {"which_rhs_values": payload["which_rhs_values"]},
+        worker_env=lambda _workers: _Env(),
+        executor_class=_executor_class,
+        executor_kwargs=lambda **_kwargs: {},
+        emit=lambda level, message: messages.append(f"{level}:{message}"),
+    )
+
+    assert results == [{"which_rhs_values": [1]}, {"which_rhs_values": [2]}]
+    assert any("process parallelism unavailable" in message for message in messages)
+
+
+def test_solve_transport_parallel_payload_packs_stubbed_result(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text("&general\n/\n")
+    emitted: list[str] = []
+    calls: list[dict[str, object]] = []
+
+    def _read_input(path: Path):
+        assert path == input_path
+        return {"input": str(path)}
+
+    def _solve_transport(**kwargs):
+        calls.append(kwargs)
+        assert kwargs["nml"] == {"input": str(input_path)}
+        assert kwargs["which_rhs_values"] == [1, 2]
+        assert kwargs["collect_transport_output_fields"] is False
+        assert kwargs["parallel_workers"] == 1
+        assert kwargs["force_store_state"] is True
+        kwargs["emit"](0, "worker progress")
+        return SimpleNamespace(
+            state_vectors_by_rhs={1: np.asarray([1.0, 0.0]), 2: np.asarray([0.0, 1.0])},
+            residual_norms_by_rhs={1: 1.0e-12, 2: 2.0e-12},
+            rhs_norms_by_rhs={1: 1.0, 2: 2.0},
+            elapsed_time_s=np.asarray([0.1, 0.2]),
+        )
+
+    result = solve_transport_parallel_payload(
+        {
+            "input_path": str(input_path),
+            "which_rhs_values": [1, 2],
+            "tol": 1.0e-11,
+            "atol": 1.0e-14,
+            "restart": 20,
+            "maxiter": 40,
+            "solve_method": "auto",
+            "identity_shift": 0.0,
+            "phi1_hat_base": [0.0, 0.0],
+            "differentiable": False,
+        },
+        read_input=_read_input,
+        solve_transport=_solve_transport,
+        emit=lambda _level, message: emitted.append(message),
+    )
+
+    assert result["which_rhs_values"] == [1, 2]
+    np.testing.assert_allclose(result["state_vectors_by_rhs"][1], np.asarray([1.0, 0.0]))
+    assert result["residual_norms_by_rhs"] == {1: 1.0e-12, 2: 2.0e-12}
+    assert result["rhs_norms_by_rhs"] == {1: 1.0, 2: 2.0}
+    assert emitted == ["worker progress"]
+    assert calls[0]["tol"] == 1.0e-11
+    assert calls[0]["differentiable"] is False
+
+
+def test_pack_transport_parallel_result_tolerates_missing_rhs_norms() -> None:
+    packed = pack_transport_parallel_result(
+        which_rhs_values=[3],
+        result=SimpleNamespace(
+            state_vectors_by_rhs={3: np.asarray([3.0])},
+            residual_norms_by_rhs={3: np.asarray(3.0e-12)},
+            elapsed_time_s=np.asarray([0.3]),
+        ),
+    )
+
+    assert packed["which_rhs_values"] == [3]
+    assert packed["rhs_norms_by_rhs"] == {}
+    np.testing.assert_allclose(packed["state_vectors_by_rhs"][3], np.asarray([3.0]))
 
 
 def test_transport_parallel_pool_cache_reuses_and_replaces_matching_keys() -> None:

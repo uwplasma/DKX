@@ -146,6 +146,18 @@ The main structural refactor is functionally complete:
   `problems/profile_sparse_direct.py`, and `problems/profile_diagnostics.py`
   report zero production-used public helpers without direct tests. Focused
   validation passed as `82 passed in 34.47 s`.
+- Transport parallel-runtime coverage now also includes direct fail-closed tests
+  for GPU worker-array validation, the standard GPU subprocess policy wrapper,
+  one-shot process-pool fallback, worker-payload packing, missing RHS-norm
+  packing, scaling-threshold validation, malformed payload provenance,
+  malformed compile-amortization gates, malformed sharded deterministic gates,
+  and malformed multi-GPU throughput artifacts. Focused validation passed as
+  `82 passed in 0.51 s`; Ruff and `git diff --check` passed. A local
+  pytest-cov/module-coverage retry aborted before pytest startup due to the
+  user-site `coverage`/`numpy` importer issue
+  (`ImportError: cannot load module more than once per process`), so the
+  package-wide coverage percentage remains the last successful CI-mode
+  measurement below until the next full coverage run.
 - Structured velocity, transport policy, sensitivity, and validation coverage
   now includes direct tests for block-tridiagonal solves, structured tz-FFT
   first-attempt policy/budget/environment thresholds, JVP/VJP flux wrappers,
@@ -1145,7 +1157,9 @@ Remaining consolidation steps:
 
 ### Lane 2 - Coverage And Future-Proof Tests
 
-Status: 88% measured package coverage.
+Status: 86% local CI-mode measured package coverage
+(`3954 passed, 187 skipped in 4:55` on 2026-07-05) with the direct public
+contract audit closed at `modules_with_missing 0`.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 
