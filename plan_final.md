@@ -1139,10 +1139,18 @@ Completed work:
 - Tranche 52: narrowed `problems/profile_sparse_solve.py` from a dynamic
   cross-owner sparse namespace to an owned orchestration export surface. Its
   `__all__` now advertises only local sparse-solve orchestration and diagnostic
-  symbols, while transitional imported helper attributes remain available until
-  direct owner imports are completed. Focused validation passed as
+  symbols. Focused validation passed as
   `23 passed in 0.70 s`; Ruff, `git diff --check`, and an export sanity probe
   passed.
+- Tranche 53: removed the sparse-solve transitional import waiver and migrated
+  the large sparse-PC behavior test plus `profile_solve.py` to direct canonical
+  sparse owners (`profile_sparse_direct`, `profile_sparse_finalization`,
+  `profile_sparse_fortran_reduced`, `profile_sparse_policy`,
+  `profile_sparse_qi`, and `profile_sparse_xblock`). The x-block public export
+  list now includes the branch context/runner it owns, and import-contract
+  tests now guard that the broad sparse-solve compatibility namespace is not
+  required. Focused validation passed as `361 passed in 2.97 s`; Ruff and
+  `git diff --check` passed.
 
 Remaining consolidation steps:
 
@@ -1151,11 +1159,11 @@ Remaining consolidation steps:
    `sfincs_jax.v3_driver` imports are allowed.
 2. Problem-family consolidation: remove "handoff" and production-campaign
    names from implementation files by merging RHSMode-1 sparse setup/rescue
-   owners into canonical profile sparse owners. Continue migrating tests and
-   downstream scripts away from transitional sparse-solve helper attributes so
-   the `profile_sparse_solve.py` lint waiver can be deleted. Success is fewer
-   broad namespace surfaces, simpler canonical imports, and unchanged
-   RHSMode-1 policy/output tests.
+   owners into canonical profile sparse owners. The sparse-solve compatibility
+   namespace and Ruff waiver are closed; any remaining cleanup should reduce
+   owner size or clarify orchestration boundaries without reintroducing broad
+   reexport surfaces. Success is fewer broad namespace surfaces, simpler
+   canonical imports, and unchanged RHSMode-1 policy/output tests.
 3. Solver-family consolidation: merge same-family preconditioner modules only
    at durable physics/numerics boundaries. Success is fewer solver files and no
    loss of targeted preconditioner tests, not a single oversized grab-bag file.

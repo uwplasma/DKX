@@ -35,7 +35,7 @@ from sfincs_jax.solvers.preconditioner_qi_device import (
     setup_rhs1_qi_device_preconditioner,
 )
 from sfincs_jax.solver import GMRESSolveResult
-from sfincs_jax.problems.profile_sparse_solve import (
+from sfincs_jax.problems.profile_sparse_direct import (
     DirectTailMaterializationContext,
     DirectTailMaterializationResult,
     DirectTailStructuredAdmissionContext,
@@ -45,41 +45,14 @@ from sfincs_jax.problems.profile_sparse_solve import (
     DirectTailResidualRescuePolicy,
     DirectTailTrueActiveRescuePolicy,
     DirectTailCoupledCoarseRescuePolicy,
-    FPXBlockGlobalCorrectionContext,
-    FPXBlockHighXCorrectionContext,
-    SparsePCFactorPreflightPolicyContext,
-    SparsePCFactorPreflightEvaluationContext,
-    SparsePCResidualCandidateAcceptanceContext,
-    SparsePCFactorDtypeRetryContext,
-    SparsePCAutoPreflightRetrySelectionContext,
-    SparsePCAutoPreflightRetryEvaluationContext,
-    SparsePCGMRESControlPolicy,
-    FortranReducedXBlockFactorBuildContext,
-    FortranReducedXBlockFinalPayloadContext,
-    FortranReducedXBlockGlobalCouplingStageContext,
-    FortranReducedXBlockKrylovSetupContext,
-    FortranReducedXBlockKrylovSolveContext,
-    FortranReducedXBlockMomentSchurStageContext,
-    MatvecCounter,
-    SparsePCGMRESContext,
-    SparsePCGMRESCompletionMessageContext,
-    SparsePCGMRESFinalizationBundleContext,
-    SparsePCGMRESFinalPayload,
-    SparsePCMemoryBudgetPreflightContext,
-    SparsePCFactorDtypeRetryFinalizationContext,
-    SparsePCPostMinresFinalizationContext,
-    SparsePCPatternSetupContext,
-    SparsePCPostMinresContext,
-    SparsePCPostMinresUpdateContext,
-    XBlockSubspaceCorrectionContext,
     SparseHostDirectPayload,
     SparseHostDirectFactorSolvePayload,
     SparseHostDirectPolishPayload,
     SparseHostDirectFallbackPayload,
     ExplicitSparseMinimumNormBranchContext,
     ExplicitSparseHostDirectBranchContext,
-    RHS1FullSparseRetryStageContext,
     SparseHostOrILUFactorBuildContext,
+    SparseHostOrILUFactorBuildResult,
     SparseHostOrILUFactorControls,
     SparseILUPreconditionerBuildContext,
     SparseHostScipyPreconditionerBuildContext,
@@ -87,21 +60,161 @@ from sfincs_jax.problems.profile_sparse_solve import (
     SparseHostRetryCandidateContext,
     SparseHostRetryCandidateResult,
     SparseJAXRetryPreconditionerBuildContext,
+    ExplicitSparseOperatorBuildPolicy,
+    ExplicitSparseOperatorBuildResult,
+    SparsePCDirectTailFinalMetadataContext,
+    SparseMinimumNormPayload,
+    SparseMinimumNormPolicy,
+    build_explicit_sparse_operator_from_pattern,
+    build_direct_tail_materialization_setup,
+    build_direct_tail_structured_preconditioner_setup,
+    explicit_sparse_pattern_progress_messages,
+    resolve_explicit_sparse_operator_build_policy,
+    resolve_sparse_minimum_norm_policy,
+    resolve_sparse_host_or_ilu_factor_controls,
+    resolve_direct_tail_structured_admission,
+    resolve_direct_tail_residual_rescue_policy,
+    resolve_direct_tail_true_active_rescue_policy,
+    resolve_direct_tail_coupled_coarse_rescue_policy,
+    run_direct_tail_support_mode_preflight,
+    sparse_pc_direct_tail_final_metadata,
+    sparse_host_direct_solve_payload,
+    sparse_host_direct_solve_from_pattern,
+    solve_explicit_sparse_host_direct_branch,
+    solve_sparse_host_direct_from_available_factor,
+    apply_sparse_host_direct_polish_if_needed,
+    sparse_host_direct_fallback_payload,
+    build_sparse_host_or_ilu_factor,
+    build_sparse_ilu_preconditioner_from_cache,
+    build_sparse_host_scipy_preconditioner,
+    run_sparse_host_scipy_gmres,
+    run_sparse_host_retry_candidate,
+    build_sparse_jax_retry_preconditioner,
+    sparse_minimum_norm_solve_payload,
+    sparse_minimum_norm_solve_from_pattern,
+    sparse_minimum_norm_start_message,
+    solve_explicit_sparse_minimum_norm_branch,
+    validate_explicit_sparse_host_request,
+)
+from sfincs_jax.problems.profile_sparse_finalization import (
+    SparsePCFactorDtypeRetryContext,
+    SparsePCFactorDtypeRetryResult,
+    SparsePCGMRESContext,
+    SparsePCGMRESCompletionMessageContext,
+    SparsePCGMRESFinalizationBundleContext,
+    SparsePCGMRESFinalPayload,
+    SparsePCFactorDtypeRetryFinalizationContext,
+    SparsePCPostMinresFinalizationContext,
+    SparsePCPostMinresContext,
+    SparsePCPostMinresUpdateContext,
+    SparsePCGMRESFinalizationContext,
+    SparsePCGMRESFinalizationStateContext,
+    SparsePCGMRESFinalResultContext,
+    SparsePCGMRESResult,
+    apply_sparse_pc_post_minres,
+    apply_sparse_pc_post_minres_if_needed,
+    apply_sparse_pc_post_minres_from_driver_state,
+    emit_sparse_pc_gmres_completion_from_driver_state,
+    evaluate_sparse_pc_factor_dtype_retry,
+    finalize_sparse_pc_gmres_from_driver_state,
+    finalize_sparse_pc_gmres_bundle,
+    finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state,
+    finalize_sparse_pc_gmres_with_dtype_retry,
+    sparse_pc_gmres_finalization_driver_scope_keys,
+    sparse_pc_gmres_finalization_driver_state_keys,
+    sparse_pc_gmres_finalization_bundle_from_driver_result,
+    sparse_pc_gmres_finalization_bundle_from_driver_scope,
+    sparse_pc_gmres_finalization_state_from_context,
+    sparse_pc_gmres_finalization_state_from_driver_scope,
+    sparse_pc_factor_dtype_retry_initial_guess,
+    retry_sparse_pc_factor_dtype_from_finalization_context,
+    run_sparse_pc_gmres_once,
+    run_sparse_pc_gmres_once_for_retry,
+    retry_sparse_pc_factor_dtype_from_driver_state,
+    retry_sparse_pc_factor_dtype_if_needed,
+    sparse_pc_gmres_completion_message,
+    sparse_pc_gmres_final_payload_from_driver_state,
+)
+from sfincs_jax.problems.profile_sparse_fortran_reduced import (
+    FortranReducedXBlockFactorBuildContext,
+    FortranReducedXBlockFinalPayloadContext,
+    FortranReducedXBlockGlobalCouplingStageContext,
+    FortranReducedXBlockKrylovSetupContext,
+    FortranReducedXBlockKrylovSolveContext,
+    FortranReducedXBlockMomentSchurStageContext,
+    apply_fortran_reduced_xblock_global_coupling_stage,
+    apply_fortran_reduced_xblock_initial_seed,
+    apply_fortran_reduced_xblock_moment_schur_stage,
+    build_fortran_reduced_xblock_factor_stage,
+    build_fortran_reduced_xblock_krylov_setup,
+    prepare_fortran_reduced_xblock_initial_guess,
+    resolve_fortran_reduced_sparse_pc_backend,
+    resolve_fortran_reduced_xblock_factor_policy,
+    resolve_fortran_reduced_xblock_global_coupling_policy,
+    resolve_fortran_reduced_xblock_initial_seed_policy,
+    resolve_fortran_reduced_xblock_krylov_policy,
+    resolve_fortran_reduced_xblock_moment_schur_policy,
+    fortran_reduced_xblock_final_payload_from_driver_state,
+    fortran_reduced_xblock_final_payload,
+    run_fortran_reduced_xblock_krylov_solve,
+)
+from sfincs_jax.problems.profile_sparse_policy import (
+    SparsePCFactorPreflightPolicyContext,
+    SparsePCFactorPreflightEvaluationContext,
+    SparsePCResidualCandidateAcceptanceContext,
+    SparsePCAutoPreflightRetrySelectionContext,
+    SparsePCAutoPreflightRetryEvaluationContext,
+    SparsePCGMRESControlPolicy,
+    SparsePCMemoryBudgetPreflightContext,
+    SparsePCPatternSetupContext,
+    build_sparse_pc_active_dof_setup,
+    build_sparse_pc_pattern_setup,
+    enforce_sparse_pc_memory_budget,
+    evaluate_sparse_pc_factor_preflight,
+    evaluate_sparse_pc_residual_candidate_acceptance,
+    select_sparse_pc_auto_preflight_retry_candidates,
+    evaluate_sparse_pc_auto_preflight_retry,
+    resolve_sparse_pc_gmres_control_policy,
+    resolve_sparse_pc_entry_policy,
+    resolve_sparse_pc_factor_policy,
+    resolve_sparse_pc_factor_preflight_policy,
+)
+from sfincs_jax.problems.profile_sparse_qi import (
+    XBlockQICoarseSeedStageContext,
+    XBlockQIDeviceMetadataContext,
+    XBlockQIDeviceSetupConfigContext,
+    XBlockQIDeflatedStageContext,
+    XBlockQIDeviceStageContext,
+    XBlockQIGalerkinStageContext,
+    XBlockQITwoLevelStageContext,
+    apply_xblock_qi_coarse_seed_stage,
+    apply_xblock_qi_deflated_stage,
+    apply_xblock_qi_device_stage,
+    apply_xblock_qi_galerkin_stage,
+    apply_xblock_qi_two_level_stage,
+    build_xblock_qi_device_preconditioner_metadata,
+    build_xblock_qi_device_setup_config,
+    build_xblock_qi_stage_pipeline_context,
+    resolve_xblock_qi_device_admission_setup,
+    resolve_xblock_qi_device_base_config_setup,
+    resolve_xblock_qi_device_enrichment_config_setup,
+    resolve_xblock_qi_device_multilevel_config_setup,
+    resolve_xblock_qi_deflated_policy_setup,
+    resolve_xblock_qi_device_operator_reuse_setup,
+    resolve_xblock_qi_galerkin_policy_setup,
+    resolve_xblock_qi_seed_policy_setup,
+    resolve_xblock_qi_two_level_policy_setup,
+)
+from sfincs_jax.problems.profile_sparse_xblock import (
+    FPXBlockGlobalCorrectionContext,
+    FPXBlockHighXCorrectionContext,
+    MatvecCounter,
+    XBlockSubspaceCorrectionContext,
     SparseSXBlockRescueContext,
     SparseXBlockExplicitSeedContext,
     SparseXBlockRescueAcceptanceContext,
     SparseXBlockRescueBuildContext,
     SparseXBlockRescueSolveContext,
-    ExplicitSparseOperatorBuildPolicy,
-    ExplicitSparseOperatorBuildResult,
-    SparsePCDirectTailFinalMetadataContext,
-    SparsePCGMRESFinalizationContext,
-    SparsePCGMRESFinalizationStateContext,
-    SparsePCGMRESFinalResultContext,
-    SparseMinimumNormPayload,
-    SparseMinimumNormPolicy,
-    SparsePCGMRESResult,
-    run_rhs1_full_sparse_retry_stage,
     XBlockAugmentedKrylovBasisContext,
     XBlockAugmentedKrylovBasisResult,
     XBlockAugmentedKrylovStageContext,
@@ -134,13 +247,6 @@ from sfincs_jax.problems.profile_sparse_solve import (
     XBlockPreflightGateContext,
     XBlockProbeCoarseStageContext,
     XBlockProbeCoarseStageResult,
-    XBlockQICoarseSeedStageContext,
-    XBlockQIDeviceMetadataContext,
-    XBlockQIDeviceSetupConfigContext,
-    XBlockQIDeflatedStageContext,
-    XBlockQIDeviceStageContext,
-    XBlockQIGalerkinStageContext,
-    XBlockQITwoLevelStageContext,
     XBlockSparsePCCompletionContext,
     XBlockSparsePCFinalCoreState,
     XBlockSparsePCFinalDeviceState,
@@ -151,36 +257,16 @@ from sfincs_jax.problems.profile_sparse_solve import (
     XBlockSparsePCWorkEstimates,
     XBlockTwoLevelStageContext,
     XBlockAssembledPreflightError,
-    apply_fortran_reduced_xblock_global_coupling_stage,
-    apply_fortran_reduced_xblock_initial_seed,
-    apply_fortran_reduced_xblock_moment_schur_stage,
     apply_xblock_global_coupling_stage,
     apply_xblock_augmented_krylov_stage,
     apply_xblock_moment_schur_stage,
     apply_xblock_probe_coarse_stage,
-    apply_xblock_qi_coarse_seed_stage,
-    apply_xblock_qi_deflated_stage,
-    apply_xblock_qi_device_stage,
-    apply_xblock_qi_galerkin_stage,
-    apply_xblock_qi_two_level_stage,
     apply_xblock_side_probe_stage,
     apply_xblock_two_level_stage,
-    apply_sparse_pc_post_minres,
-    apply_sparse_pc_post_minres_if_needed,
-    apply_sparse_pc_post_minres_from_driver_state,
     apply_sparse_xblock_explicit_seed,
     accept_sparse_xblock_rescue_candidate,
     apply_xblock_subspace_correction_if_needed,
-    build_fortran_reduced_xblock_factor_stage,
     build_sparse_xblock_rescue_preconditioner,
-    build_explicit_sparse_operator_from_pattern,
-    build_fortran_reduced_xblock_krylov_setup,
-    build_sparse_pc_active_dof_setup,
-    build_sparse_pc_pattern_setup,
-    build_direct_tail_materialization_setup,
-    build_direct_tail_structured_preconditioner_setup,
-    build_xblock_qi_device_preconditioner_metadata,
-    build_xblock_qi_device_setup_config,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
     build_xblock_assembled_matvec_setup,
@@ -189,68 +275,18 @@ from sfincs_jax.problems.profile_sparse_solve import (
     build_xblock_krylov_progress_callbacks,
     build_xblock_krylov_matvec_setup,
     build_xblock_local_preconditioner,
-    build_xblock_qi_stage_pipeline_context,
     emit_xblock_sparse_pc_completion_from_driver_state,
     emit_xblock_sparse_pc_completion,
-    emit_sparse_pc_gmres_completion_from_driver_state,
-    enforce_sparse_pc_memory_budget,
     evaluate_xblock_moment_schur_probe_result,
-    evaluate_sparse_pc_factor_preflight,
-    evaluate_sparse_pc_residual_candidate_acceptance,
     evaluate_xblock_preflight_gate,
-    select_sparse_pc_auto_preflight_retry_candidates,
-    evaluate_sparse_pc_auto_preflight_retry,
-    evaluate_sparse_pc_factor_dtype_retry,
-    explicit_sparse_pattern_progress_messages,
-    resolve_sparse_pc_gmres_control_policy,
     failed_xblock_global_coupling_metadata,
     failed_xblock_two_level_metadata,
     failed_xblock_moment_schur_metadata,
-    finalize_sparse_pc_gmres_from_driver_state,
-    finalize_sparse_pc_gmres_bundle,
-    finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state,
     finalize_xblock_global_coupling_metadata,
     finalize_xblock_two_level_metadata,
     finalize_xblock_moment_schur_metadata,
-    finalize_sparse_pc_gmres_with_dtype_retry,
-    sparse_pc_gmres_finalization_driver_scope_keys,
-    sparse_pc_gmres_finalization_driver_state_keys,
-    sparse_pc_gmres_finalization_bundle_from_driver_result,
-    sparse_pc_gmres_finalization_bundle_from_driver_scope,
-    sparse_pc_gmres_finalization_state_from_context,
-    sparse_pc_gmres_finalization_state_from_driver_scope,
-    prepare_fortran_reduced_xblock_initial_guess,
     prepare_xblock_initial_guess,
-    resolve_fortran_reduced_sparse_pc_backend,
-    resolve_fortran_reduced_xblock_factor_policy,
-    resolve_fortran_reduced_xblock_global_coupling_policy,
-    resolve_fortran_reduced_xblock_initial_seed_policy,
-    resolve_fortran_reduced_xblock_krylov_policy,
-    resolve_fortran_reduced_xblock_moment_schur_policy,
-    resolve_sparse_pc_entry_policy,
-    resolve_explicit_sparse_operator_build_policy,
-    resolve_sparse_pc_factor_policy,
-    resolve_sparse_minimum_norm_policy,
-    resolve_sparse_host_or_ilu_factor_controls,
-    sparse_pc_factor_dtype_retry_initial_guess,
-    retry_sparse_pc_factor_dtype_from_finalization_context,
-    resolve_sparse_pc_factor_preflight_policy,
-    resolve_direct_tail_structured_admission,
-    resolve_direct_tail_residual_rescue_policy,
-    resolve_direct_tail_true_active_rescue_policy,
-    resolve_direct_tail_coupled_coarse_rescue_policy,
-    run_direct_tail_support_mode_preflight,
-    sparse_pc_direct_tail_final_metadata,
-    resolve_xblock_qi_device_admission_setup,
-    resolve_xblock_qi_device_base_config_setup,
-    resolve_xblock_qi_device_enrichment_config_setup,
-    resolve_xblock_qi_device_multilevel_config_setup,
-    resolve_xblock_qi_deflated_policy_setup,
-    resolve_xblock_qi_device_operator_reuse_setup,
-    resolve_xblock_qi_galerkin_policy_setup,
     resolve_xblock_krylov_control_setup,
-    resolve_xblock_qi_seed_policy_setup,
-    resolve_xblock_qi_two_level_policy_setup,
     resolve_xblock_global_coupling_policy_setup,
     resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_seed_policy_setup,
@@ -258,20 +294,15 @@ from sfincs_jax.problems.profile_sparse_solve import (
     resolve_xblock_sparse_pc_branch_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
     resolve_xblock_two_level_policy_setup,
-    fortran_reduced_xblock_final_payload_from_driver_state,
-    fortran_reduced_xblock_final_payload,
     complete_xblock_post_krylov_stage,
     prepare_xblock_augmented_krylov_basis,
     prepare_xblock_krylov_solve_space,
-    run_fortran_reduced_xblock_krylov_solve,
     run_xblock_first_krylov_attempt,
     run_xblock_krylov_solve_stage,
     run_fp_xblock_global_correction_stage,
     run_fp_xblock_highx_residual_correction_stage,
     run_sparse_sxblock_rescue_stage,
     run_sparse_xblock_rescue_solve_stage,
-    run_sparse_pc_gmres_once,
-    run_sparse_pc_gmres_once_for_retry,
     run_xblock_gmres_fallback_if_needed,
     run_xblock_post_solve_corrections,
     xblock_device_krylov_state,
@@ -289,35 +320,18 @@ from sfincs_jax.problems.profile_sparse_solve import (
     xblock_physical_solution_and_residual,
     xblock_sparse_pc_final_payload,
     xblock_sparse_pc_work_estimates,
-    retry_sparse_pc_factor_dtype_from_driver_state,
-    retry_sparse_pc_factor_dtype_if_needed,
-    sparse_pc_gmres_completion_message,
-    sparse_pc_gmres_final_payload_from_driver_state,
-    sparse_host_direct_solve_payload,
-    sparse_host_direct_solve_from_pattern,
-    solve_explicit_sparse_host_direct_branch,
-    solve_sparse_host_direct_from_available_factor,
-    apply_sparse_host_direct_polish_if_needed,
-    sparse_host_direct_fallback_payload,
-    build_sparse_host_or_ilu_factor,
-    build_sparse_ilu_preconditioner_from_cache,
-    build_sparse_host_scipy_preconditioner,
-    run_sparse_host_scipy_gmres,
-    run_sparse_host_retry_candidate,
-    build_sparse_jax_retry_preconditioner,
-    sparse_minimum_norm_solve_payload,
-    sparse_minimum_norm_solve_from_pattern,
-    sparse_minimum_norm_start_message,
-    solve_explicit_sparse_minimum_norm_branch,
-    validate_explicit_sparse_host_request,
     finalize_xblock_assembled_operator_metadata,
     xblock_sparse_pc_final_metadata_from_driver_state,
     xblock_sparse_pc_final_payload_from_driver_state,
 )
+from sfincs_jax.problems.profile_sparse_solve import (
+    RHS1FullSparseRetryStageContext,
+    run_rhs1_full_sparse_retry_stage,
+)
 
 
-def test_sparse_xblock_module_reexports_match_compat_layer() -> None:
-    """The split sparse x-block module keeps legacy sparse_pc imports stable."""
+def test_sparse_xblock_module_exposes_canonical_public_contract() -> None:
+    """The split sparse x-block module owns its public sparse-PC helpers."""
 
     moved_names = (
         "MatvecCounter",
@@ -464,11 +478,12 @@ def test_sparse_xblock_module_reexports_match_compat_layer() -> None:
         "resolve_xblock_seed_policy_setup",
     )
     for name in moved_names:
-        assert getattr(sparse_pc_module, name) is getattr(sparse_xblock_module, name)
+        assert hasattr(sparse_xblock_module, name)
+        assert name in sparse_xblock_module.__all__
 
 
-def test_sparse_qi_module_reexports_match_compat_layer() -> None:
-    """The split sparse QI module keeps legacy sparse_pc imports stable."""
+def test_sparse_qi_module_exposes_canonical_public_contract() -> None:
+    """The split sparse QI module owns its public sparse-PC helpers."""
 
     moved_names = (
         "XBlockQICoarseSeedStageContext",
@@ -512,7 +527,8 @@ def test_sparse_qi_module_reexports_match_compat_layer() -> None:
         "resolve_xblock_qi_two_level_policy_setup",
     )
     for name in moved_names:
-        assert getattr(sparse_pc_module, name) is getattr(sparse_qi_module, name)
+        assert hasattr(sparse_qi_module, name)
+        assert name in sparse_qi_module.__all__
 
 
 def test_sparse_xblock_result_containers_preserve_orchestration_contract() -> None:
@@ -1219,8 +1235,8 @@ def test_run_xblock_qi_preconditioner_pipeline_preserves_base_when_disabled() ->
     assert result.diagnostic_scope()["qi_seed_max_rank"] == 0
 
 
-def test_sparse_direct_module_reexports_match_compat_layer() -> None:
-    """The split sparse direct module keeps legacy sparse_pc imports stable."""
+def test_sparse_direct_module_exposes_canonical_public_contract() -> None:
+    """The split sparse direct module owns its public sparse-PC helpers."""
 
     moved_names = (
         "DirectTailCoupledCoarseRescuePolicy",
@@ -1288,11 +1304,12 @@ def test_sparse_direct_module_reexports_match_compat_layer() -> None:
         "validate_explicit_sparse_host_request",
     )
     for name in moved_names:
-        assert getattr(sparse_pc_module, name) is getattr(sparse_direct_module, name)
+        assert hasattr(sparse_direct_module, name)
+        assert name in sparse_direct_module.__all__
 
 
-def test_sparse_finalization_module_reexports_match_compat_layer() -> None:
-    """The split sparse finalization module keeps legacy sparse_pc imports stable."""
+def test_sparse_finalization_module_exposes_canonical_public_contract() -> None:
+    """The split sparse finalization module owns its public sparse-PC helpers."""
 
     moved_names = (
         "SparsePCFactorDtypeRetryContext",
@@ -1337,14 +1354,12 @@ def test_sparse_finalization_module_reexports_match_compat_layer() -> None:
         "sparse_pc_gmres_final_payload_from_driver_state",
     )
     for name in moved_names:
-        assert getattr(sparse_pc_module, name) is getattr(
-            sparse_finalization_module,
-            name,
-        )
+        assert hasattr(sparse_finalization_module, name)
+        assert name in sparse_finalization_module.__all__
 
 
 def test_sparse_krylov_helpers_live_on_sparse_pc_owner() -> None:
-    """Sparse-PC Krylov helpers now live directly on the sparse_pc owner."""
+    """Sparse-PC Krylov helpers live directly on the finalization owner."""
 
     moved_names = (
         "SparsePCGMRESContext",
@@ -1352,14 +1367,12 @@ def test_sparse_krylov_helpers_live_on_sparse_pc_owner() -> None:
         "run_sparse_pc_gmres_once_for_retry",
     )
     for name in moved_names:
-        assert getattr(sparse_pc_module, name) is getattr(
-            sparse_finalization_module,
-            name,
-        )
+        assert hasattr(sparse_finalization_module, name)
+        assert name in sparse_finalization_module.__all__
 
 
-def test_sparse_policy_module_reexports_match_compat_layer() -> None:
-    """The split sparse policy module keeps legacy sparse_pc imports stable."""
+def test_sparse_policy_module_exposes_canonical_public_contract() -> None:
+    """The split sparse policy module owns its public sparse-PC helpers."""
 
     moved_names = (
         "SparsePCActiveDOFSetup",
@@ -1392,11 +1405,12 @@ def test_sparse_policy_module_reexports_match_compat_layer() -> None:
         "resolve_sparse_pc_gmres_control_policy",
     )
     for name in moved_names:
-        assert getattr(sparse_pc_module, name) is getattr(sparse_policy_module, name)
+        assert hasattr(sparse_policy_module, name)
+        assert name in sparse_policy_module.__all__
 
 
-def test_sparse_fortran_reduced_module_reexports_match_compat_layer() -> None:
-    """The split fortran-reduced module keeps legacy sparse_pc imports stable."""
+def test_sparse_fortran_reduced_module_exposes_canonical_public_contract() -> None:
+    """The split fortran-reduced module owns its public sparse-PC helpers."""
 
     moved_names = (
         "FortranReducedSparsePCBackendSetup",
@@ -1431,10 +1445,8 @@ def test_sparse_fortran_reduced_module_reexports_match_compat_layer() -> None:
         "run_fortran_reduced_xblock_krylov_solve",
     )
     for name in moved_names:
-        assert getattr(sparse_pc_module, name) is getattr(
-            sparse_fortran_reduced_module,
-            name,
-        )
+        assert hasattr(sparse_fortran_reduced_module, name)
+        assert name in sparse_fortran_reduced_module.__all__
 
 
 def _identity(v: jnp.ndarray) -> jnp.ndarray:
@@ -11649,7 +11661,7 @@ def test_run_sparse_host_retry_candidate_uses_host_direct_path() -> None:
     messages: list[tuple[int, str]] = []
     explicit_factor = SimpleNamespace(solve=lambda rhs: rhs, factor=object())
     explicit_operator = SimpleNamespace(matrix=scipy_sparse.eye(2, format="csr"))
-    factor_build = sparse_pc_module.SparseHostOrILUFactorBuildResult(
+    factor_build = SparseHostOrILUFactorBuildResult(
         explicit_sparse_operator=explicit_operator,
         explicit_sparse_factor=explicit_factor,
         a_csr_full=explicit_operator.matrix,
@@ -11723,7 +11735,7 @@ def test_run_sparse_host_retry_candidate_uses_scipy_gmres_path() -> None:
     messages: list[tuple[int, str]] = []
     ilu = SimpleNamespace(solve=lambda rhs: 0.5 * rhs)
     matrix = scipy_sparse.eye(2, format="csr")
-    factor_build = sparse_pc_module.SparseHostOrILUFactorBuildResult(
+    factor_build = SparseHostOrILUFactorBuildResult(
         explicit_sparse_operator=None,
         explicit_sparse_factor=None,
         a_csr_full=matrix,
@@ -12879,7 +12891,7 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_updates_copied_state(
     def fake_retry(arg_state, **kwargs):
         calls["retry_state"] = arg_state
         calls["retry_kwargs"] = kwargs
-        return sparse_pc_module.SparsePCFactorDtypeRetryResult(
+        return SparsePCFactorDtypeRetryResult(
             retried=True,
             factor_dtype_used=np.dtype(np.float64),
             factor_dtype_retry="float64",

@@ -174,38 +174,50 @@ from sfincs_jax.problems.profile_sparse_solve import (
     FortranReducedXBlockBackendContext, RequestedSparsePCGMRESBranchContext, SparsePCDirectTailFactorSetupContext,
     SparsePCDirectTailRescuePolicySetupContext, SparsePCGenericBranchSetupContext, SparsePCFactorPreflightRunContext,
     SparsePCResidualCorrectionStageContext, SparsePCAutoPreflightRetryStageContext,
-    SparsePCTrueCoupledCoarseStageContext, ExplicitSparseMinimumNormBranchContext,
-    ExplicitSparseHostDirectBranchContext, RHS1FullSparseRetryStageContext, SparseHostOrILUFactorBuildContext,
-    SparseHostRetryCandidateContext, SparseJAXRetryPreconditionerBuildContext, SparsePCGMRESContext,
+    SparsePCTrueCoupledCoarseStageContext, RHS1FullSparseRetryStageContext,
+    build_sparse_pc_direct_tail_factor_setup, build_sparse_pc_direct_tail_rescue_policy_setup,
+    build_sparse_pc_generic_branch_setup, run_sparse_pc_auto_preflight_retry_stage, run_sparse_pc_factor_preflight,
+    run_sparse_pc_residual_correction_stage, run_sparse_pc_true_coupled_coarse_stage,
+    run_rhs1_full_sparse_retry_stage, solve_fortran_reduced_xblock_backend, try_run_requested_sparse_pc_gmres_branch,
+)
+from sfincs_jax.problems.profile_sparse_direct import (
+    ExplicitSparseMinimumNormBranchContext, ExplicitSparseHostDirectBranchContext, SparseHostOrILUFactorBuildContext,
+    SparseHostRetryCandidateContext, SparseJAXRetryPreconditionerBuildContext, build_sparse_host_or_ilu_factor,
+    run_sparse_host_retry_candidate, build_sparse_jax_retry_preconditioner, resolve_sparse_host_or_ilu_factor_controls,
+    solve_explicit_sparse_minimum_norm_branch, solve_explicit_sparse_host_direct_branch,
+)
+from sfincs_jax.problems.profile_sparse_finalization import (
+    SparsePCGMRESContext, finalize_sparse_pc_gmres_bundle, sparse_pc_gmres_finalization_bundle_from_driver_result,
+    run_sparse_pc_gmres_once, run_sparse_pc_gmres_once_for_retry,
+)
+from sfincs_jax.problems.profile_sparse_fortran_reduced import (
+    resolve_fortran_reduced_xblock_factor_policy,
+)
+from sfincs_jax.problems.profile_sparse_policy import (
+    resolve_sparse_pc_gmres_control_policy, resolve_sparse_pc_entry_policy,
+)
+from sfincs_jax.problems.profile_sparse_qi import (
+    run_xblock_qi_preconditioner_pipeline, build_xblock_qi_stage_pipeline_context,
+)
+from sfincs_jax.problems.profile_sparse_xblock import (
     XBlockAugmentedKrylovStageContext, XBlockFirstKrylovAttemptContext, XBlockGlobalCouplingStageContext,
     XBlockKrylovControlSetupContext, XBlockKrylovProgressCallbacksContext, XBlockKrylovSolveStageContext,
     XBlockKrylovSolveSpaceContext, XBlockMomentSchurStageContext, XBlockPostKrylovCompletionContext,
     XBlockPostSolveCorrectionContext, XBlockPreflightGateContext, XBlockProbeCoarseStageContext,
     XBlockSideProbeStageContext, XBlockSparsePCBranchContext, XBlockTwoLevelStageContext,
     apply_xblock_global_coupling_stage, apply_xblock_augmented_krylov_stage, apply_xblock_moment_schur_stage,
-    apply_xblock_probe_coarse_stage, run_xblock_qi_preconditioner_pipeline, apply_xblock_side_probe_stage,
+    apply_xblock_probe_coarse_stage, apply_xblock_side_probe_stage,
     apply_xblock_two_level_stage, build_xblock_local_preconditioner, build_xblock_krylov_matvec_setup,
-    build_xblock_assembled_operator_if_requested, build_sparse_pc_direct_tail_factor_setup,
-    build_sparse_pc_direct_tail_rescue_policy_setup, build_sparse_pc_generic_branch_setup,
-    build_xblock_krylov_progress_callbacks, build_xblock_qi_stage_pipeline_context, evaluate_xblock_preflight_gate,
-    run_sparse_pc_auto_preflight_retry_stage, run_sparse_pc_factor_preflight, run_sparse_pc_residual_correction_stage,
-    run_sparse_pc_true_coupled_coarse_stage, complete_xblock_post_krylov_stage,
-    resolve_sparse_pc_gmres_control_policy, prepare_xblock_initial_guess, resolve_sparse_pc_entry_policy,
-    resolve_fortran_reduced_xblock_factor_policy, prepare_xblock_augmented_krylov_basis,
+    build_xblock_assembled_operator_if_requested, build_xblock_krylov_progress_callbacks, evaluate_xblock_preflight_gate,
+    complete_xblock_post_krylov_stage, prepare_xblock_initial_guess, prepare_xblock_augmented_krylov_basis,
     prepare_xblock_krylov_solve_space, resolve_xblock_krylov_control_setup,
     resolve_xblock_global_coupling_policy_setup, resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_seed_policy_setup, resolve_xblock_sparse_pc_branch_setup, resolve_xblock_two_level_policy_setup,
-    run_sparse_pc_gmres_once, run_sparse_pc_gmres_once_for_retry, FPXBlockGlobalCorrectionContext,
-    FPXBlockHighXCorrectionContext, SparseSXBlockRescueContext, SparseXBlockRescueAcceptanceContext,
+    FPXBlockGlobalCorrectionContext, FPXBlockHighXCorrectionContext, SparseSXBlockRescueContext, SparseXBlockRescueAcceptanceContext,
     SparseXBlockRescueBuildContext, SparseXBlockRescueSolveContext, accept_sparse_xblock_rescue_candidate,
     build_sparse_xblock_rescue_preconditioner, run_fp_xblock_global_correction_stage,
     run_fp_xblock_highx_residual_correction_stage, run_sparse_sxblock_rescue_stage,
-    run_sparse_xblock_rescue_solve_stage, run_rhs1_full_sparse_retry_stage, run_xblock_sparse_pc_branch,
-    run_xblock_krylov_solve_stage, build_sparse_host_or_ilu_factor, run_sparse_host_retry_candidate,
-    build_sparse_jax_retry_preconditioner, resolve_sparse_host_or_ilu_factor_controls,
-    solve_fortran_reduced_xblock_backend, finalize_sparse_pc_gmres_bundle,
-    sparse_pc_gmres_finalization_bundle_from_driver_result, try_run_requested_sparse_pc_gmres_branch,
-    solve_explicit_sparse_minimum_norm_branch, solve_explicit_sparse_host_direct_branch,
+    run_sparse_xblock_rescue_solve_stage, run_xblock_sparse_pc_branch, run_xblock_krylov_solve_stage,
     finalize_xblock_assembled_operator_metadata,
 )
 from sfincs_jax.problems.profile_sparse_xblock import (

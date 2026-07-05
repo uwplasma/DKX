@@ -669,8 +669,8 @@ replacing the old monolith are:
   structural-threshold application, SuperLU retry/regularization policy, cached
   dense/JAX triangular-factor materialization, and the matrix-free full-system
   adapter used by coarse/Galerkin corrections. Historical private helper names
-  are exposed through the profile-response solve owner and the tiny driver
-  compatibility shim.
+  are exposed through the profile-response solve owner only when that owner
+  still needs them for orchestration.
 - ``sfincs_jax/solvers/preconditioner_symbolic_profile.py``:
   Fortran-v3-style reduced active sparse factors for RHSMode=1. The module owns
   reduced active matrix construction, support-mode parsing and preflight,
@@ -690,10 +690,8 @@ replacing the old monolith are:
   (historical location: ``sfincs_jax/rhs1_direct_tail_policy.py``):
   RHSMode=1 direct-tail structured-preconditioner adapter, direct reduced-Pmat
   aliases, stable cache-key hashing, cache-hit metadata tagging, and adaptive
-  direct-tail memory-cap policy. Historical compatibility names are exposed
-  through the profile-response solve owner and tiny driver shim so existing
-  debug scripts can still clear the direct-tail cache or inspect the policy
-  through the historical driver namespace.
+  direct-tail memory-cap policy. Canonical debug scripts should import this
+  owner directly when clearing the direct-tail cache or inspecting the policy.
 - ``sfincs_jax/operators/profile_reduced_tail.py``
   (historical location: ``sfincs_jax/rhs1_fortran_reduced_direct_tail.py``):
   RHSMode=1 Fortran-reduced constraintScheme=1 direct-tail sparse-operator
@@ -745,13 +743,13 @@ replacing the old monolith are:
   operator residual-window LSQ, active-block LSQ, active-residual-block LSQ,
   active-submatrix, coupled-coarse builders, and active residual diagnostic
   summaries. Historical private names are exposed through the profile-response
-  solve owner and tiny driver compatibility shim.
+  solve owner only when that owner still needs them for orchestration.
 - ``sfincs_jax/solvers/krylov_dispatch.py``:
   concrete Krylov solver routing for host-only SciPy methods, JIT/non-JIT JAX
   GMRES, distributed GMRES, diagnostic solver labels, and
   ``SFINCS_JAX_GMRES_DISTRIBUTED`` axis selection. Problem solve owners pass the
-  selected solver callbacks through typed contexts; the driver shim only
-  preserves historical import access.
+  selected solver callbacks through typed contexts; historical driver import
+  access has been retired.
 - ``sfincs_jax/solvers/preconditioner_transport_matrix.py``:
   numerical builder implementations for the common RHSMode=2/3 transport
   preconditioners: collision diagonal, species/speed block, x-grid coarse
@@ -760,7 +758,8 @@ replacing the old monolith are:
   block-Thomas Fourier line factors, Schur overlays, local-geometry line
   factors, x-block angular sparse LU, x-block Schur correction, and structured
   f-block LU. Historical private wrapper names are exposed through the
-  transport/profile-response solve owners and the driver compatibility shim.
+  transport/profile-response solve owners when those owners still need
+  compatibility wiring.
 - ``sfincs_jax/solvers/preconditioner_pas_policy.py``
   (historical location: ``sfincs_jax/rhs1_pas_policy.py``):
   PAS applicability, PAS-TZ memory safety, PAS fallback routing, and PAS
@@ -795,8 +794,8 @@ replacing the old monolith are:
   writing, the small Newton-Krylov parity fixture path, active-DOF compaction,
   frozen-Jacobian mode selection, sparse-direct host rescue for non-autodiff
   runs, KSP-history replay wiring, and line-search advancement. Historical
-  public names from this module remain reachable through the driver
-  compatibility shim.
+  public names from this module are imported from the profile-response owner or
+  from this module directly.
 - ``sfincs_jax/problems/profile_preconditioner_build.py``:
   RHSMode=1/profile-response full and reduced preconditioner build
   orchestration. The driver passes solve-local builders and projection
@@ -815,9 +814,9 @@ replacing the old monolith are:
   cache/replay/residual routing, generic sparse-PC retry execution, direct-tail
   correction admission, finalization, and x-block sparse branch orchestration.
   Its public ``__all__`` is limited to owned orchestration and diagnostics
-  symbols; imported sparse helper owners remain available as transitional
-  module attributes only while tests and downstream scripts migrate to direct
-  owner imports.
+  symbols. Direct sparse, finalization, policy, QI, Fortran-reduced, and x-block
+  helpers are imported from their canonical split owners; tests guard that the
+  old broad sparse-solve namespace is not needed.
 - ``sfincs_jax/problems/profile_sparse_policy.py``:
   generic sparse-PC policy and admission helpers: active-DOF map construction,
   entry classification, sparse factor policy, conservative-pattern setup,
@@ -892,8 +891,8 @@ replacing the old monolith are:
   (historical location: ``sfincs_jax/rhs1_solver_diagnostics.py``):
   typed RHSMode=1 x-block correction diagnostic records, historical solver
   metadata key assembly, and KSP replay diagnostic context forwarding. This
-  keeps output-visible trace fields independently testable outside the driver
-  compatibility shim.
+  keeps output-visible trace fields independently testable outside the
+  monolithic solve path.
 - ``sfincs_jax/problems/profile_solver_diagnostics.py``:
   final RHSMode=1/profile-response linear-solve diagnostics, output-visible solver
   metadata, bounded PETSc-style KSP residual-history replay, and iteration-count
