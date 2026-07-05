@@ -847,8 +847,8 @@ replacing the old monolith are:
   legacy binding layer for dispatch, PAS-family builders, Schur binding,
   transport ``tzfft`` reuse, x-block builders, and strong fallback binding; the
   solve owner imports these names only as compatibility seams.
-- ``sfincs_jax/problems/profile_sparse_handoff.py``:
-  RHSMode=1/profile-response sparse-PC handoff layer. It owns the
+- ``sfincs_jax/problems/profile_sparse_solve.py``:
+  RHSMode=1/profile-response sparse-PC solve orchestration layer. It owns the
   driver-facing sparse-PC attempt orchestration that depends on solve-local
   cache/replay/residual routing, generic sparse-PC retry execution, direct-tail
   correction admission, finalization, and x-block sparse branch orchestration.
@@ -932,7 +932,7 @@ replacing the old monolith are:
   keeps output-visible trace fields independently testable outside the driver
   compatibility shim.
 - ``sfincs_jax/problems/profile_solver_diagnostics.py``:
-  final RHSMode=1/profile-response linear-solve handoff, output-visible solver
+  final RHSMode=1/profile-response linear-solve diagnostics, output-visible solver
   metadata, bounded PETSc-style KSP residual-history replay, and iteration-count
   diagnostics. It applies cleanup projection, emits optional replay diagnostics,
   writes final residual and elapsed-time progress lines, applies post-xblock
@@ -1044,7 +1044,7 @@ replacing the old monolith are:
   imports. The implementation owner is
   ``sfincs_jax/problems/profile_preconditioner_build.py``.
 - ``sfincs_jax/problems/profile_solver_diagnostics.py``
-  (absorbed owner for former ``profile_response/handoff.py``):
+  (absorbed owner for former profile-response finalization helpers):
   accepted-candidate replay, Krylov replay-state updates, final RHSMode=1
   solver diagnostics, and final linear-solve metadata. This is the
   source-mapped seam for the repeated RHSMode=1 driver pattern: compare a
