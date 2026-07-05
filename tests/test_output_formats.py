@@ -24,6 +24,7 @@ def test_io_facade_forwards_writer_private_names_and_missing_attributes() -> Non
     """Compatibility facade should route monkeypatches to the output writer owner."""
 
     import sfincs_jax.outputs.writer as writer
+    from sfincs_jax.geometry import boozer
 
     sentinel = object()
     old_value = writer._should_precompile_v3_full_system
@@ -33,6 +34,8 @@ def test_io_facade_forwards_writer_private_names_and_missing_attributes() -> Non
         assert io._should_precompile_v3_full_system is sentinel
     finally:
         io._should_precompile_v3_full_system = old_value  # type: ignore[attr-defined]
+
+    assert io._evaluate_boozer_rzd_and_derivatives is boozer.evaluate_boozer_rzd_and_derivatives
 
     with pytest.raises(AttributeError, match="has no attribute"):
         _ = io.definitely_not_a_sfincs_jax_io_attribute
