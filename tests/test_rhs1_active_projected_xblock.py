@@ -69,6 +69,53 @@ def test_active_positions_for_full_indices_deduplicates_and_maps_unsorted_active
     np.testing.assert_array_equal(positions, np.asarray([1, 3, 4], dtype=np.int64))
 
 
+def test_active_positions_for_full_indices_handles_empty_and_absent_matches() -> None:
+    np.testing.assert_array_equal(
+        active_projected.active_positions_for_full_indices(
+            active_indices=[],
+            full_indices=[1, 2],
+        ),
+        np.zeros((0,), dtype=np.int64),
+    )
+    np.testing.assert_array_equal(
+        active_projected.active_positions_for_full_indices(
+            active_indices=[3, 5, 7],
+            full_indices=[],
+        ),
+        np.zeros((0,), dtype=np.int64),
+    )
+    np.testing.assert_array_equal(
+        active_projected.active_positions_for_full_indices(
+            active_indices=[3, 5, 7],
+            full_indices=[1, 2, 4],
+        ),
+        np.zeros((0,), dtype=np.int64),
+    )
+
+
+def test_active_projected_low_level_policy_helpers_fail_closed(monkeypatch) -> None:
+    matrix = sp.csr_matrix(np.asarray([[1.0, 0.0], [2.0, 3.0]], dtype=np.float64))
+    expected_nbytes = matrix.data.nbytes + matrix.indices.nbytes + matrix.indptr.nbytes
+    assert active_projected._scipy_csr_nbytes(matrix) == expected_nbytes
+
+    monkeypatch.setenv("SFINCS_JAX_UNIT_TEST_INT", "bad")
+    monkeypatch.setenv("SFINCS_JAX_UNIT_TEST_FLOAT", "bad")
+    monkeypatch.setenv("SFINCS_JAX_UNIT_TEST_BOOL", "off")
+    assert active_projected._env_int("SFINCS_JAX_UNIT_TEST_INT", 17) == 17
+    assert active_projected._env_float("SFINCS_JAX_UNIT_TEST_FLOAT", 2.5) == 2.5
+    assert active_projected._env_bool("SFINCS_JAX_UNIT_TEST_BOOL", True) is False
+
+    monkeypatch.setenv("SFINCS_JAX_UNIT_TEST_INT", "23")
+    monkeypatch.setenv("SFINCS_JAX_UNIT_TEST_FLOAT", "1.25")
+    monkeypatch.setenv("SFINCS_JAX_UNIT_TEST_BOOL", "yes")
+    assert active_projected._env_int("SFINCS_JAX_UNIT_TEST_INT", 17) == 23
+    assert active_projected._env_float("SFINCS_JAX_UNIT_TEST_FLOAT", 2.5) == 1.25
+    assert active_projected._env_bool("SFINCS_JAX_UNIT_TEST_BOOL", False) is True
+
+    monkeypatch.delenv("SFINCS_JAX_UNIT_TEST_BOOL", raising=False)
+    assert active_projected._env_bool("SFINCS_JAX_UNIT_TEST_BOOL", True) is True
+
+
 def test_active_projected_xblock_solves_exact_block_system(monkeypatch) -> None:
     layout = _layout()
     matrix = _block_matrix(layout)

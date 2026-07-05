@@ -77,6 +77,12 @@ The main structural refactor is functionally complete:
   `tests/test_rhs1_full_csr_schur_preconditioners.py`,
   `tests/test_rhs1_coarse_basis.py`, `tests/test_rhs1_coarse_policy.py`, and
   `tests/test_rhs1_schur_policy.py` as `55 passed in 0.86 s`.
+- The RHSMode=1 active x-block projected preconditioner tests now cover
+  empty/no-match active-index projection, SciPy CSR byte accounting, and
+  fail-closed integer/float/boolean environment parser behavior. These are
+  bounded policy/numerics checks for the active-DOF preconditioner admission
+  path and do not add solve time to CI. Focused validation passed:
+  `tests/test_rhs1_active_projected_xblock.py` as `8 passed in 0.32 s`.
 - The latest local xdist coverage audit measured `88%` package coverage:
   `4031 passed in 283.48 s` with `8089` missing executable lines. The latest
   explicit-sparse and true-operator rescue tranches reduced missing executable
