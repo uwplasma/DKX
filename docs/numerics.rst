@@ -188,14 +188,13 @@ Code locations
 
 The most important numerical modules are:
 
-- ``sfincs_jax/operators/profile_system.py``: system definition, cached operators, block structure.
+- ``sfincs_jax/operators/profile_system.py``: system definition, cached
+  operators, block structure, residual and right-hand-side evaluation.
 - ``sfincs_jax/problems/profile_solve.py``: RHSMode-1 solve orchestration,
   solver/preconditioner selection, and rescue policy.
 - ``sfincs_jax/problems/transport_solve.py`` and
   ``sfincs_jax/problems/transport_parallel_runtime.py``: RHSMode-2/3 transport
   solves and parallel transport execution.
-- ``sfincs_jax/operators/profile_linear_systems.py``: residual and
-  right-hand-side evaluation.
 - ``sfincs_jax/solver.py``: linear-solver wrappers and Krylov helpers.
 - ``sfincs_jax/solvers/implicit.py``: differentiable linear solve path.
 - ``sfincs_jax/physics/collisions.py``: PAS and full FP operator kernels.

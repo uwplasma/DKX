@@ -245,6 +245,15 @@ def test_deleted_full_fp_species_preconditioner_facade_is_absent() -> None:
     assert hasattr(module, "build_rhs1_species_xblock_preconditioner")
 
 
+def test_deleted_profile_linear_systems_facade_is_absent() -> None:
+    """Matrix-free residual wrappers belong to the profile-system owner."""
+
+    assert not (PACKAGE_ROOT / "operators" / "profile_linear_systems.py").exists()
+    module = importlib.import_module("sfincs_jax.operators.profile_system")
+    assert hasattr(module, "V3FBlockLinearSystem")
+    assert hasattr(module, "V3FullLinearSystem")
+
+
 def test_canonical_flat_domain_modules_are_importable() -> None:
     """Canonical owners replace the deleted compatibility import paths."""
 
