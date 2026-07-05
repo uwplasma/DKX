@@ -560,6 +560,10 @@ Latest AST audit:
 - RHSMode=1 NTV diagnostic recomputation has been extracted from the HDF5
   writer into `outputs/rhsmode1.py`, keeping the Fortran v3 `NTVKernel`
   convention and adding direct zero/non-axisymmetric branch tests.
+- Strict numeric HDF5 parity has been folded into the root public
+  `compare.py` API and the `validation/h5_parity.py` helper has been deleted.
+  Scripts and tests now use one public comparison owner instead of a
+  validation-only facade.
 - The next consolidation pass must reduce those owner sizes using existing
   domain files. Do not add more package folders or helper-only files.
 

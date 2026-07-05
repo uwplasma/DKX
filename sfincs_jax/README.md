@@ -17,7 +17,7 @@ discretization, operators, solvers, outputs, validation, and research workflows.
   helpers.
 - `plotting.py`: output plotting utilities used by `sfincs_jax --plot`.
 - `compare.py`: comparison utilities for frozen SFINCS Fortran v3 references,
-  regression fixtures, and benchmark summaries.
+  strict numeric HDF5 parity, regression fixtures, and benchmark summaries.
 - `io.py`, `namelist.py`, `input_compat.py`, and `paths.py`: file I/O, input
   parsing, input compatibility, and cache or data-path helpers.
 - `diagnostics.py` and `grids.py`: stable scientific helper APIs for

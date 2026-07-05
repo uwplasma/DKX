@@ -324,7 +324,10 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "ambipolar.py": ("problems.ambipolar via public API facade", "keep root shim until public docs/examples migrate"),
     "api.py": ("package root public API", "keep at root"),
     "cli.py": ("package root CLI entry point", "keep at root"),
-    "compare.py": ("validation comparison API", "move only after examples/scripts use validation owner"),
+    "compare.py": (
+        "package root public comparison API",
+        "keep at root; it owns user-facing SFINCS comparison helpers and strict HDF5 output parity",
+    ),
     "diagnostics.py": ("physics/output diagnostics owner", "defer until diagnostics API split is explicit"),
     "grids.py": ("discretization public grid owner", "keep root public helper until discretization package exports are documented"),
     "input_compat.py": ("input compatibility owner", "keep root public compatibility shim until input package exports cover callers"),

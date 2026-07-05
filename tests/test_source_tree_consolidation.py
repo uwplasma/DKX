@@ -209,6 +209,15 @@ def test_deleted_sparse_handoff_filename_is_absent() -> None:
     assert hasattr(module, "build_sparse_pc_generic_branch_setup")
 
 
+def test_deleted_h5_parity_validation_facade_is_absent() -> None:
+    """Strict HDF5 parity is part of the public comparison API."""
+
+    assert not (PACKAGE_ROOT / "validation" / "h5_parity.py").exists()
+    module = importlib.import_module("sfincs_jax.compare")
+    assert hasattr(module, "compare_h5_outputs")
+    assert hasattr(module, "H5DatasetParity")
+
+
 def test_canonical_flat_domain_modules_are_importable() -> None:
     """Canonical owners replace the deleted compatibility import paths."""
 

@@ -16,7 +16,7 @@ from typing import Any
 import h5py
 import numpy as np
 
-from sfincs_jax.validation.h5_parity import compare_h5_outputs
+from sfincs_jax.compare import compare_h5_outputs
 from sfincs_jax.input_compat import effective_equilibrium_file
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.artifacts import PhaseTimer
