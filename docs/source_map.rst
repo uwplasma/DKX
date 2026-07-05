@@ -95,7 +95,7 @@ facades.
      - Lightweight ambipolar postprocessing helpers used by workflows and tests.
    * - ``compare.py``
      - public validation API
-     - HDF5/output comparison helpers used by examples and validation tools.
+     - SFINCS output comparison, strict numeric HDF5 parity, and benchmark-summary helpers used by examples, scripts, and validation tools.
    * - ``input_compat.py``
      - public compatibility API
      - Fortran-v3-compatible input normalization and equilibrium path handling.
@@ -162,8 +162,8 @@ tests.
      - problems.ambipolar via public API facade
      - keep root shim until public docs/examples migrate
    * - ``compare.py``
-     - validation comparison API
-     - move only after examples/scripts use validation owner
+     - package root public comparison API
+     - keep at root; it owns user-facing SFINCS comparison helpers and strict HDF5 output parity
    * - ``input_compat.py``
      - input compatibility owner
      - keep root public compatibility shim until input package exports cover callers
