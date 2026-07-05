@@ -20,6 +20,18 @@ def test_io_legacy_output_format_aliases_point_to_new_owner() -> None:
     assert io._output_file_format is formats.output_file_format
 
 
+def test_output_format_scalar_helpers_match_sfincs_conventions() -> None:
+    """Shared output helpers should cover namelist scalars and v3 logicals."""
+
+    assert formats.get_namelist_float({"A": [2.5]}, "A", 0.0) == pytest.approx(2.5)
+    assert formats.get_namelist_float({"A": []}, "A", 1.25) == pytest.approx(1.25)
+    assert formats.get_namelist_int({"B": [4]}, "B", 0) == 4
+    assert formats.get_namelist_int({"B": []}, "B", 6) == 6
+    assert formats.get_namelist_int({}, "B", 6) == 6
+    assert formats.fortran_logical(True) == np.int32(1)
+    assert formats.fortran_logical(False) == np.int32(-1)
+
+
 def test_io_facade_forwards_writer_private_names_and_missing_attributes() -> None:
     """Compatibility facade should route monkeypatches to the output writer owner."""
 
