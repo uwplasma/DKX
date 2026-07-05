@@ -17,8 +17,10 @@ EXTRA_INPUT = REPO_ROOT / "examples" / "data" / "qi_nfp2_reference.input.namelis
 EXTRA_CASE_NAME = "additional_examples"
 DEFAULT_PUBLIC_MIN_FORTRAN_RUNTIME_S = 10.0
 
-BEGIN = "<!-- BEGIN FAST_BRANCH_AUDIT -->"
-END = "<!-- END FAST_BRANCH_AUDIT -->"
+BEGIN = "<!-- BEGIN EXAMPLE_SUITE_AUDIT -->"
+END = "<!-- END EXAMPLE_SUITE_AUDIT -->"
+LEGACY_BEGIN = "<!-- BEGIN FAST_BRANCH_AUDIT -->"
+LEGACY_END = "<!-- END FAST_BRANCH_AUDIT -->"
 
 
 def _load_json(path: Path) -> object:
@@ -333,8 +335,16 @@ def _format_runtime_drift_summary(prefix: str, summary: dict[str, object]) -> st
     status = str(summary.get("status", "")).strip().lower()
     if status in {"not_applicable", "skipped"}:
         reason = str(summary.get("reason", "")).strip()
+        for stale_reason in (
+            "production-floor reruns are not same-resolution with the older frozen smoke baseline",
+            "production-floor reruns are not same-resolution with the frozen smoke baseline",
+        ):
+            reason = reason.replace(
+                stale_reason,
+                "suite rows are not same-resolution with the optional runtime baseline",
+            )
         suffix = f": {reason}" if reason else ""
-        return f"- {prefix} runtime drift watchlist: not applicable{suffix}"
+        return f"- {prefix} runtime drift gate: not applicable{suffix}"
 
     flagged = int(summary.get("flagged_cases", 0))
     threshold = summary.get("threshold_ratio", "-")
@@ -342,11 +352,11 @@ def _format_runtime_drift_summary(prefix: str, summary: dict[str, object]) -> st
     cases = [str(case) for case in summary.get("cases", [])]
     if flagged > 0:
         return (
-            f"- {prefix} runtime drift watchlist vs `{baseline}`: "
+            f"- {prefix} runtime drift gate vs `{baseline}`: "
             f"`{flagged}` cases above `{threshold}x` "
             f"({', '.join(cases[:4])})"
         )
-    return f"- {prefix} runtime drift watchlist vs `{baseline}`: none"
+    return f"- {prefix} runtime drift gate vs `{baseline}`: none"
 
 
 def main() -> int:
@@ -373,7 +383,7 @@ def main() -> int:
         "--min-fortran-runtime-s",
         type=float,
         default=DEFAULT_PUBLIC_MIN_FORTRAN_RUNTIME_S,
-        help="Minimum Fortran v3 runtime for README-facing runtime/memory comparison rows.",
+        help="Minimum Fortran v3 runtime for public runtime/memory comparison rows.",
     )
     args = parser.parse_args()
 
@@ -432,11 +442,11 @@ def main() -> int:
 
     lines = [
         BEGIN,
-        f"Current `main` CPU audit comes from `{_repo_rel(out_root)}`.",
+        f"CPU audit source: `{_repo_rel(out_root)}`.",
         (
-            f"Matching `main` GPU audit comes from `{_repo_rel(gpu_out_root)}`."
+            f"GPU audit source: `{_repo_rel(gpu_out_root)}`."
             if gpu_rows
-            else "Matching `main` GPU audit: not available."
+            else "GPU audit source: not available."
         ),
         "",
         f"- Recorded cases: `{len(rows)}/{total_cases}`",
@@ -506,7 +516,7 @@ def main() -> int:
         lines.extend(
             [
                 "",
-                "Current mismatches:",
+                "Mismatches:",
                 *[_format_mismatch(row) for row in mismatches],
             ]
         )
@@ -514,7 +524,7 @@ def main() -> int:
         lines.extend(
             [
                 "",
-                "Current mismatches:",
+                "Mismatches:",
                 "- CPU practical mismatches: none",
                 (
                     "- CPU strict-only survivor: "
@@ -537,10 +547,10 @@ def main() -> int:
             "(`jax_incremental_max_rss_mb`) when present; full process peak RSS remains "
             "available as `jax_max_rss_mb` in the merged JSON reports.",
             "The benchmark summary JSON records production-resolution floor violations for "
-            "legacy frozen rows, so the table should be read as a reference-runtime-window "
-            "comparison until every row has been rerun at the current production floor.",
+            "frozen reference rows, so the table is a reference-runtime-window comparison "
+            "unless a row is also marked as satisfying the production-resolution floor.",
             (
-                f"README-facing runtime/memory rows are restricted to cases where the "
+                f"The public runtime/memory table is restricted to cases where the "
                 f"SFINCS Fortran v3 reference runtime is at least `{float(args.min_fortran_runtime_s):g} s`. "
                 f"Excluded lower-resolution CI parity/smoke rows: "
                 f"{_format_excluded_public_cases(excluded_public_cases)}."
@@ -571,10 +581,12 @@ def main() -> int:
     lines.append(END)
 
     readme = README.read_text()
-    if BEGIN not in readme or END not in readme:
-        raise SystemExit("README fast-branch markers not found.")
-    prefix, rest = readme.split(BEGIN, 1)
-    _old, suffix = rest.split(END, 1)
+    begin = BEGIN if BEGIN in readme else LEGACY_BEGIN
+    end = END if END in readme else LEGACY_END
+    if begin not in readme or end not in readme:
+        raise SystemExit("README example-suite audit markers not found.")
+    prefix, rest = readme.split(begin, 1)
+    _old, suffix = rest.split(end, 1)
     README.write_text(prefix + "\n".join(lines) + suffix)
     print("Updated README full example-suite audit block.")
     return 0

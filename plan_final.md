@@ -1334,6 +1334,16 @@ Completed work:
   updates. `sphinx-build -W -b html docs docs/_build/html` completed
   successfully over all 44 documentation sources, including source-map,
   testing, examples, performance, parity, API, and release-checklist pages.
+- Tranche 71: made the generated README example-suite audit block
+  release-neutral. The generator now emits `EXAMPLE_SUITE_AUDIT` markers while
+  accepting the older markers for one regeneration cycle, removes branch
+  history wording from the public audit text, normalizes old same-resolution
+  drift reasons from archived reports, keeps custom drift reasons actionable,
+  and aligns the performance documentation terminology with the generated
+  runtime-drift gate language. Focused validation passed:
+  `tests/test_generate_readme_fast_branch_audit.py tests/test_benchmark_doc_claims.py`
+  as `10 passed in 0.10 s`; `sphinx-build -W -b html docs docs/_build/html`
+  passed; Ruff passed.
 
 Remaining consolidation steps:
 
