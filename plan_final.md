@@ -1675,6 +1675,16 @@ Completed work:
   `wout_new_QA_aScaling.nc`. The machine-readable report records this path as
   `solve.equilibrium_path`; the next step for this lane is an actual bounded
   candidate solve when compute budget is allocated.
+- Tranche 104: tightened the examples learning surface without moving runnable
+  files. `examples/README.md` and `docs/examples.rst` now include a
+  one-command start table and explicit run-budget/output guidance for CLI
+  output, file formats, VMEC `wout_path`, RHSMode=2/3 transport, autodiff,
+  bootstrap-current/Redl, output-format timing, and frozen Fortran-v3 fixture
+  checks. `tests/test_examples_tree_contract.py` now guards these entry points
+  and docs labels, and `examples/tutorials/README.md` avoids release-history
+  wording. Validation: `pytest tests/test_examples_tree_contract.py
+  tests/test_benchmark_doc_claims.py` passed `14/14`, Ruff passed,
+  `compileall` passed, `git diff --check` passed, and Sphinx `-W` passed.
 
 Remaining consolidation steps:
 
@@ -1740,7 +1750,7 @@ Coverage ramp:
 
 ### Lane 3 - Documentation And Examples
 
-Status: 92%.
+Status: 94%.
 
 Goal: make the public docs, README files, examples, and notebooks self-contained
 and understandable for new users.

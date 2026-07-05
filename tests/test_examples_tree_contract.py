@@ -81,6 +81,28 @@ APPLICATION_RECIPE_ENTRYPOINTS = {
     "publication_figures/generate_fortran_suite_benchmark_summary.py",
 }
 
+ONE_COMMAND_ENTRYPOINTS = {
+    "tutorials/run_quick_output_and_plot.py",
+    "getting_started/write_and_plot_multiple_formats.py",
+    "getting_started/write_sfincs_output_vmec.py",
+    "transport/transport_matrix_rhsmode2_and_rhsmode3.py",
+    "autodiff/autodiff_gradient_nu_n_residual.py",
+    "vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py",
+    "performance/benchmark_output_formats.py",
+    "parity/output_parity_vs_fortran_fixture.py",
+}
+
+ONE_COMMAND_LABELS = {
+    "Write output files and a diagnostics panel",
+    "Inspect HDF5, NetCDF, NPZ, and plotting",
+    "Load VMEC geometry through",
+    "Compute a RHSMode=2/3 transport matrix",
+    "Differentiate a residual with JAX",
+    "Compare kinetic bootstrap current with Redl",
+    "Time output formats and memory behavior",
+    "Check a frozen Fortran-v3 output fixture",
+}
+
 APPLICATION_RECIPE_LABELS = {
     "CLI output and diagnostics panel",
     "Analytic tokamak input",
@@ -162,6 +184,8 @@ def test_examples_top_level_folders_are_intentional() -> None:
 def test_examples_readme_is_a_complete_user_navigation_map() -> None:
     readme = (EXAMPLES_ROOT / "README.md").read_text(encoding="utf-8")
     assert "### Learning Path" in readme
+    assert "### One-Command Starts" in readme
+    assert "### Run Budgets And Outputs" in readme
     assert "### Choose By Task" in readme
     assert "### Application Recipes" in readme
     assert "### Canonical Workflow Catalog" in readme
@@ -174,6 +198,13 @@ def test_examples_readme_is_a_complete_user_navigation_map() -> None:
         assert (EXAMPLES_ROOT / folder / "README.md").is_file(), folder
 
     for entrypoint in sorted(REQUIRED_TASK_ENTRYPOINTS):
+        assert f"`{entrypoint}`" in readme, entrypoint
+        assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
+
+    for label in sorted(ONE_COMMAND_LABELS):
+        assert label in readme, label
+
+    for entrypoint in sorted(ONE_COMMAND_ENTRYPOINTS):
         assert f"`{entrypoint}`" in readme, entrypoint
         assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
 
@@ -191,7 +222,17 @@ def test_examples_readme_is_a_complete_user_navigation_map() -> None:
 
 def test_docs_examples_page_matches_application_recipe_map() -> None:
     docs = DOCS_EXAMPLES.read_text(encoding="utf-8")
+    assert "One-command start points" in docs
     assert "Application recipe map" in docs
+
+    for label in sorted(ONE_COMMAND_LABELS):
+        rst_label = label.replace("`", "``")
+        assert rst_label in docs, label
+
+    for entrypoint in sorted(ONE_COMMAND_ENTRYPOINTS):
+        docs_path = f"examples/{entrypoint}"
+        assert f"``{docs_path}``" in docs, docs_path
+        assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
 
     for label in sorted(APPLICATION_RECIPE_LABELS):
         rst_label = label.replace("`", "``")

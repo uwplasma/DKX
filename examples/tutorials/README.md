@@ -1,6 +1,6 @@
 # Tutorials
 
-This folder is the compact learning path for new `sfincs_jax` users. It does
+This folder is the compact learning path for first-time `sfincs_jax` users. It does
 not replace the topic folders under `examples/`; it points to the best first
 scripts and explains the physics and diagnostics in a notebook format.
 

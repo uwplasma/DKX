@@ -1,10 +1,37 @@
 ## Examples
 
 This directory is the learning surface for `sfincs_jax`. Start with
-`tutorials/` if you are new to the code; jump to the topic folders if you
+`tutorials/` if you are starting with the code; jump to the topic folders if you
 already know which workflow you need. All first-pass examples avoid a local
 SFINCS Fortran v3 executable. Parity and benchmark scripts use frozen
 references or optional local Fortran only when explicitly requested.
+
+### One-Command Starts
+
+Use these entries when you want a concrete command before reading the topic
+folders. Each entry writes outputs under a script-controlled directory or a
+temporary path, and none requires SFINCS Fortran v3 for the first run.
+
+| Goal | Entry script | Typical command |
+| --- | --- | --- |
+| Write output files and a diagnostics panel | `tutorials/run_quick_output_and_plot.py` | `python examples/tutorials/run_quick_output_and_plot.py --out-dir tutorial_output` |
+| Inspect HDF5, NetCDF, NPZ, and plotting | `getting_started/write_and_plot_multiple_formats.py` | `python examples/getting_started/write_and_plot_multiple_formats.py` |
+| Load VMEC geometry through `wout_path` | `getting_started/write_sfincs_output_vmec.py` | `python examples/getting_started/write_sfincs_output_vmec.py` |
+| Compute a RHSMode=2/3 transport matrix | `transport/transport_matrix_rhsmode2_and_rhsmode3.py` | `python examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py` |
+| Differentiate a residual with JAX | `autodiff/autodiff_gradient_nu_n_residual.py` | `python examples/autodiff/autodiff_gradient_nu_n_residual.py` |
+| Compare kinetic bootstrap current with Redl | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` | `python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py --case QA --quick --jax-vs-redl --solve-method auto` |
+| Time output formats and memory behavior | `performance/benchmark_output_formats.py` | `python examples/performance/benchmark_output_formats.py --repeats 2` |
+| Check a frozen Fortran-v3 output fixture | `parity/output_parity_vs_fortran_fixture.py` | `python examples/parity/output_parity_vs_fortran_fixture.py` |
+
+### Run Budgets And Outputs
+
+- Tutorial, getting-started, and frozen-fixture parity entries are designed for
+  seconds-scale laptop CPU runs.
+- VMEC, Redl, optimization, and performance entries can take longer; use
+  `--quick` where available and inspect the generated JSON/HDF5 solver metadata
+  before using a result quantitatively.
+- Large VMEC and Fortran reference assets are fetched through the package data
+  cache or supplied by the user. Generated output directories stay out of git.
 
 ### Learning Path
 
