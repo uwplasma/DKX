@@ -19,7 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
-from sfincs_jax.workflows.postprocess_upstream import run_upstream_util
+from sfincs_jax.workflows.scans import run_upstream_util
 from sfincs_jax.workflows.scans import run_er_scan
 from sfincs_jax.profiling import make_emit
 

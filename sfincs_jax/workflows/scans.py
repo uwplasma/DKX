@@ -8,6 +8,9 @@ import os
 from pathlib import Path
 import re
 import concurrent.futures
+import subprocess
+import sys
+import textwrap
 import time
 
 import numpy as np
@@ -315,3 +318,90 @@ def linspace_including_endpoints(min_value: float, max_value: float, n: int) -> 
     if int(n) < 2:
         raise ValueError("n must be >= 2")
     return np.linspace(float(min_value), float(max_value), int(n), dtype=np.float64)
+
+
+def find_upstream_utils_dir(*, override: Path | None = None) -> Path:
+    """Locate upstream SFINCS v3 ``utils/`` scripts used for scan postprocessing.
+
+    Search order is explicit override, ``SFINCS_JAX_UPSTREAM_UTILS_DIR``, then
+    the vendored example-suite path in a source checkout.
+    """
+
+    if override is not None:
+        path = Path(override)
+        if not path.exists():
+            raise FileNotFoundError(f"utils dir does not exist: {path}")
+        return path
+
+    env = os.environ.get("SFINCS_JAX_UPSTREAM_UTILS_DIR", "").strip()
+    if env:
+        path = Path(env)
+        if not path.exists():
+            raise FileNotFoundError(f"SFINCS_JAX_UPSTREAM_UTILS_DIR does not exist: {path}")
+        return path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    candidate = repo_root / "examples" / "sfincs_examples" / "utils"
+    if candidate.exists():
+        return candidate
+
+    raise FileNotFoundError(
+        "Could not locate upstream v3 utils/ scripts. Set SFINCS_JAX_UPSTREAM_UTILS_DIR or run from a repo checkout."
+    )
+
+
+def run_upstream_util(
+    *,
+    util: str,
+    case_dir: Path,
+    args: Sequence[str] = (),
+    utils_dir: Path | None = None,
+    noninteractive: bool = True,
+    emit: Callable[[int, str], None] | None = None,
+) -> None:
+    """Run an upstream v3 ``utils/<util>`` script without interactive prompts.
+
+    The wrapper executes the script in a subprocess with ``MPLBACKEND=Agg`` and
+    optionally overrides ``input()`` so plotting utilities can run in CI,
+    tutorials, and batch environments.
+    """
+
+    resolved_utils_dir = find_upstream_utils_dir(override=utils_dir)
+    script_path = (resolved_utils_dir / util).resolve()
+    if not script_path.exists():
+        raise FileNotFoundError(f"Upstream util not found: {script_path}")
+
+    resolved_case_dir = Path(case_dir).resolve()
+    if not resolved_case_dir.exists():
+        raise FileNotFoundError(f"case_dir does not exist: {resolved_case_dir}")
+
+    harness = textwrap.dedent(
+        """
+        import builtins
+        import runpy
+        import sys
+
+        noninteractive = bool(int(sys.argv[1]))
+        script = sys.argv[2]
+        argv = sys.argv[3:]
+        if noninteractive:
+            builtins.input = lambda *a, **k: ""
+        sys.argv = [script] + argv
+        runpy.run_path(script, run_name="__main__")
+        """
+    ).strip()
+
+    cmd = [
+        sys.executable,
+        "-c",
+        harness,
+        "1" if noninteractive else "0",
+        str(script_path),
+        *list(args),
+    ]
+    env = dict(os.environ)
+    env.setdefault("MPLBACKEND", "Agg")
+
+    if emit is not None:
+        emit(0, f"postprocess-upstream: running {script_path.name} in {resolved_case_dir}")
+    subprocess.run(cmd, cwd=str(resolved_case_dir), env=env, check=True)

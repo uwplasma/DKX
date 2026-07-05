@@ -1168,7 +1168,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def _cmd_postprocess_upstream(args: argparse.Namespace) -> int:
         t0 = _now()
-        from .workflows.postprocess_upstream import run_upstream_util  # noqa: PLC0415
+        from .workflows.scans import run_upstream_util  # noqa: PLC0415
 
         _emit("################################################################", level=0, args=args)
         _emit(" sfincs_jax postprocess-upstream", level=0, args=args)

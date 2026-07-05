@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from sfincs_jax.validation.fortran import read_petsc_mat_aij, read_petsc_vec
-from sfincs_jax.workflows.postprocess_upstream import find_upstream_utils_dir, run_upstream_util
+from sfincs_jax.workflows.scans import find_upstream_utils_dir, run_upstream_util
 
 
 def test_petsc_vec_reader_roundtrips_big_endian_fixture(tmp_path: Path) -> None:

@@ -361,6 +361,15 @@ The main structural refactor is functionally complete:
   orchestration owner from `problems/profile_sparse_handoff.py` to
   `problems/profile_sparse_solve.py`. The old file path is guarded absent by
   source-tree tests, and docs/tests now point at the canonical solve owner.
+- The upstream postprocessing workflow helper has been consolidated into
+  `workflows/scans.py`, which now owns Er-scan execution and upstream
+  `utils/` postprocessing wrappers used by the CLI and examples. The separate
+  `workflows/postprocess_upstream.py` implementation file was deleted. Focused
+  validation passed:
+  `tests/test_validation_petsc_and_upstream_helpers.py`,
+  `tests/test_upstream_scanplot2_smoke.py`,
+  `tests/test_domain_package_import_contracts.py`, and
+  `tests/test_source_tree_consolidation.py` as `39 passed in 9.60 s`.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -439,7 +448,7 @@ Current source inventory:
 - Domain folders: `discretization/` (`7` files), `geometry/` (`5`),
   `operators/` (`20`), `outputs/` (`6`), `physics/` (`3`),
   `problems/` (`26`), `solvers/` (`37`), `validation/` (`8`), and
-  `workflows/` (`5`).
+  `workflows/` (`4`).
 - The complexity hotspots are not nested folders; they are many
   same-family files in `problems/`, `solvers/`, and `operators/`.
   `problems/` and `solvers/` together own more than two thirds of the package
