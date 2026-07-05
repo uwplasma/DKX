@@ -31,11 +31,23 @@ from sfincs_jax.io import (
     sfincs_jax_output_dict,
     write_sfincs_h5,
 )
-from sfincs_jax.geometry.boozer import BoozerBCHeader, BoozerBCSurface
+from sfincs_jax.geometry.boozer import (
+    BoozerBCHeader,
+    BoozerBCSurface,
+    read_boozer_bc_bracketing_surfaces,
+    read_boozer_bc_header,
+    selected_r_n_from_bc,
+)
 from sfincs_jax.namelist import Namelist, read_sfincs_input
 from sfincs_jax.outputs import rhsmode1 as rhsmode1_output
 from sfincs_jax.outputs import writer as output_writer
-from sfincs_jax.outputs.formats import output_cache_dir, output_cache_path
+from sfincs_jax.outputs.formats import (
+    output_cache_dir,
+    output_cache_path,
+    output_geom_cache_key,
+    write_sfincs_netcdf,
+    write_sfincs_npz,
+)
 from sfincs_jax.outputs.rhsmode1 import (
     RHSMode1SolveMethodSelectionContext,
     _maybe_align_pas_no_phi1_flow_diagnostics_to_fortran,
@@ -70,6 +82,35 @@ def test_output_cache_path_is_stable_and_key_sensitive(tmp_path: Path, monkeypat
     assert path1 is not None and path1.name.startswith("output_geom_")
 
 
+def test_output_geom_cache_key_direct_tracks_equilibrium_and_grid(tmp_path: Path) -> None:
+    eq = tmp_path / "wout_direct.nc"
+    eq.write_bytes(b"direct cache key equilibrium")
+    nml_path = tmp_path / "input.namelist"
+    nml_path.write_text(
+        "&geometryParameters\n"
+        "  geometryScheme = 5\n"
+        "  equilibriumFile = 'wout_direct.nc'\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    nml = read_sfincs_input(nml_path)
+    grids = SimpleNamespace(
+        theta=np.asarray([0.0, 1.0], dtype=np.float64),
+        zeta=np.asarray([0.0, 2.0], dtype=np.float64),
+    )
+
+    key = output_geom_cache_key(
+        nml=nml,
+        grids=grids,
+        get_int=_get_int,
+        resolve_equilibrium_file=lambda **_kwargs: eq,
+    )
+
+    assert key is not None
+    assert any(item == 5 for item in key)
+    assert any(isinstance(item, tuple) and item[0] == len(eq.read_bytes()) for item in key)
+
+
 def test_output_geom_cache_key_uses_equilibrium_content_identity(tmp_path: Path) -> None:
     eq1 = tmp_path / "wout_a.nc"
     eq2 = tmp_path / "wout_b.nc"
@@ -100,6 +141,31 @@ def test_output_geom_cache_key_uses_equilibrium_content_identity(tmp_path: Path)
     assert key3 != key1
 
 
+def test_direct_boozer_bc_readers_select_bracketing_and_effective_radius() -> None:
+    bc_path = Path("tests/ref/nonStelSym_tiny_geometryScheme12.bc")
+
+    header = read_boozer_bc_header(path=bc_path, geometry_scheme=12)
+    header2, old, new = read_boozer_bc_bracketing_surfaces(
+        path=bc_path,
+        geometry_scheme=12,
+        r_n_wish=0.5,
+    )
+
+    assert header2 == header
+    assert header.n_periods == 1
+    assert header.psi_a_hat == pytest.approx(-1.0 / (2.0 * np.pi))
+    assert old.r_n == pytest.approx(0.4)
+    assert new.r_n == pytest.approx(0.6)
+    assert selected_r_n_from_bc(path=bc_path, geometry_scheme=12, r_n_wish=0.45) == pytest.approx(0.4)
+    assert selected_r_n_from_bc(path=bc_path, geometry_scheme=12, r_n_wish=0.55) == pytest.approx(0.6)
+    assert selected_r_n_from_bc(
+        path=bc_path,
+        geometry_scheme=12,
+        r_n_wish=0.5,
+        vmecradial_option=2,
+    ) == pytest.approx(0.5)
+
+
 def test_read_sfincs_h5_handles_nested_datasets_and_missing_file(tmp_path: Path) -> None:
     path = tmp_path / "nested.h5"
     with h5py.File(path, "w") as h5:
@@ -113,6 +179,37 @@ def test_read_sfincs_h5_handles_nested_datasets_and_missing_file(tmp_path: Path)
 
     with pytest.raises(FileNotFoundError):
         read_sfincs_h5(tmp_path / "missing.h5")
+
+
+def test_direct_npz_and_netcdf_writers_preserve_tiny_payloads(tmp_path: Path) -> None:
+    payload = {
+        "scalar": np.asarray(2.5),
+        "matrix": np.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64),
+        "flag": np.asarray(True),
+        "skipped": None,
+    }
+
+    npz_path = tmp_path / "out.npz"
+    write_sfincs_npz(path=npz_path, data=payload, fortran_layout=False)
+    with np.load(npz_path) as data:
+        assert "skipped" not in data.files
+        np.testing.assert_allclose(data["scalar"], np.asarray(2.5))
+        np.testing.assert_allclose(data["matrix"], payload["matrix"])
+        assert bool(data["flag"])
+    with pytest.raises(FileExistsError):
+        write_sfincs_npz(path=npz_path, data=payload, fortran_layout=False, overwrite=False)
+
+    netcdf4 = pytest.importorskip("netCDF4")
+    nc_path = tmp_path / "out.nc"
+    write_sfincs_netcdf(path=nc_path, data=payload, fortran_layout=False)
+    with netcdf4.Dataset(nc_path) as ds:
+        assert ds.getncattr("sfincs_jax_format") == "netcdf"
+        assert "skipped" not in ds.variables
+        np.testing.assert_allclose(ds.variables["scalar"][...], np.asarray(2.5))
+        np.testing.assert_allclose(ds.variables["matrix"][...], payload["matrix"])
+        assert int(ds.variables["flag"][...]) == 1
+    with pytest.raises(FileExistsError):
+        write_sfincs_netcdf(path=nc_path, data=payload, fortran_layout=False, overwrite=False)
 
 
 def test_write_sfincs_h5_respects_overwrite_guard(tmp_path: Path) -> None:

@@ -131,6 +131,12 @@ The main structural refactor is functionally complete:
   `workflows/mapped_xgrid.py`, and `solvers/memory_model.py` report zero
   production-used public helpers without direct tests. Focused validation
   passed as `48 passed in 14.06 s`.
+- Geometry and output-format coverage now includes direct tests for Boozer
+  `.bc` header/bracketing/effective-radius readers, geometry output cache-key
+  construction, and direct NPZ/NetCDF writer payload/overwrite behavior.
+  Source/test audits for `geometry/boozer.py` and `outputs/formats.py` report
+  zero production-used public helpers without direct tests. Focused validation
+  passed as `81 passed in 2.18 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -948,6 +954,11 @@ Completed work:
   dtype byte accounting, then reran source/test audits showing no
   production-used public helpers without direct tests in the targeted
   discretization/workflow/memory modules.
+- Tranche 37: added direct geometry/output tests for Boozer `.bc`
+  header/bracketing/effective-radius selection, output cache-key construction,
+  and direct NPZ/NetCDF writer behavior, then reran source/test audits showing
+  no production-used public helpers without direct tests in the targeted
+  geometry/output modules.
 
 Remaining consolidation steps:
 
