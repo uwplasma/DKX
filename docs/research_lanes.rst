@@ -38,7 +38,7 @@ True device-QI
 --------------
 
 Evidence State
-~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 The large-QI production escape hatch is closed for users who do not need
 end-to-end differentiation: explicit large RHSMode=1 QI requests can enter the
@@ -793,7 +793,7 @@ Production-resolution QI ladders
 --------------------------------
 
 Evidence State
-~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 Bounded QI evidence is strong up to the scale-0.55 CPU/GPU seed-robustness
 ladders, selected scale-0.60 probes, and the first QI ``nfp=2`` kinetic
