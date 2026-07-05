@@ -8,6 +8,7 @@ import subprocess
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_ROOT = REPO_ROOT / "examples"
+DOCS_EXAMPLES = REPO_ROOT / "docs" / "examples.rst"
 
 ALLOWED_EXAMPLE_FOLDERS = {
     "autodiff",
@@ -185,6 +186,20 @@ def test_examples_readme_is_a_complete_user_navigation_map() -> None:
 
     for entrypoint in sorted(APPLICATION_RECIPE_ENTRYPOINTS):
         assert f"`{entrypoint}`" in readme, entrypoint
+        assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
+
+
+def test_docs_examples_page_matches_application_recipe_map() -> None:
+    docs = DOCS_EXAMPLES.read_text(encoding="utf-8")
+    assert "Application recipe map" in docs
+
+    for label in sorted(APPLICATION_RECIPE_LABELS):
+        rst_label = label.replace("`", "``")
+        assert rst_label in docs, label
+
+    for entrypoint in sorted(APPLICATION_RECIPE_ENTRYPOINTS):
+        docs_path = f"examples/{entrypoint}"
+        assert f"``{docs_path}``" in docs, docs_path
         assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
 
 
