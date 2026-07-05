@@ -15,6 +15,7 @@ from sfincs_jax.problems.transport_parallel_runtime import (
     run_transport_parallel_gpu_subprocesses,
     run_transport_parallel_payloads,
     summarize_transport_worker_output,
+    transport_parallel_result_to_npz_arrays,
     transport_worker_subprocess_env,
     validate_complete_transport_worker_rhs_coverage,
     validate_transport_worker_result_payload,
@@ -77,6 +78,45 @@ def test_merge_transport_parallel_results_handles_indexed_elapsed_layout() -> No
     assert set(residual_norms) == {2, 4}
     assert rhs_norms == {2: 2.0, 4: 4.0}
     np.testing.assert_allclose(elapsed_s, np.array([0.0, 0.2, 0.0, 0.4]))
+
+
+def test_transport_parallel_result_to_npz_arrays_covers_elapsed_layouts() -> None:
+    empty = transport_parallel_result_to_npz_arrays({})
+    assert empty["which_rhs_values"].shape == (0,)
+    assert empty["state_vectors"].shape == (0, 0)
+
+    scalar_elapsed = transport_parallel_result_to_npz_arrays(
+        {
+            "which_rhs_values": [2, 4],
+            "state_vectors_by_rhs": {2: np.asarray([2.0]), 4: np.asarray([4.0])},
+            "residual_norms_by_rhs": {2: 2.0e-12, 4: 4.0e-12},
+            "rhs_norms_by_rhs": {2: 2.0, 4: 4.0},
+            "elapsed_time_s": np.asarray(0.75),
+        }
+    )
+    np.testing.assert_allclose(scalar_elapsed["elapsed_time_s"], np.asarray([0.75, 0.75]))
+    np.testing.assert_allclose(scalar_elapsed["rhs_norms"], np.asarray([2.0, 4.0]))
+
+    indexed_elapsed = transport_parallel_result_to_npz_arrays(
+        {
+            "which_rhs_values": [2, 4],
+            "state_vectors_by_rhs": {2: np.asarray([2.0]), 4: np.asarray([4.0])},
+            "residual_norms_by_rhs": {2: 2.0e-12, 4: 4.0e-12},
+            "elapsed_time_s": np.asarray([9.0, 0.2, 9.0, 0.4], dtype=np.float64),
+        }
+    )
+    np.testing.assert_allclose(indexed_elapsed["elapsed_time_s"], np.asarray([0.2, 0.4]))
+    np.testing.assert_allclose(indexed_elapsed["rhs_norms"], np.asarray([np.nan, np.nan]))
+
+    partial_elapsed = transport_parallel_result_to_npz_arrays(
+        {
+            "which_rhs_values": [3, 1],
+            "state_vectors_by_rhs": {1: np.asarray([1.0]), 3: np.asarray([3.0])},
+            "residual_norms_by_rhs": {1: 1.0e-12, 3: 3.0e-12},
+            "elapsed_time_s": np.asarray([0.3], dtype=np.float64),
+        }
+    )
+    np.testing.assert_allclose(partial_elapsed["elapsed_time_s"], np.asarray([0.3, 0.0]))
 
 
 def test_merge_transport_parallel_results_rejects_duplicate_rhs_coverage() -> None:

@@ -629,7 +629,7 @@ flat owners directly.
 
 ### Lane 1 - Review-Ready Refactor
 
-Status: 97% for final review readiness.
+Status: 98% for final review readiness.
 
 Goal: finish the PR with a smaller, clearer source tree without changing
 physics, outputs, tolerances, solver defaults, differentiable Python paths,
