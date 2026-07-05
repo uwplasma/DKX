@@ -57,6 +57,121 @@
     "validation",
     "workflows"
   ],
+  "allowed_domain_modules": {
+    "discretization": [
+      "adaptive_maps.py",
+      "periodic_stencil.py",
+      "structured_velocity.py",
+      "v3.py",
+      "xgrid.py"
+    ],
+    "geometry": [
+      "boozer.py",
+      "jax_adapters.py",
+      "vmec.py",
+      "vmec_wout.py"
+    ],
+    "operators": [
+      "profile_collisionless.py",
+      "profile_collisions.py",
+      "profile_device_sparse.py",
+      "profile_drifts.py",
+      "profile_electric_field.py",
+      "profile_exb.py",
+      "profile_fblock.py",
+      "profile_full_system.py",
+      "profile_kinetic.py",
+      "profile_layout.py",
+      "profile_magnetic_drifts.py",
+      "profile_reduced_tail.py",
+      "profile_sparse_pattern.py",
+      "profile_system.py",
+      "profile_true_operator_rescue.py"
+    ],
+    "outputs": [
+      "formats.py",
+      "rhsmode1.py",
+      "transport.py",
+      "writer.py"
+    ],
+    "physics": [
+      "classical_transport.py",
+      "collisions.py"
+    ],
+    "problems": [
+      "ambipolar.py",
+      "profile_dense.py",
+      "profile_diagnostics.py",
+      "profile_phi1_newton.py",
+      "profile_policies.py",
+      "profile_preconditioner_build.py",
+      "profile_residual.py",
+      "profile_setup.py",
+      "profile_solve.py",
+      "profile_solver_diagnostics.py",
+      "profile_sparse_direct.py",
+      "profile_sparse_finalization.py",
+      "profile_sparse_fortran_reduced.py",
+      "profile_sparse_policy.py",
+      "profile_sparse_qi.py",
+      "profile_sparse_solve.py",
+      "profile_sparse_xblock.py",
+      "transport_diagnostics.py",
+      "transport_finalize.py",
+      "transport_linear_system.py",
+      "transport_parallel_runtime.py",
+      "transport_policies.py",
+      "transport_setup.py",
+      "transport_solve.py"
+    ],
+    "solvers": [
+      "diagnostics.py",
+      "explicit_sparse.py",
+      "implicit.py",
+      "krylov_dispatch.py",
+      "memory_model.py",
+      "native_block_factor.py",
+      "path_policy.py",
+      "preconditioner_domain_decomposition.py",
+      "preconditioner_full_fp_csr.py",
+      "preconditioner_full_fp_kinetic.py",
+      "preconditioner_full_fp_structured.py",
+      "preconditioner_pas_angular.py",
+      "preconditioner_pas_composite.py",
+      "preconditioner_pas_matrix_free.py",
+      "preconditioner_pas_policy.py",
+      "preconditioner_pas_xblock_ilu.py",
+      "preconditioner_qi_basis.py",
+      "preconditioner_qi_corrections.py",
+      "preconditioner_qi_device.py",
+      "preconditioner_schur_profile.py",
+      "preconditioner_symbolic_active.py",
+      "preconditioner_symbolic_host.py",
+      "preconditioner_symbolic_policy.py",
+      "preconditioner_symbolic_profile.py",
+      "preconditioner_transport_matrix.py",
+      "preconditioner_xblock_active.py",
+      "preconditioner_xblock_block_jacobi.py",
+      "preconditioner_xblock_coarse.py",
+      "preconditioner_xblock_low_l_schur.py",
+      "preconditioner_xblock_policy.py",
+      "preconditioner_xblock_radial.py",
+      "preconditioner_xblock_tz_sparse.py",
+      "preconditioning.py"
+    ],
+    "validation": [
+      "artifacts.py",
+      "data_fetch.py",
+      "figures.py",
+      "fortran.py",
+      "qi_device.py"
+    ],
+    "workflows": [
+      "mapped_xgrid.py",
+      "optimization.py",
+      "scans.py"
+    ]
+  },
   "temporary_nested_packages": [
   ],
   "temporary_init_only_packages": [
