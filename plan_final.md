@@ -1396,6 +1396,16 @@ Completed work:
   `tests/test_source_tree_consolidation.py tests/test_pas_preconditioner_policy.py`
   as `44 passed in 3.18 s`; the broader refactor/owner bundle passed as
   `193 passed in 37.62 s`; Ruff, `compileall`, and `git diff --check` passed.
+- Tranche 77: moved standalone distributed-GMRES axis resolver tests from the
+  profile-solve wrapper to the canonical Krylov dispatch owner,
+  `solvers/krylov_dispatch.py`. Wrapper injection coverage remains in
+  `tests/test_profile_solve_module_wrappers.py`, while
+  `tests/test_distributed_gmres_axis.py` now directly validates the public
+  resolver policy with explicit shard-axis injection. A source-tree guard keeps
+  the resolver tests off `profile_solve.py`. Focused validation passed:
+  `tests/test_source_tree_consolidation.py tests/test_distributed_gmres_axis.py`
+  as `33 passed in 3.59 s`; the compact wrapper/owner bundle passed as
+  `131 passed in 30.43 s`; Ruff, `compileall`, and `git diff --check` passed.
 
 Remaining consolidation steps:
 
