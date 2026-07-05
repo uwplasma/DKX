@@ -241,6 +241,14 @@ The main structural refactor is functionally complete:
   `operators/profile_full_system.py`. The direct-reference audit for those
   three large owners reports zero untested public definitions. Focused
   validation passed as `4 passed in 0.55 s`; Ruff passed for the new test file.
+- Solver/setup policy contract coverage now directly exercises the remaining
+  public setup and result containers in `problems/profile_setup.py`,
+  `problems/profile_dense.py`, `problems/transport_parallel_runtime.py`,
+  `problems/transport_policies.py`, `problems/transport_setup.py`,
+  `solvers/preconditioner_xblock_policy.py`, `solvers/native_block_factor.py`,
+  and `solvers/preconditioner_symbolic_policy.py`. The direct-reference audit
+  for those eight owners reports zero untested public definitions. Focused
+  validation passed as `4 passed in 0.72 s`; Ruff passed for the new test file.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
