@@ -1151,6 +1151,11 @@ Completed work:
   tests now guard that the broad sparse-solve compatibility namespace is not
   required. Focused validation passed as `361 passed in 2.97 s`; Ruff and
   `git diff --check` passed.
+- Tranche 54: synchronized active roadmap and feature-matrix docs with the
+  deleted `v3_driver.py` monolith. Current docs now describe flat canonical
+  profile/transport owners and the review-gated architecture state instead of
+  active legacy driver shims. Lightweight docs/source guards passed as
+  `49 passed in 3.03 s`; `git diff --check` passed.
 
 Remaining consolidation steps:
 

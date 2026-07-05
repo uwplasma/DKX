@@ -71,11 +71,12 @@ contracts.
 Refactoring Plan
 ----------------
 
-The main code-health target is to keep ``sfincs_jax/v3_driver.py`` as a small
-compatibility facade and keep implementation ownership in one level of domain
-folders below ``sfincs_jax/``. Refactor work should be behavior-preserving,
-tested in gated slices, and should avoid new historical helper names such as
-top-level ``rhs1_*`` files.
+The main code-health target is to keep implementation ownership in one level of
+domain folders below ``sfincs_jax/`` with only public entry points and stable
+facades at package root. The historical ``v3_driver.py`` monolith has been
+retired; refactor work should remain behavior-preserving, tested in gated
+slices, and should avoid new historical helper names such as top-level
+``rhs1_*`` files.
 
 1. Package structure and import contract
    The retained package folders are ``discretization``, ``geometry``,
