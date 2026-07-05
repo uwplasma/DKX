@@ -97,6 +97,12 @@ The main structural refactor is functionally complete:
   public helpers without direct tests. Focused validation passed:
   `tests/test_profile_response_preconditioner_build.py` as
   `20 passed in 0.44 s`.
+- RHSMode=2/3 transport linear-system coverage now includes direct module
+  boundary tests for active-DOF selection and both FP transport preconditioner
+  builder fallback contracts. A source/test audit for
+  `problems/transport_linear_system.py` reports zero production-used public
+  helpers without direct tests. Focused validation passed:
+  `tests/test_transport_active_factor.py` as `30 passed in 0.55 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -890,6 +896,11 @@ Completed work:
   `problems/profile_preconditioner_build.py` threshold readers and strong
   preconditioner builder functions, then reran the source/test audit showing no
   production-used public helpers in that module without direct tests.
+- Tranche 32: added direct bounded coverage for
+  `problems/transport_linear_system.py` active-DOF selection and FP transport
+  preconditioner builder fallback contracts, then reran the source/test audit
+  showing no production-used public helpers in that module without direct
+  tests.
 
 Remaining consolidation steps:
 

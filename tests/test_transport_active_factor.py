@@ -13,7 +13,10 @@ from sfincs_jax.problems.transport_linear_system import (
     build_active_block_ordering,
     build_active_block_schur_factor,
     build_active_block_schur_residual_coarse_factor,
+    build_transport_fp_direct_active_block_schur_preconditioner,
+    build_transport_fp_fortran_reduced_lu_preconditioner,
     deterministic_probe_matrix,
+    transport_active_dof_indices,
 )
 
 
@@ -54,6 +57,89 @@ def test_active_block_ordering_supports_reusable_layouts() -> None:
     assert plane.block_kind == "ell_band"
     assert len(plane.blocks) == 1
     assert plane.block_size_max == 24
+
+
+def test_transport_active_dof_indices_uses_compressed_pitch_layout(monkeypatch) -> None:
+    expected = np.asarray([3, 1, 4], dtype=np.int64)
+
+    monkeypatch.setattr(
+        tls,
+        "build_rhs1_compressed_pitch_layout",
+        lambda _op: SimpleNamespace(active_full_indices=expected),
+    )
+
+    active = transport_active_dof_indices(SimpleNamespace())
+
+    assert active.dtype == np.int32
+    np.testing.assert_array_equal(active, expected.astype(np.int32))
+
+
+def test_transport_fp_direct_active_block_schur_builder_falls_back_for_ineligible_inputs() -> None:
+    calls: list[tuple[object, object, object]] = []
+
+    def fallback_builder(**kwargs):
+        calls.append((kwargs["op"], kwargs["reduce_full"], kwargs["expand_reduced"]))
+        return "fallback"
+
+    ineligible_op = SimpleNamespace(rhs_mode=1, fblock=SimpleNamespace(fp=object()))
+    assert build_transport_fp_direct_active_block_schur_preconditioner(
+        op=ineligible_op,
+        reduce_full=lambda x: x,
+        expand_reduced=lambda x: x,
+        active_indices_np=np.asarray([0], dtype=np.int64),
+        fallback_builder=fallback_builder,
+        transport_precond_cache_key=lambda _op, label: (label,),
+    ) == "fallback"
+
+    eligible_op = SimpleNamespace(rhs_mode=2, fblock=SimpleNamespace(fp=object()))
+    assert build_transport_fp_direct_active_block_schur_preconditioner(
+        op=eligible_op,
+        reduce_full=None,
+        expand_reduced=lambda x: x,
+        active_indices_np=np.asarray([0], dtype=np.int64),
+        fallback_builder=fallback_builder,
+        transport_precond_cache_key=lambda _op, label: (label,),
+    ) == "fallback"
+
+    assert calls[0][0] is ineligible_op
+    assert calls[1][0] is eligible_op
+    assert calls[1][1] is None
+
+
+def test_transport_fp_fortran_reduced_lu_builder_falls_back_for_ineligible_inputs() -> None:
+    calls: list[tuple[object, object, object]] = []
+
+    def fallback_builder(**kwargs):
+        calls.append((kwargs["op"], kwargs["reduce_full"], kwargs["expand_reduced"]))
+        return "fallback"
+
+    ineligible_op = SimpleNamespace(rhs_mode=1, fblock=SimpleNamespace(fp=object()))
+    assert build_transport_fp_fortran_reduced_lu_preconditioner(
+        op=ineligible_op,
+        reduce_full=lambda x: x,
+        expand_reduced=lambda x: x,
+        active_indices_np=np.asarray([0], dtype=np.int64),
+        fallback_builder=fallback_builder,
+        transport_precond_cache_key=lambda _op, label: (label,),
+        build_host_sparse_direct_factor_from_matvec=lambda **_kwargs: object(),
+        host_physical_memory_mb=lambda: None,
+    ) == "fallback"
+
+    eligible_op = SimpleNamespace(rhs_mode=3, fblock=SimpleNamespace(fp=object()))
+    assert build_transport_fp_fortran_reduced_lu_preconditioner(
+        op=eligible_op,
+        reduce_full=lambda x: x,
+        expand_reduced=lambda x: x,
+        active_indices_np=None,
+        fallback_builder=fallback_builder,
+        transport_precond_cache_key=lambda _op, label: (label,),
+        build_host_sparse_direct_factor_from_matvec=lambda **_kwargs: object(),
+        host_physical_memory_mb=lambda: None,
+    ) == "fallback"
+
+    assert calls[0][0] is ineligible_op
+    assert calls[1][0] is eligible_op
+    assert calls[1][1] is not None
 
 
 def test_active_block_ordering_supports_complete_angular_planes() -> None:
