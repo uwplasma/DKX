@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Review Plan
 
-Last updated: 2026-06-27
+Last updated: 2026-07-05
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -40,6 +40,23 @@ The main structural refactor is functionally complete:
   rules.
 - `examples/README.md` and `docs/examples.rst` provide task-oriented example
   navigation, including tutorial notebooks and runnable scripts.
+- `examples/README.md` includes an application-recipe map for the most common
+  user goals: CLI output and plotting, analytic tokamak inputs, VMEC
+  `wout_path`, RHSMode=2/3 transport matrices, bootstrap-current/Redl
+  comparisons, ambipolar electric-field scans, autodiff, VMEC/Boozer/JAX
+  handoff, QA/QI optimization, CPU/GPU timing, and frozen Fortran-v3 parity.
+  The map is guarded by `tests/test_examples_tree_contract.py`, which checks
+  both labels and every referenced script or input file.
+- The 2026-07-05 source/navigation focused guard passed:
+  `tests/test_source_tree_consolidation.py`,
+  `tests/test_domain_package_import_contracts.py`, and
+  `tests/test_examples_tree_contract.py` as `37 passed in 3.42 s`. The package
+  tree has `17` allowed root modules, `9` one-level domain folders, no nested
+  packages, and no `__init__.py`-only package stubs. The only target-root delta
+  is the public compatibility facade `v3_driver.py`.
+- The 2026-07-05 example/docs wording guard passed:
+  `tests/test_examples_tree_contract.py` and
+  `tests/test_benchmark_doc_claims.py` as `13 passed in 0.15 s`.
 - The latest local xdist coverage audit measured `88%` package coverage:
   `4031 passed in 283.48 s` with `8089` missing executable lines. The latest
   explicit-sparse and true-operator rescue tranches reduced missing executable
