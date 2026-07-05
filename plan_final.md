@@ -1330,6 +1330,10 @@ Completed work:
   drifting back into file proliferation. Focused validation passed:
   `tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py`
   as `38 passed in 3.27 s`; Ruff passed and the fixture remained valid JSON.
+- Tranche 70: ran the documentation review gate after the refactor guard
+  updates. `sphinx-build -W -b html docs docs/_build/html` completed
+  successfully over all 44 documentation sources, including source-map,
+  testing, examples, performance, parity, API, and release-checklist pages.
 
 Remaining consolidation steps:
 
