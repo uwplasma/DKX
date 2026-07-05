@@ -188,7 +188,7 @@ Unreleased
   passed with ``285`` tests. The post-move local full suite passed with
   ``2678 passed in 555.29 s``.
 - Moved the constraintScheme=1 x-block moment-Schur wrapper into
-  ``sfincs_jax.operators.profile_sources`` and the bounded host/device subspace
+  ``sfincs_jax.operators.profile_system`` and the bounded host/device subspace
   residual-equation corrections into
   ``sfincs_jax.problems.profile_residual``. The driver now imports
   the historical private names as aliases, while direct algebraic tests cover
