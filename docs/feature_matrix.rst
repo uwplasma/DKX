@@ -54,7 +54,7 @@ Fortran v3 feature ownership
        writes particle fluxes, heat fluxes, flows, currents, Phi1 fields, and
        convergence diagnostics.
      - ``sfincs_jax.problems.profile_solve`` plus flat ``profile_*`` problem
-       owners and legacy driver shims:
+       owners:
        implemented with gates. QA/QH production-grid convergence is supported
        with documented solver-policy limits; lower-memory replacement remains a
        performance lane, not a correctness blocker.
@@ -240,11 +240,11 @@ Fortran v3 feature ownership
      - Promote to auto only when production CPU/GPU residual, runtime, and RSS
        gates pass.
    * - Refactor/review-ready architecture
-     - partial
-     - Domain packages and import-contract tests exist; new extracted helpers
-       are covered by focused tests.
-     - Finish owner-boundary extraction, simplify ``v3_driver.py``, keep docs and
-       source map synchronized, and avoid file-count churn.
+     - implemented with review gates
+     - Domain packages, source-tree guards, import-contract tests, and direct
+       owner tests cover the retired monolith and canonical flat owners.
+     - Keep docs and the source map synchronized, avoid file-count churn, and
+       make future extractions at complete physics/numerics boundaries.
 
 Using this matrix during review
 -------------------------------
