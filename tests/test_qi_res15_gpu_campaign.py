@@ -5,7 +5,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from sfincs_jax.validation.qi_device import evaluate_qi_res15_gpu_campaign_files
+from sfincs_jax.validation.qi_device import (
+    evaluate_qi_res15_gpu_campaign,
+    evaluate_qi_res15_gpu_campaign_files,
+    load_json_object,
+)
 
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -80,6 +84,36 @@ def test_qi_res15_gpu_campaign_ingestion_accepts_clean_gpu_promotion(tmp_path: P
     assert artifact["gates"]["gpu_cpu_root_agreement"] == "pass"
     assert artifact["gates"]["production_resolution_qi_convergence"] == "open"
     assert artifact["residual_summary"]["failed_count"] == 0
+
+
+def test_qi_res15_gpu_campaign_mapping_api_and_json_loader(tmp_path: Path) -> None:
+    promotion_path = _write_json(tmp_path / "gpu_promotion" / "qi_gpu.json", _promotion())
+    campaign = {
+        "workflow": "sfincs_jax_optimization_promotion_evidence_plan",
+        "campaign_status": "pass",
+        "lane_results": [
+            {
+                "label": "gpu",
+                "backend": "sfincs_jax",
+                "status": "pass",
+                "promotion_json": str(promotion_path),
+            }
+        ],
+    }
+    reference = _reference()
+
+    artifact = evaluate_qi_res15_gpu_campaign(campaign, reference, campaign_dir=tmp_path)
+
+    assert artifact["status"] == "pass_bounded_gpu_res15"
+    assert load_json_object(promotion_path)["selected_root"]["root_type"] == "electron"
+    scalar_path = tmp_path / "bad.json"
+    scalar_path.write_text("[1, 2, 3]", encoding="utf-8")
+    try:
+        load_json_object(scalar_path)
+    except TypeError as exc:
+        assert "JSON object" in str(exc)
+    else:  # pragma: no cover - defensive assertion.
+        raise AssertionError("load_json_object accepted a non-object JSON payload")
 
 
 def test_qi_res15_gpu_campaign_ingestion_fails_closed_on_root_or_residual_mismatch(

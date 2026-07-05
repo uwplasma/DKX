@@ -40,9 +40,11 @@ from sfincs_jax.sensitivity import (
     implicit_linear_observable_derivative_from_builder,
     implicit_matrix_free_linear_observable_derivative,
     implicit_matrix_free_linear_observable_derivative_from_builder,
+    jvp_flux,
     probe_linear_observable_vector,
     validate_fortran_v3_adjoint_sensitivity_constraints,
     validate_fortran_v3_adjoint_sensitivity_output_surface,
+    vjp_flux,
 )
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.operators.profile_system import apply_v3_full_system_operator_cached, full_system_operator_from_namelist
@@ -107,6 +109,24 @@ def _adjoint_config(**overrides):
     for group, values in overrides.items():
         config[group].update(values)
     return config
+
+
+def test_jvp_and_vjp_flux_wrappers_match_jax_linearization() -> None:
+    def flux(params):
+        return jnp.asarray([params[0] ** 2 + params[1], params[0] - 3.0 * params[1]], dtype=jnp.float64)
+
+    params = jnp.asarray([2.0, -1.0], dtype=jnp.float64)
+    tangent = jnp.asarray([0.5, 2.0], dtype=jnp.float64)
+    cotangent = jnp.asarray([1.5, -0.25], dtype=jnp.float64)
+
+    value, jvp_value = jvp_flux(flux, params, tangent)
+    value_vjp, vjp_value = vjp_flux(flux, params, cotangent)
+
+    expected_jacobian = jnp.asarray([[4.0, 1.0], [1.0, -3.0]], dtype=jnp.float64)
+    np.testing.assert_allclose(np.asarray(value), np.asarray(flux(params)), rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(np.asarray(value_vjp), np.asarray(value), rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(np.asarray(jvp_value), np.asarray(expected_jacobian @ tangent), rtol=1.0e-14)
+    np.testing.assert_allclose(np.asarray(vjp_value), np.asarray(expected_jacobian.T @ cotangent), rtol=1.0e-14)
 
 
 def test_fortran_v3_adjoint_sensitivity_constraints_and_output_fields() -> None:

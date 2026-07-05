@@ -8,6 +8,7 @@ from sfincs_jax.discretization.structured_velocity import (
     apply_block_tridiagonal,
     block_tridiagonal_to_dense,
     factor_block_tridiagonal,
+    solve_block_tridiagonal,
 )
 
 
@@ -43,10 +44,12 @@ def test_block_tridiagonal_solve_matches_dense_and_reuses_factor() -> None:
     rhs2 = np.random.default_rng(5).standard_normal(dense.shape[0])
 
     sol1 = np.asarray(factor.solve(jnp.asarray(rhs1)))
+    sol1_direct = np.asarray(solve_block_tridiagonal(factor, jnp.asarray(rhs1)))
     sol2 = np.asarray(factor.solve(jnp.asarray(rhs2)))
     sol_batch = np.asarray(factor.solve(jnp.asarray(np.stack([rhs1, rhs2], axis=0))))
 
     np.testing.assert_allclose(dense @ sol1, rhs1, rtol=0.0, atol=1e-11)
+    np.testing.assert_allclose(sol1_direct, sol1, rtol=0.0, atol=1e-12)
     np.testing.assert_allclose(dense @ sol2, rhs2, rtol=0.0, atol=1e-11)
     np.testing.assert_allclose(sol1, np.linalg.solve(dense, rhs1), rtol=0.0, atol=1e-10)
     np.testing.assert_allclose(sol2, np.linalg.solve(dense, rhs2), rtol=0.0, atol=1e-10)

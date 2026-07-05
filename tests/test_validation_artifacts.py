@@ -31,10 +31,21 @@ from sfincs_jax.validation.artifacts import (
     suite_case_metrics,
     suite_report_summary,
 )
+from sfincs_jax.validation.data_fetch import external_data_dir, external_data_version
 
 
 def _artifact_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "examples" / "publication_figures" / "artifacts"
+
+
+def test_external_data_version_and_dir_follow_manifest_and_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(tmp_path / "data"))
+
+    version = external_data_version()
+    path = external_data_dir()
+
+    assert version
+    assert path == tmp_path / "data" / version
 
 
 def _synthetic_suite_rows(n: int = 39) -> list[dict[str, object]]:

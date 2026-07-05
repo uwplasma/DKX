@@ -146,6 +146,15 @@ The main structural refactor is functionally complete:
   `problems/profile_sparse_direct.py`, and `problems/profile_diagnostics.py`
   report zero production-used public helpers without direct tests. Focused
   validation passed as `82 passed in 34.47 s`.
+- Structured velocity, transport policy, sensitivity, and validation coverage
+  now includes direct tests for block-tridiagonal solves, structured tz-FFT
+  first-attempt policy/budget/environment thresholds, JVP/VJP flux wrappers,
+  release-hosted data cache paths, and QI campaign JSON/mapping APIs.
+  Source/test audits for `discretization/structured_velocity.py`,
+  `problems/transport_policies.py`, `sensitivity.py`,
+  `validation/data_fetch.py`, and `validation/qi_device.py` report zero
+  production-used public helpers without direct tests. Focused validation
+  passed as `110 passed in 62.60 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -971,6 +980,10 @@ Completed work:
 - Tranche 38: added direct transport-runtime, profile-setup, sparse-direct,
   and sparse diagnostics wrapper tests, then reran source/test audits showing
   no production-used public helpers without direct tests in those targeted
+  modules.
+- Tranche 39: added direct structured-velocity, transport-policy, sensitivity,
+  and validation API tests, then reran source/test audits showing no
+  production-used public helpers without direct tests in those targeted
   modules.
 
 Remaining consolidation steps:

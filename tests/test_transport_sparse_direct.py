@@ -6,6 +6,7 @@ import numpy as np
 import jax.numpy as jnp
 
 from sfincs_jax.namelist import read_sfincs_input
+import sfincs_jax.problems.transport_policies as transport_policies
 from sfincs_jax.problems.transport_solve import (
     _build_rhsmode23_fp_local_geom_line_preconditioner,
     _build_rhsmode23_fp_structured_fblock_lu_preconditioner,
@@ -292,6 +293,44 @@ def test_transport_structured_tzfft_first_attempt_guards_and_budget(monkeypatch)
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_TZFFT_FIRST_RESTART", "23")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_TZFFT_FIRST_MAXITER", "7")
     assert _transport_tzfft_first_attempt_budget(restart=80, maxiter=400) == ("incremental", 23, 7)
+
+
+def test_transport_policy_direct_tzfft_budget_and_float_env(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_TZFFT_FIRST", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_TZFFT_FIRST_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_TZFFT_FIRST_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_UNIT_FLOAT_ENV", raising=False)
+    op = SimpleNamespace(
+        rhs_mode=2,
+        include_phi1=False,
+        n_x=1,
+        n_theta=9,
+        n_zeta=9,
+        fblock=SimpleNamespace(fp=None),
+    )
+
+    assert transport_policies.transport_tzfft_structured_first_attempt_allowed(
+        op,
+        size=6000,
+        use_implicit=False,
+        backend="gpu",
+    )
+    assert not transport_policies.transport_tzfft_structured_first_attempt_allowed(
+        op,
+        size=4000,
+        use_implicit=False,
+        backend="gpu",
+    )
+    assert transport_policies.transport_tzfft_first_attempt_budget(restart=80, maxiter=400) == (
+        "incremental",
+        40,
+        12,
+    )
+    assert transport_policies.float_env("SFINCS_JAX_UNIT_FLOAT_ENV") == 0.0
+    monkeypatch.setenv("SFINCS_JAX_UNIT_FLOAT_ENV", "-1")
+    assert transport_policies.float_env("SFINCS_JAX_UNIT_FLOAT_ENV") == 0.0
+    monkeypatch.setenv("SFINCS_JAX_UNIT_FLOAT_ENV", "1.25")
+    assert transport_policies.float_env("SFINCS_JAX_UNIT_FLOAT_ENV") == 1.25
 
 
 def test_transport_sparse_direct_first_attempt_keeps_generic_large_gpu_transport_bounded(monkeypatch) -> None:
