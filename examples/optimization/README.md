@@ -41,7 +41,7 @@ Examples:
   then writes JSON plus PNG/PDF promotion plots.
   Pass `--impurity-species-index` only for a real impurity/flux-selectivity
   objective; omit it for two-species ion/electron electron-root scans.
-- `launch_sfincs_jax_candidate_scan.py` — accepted-candidate handoff from a
+- `launch_sfincs_jax_candidate_scan.py` — accepted-candidate workflow from a
   proxy optimization JSON to a reproducible `sfincs_jax scan-er` command. By
   default it writes a JSON plan and prints commands; pass `--execute` only when
   ready to launch the high-fidelity scan.
