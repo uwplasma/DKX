@@ -84,6 +84,12 @@ The main structural refactor is functionally complete:
   `tests/test_profile_response_diagnostics.py` as `25 passed in 0.57 s`; the
   broader diagnostics/finalization bundle passed as `51 passed in 0.67 s`;
   source-tree and import-contract guards passed as `35 passed in 2.83 s`.
+- RHSMode=1 preconditioner policy coverage now includes the active-backend GPU
+  sparse-fallback skip wrapper, including GPU acceptance, CPU rejection, Phi1
+  rejection, and missing-PAS rejection. A source/test audit for
+  `problems/profile_policies.py` reports zero production-used public policy
+  helpers without direct tests. Focused validation passed:
+  `tests/test_rhs1_preconditioner_auto_policy.py` as `30 passed in 0.20 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -869,6 +875,10 @@ Completed work:
   `problems/profile_diagnostics.py`. The retained single-reference private
   helpers are either directly tested reference implementations or used by live
   progress/label formatting paths.
+- Tranche 30: added direct bounded coverage for the
+  `rhs1_gpu_sparse_fallback_skip_allowed_current_backend` policy wrapper and
+  reran a source/test audit showing no production-used public helpers in
+  `problems/profile_policies.py` without direct tests.
 
 Remaining consolidation steps:
 
