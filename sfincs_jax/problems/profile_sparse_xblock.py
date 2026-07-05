@@ -5097,7 +5097,7 @@ def xblock_sparse_pc_final_metadata_from_driver_state(
     *,
     full_size: object,
 ) -> dict[str, object]:
-    """Build final x-block sparse-PC metadata from one driver-state handoff."""
+    """Build final x-block sparse-PC metadata from one driver-state snapshot."""
 
     return {
         **xblock_sparse_pc_result_diagnostics_from_driver_state(

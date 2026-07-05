@@ -36,12 +36,12 @@ EmitFn = Callable[[int, str], None]
 
 # RHSMode=1 candidate replay and acceptance helpers.
 #
-# These helpers used to live in ``profile_response.handoff``. They now live next
-# to the KSP replay/finalization diagnostics so accepted candidates, replay
-# state, and final iteration history have one owner.
+# Accepted solve candidates, replay state, and final iteration history live in
+# one owner so diagnostics always describe the linear problem that produced the
+# returned residual.
 
 @dataclass(frozen=True)
-class RHS1KSPHandoffState:
+class RHS1KSPAcceptedCandidateState:
     """Krylov replay state to emit iteration history for an accepted solve."""
 
     matvec_fn: Any
@@ -91,26 +91,26 @@ class RHS1SkipPrimaryKrylovSeedContext:
     result_factory: Any
 
 
-def rhs1_apply_handoff_to_replay_state(
+def rhs1_apply_candidate_to_replay_state(
     replay_state: RHS1KSPReplayState,
-    handoff_state: RHS1KSPHandoffState | None,
+    candidate_state: RHS1KSPAcceptedCandidateState | None,
 ) -> bool:
-    """Update ``replay_state`` from an accepted candidate handoff.
+    """Update ``replay_state`` from an accepted candidate state.
 
-    Returns ``True`` when a handoff was applied. A ``None`` handoff leaves the
+    Returns ``True`` when a candidate state was applied. ``None`` leaves the
     replay state unchanged and returns ``False``; this mirrors existing driver
     behavior where rejected candidates must not perturb the final diagnostics.
     """
-    if handoff_state is None:
+    if candidate_state is None:
         return False
-    replay_state.matvec_fn = handoff_state.matvec_fn
-    replay_state.b_vec = handoff_state.b_vec
-    replay_state.precond_fn = handoff_state.precond_fn
-    replay_state.x0_vec = handoff_state.x0_vec
-    replay_state.restart = int(handoff_state.restart)
-    replay_state.maxiter = handoff_state.maxiter
-    replay_state.precond_side = str(handoff_state.precond_side)
-    replay_state.solver_kind = str(handoff_state.solver_kind)
+    replay_state.matvec_fn = candidate_state.matvec_fn
+    replay_state.b_vec = candidate_state.b_vec
+    replay_state.precond_fn = candidate_state.precond_fn
+    replay_state.x0_vec = candidate_state.x0_vec
+    replay_state.restart = int(candidate_state.restart)
+    replay_state.maxiter = candidate_state.maxiter
+    replay_state.precond_side = str(candidate_state.precond_side)
+    replay_state.solver_kind = str(candidate_state.solver_kind)
     return True
 
 
@@ -180,7 +180,7 @@ def rhs1_accept_candidate(
     candidate_metrics: SolverCandidateMetrics | None = None,
     baseline_metrics: SolverCandidateMetrics | None = None,
     criteria: SolverAcceptanceCriteria | None = None,
-) -> tuple[Any, Any, RHS1KSPHandoffState | None, bool]:
+) -> tuple[Any, Any, RHS1KSPAcceptedCandidateState | None, bool]:
     """Accept a candidate result and return the updated replay state.
 
     The return shape is intentionally compact for profile-solve orchestration:
@@ -213,7 +213,7 @@ def rhs1_accept_candidate(
         return (
             candidate_result,
             accepted_residual_vec,
-            RHS1KSPHandoffState(
+            RHS1KSPAcceptedCandidateState(
                 matvec_fn=matvec_fn,
                 b_vec=b_vec,
                 precond_fn=precond_fn,
@@ -237,14 +237,14 @@ def rhs1_accept_candidate_and_update_replay(
 
     This is the driver-facing form for fallback/rescue branches: accepted
     candidates must update the final KSP replay diagnostics in the same step as
-    the residual/result handoff, while rejected candidates leave the replay
+    the residual/result replay update, while rejected candidates leave the replay
     state untouched.
     """
 
-    result, residual_vec, handoff_state, accepted = rhs1_accept_candidate(
+    result, residual_vec, candidate_state, accepted = rhs1_accept_candidate(
         **candidate_kwargs
     )
-    rhs1_apply_handoff_to_replay_state(replay_state, handoff_state)
+    rhs1_apply_candidate_to_replay_state(replay_state, candidate_state)
     return result, residual_vec, accepted
 
 
@@ -295,7 +295,7 @@ def rhs1_accept_measured_candidate(
     setup_s: float | None = None,
     peak_rss_mb: float | None = None,
     criteria: SolverAcceptanceCriteria | None = None,
-) -> tuple[Any, Any, RHS1KSPHandoffState | None, bool]:
+) -> tuple[Any, Any, RHS1KSPAcceptedCandidateState | None, bool]:
     """Accept a measured candidate while constructing standard gate metrics."""
     return rhs1_accept_candidate(
         current_result=current_result,
@@ -335,10 +335,10 @@ def rhs1_accept_measured_candidate_and_update_replay(
 ) -> tuple[Any, Any, bool]:
     """Accept a measured candidate and update replay diagnostics atomically."""
 
-    result, residual_vec, handoff_state, accepted = rhs1_accept_measured_candidate(
+    result, residual_vec, candidate_state, accepted = rhs1_accept_measured_candidate(
         **candidate_kwargs
     )
-    rhs1_apply_handoff_to_replay_state(replay_state, handoff_state)
+    rhs1_apply_candidate_to_replay_state(replay_state, candidate_state)
     return result, residual_vec, accepted
 
 
@@ -714,7 +714,7 @@ def rhs1_run_collision_retry_if_allowed(
     returns_residual_vec: bool,
     emit: Any = None,
 ) -> tuple[Any, Any, Any, bool, float]:
-    """Run a collision-preconditioner retry while preserving cache handoff."""
+    """Run a collision-preconditioner retry while preserving replay state."""
 
     if not bool(allowed):
         return current_result, current_residual_vec, precond_fn, False, 0.0
@@ -879,9 +879,9 @@ def rhs1_run_bicgstab_gmres_fallback_if_allowed(
     if result_ready is not None:
         candidate_result = result_ready(candidate_result)
     elapsed_s = time.perf_counter() - started
-    rhs1_apply_handoff_to_replay_state(
+    rhs1_apply_candidate_to_replay_state(
         replay_state,
-        RHS1KSPHandoffState(
+        RHS1KSPAcceptedCandidateState(
             matvec_fn=matvec_fn,
             b_vec=b_vec,
             precond_fn=preconditioner,
@@ -1479,7 +1479,7 @@ def emit_profile_response_ksp_replay_diagnostics(
     """Emit RHSMode=1 KSP replay history and iteration statistics.
 
     ``replay_state`` is duck-typed so the driver-owned solve state can stay in
-    the handoff module without creating an import cycle.
+    the solver-diagnostics owner without creating an import cycle.
     """
 
     matvec_fn = getattr(replay_state, "matvec_fn", None)
@@ -2010,7 +2010,7 @@ def _read_iter_stats_max_iter() -> int:
     except ValueError:
         return 2000
 
-# Consolidated final RHSMode=1 linear-solve handoff
+# Consolidated final RHSMode=1 linear-solve finalization
 
 @dataclass(frozen=True)
 class ProfileResponseLinearFinalizationContext:

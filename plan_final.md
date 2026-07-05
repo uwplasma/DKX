@@ -670,10 +670,10 @@ The main structural refactor is functionally complete:
   `validation/petsc_binary.py` module into `validation/fortran.py`, then
   deleted the helper file. Fortran-v3 execution, profiling, and frozen PETSc
   reference readers now have one canonical validation owner.
-- Phase C sparse-owner cleanup renamed the internal RHSMode-1 sparse-PC
-  orchestration owner from `problems/profile_sparse_handoff.py` to
-  `problems/profile_sparse_solve.py`. The old file path is guarded absent by
-  source-tree tests, and docs/tests now point at the canonical solve owner.
+- Phase C sparse-owner cleanup consolidated the internal RHSMode-1 sparse-PC
+  orchestration owner into `problems/profile_sparse_solve.py`. Deleted sparse
+  replay filenames are guarded absent by source-tree tests, and docs/tests now
+  point at the canonical solve owner.
 - The upstream postprocessing workflow helper has been consolidated into
   `workflows/scans.py`, which now owns Er-scan execution and upstream
   `utils/` postprocessing wrappers used by the CLI and examples. The separate
@@ -775,7 +775,7 @@ Target source shape for the review PR:
   facades only when docs, examples, scripts, and compatibility tests have moved
   to canonical imports.
 - Reduce `problems/` from the current `25` files toward `16-20` durable files by merging
-  setup, policy, diagnostics, sparse-handoff, and finalization helpers into
+  setup, policy, diagnostics, sparse replay, and finalization helpers into
   coherent problem owners. The final names should describe physics/problem
   ownership: `profile_*`, `transport_*`, and `ambipolar.py` are acceptable;
   campaign, handoff, promotion, and temporary solver-path names are not.
@@ -810,7 +810,7 @@ Files and families to review in order:
    `profile_sparse_policy.py`, `profile_sparse_qi.py`, and
    `profile_sparse_xblock.py`. Consolidate by role into sparse setup,
    sparse solve/rescue, and x-block/QI production owners. Do not keep
-   "handoff" names in final implementation files.
+   historical transfer-state names in final implementation files.
 3. Solver preconditioner families:
    merge `preconditioner_pas_*`, `preconditioner_full_fp_*`,
    `preconditioner_xblock_*`, `preconditioner_qi_*`, and
@@ -1011,10 +1011,10 @@ Completed work:
   setup helpers into existing `problems/transport_setup.py`. This lowered
   `problems/transport_solve.py` to `2326` lines while preserving public
   compatibility imports and existing loop-support tests.
-- Tranche 15: renamed the RHSMode=1 sparse-PC orchestration owner from
-  `profile_sparse_handoff.py` to `profile_sparse_solve.py`, updated internal
-  imports, docs, API references, and import contracts, and added a source-tree
-  guard so the historical filename is not reintroduced.
+- Tranche 15: consolidated the RHSMode=1 sparse-PC orchestration owner into
+  `profile_sparse_solve.py`, updated internal imports, docs, API references,
+  and import contracts, and added a source-tree guard so deleted sparse replay
+  filenames are not reintroduced.
 - Tranche 16: moved strict numeric HDF5 parity from
   `validation/h5_parity.py` into the root public `compare.py` API, deleted the
   validation helper, and updated docs/scripts/tests to use one comparison
@@ -1465,19 +1465,33 @@ Completed work:
   passed as `450 passed in 20.33 s`; the broader source/policy/docs-adjacent
   bundle passed as `581 passed in 25.07 s`; Ruff, `compileall`, and
   `git diff --check` passed.
+- Tranche 84: renamed the active RHSMode-1 accepted-solver-state API from
+  historical transfer-state terminology to solver replay terminology:
+  `RHS1KSPAcceptedCandidateState`,
+  `rhs1_apply_candidate_to_replay_state`, and
+  `tests/test_rhs1_solver_replay.py`. The implementation behavior is
+  unchanged; the tranche removes historical naming from active solver
+  diagnostics, profile dense replay prose, sparse x-block metadata prose,
+  sensitivity integration prose, and source-map/performance docs. Focused
+  validation passed:
+  `tests/test_rhs1_solver_replay.py tests/test_profile_solve_module_wrappers.py tests/test_source_tree_consolidation.py`
+  as `112 passed in 4.81 s`; the broader solver-replay/sparse-dispatch bundle
+  passed as `472 passed in 48.55 s`; Ruff, `compileall`, and
+  `git diff --check` passed.
 
 Remaining consolidation steps:
 
 1. Compatibility cleanup: keep deleted-facade tests and stale-import scans in
    place. Behavior tests should import canonical domain owners; no
    `sfincs_jax.v3_driver` imports are allowed.
-2. Problem-family consolidation: remove "handoff" and production-campaign
-   names from implementation files by merging RHSMode-1 sparse setup/rescue
-   owners into canonical profile sparse owners. The sparse-solve compatibility
-   namespace and Ruff waiver are closed; any remaining cleanup should reduce
-   owner size or clarify orchestration boundaries without reintroducing broad
-   reexport surfaces. Success is fewer broad namespace surfaces, simpler
-   canonical imports, and unchanged RHSMode-1 policy/output tests.
+2. Problem-family consolidation: remove historical transfer-state and
+   production-campaign names from implementation files by merging RHSMode-1
+   sparse setup/rescue owners into canonical profile sparse owners. The
+   sparse-solve compatibility namespace and Ruff waiver are closed; any
+   remaining cleanup should reduce owner size or clarify orchestration
+   boundaries without reintroducing broad reexport surfaces. Success is fewer
+   broad namespace surfaces, simpler canonical imports, and unchanged RHSMode-1
+   policy/output tests.
 3. Solver-family consolidation: merge same-family preconditioner modules only
    at durable physics/numerics boundaries. Success is fewer solver files and no
    loss of targeted preconditioner tests, not a single oversized grab-bag file.
@@ -1636,9 +1650,9 @@ Acceptance:
 Pass 1 - Problem owners:
 
 1. Consolidate RHSMode-1 sparse rescue/finalization code into canonical
-   profile sparse owners. The historical sparse handoff filename has been
-   replaced by `profile_sparse_solve.py`; remaining work is reducing file count
-   and line count inside the sparse-profile family.
+   profile sparse owners. Deleted sparse replay filenames stay guarded absent;
+   remaining work is reducing file count and line count inside the
+   sparse-profile family.
 2. Keep `profile_solve.py` as orchestration. Move complete phases, not helper
    fragments, into existing setup, policy, residual, sparse, or diagnostics
    owners.

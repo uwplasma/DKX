@@ -5,10 +5,10 @@ from types import SimpleNamespace
 import pytest
 
 from sfincs_jax.problems.profile_solver_diagnostics import (
-    RHS1KSPHandoffState,
+    RHS1KSPAcceptedCandidateState,
     RHS1KSPReplayState,
     RHS1SkipPrimaryKrylovSeedContext,
-    rhs1_apply_handoff_to_replay_state,
+    rhs1_apply_candidate_to_replay_state,
     rhs1_accept_candidate,
     rhs1_accept_candidate_and_update_replay,
     rhs1_accept_measured_candidate,
@@ -65,10 +65,10 @@ def test_rhs1_residual_improves_is_strict_and_finite(
     )
 
 
-def test_rhs1_accept_candidate_accepts_improvement_and_emits_handoff_state() -> None:
+def test_rhs1_accept_candidate_accepts_improvement_and_emits_candidate_state() -> None:
     current = _result(1.0, x="x0")
     candidate = _result(0.25, x="x1")
-    result, residual_vec, handoff, accepted = rhs1_accept_candidate(
+    result, residual_vec, candidate_state, accepted = rhs1_accept_candidate(
         current_result=current,
         candidate_result=candidate,
         current_residual_vec="r0",
@@ -85,21 +85,21 @@ def test_rhs1_accept_candidate_accepts_improvement_and_emits_handoff_state() -> 
     assert accepted
     assert result is candidate
     assert residual_vec == "r1"
-    assert handoff is not None
-    assert handoff.matvec_fn == "mv"
-    assert handoff.b_vec == "rhs"
-    assert handoff.precond_fn == "pc"
-    assert handoff.x0_vec == "seed"
-    assert handoff.restart == 30
-    assert handoff.maxiter == 90
-    assert handoff.precond_side == "left"
-    assert handoff.solver_kind == "gmres"
+    assert candidate_state is not None
+    assert candidate_state.matvec_fn == "mv"
+    assert candidate_state.b_vec == "rhs"
+    assert candidate_state.precond_fn == "pc"
+    assert candidate_state.x0_vec == "seed"
+    assert candidate_state.restart == 30
+    assert candidate_state.maxiter == 90
+    assert candidate_state.precond_side == "left"
+    assert candidate_state.solver_kind == "gmres"
 
 
 def test_rhs1_accept_candidate_rejects_non_improving_result() -> None:
     current = _result(1.0, x="x0")
     candidate = _result(1.0, x="x1")
-    result, residual_vec, handoff, accepted = rhs1_accept_candidate(
+    result, residual_vec, candidate_state, accepted = rhs1_accept_candidate(
         current_result=current,
         candidate_result=candidate,
         current_residual_vec="r0",
@@ -116,14 +116,14 @@ def test_rhs1_accept_candidate_rejects_non_improving_result() -> None:
     assert not accepted
     assert result is current
     assert residual_vec == "r0"
-    assert handoff is None
+    assert candidate_state is None
 
 
 def test_rhs1_accept_candidate_accepts_finite_rescue_after_nonfinite_current() -> None:
     current = _result(float("nan"), x="x0")
     candidate = _result(1.0e-10, x="x1")
 
-    result, residual_vec, handoff, accepted = rhs1_accept_candidate(
+    result, residual_vec, candidate_state, accepted = rhs1_accept_candidate(
         current_result=current,
         candidate_result=candidate,
         current_residual_vec="r0",
@@ -141,14 +141,14 @@ def test_rhs1_accept_candidate_accepts_finite_rescue_after_nonfinite_current() -
     assert accepted
     assert result is candidate
     assert residual_vec == "r1"
-    assert handoff is not None
+    assert candidate_state is not None
 
 
 def test_rhs1_accept_candidate_rejects_nonfinite_candidate_residual() -> None:
     current = _result(1.0e-6, x="x0")
     candidate = _result(float("nan"), x="x1")
 
-    result, residual_vec, handoff, accepted = rhs1_accept_candidate(
+    result, residual_vec, candidate_state, accepted = rhs1_accept_candidate(
         current_result=current,
         candidate_result=candidate,
         current_residual_vec="r0",
@@ -166,13 +166,13 @@ def test_rhs1_accept_candidate_rejects_nonfinite_candidate_residual() -> None:
     assert not accepted
     assert result is current
     assert residual_vec == "r0"
-    assert handoff is None
+    assert candidate_state is None
 
 
 def test_rhs1_accept_candidate_keeps_current_residual_vector_when_candidate_residual_is_missing() -> None:
     current = _result(1.0, x="x0")
     candidate = _result(0.5, x="x1")
-    result, residual_vec, handoff, accepted = rhs1_accept_candidate(
+    result, residual_vec, candidate_state, accepted = rhs1_accept_candidate(
         current_result=current,
         candidate_result=candidate,
         current_residual_vec="r0",
@@ -189,7 +189,7 @@ def test_rhs1_accept_candidate_keeps_current_residual_vector_when_candidate_resi
     assert accepted
     assert result is candidate
     assert residual_vec == "r0"
-    assert handoff is not None
+    assert candidate_state is not None
 
 
 def test_rhs1_accept_candidate_and_update_replay_updates_only_on_acceptance() -> None:
@@ -457,7 +457,7 @@ def test_rhs1_accept_candidate_rejects_measured_runtime_memory_regression() -> N
         peak_rss_mb=900.0,
     )
 
-    result, residual_vec, handoff, accepted = rhs1_accept_candidate(
+    result, residual_vec, candidate_state, accepted = rhs1_accept_candidate(
         current_result=current,
         candidate_result=candidate,
         current_residual_vec="r0",
@@ -477,7 +477,7 @@ def test_rhs1_accept_candidate_rejects_measured_runtime_memory_regression() -> N
     assert not accepted
     assert result is current
     assert residual_vec == "r0"
-    assert handoff is None
+    assert candidate_state is None
 
 
 def test_rhs1_accept_candidate_allows_slower_candidate_when_baseline_failed() -> None:
@@ -500,7 +500,7 @@ def test_rhs1_accept_candidate_allows_slower_candidate_when_baseline_failed() ->
         peak_rss_mb=900.0,
     )
 
-    result, residual_vec, handoff, accepted = rhs1_accept_candidate(
+    result, residual_vec, candidate_state, accepted = rhs1_accept_candidate(
         current_result=current,
         candidate_result=candidate,
         current_residual_vec="r0",
@@ -520,7 +520,7 @@ def test_rhs1_accept_candidate_allows_slower_candidate_when_baseline_failed() ->
     assert accepted
     assert result is candidate
     assert residual_vec == "r1"
-    assert handoff is not None
+    assert candidate_state is not None
 
 
 def test_rhs1_solver_candidate_metrics_extracts_finite_result_fields() -> None:
@@ -553,11 +553,11 @@ def test_rhs1_solver_candidate_metrics_marks_unreadable_residual_nonfinite() -> 
     assert not metrics.finite
 
 
-def test_rhs1_accept_measured_candidate_uses_standard_metrics_and_handoff() -> None:
+def test_rhs1_accept_measured_candidate_uses_standard_metrics_and_candidate_state() -> None:
     current = _result(5.0e-6, x="x0")
     candidate = _result(5.0e-11, x="x1")
 
-    result, residual_vec, handoff, accepted = rhs1_accept_measured_candidate(
+    result, residual_vec, candidate_state, accepted = rhs1_accept_measured_candidate(
         current_result=current,
         candidate_result=candidate,
         current_residual_vec="r0",
@@ -580,8 +580,8 @@ def test_rhs1_accept_measured_candidate_uses_standard_metrics_and_handoff() -> N
     assert accepted
     assert result is candidate
     assert residual_vec == "r1"
-    assert handoff is not None
-    assert handoff.solver_kind == "gmres"
+    assert candidate_state is not None
+    assert candidate_state.solver_kind == "gmres"
 
 
 def test_rhs1_accept_measured_candidate_and_update_replay_uses_standard_metrics() -> None:
@@ -692,7 +692,7 @@ def test_rhs1_accept_measured_candidate_rejects_clean_baseline_without_win() -> 
     current = _result(1.0e-12, x="x0")
     candidate = _result(5.0e-13, x="x1")
 
-    result, residual_vec, handoff, accepted = rhs1_accept_measured_candidate(
+    result, residual_vec, candidate_state, accepted = rhs1_accept_measured_candidate(
         current_result=current,
         candidate_result=candidate,
         current_residual_vec="r0",
@@ -715,10 +715,10 @@ def test_rhs1_accept_measured_candidate_rejects_clean_baseline_without_win() -> 
     assert not accepted
     assert result is current
     assert residual_vec == "r0"
-    assert handoff is None
+    assert candidate_state is None
 
 
-def test_rhs1_apply_handoff_to_replay_state_is_noop_for_rejected_candidate() -> None:
+def test_rhs1_apply_candidate_to_replay_state_is_noop_for_rejected_candidate() -> None:
     replay = RHS1KSPReplayState(
         matvec_fn="mv0",
         b_vec="rhs0",
@@ -730,7 +730,7 @@ def test_rhs1_apply_handoff_to_replay_state_is_noop_for_rejected_candidate() -> 
         solver_kind="gmres",
     )
 
-    applied = rhs1_apply_handoff_to_replay_state(replay, None)
+    applied = rhs1_apply_candidate_to_replay_state(replay, None)
 
     assert not applied
     assert replay.matvec_fn == "mv0"
@@ -743,9 +743,9 @@ def test_rhs1_apply_handoff_to_replay_state_is_noop_for_rejected_candidate() -> 
     assert replay.solver_kind == "gmres"
 
 
-def test_rhs1_apply_handoff_to_replay_state_updates_all_replay_fields() -> None:
+def test_rhs1_apply_candidate_to_replay_state_updates_all_replay_fields() -> None:
     replay = RHS1KSPReplayState()
-    handoff = RHS1KSPHandoffState(
+    candidate_state = RHS1KSPAcceptedCandidateState(
         matvec_fn="mv1",
         b_vec="rhs1",
         precond_fn="pc1",
@@ -756,7 +756,7 @@ def test_rhs1_apply_handoff_to_replay_state_updates_all_replay_fields() -> None:
         solver_kind="incremental",
     )
 
-    applied = rhs1_apply_handoff_to_replay_state(replay, handoff)
+    applied = rhs1_apply_candidate_to_replay_state(replay, candidate_state)
 
     assert applied
     assert replay.matvec_fn == "mv1"

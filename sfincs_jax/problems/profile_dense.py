@@ -1249,7 +1249,7 @@ class RHS1ReducedDenseFallbackStageContext:
 
 @dataclass(frozen=True)
 class RHS1ReducedDenseFallbackAdmissionStageContext:
-    """Inputs for reduced dense fallback admission plus execution handoff."""
+    """Inputs for reduced dense fallback admission plus execution state."""
 
     stage_context: RHS1ReducedDenseFallbackStageContext
     dense_fallback_max: int
@@ -2028,7 +2028,7 @@ def run_rhs1_dense_probe_stage(
     solver_kind: Callable[[str], tuple[str, str]],
     emit: Callable[[int, str], None] | None = None,
 ) -> RHS1DenseProbeStageResult:
-    """Run the reduced dense-probe shortcut/seed stage with replay handoff."""
+    """Run the reduced dense-probe shortcut/seed stage with replay update."""
 
     result = context.current_result
     x0_reduced = context.x0_reduced
@@ -2396,7 +2396,7 @@ def run_rhs1_reduced_dense_fallback_stage(
     mark: Callable[[str], None] | None = None,
     peak_rss_mb: Callable[[], float] | None = None,
 ) -> tuple[GMRESSolveResult, jnp.ndarray | None, bool]:
-    """Run a reduced dense fallback candidate and measured replay handoff."""
+    """Run a reduced dense fallback candidate and measured replay update."""
 
     candidate_context = context.candidate_context
     if mark is not None:
@@ -2512,7 +2512,7 @@ def run_rhs1_full_dense_fallback_candidate(
     mark: Callable[[str], None] | None = None,
     peak_rss_mb: Callable[[], float] | None = None,
 ) -> tuple[GMRESSolveResult, jnp.ndarray | None, bool]:
-    """Run the final full-system dense fallback and measured acceptance handoff."""
+    """Run the final full-system dense fallback and measured acceptance update."""
 
     if mark is not None:
         mark("rhs1_dense_fallback_start")

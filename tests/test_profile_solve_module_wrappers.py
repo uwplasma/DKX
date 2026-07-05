@@ -534,7 +534,7 @@ def test_profile_solve_top_level_orchestrator_can_exit_through_sparse_host_safe(
     assert "minimum_norm_context" not in captured
 
 
-def test_profile_solve_top_level_orchestrator_can_exit_through_sparse_pc_handoff(monkeypatch) -> None:
+def test_profile_solve_top_level_orchestrator_can_exit_through_sparse_pc_replay(monkeypatch) -> None:
     nml, captured = _install_profile_solve_sparse_branch_scaffold(monkeypatch, solve_method="sparse_pc_gmres")
     sentinel = SimpleNamespace(kind="sparse-pc-result")
 

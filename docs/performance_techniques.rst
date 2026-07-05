@@ -248,7 +248,7 @@ so repeated cases that share the same equilibrium file reuse the computed data.
   payload safely.
 - The RHSMode=1 output-writing path also reuses the already-built ``grids``,
   ``geom``, and full-system operator instead of rebuilding them again during the
-  solve handoff. This removes a full operator-construction pass from
+  solve stage. This removes a full operator-construction pass from
   ``write_sfincs_jax_output_h5(...)`` on staged HSX/geometry11 reruns.
 - Disable with ``SFINCS_JAX_GEOMETRY_CACHE=0`` / ``SFINCS_JAX_OUTPUT_CACHE=0`` or
   skip disk persistence with ``SFINCS_JAX_GEOMETRY_CACHE_PERSIST=0`` /
