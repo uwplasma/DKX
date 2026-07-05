@@ -387,9 +387,11 @@ QI device evidence owner:
 ``sfincs_jax/input_compat.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Compatibility and search-order logic for equilibrium files, input normalization, and
-user overrides. This is the module to inspect first when a case fails to find a VMEC or
-Boozer file.
+Compatibility and search-order logic for equilibrium files, input normalization,
+radial-coordinate conversions, and user overrides. This is the module to
+inspect first when a case fails to find a VMEC or Boozer file, or when a
+Fortran-v3 radial-coordinate input such as ``psiHat_wish``, ``psiN_wish``,
+``rHat_wish``, or ``rN_wish`` needs to be converted consistently.
 
 ``sfincs_jax/geometry/jax_adapters.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -427,6 +429,18 @@ Geometry loading and normalized coefficient generation:
 - Boozer ``.bc`` evaluation,
 - surface metrics and scalar geometry diagnostics.
 
+``sfincs_jax/geometry/boozer.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Boozer ``.bc`` parser and geometryScheme 11/12 metric helper:
+
+- header and surface-block parsing with SFINCS-v3 sign conventions,
+- bracketing-surface selection and effective ``rN`` resolution,
+- Fourier reconstruction of ``R``, ``Z``, ``Dz``, and their angular
+  derivatives on the Boozer grid,
+- ``gpsiHatpsiHat`` reconstruction used by output diagnostics and classical
+  transport terms.
+
 ``sfincs_jax/geometry/vmec_wout.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -435,7 +449,9 @@ VMEC ``wout`` reader and radial interpolation contracts:
 - netCDF ``wout`` parsing,
 - mode/radius array convention normalization,
 - half/full-mesh interpolation rules,
-- SFINCS-compatible ``psiAHat`` and ripple-scale helpers.
+- SFINCS-compatible ``psiAHat`` and ripple-scale helpers,
+- ``gpsiHatpsiHat`` reconstruction from VMEC Fourier coefficients using the
+  same full/half-mesh derivative convention as the scheme-5 geometry evaluator.
 
 ``sfincs_jax/geometry/vmec.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
