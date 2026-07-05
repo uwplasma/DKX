@@ -1283,6 +1283,12 @@ Completed work:
   dense/CSR drop-plus-diagonal-regularization paths. Focused validation passed:
   `tests/test_sparse_assembly.py tests/test_source_tree_consolidation.py`
   as `34 passed in 3.23 s`; Ruff, compileall, and `git diff --check` passed.
+- Tranche 63: renamed the remaining stale test module
+  `test_v3_driver_strong_fallback_coverage.py` to
+  `test_rhs1_strong_preconditioner_fallback.py` and added a source-tree guard
+  against reintroducing deleted-driver terminology in test filenames. The tests
+  still protect the same RHSMode-1 strong-preconditioner fallback policy
+  contracts; no source files or runtime paths changed.
 
 Remaining consolidation steps:
 
