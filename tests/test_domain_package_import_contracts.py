@@ -256,14 +256,12 @@ MOVED_ROOT_MODULE_OWNERS = {
         "external_data_manifest",
         "resolve_external_equilibrium",
     ),
-    "sfincs_jax.workflows.postprocess_upstream": (
-        "find_upstream_utils_dir",
-        "run_upstream_util",
-    ),
     "sfincs_jax.workflows.scans": (
+        "find_upstream_utils_dir",
         "ScanResult",
         "linspace_including_endpoints",
         "run_er_scan",
+        "run_upstream_util",
     ),
     "sfincs_jax.workflows.optimization": (
         "AmbipolarRoot",
