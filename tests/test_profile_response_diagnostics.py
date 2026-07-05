@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import math
 from types import SimpleNamespace
 
 import numpy as np
 import jax.numpy as jnp
+import pytest
 
 from sfincs_jax.problems.profile_diagnostics import (
     SparsePCDirectTailMetadataContext,
     SparsePCFactorPreflightMetadataContext,
+    SparsePCGMRESStaticMetadataContext,
     SparsePCPatternMetadataContext,
     SparseRescueTailMetadataContext,
     XBlockAssembledOperatorDiagnosticsContext,
@@ -19,12 +22,14 @@ from sfincs_jax.problems.profile_diagnostics import (
     XBlockSideProbeDiagnosticsContext,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
+    fortran_reduced_xblock_result_metadata,
     record_structured_fblock_preconditioner_metadata,
     sparse_pc_direct_tail_result_metadata,
     sparse_pc_direct_tail_result_metadata_from_context,
     sparse_pc_factor_preflight_result_metadata,
     sparse_pc_factor_preflight_result_metadata_from_context,
     sparse_pc_gmres_result_metadata,
+    sparse_pc_gmres_static_metadata_from_context,
     sparse_pc_pattern_result_metadata,
     sparse_pc_pattern_result_metadata_from_context,
     sparse_rescue_tail_metadata,
@@ -83,6 +88,30 @@ def test_record_structured_fblock_preconditioner_metadata_records_assembly_summa
     assert metadata["structured_fblock_preconditioner_nnz_blocks"] == 7
     assert metadata["structured_fblock_preconditioner_data_nbytes"] == 128
     assert metadata["structured_fblock_preconditioner_metadata"] is preconditioner._sfincs_jax_structured_fblock_metadata
+
+
+def test_record_structured_fblock_preconditioner_metadata_handles_malformed_assembly() -> None:
+    metadata: dict[str, object] = {}
+
+    def preconditioner(x):
+        return x
+
+    preconditioner._sfincs_jax_structured_fblock_metadata = {
+        "selected": 0,
+        "reason": 123,
+        "assembly": "not-a-dict",
+    }
+
+    record_structured_fblock_preconditioner_metadata(
+        target=metadata,
+        preconditioner=preconditioner,
+    )
+
+    assert metadata["structured_fblock_preconditioner_enabled"] is True
+    assert metadata["structured_fblock_preconditioner_selected"] is False
+    assert metadata["structured_fblock_preconditioner_reason"] == "123"
+    assert metadata["structured_fblock_preconditioner_nnz_blocks"] == 0
+    assert metadata["structured_fblock_preconditioner_data_nbytes"] == 0
 
 
 def test_prepare_cached_qi_correction_basis_skips_inactive_or_disabled() -> None:
@@ -1284,6 +1313,127 @@ def test_sparse_pc_gmres_result_metadata_preserves_driver_schema() -> None:
         == {"kind": "precomputed"}
     )
     assert precomputed_metadata["sparse_pc_direct_tail_true_active_block_species_count"] == 2
+
+
+def test_sparse_pc_gmres_static_metadata_covers_global_branch() -> None:
+    metadata = sparse_pc_gmres_static_metadata_from_context(
+        SparsePCGMRESStaticMetadataContext(
+            op=SimpleNamespace(total_size=np.int64(17)),
+            fortran_reduced_sparse_pc=False,
+            fortran_reduced_sparse_pc_backend="unused",
+            fortran_reduced_sparse_pc_backend_reason="unused",
+            fortran_reduced_xblock_min_size=np.int64(999),
+            pc_restart=np.int64(12),
+            pc_maxiter=np.int64(34),
+            sparse_pc_first_attempt_maxiter=np.int64(5),
+            pc_shift=np.float64(1.0e-9),
+            sparse_pc_factor_dtype_initial=np.dtype(np.float32),
+            sparse_pc_preconditioner_operator="full",
+            sparse_pc_factorization="ilu",
+            sparse_pc_default_factor_kind="ilu",
+            sparse_pc_default_ilu_fill_factor=np.float64(4.0),
+            sparse_pc_default_ilu_drop_tol=np.float64(1.0e-4),
+            sparse_pc_default_pattern_color_batch=np.int64(6),
+            preconditioner_x=np.int64(1),
+            preconditioner_x_min_l=np.int64(2),
+            preconditioner_xi=np.int64(3),
+            preconditioner_species=np.int64(4),
+            sparse_pc_permc_spec="COLAMD",
+            sparse_pc_default_permc_spec="MMD_AT_PLUS_A",
+            sparse_pc_use_active_dof=1,
+            sparse_pc_linear_size=np.int64(13),
+            sparse_pc_fp_dense_velocity_block=np.bool_(True),
+        )
+    )
+
+    assert metadata["solver_kind"] == "sparse_pc_gmres"
+    assert metadata["sparse_pc_backend"] == "global"
+    assert metadata["sparse_pc_backend_reason"] == "not_fortran_reduced"
+    assert metadata["sparse_pc_xblock_min_size"] is None
+    assert metadata["sparse_pc_fortran_reduced"] is False
+    assert metadata["sparse_pc_full_size"] == 17
+    assert metadata["sparse_pc_fp_dense_velocity_block"] is True
+    assert metadata["sparse_pc_initial_factor_dtype"] == "float32"
+
+
+def test_sparse_pc_gmres_result_metadata_accepts_precomputed_sections_and_zero_target() -> None:
+    state = {
+        "history": (),
+        "mv_count": np.int64(0),
+        "sparse_pc_post_minres_steps": np.int64(0),
+        "sparse_pc_post_minres_alphas": (),
+        "sparse_pc_post_minres_alpha_clip": np.float64(2.0),
+        "sparse_pc_post_minres_min_improvement": np.float64(0.1),
+        "sparse_pc_post_minres_residual_before": None,
+        "sparse_pc_post_minres_residual_after": None,
+        "sparse_pc_post_minres_history": (),
+        "sparse_pc_post_minres_error": "not_attempted",
+        "sparse_pc_factor_dtype_used": "float64",
+        "sparse_pc_factor_dtype_retry": None,
+        "sparse_pc_factor_preflight_metadata": {
+            "sparse_pc_factor_preflight_enabled": False,
+        },
+        "sparse_pc_direct_tail_metadata": {
+            "sparse_pc_fortran_reduced_direct_tail_enabled": False,
+        },
+        "sparse_pc_pattern_metadata": {
+            "sparse_pattern_nnz": 0,
+            "sparse_pattern_scope": "precomputed",
+        },
+        "sparse_pc_static_metadata": {
+            "solver_kind": "sparse_pc_gmres",
+            "sparse_pc_backend": "global",
+        },
+        "setup_s": np.float64(0.1),
+        "solve_s": np.float64(0.2),
+        "sparse_pc_elapsed_s": np.float64(0.3),
+        "pc_factor_s": np.float64(0.0),
+        "factor_bundle_pc": None,
+        "_operator_bundle_pc": None,
+        "target": 0.0,
+        "residual_norm_sparse_pc": 1.0,
+        "sparse_pc_accepted_converged": False,
+        "sparse_pc_factor_quality_rejected": True,
+    }
+
+    metadata = sparse_pc_gmres_result_metadata(state)
+
+    assert metadata["solver_kind"] == "sparse_pc_gmres"
+    assert metadata["iterations"] == 0
+    assert metadata["matvecs"] == 0
+    assert metadata["elapsed_s"] == 0.3
+    assert metadata["sparse_pc_factor_elapsed_s"] is None
+    assert metadata["sparse_pc_operator_csr_nbytes_estimate"] is None
+    assert math.isinf(metadata["sparse_pc_residual_ratio_to_target"])
+    assert metadata["sparse_pc_factor_quality_rejected"] is True
+    assert metadata["sparse_pattern_scope"] == "precomputed"
+    assert metadata["sparse_pc_factor_preflight_enabled"] is False
+    assert metadata["sparse_pc_fortran_reduced_direct_tail_enabled"] is False
+
+
+@pytest.mark.parametrize(
+    ("bad_key", "message"),
+    [
+        ("moment_schur_metadata", "moment_schur_metadata must be a mapping"),
+        ("moment_schur_stats", "moment_schur_stats must be a mapping"),
+        ("global_coupling_metadata", "global_coupling_metadata must be a mapping"),
+        ("global_coupling_stats", "global_coupling_stats must be a mapping"),
+    ],
+)
+def test_fortran_reduced_xblock_result_metadata_rejects_non_mapping_sections(
+    bad_key: str,
+    message: str,
+) -> None:
+    state = {
+        "moment_schur_metadata": {},
+        "moment_schur_stats": {},
+        "global_coupling_metadata": {},
+        "global_coupling_stats": {},
+    }
+    state[bad_key] = object()
+
+    with pytest.raises(TypeError, match=message):
+        fortran_reduced_xblock_result_metadata(state)
 
 
 def test_sparse_pc_factor_preflight_result_metadata_context_matches_state() -> None:

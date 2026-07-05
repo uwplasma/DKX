@@ -75,6 +75,15 @@ The main structural refactor is functionally complete:
   `tests/test_transport_parallel_payload.py`,
   `tests/test_transport_parallel_runtime.py`, and
   `tests/test_transport_parallel_validation.py` as `37 passed in 0.44 s`.
+- Profile sparse-PC diagnostics now cover malformed structured f-block
+  metadata, the non-Fortran/global sparse-PC static metadata branch,
+  precomputed metadata-section injection, zero-target residual ratios, and
+  fail-fast type guards for Fortran-reduced xblock metadata sections. These
+  are bounded report-schema and solver-policy tests for production diagnostics
+  and add no solve time to CI. Focused validation passed:
+  `tests/test_profile_response_diagnostics.py` as `25 passed in 0.57 s`; the
+  broader diagnostics/finalization bundle passed as `51 passed in 0.67 s`;
+  source-tree and import-contract guards passed as `35 passed in 2.83 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
