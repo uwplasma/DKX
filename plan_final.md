@@ -550,10 +550,13 @@ The main structural refactor is functionally complete:
 - Transport preconditioner coverage now includes reduced-view equivalence for
   collision, species-x, angular FFT, and FP line factors; singular collision
   and x-grid coarse pseudo-inverse fallbacks; and ExB/DKES angular branches for
-  both PAS and full-FP Fourier preconditioners. Focused validation passed:
-  `tests/test_transport_matrix_preconditioners.py` as `16 passed in 4.81 s`,
+  both PAS and full-FP Fourier preconditioners. The current pass additionally
+  covers FP-builder no-FP fallback to the collisionless angular factor, Phi1
+  reduced-view Schur bypass, x-block host-factor apply failure fallback, and
+  rejected structured-fblock selection fallback. Focused validation passed:
+  `tests/test_transport_matrix_preconditioners.py` as `19 passed in 5.60 s`,
   and the broader transport preconditioner/policy bundle passed as
-  `59 passed in 4.72 s`.
+  `59 passed in 4.72 s` before this latest branch tranche.
 - RHSMode=1 output policy coverage now includes the remaining automatic
   solve-method branches for tokamak full-FP no-Er sparse-PC, 3D full-FP
   sparse-PC, host dense shortcut reporting, dense-auto skip reporting,

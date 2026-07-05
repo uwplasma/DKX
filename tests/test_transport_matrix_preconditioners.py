@@ -469,6 +469,29 @@ def test_transport_fp_preconditioners_respect_memory_caps_and_fallbacks(monkeypa
     assert len(_TRANSPORT_SXBLOCK_PRECOND_CACHE) == 1
 
 
+def test_transport_fp_builders_without_fp_route_to_collisionless_tzfft(monkeypatch) -> None:
+    """FP-specific transport preconditioners degrade to the collisionless angular factor."""
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_TZFFT_REG", "0.2")
+    op = _transport_operator(include_fp=False)
+    vector = _vector(op)
+
+    _clear_transport_caches()
+    expected = np.asarray(tm.build_rhsmode23_tzfft_preconditioner(op=op)(vector))
+    builders = (
+        tm.build_rhsmode23_fp_tzfft_preconditioner,
+        tm.build_rhsmode23_fp_tzfft_line_preconditioner,
+        tm.build_rhsmode23_fp_tzfft_line_schur_preconditioner,
+        tm.build_rhsmode23_fp_local_geom_line_preconditioner,
+        tm.build_rhsmode23_fp_xblock_tz_lu_preconditioner,
+        tm.build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner,
+        tm.build_rhsmode23_fp_structured_fblock_lu_preconditioner,
+    )
+    for builder in builders:
+        _clear_transport_caches()
+        result = np.asarray(builder(op=op)(vector))
+        np.testing.assert_allclose(result, expected, rtol=3e-6, atol=3e-6)
+
+
 def test_transport_fp_line_and_local_geometry_factors_are_finite_and_cached(monkeypatch) -> None:
     op = _transport_operator()
     vector = _vector(op)
@@ -492,6 +515,41 @@ def test_transport_fp_line_and_local_geometry_factors_are_finite_and_cached(monk
     assert local_result.shape == vector.shape
     assert bool(jnp.all(jnp.isfinite(local_result)))
     assert len(_TRANSPORT_FP_LOCAL_GEOM_LINE_PRECOND_CACHE) == 1
+
+
+def test_transport_fp_schur_wrappers_bypass_for_phi1_reduced_views(monkeypatch) -> None:
+    """Schur coarse wrappers fall back to their base factors for unsupported Phi1 solves."""
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_DTYPE", "float64")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_MAX_MB", "128")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_FACTOR_MAX_MB", "128")
+    op = _transport_operator()
+    op.include_phi1 = True
+    op.point_at_x0 = True
+    vector = _vector(op)
+    _, reduce_full, expand_reduced = _reduction_pair(op, stride=4)
+    reduced_rhs = reduce_full(vector)
+
+    _clear_transport_caches()
+    base_line = tm.build_rhsmode23_fp_tzfft_line_preconditioner(op=op)
+    line_schur = tm.build_rhsmode23_fp_tzfft_line_schur_preconditioner(
+        op=op,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
+    expected_line = reduce_full(base_line(expand_reduced(reduced_rhs)))
+    np.testing.assert_allclose(np.asarray(line_schur(reduced_rhs)), np.asarray(expected_line), rtol=3e-6, atol=3e-6)
+    assert len(_TRANSPORT_FP_TZFFT_LINE_SCHUR_PRECOND_CACHE) == 0
+
+    _clear_transport_caches()
+    base_xblock = tm.build_rhsmode23_fp_xblock_tz_lu_preconditioner(op=op)
+    xblock_schur = tm.build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner(
+        op=op,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
+    expected_xblock = reduce_full(base_xblock(expand_reduced(reduced_rhs)))
+    np.testing.assert_allclose(np.asarray(xblock_schur(reduced_rhs)), np.asarray(expected_xblock), rtol=3e-6, atol=3e-6)
+    assert len(_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_PRECOND_CACHE) == 0
 
 
 def test_transport_fp_xblock_tz_lu_factor_is_finite_cached_and_reduced(monkeypatch) -> None:
@@ -534,6 +592,34 @@ def test_transport_fp_xblock_tz_lu_factor_is_finite_cached_and_reduced(monkeypat
     expected = reduce_full(full_preconditioner(expand_reduced(reduced_rhs)))
     np.testing.assert_allclose(np.asarray(reduced_preconditioner(reduced_rhs)), np.asarray(expected))
     assert len(_TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE) == 1
+
+
+def test_transport_fp_xblock_tz_lu_factor_solve_failure_keeps_bounded_identity_fallback(
+    monkeypatch,
+) -> None:
+    """A per-block host-factor failure during apply does not poison the full transport solve."""
+    op = _transport_operator()
+    vector = _vector(op)
+
+    class _RaisingFactor:
+        factor_nbytes_estimate = 16
+        factor_nnz_estimate = 4
+
+        def solve(self, rhs: np.ndarray) -> np.ndarray:
+            del rhs
+            raise RuntimeError("synthetic block solve failure")
+
+    monkeypatch.setattr(tm, "factorize_host_sparse_operator", lambda *args, **kwargs: _RaisingFactor())
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_MAX_MB", "128")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_FACTOR_MAX_MB", "128")
+    _clear_transport_caches()
+
+    preconditioner = tm.build_rhsmode23_fp_xblock_tz_lu_preconditioner(op=op)
+    result = np.asarray(preconditioner(vector))
+
+    np.testing.assert_allclose(result, np.asarray(vector), rtol=0.0, atol=0.0)
+    cache = next(iter(_TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE.values()))
+    assert cache.metadata["block_failures"] == 0
 
 
 def test_transport_fp_xblock_tz_lu_uses_diagonal_and_memory_fallbacks(monkeypatch) -> None:
@@ -690,6 +776,22 @@ def test_transport_structured_fblock_lu_uses_factor_metadata_and_memory_fallback
     fallback = tm.build_rhsmode23_fp_structured_fblock_lu_preconditioner(op=op)
     np.testing.assert_allclose(
         np.asarray(fallback(vector)),
+        np.asarray(tm.build_rhsmode23_sxblock_preconditioner(op=op)(vector)),
+    )
+    assert len(_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE) == 0
+
+    class _RejectedSelection:
+        selected = False
+        matrix = None
+
+        def to_dict(self) -> dict[str, object]:
+            return {"selected": False}
+
+    monkeypatch.setattr(tm, "select_structured_rhs1_fblock_csr_operator", lambda *args, **kwargs: _RejectedSelection())
+    _clear_transport_caches()
+    rejected = tm.build_rhsmode23_fp_structured_fblock_lu_preconditioner(op=op)
+    np.testing.assert_allclose(
+        np.asarray(rejected(vector)),
         np.asarray(tm.build_rhsmode23_sxblock_preconditioner(op=op)(vector)),
     )
     assert len(_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE) == 0
