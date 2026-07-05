@@ -8,8 +8,10 @@ import pytest
 
 import sfincs_jax.problems.profile_solve as profile_solve
 import sfincs_jax.problems.profile_preconditioner_build as pb
+import sfincs_jax.problems.profile_policies as profile_policies
 import sfincs_jax.problems.profile_sparse_direct as sparse_direct
 import sfincs_jax.solvers.preconditioner_full_fp_structured as structured_fblock
+import sfincs_jax.solvers.path_policy as path_policy
 from sfincs_jax.solvers import krylov_dispatch
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.solvers.preconditioning import _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE
@@ -653,7 +655,7 @@ def test_matvec_submatrix_uses_unsharded_operator_inside_vmap(monkeypatch) -> No
 
 
 def test_rhs1_dkes_gmres_budget_respects_explicit_limits() -> None:
-    restart, maxiter, restart_defaulted, maxiter_defaulted = profile_solve._rhs1_dkes_gmres_budget(
+    restart, maxiter, restart_defaulted, maxiter_defaulted = path_policy.rhs1_dkes_gmres_budget(
         restart=20,
         maxiter=20,
         restart_forced=True,
@@ -667,7 +669,7 @@ def test_rhs1_dkes_gmres_budget_respects_explicit_limits() -> None:
 
 
 def test_rhs1_dkes_gmres_budget_applies_defaults_when_unforced() -> None:
-    restart, maxiter, restart_defaulted, maxiter_defaulted = profile_solve._rhs1_dkes_gmres_budget(
+    restart, maxiter, restart_defaulted, maxiter_defaulted = path_policy.rhs1_dkes_gmres_budget(
         restart=20,
         maxiter=20,
         restart_forced=False,
@@ -681,7 +683,7 @@ def test_rhs1_dkes_gmres_budget_applies_defaults_when_unforced() -> None:
 
 
 def test_rhs1_dkes_gmres_budget_caps_unforced_restart() -> None:
-    restart, maxiter, restart_defaulted, maxiter_defaulted = profile_solve._rhs1_dkes_gmres_budget(
+    restart, maxiter, restart_defaulted, maxiter_defaulted = path_policy.rhs1_dkes_gmres_budget(
         restart=200,
         maxiter=None,
         restart_forced=False,
@@ -695,11 +697,12 @@ def test_rhs1_dkes_gmres_budget_caps_unforced_restart() -> None:
 
 
 def test_rhs1_pas_tz_guarded_structured_levels_parse_aliases() -> None:
-    assert profile_solve._rhs1_pas_tz_guarded_structured_levels("") == ()
-    assert profile_solve._rhs1_pas_tz_guarded_structured_levels("off") == ()
-    assert profile_solve._rhs1_pas_tz_guarded_structured_levels("structured") == ("xmg", "collision")
-    assert profile_solve._rhs1_pas_tz_guarded_structured_levels("x+coll+x") == ("xmg", "collision")
-    assert profile_solve._rhs1_pas_tz_guarded_structured_levels("unknown,collision_diag") == ("collision",)
+    parse = profile_policies.parse_rhs1_pas_tz_guarded_structured_levels
+    assert parse("") == ()
+    assert parse("off") == ()
+    assert parse("structured") == ("xmg", "collision")
+    assert parse("x+coll+x") == ("xmg", "collision")
+    assert parse("unknown,collision_diag") == ("collision",)
 
 
 def test_ksp_iteration_solver_label_reports_lgmres_method() -> None:

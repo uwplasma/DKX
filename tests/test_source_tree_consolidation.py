@@ -296,6 +296,18 @@ def test_structured_csr_docs_tests_use_profile_setup_owner() -> None:
     assert "sfincs_jax.problems.profile_setup" in text
 
 
+def test_rhs1_dispatch_coverage_uses_canonical_helper_owners() -> None:
+    """RHSMode-1 dispatch tests may run solves but should not assert helper aliases."""
+
+    text = (REPO_ROOT / "tests" / "test_profile_rhs1_dispatch_coverage.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "profile_solve._" not in text
+    assert "sfincs_jax.problems.profile_policies" in text
+    assert "sfincs_jax.solvers.path_policy" in text
+
+
 def test_test_filenames_do_not_reintroduce_deleted_v3_driver_label() -> None:
     """Keep test modules named after the canonical behavior they protect."""
 

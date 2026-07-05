@@ -1434,6 +1434,16 @@ Completed work:
   `tests/test_source_tree_consolidation.py tests/test_structured_csr_docs.py`
   as `38 passed in 3.27 s`; the compact owner bundle passed as
   `143 passed in 31.30 s`; Ruff, `compileall`, and `git diff --check` passed.
+- Tranche 81: moved the remaining RHSMode-1 dispatch-coverage helper checks
+  off private `profile_solve._*` aliases. DKES GMRES budget tests now use
+  `solvers/path_policy.py`, and PAS-TZ guarded structured-level parsing tests
+  now use `problems/profile_policies.py`. The file still imports
+  `profile_solve.py` for high-level solve integration, but a source-tree guard
+  prevents private solve-helper assertions from returning. Focused validation
+  passed:
+  `tests/test_source_tree_consolidation.py tests/test_profile_rhs1_dispatch_coverage.py`
+  as `71 passed in 42.48 s`; the broader owner/wrapper bundle passed as
+  `192 passed in 70.54 s`; Ruff, `compileall`, and `git diff --check` passed.
 
 Remaining consolidation steps:
 
