@@ -922,8 +922,8 @@ def rhs1_run_primary_krylov_and_update_replay(
 ) -> tuple[Any, Any, float]:
     """Run a primary Krylov solve and record the replay problem.
 
-    The legacy driver initialized replay restart/maxiter once near the top of
-    the solve. Most primary-solve replay updates only replaced the linear
+    The solve orchestrator initializes replay restart/maxiter once near the top
+    of the solve. Most primary-solve replay updates only replace the linear
     problem and solver kind, so ``update_krylov_controls`` stays opt-in.
     """
 

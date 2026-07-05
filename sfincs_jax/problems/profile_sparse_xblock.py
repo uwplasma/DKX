@@ -5163,7 +5163,7 @@ def xblock_sparse_pc_final_payload(
     if context.restart is not None:
         metadata_state["pc_restart"] = int(context.restart)
     if context.post_corrections is not None:
-        metadata_state.update(context.post_corrections.driver_state())
+        metadata_state.update(context.post_corrections.metadata_state())
     if (
         "xblock_solver_kind" not in metadata_state
         and context.linear_size is not None
@@ -7176,8 +7176,8 @@ class XBlockPostSolveCorrectionResult:
     post_residual_equation_residual_before: float | None
     post_residual_equation_residual_after: float | None
 
-    def driver_state(self) -> dict[str, object]:
-        """Return historical driver-state keys consumed by final metadata."""
+    def metadata_state(self) -> dict[str, object]:
+        """Return stored solver metadata keys consumed by final metadata."""
 
         return {
             name: getattr(self, name)

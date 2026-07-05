@@ -879,7 +879,7 @@ def retry_sparse_pc_factor_dtype_from_driver_state(
     build_host_sparse_direct_factor_from_matvec: Callable[..., tuple[Any, Any]],
     run_sparse_pc_gmres_once_callback: Callable[..., tuple[np.ndarray, float, float, Sequence[float], float]],
 ) -> SparsePCFactorDtypeRetryResult:
-    """Retry sparse-PC factor precision using the historical driver state names."""
+    """Retry sparse-PC factor precision using stored sparse-PC solve state."""
 
     def build_factor(factor_dtype_arg: np.dtype) -> tuple[Any, Any]:
         return build_host_sparse_direct_factor_from_matvec(
@@ -1018,7 +1018,7 @@ def sparse_pc_gmres_completion_message(
 def emit_sparse_pc_gmres_completion_from_driver_state(
     state: Mapping[str, object],
 ) -> None:
-    """Emit the sparse-PC GMRES completion line from historical driver names."""
+    """Emit the sparse-PC GMRES completion line from stored solve state."""
 
     emit = state["emit"]
     if emit is None:
@@ -1043,7 +1043,7 @@ def sparse_pc_gmres_final_payload_from_driver_state(
     *,
     expand_reduced: ArrayFn,
 ) -> SparsePCGMRESFinalPayload:
-    """Build the final sparse-PC solve payload from historical driver names."""
+    """Build the final sparse-PC solve payload from stored solve state."""
 
     residual_norm = float(state["residual_norm_sparse_pc"])
     metadata_state = state if isinstance(state, MutableMapping) else dict(state)
@@ -1484,7 +1484,7 @@ def apply_sparse_pc_post_minres_from_driver_state(
     *,
     minres_correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[float]]],
 ) -> SparsePCPostMinresUpdateResult:
-    """Apply sparse-PC post-minres using the historical driver state names."""
+    """Apply sparse-PC post-minres using stored sparse-PC solve state."""
 
     return apply_sparse_pc_post_minres_if_needed(
         SparsePCPostMinresUpdateContext(

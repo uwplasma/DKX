@@ -3209,7 +3209,7 @@ def test_run_xblock_post_solve_corrections_applies_ordered_stages() -> None:
     assert any("post-minres improved" in message for _, message in messages)
     assert any("post-coarse improved" in message for _, message in messages)
 
-    state = result.driver_state()
+    state = result.metadata_state()
     assert state["post_residual_equation_include_qi_basis"] is True
     assert state["post_residual_equation_direction_counts"] == (1,)
     assert state["post_minres_alphas"] == (0.5,)
@@ -13308,7 +13308,7 @@ def test_xblock_sparse_pc_final_payload_uses_explicit_context(
             restart=2,
             diagnostic_state={"diagnostic_token": "kept"},
             post_corrections=SimpleNamespace(
-                driver_state=lambda: {"post_minres_alphas": (0.25,)}
+                metadata_state=lambda: {"post_minres_alphas": (0.25,)}
             ),
         ),
         expand_reduced=lambda x: jnp.asarray([x[1], x[0]], dtype=x.dtype),
@@ -13371,7 +13371,7 @@ def test_xblock_sparse_pc_final_payload_from_driver_state_sets_gate_and_expands(
             [jnp.asarray([0.0], dtype=x.dtype), x]
         ),
         post_corrections=SimpleNamespace(
-            driver_state=lambda: {"post_minres_alphas": (0.5,)}
+            metadata_state=lambda: {"post_minres_alphas": (0.5,)}
         ),
     )
 

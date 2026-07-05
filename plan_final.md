@@ -1478,6 +1478,18 @@ Completed work:
   as `112 passed in 4.81 s`; the broader solver-replay/sparse-dispatch bundle
   passed as `472 passed in 48.55 s`; Ruff, `compileall`, and
   `git diff --check` passed.
+- Tranche 85: removed active-source "legacy driver" / "historical driver"
+  wording from profile diagnostics, solver replay diagnostics, sparse-PC
+  finalization, sparse x-block metadata, RHSMode-1 policy parsing, PAS
+  composite builders, shared preconditioning helpers, structured f-block docs,
+  and the source-map page. The local x-block post-correction metadata callback
+  is now `metadata_state()` instead of `driver_state()`, with tests updated to
+  the new contract. This keeps current solver behavior unchanged while making
+  the review surface describe the present architecture. Focused validation
+  passed:
+  `tests/test_profile_response_sparse_pc.py tests/test_profile_response_diagnostics.py tests/test_profile_solve_policy_helpers.py tests/test_profile_solve_policy_coverage.py tests/test_pas_preconditioner_policy.py tests/test_preconditioner_setup.py`
+  as `421 passed in 4.22 s`; Ruff, `compileall`, and `git diff --check`
+  passed.
 
 Remaining consolidation steps:
 

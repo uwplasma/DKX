@@ -545,7 +545,7 @@ def sparse_pc_direct_tail_result_metadata_from_context(
 def sparse_pc_direct_tail_result_metadata(
     state: Mapping[str, object],
 ) -> dict[str, object]:
-    """Return direct-tail sparse-PC diagnostics from legacy driver-state keys."""
+    """Return direct-tail sparse-PC diagnostics from solve-state keys."""
 
     return sparse_pc_direct_tail_result_metadata_from_context(
         SparsePCDirectTailMetadataContext(
@@ -651,7 +651,7 @@ def sparse_pc_factor_preflight_result_metadata_from_context(
 def sparse_pc_factor_preflight_result_metadata(
     state: Mapping[str, object],
 ) -> dict[str, object]:
-    """Return factor-preflight diagnostics from historical driver names."""
+    """Return factor-preflight diagnostics from stored solver metadata names."""
 
     return sparse_pc_factor_preflight_result_metadata_from_context(
         SparsePCFactorPreflightMetadataContext(
@@ -851,7 +851,7 @@ def sparse_pc_pattern_result_metadata_from_context(
 def sparse_pc_pattern_result_metadata(
     state: Mapping[str, object],
 ) -> dict[str, object]:
-    """Return sparse pattern diagnostics from historical driver names."""
+    """Return sparse pattern diagnostics from stored solver metadata names."""
 
     return sparse_pc_pattern_result_metadata_from_context(
         SparsePCPatternMetadataContext(
@@ -867,8 +867,8 @@ def sparse_pc_gmres_result_metadata(
 ) -> dict[str, object]:
     """Return final metadata for generic sparse-PC GMRES solves.
 
-    This helper is deliberately state-mapping based to preserve the historical
-    driver key names while moving the metadata schema out of the solve loop.
+    This helper is deliberately state-mapping based to preserve stored metadata
+    key names while keeping schema conversion out of the solve loop.
     """
 
     target = float(state["target"])
@@ -1564,7 +1564,7 @@ def xblock_qi_device_preconditioner_diagnostics_from_context(
 def xblock_qi_device_preconditioner_diagnostics(
     scope: Mapping[str, object],
 ) -> dict[str, object]:
-    """Return QI-device diagnostics from historical state names."""
+    """Return QI-device diagnostics from stored solver metadata names."""
 
     return _xblock_qi_device_preconditioner_diagnostics_from_scope(scope)
 
@@ -1657,7 +1657,7 @@ def xblock_qi_deflated_preconditioner_diagnostics_from_context(
 def xblock_qi_deflated_preconditioner_diagnostics(
     scope: Mapping[str, object],
 ) -> dict[str, object]:
-    """Return QI deflated diagnostics from historical state names."""
+    """Return QI deflated diagnostics from stored solver metadata names."""
 
     return xblock_qi_deflated_preconditioner_diagnostics_from_context(
         XBlockQIDeflatedPreconditionerDiagnosticsContext(
@@ -2033,7 +2033,7 @@ def xblock_coarse_correction_diagnostics_from_context(
 def xblock_coarse_correction_diagnostics(
     scope: Mapping[str, object],
 ) -> dict[str, object]:
-    """Return coarse-correction diagnostics from historical state names."""
+    """Return coarse-correction diagnostics from stored solver metadata names."""
 
     return xblock_coarse_correction_diagnostics_from_context(
         XBlockCoarseCorrectionDiagnosticsContext(
@@ -2359,7 +2359,7 @@ def xblock_qi_seed_preconditioner_diagnostics_from_context(
 def xblock_qi_seed_preconditioner_diagnostics(
     scope: Mapping[str, object],
 ) -> dict[str, object]:
-    """Return QI seed diagnostics from historical state names."""
+    """Return QI seed diagnostics from stored solver metadata names."""
 
     return _xblock_qi_seed_preconditioner_diagnostics_from_scope(scope)
 

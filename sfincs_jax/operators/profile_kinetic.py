@@ -1,7 +1,7 @@
 """Partial RHSMode=1 f-block assembly using JAX-native block operators.
 
-This module is the integration seam between the legacy ``V3FBlockOperator``
-term objects and the new structured block-COO architecture.  It intentionally
+This module is the integration seam between ``V3FBlockOperator`` term objects
+and the structured block-COO architecture.  It intentionally
 assembles only terms that have been parity-tested as block stencils; unsupported
 terms are reported explicitly instead of silently falling back to dense probing.
 """

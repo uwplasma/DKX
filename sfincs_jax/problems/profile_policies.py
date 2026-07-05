@@ -5983,7 +5983,7 @@ def resolve_rhs1_preconditioner_route_setup(
 ) -> dict[str, Any]:
     """Resolve RHSMode=1 preconditioner routing before Krylov branch setup.
 
-    This function owns the policy-only part of the historical driver block:
+    This function owns the policy-only part of RHSMode=1 route selection:
     environment parsing, automatic FP/PAS preconditioner selection, sharded-run
     downgrades, GPU PAS tolerance tightening, and the final policy-hint update.
     It intentionally receives callbacks through ``context`` to avoid importing
@@ -6582,8 +6582,8 @@ def resolve_rhs1_preconditioner_route_setup(
 def canonical_rhs1_preconditioner_kind(raw: str | None) -> str | None:
     """Canonicalize ``SFINCS_JAX_RHSMODE1_PRECONDITIONER`` aliases.
 
-    Unknown non-empty aliases intentionally return ``None`` to preserve the
-    historical driver behavior for unrecognized values.
+    Unknown non-empty aliases intentionally return ``None`` so unrecognized
+    values fail closed without changing default solver selection.
     """
     key = str(raw or "").strip().lower()
     if not key:

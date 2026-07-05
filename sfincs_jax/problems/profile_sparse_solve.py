@@ -1004,7 +1004,7 @@ def try_run_requested_sparse_pc_gmres_branch(
             direct_tail_true_coupled_coarse_beta_max,
             direct_tail_true_coupled_coarse_accept_base_improvement,
             direct_tail_true_coupled_coarse_base_improvement_override_used,
-        ) = direct_tail_rescue_policy_setup.driver_rescue_tuple()
+        ) = direct_tail_rescue_policy_setup.solve_rescue_tuple()
         residual_vec_current = jnp.asarray(sparse_pc_rhs, dtype=jnp.float64)
         if bool(factor_preflight_enabled) and x0_sparse is None:
             try:
@@ -3748,10 +3748,10 @@ class SparsePCDirectTailRescuePolicySetupResult:
     direct_tail_true_coupled_coarse_policy: DirectTailCoupledCoarseRescuePolicy
     rescue_values: Mapping[str, object]
 
-    def driver_rescue_tuple(self) -> tuple[object, ...]:
-        """Return legacy driver locals in the order used by ``solve.py``.
+    def solve_rescue_tuple(self) -> tuple[object, ...]:
+        """Return solve-local rescue state in the order used by orchestration.
 
-        This keeps the current driver behavior stable while the surrounding
+        This keeps current solve behavior stable while the surrounding
         sparse-PC rescue stages are still being collapsed into owner modules.
         """
 

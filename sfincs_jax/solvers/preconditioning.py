@@ -1371,8 +1371,8 @@ def precond_chunk_cols(
     """Choose how many basis columns to probe at once during setup.
 
     The explicit column override wins over the memory-budget estimate. Invalid
-    environment values deliberately fall back to conservative defaults, matching
-    the historical driver behavior.
+    environment values deliberately fall back to conservative defaults so
+    malformed overrides do not change solver behavior.
     """
 
     env = os.environ if environ is None else environ

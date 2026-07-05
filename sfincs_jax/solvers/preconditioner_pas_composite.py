@@ -31,8 +31,8 @@ class RHS1PasCompositeBuilders:
     """Builder bundle used by PAS composite preconditioners.
 
     The composite policies live in this module, while the individual line,
-    angular, collision, and x-coarse builders can still be supplied by the
-    driver compatibility facade or by tests.
+    angular, collision, and x-coarse builders are supplied by the solve
+    orchestration layer or by tests.
     """
 
     pas_tokamak_theta_applicable: ApplicabilityPredicate
@@ -52,10 +52,10 @@ class RHS1PasFamilyBuilders:
     """RHSMode=1 PAS-family dependency bundle.
 
     This object keeps the PAS preconditioner-family wiring near the PAS
-    implementations. The production driver supplies the current low-level
-    builders so legacy monkeypatch-based tests can still override those names,
-    but the PAS package owns how the family composes tokamak-theta, theta-zeta,
-    lite, hybrid, Schur, and x-block ILU variants.
+    implementations. The solve orchestration layer supplies the current
+    low-level builders so tests can override those callables without changing
+    how the PAS family composes tokamak-theta, theta-zeta, lite, hybrid, Schur,
+    and x-block ILU variants.
     """
 
     pas_tokamak_theta_applicable: ApplicabilityPredicate
