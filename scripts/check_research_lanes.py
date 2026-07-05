@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import sys
 
-from sfincs_jax.validation.research_lanes import check_research_lane_completion_file
+from sfincs_jax.validation.artifacts import check_research_lane_completion_file
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
