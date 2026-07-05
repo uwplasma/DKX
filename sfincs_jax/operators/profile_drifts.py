@@ -1028,22 +1028,6 @@ def _charge_scalar(operator: Any, label: str) -> float:
     return z
 
 
-def _append_scalar(
-    rows: list[int],
-    cols: list[int],
-    values: list[float],
-    row: int,
-    col: int,
-    value: float,
-    threshold: float,
-) -> None:
-    if threshold > 0.0 and abs(value) <= threshold:
-        return
-    rows.append(int(row))
-    cols.append(int(col))
-    values.append(float(value))
-
-
 __all__ = [
     "build_collisionless_f_block_operator",
     "build_er_xdot_f_block_operator",

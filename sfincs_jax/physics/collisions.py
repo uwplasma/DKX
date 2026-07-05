@@ -55,26 +55,6 @@ def _psi_chandra(x: jnp.ndarray) -> jnp.ndarray:
     return jnp.where(small, series, num / den)
 
 
-def _psi_chandra_np(x: np.ndarray) -> np.ndarray:
-    """NumPy version of :func:`_psi_chandra` used in collision-operator precomputations."""
-    x = np.asarray(x, dtype=np.float64)
-    sqrt_pi = float(_V3_SQRTPI)
-    num = _erf_np(x) - (2.0 / sqrt_pi) * x * np.exp(-(x * x))
-    den = 2.0 * x * x
-    out = np.empty_like(x)
-    eps = 1e-5
-    small = np.abs(x) < eps
-    x_small = x[small]
-    x2_small = x_small * x_small
-    out[small] = (
-        (2.0 / 3.0) * x_small
-        - (2.0 / 5.0) * x_small * x2_small
-        + (1.0 / 7.0) * x_small * x2_small * x2_small
-    ) / sqrt_pi
-    out[~small] = num[~small] / den[~small]
-    return out
-
-
 def nu_d_hat_pitch_angle_scattering_v3(
     *,
     x: jnp.ndarray,  # (Nx,)

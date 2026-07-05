@@ -220,22 +220,6 @@ def sparse_rescue_tail_metadata(scope: Mapping[str, object]) -> dict[str, object
     }
 
 
-def _state_bool(state: Mapping[str, object], name: str) -> bool:
-    return bool(state[name])
-
-
-def _state_int(state: Mapping[str, object], name: str) -> int:
-    return int(state[name])
-
-
-def _state_float(state: Mapping[str, object], name: str) -> float:
-    return float(state[name])
-
-
-def _state_str(state: Mapping[str, object], name: str) -> str:
-    return str(state[name])
-
-
 _DIRECT_TAIL_BOOL_SUFFIXES = (
     "residual_coarse_requested",
     "residual_coarse_selected",

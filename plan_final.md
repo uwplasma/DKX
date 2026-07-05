@@ -252,6 +252,14 @@ The main structural refactor is functionally complete:
   and import-contract guards passed as `35 passed in 2.85 s`. This reduced
   `problems/profile_solve.py` to `4351` lines and
   `problems/profile_sparse_xblock.py` to `7681` lines without adding files.
+- A private-symbol audit removed unreferenced helpers from
+  `operators/profile_drifts.py`, `physics/collisions.py`, and
+  `problems/profile_diagnostics.py`. The remaining audit hits are intentional
+  private reference helpers that are tested or used by live progress/labeling
+  code. Focused validation passed: collision/diagnostics tests as
+  `46 passed in 5.34 s`, f-block stencil/parity tests as
+  `21 passed in 8.11 s`, and source-tree/import guards as
+  `35 passed in 2.84 s`.
 - The RHSMode=2/3 transport linear-solve dispatch layer is now owned by
   `problems/transport_linear_system.py`, including
   `TransportLinearSolveContext`, `TransportLinearSolveCallbacks`,
@@ -856,6 +864,11 @@ Completed work:
   `solvers/preconditioning.py`, while `profile_solve.py` keeps only live
   orchestration wrappers. This also deleted an unused duplicate elapsed-time
   helper in `problems/profile_sparse_xblock.py`.
+- Tranche 29: ran a private-symbol audit and removed unreferenced helpers from
+  `operators/profile_drifts.py`, `physics/collisions.py`, and
+  `problems/profile_diagnostics.py`. The retained single-reference private
+  helpers are either directly tested reference implementations or used by live
+  progress/label formatting paths.
 
 Remaining consolidation steps:
 
