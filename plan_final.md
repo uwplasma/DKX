@@ -1115,6 +1115,13 @@ Completed work:
   test for `run_xblock_qi_preconditioner_pipeline`, then reran the
   direct-reference audit showing the QI pipeline wrapper is covered without
   adding a slow solve.
+- Tranche 49: added bounded public-contract tests for optimization evidence
+  plans, Fortran-scan orchestration, benchmark-artifact validation, solver
+  profile parsers, sparse/device metadata, mapped-grid evidence records, VMEC
+  interpolation records, PAS/QI policy containers, and RHSMode-1 symbolic
+  sparse metadata. The direct-reference audit now reports
+  `modules_with_missing 0`; the measured coverage floor still needs the next
+  branch/line coverage run before it can be raised.
 
 Remaining consolidation steps:
 
