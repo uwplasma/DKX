@@ -142,7 +142,6 @@ LEGACY_MODULES_THAT_KEEP_THEIR_IMPORT_PATHS = (
     "sfincs_jax.geometry",
     "sfincs_jax.io",
     "sfincs_jax.solver",
-    "sfincs_jax.v3_driver",
 )
 
 RESERVED_MODULE_NAMES_UNTIL_MIGRATION = (
@@ -300,6 +299,7 @@ DELETED_ROOT_ALIASES = (
     "sfincs_jax.pas_smoother",
     "sfincs_jax.phi1_newton_linear",
     "sfincs_jax.phi1_newton_policy",
+    "sfincs_jax.v3_driver",
 )
 
 ROOT_MODULE_CLASSIFICATIONS = {
@@ -319,7 +319,6 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "profiling.py": "stable support utility",
     "sensitivity.py": "public differentiation API",
     "solver.py": "stable solver kernel",
-    "v3_driver.py": "compatibility shim",
 }
 
 ROOT_MODULE_CLOSURE_MANIFEST = {
@@ -342,10 +341,6 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "profiling.py": ("solvers/validation profiling support", "defer until profiling API boundary is explicit"),
     "sensitivity.py": ("package root differentiation API", "keep at root"),
     "solver.py": ("solvers public contracts owner", "keep root shim until solvers exports cover public contracts"),
-    "v3_driver.py": (
-        "compatibility shim to problem owners",
-        "keep tiny shim until the compatibility deprecation window closes; public examples and scripts should not import it",
-    ),
 }
 
 TRANSPORT_COMPATIBILITY_IMPORTS = (
@@ -830,9 +825,6 @@ def test_existing_legacy_modules_keep_their_import_paths() -> None:
 
     for module_name in LEGACY_MODULES_THAT_KEEP_THEIR_IMPORT_PATHS:
         module = _import_module(module_name)
-        if module_name == "sfincs_jax.v3_driver":
-            assert module.__name__ == "sfincs_jax.problems.profile_solve"
-            continue
         assert module.__name__ == module_name
 
 
