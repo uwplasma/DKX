@@ -21,6 +21,8 @@ from ..input_compat import (
     infer_input_radial_coordinate_for_gradients,
     infer_phi_input_radial_coordinate_for_gradients,
     _resolve_equilibrium_file_from_namelist,
+    _scheme4_radial_constants,
+    _set_input_radial_coordinate_wish,
     with_equilibrium_override,
 )
 from ..namelist import Namelist, read_sfincs_input
@@ -141,61 +143,12 @@ def _get_int(group: dict, key: str, default: int) -> int:
     return int(v)
 
 
-def _dphi_hat_dpsi_hat_from_er_geometry_scheme4(er: float) -> float:
-    """Compute dPhiHat/dpsiHat from Er for geometryScheme=4 (v3 defaults).
-
-    Matches `sfincs_jax.operators.profile_fblock._dphi_hat_dpsi_hat_from_er`,
-    and v3's defaults:
-    `inputRadialCoordinateForGradients=4` with rN forced to 0.5.
-    """
-    psi_a_hat = -0.384935
-    a_hat = 0.5109
-    psi_n = 0.25
-    ddrhat2ddpsihat = a_hat / (2.0 * psi_a_hat * np.sqrt(psi_n))
-    return float(ddrhat2ddpsihat * (-er))
-
-
 def _fortran_logical(x: bool) -> np.int32:
     """Match v3's common logical representation in `sfincsOutput.h5`.
 
     Many v3 HDF5 outputs store logicals as int32 with `-1` for false and `+1` for true.
     """
     return np.int32(1 if bool(x) else -1)
-
-
-def _scheme4_radial_constants() -> tuple[float, float]:
-    # Matches v3's built-in geometryScheme=4 W7-X simplified model.
-    psi_a_hat = -0.384935
-    a_hat = 0.5109
-    return psi_a_hat, a_hat
-
-
-def _set_input_radial_coordinate_wish(
-    *,
-    input_radial_coordinate: int,
-    psi_a_hat: float,
-    a_hat: float,
-    psi_hat_wish_in: float,
-    psi_n_wish_in: float,
-    r_hat_wish_in: float,
-    r_n_wish_in: float,
-) -> tuple[float, float, float, float]:
-    """Replicate v3 `radialCoordinates.setInputRadialCoordinateWish` for the wish coordinates."""
-    if input_radial_coordinate == 0:
-        psi_hat_wish = float(psi_hat_wish_in)
-    elif input_radial_coordinate == 1:
-        psi_hat_wish = float(psi_n_wish_in) * float(psi_a_hat)
-    elif input_radial_coordinate == 2:
-        psi_hat_wish = float(psi_a_hat) * float(r_hat_wish_in) * float(r_hat_wish_in) / (float(a_hat) * float(a_hat))
-    elif input_radial_coordinate == 3:
-        psi_hat_wish = float(r_n_wish_in) * float(r_n_wish_in) * float(psi_a_hat)
-    else:
-        raise ValueError(f"Invalid inputRadialCoordinate={input_radial_coordinate}")
-
-    psi_n_wish = float(psi_hat_wish) / float(psi_a_hat)
-    r_hat_wish = float(np.sqrt(float(a_hat) * float(a_hat) * float(psi_hat_wish) / float(psi_a_hat)))
-    r_n_wish = float(np.sqrt(float(psi_hat_wish) / float(psi_a_hat)))
-    return psi_hat_wish, psi_n_wish, r_hat_wish, r_n_wish
 
 
 def _evaluate_boozer_rzd_and_derivatives(

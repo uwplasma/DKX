@@ -74,8 +74,9 @@ Use this map before adding a file or following an internal import:
 - `problems/transport_parallel_runtime.py`: RHSMode-2/3 whichRHS
   parallelism, GPU subprocess worker CLI, worker payload schemas, and result
   merging.
-- `input_compat.py`: SFINCS-v3 input aliases, equilibrium-file overrides,
-  VMEC/Boozer path resolution, and staged-run equilibrium localization.
+- `input_compat.py`: SFINCS-v3 input aliases, radial-coordinate conversions,
+  equilibrium-file overrides, VMEC/Boozer path resolution, and staged-run
+  equilibrium localization.
 - `solvers/preconditioning.py`: shared preconditioner caches, projection
   helpers, and RHSMode-1 preconditioner dispatch.
 - `solvers/preconditioner_full_fp_kinetic.py`: full-FP RHSMode-1 kinetic,

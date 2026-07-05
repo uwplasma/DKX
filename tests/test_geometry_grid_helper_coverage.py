@@ -10,12 +10,14 @@ from sfincs_jax.geometry import jax_adapters as jax_geometry_adapters
 from sfincs_jax.geometry import boozer_geometry_scheme1, boozer_geometry_scheme2, boozer_geometry_scheme4
 from sfincs_jax.geometry import boozer_geometry_from_bc_file
 from sfincs_jax.grids import uniform_diff_matrices
+from sfincs_jax.input_compat import (
+    dphi_hat_dpsi_hat_from_er_geometry_scheme4,
+    scheme4_radial_constants,
+    set_input_radial_coordinate_wish,
+)
 from sfincs_jax.io import (
     _conversion_factors_to_from_dpsi_hat,
-    _dphi_hat_dpsi_hat_from_er_geometry_scheme4,
     _fortran_logical,
-    _scheme4_radial_constants,
-    _set_input_radial_coordinate_wish,
 )
 from sfincs_jax.geometry.vmec import _finite_diff_on_full_mesh_from_half_mesh
 from sfincs_jax.geometry.vmec import vmec_geometry_from_wout, vmec_geometry_from_wout_file
@@ -193,11 +195,11 @@ def test_vmec_geometry_from_preloaded_wout_matches_file_wrapper() -> None:
 
 
 def test_io_radial_coordinate_formula_helpers() -> None:
-    psi_a_hat, a_hat = _scheme4_radial_constants()
+    psi_a_hat, a_hat = scheme4_radial_constants()
     assert psi_a_hat == pytest.approx(-0.384935)
     assert a_hat == pytest.approx(0.5109)
 
-    wish = _set_input_radial_coordinate_wish(
+    wish = set_input_radial_coordinate_wish(
         input_radial_coordinate=3,
         psi_a_hat=psi_a_hat,
         a_hat=a_hat,
@@ -220,6 +222,6 @@ def test_io_radial_coordinate_formula_helpers() -> None:
 
     er = 3.0
     expected = a_hat / (2.0 * psi_a_hat * math.sqrt(0.25)) * (-er)
-    assert _dphi_hat_dpsi_hat_from_er_geometry_scheme4(er) == pytest.approx(expected)
+    assert dphi_hat_dpsi_hat_from_er_geometry_scheme4(er) == pytest.approx(expected)
     assert int(_fortran_logical(True)) == 1
     assert int(_fortran_logical(False)) == -1

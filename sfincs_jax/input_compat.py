@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 import re
 import shutil
@@ -313,6 +314,75 @@ def effective_psi_a_hat(
     if value is None:
         value = _group_get(phys_params, "psiAHat")
     return float(value) if value is not None else float(default)
+
+
+def dphi_hat_dpsi_hat_from_er_geometry_scheme4(er: float) -> float:
+    """Compute ``dPhiHat/dpsiHat`` from ``Er`` for v3 ``geometryScheme=4``.
+
+    SFINCS v3 treats the built-in W7-X simplified model as if
+    ``inputRadialCoordinateForGradients=4`` at fixed ``rN=sqrt(psiN)=0.5``.
+    Centralizing the conversion here keeps the input parser, output writer, and
+    geometry tests on the same legacy-normalization contract.
+    """
+
+    psi_a_hat, a_hat = scheme4_radial_constants()
+    psi_n = 0.25
+    ddrhat2ddpsihat = a_hat / (2.0 * psi_a_hat * math.sqrt(psi_n))
+    return float(ddrhat2ddpsihat * (-er))
+
+
+def scheme4_radial_constants() -> tuple[float, float]:
+    """Return v3's built-in ``geometryScheme=4`` radial normalization constants."""
+
+    psi_a_hat = -0.384935
+    a_hat = 0.5109
+    return psi_a_hat, a_hat
+
+
+def set_input_radial_coordinate_wish(
+    *,
+    input_radial_coordinate: int,
+    psi_a_hat: float,
+    a_hat: float,
+    psi_hat_wish_in: float,
+    psi_n_wish_in: float,
+    r_hat_wish_in: float,
+    r_n_wish_in: float,
+) -> tuple[float, float, float, float]:
+    """Replicate v3 ``radialCoordinates.setInputRadialCoordinateWish``.
+
+    The four SFINCS input modes all name the same flux surface using either
+    ``psiHat``, ``psiN``, ``rHat``, or ``rN``. The returned tuple is
+    ``(psiHat_wish, psiN_wish, rHat_wish, rN_wish)``.
+    """
+
+    if input_radial_coordinate == 0:
+        psi_hat_wish = float(psi_hat_wish_in)
+    elif input_radial_coordinate == 1:
+        psi_hat_wish = float(psi_n_wish_in) * float(psi_a_hat)
+    elif input_radial_coordinate == 2:
+        psi_hat_wish = (
+            float(psi_a_hat)
+            * float(r_hat_wish_in)
+            * float(r_hat_wish_in)
+            / (float(a_hat) * float(a_hat))
+        )
+    elif input_radial_coordinate == 3:
+        psi_hat_wish = float(r_n_wish_in) * float(r_n_wish_in) * float(psi_a_hat)
+    else:
+        raise ValueError(f"Invalid inputRadialCoordinate={input_radial_coordinate}")
+
+    psi_n_wish = float(psi_hat_wish) / float(psi_a_hat)
+    r_hat_wish = float(
+        math.sqrt(float(a_hat) * float(a_hat) * float(psi_hat_wish) / float(psi_a_hat))
+    )
+    r_n_wish = float(math.sqrt(float(psi_hat_wish) / float(psi_a_hat)))
+    return psi_hat_wish, psi_n_wish, r_hat_wish, r_n_wish
+
+
+_dphi_hat_dpsi_hat_from_er_geometry_scheme4 = dphi_hat_dpsi_hat_from_er_geometry_scheme4
+_scheme4_radial_constants = scheme4_radial_constants
+_set_input_radial_coordinate_wish = set_input_radial_coordinate_wish
 
 
 def infer_species_input_radial_coordinate_for_gradients(

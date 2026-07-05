@@ -8,10 +8,14 @@ import h5py
 import numpy as np
 import pytest
 
+from sfincs_jax.input_compat import (
+    dphi_hat_dpsi_hat_from_er_geometry_scheme4,
+    scheme4_radial_constants,
+    set_input_radial_coordinate_wish,
+)
 from sfincs_jax.io import (
     _apply_export_f_maps,
     _as_1d_float,
-    _dphi_hat_dpsi_hat_from_er_geometry_scheme4,
     _evaluate_boozer_rzd_and_derivatives,
     _export_f_config,
     _fortran_logical,
@@ -21,11 +25,9 @@ from sfincs_jax.io import (
     _output_geom_cache_key,
     localize_equilibrium_file_in_place,
     _phi1_fast_explicit_gmres_restart_default,
-    _scheme4_radial_constants,
     _select_phi1_use_frozen_linearization,
     _select_phi1_newton_linear_solve_method,
     _select_rhsmode1_linear_solve_method,
-    _set_input_radial_coordinate_wish,
     _should_precompile_v3_full_system,
     read_sfincs_h5,
     _resolve_equilibrium_file_from_namelist,
@@ -1426,7 +1428,7 @@ def test_phi1_history_alignment_trims_frozen_initial_guess_before_output() -> No
 
 
 def test_geometry_scheme4_radial_helpers_match_v3_conventions() -> None:
-    psi_a_hat, a_hat = _scheme4_radial_constants()
+    psi_a_hat, a_hat = scheme4_radial_constants()
     assert psi_a_hat == pytest.approx(-0.384935)
     assert a_hat == pytest.approx(0.5109)
 
@@ -1449,7 +1451,7 @@ def test_geometry_scheme4_radial_helpers_match_v3_conventions() -> None:
             "r_n_wish_in": 0.0,
         }
         base.update(overrides)
-        psi_hat, psi_n, r_hat, r_n = _set_input_radial_coordinate_wish(
+        psi_hat, psi_n, r_hat, r_n = set_input_radial_coordinate_wish(
             input_radial_coordinate=input_radial_coordinate,
             psi_a_hat=psi_a_hat,
             a_hat=a_hat,
@@ -1460,14 +1462,14 @@ def test_geometry_scheme4_radial_helpers_match_v3_conventions() -> None:
         assert r_hat == pytest.approx(target_r_hat)
         assert r_n == pytest.approx(target_r_n)
 
-    dphi = _dphi_hat_dpsi_hat_from_er_geometry_scheme4(2.0)
+    dphi = dphi_hat_dpsi_hat_from_er_geometry_scheme4(2.0)
     expected = a_hat / (2.0 * psi_a_hat * np.sqrt(0.25)) * (-2.0)
     assert dphi == pytest.approx(expected)
 
     assert _fortran_logical(True) == np.int32(1)
     assert _fortran_logical(False) == np.int32(-1)
     with pytest.raises(ValueError, match="Invalid inputRadialCoordinate"):
-        _set_input_radial_coordinate_wish(
+        set_input_radial_coordinate_wish(
             input_radial_coordinate=99,
             psi_a_hat=psi_a_hat,
             a_hat=a_hat,

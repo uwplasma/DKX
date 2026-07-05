@@ -907,7 +907,7 @@ Latest AST audit:
   `solvers/explicit_sparse.py` (`5198` lines),
   `problems/profile_sparse_qi.py` (`4873` lines),
   `problems/profile_solve.py` (`4351` lines), and
-  `outputs/writer.py` (`3040` lines).
+  `outputs/writer.py` (`2993` lines).
 - The final consolidation pass should reduce file count and improve ownership
   before further line-by-line extraction. A patch that only moves a few
   functions but leaves the same number of files is not sufficient unless it
@@ -1250,6 +1250,14 @@ Completed work:
   `tests/test_input_compat.py tests/test_io_output_policy_coverage.py tests/test_api_contracts.py tests/test_domain_package_import_contracts.py tests/test_source_tree_consolidation.py`
   as `164 passed in 7.54 s`; Ruff and `git diff --check` passed. This reduced
   `outputs/writer.py` from `3129` to `3040` lines without adding source files.
+- Tranche 59: moved geometryScheme=4 radial normalization and
+  `setInputRadialCoordinateWish` compatibility formulas from
+  `outputs/writer.py` into existing `input_compat.py`, keeping legacy private
+  aliases reachable through `sfincs_jax.io` while making tests import the
+  public canonical input-compat names. This keeps radial-coordinate semantics
+  with SFINCS-v3 input compatibility rather than output orchestration and
+  reduces `outputs/writer.py` from `3040` to `2993` lines without adding source
+  files.
 
 Remaining consolidation steps:
 
