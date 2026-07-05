@@ -862,10 +862,12 @@ improve runtime or peak memory, so no default promotion is justified.
 
 Relevant implementation:
 
-- ``sfincs_jax/rhs1_pas_matrixfree.py`` contains guarded matrix-free correction
-  helpers, candidate-size preflights, and ``PasRuntimeChunkPlan`` for deriving
-  bounded reduction chunks from configured byte budgets.
-- ``sfincs_jax/rhs1_pas_policy.py`` contains PAS applicability and memory gates.
+- ``sfincs_jax/solvers/preconditioner_pas_matrix_free.py`` contains guarded
+  matrix-free correction helpers, candidate-size preflights, and
+  ``PasRuntimeChunkPlan`` for deriving bounded reduction chunks from configured
+  byte budgets.
+- ``sfincs_jax/solvers/preconditioner_pas_policy.py`` contains PAS
+  applicability and memory gates.
 - ``scripts/benchmark_pas_tz_memory_fallback.py`` records promotion/rejection
   evidence. Its dry-runs are explicitly non-promoting; a row becomes
   ``promotion_ready`` only after real child solves pass residual, stall, RSS,
