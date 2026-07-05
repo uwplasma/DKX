@@ -254,6 +254,15 @@ def test_deleted_profile_linear_systems_facade_is_absent() -> None:
     assert hasattr(module, "V3FullLinearSystem")
 
 
+def test_deleted_profile_sources_facade_is_absent() -> None:
+    """Constraint-source kernels belong to the profile-system owner."""
+
+    assert not (PACKAGE_ROOT / "operators" / "profile_sources.py").exists()
+    module = importlib.import_module("sfincs_jax.operators.profile_system")
+    assert hasattr(module, "constraint_scheme1_inject_source")
+    assert hasattr(module, "constraint_scheme2_source_from_f")
+
+
 def test_canonical_flat_domain_modules_are_importable() -> None:
     """Canonical owners replace the deleted compatibility import paths."""
 

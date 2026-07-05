@@ -374,7 +374,7 @@ from sfincs_jax.problems.profile_policies import (
     rhs1_constraint0_petsc_compat_config_from_env, rhs1_constraint0_petsc_compat_regularization,
     rhsmode1_constraint0_sparse_first_current_backend as _rhsmode1_constraint0_sparse_first,
 )
-from sfincs_jax.operators.profile_sources import (
+from sfincs_jax.operators.profile_system import (
     build_rhs1_xblock_constraint1_moment_schur_preconditioner as _build_rhs1_xblock_constraint1_moment_schur_preconditioner,
     constraint_scheme1_inject_source as _constraint_scheme1_inject_source,
     constraint_scheme1_moments_from_f as _constraint_scheme1_moments_from_f,

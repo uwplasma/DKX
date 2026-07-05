@@ -496,6 +496,7 @@ System construction:
 - transport-RHS rewrites,
 - cached operator application,
 - matrix-free residual and JVP wrappers,
+- constraint-source moment kernels for constraint schemes 1 and 2,
 - system metadata used by the driver and diagnostics.
 
 ``sfincs_jax/v3_driver.py``
@@ -1028,13 +1029,6 @@ replacing the old monolith are:
   measured solver-candidate gates, preserve the accepted residual vector, and
   update the KSP replay metadata only after a strict finite residual
   improvement.
-- ``sfincs_jax/operators/profile_sources.py``
-  (historical location: ``sfincs_jax/rhs1_constraint_sources.py``):
-  JAX kernels that convert between kinetic ``f`` blocks and constraint-source
-  amplitudes for constraint schemes 1 and 2, including flux-surface averages,
-  density/pressure moments, source-basis injection with ``pointAtX0`` handling,
-  and the constraintScheme=1 moment-Schur wrapper used by x-block
-  preconditioners.
 - ``sfincs_jax/problems/profile_policies.py``:
   RHSMode=1 host dense fallback, host sparse-direct, sparse-preconditioned
   GMRES rescue, factor-dtype, explicit sparse-helper policy, and automatic

@@ -19,11 +19,13 @@ import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.solvers.explicit_sparse import SparseOperatorBundle
-from sfincs_jax.operators.profile_sources import (
+from sfincs_jax.operators.profile_system import (
+    _fs_average_factor,
+    _ix_min,
+    _source_basis_constraint_scheme_1,
     constraint_scheme2_inject_source as _constraint_scheme2_inject_source,
     constraint_scheme2_source_from_f as _constraint_scheme2_source_from_f,
 )
-from sfincs_jax.operators.profile_system import _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1
 from sfincs_jax.operators.profile_layout import RHS1ActiveFieldSplitOrdering, RHS1BlockLayout
 
 if TYPE_CHECKING:

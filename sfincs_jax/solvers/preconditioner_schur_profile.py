@@ -19,17 +19,18 @@ import jax.numpy as jnp
 import numpy as np
 import scipy.sparse as sp
 
-from sfincs_jax.operators.profile_sources import (
-    constraint_scheme2_inject_source,
-    constraint_scheme2_source_from_f,
-)
 from sfincs_jax.solvers.preconditioning import (
     _RHSMODE1_PRECOND_CACHE,
     _RHSMODE1_SCHUR_CACHE,
 )
 from sfincs_jax.solvers.preconditioning import precond_dtype as _precond_dtype
 from sfincs_jax.solvers.preconditioning import rhs_mode1_precond_cache_key
-from sfincs_jax.operators.profile_system import V3FullSystemOperator, _ix_min
+from sfincs_jax.operators.profile_system import (
+    V3FullSystemOperator,
+    _ix_min,
+    constraint_scheme2_inject_source,
+    constraint_scheme2_source_from_f,
+)
 
 __all__ = (
     "ActiveNativeFieldSplitSparseCoarsePolicy",
