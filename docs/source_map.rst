@@ -340,21 +340,14 @@ Electric-field scan workflow owner:
 - optional scan-point parallelism,
 - progress and ETA reporting,
 - Krylov state recycling between adjacent scan points,
-- public ``run_er_scan`` helper used by CLI, examples, and validation scripts.
+- public ``run_er_scan`` helper used by CLI, examples, and validation scripts,
+- upstream-style postprocessing helpers that locate vendored or user-provided
+  SFINCS Fortran-v3 ``utils`` scripts,
+- non-interactive execution of plotting/postprocessing scripts with a non-GUI
+  matplotlib backend.
 
-This module replaces the former root ``sfincs_jax/scans.py`` implementation.
-
-``sfincs_jax/workflows/postprocess_upstream.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Upstream utility postprocessing wrapper:
-
-- locates vendored or user-provided SFINCS Fortran-v3 ``utils`` scripts,
-- runs plotting/postprocessing scripts in non-interactive mode,
-- forces a non-GUI matplotlib backend for scripted examples.
-
-This module replaces the former root ``sfincs_jax/postprocess_upstream.py``
-implementation.
+This module is the canonical owner for scan execution and upstream-style
+postprocessing workflow helpers.
 
 ``sfincs_jax/workflows/optimization.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
