@@ -13,8 +13,11 @@ from sfincs_jax.solvers.preconditioner_schur_profile import (
     build_block_schur_preconditioner,
     build_diagonal_schur_preconditioner,
     build_jacobi_preconditioner,
+    build_x_xi_diagonal_inverse_blocks,
     build_x_xi_block_schur_preconditioner,
+    build_xi_diagonal_inverse_blocks,
     build_xi_block_schur_preconditioner,
+    build_zeta_diagonal_inverse_blocks,
     estimate_x_xi_block_inverse_nbytes,
     estimate_xi_block_inverse_nbytes,
     estimate_zeta_block_inverse_nbytes,
@@ -161,6 +164,69 @@ def test_full_csr_block_memory_estimates_match_layout_sizes() -> None:
         estimate_x_xi_block_inverse_nbytes(layout)
         == layout.n_species * layout.n_theta * layout.n_zeta * (layout.n_x * layout.n_xi) ** 2 * 8
     )
+
+
+def test_full_csr_block_inverse_builders_fail_closed_on_singular_blocks() -> None:
+    layout = TinyRHS1Layout()
+    singular_matrix = sp.csr_matrix((layout.total_size, layout.total_size), dtype=np.float64)
+
+    zeta_inv, zeta_meta = build_zeta_diagonal_inverse_blocks(
+        matrix=singular_matrix,
+        n_f=layout.f_size,
+        block_size=layout.n_zeta,
+        regularization=0.0,
+    )
+    xi_inv, xi_indices, xi_meta = build_xi_diagonal_inverse_blocks(
+        matrix=singular_matrix,
+        layout=layout,
+        regularization=0.0,
+    )
+    x_xi_inv, x_xi_indices, x_xi_meta = build_x_xi_diagonal_inverse_blocks(
+        matrix=singular_matrix,
+        layout=layout,
+        regularization=0.0,
+    )
+
+    assert zeta_meta["block_inverse_singular_count"] == zeta_inv.shape[0]
+    assert xi_meta["block_inverse_singular_count"] == xi_inv.shape[0]
+    assert x_xi_meta["block_inverse_singular_count"] == x_xi_inv.shape[0]
+    np.testing.assert_allclose(zeta_inv, np.zeros_like(zeta_inv))
+    np.testing.assert_allclose(xi_inv, np.zeros_like(xi_inv))
+    np.testing.assert_allclose(x_xi_inv, np.zeros_like(x_xi_inv))
+    assert xi_indices.shape == (layout.n_species * layout.n_x * layout.n_theta * layout.n_zeta, layout.n_xi)
+    assert x_xi_indices.shape == (layout.n_species * layout.n_theta * layout.n_zeta, layout.n_x * layout.n_xi)
+
+
+def test_full_csr_block_inverse_builders_regularize_rank_deficient_blocks() -> None:
+    layout = TinyRHS1Layout()
+    singular_matrix = sp.csr_matrix((layout.total_size, layout.total_size), dtype=np.float64)
+
+    zeta_inv, zeta_meta = build_zeta_diagonal_inverse_blocks(
+        matrix=singular_matrix,
+        n_f=layout.f_size,
+        block_size=layout.n_zeta,
+        regularization=1.0e-3,
+    )
+    xi_inv, _xi_indices, xi_meta = build_xi_diagonal_inverse_blocks(
+        matrix=singular_matrix,
+        layout=layout,
+        regularization=1.0e-3,
+    )
+    x_xi_inv, _x_xi_indices, x_xi_meta = build_x_xi_diagonal_inverse_blocks(
+        matrix=singular_matrix,
+        layout=layout,
+        regularization=1.0e-3,
+    )
+
+    assert zeta_meta["block_inverse_regularized_count"] == zeta_inv.shape[0]
+    assert xi_meta["block_inverse_regularized_count"] == xi_inv.shape[0]
+    assert x_xi_meta["block_inverse_regularized_count"] == x_xi_inv.shape[0]
+    assert zeta_meta["block_inverse_singular_count"] == 0
+    assert xi_meta["block_inverse_singular_count"] == 0
+    assert x_xi_meta["block_inverse_singular_count"] == 0
+    np.testing.assert_allclose(zeta_inv[0], np.eye(layout.n_zeta) / 1.0e-3)
+    np.testing.assert_allclose(xi_inv[0], np.eye(layout.n_xi) / 1.0e-3)
+    np.testing.assert_allclose(x_xi_inv[0], np.eye(layout.n_x * layout.n_xi) / 1.0e-3)
 
 
 def test_rhs1_full_assembly_keeps_legacy_schur_aliases() -> None:

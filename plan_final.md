@@ -68,6 +68,15 @@ The main structural refactor is functionally complete:
   `tests/test_transport_parallel_payload.py`,
   `tests/test_transport_parallel_runtime.py`, and
   `tests/test_transport_parallel_validation.py` as `37 passed in 0.44 s`.
+- The RHSMode=1 structured full-CSR Schur tests now cover singular local
+  zeta-line, pitch-line, and x-pitch kinetic block fallback through
+  pseudo-inverses, plus the corresponding regularized inverse paths. This
+  protects the bounded local-factor path used when production grids contain
+  rank-deficient active kinetic blocks. Focused Schur/preconditioner validation
+  passed:
+  `tests/test_rhs1_full_csr_schur_preconditioners.py`,
+  `tests/test_rhs1_coarse_basis.py`, `tests/test_rhs1_coarse_policy.py`, and
+  `tests/test_rhs1_schur_policy.py` as `55 passed in 0.86 s`.
 - The latest local xdist coverage audit measured `88%` package coverage:
   `4031 passed in 283.48 s` with `8089` missing executable lines. The latest
   explicit-sparse and true-operator rescue tranches reduced missing executable
