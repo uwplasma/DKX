@@ -132,11 +132,13 @@ def test_run_transport_parallel_gpu_subprocesses_collects_completed_workers(
 ) -> None:
     messages: list[str] = []
     launched_envs: list[dict[str, str]] = []
+    launched_cmds: list[list[str]] = []
 
     class _FakeProc:
         returncode = 0
 
         def __init__(self, cmd, **_kwargs):
+            launched_cmds.append(list(cmd))
             launched_envs.append(dict(_kwargs["env"]))
             payload_path = Path(cmd[cmd.index("--payload") + 1])
             output_path = Path(cmd[cmd.index("--output") + 1])
@@ -176,6 +178,7 @@ def test_run_transport_parallel_gpu_subprocesses_collects_completed_workers(
     assert any("GPU transport worker log" in msg and "rhs_norm=1.000000e+00" in msg for msg in messages)
     assert any("GPU transport worker result" in msg and "relative_residual=1.000000e-12" in msg for msg in messages)
     assert all("sfincs_jax" in env["PYTHONPATH"] for env in launched_envs)
+    assert all(cmd[1:3] == ["-m", "sfincs_jax.problems.transport_parallel_runtime"] for cmd in launched_cmds)
 
 
 def test_run_transport_parallel_gpu_subprocesses_rejects_mismatched_worker_rhs(
