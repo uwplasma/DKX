@@ -89,6 +89,13 @@ The main structural refactor is functionally complete:
   branches, empty block-family rejection, and local-base dispatch to the
   canonical native owner. Focused validation passed:
   `tests/test_rhs1_active_projected_xblock.py` as `11 passed in 0.86 s`.
+- The profile full-system operator tests now cover matrix-free matvec
+  sharding-policy decisions, fail-closed invalid shard-axis handling,
+  default-on shard padding, and full-vector pad/unpad round trips along theta,
+  zeta, and speed-grid axes on the tiny Fortran-v3 fixture. These checks
+  protect the CPU/GPU matvec infrastructure without adding production solves.
+  Focused validation passed:
+  `tests/test_full_system_operator_jit.py` as `5 passed in 6.93 s`.
 - The latest local xdist coverage audit measured `88%` package coverage:
   `4031 passed in 283.48 s` with `8089` missing executable lines. The latest
   explicit-sparse and true-operator rescue tranches reduced missing executable
