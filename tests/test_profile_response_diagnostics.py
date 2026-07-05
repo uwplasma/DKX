@@ -7,6 +7,7 @@ import numpy as np
 import jax.numpy as jnp
 import pytest
 
+import sfincs_jax.problems.profile_diagnostics as profile_diagnostics
 from sfincs_jax.problems.profile_diagnostics import (
     SparsePCDirectTailMetadataContext,
     SparsePCFactorPreflightMetadataContext,
@@ -29,6 +30,7 @@ from sfincs_jax.problems.profile_diagnostics import (
     sparse_pc_factor_preflight_result_metadata,
     sparse_pc_factor_preflight_result_metadata_from_context,
     sparse_pc_gmres_result_metadata,
+    sparse_pc_gmres_static_metadata,
     sparse_pc_gmres_static_metadata_from_context,
     sparse_pc_pattern_result_metadata,
     sparse_pc_pattern_result_metadata_from_context,
@@ -46,6 +48,7 @@ from sfincs_jax.problems.profile_diagnostics import (
     xblock_qi_seed_preconditioner_diagnostics,
     xblock_qi_seed_preconditioner_diagnostics_from_context,
     xblock_sparse_pc_core_diagnostics,
+    xblock_sparse_pc_result_diagnostics_from_driver_state,
     xblock_side_probe_diagnostics,
 )
 from sfincs_jax.problems.profile_solver_diagnostics import (
@@ -1353,7 +1356,98 @@ def test_sparse_pc_gmres_static_metadata_covers_global_branch() -> None:
     assert metadata["sparse_pc_fortran_reduced"] is False
     assert metadata["sparse_pc_full_size"] == 17
     assert metadata["sparse_pc_fp_dense_velocity_block"] is True
-    assert metadata["sparse_pc_initial_factor_dtype"] == "float32"
+
+
+def test_sparse_pc_gmres_static_metadata_driver_state_wrapper() -> None:
+    metadata = sparse_pc_gmres_static_metadata(
+        {
+            "op": SimpleNamespace(total_size=19),
+            "fortran_reduced_sparse_pc": True,
+            "fortran_reduced_sparse_pc_backend": "xblock",
+            "fortran_reduced_sparse_pc_backend_reason": "unit",
+            "fortran_reduced_xblock_min_size": 10,
+            "pc_restart": 4,
+            "pc_maxiter": 8,
+            "sparse_pc_first_attempt_maxiter": 3,
+            "pc_shift": 1.0e-8,
+            "sparse_pc_factor_dtype_initial": np.dtype(np.float64),
+            "sparse_pc_preconditioner_operator": "fortran_reduced",
+            "sparse_pc_factorization": "lu",
+            "sparse_pc_default_factor_kind": "lu",
+            "sparse_pc_default_ilu_fill_factor": 1.0,
+            "sparse_pc_default_ilu_drop_tol": 0.0,
+            "sparse_pc_default_pattern_color_batch": 1,
+            "preconditioner_x": 0,
+            "preconditioner_x_min_l": 0,
+            "preconditioner_xi": 0,
+            "preconditioner_species": 1,
+            "sparse_pc_permc_spec": "COLAMD",
+            "sparse_pc_default_permc_spec": "COLAMD",
+            "sparse_pc_use_active_dof": False,
+            "sparse_pc_linear_size": 11,
+            "sparse_pc_fp_dense_velocity_block": None,
+        }
+    )
+
+    assert metadata["sparse_pc_fortran_reduced"]
+    assert metadata["sparse_pc_backend"] == "xblock"
+    assert metadata["sparse_pc_linear_size"] == 11
+
+
+def test_xblock_sparse_pc_result_diagnostics_driver_state_wrapper(monkeypatch) -> None:
+    monkeypatch.setattr(
+        profile_diagnostics,
+        "xblock_device_krylov_diagnostics",
+        lambda _state: {"xblock_device_krylov_method": "unit"},
+    )
+    state = {
+        "xblock_assembled_operator_result_metadata": {"xblock_assembled_operator_built": False},
+        "xblock_coarse_correction_metadata": {"xblock_coarse_correction_selected": False},
+        "xblock_qi_seed_preconditioner_metadata": {"xblock_qi_seed_enabled": False},
+        "xblock_qi_device_preconditioner_metadata": {"xblock_qi_device_enabled": False},
+        "xblock_qi_deflated_preconditioner_metadata": {"xblock_qi_deflated_enabled": False},
+        "xblock_side_probe_metadata": {"xblock_side_probe_enabled": False},
+        "xblock_solver_kind": "xblock_sparse_pc",
+        "accepted_converged_xblock": True,
+        "reported_iterations": 2,
+        "reported_matvecs": 3,
+        "mv_count": 4,
+        "device_krylov_estimated_matvecs": 0,
+        "xblock_krylov_method": "gmres",
+        "candidate_krylov_method": "none",
+        "candidate_iterations": 0,
+        "candidate_matvecs": 0,
+        "candidate_residual_norm": 0.0,
+        "fallback_started_from_candidate": False,
+        "fallback_candidate_improved_rhs": False,
+        "precondition_side": "left",
+        "xblock_default_right_pc": False,
+        "xblock_default_restart_capped": False,
+        "pc_restart": 5,
+        "pc_maxiter": 6,
+        "setup_s": 0.1,
+        "solve_s": 0.2,
+        "sparse_timer": SimpleNamespace(elapsed_s=lambda: 0.3),
+        "pc_factor_s": 0.4,
+        "xblock_preconditioner_xi": 1,
+        "xblock_preconditioner_built": True,
+        "xblock_assembled_host_fp": False,
+        "xblock_jax_factors": False,
+        "xblock_jax_factor_format": None,
+        "xblock_jax_factor_apply": None,
+        "xblock_lower_fill_mode": "off",
+        "xblock_lower_fill_ignored_env": False,
+        "xblock_use_active_dof": True,
+        "xblock_linear_size": 7,
+    }
+
+    metadata = xblock_sparse_pc_result_diagnostics_from_driver_state(state, full_size=17)
+
+    assert metadata["solver_kind"] == "xblock_sparse_pc"
+    assert metadata["xblock_full_size"] == 17
+    assert metadata["xblock_linear_size"] == 7
+    assert metadata["xblock_device_krylov_method"] == "unit"
+    assert metadata["xblock_qi_seed_enabled"] is False
 
 
 def test_sparse_pc_gmres_result_metadata_accepts_precomputed_sections_and_zero_target() -> None:

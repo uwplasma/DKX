@@ -439,6 +439,76 @@ def test_transport_parallel_pool_reuses_workers(monkeypatch: pytest.MonkeyPatch)
     assert _DummyPool.shutdown_calls == 1
 
 
+def test_transport_parallel_runtime_direct_worker_count_validation() -> None:
+    assert transport_parallel_pool.validate_transport_parallel_worker_count("3") == 3
+    with pytest.raises(ValueError, match="worker count"):
+        transport_parallel_pool.validate_transport_parallel_worker_count(0, context="unit")
+    with pytest.raises(ValueError, match="worker count"):
+        transport_parallel_pool.validate_transport_parallel_worker_count("bad")
+
+
+def test_transport_parallel_runtime_direct_gpu_policy_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_gpu_runner(**kwargs):
+        seen.update(kwargs)
+        return [{"ok": True}]
+
+    monkeypatch.setattr(
+        transport_parallel_pool,
+        "run_transport_parallel_gpu_subprocesses",
+        fake_gpu_runner,
+    )
+
+    result = transport_parallel_pool.run_transport_parallel_gpu_subprocesses_with_policy(
+        payloads=[{"which": 1}],
+        parallel_workers=2,
+        emit=None,
+    )
+
+    assert result == [{"ok": True}]
+    assert seen["payloads"] == [{"which": 1}]
+    assert seen["parallel_workers"] == 2
+    assert seen["visible_gpu_ids"] is transport_parallel_pool.transport_parallel_visible_gpu_ids
+    assert seen["gpu_worker_env"] is transport_parallel_pool.transport_parallel_gpu_worker_env
+
+
+def test_transport_parallel_runtime_direct_pool_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _DummyPool:
+        init_calls = 0
+        shutdown_calls = 0
+
+        def __init__(self, **kwargs):
+            type(self).init_calls += 1
+            self.kwargs = kwargs
+            self._shutdown = False
+
+        def shutdown(self, wait: bool = True, cancel_futures: bool = True) -> None:
+            _ = (wait, cancel_futures)
+            if not self._shutdown:
+                self._shutdown = True
+                type(self).shutdown_calls += 1
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_POOL_PERSIST", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_MP_START_METHOD", "spawn")
+    monkeypatch.setattr(transport_parallel_pool.concurrent.futures, "ProcessPoolExecutor", _DummyPool)
+    monkeypatch.setattr(transport_parallel_pool.mp, "get_context", lambda _name: object())
+
+    direct_pool = transport_parallel_pool.transport_parallel_process_pool_executor(max_workers=1)
+    assert isinstance(direct_pool, _DummyPool)
+    assert direct_pool.kwargs["max_workers"] == 1
+    direct_pool.shutdown()
+
+    transport_parallel_pool.shutdown_transport_parallel_pool()
+    try:
+        cached_1 = transport_parallel_pool.get_transport_parallel_pool(parallel_workers=2)
+        cached_2 = transport_parallel_pool.get_transport_parallel_pool(parallel_workers=2)
+        assert cached_1 is cached_2
+    finally:
+        transport_parallel_pool.shutdown_transport_parallel_pool()
+    assert _DummyPool.shutdown_calls >= 2
+
+
 def test_transport_parallel_pool_rebuilds_on_worker_change(monkeypatch: pytest.MonkeyPatch) -> None:
     """Persistent transport pool should rebuild when parallel worker count changes."""
 

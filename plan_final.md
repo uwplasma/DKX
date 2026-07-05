@@ -137,6 +137,15 @@ The main structural refactor is functionally complete:
   Source/test audits for `geometry/boozer.py` and `outputs/formats.py` report
   zero production-used public helpers without direct tests. Focused validation
   passed as `81 passed in 2.18 s`.
+- Transport runtime, profile setup, sparse-direct, and diagnostics coverage now
+  includes direct tests for worker-count validation, GPU subprocess policy
+  injection, persistent-pool helpers, solve-method normalization, explicit
+  sparse-pattern controls/cache keys, sparse-PC static metadata wrappers, and
+  x-block sparse-PC result diagnostics wrappers. Source/test audits for
+  `problems/transport_parallel_runtime.py`, `problems/profile_setup.py`,
+  `problems/profile_sparse_direct.py`, and `problems/profile_diagnostics.py`
+  report zero production-used public helpers without direct tests. Focused
+  validation passed as `82 passed in 34.47 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -959,6 +968,10 @@ Completed work:
   and direct NPZ/NetCDF writer behavior, then reran source/test audits showing
   no production-used public helpers without direct tests in the targeted
   geometry/output modules.
+- Tranche 38: added direct transport-runtime, profile-setup, sparse-direct,
+  and sparse diagnostics wrapper tests, then reran source/test audits showing
+  no production-used public helpers without direct tests in those targeted
+  modules.
 
 Remaining consolidation steps:
 

@@ -207,6 +207,49 @@ def test_explicit_sparse_host_direct_allowed_and_env_bounds(monkeypatch) -> None
     )
 
 
+def test_profile_sparse_direct_pattern_probe_and_cache_key(monkeypatch) -> None:
+    assert not sparse_direct.rhsmode1_explicit_sparse_pattern_probe_enabled(env={})
+    assert sparse_direct.rhsmode1_explicit_sparse_pattern_probe_enabled(
+        env={"SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_PATTERN": "pattern"}
+    )
+
+    assert sparse_direct.maybe_rhsmode1_full_sparse_pattern(SimpleNamespace(), env={}) is None
+
+    emits: list[str] = []
+    pattern = SimpleNamespace(shape=(2, 2), nnz=3)
+    summary = SimpleNamespace(shape=(2, 2), nnz=3, avg_row_nnz=1.5, max_row_nnz=2)
+    monkeypatch.setattr(
+        sparse_direct,
+        "v3_full_system_conservative_sparsity_pattern",
+        lambda _op: pattern,
+    )
+    monkeypatch.setattr(sparse_direct, "summarize_v3_sparse_pattern", lambda _op, _pattern: summary)
+    assert sparse_direct.maybe_rhsmode1_full_sparse_pattern(
+        SimpleNamespace(),
+        emit=lambda _level, message: emits.append(message),
+        env={"SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_PATTERN": "on"},
+    ) is pattern
+    assert any("explicit_sparse_pattern" in message for message in emits)
+
+    monkeypatch.setattr(
+        sparse_direct,
+        "_rhsmode1_precond_cache_key",
+        lambda _op, kind: ("operator", kind),
+    )
+    key = sparse_direct.rhsmode1_sparse_cache_key(
+        SimpleNamespace(),
+        kind="ilu",
+        active_size=17,
+        use_active_dof_mode=True,
+        use_pas_projection=False,
+        drop_tol=1.0e-3,
+        drop_rel=2.0e-3,
+        ilu_drop_tol=3.0e-3,
+        fill_factor=4.0,
+    )
+    assert key == ("operator", "ilu", 17, 1, 0, 1.0e-3, 2.0e-3, 3.0e-3, 4.0)
+
+
 def test_build_host_sparse_direct_factor_from_matvec_falls_back_on_invalid_env(monkeypatch) -> None:
     seen: dict[str, object] = {}
     operator_bundle = SimpleNamespace(metadata=SimpleNamespace(storage_kind="csr", reason="fallback"))

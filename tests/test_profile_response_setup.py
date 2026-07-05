@@ -13,6 +13,7 @@ from sfincs_jax.problems.profile_setup import (
     equilibrium_name_hint_from_namelist,
     geometry_scheme_hint_from_namelist,
     materialize_profile_response_linear_problem,
+    normalize_profile_solve_method_kind,
     resolve_rhs1_active_problem_setup,
     resolve_rhs1_domain_decomposition_setup,
     resolve_rhs1_dkes_adjustment_setup,
@@ -57,9 +58,14 @@ class FakeOperator:
     total_size: int
     phi1_size: int
     fblock: FakeFBlock
-    n_zeta: int = 1
     n_species: int = 1
     f_size: int = 0
+    n_zeta: int = 1
+
+
+def test_normalize_profile_solve_method_kind_handles_case_and_dashes() -> None:
+    assert normalize_profile_solve_method_kind(" Sparse-PC-GMRES ") == "sparse_pc_gmres"
+    assert normalize_profile_solve_method_kind("xblock_sparse_pc_gmres") == "xblock_sparse_pc_gmres"
 
 
 @dataclass(frozen=True)
