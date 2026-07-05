@@ -196,6 +196,18 @@ def test_profile_solve_does_not_reexport_low_level_helper_namespaces() -> None:
         assert fragment not in text
 
 
+def test_policy_tests_import_policy_owners_not_profile_solve() -> None:
+    """Policy-only tests should not widen the solve-orchestration API."""
+
+    policy_test_paths = (
+        REPO_ROOT / "tests" / "test_profile_solve_policy_helpers.py",
+        REPO_ROOT / "tests" / "test_profile_solve_policy_coverage.py",
+    )
+
+    for path in policy_test_paths:
+        assert "profile_solve" not in path.read_text(encoding="utf-8"), path
+
+
 def test_test_filenames_do_not_reintroduce_deleted_v3_driver_label() -> None:
     """Keep test modules named after the canonical behavior they protect."""
 

@@ -1354,6 +1354,16 @@ Completed work:
   from returning to `profile_solve.py`. Focused validation passed:
   `tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_profile_dd_reduction_coverage.py tests/test_rhs1_schwarz_heuristic.py tests/test_rhs1_domain_decomposition.py tests/test_pas_preconditioner_policy.py tests/test_profile_solve_policy_helpers.py`
   as `100 passed in 12.39 s`; Ruff passed.
+- Tranche 73: moved policy-only tests off `problems/profile_solve.py` and onto
+  their canonical owners. JIT/dtype tests now use
+  `solvers/preconditioning.py`, RHSMode-1 route tests use
+  `problems/profile_policies.py`, generic solver-path tests use
+  `solvers/path_policy.py`, and transport policy tests use
+  `problems/transport_policies.py`. A source-tree guard keeps those
+  policy-only tests from re-widening the solve-orchestration API. Focused
+  validation passed:
+  `tests/test_source_tree_consolidation.py tests/test_profile_solve_policy_helpers.py tests/test_profile_solve_policy_coverage.py`
+  as `55 passed in 3.32 s`; Ruff passed.
 
 Remaining consolidation steps:
 
