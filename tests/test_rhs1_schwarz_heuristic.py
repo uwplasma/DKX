@@ -15,6 +15,12 @@ from sfincs_jax.problems.profile_residual import (
     compose_residual_correction_preconditioner,
 )
 import sfincs_jax.solvers.preconditioner_pas_policy as pas_policy
+from sfincs_jax.solvers.preconditioner_domain_decomposition import (
+    _rhs1_dd_auto_block_size,
+    _rhs1_dd_coarse_block_size,
+    _rhs1_dd_coarse_block_sizes,
+    _rhs1_dd_coarse_level_count,
+)
 import sfincs_jax.problems.profile_solve as vd
 import sfincs_jax.problems.profile_preconditioner_build as pb
 
@@ -109,9 +115,9 @@ def test_pas_tz_memory_estimate_flags_large_case() -> None:
         n_zeta = 127
         fblock = _FBlock()
 
-    estimate = vd._estimate_rhs1_pas_tz_build_bytes(_Op())
+    estimate = pas_policy.estimate_rhs1_pas_tz_build_bytes(_Op())
     assert estimate > 100 * 2**30
-    assert not vd._pas_tz_preconditioner_memory_safe(_Op())
+    assert not pas_policy.pas_tz_preconditioner_memory_safe(_Op())
 
 
 def test_pas_tz_builder_falls_back_to_theta_schwarz_when_memory_unsafe(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -155,7 +161,7 @@ def test_pas_tz_builder_falls_back_to_theta_schwarz_when_memory_unsafe(monkeypat
 
 
 def test_rhs1_dd_auto_block_size_spans_more_than_one_local_shard() -> None:
-    block = vd._rhs1_dd_auto_block_size(
+    block = _rhs1_dd_auto_block_size(
         n=31,
         n_dev=8,
         sum_nxi=144,
@@ -166,7 +172,7 @@ def test_rhs1_dd_auto_block_size_spans_more_than_one_local_shard() -> None:
 
 
 def test_rhs1_dd_auto_block_size_respects_global_extent() -> None:
-    block = vd._rhs1_dd_auto_block_size(
+    block = _rhs1_dd_auto_block_size(
         n=31,
         n_dev=2,
         sum_nxi=144,
@@ -177,20 +183,20 @@ def test_rhs1_dd_auto_block_size_respects_global_extent() -> None:
 
 
 def test_rhs1_dd_coarse_block_size_widens_local_patch() -> None:
-    coarse = vd._rhs1_dd_coarse_block_size(n=31, block=12, overlap=1)
+    coarse = _rhs1_dd_coarse_block_size(n=31, block=12, overlap=1)
     assert coarse == 20
     assert coarse > 12
 
 
 def test_rhs1_dd_coarse_level_count_auto(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_LEVELS", raising=False)
-    assert vd._rhs1_dd_coarse_level_count(n_dev=2) == 0
-    assert vd._rhs1_dd_coarse_level_count(n_dev=4) == 1
-    assert vd._rhs1_dd_coarse_level_count(n_dev=8) == 2
+    assert _rhs1_dd_coarse_level_count(n_dev=2) == 0
+    assert _rhs1_dd_coarse_level_count(n_dev=4) == 1
+    assert _rhs1_dd_coarse_level_count(n_dev=8) == 2
 
 
 def test_rhs1_dd_coarse_block_sizes_build_multiple_levels() -> None:
-    coarse_blocks = vd._rhs1_dd_coarse_block_sizes(n=63, block=12, overlap=1, levels=2)
+    coarse_blocks = _rhs1_dd_coarse_block_sizes(n=63, block=12, overlap=1, levels=2)
     assert coarse_blocks == (20, 30)
 
 
@@ -204,10 +210,6 @@ def test_compose_residual_correction_preconditioner_matches_one_step() -> None:
     def matvec(v):
         return 2.0 * v
 
-    assert (
-        vd._compose_residual_correction_preconditioner
-        is compose_residual_correction_preconditioner
-    )
     precond = compose_residual_correction_preconditioner(
         base=base,
         coarse=coarse,
@@ -232,10 +234,6 @@ def test_compose_multilevel_residual_correction_preconditioner_applies_levels_in
     def matvec(v):
         return 2.0 * v
 
-    assert (
-        vd._compose_multilevel_residual_correction_preconditioner
-        is compose_multilevel_residual_correction_preconditioner
-    )
     precond = compose_multilevel_residual_correction_preconditioner(
         base=base,
         coarse_levels=(coarse_1, coarse_2),
@@ -257,10 +255,6 @@ def test_compose_multilevel_minres_correction_rejects_zero_direction() -> None:
     def matvec(v):
         return 2.0 * v
 
-    assert (
-        vd._compose_multilevel_minres_correction_preconditioner
-        is compose_multilevel_minres_correction_preconditioner
-    )
     precond = compose_multilevel_minres_correction_preconditioner(
         base=base,
         coarse_levels=(bad_coarse,),
@@ -303,7 +297,6 @@ def test_preconditioned_minres_correction_accepts_only_residual_improvement() ->
     rhs = jnp.asarray([2.0, 4.0], dtype=jnp.float64)
     x0 = jnp.zeros((2,), dtype=jnp.float64)
 
-    assert vd._apply_preconditioned_minres_correction is apply_preconditioned_minres_correction
     x, residual, history, alphas = apply_preconditioned_minres_correction(
         matvec=matvec,
         rhs=rhs,
@@ -331,7 +324,6 @@ def test_subspace_minres_correction_combines_multiple_directions() -> None:
     rhs = jnp.asarray([2.0, 10.0], dtype=jnp.float64)
     x0 = jnp.zeros((2,), dtype=jnp.float64)
 
-    assert vd._apply_subspace_minres_correction is apply_subspace_minres_correction
     x, residual, history, counts, names = apply_subspace_minres_correction(
         matvec=matvec,
         rhs=rhs,

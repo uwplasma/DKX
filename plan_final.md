@@ -1344,6 +1344,16 @@ Completed work:
   `tests/test_generate_readme_fast_branch_audit.py tests/test_benchmark_doc_claims.py`
   as `10 passed in 0.10 s`; `sphinx-build -W -b html docs docs/_build/html`
   passed; Ruff passed.
+- Tranche 72: reduced the RHSMode-1 solve-orchestration compatibility surface
+  by removing low-level domain-decomposition and diagonal-reduction helper
+  aliases from `problems/profile_solve.py`. The affected tests now import those
+  helpers from their canonical owners:
+  `solvers/preconditioner_domain_decomposition.py`,
+  `solvers/preconditioning.py`, `problems/profile_residual.py`, and
+  `solver.py`. A source-tree guard prevents those accidental helper aliases
+  from returning to `profile_solve.py`. Focused validation passed:
+  `tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_profile_dd_reduction_coverage.py tests/test_rhs1_schwarz_heuristic.py tests/test_rhs1_domain_decomposition.py tests/test_pas_preconditioner_policy.py tests/test_profile_solve_policy_helpers.py`
+  as `100 passed in 12.39 s`; Ruff passed.
 
 Remaining consolidation steps:
 

@@ -46,13 +46,6 @@ from sfincs_jax.solvers.explicit_sparse import (
 from sfincs_jax.operators.profile_device_sparse import (
     device_csr_from_matrix, validate_device_csr_matvec,
 )
-from sfincs_jax.solvers.preconditioner_domain_decomposition import (  # compatibility exports for legacy tests/debug scripts
-    _dd_core_patch_ranges,
-    _rhs1_dd_auto_block_size,
-    _rhs1_dd_coarse_block_size,
-    _rhs1_dd_coarse_block_sizes,
-    _rhs1_dd_coarse_level_count,
-)
 from sfincs_jax.solvers.memory_model import estimate_sparse_pc_memory
 from sfincs_jax.solvers.preconditioner_pas_policy import (
     build_pas_tz_memory_fallback, estimate_rhs1_pas_tz_build_bytes as _estimate_rhs1_pas_tz_build_bytes,
@@ -518,10 +511,6 @@ from sfincs_jax.problems.transport_finalize import (
 from sfincs_jax.outputs.transport import TransportStreamingOutputAccumulator
 from sfincs_jax.solver import (
     block_gmres_result_ready as _block_gmres_result_ready, gmres_result_is_finite as _gmres_result_is_finite,
-)
-from sfincs_jax.solvers.preconditioning import (  # noqa: F401
-    block_diagonal_only as _block_diag_only,
-    diagonal_only as _diag_only,
 )
 from sfincs_jax.solvers.preconditioning import (
     _build_rhsmode1_preconditioner_operator_fortran_reduced, _build_rhsmode1_preconditioner_operator_point,
