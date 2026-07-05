@@ -1650,6 +1650,18 @@ Completed work:
   passed on the touched Python owners and test files. `sfincs_jax/io.py`
   remains a small compatibility wrapper at `73` lines, below the review-lock
   `80`-line cap.
+- Tranche 101: ran the non-destructive benchmark-regeneration readiness pass.
+  `materialize_production_stress_manifest.py --out-root /tmp/... --json`
+  produced a 39-case manifest with 15 short-Fortran reference rows, 16 CPU/GPU
+  benchmark-floor gap rows, and QI evidence covering `nfp=1,2,3,4`.
+  `create_production_benchmark_inputs.py --out-root /tmp/... --clean` produced
+  a temporary 39-case production input tree with large-grid cases. The
+  production-manifest/doc-claim test bundle passed as `16 passed in 0.20 s`.
+  `check_benchmark_artifacts.py` validated the current README-facing benchmark
+  summary JSON at
+  `examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json`.
+  The next Lane-4 step is fresh CPU/GPU/Fortran evidence generation, not script
+  repair.
 
 Remaining consolidation steps:
 
