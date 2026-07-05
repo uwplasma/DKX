@@ -1695,6 +1695,17 @@ Completed work:
   still exited with code `134` before producing a report, so the measured
   package coverage percentage remains pinned to the latest successful full
   coverage audit until CI or a stable local coverage run updates it.
+- Tranche 106: ran bounded executable examples for the review-lock examples
+  lane. `examples/tutorials/run_quick_output_and_plot.py --out-dir /tmp/...`
+  wrote HDF5, NetCDF, NPZ, and a PDF diagnostics panel with `125` output fields
+  per data file. `examples/getting_started/build_grids_and_geometry.py` ran the
+  analytic geometry path and reported the expected `5 x 7` angular grid.
+  `examples/autodiff/autodiff_gradient_nu_n_residual.py` ran the residual
+  gradient path and returned the frozen-fixture near-zero loss. The supporting
+  example contract suite `tests/test_getting_started_examples.py
+  tests/test_examples_tutorials.py tests/test_examples_tree_contract.py`
+  passed `20/20` in `20.49 s`. This keeps Phase E executable evidence fresh
+  without writing generated artifacts into the repository.
 
 Remaining consolidation steps:
 
