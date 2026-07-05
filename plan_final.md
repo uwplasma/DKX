@@ -509,7 +509,7 @@ flat owners directly.
 
 ### Lane 1 - Review-Ready Refactor
 
-Status: 94% for final review readiness.
+Status: 96% for final review readiness.
 
 Goal: finish the PR with a smaller, clearer source tree without changing
 physics, outputs, tolerances, solver defaults, differentiable Python paths,
@@ -519,7 +519,9 @@ Latest AST audit:
 
 - Folder depth is no longer the blocker: the package has one-level domain
   folders only and no `__init__.py`-only source packages.
-- The remaining structural blockers are file-family sprawl and owner size.
+- The source tree has 134 Python files, 17 package-root modules, and one-level
+  domain folders only. The remaining structural blockers are file-family sprawl
+  and owner size.
   The largest retained owners are `problems/profile_policies.py` (`7936`
   lines), `problems/profile_sparse_xblock.py` (`7689` lines),
   `operators/profile_full_system.py` (`5978` lines),
@@ -636,6 +638,18 @@ Completed work:
   `profile_sparse_handoff.py` to `profile_sparse_solve.py`, updated internal
   imports, docs, API references, and import contracts, and added a source-tree
   guard so the historical filename is not reintroduced.
+- Tranche 16: moved strict numeric HDF5 parity from
+  `validation/h5_parity.py` into the root public `compare.py` API, deleted the
+  validation helper, and updated docs/scripts/tests to use one comparison
+  owner.
+- Tranche 17: merged measured solver-candidate admission gates from
+  `solvers/selection_policy.py` into `solvers/path_policy.py`, deleted the
+  separate selection module, and kept residual/runtime/memory promotion tests
+  on the canonical policy owner.
+- Tranche 18: moved QI production-ladder promotion gates from
+  `solvers/preconditioner_qi_policy.py` into `validation/qi_device.py`, deleted
+  the solver-policy file, and documented that QI evidence gates are validation
+  policy rather than numerical preconditioners.
 
 Remaining consolidation steps:
 
