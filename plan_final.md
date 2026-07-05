@@ -1364,6 +1364,16 @@ Completed work:
   validation passed:
   `tests/test_source_tree_consolidation.py tests/test_profile_solve_policy_helpers.py tests/test_profile_solve_policy_coverage.py`
   as `55 passed in 3.32 s`; Ruff passed.
+- Tranche 74: moved sparse-helper coverage off private `profile_solve._*`
+  aliases and onto canonical sparse/policy owners. The helper tests now use
+  `problems/profile_sparse_direct.py`, `problems/profile_policies.py`,
+  `solvers/explicit_sparse.py`, `solvers/path_policy.py`, and
+  `solvers/preconditioner_xblock_tz_sparse.py` directly, while keeping the
+  final solve integration test on `profile_solve.py`. A source-tree guard
+  allows that high-level solve import but forbids private
+  `profile_solve._*` helper assertions. Focused validation passed:
+  `tests/test_source_tree_consolidation.py tests/test_profile_sparse_helper_coverage.py`
+  as `43 passed in 3.49 s`; Ruff passed.
 
 Remaining consolidation steps:
 

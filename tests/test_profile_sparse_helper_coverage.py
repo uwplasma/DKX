@@ -7,8 +7,12 @@ import jax.numpy as jnp
 import pytest
 from scipy import sparse
 
+import sfincs_jax.problems.profile_policies as profile_policies
 import sfincs_jax.problems.profile_sparse_direct as sparse_direct
 import sfincs_jax.problems.profile_solve as profile_solve
+import sfincs_jax.solvers.explicit_sparse as explicit_sparse
+import sfincs_jax.solvers.path_policy as path_policy
+import sfincs_jax.solvers.preconditioner_xblock_tz_sparse as xblock_tz_sparse
 
 
 class _HalfSolve:
@@ -33,40 +37,40 @@ def test_rhsmode1_xblock_sparse_lu_default_max_targets_full_fp_host_path() -> No
     pas_op = SimpleNamespace(fblock=SimpleNamespace(fp=None, pas=object()))
     generic_op = SimpleNamespace(fblock=SimpleNamespace(fp=None, pas=None))
 
-    assert profile_solve._rhsmode1_xblock_sparse_lu_default_max(full_fp_op, build_jax_factors=False) == 30000
-    assert profile_solve._rhsmode1_xblock_sparse_lu_default_max(full_fp_op, build_jax_factors=True) == 2000
-    assert profile_solve._rhsmode1_xblock_sparse_lu_default_max(pas_op, build_jax_factors=False) == 2000
-    assert profile_solve._rhsmode1_xblock_sparse_lu_default_max(generic_op, build_jax_factors=False) == 2000
+    assert xblock_tz_sparse.rhsmode1_xblock_sparse_lu_default_max(full_fp_op, build_jax_factors=False) == 30000
+    assert xblock_tz_sparse.rhsmode1_xblock_sparse_lu_default_max(full_fp_op, build_jax_factors=True) == 2000
+    assert xblock_tz_sparse.rhsmode1_xblock_sparse_lu_default_max(pas_op, build_jax_factors=False) == 2000
+    assert xblock_tz_sparse.rhsmode1_xblock_sparse_lu_default_max(generic_op, build_jax_factors=False) == 2000
 
 
 def test_rhsmode1_fp_xblock_host_species_decoupling_equivalence() -> None:
     one_species = SimpleNamespace(n_species=1)
     two_species = SimpleNamespace(n_species=2)
 
-    assert profile_solve._rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+    assert xblock_tz_sparse.rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
         op=one_species,
         preconditioner_species=0,
     )
-    assert profile_solve._rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+    assert xblock_tz_sparse.rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
         op=two_species,
         preconditioner_species=1,
     )
-    assert not profile_solve._rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+    assert not xblock_tz_sparse.rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
         op=two_species,
         preconditioner_species=0,
     )
 
 
 def test_host_sparse_direct_allowed_and_sparse_pc_rescue_policy(monkeypatch) -> None:
-    assert not profile_solve._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=False)
-    assert not profile_solve._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True, use_implicit=True)
+    assert not profile_policies.rhs1_host_sparse_direct_allowed(sparse_exact_lu=False)
+    assert not profile_policies.rhs1_host_sparse_direct_allowed(sparse_exact_lu=True, use_implicit=True)
 
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_HOST", raising=False)
-    assert profile_solve._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True)
+    assert profile_policies.rhs1_host_sparse_direct_allowed(sparse_exact_lu=True)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_HOST", "0")
-    assert not profile_solve._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True)
+    assert not profile_policies.rhs1_host_sparse_direct_allowed(sparse_exact_lu=True)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_HOST", "1")
-    assert profile_solve._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True)
+    assert profile_policies.rhs1_host_sparse_direct_allowed(sparse_exact_lu=True)
 
     op = SimpleNamespace(
         rhs_mode=1,
@@ -74,13 +78,13 @@ def test_host_sparse_direct_allowed_and_sparse_pc_rescue_policy(monkeypatch) -> 
         constraint_scheme=1,
         fblock=SimpleNamespace(fp=object(), pas=None),
     )
-    monkeypatch.setattr("sfincs_jax.problems.profile_solve.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES", raising=False)
-    assert profile_solve._rhsmode1_sparse_operator_preconditioned_rescue_allowed(
+    assert profile_policies.rhsmode1_sparse_operator_preconditioned_rescue_allowed_current_backend(
         op=op, sparse_exact_lu=True, host_sparse_direct_wanted=True
     )
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES", "off")
-    assert not profile_solve._rhsmode1_sparse_operator_preconditioned_rescue_allowed(
+    assert not profile_policies.rhsmode1_sparse_operator_preconditioned_rescue_allowed_current_backend(
         op=op, sparse_exact_lu=True, host_sparse_direct_wanted=True
     )
 
@@ -88,52 +92,52 @@ def test_host_sparse_direct_allowed_and_sparse_pc_rescue_policy(monkeypatch) -> 
 def test_host_sparse_factor_dtype_and_cache_key(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_HOST_SPARSE_FACTOR_DTYPE", raising=False)
     monkeypatch.delenv("SFINCS_JAX_HOST_SPARSE_FACTOR_FLOAT32_MIN", raising=False)
-    monkeypatch.setattr("sfincs_jax.problems.profile_solve.jax.default_backend", lambda: "cpu")
-    assert profile_solve._host_sparse_factor_dtype(size=20_000, factorization="lu", use_implicit=False) == np.dtype(np.float32)
-    assert profile_solve._host_sparse_factor_dtype(size=1_000, factorization="ilu", use_implicit=False) == np.dtype(np.float64)
-    assert profile_solve._host_sparse_factor_dtype(size=20_000, factorization="lu", use_implicit=True) == np.dtype(np.float64)
+    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
+    assert profile_policies.host_sparse_factor_dtype_current_backend(size=20_000, factorization="lu", use_implicit=False) == np.dtype(np.float32)
+    assert profile_policies.host_sparse_factor_dtype_current_backend(size=1_000, factorization="ilu", use_implicit=False) == np.dtype(np.float64)
+    assert profile_policies.host_sparse_factor_dtype_current_backend(size=20_000, factorization="lu", use_implicit=True) == np.dtype(np.float64)
 
     monkeypatch.setenv("SFINCS_JAX_HOST_SPARSE_FACTOR_DTYPE", "fp64")
-    assert profile_solve._host_sparse_factor_dtype(size=20_000, factorization="lu", use_implicit=False) == np.dtype(np.float64)
+    assert profile_policies.host_sparse_factor_dtype_current_backend(size=20_000, factorization="lu", use_implicit=False) == np.dtype(np.float64)
     monkeypatch.setenv("SFINCS_JAX_HOST_SPARSE_FACTOR_DTYPE", "32")
-    assert profile_solve._host_sparse_factor_dtype(size=1, factorization="lu", use_implicit=False) == np.dtype(np.float32)
+    assert profile_policies.host_sparse_factor_dtype_current_backend(size=1, factorization="lu", use_implicit=False) == np.dtype(np.float32)
 
-    key = profile_solve._sparse_factor_cache_key(("a", 1), np.dtype(np.float32))
+    key = sparse_direct.sparse_factor_cache_key(("a", 1), np.dtype(np.float32))
     assert key == ("a", 1, np.dtype(np.float32).str)
 
 
 def test_host_sparse_refine_step_parsing_and_skip_dense_ratio(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_SKIP_DENSE_RATIO", raising=False)
-    assert profile_solve._rhsmode1_host_sparse_skip_dense_ratio() == pytest.approx(1.0e4)
+    assert profile_policies.rhs1_host_sparse_skip_dense_ratio() == pytest.approx(1.0e4)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_SKIP_DENSE_RATIO", "bad")
-    assert profile_solve._rhsmode1_host_sparse_skip_dense_ratio() == pytest.approx(1.0e4)
+    assert profile_policies.rhs1_host_sparse_skip_dense_ratio() == pytest.approx(1.0e4)
 
     monkeypatch.delenv("MY_REFINE_STEPS", raising=False)
-    assert profile_solve._host_sparse_direct_refine_steps("MY_REFINE_STEPS", default=3) == 3
+    assert profile_policies.host_sparse_direct_refine_steps("MY_REFINE_STEPS", default=3) == 3
     monkeypatch.setenv("MY_REFINE_STEPS", "bad")
-    assert profile_solve._host_sparse_direct_refine_steps("MY_REFINE_STEPS", default=2) == 2
+    assert profile_policies.host_sparse_direct_refine_steps("MY_REFINE_STEPS", default=2) == 2
     monkeypatch.setenv("MY_REFINE_STEPS", "-4")
-    assert profile_solve._host_sparse_direct_refine_steps("MY_REFINE_STEPS", default=2) == 0
+    assert profile_policies.host_sparse_direct_refine_steps("MY_REFINE_STEPS", default=2) == 0
 
 
 def test_rhs1_residual_rescue_uses_small_target_slack(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_RESCUE_TARGET_SLACK", raising=False)
-    assert not profile_solve._rhs1_residual_needs_rescue(1.006e-12, 1.0e-12)
-    assert profile_solve._rhs1_residual_needs_rescue(1.02e-12, 1.0e-12)
-    assert profile_solve._rhs1_residual_needs_rescue(1.006e-12, 1.0e-12, force=True)
+    assert not path_policy.rhs1_residual_needs_rescue(1.006e-12, 1.0e-12)
+    assert path_policy.rhs1_residual_needs_rescue(1.02e-12, 1.0e-12)
+    assert path_policy.rhs1_residual_needs_rescue(1.006e-12, 1.0e-12, force=True)
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_RESCUE_TARGET_SLACK", "0")
-    assert profile_solve._rhs1_residual_needs_rescue(1.006e-12, 1.0e-12)
+    assert path_policy.rhs1_residual_needs_rescue(1.006e-12, 1.0e-12)
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_RESCUE_TARGET_SLACK", "bad")
-    assert not profile_solve._rhs1_residual_needs_rescue(1.006e-12, 1.0e-12)
+    assert not path_policy.rhs1_residual_needs_rescue(1.006e-12, 1.0e-12)
 
 
 def test_host_direct_refinement_helpers_improve_residual() -> None:
     rhs = jnp.asarray([2.0, -4.0], dtype=jnp.float64)
     ident = np.eye(2, dtype=np.float64)
 
-    x_direct, rn_direct = profile_solve._host_direct_solve_with_refinement(
+    x_direct, rn_direct = explicit_sparse.host_direct_solve_with_refinement(
         factor_solve=lambda v: 0.5 * np.asarray(v, dtype=np.float64),
         operator_matrix=ident,
         rhs_vec=rhs,
@@ -143,7 +147,7 @@ def test_host_direct_refinement_helpers_improve_residual() -> None:
     np.testing.assert_allclose(x_direct, np.asarray([1.875, -3.75]))
     assert rn_direct < np.linalg.norm(np.asarray(rhs) - 0.5 * np.asarray(rhs))
 
-    x_sparse, rn_sparse = profile_solve._host_sparse_direct_solve_with_refinement(
+    x_sparse, rn_sparse = explicit_sparse.host_sparse_direct_solve_with_refinement(
         ilu=_HalfSolve(),
         a_csr_full=sparse.csr_matrix(ident),
         rhs_vec=rhs,
@@ -183,24 +187,24 @@ def test_host_sparse_direct_polish_uses_preconditioner_and_reports_residual(monk
 def test_explicit_sparse_host_direct_allowed_and_env_bounds(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER_MAX", raising=False)
-    assert profile_solve._rhsmode1_explicit_sparse_host_direct_allowed(
+    assert profile_policies.rhs1_explicit_sparse_host_direct_allowed(
         sparse_exact_lu=True,
         use_implicit=False,
         active_size=10_000,
     )
-    assert not profile_solve._rhsmode1_explicit_sparse_host_direct_allowed(
+    assert not profile_policies.rhs1_explicit_sparse_host_direct_allowed(
         sparse_exact_lu=False,
         use_implicit=False,
         active_size=10_000,
     )
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER_MAX", "bad")
-    assert profile_solve._rhsmode1_explicit_sparse_host_direct_allowed(
+    assert profile_policies.rhs1_explicit_sparse_host_direct_allowed(
         sparse_exact_lu=True,
         use_implicit=False,
         active_size=10_000,
     )
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER", "off")
-    assert not profile_solve._rhsmode1_explicit_sparse_host_direct_allowed(
+    assert not profile_policies.rhs1_explicit_sparse_host_direct_allowed(
         sparse_exact_lu=True,
         use_implicit=False,
         active_size=10_000,

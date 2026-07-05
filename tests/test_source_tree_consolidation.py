@@ -208,6 +208,16 @@ def test_policy_tests_import_policy_owners_not_profile_solve() -> None:
         assert "profile_solve" not in path.read_text(encoding="utf-8"), path
 
 
+def test_sparse_helper_tests_do_not_use_profile_solve_private_aliases() -> None:
+    """Sparse-helper tests may run solves, but helpers should use canonical owners."""
+
+    text = (REPO_ROOT / "tests" / "test_profile_sparse_helper_coverage.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "profile_solve._" not in text
+
+
 def test_test_filenames_do_not_reintroduce_deleted_v3_driver_label() -> None:
     """Keep test modules named after the canonical behavior they protect."""
 
