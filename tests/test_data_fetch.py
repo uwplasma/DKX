@@ -5,6 +5,8 @@ import io
 from pathlib import Path
 import tarfile
 
+import pytest
+
 from sfincs_jax.validation import data_fetch
 
 
@@ -152,6 +154,171 @@ def test_external_equilibrium_cached_data_short_circuits_download(tmp_path: Path
     assert data_fetch.resolve_external_equilibrium("'tiny_cached.bc'", fetch=True) == cached
 
 
+def test_external_equilibrium_resolver_fetches_known_basename_on_cache_miss(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    payload = b"created by fake fetch\n"
+    rel_path = Path("sfincs_jax/data/equilibria/tiny_fetch.nc")
+    manifest = {
+        "version": "test-v1",
+        "release_tag": "test-data",
+        "release_url": "https://example.invalid/release",
+        "asset": "missing.tar.gz",
+        "archive_sha256": "0" * 64,
+        "files": [
+            {
+                "path": rel_path.as_posix(),
+                "size": len(payload),
+                "sha256": _sha256_bytes(payload),
+            }
+        ],
+    }
+    cache_root = tmp_path / "cache"
+    target = cache_root / "test-v1"
+    calls: list[str] = []
+
+    def _fake_fetch() -> Path:
+        calls.append("fetch")
+        fixture = target / rel_path
+        fixture.parent.mkdir(parents=True, exist_ok=True)
+        fixture.write_bytes(payload)
+        return target
+
+    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(cache_root))
+    monkeypatch.setattr(data_fetch, "_load_manifest", lambda: manifest)
+    monkeypatch.setattr(data_fetch, "ensure_external_equilibrium_data", _fake_fetch)
+
+    assert data_fetch.resolve_external_equilibrium('"tiny_fetch.nc"', fetch=True) == target / rel_path
+    assert calls == ["fetch"]
+
+
+def test_external_equilibrium_resolver_rejects_corrupt_cached_file_without_fetch(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    good_payload = b"expected fixture\n"
+    bad_payload = b"wrong fixture\n"
+    rel_path = Path("sfincs_jax/data/equilibria/tiny_corrupt.nc")
+    target = tmp_path / "cache" / "test-v1"
+    cached = target / rel_path
+    cached.parent.mkdir(parents=True, exist_ok=True)
+    cached.write_bytes(bad_payload)
+    manifest = {
+        "version": "test-v1",
+        "release_tag": "test-data",
+        "release_url": "https://example.invalid/release",
+        "asset": "missing.tar.gz",
+        "archive_sha256": "0" * 64,
+        "files": [
+            {
+                "path": rel_path.as_posix(),
+                "size": len(good_payload),
+                "sha256": _sha256_bytes(good_payload),
+            }
+        ],
+    }
+
+    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(data_fetch, "_load_manifest", lambda: manifest)
+
+    assert data_fetch.resolve_external_equilibrium("tiny_corrupt.nc", fetch=False) is None
+
+
+def test_external_equilibrium_resolver_returns_none_if_fetch_does_not_produce_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    rel_path = Path("sfincs_jax/data/equilibria/tiny_missing_after_fetch.nc")
+    manifest = {
+        "version": "test-v1",
+        "release_tag": "test-data",
+        "release_url": "https://example.invalid/release",
+        "asset": "missing.tar.gz",
+        "archive_sha256": "0" * 64,
+        "files": [
+            {
+                "path": rel_path.as_posix(),
+                "size": 7,
+                "sha256": "1" * 64,
+            }
+        ],
+    }
+    calls: list[str] = []
+
+    def _fake_fetch() -> Path:
+        calls.append("fetch")
+        return tmp_path / "cache" / "test-v1"
+
+    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(data_fetch, "_load_manifest", lambda: manifest)
+    monkeypatch.setattr(data_fetch, "ensure_external_equilibrium_data", _fake_fetch)
+
+    assert data_fetch.resolve_external_equilibrium("tiny_missing_after_fetch.nc", fetch=True) is None
+    assert calls == ["fetch"]
+
+
+def test_external_equilibrium_file_verification_checks_missing_size_and_hash(
+    tmp_path: Path,
+) -> None:
+    rel_path = Path("sfincs_jax/data/equilibria/tiny_verify.bc")
+    payload = b"reference fixture\n"
+    manifest = {
+        "files": [
+            {
+                "path": rel_path.as_posix(),
+                "size": len(payload),
+                "sha256": _sha256_bytes(payload),
+            }
+        ],
+    }
+
+    assert not data_fetch._verify_files(tmp_path, manifest)
+
+    fixture = tmp_path / rel_path
+    fixture.parent.mkdir(parents=True, exist_ok=True)
+    fixture.write_bytes(payload + b"extra")
+    assert not data_fetch._verify_files(tmp_path, manifest)
+
+    fixture.write_bytes(b"wrong-length-ok!")
+    bad_hash_manifest = {
+        "files": [
+            {
+                "path": rel_path.as_posix(),
+                "size": fixture.stat().st_size,
+                "sha256": _sha256_bytes(payload),
+            }
+        ],
+    }
+    assert not data_fetch._verify_files(tmp_path, bad_hash_manifest)
+
+    fixture.write_bytes(payload)
+    assert data_fetch._verify_files(tmp_path, manifest)
+
+
+def test_download_archive_accepts_matching_checksum_and_replaces_temp_file(tmp_path: Path) -> None:
+    release_dir = tmp_path / "release"
+    release_dir.mkdir()
+    archive = release_dir / "payload.tar.gz"
+    with tarfile.open(archive, "w:gz") as tf:
+        info = tarfile.TarInfo("payload.txt")
+        payload = b"payload"
+        info.size = len(payload)
+        tf.addfile(info, io.BytesIO(payload))
+
+    destination = tmp_path / "cache" / "payload.tar.gz"
+    manifest = {
+        "release_url": release_dir.as_uri() + "/",
+        "asset": archive.name,
+        "archive_sha256": data_fetch._sha256(archive),
+    }
+
+    data_fetch._download_archive(manifest, destination)
+
+    assert destination.read_bytes() == archive.read_bytes()
+    assert not destination.with_suffix(destination.suffix + ".tmp").exists()
+
+
 def test_external_equilibrium_offline_missing_cache_raises(tmp_path: Path, monkeypatch) -> None:
     manifest = {
         "version": "test-v1",
@@ -166,9 +333,5 @@ def test_external_equilibrium_offline_missing_cache_raises(tmp_path: Path, monke
     monkeypatch.setenv("SFINCS_JAX_OFFLINE", "1")
     monkeypatch.setattr(data_fetch, "_load_manifest", lambda: manifest)
 
-    try:
+    with pytest.raises(FileNotFoundError, match="SFINCS_JAX_OFFLINE"):
         data_fetch.ensure_external_equilibrium_data(quiet=True)
-    except FileNotFoundError as exc:
-        assert "SFINCS_JAX_OFFLINE" in str(exc)
-    else:  # pragma: no cover - defensive assertion branch
-        raise AssertionError("missing offline cache should raise FileNotFoundError")
