@@ -217,6 +217,11 @@ The main structural refactor is functionally complete:
   systems. A source/test audit for `solver.py` reports zero production-used
   public helpers without direct tests. Focused validation passed as
   `3 passed in 1.50 s`.
+- Public distributed-Krylov wrapper coverage now also exercises mesh-present
+  fallback when no sharded callable is available, plus fake-sharded pad/trim
+  behavior for non-device-divisible vectors with a preconditioner. The focused
+  distributed subset passed as `8 passed, 51 deselected in 1.31 s`; the full
+  solver GMRES owner file passed as `59 passed in 23.63 s`.
 - Native block-factor, QI basis, sparse cache-key, and host sparse-factor
   coverage now includes direct tests for native x-ell factor construction and
   application, QI global moment-basis rank gating, RHSMode-1 PAS/x-block sparse
@@ -1133,6 +1138,9 @@ Completed work:
 - Tranche 41: added direct public Krylov wrapper tests for BiCGStab, TFQMR,
   and distributed-GMRES fallback APIs, then reran the source/test audit showing
   no production-used public helpers in `solver.py` without direct tests.
+- Tranche 41b: added bounded distributed-GMRES mesh-present fallback and
+  fake-sharded pad/trim tests so distributed wrapper behavior is checked without
+  requiring multi-device hardware in normal CI.
 - Tranche 42: added direct native-factor, QI global-basis, sparse cache-key,
   host sparse-factor, and bounded x-block-TZ builder tests, then reran
   source/test audits showing no production-used public helpers without direct

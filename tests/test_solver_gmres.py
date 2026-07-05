@@ -1533,6 +1533,130 @@ def test_distributed_gmres_wrappers_fall_back_to_host_without_axis() -> None:
     np.testing.assert_allclose(np.asarray(residual), np.asarray(b - mv(result_with_residual.x)), rtol=1.0e-10)
 
 
+def test_distributed_gmres_wrappers_fall_back_when_sharded_callable_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Mesh:
+        devices = np.empty((2,), dtype=object)
+
+    a = jnp.asarray([[2.0, 0.25], [0.0, 3.0]], dtype=jnp.float64)
+    b = jnp.asarray([1.0, -2.0], dtype=jnp.float64)
+    ref = np.linalg.solve(np.asarray(a), np.asarray(b))
+
+    def mv(x):
+        return a @ x
+
+    monkeypatch.setattr(solver_module, "_get_gmres_mesh", lambda _axis_name: _Mesh())
+    monkeypatch.setattr(solver_module, "_get_distributed_solve_pjit", lambda _axis_name: None)
+    monkeypatch.setattr(solver_module, "_get_distributed_solve_with_residual_pjit", lambda _axis_name: None)
+
+    result = gmres_solve_distributed(
+        matvec=mv,
+        b=b,
+        axis_name="theta",
+        tol=1.0e-12,
+        restart=4,
+        maxiter=20,
+    )
+    result_with_residual, residual = gmres_solve_with_residual_distributed(
+        matvec=mv,
+        b=b,
+        axis_name="theta",
+        tol=1.0e-12,
+        restart=4,
+        maxiter=20,
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), ref, rtol=1.0e-8, atol=1.0e-8)
+    np.testing.assert_allclose(np.asarray(result_with_residual.x), ref, rtol=1.0e-8, atol=1.0e-8)
+    np.testing.assert_allclose(np.asarray(residual), np.asarray(b - mv(result_with_residual.x)), rtol=1.0e-10)
+
+
+def test_distributed_gmres_wrappers_pad_and_trim_fake_sharded_solve(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Mesh:
+        devices = np.empty((2,), dtype=object)
+
+    class _MeshContext:
+        def __enter__(self):
+            return None
+
+        def __exit__(self, *_exc):
+            return False
+
+    calls: list[tuple[str, tuple[int, ...], tuple[int, ...] | None, str]] = []
+    b = jnp.asarray([1.0, -2.0, 0.5], dtype=jnp.float64)
+
+    def mv(x):
+        return x
+
+    def preconditioner(x):
+        return 2.0 * x
+
+    def fake_solve_pjit(
+        b_use,
+        x0_use,
+        matvec_use,
+        preconditioner_use,
+        solver_kind,
+        *_args,
+    ):
+        preconditioned = preconditioner_use(jnp.ones_like(b_use))
+        calls.append(("solve", tuple(b_use.shape), tuple(preconditioned.shape), solver_kind))
+        np.testing.assert_allclose(np.asarray(x0_use), np.zeros((4,), dtype=np.float64))
+        np.testing.assert_allclose(np.asarray(matvec_use(b_use)), np.asarray(b_use))
+        return b_use, jnp.asarray(99.0, dtype=jnp.float64)
+
+    def fake_solve_with_residual_pjit(
+        b_use,
+        x0_use,
+        matvec_use,
+        preconditioner_use,
+        solver_kind,
+        *_args,
+    ):
+        preconditioned = preconditioner_use(jnp.ones_like(b_use))
+        calls.append(("residual", tuple(b_use.shape), tuple(preconditioned.shape), solver_kind))
+        np.testing.assert_allclose(np.asarray(x0_use), np.zeros((4,), dtype=np.float64))
+        np.testing.assert_allclose(np.asarray(matvec_use(b_use)), np.asarray(b_use))
+        return b_use, jnp.asarray(99.0, dtype=jnp.float64), -jnp.ones_like(b_use)
+
+    monkeypatch.setattr(solver_module, "_get_gmres_mesh", lambda _axis_name: _Mesh())
+    monkeypatch.setattr(solver_module, "_mesh_context", lambda _mesh: _MeshContext())
+    monkeypatch.setattr(solver_module, "_get_distributed_solve_pjit", lambda _axis_name: fake_solve_pjit)
+    monkeypatch.setattr(
+        solver_module,
+        "_get_distributed_solve_with_residual_pjit",
+        lambda _axis_name: fake_solve_with_residual_pjit,
+    )
+
+    result = gmres_solve_distributed(
+        matvec=mv,
+        b=b,
+        preconditioner=preconditioner,
+        axis_name="theta",
+        solve_method="bicgstab",
+    )
+    result_with_residual, residual = gmres_solve_with_residual_distributed(
+        matvec=mv,
+        b=b,
+        preconditioner=preconditioner,
+        axis_name="theta",
+        solve_method="bicgstab",
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), np.asarray(b))
+    np.testing.assert_allclose(np.asarray(result_with_residual.x), np.asarray(b))
+    np.testing.assert_allclose(np.asarray(result.residual_norm), 0.0)
+    np.testing.assert_allclose(np.asarray(result_with_residual.residual_norm), 0.0)
+    np.testing.assert_allclose(np.asarray(residual), np.zeros((3,), dtype=np.float64))
+    assert calls == [
+        ("solve", (4,), (4,), "bicgstab"),
+        ("residual", (4,), (4,), "bicgstab"),
+    ]
+
+
 def test_distributed_solver_sharded_jit_smoke_two_cpu_devices() -> None:
     code = r"""
 import numpy as np
