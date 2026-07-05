@@ -63,6 +63,10 @@ Use this map before adding a file or following an internal import:
 - `operators/profile_fblock.py`: kinetic distribution-function block assembly.
 - `operators/profile_full_system.py`: explicit sparse/full-system assembly and
   reduced-Pmat helpers.
+- `geometry/boozer.py`: Boozer `.bc` parsing, radial surface selection, and
+  Boozer-grid metric reconstruction for output diagnostics.
+- `geometry/vmec_wout.py`: VMEC `wout` reading, radial interpolation, and
+  VMEC-grid metric reconstruction for output diagnostics.
 - `problems/profile_solve.py`: RHSMode-1 solve orchestration.
 - `problems/profile_policies.py`: RHSMode-1 automatic solver, fallback, and
   environment-policy decisions.

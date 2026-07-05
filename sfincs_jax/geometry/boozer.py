@@ -415,3 +415,204 @@ def selected_r_n_from_bc(
     radial_weight = (s_new - s_wish) / (s_new - s_old)
     s_eff = radial_weight * s_old + (1.0 - radial_weight) * s_new
     return float(math.sqrt(max(s_eff, 0.0)))
+
+
+def evaluate_boozer_rzd_and_derivatives(
+    *,
+    theta: np.ndarray,
+    zeta: np.ndarray,
+    n_periods: int,
+    m: np.ndarray,
+    n: np.ndarray,
+    parity: np.ndarray,
+    r0: float,
+    r_amp: np.ndarray,
+    z_amp: np.ndarray,
+    dz_amp: np.ndarray,
+    dz_scale: float,
+    chunk: int = 256,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Evaluate Boozer cylindrical geometry and derivatives on a grid.
+
+    The basis, sign conventions, and Nyquist exclusions match SFINCS v3
+    ``geometry.F90`` for geometryScheme 11/12.  The returned arrays are
+    ``R``, ``dR/dtheta``, ``dR/dzeta``, ``Z``, ``dZ/dtheta``, ``dZ/dzeta``,
+    ``Dz``, ``dDz/dtheta``, and ``dDz/dzeta``.
+    """
+
+    theta1 = theta[None, :, None]
+    zeta1 = zeta[None, None, :]
+
+    ntheta = int(theta.shape[0])
+    nzeta = int(zeta.shape[0])
+    m_max_grid = int(ntheta / 2.0)
+    n_max_grid = int(nzeta / 2.0)
+
+    if nzeta == 1:
+        include = np.ones((int(m.shape[0]),), dtype=bool)
+    else:
+        include = (np.abs(n) <= n_max_grid) & (m <= m_max_grid)
+
+    is_sin = ~parity.astype(bool)
+    if nzeta != 1 and np.any(is_sin):
+        at_m_nyq = (m == 0) | (m.astype(np.float64) == (ntheta / 2.0))
+        at_n_nyq = (n == 0) | (np.abs(n.astype(np.float64)) == (nzeta / 2.0))
+        include = include & ~(is_sin & at_m_nyq & at_n_nyq)
+
+    m = m[include].astype(np.float64)
+    n = n[include].astype(np.float64)
+    parity = parity[include].astype(bool)
+    r_amp = r_amp[include].astype(np.float64)
+    z_amp = z_amp[include].astype(np.float64)
+    dz_amp = dz_amp[include].astype(np.float64) * float(dz_scale)
+
+    r = np.full((ntheta, nzeta), float(r0), dtype=np.float64)
+    dr_dtheta = np.zeros_like(r)
+    dr_dzeta = np.zeros_like(r)
+
+    z = np.zeros_like(r)
+    dz_dtheta = np.zeros_like(r)
+    dz_dzeta = np.zeros_like(r)
+
+    dzeta = np.zeros_like(r)
+    ddz_dtheta = np.zeros_like(r)
+    ddz_dzeta = np.zeros_like(r)
+
+    for i0 in range(0, int(m.shape[0]), int(chunk)):
+        i1 = min(int(m.shape[0]), i0 + int(chunk))
+        mc = m[i0:i1][:, None, None]
+        nc = n[i0:i1][:, None, None]
+        rc = r_amp[i0:i1][:, None, None]
+        zc = z_amp[i0:i1][:, None, None]
+        dzc = dz_amp[i0:i1][:, None, None]
+        pc = parity[i0:i1][:, None, None]
+
+        angle = mc * theta1 - float(n_periods) * nc * zeta1
+        cos_a = np.cos(angle)
+        sin_a = np.sin(angle)
+
+        basis_r = np.where(pc, cos_a, sin_a)
+        r = r + np.sum(rc * basis_r, axis=0)
+
+        dtheta_basis_r = np.where(pc, -mc * sin_a, mc * cos_a)
+        dr_dtheta = dr_dtheta + np.sum(rc * dtheta_basis_r, axis=0)
+
+        dzeta_factor = float(n_periods) * nc
+        dzeta_basis_r = np.where(pc, dzeta_factor * sin_a, -dzeta_factor * cos_a)
+        dr_dzeta = dr_dzeta + np.sum(rc * dzeta_basis_r, axis=0)
+
+        basis_z = np.where(pc, sin_a, cos_a)
+        z = z + np.sum(zc * basis_z, axis=0)
+        dzeta = dzeta + np.sum(dzc * basis_z, axis=0)
+
+        dtheta_basis_z = np.where(pc, mc * cos_a, -mc * sin_a)
+        dz_dtheta = dz_dtheta + np.sum(zc * dtheta_basis_z, axis=0)
+        ddz_dtheta = ddz_dtheta + np.sum(dzc * dtheta_basis_z, axis=0)
+
+        dzeta_basis_z = np.where(pc, -dzeta_factor * cos_a, dzeta_factor * sin_a)
+        dz_dzeta = dz_dzeta + np.sum(zc * dzeta_basis_z, axis=0)
+        ddz_dzeta = ddz_dzeta + np.sum(dzc * dzeta_basis_z, axis=0)
+
+    return r, dr_dtheta, dr_dzeta, z, dz_dtheta, dz_dzeta, dzeta, ddz_dtheta, ddz_dzeta
+
+
+def gpsipsi_from_bc_file(
+    *,
+    path: str | Path,
+    theta: np.ndarray,
+    zeta: np.ndarray,
+    d_hat: np.ndarray,
+    r_n_wish: float,
+    vmecradial_option: int,
+    geometry_scheme: int,
+) -> np.ndarray:
+    """Compute ``gpsiHatpsiHat`` for Boozer geometryScheme 11/12.
+
+    This is the metric branch used by SFINCS v3 when Sugama magnetic drifts
+    require ``gpsipsi`` from nearby Boozer surfaces.
+    """
+
+    header, surf_old, surf_new = read_boozer_bc_bracketing_surfaces(
+        path=path,
+        geometry_scheme=int(geometry_scheme),
+        r_n_wish=float(r_n_wish),
+    )
+
+    r_old = float(surf_old.r_n)
+    r_new = float(surf_new.r_n)
+    if r_new == r_old:
+        radial_weight = 1.0
+    elif int(vmecradial_option) == 1:
+        radial_weight = 1.0 if abs(r_old - float(r_n_wish)) < abs(r_new - float(r_n_wish)) else 0.0
+    else:
+        radial_weight = (r_new * r_new - float(r_n_wish) * float(r_n_wish)) / (
+            r_new * r_new - r_old * r_old
+        )
+
+    theta = np.asarray(theta, dtype=np.float64)
+    zeta = np.asarray(zeta, dtype=np.float64)
+
+    n_old = -np.asarray(surf_old.n, dtype=np.int32)
+    n_new = -np.asarray(surf_new.n, dtype=np.int32)
+    dz_scale = float(2.0 * math.pi / float(header.n_periods)) * (-1.0)
+
+    ro, dro_dt, dro_dz, _zo, dzo_dt, dzo_dz, dzo, ddzo_dt, ddzo_dz = evaluate_boozer_rzd_and_derivatives(
+        theta=theta,
+        zeta=zeta,
+        n_periods=int(header.n_periods),
+        m=np.asarray(surf_old.m, dtype=np.int32),
+        n=n_old,
+        parity=np.asarray(surf_old.parity, dtype=bool),
+        r0=float(surf_old.r0),
+        r_amp=np.asarray(surf_old.r_amp, dtype=np.float64),
+        z_amp=np.asarray(surf_old.z_amp, dtype=np.float64),
+        dz_amp=np.asarray(surf_old.dz_amp, dtype=np.float64),
+        dz_scale=dz_scale,
+    )
+    rn, drn_dt, drn_dz, _zn, dzn_dt, dzn_dz, dzn, ddzn_dt, ddzn_dz = evaluate_boozer_rzd_and_derivatives(
+        theta=theta,
+        zeta=zeta,
+        n_periods=int(header.n_periods),
+        m=np.asarray(surf_new.m, dtype=np.int32),
+        n=n_new,
+        parity=np.asarray(surf_new.parity, dtype=bool),
+        r0=float(surf_new.r0),
+        r_amp=np.asarray(surf_new.r_amp, dtype=np.float64),
+        z_amp=np.asarray(surf_new.z_amp, dtype=np.float64),
+        dz_amp=np.asarray(surf_new.dz_amp, dtype=np.float64),
+        dz_scale=dz_scale,
+    )
+
+    r = ro * radial_weight + rn * (1.0 - radial_weight)
+    dr_dt = dro_dt * radial_weight + drn_dt * (1.0 - radial_weight)
+    dr_dz = dro_dz * radial_weight + drn_dz * (1.0 - radial_weight)
+    dz_dt = dzo_dt * radial_weight + dzn_dt * (1.0 - radial_weight)
+    dz_dz = dzo_dz * radial_weight + dzn_dz * (1.0 - radial_weight)
+    dz_field = dzo * radial_weight + dzn * (1.0 - radial_weight)
+    ddz_dt = ddzo_dt * radial_weight + ddzn_dt * (1.0 - radial_weight)
+    ddz_dz = ddzo_dz * radial_weight + ddzn_dz * (1.0 - radial_weight)
+
+    geomang = dz_field - zeta[None, :]
+    dgeomang_dtheta = ddz_dt
+    dgeomang_dzeta = ddz_dz - 1.0
+
+    cosg = np.cos(geomang)
+    sing = np.sin(geomang)
+
+    dX_dtheta = dr_dt * cosg - r * dgeomang_dtheta * sing
+    dX_dzeta = dr_dz * cosg - r * dgeomang_dzeta * sing
+    dY_dtheta = dr_dt * sing + r * dgeomang_dtheta * cosg
+    dY_dzeta = dr_dz * sing + r * dgeomang_dzeta * cosg
+
+    dZ_dtheta = dz_dt
+    dZ_dzeta = dz_dz
+
+    d_hat = np.asarray(d_hat, dtype=np.float64)
+    gradpsi_x = d_hat * (dY_dtheta * dZ_dzeta - dZ_dtheta * dY_dzeta)
+    gradpsi_y = d_hat * (dZ_dtheta * dX_dzeta - dX_dtheta * dZ_dzeta)
+    gradpsi_z = d_hat * (dX_dtheta * dY_dzeta - dY_dtheta * dX_dzeta)
+    return gradpsi_x * gradpsi_x + gradpsi_y * gradpsi_y + gradpsi_z * gradpsi_z
+
+
+_evaluate_boozer_rzd_and_derivatives = evaluate_boozer_rzd_and_derivatives
+_gpsipsi_from_bc_file = gpsipsi_from_bc_file

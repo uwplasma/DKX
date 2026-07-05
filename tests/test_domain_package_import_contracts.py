@@ -236,6 +236,8 @@ MOVED_ROOT_MODULE_OWNERS = {
         "make_x_polynomial_diff_matrices",
     ),
     "sfincs_jax.geometry.boozer": (
+        "evaluate_boozer_rzd_and_derivatives",
+        "gpsipsi_from_bc_file",
         "read_boozer_bc_header",
         "read_boozer_bc_bracketing_surfaces",
         "selected_r_n_from_bc",
@@ -250,6 +252,7 @@ MOVED_ROOT_MODULE_OWNERS = {
     ),
     "sfincs_jax.geometry.vmec_wout": (
         "VmecWout",
+        "gpsipsi_from_wout_file",
         "read_vmec_wout",
         "vmec_interpolation",
     ),

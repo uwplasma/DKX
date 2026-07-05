@@ -8,7 +8,13 @@ from typing import Any, Callable, Dict
 
 import numpy as np
 
-from ..geometry.boozer import read_boozer_bc_bracketing_surfaces, read_boozer_bc_header, selected_r_n_from_bc
+from ..geometry.boozer import (
+    evaluate_boozer_rzd_and_derivatives as _geometry_evaluate_boozer_rzd_and_derivatives,
+    gpsipsi_from_bc_file as _geometry_gpsipsi_from_bc_file,
+    read_boozer_bc_bracketing_surfaces,
+    read_boozer_bc_header,
+    selected_r_n_from_bc,
+)
 from ..diagnostics import fsab_hat2 as fsab_hat2_jax
 from ..diagnostics import u_hat_np
 from ..diagnostics import vprime_hat as vprime_hat_jax
@@ -67,7 +73,12 @@ from ..solvers.diagnostics import (
     runtime_scale_hint,
     write_solver_trace_json,
 )
-from ..geometry.vmec_wout import _set_scale_factor, psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
+from ..geometry.vmec_wout import (
+    gpsipsi_from_wout_file as _geometry_gpsipsi_from_wout_file,
+    psi_a_hat_from_wout,
+    read_vmec_wout,
+    vmec_interpolation,
+)
 from sfincs_jax.discretization.v3 import V3Grids, geometry_from_namelist, grids_from_namelist
 
 
@@ -103,6 +114,7 @@ write_sfincs_output_file = _output_formats.write_sfincs_output_file
 _select_rhsmode1_linear_solve_method = (
     _rhsmode1_outputs._select_rhsmode1_linear_solve_method
 )
+_evaluate_boozer_rzd_and_derivatives = _geometry_evaluate_boozer_rzd_and_derivatives
 _align_phi1_history_for_output = _rhsmode1_outputs._align_phi1_history_for_output
 _phi1_fast_explicit_gmres_restart_default = _rhsmode1_outputs._phi1_fast_explicit_gmres_restart_default
 _select_phi1_newton_linear_solve_method = _rhsmode1_outputs._select_phi1_newton_linear_solve_method
@@ -151,106 +163,6 @@ def _fortran_logical(x: bool) -> np.int32:
     return np.int32(1 if bool(x) else -1)
 
 
-def _evaluate_boozer_rzd_and_derivatives(
-    *,
-    theta: np.ndarray,
-    zeta: np.ndarray,
-    n_periods: int,
-    m: np.ndarray,
-    n: np.ndarray,
-    parity: np.ndarray,
-    r0: float,
-    r_amp: np.ndarray,
-    z_amp: np.ndarray,
-    dz_amp: np.ndarray,
-    dz_scale: float,
-    chunk: int = 256,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Evaluate (RHat, ZHat, Dz) and their (theta,zeta) derivatives on a Boozer grid.
-
-    This mirrors the Fourier evaluation in v3 `geometry.F90` for geometryScheme 11/12,
-    including Nyquist exclusions and the parity-dependent sine/cosine choices for ZHat and Dz.
-    """
-    theta1 = theta[None, :, None]  # (1,T,1)
-    zeta1 = zeta[None, None, :]  # (1,1,Z)
-
-    ntheta = int(theta.shape[0])
-    nzeta = int(zeta.shape[0])
-    m_max_grid = int(ntheta / 2.0)
-    n_max_grid = int(nzeta / 2.0)
-
-    if nzeta == 1:
-        include = np.ones((int(m.shape[0]),), dtype=bool)
-    else:
-        include = (np.abs(n) <= n_max_grid) & (m <= m_max_grid)
-
-    # Additional Nyquist exclusions for sine components (same logic as v3 `computeBHat`).
-    is_sin = ~parity.astype(bool)
-    if nzeta != 1 and np.any(is_sin):
-        at_m_nyq = (m == 0) | (m.astype(np.float64) == (ntheta / 2.0))
-        at_n_nyq = (n == 0) | (np.abs(n.astype(np.float64)) == (nzeta / 2.0))
-        include = include & ~(is_sin & at_m_nyq & at_n_nyq)
-
-    m = m[include].astype(np.float64)
-    n = n[include].astype(np.float64)
-    parity = parity[include].astype(bool)
-    r_amp = r_amp[include].astype(np.float64)
-    z_amp = z_amp[include].astype(np.float64)
-    dz_amp = dz_amp[include].astype(np.float64) * float(dz_scale)
-
-    r = np.full((ntheta, nzeta), float(r0), dtype=np.float64)
-    dr_dtheta = np.zeros_like(r)
-    dr_dzeta = np.zeros_like(r)
-
-    z = np.zeros_like(r)
-    dz_dtheta = np.zeros_like(r)
-    dz_dzeta = np.zeros_like(r)
-
-    dzeta = np.zeros_like(r)  # Dz field
-    ddz_dtheta = np.zeros_like(r)
-    ddz_dzeta = np.zeros_like(r)
-
-    h = int(m.shape[0])
-    for i0 in range(0, h, chunk):
-        i1 = min(h, i0 + chunk)
-        mc = m[i0:i1][:, None, None]
-        nc = n[i0:i1][:, None, None]
-        rc = r_amp[i0:i1][:, None, None]
-        zc = z_amp[i0:i1][:, None, None]
-        dzc = dz_amp[i0:i1][:, None, None]
-        pc = parity[i0:i1][:, None, None]
-
-        angle = mc * theta1 - float(n_periods) * nc * zeta1
-        cos_a = np.cos(angle)
-        sin_a = np.sin(angle)
-
-        # R uses the same basis as BHat (cos for parity=True, sin for parity=False).
-        basis_r = np.where(pc, cos_a, sin_a)
-        r = r + np.sum(rc * basis_r, axis=0)
-
-        dtheta_basis_r = np.where(pc, -mc * sin_a, mc * cos_a)
-        dr_dtheta = dr_dtheta + np.sum(rc * dtheta_basis_r, axis=0)
-
-        dzeta_factor = float(n_periods) * nc
-        dzeta_basis_r = np.where(pc, dzeta_factor * sin_a, -dzeta_factor * cos_a)
-        dr_dzeta = dr_dzeta + np.sum(rc * dzeta_basis_r, axis=0)
-
-        # Z and Dz use the opposite basis (sin for parity=True, cos for parity=False).
-        basis_z = np.where(pc, sin_a, cos_a)
-        z = z + np.sum(zc * basis_z, axis=0)
-        dzeta = dzeta + np.sum(dzc * basis_z, axis=0)
-
-        dtheta_basis_z = np.where(pc, mc * cos_a, -mc * sin_a)
-        dz_dtheta = dz_dtheta + np.sum(zc * dtheta_basis_z, axis=0)
-        ddz_dtheta = ddz_dtheta + np.sum(dzc * dtheta_basis_z, axis=0)
-
-        dzeta_basis_z = np.where(pc, -dzeta_factor * cos_a, dzeta_factor * sin_a)
-        dz_dzeta = dz_dzeta + np.sum(zc * dzeta_basis_z, axis=0)
-        ddz_dzeta = ddz_dzeta + np.sum(dzc * dzeta_basis_z, axis=0)
-
-    return r, dr_dtheta, dr_dzeta, z, dz_dtheta, dz_dzeta, dzeta, ddz_dtheta, ddz_dzeta
-
-
 def _gpsipsi_from_bc_file(
     *,
     nml: Namelist,
@@ -260,95 +172,18 @@ def _gpsipsi_from_bc_file(
     vmecradial_option: int,
     geometry_scheme: int,
 ) -> np.ndarray:
-    """Compute `gpsipsi` (written as `gpsiHatpsiHat`) for geometryScheme 11/12.
+    """Compatibility wrapper for Boozer ``gpsiHatpsiHat`` output metrics."""
 
-    This replicates the `nearbyRadiiGiven` branch used in v3's `geometry.F90` for
-    Sugama magnetic drift support, but only computes `gpsipsi` (not curvature).
-    """
     p = _resolve_equilibrium_file_from_namelist(nml=nml)
-    header, surf_old, surf_new = read_boozer_bc_bracketing_surfaces(
-        path=p, geometry_scheme=int(geometry_scheme), r_n_wish=float(r_n_wish)
+    return _geometry_gpsipsi_from_bc_file(
+        path=p,
+        theta=np.asarray(grids.theta, dtype=np.float64),
+        zeta=np.asarray(grids.zeta, dtype=np.float64),
+        d_hat=np.asarray(geom.d_hat, dtype=np.float64),
+        r_n_wish=float(r_n_wish),
+        vmecradial_option=int(vmecradial_option),
+        geometry_scheme=int(geometry_scheme),
     )
-
-    r_old = float(surf_old.r_n)
-    r_new = float(surf_new.r_n)
-    if r_new == r_old:
-        radial_weight = 1.0
-    else:
-        if int(vmecradial_option) == 1:
-            radial_weight = 1.0 if abs(r_old - float(r_n_wish)) < abs(r_new - float(r_n_wish)) else 0.0
-        else:
-            radial_weight = (r_new * r_new - float(r_n_wish) * float(r_n_wish)) / (r_new * r_new - r_old * r_old)
-
-    theta = np.asarray(grids.theta, dtype=np.float64)
-    zeta = np.asarray(grids.zeta, dtype=np.float64)
-
-    # Toroidal direction sign switch: n -> -n.
-    n_old = -np.asarray(surf_old.n, dtype=np.int32)
-    n_new = -np.asarray(surf_new.n, dtype=np.int32)
-
-    # Toroidal direction sign switch for Dz: multiply coefficients by -1.
-    dz_scale = float(2.0 * np.pi / float(header.n_periods)) * (-1.0)
-
-    ro, dro_dt, dro_dz, zo, dzo_dt, dzo_dz, dzo, ddzo_dt, ddzo_dz = _evaluate_boozer_rzd_and_derivatives(
-        theta=theta,
-        zeta=zeta,
-        n_periods=int(header.n_periods),
-        m=np.asarray(surf_old.m, dtype=np.int32),
-        n=n_old,
-        parity=np.asarray(surf_old.parity, dtype=bool),
-        r0=float(surf_old.r0),
-        r_amp=np.asarray(surf_old.r_amp, dtype=np.float64),
-        z_amp=np.asarray(surf_old.z_amp, dtype=np.float64),
-        dz_amp=np.asarray(surf_old.dz_amp, dtype=np.float64),
-        dz_scale=dz_scale,
-    )
-    rn, drn_dt, drn_dz, zn, dzn_dt, dzn_dz, dzn, ddzn_dt, ddzn_dz = _evaluate_boozer_rzd_and_derivatives(
-        theta=theta,
-        zeta=zeta,
-        n_periods=int(header.n_periods),
-        m=np.asarray(surf_new.m, dtype=np.int32),
-        n=n_new,
-        parity=np.asarray(surf_new.parity, dtype=bool),
-        r0=float(surf_new.r0),
-        r_amp=np.asarray(surf_new.r_amp, dtype=np.float64),
-        z_amp=np.asarray(surf_new.z_amp, dtype=np.float64),
-        dz_amp=np.asarray(surf_new.dz_amp, dtype=np.float64),
-        dz_scale=dz_scale,
-    )
-
-    r = ro * radial_weight + rn * (1.0 - radial_weight)
-    dr_dt = dro_dt * radial_weight + drn_dt * (1.0 - radial_weight)
-    dr_dz = dro_dz * radial_weight + drn_dz * (1.0 - radial_weight)
-    dz_dt = dzo_dt * radial_weight + dzn_dt * (1.0 - radial_weight)
-    dz_dz = dzo_dz * radial_weight + dzn_dz * (1.0 - radial_weight)
-    dz_field = dzo * radial_weight + dzn * (1.0 - radial_weight)
-    ddz_dt = ddzo_dt * radial_weight + ddzn_dt * (1.0 - radial_weight)
-    ddz_dz = ddzo_dz * radial_weight + ddzn_dz * (1.0 - radial_weight)
-
-    # geometric toroidal angle: geomang = Dz - zeta
-    geomang = dz_field - zeta[None, :]
-    dgeomang_dtheta = ddz_dt
-    dgeomang_dzeta = ddz_dz - 1.0
-
-    cosg = np.cos(geomang)
-    sing = np.sin(geomang)
-
-    dX_dtheta = dr_dt * cosg - r * dgeomang_dtheta * sing
-    dX_dzeta = dr_dz * cosg - r * dgeomang_dzeta * sing
-    dY_dtheta = dr_dt * sing + r * dgeomang_dtheta * cosg
-    dY_dzeta = dr_dz * sing + r * dgeomang_dzeta * cosg
-
-    # Z is already the cylindrical vertical coordinate.
-    dZ_dtheta = dz_dt
-    dZ_dzeta = dz_dz
-
-    d_hat = np.asarray(geom.d_hat, dtype=np.float64)
-    gradpsiX = d_hat * (dY_dtheta * dZ_dzeta - dZ_dtheta * dY_dzeta)
-    gradpsiY = d_hat * (dZ_dtheta * dX_dzeta - dX_dtheta * dZ_dzeta)
-    gradpsiZ = d_hat * (dX_dtheta * dY_dzeta - dY_dtheta * dX_dzeta)
-    gpsipsi = gradpsiX * gradpsiX + gradpsiY * gradpsiY + gradpsiZ * gradpsiZ
-    return gpsipsi
 
 
 def _gpsipsi_from_wout_file(
@@ -358,176 +193,24 @@ def _gpsipsi_from_wout_file(
     psi_n_wish: float,
     vmec_radial_option: int,
 ) -> np.ndarray:
-    """Compute `gpsipsi` (written as `gpsiHatpsiHat`) for geometryScheme=5 (VMEC wout).
+    """Compatibility wrapper for VMEC ``gpsiHatpsiHat`` output metrics."""
 
-    This mirrors the metric-based expression used in v3 `geometry.F90::computeBHat_VMEC`.
-    """
     geom_params = nml.group("geometryParameters")
     wout_path = _resolve_equilibrium_file_from_namelist(nml=nml)
-    w = read_vmec_wout(wout_path)
-
-    interp = vmec_interpolation(w=w, psi_n_wish=float(psi_n_wish), vmec_radial_option=int(vmec_radial_option))
-    (i_full0, i_full1) = interp.index_full
-    (w_full0, w_full1) = interp.weight_full
-    (i_half0, i_half1) = interp.index_half
-    (w_half0, w_half1) = interp.weight_half
-
-    theta = np.asarray(grids.theta, dtype=np.float64)
-    zeta = np.asarray(grids.zeta, dtype=np.float64)
-    theta1 = theta[None, :, None]
-    zeta1 = zeta[None, None, :]
-
-    ntheta = int(theta.shape[0])
-    nzeta = int(zeta.shape[0])
-
-    # Reproduce v3's mode-inclusion logic (same as used for BHat, etc).
-    n_periods = int(w.nfp)
-    xm_nyq = np.asarray(w.xm_nyq, dtype=np.float64)
-    xn_nyq = np.asarray(w.xn_nyq, dtype=np.float64)
-    b00 = float(w.bmnc[0, i_half0] * w_half0 + w.bmnc[0, i_half1] * w_half1)
-    if b00 == 0.0:
-        raise ValueError("VMEC bmnc(0,0) is zero; cannot apply min_Bmn_to_load filter.")
-
-    min_bmn_to_load = float(_get_float(geom_params, "min_Bmn_to_load", 0.0))
-    ripple_scale = float(_get_float(geom_params, "rippleScale", 1.0))
-    helicity_n = int(_get_int(geom_params, "helicity_n", 0))
-    helicity_l = int(_get_int(geom_params, "helicity_l", 0))
-    vmec_nyquist_option = int(
-        _get_int(geom_params, "VMEC_Nyquist_option", _get_int(geom_params, "VMEC_NYQUIST_OPTION", 1))
+    return _geometry_gpsipsi_from_wout_file(
+        path=wout_path,
+        theta=np.asarray(grids.theta, dtype=np.float64),
+        zeta=np.asarray(grids.zeta, dtype=np.float64),
+        psi_n_wish=float(psi_n_wish),
+        vmec_radial_option=int(vmec_radial_option),
+        min_bmn_to_load=float(_get_float(geom_params, "min_Bmn_to_load", 0.0)),
+        ripple_scale=float(_get_float(geom_params, "rippleScale", 1.0)),
+        helicity_n=int(_get_int(geom_params, "helicity_n", 0)),
+        helicity_l=int(_get_int(geom_params, "helicity_l", 0)),
+        vmec_nyquist_option=int(
+            _get_int(geom_params, "VMEC_Nyquist_option", _get_int(geom_params, "VMEC_NYQUIST_OPTION", 1))
+        ),
     )
-    if vmec_nyquist_option == 0:
-        vmec_nyquist_option = 1
-    if vmec_nyquist_option not in {1, 2}:
-        raise ValueError("VMEC_Nyquist_option must be 1 (skip Nyquist) or 2 (include Nyquist).")
-
-    # v3 applies the scale factor *before* checking `min_Bmn_to_load`.
-    scale_all = np.array(
-        [
-            _set_scale_factor(
-                n=int(round(float(xn_nyq[k]) / float(n_periods))),
-                m=int(round(float(xm_nyq[k]))),
-                helicity_n=helicity_n,
-                helicity_l=helicity_l,
-                ripple_scale=ripple_scale,
-            )
-            for k in range(int(xm_nyq.shape[0]))
-        ],
-        dtype=np.float64,
-    )
-    b_mode = (w.bmnc[:, i_half0] * w_half0 + w.bmnc[:, i_half1] * w_half1) * scale_all
-    include = np.abs(b_mode / float(b00)) >= float(min_bmn_to_load)
-    if int(vmec_nyquist_option) == 1:
-        n_eff = xn_nyq / float(n_periods)
-        include = include & (np.abs(xm_nyq) < float(w.mpol)) & (np.abs(n_eff) <= float(w.ntor))
-
-    idx = np.nonzero(include)[0].astype(np.int32)
-    if idx.size == 0:
-        raise ValueError("No VMEC modes were included (min_Bmn_to_load too large?).")
-
-    # Map (m,n) in the non-Nyquist mode table to indices (for rmnc/zmns).
-    mode_to_index: dict[tuple[int, int], int] = {
-        (int(w.xm[k]), int(w.xn[k])): int(k) for k in range(int(w.xm.shape[0]))
-    }
-
-    # VMEC spacing in psiHat (v3): dpsi = phi(2)/(2*pi).
-    dpsi = float(w.phi[1]) / (2.0 * math.pi)
-
-    rmnc = np.asarray(w.rmnc, dtype=np.float64)
-    zmns = np.asarray(w.zmns, dtype=np.float64)
-    d_rmnc_dpsi_hat = np.zeros_like(rmnc)
-    d_zmns_dpsi_hat = np.zeros_like(zmns)
-    d_rmnc_dpsi_hat[:, 1:] = (rmnc[:, 1:] - rmnc[:, :-1]) / float(dpsi)
-    d_zmns_dpsi_hat[:, 1:] = (zmns[:, 1:] - zmns[:, :-1]) / float(dpsi)
-
-    r = np.zeros((ntheta, nzeta), dtype=np.float64)
-    dr_dtheta = np.zeros_like(r)
-    dr_dzeta = np.zeros_like(r)
-    dr_dpsi_hat = np.zeros_like(r)
-    dz_dtheta = np.zeros_like(r)
-    dz_dzeta = np.zeros_like(r)
-    dz_dpsi_hat = np.zeros_like(r)
-
-    chunk = 256
-    for i0 in range(0, int(idx.size), chunk):
-        sel_nyq = idx[i0 : min(int(idx.size), i0 + chunk)]
-        non_sel = np.array(
-            [mode_to_index.get((int(w.xm_nyq[k]), int(w.xn_nyq[k])), -1) for k in sel_nyq.tolist()],
-            dtype=np.int32,
-        )
-        mask = non_sel >= 0
-        if not np.any(mask):
-            continue
-        non_sel = non_sel[mask]
-        m = np.asarray(w.xm[non_sel], dtype=np.float64)[:, None, None]
-        n_nyq = np.asarray(w.xn[non_sel], dtype=np.float64)[:, None, None]
-
-        scale = np.array(
-            [
-                _set_scale_factor(
-                    n=int(round(float(w.xn[k]) / float(n_periods))),
-                    m=int(round(float(w.xm[k]))),
-                    helicity_n=helicity_n,
-                    helicity_l=helicity_l,
-                    ripple_scale=ripple_scale,
-                )
-                for k in non_sel.tolist()
-            ],
-            dtype=np.float64,
-        )[:, None, None]
-
-        angle = m * theta1 - n_nyq * zeta1
-        cos_a = np.cos(angle)
-        sin_a = np.sin(angle)
-
-        # R and Z live on the full mesh.
-        r_coef = (rmnc[non_sel, i_full0] * w_full0 + rmnc[non_sel, i_full1] * w_full1)[:, None, None] * scale
-        z_coef = (zmns[non_sel, i_full0] * w_full0 + zmns[non_sel, i_full1] * w_full1)[:, None, None] * scale
-
-        # d/dpsiHat coefficients live on the half mesh.
-        dr_dpsi_coef = (
-            d_rmnc_dpsi_hat[non_sel, i_half0] * w_half0 + d_rmnc_dpsi_hat[non_sel, i_half1] * w_half1
-        )[:, None, None] * scale
-        dz_dpsi_coef = (
-            d_zmns_dpsi_hat[non_sel, i_half0] * w_half0 + d_zmns_dpsi_hat[non_sel, i_half1] * w_half1
-        )[:, None, None] * scale
-
-        r += np.sum(r_coef * cos_a, axis=0)
-        dr_dtheta += np.sum(-m * r_coef * sin_a, axis=0)
-        dr_dzeta += np.sum(n_nyq * r_coef * sin_a, axis=0)
-        dr_dpsi_hat += np.sum(dr_dpsi_coef * cos_a, axis=0)
-
-        dz_dtheta += np.sum(m * z_coef * cos_a, axis=0)
-        dz_dzeta += np.sum(-n_nyq * z_coef * cos_a, axis=0)
-        dz_dpsi_hat += np.sum(dz_dpsi_coef * sin_a, axis=0)
-
-    cosz = np.cos(zeta)[None, :]
-    sinz = np.sin(zeta)[None, :]
-
-    dX_dtheta = dr_dtheta * cosz
-    dX_dzeta = dr_dzeta * cosz - r * sinz
-    dX_dpsi = dr_dpsi_hat * cosz
-
-    dY_dtheta = dr_dtheta * sinz
-    dY_dzeta = dr_dzeta * sinz + r * cosz
-    dY_dpsi = dr_dpsi_hat * sinz
-
-    dZ_dtheta = dz_dtheta
-    dZ_dzeta = dz_dzeta
-    dZ_dpsi = dz_dpsi_hat
-
-    g_tt = dX_dtheta * dX_dtheta + dY_dtheta * dY_dtheta + dZ_dtheta * dZ_dtheta
-    g_tz = dX_dtheta * dX_dzeta + dY_dtheta * dY_dzeta + dZ_dtheta * dZ_dzeta
-    g_zz = dX_dzeta * dX_dzeta + dY_dzeta * dY_dzeta + dZ_dzeta * dZ_dzeta
-    g_pt = dX_dpsi * dX_dtheta + dY_dpsi * dY_dtheta + dZ_dpsi * dZ_dtheta
-    g_pz = dX_dpsi * dX_dzeta + dY_dpsi * dY_dzeta + dZ_dpsi * dZ_dzeta
-    g_pp = dX_dpsi * dX_dpsi + dY_dpsi * dY_dpsi + dZ_dpsi * dZ_dpsi
-
-    denom = g_tt * g_zz - g_tz * g_tz
-    gpsipsi = 1.0 / (
-        g_pp
-        + (g_pt * (g_tz * g_pz - g_pt * g_zz) + g_pz * (g_pt * g_tz - g_tt * g_pz)) / denom
-    )
-    return gpsipsi
 
 
 def sfincs_jax_output_dict(

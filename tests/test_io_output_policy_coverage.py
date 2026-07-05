@@ -13,10 +13,12 @@ from sfincs_jax.input_compat import (
     scheme4_radial_constants,
     set_input_radial_coordinate_wish,
 )
+from sfincs_jax.geometry import boozer as geometry_boozer
+from sfincs_jax.geometry import vmec_wout as geometry_vmec_wout
+from sfincs_jax.geometry.boozer import evaluate_boozer_rzd_and_derivatives
 from sfincs_jax.io import (
     _apply_export_f_maps,
     _as_1d_float,
-    _evaluate_boozer_rzd_and_derivatives,
     _export_f_config,
     _fortran_logical,
     _get_float,
@@ -1488,7 +1490,7 @@ def test_boozer_fourier_derivative_evaluator_matches_analytic_modes() -> None:
     parity = np.asarray([True])
 
     r, dr_dtheta, dr_dzeta, z, dz_dtheta, dz_dzeta, dzeta, ddz_dtheta, ddz_dzeta = (
-        _evaluate_boozer_rzd_and_derivatives(
+        evaluate_boozer_rzd_and_derivatives(
             theta=theta,
             zeta=zeta,
             n_periods=2,
@@ -1523,7 +1525,7 @@ def test_boozer_fourier_evaluator_handles_nonstellarator_symmetric_modes() -> No
     parity = np.asarray([False])
 
     r, dr_dtheta, dr_dzeta, z, dz_dtheta, dz_dzeta, dzeta, ddz_dtheta, ddz_dzeta = (
-        _evaluate_boozer_rzd_and_derivatives(
+        evaluate_boozer_rzd_and_derivatives(
             theta=theta,
             zeta=zeta,
             n_periods=3,
@@ -1555,7 +1557,7 @@ def test_boozer_fourier_evaluator_drops_sine_nyquist_modes_like_v3() -> None:
     theta = np.asarray([0.0, np.pi], dtype=np.float64)
     zeta = np.asarray([0.0, np.pi], dtype=np.float64)
     r, dr_dtheta, dr_dzeta, z, dz_dtheta, dz_dzeta, dzeta, ddz_dtheta, ddz_dzeta = (
-        _evaluate_boozer_rzd_and_derivatives(
+        evaluate_boozer_rzd_and_derivatives(
             theta=theta,
             zeta=zeta,
             n_periods=1,
@@ -2031,7 +2033,7 @@ def test_bc_metric_output_branch_matches_positive_boozer_surface_metric(
 
     monkeypatch.setattr(output_writer, "_resolve_equilibrium_file_from_namelist", lambda *, nml: Path("toy.bc"))
     monkeypatch.setattr(
-        output_writer,
+        geometry_boozer,
         "read_boozer_bc_bracketing_surfaces",
         lambda **_kwargs: (header, old, new),
     )
@@ -2082,8 +2084,8 @@ def test_vmec_metric_output_branch_filters_modes_and_produces_finite_metric(
     )
 
     monkeypatch.setattr(output_writer, "_resolve_equilibrium_file_from_namelist", lambda *, nml: Path("wout_toy.nc"))
-    monkeypatch.setattr(output_writer, "read_vmec_wout", lambda _path: w)
-    monkeypatch.setattr(output_writer, "vmec_interpolation", lambda **_kwargs: interp)
+    monkeypatch.setattr(geometry_vmec_wout, "read_vmec_wout", lambda _path: w)
+    monkeypatch.setattr(geometry_vmec_wout, "vmec_interpolation", lambda **_kwargs: interp)
 
     nml = Namelist(
         groups={
