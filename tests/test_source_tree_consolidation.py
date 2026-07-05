@@ -218,6 +218,15 @@ def test_deleted_h5_parity_validation_facade_is_absent() -> None:
     assert hasattr(module, "H5DatasetParity")
 
 
+def test_deleted_solver_selection_policy_facade_is_absent() -> None:
+    """Measured candidate gates live with solver path-policy helpers."""
+
+    assert not (PACKAGE_ROOT / "solvers" / "selection_policy.py").exists()
+    module = importlib.import_module("sfincs_jax.solvers.path_policy")
+    assert hasattr(module, "SolverCandidateMetrics")
+    assert hasattr(module, "solver_candidate_gate")
+
+
 def test_canonical_flat_domain_modules_are_importable() -> None:
     """Canonical owners replace the deleted compatibility import paths."""
 
