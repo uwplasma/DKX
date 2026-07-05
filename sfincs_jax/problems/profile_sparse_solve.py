@@ -246,7 +246,7 @@ def try_run_requested_sparse_pc_gmres_branch(
     select_active_fortran_v3_reduced_support_mode_preconditioner = context.values['select_active_fortran_v3_reduced_support_mode_preconditioner']
     solve_fortran_reduced_xblock_backend = context.values['solve_fortran_reduced_xblock_backend']
     solve_method_kind_explicit = context.values['solve_method_kind_explicit']
-    sparse_pc_gmres_finalization_bundle_from_driver_result = context.values['sparse_pc_gmres_finalization_bundle_from_driver_result']
+    sparse_pc_gmres_finalization_bundle_from_solve_result = context.values['sparse_pc_gmres_finalization_bundle_from_solve_result']
     summarize_v3_sparse_pattern = context.values['summarize_v3_sparse_pattern']
     tfqmr_solve_with_residual = context.values['tfqmr_solve_with_residual']
     tol = context.values['tol']
@@ -1434,7 +1434,7 @@ def try_run_requested_sparse_pc_gmres_branch(
             maxiter=int(sparse_pc_first_attempt_maxiter),
         )
         sparse_pc_final_payload = finalize_sparse_pc_gmres_bundle(
-            sparse_pc_gmres_finalization_bundle_from_driver_result(
+            sparse_pc_gmres_finalization_bundle_from_solve_result(
                 locals(),
                 x=np.asarray(x_np, dtype=np.float64),
                 residual_norm=float(residual_norm_sparse_pc),
@@ -5161,7 +5161,7 @@ _DIAGNOSTIC_EXPORTS = (
     "xblock_qi_device_preconditioner_diagnostics",
     "xblock_qi_seed_preconditioner_diagnostics", "xblock_side_probe_diagnostics",
     "xblock_sparse_pc_core_diagnostics",
-    "xblock_sparse_pc_result_diagnostics_from_driver_state",
+    "xblock_sparse_pc_result_diagnostics_from_solve_state",
 )
 
 __all__ = tuple(dict.fromkeys((*_LOCAL_EXPORTS, *_DIAGNOSTIC_EXPORTS)))

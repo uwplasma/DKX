@@ -1234,7 +1234,7 @@ def prepare_fortran_reduced_xblock_initial_guess(
         ),
     )
 
-def fortran_reduced_xblock_final_payload_from_driver_state(
+def fortran_reduced_xblock_final_payload_from_solve_state(
     state: Mapping[str, object],
     *,
     result: SparsePCGMRESResult,
@@ -1330,6 +1330,6 @@ __all__ = (
     "resolve_fortran_reduced_xblock_moment_schur_policy",
     "resolve_fortran_reduced_xblock_global_coupling_policy",
     "prepare_fortran_reduced_xblock_initial_guess",
-    "fortran_reduced_xblock_final_payload_from_driver_state",
+    "fortran_reduced_xblock_final_payload_from_solve_state",
     "fortran_reduced_xblock_final_payload",
 )

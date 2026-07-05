@@ -113,27 +113,27 @@ from sfincs_jax.problems.profile_sparse_finalization import (
     SparsePCGMRESResult,
     apply_sparse_pc_post_minres,
     apply_sparse_pc_post_minres_if_needed,
-    apply_sparse_pc_post_minres_from_driver_state,
-    emit_sparse_pc_gmres_completion_from_driver_state,
+    apply_sparse_pc_post_minres_from_solve_state,
+    emit_sparse_pc_gmres_completion_from_solve_state,
     evaluate_sparse_pc_factor_dtype_retry,
-    finalize_sparse_pc_gmres_from_driver_state,
+    finalize_sparse_pc_gmres_from_solve_state,
     finalize_sparse_pc_gmres_bundle,
-    finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state,
+    finalize_sparse_pc_gmres_with_dtype_retry_from_solve_state,
     finalize_sparse_pc_gmres_with_dtype_retry,
-    sparse_pc_gmres_finalization_driver_scope_keys,
-    sparse_pc_gmres_finalization_driver_state_keys,
-    sparse_pc_gmres_finalization_bundle_from_driver_result,
-    sparse_pc_gmres_finalization_bundle_from_driver_scope,
+    sparse_pc_gmres_finalization_solve_scope_keys,
+    sparse_pc_gmres_finalization_solve_state_keys,
+    sparse_pc_gmres_finalization_bundle_from_solve_result,
+    sparse_pc_gmres_finalization_bundle_from_solve_scope,
     sparse_pc_gmres_finalization_state_from_context,
-    sparse_pc_gmres_finalization_state_from_driver_scope,
+    sparse_pc_gmres_finalization_state_from_solve_scope,
     sparse_pc_factor_dtype_retry_initial_guess,
     retry_sparse_pc_factor_dtype_from_finalization_context,
     run_sparse_pc_gmres_once,
     run_sparse_pc_gmres_once_for_retry,
-    retry_sparse_pc_factor_dtype_from_driver_state,
+    retry_sparse_pc_factor_dtype_from_solve_state,
     retry_sparse_pc_factor_dtype_if_needed,
     sparse_pc_gmres_completion_message,
-    sparse_pc_gmres_final_payload_from_driver_state,
+    sparse_pc_gmres_final_payload_from_solve_state,
 )
 from sfincs_jax.problems.profile_sparse_fortran_reduced import (
     FortranReducedXBlockFactorBuildContext,
@@ -154,7 +154,7 @@ from sfincs_jax.problems.profile_sparse_fortran_reduced import (
     resolve_fortran_reduced_xblock_initial_seed_policy,
     resolve_fortran_reduced_xblock_krylov_policy,
     resolve_fortran_reduced_xblock_moment_schur_policy,
-    fortran_reduced_xblock_final_payload_from_driver_state,
+    fortran_reduced_xblock_final_payload_from_solve_state,
     fortran_reduced_xblock_final_payload,
     run_fortran_reduced_xblock_krylov_solve,
 )
@@ -275,7 +275,7 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     build_xblock_krylov_progress_callbacks,
     build_xblock_krylov_matvec_setup,
     build_xblock_local_preconditioner,
-    emit_xblock_sparse_pc_completion_from_driver_state,
+    emit_xblock_sparse_pc_completion_from_solve_state,
     emit_xblock_sparse_pc_completion,
     evaluate_xblock_moment_schur_probe_result,
     evaluate_xblock_preflight_gate,
@@ -308,10 +308,10 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     xblock_device_krylov_state,
     xblock_device_cycle_progress_message,
     xblock_host_krylov_progress_message,
-    xblock_sparse_pc_final_metadata_driver_scope_keys,
-    xblock_sparse_pc_final_metadata_driver_state_keys,
+    xblock_sparse_pc_final_metadata_solve_scope_keys,
+    xblock_sparse_pc_final_metadata_solve_state_keys,
     xblock_sparse_pc_final_metadata_state_from_context,
-    xblock_sparse_pc_final_metadata_state_from_driver_scope,
+    xblock_sparse_pc_final_metadata_state_from_solve_scope,
     xblock_krylov_state_from_first_attempt,
     xblock_krylov_state_from_gmres_fallback,
     xblock_sparse_pc_completion_message,
@@ -321,8 +321,8 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     xblock_sparse_pc_final_payload,
     xblock_sparse_pc_work_estimates,
     finalize_xblock_assembled_operator_metadata,
-    xblock_sparse_pc_final_metadata_from_driver_state,
-    xblock_sparse_pc_final_payload_from_driver_state,
+    xblock_sparse_pc_final_metadata_from_solve_state,
+    xblock_sparse_pc_final_payload_from_solve_state,
 )
 from sfincs_jax.problems.profile_sparse_solve import (
     RHS1FullSparseRetryStageContext,
@@ -428,19 +428,19 @@ def test_sparse_xblock_module_exposes_canonical_public_contract() -> None:
         "xblock_sparse_pc_work_estimates",
         "xblock_sparse_pc_completion_message",
         "emit_xblock_sparse_pc_completion",
-        "emit_xblock_sparse_pc_completion_from_driver_state",
+        "emit_xblock_sparse_pc_completion_from_solve_state",
         "xblock_physical_solution_and_residual",
         "XBlockSparsePCFinalCoreState",
         "XBlockSparsePCFinalDeviceState",
         "XBlockSparsePCFinalPreflightState",
         "XBlockSparsePCFinalNestedMetadata",
         "XBlockSparsePCFinalMetadataStateContext",
-        "xblock_sparse_pc_final_metadata_driver_state_keys",
-        "xblock_sparse_pc_final_metadata_driver_scope_keys",
+        "xblock_sparse_pc_final_metadata_solve_state_keys",
+        "xblock_sparse_pc_final_metadata_solve_scope_keys",
         "xblock_sparse_pc_final_metadata_state_from_context",
-        "xblock_sparse_pc_final_metadata_state_from_driver_scope",
-        "xblock_sparse_pc_final_metadata_from_driver_state",
-        "xblock_sparse_pc_final_payload_from_driver_state",
+        "xblock_sparse_pc_final_metadata_state_from_solve_scope",
+        "xblock_sparse_pc_final_metadata_from_solve_state",
+        "xblock_sparse_pc_final_payload_from_solve_state",
         "xblock_sparse_pc_final_payload",
         "XBlockSubspaceCorrectionContext",
         "XBlockSubspaceCorrectionResult",
@@ -532,7 +532,7 @@ def test_sparse_qi_module_exposes_canonical_public_contract() -> None:
 
 
 def test_sparse_xblock_result_containers_preserve_orchestration_contract() -> None:
-    """Sparse x-block stages exchange small result dataclasses, not driver scope."""
+    """Sparse x-block stages exchange small result dataclasses, not solve scope."""
 
     result = GMRESSolveResult(x=jnp.asarray([1.0]), residual_norm=jnp.asarray(0.25))
     residual_vec = jnp.asarray([0.5])
@@ -1330,28 +1330,28 @@ def test_sparse_finalization_module_exposes_canonical_public_contract() -> None:
         "SparsePCPostMinresUpdateContext",
         "SparsePCPostMinresUpdateResult",
         "apply_sparse_pc_post_minres",
-        "apply_sparse_pc_post_minres_from_driver_state",
+        "apply_sparse_pc_post_minres_from_solve_state",
         "apply_sparse_pc_post_minres_if_needed",
-        "emit_sparse_pc_gmres_completion_from_driver_state",
+        "emit_sparse_pc_gmres_completion_from_solve_state",
         "evaluate_sparse_pc_factor_dtype_retry",
         "finalize_sparse_pc_gmres_bundle",
-        "finalize_sparse_pc_gmres_from_driver_state",
+        "finalize_sparse_pc_gmres_from_solve_state",
         "finalize_sparse_pc_gmres_with_dtype_retry",
-        "finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state",
+        "finalize_sparse_pc_gmres_with_dtype_retry_from_solve_state",
         "run_sparse_pc_gmres_once",
         "run_sparse_pc_gmres_once_for_retry",
-        "retry_sparse_pc_factor_dtype_from_driver_state",
+        "retry_sparse_pc_factor_dtype_from_solve_state",
         "retry_sparse_pc_factor_dtype_from_finalization_context",
         "retry_sparse_pc_factor_dtype_if_needed",
         "sparse_pc_factor_dtype_retry_initial_guess",
         "sparse_pc_gmres_completion_message",
-        "sparse_pc_gmres_finalization_bundle_from_driver_result",
-        "sparse_pc_gmres_finalization_bundle_from_driver_scope",
-        "sparse_pc_gmres_finalization_driver_scope_keys",
-        "sparse_pc_gmres_finalization_driver_state_keys",
+        "sparse_pc_gmres_finalization_bundle_from_solve_result",
+        "sparse_pc_gmres_finalization_bundle_from_solve_scope",
+        "sparse_pc_gmres_finalization_solve_scope_keys",
+        "sparse_pc_gmres_finalization_solve_state_keys",
         "sparse_pc_gmres_finalization_state_from_context",
-        "sparse_pc_gmres_finalization_state_from_driver_scope",
-        "sparse_pc_gmres_final_payload_from_driver_state",
+        "sparse_pc_gmres_finalization_state_from_solve_scope",
+        "sparse_pc_gmres_final_payload_from_solve_state",
     )
     for name in moved_names:
         assert hasattr(sparse_finalization_module, name)
@@ -1434,7 +1434,7 @@ def test_sparse_fortran_reduced_module_exposes_canonical_public_contract() -> No
         "build_fortran_reduced_xblock_factor_stage",
         "build_fortran_reduced_xblock_krylov_setup",
         "fortran_reduced_xblock_final_payload",
-        "fortran_reduced_xblock_final_payload_from_driver_state",
+        "fortran_reduced_xblock_final_payload_from_solve_state",
         "prepare_fortran_reduced_xblock_initial_guess",
         "resolve_fortran_reduced_sparse_pc_backend",
         "resolve_fortran_reduced_xblock_factor_policy",
@@ -3035,10 +3035,10 @@ def test_emit_xblock_sparse_pc_completion_skips_missing_emit() -> None:
     )
 
 
-def test_emit_xblock_sparse_pc_completion_from_driver_state_emits_message() -> None:
+def test_emit_xblock_sparse_pc_completion_from_solve_state_emits_message() -> None:
     emitted: list[tuple[int, str]] = []
 
-    emit_xblock_sparse_pc_completion_from_driver_state(
+    emit_xblock_sparse_pc_completion_from_solve_state(
         {
             "emit": lambda level, message: emitted.append((level, message)),
             "xblock_krylov_method": "bicgstab",
@@ -3061,8 +3061,8 @@ def test_emit_xblock_sparse_pc_completion_from_driver_state_emits_message() -> N
     ]
 
 
-def test_emit_xblock_sparse_pc_completion_from_driver_state_skips_missing_emit() -> None:
-    emit_xblock_sparse_pc_completion_from_driver_state({"emit": None})
+def test_emit_xblock_sparse_pc_completion_from_solve_state_skips_missing_emit() -> None:
+    emit_xblock_sparse_pc_completion_from_solve_state({"emit": None})
 
 
 def _xblock_post_policy(
@@ -3898,7 +3898,7 @@ def test_retry_sparse_pc_factor_dtype_from_finalization_context_rebuilds_and_rer
     assert any("factor_dtype=float64" in msg for msg in messages)
 
 
-def test_retry_sparse_pc_factor_dtype_from_driver_state_forwards_build_policy() -> None:
+def test_retry_sparse_pc_factor_dtype_from_solve_state_forwards_build_policy() -> None:
     times = iter((2.0, 2.25, 2.5))
     build_kwargs: list[dict[str, object]] = []
     run_calls: list[tuple[np.ndarray, int]] = []
@@ -3940,7 +3940,7 @@ def test_retry_sparse_pc_factor_dtype_from_driver_state_forwards_build_policy() 
         "sparse_timer": SimpleNamespace(elapsed_s=lambda: next(times)),
     }
 
-    result = retry_sparse_pc_factor_dtype_from_driver_state(
+    result = retry_sparse_pc_factor_dtype_from_solve_state(
         state,
         build_host_sparse_direct_factor_from_matvec=build_factor,
         run_sparse_pc_gmres_once_callback=run_gmres_once,
@@ -6678,7 +6678,7 @@ def test_fortran_reduced_xblock_result_metadata_formats_branch_payload() -> None
     assert metadata["sparse_pc_factor_quality_rejected"] is False
 
 
-def _fortran_reduced_xblock_driver_state() -> _DefaultSparsePCDriverState:
+def _fortran_reduced_xblock_solve_state() -> _DefaultSparsePCDriverState:
     return _DefaultSparsePCDriverState(
         {
             "op": SimpleNamespace(total_size=4),
@@ -6743,7 +6743,7 @@ def _fortran_reduced_xblock_result() -> SparsePCGMRESResult:
 
 
 def test_fortran_reduced_xblock_final_payload_uses_explicit_context() -> None:
-    state = _fortran_reduced_xblock_driver_state()
+    state = _fortran_reduced_xblock_solve_state()
 
     payload = fortran_reduced_xblock_final_payload(
         FortranReducedXBlockFinalPayloadContext(
@@ -6769,10 +6769,10 @@ def test_fortran_reduced_xblock_final_payload_uses_explicit_context() -> None:
     assert payload.metadata["sparse_pc_residual_ratio_to_target"] == pytest.approx(0.4)
 
 
-def test_fortran_reduced_xblock_final_payload_from_driver_state_sets_gates() -> None:
-    state = _fortran_reduced_xblock_driver_state()
+def test_fortran_reduced_xblock_final_payload_from_solve_state_sets_gates() -> None:
+    state = _fortran_reduced_xblock_solve_state()
 
-    payload = fortran_reduced_xblock_final_payload_from_driver_state(
+    payload = fortran_reduced_xblock_final_payload_from_solve_state(
         state,
         result=_fortran_reduced_xblock_result(),
         expand_reduced=lambda x: jnp.concatenate(
@@ -10478,10 +10478,10 @@ def test_sparse_pc_gmres_completion_message_omits_nonfinite_optional_residuals()
     )
 
 
-def test_emit_sparse_pc_gmres_completion_from_driver_state_uses_current_state() -> None:
+def test_emit_sparse_pc_gmres_completion_from_solve_state_uses_current_state() -> None:
     messages: list[tuple[int, str]] = []
 
-    emit_sparse_pc_gmres_completion_from_driver_state(
+    emit_sparse_pc_gmres_completion_from_solve_state(
         {
             "emit": lambda level, msg: messages.append((level, msg)),
             "sparse_timer": SimpleNamespace(elapsed_s=lambda: 2.5),
@@ -10492,7 +10492,7 @@ def test_emit_sparse_pc_gmres_completion_from_driver_state_uses_current_state() 
             "rn_pc": 0.5,
         }
     )
-    emit_sparse_pc_gmres_completion_from_driver_state(
+    emit_sparse_pc_gmres_completion_from_solve_state(
         {
             "emit": None,
             "sparse_timer": SimpleNamespace(elapsed_s=lambda: 0.0),
@@ -10515,7 +10515,7 @@ def test_emit_sparse_pc_gmres_completion_from_driver_state_uses_current_state() 
     ]
 
 
-def test_sparse_pc_gmres_final_payload_from_driver_state_expands_result_and_metadata() -> None:
+def test_sparse_pc_gmres_final_payload_from_solve_state_expands_result_and_metadata() -> None:
     state = _DefaultSparsePCDriverState(
         {
             "op": SimpleNamespace(total_size=np.int64(4)),
@@ -10604,7 +10604,7 @@ def test_sparse_pc_gmres_final_payload_from_driver_state_expands_result_and_meta
         }
     )
 
-    payload = sparse_pc_gmres_final_payload_from_driver_state(
+    payload = sparse_pc_gmres_final_payload_from_solve_state(
         state,
         expand_reduced=lambda x: jnp.concatenate(
             [jnp.asarray([0.0], dtype=x.dtype), x]
@@ -12084,7 +12084,7 @@ def test_xblock_subspace_correction_rejects_nonimproving_residual() -> None:
     assert any("xblock_sparse_pc_gmres post-coarse rejected" in msg for msg in messages)
 
 
-def test_sparse_pc_post_minres_from_driver_state_updates_solve_state() -> None:
+def test_sparse_pc_post_minres_from_solve_state_updates_solve_state() -> None:
     times = iter((4.0, 4.6))
 
     def minres_correction(**_kwargs):
@@ -12112,7 +12112,7 @@ def test_sparse_pc_post_minres_from_driver_state_updates_solve_state() -> None:
         "target": 0.1,
     }
 
-    result = apply_sparse_pc_post_minres_from_driver_state(
+    result = apply_sparse_pc_post_minres_from_solve_state(
         state,
         minres_correction=minres_correction,
     )
@@ -12130,7 +12130,7 @@ def test_sparse_pc_post_minres_from_driver_state_updates_solve_state() -> None:
     assert result.solve_s == pytest.approx(7.6)
 
 
-def test_finalize_sparse_pc_gmres_from_driver_state_applies_polish_and_payload() -> None:
+def test_finalize_sparse_pc_gmres_from_solve_state_applies_polish_and_payload() -> None:
     messages: list[tuple[int, str]] = []
 
     def minres_correction(**_kwargs):
@@ -12225,7 +12225,7 @@ def test_finalize_sparse_pc_gmres_from_driver_state_applies_polish_and_payload()
         }
     )
 
-    payload = finalize_sparse_pc_gmres_from_driver_state(
+    payload = finalize_sparse_pc_gmres_from_solve_state(
         state,
         minres_correction=minres_correction,
         expand_reduced=lambda x: jnp.concatenate(
@@ -12246,9 +12246,9 @@ def test_finalize_sparse_pc_gmres_from_driver_state_applies_polish_and_payload()
     assert any("sparse_pc_gmres complete" in message for _, message in messages)
 
 
-def test_sparse_pc_gmres_finalization_state_from_driver_scope_filters_scope() -> None:
-    keys = sparse_pc_gmres_finalization_driver_state_keys()
-    scope_keys = sparse_pc_gmres_finalization_driver_scope_keys()
+def test_sparse_pc_gmres_finalization_state_from_solve_scope_filters_scope() -> None:
+    keys = sparse_pc_gmres_finalization_solve_state_keys()
+    scope_keys = sparse_pc_gmres_finalization_solve_scope_keys()
     scope = {key: object() for key in keys}
     direct_tail_metadata = {"kind": "precomputed"}
     factor_preflight_metadata = {"preflight": "precomputed"}
@@ -12264,7 +12264,7 @@ def test_sparse_pc_gmres_finalization_state_from_driver_scope_filters_scope() ->
     scope["summary"] = object()
     scope["sparse_pc_preconditioner_operator"] = "raw_operator"
 
-    state = sparse_pc_gmres_finalization_state_from_driver_scope(scope)
+    state = sparse_pc_gmres_finalization_state_from_solve_scope(scope)
     context_state = sparse_pc_gmres_finalization_state_from_context(
         SparsePCGMRESFinalizationStateContext(
             atol=scope["atol"],
@@ -12304,7 +12304,7 @@ def test_sparse_pc_gmres_finalization_state_from_driver_scope_filters_scope() ->
     missing = keys[0]
     incomplete_scope.pop(missing)
     with pytest.raises(KeyError, match=missing):
-        sparse_pc_gmres_finalization_state_from_driver_scope(incomplete_scope)
+        sparse_pc_gmres_finalization_state_from_solve_scope(incomplete_scope)
 
 
 def test_sparse_pc_direct_tail_final_metadata_uses_grouped_policy_state() -> None:
@@ -12429,7 +12429,7 @@ def test_sparse_pc_direct_tail_final_metadata_uses_grouped_policy_state() -> Non
     }
 
 
-def test_sparse_pc_gmres_finalization_bundle_from_driver_scope_groups_locals() -> None:
+def test_sparse_pc_gmres_finalization_bundle_from_solve_scope_groups_locals() -> None:
     materialization = DirectTailMaterializationResult(
         direct_tail_default=True,
         enabled=True,
@@ -12614,7 +12614,7 @@ def test_sparse_pc_gmres_finalization_bundle_from_driver_scope_groups_locals() -
         "x0_sparse": jnp.zeros(2, dtype=jnp.float64),
     }
 
-    bundle = sparse_pc_gmres_finalization_bundle_from_driver_scope(
+    bundle = sparse_pc_gmres_finalization_bundle_from_solve_scope(
         scope,
         result=result,
         post_minres=post_minres,
@@ -12632,7 +12632,7 @@ def test_sparse_pc_gmres_finalization_bundle_from_driver_scope_groups_locals() -
     assert bundle.post_minres is post_minres
     assert bundle.dtype_retry is dtype_retry
 
-    driver_bundle = sparse_pc_gmres_finalization_bundle_from_driver_result(
+    solve_bundle = sparse_pc_gmres_finalization_bundle_from_solve_result(
         scope,
         x=np.asarray([1.0, 2.0]),
         residual_norm=0.5,
@@ -12641,12 +12641,12 @@ def test_sparse_pc_gmres_finalization_bundle_from_driver_scope_groups_locals() -
         solve_s=3.0,
     )
 
-    np.testing.assert_allclose(driver_bundle.result.x, np.asarray([1.0, 2.0]))
-    assert driver_bundle.result.factor_dtype_used == np.dtype(np.float64)
-    assert driver_bundle.result.operator_bundle == "operator"
-    assert driver_bundle.post_minres.rhs.shape == (2,)
-    assert driver_bundle.dtype_retry.linear_size == 2
-    assert driver_bundle.dtype_retry.pc_maxiter == 5
+    np.testing.assert_allclose(solve_bundle.result.x, np.asarray([1.0, 2.0]))
+    assert solve_bundle.result.factor_dtype_used == np.dtype(np.float64)
+    assert solve_bundle.result.operator_bundle == "operator"
+    assert solve_bundle.post_minres.rhs.shape == (2,)
+    assert solve_bundle.dtype_retry.linear_size == 2
+    assert solve_bundle.dtype_retry.pc_maxiter == 5
 
 
 def test_finalize_sparse_pc_gmres_bundle_builds_typed_state(
@@ -12917,12 +12917,12 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_updates_copied_state(
 
     monkeypatch.setattr(
         sparse_finalization_module,
-        "retry_sparse_pc_factor_dtype_from_driver_state",
+        "retry_sparse_pc_factor_dtype_from_solve_state",
         fake_retry,
     )
     monkeypatch.setattr(
         sparse_finalization_module,
-        "finalize_sparse_pc_gmres_from_driver_state",
+        "finalize_sparse_pc_gmres_from_solve_state",
         fake_finalize,
     )
 
@@ -12999,17 +12999,17 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_uses_explicit_finalization_co
 
     monkeypatch.setattr(
         sparse_finalization_module,
-        "retry_sparse_pc_factor_dtype_from_driver_state",
+        "retry_sparse_pc_factor_dtype_from_solve_state",
         fail_legacy_retry,
     )
     monkeypatch.setattr(
         sparse_finalization_module,
-        "finalize_sparse_pc_gmres_from_driver_state",
+        "finalize_sparse_pc_gmres_from_solve_state",
         fail_legacy_finalize,
     )
     monkeypatch.setattr(
         sparse_finalization_module,
-        "sparse_pc_gmres_final_payload_from_driver_state",
+        "sparse_pc_gmres_final_payload_from_solve_state",
         fake_payload,
     )
 
@@ -13101,7 +13101,7 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_uses_explicit_finalization_co
     assert "x0_sparse" not in final_state
 
 
-def test_finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state_delegates(
+def test_finalize_sparse_pc_gmres_with_dtype_retry_from_solve_state_delegates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: dict[str, object] = {}
@@ -13134,7 +13134,7 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state_delegates(
         "setup_s": 1.25,
     }
 
-    payload = finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state(
+    payload = finalize_sparse_pc_gmres_with_dtype_retry_from_solve_state(
         state,
         build_host_sparse_direct_factor_from_matvec=lambda **_kwargs: None,
         run_sparse_pc_gmres_once_callback=lambda *_args, **_kwargs: None,
@@ -13159,7 +13159,7 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state_delegates(
     assert context.setup_s == pytest.approx(1.25)
 
 
-def test_xblock_sparse_pc_final_metadata_from_driver_state_merges_components(
+def test_xblock_sparse_pc_final_metadata_from_solve_state_merges_components(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: dict[str, object] = {}
@@ -13176,16 +13176,16 @@ def test_xblock_sparse_pc_final_metadata_from_driver_state_merges_components(
 
     monkeypatch.setattr(
         sparse_xblock_module,
-        "xblock_sparse_pc_result_diagnostics_from_driver_state",
+        "xblock_sparse_pc_result_diagnostics_from_solve_state",
         fake_result_metadata,
     )
     monkeypatch.setattr(
         sparse_xblock_module,
-        "build_rhs1_xblock_correction_metadata_from_driver_state",
+        "build_rhs1_xblock_correction_metadata_from_solve_state",
         fake_correction_metadata,
     )
 
-    metadata = xblock_sparse_pc_final_metadata_from_driver_state(
+    metadata = xblock_sparse_pc_final_metadata_from_solve_state(
         state,
         full_size=123,
     )
@@ -13198,9 +13198,9 @@ def test_xblock_sparse_pc_final_metadata_from_driver_state_merges_components(
     assert metadata == {"core": 1, "correction": 2, "shared": "correction"}
 
 
-def test_xblock_sparse_pc_final_metadata_state_from_driver_scope_filters_scope() -> None:
-    keys = xblock_sparse_pc_final_metadata_driver_state_keys()
-    scope_keys = xblock_sparse_pc_final_metadata_driver_scope_keys()
+def test_xblock_sparse_pc_final_metadata_state_from_solve_scope_filters_scope() -> None:
+    keys = xblock_sparse_pc_final_metadata_solve_state_keys()
+    scope_keys = xblock_sparse_pc_final_metadata_solve_scope_keys()
     precomputed_metadata = {
         "xblock_assembled_operator_result_metadata": {"assembled": True},
         "xblock_coarse_correction_metadata": {"coarse": True},
@@ -13214,7 +13214,7 @@ def test_xblock_sparse_pc_final_metadata_state_from_driver_scope_filters_scope()
     scope["unrelated_xblock_scratch"] = object()
     scope["qi_device_preconditioner_metadata"] = {"raw": True}
 
-    state = xblock_sparse_pc_final_metadata_state_from_driver_scope(scope)
+    state = xblock_sparse_pc_final_metadata_state_from_solve_scope(scope)
 
     assert tuple(state) == (*keys, *precomputed_metadata)
     assert "unrelated_xblock_scratch" not in state
@@ -13229,11 +13229,11 @@ def test_xblock_sparse_pc_final_metadata_state_from_driver_scope_filters_scope()
     missing = keys[-1]
     incomplete_scope.pop(missing)
     with pytest.raises(KeyError, match=missing):
-        xblock_sparse_pc_final_metadata_state_from_driver_scope(incomplete_scope)
+        xblock_sparse_pc_final_metadata_state_from_solve_scope(incomplete_scope)
 
 
-def test_xblock_sparse_pc_final_metadata_state_context_matches_driver_scope() -> None:
-    keys = xblock_sparse_pc_final_metadata_driver_state_keys()
+def test_xblock_sparse_pc_final_metadata_state_context_matches_solve_scope() -> None:
+    keys = xblock_sparse_pc_final_metadata_solve_state_keys()
     precomputed_metadata = {
         "xblock_assembled_operator_result_metadata": {"assembled": True},
         "xblock_coarse_correction_metadata": {"coarse": True},
@@ -13262,7 +13262,7 @@ def test_xblock_sparse_pc_final_metadata_state_context_matches_driver_scope() ->
             ),
         )
     )
-    wrapper_state = xblock_sparse_pc_final_metadata_state_from_driver_scope(scope)
+    wrapper_state = xblock_sparse_pc_final_metadata_state_from_solve_scope(scope)
 
     assert context_state == wrapper_state
     assert tuple(context_state) == (*keys, *precomputed_metadata)
@@ -13288,12 +13288,12 @@ def test_xblock_sparse_pc_final_payload_uses_explicit_context(
 
     monkeypatch.setattr(
         sparse_xblock_module,
-        "xblock_sparse_pc_result_diagnostics_from_driver_state",
+        "xblock_sparse_pc_result_diagnostics_from_solve_state",
         fake_result_metadata,
     )
     monkeypatch.setattr(
         sparse_xblock_module,
-        "build_rhs1_xblock_correction_metadata_from_driver_state",
+        "build_rhs1_xblock_correction_metadata_from_solve_state",
         fake_correction_metadata,
     )
 
@@ -13329,7 +13329,7 @@ def test_xblock_sparse_pc_final_payload_uses_explicit_context(
     assert payload.metadata == {"core": 1, "correction": 2}
 
 
-def test_xblock_sparse_pc_final_payload_from_driver_state_sets_gate_and_expands(
+def test_xblock_sparse_pc_final_payload_from_solve_state_sets_gate_and_expands(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: dict[str, object] = {}
@@ -13348,16 +13348,16 @@ def test_xblock_sparse_pc_final_payload_from_driver_state_sets_gate_and_expands(
 
     monkeypatch.setattr(
         sparse_xblock_module,
-        "xblock_sparse_pc_result_diagnostics_from_driver_state",
+        "xblock_sparse_pc_result_diagnostics_from_solve_state",
         fake_result_metadata,
     )
     monkeypatch.setattr(
         sparse_xblock_module,
-        "build_rhs1_xblock_correction_metadata_from_driver_state",
+        "build_rhs1_xblock_correction_metadata_from_solve_state",
         fake_correction_metadata,
     )
 
-    payload = xblock_sparse_pc_final_payload_from_driver_state(
+    payload = xblock_sparse_pc_final_payload_from_solve_state(
         {
             "op": SimpleNamespace(total_size=7),
             "x_np": np.asarray([3.0, 4.0]),

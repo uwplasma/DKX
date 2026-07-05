@@ -19,7 +19,7 @@ from .profile_diagnostics import (
     xblock_qi_deflated_preconditioner_diagnostics,
     xblock_qi_device_preconditioner_diagnostics,
     xblock_qi_seed_preconditioner_diagnostics,
-    xblock_sparse_pc_result_diagnostics_from_driver_state,
+    xblock_sparse_pc_result_diagnostics_from_solve_state,
     xblock_side_probe_diagnostics,
 )
 from .profile_policies import (
@@ -28,7 +28,7 @@ from .profile_policies import (
     rhs1_polish_enabled,
 )
 from .profile_solver_diagnostics import (
-    build_rhs1_xblock_correction_metadata_from_driver_state,
+    build_rhs1_xblock_correction_metadata_from_solve_state,
     prepare_cached_qi_correction_basis,
 )
 from .profile_sparse_finalization import (
@@ -2608,14 +2608,14 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
         x_np = np.asarray(post_completion.x, dtype=np.float64)
         residual_norm_xblock_pc = float(post_completion.residual_norm)
         solve_s = float(post_completion.solve_s)
-        xblock_final_driver_state = {**qi_pipeline.diagnostic_scope(), **locals()}
+        xblock_final_solve_state = {**qi_pipeline.diagnostic_scope(), **locals()}
         xblock_final_metadata_state = (
-            xblock_sparse_pc_final_metadata_state_from_driver_scope(
-                xblock_final_driver_state
+            xblock_sparse_pc_final_metadata_state_from_solve_scope(
+                xblock_final_solve_state
             )
         )
         xblock_sparse_pc_final_payload = (
-            xblock_sparse_pc_final_payload_from_driver_state(
+            xblock_sparse_pc_final_payload_from_solve_state(
                 {
                     **xblock_final_metadata_state,
                     "op": op,
@@ -4888,14 +4888,14 @@ def _dataclass_field_mapping(value: object) -> dict[str, object]:
     return {field.name: getattr(value, field.name) for field in fields(value)}
 
 
-def xblock_sparse_pc_final_metadata_driver_state_keys() -> tuple[str, ...]:
-    """Return driver-scope keys copied into x-block final metadata."""
+def xblock_sparse_pc_final_metadata_solve_state_keys() -> tuple[str, ...]:
+    """Return solve-scope keys copied into x-block final metadata."""
 
     return _XBLOCK_SPARSE_PC_FINAL_METADATA_STATE_KEYS
 
 
-def xblock_sparse_pc_final_metadata_driver_scope_keys() -> tuple[str, ...]:
-    """Return raw driver-scope keys needed to derive x-block final metadata."""
+def xblock_sparse_pc_final_metadata_solve_scope_keys() -> tuple[str, ...]:
+    """Return raw solve-scope keys needed to derive x-block final metadata."""
 
     return _XBLOCK_SPARSE_PC_FINAL_METADATA_SCOPE_KEYS
 
@@ -4942,7 +4942,7 @@ def xblock_sparse_pc_final_metadata_state_from_context(
     }
 
 
-def xblock_sparse_pc_final_metadata_state_from_driver_scope(
+def xblock_sparse_pc_final_metadata_state_from_solve_scope(
     scope: Mapping[str, object],
 ) -> dict[str, object]:
     """Copy compact x-block final state and precompute nested diagnostics."""
@@ -5092,23 +5092,23 @@ class XBlockSparsePCFinalPayloadContext:
     post_corrections: object | None = None
 
 
-def xblock_sparse_pc_final_metadata_from_driver_state(
+def xblock_sparse_pc_final_metadata_from_solve_state(
     state: Mapping[str, object],
     *,
     full_size: object,
 ) -> dict[str, object]:
-    """Build final x-block sparse-PC metadata from one driver-state snapshot."""
+    """Build final x-block sparse-PC metadata from one solve-state snapshot."""
 
     return {
-        **xblock_sparse_pc_result_diagnostics_from_driver_state(
+        **xblock_sparse_pc_result_diagnostics_from_solve_state(
             state,
             full_size=full_size,
         ),
-        **build_rhs1_xblock_correction_metadata_from_driver_state(state),
+        **build_rhs1_xblock_correction_metadata_from_solve_state(state),
     }
 
 
-def xblock_sparse_pc_final_payload_from_driver_state(
+def xblock_sparse_pc_final_payload_from_solve_state(
     state: Mapping[str, object],
     *,
     expand_reduced: ArrayFn,
@@ -5191,7 +5191,7 @@ def xblock_sparse_pc_final_payload(
     return SparsePCGMRESFinalPayload(
         x=expand_reduced(jnp.asarray(context.x, dtype=jnp.float64)),
         residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
-        metadata=xblock_sparse_pc_final_metadata_from_driver_state(
+        metadata=xblock_sparse_pc_final_metadata_from_solve_state(
             metadata_state,
             full_size=getattr(context.op, "total_size"),
         ),
@@ -7011,7 +7011,7 @@ def emit_xblock_sparse_pc_completion(
     )
 
 
-def emit_xblock_sparse_pc_completion_from_driver_state(
+def emit_xblock_sparse_pc_completion_from_solve_state(
     state: Mapping[str, object],
 ) -> None:
     """Emit the final xblock sparse-PC progress line from driver state."""
@@ -7580,10 +7580,10 @@ __all__ = (
     "XBlockSparsePCFinalPreflightState",
     "XBlockSparsePCFinalNestedMetadata",
     "XBlockSparsePCFinalMetadataStateContext",
-    "xblock_sparse_pc_final_metadata_driver_state_keys",
-    "xblock_sparse_pc_final_metadata_driver_scope_keys",
+    "xblock_sparse_pc_final_metadata_solve_state_keys",
+    "xblock_sparse_pc_final_metadata_solve_scope_keys",
     "xblock_sparse_pc_final_metadata_state_from_context",
-    "xblock_sparse_pc_final_metadata_state_from_driver_scope",
+    "xblock_sparse_pc_final_metadata_state_from_solve_scope",
     "XBlockSubspaceCorrectionContext",
     "XBlockSubspaceCorrectionResult",
     "XBlockPostSolveCorrectionContext",
@@ -7596,8 +7596,8 @@ __all__ = (
     "XBlockKrylovReport",
     "XBlockSparsePCCompletionContext",
     "XBlockSparsePCFinalPayloadContext",
-    "xblock_sparse_pc_final_metadata_from_driver_state",
-    "xblock_sparse_pc_final_payload_from_driver_state",
+    "xblock_sparse_pc_final_metadata_from_solve_state",
+    "xblock_sparse_pc_final_payload_from_solve_state",
     "xblock_sparse_pc_final_payload",
     "XBlockGMRESFallbackDecision",
     "XBlockGMRESFallbackContext",
@@ -7648,7 +7648,7 @@ __all__ = (
     "xblock_sparse_pc_work_estimates",
     "xblock_sparse_pc_completion_message",
     "emit_xblock_sparse_pc_completion",
-    "emit_xblock_sparse_pc_completion_from_driver_state",
+    "emit_xblock_sparse_pc_completion_from_solve_state",
     "xblock_physical_solution_and_residual",
     "XBlockMomentSchurPolicySetup",
     "XBlockMomentSchurStageContext",

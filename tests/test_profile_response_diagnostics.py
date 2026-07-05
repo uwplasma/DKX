@@ -48,7 +48,7 @@ from sfincs_jax.problems.profile_diagnostics import (
     xblock_qi_seed_preconditioner_diagnostics,
     xblock_qi_seed_preconditioner_diagnostics_from_context,
     xblock_sparse_pc_core_diagnostics,
-    xblock_sparse_pc_result_diagnostics_from_driver_state,
+    xblock_sparse_pc_result_diagnostics_from_solve_state,
     xblock_side_probe_diagnostics,
 )
 from sfincs_jax.problems.profile_solver_diagnostics import (
@@ -1358,7 +1358,7 @@ def test_sparse_pc_gmres_static_metadata_covers_global_branch() -> None:
     assert metadata["sparse_pc_fp_dense_velocity_block"] is True
 
 
-def test_sparse_pc_gmres_static_metadata_driver_state_wrapper() -> None:
+def test_sparse_pc_gmres_static_metadata_solve_state_wrapper() -> None:
     metadata = sparse_pc_gmres_static_metadata(
         {
             "op": SimpleNamespace(total_size=19),
@@ -1394,7 +1394,7 @@ def test_sparse_pc_gmres_static_metadata_driver_state_wrapper() -> None:
     assert metadata["sparse_pc_linear_size"] == 11
 
 
-def test_xblock_sparse_pc_result_diagnostics_driver_state_wrapper(monkeypatch) -> None:
+def test_xblock_sparse_pc_result_diagnostics_solve_state_wrapper(monkeypatch) -> None:
     monkeypatch.setattr(
         profile_diagnostics,
         "xblock_device_krylov_diagnostics",
@@ -1441,7 +1441,7 @@ def test_xblock_sparse_pc_result_diagnostics_driver_state_wrapper(monkeypatch) -
         "xblock_linear_size": 7,
     }
 
-    metadata = xblock_sparse_pc_result_diagnostics_from_driver_state(state, full_size=17)
+    metadata = xblock_sparse_pc_result_diagnostics_from_solve_state(state, full_size=17)
 
     assert metadata["solver_kind"] == "xblock_sparse_pc"
     assert metadata["xblock_full_size"] == 17

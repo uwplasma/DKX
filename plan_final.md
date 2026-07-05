@@ -1544,6 +1544,19 @@ Completed work:
   `tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py tests/test_source_tree_consolidation.py`
   passed as `50 passed in 3.68 s`; Ruff, py_compile, notebook JSON parsing,
   and `git diff --check` passed.
+- Tranche 90: renamed active sparse-PC/x-block finalization and diagnostic
+  helpers from `driver_state` / `driver_scope` terminology to
+  `solve_state` / `solve_scope` terminology. This was a behavior-preserving
+  source/test API cleanup over RHSMode-1 sparse finalization owners, with no
+  file moves or line-count growth. A stale-term audit over active problem
+  owners and targeted tests found no remaining `driver_state`, `driver_scope`,
+  `from_driver`, `driver-state`, or `driver-scope` matches. Focused validation
+  passed:
+  `tests/test_profile_response_sparse_pc.py tests/test_profile_response_diagnostics.py tests/test_rhs1_solver_diagnostics.py tests/test_profile_solve_module_wrappers.py`
+  as `389 passed in 4.06 s`; source-tree/import guards
+  `tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py`
+  passed as `50 passed in 3.60 s`; Ruff, py_compile, and `git diff --check`
+  passed.
 
 Remaining consolidation steps:
 

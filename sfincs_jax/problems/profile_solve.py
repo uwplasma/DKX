@@ -180,7 +180,7 @@ from sfincs_jax.problems.profile_sparse_direct import (
     solve_explicit_sparse_minimum_norm_branch, solve_explicit_sparse_host_direct_branch,
 )
 from sfincs_jax.problems.profile_sparse_finalization import (
-    SparsePCGMRESContext, finalize_sparse_pc_gmres_bundle, sparse_pc_gmres_finalization_bundle_from_driver_result,
+    SparsePCGMRESContext, finalize_sparse_pc_gmres_bundle, sparse_pc_gmres_finalization_bundle_from_solve_result,
     run_sparse_pc_gmres_once, run_sparse_pc_gmres_once_for_retry,
 )
 from sfincs_jax.problems.profile_sparse_fortran_reduced import (
@@ -214,7 +214,7 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     finalize_xblock_assembled_operator_metadata,
 )
 from sfincs_jax.problems.profile_sparse_xblock import (
-    xblock_sparse_pc_final_metadata_state_from_driver_scope, xblock_sparse_pc_final_payload_from_driver_state,
+    xblock_sparse_pc_final_metadata_state_from_solve_scope, xblock_sparse_pc_final_payload_from_solve_state,
 )
 from sfincs_jax.problems.profile_preconditioner_build import (
     RHS1PostPrimaryMinresCorrectionContext, rhs1_collision_retry_allowed, rhs1_pas_force_strong_ratio_from_env,

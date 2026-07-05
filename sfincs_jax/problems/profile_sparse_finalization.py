@@ -349,14 +349,14 @@ _SPARSE_PC_GMRES_FINALIZATION_SCOPE_KEYS = _unique_state_keys(
 )
 
 
-def sparse_pc_gmres_finalization_driver_state_keys() -> tuple[str, ...]:
-    """Return finalizer keys copied from driver scope before metadata injection."""
+def sparse_pc_gmres_finalization_solve_state_keys() -> tuple[str, ...]:
+    """Return finalizer keys copied from solve scope before metadata injection."""
 
     return _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS
 
 
-def sparse_pc_gmres_finalization_driver_scope_keys() -> tuple[str, ...]:
-    """Return raw driver-scope keys needed to build sparse-PC finalization state."""
+def sparse_pc_gmres_finalization_solve_scope_keys() -> tuple[str, ...]:
+    """Return raw solve-scope keys needed to build sparse-PC finalization state."""
 
     return _SPARSE_PC_GMRES_FINALIZATION_SCOPE_KEYS
 
@@ -394,7 +394,7 @@ def sparse_pc_gmres_finalization_state_from_context(
     }
 
 
-def sparse_pc_gmres_finalization_state_from_driver_scope(
+def sparse_pc_gmres_finalization_state_from_solve_scope(
     scope: Mapping[str, object],
 ) -> dict[str, object]:
     """Copy only sparse-PC finalizer state and precompute direct-tail metadata."""
@@ -442,7 +442,7 @@ def sparse_pc_gmres_finalization_state_from_driver_scope(
     )
 
 
-def sparse_pc_gmres_finalization_bundle_from_driver_scope(
+def sparse_pc_gmres_finalization_bundle_from_solve_scope(
     scope: Mapping[str, object],
     *,
     result: SparsePCGMRESFinalResultContext,
@@ -595,7 +595,7 @@ def sparse_pc_gmres_finalization_bundle_from_driver_scope(
     )
 
 
-def sparse_pc_gmres_finalization_bundle_from_driver_result(
+def sparse_pc_gmres_finalization_bundle_from_solve_result(
     scope: Mapping[str, object],
     *,
     x: np.ndarray,
@@ -606,7 +606,7 @@ def sparse_pc_gmres_finalization_bundle_from_driver_result(
 ) -> SparsePCGMRESFinalizationBundleContext:
     """Build the full sparse-PC finalization bundle from the first GMRES result."""
 
-    return sparse_pc_gmres_finalization_bundle_from_driver_scope(
+    return sparse_pc_gmres_finalization_bundle_from_solve_scope(
         scope,
         result=SparsePCGMRESFinalResultContext(
             x=np.asarray(x, dtype=np.float64),
@@ -873,7 +873,7 @@ def retry_sparse_pc_factor_dtype_if_needed(
         solve_s=float(context.solve_s) + float(solve_s_retry),
     )
 
-def retry_sparse_pc_factor_dtype_from_driver_state(
+def retry_sparse_pc_factor_dtype_from_solve_state(
     state: Mapping[str, object],
     *,
     build_host_sparse_direct_factor_from_matvec: Callable[..., tuple[Any, Any]],
@@ -1015,7 +1015,7 @@ def sparse_pc_gmres_completion_message(
         f"target={float(context.target):.6e}{pc_suffix}"
     )
 
-def emit_sparse_pc_gmres_completion_from_driver_state(
+def emit_sparse_pc_gmres_completion_from_solve_state(
     state: Mapping[str, object],
 ) -> None:
     """Emit the sparse-PC GMRES completion line from stored solve state."""
@@ -1038,7 +1038,7 @@ def emit_sparse_pc_gmres_completion_from_driver_state(
         ),
     )
 
-def sparse_pc_gmres_final_payload_from_driver_state(
+def sparse_pc_gmres_final_payload_from_solve_state(
     state: Mapping[str, object],
     *,
     expand_reduced: ArrayFn,
@@ -1065,7 +1065,7 @@ def sparse_pc_gmres_final_payload_from_driver_state(
         metadata=sparse_pc_gmres_result_metadata(metadata_state),
     )
 
-def finalize_sparse_pc_gmres_from_driver_state(
+def finalize_sparse_pc_gmres_from_solve_state(
     state: Mapping[str, object],
     *,
     minres_correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[float]]],
@@ -1079,7 +1079,7 @@ def finalize_sparse_pc_gmres_from_driver_state(
     mutation is isolated to a copied state map instead of scattered through the
     solve loop.
     """
-    post_minres = apply_sparse_pc_post_minres_from_driver_state(
+    post_minres = apply_sparse_pc_post_minres_from_solve_state(
         state,
         minres_correction=minres_correction,
     )
@@ -1097,13 +1097,13 @@ def finalize_sparse_pc_gmres_from_driver_state(
             "solve_s": float(post_minres.solve_s),
         }
     )
-    emit_sparse_pc_gmres_completion_from_driver_state(final_state)
-    return sparse_pc_gmres_final_payload_from_driver_state(
+    emit_sparse_pc_gmres_completion_from_solve_state(final_state)
+    return sparse_pc_gmres_final_payload_from_solve_state(
         final_state,
         expand_reduced=expand_reduced,
     )
 
-def finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state(
+def finalize_sparse_pc_gmres_with_dtype_retry_from_solve_state(
     state: Mapping[str, object],
     *,
     build_host_sparse_direct_factor_from_matvec: Callable[..., tuple[Any, Any]],
@@ -1233,7 +1233,7 @@ def finalize_sparse_pc_gmres_with_dtype_retry(
     if context.setup_s is not None:
         initial_state["setup_s"] = float(context.setup_s)
     if context.dtype_retry is None:
-        retry_result = retry_sparse_pc_factor_dtype_from_driver_state(
+        retry_result = retry_sparse_pc_factor_dtype_from_solve_state(
             initial_state,
             build_host_sparse_direct_factor_from_matvec=build_host_sparse_direct_factor_from_matvec,
             run_sparse_pc_gmres_once_callback=run_sparse_pc_gmres_once_callback,
@@ -1338,11 +1338,11 @@ def finalize_sparse_pc_gmres_with_dtype_retry(
                     )
                 ),
             )
-        return sparse_pc_gmres_final_payload_from_driver_state(
+        return sparse_pc_gmres_final_payload_from_solve_state(
             final_state,
             expand_reduced=expand_reduced,
         )
-    return finalize_sparse_pc_gmres_from_driver_state(
+    return finalize_sparse_pc_gmres_from_solve_state(
         final_state,
         minres_correction=minres_correction,
         expand_reduced=expand_reduced,
@@ -1479,7 +1479,7 @@ def apply_sparse_pc_post_minres_if_needed(
         solve_s=float(context.solve_s) + float(post_minres.solve_s),
     )
 
-def apply_sparse_pc_post_minres_from_driver_state(
+def apply_sparse_pc_post_minres_from_solve_state(
     state: Mapping[str, object],
     *,
     minres_correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[float]]],
@@ -1524,28 +1524,28 @@ __all__ = (
     "SparsePCPostMinresUpdateResult",
     "run_sparse_pc_gmres_once",
     "run_sparse_pc_gmres_once_for_retry",
-    "sparse_pc_gmres_finalization_driver_state_keys",
-    "sparse_pc_gmres_finalization_driver_scope_keys",
+    "sparse_pc_gmres_finalization_solve_state_keys",
+    "sparse_pc_gmres_finalization_solve_scope_keys",
     "sparse_pc_gmres_finalization_state_from_context",
-    "sparse_pc_gmres_finalization_state_from_driver_scope",
-    "sparse_pc_gmres_finalization_bundle_from_driver_scope",
-    "sparse_pc_gmres_finalization_bundle_from_driver_result",
+    "sparse_pc_gmres_finalization_state_from_solve_scope",
+    "sparse_pc_gmres_finalization_bundle_from_solve_scope",
+    "sparse_pc_gmres_finalization_bundle_from_solve_result",
     "SparsePCFactorDtypeRetryDecision",
     "SparsePCFactorDtypeRetryContext",
     "SparsePCFactorDtypeRetryResult",
     "evaluate_sparse_pc_factor_dtype_retry",
     "sparse_pc_factor_dtype_retry_initial_guess",
     "retry_sparse_pc_factor_dtype_if_needed",
-    "retry_sparse_pc_factor_dtype_from_driver_state",
+    "retry_sparse_pc_factor_dtype_from_solve_state",
     "retry_sparse_pc_factor_dtype_from_finalization_context",
     "sparse_pc_gmres_completion_message",
-    "emit_sparse_pc_gmres_completion_from_driver_state",
-    "sparse_pc_gmres_final_payload_from_driver_state",
-    "finalize_sparse_pc_gmres_from_driver_state",
-    "finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state",
+    "emit_sparse_pc_gmres_completion_from_solve_state",
+    "sparse_pc_gmres_final_payload_from_solve_state",
+    "finalize_sparse_pc_gmres_from_solve_state",
+    "finalize_sparse_pc_gmres_with_dtype_retry_from_solve_state",
     "finalize_sparse_pc_gmres_bundle",
     "finalize_sparse_pc_gmres_with_dtype_retry",
     "apply_sparse_pc_post_minres",
     "apply_sparse_pc_post_minres_if_needed",
-    "apply_sparse_pc_post_minres_from_driver_state",
+    "apply_sparse_pc_post_minres_from_solve_state",
 )

@@ -1668,10 +1668,10 @@ def build_rhs1_xblock_correction_metadata(
     return metadata
 
 
-def build_rhs1_xblock_correction_metadata_from_driver_state(
+def build_rhs1_xblock_correction_metadata_from_solve_state(
     state: Mapping[str, object],
 ) -> dict[str, object]:
-    """Build x-block correction metadata from the driver solve state.
+    """Build x-block correction metadata from the solve state.
 
     This keeps the long correction-diagnostics object assembly next to the
     stable metadata schema instead of in the main solve routine.

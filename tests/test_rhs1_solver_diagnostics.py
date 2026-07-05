@@ -11,7 +11,7 @@ from sfincs_jax.problems.profile_solver_diagnostics import (
     RHS1SubspaceCorrectionDiagnostics,
     build_profile_response_linear_metadata,
     build_rhs1_xblock_correction_metadata,
-    build_rhs1_xblock_correction_metadata_from_driver_state,
+    build_rhs1_xblock_correction_metadata_from_solve_state,
     emit_profile_response_ksp_history,
     emit_profile_response_ksp_iter_stats,
     emit_profile_response_ksp_replay_diagnostics,
@@ -188,7 +188,7 @@ def test_profile_response_linear_metadata_marks_post_xblock_acceptance() -> None
     assert metadata["accepted_residual_floor"] == 1.0e-9
 
 
-def test_rhs1_xblock_correction_metadata_from_driver_state_matches_typed_builder() -> None:
+def test_rhs1_xblock_correction_metadata_from_solve_state_matches_typed_builder() -> None:
     state = {
         "probe_coarse_steps_requested": 2,
         "probe_coarse_direction_counts": (3, 4),
@@ -284,7 +284,7 @@ def test_rhs1_xblock_correction_metadata_from_driver_state_matches_typed_builder
         ),
     )
 
-    assert build_rhs1_xblock_correction_metadata_from_driver_state(state) == expected
+    assert build_rhs1_xblock_correction_metadata_from_solve_state(state) == expected
 
 
 def test_profile_response_ksp_diagnostics_forward_context(monkeypatch) -> None:

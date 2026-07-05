@@ -2614,12 +2614,12 @@ def xblock_sparse_pc_core_diagnostics(
     }
 
 
-def xblock_sparse_pc_result_diagnostics_from_driver_state(
+def xblock_sparse_pc_result_diagnostics_from_solve_state(
     state: Mapping[str, object],
     *,
     full_size: object,
 ) -> dict[str, object]:
-    """Build final x-block sparse-PC diagnostics from the driver solve state.
+    """Build final x-block sparse-PC diagnostics from the solve state.
 
     The driver now passes precomputed coarse, QI, device, and side-probe
     payloads through typed contexts. This helper keeps the stable public
