@@ -90,6 +90,9 @@ _equilibrium_cache_identity = _output_formats.equilibrium_cache_identity
 _load_output_cache = _output_formats.load_output_cache
 _save_output_cache = _output_formats.save_output_cache
 _decode_if_bytes = _output_formats.decode_if_bytes
+_get_float = _output_formats.get_namelist_float
+_get_int = _output_formats.get_namelist_int
+_fortran_logical = _output_formats.fortran_logical
 ExportFConfig = _output_formats.ExportFConfig
 _apply_export_f_maps = _output_formats._apply_export_f_maps
 _as_1d_float = _output_formats._as_1d_float
@@ -135,28 +138,6 @@ def _output_geom_cache_key(*, nml: Namelist, grids: V3Grids) -> tuple[object, ..
         get_int=_get_int,
         resolve_equilibrium_file=_resolve_equilibrium_file_from_namelist,
     )
-
-def _get_float(group: dict, key: str, default: float) -> float:
-    v = group.get(key.upper(), default)
-    if isinstance(v, list):
-        v = v[0] if v else default
-    return float(v)
-
-
-def _get_int(group: dict, key: str, default: int) -> int:
-    v = group.get(key.upper(), default)
-    if isinstance(v, list):
-        v = v[0] if v else default
-    return int(v)
-
-
-def _fortran_logical(x: bool) -> np.int32:
-    """Match v3's common logical representation in `sfincsOutput.h5`.
-
-    Many v3 HDF5 outputs store logicals as int32 with `-1` for false and `+1` for true.
-    """
-    return np.int32(1 if bool(x) else -1)
-
 
 def _gpsipsi_from_bc_file(
     *,

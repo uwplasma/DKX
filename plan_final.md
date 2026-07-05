@@ -907,7 +907,7 @@ Latest AST audit:
   `solvers/explicit_sparse.py` (`5198` lines),
   `problems/profile_sparse_qi.py` (`4873` lines),
   `problems/profile_solve.py` (`4351` lines), and
-  `outputs/writer.py` (`2490` lines).
+  `outputs/writer.py` (`2471` lines).
 - The final consolidation pass should reduce file count and improve ownership
   before further line-by-line extraction. A patch that only moves a few
   functions but leaves the same number of files is not sufficient unless it
@@ -943,6 +943,10 @@ Latest AST audit:
   into `outputs/rhsmode1.py`, keeping solver provenance, residual targets,
   per-RHS transport diagnostics, and memory estimates on the RHSMode-aware
   output owner while leaving `outputs/writer.py` as orchestration.
+- Scalar namelist conversion and Fortran logical encoding for output datasets
+  are owned by `outputs/formats.py`; `outputs/writer.py` and
+  `outputs/rhsmode1.py` keep compatibility aliases but no duplicate
+  implementations.
 - Strict numeric HDF5 parity has been folded into the root public
   `compare.py` API and the `validation/h5_parity.py` helper has been deleted.
   Scripts and tests now use one public comparison owner instead of a
@@ -1515,6 +1519,14 @@ Completed work:
   broader output/CLI bundle
   `tests/test_solver_trace_output_formats.py tests/test_io_output_policy_coverage.py tests/test_io_export_and_h5_coverage.py tests/test_cli_solve_mode.py`
   as `161 passed in 2.91 s`; Ruff, py_compile, and `git diff --check` passed.
+- Tranche 88: centralized scalar namelist conversion and SFINCS-v3 logical
+  output encoding in `outputs/formats.py`, replacing duplicate implementations
+  in `outputs/writer.py` and `outputs/rhsmode1.py` with compatibility aliases.
+  This reduced `outputs/writer.py` from `2490` to `2471` lines and
+  `outputs/rhsmode1.py` from `2303` to `2298` lines without adding files.
+  Focused validation passed:
+  `tests/test_output_formats.py tests/test_io_output_policy_coverage.py tests/test_geometry_grid_helper_coverage.py tests/test_solver_trace_output_formats.py`
+  as `114 passed in 4.60 s`; Ruff and py_compile passed.
 
 Remaining consolidation steps:
 

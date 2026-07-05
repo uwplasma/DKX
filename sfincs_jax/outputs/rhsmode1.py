@@ -30,6 +30,7 @@ from sfincs_jax.problems.profile_policies import (
     rhs1_tokamak_pas_noer_sparse_pc_auto_allowed,
 )
 
+from .formats import fortran_logical as _fortran_logical
 from ..solvers.memory_model import estimate_linear_solve_memory
 from ..solvers.diagnostics import SolverTrace, write_solver_trace_json
 
@@ -1367,12 +1368,6 @@ def _metadata_float(metadata: dict[str, Any], key: str) -> float | None:
     except (TypeError, ValueError, OverflowError):
         return None
     return value if np.isfinite(value) else None
-
-
-def _fortran_logical(value: bool) -> np.int32:
-    """Return the SFINCS convention for logical output fields."""
-
-    return np.int32(1 if bool(value) else -1)
 
 
 def _compact_json_metadata(value: Any, *, max_chars: int = 16384) -> str | None:

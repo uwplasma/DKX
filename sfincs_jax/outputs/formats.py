@@ -297,18 +297,32 @@ class ExportFConfig:
     map_xi: np.ndarray
 
 
-def _format_get_float(group: dict, key: str, default: float) -> float:
+def get_namelist_float(group: dict, key: str, default: float) -> float:
+    """Return a scalar namelist value as ``float`` with SFINCS key casing."""
+
     v = group.get(key.upper(), default)
     if isinstance(v, list):
         v = v[0] if v else default
     return float(v)
 
 
-def _format_get_int(group: dict, key: str, default: int) -> int:
+def get_namelist_int(group: dict, key: str, default: int) -> int:
+    """Return a scalar namelist value as ``int`` with SFINCS key casing."""
+
     v = group.get(key.upper(), default)
     if isinstance(v, list):
         v = v[0] if v else default
     return int(v)
+
+
+def fortran_logical(value: bool) -> np.int32:
+    """Return the SFINCS v3 convention for logical output datasets."""
+
+    return np.int32(1 if bool(value) else -1)
+
+
+_format_get_float = get_namelist_float
+_format_get_int = get_namelist_int
 
 
 def _as_1d_float(group: dict, key: str, *, default: float | None = None) -> np.ndarray:
@@ -807,7 +821,10 @@ def read_sfincs_output_file(path: Path) -> dict[str, Any]:
 __all__ = (
     "ExportFConfig",
     "decode_if_bytes",
+    "fortran_logical",
     "fortran_h5_layout",
+    "get_namelist_float",
+    "get_namelist_int",
     "netcdf_safe_name",
     "output_file_format",
     "read_sfincs_h5",
