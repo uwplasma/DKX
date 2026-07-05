@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -512,6 +512,20 @@ def test_sparse_qi_module_reexports_match_compat_layer() -> None:
     )
     for name in moved_names:
         assert getattr(sparse_pc_module, name) is getattr(sparse_qi_module, name)
+
+
+def test_run_xblock_sparse_pc_branch_disabled_context_returns_none() -> None:
+    values = {
+        dataclass_field.name: None
+        for dataclass_field in fields(sparse_xblock_module.XBlockSparsePCBranchContext)
+    }
+    values["xblock_sparse_pc"] = False
+
+    result = sparse_xblock_module.run_xblock_sparse_pc_branch(
+        sparse_xblock_module.XBlockSparsePCBranchContext(**values)
+    )
+
+    assert result is None
 
 
 def test_xblock_qi_pipeline_context_factory_owns_default_builders() -> None:

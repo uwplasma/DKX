@@ -109,6 +109,11 @@ The main structural refactor is functionally complete:
   zero production-used public helpers without direct tests. Focused validation
   passed: `tests/test_profile_response_linear_solve.py` as
   `13 passed in 2.26 s`.
+- RHSMode=1 sparse x-block coverage now includes a direct disabled-branch
+  context-schema test for the public `run_xblock_sparse_pc_branch` entry
+  point. A source/test audit for `problems/profile_sparse_xblock.py` reports
+  zero production-used public helpers without direct tests. The broader
+  sparse-PC/source-guard bundle passed as `365 passed in 5.86 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -911,6 +916,10 @@ Completed work:
   `problems/profile_dense.py::solve_profile_linear` entry point, then reran the
   source/test audit showing no production-used public helpers in that module
   without direct tests.
+- Tranche 34: added a direct bounded disabled-branch/context-schema test for
+  `problems/profile_sparse_xblock.py::run_xblock_sparse_pc_branch`, then reran
+  the source/test audit showing no production-used public helpers in that
+  module without direct tests.
 
 Remaining consolidation steps:
 
