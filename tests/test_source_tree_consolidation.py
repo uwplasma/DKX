@@ -184,6 +184,14 @@ def test_deleted_nonroot_compatibility_facades_are_absent() -> None:
         assert not path.exists(), path
 
 
+def test_deleted_campaign_specific_workflow_module_is_absent() -> None:
+    """Claim-policy gates should live under validation, not workflow sprawl."""
+
+    assert not (PACKAGE_ROOT / "workflows" / "qi_res15_gpu_campaign.py").exists()
+    module = importlib.import_module("sfincs_jax.validation.qi_device")
+    assert hasattr(module, "evaluate_qi_res15_gpu_campaign_files")
+
+
 def test_canonical_flat_domain_modules_are_importable() -> None:
     """Canonical owners replace the deleted compatibility import paths."""
 

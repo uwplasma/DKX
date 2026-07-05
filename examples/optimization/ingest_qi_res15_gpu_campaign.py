@@ -15,7 +15,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.workflows.qi_res15_gpu_campaign import (  # noqa: E402
+from sfincs_jax.validation.qi_device import (  # noqa: E402
     DEFAULT_GPU_CPU_ROOT_ATOL,
     DEFAULT_GPU_FORTRAN_ROOT_ATOL,
     evaluate_qi_res15_gpu_campaign_files,

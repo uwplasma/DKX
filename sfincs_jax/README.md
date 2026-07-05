@@ -51,10 +51,10 @@ inside domain folders are for contributors and advanced research workflows.
   memory models, and flat `preconditioner_*.py` modules.
 - `outputs/`: HDF5/NetCDF/NPZ schemas, writer logic, and post-solve
   diagnostics.
-- `validation/`: frozen-reference loading, parity checks, the release-data
-  manifest/fetcher, and validation-figure helpers.
+- `validation/`: frozen-reference loading, parity checks, release-data
+  manifest/fetching, QI device evidence gates, and validation-figure helpers.
 - `workflows/`: optional research workflows that combine public APIs into
-  scans, optimization tasks, and promotion campaigns.
+  scans, optimization tasks, and reusable evidence-generation tasks.
 
 ## Design Rules
 

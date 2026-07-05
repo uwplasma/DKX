@@ -286,6 +286,11 @@ The main structural refactor is functionally complete:
   flat owners are now the only supported implementation imports for those
   families; `v3_driver.py` remains the single root compatibility shim. Focused
   source/import validation passed as `24 passed in 3.02 s`.
+- Phase C workflow cleanup moved bounded QI `15x` GPU campaign-gating policy
+  from the campaign-specific `workflows/qi_res15_gpu_campaign.py` module into
+  the durable `validation/qi_device.py` owner, then deleted the workflow module.
+  The public example script remains available, but fixed-artifact claim gates
+  now live under validation rather than workflow implementation files.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -364,7 +369,7 @@ Current source inventory:
 - Domain folders: `discretization/` (`7` files), `geometry/` (`5`),
   `operators/` (`21`), `outputs/` (`6`), `physics/` (`3`),
   `problems/` (`28`), `solvers/` (`40`), `validation/` (`10`), and
-  `workflows/` (`6`).
+  `workflows/` (`5`).
 - The complexity hotspots are not nested folders; they are many
   same-family files in `problems/`, `solvers/`, and `operators/`.
   `problems/` and `solvers/` together own more than two thirds of the package
@@ -396,8 +401,10 @@ Target source shape for the review PR:
   `cache.py`, and output-schema helpers. Do not create one output file per
   diagnostic.
 - Move or delete campaign-specific workflow modules once their behavior is
-  represented by public examples, docs, tests, or scripts. `workflows/` should
-  contain reusable workflows, not historical validation campaigns.
+  represented by public examples, docs, tests, or validation owners.
+  `workflows/` should contain reusable workflows, not historical validation
+  campaigns. The bounded QI `15x` GPU campaign gate has been moved to
+  `validation/qi_device.py`.
 
 Files and families to review in order:
 

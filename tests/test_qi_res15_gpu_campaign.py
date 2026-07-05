@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from sfincs_jax.workflows.qi_res15_gpu_campaign import evaluate_qi_res15_gpu_campaign_files
+from sfincs_jax.validation.qi_device import evaluate_qi_res15_gpu_campaign_files
 
 
 _REPO = Path(__file__).resolve().parents[1]
