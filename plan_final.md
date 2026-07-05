@@ -375,8 +375,8 @@ Current source inventory:
   the files are public entry points or compatibility facades, but
   `v3_driver.py` must remain implementation-free and below `80` lines.
 - Domain folders: `discretization/` (`7` files), `geometry/` (`5`),
-  `operators/` (`21`), `outputs/` (`6`), `physics/` (`3`),
-  `problems/` (`28`), `solvers/` (`40`), `validation/` (`9`), and
+  `operators/` (`20`), `outputs/` (`6`), `physics/` (`3`),
+  `problems/` (`26`), `solvers/` (`37`), `validation/` (`8`), and
   `workflows/` (`5`).
 - The complexity hotspots are not nested folders; they are many
   same-family files in `problems/`, `solvers/`, and `operators/`.
