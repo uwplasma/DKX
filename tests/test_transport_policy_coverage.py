@@ -683,6 +683,26 @@ def test_multi_gpu_case_throughput_audit_fails_closed_on_release_and_bad_ratio()
     assert any("does not match wall-time ratio" in failure for failure in audit.failures)
 
 
+def test_multi_gpu_case_throughput_audit_infers_warm_timing_from_warmup_metadata() -> None:
+    audit = audit_multi_gpu_case_throughput_summary(
+        {
+            "benchmark_kind": "multi_gpu_case_throughput",
+            "backend": "gpu",
+            "warmup": 1,
+            "required_gpu_count": 2,
+            "sequential_one_gpu": {"wall_s": 9.0},
+            "parallel_two_gpu": {"wall_s": 4.5},
+            "throughput_speedup": 2.0,
+        },
+        min_throughput_speedup=1.5,
+    )
+
+    assert audit.ci_gate_pass
+    assert audit.timing_semantics == "cache_warm"
+    assert audit.throughput_speedup == pytest.approx(2.0)
+    assert any("inferred from recorded warmup counts" in note for note in audit.notes)
+
+
 def test_sharded_scaling_deterministic_gate_rejects_missing_digest() -> None:
     audit = audit_sharded_solve_scaling_summary(
         {

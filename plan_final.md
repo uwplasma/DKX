@@ -1490,6 +1490,15 @@ Completed work:
   `tests/test_profile_response_sparse_pc.py tests/test_profile_response_diagnostics.py tests/test_profile_solve_policy_helpers.py tests/test_profile_solve_policy_coverage.py tests/test_pas_preconditioner_policy.py tests/test_preconditioner_setup.py`
   as `421 passed in 4.22 s`; Ruff, `compileall`, and `git diff --check`
   passed.
+- Tranche 86: added bounded transport-parallel policy coverage for release
+  scope admission and fail-closed scaling claims. The new tests exercise
+  measured independent-transport throughput scope, legacy deterministic-output
+  admission for experimental sharded-solve snapshots, and warm-cache timing
+  inference for multi-GPU case-throughput artifacts. This improves coverage of
+  production-shape metadata gates without launching solves or adding fixtures.
+  Focused validation passed:
+  `tests/test_transport_parallel_execution.py tests/test_transport_policy_coverage.py tests/test_transport_parallel_sharding.py`
+  as `58 passed in 0.48 s`; Ruff passed for the touched tests.
 
 Remaining consolidation steps:
 
@@ -1519,7 +1528,10 @@ Remaining consolidation steps:
 Status: 86% local CI-mode measured package coverage
 (`3938 passed, 195 skipped, 5 stale-manifest failures before the manifest-path
 fix, in 17:22` on 2026-07-05) with the direct public contract audit closed at
-`modules_with_missing 0`.
+`modules_with_missing 0`. Additional bounded tests have been added since that
+audit for transport-parallel release-scope, sharded-solve, and multi-GPU
+throughput metadata gates; exact percentage movement is delegated to the next
+CI coverage shards because local pytest-cov remains unstable on this machine.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 

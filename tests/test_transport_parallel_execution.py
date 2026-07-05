@@ -143,6 +143,34 @@ def test_parallel_scaling_claim_scope_distinguishes_throughput_from_single_case(
     assert not throughput_scope.unsupported_single_case_strong_scaling
 
 
+def test_parallel_scaling_claim_scope_accepts_measured_transport_throughput_scope() -> None:
+    audit = audit_parallel_scaling_claim_scope(
+        {
+            "benchmark_kind": "transport_worker_scaling",
+            "claim_scope": "independent_transport_worker_throughput",
+            "backend": "gpu",
+            "rhs_count": 3,
+            "workers": ["1", "2"],
+            "artifact_kind": "benchmark_result",
+            "launches_solves": True,
+            "release_scaling_claim": True,
+            "results": [
+                {"workers": 1, "mean_s": 12.0},
+                {"workers": 2, "mean_s": 7.0},
+            ],
+        }
+    )
+
+    assert audit.claim_scope_release_eligible
+    assert audit.release_scaling_supported
+    assert audit.parallel_count == 2
+    assert audit.independent_task_count == 3
+    assert audit.release_gate_required == "audit_transport_parallel_scaling_summary"
+    assert audit.failures == ()
+    assert "artifact_kind=benchmark_result" in audit.notes
+    assert "launches_solves=True" in audit.notes
+
+
 def test_parallel_scaling_claim_scope_fails_closed_for_ambiguous_or_overclaimed_artifacts() -> None:
     ambiguous = audit_parallel_scaling_claim_scope(
         {
@@ -293,6 +321,41 @@ def test_audit_sharded_solve_scaling_summary_accepts_honest_experimental_payload
     assert not audit.release_promotion_supported
     assert any("single-case sharded solve" in blocker for blocker in audit.release_promotion_blockers)
     assert any("not a release scaling claim" in note for note in audit.notes)
+
+
+def test_audit_sharded_solve_scaling_summary_accepts_legacy_deterministic_output_flag() -> None:
+    audit = audit_sharded_solve_scaling_summary(
+        {
+            "benchmark_kind": "single_case_sharded_solve",
+            "scaling_status": "experimental_single_case_sharding",
+            "experimental_single_case_scaling": True,
+            "release_scaling_claim": False,
+            "backend": "gpu",
+            "gpu_device_count": 2,
+            "timing_semantics": "hot_solve",
+            "operator_reuse_gate": {
+                "passes": True,
+                "timing_semantics": "hot_solve",
+                "timed_repeats": 1,
+                "min_timed_repeats": 1,
+                "compile_in_timed_region": False,
+                "warm_run_amortization_pass": True,
+                "persistent_compile_cache": True,
+                "compile_cache_dir": "examples/performance/output/cache",
+            },
+            "deterministic_output_check": True,
+            "devices": [1, 2],
+            "results": [
+                {"devices": 1, "mean_s": 10.0, "speedup": 1.0},
+                {"devices": 2, "mean_s": 8.0, "speedup": 1.25},
+            ],
+        }
+    )
+
+    assert audit.ci_gate_pass
+    assert audit.deterministic_output_check
+    assert audit.deterministic_output_gate
+    assert any("legacy deterministic_output_check=true" in note for note in audit.notes)
 
 
 def test_audit_sharded_solve_scaling_summary_requires_operator_reuse_gate() -> None:
