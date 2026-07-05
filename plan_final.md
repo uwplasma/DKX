@@ -1267,6 +1267,14 @@ Completed work:
   `tests/test_io_output_policy_coverage.py tests/test_geometry_grid_helper_coverage.py tests/test_vmec_wout_conventions.py tests/test_domain_package_import_contracts.py tests/test_source_tree_consolidation.py`
   as `142 passed in 6.07 s`; Ruff passed. This reduced `outputs/writer.py`
   from `2993` to `2675` lines without adding source files.
+- Tranche 61: added direct VMEC metric reconstruction tests for finite
+  `gpsiHatpsiHat` output plus fail-closed gates for invalid
+  `VMEC_Nyquist_option`, zero `bmnc(0,0)`, and an over-aggressive mode filter.
+  The `sfincs_jax.io` facade test now also verifies that the moved Boozer
+  evaluator still resolves through the legacy private facade. Focused
+  validation passed:
+  `tests/test_vmec_wout_conventions.py tests/test_output_formats.py tests/test_io_output_policy_coverage.py tests/test_geometry_grid_helper_coverage.py tests/test_domain_package_import_contracts.py`
+  as `129 passed in 3.82 s`; Ruff and `git diff --check` passed.
 
 Remaining consolidation steps:
 
