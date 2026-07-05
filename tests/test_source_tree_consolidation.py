@@ -178,6 +178,31 @@ def test_package_sources_do_not_document_deleted_v3_driver_as_architecture() -> 
     assert offenders == []
 
 
+def test_package_sources_do_not_repeat_top_level_defs() -> None:
+    """Repeated top-level definitions hide stale helpers in large owner files."""
+
+    offenders: list[tuple[str, str, int, int]] = []
+    for path in sorted(PACKAGE_ROOT.rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        seen: dict[str, int] = {}
+        for node in tree.body:
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                if node.name in seen:
+                    offenders.append(
+                        (
+                            path.relative_to(REPO_ROOT).as_posix(),
+                            node.name,
+                            seen[node.name],
+                            node.lineno,
+                        )
+                    )
+                seen[node.name] = node.lineno
+
+    assert offenders == []
+
+
 def test_profile_solve_does_not_reexport_low_level_helper_namespaces() -> None:
     """Keep RHSMode-1 orchestration from becoming a private-helper namespace."""
 
