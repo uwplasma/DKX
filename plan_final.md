@@ -1706,6 +1706,13 @@ Completed work:
   tests/test_examples_tutorials.py tests/test_examples_tree_contract.py`
   passed `20/20` in `20.49 s`. This keeps Phase E executable evidence fresh
   without writing generated artifacts into the repository.
+- Tranche 107: removed release-history wording from the getting-started
+  geometry example by describing the "supported" Python API surface instead of
+  the "current" surface. The file already uses a repository-root bootstrap for
+  standalone execution, so it now carries a file-local `E402` Ruff waiver for
+  that intentional example-script pattern. Validation: the script ran, Ruff
+  passed, `compileall` passed, `git diff --check` passed, and the affected
+  examples tests passed `17/17` before the waiver-only patch.
 
 Remaining consolidation steps:
 
