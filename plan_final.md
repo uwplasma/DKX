@@ -891,7 +891,7 @@ canonical flat owners directly.
 
 ### Lane 1 - Review-Ready Refactor
 
-Status: 98% for final review readiness.
+Status: 99% for final review readiness.
 
 Goal: finish the PR with a smaller, clearer source tree without changing
 physics, outputs, tolerances, solver defaults, differentiable Python paths,
@@ -904,9 +904,9 @@ Latest AST audit:
 - The source tree has 120 Python files, 16 package-root modules, and one-level
   domain folders only. The remaining structural blockers are file-family sprawl
   and owner size.
-  The largest retained owners are `problems/profile_policies.py` (`7936`
-  lines), `problems/profile_sparse_xblock.py` (`7681` lines),
-  `operators/profile_full_system.py` (`6130` lines),
+  The largest retained owners are `problems/profile_policies.py` (`7916`
+  lines), `problems/profile_sparse_xblock.py` (`7727` lines),
+  `operators/profile_full_system.py` (`6133` lines),
   `problems/profile_sparse_solve.py` (`5168` lines),
   `solvers/preconditioner_qi_device.py` (`5433` lines),
   `solvers/explicit_sparse.py` (`5198` lines),
@@ -1647,8 +1647,9 @@ Completed work:
 Remaining consolidation steps:
 
 1. Compatibility cleanup: keep deleted-facade tests and stale-import scans in
-   place. Behavior tests should import canonical domain owners; no
-   `sfincs_jax.v3_driver` imports are allowed.
+   place. Behavior tests now import canonical domain owners; no
+   `sfincs_jax.v3_driver` imports are allowed, and private `profile_solve`
+   helper-owner checks are confined to the explicit wrapper test.
 2. Problem-family consolidation: remove historical transfer-state and
    production-campaign names from implementation files by merging RHSMode-1
    sparse setup/rescue owners into canonical profile sparse owners. The
@@ -1663,9 +1664,9 @@ Remaining consolidation steps:
 4. Operator cleanup: merge small profile-response term helpers only when
    equation-to-file mapping remains clear in docs and tests. Otherwise retain
    them as pedagogical owners.
-5. Review lock: keep `io.py` below `80` lines and implementation-free, update
-   `sfincs_jax/README.md`, and run source-layout, import-contract, docs,
-   examples, CLI/output, and focused behavior guards.
+5. Review lock: keep `io.py` below `80` lines and implementation-free, keep
+   `sfincs_jax/README.md` aligned with the source tree, and run source-layout,
+   import-contract, docs, examples, CLI/output, and focused behavior guards.
 
 ### Lane 2 - Coverage And Future-Proof Tests
 
