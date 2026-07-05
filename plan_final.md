@@ -1669,6 +1669,12 @@ Completed work:
   `FSABjHat`, `FSABjHatOverRootFSAB2`, particle-flux, heat-flux, and
   `NIterations` datasets. This verifies the QA/QH parity runner inputs before
   launching fresh candidate solves.
+- Tranche 103: ran a one-case Zenodo QS candidate-solve dry run. The generated
+  command uses `sfincs_jax write-output --compute-solution --solve-method auto`
+  and includes `--wout-path` pointing at the QA VMEC file
+  `wout_new_QA_aScaling.nc`. The machine-readable report records this path as
+  `solve.equilibrium_path`; the next step for this lane is an actual bounded
+  candidate solve when compute budget is allocated.
 
 Remaining consolidation steps:
 
