@@ -350,6 +350,41 @@ def test_device_operator_tests_use_active_layout_and_xblock_policy_owners() -> N
     assert "sfincs_jax.solvers.preconditioner_xblock_policy" in text
 
 
+def test_transport_helper_tests_do_not_use_profile_solve_aliases() -> None:
+    """RHSMode=2/3 helper tests should import transport owners directly."""
+
+    forbidden_attrs = (
+        "_transport_active_dof_indices",
+        "_build_rhsmode23",
+        "_try_build_rhsmode23",
+    )
+    offenders: list[tuple[str, str]] = []
+    for path in sorted((REPO_ROOT / "tests").glob("test_*.py")):
+        if path.name == "test_profile_solve_module_wrappers.py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        profile_solve_aliases: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "sfincs_jax.problems.profile_solve":
+                        profile_solve_aliases.add(alias.asname or "profile_solve")
+            elif isinstance(node, ast.ImportFrom):
+                if node.module == "sfincs_jax.problems" and any(
+                    alias.name == "profile_solve" for alias in node.names
+                ):
+                    for alias in node.names:
+                        if alias.name == "profile_solve":
+                            profile_solve_aliases.add(alias.asname or alias.name)
+            elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+                if node.value.id in profile_solve_aliases and any(
+                    node.attr.startswith(attr) for attr in forbidden_attrs
+                ):
+                    offenders.append((path.relative_to(REPO_ROOT).as_posix(), node.attr))
+
+    assert offenders == []
+
+
 def test_structured_csr_docs_tests_use_profile_setup_owner() -> None:
     """Structured-CSR method constants belong to profile setup."""
 
