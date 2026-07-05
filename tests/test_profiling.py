@@ -1,9 +1,20 @@
 from __future__ import annotations
 
 import io
+import sys
+from types import SimpleNamespace
 
 import sfincs_jax.profiling as profiling
-from sfincs_jax.profiling import SimpleProfiler, _resource_maxrss_to_mb, make_emit, maybe_profiler
+from sfincs_jax.profiling import (
+    SimpleProfiler,
+    Timer,
+    _device_mem_mb,
+    _peak_rss_mb,
+    _resource_maxrss_to_mb,
+    _rss_mb,
+    make_emit,
+    maybe_profiler,
+)
 
 
 def test_resource_maxrss_to_mb_handles_darwin_bytes() -> None:
@@ -12,6 +23,63 @@ def test_resource_maxrss_to_mb_handles_darwin_bytes() -> None:
 
 def test_resource_maxrss_to_mb_handles_linux_kib() -> None:
     assert _resource_maxrss_to_mb(1024.0, platform="linux") == 1.0
+
+
+def test_timer_uses_perf_counter_delta(monkeypatch) -> None:
+    ticks = iter([2.0, 2.75])
+    monkeypatch.setattr(profiling.time, "perf_counter", lambda: next(ticks))
+
+    timer = Timer()
+
+    assert timer.elapsed_s() == 0.75
+
+
+def test_rss_helpers_cover_resource_fallback_and_missing_resource(monkeypatch) -> None:
+    def raise_psutil() -> None:
+        raise RuntimeError("psutil unavailable")
+
+    fake_resource = SimpleNamespace(
+        RUSAGE_SELF=0,
+        getrusage=lambda _who: SimpleNamespace(ru_maxrss=2048.0),
+    )
+    monkeypatch.setitem(sys.modules, "psutil", SimpleNamespace(Process=raise_psutil))
+    monkeypatch.setitem(sys.modules, "resource", fake_resource)
+    monkeypatch.setattr(profiling.sys, "platform", "linux")
+
+    assert _rss_mb() == 2.0
+    assert _peak_rss_mb() == 2.0
+
+    fake_broken_resource = SimpleNamespace(
+        RUSAGE_SELF=0,
+        getrusage=lambda _who: (_ for _ in ()).throw(RuntimeError("resource unavailable")),
+    )
+    monkeypatch.setitem(sys.modules, "resource", fake_broken_resource)
+    assert _rss_mb() is None
+    assert _peak_rss_mb() is None
+
+
+def test_device_memory_uses_first_numeric_jax_stat(monkeypatch) -> None:
+    fake_jax = SimpleNamespace(
+        devices=lambda: [
+            SimpleNamespace(
+                memory_stats=lambda: {
+                    "bytes_in_use": "not-a-number",
+                    "bytes_active": 5_000_000,
+                }
+            )
+        ]
+    )
+    monkeypatch.setitem(sys.modules, "jax", fake_jax)
+
+    assert _device_mem_mb() == 5.0
+
+    fake_empty_jax = SimpleNamespace(devices=lambda: [SimpleNamespace(memory_stats=lambda: {})])
+    monkeypatch.setitem(sys.modules, "jax", fake_empty_jax)
+    assert _device_mem_mb() is None
+
+    fake_broken_jax = SimpleNamespace(devices=lambda: (_ for _ in ()).throw(RuntimeError("no device")))
+    monkeypatch.setitem(sys.modules, "jax", fake_broken_jax)
+    assert _device_mem_mb() is None
 
 
 def test_make_emit_respects_verbosity_quiet_and_prefix() -> None:
