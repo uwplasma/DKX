@@ -266,6 +266,23 @@ def test_sparse_helper_tests_do_not_use_profile_solve_private_aliases() -> None:
     assert "profile_solve._" not in text
 
 
+def test_transport_solve_does_not_import_profile_solve_globals() -> None:
+    """Transport orchestration should depend on transport owners explicitly."""
+
+    text = (PACKAGE_ROOT / "problems" / "transport_solve.py").read_text(
+        encoding="utf-8"
+    )
+    forbidden_fragments = (
+        "_PROFILE_SOLVE",
+        'import_module("sfincs_jax.problems.profile_solve")',
+        "vars(_PROFILE_SOLVE)",
+        "globals()[_name]",
+    )
+
+    for fragment in forbidden_fragments:
+        assert fragment not in text
+
+
 def test_schur_heuristic_tests_use_canonical_policy_and_preconditioner_owners() -> None:
     """Schur/PAS unit tests should not widen profile_solve's private API."""
 

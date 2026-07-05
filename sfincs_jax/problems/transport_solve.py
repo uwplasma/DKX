@@ -12,6 +12,7 @@ from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
 import math
 import os
+from pathlib import Path
 import time
 from typing import Any
 
@@ -20,6 +21,14 @@ import jax.numpy as jnp
 import jax.scipy.linalg as jla
 import numpy as np
 
+from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
+from sfincs_jax.namelist import Namelist, read_sfincs_input
+from sfincs_jax.operators.profile_system import (
+    _matvec_shard_axis,
+    full_system_operator_from_namelist,
+    rhs_v3_full_system_jit,
+    with_transport_rhs_settings,
+)
 from sfincs_jax.profiling import Timer
 from sfincs_jax.solvers.explicit_sparse import build_operator_from_matvec, estimate_csr_nbytes, factorize_host_sparse_operator
 from sfincs_jax.solver import (
@@ -29,22 +38,91 @@ from sfincs_jax.solver import (
     bicgstab_solve_with_history_scipy,
     explicit_left_preconditioned_gmres_scipy,
     gmres_solve_with_history_scipy,
+    gmres_result_is_finite as _gmres_result_is_finite,
     recycled_initial_guess,
 )
+from sfincs_jax.problems.profile_policies import (
+    _hash_numpy_array_for_cache,
+    host_sparse_direct_refine_steps as _host_sparse_direct_refine_steps,
+    host_sparse_factor_dtype_current_backend as _host_sparse_factor_dtype,
+    resolve_use_implicit as _resolve_use_implicit_impl,
+)
+from sfincs_jax.problems.profile_sparse_direct import (
+    build_host_sparse_direct_factor_from_matvec as _build_host_sparse_direct_factor_from_matvec,
+    build_sparse_jax_preconditioner_from_matvec as _build_sparse_jax_preconditioner_from_matvec,
+    host_physical_memory_mb as _host_physical_memory_mb,
+    host_sparse_direct_polish as _host_sparse_direct_polish,
+    sparse_factor_cache_key as _sparse_factor_cache_key,
+)
 from sfincs_jax.problems.transport_finalize import (
+    TransportConstraintNullspaceProjector,
+    TransportRHSFinalizationContext,
     V3TransportMatrixSolveResult,
     compute_transport_postsolve_diagnostics,
+    finalize_full_transport_rhs,
+    finalize_reduced_transport_rhs,
 )
 from sfincs_jax.operators.profile_sparse_pattern import (
     summarize_v3_sparse_pattern,
     v3_full_system_conservative_sparsity_pattern,
     v3_full_system_conservative_sparsity_pattern_for_indices,
 )
-from sfincs_jax.solvers.diagnostics import transport_progress_message
+from sfincs_jax.solvers.diagnostics import save_krylov_state, transport_progress_message
+from sfincs_jax.solvers.explicit_sparse import (
+    host_sparse_direct_solve_with_refinement as _host_sparse_direct_solve_with_refinement,
+)
+from sfincs_jax.solvers.krylov_dispatch import (
+    resolve_distributed_gmres_axis as _resolve_distributed_gmres_axis_impl,
+)
+from sfincs_jax.solvers.preconditioner_symbolic_host import (
+    build_sparse_ilu_from_matvec as _build_sparse_ilu_from_matvec,
+)
+from sfincs_jax.solvers.preconditioner_transport_matrix import (
+    build_rhsmode23_block_preconditioner,
+    build_rhsmode23_collision_preconditioner,
+    build_rhsmode23_fp_local_geom_line_preconditioner,
+    build_rhsmode23_fp_structured_fblock_lu_preconditioner,
+    build_rhsmode23_fp_tzfft_line_preconditioner,
+    build_rhsmode23_fp_tzfft_line_schur_preconditioner,
+    build_rhsmode23_fp_tzfft_preconditioner,
+    build_rhsmode23_fp_xblock_tz_lu_preconditioner,
+    build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner,
+    build_rhsmode23_sxblock_preconditioner,
+    build_rhsmode23_tzfft_preconditioner,
+    build_rhsmode23_xmg_preconditioner,
+)
+from sfincs_jax.solvers.preconditioning import (
+    precond_dtype as _precond_dtype,
+    set_precond_policy_hints as _set_precond_policy_hints,
+    set_precond_size_hint as _set_precond_size_hint,
+    transport_precond_cache_key as _transport_precond_cache_key_impl,
+    use_solver_jit as _use_solver_jit,
+)
 from sfincs_jax.problems.transport_policies import (
+    TransportPreconditionerContext,
+    TransportPreconditionerDispatchBuilders,
+    TransportRuntimePolicy,
+    TransportStrongPreconditionerCache,
+    build_transport_preconditioner_from_kind,
+    normalize_transport_preconditioner_kind,
+    resolve_transport_per_rhs_loop_policy,
+    resolve_transport_precondition_side_for_kind,
+    resolve_transport_preconditioner_choice,
+    transport_candidate_is_better,
+    transport_dd_config_from_env,
+    transport_geometry_scheme_from_namelist,
     transport_host_gmres_accepts_preconditioned_residual,
+    transport_host_gmres_accepts_preconditioned_residual as _transport_host_gmres_accepts_preconditioned_residual_impl,
+    transport_polish_config_from_env,
+    transport_precondition_side as _transport_precondition_side_impl,
+    transport_residual_value,
     transport_residual_gate_failure,
     transport_residual_gate_thresholds_from_env,
+    transport_result_needs_retry,
+    transport_sparse_direct_needs_float64_retry as _transport_sparse_direct_needs_float64_retry_impl,
+    transport_sparse_direct_rescue_first as _transport_sparse_direct_rescue_first_impl,
+    transport_sparse_jax_config_from_env,
+    transport_tzfft_first_attempt_budget as _transport_tzfft_first_attempt_budget_impl,
 )
 from sfincs_jax.outputs.transport import TransportStreamingOutputAccumulator
 from sfincs_jax.operators.profile_system import (
@@ -59,14 +137,19 @@ from sfincs_jax.problems.transport_linear_system import (
     _dense_dtype,
     _emit_rhs_residual,
     _store_dense_batch_result,
+    build_transport_fp_direct_active_block_schur_preconditioner,
+    build_transport_fp_fortran_reduced_lu_preconditioner,
     dense_preconditioner_for_matvec,
     dense_solver_for_matvec,
+    resolve_transport_active_dense_setup,
     solve_transport_dense_batch,
     solve_transport_linear,
     solve_transport_linear_with_residual,
     transport_host_gmres_solve,
     transport_restart_for_method,
     transport_solver_kind,
+    transport_active_dof_indices as _transport_active_dof_indices,
+    _try_build_rhsmode23_fp_direct_active_operator_bundle,
 )
 from sfincs_jax.problems.transport_setup import (
     TransportLoopProgress,
@@ -79,6 +162,27 @@ from sfincs_jax.problems.transport_setup import (
     resolve_transport_state_setup,
     resolve_transport_which_rhs_setup,
 )
+from sfincs_jax.problems.transport_parallel_runtime import (
+    TransportParallelSolveRuntime,
+    get_transport_parallel_pool as _get_transport_parallel_pool,
+    maybe_run_transport_parallel_solve,
+    run_transport_parallel_gpu_subprocesses_with_policy as _run_transport_parallel_gpu_subprocesses,
+    shutdown_transport_parallel_pool as _shutdown_transport_parallel_pool,
+    solve_transport_parallel_payload as _solve_transport_parallel_payload,
+    transport_parallel_backend as _transport_parallel_backend,
+    transport_parallel_persistent_pool_enabled as _transport_parallel_persistent_pool_enabled,
+    transport_parallel_pool_executor_kwargs as _transport_parallel_pool_executor_kwargs,
+    transport_parallel_pool_key as _transport_parallel_pool_key,
+    transport_parallel_process_pool_executor as _transport_parallel_process_pool_executor,
+    transport_parallel_visible_gpu_ids as _transport_parallel_visible_gpu_ids,
+    transport_parallel_worker_env as _transport_parallel_worker_env,
+)
+from sfincs_jax.problems.profile_preconditioner_build import (
+    _build_rhsmode23_theta_dd_preconditioner,
+    _build_rhsmode23_theta_schwarz_preconditioner,
+    _build_rhsmode23_zeta_dd_preconditioner,
+    _build_rhsmode23_zeta_schwarz_preconditioner,
+)
 
 
 _transport_solver_kind = transport_solver_kind
@@ -87,19 +191,128 @@ _dense_preconditioner_for_matvec = dense_preconditioner_for_matvec
 _dense_solver_for_matvec = dense_solver_for_matvec
 _transport_host_gmres_solve = transport_host_gmres_solve
 _solve_transport_dense_batch = solve_transport_dense_batch
-
-from importlib import import_module as _import_module
-
-_PROFILE_SOLVE = _import_module("sfincs_jax.problems.profile_solve")
-for _name, _value in vars(_PROFILE_SOLVE).items():
-    if not _name.startswith("__"):
-        globals()[_name] = _value
-from sfincs_jax.problems.profile_preconditioner_build import (
-    _build_rhsmode23_theta_dd_preconditioner,
-    _build_rhsmode23_theta_schwarz_preconditioner,
-    _build_rhsmode23_zeta_dd_preconditioner,
-    _build_rhsmode23_zeta_schwarz_preconditioner,
+_resolve_use_implicit = _resolve_use_implicit_impl
+_build_rhsmode23_collision_preconditioner = build_rhsmode23_collision_preconditioner
+_build_rhsmode23_sxblock_preconditioner = build_rhsmode23_sxblock_preconditioner
+_build_rhsmode23_xmg_preconditioner = build_rhsmode23_xmg_preconditioner
+_build_rhsmode23_block_preconditioner = build_rhsmode23_block_preconditioner
+_build_rhsmode23_tzfft_preconditioner = build_rhsmode23_tzfft_preconditioner
+_build_rhsmode23_fp_tzfft_preconditioner = build_rhsmode23_fp_tzfft_preconditioner
+_build_rhsmode23_fp_tzfft_line_preconditioner = (
+    build_rhsmode23_fp_tzfft_line_preconditioner
 )
+_build_rhsmode23_fp_tzfft_line_schur_preconditioner = (
+    build_rhsmode23_fp_tzfft_line_schur_preconditioner
+)
+_build_rhsmode23_fp_local_geom_line_preconditioner = (
+    build_rhsmode23_fp_local_geom_line_preconditioner
+)
+_build_rhsmode23_fp_xblock_tz_lu_preconditioner = (
+    build_rhsmode23_fp_xblock_tz_lu_preconditioner
+)
+_build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner = (
+    build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner
+)
+_build_rhsmode23_fp_structured_fblock_lu_preconditioner = (
+    build_rhsmode23_fp_structured_fblock_lu_preconditioner
+)
+_transport_runtime_policy = TransportRuntimePolicy(
+    backend=lambda: jax.default_backend(),
+    host_sparse_factor_dtype=_host_sparse_factor_dtype,
+)
+_transport_dense_backend_allowed = _transport_runtime_policy.dense_backend_allowed
+_transport_dense_accelerator_auto_allowed = (
+    _transport_runtime_policy.dense_accelerator_auto_allowed
+)
+_transport_tzfft_backend_allowed = _transport_runtime_policy.tzfft_backend_allowed
+_transport_tzfft_accelerator_auto_allowed = (
+    _transport_runtime_policy.tzfft_accelerator_auto_allowed
+)
+_transport_tzfft_structured_first_attempt_allowed = (
+    _transport_runtime_policy.tzfft_structured_first_attempt_allowed
+)
+_transport_sparse_direct_rescue_allowed = (
+    _transport_runtime_policy.sparse_direct_rescue_allowed
+)
+_transport_sparse_direct_first_attempt_allowed = (
+    _transport_runtime_policy.sparse_direct_first_attempt_allowed
+)
+_transport_host_gmres_first_attempt_allowed = (
+    _transport_runtime_policy.host_gmres_first_attempt_allowed
+)
+_transport_disable_auto_recycle = _transport_runtime_policy.disable_auto_recycle
+_transport_sparse_factor_dtype = _transport_runtime_policy.sparse_factor_dtype
+_transport_sparse_direct_use_explicit_helper = (
+    _transport_runtime_policy.sparse_direct_use_explicit_helper
+)
+_transport_host_gmres_progress_every = (
+    _transport_runtime_policy.host_gmres_progress_every
+)
+_transport_tzfft_first_attempt_budget = _transport_tzfft_first_attempt_budget_impl
+_transport_sparse_direct_rescue_first = _transport_sparse_direct_rescue_first_impl
+_transport_precondition_side = _transport_precondition_side_impl
+_transport_host_gmres_accepts_preconditioned_residual = (
+    _transport_host_gmres_accepts_preconditioned_residual_impl
+)
+_transport_sparse_direct_needs_float64_retry = (
+    _transport_sparse_direct_needs_float64_retry_impl
+)
+
+
+def _resolve_distributed_gmres_axis(
+    *, op: V3FullSystemOperator | None, emit: Callable[[int, str], None] | None = None
+) -> str | None:
+    return _resolve_distributed_gmres_axis_impl(
+        op=op,
+        emit=emit,
+        matvec_shard_axis_fn=_matvec_shard_axis,
+    )
+
+
+def _transport_precond_cache_key(
+    op: V3FullSystemOperator, kind: str
+) -> tuple[object, ...]:
+    return _transport_precond_cache_key_impl(op, kind, precond_dtype=_precond_dtype())
+
+
+def _build_rhsmode23_fp_direct_active_block_schur_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    active_indices_np: np.ndarray | None = None,
+    emit: Callable[[int, str], None] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    return build_transport_fp_direct_active_block_schur_preconditioner(
+        op=op,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        active_indices_np=active_indices_np,
+        emit=emit,
+        fallback_builder=_build_rhsmode23_sxblock_preconditioner,
+        transport_precond_cache_key=_transport_precond_cache_key,
+    )
+
+
+def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    active_indices_np: np.ndarray | None = None,
+    emit: Callable[[int, str], None] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    return build_transport_fp_fortran_reduced_lu_preconditioner(
+        op=op,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        active_indices_np=active_indices_np,
+        emit=emit,
+        fallback_builder=_build_rhsmode23_sxblock_preconditioner,
+        transport_precond_cache_key=_transport_precond_cache_key,
+        build_host_sparse_direct_factor_from_matvec=_build_host_sparse_direct_factor_from_matvec,
+        host_physical_memory_mb=_host_physical_memory_mb,
+    )
 
 def _transport_parallel_worker(payload: dict[str, object]) -> dict[str, object]:
     """Worker entry point for parallel whichRHS transport solves."""

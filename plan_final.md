@@ -1565,6 +1565,22 @@ Completed work:
   Focused validation passed:
   `tests/test_source_tree_consolidation.py tests/test_profile_response_sparse_pc.py tests/test_profile_response_diagnostics.py tests/test_rhs1_solver_diagnostics.py`
   as `415 passed in 6.71 s`; Ruff, py_compile, and `git diff --check` passed.
+- Tranche 92: removed the dynamic `profile_solve` global-copy dependency from
+  `problems/transport_solve.py`. RHSMode=2/3 transport orchestration now imports
+  canonical transport, preconditioner, sparse-direct, profiling, and policy
+  owners explicitly and carries local transport wrappers only where fallback
+  builder/cache injection is required. A source-tree guard prevents
+  `_PROFILE_SOLVE`, dynamic `import_module("sfincs_jax.problems.profile_solve")`,
+  `vars(_PROFILE_SOLVE)`, and `globals()[_name]` from returning. This tranche
+  intentionally trades a larger explicit import block for a simpler dependency
+  graph and removes a hidden broad namespace coupling between RHSMode=1 and
+  RHSMode=2/3 solvers. Focused validation passed:
+  `tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_transport_sparse_direct.py tests/test_transport_matrix_preconditioners.py tests/test_transport_parallel_runtime.py tests/test_transport_parallel_payload.py`
+  as `159 passed in 23.53 s`; the wrapper/transport bundle
+  `tests/test_profile_solve_module_wrappers.py tests/test_transport_sparse_direct.py tests/test_transport_matrix_preconditioners.py tests/test_transport_parallel_runtime.py tests/test_transport_parallel_payload.py`
+  passed as `118 passed in 19.94 s`; direct import of
+  `sfincs_jax.problems.transport_solve` succeeded; Ruff, py_compile, and
+  `git diff --check` passed.
 
 Remaining consolidation steps:
 
