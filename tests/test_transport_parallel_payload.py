@@ -74,6 +74,45 @@ def test_solve_transport_parallel_payload_normalizes_kwargs_and_child_env(
     assert os.environ["SFINCS_JAX_TRANSPORT_PARALLEL_CHILD"] == "1"
 
 
+def test_solve_transport_parallel_payload_can_skip_recursive_env_guard(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text("&general\n/\n")
+    emitted: list[tuple[int, str]] = []
+    captured: dict[str, object] = {}
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL", "on")
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_PARALLEL_CHILD", raising=False)
+
+    def _solve_transport(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            state_vectors_by_rhs={1: np.asarray([1.0])},
+            residual_norms_by_rhs={1: np.asarray(1.0e-12)},
+            rhs_norms_by_rhs={1: np.asarray(2.0)},
+            elapsed_time_s=np.asarray(0.5, dtype=np.float64),
+        )
+
+    result = solve_transport_parallel_payload(
+        {
+            "input_path": str(input_path),
+            "which_rhs_values": [1],
+        },
+        read_input=lambda _path: {"input": "model"},
+        solve_transport=_solve_transport,
+        emit=lambda level, message: emitted.append((level, message)),
+        set_child_environment=False,
+    )
+
+    assert captured["emit"] is not None
+    assert os.environ["SFINCS_JAX_TRANSPORT_PARALLEL"] == "on"
+    assert "SFINCS_JAX_TRANSPORT_PARALLEL_CHILD" not in os.environ
+    assert emitted == []
+    assert result["which_rhs_values"] == [1]
+    np.testing.assert_allclose(result["elapsed_time_s"], np.asarray(0.5))
+
+
 def test_pack_transport_parallel_result_preserves_optional_rhs_norms() -> None:
     result = SimpleNamespace(
         state_vectors_by_rhs={1: np.asarray([1.0])},
@@ -111,6 +150,37 @@ def test_transport_parallel_result_to_npz_arrays_indexes_full_elapsed_vector() -
     np.testing.assert_allclose(arrays["residual_norms"], np.asarray([2.0e-12, 4.0e-12]))
     np.testing.assert_allclose(arrays["rhs_norms"], np.asarray([2.0, 4.0]))
     np.testing.assert_allclose(arrays["elapsed_time_s"], np.asarray([0.2, 0.4]))
+
+
+def test_transport_parallel_result_to_npz_arrays_handles_scalar_and_short_elapsed() -> None:
+    scalar = transport_parallel_result_to_npz_arrays(
+        {
+            "which_rhs_values": [1, 3],
+            "state_vectors_by_rhs": {
+                1: np.asarray([1.0]),
+                3: np.asarray([3.0]),
+            },
+            "residual_norms_by_rhs": {1: 1.0e-12, 3: 3.0e-12},
+            "rhs_norms_by_rhs": {1: 1.0, 3: 3.0},
+            "elapsed_time_s": np.asarray(0.75, dtype=np.float64),
+        }
+    )
+    np.testing.assert_allclose(scalar["elapsed_time_s"], np.asarray([0.75, 0.75]))
+
+    short = transport_parallel_result_to_npz_arrays(
+        {
+            "which_rhs_values": [2, 4],
+            "state_vectors_by_rhs": {
+                2: np.asarray([2.0]),
+                4: np.asarray([4.0]),
+            },
+            "residual_norms_by_rhs": {2: 2.0e-12, 4: 4.0e-12},
+            "rhs_norms_by_rhs": {},
+            "elapsed_time_s": np.asarray([0.2], dtype=np.float64),
+        }
+    )
+    np.testing.assert_allclose(short["rhs_norms"], np.asarray([np.nan, np.nan]))
+    np.testing.assert_allclose(short["elapsed_time_s"], np.asarray([0.2, 0.0]))
 
 
 def test_transport_parallel_result_to_npz_arrays_handles_empty_payload() -> None:

@@ -61,6 +61,13 @@ The main structural refactor is functionally complete:
   README, with `tests/test_examples_tree_contract.py` checking that the README
   and ReadTheDocs entry points stay synchronized. The docs-sync focused guard
   passed as `14 passed in 0.12 s`.
+- Transport worker payload tests cover scalar elapsed-time arrays,
+  short elapsed-time arrays, missing RHS norms, and the explicit
+  `set_child_environment=False` lane used by injected worker runtimes. Focused
+  validation passed:
+  `tests/test_transport_parallel_payload.py`,
+  `tests/test_transport_parallel_runtime.py`, and
+  `tests/test_transport_parallel_validation.py` as `37 passed in 0.44 s`.
 - The latest local xdist coverage audit measured `88%` package coverage:
   `4031 passed in 283.48 s` with `8089` missing executable lines. The latest
   explicit-sparse and true-operator rescue tranches reduced missing executable
