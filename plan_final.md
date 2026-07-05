@@ -1598,6 +1598,15 @@ Completed work:
   owners directly. Focused validation passed:
   `tests/test_source_tree_consolidation.py` as `39 passed in 4.61 s`; Ruff,
   py_compile, and `git diff --check` passed.
+- Tranche 95: moved true-operator rescue tests in
+  `tests/test_v3_sparse_pattern.py` from `profile_solve` private aliases to the
+  canonical `operators/profile_true_operator_rescue.py` owner. This preserves
+  the RHSMode-1 solve facade for compatibility while making the numerical
+  rescue tests exercise the module that owns residual-window, active-block,
+  active-residual, active-submatrix, and reusable true-action-column logic.
+  Focused validation passed: `tests/test_v3_sparse_pattern.py` as
+  `141 passed in 138.06 s`; `tests/test_source_tree_consolidation.py` as
+  `39 passed in 4.50 s`; Ruff and py_compile passed.
 
 Remaining consolidation steps:
 

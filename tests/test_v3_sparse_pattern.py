@@ -12,6 +12,7 @@ from scipy.sparse.linalg import aslinearoperator
 
 import sfincs_jax.io as io_module
 import sfincs_jax.operators.profile_sparse_pattern as sparse_pattern_module
+import sfincs_jax.operators.profile_true_operator_rescue as true_operator_rescue_module
 import sfincs_jax.solvers.preconditioner_qi_device as rhs1_qi_device_preconditioner_module
 import sfincs_jax.problems.profile_solve as profile_solve_module
 from sfincs_jax.solvers.explicit_sparse import SparseDecision, SparseOperatorBundle, build_operator_from_pattern
@@ -185,7 +186,7 @@ def test_residual_coarse_host_preconditioner_solves_adaptive_identity_residual()
     rhs = np.asarray([1.0, -2.0, 3.0, -4.0], dtype=np.float64)
     failed_residual = rhs - operator.matvec(HalfFactor().solve(rhs))
 
-    bundle = profile_solve_module._try_build_residual_coarse_host_sparse_preconditioner(
+    bundle = true_operator_rescue_module._try_build_residual_coarse_host_sparse_preconditioner(
         operator_bundle=operator,
         factor_bundle=HalfFactor(),
         residual=failed_residual,
@@ -244,7 +245,7 @@ def test_residual_window_host_preconditioner_solves_targeted_kinetic_window() ->
     rhs = np.asarray([0.0, 2.0, 0.0, 0.0], dtype=np.float64)
     failed_residual = rhs - operator.matvec(HalfFactor().solve(rhs))
 
-    bundle = profile_solve_module._try_build_residual_window_host_sparse_preconditioner(
+    bundle = true_operator_rescue_module._try_build_residual_window_host_sparse_preconditioner(
         operator_bundle=operator,
         factor_bundle=HalfFactor(),
         residual=failed_residual,
@@ -303,7 +304,7 @@ def test_true_operator_residual_window_lsq_reduces_global_residual() -> None:
             return np.zeros_like(np.asarray(rhs, dtype=np.float64))
 
     rhs = np.asarray([1.0, 0.25, -0.5], dtype=np.float64)
-    bundle = profile_solve_module._try_build_true_operator_residual_window_lsq_preconditioner(
+    bundle = true_operator_rescue_module._try_build_true_operator_residual_window_lsq_preconditioner(
         true_matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         true_matmat=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         factor_bundle=ZeroFactor(),
@@ -357,7 +358,7 @@ def test_true_operator_residual_window_lsq_is_linear_without_damping() -> None:
         def solve(self, rhs):
             return np.zeros_like(np.asarray(rhs, dtype=np.float64))
 
-    bundle = profile_solve_module._try_build_true_operator_residual_window_lsq_preconditioner(
+    bundle = true_operator_rescue_module._try_build_true_operator_residual_window_lsq_preconditioner(
         true_matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         true_matmat=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         factor_bundle=ZeroFactor(),
@@ -423,7 +424,7 @@ def test_true_operator_active_block_lsq_solves_deterministic_active_block() -> N
             return np.zeros_like(np.asarray(rhs, dtype=np.float64))
 
     rhs = np.asarray([1.0, -0.25, 0.5], dtype=np.float64)
-    bundle = profile_solve_module._try_build_true_operator_active_block_lsq_preconditioner(
+    bundle = true_operator_rescue_module._try_build_true_operator_active_block_lsq_preconditioner(
         true_matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         true_matmat=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         factor_bundle=ZeroFactor(),
@@ -486,7 +487,7 @@ def test_true_operator_active_residual_block_lsq_solves_dominant_true_residual()
             return np.zeros_like(np.asarray(rhs, dtype=np.float64))
 
     rhs = np.asarray([0.1, 2.0, -3.0, 4.0], dtype=np.float64)
-    bundle = profile_solve_module._try_build_true_operator_active_residual_block_lsq_preconditioner(
+    bundle = true_operator_rescue_module._try_build_true_operator_active_residual_block_lsq_preconditioner(
         true_matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         true_matmat=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         factor_bundle=ZeroFactor(),
@@ -549,7 +550,7 @@ def test_true_operator_active_submatrix_solves_deterministic_active_block() -> N
             return np.zeros_like(np.asarray(rhs, dtype=np.float64))
 
     rhs = np.asarray([1.0, -0.25, 0.5], dtype=np.float64)
-    bundle = profile_solve_module._try_build_true_operator_active_submatrix_preconditioner(
+    bundle = true_operator_rescue_module._try_build_true_operator_active_submatrix_preconditioner(
         true_matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         true_matmat=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         factor_bundle=ZeroFactor(),
@@ -592,7 +593,7 @@ def test_reusable_true_action_column_cache_reuses_batched_columns() -> None:
         calls["matmat"] += 1
         return matrix @ np.asarray(x, dtype=np.float64)
 
-    cache = profile_solve_module._ReusableTrueActionColumnCache(
+    cache = true_operator_rescue_module._ReusableTrueActionColumnCache(
         true_matvec=lambda x: matrix @ np.asarray(x, dtype=np.float64),
         true_matmat=true_matmat,
         n=3,
@@ -656,7 +657,7 @@ def test_active_residual_block_reuses_true_action_column_cache() -> None:
         calls["matmat"] += 1
         return matrix @ np.asarray(x, dtype=np.float64)
 
-    cache = profile_solve_module._ReusableTrueActionColumnCache(
+    cache = true_operator_rescue_module._ReusableTrueActionColumnCache(
         true_matvec=lambda x: matrix @ np.asarray(x, dtype=np.float64),
         true_matmat=true_matmat,
         n=3,
@@ -665,7 +666,7 @@ def test_active_residual_block_reuses_true_action_column_cache() -> None:
     )
     rhs = np.asarray([1.0, -2.0, 3.0], dtype=np.float64)
 
-    first = profile_solve_module._try_build_true_operator_active_block_lsq_preconditioner(
+    first = true_operator_rescue_module._try_build_true_operator_active_block_lsq_preconditioner(
         true_matvec=cache.matvec,
         true_matmat=cache.matmat,
         factor_bundle=ZeroFactor(),
@@ -682,7 +683,7 @@ def test_active_residual_block_reuses_true_action_column_cache() -> None:
         include_tail=False,
         max_tail=0,
     )
-    second = profile_solve_module._try_build_true_operator_active_residual_block_lsq_preconditioner(
+    second = true_operator_rescue_module._try_build_true_operator_active_residual_block_lsq_preconditioner(
         true_matvec=cache.matvec,
         true_matmat=cache.matmat,
         factor_bundle=ZeroFactor(),
@@ -726,7 +727,7 @@ def test_true_operator_residual_window_specs_skip_invalid_indices() -> None:
         rhs_mode=1,
     )
 
-    specs = profile_solve_module._parse_true_operator_window_specs(
+    specs = true_operator_rescue_module._parse_true_operator_window_specs(
         "0:0:1, 4:0:0, -1:0:0, 0:5:0, 0:0:9, 0/1/2",
         layout=layout,
     )
@@ -767,7 +768,7 @@ def test_true_operator_residual_window_lsq_supports_matvec_only_short_batches() 
             return np.zeros_like(np.asarray(rhs, dtype=np.float64))
 
     rhs = np.asarray([2.0, 3.0, 4.0], dtype=np.float64)
-    bundle = profile_solve_module._try_build_true_operator_residual_window_lsq_preconditioner(
+    bundle = true_operator_rescue_module._try_build_true_operator_residual_window_lsq_preconditioner(
         true_matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         true_matmat=None,
         factor_bundle=ZeroFactor(),
@@ -818,7 +819,7 @@ def test_true_operator_residual_window_lsq_is_memory_gated() -> None:
         def solve(self, rhs):
             return np.zeros_like(np.asarray(rhs, dtype=np.float64))
 
-    bundle = profile_solve_module._try_build_true_operator_residual_window_lsq_preconditioner(
+    bundle = true_operator_rescue_module._try_build_true_operator_residual_window_lsq_preconditioner(
         true_matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         true_matmat=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.float64)),
         factor_bundle=ZeroFactor(),
@@ -885,7 +886,7 @@ def test_residual_window_host_preconditioner_can_combine_windows() -> None:
     rhs = np.asarray([2.0, 0.0, 0.0, 0.0, 0.0, -3.0, 0.0, 0.0], dtype=np.float64)
     failed_residual = rhs - operator.matvec(HalfFactor().solve(rhs))
 
-    bundle = profile_solve_module._try_build_residual_window_host_sparse_preconditioner(
+    bundle = true_operator_rescue_module._try_build_residual_window_host_sparse_preconditioner(
         operator_bundle=operator,
         factor_bundle=HalfFactor(),
         residual=failed_residual,
