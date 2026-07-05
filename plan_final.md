@@ -328,6 +328,14 @@ The main structural refactor is functionally complete:
   `tests/test_sparse_assembly.py tests/test_rhs1_sxblock_tz_sparse_host.py` as
   `15 passed in 0.71 s`, and the adjacent xblock/host-policy bundle passed as
   `45 passed in 0.79 s`.
+- The padded-row and compact-CSR JAX triangular-factor apply kernels are now
+  owned by `solvers/explicit_sparse.py`; the helper-only
+  `solvers/sparse_triangular.py` file was deleted and internal imports were
+  moved to the explicit sparse owner. Focused validation passed:
+  `tests/test_sparse_triangular.py tests/test_explicit_sparse.py
+  tests/test_v3_sparse_pattern.py tests/test_domain_package_import_contracts.py
+  tests/test_source_tree_consolidation.py` as `253 passed in 133.66 s`; the
+  direct kernel test passed after lint cleanup as `4 passed in 0.44 s`.
 - The examples tree has been re-audited for navigation and repository size:
   every top-level task folder has a README, examples contract tests passed as
   `26 passed in 20.66 s`, and the nested `output/`, `artifacts/`,
@@ -590,7 +598,7 @@ Latest AST audit:
 
 - Folder depth is no longer the blocker: the package has one-level domain
   folders only and no `__init__.py`-only source packages.
-- The source tree has 134 Python files, 17 package-root modules, and one-level
+- The source tree has 132 Python files, 17 package-root modules, and one-level
   domain folders only. The remaining structural blockers are file-family sprawl
   and owner size.
   The largest retained owners are `problems/profile_policies.py` (`7936`
@@ -598,7 +606,7 @@ Latest AST audit:
   `operators/profile_full_system.py` (`5978` lines),
   `problems/profile_sparse_solve.py` (`5500` lines),
   `solvers/preconditioner_qi_device.py` (`5433` lines),
-  `solvers/explicit_sparse.py` (`5063` lines),
+  `solvers/explicit_sparse.py` (`5198` lines),
   `problems/profile_sparse_qi.py` (`4873` lines),
   `problems/profile_solve.py` (`4402` lines), and
   `outputs/writer.py` (`3250` lines).

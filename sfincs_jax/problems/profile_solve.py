@@ -518,7 +518,7 @@ from sfincs_jax.solvers.preconditioning import (
     _build_rhsmode1_preconditioner_operator_zeta_dd, _build_rhsmode1_preconditioner_operator_zeta_line,
     _build_transport_preconditioner_operator_fortran_reduced, _build_transport_preconditioner_operator_point,
 )
-from sfincs_jax.solvers.sparse_triangular import (
+from sfincs_jax.solvers.explicit_sparse import (
     inverse_permutation as _inverse_permutation, triangular_solve_lower_csr_rows as _triangular_solve_lower_csr_rows,
     triangular_solve_lower_padded as _triangular_solve_lower_padded,
     triangular_solve_upper_csr_rows as _triangular_solve_upper_csr_rows,

@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.solvers.sparse_triangular import (
+from sfincs_jax.solvers.explicit_sparse import (
     inverse_permutation,
     triangular_solve_lower_csr_rows,
     triangular_solve_lower_padded,

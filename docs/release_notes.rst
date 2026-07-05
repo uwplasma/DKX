@@ -256,11 +256,10 @@ Unreleased
   existing cache-clearing tests and debugging scripts keep working while the
   containers now have direct lightweight tests. The post-extraction local full
   suite passed with ``2545 passed in 535.59 s``.
-- Extracted JAX-native padded-row and compact-CSR triangular sparse-factor
-  solves into ``sparse_triangular.py`` with dense-reference tests. The driver
+- Moved JAX-native padded-row and compact-CSR triangular sparse-factor solves
+  under ``solvers/explicit_sparse.py`` with dense-reference tests. The driver
   keeps the old private helper names by import, preserving sparse-preconditioner
-  apply behavior while making the kernels independently testable. The
-  post-extraction local full suite passed with ``2549 passed in 507.83 s``.
+  apply behavior while keeping the explicit sparse factor lane in one owner.
 - Extracted preconditioner setup utilities into ``preconditioning.py``:
   chunk-size policy, matrix-free selected submatrix probing, and stable array
   hashing for cache keys. ``v3_driver.py`` keeps a compatibility wrapper for

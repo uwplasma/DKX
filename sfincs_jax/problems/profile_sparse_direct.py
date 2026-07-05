@@ -53,7 +53,7 @@ from ..solver import (
     assemble_dense_matrix_from_matvec,
     gmres_solve_with_history_scipy,
 )
-from sfincs_jax.solvers.sparse_triangular import (
+from sfincs_jax.solvers.explicit_sparse import (
     triangular_solve_lower_padded,
     triangular_solve_upper_padded,
 )

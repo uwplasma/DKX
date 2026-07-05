@@ -21,7 +21,7 @@ from sfincs_jax.solvers.preconditioning import (
     rhs_mode1_precond_cache_key,
 )
 from sfincs_jax.problems.profile_residual import safe_preconditioner
-from sfincs_jax.solvers.sparse_triangular import (
+from sfincs_jax.solvers.explicit_sparse import (
     inverse_permutation,
     triangular_solve_lower_padded,
     triangular_solve_upper_padded,
