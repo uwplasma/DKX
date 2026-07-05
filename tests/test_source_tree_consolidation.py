@@ -218,6 +218,23 @@ def test_sparse_helper_tests_do_not_use_profile_solve_private_aliases() -> None:
     assert "profile_solve._" not in text
 
 
+def test_schur_heuristic_tests_use_canonical_policy_and_preconditioner_owners() -> None:
+    """Schur/PAS unit tests should not widen profile_solve's private API."""
+
+    text = (REPO_ROOT / "tests" / "test_schur_precond_heuristic.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "profile_solve._" not in text
+    for owner in (
+        "sfincs_jax.problems.profile_policies",
+        "sfincs_jax.problems.profile_preconditioner_build",
+        "sfincs_jax.solvers.path_policy",
+        "sfincs_jax.solvers.preconditioning",
+    ):
+        assert owner in text
+
+
 def test_test_filenames_do_not_reintroduce_deleted_v3_driver_label() -> None:
     """Keep test modules named after the canonical behavior they protect."""
 
