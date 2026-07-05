@@ -200,7 +200,7 @@ MOVED_ROOT_MODULE_OWNERS = {
         "apply_exb_theta_v3",
         "apply_exb_zeta_v3",
     ),
-    "sfincs_jax.operators.profile_linear_systems": (
+    "sfincs_jax.operators.profile_system": (
         "V3FBlockLinearSystem",
         "V3FullLinearSystem",
     ),

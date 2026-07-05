@@ -9,12 +9,13 @@ from jax import tree_util as jtu
 
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.fortran import read_petsc_vec
-from sfincs_jax.operators.profile_linear_systems import (
+from sfincs_jax.operators.profile_system import (
     V3FullLinearSystem,
+    apply_v3_full_system_operator,
+    full_system_operator_from_namelist,
     jacobian_matvec_v3_full_system_jit,
     residual_v3_full_system_jit,
 )
-from sfincs_jax.operators.profile_system import apply_v3_full_system_operator, full_system_operator_from_namelist
 
 
 def test_full_system_residual_and_jvp_pas_tiny() -> None:

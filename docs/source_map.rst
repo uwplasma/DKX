@@ -495,13 +495,8 @@ System construction:
 - operator block composition,
 - transport-RHS rewrites,
 - cached operator application,
+- matrix-free residual and JVP wrappers,
 - system metadata used by the driver and diagnostics.
-
-``sfincs_jax/operators/profile_linear_systems.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Residual and source-term helpers. This is where the thermodynamic drives and other RHS
-pieces are assembled before being fed to the solve stack.
 
 ``sfincs_jax/v3_driver.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^

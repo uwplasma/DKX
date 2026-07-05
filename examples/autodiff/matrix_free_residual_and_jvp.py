@@ -13,6 +13,8 @@ additional constraints), while keeping the Jacobian application matrix-free.
 
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 import argparse
 import sys
 from pathlib import Path
@@ -26,9 +28,9 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_linear_systems import V3FBlockLinearSystem
 from sfincs_jax.operators.profile_fblock import fblock_operator_from_namelist
 from sfincs_jax.operators.profile_fblock import matvec_v3_fblock_flat
+from sfincs_jax.operators.profile_system import V3FBlockLinearSystem
 
 
 def _default_input() -> Path:

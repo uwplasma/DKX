@@ -53,6 +53,7 @@ from sfincs_jax.operators.profile_fblock import (
     V3FBlockOperator,
     apply_v3_fblock_operator,
     fblock_operator_from_namelist,
+    matvec_v3_fblock_flat,
 )
 from sfincs_jax.paths import resolve_existing_path
 from sfincs_jax.discretization.v3 import V3Grids, geometry_from_namelist, grids_from_namelist
@@ -1636,6 +1637,94 @@ def apply_v3_full_system_operator_cached(
                 return y[:n] if pad else y
     fn = _get_apply_full_system_operator_jit(_operator_signature_cached(op))
     return fn(op, x_full, include_jacobian_terms, 0)
+
+
+@jtu.register_pytree_node_class
+@dataclass(frozen=True)
+class V3FBlockLinearSystem:
+    """Matrix-free residual wrapper for the distribution-function block.
+
+    The residual is ``r(x) = A x - b`` where ``A`` is represented by
+    :class:`sfincs_jax.operators.profile_fblock.V3FBlockOperator`.
+    """
+
+    op: V3FBlockOperator
+    b_flat: jnp.ndarray
+
+    def tree_flatten(self):
+        return (self.op, self.b_flat), None
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        del aux
+        op, b_flat = children
+        return cls(op=op, b_flat=b_flat)
+
+    def residual(self, x_flat: jnp.ndarray) -> jnp.ndarray:
+        """Compute ``r(x) = A x - b``."""
+        x_flat = jnp.asarray(x_flat)
+        return matvec_v3_fblock_flat(self.op, x_flat) - self.b_flat
+
+    def jacobian_matvec(self, v_flat: jnp.ndarray) -> jnp.ndarray:
+        """Compute ``(dr/dx) v`` using the matrix-free kinetic-block action."""
+        v_flat = jnp.asarray(v_flat)
+        return matvec_v3_fblock_flat(self.op, v_flat)
+
+    def jvp(self, x_flat: jnp.ndarray, v_flat: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Return ``(r(x), (dr/dx) v)`` using JAX's JVP machinery."""
+
+        def residual_fn(x):
+            return self.residual(x)
+
+        return jax.jvp(residual_fn, (jnp.asarray(x_flat),), (jnp.asarray(v_flat),))
+
+
+residual_v3_fblock_jit = jax.jit(lambda sys, x: sys.residual(x), static_argnums=())
+jacobian_matvec_v3_fblock_jit = jax.jit(lambda sys, v: sys.jacobian_matvec(v), static_argnums=())
+
+
+@jtu.register_pytree_node_class
+@dataclass(frozen=True)
+class V3FullLinearSystem:
+    """Matrix-free residual wrapper for the full profile-response operator.
+
+    The residual is ``r(x) = A x - b`` where ``A`` is represented by
+    :class:`sfincs_jax.operators.profile_system.V3FullSystemOperator`.
+    """
+
+    op: V3FullSystemOperator
+    b_full: jnp.ndarray
+
+    def tree_flatten(self):
+        return (self.op, self.b_full), None
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        del aux
+        op, b_full = children
+        return cls(op=op, b_full=b_full)
+
+    def residual(self, x_full: jnp.ndarray) -> jnp.ndarray:
+        """Compute ``r(x) = A x - b``."""
+        x_full = jnp.asarray(x_full)
+        return apply_v3_full_system_operator_cached(self.op, x_full) - self.b_full
+
+    def jacobian_matvec(self, v_full: jnp.ndarray) -> jnp.ndarray:
+        """Compute ``(dr/dx) v`` using the matrix-free full-system action."""
+        v_full = jnp.asarray(v_full)
+        return apply_v3_full_system_operator_cached(self.op, v_full)
+
+    def jvp(self, x_full: jnp.ndarray, v_full: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Return ``(r(x), (dr/dx) v)`` using JAX's JVP machinery."""
+
+        def residual_fn(x):
+            return self.residual(x)
+
+        return jax.jvp(residual_fn, (jnp.asarray(x_full),), (jnp.asarray(v_full),))
+
+
+residual_v3_full_system_jit = jax.jit(lambda sys, x: sys.residual(x), static_argnums=())
+jacobian_matvec_v3_full_system_jit = jax.jit(lambda sys, v: sys.jacobian_matvec(v), static_argnums=())
 
 
 def rhs_v3_full_system(op: V3FullSystemOperator) -> jnp.ndarray:

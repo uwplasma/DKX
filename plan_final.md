@@ -494,7 +494,7 @@ Current source inventory:
   the files are public entry points or compatibility facades, but
   `v3_driver.py` must remain implementation-free and below `80` lines.
 - Domain folders: `discretization/` (`6` files), `geometry/` (`5`),
-  `operators/` (`19`), `outputs/` (`5`), `physics/` (`3`),
+  `operators/` (`18`), `outputs/` (`5`), `physics/` (`3`),
   `problems/` (`26`), `solvers/` (`34`), `validation/` (`6`), and
   `workflows/` (`4`).
 - The complexity hotspots are not nested folders; they are many
@@ -637,7 +637,7 @@ Latest AST audit:
 
 - Folder depth is no longer the blocker: the package has one-level domain
   folders only and no `__init__.py`-only source packages.
-- The source tree has 125 Python files, 17 package-root modules, and one-level
+- The source tree has 124 Python files, 17 package-root modules, and one-level
   domain folders only. The remaining structural blockers are file-family sprawl
   and owner size.
   The largest retained owners are `problems/profile_policies.py` (`7936`
@@ -789,6 +789,13 @@ Completed work:
   profile solve/setup imports, focused species-block tests, and the source map
   to the canonical full-FP kinetic owner. This reduces `solvers/` to `34`
   source files while preserving the same block inverse algorithms and caches.
+- Tranche 23: moved matrix-free residual/JVP wrappers from
+  `operators/profile_linear_systems.py` into existing
+  `operators/profile_system.py`, deleted the standalone residual wrapper
+  module, and updated the autodiff example, residual tests, API docs, numerics
+  docs, physics-reference links, source map, and source-tree guard. This
+  reduces `operators/` to `18` source files while keeping the differentiable
+  residual API under the profile-system operator owner.
 
 Remaining consolidation steps:
 

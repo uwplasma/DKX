@@ -61,8 +61,7 @@ and uses the standard :math:`E\times B` drift
    \mathbf{E} = -\nabla\Phi_0.
 
 Code links:
-``sfincs_jax/operators/profile_system.py`` (operator assembly),
-``sfincs_jax/operators/profile_linear_systems.py`` (source terms and residuals),
+``sfincs_jax/operators/profile_system.py`` (operator assembly and residual wrappers),
 ``sfincs_jax/problems/transport_diagnostics.py`` (RHSMode=2/3 forcing).
 
 Single-species baseline (20131220-04)
@@ -107,7 +106,7 @@ The same note writes the thermodynamic drive in the compact form
 
 with additional :math:`\Phi_1`-dependent pieces if flux-surface variation is enabled.
 In `sfincs_jax`, these drive terms are assembled in
-``sfincs_jax/operators/profile_linear_systems.py`` and combined with the transport-matrix forcing in
+``sfincs_jax/operators/profile_system.py`` and combined with the transport-matrix forcing in
 ``sfincs_jax/problems/transport_diagnostics.py``.
 
 Multi-species extension (20131219-01)
