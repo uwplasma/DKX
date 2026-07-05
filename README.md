@@ -458,7 +458,7 @@ memory in the plot is `109 MB` for the JAX factor/CSR estimate versus
 Fortran v3 run.
 The figure remains a mixed-grid diagnostic, not a production same-resolution
 parity claim: max QA differences are `23.95%` versus Redl and `6.94%` versus
-SFINCS Fortran v3 on this reduced JAX grid. README-facing same-resolution
+SFINCS Fortran v3 on this reduced JAX grid. Same-resolution
 claims require the gated command above and refinement/error-bar metadata for
 both codes.
 
@@ -907,7 +907,7 @@ If `scripts/run_reduced_upstream_suite.py` is used against a generated
 production input tree, pass `--production-inputs` so the runner uses the
 manifest decks exactly and does not substitute or promote reduced CI fixtures.
 
-<!-- BEGIN FAST_BRANCH_AUDIT -->
+<!-- BEGIN EXAMPLE_SUITE_AUDIT -->
 CPU audit source: `tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak`.
 GPU audit source: `tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas`.
 
@@ -918,8 +918,8 @@ GPU audit source: `tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3
 - GPU strict status counts: `parity_ok=39`
 - CPU output-key coverage: `missing_total=0, extra_total=-, audited_cases=39, skipped_cases=0`
 - GPU output-key coverage: `missing_total=0, extra_total=-, audited_cases=39, skipped_cases=0`
-- CPU runtime drift watchlist: not applicable because production-floor reruns are not same-resolution with the frozen smoke baseline
-- GPU runtime drift watchlist: not applicable because production-floor reruns are not same-resolution with the frozen smoke baseline
+- CPU runtime drift gate: not applicable: suite rows are not same-resolution with the optional runtime baseline
+- GPU runtime drift gate: not applicable: suite rows are not same-resolution with the optional runtime baseline
 - Remaining cases: none
 - Additional example: `parity_ok` on CPU and `parity_ok` on GPU
 
@@ -929,9 +929,7 @@ Mismatches:
 - GPU practical/strict mismatches: none
 
 Runtime columns match the summary plot: cold is `jax_runtime_s`; warm/logged is `jax_runtime_s_warm` when available, otherwise `jax_logged_elapsed_s`. The JAX memory columns match the plot and use profiler active RSS deltas (`jax_incremental_max_rss_mb`) when present; full process peak RSS remains available as `jax_max_rss_mb` in the merged JSON reports.
-The benchmark summary JSON records production-resolution floor violations for
-frozen reference rows, so the table should be read as a reference-runtime-window
-comparison until every row has been rerun at the production floor.
+The benchmark summary JSON records production-resolution floor violations for frozen reference rows, so the table is a reference-runtime-window comparison unless a row is also marked as satisfying the production-resolution floor.
 The public runtime/memory table is restricted to cases where the SFINCS Fortran v3 reference runtime is at least `10 s`. Excluded lower-resolution CI parity/smoke rows: `HSX_PASCollisions_DKESTrajectories` (0.994s), `HSX_PASCollisions_fullTrajectories` (2.510s), `geometryScheme4_1species_PAS_withEr_DKESTrajectories` (1.365s), `geometryScheme4_2species_PAS_noEr` (0.953s), `monoenergetic_geometryScheme1` (0.795s), `monoenergetic_geometryScheme11` (0.861s), `monoenergetic_geometryScheme5_ASCII` (1.052s), `monoenergetic_geometryScheme5_netCDF` (1.029s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` (1.104s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (1.706s), `tokamak_1species_FPCollisions_noEr` (7.897s), `tokamak_1species_FPCollisions_withEr_DKESTrajectories` (6.958s), `tokamak_1species_FPCollisions_withEr_fullTrajectories` (6.736s), `transportMatrix_geometryScheme11` (0.025s), `transportMatrix_geometryScheme2` (0.031s).
 
 Full per-case runtime / memory table:
@@ -961,7 +959,7 @@ Full per-case runtime / memory table:
 | `tokamak_1species_PASCollisions_withEr_fullTrajectories` | 75.698 | 7.049 | 0.09x | 6.231 | 0.08x | 14.423 | 0.19x | 13.193 | 0.17x | 248.9 | 1319.5 | 5.30x | 1572.1 | 6.32x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
 | `tokamak_2species_PASCollisions_noEr` | 75.362 | 2.033 | 0.03x | 2.023 | 0.03x | 5.243 | 0.07x | 5.207 | 0.07x | 215.3 | 393.5 | 1.83x | 1168.7 | 5.43x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_2species_PASCollisions_withEr_fullTrajectories` | 76.530 | 9.435 | 0.12x | 8.669 | 0.11x | 23.369 | 0.31x | 22.264 | 0.29x | 386.6 | 1389.9 | 3.60x | 2007.0 | 5.19x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
-<!-- END FAST_BRANCH_AUDIT -->
+<!-- END EXAMPLE_SUITE_AUDIT -->
 
 ## Documentation
 

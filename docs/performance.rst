@@ -64,8 +64,8 @@ The performance summary is:
 - correctness and robustness are release-ready for the vendored example suite,
 - the default CLI path is explicit and tuned for throughput and reliable convergence,
 - the differentiable path is available from Python when gradients are needed,
-- the CPU runtime drift watchlist is clean against the promoted CPU reference lane,
-- the GPU runtime drift watchlist is clean against the promoted GPU reference lane,
+- the CPU runtime drift gate is clean against the promoted CPU reference lane,
+- the GPU runtime drift gate is clean against the promoted GPU reference lane,
 - and the heaviest PAS and geometry-rich cases are tracked as bounded
   optimization lanes rather than correctness blockers.
 
