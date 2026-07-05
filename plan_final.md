@@ -1444,6 +1444,15 @@ Completed work:
   `tests/test_source_tree_consolidation.py tests/test_profile_rhs1_dispatch_coverage.py`
   as `71 passed in 42.48 s`; the broader owner/wrapper bundle passed as
   `192 passed in 70.54 s`; Ruff, `compileall`, and `git diff --check` passed.
+- Tranche 82: added a global test-suite consolidation guard that allows
+  `profile_solve._*` references only in
+  `tests/test_profile_solve_module_wrappers.py` and the guard file itself.
+  This locks the remaining private solve-orchestration usage to explicit
+  wrapper-contract tests and prevents future unit tests from widening the
+  solve module's private helper surface. Focused validation passed:
+  `tests/test_source_tree_consolidation.py tests/test_profile_solve_module_wrappers.py`
+  as `46 passed in 3.92 s`; the broader owner/wrapper bundle passed as
+  `193 passed in 76.71 s`; Ruff, `compileall`, and `git diff --check` passed.
 
 Remaining consolidation steps:
 
