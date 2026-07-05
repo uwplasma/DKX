@@ -357,6 +357,14 @@ The main structural refactor is functionally complete:
   tests/test_validation_policy_coverage.py tests/test_research_lane_policy.py`
   as `42 passed in 0.23 s`, and the source/import structure guard passed as
   `30 passed in 2.87 s`.
+- Release-hosted equilibrium fixture tests now cover cache-miss fetch by known
+  basename, corrupt-cache rejection without network access, failed-fetch
+  no-file behavior, missing/size/hash verifier failures, successful local
+  archive download with checksum admission, and offline cache-missing errors.
+  This keeps large VMEC/Boozer fixtures out of the repository while testing the
+  data path used by docs, examples, and CI. Focused validation passed:
+  `tests/test_data_fetch.py` as `13 passed in 0.06 s`, with the
+  source/import structure guard passing as `30 passed in 3.20 s`.
 - The examples tree has been re-audited for navigation and repository size:
   every top-level task folder has a README, examples contract tests passed as
   `26 passed in 20.66 s`, and the nested `output/`, `artifacts/`,
