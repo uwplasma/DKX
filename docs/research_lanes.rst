@@ -1005,8 +1005,8 @@ infrastructure:
 Validation order
 ----------------
 
-1. Add pure unit tests for each new policy/helper before wiring it into
-   ``v3_driver.py``.
+1. Add pure unit tests for each new policy/helper before wiring it into the
+   canonical profile or transport solve owner.
 2. Run focused CPU tests for QI, PAS, sharding, and release-gate policy.
 3. Run bounded CPU hard-seed probes.
 4. Run one-GPU hard-seed probes on ``office`` only after the CPU preflight
