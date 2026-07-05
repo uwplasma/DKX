@@ -233,6 +233,7 @@ from sfincs_jax.problems.profile_sparse_solve import (
     resolve_sparse_minimum_norm_policy,
     resolve_sparse_host_or_ilu_factor_controls,
     sparse_pc_factor_dtype_retry_initial_guess,
+    retry_sparse_pc_factor_dtype_from_finalization_context,
     resolve_sparse_pc_factor_preflight_policy,
     resolve_direct_tail_structured_admission,
     resolve_direct_tail_residual_rescue_policy,
@@ -3681,6 +3682,73 @@ def test_retry_sparse_pc_factor_dtype_if_needed_rebuilds_and_reruns_failed_fp32_
     assert build_calls == [np.dtype(np.float64)]
     np.testing.assert_allclose(run_calls[0][0], np.asarray([1.0, 2.0]))
     assert run_calls[0][1] == 20
+    assert any("factor_dtype=float64" in msg for msg in messages)
+
+
+def test_retry_sparse_pc_factor_dtype_from_finalization_context_rebuilds_and_reruns() -> None:
+    messages: list[str] = []
+    times = iter((20.0, 20.2, 20.3))
+    build_calls: list[dict[str, object]] = []
+    run_calls: list[tuple[np.ndarray, int]] = []
+
+    def factor_matvec(x):
+        return x
+
+    context = SparsePCFactorDtypeRetryFinalizationContext(
+        factor_matvec=factor_matvec,
+        linear_size=2,
+        rhs_dtype=np.dtype(np.float64),
+        pattern="pattern",
+        emit=lambda _level, msg: messages.append(str(msg)),
+        constrained_pas_pc=False,
+        tokamak_fp_pc=False,
+        fortran_reduced_sparse_pc=False,
+        default_permc_spec="COLAMD",
+        default_factor_kind="ilu",
+        default_ilu_fill_factor=3.0,
+        default_ilu_drop_tol=1.0e-3,
+        default_pattern_color_batch=4,
+        x0_fallback=jnp.asarray([9.0, 9.0], dtype=jnp.float64),
+        pc_maxiter=12,
+        elapsed_s=lambda: next(times),
+    )
+
+    def build_host_sparse_direct_factor_from_matvec(**kwargs):
+        build_calls.append(kwargs)
+        return "operator64", "factor64"
+
+    def run_sparse_pc_gmres_once_callback(x0, *, maxiter_arg: int):
+        run_calls.append((np.asarray(x0), int(maxiter_arg)))
+        return np.asarray([4.0, 5.0]), 0.2, 0.1, (0.4, 0.2), 6.0
+
+    result = retry_sparse_pc_factor_dtype_from_finalization_context(
+        context,
+        factor_dtype_used=np.dtype(np.float32),
+        factor_dtype_retry=None,
+        residual_norm=3.0,
+        preconditioned_residual_norm=2.0,
+        history=(3.0,),
+        target=1.0,
+        x=np.asarray([1.0, 2.0]),
+        solve_s=5.0,
+        operator_bundle="operator0",
+        factor_bundle="factor0",
+        build_host_sparse_direct_factor_from_matvec=build_host_sparse_direct_factor_from_matvec,
+        run_sparse_pc_gmres_once_callback=run_sparse_pc_gmres_once_callback,
+    )
+
+    assert result.retried is True
+    assert result.factor_dtype_used == np.dtype(np.float64)
+    assert result.factor_s_increment == pytest.approx(0.2)
+    assert result.setup_s == pytest.approx(20.3)
+    assert result.solve_s == pytest.approx(11.0)
+    np.testing.assert_allclose(result.x, np.asarray([4.0, 5.0]))
+    assert build_calls[0]["matvec"] is factor_matvec
+    assert build_calls[0]["factor_dtype"] == np.dtype(np.float64)
+    assert build_calls[0]["default_permc_spec"] == "COLAMD"
+    assert build_calls[0]["default_factor_kind"] == "ilu"
+    assert run_calls[0][1] == 12
+    np.testing.assert_allclose(run_calls[0][0], np.asarray([1.0, 2.0]))
     assert any("factor_dtype=float64" in msg for msg in messages)
 
 

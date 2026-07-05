@@ -193,6 +193,13 @@ The main structural refactor is functionally complete:
   Source/test audits for `workflows/optimization.py` and
   `solvers/preconditioning.py` report zero production-used public helpers
   without direct tests. Focused validation passed as `2 passed in 1.89 s`.
+- Ambipolar and sparse-finalization wrapper coverage now includes direct tests
+  for matrix-free radial-current derivative adaptation, the SFINCS_JAX-backed
+  Brent wrapper's evaluator/root-solver wiring, and sparse-PC factor-dtype
+  retry from finalization context. Source/test audits for
+  `problems/ambipolar.py` and `problems/profile_sparse_finalization.py` report
+  zero production-used public helpers without direct tests. Focused validation
+  passed as `3 passed in 1.76 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -1042,6 +1049,10 @@ Completed work:
   submatrix-probe wrapper tests, then reran source/test audits showing no
   production-used public helpers without direct tests in those targeted
   workflow/preconditioning modules.
+- Tranche 45: added direct ambipolar derivative/Brent-wrapper and sparse-PC
+  finalization retry-wrapper tests, then reran source/test audits showing no
+  production-used public helpers without direct tests in those targeted problem
+  modules.
 
 Remaining consolidation steps:
 

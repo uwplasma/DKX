@@ -16,6 +16,7 @@ from sfincs_jax.problems.ambipolar import (
     er_operator_tangent_from_dphi_hat_dpsi_hat_derivative,
     implicit_linear_radial_current_derivative,
     implicit_linear_radial_current_derivative_from_builder,
+    implicit_matrix_free_radial_current_derivative,
     implicit_matrix_free_radial_current_derivative_from_builder,
     matrix_free_rhs1_vm_radial_current_linear_observable_system,
     operator_tangent_from_centered_difference,
@@ -669,6 +670,39 @@ def test_matrix_free_radial_current_builder_adapts_to_ambipolar_contract() -> No
     assert result.metadata["gate"] == "ambipolar_option13"
     assert result.metadata["system_kind"] == "matrix_free_linear_observable"
     assert result.metadata["finite_difference_abs_error"] < 1.0e-8
+    assert result.metadata["tangent_adjoint_abs_error"] < 1.0e-12
+
+
+def test_matrix_free_radial_current_derivative_direct_system_adapter() -> None:
+    a0, ap, b0, bp, c0, cp, offset0, offsetp, p0 = _linear_system_components()
+    a = a0 + p0 * ap
+    system = MatrixFreeLinearObservableSystem(
+        parameter=float(p0),
+        size=int(a.shape[0]),
+        rhs=b0 + p0 * bp,
+        rhs_derivative=bp,
+        apply=lambda x: a @ x,
+        transpose_apply=lambda x: a.T @ x,
+        derivative_apply=lambda x: ap @ x,
+        solve=lambda rhs: jnp.linalg.solve(a, rhs),
+        transpose_solve=lambda rhs: jnp.linalg.solve(a.T, rhs),
+        observable_vector=c0 + p0 * cp,
+        observable_vector_derivative=cp,
+        observable_offset=offset0 + p0 * offsetp,
+        observable_offset_derivative=offsetp,
+        metadata={"operator_owner": "direct_matrix_free"},
+    )
+
+    result = implicit_matrix_free_radial_current_derivative(
+        system,
+        metadata={"gate": "direct_adapter"},
+    )
+
+    assert isinstance(result, RadialCurrentDerivativeResult)
+    assert result.er == p0
+    assert result.scheme == "implicit_linear_adjoint"
+    assert result.metadata["operator_owner"] == "direct_matrix_free"
+    assert result.metadata["gate"] == "direct_adapter"
     assert result.metadata["tangent_adjoint_abs_error"] < 1.0e-12
 
 

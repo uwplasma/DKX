@@ -527,6 +527,59 @@ def test_rhsmode1_namelist_ambipolar_option3_replays_fortran_active_root() -> No
     np.testing.assert_allclose(result.root_radial_current, -1.0650279455435228e-9, rtol=0.0, atol=1.0e-12)
 
 
+def test_solve_sfincs_jax_ambipolar_brent_wires_evaluator_and_root_solver(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: dict[str, object] = {}
+
+    class FakeEvaluator:
+        def __init__(self, **kwargs):
+            calls["evaluator_kwargs"] = kwargs
+
+    def fake_brent(evaluator, **kwargs):
+        calls["brent_evaluator"] = evaluator
+        calls["brent_kwargs"] = kwargs
+        return ambipolar_problem.AmbipolarResult(
+            converged=True,
+            method="brent",
+            root_er=0.25,
+            root_radial_current=0.0,
+            iterations=(),
+            status="converged",
+        )
+
+    monkeypatch.setattr(ambipolar_problem, "SfincsJaxRadialCurrentEvaluator", FakeEvaluator)
+    monkeypatch.setattr(ambipolar_problem, "brent_ambipolar_root", fake_brent)
+
+    result, evaluator = ambipolar_problem.solve_sfincs_jax_ambipolar_brent(
+        input_namelist=tmp_path / "input.namelist",
+        work_dir=tmp_path / "work",
+        er_min=-1.0,
+        er_max=1.0,
+        er_initial=0.1,
+        max_evaluations=5,
+        solve_method="structured_csr",
+        differentiable=True,
+        reuse_output_geometry_cache=False,
+        reuse_solver_state=False,
+        emit=None,
+    )
+
+    assert isinstance(evaluator, FakeEvaluator)
+    assert result.root_er == 0.25
+    assert calls["evaluator_kwargs"]["solve_method"] == "structured_csr"
+    assert calls["evaluator_kwargs"]["differentiable"] is True
+    assert calls["evaluator_kwargs"]["reuse_output_geometry_cache"] is False
+    assert calls["evaluator_kwargs"]["reuse_solver_state"] is False
+    assert calls["brent_evaluator"] is evaluator
+    assert calls["brent_kwargs"]["er_initial"] == 0.1
+    assert calls["brent_kwargs"]["metadata"] == {
+        "input_namelist": str(tmp_path / "input.namelist"),
+        "work_dir": str(tmp_path / "work"),
+    }
+
+
 def test_sfincs_jax_radial_current_evaluator_runs_real_tiny_rhs1_output(tmp_path: Path) -> None:
     """The canonical ambipolar owner can evaluate radial current through sfincs_jax itself."""
 
