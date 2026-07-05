@@ -8,6 +8,8 @@ By default it uses the repository fixture in `tests/ref/quick_2species_FPCollisi
 
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 import argparse
 import sys
 from pathlib import Path
@@ -19,11 +21,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.operators.profile_collisionless import CollisionlessV3Operator, apply_collisionless_v3
-from sfincs_jax.discretization.indices import V3Indexing
+from sfincs_jax.discretization.v3 import V3Indexing, geometry_from_namelist, grids_from_namelist
 from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax.operators.profile_collisionless import CollisionlessV3Operator, apply_collisionless_v3
 from sfincs_jax.validation.fortran import read_petsc_mat_aij, read_petsc_vec
-from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 
 
 def _default_prefix() -> Path:
@@ -88,8 +89,8 @@ def main() -> int:
         ),
         dtype=np.float64,
     )
-    for g, (s, ix, l, it, iz) in enumerate(inv):
-        f[s, ix, l, it, iz] = x_full[g]
+    for g, (s, ix, ell, it, iz) in enumerate(inv):
+        f[s, ix, ell, it, iz] = x_full[g]
 
     y_jax = np.asarray(apply_collisionless_v3(op, jnp.asarray(f)))
 
@@ -114,8 +115,8 @@ def main() -> int:
         y_ref[row] = acc
 
     y_jax_vec = np.zeros((n_f,), dtype=np.float64)
-    for g, (s, ix, l, it, iz) in enumerate(inv):
-        y_jax_vec[g] = y_jax[s, ix, l, it, iz]
+    for g, (s, ix, ell, it, iz) in enumerate(inv):
+        y_jax_vec[g] = y_jax[s, ix, ell, it, iz]
 
     max_abs = float(np.max(np.abs(y_jax_vec - y_ref)))
     print(f"max |jax - fortran| = {max_abs:.3e}")
