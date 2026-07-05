@@ -180,6 +180,11 @@ The main structural refactor is functionally complete:
   scheme11 remains skipped because it exceeded the bounded probe. The narrowed
   CI selection passed as `8 passed, 1 skipped in 1.85 s`, restoring fast
   writer/output parity coverage without admitting the slow scheme11 path.
+- CI coverage recovery now also keeps bounded RHSMode=1 write-output,
+  RHSMode=1 Phi1 write-output, state-recycle, ambipolar scan, and upstream
+  scanplot tests active in CI. These tests exercise real writer/physics
+  contracts while staying below production-run budgets; the recovered CI-mode
+  bundle passed as `14 passed in 26.74 s`.
 - Structured velocity, transport policy, sensitivity, and validation coverage
   now includes direct tests for block-tridiagonal solves, structured tz-FFT
   first-attempt policy/budget/environment thresholds, JVP/VJP flux wrappers,
