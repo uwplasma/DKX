@@ -222,6 +222,14 @@ The main structural refactor is functionally complete:
   behavior for non-device-divisible vectors with a preconditioner. The focused
   distributed subset passed as `8 passed, 51 deselected in 1.31 s`; the full
   solver GMRES owner file passed as `59 passed in 23.63 s`.
+- Public ambipolar scan-postprocessing coverage now exercises non-`Er` scan
+  variables, normalized-field-to-`Er` conversion, no-root scan output, malformed
+  scan-directory failures, Fortran-style boolean fallback parsing, single-
+  species Phi1 scanplot output rows, and invalid-rank fail-fast behavior. This
+  keeps the CLI/postprocessing path future-proof without running new solves.
+  Focused validation passed:
+  `tests/test_er_scan_and_ambipolar.py tests/test_helper_module_coverage.py` as
+  `15 passed in 7.89 s`.
 - Native block-factor, QI basis, sparse cache-key, and host sparse-factor
   coverage now includes direct tests for native x-ell factor construction and
   application, QI global moment-basis rank gating, RHSMode-1 PAS/x-block sparse
