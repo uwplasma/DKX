@@ -168,7 +168,7 @@ tests.
      - input compatibility owner
      - keep root public compatibility shim until input package exports cover callers
    * - ``io.py``
-     - outputs writer/formats/cache owners
+     - outputs writer/formats owners
      - keep tiny root facade until public imports migrate
    * - ``namelist.py``
      - input namelist owner
@@ -268,19 +268,13 @@ Input/output orchestration:
 ``sfincs_jax/outputs/formats.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Flat output file-format helpers:
+Flat output file-format and output-cache helpers:
 
 - HDF5, NetCDF, and NPZ readers/writers,
 - SFINCS Fortran-compatible HDF5 layout conversion,
 - output suffix dispatch,
 - NetCDF-safe dataset naming,
 - solver-trace attachment for HDF5 outputs.
-
-``sfincs_jax/outputs/cache.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Geometry-output cache helpers:
-
 - output-cache environment gates,
 - stable cache-directory and cache-path construction,
 - hashable namelist fragments for geometry/species/physics cache keys,
