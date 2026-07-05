@@ -6,7 +6,7 @@ import subprocess
 import numpy as np
 import pytest
 
-from sfincs_jax.validation.fortran import read_petsc_mat_aij, read_petsc_vec
+from sfincs_jax.validation.fortran import parse_fortran_v3_profile_text, read_petsc_mat_aij, read_petsc_vec
 from sfincs_jax.workflows.scans import find_upstream_utils_dir, run_upstream_util
 
 
@@ -113,6 +113,90 @@ def test_petsc_aij_reader_rejects_bad_headers_and_row_counts(tmp_path: Path) -> 
         np.asarray([1.0], dtype=">f8").tofile(stream)
     with pytest.raises(ValueError, match="Mat values"):
         read_petsc_mat_aij(truncated_values)
+
+
+def test_fortran_profile_parser_handles_d_exponents_and_optional_sections() -> None:
+    profile = parse_fortran_v3_profile_text(
+        "Parallel job ( 8 processes) detected\n"
+        "Ntheta = 25\n"
+        "Nzeta = 51\n"
+        "Nxi = 100\n"
+        "NL = 4\n"
+        "Nx = 7\n"
+        "solverTolerance = 1.0D-10\n"
+        "Solver package which will be used:\n"
+        "superlu_dist\n"
+        "The matrix is 12 x 12 elements\n"
+        "# of nonzeros in Jacobian matrix: 30, allocated: 40\n"
+        "# of nonzeros in Jacobian preconditioner matrix: 18, allocated: 20\n"
+        "# of nonzeros in residual f1 matrix: 9, allocated: 16\n"
+        "Time to pre-assemble Jacobian preconditioner matrix: 1.5D-1\n"
+        "Time to assemble Jacobian preconditioner matrix: 2.5D-1\n"
+        "Time to pre-assemble Jacobian matrix: 3.5D-1\n"
+        "Time to assemble Jacobian matrix: 4.5D-1\n"
+        "Time to pre-assemble residual f1 matrix: 5.5D-1\n"
+        "Time to assemble residual f1 matrix: 6.5D-1\n"
+        "Elapsed time in solve driver= 1.0D+0\n"
+        "Elapsed time in solve driver= 2.0D+0\n"
+        " 0 KSP Residual norm 3.0D-2\n"
+        " 1 KSP Residual norm 4.0D-8\n"
+        "KSPConvergedReason = 4\n"
+        "Residual function norm: 8.0D-3\n"
+    )
+
+    assert profile["n_mpi_processes"] == 8
+    assert profile["solver_package"] == "superlu_dist"
+    assert profile["resolution"] == {"Ntheta": 25, "Nzeta": 51, "Nxi": 100, "NL": 4, "Nx": 7}
+    assert profile["solver_tolerance"] == pytest.approx(1.0e-10)
+    assert profile["matrix_shape"] == [12, 12]
+    assert profile["matrix_nnz"] == {"nnz": 30, "allocated_nnz": 40}
+    assert profile["preconditioner_nnz"] == {"nnz": 18, "allocated_nnz": 20}
+    assert profile["residual_matrix_nnz"] == {"nnz": 9, "allocated_nnz": 16}
+    assert profile["timings_s"]["preassemble_preconditioner"] == pytest.approx(0.15)
+    assert profile["timings_s"]["assemble_preconditioner"] == pytest.approx(0.25)
+    assert profile["timings_s"]["preassemble_jacobian"] == pytest.approx(0.35)
+    assert profile["timings_s"]["assemble_jacobian"] == pytest.approx(0.45)
+    assert profile["timings_s"]["residual_preassemble_f1"] == pytest.approx(0.55)
+    assert profile["timings_s"]["residual_assemble_f1"] == pytest.approx(0.65)
+    assert profile["timings_s"]["last_solve_driver"] == pytest.approx(2.0)
+    assert profile["ksp"]["iteration_count"] == 2
+    assert profile["ksp"]["initial_residual"] == pytest.approx(3.0e-2)
+    assert profile["ksp"]["final_residual"] == pytest.approx(4.0e-8)
+    assert profile["ksp"]["converged_reason"] == 4
+    assert profile["residual_function_norm_initial"] == pytest.approx(8.0e-3)
+    assert profile["mumps"]["detected"] is False
+    assert profile["mumps"]["infog"] == {}
+
+
+def test_fortran_profile_parser_extracts_mumps_infog_and_tolerates_empty_logs() -> None:
+    profile = parse_fortran_v3_profile_text(
+        "mumps detected\n"
+        "INFOG(16) = 11\n"
+        "INFOG(17) = 12\n"
+        "INFOG(21) = 21\n"
+        "INFOG(22) = 22\n"
+        "INFOG(29) = 99\n"
+        "INFOG(30) = 100\n"
+        "Elapsed time in analysis driver= 7.0e-1\n"
+        "Elapsed time in factorization driver= 8.0e-1\n"
+    )
+
+    assert profile["mumps"]["detected"] is True
+    assert profile["mumps"]["infog"]["16"] == 11
+    assert profile["mumps"]["infog"]["29"] == 99
+    assert profile["mumps"]["factor_entries"] == pytest.approx(99.0)
+    assert profile["mumps"]["analysis_memory_peak_mb"] == 11
+    assert profile["mumps"]["analysis_memory_total_mb"] == 12
+    assert profile["mumps"]["factor_memory_peak_mb"] == 21
+    assert profile["mumps"]["factor_memory_total_mb"] == 22
+    assert profile["timings_s"]["mumps_analysis_driver"] == pytest.approx(0.7)
+    assert profile["timings_s"]["mumps_factorization_driver"] == pytest.approx(0.8)
+
+    empty = parse_fortran_v3_profile_text("")
+    assert empty["solver_package"] is None
+    assert empty["matrix_shape"] is None
+    assert empty["ksp"]["history"] == []
+    assert empty["timings_s"]["last_solve_driver"] is None
 
 
 def test_find_upstream_utils_dir_resolves_override_and_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

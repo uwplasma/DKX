@@ -1295,6 +1295,13 @@ Completed work:
   fixtures without requiring Fortran to run in CI. Focused validation passed:
   `tests/test_validation_petsc_and_upstream_helpers.py` as `8 passed in
   0.61 s`; Ruff, compileall, and `git diff --check` passed.
+- Tranche 65: extended Fortran-v3 profile-log coverage for parser fields used
+  by solver and benchmark audits: D-exponent tolerances/timings, matrix and
+  preconditioner nonzero counts, residual-f1 matrix counts, repeated solve
+  driver timings, KSP residual history, MUMPS `INFOG` memory/factor metadata,
+  and empty-log tolerance. Focused validation passed:
+  `tests/test_validation_petsc_and_upstream_helpers.py` as `10 passed in
+  0.62 s`; Ruff, compileall, and `git diff --check` passed.
 
 Remaining consolidation steps:
 
