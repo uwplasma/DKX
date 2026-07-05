@@ -209,3 +209,129 @@ def test_active_projected_overlap_schwarz_rejects_too_small_factor_budget(monkey
     assert preconditioner.selected is False
     assert preconditioner.reason.startswith("active_overlap_schwarz_budget_exceeded:")
     assert preconditioner.metadata["max_factor_nbytes"] == 1
+
+
+def test_active_native_indexed_schwarz_solves_diagonal_active_system(monkeypatch) -> None:
+    layout = _layout()
+    diagonal = 2.0 + 0.25 * np.arange(int(layout.total_size), dtype=np.float64)
+    matrix = sp.diags(diagonal, format="csr")
+    rhs = np.linspace(0.5, 1.5, int(layout.total_size), dtype=np.float64)
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_INDEXED_MIN_BLOCK_SIZE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_INDEXED_MAX_BLOCK_SIZE", "8")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_INDEXED_NORMALIZE_OVERLAP", "true")
+
+    preconditioner = active_projected.build_active_projected_native_indexed_schwarz_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=np.arange(int(layout.total_size), dtype=np.int64),
+        requested_kind="active_native_indexed_schwarz",
+        regularization=0.0,
+        max_factor_nbytes=100_000_000,
+        t0=time.perf_counter(),
+    )
+
+    assert preconditioner.selected, preconditioner.to_dict()
+    assert preconditioner.operator is not None
+    assert preconditioner.kind == "active_native_indexed_schwarz"
+    assert preconditioner.metadata["architecture"] == "jax_native_overlapping_indexed_line_blocks"
+    assert preconditioner.metadata["block_family_counts"] == {"angular": 4, "xell": 2}
+    solution = np.asarray(preconditioner.operator.matvec(rhs), dtype=np.float64)
+    residual = rhs - np.asarray(matrix @ solution, dtype=np.float64)
+    np.testing.assert_allclose(residual, np.zeros_like(rhs), rtol=1.0e-12, atol=1.0e-12)
+
+
+def test_active_native_indexed_schwarz_rejection_paths_are_fail_closed() -> None:
+    layout = _layout()
+
+    nonsquare = active_projected.build_active_projected_native_indexed_schwarz_preconditioner(
+        matrix=sp.csr_matrix((2, 3), dtype=np.float64),
+        layout=layout,
+        active_indices=np.arange(2, dtype=np.int64),
+        requested_kind="active_native_indexed_schwarz",
+        regularization=0.0,
+        max_factor_nbytes=1000,
+        t0=time.perf_counter(),
+    )
+    assert nonsquare.selected is False
+    assert nonsquare.reason == "matrix_not_square"
+
+    size_mismatch = active_projected.build_active_projected_native_indexed_schwarz_preconditioner(
+        matrix=sp.eye(2, format="csr", dtype=np.float64),
+        layout=layout,
+        active_indices=np.asarray([0], dtype=np.int64),
+        requested_kind="active_native_indexed_schwarz",
+        regularization=0.0,
+        max_factor_nbytes=1000,
+        t0=time.perf_counter(),
+    )
+    assert size_mismatch.selected is False
+    assert size_mismatch.reason == "active_index_size_mismatch"
+
+    empty = active_projected.build_active_projected_native_indexed_schwarz_preconditioner(
+        matrix=sp.csr_matrix((0, 0), dtype=np.float64),
+        layout=layout,
+        active_indices=np.zeros((0,), dtype=np.int64),
+        requested_kind="active_native_indexed_schwarz",
+        regularization=0.0,
+        max_factor_nbytes=1000,
+        t0=time.perf_counter(),
+    )
+    assert empty.selected is False
+    assert empty.reason == "empty_active_space"
+
+    out_of_range = active_projected.build_active_projected_native_indexed_schwarz_preconditioner(
+        matrix=sp.eye(1, format="csr", dtype=np.float64),
+        layout=layout,
+        active_indices=np.asarray([int(layout.total_size)], dtype=np.int64),
+        requested_kind="active_native_indexed_schwarz",
+        regularization=0.0,
+        max_factor_nbytes=1000,
+        t0=time.perf_counter(),
+    )
+    assert out_of_range.selected is False
+    assert out_of_range.reason == "active_indices_outside_full_vector"
+
+
+def test_active_native_indexed_schwarz_empty_block_space_and_local_dispatch(monkeypatch) -> None:
+    layout = _layout()
+    matrix = sp.eye(int(layout.total_size), format="csr", dtype=np.float64)
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_INDEXED_INCLUDE_XELL", "false")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_INDEXED_INCLUDE_ANGULAR", "false")
+
+    preconditioner = active_projected.build_active_projected_native_indexed_schwarz_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=np.arange(int(layout.total_size), dtype=np.int64),
+        requested_kind="active_native_indexed_schwarz",
+        regularization=0.0,
+        max_factor_nbytes=100_000_000,
+        t0=time.perf_counter(),
+    )
+
+    assert preconditioner.selected is False
+    assert preconditioner.reason == "empty_active_native_indexed_block_space"
+    assert preconditioner.metadata["include_xell"] is False
+    assert preconditioner.metadata["include_angular"] is False
+
+    dispatched = active_projected._build_active_projected_local_base_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=np.arange(int(layout.total_size), dtype=np.int64),
+        kind="active_native_indexed_lines",
+        max_factor_nbytes=100_000_000,
+        regularization=0.0,
+        t0=time.perf_counter(),
+    )
+    assert dispatched.reason == "empty_active_native_indexed_block_space"
+
+    unsupported = active_projected._build_active_projected_local_base_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=np.arange(int(layout.total_size), dtype=np.int64),
+        kind="not_a_real_base",
+        max_factor_nbytes=1000,
+        regularization=0.0,
+        t0=time.perf_counter(),
+    )
+    assert unsupported.selected is False
+    assert unsupported.reason == "unsupported_local_base_kind"

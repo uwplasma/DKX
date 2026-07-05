@@ -83,6 +83,12 @@ The main structural refactor is functionally complete:
   bounded policy/numerics checks for the active-DOF preconditioner admission
   path and do not add solve time to CI. Focused validation passed:
   `tests/test_rhs1_active_projected_xblock.py` as `8 passed in 0.32 s`.
+- The same active x-block test owner now also covers the JAX-native indexed
+  Schwarz active preconditioner: exact residual parity on a diagonal active
+  system, fail-closed nonsquare/size-mismatch/empty/out-of-range admission
+  branches, empty block-family rejection, and local-base dispatch to the
+  canonical native owner. Focused validation passed:
+  `tests/test_rhs1_active_projected_xblock.py` as `11 passed in 0.86 s`.
 - The latest local xdist coverage audit measured `88%` package coverage:
   `4031 passed in 283.48 s` with `8089` missing executable lines. The latest
   explicit-sparse and true-operator rescue tranches reduced missing executable
