@@ -9,6 +9,7 @@ import pytest
 import sfincs_jax.problems.profile_solve as profile_solve
 import sfincs_jax.problems.profile_preconditioner_build as pb
 import sfincs_jax.problems.profile_sparse_direct as sparse_direct
+import sfincs_jax.solvers.preconditioner_full_fp_structured as structured_fblock
 from sfincs_jax.solvers import krylov_dispatch
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.solvers.preconditioning import _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE
@@ -286,7 +287,7 @@ def test_rhs1_dispatch_structured_fblock_fp_tail_coupled_schur_uses_builder(monk
 def test_structured_fblock_jacobi_preconditioner_builds_complete_full_vector_action() -> None:
     nml = read_sfincs_input("tests/ref/quick_2species_FPCollisions_noEr.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
-    precond = pb._build_rhsmode1_structured_fblock_jacobi_preconditioner(op=op)
+    precond = structured_fblock.build_rhs1_structured_fblock_jacobi_preconditioner(op=op)
     metadata = getattr(precond, "_sfincs_jax_structured_fblock_metadata")
 
     assert metadata["selected"] is True
@@ -305,7 +306,7 @@ def test_structured_fblock_jacobi_preconditioner_builds_complete_full_vector_act
 def test_structured_fblock_angular_jacobi_preconditioner_builds_complete_full_vector_action() -> None:
     nml = read_sfincs_input("tests/ref/pas_1species_PAS_noEr_small.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
-    precond = pb._build_rhsmode1_structured_fblock_angular_jacobi_preconditioner(op=op)
+    precond = structured_fblock.build_rhs1_structured_fblock_angular_jacobi_preconditioner(op=op)
     metadata = getattr(precond, "_sfincs_jax_structured_fblock_metadata")
 
     assert metadata["selected"] is True
@@ -325,7 +326,7 @@ def test_structured_fblock_angular_jacobi_preconditioner_builds_complete_full_ve
 def test_structured_fblock_xi_angular_jacobi_preconditioner_builds_complete_full_vector_action() -> None:
     nml = read_sfincs_input("tests/ref/pas_1species_PAS_noEr_small.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
-    precond = pb._build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner(op=op)
+    precond = structured_fblock.build_rhs1_structured_fblock_xi_angular_jacobi_preconditioner(op=op)
     metadata = getattr(precond, "_sfincs_jax_structured_fblock_metadata")
 
     assert metadata["selected"] is True
@@ -354,7 +355,7 @@ def test_structured_fblock_xi_angular_jacobi_preconditioner_respects_block_guard
 def test_structured_fblock_fp_radial_jacobi_preconditioner_builds_complete_full_vector_action() -> None:
     nml = read_sfincs_input("tests/ref/quick_2species_FPCollisions_noEr.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
-    precond = pb._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
+    precond = structured_fblock.build_rhs1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
     metadata = getattr(precond, "_sfincs_jax_structured_fblock_metadata")
 
     assert metadata["selected"] is True
@@ -405,7 +406,7 @@ def test_structured_fblock_fp_lowmode_schur_truncates_optional_features(monkeypa
     stride = int(op.n_species) * int(op.n_x) * int(op.n_xi)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_MAX_COARSE", str(4 * stride))
 
-    precond = pb._build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner(op=op)
+    precond = structured_fblock.build_rhs1_structured_fblock_fp_lowmode_schur_preconditioner(op=op)
     metadata = getattr(precond, "_sfincs_jax_structured_fblock_metadata")
 
     feature_selection = metadata["coarse_feature_selection"]
@@ -513,7 +514,7 @@ def test_structured_fblock_fp_moment_schur_is_compact_and_finite() -> None:
 
     fp_radial_precond = pb._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
     lowmode_precond = pb._build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner(op=op)
-    moment_precond = pb._build_rhsmode1_structured_fblock_fp_moment_schur_preconditioner(op=op)
+    moment_precond = structured_fblock.build_rhs1_structured_fblock_fp_moment_schur_preconditioner(op=op)
     moment_metadata = getattr(moment_precond, "_sfincs_jax_structured_fblock_metadata")
     lowmode_metadata = getattr(lowmode_precond, "_sfincs_jax_structured_fblock_metadata")
 
@@ -543,7 +544,7 @@ def test_structured_fblock_fp_coupled_moment_schur_reduces_full_residual() -> No
     rhs = rhs.at[: op.f_size].set(jnp.linspace(-0.35, 0.65, op.f_size, dtype=jnp.float64))
 
     fp_radial_precond = pb._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
-    coupled_precond = pb._build_rhsmode1_structured_fblock_fp_coupled_moment_schur_preconditioner(op=op)
+    coupled_precond = structured_fblock.build_rhs1_structured_fblock_fp_coupled_moment_schur_preconditioner(op=op)
     metadata = getattr(coupled_precond, "_sfincs_jax_structured_fblock_metadata")
 
     assert metadata["line_kind"] == "fp_radial_plus_coupled_tail_moment_galerkin"
@@ -574,7 +575,7 @@ def test_structured_fblock_fp_tail_coupled_schur_preserves_f_correction() -> Non
     rhs = rhs.at[: op.f_size].set(jnp.linspace(-0.35, 0.65, op.f_size, dtype=jnp.float64))
 
     fp_radial_precond = pb._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
-    tail_precond = pb._build_rhsmode1_structured_fblock_fp_tail_coupled_schur_preconditioner(op=op)
+    tail_precond = structured_fblock.build_rhs1_structured_fblock_fp_tail_coupled_schur_preconditioner(op=op)
     metadata = getattr(tail_precond, "_sfincs_jax_structured_fblock_metadata")
 
     assert metadata["line_kind"] == "fp_radial_plus_tail_coupled_minres"

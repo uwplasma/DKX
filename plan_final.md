@@ -200,6 +200,11 @@ The main structural refactor is functionally complete:
   `problems/ambipolar.py` and `problems/profile_sparse_finalization.py` report
   zero production-used public helpers without direct tests. Focused validation
   passed as `3 passed in 1.76 s`.
+- Structured full-FP f-block preconditioner coverage now exercises all eight
+  public builders through the canonical `solvers/preconditioner_full_fp_structured.py`
+  owner rather than compatibility aliases. A source/test audit for that module
+  reports zero production-used public helpers without direct tests. Focused
+  validation passed as `8 passed in 15.08 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -1053,6 +1058,10 @@ Completed work:
   finalization retry-wrapper tests, then reran source/test audits showing no
   production-used public helpers without direct tests in those targeted problem
   modules.
+- Tranche 46: moved representative structured full-FP f-block preconditioner
+  tests to direct canonical builder calls, then reran the source/test audit
+  showing no production-used public helpers in that solver module without
+  direct tests.
 
 Remaining consolidation steps:
 
