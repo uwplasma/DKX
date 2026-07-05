@@ -174,6 +174,12 @@ The main structural refactor is functionally complete:
   `tests/test_transport_matrix_preconditioners.py` active. Focused validation
   passed under CI mode as `16 passed, 26 skipped in 5.24 s`; standalone
   validation of the recovered test file passed as `16 passed in 5.25 s`.
+- CI coverage recovery also keeps the fast output-HDF5 scheme parity tests
+  active in CI. Individual timing showed scheme1, scheme2, scheme4,
+  scheme4-quick2species, and scheme5 each complete in about `1.3-1.5 s`;
+  scheme11 remains skipped because it exceeded the bounded probe. The narrowed
+  CI selection passed as `8 passed, 1 skipped in 1.85 s`, restoring fast
+  writer/output parity coverage without admitting the slow scheme11 path.
 - Structured velocity, transport policy, sensitivity, and validation coverage
   now includes direct tests for block-tridiagonal solves, structured tz-FFT
   first-attempt policy/budget/environment thresholds, JVP/VJP flux wrappers,

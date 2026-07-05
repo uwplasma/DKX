@@ -48,7 +48,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         "test_upstream_scanplot2_smoke",
         "test_rhsmode1_write_output_end_to_end",
         "test_rhsmode1_phi1_write_output_end_to_end",
-        "test_output_h5_scheme",
+        "tests/test_output_h5_scheme11_parity.py::",
         "test_full_system_newton_krylov",
         "test_full_system_gmres_solution_parity",
     )
