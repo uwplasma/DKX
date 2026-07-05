@@ -335,7 +335,7 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "diagnostics.py": ("physics/output diagnostics owner", "defer until diagnostics API split is explicit"),
     "grids.py": ("discretization public grid owner", "keep root public helper until discretization package exports are documented"),
     "input_compat.py": ("input compatibility owner", "keep root public compatibility shim until input package exports cover callers"),
-    "io.py": ("outputs writer/formats/cache owners", "keep tiny root facade until public imports migrate"),
+    "io.py": ("outputs writer/formats owners", "keep tiny root facade until public imports migrate"),
     "namelist.py": ("input namelist owner", "keep root public parser until input package exports are documented"),
     "paths.py": ("package root path support utility", "keep at root unless a support package is introduced with broad import rewrite"),
     "plotting.py": ("outputs/plotting public helper", "keep root public helper unless API replacement is documented"),
