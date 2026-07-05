@@ -22,6 +22,7 @@ from sfincs_jax.solvers.preconditioner_qi_basis import (
     build_rhs1_qi_xblock_hard_seed_basis,
     build_rhs1_qi_xblock_hard_seed_candidates,
     orthonormalize_rhs1_qi_coarse_basis,
+    orthonormalize_rhs1_qi_global_moment_basis,
     rhs1_xblock_qi_block_geometry_metadata,
 )
 
@@ -56,6 +57,28 @@ def test_build_qi_coarse_basis_is_deterministic_and_rank_gated() -> None:
     np.testing.assert_allclose(
         basis.vectors.T @ basis.vectors, np.eye(basis.metadata.rank), atol=1.0e-13
     )
+
+
+def test_qi_global_moment_basis_is_deterministic_and_discards_dependent_columns() -> None:
+    candidates = jnp.asarray(
+        [
+            [1.0, 2.0, 0.0],
+            [0.0, 0.0, 3.0],
+            [0.0, 0.0, 0.0],
+        ],
+        dtype=jnp.float64,
+    )
+
+    basis = orthonormalize_rhs1_qi_global_moment_basis(
+        candidates,
+        labels=("density", "density_duplicate", "flow"),
+        rtol=1.0e-12,
+    )
+
+    assert basis.metadata.rank == 2
+    assert basis.metadata.discarded_count == 1
+    assert basis.metadata.accepted_labels == ("density", "flow")
+    np.testing.assert_allclose(np.asarray(basis.vectors.T @ basis.vectors), np.eye(2), atol=1.0e-13)
 
 
 def test_xblock_hard_seed_basis_is_deterministic_bounded_and_rank_gated() -> None:

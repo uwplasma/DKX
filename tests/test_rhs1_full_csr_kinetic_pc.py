@@ -4,8 +4,12 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 from jax import jit
+import jax.numpy as jnp
 
-from sfincs_jax.solvers.native_block_factor import apply_native_x_ell_kinetic_factor
+from sfincs_jax.solvers.native_block_factor import (
+    apply_native_x_ell_kinetic_factor,
+    build_native_x_ell_kinetic_factor,
+)
 from sfincs_jax.operators.profile_layout import RHS1BlockLayout
 from sfincs_jax.solvers.preconditioner_full_fp_csr import (
     build_rhs1_full_csr_kinetic_preconditioner,
@@ -52,6 +56,32 @@ def _tiny_full_csr(layout: RHS1BlockLayout) -> sp.csr_matrix:
     dense[tail, 0] = 0.7
     dense[1, tail + 1] = -0.4
     return sp.csr_matrix(dense)
+
+
+def test_native_x_ell_factor_builder_applies_blocks_and_tail() -> None:
+    factor = build_native_x_ell_kinetic_factor(
+        block_inverses=jnp.asarray(
+            [
+                [[0.5, 0.0], [0.0, 0.25]],
+                [[1.0 / 3.0, 0.0], [0.0, 0.2]],
+            ],
+            dtype=jnp.float64,
+        ),
+        block_indices=jnp.asarray([[0, 1], [2, 3]], dtype=jnp.int32),
+        f_size=4,
+        total_size=6,
+        inv_tail=jnp.asarray([0.1, -0.5], dtype=jnp.float64),
+    )
+
+    rhs = jnp.asarray([2.0, 4.0, 9.0, 10.0, 30.0, -8.0], dtype=jnp.float64)
+    expected = jnp.asarray([1.0, 1.0, 3.0, 2.0, 3.0, 4.0], dtype=jnp.float64)
+
+    np.testing.assert_allclose(
+        np.asarray(apply_native_x_ell_kinetic_factor(factor, rhs)),
+        np.asarray(expected),
+        rtol=0.0,
+        atol=1.0e-14,
+    )
 
 
 def test_x_ell_preconditioner_applies_dense_kinetic_lines_and_tail_jacobi() -> None:

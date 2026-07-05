@@ -170,6 +170,17 @@ The main structural refactor is functionally complete:
   systems. A source/test audit for `solver.py` reports zero production-used
   public helpers without direct tests. Focused validation passed as
   `3 passed in 1.50 s`.
+- Native block-factor, QI basis, sparse cache-key, and host sparse-factor
+  coverage now includes direct tests for native x-ell factor construction and
+  application, QI global moment-basis rank gating, RHSMode-1 PAS/x-block sparse
+  cache-key wrappers, host sparse factor cache reuse, and the bounded
+  x-block-TZ host skip path. Source/test audits for
+  `solvers/native_block_factor.py`, `solvers/preconditioner_qi_basis.py`,
+  `solvers/preconditioner_pas_xblock_ilu.py`,
+  `solvers/preconditioner_xblock_tz_sparse.py`, and
+  `solvers/preconditioner_symbolic_host.py` report zero production-used public
+  helpers without direct tests. Focused validation passed as
+  `5 passed in 1.17 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -1007,6 +1018,10 @@ Completed work:
 - Tranche 41: added direct public Krylov wrapper tests for BiCGStab, TFQMR,
   and distributed-GMRES fallback APIs, then reran the source/test audit showing
   no production-used public helpers in `solver.py` without direct tests.
+- Tranche 42: added direct native-factor, QI global-basis, sparse cache-key,
+  host sparse-factor, and bounded x-block-TZ builder tests, then reran
+  source/test audits showing no production-used public helpers without direct
+  tests in those targeted modules.
 
 Remaining consolidation steps:
 
