@@ -1302,6 +1302,13 @@ Completed work:
   and empty-log tolerance. Focused validation passed:
   `tests/test_validation_petsc_and_upstream_helpers.py` as `10 passed in
   0.62 s`; Ruff, compileall, and `git diff --check` passed.
+- Tranche 66: extended validation-figure policy coverage for W7-X
+  ambipolar-root publication claims. The tests now prove that the panel becomes
+  literature-ready only when numerical gates, complete provenance, a matching
+  JSON payload, and a Git-tracked source artifact all pass; tracked wrong-name
+  and tracked payload-mismatch artifacts fail closed with explicit statuses.
+  Focused validation passed: `tests/test_validation_figures.py` as `9 passed in
+  0.08 s`; Ruff passed.
 
 Remaining consolidation steps:
 

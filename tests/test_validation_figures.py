@@ -195,6 +195,77 @@ def test_w7x_ambipolar_panel_records_provenance_but_keeps_untracked_artifact_def
     ]
 
 
+def test_w7x_ambipolar_panel_can_be_literature_ready_with_checked_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = _ambipolar_payload(provenance=_complete_provenance())
+    source_artifact = tmp_path / "sfincs_jax_w7x_ambipolar_validation_summary.json"
+    source_artifact.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(validation_figures, "_is_git_tracked_file", lambda path: True)
+
+    panel = build_w7x_ambipolar_root_provenance_panel(
+        payload,
+        source_artifact=source_artifact,
+    )
+
+    assert panel["metadata"]["validation_state"] == "artifact_backed_literature_ready"
+    assert panel["metadata"]["figure_label"].startswith("ARTIFACT-BACKED")
+    assert panel["metadata"]["publication_figure"] == {
+        "claim_status": "checked_in_converged_artifact",
+        "artifact_class": "checked_in_w7x_ambipolar_literature_artifact",
+        "checked_in_converged_artifact": True,
+        "ready_for_physics_validation_claim": True,
+        "manuscript_label": "checked-in W7-X ambipolar-root validation",
+    }
+    assert panel["source_artifact"]["status"] == "checked_in"
+    assert panel["source_artifact"]["tracked"] is True
+    assert panel["source_artifact"]["payload_matches"] is True
+    assert panel["source_artifact"]["checked_in"] is True
+    assert panel["gates"]["provenance_complete"] is True
+    assert panel["gates"]["source_artifact_checked_in"] is True
+    assert panel["gates"]["ready_for_literature_claim"] is True
+    assert panel["gates"]["checked_in_converged_artifact"] is True
+    assert panel["metadata"]["deferred_reason_codes"] == []
+    assert panel["deferred_reasons"] == []
+
+
+def test_w7x_ambipolar_panel_fails_closed_for_tracked_payload_or_name_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = _ambipolar_payload(provenance=_complete_provenance())
+    monkeypatch.setattr(validation_figures, "_is_git_tracked_file", lambda path: True)
+
+    wrong_name = tmp_path / "local_scan_summary.json"
+    wrong_name.write_text(json.dumps(payload), encoding="utf-8")
+    wrong_name_panel = build_w7x_ambipolar_root_provenance_panel(
+        payload,
+        source_artifact=wrong_name,
+    )
+    assert wrong_name_panel["source_artifact"]["tracked"] is True
+    assert wrong_name_panel["source_artifact"]["looks_like_w7x_ambipolar_artifact"] is False
+    assert wrong_name_panel["source_artifact"]["status"] == "tracked_non_w7x_ambipolar_artifact"
+    assert wrong_name_panel["gates"]["source_artifact_checked_in"] is False
+    assert wrong_name_panel["metadata"]["deferred_reason_codes"] == ["source_artifact_not_checked_in"]
+
+    mismatched_payload = tmp_path / "sfincs_jax_w7x_ambipolar_validation_summary.json"
+    mismatched_payload.write_text(
+        json.dumps({**payload, "runs": payload["runs"][:-1]}),
+        encoding="utf-8",
+    )
+    mismatch_panel = build_w7x_ambipolar_root_provenance_panel(
+        payload,
+        source_artifact=mismatched_payload,
+    )
+    assert mismatch_panel["source_artifact"]["tracked"] is True
+    assert mismatch_panel["source_artifact"]["looks_like_w7x_ambipolar_artifact"] is True
+    assert mismatch_panel["source_artifact"]["payload_matches"] is False
+    assert mismatch_panel["source_artifact"]["status"] == "tracked_w7x_ambipolar_artifact_payload_mismatch"
+    assert mismatch_panel["gates"]["source_artifact_checked_in"] is False
+    assert mismatch_panel["metadata"]["deferred_reason_codes"] == ["source_artifact_not_checked_in"]
+
+
 def test_w7x_ambipolar_panel_rejects_root_not_supported_by_current_bracket() -> None:
     payload = _ambipolar_payload(root_er=0.8, root_type="electron")
     panel = build_w7x_ambipolar_root_provenance_panel(payload)
