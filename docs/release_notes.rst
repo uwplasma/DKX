@@ -138,8 +138,8 @@ Unreleased
   ``sfincs_jax.problems.transport_matrix.parallel``: worker payloads, process/GPU
   execution, runtime merge/partition helpers, persistent-pool management,
   scaling/sharding policy, validation, and the subprocess worker entry point.
-  The maintained worker entry point is now
-  ``python -m sfincs_jax.problems.transport_parallel_worker`` for GPU
+  The maintained worker entry point is
+  ``python -m sfincs_jax.problems.transport_parallel_runtime`` for GPU
   worker subprocesses; top-level ``sfincs_jax.transport_parallel_*`` aliases
   were removed in the consolidation pass. Focused parallel/import tests passed with
   ``139 passed``, a broader transport/CLI slice passed with ``169 passed``, and

@@ -505,8 +505,8 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "plan_single_case_operator_coarse_reuse",
     ),
     (
-        "sfincs_jax.problems.transport_parallel_worker",
-        "sfincs_jax.problems.transport_parallel_worker",
+        "sfincs_jax.problems.transport_parallel_runtime",
+        "sfincs_jax.problems.transport_parallel_runtime",
         "main",
     ),
 )
