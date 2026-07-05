@@ -7,7 +7,6 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 
-import sfincs_jax.problems.profile_solve as profile_solve
 import sfincs_jax.solvers.preconditioner_xblock_tz_sparse as tz_sparse
 import sfincs_jax.solvers.preconditioner_symbolic_host as symbolic_host
 from sfincs_jax.solvers.preconditioner_symbolic_host import build_sparse_ilu_from_matvec
@@ -386,10 +385,6 @@ def test_explicit_fp_xblock_matrix_and_diagonal_share_domain_implementation() ->
             er_xdot=None,
         ),
     )
-
-    assert profile_solve._get_rhsmode1_fp_xblock_assembled_host_cache is get_rhsmode1_fp_xblock_assembled_host_cache
-    assert profile_solve._assemble_rhsmode1_fp_xblock_tz_sparse_matrix is assemble_rhsmode1_fp_xblock_tz_sparse_matrix
-    assert profile_solve._rhsmode1_fp_xblock_tz_sparse_diagonal is rhsmode1_fp_xblock_tz_sparse_diagonal
 
     host = get_rhsmode1_fp_xblock_assembled_host_cache(op=op)
     matrix = assemble_rhsmode1_fp_xblock_tz_sparse_matrix(

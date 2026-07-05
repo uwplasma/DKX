@@ -1406,6 +1406,15 @@ Completed work:
   `tests/test_source_tree_consolidation.py tests/test_distributed_gmres_axis.py`
   as `33 passed in 3.59 s`; the compact wrapper/owner bundle passed as
   `131 passed in 30.43 s`; Ruff, `compileall`, and `git diff --check` passed.
+- Tranche 78: removed the final redundant `profile_solve.py` sparse-assembly
+  alias assertions from `tests/test_sparse_assembly.py`. The tests now cover
+  the RHSMode-1 FP x-block sparse assembly, host cache, and diagonal helpers
+  directly through `solvers/preconditioner_xblock_tz_sparse.py`; a source-tree
+  guard keeps sparse assembly tests from reintroducing solve-orchestration
+  alias checks. Focused validation passed:
+  `tests/test_source_tree_consolidation.py tests/test_sparse_assembly.py` as
+  `43 passed in 3.70 s`; the compact owner bundle passed as
+  `133 passed in 28.70 s`; Ruff, `compileall`, and `git diff --check` passed.
 
 Remaining consolidation steps:
 
