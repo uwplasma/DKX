@@ -896,7 +896,7 @@ Latest AST audit:
 
 - Folder depth is no longer the blocker: the package has one-level domain
   folders only and no `__init__.py`-only source packages.
-- The source tree has 121 Python files, 17 package-root modules, and one-level
+- The source tree has 120 Python files, 16 package-root modules, and one-level
   domain folders only. The remaining structural blockers are file-family sprawl
   and owner size.
   The largest retained owners are `problems/profile_policies.py` (`7936`
@@ -907,7 +907,7 @@ Latest AST audit:
   `solvers/explicit_sparse.py` (`5198` lines),
   `problems/profile_sparse_qi.py` (`4873` lines),
   `problems/profile_solve.py` (`4351` lines), and
-  `outputs/writer.py` (`3249` lines).
+  `outputs/writer.py` (`3129` lines).
 - The final consolidation pass should reduce file count and improve ownership
   before further line-by-line extraction. A patch that only moves a few
   functions but leaves the same number of files is not sufficient unless it
@@ -1232,6 +1232,14 @@ Completed work:
   largest current blocker without duplicating tests. CI-mode validation for
   the transport-parallel group passed as `85 passed, 18 skipped in 0.78 s`;
   Ruff and `git diff --check` passed.
+- Tranche 57: moved Phi1 Newton-step solve-policy helpers and Phi1 output
+  history alignment from `outputs/writer.py` into existing
+  `outputs/rhsmode1.py`. The writer now keeps compatibility aliases for
+  legacy private imports but no longer owns that policy code. Focused
+  validation passed:
+  `tests/test_phi1_history_alignment.py tests/test_cli_solve_mode.py tests/test_io_output_policy_coverage.py`
+  as `136 passed in 2.53 s`; Ruff passed. This reduced
+  `outputs/writer.py` from `3250` to `3129` lines without adding source files.
 
 Remaining consolidation steps:
 

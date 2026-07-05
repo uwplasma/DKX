@@ -6,7 +6,7 @@ import re
 import shutil
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, Sequence
+from typing import Any, Callable, Dict
 
 import numpy as np
 
@@ -102,6 +102,10 @@ write_sfincs_output_file = _output_formats.write_sfincs_output_file
 _select_rhsmode1_linear_solve_method = (
     _rhsmode1_outputs._select_rhsmode1_linear_solve_method
 )
+_align_phi1_history_for_output = _rhsmode1_outputs._align_phi1_history_for_output
+_phi1_fast_explicit_gmres_restart_default = _rhsmode1_outputs._phi1_fast_explicit_gmres_restart_default
+_select_phi1_newton_linear_solve_method = _rhsmode1_outputs._select_phi1_newton_linear_solve_method
+_select_phi1_use_frozen_linearization = _rhsmode1_outputs._select_phi1_use_frozen_linearization
 
 
 def _should_precompile_v3_full_system(*, env_value: str) -> bool:
@@ -115,131 +119,6 @@ def _should_precompile_v3_full_system(*, env_value: str) -> bool:
 
     env = str(env_value).strip().lower()
     return env in {"1", "true", "yes", "on"}
-
-
-def _phi1_fast_explicit_gmres_restart_default(active_total_size: int) -> int:
-    """Return the profiled GMRES restart for fast explicit-Phi1 Newton steps."""
-
-    return 120 if int(active_total_size) >= 8000 else 80
-
-
-def _select_phi1_newton_linear_solve_method(
-    *,
-    active_total_size: int,
-    dense_cutoff: int,
-    default_method: str,
-    fast_explicit: bool,
-    dense_auto_ok: bool,
-    dense_auto_backend: str,
-    env_override: str,
-    emit=None,
-) -> str:
-    method = default_method
-    if fast_explicit:
-        sparse_direct_min_env = os.environ.get("SFINCS_JAX_PHI1_FAST_SPARSE_DIRECT_MIN", "").strip()
-        try:
-            sparse_direct_min = int(sparse_direct_min_env) if sparse_direct_min_env else 5000
-        except ValueError:
-            sparse_direct_min = 5000
-        backend = str(dense_auto_backend).strip().lower()
-        sparse_direct_backend_ok = backend in {"cpu", "gpu", "cuda"}
-        if (
-            int(active_total_size) > int(dense_cutoff)
-            and sparse_direct_backend_ok
-            and int(active_total_size) >= max(1, int(sparse_direct_min))
-        ):
-            method = "sparse_direct"
-            if emit is not None:
-                emit(
-                    1,
-                    "write_sfincs_jax_output_h5: includePhi1 fast explicit mode -> "
-                    f"preferring host sparse-direct Newton step on backend={backend}",
-                )
-        elif method == "batched":
-            method = "incremental"
-            if emit is not None:
-                emit(
-                    1,
-                    "write_sfincs_jax_output_h5: includePhi1 fast explicit mode -> "
-                    "preferring incremental Newton step over batched solve",
-                )
-    if int(active_total_size) <= int(dense_cutoff):
-        if dense_auto_ok:
-            method = "dense"
-            if emit is not None:
-                emit(
-                    1,
-                    "write_sfincs_jax_output_h5: includePhi1 -> "
-                    f"using dense Newton step (active_n={active_total_size})",
-                )
-        elif emit is not None:
-            emit(
-                1,
-                "write_sfincs_jax_output_h5: includePhi1 -> skipping dense auto mode on "
-                f"backend={dense_auto_backend}; using {default_method} Newton step",
-            )
-    if env_override in {"dense", "incremental", "batched", "sparse_direct"}:
-        method = env_override
-    return method
-
-
-def _select_phi1_use_frozen_linearization(
-    *,
-    fast_explicit: bool,
-    solve_method: str,
-    env_value: str,
-) -> bool:
-    """Return whether the Phi1 Newton solve may use the fast frozen Jacobian path.
-
-    Sparse-direct Newton is the production CPU path for moderate explicit Phi1
-    systems. It is fast enough to use the true Newton linearization and avoids the
-    residual stall observed when the frozen shortcut is applied above the small
-    fixture regime.
-    """
-
-    env_frozen = str(env_value).strip().lower()
-    if env_frozen in {"1", "true", "yes", "on"}:
-        return True
-    if env_frozen in {"0", "false", "no", "off"}:
-        return False
-    if str(solve_method).strip().lower() == "sparse_direct":
-        return False
-    return bool(fast_explicit)
-
-
-def _align_phi1_history_for_output(
-    *,
-    history: Sequence[Any],
-    result_x: Any,
-    x0_state: Any,
-    use_frozen_linearization: bool,
-    min_iters: int,
-    n_newton: int,
-) -> list[Any]:
-    """Return the nonlinear-state history used for output diagnostics/H5.
-
-    The Newton solver history is defined in terms of accepted iterates, excluding the
-    initial guess. Frozen-linearization paths may still prepend `x0` temporarily for
-    debugging or fixture-shape control; when aligning to the recorded Newton count,
-    keep the most recent accepted iterates so one-step converged runs do not regress
-    to the initial state in output diagnostics.
-    """
-
-    xs = list(history) if history else [result_x]
-    if use_frozen_linearization and x0_state is not None:
-        xs = [x0_state, *xs]
-
-    if min_iters > 0:
-        while len(xs) < int(min_iters):
-            xs.append(xs[-1])
-
-    n_newton_use = max(1, int(n_newton))
-    if len(xs) > n_newton_use:
-        xs = xs[-n_newton_use:]
-    elif len(xs) < n_newton_use:
-        xs.extend([xs[-1]] * (n_newton_use - len(xs)))
-    return xs
-
 
 def _output_geom_cache_key(*, nml: Namelist, grids: V3Grids) -> tuple[object, ...] | None:
     return _output_formats.output_geom_cache_key(

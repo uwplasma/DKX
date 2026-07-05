@@ -13,7 +13,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 import jax.numpy as jnp
 import numpy as np
@@ -122,6 +122,119 @@ def _select_rhsmode1_linear_solve_method(
         if emit is not None:
             emit(1, f"write_sfincs_jax_output_h5: solve method forced by env -> {method}")
     return method
+
+
+def _phi1_fast_explicit_gmres_restart_default(active_total_size: int) -> int:
+    """Return the profiled GMRES restart for fast explicit-Phi1 Newton steps."""
+
+    return 120 if int(active_total_size) >= 8000 else 80
+
+
+def _select_phi1_newton_linear_solve_method(
+    *,
+    active_total_size: int,
+    dense_cutoff: int,
+    default_method: str,
+    fast_explicit: bool,
+    dense_auto_ok: bool,
+    dense_auto_backend: str,
+    env_override: str,
+    emit=None,
+) -> str:
+    """Choose the linear solver for one explicit-Phi1 Newton step."""
+
+    method = default_method
+    if fast_explicit:
+        sparse_direct_min_env = os.environ.get("SFINCS_JAX_PHI1_FAST_SPARSE_DIRECT_MIN", "").strip()
+        try:
+            sparse_direct_min = int(sparse_direct_min_env) if sparse_direct_min_env else 5000
+        except ValueError:
+            sparse_direct_min = 5000
+        backend = str(dense_auto_backend).strip().lower()
+        sparse_direct_backend_ok = backend in {"cpu", "gpu", "cuda"}
+        if (
+            int(active_total_size) > int(dense_cutoff)
+            and sparse_direct_backend_ok
+            and int(active_total_size) >= max(1, int(sparse_direct_min))
+        ):
+            method = "sparse_direct"
+            if emit is not None:
+                emit(
+                    1,
+                    "write_sfincs_jax_output_h5: includePhi1 fast explicit mode -> "
+                    f"preferring host sparse-direct Newton step on backend={backend}",
+                )
+        elif method == "batched":
+            method = "incremental"
+            if emit is not None:
+                emit(
+                    1,
+                    "write_sfincs_jax_output_h5: includePhi1 fast explicit mode -> "
+                    "preferring incremental Newton step over batched solve",
+                )
+    if int(active_total_size) <= int(dense_cutoff):
+        if dense_auto_ok:
+            method = "dense"
+            if emit is not None:
+                emit(
+                    1,
+                    "write_sfincs_jax_output_h5: includePhi1 -> "
+                    f"using dense Newton step (active_n={active_total_size})",
+                )
+        elif emit is not None:
+            emit(
+                1,
+                "write_sfincs_jax_output_h5: includePhi1 -> skipping dense auto mode on "
+                f"backend={dense_auto_backend}; using {default_method} Newton step",
+            )
+    if env_override in {"dense", "incremental", "batched", "sparse_direct"}:
+        method = env_override
+    return method
+
+
+def _select_phi1_use_frozen_linearization(
+    *,
+    fast_explicit: bool,
+    solve_method: str,
+    env_value: str,
+) -> bool:
+    """Return whether the Phi1 Newton solve may use the fast frozen Jacobian path."""
+
+    env_frozen = str(env_value).strip().lower()
+    if env_frozen in {"1", "true", "yes", "on"}:
+        return True
+    if env_frozen in {"0", "false", "no", "off"}:
+        return False
+    if str(solve_method).strip().lower() == "sparse_direct":
+        return False
+    return bool(fast_explicit)
+
+
+def _align_phi1_history_for_output(
+    *,
+    history: Sequence[Any],
+    result_x: Any,
+    x0_state: Any,
+    use_frozen_linearization: bool,
+    min_iters: int,
+    n_newton: int,
+) -> list[Any]:
+    """Return the nonlinear-state history used for output diagnostics/H5."""
+
+    xs = list(history) if history else [result_x]
+    if use_frozen_linearization and x0_state is not None:
+        xs = [x0_state, *xs]
+
+    if min_iters > 0:
+        while len(xs) < int(min_iters):
+            xs.append(xs[-1])
+
+    n_newton_use = max(1, int(n_newton))
+    if len(xs) > n_newton_use:
+        xs = xs[-n_newton_use:]
+    elif len(xs) < n_newton_use:
+        xs.extend([xs[-1]] * (n_newton_use - len(xs)))
+    return xs
 
 
 def select_rhsmode1_solve_method(
@@ -1930,9 +2043,13 @@ __all__ = (
     "_maybe_apply_constraint0_fortran_gauge",
     "_maybe_apply_pas_no_phi1_output_scale",
     "_profile_memory_summary",
+    "_align_phi1_history_for_output",
+    "_phi1_fast_explicit_gmres_restart_default",
     "_raise_for_nonconverged_rhsmode1_output",
     "_rhs1_active_size_for_trace",
     "_rhsmode1_result_residual_and_target",
+    "_select_phi1_newton_linear_solve_method",
+    "_select_phi1_use_frozen_linearization",
     "_should_fail_nonconverged_rhsmode1_output",
     "_solver_metadata_dict",
     "_solver_trace_memory_estimate",
