@@ -246,6 +246,17 @@ def test_pas_policy_tests_use_pas_policy_owner_not_profile_solve() -> None:
     assert "sfincs_jax.solvers.preconditioner_pas_policy" in text
 
 
+def test_distributed_gmres_axis_tests_use_krylov_dispatch_owner() -> None:
+    """Distributed-GMRES axis tests belong to the Krylov dispatch owner."""
+
+    text = (REPO_ROOT / "tests" / "test_distributed_gmres_axis.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "profile_solve" not in text
+    assert "sfincs_jax.solvers.krylov_dispatch" in text
+
+
 def test_test_filenames_do_not_reintroduce_deleted_v3_driver_label() -> None:
     """Keep test modules named after the canonical behavior they protect."""
 
