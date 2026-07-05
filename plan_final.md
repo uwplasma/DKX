@@ -103,6 +103,12 @@ The main structural refactor is functionally complete:
   `problems/transport_linear_system.py` reports zero production-used public
   helpers without direct tests. Focused validation passed:
   `tests/test_transport_active_factor.py` as `30 passed in 0.55 s`.
+- RHSMode=1 dense profile-solve coverage now includes a direct public
+  `solve_profile_linear` identity-system test beside the existing residual and
+  dispatch tests. A source/test audit for `problems/profile_dense.py` reports
+  zero production-used public helpers without direct tests. Focused validation
+  passed: `tests/test_profile_response_linear_solve.py` as
+  `13 passed in 2.26 s`.
 - The RHSMode=1 structured full-CSR Schur tests now cover singular local
   zeta-line, pitch-line, and x-pitch kinetic block fallback through
   pseudo-inverses, plus the corresponding regularized inverse paths. This
@@ -901,6 +907,10 @@ Completed work:
   preconditioner builder fallback contracts, then reran the source/test audit
   showing no production-used public helpers in that module without direct
   tests.
+- Tranche 33: added a direct bounded identity-system test for the public
+  `problems/profile_dense.py::solve_profile_linear` entry point, then reran the
+  source/test audit showing no production-used public helpers in that module
+  without direct tests.
 
 Remaining consolidation steps:
 

@@ -19,6 +19,7 @@ from sfincs_jax.problems.profile_dense import (
     solve_rhs1_constraint0_petsc_compat,
     solve_rhs1_dense_ksp_full,
     solve_rhs1_dense_ksp_reduced,
+    solve_profile_linear,
     solve_profile_linear_with_residual,
 )
 from sfincs_jax.solver import GMRESSolveResult, assemble_dense_matrix_from_matvec
@@ -110,6 +111,26 @@ def test_rhs1_small_gmres_max_env_preserves_defaults(monkeypatch) -> None:
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_GMRES_SMALL_MAX", "bad")
     assert rhs1_small_gmres_max_from_env(default=17) == 17
+
+
+def test_solve_profile_linear_solves_tiny_identity_system() -> None:
+    b = jnp.asarray([1.0, -2.0], dtype=jnp.float64)
+
+    result = solve_profile_linear(
+        context=_context(total_size=2, small_gmres_max=10),
+        matvec_fn=lambda x: x,
+        b_vec=b,
+        precond_fn=None,
+        x0_vec=None,
+        tol_val=1.0e-12,
+        atol_val=1.0e-12,
+        restart_val=4,
+        maxiter_val=8,
+        solve_method_val="auto",
+        precond_side="left",
+    )
+
+    assert jnp.linalg.norm(result.x - b) < 1.0e-10
 
 
 def test_solve_profile_linear_with_residual_solves_tiny_identity_system() -> None:
