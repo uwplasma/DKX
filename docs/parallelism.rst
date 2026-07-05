@@ -176,7 +176,7 @@ Historical cache-warm CPU sweep (1, 2, 4 requested workers):
 1 worker 252.5s, 2 workers 169.2s, 4 workers 93.7s.
 Because this RHSMode=2 case has only three independent ``whichRHS`` tasks, the
 4-worker point is a task-limited throughput snapshot rather than a release gate
-for four fully occupied workers. New benchmark JSON records ``rhs_count`` and
+for four fully occupied workers. Benchmark JSON records ``rhs_count`` and
 payload coverage, and release-facing audits require claimed worker counts to be
 no larger than the independent task count.
 

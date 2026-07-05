@@ -129,7 +129,7 @@ The release-facing example-suite artifacts on ``main`` are generated from the fu
 39-case CPU and GPU audits recorded in the repository. Those audits are summarized in
 the README and the performance/validation pages.
 
-For current release documentation, the important point is simple:
+For release documentation, the important point is simple:
 
 - all cases in the audited suite complete on CPU and GPU,
 - no ``jax_error`` or ``max_attempts`` entries remain in the release artifacts,
@@ -327,15 +327,15 @@ unit/regression suite:
 - ``scripts/check_release_gates.py`` and ``tests/test_release_gate_metadata.py`` add a
   CI-fast release gate over the manifest's ``release_gate`` metadata. Each lane must be
   ``release_ready``, ``regression_scaffold``, ``bounded_proxy``, or
-  ``closed_deferred``; none may block the current release without being explicitly
-  closed or removed from the release manifest. The release checker also validates
+  ``closed_deferred``; no lane may remain ambiguous in the release manifest. The
+  release checker also validates
   the record status/kind, the non-empty literature/claim/source/test/gate lists, and
   all listed source, test, script, and artifact paths, including paths on
   ``closed_deferred`` lanes. A deferred lane is therefore allowed to stay out of the
   tagged release claim, but it is not allowed to rot silently.
 - ``docs/_static/research_lane_completion_2026_05_12.json`` records the active
   research/performance lanes, evidence artifacts, completion estimates, gates,
-  and next actions for the current large-push cycle. ``scripts/check_research_lanes.py``
+  and next actions for the checked research-lane cycle. ``scripts/check_research_lanes.py``
   and ``tests/test_research_lane_policy.py`` enforce that those percentages are
   evidence-backed and that active lanes record substantial measured progress
   before their completion estimate is increased. The policy is target-capped:
