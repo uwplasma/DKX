@@ -8,7 +8,7 @@ import pytest
 import jax.numpy as jnp
 from scipy import sparse as scipy_sparse
 
-import sfincs_jax.problems.profile_sparse_handoff as sparse_pc_module
+import sfincs_jax.problems.profile_sparse_solve as sparse_pc_module
 import sfincs_jax.problems.profile_sparse_direct as sparse_direct_module
 import sfincs_jax.problems.profile_sparse_finalization as sparse_finalization_module
 import sfincs_jax.problems.profile_sparse_fortran_reduced as sparse_fortran_reduced_module
@@ -35,7 +35,7 @@ from sfincs_jax.solvers.preconditioner_qi_device import (
     setup_rhs1_qi_device_preconditioner,
 )
 from sfincs_jax.solver import GMRESSolveResult
-from sfincs_jax.problems.profile_sparse_handoff import (
+from sfincs_jax.problems.profile_sparse_solve import (
     DirectTailMaterializationContext,
     DirectTailMaterializationResult,
     DirectTailStructuredAdmissionContext,

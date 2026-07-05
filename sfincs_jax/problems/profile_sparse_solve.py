@@ -1,4 +1,4 @@
-"""Sparse-PC handoff helpers for RHSMode=1 profile-response solves."""
+"""Sparse-PC solve orchestration for RHSMode=1 profile-response solves."""
 
 # This compatibility owner intentionally re-exports sparse branch primitives by
 # composing owner __all__ lists and maps driver-scope names onto local aliases.

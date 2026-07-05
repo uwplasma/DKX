@@ -1584,7 +1584,7 @@ apply SciPy’s sparse ILU and optionally use the sparse operator for matvecs.
 References: GMRES [#saad86]_, ILU/Preconditioning surveys [#benzi02]_.
 
 Implementation: ``sfincs_jax.solvers.explicit_sparse`` and
-``sfincs_jax.problems.profile_sparse_handoff``. Controls:
+``sfincs_jax.problems.profile_sparse_solve``. Controls:
 
 - ``SFINCS_JAX_RHSMODE1_SPARSE_PRECOND`` (auto/on/off/jax/scipy)
 - ``SFINCS_JAX_RHSMODE1_SPARSE_OPERATOR`` (optional sparse matvec path)

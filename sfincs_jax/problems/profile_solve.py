@@ -172,7 +172,7 @@ from sfincs_jax.problems.profile_diagnostics import (
     SparseRescueTailMetadataContext, record_structured_fblock_preconditioner_metadata,
     sparse_rescue_tail_metadata_from_context,
 )
-from sfincs_jax.problems.profile_sparse_handoff import (
+from sfincs_jax.problems.profile_sparse_solve import (
     FortranReducedXBlockBackendContext, RequestedSparsePCGMRESBranchContext, SparsePCDirectTailFactorSetupContext,
     SparsePCDirectTailRescuePolicySetupContext, SparsePCGenericBranchSetupContext, SparsePCFactorPreflightRunContext,
     SparsePCResidualCorrectionStageContext, SparsePCAutoPreflightRetryStageContext,

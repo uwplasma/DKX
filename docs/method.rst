@@ -353,7 +353,7 @@ solvers. In `sfincs_jax`, the reusable implementation lives in
 `sfincs_jax/discretization/structured_velocity.py`. It is used in the weakly coupled
 `pas_tokamak_theta` tail solve for the `L>=2` block chain, while the
 special `(L=0,1)` entrance block remains handled explicitly in
-`sfincs_jax/problems/profile_sparse_handoff.py`. A reverse factorization is available for cases where
+`sfincs_jax/problems/profile_sparse_solve.py`. A reverse factorization is available for cases where
 the leading block is singular or badly conditioned, so the solve can start from
 the opposite end of the block chain. The structured tail is an expert opt-in
 path (`SFINCS_JAX_PAS_TOKAMAK_STRUCTURED=1`); the automatic policy keeps the

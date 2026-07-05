@@ -295,6 +295,10 @@ The main structural refactor is functionally complete:
   `validation/petsc_binary.py` module into `validation/fortran.py`, then
   deleted the helper file. Fortran-v3 execution, profiling, and frozen PETSc
   reference readers now have one canonical validation owner.
+- Phase C sparse-owner cleanup renamed the internal RHSMode-1 sparse-PC
+  orchestration owner from `problems/profile_sparse_handoff.py` to
+  `problems/profile_sparse_solve.py`. The old file path is guarded absent by
+  source-tree tests, and docs/tests now point at the canonical solve owner.
 - The root README runtime/memory summary no longer carries branch-history or
   benchmark-process phrasing; detailed audit and regeneration procedures belong
   in the performance, parity, and Fortran-example docs.
@@ -313,7 +317,7 @@ The largest coverage blockers from the fresh audit are:
 - `solvers/explicit_sparse.py`: `88%`, 286 missing lines.
 - `operators/profile_full_system.py`: `84%`, 279 missing lines.
 - `problems/profile_policies.py`: `89%`, 276 missing lines.
-- `problems/profile_sparse_handoff.py`: `85%`, 258 missing lines.
+- `problems/profile_sparse_solve.py`: `85%`, 258 missing lines.
 - `solvers/preconditioner_xblock_tz_sparse.py`: `76%`, 251 missing lines.
 - `problems/transport_solve.py`: `71%`, 251 missing lines. The remaining
   uncovered code is concentrated in retry/rescue branches that should be
@@ -419,7 +423,7 @@ Files and families to review in order:
    required for this release. Otherwise delete the facade and update docs,
    examples, and imports to the canonical owner.
 2. RHSMode-1 profile problem helpers:
-   `profile_sparse_handoff.py`, `profile_sparse_direct.py`,
+   `profile_sparse_solve.py`, `profile_sparse_direct.py`,
    `profile_sparse_fortran_reduced.py`, `profile_sparse_finalization.py`,
    `profile_sparse_policy.py`, `profile_sparse_qi.py`, and
    `profile_sparse_xblock.py`. Consolidate by role into sparse setup,
@@ -505,7 +509,7 @@ flat owners directly.
 
 ### Lane 1 - Review-Ready Refactor
 
-Status: 92% for final review readiness.
+Status: 94% for final review readiness.
 
 Goal: finish the PR with a smaller, clearer source tree without changing
 physics, outputs, tolerances, solver defaults, differentiable Python paths,
@@ -519,7 +523,7 @@ Latest AST audit:
   The largest retained owners are `problems/profile_policies.py` (`7936`
   lines), `problems/profile_sparse_xblock.py` (`7689` lines),
   `operators/profile_full_system.py` (`5978` lines),
-  `problems/profile_sparse_handoff.py` (`5500` lines),
+  `problems/profile_sparse_solve.py` (`5500` lines),
   `solvers/preconditioner_qi_device.py` (`5433` lines),
   `solvers/explicit_sparse.py` (`5063` lines),
   `problems/profile_sparse_qi.py` (`4873` lines),
@@ -616,6 +620,10 @@ Completed work:
   setup helpers into existing `problems/transport_setup.py`. This lowered
   `problems/transport_solve.py` to `2326` lines while preserving public
   compatibility imports and existing loop-support tests.
+- Tranche 15: renamed the RHSMode=1 sparse-PC orchestration owner from
+  `profile_sparse_handoff.py` to `profile_sparse_solve.py`, updated internal
+  imports, docs, API references, and import contracts, and added a source-tree
+  guard so the historical filename is not reintroduced.
 
 Remaining consolidation steps:
 
@@ -783,9 +791,10 @@ Acceptance:
 
 Pass 1 - Problem owners:
 
-1. Consolidate RHSMode-1 sparse handoff/rescue/finalization code into canonical
-   profile sparse owners. Do not keep "handoff" implementation names unless the
-   file is deleted before review.
+1. Consolidate RHSMode-1 sparse rescue/finalization code into canonical
+   profile sparse owners. The historical sparse handoff filename has been
+   replaced by `profile_sparse_solve.py`; remaining work is reducing file count
+   and line count inside the sparse-profile family.
 2. Keep `profile_solve.py` as orchestration. Move complete phases, not helper
    fragments, into existing setup, policy, residual, sparse, or diagnostics
    owners.

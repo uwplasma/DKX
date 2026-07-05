@@ -745,43 +745,43 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "requested_rhs1_strong_preconditioner_kind",
     ),
     (
-        "sfincs_jax.problems.profile_sparse_handoff",
-        "sfincs_jax.problems.profile_sparse_handoff",
+        "sfincs_jax.problems.profile_sparse_solve",
+        "sfincs_jax.problems.profile_sparse_solve",
         "FortranReducedXBlockBackendContext",
     ),
     (
-        "sfincs_jax.problems.profile_sparse_handoff",
-        "sfincs_jax.problems.profile_sparse_handoff",
+        "sfincs_jax.problems.profile_sparse_solve",
+        "sfincs_jax.problems.profile_sparse_solve",
         "SparsePCDirectTailFactorSetupContext",
     ),
     (
-        "sfincs_jax.problems.profile_sparse_handoff",
-        "sfincs_jax.problems.profile_sparse_handoff",
+        "sfincs_jax.problems.profile_sparse_solve",
+        "sfincs_jax.problems.profile_sparse_solve",
         "SparsePCDirectTailRescuePolicySetupContext",
     ),
     (
-        "sfincs_jax.problems.profile_sparse_handoff",
-        "sfincs_jax.problems.profile_sparse_handoff",
+        "sfincs_jax.problems.profile_sparse_solve",
+        "sfincs_jax.problems.profile_sparse_solve",
         "SparsePCGenericBranchSetupContext",
     ),
     (
-        "sfincs_jax.problems.profile_sparse_handoff",
-        "sfincs_jax.problems.profile_sparse_handoff",
+        "sfincs_jax.problems.profile_sparse_solve",
+        "sfincs_jax.problems.profile_sparse_solve",
         "build_sparse_pc_direct_tail_factor_setup",
     ),
     (
-        "sfincs_jax.problems.profile_sparse_handoff",
-        "sfincs_jax.problems.profile_sparse_handoff",
+        "sfincs_jax.problems.profile_sparse_solve",
+        "sfincs_jax.problems.profile_sparse_solve",
         "build_sparse_pc_direct_tail_rescue_policy_setup",
     ),
     (
-        "sfincs_jax.problems.profile_sparse_handoff",
-        "sfincs_jax.problems.profile_sparse_handoff",
+        "sfincs_jax.problems.profile_sparse_solve",
+        "sfincs_jax.problems.profile_sparse_solve",
         "build_sparse_pc_generic_branch_setup",
     ),
     (
-        "sfincs_jax.problems.profile_sparse_handoff",
-        "sfincs_jax.problems.profile_sparse_handoff",
+        "sfincs_jax.problems.profile_sparse_solve",
+        "sfincs_jax.problems.profile_sparse_solve",
         "solve_fortran_reduced_xblock_backend",
     ),
 )
@@ -969,10 +969,10 @@ def test_profile_response_canonical_modules_expose_expected_symbols() -> None:
             assert public_name in new_module.__all__
 
 
-def test_sparse_handoff_compatibility_waiver_is_documented() -> None:
-    """The sparse handoff lint waiver must remain a documented compatibility seam."""
+def test_sparse_solve_reexport_waiver_is_documented() -> None:
+    """The sparse solve lint waiver must remain a documented compatibility seam."""
 
-    source = Path("sfincs_jax/problems/profile_sparse_handoff.py").read_text()
+    source = Path("sfincs_jax/problems/profile_sparse_solve.py").read_text()
     assert "# ruff: noqa: F401,F811" in source
     assert "dynamic re-export surface" in source
     assert "Delete this waiver" in source
