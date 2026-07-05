@@ -5,14 +5,55 @@ import subprocess
 import sys
 from pathlib import Path
 
+import numpy as np
+
 from sfincs_jax.workflows.optimization import (
     build_candidate_scan_plan,
+    compare_promotion_pair,
     er_values_from_bounds,
+    qa_proxy_neoclassical_components,
     write_candidate_scan_plan,
 )
 
 
 _REPO = Path(__file__).resolve().parents[1]
+
+
+def test_qa_proxy_neoclassical_components_and_promotion_pair_are_direct_apis() -> None:
+    theta = np.linspace(0.0, 2.0 * np.pi, 5, endpoint=False)
+    zeta = np.linspace(0.0, 2.0 * np.pi, 4, endpoint=False)
+    components = qa_proxy_neoclassical_components(
+        active_bmnc_b=[0.02, 0.01],
+        ixm_b=[0, 1, 1],
+        ixn_b=[0, 0, 1],
+        theta=theta,
+        zeta=zeta,
+    )
+
+    assert {"bootstrap", "electron_root", "main_heat_flux", "impurity_flux"} <= set(components)
+    assert all(np.isfinite(np.asarray(value)).all() for value in components.values())
+
+    reference = {
+        "promotion_gate": {"status": "pass"},
+        "selected_root": {"er": 1.25},
+        "objectives": {"bootstrap": 0.5, "flux_total": 0.75},
+    }
+    candidate = {
+        "promotion_gate": {"status": "pass"},
+        "selected_root": {"er": 1.25 + 1.0e-12},
+        "objectives": {"bootstrap": 0.5, "flux_total": 0.75},
+    }
+
+    comparison = compare_promotion_pair(
+        reference,
+        candidate,
+        reference_label="cpu",
+        candidate_label="gpu",
+    )
+
+    assert comparison["status"] == "pass"
+    assert comparison["comparison"] == "cpu_vs_gpu_promotion"
+    assert comparison["metrics"]["selected_root_er"]["status"] == "pass"
 
 
 def test_candidate_scan_plan_builds_reproducible_commands(tmp_path: Path) -> None:
