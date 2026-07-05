@@ -33,6 +33,18 @@ def test_petsc_vec_reader_rejects_short_and_wrong_class_files(tmp_path: Path) ->
     with pytest.raises(ValueError, match="Unexpected PETSc Vec classid"):
         read_petsc_vec(wrong)
 
+    negative = tmp_path / "negative.vec"
+    np.asarray([1211214, -1], dtype=">i4").tofile(negative)
+    with pytest.raises(ValueError, match="negative size"):
+        read_petsc_vec(negative)
+
+    truncated = tmp_path / "truncated.vec"
+    np.asarray([1211214, 2], dtype=">i4").tofile(truncated)
+    with truncated.open("ab") as stream:
+        np.asarray([1.0], dtype=">f8").tofile(stream)
+    with pytest.raises(ValueError, match="Invalid PETSc Vec"):
+        read_petsc_vec(truncated)
+
 
 def test_petsc_aij_reader_roundtrips_sorted_csr_fixture(tmp_path: Path) -> None:
     path = tmp_path / "mat.dat"
@@ -64,6 +76,11 @@ def test_petsc_aij_reader_rejects_bad_headers_and_row_counts(tmp_path: Path) -> 
     with pytest.raises(ValueError, match="Unexpected PETSc Mat classid"):
         read_petsc_mat_aij(wrong)
 
+    negative = tmp_path / "negative.mat"
+    np.asarray([1211216, 1, 1, -1], dtype=">i4").tofile(negative)
+    with pytest.raises(ValueError, match="negative dimension"):
+        read_petsc_mat_aij(negative)
+
     bad_rows = tmp_path / "bad_rows.mat"
     np.asarray([1211216, 2, 2, 3], dtype=">i4").tofile(bad_rows)
     with bad_rows.open("ab") as stream:
@@ -72,6 +89,30 @@ def test_petsc_aij_reader_rejects_bad_headers_and_row_counts(tmp_path: Path) -> 
         np.asarray([1.0, 2.0, 3.0], dtype=">f8").tofile(stream)
     with pytest.raises(ValueError, match="row pointers do not sum"):
         read_petsc_mat_aij(bad_rows)
+
+    truncated_rows = tmp_path / "truncated_rows.mat"
+    np.asarray([1211216, 2, 2, 0], dtype=">i4").tofile(truncated_rows)
+    with truncated_rows.open("ab") as stream:
+        np.asarray([0], dtype=">i4").tofile(stream)
+    with pytest.raises(ValueError, match="row counts"):
+        read_petsc_mat_aij(truncated_rows)
+
+    truncated_cols = tmp_path / "truncated_cols.mat"
+    np.asarray([1211216, 1, 2, 2], dtype=">i4").tofile(truncated_cols)
+    with truncated_cols.open("ab") as stream:
+        np.asarray([2], dtype=">i4").tofile(stream)
+        np.asarray([0], dtype=">i4").tofile(stream)
+    with pytest.raises(ValueError, match="column indices"):
+        read_petsc_mat_aij(truncated_cols)
+
+    truncated_values = tmp_path / "truncated_values.mat"
+    np.asarray([1211216, 1, 2, 2], dtype=">i4").tofile(truncated_values)
+    with truncated_values.open("ab") as stream:
+        np.asarray([2], dtype=">i4").tofile(stream)
+        np.asarray([0, 1], dtype=">i4").tofile(stream)
+        np.asarray([1.0], dtype=">f8").tofile(stream)
+    with pytest.raises(ValueError, match="Mat values"):
+        read_petsc_mat_aij(truncated_values)
 
 
 def test_find_upstream_utils_dir_resolves_override_and_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
