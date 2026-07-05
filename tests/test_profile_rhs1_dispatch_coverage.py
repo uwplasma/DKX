@@ -9,6 +9,7 @@ import pytest
 import sfincs_jax.problems.profile_solve as profile_solve
 import sfincs_jax.problems.profile_preconditioner_build as pb
 import sfincs_jax.problems.profile_sparse_direct as sparse_direct
+from sfincs_jax.solvers import krylov_dispatch
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.solvers.preconditioning import _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE
 from sfincs_jax.operators.profile_system import apply_v3_full_system_operator, full_system_operator_from_namelist
@@ -701,6 +702,6 @@ def test_rhs1_pas_tz_guarded_structured_levels_parse_aliases() -> None:
 
 
 def test_ksp_iteration_solver_label_reports_lgmres_method() -> None:
-    assert profile_solve._ksp_iteration_solver_label(solver_kind="gmres", solve_method="incremental") == "gmres"
-    assert profile_solve._ksp_iteration_solver_label(solver_kind="gmres", solve_method="lgmres") == "lgmres"
-    assert profile_solve._ksp_iteration_solver_label(solver_kind="bicgstab", solve_method="lgmres") == "bicgstab"
+    assert krylov_dispatch.ksp_iteration_solver_label(solver_kind="gmres", solve_method="incremental") == "gmres"
+    assert krylov_dispatch.ksp_iteration_solver_label(solver_kind="gmres", solve_method="lgmres") == "lgmres"
+    assert krylov_dispatch.ksp_iteration_solver_label(solver_kind="bicgstab", solve_method="lgmres") == "bicgstab"

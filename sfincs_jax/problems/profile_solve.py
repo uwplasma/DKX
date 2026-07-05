@@ -526,16 +526,10 @@ from sfincs_jax.solvers.explicit_sparse import (
 from sfincs_jax.solvers.preconditioning import (
     hash_array as _hash_array, precond_chunk_cols as _precond_chunk_cols,
     rhs_mode1_precond_cache_key as _rhs_mode1_precond_cache_key_impl,
-    rhs_mode1_structured_fblock_cache_key as _rhs_mode1_structured_fblock_cache_key_impl,
     transport_precond_cache_key as _transport_precond_cache_key_impl,
 )
 from sfincs_jax.solvers.krylov_dispatch import (
-    HOST_SCIPY_KRYLOV_METHODS as _HOST_SCIPY_KRYLOV_METHODS, gmres_solve_dispatch as _gmres_solve_dispatch_impl,
-    gmres_solve_with_residual_dispatch as _gmres_solve_with_residual_dispatch_impl,
-    host_scipy_krylov_requested as _host_scipy_krylov_requested,
-    ksp_iteration_solver_label as _ksp_iteration_solver_label,
     resolve_distributed_gmres_axis as _resolve_distributed_gmres_axis_impl,
-    rhs_krylov_method_for_context as _rhs_krylov_method_for_context, solver_kind_for_label as _solver_kind_for_label,
 )
 from sfincs_jax.solvers.preconditioning import (
     _RHSMODE1_PAS_PRECOND_PROBE_CACHE, _RHSMODE1_PAS_TOKAMAK_THETA_CACHE, _RHSMODE1_PAS_TZ_CACHE,
@@ -761,36 +755,6 @@ def _build_rhsmode1_schur_preconditioner(
     )
 
 
-def _gmres_solve_dispatch(
-    *, distributed_axis: str | None = None, size_hint: int | None = None, **kwargs
-):
-    return _gmres_solve_dispatch_impl(
-        distributed_axis=distributed_axis,
-        size_hint=size_hint,
-        gmres_solve_fn=gmres_solve,
-        gmres_solve_jit_fn=gmres_solve_jit,
-        gmres_solve_distributed_fn=gmres_solve_distributed,
-        distributed_gmres_enabled_fn=distributed_gmres_enabled,
-        use_solver_jit_fn=_use_solver_jit,
-        **kwargs,
-    )
-
-
-def _gmres_solve_with_residual_dispatch(
-    *, distributed_axis: str | None = None, size_hint: int | None = None, **kwargs
-):
-    return _gmres_solve_with_residual_dispatch_impl(
-        distributed_axis=distributed_axis,
-        size_hint=size_hint,
-        gmres_solve_with_residual_fn=gmres_solve_with_residual,
-        gmres_solve_with_residual_jit_fn=gmres_solve_with_residual_jit,
-        gmres_solve_with_residual_distributed_fn=gmres_solve_with_residual_distributed,
-        distributed_gmres_enabled_fn=distributed_gmres_enabled,
-        use_solver_jit_fn=_use_solver_jit,
-        **kwargs,
-    )
-
-
 def _resolve_distributed_gmres_axis(
     *, op: V3FullSystemOperator | None, emit: Callable[[int, str], None] | None = None
 ) -> str | None:
@@ -803,20 +767,6 @@ def _resolve_distributed_gmres_axis(
 
 def _rhsmode1_dense_fallback_max(op: V3FullSystemOperator) -> int:
     return _rhs1_dense_fallback_max_impl(op)
-
-
-def _rhsmode1_structured_fblock_cache_key(
-    op: V3FullSystemOperator,
-    kind: str,
-    *,
-    params: tuple[object, ...] = (),
-) -> tuple[object, ...]:
-    return _rhs_mode1_structured_fblock_cache_key_impl(
-        op,
-        kind,
-        precond_dtype=_precond_dtype(),
-        params=params,
-    )
 
 
 def _transport_precond_cache_key(

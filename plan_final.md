@@ -240,6 +240,18 @@ The main structural refactor is functionally complete:
   broader source/profile/policy bundle passed as `143 passed in 3.91 s`. This
   reduced `problems/profile_solve.py` to `4402` lines and
   `solve_v3_full_system_linear_gmres` to `3494` lines without adding files.
+- Dead private profile-solve wrappers for GMRES dispatch and structured
+  f-block cache-key injection were removed after confirming production code no
+  longer used them; canonical coverage remains in `solvers/krylov_dispatch.py`
+  and `solvers/preconditioning.py`. A duplicate unused xblock elapsed-time
+  helper was also deleted. Focused validation passed:
+  `tests/test_krylov_dispatch.py`, `tests/test_profile_solve_module_wrappers.py`,
+  `tests/test_profile_solve_policy_coverage.py`, and
+  `tests/test_profile_rhs1_dispatch_coverage.py` as `69 passed in 24.87 s`;
+  the touched Schur heuristic test passed as `2 passed in 2.29 s`; source-tree
+  and import-contract guards passed as `35 passed in 2.85 s`. This reduced
+  `problems/profile_solve.py` to `4351` lines and
+  `problems/profile_sparse_xblock.py` to `7681` lines without adding files.
 - The RHSMode=2/3 transport linear-solve dispatch layer is now owned by
   `problems/transport_linear_system.py`, including
   `TransportLinearSolveContext`, `TransportLinearSolveCallbacks`,
@@ -652,13 +664,13 @@ Latest AST audit:
   domain folders only. The remaining structural blockers are file-family sprawl
   and owner size.
   The largest retained owners are `problems/profile_policies.py` (`7936`
-  lines), `problems/profile_sparse_xblock.py` (`7689` lines),
+  lines), `problems/profile_sparse_xblock.py` (`7681` lines),
   `operators/profile_full_system.py` (`6130` lines),
   `problems/profile_sparse_solve.py` (`5500` lines),
   `solvers/preconditioner_qi_device.py` (`5433` lines),
   `solvers/explicit_sparse.py` (`5198` lines),
   `problems/profile_sparse_qi.py` (`4873` lines),
-  `problems/profile_solve.py` (`4402` lines), and
+  `problems/profile_solve.py` (`4351` lines), and
   `outputs/writer.py` (`3249` lines).
 - The final consolidation pass should reduce file count and improve ownership
   before further line-by-line extraction. A patch that only moves a few
@@ -837,6 +849,13 @@ Completed work:
   and added a source-tree guard so transport parallelism has one runtime owner.
   This reduces `problems/` to `25` source files without changing the worker
   payload schema, merge-ready NPZ output, or parent-side transport solve API.
+- Tranche 28: removed dead private wrappers from `problems/profile_solve.py`
+  that forwarded to canonical Krylov dispatch and structured f-block cache-key
+  owners but were no longer called by production code. Tests now exercise those
+  behaviors through `solvers/krylov_dispatch.py` and
+  `solvers/preconditioning.py`, while `profile_solve.py` keeps only live
+  orchestration wrappers. This also deleted an unused duplicate elapsed-time
+  helper in `problems/profile_sparse_xblock.py`.
 
 Remaining consolidation steps:
 

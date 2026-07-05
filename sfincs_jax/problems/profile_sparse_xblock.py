@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, fields
 import os
-from time import perf_counter
 from typing import Any
 
 import jax
@@ -4453,13 +4452,6 @@ def resolve_xblock_seed_policy_setup(
 
 
 
-
-
-def _elapsed_since_now() -> Callable[[], float]:
-    """Return a cheap elapsed-time callback for explicit host sparse branches."""
-
-    start_s = perf_counter()
-    return lambda: perf_counter() - start_s
 
 
 _XBLOCK_SPARSE_PC_FINAL_METADATA_CORE_STATE_KEYS = (

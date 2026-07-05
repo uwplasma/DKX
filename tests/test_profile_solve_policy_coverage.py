@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import jax.numpy as jnp
 import numpy as np
-import pytest
 
 import sfincs_jax.problems.profile_solve as profile_solve
 
@@ -400,57 +398,3 @@ def test_transport_sparse_factor_dtype_respects_explicit_env(monkeypatch) -> Non
     assert profile_solve._transport_sparse_factor_dtype(size=99999, use_implicit=False) == np.dtype(np.float32)
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE", "float64")
     assert profile_solve._transport_sparse_factor_dtype(size=1, use_implicit=False) == np.dtype(np.float64)
-
-
-def test_host_scipy_krylov_requested_and_dispatch_host_only(monkeypatch) -> None:
-    assert profile_solve._host_scipy_krylov_requested("lgmres")
-    assert profile_solve._host_scipy_krylov_requested(" LGMRES_SCIPY ")
-    assert not profile_solve._host_scipy_krylov_requested("incremental")
-
-    sentinel = object()
-    monkeypatch.setattr(profile_solve, "gmres_solve", lambda **kwargs: ("host", kwargs["solve_method"], sentinel))
-    monkeypatch.setattr(profile_solve, "distributed_gmres_enabled", lambda: False)
-    out = profile_solve._gmres_solve_dispatch(solve_method="lgmres", distributed_axis=None, size_hint=10, rhs=jnp.ones(1))
-    assert out == ("host", "lgmres", sentinel)
-
-
-def test_gmres_dispatch_rejects_host_only_method_with_distributed_axis(monkeypatch) -> None:
-    monkeypatch.setattr(profile_solve, "distributed_gmres_enabled", lambda: False)
-    with pytest.raises(ValueError, match="host-only"):
-        profile_solve._gmres_solve_dispatch(solve_method="lgmres", distributed_axis="theta", size_hint=10, rhs=jnp.ones(1))
-
-
-def test_gmres_dispatch_selects_jit_and_nonjit_paths(monkeypatch) -> None:
-    monkeypatch.setattr(profile_solve, "distributed_gmres_enabled", lambda: False)
-    monkeypatch.setattr(profile_solve, "_use_solver_jit", lambda size_hint=None: False)
-    monkeypatch.setattr(profile_solve, "gmres_solve", lambda **kwargs: ("plain", kwargs.get("solve_method")))
-    monkeypatch.setattr(profile_solve, "gmres_solve_jit", lambda **kwargs: ("jit", kwargs.get("solve_method")))
-    assert profile_solve._gmres_solve_dispatch(solve_method="incremental", distributed_axis=None, size_hint=10) == (
-        "plain",
-        "incremental",
-    )
-    monkeypatch.setattr(profile_solve, "_use_solver_jit", lambda size_hint=None: True)
-    assert profile_solve._gmres_solve_dispatch(solve_method="incremental", distributed_axis=None, size_hint=10) == (
-        "jit",
-        "incremental",
-    )
-
-
-def test_gmres_with_residual_dispatch_host_only_and_distributed_paths(monkeypatch) -> None:
-    monkeypatch.setattr(profile_solve, "distributed_gmres_enabled", lambda: False)
-    monkeypatch.setattr(profile_solve, "gmres_solve_with_residual", lambda **kwargs: ("host_residual", kwargs["solve_method"]))
-    monkeypatch.setattr(
-        profile_solve,
-        "gmres_solve_with_residual_distributed",
-        lambda **kwargs: ("distributed_residual", kwargs.get("axis_name")),
-    )
-    assert profile_solve._gmres_solve_with_residual_dispatch(
-        solve_method="lgmres_scipy",
-        distributed_axis=None,
-        size_hint=10,
-    ) == ("host_residual", "lgmres_scipy")
-    assert profile_solve._gmres_solve_with_residual_dispatch(
-        solve_method="incremental",
-        distributed_axis="zeta",
-        size_hint=10,
-    ) == ("distributed_residual", "zeta")

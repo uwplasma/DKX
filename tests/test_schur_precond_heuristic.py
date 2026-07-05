@@ -3,13 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 import re
 from types import SimpleNamespace
-import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from sfincs_jax.io import write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.solver import GMRESSolveResult
 import sfincs_jax.problems.profile_solve as profile_solve
 from sfincs_jax.operators.profile_system import full_system_operator_from_namelist, rhs_v3_full_system
 
@@ -435,13 +433,6 @@ def test_forced_rhs1_preconditioner_does_not_crash_before_er_is_computed(
             "_build_rhsmode1_schur_preconditioner",
             lambda **_kwargs: (lambda v: v),
         )
-
-    def _fake_linear_with_residual(**kwargs):
-        b = jnp.asarray(kwargs["b"])
-        x = jnp.zeros_like(b)
-        return GMRESSolveResult(x=x, residual_norm=jnp.asarray(0.0, dtype=b.dtype)), jnp.zeros_like(b)
-
-    monkeypatch.setattr(profile_solve, "_gmres_solve_with_residual_dispatch", _fake_linear_with_residual)
 
     result = profile_solve.solve_v3_full_system_linear_gmres(
         nml=read_sfincs_input(patched),

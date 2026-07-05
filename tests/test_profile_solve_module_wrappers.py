@@ -7,58 +7,6 @@ import jax.numpy as jnp
 import sfincs_jax.problems.profile_solve as profile_solve
 
 
-def test_profile_solve_gmres_dispatch_wires_module_solver_functions(monkeypatch) -> None:
-    captured = {}
-
-    def fake_dispatch_impl(**kwargs):
-        captured.update(kwargs)
-        return "gmres-result"
-
-    monkeypatch.setattr(profile_solve, "_gmres_solve_dispatch_impl", fake_dispatch_impl)
-
-    out = profile_solve._gmres_solve_dispatch(
-        distributed_axis="theta",
-        size_hint=17,
-        solve_method="incremental",
-        rhs=jnp.ones(2),
-    )
-
-    assert out == "gmres-result"
-    assert captured["distributed_axis"] == "theta"
-    assert captured["size_hint"] == 17
-    assert captured["gmres_solve_fn"] is profile_solve.gmres_solve
-    assert captured["gmres_solve_jit_fn"] is profile_solve.gmres_solve_jit
-    assert captured["gmres_solve_distributed_fn"] is profile_solve.gmres_solve_distributed
-    assert captured["distributed_gmres_enabled_fn"] is profile_solve.distributed_gmres_enabled
-    assert captured["use_solver_jit_fn"] is profile_solve._use_solver_jit
-    assert captured["solve_method"] == "incremental"
-
-
-def test_profile_solve_gmres_residual_dispatch_wires_module_solver_functions(monkeypatch) -> None:
-    captured = {}
-
-    def fake_dispatch_impl(**kwargs):
-        captured.update(kwargs)
-        return "gmres-residual-result"
-
-    monkeypatch.setattr(profile_solve, "_gmres_solve_with_residual_dispatch_impl", fake_dispatch_impl)
-
-    out = profile_solve._gmres_solve_with_residual_dispatch(
-        distributed_axis="zeta",
-        size_hint=19,
-        solve_method="incremental",
-    )
-
-    assert out == "gmres-residual-result"
-    assert captured["distributed_axis"] == "zeta"
-    assert captured["size_hint"] == 19
-    assert captured["gmres_solve_with_residual_fn"] is profile_solve.gmres_solve_with_residual
-    assert captured["gmres_solve_with_residual_jit_fn"] is profile_solve.gmres_solve_with_residual_jit
-    assert captured["gmres_solve_with_residual_distributed_fn"] is profile_solve.gmres_solve_with_residual_distributed
-    assert captured["distributed_gmres_enabled_fn"] is profile_solve.distributed_gmres_enabled
-    assert captured["use_solver_jit_fn"] is profile_solve._use_solver_jit
-
-
 def test_profile_solve_distributed_axis_wrapper_uses_profile_system_policy(monkeypatch) -> None:
     captured = {}
 
@@ -75,31 +23,23 @@ def test_profile_solve_distributed_axis_wrapper_uses_profile_system_policy(monke
     assert captured["emit"] is None
 
 
-def test_profile_solve_cache_key_wrappers_inject_current_preconditioner_dtype(monkeypatch) -> None:
+def test_profile_solve_transport_cache_key_wrapper_injects_current_preconditioner_dtype(monkeypatch) -> None:
     op = SimpleNamespace(rhs_mode=1)
     captured = {}
 
     def fake_precond_dtype():
         return jnp.float32
 
-    def fake_structured_impl(op_arg, kind, *, precond_dtype, params):
-        captured["structured"] = (op_arg, kind, precond_dtype, params)
-        return ("structured", kind, str(precond_dtype), params)
-
     def fake_transport_impl(op_arg, kind, *, precond_dtype):
         captured["transport"] = (op_arg, kind, precond_dtype)
         return ("transport", kind, str(precond_dtype))
 
     monkeypatch.setattr(profile_solve, "_precond_dtype", fake_precond_dtype)
-    monkeypatch.setattr(profile_solve, "_rhs_mode1_structured_fblock_cache_key_impl", fake_structured_impl)
     monkeypatch.setattr(profile_solve, "_transport_precond_cache_key_impl", fake_transport_impl)
 
-    structured = profile_solve._rhsmode1_structured_fblock_cache_key(op, "xblock", params=("a", 2))
     transport = profile_solve._transport_precond_cache_key(op, "collision")
 
-    assert structured == ("structured", "xblock", str(jnp.float32), ("a", 2))
     assert transport == ("transport", "collision", str(jnp.float32))
-    assert captured["structured"][0] is op
     assert captured["transport"][0] is op
 
 
