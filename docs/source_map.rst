@@ -814,9 +814,10 @@ replacing the old monolith are:
   driver-facing sparse-PC attempt orchestration that depends on solve-local
   cache/replay/residual routing, generic sparse-PC retry execution, direct-tail
   correction admission, finalization, and x-block sparse branch orchestration.
-  The module provides a stable compatibility import surface for the profile
-  solve owner while keeping sparse branch behavior covered by owner-level
-  tests.
+  Its public ``__all__`` is limited to owned orchestration and diagnostics
+  symbols; imported sparse helper owners remain available as transitional
+  module attributes only while tests and downstream scripts migrate to direct
+  owner imports.
 - ``sfincs_jax/problems/profile_sparse_policy.py``:
   generic sparse-PC policy and admission helpers: active-DOF map construction,
   entry classification, sparse factor policy, conservative-pattern setup,

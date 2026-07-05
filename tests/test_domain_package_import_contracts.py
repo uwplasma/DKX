@@ -968,11 +968,10 @@ def test_profile_response_canonical_modules_expose_expected_symbols() -> None:
             assert public_name in new_module.__all__
 
 
-def test_sparse_solve_reexport_waiver_is_documented() -> None:
-    """The sparse solve lint waiver must remain a documented compatibility seam."""
+def test_sparse_solve_transitional_attribute_waiver_is_documented() -> None:
+    """The sparse solve lint waiver must remain documented until imports move."""
 
     source = Path("sfincs_jax/problems/profile_sparse_solve.py").read_text()
     assert "# ruff: noqa: F401,F811" in source
-    assert "dynamic re-export surface" in source
-    assert "Delete this waiver" in source
-    assert "solve.py and owner tests import the concrete sparse owners directly" in source
+    assert "transitional attributes" in source
+    assert "Delete this waiver after direct owner imports are complete" in source

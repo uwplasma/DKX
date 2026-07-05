@@ -1,10 +1,9 @@
 """Sparse-PC solve orchestration for RHSMode=1 profile-response solves."""
 
-# This compatibility owner intentionally re-exports sparse branch primitives by
-# composing owner __all__ lists and maps driver-scope names onto local aliases.
-# Ruff cannot statically prove that dynamic re-export surface, and it reports a
-# small number of intentional shadowed compatibility names. Delete this waiver
-# only after solve.py and owner tests import the concrete sparse owners directly.
+# This solve owner still exposes imported sparse branch primitives as module
+# attributes while tests and downstream scripts migrate to concrete sparse
+# owners. Ruff cannot statically distinguish those transitional attributes from
+# unused imports. Delete this waiver after direct owner imports are complete.
 # ruff: noqa: F401,F811
 
 from __future__ import annotations
@@ -100,7 +99,6 @@ from .profile_sparse_direct import (
     sparse_minimum_norm_start_message,
     validate_explicit_sparse_host_request,
 )
-from .profile_sparse_direct import __all__ as _direct_all
 from .profile_sparse_finalization import (
     SparsePCFactorDtypeRetryContext,
     SparsePCFactorDtypeRetryDecision,
@@ -143,7 +141,6 @@ from .profile_sparse_finalization import (
     sparse_pc_gmres_finalization_state_from_context,
     sparse_pc_gmres_finalization_state_from_driver_scope,
 )
-from .profile_sparse_finalization import __all__ as _finalization_all
 from .profile_sparse_fortran_reduced import (
     FortranReducedSparsePCBackendSetup,
     FortranReducedXBlockFactorBuildContext,
@@ -176,7 +173,6 @@ from .profile_sparse_fortran_reduced import (
     resolve_fortran_reduced_xblock_moment_schur_policy,
     run_fortran_reduced_xblock_krylov_solve,
 )
-from .profile_sparse_fortran_reduced import __all__ as _fortran_reduced_all
 from .profile_sparse_policy import (
     SparsePCActiveDOFSetup,
     SparsePCAutoPreflightRetryEvaluationContext,
@@ -210,7 +206,6 @@ from .profile_sparse_policy import (
     resolve_sparse_pc_gmres_control_policy,
     select_sparse_pc_auto_preflight_retry_candidates,
 )
-from .profile_sparse_policy import __all__ as _policy_all
 from .profile_sparse_qi import (
     XBlockQICoarseSeedStageContext,
     XBlockQICoarseSeedStageResult,
@@ -255,7 +250,6 @@ from .profile_sparse_qi import (
     resolve_xblock_qi_two_level_policy_setup,
     run_xblock_qi_preconditioner_pipeline,
 )
-from .profile_sparse_qi import __all__ as _qi_all
 from .profile_sparse_xblock import (
     XBlockSparsePCSetup as XBlockSparsePCSetup,
     XBlockSparsePCSidePolicySetup as XBlockSparsePCSidePolicySetup,
@@ -407,7 +401,6 @@ from .profile_sparse_xblock import (
     run_sparse_sxblock_rescue_stage,
     run_sparse_xblock_rescue_solve_stage,
 )
-from .profile_sparse_xblock import __all__ as _xblock_all
 
 # Consolidated sparse-PC Krylov execution helpers
 
@@ -5425,21 +5418,6 @@ def solve_fortran_reduced_xblock_backend(
 
 
 
-_OWNER_EXPORT_EXCLUSIONS = {
-    "MatrixFreeQIDeviceSeedAttempt", "MatrixFreeQIDeviceSeedContext",
-    "MatrixFreeQIDeviceSeedSetup", "XBlockGlobalCouplingPolicySetup",
-    "XBlockMomentSchurPolicySetup", "_env_bool", "_env_float", "_env_int",
-    "_env_value", "attempt_matrixfree_qi_device_seed",
-    "attempt_matrixfree_qi_device_seed_if_requested",
-    "build_host_sparse_direct_factor_from_matvec",
-    "build_matrixfree_qi_device_seed_setup",
-    "build_sparse_jax_preconditioner_from_matvec", "host_physical_memory_mb",
-    "host_sparse_direct_polish", "matvec_submatrix",
-    "maybe_rhsmode1_full_sparse_pattern",
-    "rhsmode1_explicit_sparse_pattern_probe_enabled",
-    "rhsmode1_sparse_cache_key", "sparse_factor_cache_key",
-}
-
 _LOCAL_EXPORTS = (
     "FortranReducedXBlockBackendContext", "RequestedSparsePCGMRESBranchContext",
     "SparsePCAutoPreflightRetryStageContext",
@@ -5464,8 +5442,8 @@ _LOCAL_EXPORTS = (
     "build_sparse_pc_generic_branch_setup", "resolve_xblock_sparse_pc_branch_setup",
     "run_sparse_pc_auto_preflight_retry_stage", "run_sparse_pc_factor_preflight",
     "run_sparse_pc_residual_correction_stage", "run_sparse_pc_true_coupled_coarse_stage",
-    "run_xblock_sparse_pc_branch", "solve_fortran_reduced_xblock_backend",
-    "try_run_requested_sparse_pc_gmres_branch",
+    "run_rhs1_full_sparse_retry_stage", "run_xblock_sparse_pc_branch",
+    "solve_fortran_reduced_xblock_backend", "try_run_requested_sparse_pc_gmres_branch",
 )
 
 _DIAGNOSTIC_EXPORTS = (
@@ -5482,19 +5460,4 @@ _DIAGNOSTIC_EXPORTS = (
     "xblock_sparse_pc_result_diagnostics_from_driver_state",
 )
 
-__all__ = tuple(
-    name
-    for name in dict.fromkeys(
-        (
-            *_fortran_reduced_all,
-            *_direct_all,
-            *_finalization_all,
-            *_policy_all,
-            *_qi_all,
-            *_xblock_all,
-            *_LOCAL_EXPORTS,
-            *_DIAGNOSTIC_EXPORTS,
-        )
-    )
-    if name not in _OWNER_EXPORT_EXCLUSIONS
-)
+__all__ = tuple(dict.fromkeys((*_LOCAL_EXPORTS, *_DIAGNOSTIC_EXPORTS)))
