@@ -1075,10 +1075,9 @@ replacing the old monolith are:
   loop, preconditioner-kind normalization, auto-selection, DD/sparse-JAX env,
   and reduced/full preconditioner builder-dispatch policy. ``TransportRuntimePolicy``
   binds backend-sensitive decisions to the active JAX backend and host
-  sparse-factor dtype provider. The former ``handoff_policy.py``,
-  ``residual_quality.py``, ``preconditioner_dispatch.py``, and
-  ``solve_policy.py`` relays have been deleted; tests import this owner
-  directly.
+  sparse-factor dtype provider. The former solver-replay, residual-quality,
+  preconditioner-dispatch, and solve-policy relays have been deleted; tests
+  import this owner directly.
 - ``sfincs_jax/problems/transport_setup.py``
   (historical location: ``sfincs_jax/transport_solve_setup.py``):
   side-effect-light RHSMode=2/3 setup resolution for transport max-iteration
