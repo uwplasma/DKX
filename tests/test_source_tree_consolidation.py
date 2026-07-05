@@ -178,6 +178,24 @@ def test_package_sources_do_not_document_deleted_v3_driver_as_architecture() -> 
     assert offenders == []
 
 
+def test_profile_solve_does_not_reexport_low_level_helper_namespaces() -> None:
+    """Keep RHSMode-1 orchestration from becoming a private-helper namespace."""
+
+    text = (PACKAGE_ROOT / "problems" / "profile_solve.py").read_text(encoding="utf-8")
+    forbidden_fragments = (
+        "_dd_core_patch_ranges",
+        "_rhs1_dd_auto_block_size",
+        "_rhs1_dd_coarse_block_size",
+        "_rhs1_dd_coarse_block_sizes",
+        "_rhs1_dd_coarse_level_count",
+        "block_diagonal_only as _block_diag_only",
+        "diagonal_only as _diag_only",
+    )
+
+    for fragment in forbidden_fragments:
+        assert fragment not in text
+
+
 def test_test_filenames_do_not_reintroduce_deleted_v3_driver_label() -> None:
     """Keep test modules named after the canonical behavior they protect."""
 
