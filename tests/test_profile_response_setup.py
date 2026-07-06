@@ -151,7 +151,7 @@ def test_rhs1_tolerance_setup_tightens_only_matching_physics_lanes() -> None:
     assert fp_setup.fp_tightened
     assert not fp_setup.pas_tightened
 
-    pas_op = FakeOperator(
+    small_pas_op = FakeOperator(
         rhs_mode=1,
         include_phi1=False,
         constraint_scheme=2,
@@ -159,6 +159,24 @@ def test_rhs1_tolerance_setup_tightens_only_matching_physics_lanes() -> None:
         phi1_size=0,
         fblock=FakeFBlock(fp=None, pas=object()),
     )
+    small_pas_setup = resolve_rhs1_tolerance_setup(op=small_pas_op, tol=1e-6, env={})
+
+    assert small_pas_setup.tol == 1e-6
+    assert not small_pas_setup.pas_tightened
+
+    pas_op = FakeOperator(
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=2,
+        total_size=60000,
+        phi1_size=0,
+        fblock=FakeFBlock(fp=None, pas=object()),
+    )
+    default_pas_setup = resolve_rhs1_tolerance_setup(op=pas_op, tol=1e-6, env={})
+
+    assert default_pas_setup.tol == 1e-8
+    assert default_pas_setup.pas_tightened
+
     pas_setup = resolve_rhs1_tolerance_setup(
         op=pas_op,
         tol=1e-6,

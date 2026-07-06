@@ -3433,6 +3433,68 @@ Coverage movement:
   `transport_solve.py` (`250`), `profile_true_operator_rescue.py` (`247`), and
   `explicit_sparse.py` (`243`).
 
+## Tranche 158: Single-Branch Evidence Refresh And PAS Production Parity Fix
+
+Scope:
+
+- Confirmed `origin/main` is an ancestor of
+  `origin/refactor/v3-driver-architecture`; the refactor PR branch remains the
+  single review branch and no second feature branch needs to be merged.
+- Re-rendered the checked Fortran-suite runtime/memory figure, README audit
+  block, and QA/QH bootstrap-current PNG/PDF/JSON bundles from committed
+  summary artifacts. The artifacts are deterministic and produced no tracked
+  figure diffs.
+- Materialized a temporary 39-case production-resolution input tree and reran
+  the bounded CPU production subset against local SFINCS Fortran v3 at the
+  raised production floor.
+- The first bounded CPU pass exposed two strict solver-derived output
+  mismatches in `tokamak_1species_PASCollisions_withEr_fullTrajectories` and
+  `tokamak_2species_PASCollisions_withEr_fullTrajectories`. The mismatches were
+  only in flow/current diagnostics at about `1e-7` relative error; geometry and
+  physics-flux buckets were clean.
+- Tightened the default RHSMode=1 PAS tolerance floor for large Phi1-free PAS
+  solves to `1e-8`, with `SFINCS_JAX_RHSMODE1_PAS_TOL` and
+  `SFINCS_JAX_RHSMODE1_PAS_TOL_MIN_SIZE` retaining explicit user override and
+  disable control. Small PAS solves keep the namelist tolerance.
+
+Validation:
+
+- Focused setup validation passed:
+  `tests/test_profile_response_setup.py tests/test_profile_solve_module_wrappers.py`
+  as `33 passed in 1.57 s`; Ruff and compile checks passed for touched files.
+- Artifact/docs validation passed:
+  `tests/test_profile_response_setup.py`,
+  `tests/test_profile_solve_module_wrappers.py`,
+  `tests/test_benchmark_doc_claims.py`,
+  `tests/test_generate_fortran_suite_benchmark_summary.py`,
+  `tests/test_validation_artifacts.py`,
+  `tests/test_benchmark_artifact_policy.py`, and
+  `tests/test_finite_beta_vmec_example.py` as `127 passed in 4.00 s`.
+- The benchmark artifact reproducibility check passed for
+  `examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json`.
+- The benchmark artifact index release gate over the tracked artifact roots
+  reported `release_blocking=0`.
+- The post-fix bounded CPU production rerun passed both launched cases with
+  `parity_ok`, `0/195` practical mismatches, `0/195` strict mismatches, no
+  missing output keys, and `8/9` print-parity signals. Runtime stayed bounded:
+  about `8.3 s` JAX versus `6.0 s` Fortran for the one-species case and
+  `14.8 s` JAX versus `9.2 s` Fortran for the two-species case. Peak RSS was
+  about `3.1 GB` and `5.7 GB`, respectively.
+- `ssh office` timed out twice during this pass, so no fresh GPU rerun was
+  produced. The checked GPU report remains the current GPU evidence until a
+  reachable office/cluster lane regenerates it from the same branch.
+
+Status:
+
+- The refactor branch is branch-consolidated and has a fresh local
+  production-floor CPU parity fix for the only locally bounded production rows.
+- The README-facing runtime/memory plot is still generated from the verified
+  checked CPU/GPU reports; it should not be replaced by the bounded temporary
+  CPU probe because the full production suite did not run.
+- The full fresh 39-case CPU/GPU/Fortran production benchmark campaign remains
+  the main evidence-refresh item before final merge if reviewers require all
+  public performance claims to be regenerated from this branch state.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

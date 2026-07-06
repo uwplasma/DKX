@@ -640,11 +640,8 @@ def resolve_rhs1_tolerance_setup(
         tol_use = min(float(tol_use), float(fp_tol))
         fp_tightened = bool(float(tol_use) < float(fp_previous))
 
-    pas_raw = _env_value(env, "SFINCS_JAX_RHSMODE1_PAS_TOL")
-    try:
-        pas_tol = float(pas_raw) if pas_raw else None
-    except ValueError:
-        pas_tol = None
+    pas_tol = _read_float(env, "SFINCS_JAX_RHSMODE1_PAS_TOL", 1.0e-8)
+    pas_tol_min = _read_int(env, "SFINCS_JAX_RHSMODE1_PAS_TOL_MIN_SIZE", 50000)
     pas_tightened = False
     pas_previous: float | None = None
     if (
@@ -652,7 +649,7 @@ def resolve_rhs1_tolerance_setup(
         and (not bool(op.include_phi1))
         and op.fblock.pas is not None
         and int(op.constraint_scheme) == 2
-        and pas_tol is not None
+        and int(op.total_size) >= max(1, int(pas_tol_min))
         and pas_tol > 0.0
     ):
         pas_previous = float(tol_use)
