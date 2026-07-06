@@ -38,6 +38,22 @@ temporary path, and none requires SFINCS Fortran v3 for the first run.
 - Large VMEC and Fortran reference assets are fetched through the package data
   cache or supplied by the user. Generated output directories stay out of git.
 
+### Decision Map
+
+Use this map when you are looking at `examples/` for the first time and want the
+shortest path to the relevant workflow.
+
+| Starting question | Go here | Why |
+| --- | --- | --- |
+| I want to run one case and plot the output. | `tutorials/run_quick_output_and_plot.py` | It writes HDF5, NetCDF, NPZ, and a PDF panel in one bounded command. |
+| I want to learn the file formats and CLI/API basics. | `getting_started/` | These scripts isolate input parsing, output writing, VMEC paths, and plotting. |
+| I need transport coefficients. | `transport/` | These examples cover RHSMode=2/3 transport matrices and scan postprocessing. |
+| I need gradients or optimization hooks. | `autodiff/` then `optimization/` | Start with residual/JVP examples, then move to QA/QI objectives and promotion gates. |
+| I need bootstrap current or Redl comparisons. | `vmec_jax_finite_beta/` | This folder owns the VMEC, Redl, ambipolar-root, and bootstrap-current profile scripts. |
+| I need to validate against SFINCS Fortran v3 behavior. | `parity/` then `publication_figures/` | The first folder has frozen fixtures; the second regenerates release-facing comparison plots. |
+| I need CPU/GPU runtime or memory evidence. | `performance/` | These scripts benchmark output formats, JIT, sharding, transport workers, and optional backends. |
+| I recognize an upstream SFINCS input name. | `sfincs_examples/` or `upstream/` | These folders preserve upstream decks for parity and benchmark audits, not first-pass learning. |
+
 ### Learning Path
 
 | Step | Goal | Start here |
