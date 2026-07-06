@@ -439,3 +439,120 @@ def test_active_projected_preconditioner_ilu_budget_and_unsupported_paths(monkey
     )
     assert not unsupported.selected
     assert unsupported.reason == "unsupported_active_projected_preconditioner"
+
+
+def test_full_csr_preconditioner_rejects_bad_contracts_and_disabled_path() -> None:
+    layout = _layout(3)
+
+    rectangular = profile_full_system.build_structured_rhs1_full_csr_preconditioner(
+        matrix=sparse.csr_matrix((2, 3), dtype=np.float64),
+        layout=layout,
+        kind="jacobi",
+    )
+    assert not rectangular.selected
+    assert rectangular.reason == "matrix_not_square"
+    assert rectangular.metadata["shape"] == (2, 3)
+
+    mismatch = profile_full_system.build_structured_rhs1_full_csr_preconditioner(
+        matrix=sparse.eye(2, format="csr", dtype=np.float64),
+        layout=layout,
+        kind="jacobi",
+    )
+    assert not mismatch.selected
+    assert mismatch.reason == "layout_size_mismatch"
+    assert mismatch.metadata["layout_total_size"] == 3
+
+    disabled = profile_full_system.build_structured_rhs1_full_csr_preconditioner(
+        matrix=sparse.eye(3, format="csr", dtype=np.float64),
+        layout=layout,
+        kind="off",
+    )
+    assert not disabled.selected
+    assert disabled.kind == "none"
+    assert disabled.reason == "disabled"
+
+    unsupported = profile_full_system.build_structured_rhs1_full_csr_preconditioner(
+        matrix=sparse.eye(3, format="csr", dtype=np.float64),
+        layout=layout,
+        kind="does_not_exist",
+    )
+    assert not unsupported.selected
+    assert unsupported.reason == "unsupported_preconditioner"
+
+
+def test_full_csr_preconditioner_auto_prefers_safe_xblock_candidate(monkeypatch) -> None:
+    layout = _layout(3)
+    matrix = sparse.eye(3, format="csr", dtype=np.float64)
+    captured: dict[str, object] = {}
+
+    def fake_xblock(**kwargs):
+        captured.update(kwargs)
+        return _selected_preconditioner(kind="xblock_tz_low_l_schur")
+
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_XBLOCK_AUTO_MIN_SIZE", "0")
+    monkeypatch.setattr(
+        profile_full_system,
+        "_build_xblock_tz_low_l_schur_preconditioner",
+        fake_xblock,
+    )
+
+    pc = profile_full_system.build_structured_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        kind="auto",
+        max_schur_size=8,
+        max_block_inverse_nbytes=1024 * 1024,
+    )
+
+    assert pc.selected
+    assert pc.kind == "xblock_tz_low_l_schur"
+    assert captured["requested_kind"] == "auto"
+    assert captured["layout"] is layout
+    assert captured["config"]["lmax"] >= 0
+
+
+@pytest.mark.parametrize(
+    ("kind", "expected_kind"),
+    [
+        ("xi_block_schur", "xi_block_schur"),
+        ("x_xi_block_schur", "x_xi_block_schur"),
+        ("xblock_tz_low_l_schur", "xblock_tz_low_l_schur"),
+        ("xblock_tz_low_l_coarse_schur", "xblock_tz_low_l_coarse_schur"),
+        ("block_schur", "block_schur"),
+        ("diagonal_schur", "diagonal_schur"),
+    ],
+)
+def test_full_csr_preconditioner_reports_tail_budget_rejections(kind: str, expected_kind: str) -> None:
+    layout = _layout(4)
+    matrix = sparse.eye(4, format="csr", dtype=np.float64)
+
+    pc = profile_full_system.build_structured_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        kind=kind,
+        max_schur_size=0,
+        max_block_inverse_nbytes=1024 * 1024,
+    )
+
+    assert not pc.selected
+    assert pc.kind == expected_kind
+    assert pc.reason == "schur_tail_size_exceeded:3>0"
+    assert pc.metadata["tail_size"] == 3
+    assert pc.metadata["max_schur_size"] == 0
+
+
+def test_full_csr_preconditioner_jacobi_path_is_finite_and_metadata_rich() -> None:
+    layout = _layout(3)
+    matrix = sparse.diags([2.0, 4.0, 8.0], format="csr", dtype=np.float64)
+
+    pc = profile_full_system.build_structured_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        kind="jacobi",
+        regularization=0.0,
+    )
+
+    assert pc.selected
+    assert pc.kind == "jacobi"
+    np.testing.assert_allclose(pc.operator @ np.asarray([2.0, 8.0, 24.0]), np.asarray([1.0, 2.0, 3.0]))
+    assert pc.metadata["diagonal_size"] == 3

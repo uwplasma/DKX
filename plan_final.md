@@ -4776,6 +4776,41 @@ Status:
   `profile_full_system.py`, `profile_solve.py`, or the QI/device preconditioner
   owners.
 
+### 2026-07-06: Full-CSR Preconditioner Policy Coverage Tranche
+
+Changes:
+
+- Added CPU-only tests for the RHSMode=1 structured full-CSR preconditioner
+  contract gates: nonsquare matrices, layout-size mismatches, disabled policy,
+  unsupported policy names, and the bounded Jacobi path.
+- Added an automatic full-CSR preconditioner test that forces a safe
+  x-block/low-L candidate and verifies the auto route passes layout, config,
+  and requested-kind provenance to the builder.
+- Added parameterized tail-budget rejection tests for the full-CSR Schur
+  families (`xi`, `x-xi`, x-block/low-L, coarse residual, block Schur, and
+  diagonal Schur), protecting fail-fast setup behavior before expensive host
+  factors are attempted.
+
+Validation:
+
+- `python -m pytest -q tests/test_profile_full_system_structured_selection.py`
+  passed as `62 passed in 0.30 s`.
+- `python -m pytest -q tests/test_profile_full_system_structured_selection.py
+  tests/test_rhs1_active_projected_xblock.py
+  tests/test_rhs1_full_csr_schur_preconditioners.py
+  tests/test_rhs1_active_sparse_factors.py tests/test_full_system_operator_jit.py`
+  passed as `94 passed in 6.67 s`.
+- `python -m pytest -q tests/test_source_tree_consolidation.py
+  tests/test_domain_package_import_contracts.py tests/test_benchmark_doc_claims.py`
+  passed as `64 passed in 4.69 s`.
+
+Status:
+
+- This reduces risk in the full-CSR auto/default policy layer without changing
+  production algorithms or adding CI solve cost. The next highest-return
+  coverage tranche remains either `profile_solve.py` route orchestration or
+  QI/device preconditioner metadata and fail-fast branches.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
