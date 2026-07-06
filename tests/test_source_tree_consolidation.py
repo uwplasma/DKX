@@ -4,6 +4,7 @@ import ast
 import json
 import importlib
 from pathlib import Path
+import subprocess
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -11,6 +12,31 @@ PACKAGE_ROOT = REPO_ROOT / "sfincs_jax"
 EXPECTED_TREE = REPO_ROOT / "tests" / "fixtures" / "source_tree_expected.json"
 PACKAGE_README = PACKAGE_ROOT / "README.md"
 SOURCE_MAP_DOC = REPO_ROOT / "docs" / "source_map.rst"
+PACKAGE_README_REQUIRED_SECTIONS = (
+    "## Root Modules At A Glance",
+    "## Domain Packages At A Glance",
+    "## Main Implementation Owners",
+    "## Design Rules",
+    "## Stability And Compatibility",
+    "## Generated Files Policy",
+    "## Contributor Workflow",
+)
+DISALLOWED_TRACKED_PACKAGE_PARTS = {
+    "__pycache__",
+    ".ipynb_checkpoints",
+}
+DISALLOWED_TRACKED_PACKAGE_SUFFIXES = {
+    ".h5",
+    ".hdf5",
+    ".nc",
+    ".netcdf",
+    ".npy",
+    ".npz",
+    ".pb",
+    ".prof",
+    ".pyc",
+    ".pyo",
+}
 
 
 def _expected_tree() -> dict[str, list[str]]:
@@ -103,7 +129,8 @@ def test_package_readme_describes_current_source_layout() -> None:
     text = PACKAGE_README.read_text(encoding="utf-8")
 
     assert "one-level domain structure" in text
-    assert "Main Implementation Owners" in text
+    for section in PACKAGE_README_REQUIRED_SECTIONS:
+        assert section in text
     for package in expected["allowed_root_packages"]:
         assert f"`{package}/`" in text
     for module in expected["target_root_modules"]:
@@ -119,6 +146,46 @@ def test_package_readme_describes_current_source_layout() -> None:
     )
     for phrase in canonical_owner_phrases:
         assert phrase in text
+
+
+def test_package_readme_explains_public_surface_and_implementation_boundaries() -> None:
+    """The source README should be enough to navigate the package during review."""
+
+    text = PACKAGE_README.read_text(encoding="utf-8")
+    expected_phrases = (
+        "stable user-facing API",
+        "If a new feature is not meant to be imported directly by users",
+        "There are no implementation packages nested inside those folders",
+        "A folder that contains only `__init__.py`",
+        "Public root modules are the stable import surface",
+        "Compatibility aliases may remain",
+        "Large external data belongs in release-hosted assets",
+    )
+
+    for phrase in expected_phrases:
+        assert phrase in text
+
+
+def test_package_tree_has_no_tracked_generated_or_large_runtime_outputs() -> None:
+    """Keep the importable package light and independent of local run artifacts."""
+
+    result = subprocess.run(
+        ["git", "ls-files", "sfincs_jax"],
+        cwd=REPO_ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    offenders: list[str] = []
+    for line in result.stdout.splitlines():
+        path = Path(line)
+        if DISALLOWED_TRACKED_PACKAGE_PARTS.intersection(path.parts):
+            offenders.append(line)
+            continue
+        if path.suffix in DISALLOWED_TRACKED_PACKAGE_SUFFIXES:
+            offenders.append(line)
+
+    assert offenders == []
 
 
 def test_source_map_doc_describes_current_one_level_layout() -> None:
