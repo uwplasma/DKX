@@ -183,6 +183,76 @@ def test_symbolic_host_drop_and_regularize_matches_dense_and_csr_paths() -> None
     np.testing.assert_allclose(np.asarray(csr_path.toarray()), expected)
 
 
+def test_symbolic_host_cache_can_add_dense_and_jax_factors_lazily() -> None:
+    """Pin the bounded setup path that avoids building all factors on first use."""
+
+    symbolic_host._RHSMODE1_SPARSE_ILU_CACHE.clear()
+    messages: list[str] = []
+    matrix = jnp.asarray(
+        [
+            [4.0, 0.5, 0.0],
+            [0.25, 3.0, -0.2],
+            [0.0, 0.1, 2.5],
+        ],
+        dtype=jnp.float64,
+    )
+    key = ("symbolic-host-lazy-factor-test",)
+
+    first = build_sparse_ilu_from_matvec(
+        matvec=lambda x: matrix @ x,
+        n=3,
+        dtype=jnp.float64,
+        cache_key=key,
+        drop_tol=0.0,
+        drop_rel=0.0,
+        ilu_drop_tol=0.0,
+        fill_factor=10.0,
+        build_dense_factors=False,
+        build_jax_factors=False,
+        build_ilu=True,
+        store_dense=False,
+        factorization="lu",
+        emit=lambda _level, message: messages.append(message),
+    )
+    cached_first = symbolic_host._RHSMODE1_SPARSE_ILU_CACHE[key]
+    assert first[2] is cached_first.ilu
+    assert cached_first.l_dense is None
+    assert cached_first.perm_r is None
+
+    second = build_sparse_ilu_from_matvec(
+        matvec=lambda x: matrix @ x,
+        n=3,
+        dtype=jnp.float64,
+        cache_key=key,
+        drop_tol=0.0,
+        drop_rel=0.0,
+        ilu_drop_tol=0.0,
+        fill_factor=10.0,
+        build_dense_factors=True,
+        build_jax_factors=True,
+        build_ilu=True,
+        store_dense=False,
+        factorization="lu",
+        row_nnz_cap=1,
+        emit=lambda _level, message: messages.append(message),
+    )
+    cached_second = symbolic_host._RHSMODE1_SPARSE_ILU_CACHE[key]
+
+    assert second[2] is first[2]
+    assert second[4] is not None
+    assert second[5] is not None
+    assert cached_second.l_dense is not None
+    assert cached_second.u_dense is not None
+    assert cached_second.perm_r is not None
+    assert cached_second.inv_perm_c is not None
+    assert cached_second.lower_idx is not None
+    assert cached_second.upper_idx is not None
+    assert int(cached_second.lower_idx.shape[1]) <= 1
+    assert int(cached_second.upper_idx.shape[1]) <= 1
+    assert any("cached JAX factors" in message for message in messages)
+    assert any("factorization cache hit" in message for message in messages)
+
+
 def test_selected_theta_tz_operator_matches_expected_rows() -> None:
     dd_plus = np.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)
     dd_minus = np.asarray([[-1.0, -2.0], [-3.0, -4.0]], dtype=np.float64)

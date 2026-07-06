@@ -4345,6 +4345,43 @@ Status:
   `profile_solve.py`, `transport_solve.py`, `profile_full_system.py`, and the
   QI/preconditioner owners.
 
+## Latest Execution Log: Symbolic Host Factor Cache Coverage Tranche
+
+What was checked:
+
+- Inspected `solvers/preconditioner_symbolic_host.py` and the existing sparse
+  assembly tests.
+- Confirmed existing tests already cover chunked assembly, structural
+  thresholding, regularization settings, CSR drop/regularization, singular
+  retry escalation, and basic CSR-factor cache reuse.
+- Identified one production-relevant branch still worth guarding: building a
+  host LU/ILU cache without dense/JAX factors and later adding those optional
+  factors from the cache only when a preconditioner path actually needs them.
+
+Source/test change:
+
+- Added a tiny symbolic-host cache test that first assembles/factorizes a
+  3-by-3 nonsymmetric matrix without optional factors, then reuses the same
+  cache key to lazily materialize dense and row-capped JAX triangular-factor
+  arrays.
+- The test checks that the factor object is reused, optional factor arrays are
+  installed in the shared cache, row caps are respected, and setup messages
+  report both cached JAX factors and a cache hit.
+
+Validation:
+
+- `python -m pytest -q tests/test_sparse_assembly.py` passed as
+  `13 passed in 0.43 s`.
+- `python -m ruff check tests/test_sparse_assembly.py` passed.
+- `python -m compileall -q tests/test_sparse_assembly.py` passed.
+
+Status:
+
+- This strengthens coverage for lower-memory sparse preconditioner setup
+  without increasing CI runtime. It is also a regression guard for the
+  CLI-oriented large-run path where optional factors should be built lazily
+  rather than by default.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
