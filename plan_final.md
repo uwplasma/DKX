@@ -1926,12 +1926,18 @@ Completed work:
   device preconditioner owner. Moved the QI extra-coarse and residual-correction
   environment readers out of the generic profile-policy owner, kept thin
   compatibility wrappers for public imports, switched the QI sparse pipeline to
-  the canonical solver import, and converted the verbose QI control dictionaries
-  into typed control specs. Validation:
+  the canonical solver import, and removed the large generic-policy
+  implementation block. Validation:
   `tests/test_rhs1_xblock_fallback_initial_guess.py tests/test_rhs1_qi_residual_galerkin.py tests/test_rhs1_xblock_policy.py tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py`
   passed `155/155` in `7.52 s`; Ruff and `compileall` passed. This reduced
-  `problems/profile_policies.py` from `7916` to `7597` lines and reduced the
-  touched owner group by `158` lines net while keeping QI behavior unchanged.
+  `problems/profile_policies.py` from `7916` to `7597` lines while keeping QI
+  behavior unchanged.
+- Tranche 127: compressed the moved QI-device control readers into typed
+  control specs inside the QI device preconditioner owner. This preserves every
+  QI control key, default, and environment suffix while eliminating repetitive
+  dictionary construction. Validation repeated the QI policy/source bundle as
+  `155/155` in `7.52 s`; Ruff and `compileall` passed. The touched owner group
+  now has `18064` lines, `158` fewer than the pre-consolidation baseline.
 
 Remaining consolidation steps:
 
