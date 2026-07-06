@@ -32,7 +32,7 @@ def test_summarize_log_extracts_solver_path(tmp_path: Path) -> None:
     log_path.write_text(
         "\n".join(
             [
-                "write_sfincs_jax_output_h5: FP RHSMode=1 small system -> using dense solve",
+                "write_sfincs_jax_output_h5: FP RHSMode=1 bounded system -> using dense solve",
                 "solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner=theta_line",
                 "profiling: rhs1_solve_start dt_s=0.1 total_s=0.2 rss_mb=100.0 drss_mb=1.0 device_mb=na",
                 "profiling: rhs1_solve_done dt_s=1.5 total_s=1.7 rss_mb=300.0 drss_mb=2.0 device_mb=na",

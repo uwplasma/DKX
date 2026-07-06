@@ -423,7 +423,7 @@ def select_rhsmode1_solve_method(
     ):
         solve_method = "dense"
         if emit is not None:
-            msg = "write_sfincs_jax_output_h5: FP RHSMode=1 small system -> using dense solve"
+            msg = "write_sfincs_jax_output_h5: FP RHSMode=1 bounded system -> using dense solve"
             if context.dense_auto_accelerator_fp_window:
                 msg += f" on backend={context.dense_auto_backend}"
             emit(1, msg)
@@ -444,13 +444,13 @@ def select_rhsmode1_solve_method(
             if emit is not None:
                 emit(
                     1,
-                    "write_sfincs_jax_output_h5: FP RHSMode=1 small system -> "
+                    "write_sfincs_jax_output_h5: FP RHSMode=1 bounded system -> "
                     f"using host dense shortcut on backend={context.dense_auto_backend}",
                 )
         elif emit is not None:
             emit(
                 1,
-                "write_sfincs_jax_output_h5: FP RHSMode=1 small system -> skipping dense auto mode on "
+                "write_sfincs_jax_output_h5: FP RHSMode=1 bounded system -> skipping dense auto mode on "
                 f"backend={context.dense_auto_backend}; falling through to Krylov policy",
             )
     elif op.fblock.fp is not None and (not context.include_phi1):

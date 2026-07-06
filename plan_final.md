@@ -3861,6 +3861,9 @@ Source change:
   shortcut.
 - CLI progress text now reports `accelerator FP bounded system -> using host
   dense shortcut`, which better matches the widened but still bounded policy.
+- The output-writer solver selector uses the same `bounded system` wording, and
+  `scripts/summarize_solver_paths.py` recognizes both old and new dense-auto
+  log messages so existing artifacts remain parseable.
 
 Validation:
 
@@ -3870,6 +3873,10 @@ Validation:
 - `python -m pytest -q tests/test_rhs1_host_policy.py
   tests/test_rhs1_sparse_first_heuristic.py tests/test_profile_response_dense.py
   tests/test_io_output_policy_coverage.py` passed as `236 passed`.
+- After the output-selector/parser cleanup, `python -m pytest -q
+  tests/test_io_output_policy_coverage.py tests/test_profile_response_dense.py
+  tests/test_rhs1_host_policy.py tests/test_rhs1_sparse_first_heuristic.py
+  tests/test_summarize_solver_paths.py` passed as `238 passed`.
 - `python -m ruff check sfincs_jax/problems/profile_policies.py
   sfincs_jax/problems/profile_dense.py tests/test_rhs1_host_policy.py
   tests/test_rhs1_sparse_first_heuristic.py tests/test_profile_response_dense.py`

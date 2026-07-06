@@ -10,6 +10,10 @@ from benchmark_case_variants import _parse_profile_events, _profile_stage_durati
 
 
 _KSP_RE = re.compile(r"ksp_iterations=(?P<iters>\d+)\s+solver=(?P<solver>[a-zA-Z0-9_]+)")
+_DENSE_AUTO_MARKERS = (
+    "FP RHSMode=1 small system -> using dense solve",
+    "FP RHSMode=1 bounded system -> using dense solve",
+)
 
 
 def _solver_iterations(text: str) -> list[dict[str, object]]:
@@ -31,7 +35,7 @@ def summarize_log(log_path: Path) -> dict[str, object]:
     return {
         "case": log_path.parent.name,
         "log_path": str(log_path),
-        "dense_auto": "FP RHSMode=1 small system -> using dense solve" in text,
+        "dense_auto": any(marker in text for marker in _DENSE_AUTO_MARKERS),
         "default_krylov": "defaulting to Krylov GMRES" in text,
         "dense_fallback": "rhs1_dense_fallback" in text,
         "sparse_fallback": "rhs1_sparse_precond" in text or "host sparse LU direct fallback" in text,
