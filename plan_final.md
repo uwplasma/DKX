@@ -3106,6 +3106,51 @@ Review status:
   production-resolution SFINCS Fortran v3 rerun; that remains a separate
   explicitly budgeted compute campaign.
 
+## Tranche 152: RHSMode=1 Solver-Trace Robustness Gates
+
+Scope:
+
+- Added fail-closed RHSMode=1 output trace tests for production runs that fail
+  or return partial solver metadata:
+  - nonconverged trace generation without an operator on the solve result;
+  - `op0` fallback when the result has malformed size/collision metadata;
+  - final solver-trace generation with malformed residual/rhs/elapsed fields
+    but valid per-RHS residual summaries and profiler entries.
+- These tests protect the user-facing progress/profiling lane for large
+  RHSMode=1 runs without adding slow solves to CI.
+- The branch is intentionally diagnostic/output-policy focused: it hardens
+  trace sidecars that explain residuals, memory estimates, selected solve path,
+  and partial metadata when a production run is refused as nonconverged.
+
+Validation:
+
+- `python -m pytest -q tests/test_solver_trace_output_formats.py` passed as
+  `15 passed in 0.49 s`.
+- `python -m ruff check tests/test_solver_trace_output_formats.py` passed.
+- `python -m compileall -q tests/test_solver_trace_output_formats.py` passed.
+- `python -m pytest -q tests/test_solver_trace_output_formats.py tests/test_io_output_policy_coverage.py tests/test_io_export_and_h5_coverage.py tests/test_rhsmode1_current_closure.py`
+  passed as `132 passed in 2.45 s`.
+- `python -m pytest -q tests/test_solver_trace_output_formats.py tests/test_io_output_policy_coverage.py tests/test_io_export_and_h5_coverage.py tests/test_rhsmode1_current_closure.py tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `203 passed in 6.83 s`.
+- `git diff --check` passed.
+- `python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax --cov-report=term --cov-report=json:/tmp/sfincs_jax_coverage_after_trace_tranche.json`
+  passed as `4369 passed in 321.20 s`. Coverage is
+  `62366 / 69108` statements, `6742` missing lines, `90.24%` total.
+- `sfincs_jax/outputs/rhsmode1.py` improved from `108` missing lines to `83`
+  missing lines, raising that module from `88.96%` to `91.51%`.
+- A module-only `pytest --cov=sfincs_jax.outputs.rhsmode1` probe aborted
+  locally with exit code `134` and no traceback, but the standard full-suite
+  package coverage gate above passed and is the authoritative coverage audit
+  for this tranche.
+
+Status:
+
+- The 95% meaningful package coverage gate remains open.
+- Highest remaining coverage debt remains concentrated in
+  `problems/profile_solve.py`, `operators/profile_full_system.py`,
+  `solvers/explicit_sparse.py`, `problems/transport_solve.py`, and the
+  QI/x-block preconditioner modules.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

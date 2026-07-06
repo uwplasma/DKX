@@ -403,6 +403,96 @@ def test_write_nonconverged_rhsmode1_solver_trace_json_records_failure_context(t
     assert payload["metadata"]["memory_estimate"]["gmres_basis_nbytes"] > 0
 
 
+def test_write_nonconverged_trace_falls_back_when_result_metadata_is_partial(tmp_path: Path) -> None:
+    """Nonconverged production runs should still leave a useful trace sidecar."""
+
+    trace_path = tmp_path / "solver_trace_fallback.json"
+    input_path = tmp_path / "input.namelist"
+    output_path = tmp_path / "sfincsOutput.h5"
+    input_path.write_text("&general\n RHSMode = 1\n/\n", encoding="utf-8")
+    result = SimpleNamespace(
+        rhs=object(),
+        metadata={
+            "preconditioner_kind": "fallback",
+            "gmres_restart": 5,
+        },
+    )
+
+    _write_nonconverged_rhsmode1_solver_trace_json(
+        solver_trace_path=trace_path,
+        input_namelist=input_path,
+        output_path=output_path,
+        output_format="h5",
+        rhs_mode=1,
+        geom_scheme_hint=None,
+        compute_solution=False,
+        compute_transport_matrix=False,
+        differentiable=None,
+        result=result,
+        op_fallback=None,
+        solver_tol=1.0e-4,
+        solve_method="auto",
+        residual_norm=None,
+        residual_target=None,
+        active_total_size=777,
+        run_t0=0.0,
+        profiler=None,
+    )
+
+    payload = json.loads(trace_path.read_text(encoding="utf-8"))
+    assert payload["selected_path"] == "geometry_only"
+    assert payload["active_size"] == 777
+    assert payload["total_size"] is None
+    assert payload["residual_target"] is None
+    assert payload["preconditioner"] == "fallback"
+    assert payload["metadata"]["memory_estimate"]["dense_operator_nbytes"] == 777 * 777 * 8
+
+
+def test_write_nonconverged_trace_uses_op0_and_handles_bad_operator_fields(tmp_path: Path) -> None:
+    trace_path = tmp_path / "solver_trace_op0.json"
+    input_path = tmp_path / "input.namelist"
+    output_path = tmp_path / "sfincsOutput.h5"
+    input_path.write_text("&general\n RHSMode = 1\n/\n", encoding="utf-8")
+    bad_op = SimpleNamespace(
+        total_size=object(),
+        active_size=object(),
+        fblock=SimpleNamespace(),
+    )
+    result = SimpleNamespace(
+        op0=bad_op,
+        rhs=np.asarray([1.0]),
+        metadata={"matvecs": 3},
+    )
+
+    _write_nonconverged_rhsmode1_solver_trace_json(
+        solver_trace_path=trace_path,
+        input_namelist=input_path,
+        output_path=output_path,
+        output_format="h5",
+        rhs_mode=1,
+        geom_scheme_hint=4,
+        compute_solution=True,
+        compute_transport_matrix=False,
+        differentiable=True,
+        result=result,
+        op_fallback=None,
+        solver_tol=1.0e-3,
+        solve_method="sparse_pc_gmres",
+        residual_norm=2.0,
+        residual_target=None,
+        active_total_size=64,
+        run_t0=0.0,
+        profiler=None,
+    )
+
+    trace = read_solver_trace_json(trace_path)
+    assert trace.total_size is None
+    assert trace.active_size == 64
+    assert trace.collision_operator is None
+    assert trace.residual_target == pytest.approx(1.0e-3)
+    assert trace.matvec_count == 3
+
+
 def test_write_output_solver_trace_json_records_transport_matrix_context(tmp_path: Path) -> None:
     trace_path = tmp_path / "solver_trace.json"
     input_path = tmp_path / "input.namelist"
@@ -461,3 +551,56 @@ def test_write_output_solver_trace_json_records_transport_matrix_context(tmp_pat
     assert trace.metadata["preconditioner_kind"] == "sxblock"
     assert trace.metadata["strong_preconditioner_kind"] == "xmg"
     assert trace.metadata["memory_estimate"]["csr_operator_nbytes"] > 0
+
+
+def test_write_output_solver_trace_json_keeps_malformed_solver_metrics_bounded(tmp_path: Path) -> None:
+    trace_path = tmp_path / "solver_trace_bad_metrics.json"
+    input_path = tmp_path / "input.namelist"
+    output_path = tmp_path / "sfincsOutput.h5"
+    input_path.write_text("&general\n RHSMode = 1\n/\n", encoding="utf-8")
+    bad_op = SimpleNamespace(
+        total_size=object(),
+        active_size=object(),
+        fblock=SimpleNamespace(),
+    )
+    result = SimpleNamespace(
+        op=bad_op,
+        residual_norm=object(),
+        rhs=object(),
+        residual_norms_by_rhs={1: object(), 2: np.asarray(2.0e-7)},
+        rhs_norms_by_rhs={1: object(), 2: np.asarray(5.0)},
+        elapsed_time_s=np.asarray(["bad"]),
+        metadata={"solver_kind": "auto", "gmres_restart": 4},
+    )
+    profiler = SimpleNamespace(entries=[{"dpeak_rss_mb": 3.0, "device_mb": 7.0, "peak_rss_mb": 11.0}])
+    nml = SimpleNamespace(group=lambda _name: {})
+
+    write_output_solver_trace_json(
+        solver_trace_path=trace_path,
+        input_namelist=input_path,
+        output_path=output_path,
+        output_format="h5",
+        rhs_mode=1,
+        geom_scheme_hint=None,
+        compute_solution=True,
+        compute_transport_matrix=False,
+        differentiable=None,
+        result=result,
+        nml=nml,
+        solver_tol=1.0e-5,
+        solve_method=None,
+        run_t0=0.0,
+        profiler=profiler,
+    )
+
+    trace = read_solver_trace_json(trace_path)
+    assert trace.selected_path == "rhsmode1_solution"
+    assert trace.solve_method == "auto"
+    assert trace.total_size is None
+    assert trace.active_size is None
+    assert trace.residual_norm == pytest.approx(2.0e-7)
+    assert trace.residual_target == pytest.approx(5.0e-5)
+    assert trace.active_rss_mb == 3.0
+    assert trace.device_peak_mb == 7.0
+    assert "elapsed_time_s_by_rhs" not in trace.metadata
+    assert trace.metadata["profile_entries"] == profiler.entries
