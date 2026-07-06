@@ -2029,17 +2029,17 @@ Remaining consolidation steps:
 
 ### Lane 2 - Coverage And Future-Proof Tests
 
-Status: about `91%` package coverage from the latest full local audit
-(`90.967%`, `69,136` statements, `6,245` missing). The direct public contract audit remains
+Status: `91%` package coverage from the latest CI coverage artifact for PR #8
+head `5f020500` (`69,136` statements, `6,063` missing). The direct public contract audit remains
 closed at `modules_with_missing 0`; focused owner coverage is `98%` for
 `workflows/scans.py` after Tranche 111 and `100%` for
 `validation/figures.py` after Tranche 112 and `validation/qi_device.py` after
 Tranche 113; `validation/artifacts.py` is `95%` after Tranche 114,
 `validation/data_fetch.py` is `100%` after Tranche 115, and
 `validation/fortran.py` is `99%` after Tranche 116; `transport_policies.py`
-is `86%` after Tranche 117; `transport_linear_system.py` reaches `71%` in the
+is `86%` after Tranche 117; `transport_linear_system.py` reaches `86%` in the
 combined focused transport bundle after Tranche 118; `explicit_sparse.py` is
-`88%` after Tranche 119; `profile_policies.py` reaches `91%` in the broad
+`92%` after the explicit sparse symbolic fail-soft tranche; `profile_policies.py` reaches `92%` in the broad
 RHSMode-1 policy bundle after Tranche 120; `profile_preconditioner_build.py`
 is `97%` after Tranche 121; `profile_sparse_direct.py` is `95%` after
 Tranche 122; `profile_sparse_solve.py` reaches `74%` in the owner sparse-PC
@@ -5239,6 +5239,15 @@ Validation:
   `sfincs_jax.solvers.explicit_sparse` aborted with exit code `134`, matching
   the known local coverage/NumPy importer anomaly. Treat the next full-package
   or CI coverage artifact as the authoritative percentage measurement.
+- PR #8 CI passed for head `5f020500`: build, four coverage shards,
+  coverage-report, examples smoke, external-data smoke, optional ecosystem
+  gates, and tests. The downloaded CI coverage shards remapped locally to
+  `TOTAL 69136 statements, 6063 missing, 91%`; `solvers/explicit_sparse.py`
+  measured `2495 statements, 193 missing, 92%`.
+- A serial local full-suite check was attempted because `pytest-xdist` is not
+  installed in this environment. It was interrupted after `1168 passed, 3
+  skipped in 406.91 s` when it stalled in JAX array handling; CI shards are the
+  authoritative full validation for this branch state.
 
 Status:
 
