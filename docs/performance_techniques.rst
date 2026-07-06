@@ -1623,7 +1623,7 @@ so scan points can reuse the same preconditioner blocks. Controls:
 - ``SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_ACTIVE_MAX`` and ``SFINCS_JAX_RHSMODE1_PAS_DKES_GPU_PAS_TZ_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_DKES_GPU_PAS_TZ_ACTIVE_MAX`` (PAS DKES only: prefer the structured ``pas_tz`` angular block above this backend-specific angular-block size and below this active-DOF cap; defaults ``950`` and ``15000``)
 - ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_NZETA_MAX`` / ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_ACTIVE_MAX`` (CPU full-trajectory PAS only: prefer ``pas_tz`` over Schur for bounded geometryScheme=11 cases; defaults ``19``, ``950``, and ``15000``)
 - ``SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ`` plus ``SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_NZETA_MAX`` / ``SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_ACTIVE_MAX`` (one-GPU full-trajectory PAS geometryScheme=11 only: prefer ``pas_tz`` over Schur for the measured bounded HSX / SFINCS-paper rows; defaults enabled, ``19``, ``950``, and ``15000``)
-- ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL`` (bounded one-GPU tokamak PAS+Er only: default tight-GMRES tolerance ``1e-8`` for cases below the ``xblock_tz`` active-size window; ``0`` disables the tightening; legacy ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL`` is accepted)
+- ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL`` (bounded one-GPU tokamak PAS+Er only: default tight-GMRES tolerance ``1e-8`` for cases below the ``xblock_tz`` active-size window; ``0`` disables the tightening; compatibility alias ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL`` is accepted)
 - ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX`` (bounded one-GPU tokamak PAS+Er only: default ``1000`` / ``8000`` active-DOF window for the structured ``xblock_tz`` branch)
 - ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ`` and
   ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_*`` (geometryScheme=4 PAS no-Er
@@ -2832,7 +2832,7 @@ temporary estimates when available. The GMRES restart cap in
 ``sfincs_jax.solver`` uses this shared model, and
 ``sfincs_jax.solvers.path_policy`` can compare candidate routes using paired
 memory metrics in priority order: device peak memory, active RSS, compiled
-temporary memory, and finally legacy process peak RSS. This avoids promoting a
+temporary memory, and finally archived process peak RSS. This avoids promoting a
 route by comparing GPU device memory against CPU process RSS or by hiding a true
 solver-state regression behind the fixed Python/JAX runtime baseline.
 
@@ -2882,7 +2882,7 @@ The checked smoke artifact
 ``tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json``
 records the intended guard behavior on the geometryScheme=4 PAS deck. The
 cheap collision and guarded structured rows return in about ``1.6 s`` with
-residual ``6.4e5``; the explicit legacy ``hybrid`` row returns in about
+residual ``6.4e5``; the explicit ``hybrid`` row returns in about
 ``2.3 s`` but with residual ``2.5e16``. The experimental ``tzfft`` row returns
 in about ``3.3 s`` with residual ``1.9e-4`` and a higher RSS footprint
 (``~944 MB`` in the checked smoke). This is a useful matrix-free residual

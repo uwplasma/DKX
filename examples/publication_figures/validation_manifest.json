@@ -156,7 +156,7 @@
       "claim_status": "closed_deferred",
       "blocks_current_release": false,
       "evidence": "checked-in normalization audit and executable high-nu run plan, not completed high-nu scan evidence",
-      "closed_or_deferred_reason": "Closed for the current release as post-release research until wider high-nu LHD and W7-X scans are pinned",
+      "closed_or_deferred_reason": "Closed for the tagged release as post-release research until wider high-nu LHD and W7-X scans are pinned",
       "promotion_gate": "Promote only after completed high-nu scan artifacts satisfy the Simakov-Helander readiness gates"
     },
     "kind": "literature_reproduction",
@@ -175,7 +175,7 @@
     ],
     "claims": [
       "High-collisionality transport-matrix trends should agree with analytic asymptotic limits",
-      "This full analytic-limit reproduction is closed as a post-release research lane until a wider high-nu scan is available; a bounded normalization audit is now checked in"
+      "This full analytic-limit reproduction is closed as a post-release research lane until a wider high-nu scan is available; a bounded normalization audit is included in the validation bundle"
     ],
     "source_code": [
       "examples/publication_figures/generate_sfincs_paper_figs.py",
@@ -444,7 +444,7 @@
       "claim_status": "closed_deferred",
       "blocks_current_release": false,
       "evidence": "checked-in scaffold script and incomplete provenance template only",
-      "closed_or_deferred_reason": "Closed for the current release as post-release profile validation until defensible W7-X equilibrium/profile provenance is supplied",
+      "closed_or_deferred_reason": "Closed for the tagged release as post-release profile validation until defensible W7-X equilibrium/profile provenance is supplied",
       "promotion_gate": "Promote only after complete provenance, bracketed ambipolar roots, checked-in source artifacts, and ready_for_literature_claim=true"
     },
     "kind": "profile_validation",
@@ -461,7 +461,7 @@
     ],
     "claims": [
       "Ambipolar Er trends and neoclassical heat-flux ordering should follow the W7-X validation literature",
-      "This lane is closed for the current release as a post-release/nightly validation target because it requires a defensible W7-X profile and equilibrium reconstruction"
+      "This lane is closed for the tagged release as a post-release/nightly validation target because it requires a defensible W7-X profile and equilibrium reconstruction"
     ],
     "source_code": [
       "examples/publication_figures/generate_w7x_ambipolar_validation.py",
@@ -486,7 +486,7 @@
       "claim_status": "closed_deferred",
       "blocks_current_release": false,
       "evidence": "documented target with no checked-in cross-code comparison artifact",
-      "closed_or_deferred_reason": "Closed for the current release as post-release cross-code validation until shared-model normalizations and artifacts are pinned",
+      "closed_or_deferred_reason": "Closed for the tagged release as post-release cross-code validation until shared-model normalizations and artifacts are pinned",
       "promotion_gate": "Promote only after exact shared-model comparisons and qualitative trend checks are separated in machine-readable artifacts"
     },
     "kind": "cross_code_validation",
@@ -499,7 +499,7 @@
     "claims": [
       "Monoenergetic coefficients and low-collisionality trends should overlap with MONKES on shared model subsets",
       "KNOSOS-style low-collisionality ordering should be respected when exact model overlap is not available",
-      "This lane is closed for the current release as a post-release cross-code target because shared-model normalizations must be pinned before claiming overlap"
+      "This lane is closed for the tagged release as a post-release cross-code target because shared-model normalizations must be pinned before claiming overlap"
     ],
     "source_code": [
       "sfincs_jax/problems/transport_solve.py",

@@ -4382,6 +4382,50 @@ Status:
   CLI-oriented large-run path where optional factors should be built lazily
   rather than by default.
 
+## Latest Execution Log: Public Docs Wording Cleanup Tranche
+
+What was checked:
+
+- Ran the active README/docs/examples wording scan for time-dependent or
+  historical prose such as "current release", "new version", "previous best",
+  "handoff", and broad "legacy" wording.
+- Found no README blockers, but found a small set of docs/helper metadata
+  phrases that could make the project read like an iteration log rather than a
+  standalone package.
+
+Docs/test change:
+
+- Replaced public-facing historical wording with standalone terms:
+  implementation internals, compatibility aliases, archived rows/artifacts,
+  baseline QI coarse seed, tagged release, and compatibility line-search mode.
+- Updated the validation manifest wording to remove "current release" while
+  preserving the `post-release` gate label required by release-lane tests.
+- Updated the benchmark-summary helper text to describe archived frozen reports
+  rather than historical report regeneration.
+
+Validation:
+
+- The active wording scan over `README.md`, `sfincs_jax/README.md`, `examples`,
+  and `docs` returned no matches after excluding generated/upstream/static
+  artifacts.
+- `python -m pytest -q tests/test_benchmark_doc_claims.py
+  tests/test_public_docs_wording_contract.py tests/test_examples_tree_contract.py
+  tests/test_validation_deferred_lane_gates.py tests/test_release_gate_metadata.py
+  tests/test_validation_manifest_schema.py` passed as `31 passed in 0.43 s`.
+- `python -m ruff check
+  examples/publication_figures/generate_fortran_suite_benchmark_summary.py`
+  passed.
+- `python -m compileall -q
+  examples/publication_figures/generate_fortran_suite_benchmark_summary.py`
+  passed.
+
+Status:
+
+- Active public docs and README prose are clean for review with respect to the
+  known old/stale wording patterns. Generated docs under `docs/_build`, bundled
+  upstream SFINCS-v3 documents, and static evidence artifacts are intentionally
+  excluded from this prose guard.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

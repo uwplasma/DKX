@@ -118,7 +118,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Fail if any plotted row is below the documented production-resolution floor. "
-            "By default, legacy frozen-report regeneration is allowed and the floor "
+            "By default, archived frozen-report regeneration is allowed and the floor "
             "violations are recorded in the summary JSON."
         ),
     )

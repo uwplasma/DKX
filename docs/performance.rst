@@ -862,7 +862,7 @@ opt-in environment variables:
 - ``SFINCS_JAX_PHI1_GMRES_MAXITER``:
   override GMRES max iterations inside includePhi1 Newton–Krylov solves.
 - ``SFINCS_JAX_PHI1_LINESEARCH_FACTOR``:
-  override the relative residual decrease required to accept a Newton step (legacy mode).
+  override the relative residual decrease required to accept a Newton step (compatibility mode).
 - ``SFINCS_JAX_PHI1_LINESEARCH_C1``:
   Armijo coefficient for the PETSc-style backtracking rule (default 1e-4).
 - ``SFINCS_JAX_PHI1_LINESEARCH_MODE``:
