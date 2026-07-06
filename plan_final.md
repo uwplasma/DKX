@@ -4892,6 +4892,42 @@ Status:
   `transport_solve.py`, `profile_true_operator_rescue.py`, and the remaining
   x-block/transport preconditioner modules.
 
+### 2026-07-06: Device CSR Operator Contract Coverage Tranche
+
+Changes:
+
+- Added CPU-only tests for the assembled device-CSR operator path, including
+  array accessors, `nnz`/byte estimates, non-jitted and jitted matvec callables,
+  matvec shape guards, and deterministic metadata serialization.
+- Added bounded construction tests for nonsparse inputs, active-index
+  out-of-range and duplicate guards, signed-index dtype requirements, integer
+  index overflow, nonsquare active slicing, drop-tolerance compaction, dense
+  conversion, and dense rank validation.
+- Added validation tests for invalid reference-input modes, malformed probe
+  shapes, reference shape mismatches, failed matvec comparisons, assertion
+  messages, and the public `validate_device_csr_matvec` tuple-return contract.
+
+Validation:
+
+- `python -m pytest -q tests/test_rhs1_device_operator_unit.py` passed as
+  `8 passed in 0.97 s`.
+- `python -m pytest -q tests/test_rhs1_device_operator_unit.py
+  tests/test_rhs1_device_operator.py tests/test_rhs1_qi_device_smoother.py
+  tests/test_rhs1_qi_device_preconditioner.py` passed as
+  `63 passed in 17.09 s`.
+- `python -m pytest -q tests/test_source_tree_consolidation.py
+  tests/test_domain_package_import_contracts.py tests/test_benchmark_doc_claims.py`
+  passed as `64 passed in 4.60 s`.
+- `python -m ruff check`, `python -m compileall -q`, and
+  `git diff --check` passed for the touched device-operator test.
+
+Status:
+
+- This strengthens the bounded-memory assembled-operator lane used by CPU/GPU
+  QI and sparse-preconditioner paths without adding production solves. The next
+  coverage tranche should return to larger orchestration owners or the
+  remaining x-block/transport preconditioner modules.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

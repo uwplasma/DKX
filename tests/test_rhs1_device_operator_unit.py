@@ -12,9 +12,11 @@ from sfincs_jax.solvers.explicit_sparse import estimate_csr_nbytes
 from sfincs_jax.operators.profile_device_sparse import (
     assert_device_matvec_matches,
     device_csr_from_operator,
+    device_csr_from_matrix,
     device_csr_from_scipy_csr,
     estimate_device_csr_nbytes,
     materialized_operator_to_csr,
+    validate_device_csr_matvec,
     validate_device_matvec,
 )
 from sfincs_jax.solvers.preconditioner_qi_basis import (
@@ -56,6 +58,20 @@ def test_device_csr_from_scipy_csr_exposes_arrays_and_jitted_matvec() -> None:
     x = jnp.asarray([1.0, 2.0, 3.0], dtype=jnp.float64)
     np.testing.assert_allclose(np.asarray(device_operator.matvec(x)), matrix @ np.asarray(x))
     np.testing.assert_allclose(np.asarray(jax.jit(device_operator.matvec)(x)), matrix @ np.asarray(x))
+    np.testing.assert_allclose(np.asarray(device_operator.as_matvec()(x)), matrix @ np.asarray(x))
+    np.testing.assert_allclose(np.asarray(device_operator.jitted_matvec()(x)), matrix @ np.asarray(x))
+    assert device_operator.arrays() == (
+        device_operator.data,
+        device_operator.indices,
+        device_operator.indptr,
+    )
+    assert device_operator.nnz == matrix.nnz
+    assert device_operator.nbytes_estimate == device_operator.metadata.csr_nbytes
+
+    with pytest.raises(ValueError, match="1D vector"):
+        device_operator.matvec(jnp.ones((1, 3), dtype=jnp.float64))
+    with pytest.raises(ValueError, match="vector length"):
+        device_operator.matvec(jnp.ones((2,), dtype=jnp.float64))
 
 
 def test_device_csr_from_operator_slices_active_indices_without_dense_materialization() -> None:
@@ -123,6 +139,61 @@ def test_materialized_operator_to_csr_rejects_operator_only_and_dense_by_default
     assert sp.isspmatrix_csr(csr)
     np.testing.assert_allclose(csr.toarray(), np.eye(2))
 
+    with pytest.raises(ValueError, match="2D matrix"):
+        materialized_operator_to_csr(np.ones((2, 2, 1)), allow_dense=True)
+
+
+def test_device_csr_construction_validates_active_indices_and_index_dtype() -> None:
+    matrix = sp.eye(4, format="csr", dtype=np.float64)
+
+    with pytest.raises(TypeError, match="SciPy sparse"):
+        device_csr_from_scipy_csr(np.eye(4))
+    with pytest.raises(ValueError, match="outside"):
+        device_csr_from_scipy_csr(matrix, active_indices=np.asarray([0, 4]))
+    with pytest.raises(ValueError, match="duplicates"):
+        device_csr_from_scipy_csr(matrix, active_indices=np.asarray([1, 1]))
+    with pytest.raises(TypeError, match="signed integer"):
+        device_csr_from_scipy_csr(matrix, index_dtype=np.uint32)
+
+    too_large_for_int8 = sp.eye(130, format="csr", dtype=np.float64)
+    with pytest.raises(OverflowError, match="indices larger"):
+        device_csr_from_scipy_csr(too_large_for_int8, index_dtype=np.int8)
+
+    rectangular = sp.csr_matrix(np.ones((2, 3), dtype=np.float64))
+    with pytest.raises(ValueError, match="square operator"):
+        device_csr_from_scipy_csr(rectangular, active_indices=np.asarray([0, 1]))
+
+
+def test_device_csr_drop_tol_and_dense_operator_paths_are_bounded() -> None:
+    matrix = sp.csr_matrix(
+        [
+            [1.0, 1.0e-14, 0.0],
+            [0.0, 2.0, 3.0e-14],
+            [4.0, 0.0, 3.0],
+        ],
+        dtype=np.float64,
+    )
+    dropped = device_csr_from_scipy_csr(
+        matrix,
+        drop_tol=1.0e-12,
+        max_csr_mb=1.0,
+        max_csr_nbytes=10_000,
+    )
+    assert dropped.metadata.drop_tol == pytest.approx(1.0e-12)
+    assert dropped.metadata.max_csr_nbytes == 10_000
+    assert dropped.metadata.source_nnz == matrix.nnz
+    assert dropped.metadata.nnz == 4
+
+    dense = np.asarray([[2.0, 0.0], [1.0, 3.0]], dtype=np.float64)
+    with pytest.raises(TypeError, match="allow_dense=True"):
+        device_csr_from_operator(dense)
+    with pytest.raises(ValueError, match="2D matrix"):
+        device_csr_from_operator(np.ones((2, 2, 1)), allow_dense=True)
+
+    device_operator = device_csr_from_matrix(dense, max_mb=1.0)
+    x = jnp.asarray([0.5, -1.0], dtype=jnp.float64)
+    np.testing.assert_allclose(device_operator.matvec(x), dense @ np.asarray(x))
+
 
 def test_device_csr_matvec_supports_jitted_qi_galerkin_preconditioner() -> None:
     matrix = sp.csr_matrix(
@@ -142,3 +213,60 @@ def test_device_csr_matvec_supports_jitted_qi_galerkin_preconditioner() -> None:
     assert preconditioner.metadata.rank == basis.metadata.rank
     assert preconditioner.metadata.coarse_operator_shape == (basis.metadata.rank, basis.metadata.rank)
     np.testing.assert_allclose(got, exact, atol=1.0e-10)
+
+
+def test_device_matvec_validation_reports_failures_and_shape_errors() -> None:
+    matrix = sp.eye(3, format="csr", dtype=np.float64)
+    device_operator = device_csr_from_scipy_csr(matrix, max_csr_mb=1.0)
+
+    with pytest.raises(ValueError, match="reference_input"):
+        validate_device_matvec(
+            device_operator,
+            lambda x: x,
+            reference_input="python",  # type: ignore[arg-type]
+        )
+    with pytest.raises(ValueError, match="probes must have shape"):
+        validate_device_matvec(
+            device_operator,
+            lambda x: x,
+            probes=np.ones((2, 2), dtype=np.float64),
+        )
+    with pytest.raises(ValueError, match="returned shape"):
+        validate_device_matvec(
+            device_operator,
+            lambda _x: jnp.ones((2,), dtype=jnp.float64),
+            probes=np.ones((3,), dtype=np.float64),
+            samples=0,
+        )
+
+    result = validate_device_matvec(
+        device_operator,
+        lambda x: 2.0 * jnp.asarray(x, dtype=jnp.float64),
+        probes=np.ones((3,), dtype=np.float64),
+        samples=0,
+        rtol=0.0,
+        atol=0.0,
+    )
+    assert result.passed is False
+    assert result.to_dict()["samples"] == 1
+    assert result.max_rel_error > 0.0
+
+    with pytest.raises(AssertionError, match="device CSR matvec validation failed"):
+        assert_device_matvec_matches(
+            device_operator,
+            lambda x: 2.0 * jnp.asarray(x, dtype=jnp.float64),
+            probes=np.ones((3,), dtype=np.float64),
+            samples=0,
+            rtol=0.0,
+            atol=0.0,
+        )
+
+    rel_errors = validate_device_csr_matvec(
+        device_operator,
+        lambda x: np.asarray(x, dtype=np.float64),
+        probes=np.ones((3,), dtype=np.float64),
+        samples=0,
+        rtol=0.0,
+        atol=1.0e-12,
+    )
+    assert rel_errors == (0.0,)
