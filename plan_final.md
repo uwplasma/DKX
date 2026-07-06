@@ -2839,6 +2839,27 @@ Coverage note:
   is the same local pytest-cov limitation recorded earlier. Treat the GitHub
   Actions coverage shards as the authoritative package-coverage measurement.
 
+## Tranche 145: Examples Decision-Map Navigation
+
+Scope:
+
+- Added a compact decision map to `examples/README.md` so users can choose a
+  workflow by task before reading the longer tables.
+- Mirrored the same decision map in `docs/examples.rst` so the ReadTheDocs page
+  remains consistent with the repository examples index.
+- Extended `tests/test_examples_tree_contract.py` to require the decision-map
+  section, labels, and target folders/scripts. This prevents the examples tree
+  from drifting back into an unstructured list of scripts while preserving the
+  existing topic-folder layout.
+
+Validation:
+
+- `python -m pytest -q tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `16 passed in 0.15 s`.
+- `python -m sphinx -b html docs docs/_build/html` passed.
+- `python -m ruff check tests/test_examples_tree_contract.py` passed.
+- `python -m compileall -q tests/test_examples_tree_contract.py` passed.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

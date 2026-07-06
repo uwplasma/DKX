@@ -77,6 +77,44 @@ for seconds-scale laptop CPU runs. VMEC, Redl, optimization, and performance
 entries may take longer; use ``--quick`` where available and inspect generated
 solver metadata before treating a result as quantitative evidence.
 
+Decision map
+------------
+
+Use this map when you know the kind of task you need, but not the example
+folder name.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 32 40
+
+   * - Starting question
+     - Go here
+     - Why
+   * - I want to run one case and plot the output.
+     - ``examples/tutorials/run_quick_output_and_plot.py``
+     - Writes HDF5, NetCDF, NPZ, and a PDF panel in one bounded command.
+   * - I want to learn the file formats and CLI/API basics.
+     - ``examples/getting_started/``
+     - Isolates input parsing, output writing, VMEC paths, and plotting.
+   * - I need transport coefficients.
+     - ``examples/transport/``
+     - Covers RHSMode=2/3 transport matrices and scan postprocessing.
+   * - I need gradients or optimization hooks.
+     - ``examples/autodiff/`` and ``examples/optimization/``
+     - Starts with residual/JVP examples, then moves to QA/QI objectives and promotion gates.
+   * - I need bootstrap current or Redl comparisons.
+     - ``examples/vmec_jax_finite_beta/``
+     - Owns the VMEC, Redl, ambipolar-root, and bootstrap-current profile scripts.
+   * - I need to validate against SFINCS Fortran v3 behavior.
+     - ``examples/parity/`` and ``examples/publication_figures/``
+     - Provides frozen fixtures and release-facing comparison plot generators.
+   * - I need CPU/GPU runtime or memory evidence.
+     - ``examples/performance/``
+     - Benchmarks output formats, JIT, sharding, transport workers, and optional backends.
+   * - I recognize an upstream SFINCS input name.
+     - ``examples/sfincs_examples/`` or ``examples/upstream/``
+     - Preserves upstream decks for parity and benchmark audits, not first-pass learning.
+
 Application recipe map
 ----------------------
 
