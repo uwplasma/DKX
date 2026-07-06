@@ -54,6 +54,37 @@ def _structured_fblock_cache_key(
     )
 
 
+def _attach_structured_metadata(
+    preconditioner: Preconditioner,
+    metadata: dict[str, object],
+) -> Preconditioner:
+    setattr(preconditioner, "_sfincs_jax_structured_fblock_metadata", metadata)
+    return preconditioner
+
+
+def _wrap_structured_fblock_preconditioner(
+    *,
+    apply_full_unchecked: Preconditioner,
+    metadata: dict[str, object],
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None,
+) -> Preconditioner:
+    """Attach diagnostics and optional active-system projection to a builder."""
+
+    apply_full = _attach_structured_metadata(
+        safe_preconditioner(apply_full_unchecked),
+        metadata,
+    )
+    if reduce_full is None or expand_reduced is None:
+        return apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    return _attach_structured_metadata(_apply_reduced, metadata)
+
+
 def build_rhs1_structured_fblock_jacobi_preconditioner(
     *,
     op: V3FullSystemOperator,
@@ -98,18 +129,12 @@ def build_rhs1_structured_fblock_jacobi_preconditioner(
         z_f = factor.apply(r_full[:f_size])
         return jnp.concatenate([z_f, r_full[f_size:]], axis=0)
 
-    apply_full = safe_preconditioner(_apply_full_unchecked)
-    setattr(apply_full, "_sfincs_jax_structured_fblock_metadata", metadata)
-
-    if reduce_full is None or expand_reduced is None:
-        return apply_full
-
-    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
-        z_full = apply_full(expand_reduced(r_reduced))
-        return reduce_full(z_full)
-
-    setattr(_apply_reduced, "_sfincs_jax_structured_fblock_metadata", metadata)
-    return _apply_reduced
+    return _wrap_structured_fblock_preconditioner(
+        apply_full_unchecked=_apply_full_unchecked,
+        metadata=metadata,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
 
 
 def build_rhs1_structured_fblock_angular_jacobi_preconditioner(
@@ -159,18 +184,12 @@ def build_rhs1_structured_fblock_angular_jacobi_preconditioner(
         z_f = factor.apply(r_full[:f_size])
         return jnp.concatenate([z_f, r_full[f_size:]], axis=0)
 
-    apply_full = safe_preconditioner(_apply_full_unchecked)
-    setattr(apply_full, "_sfincs_jax_structured_fblock_metadata", metadata)
-
-    if reduce_full is None or expand_reduced is None:
-        return apply_full
-
-    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
-        z_full = apply_full(expand_reduced(r_reduced))
-        return reduce_full(z_full)
-
-    setattr(_apply_reduced, "_sfincs_jax_structured_fblock_metadata", metadata)
-    return _apply_reduced
+    return _wrap_structured_fblock_preconditioner(
+        apply_full_unchecked=_apply_full_unchecked,
+        metadata=metadata,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
 
 
 def build_rhs1_structured_fblock_xi_angular_jacobi_preconditioner(
@@ -238,18 +257,12 @@ def build_rhs1_structured_fblock_xi_angular_jacobi_preconditioner(
         z_f = factor.apply(r_full[:f_size])
         return jnp.concatenate([z_f, r_full[f_size:]], axis=0)
 
-    apply_full = safe_preconditioner(_apply_full_unchecked)
-    setattr(apply_full, "_sfincs_jax_structured_fblock_metadata", metadata)
-
-    if reduce_full is None or expand_reduced is None:
-        return apply_full
-
-    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
-        z_full = apply_full(expand_reduced(r_reduced))
-        return reduce_full(z_full)
-
-    setattr(_apply_reduced, "_sfincs_jax_structured_fblock_metadata", metadata)
-    return _apply_reduced
+    return _wrap_structured_fblock_preconditioner(
+        apply_full_unchecked=_apply_full_unchecked,
+        metadata=metadata,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
 
 
 def build_rhs1_structured_fblock_fp_radial_jacobi_preconditioner(
@@ -376,18 +389,12 @@ def build_rhs1_structured_fblock_fp_radial_jacobi_preconditioner(
         z_f = factor.apply(r_full[:f_size])
         return jnp.concatenate([z_f, r_full[f_size:]], axis=0)
 
-    apply_full = safe_preconditioner(_apply_full_unchecked)
-    setattr(apply_full, "_sfincs_jax_structured_fblock_metadata", metadata)
-
-    if reduce_full is None or expand_reduced is None:
-        return apply_full
-
-    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
-        z_full = apply_full(expand_reduced(r_reduced))
-        return reduce_full(z_full)
-
-    setattr(_apply_reduced, "_sfincs_jax_structured_fblock_metadata", metadata)
-    return _apply_reduced
+    return _wrap_structured_fblock_preconditioner(
+        apply_full_unchecked=_apply_full_unchecked,
+        metadata=metadata,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
 
 
 def build_rhs1_structured_fblock_fp_lowmode_schur_preconditioner(
@@ -507,18 +514,12 @@ def build_rhs1_structured_fblock_fp_lowmode_schur_preconditioner(
         z_f = z0_full[:f_size] + coarse.apply(residual_f)
         return jnp.concatenate([z_f, z0_full[f_size:]], axis=0)
 
-    apply_full = safe_preconditioner(_apply_full_unchecked)
-    setattr(apply_full, "_sfincs_jax_structured_fblock_metadata", metadata)
-
-    if reduce_full is None or expand_reduced is None:
-        return apply_full
-
-    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
-        z_full = apply_full(expand_reduced(r_reduced))
-        return reduce_full(z_full)
-
-    setattr(_apply_reduced, "_sfincs_jax_structured_fblock_metadata", metadata)
-    return _apply_reduced
+    return _wrap_structured_fblock_preconditioner(
+        apply_full_unchecked=_apply_full_unchecked,
+        metadata=metadata,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
 
 
 def build_rhs1_structured_fblock_fp_moment_schur_preconditioner(
@@ -655,18 +656,12 @@ def build_rhs1_structured_fblock_fp_moment_schur_preconditioner(
         z_f = z0_full[:f_size] + coarse.apply(residual_f)
         return jnp.concatenate([z_f, z0_full[f_size:]], axis=0)
 
-    apply_full = safe_preconditioner(_apply_full_unchecked)
-    setattr(apply_full, "_sfincs_jax_structured_fblock_metadata", metadata)
-
-    if reduce_full is None or expand_reduced is None:
-        return apply_full
-
-    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
-        z_full = apply_full(expand_reduced(r_reduced))
-        return reduce_full(z_full)
-
-    setattr(_apply_reduced, "_sfincs_jax_structured_fblock_metadata", metadata)
-    return _apply_reduced
+    return _wrap_structured_fblock_preconditioner(
+        apply_full_unchecked=_apply_full_unchecked,
+        metadata=metadata,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
 
 
 def build_rhs1_structured_fblock_fp_coupled_moment_schur_preconditioner(
@@ -806,18 +801,12 @@ def build_rhs1_structured_fblock_fp_coupled_moment_schur_preconditioner(
         residual_full = r_full - apply_v3_full_system_operator_cached(op, z0_full)
         return z0_full + coarse.apply(residual_full)
 
-    apply_full = safe_preconditioner(_apply_full_unchecked)
-    setattr(apply_full, "_sfincs_jax_structured_fblock_metadata", metadata)
-
-    if reduce_full is None or expand_reduced is None:
-        return apply_full
-
-    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
-        z_full = apply_full(expand_reduced(r_reduced))
-        return reduce_full(z_full)
-
-    setattr(_apply_reduced, "_sfincs_jax_structured_fblock_metadata", metadata)
-    return _apply_reduced
+    return _wrap_structured_fblock_preconditioner(
+        apply_full_unchecked=_apply_full_unchecked,
+        metadata=metadata,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
 
 
 def build_rhs1_structured_fblock_fp_tail_coupled_schur_preconditioner(
@@ -933,15 +922,9 @@ def build_rhs1_structured_fblock_fp_tail_coupled_schur_preconditioner(
         residual_full = r_full - apply_v3_full_system_operator_cached(op, z0_full)
         return z0_full + coarse.apply(residual_full)
 
-    apply_full = safe_preconditioner(_apply_full_unchecked)
-    setattr(apply_full, "_sfincs_jax_structured_fblock_metadata", metadata)
-
-    if reduce_full is None or expand_reduced is None:
-        return apply_full
-
-    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
-        z_full = apply_full(expand_reduced(r_reduced))
-        return reduce_full(z_full)
-
-    setattr(_apply_reduced, "_sfincs_jax_structured_fblock_metadata", metadata)
-    return _apply_reduced
+    return _wrap_structured_fblock_preconditioner(
+        apply_full_unchecked=_apply_full_unchecked,
+        metadata=metadata,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
