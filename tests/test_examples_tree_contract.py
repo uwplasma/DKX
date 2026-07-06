@@ -123,6 +123,31 @@ APPLICATION_RECIPE_LABELS = {
     "Frozen Fortran-v3 parity check",
 }
 
+DECISION_MAP_LABELS = {
+    "I want to run one case and plot the output.",
+    "I want to learn the file formats and CLI/API basics.",
+    "I need transport coefficients.",
+    "I need gradients or optimization hooks.",
+    "I need bootstrap current or Redl comparisons.",
+    "I need to validate against SFINCS Fortran v3 behavior.",
+    "I need CPU/GPU runtime or memory evidence.",
+    "I recognize an upstream SFINCS input name.",
+}
+
+DECISION_MAP_TARGETS = {
+    "tutorials/run_quick_output_and_plot.py",
+    "getting_started/",
+    "transport/",
+    "autodiff/",
+    "optimization/",
+    "vmec_jax_finite_beta/",
+    "parity/",
+    "publication_figures/",
+    "performance/",
+    "sfincs_examples/",
+    "upstream/",
+}
+
 DISALLOWED_TRACKED_PARTS = {
     "__pycache__",
     ".ipynb_checkpoints",
@@ -221,6 +246,7 @@ def test_examples_readme_is_a_complete_user_navigation_map() -> None:
     assert "### Learning Path" in readme
     assert "### One-Command Starts" in readme
     assert "### Run Budgets And Outputs" in readme
+    assert "### Decision Map" in readme
     assert "### Choose By Task" in readme
     assert "### Application Recipes" in readme
     assert "### Canonical Workflow Catalog" in readme
@@ -254,10 +280,18 @@ def test_examples_readme_is_a_complete_user_navigation_map() -> None:
         assert f"`{entrypoint}`" in readme, entrypoint
         assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
 
+    for label in sorted(DECISION_MAP_LABELS):
+        assert label in readme, label
+
+    for target in sorted(DECISION_MAP_TARGETS):
+        assert f"`{target}`" in readme, target
+        assert (EXAMPLES_ROOT / target.rstrip("/")).exists(), target
+
 
 def test_docs_examples_page_matches_application_recipe_map() -> None:
     docs = DOCS_EXAMPLES.read_text(encoding="utf-8")
     assert "One-command start points" in docs
+    assert "Decision map" in docs
     assert "Application recipe map" in docs
 
     for label in sorted(ONE_COMMAND_LABELS):
@@ -277,6 +311,15 @@ def test_docs_examples_page_matches_application_recipe_map() -> None:
         docs_path = f"examples/{entrypoint}"
         assert f"``{docs_path}``" in docs, docs_path
         assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
+
+    for label in sorted(DECISION_MAP_LABELS):
+        rst_label = label.replace("`", "``")
+        assert rst_label in docs, label
+
+    for target in sorted(DECISION_MAP_TARGETS):
+        docs_path = f"examples/{target}"
+        assert f"``{docs_path}``" in docs, docs_path
+        assert (EXAMPLES_ROOT / target.rstrip("/")).exists(), target
 
 
 def test_example_readmes_are_standalone_and_reference_existing_scripts() -> None:
