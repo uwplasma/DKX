@@ -204,6 +204,13 @@ The main structural refactor is functionally complete:
   validation passed as `57 passed in 0.87 s`; adjacent profile/transport policy
   validation passed as `123 passed in 1.46 s`; source-tree/docs guards passed
   as `73 passed in 4.91 s`.
+- Profile-solve orchestration no longer carries a duplicate private
+  RHSMode=1 Schur-builder wrapper. `profile_solve.py` imports the canonical
+  builder from `problems/profile_preconditioner_build.py`, while PAS
+  applicability callbacks remain in the orchestrator globals because the
+  route-policy owner consumes them through its context map. Focused validation
+  passed as `111 passed in 27.61 s`; source/docs/import guard validation passed
+  as `31 passed in 0.65 s`.
 - Transport runtime, profile setup, sparse-direct, and diagnostics coverage now
   includes direct tests for worker-count validation, GPU subprocess policy
   injection, persistent-pool helpers, solve-method normalization, explicit
@@ -978,7 +985,7 @@ Latest AST audit:
   `solvers/preconditioner_qi_device.py` (`5433` lines),
   `solvers/explicit_sparse.py` (`5198` lines),
   `problems/profile_sparse_qi.py` (`4873` lines),
-  `problems/profile_solve.py` (`4351` lines), and
+  `problems/profile_solve.py` (`4318` lines), and
   `outputs/writer.py` (`2471` lines).
 - The final consolidation pass should reduce file count and improve ownership
   before further line-by-line extraction. A patch that only moves a few
@@ -5315,6 +5322,44 @@ Status:
 - This closes a real fail-soft gap in host structured preconditioner setup and
   adds more low-cost coverage to one of the remaining high-missing solver
   owners. It does not replace the final CI coverage artifact or GPU validation.
+
+### 2026-07-06: Profile-Solve Schur Wrapper Consolidation
+
+Changes:
+
+- Removed the duplicate private RHSMode=1 Schur preconditioner wrapper from
+  `problems/profile_solve.py`.
+- `profile_solve.py` now imports the canonical private Schur builder from
+  `problems/profile_preconditioner_build.py`, matching the rest of the
+  preconditioner-build ownership.
+- Removed the wrapper-only monkeypatch test that existed only to protect the
+  duplicate local implementation. Canonical Schur builder behavior remains
+  covered by `tests/test_schur_precond_heuristic.py` and
+  `tests/test_rhs1_schur_policy.py`.
+- Kept the PAS applicability callbacks in `profile_solve.py`; the route-policy
+  owner intentionally receives those callbacks from the orchestrator context.
+
+Validation:
+
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_profile_solve_module_wrappers.py
+  tests/test_source_tree_consolidation.py tests/test_schur_precond_heuristic.py
+  tests/test_rhs1_schur_policy.py` passed as `111 passed in 27.61 s`.
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py
+  tests/test_benchmark_doc_claims.py` passed as `31 passed in 0.65 s`.
+- `PYTHONNOUSERSITE=1 python -m ruff check
+  sfincs_jax/problems/profile_solve.py
+  tests/test_profile_solve_module_wrappers.py` and
+  `PYTHONNOUSERSITE=1 python -m compileall -q
+  sfincs_jax/problems/profile_solve.py
+  tests/test_profile_solve_module_wrappers.py` passed.
+
+Status:
+
+- This is a small but concrete consolidation: `profile_solve.py` dropped from
+  `4365` to `4318` lines in the current checkout while preserving the Schur
+  policy behavior and real tiny-run Schur heuristic tests.
 
 ## Standard Validation Commands
 

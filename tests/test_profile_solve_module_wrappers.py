@@ -43,69 +43,6 @@ def test_profile_solve_transport_cache_key_wrapper_injects_current_preconditione
     assert captured["transport"][0] is op
 
 
-def test_profile_solve_schur_wrapper_uses_monkeypatchable_builders(monkeypatch) -> None:
-    captured = {}
-    sentinel_builders = {
-        "_pas_tokamak_theta_preconditioner_applicable": object(),
-        "_pas_tz_preconditioner_applicable": object(),
-        "_build_rhsmode1_theta_line_preconditioner": object(),
-        "_build_rhsmode1_theta_dd_preconditioner": object(),
-        "_build_rhsmode1_species_block_preconditioner": object(),
-        "_build_rhsmode1_sxblock_tz_preconditioner": object(),
-        "_build_rhsmode1_xblock_tz_preconditioner": object(),
-        "_build_rhsmode1_xblock_tz_lmax_preconditioner": object(),
-        "_build_rhsmode1_pas_xblock_ilu_preconditioner": object(),
-        "_build_rhsmode1_xmg_preconditioner": object(),
-        "_build_rhsmode1_pas_lite_preconditioner": object(),
-        "_build_rhsmode1_pas_hybrid_preconditioner": object(),
-        "_build_rhsmode1_pas_schur_preconditioner": object(),
-        "_build_rhsmode1_pas_tokamak_theta_preconditioner": object(),
-        "_build_rhsmode1_pas_tz_preconditioner": object(),
-        "_build_rhsmode1_theta_zeta_preconditioner": object(),
-        "_build_rhsmode1_zeta_line_preconditioner": object(),
-        "_build_rhsmode1_zeta_dd_preconditioner": object(),
-        "_build_rhsmode1_block_preconditioner": object(),
-    }
-
-    def fake_build_schur(**kwargs):
-        captured.update(kwargs)
-        return "schur-preconditioner"
-
-    monkeypatch.setattr(profile_solve, "build_rhs1_schur_preconditioner", fake_build_schur)
-    for name, sentinel in sentinel_builders.items():
-        monkeypatch.setattr(profile_solve, name, sentinel)
-    op = SimpleNamespace()
-
-    out = profile_solve._build_rhsmode1_schur_preconditioner(
-        op=op,
-        reduce_full=lambda x: x,
-        expand_reduced=lambda x: x,
-    )
-
-    assert out == "schur-preconditioner"
-    assert captured["op"] is op
-    builders = captured["builders"]
-    assert builders.pas_tokamak_theta_applicable is sentinel_builders["_pas_tokamak_theta_preconditioner_applicable"]
-    assert builders.pas_tz_applicable is sentinel_builders["_pas_tz_preconditioner_applicable"]
-    assert builders.theta_line_builder is sentinel_builders["_build_rhsmode1_theta_line_preconditioner"]
-    assert builders.theta_dd_builder is sentinel_builders["_build_rhsmode1_theta_dd_preconditioner"]
-    assert builders.species_block_builder is sentinel_builders["_build_rhsmode1_species_block_preconditioner"]
-    assert builders.sxblock_tz_builder is sentinel_builders["_build_rhsmode1_sxblock_tz_preconditioner"]
-    assert builders.xblock_tz_builder is sentinel_builders["_build_rhsmode1_xblock_tz_preconditioner"]
-    assert builders.xblock_tz_lmax_builder is sentinel_builders["_build_rhsmode1_xblock_tz_lmax_preconditioner"]
-    assert builders.pas_xblock_ilu_builder is sentinel_builders["_build_rhsmode1_pas_xblock_ilu_preconditioner"]
-    assert builders.xmg_builder is sentinel_builders["_build_rhsmode1_xmg_preconditioner"]
-    assert builders.pas_lite_builder is sentinel_builders["_build_rhsmode1_pas_lite_preconditioner"]
-    assert builders.pas_hybrid_builder is sentinel_builders["_build_rhsmode1_pas_hybrid_preconditioner"]
-    assert builders.pas_schur_builder is sentinel_builders["_build_rhsmode1_pas_schur_preconditioner"]
-    assert builders.pas_tokamak_theta_builder is sentinel_builders["_build_rhsmode1_pas_tokamak_theta_preconditioner"]
-    assert builders.pas_tz_builder is sentinel_builders["_build_rhsmode1_pas_tz_preconditioner"]
-    assert builders.theta_zeta_builder is sentinel_builders["_build_rhsmode1_theta_zeta_preconditioner"]
-    assert builders.zeta_line_builder is sentinel_builders["_build_rhsmode1_zeta_line_preconditioner"]
-    assert builders.zeta_dd_builder is sentinel_builders["_build_rhsmode1_zeta_dd_preconditioner"]
-    assert builders.block_builder is sentinel_builders["_build_rhsmode1_block_preconditioner"]
-
-
 def test_profile_solve_transport_fp_wrapper_injects_fallback_and_cache_hooks(monkeypatch) -> None:
     captured = {}
 

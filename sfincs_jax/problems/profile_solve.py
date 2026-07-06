@@ -98,9 +98,6 @@ from sfincs_jax.problems.profile_policies import (
 from sfincs_jax.problems.profile_policies import (
     rhs1_gpu_sparse_fallback_skip_allowed_current_backend as _rhs1_gpu_sparse_fallback_skip_allowed,
 )
-from sfincs_jax.solvers.preconditioner_schur_profile import (
-    resolve_rhs1_schur_base_kind,
-)
 from sfincs_jax.problems.profile_solver_diagnostics import (
     RHS1KSPReplayState, RHS1SkipPrimaryKrylovSeedContext, rhs1_accept_candidate_and_update_replay,
     rhs1_accept_measured_candidate_and_update_replay, rhs1_accept_sparse_retry_candidate_and_update_replay,
@@ -133,6 +130,7 @@ from sfincs_jax.problems.profile_phi1_newton import (
 from sfincs_jax.problems.profile_preconditioner_build import (
     RHS1FullBasePreconditionerSetupContext, RHS1FullPreconditionerBuildContext, RHS1FullStrongRetryStageContext,
     RHS1ReducedPreconditionerBuildContext, RHS1ReducedStrongRetryStageContext, _build_rhsmode1_block_preconditioner,
+    _build_rhsmode1_schur_preconditioner,
     _build_rhs1_preconditioner_from_kind, _build_rhs1_strong_preconditioner_full_from_kind,
     _build_rhs1_strong_preconditioner_reduced_from_kind, _build_rhsmode1_collision_preconditioner,
     _build_rhsmode1_pas_hybrid_preconditioner, _build_rhsmode1_pas_lite_preconditioner,
@@ -296,9 +294,6 @@ from sfincs_jax.solvers.preconditioner_xblock_tz_sparse import (
     rhsmode1_precond_cache_key as _rhsmode1_precond_cache_key,
     rhsmode1_xblock_sparse_lu_default_max as _rhsmode1_xblock_sparse_lu_default_max,
     safe_inverse_diagonal_np as _safe_inverse_diagonal_np,
-)
-from sfincs_jax.solvers.preconditioner_schur_profile import (
-    RHS1SchurPreconditionerBuilders, build_rhs1_schur_preconditioner,
 )
 from sfincs_jax.solvers.preconditioner_transport_matrix import (
     build_rhsmode23_block_preconditioner, build_rhsmode23_collision_preconditioner,
@@ -711,48 +706,6 @@ _transport_precondition_side = _transport_precondition_side_impl
 _transport_sparse_direct_needs_float64_retry = (
     _transport_sparse_direct_needs_float64_retry_impl
 )
-
-
-def _build_rhsmode1_schur_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Build the RHSMode=1 Schur preconditioner from canonical module globals.
-
-    Tests and advanced scripts may monkeypatch individual builder globals on
-    this canonical owner, so the wrapper constructs the Schur builder bundle
-    from this module's globals instead of using a closed-over bundle elsewhere.
-    """
-
-    builders = RHS1SchurPreconditionerBuilders(
-        pas_tokamak_theta_applicable=_pas_tokamak_theta_preconditioner_applicable,
-        pas_tz_applicable=_pas_tz_preconditioner_applicable,
-        theta_line_builder=_build_rhsmode1_theta_line_preconditioner,
-        theta_dd_builder=_build_rhsmode1_theta_dd_preconditioner,
-        species_block_builder=_build_rhsmode1_species_block_preconditioner,
-        sxblock_tz_builder=_build_rhsmode1_sxblock_tz_preconditioner,
-        xblock_tz_builder=_build_rhsmode1_xblock_tz_preconditioner,
-        xblock_tz_lmax_builder=_build_rhsmode1_xblock_tz_lmax_preconditioner,
-        pas_xblock_ilu_builder=_build_rhsmode1_pas_xblock_ilu_preconditioner,
-        xmg_builder=_build_rhsmode1_xmg_preconditioner,
-        pas_lite_builder=_build_rhsmode1_pas_lite_preconditioner,
-        pas_hybrid_builder=_build_rhsmode1_pas_hybrid_preconditioner,
-        pas_schur_builder=_build_rhsmode1_pas_schur_preconditioner,
-        pas_tokamak_theta_builder=_build_rhsmode1_pas_tokamak_theta_preconditioner,
-        pas_tz_builder=_build_rhsmode1_pas_tz_preconditioner,
-        theta_zeta_builder=_build_rhsmode1_theta_zeta_preconditioner,
-        zeta_line_builder=_build_rhsmode1_zeta_line_preconditioner,
-        zeta_dd_builder=_build_rhsmode1_zeta_dd_preconditioner,
-        block_builder=_build_rhsmode1_block_preconditioner,
-    )
-    return build_rhs1_schur_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-        builders=builders,
-    )
 
 
 def _resolve_distributed_gmres_axis(
