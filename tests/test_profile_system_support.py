@@ -439,6 +439,83 @@ def test_pad_and_unpad_full_vector_roundtrip_for_phi1_scheme2(axis: str) -> None
     assert same_x is x_full
 
 
+@pytest.mark.parametrize(
+    "fixture",
+    [
+        "er_xdot_1species_tiny.input.namelist",
+        "er_xidot_1species_tiny.input.namelist",
+        "magdrift_1species_tiny.input.namelist",
+        "fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision.input.namelist",
+        "pas_1species_PAS_noEr_tiny_scheme5.input.namelist",
+    ],
+)
+@pytest.mark.parametrize("axis", ["theta", "zeta", "x"])
+def test_optional_physics_padding_roundtrips_real_tiny_v3_operators(fixture: str, axis: str) -> None:
+    """Sharded matvec padding must preserve every optional physics term layout.
+
+    The fixtures exercise the Er x-dot, Er xi-dot, magnetic-drift, PAS, and
+    FP-Phi1 branches.  The test is intentionally shape- and roundtrip-focused:
+    it proves the production padding code can stage larger device grids without
+    changing the unpadded state vector, while keeping the solve itself out of
+    the unit-test budget.
+    """
+
+    op = full_system_operator_from_namelist(
+        nml=read_sfincs_input(REF / fixture),
+        identity_shift=0.0,
+        keep_zero_er_terms=True,
+    )
+    pad = 1
+    op_pad = _pad_full_system_operator(op, axis=axis, pad=pad)
+    x_full = _deterministic_vector(op.total_size)
+    x_pad = _pad_full_vector(x_full, op=op, op_pad=op_pad, axis=axis, pad=pad)
+    roundtrip = _unpad_full_vector(x_pad, op=op, op_pad=op_pad, axis=axis, pad=pad)
+
+    expected_n_theta = int(op.n_theta) + (1 if axis == "theta" else 0)
+    expected_n_zeta = int(op.n_zeta) + (1 if axis == "zeta" else 0)
+    expected_n_x = int(op.n_x) + (1 if axis == "x" else 0)
+
+    assert int(op_pad.n_theta) == expected_n_theta
+    assert int(op_pad.n_zeta) == expected_n_zeta
+    assert int(op_pad.n_x) == expected_n_x
+    assert op_pad.fblock.f_shape == (
+        int(op.n_species),
+        expected_n_x,
+        int(op.n_xi),
+        expected_n_theta,
+        expected_n_zeta,
+    )
+    assert x_pad.shape == (op_pad.total_size,)
+    np.testing.assert_allclose(np.asarray(roundtrip), np.asarray(x_full))
+
+    surface_shape = (expected_n_theta, expected_n_zeta)
+    assert tuple(op_pad.fblock.collisionless.b_hat.shape) == surface_shape
+    if op_pad.fblock.exb_theta is not None:
+        assert tuple(op_pad.fblock.exb_theta.d_hat.shape) == surface_shape
+        assert op_pad.fblock.exb_theta.n_xi_for_x.shape == (expected_n_x,)
+    if op_pad.fblock.exb_zeta is not None:
+        assert tuple(op_pad.fblock.exb_zeta.d_hat.shape) == surface_shape
+        assert op_pad.fblock.exb_zeta.n_xi_for_x.shape == (expected_n_x,)
+    if op_pad.fblock.er_xidot is not None:
+        assert tuple(op_pad.fblock.er_xidot.d_hat.shape) == surface_shape
+        assert op_pad.fblock.er_xidot.n_xi_for_x.shape == (expected_n_x,)
+    if op_pad.fblock.er_xdot is not None:
+        assert tuple(op_pad.fblock.er_xdot.d_hat.shape) == surface_shape
+        assert op_pad.fblock.er_xdot.n_xi_for_x.shape == (expected_n_x,)
+    if op_pad.fblock.magdrift_theta is not None:
+        assert tuple(op_pad.fblock.magdrift_theta.d_hat.shape) == surface_shape
+        assert op_pad.fblock.magdrift_theta.n_xi_for_x.shape == (expected_n_x,)
+    if op_pad.fblock.magdrift_zeta is not None:
+        assert tuple(op_pad.fblock.magdrift_zeta.d_hat.shape) == surface_shape
+        assert op_pad.fblock.magdrift_zeta.n_xi_for_x.shape == (expected_n_x,)
+    if op_pad.fblock.magdrift_xidot is not None:
+        assert tuple(op_pad.fblock.magdrift_xidot.d_hat.shape) == surface_shape
+        assert op_pad.fblock.magdrift_xidot.n_xi_for_x.shape == (expected_n_x,)
+    if op_pad.fblock.pas is not None:
+        assert op_pad.fblock.pas.n_xi_for_x.shape == (expected_n_x,)
+        assert op_pad.fblock.pas.nu_d_hat.shape[-1] == expected_n_x
+
+
 def test_pad_full_vector_handles_constraint_scheme2_x_sources_without_phi1() -> None:
     base = _tiny_phi1_scheme2_operator()
     op = replace(base, include_phi1=False)

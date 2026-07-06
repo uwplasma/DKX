@@ -2920,6 +2920,38 @@ Live Fortran note:
   tracked generated docs or fixtures; the production README figures remain
   backed by the checked suite reports.
 
+## Tranche 147: Optional-Physics Sharded-Grid Padding
+
+Scope:
+
+- Fixed x-padding for optional profile-system operators that carry
+  `n_xi_for_x` metadata. ExB theta/zeta, Er x-dot, and magnetic-drift
+  theta/zeta now expand their active-L metadata consistently with the padded
+  f-block shape.
+- Added a fast regression over real tiny v3 fixtures covering Er x-dot, Er
+  xi-dot, magnetic drift, PAS, and FP-with-Phi1 collision branches. The test
+  pads theta, zeta, and x, then verifies full-vector roundtrip and optional
+  operator metadata shapes without launching a solve.
+- This closes a device/sharded-matvec correctness gap found while increasing
+  meaningful coverage in `profile_system.py`.
+
+Validation:
+
+- `python -m pytest -q tests/test_profile_system_support.py` passed as
+  `41 passed in 11.09 s`.
+- `python -m ruff check sfincs_jax/operators/profile_system.py tests/test_profile_system_support.py`
+  passed.
+- `python -m compileall -q sfincs_jax/operators/profile_system.py tests/test_profile_system_support.py`
+  passed.
+- `python -m pytest -q tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `71 passed in 5.52 s`.
+- `python -m pytest -q tests/test_profile_system_support.py tests/test_full_system_operator_jit.py tests/test_collisionless_operator_parity.py tests/test_exb_theta_parity.py tests/test_magnetic_drifts_parity.py`
+  passed as `51 passed in 18.94 s`.
+- `python -m pytest -q tests/test_pas_collision_operator_parity.py tests/test_fblock_pas_matvec_parity.py tests/test_fblock_fokker_planck_matvec_parity.py tests/test_fblock_fused_matvec.py tests/test_v3_fblock_smoke.py`
+  passed as `6 passed in 7.16 s`.
+- `python -m ruff check sfincs_jax tests` passed.
+- `git diff --check` passed.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
