@@ -545,6 +545,313 @@ def test_active_projected_preconditioner_ilu_budget_and_unsupported_paths(monkey
     assert unsupported.reason == "unsupported_active_projected_preconditioner"
 
 
+def test_active_projected_preconditioner_fail_closed_contract_edges(monkeypatch) -> None:
+    rectangular = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=sparse.csr_matrix((2, 3), dtype=np.float64),
+        kind="jacobi",
+    )
+    assert not rectangular.selected
+    assert rectangular.reason == "matrix_not_square"
+    assert rectangular.metadata["shape"] == (2, 3)
+
+    disabled = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=sparse.eye(3, format="csr", dtype=np.float64),
+        kind="off",
+    )
+    assert not disabled.selected
+    assert disabled.kind == "none"
+    assert disabled.reason == "disabled"
+
+    monkeypatch.setattr(
+        profile_full_system,
+        "resolve_active_projected_preconditioner_auto_policy",
+        lambda *, matrix_size: SimpleNamespace(
+            candidates=("auto",),
+            candidates_requested=("auto",),
+            skipped_large_fallbacks=(),
+            large_fallback_size=100,
+            large_default_used=False,
+            log_progress=False,
+        ),
+    )
+    auto_fallback = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=sparse.diags([2.0, 4.0, 8.0], format="csr", dtype=np.float64),
+        kind="auto",
+        regularization=0.0,
+    )
+    assert auto_fallback.selected
+    assert auto_fallback.kind == "jacobi"
+    assert auto_fallback.reason == "active_auto_no_candidate_selected"
+    assert auto_fallback.metadata["auto_candidates"] == ["auto"]
+
+    monkeypatch.setattr(
+        profile_full_system,
+        "resolve_active_projected_preconditioner_auto_policy",
+        lambda *, matrix_size: SimpleNamespace(
+            candidates=(),
+            candidates_requested=("jacobi",),
+            skipped_large_fallbacks=("jacobi",),
+            large_fallback_size=1,
+            large_default_used=True,
+            log_progress=False,
+        ),
+    )
+    skipped_large = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=sparse.eye(3, format="csr", dtype=np.float64),
+        kind="auto",
+    )
+    assert not skipped_large.selected
+    assert skipped_large.reason == "active_auto_no_safe_large_candidate_selected"
+    assert skipped_large.metadata["auto_skipped_large_fallbacks"] == ("jacobi",)
+
+
+def test_active_projected_preconditioner_explicit_spilu_failure(monkeypatch) -> None:
+    import scipy.sparse.linalg as scipy_sparse_linalg
+
+    matrix = sparse.eye(4, format="csc", dtype=np.float64)
+    monkeypatch.setattr(profile_full_system, "_estimate_spilu_factor_nbytes", lambda **_kwargs: 128)
+
+    def fail_spilu(*_args, **_kwargs):
+        raise RuntimeError("synthetic factorization failure")
+
+    monkeypatch.setattr(scipy_sparse_linalg, "spilu", fail_spilu)
+    failed = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        kind="active_ilu",
+        max_factor_nbytes=1024,
+    )
+
+    assert not failed.selected
+    assert failed.kind == "active_spilu"
+    assert failed.reason == "active_spilu_failed:RuntimeError"
+    assert failed.metadata["factor_nbytes_estimate"] == 128
+
+
+def test_direct_reduced_pmat_preconditioner_admission_and_metadata(monkeypatch) -> None:
+    op = _fake_op(total_size=4, f_size=2)
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_DIRECT_REDUCED_PMAT_EMISSION_MAX_SIZE", "2")
+    too_large = profile_full_system.build_direct_active_fortran_v3_reduced_pmat_preconditioner(
+        op=op,
+        active_indices=np.arange(4, dtype=np.int64),
+    )
+    assert not too_large.selected
+    assert too_large.reason == "direct_reduced_pmat_emission_size_exceeded:4>2"
+    assert too_large.metadata["direct_reduced_pmat_emission"] is False
+
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_DIRECT_REDUCED_PMAT_EMISSION_MAX_SIZE", "10")
+
+    def fail_emission(**_kwargs):
+        raise ValueError("unsupported synthetic contract")
+
+    monkeypatch.setattr(
+        profile_full_system,
+        "_direct_active_fortran_v3_reduced_pmat_input_matrix",
+        fail_emission,
+    )
+    failed = profile_full_system.build_direct_active_fortran_v3_reduced_pmat_preconditioner(
+        op=op,
+        active_indices=np.arange(3, dtype=np.int64),
+    )
+    assert not failed.selected
+    assert failed.reason == "direct_reduced_pmat_emission_failed"
+    assert failed.metadata["error"] == "unsupported synthetic contract"
+
+    layout = _layout(3)
+    active = np.arange(3, dtype=np.int64)
+    pmat = sparse.diags([2.0, 3.0, 5.0], format="csr", dtype=np.float64)
+    monkeypatch.setattr(
+        profile_full_system,
+        "_direct_active_fortran_v3_reduced_pmat_input_matrix",
+        lambda **_kwargs: (
+            pmat,
+            layout,
+            active,
+            {
+                "direct_reduced_pmat_emission": True,
+                "direct_reduced_pmat_nnz": int(pmat.nnz),
+            },
+        ),
+    )
+
+    def fake_factor_builder(**kwargs):
+        assert kwargs["matrix"] is pmat
+        assert kwargs["layout"] is layout
+        np.testing.assert_array_equal(kwargs["active_indices"], active)
+        return profile_full_system.RHS1StructuredFullCSRPreconditioner(
+            operator=object(),
+            selected=True,
+            kind="active_fortran_v3_pc_matrix",
+            reason="complete",
+            setup_s=0.0,
+            metadata={"factor_builder": "synthetic"},
+        )
+
+    monkeypatch.setattr(
+        profile_full_system,
+        "_build_active_fortran_v3_reduced_sparse_factor_preconditioner",
+        fake_factor_builder,
+    )
+    selected = profile_full_system.build_direct_active_fortran_v3_reduced_pmat_preconditioner(
+        op=op,
+        active_indices=active,
+        requested_kind="active_fortran_v3_reduced_direct_pmat_lu",
+    )
+
+    assert selected.selected
+    assert selected.kind == "active_fortran_v3_pc_matrix"
+    assert selected.metadata["factor_builder"] == "synthetic"
+    assert selected.metadata["direct_reduced_pmat_emission"] is True
+    assert selected.metadata["direct_reduced_pmat_nnz"] == 3
+
+
+def test_direct_reduced_pmat_input_matrix_uses_structured_fblock_and_tail(monkeypatch) -> None:
+    op = _fake_op(total_size=3, f_size=2)
+    f_matrix = sparse.diags([2.0, 3.0], format="csr", dtype=np.float64)
+    tail = sparse.csr_matrix(
+        np.asarray(
+            [
+                [0.0, 0.0, 0.5],
+                [0.0, 0.0, 0.0],
+                [0.25, 0.0, 5.0],
+            ],
+            dtype=np.float64,
+        )
+    )
+    monkeypatch.setattr(
+        profile_full_system,
+        "select_structured_rhs1_fblock_csr_operator",
+        lambda *_args, **_kwargs: _fblock_selection(matrix=f_matrix),
+    )
+    monkeypatch.setattr(profile_full_system, "_assemble_full_tail_csr", lambda **_kwargs: tail)
+
+    direct, layout, active, metadata = profile_full_system._direct_active_fortran_v3_reduced_pmat_input_matrix(
+        op=op,
+        active_indices=None,
+        max_csr_nbytes=1024,
+    )
+
+    assert layout.total_size == 3
+    np.testing.assert_array_equal(active, np.asarray([0, 1, 2], dtype=np.int64))
+    np.testing.assert_allclose(
+        direct.toarray(),
+        np.asarray(
+            [
+                [2.0, 0.0, 0.5],
+                [0.0, 3.0, 0.0],
+                [0.25, 0.0, 5.0],
+            ],
+            dtype=np.float64,
+        ),
+    )
+    assert metadata["direct_reduced_pmat_emission"] is True
+    assert metadata["direct_reduced_pmat_kinetic_nnz"] == 2
+    assert metadata["direct_reduced_pmat_tail_nnz"] == 3
+
+    with pytest.raises(ValueError, match="direct_reduced_pmat_budget_exceeded"):
+        profile_full_system._direct_active_fortran_v3_reduced_pmat_input_matrix(
+            op=op,
+            active_indices=None,
+            max_csr_nbytes=1,
+        )
+
+
+def test_direct_reduced_pmat_input_matrix_fails_closed_when_fblock_missing(monkeypatch) -> None:
+    op = _fake_op(total_size=3, f_size=2)
+    monkeypatch.setattr(
+        profile_full_system,
+        "select_structured_rhs1_fblock_csr_operator",
+        lambda *_args, **_kwargs: _fblock_selection(selected=False, matrix=None, reason="budget"),
+    )
+
+    with pytest.raises(ValueError, match="fblock_not_selected:budget"):
+        profile_full_system._direct_active_fortran_v3_reduced_pmat_input_matrix(
+            op=op,
+            active_indices=None,
+        )
+
+
+def test_active_coupled_kinetic_block_admission_and_zero_base(monkeypatch) -> None:
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=1,
+        n_xi=2,
+        n_theta=1,
+        n_zeta=1,
+        f_size=2,
+        phi1_size=1,
+        extra_size=0,
+        total_size=3,
+        constraint_scheme=1,
+        include_phi1=True,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    matrix = sparse.diags([2.0, 3.0, 5.0], format="csr", dtype=np.float64)
+
+    mismatch = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=np.asarray([0, 1], dtype=np.int64),
+        kind="active_coupled_kinetic_block",
+    )
+    assert not mismatch.selected
+    assert mismatch.reason == "active_index_size_mismatch"
+
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_X_COUNT", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_INCLUDE_TAIL", "0")
+    empty = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=None,
+        kind="active_coupled_kinetic_block",
+    )
+    assert not empty.selected
+    assert empty.reason == "empty_coupled_kinetic_block"
+
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_X_COUNT", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_INCLUDE_TAIL", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_ELL_COUNT", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_MAX_BLOCK_SIZE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_MAX_POSITIONS", "2")
+    too_many = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=None,
+        kind="active_coupled_kinetic_block",
+    )
+    assert not too_many.selected
+    assert too_many.reason == "active_coupled_kinetic_block_size_exceeded:2>1"
+
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_MAX_BLOCK_SIZE", "8")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_MAX_POSITIONS", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_INCLUDE_TAIL", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_BASE", "zero")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_SCALE", "0")
+    selected = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=None,
+        kind="active_coupled_kinetic_block",
+        regularization=0.0,
+        max_factor_nbytes=1024 * 1024,
+    )
+    assert selected.selected
+    assert selected.kind == "active_coupled_kinetic_block"
+    assert selected.metadata["requested_base_kind"] == "zero"
+    assert selected.metadata["block_size"] == 3
+    np.testing.assert_allclose(selected.operator @ np.asarray([2.0, 6.0, 10.0]), np.asarray([1.0, 2.0, 2.0]))
+
+    budget = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=None,
+        kind="active_coupled_kinetic_block",
+        max_factor_nbytes=1,
+    )
+    assert not budget.selected
+    assert budget.reason.startswith("active_coupled_kinetic_budget_exceeded:")
+
+
 def test_full_csr_preconditioner_rejects_bad_contracts_and_disabled_path() -> None:
     layout = _layout(3)
 

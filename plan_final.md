@@ -380,6 +380,19 @@ The main structural refactor is functionally complete:
   protect the CPU/GPU matvec infrastructure without adding production solves.
   Focused validation passed:
   `tests/test_full_system_operator_jit.py` as `5 passed in 6.93 s`.
+- The profile full-system preconditioner tests now cover active projected
+  preconditioner contract edges, direct reduced-Pmat emission/factor admission,
+  structured f-block plus tail assembly, explicit sparse-ILU failure handling,
+  and coupled kinetic-block admission and zero-base application. These are
+  bounded CPU-only solver-policy tests that protect automatic RHSMode=1 solver
+  routing without running production grids. Focused validation passed:
+  `tests/test_profile_full_system_structured_selection.py`,
+  `tests/test_rhs1_full_csr_kinetic_pc.py`, and
+  `tests/test_rhs1_full_csr_schur_preconditioners.py` as
+  `108 passed in 1.42 s`; the public docs/source guard bundle passed as
+  `74 passed in 5.67 s`. A local owner-only pytest-cov probe still aborted with
+  exit code `134`, matching the known local coverage importer anomaly, so the
+  exact package-wide percentage is delegated to CI coverage shards.
 - The public solver-kernel helper tests now cover restart memory-policy
   fail-closed branches, distributed-input host materialization, and
   right-preconditioned BiCGStab physical-initial-guess semantics. These checks
@@ -5032,6 +5045,53 @@ Status:
   blockers. Remaining coverage work should shift to `profile_solve.py`,
   `profile_full_system.py`, explicit sparse/QI preconditioner owners, and
   source simplification that removes unneeded branch surfaces.
+
+### 2026-07-06: Profile Full-System Solver Admission Coverage Tranche
+
+Changes:
+
+- Added CPU-only tests for active projected preconditioner contract edges:
+  nonsquare matrices, disabled paths, auto ladders that contain only recursive
+  candidates, and large-system auto ladders where diagonal fallbacks are
+  intentionally skipped.
+- Added fail-closed coverage for explicit active sparse-ILU factorization
+  failures so automatic solver policy can record a bounded reason instead of
+  stalling in setup.
+- Added direct reduced-Pmat tests for active-size admission, emission failure,
+  factor-builder metadata merging, structured f-block plus tail assembly, CSR
+  budget rejection, and missing f-block rejection.
+- Added coupled kinetic-block tests for active-index mismatch, empty
+  kinetic-block admission, block-size budget rejection, and the zero-base exact
+  application path on a diagonal active system.
+
+Validation:
+
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_profile_full_system_structured_selection.py
+  tests/test_rhs1_full_csr_kinetic_pc.py
+  tests/test_rhs1_full_csr_schur_preconditioners.py` passed as
+  `108 passed in 1.42 s`.
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_benchmark_doc_claims.py tests/test_public_docs_wording_contract.py
+  tests/test_source_tree_consolidation.py
+  tests/test_domain_package_import_contracts.py
+  tests/test_examples_tree_contract.py` passed as `74 passed in 5.67 s`.
+- `python -m ruff check tests/test_profile_full_system_structured_selection.py`,
+  `python -m compileall -q tests/test_profile_full_system_structured_selection.py
+  sfincs_jax/operators/profile_full_system.py`, and `git diff --check` passed.
+- A local owner-only pytest-cov probe aborted with exit code `134`, consistent
+  with the known local coverage importer anomaly. The last successful full
+  coverage audit remains `90.967%`; CI shards are expected to provide the next
+  exact package-wide measurement for this branch.
+
+Status:
+
+- `profile_full_system.py` has stronger bounded admission coverage for the
+  RHSMode=1 automatic solver selection lane. The next CPU-local tranche should
+  target `profile_solve.py`, `explicit_sparse.py`, or QI/device preconditioner
+  owners, while keeping generated artifacts out of the branch.
+- Fresh GPU benchmark regeneration remains deferred because the office GPU host
+  is not reachable in this pass.
 
 ## Standard Validation Commands
 
