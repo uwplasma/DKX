@@ -5124,6 +5124,9 @@ Validation:
   `python -m compileall -q tests/test_sparse_assembly.py
   sfincs_jax/solvers/preconditioner_xblock_tz_sparse.py`, and
   `git diff --check` passed.
+- Full local CPU suite without coverage passed:
+  `python -m pytest -q -n auto --dist=loadscope` as
+  `4571 passed, 1 skipped in 267.69 s`.
 
 Status:
 
