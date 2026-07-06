@@ -3391,6 +3391,48 @@ Status:
 - The 95% package coverage gate is unchanged; the next code-focused tranche
   should target larger uncovered solver/operator blocks or delete dead code.
 
+## Tranche 157: RHSMode=1 Domain-Decomposition Numerical Coverage
+
+Scope:
+
+- Extended `tests/test_rhs1_domain_decomposition.py` from sizing-only checks
+  into numerical coverage for the RHSMode=1 domain-decomposition
+  preconditioner builders.
+- Added a tiny diagonal full-system operator scaffold that exercises:
+  theta-line and zeta-line preconditioners, reduced active-vector
+  expand/reduce contracts, theta and zeta restricted additive Schwarz,
+  theta-line-xdiag blocks, full angular theta-zeta blocks, cache reuse, extra
+  variable inversion, line-index maps, and pseudo-inverse fail-closed behavior
+  for singular local blocks.
+- The test is a numerical solver-policy gate, not a smoke test: for a diagonal
+  operator with diagonal value 2, all local preconditioners must apply the
+  regularized inverse and return a finite vector; for a singular local block the
+  pseudo-inverse branch must return finite zeros instead of NaNs.
+
+Validation:
+
+- `python -m pytest -q tests/test_rhs1_domain_decomposition.py` passed as
+  `14 passed in 0.96 s`.
+- `python -m pytest -q tests/test_rhs1_domain_decomposition.py tests/test_domain_package_import_contracts.py tests/test_source_tree_consolidation.py`
+  passed as `69 passed in 5.83 s`.
+- `python -m ruff check tests/test_rhs1_domain_decomposition.py examples/list_workflows.py tests/test_examples_workflow_browser.py tests/test_examples_tree_contract.py`
+  passed.
+- `python -m compileall -q tests/test_rhs1_domain_decomposition.py sfincs_jax/solvers/preconditioner_domain_decomposition.py examples/list_workflows.py tests/test_examples_workflow_browser.py`
+  passed.
+- `python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax --cov-report=term --cov-report=json:/tmp/sfincs_jax_coverage_after_examples_dd_tranche.json`
+  passed as `4392 passed in 307.77 s`. Total package coverage is `90.3315%`
+  with `6682` missing lines.
+
+Coverage movement:
+
+- `sfincs_jax/solvers/preconditioner_domain_decomposition.py` improved from
+  `85.95%` with `85` missing lines to `89.92%` with `61` missing lines.
+- Total package missing lines improved from `6706` to `6682`.
+- The 95% gate remains open. The largest remaining coverage blockers are still
+  `profile_solve.py` (`315` missing lines), `profile_full_system.py` (`272`),
+  `transport_solve.py` (`250`), `profile_true_operator_rescue.py` (`247`), and
+  `explicit_sparse.py` (`243`).
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
