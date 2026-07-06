@@ -1540,7 +1540,12 @@ def transport_precond_cache_key(
 ) -> tuple[object, ...]:
     """Build the cache key for RHSMode=2/3 transport preconditioners."""
 
-    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+    collisionless = getattr(op.fblock, "collisionless", None)
+    nxi_for_x_raw = getattr(collisionless, "n_xi_for_x", None)
+    if nxi_for_x_raw is None:
+        nxi_for_x = np.full((int(op.n_x),), int(op.n_xi), dtype=np.int32)
+    else:
+        nxi_for_x = np.asarray(nxi_for_x_raw, dtype=np.int32)
     pas = op.fblock.pas
     fp = op.fblock.fp
     return (

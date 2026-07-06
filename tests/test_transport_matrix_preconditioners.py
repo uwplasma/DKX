@@ -48,7 +48,7 @@ def _fp_matrix(*, n_species: int, n_x: int, n_l: int) -> np.ndarray:
     return matrix
 
 
-def _transport_operator(*, include_fp: bool = True) -> SimpleNamespace:
+def _transport_operator(*, include_fp: bool = True, include_collisionless: bool = True) -> SimpleNamespace:
     n_species = 2
     n_x = 3
     n_l = 3
@@ -77,6 +77,7 @@ def _transport_operator(*, include_fp: bool = True) -> SimpleNamespace:
         t_hats=np.asarray([1.3, 0.9], dtype=np.float64),
         m_hats=np.asarray([2.0, 1.0], dtype=np.float64),
     )
+    collisionless_fblock = collisionless if include_collisionless else None
     fp = None
     if include_fp:
         fp = SimpleNamespace(mat=jnp.asarray(_fp_matrix(n_species=n_species, n_x=n_x, n_l=n_l)))
@@ -93,7 +94,7 @@ def _transport_operator(*, include_fp: bool = True) -> SimpleNamespace:
         identity_shift=0.45,
         fp=fp,
         pas=pas,
-        collisionless=collisionless,
+        collisionless=collisionless_fblock,
         exb_theta=None,
         exb_zeta=None,
         er_xdot=None,
@@ -233,6 +234,49 @@ def test_transport_collision_diag_matches_fp_pas_formula_and_masks_inactive_l(mo
 
     np.testing.assert_allclose(result, expected, rtol=2e-6, atol=2e-6)
     assert len(_TRANSPORT_PRECOND_CACHE) == 1
+
+
+def test_transport_collision_only_preconditioners_do_not_require_streaming_metadata(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PRECOND_REG", "0")
+    monkeypatch.setenv("SFINCS_JAX_XMG_STRIDE", "2")
+    _clear_transport_caches()
+    op = _transport_operator(include_fp=False, include_collisionless=False)
+    vector = _vector(op)
+
+    collision = tm.build_rhsmode23_collision_preconditioner(op=op)
+    collision_result = np.asarray(collision(vector))
+    assert np.all(np.isfinite(collision_result))
+    assert collision_result.shape == (op.total_size,)
+    np.testing.assert_allclose(collision_result[op.f_size :], np.asarray(vector[op.f_size :]))
+
+    tzfft_fallback = tm.build_rhsmode23_tzfft_preconditioner(op=op)
+    np.testing.assert_allclose(np.asarray(tzfft_fallback(vector)), collision_result, rtol=2e-6, atol=2e-6)
+
+    xmg = tm.build_rhsmode23_xmg_preconditioner(op=op)
+    xmg_result = np.asarray(xmg(vector))
+    assert np.all(np.isfinite(xmg_result))
+    assert xmg_result.shape == (op.total_size,)
+
+
+def test_transport_fp_angular_builders_fall_back_without_streaming_metadata(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_MAX_MB", "128")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_MAX_MB", "128")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_MAX_MB", "128")
+    _clear_transport_caches()
+    op = _transport_operator(include_fp=True, include_collisionless=False)
+    vector = _vector(op)
+    expected = np.asarray(tm.build_rhsmode23_sxblock_preconditioner(op=op)(vector))
+
+    builders = (
+        tm.build_rhsmode23_fp_tzfft_preconditioner,
+        tm.build_rhsmode23_fp_tzfft_line_preconditioner,
+        tm.build_rhsmode23_fp_local_geom_line_preconditioner,
+        tm.build_rhsmode23_fp_xblock_tz_lu_preconditioner,
+    )
+    for builder in builders:
+        _clear_transport_caches()
+        result = np.asarray(builder(op=op)(vector))
+        np.testing.assert_allclose(result, expected, rtol=2e-6, atol=2e-6)
 
 
 def test_transport_preconditioner_reduced_views_match_full_projection(monkeypatch) -> None:

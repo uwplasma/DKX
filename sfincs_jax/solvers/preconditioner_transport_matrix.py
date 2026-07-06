@@ -109,6 +109,16 @@ def _matvec_submatrix(
     )
 
 
+def _nxi_for_x_or_all(op: V3FullSystemOperator) -> np.ndarray:
+    """Return active pitch counts, defaulting to all modes for collision-only factors."""
+
+    collisionless = getattr(op.fblock, "collisionless", None)
+    nxi_for_x_raw = getattr(collisionless, "n_xi_for_x", None)
+    if nxi_for_x_raw is None:
+        return np.full((int(op.n_x),), int(op.n_xi), dtype=np.int32)
+    return np.asarray(nxi_for_x_raw, dtype=np.int32)
+
+
 def build_rhsmode23_collision_preconditioner(
     *,
     op: V3FullSystemOperator,
@@ -149,7 +159,7 @@ def build_rhsmode23_collision_preconditioner(
             diag = diag + diag_self[:, :, :, None, None]
 
         # Mask out inactive L-modes.
-        nxi_for_x = op.fblock.collisionless.n_xi_for_x.astype(jnp.int32)
+        nxi_for_x = jnp.asarray(_nxi_for_x_or_all(op), dtype=jnp.int32)
         mask = jnp.arange(n_l, dtype=jnp.int32)[None, :] < nxi_for_x[:, None]  # (X,L)
         mask = mask[None, :, :, None, None]  # (1,X,L,1,1)
         diag = jnp.where(mask, diag, jnp.asarray(1.0, dtype=jnp.float64))
@@ -238,7 +248,7 @@ def build_rhsmode23_sxblock_preconditioner(
                 factor_l = 0.5 * (l_arr * (l_arr + 1.0) + 2.0 * float(pas.krook))
                 pas_diag = float(pas.nu_n) * np.asarray(pas.nu_d_hat, dtype=np.float64)[:, :, None] * factor_l[None, None, :]
 
-            nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+            nxi_for_x = _nxi_for_x_or_all(op)
             d_inv = np.zeros((n_l, n_block), dtype=np.float64)
             d_inv_u = np.zeros((n_l, n_block, rank_k), dtype=np.float64)
             v_lr = np.zeros((n_l, rank_k, n_block), dtype=np.float64)
@@ -349,7 +359,7 @@ def build_rhsmode23_sxblock_preconditioner(
             factor_l = 0.5 * (l_arr * (l_arr + 1.0) + 2.0 * float(pas.krook))
             pas_diag = float(pas.nu_n) * np.asarray(pas.nu_d_hat, dtype=np.float64)[:, :, None] * factor_l[None, None, :]
 
-        nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+        nxi_for_x = _nxi_for_x_or_all(op)
         for ell_idx in range(n_l):
             a = np.array(mat[:, :, ell_idx, :, :], dtype=np.float64, copy=True)  # (S,S,X,X)
             a = a.transpose(0, 2, 1, 3).reshape((n_block, n_block))
@@ -449,7 +459,7 @@ def build_rhsmode23_xmg_preconditioner(
             diag_self = np.transpose(diag_self, (2, 1, 0))  # (S,X,L)
             diag = diag + diag_self[:, :, :, None, None]
 
-        nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+        nxi_for_x = _nxi_for_x_or_all(op)
         mask = np.arange(n_l, dtype=np.int32)[None, :] < nxi_for_x[:, None]  # (X,L)
         mask = mask[None, :, :, None, None]
         diag = np.where(mask, diag, 1.0)
@@ -673,7 +683,7 @@ def build_rhsmode23_tzfft_preconditioner(
             diag = diag + diag_exb
 
         # Mask invalid L modes per x.
-        nxi_for_x = op.fblock.collisionless.n_xi_for_x.astype(jnp.int32)
+        nxi_for_x = jnp.asarray(_nxi_for_x_or_all(op), dtype=jnp.int32)
         active = jnp.arange(n_l, dtype=jnp.int32)[None, :] < nxi_for_x[:, None]  # (X,L)
         active_s = active[None, :, None, None, :]  # (1,X,1,1,L)
         diag = jnp.where(active_s, diag, jnp.asarray(1.0 + 0.0j, dtype=complex_dtype))
@@ -748,7 +758,7 @@ def build_rhsmode23_block_preconditioner(
         n_z = int(op.n_zeta)
         total = int(op.total_size)
 
-        nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+        nxi_for_x = _nxi_for_x_or_all(op)
         local_per_species = int(np.sum(nxi_for_x))
 
         rep_indices_by_species: list[np.ndarray] = []
@@ -896,6 +906,10 @@ def build_rhsmode23_fp_tzfft_preconditioner(
         return build_rhsmode23_tzfft_preconditioner(
             op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
         )
+    if op.fblock.collisionless is None:
+        return build_rhsmode23_sxblock_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
 
     n_species = int(op.n_species)
     n_x = int(op.n_x)
@@ -1018,7 +1032,7 @@ def build_rhsmode23_fp_tzfft_preconditioner(
             factor_l = 0.5 * (l_arr * (l_arr + 1.0) + 2.0 * float(pas.krook))
             pas_diag = float(pas.nu_n) * np.asarray(pas.nu_d_hat, dtype=np.float64)[:, :, None] * factor_l[None, None, :]
 
-        nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+        nxi_for_x = _nxi_for_x_or_all(op)
         active = np.arange(n_l, dtype=np.int32)[None, :] < nxi_for_x[:, None]  # (X,L)
         x_arr = np.asarray(cl.x, dtype=np.float64)
         l_arr = np.arange(n_l, dtype=np.float64)
@@ -1134,6 +1148,10 @@ def build_rhsmode23_fp_tzfft_line_preconditioner(
     """
     if op.fblock.fp is None:
         return build_rhsmode23_tzfft_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if op.fblock.collisionless is None:
+        return build_rhsmode23_sxblock_preconditioner(
             op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
         )
 
@@ -1272,7 +1290,7 @@ def build_rhsmode23_fp_tzfft_line_preconditioner(
             factor_l = 0.5 * (l_arr_pas * (l_arr_pas + 1.0) + 2.0 * float(pas.krook))
             pas_diag = float(pas.nu_n) * np.asarray(pas.nu_d_hat, dtype=np.float64)[:, :, None] * factor_l[None, None, :]
 
-        nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+        nxi_for_x = _nxi_for_x_or_all(op)
         active = np.arange(n_l, dtype=np.int32)[None, :] < nxi_for_x[:, None]  # (X,L)
         x_arr = np.asarray(cl.x, dtype=np.float64)
         l_arr = np.arange(n_l, dtype=np.float64)
@@ -1708,6 +1726,10 @@ def build_rhsmode23_fp_local_geom_line_preconditioner(
         return build_rhsmode23_tzfft_preconditioner(
             op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
         )
+    if op.fblock.collisionless is None:
+        return build_rhsmode23_sxblock_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
 
     n_species = int(op.n_species)
     n_x = int(op.n_x)
@@ -1779,7 +1801,7 @@ def build_rhsmode23_fp_local_geom_line_preconditioner(
             factor_l = 0.5 * (l_arr_pas * (l_arr_pas + 1.0) + 2.0 * float(pas.krook))
             pas_diag = float(pas.nu_n) * np.asarray(pas.nu_d_hat, dtype=np.float64)[:, :, None] * factor_l[None, None, :]
 
-        nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+        nxi_for_x = _nxi_for_x_or_all(op)
         active = np.arange(n_l, dtype=np.int32)[None, :] < nxi_for_x[:, None]  # (X,L)
         x_arr = np.asarray(cl.x, dtype=np.float64)
         l_arr = np.arange(n_l, dtype=np.float64)
@@ -1948,6 +1970,10 @@ def build_rhsmode23_fp_xblock_tz_lu_preconditioner(
         return build_rhsmode23_tzfft_preconditioner(
             op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
         )
+    if op.fblock.collisionless is None:
+        return build_rhsmode23_sxblock_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
     if bool(op.point_at_x0):
         return build_rhsmode23_fp_tzfft_line_preconditioner(
             op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
@@ -2008,7 +2034,7 @@ def build_rhsmode23_fp_xblock_tz_lu_preconditioner(
         n_x = int(op.n_x)
         n_l = int(op.n_xi)
         n_tz = int(op.n_theta) * int(op.n_zeta)
-        nxi_for_x = tuple(int(v) for v in np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32))
+        nxi_for_x = tuple(int(v) for v in _nxi_for_x_or_all(op))
         factors_out: list[tuple[object | None, ...]] = []
         diag_out: list[tuple[np.ndarray | None, ...]] = []
         total_matrix_nbytes = 0

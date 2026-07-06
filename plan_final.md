@@ -211,6 +211,14 @@ The main structural refactor is functionally complete:
   route-policy owner consumes them through its context map. Focused validation
   passed as `111 passed in 27.61 s`; source/docs/import guard validation passed
   as `31 passed in 0.65 s`.
+- RHSMode=2/3 transport preconditioners no longer require collisionless
+  streaming metadata just to build collision-diagonal, x-multigrid, or
+  species-x FP factors. Collision-only operators treat all Legendre modes as
+  active, while angular/line FP builders with missing streaming stencils
+  fall back to bounded species-x factors instead of asserting. Focused
+  validation passed as `22 passed in 5.54 s`; adjacent transport validation
+  passed as `104 passed in 21.02 s`; source/docs guards passed as
+  `73 passed in 4.81 s`.
 - Transport runtime, profile setup, sparse-direct, and diagnostics coverage now
   includes direct tests for worker-count validation, GPU subprocess policy
   injection, persistent-pool helpers, solve-method normalization, explicit
@@ -5360,6 +5368,55 @@ Status:
 - This is a small but concrete consolidation: `profile_solve.py` dropped from
   `4365` to `4318` lines in the current checkout while preserving the Schur
   policy behavior and real tiny-run Schur heuristic tests.
+
+### 2026-07-06: Transport-Matrix Collision Metadata Robustness
+
+Changes:
+
+- Added a shared active-pitch-count normalization inside
+  `solvers/preconditioner_transport_matrix.py`. Transport preconditioners now
+  use the supplied `n_xi_for_x` when collisionless streaming metadata is
+  present and otherwise treat all Legendre modes as active.
+- Updated the RHSMode=2/3 transport preconditioner cache key to support the
+  same collision-only convention, preventing cache-key construction from
+  failing before a documented fallback can run.
+- Made FP angular/line preconditioners explicitly fall back to the bounded
+  species-x FP factor when the FP collision block exists but collisionless
+  streaming stencils are absent. This preserves finite solves for collision-only
+  and reduced-physics transport operators without weakening full VMEC/3D paths
+  that do provide streaming metadata.
+- Extended `tests/test_transport_matrix_preconditioners.py` with owner tests
+  for collision-only diagonal/tzfft/x-multigrid paths and FP angular-builder
+  fallback behavior with missing streaming metadata.
+
+Validation:
+
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_transport_matrix_preconditioners.py` passed as
+  `22 passed in 5.54 s`.
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_transport_matrix_preconditioners.py
+  tests/test_transport_sparse_direct.py
+  tests/test_transport_linear_solve.py` passed as `104 passed in 21.02 s`.
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py
+  tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `73 passed in 4.81 s`.
+- `PYTHONNOUSERSITE=1 python -m ruff check
+  sfincs_jax/solvers/preconditioning.py
+  sfincs_jax/solvers/preconditioner_transport_matrix.py
+  tests/test_transport_matrix_preconditioners.py`,
+  `PYTHONNOUSERSITE=1 python -m compileall -q
+  sfincs_jax/solvers/preconditioning.py
+  sfincs_jax/solvers/preconditioner_transport_matrix.py
+  tests/test_transport_matrix_preconditioners.py`, `git diff --check`,
+  public-doc stale wording scan, and the large-file audit passed.
+
+Status:
+
+- This closes a bounded RHSMode=2/3 fallback bug that could affect reduced
+  collision-only transport inputs. It is CPU-local and does not replace the
+  deferred GPU validation or final production benchmark regeneration.
 
 ## Standard Validation Commands
 
