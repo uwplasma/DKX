@@ -1749,6 +1749,16 @@ Completed work:
   passed `18/18` in `0.44 s`, Ruff passed, `compileall` passed,
   `git diff --check` passed, and direct coverage for
   `sfincs_jax/workflows/scans.py` is `98%`.
+- Tranche 112: expanded validation-figure tests around artifact-backed physics
+  gates without adding large data: W7-X malformed scans and ambipolar roots,
+  degenerate zero-current brackets, provenance/metadata fallback behavior,
+  Simakov-Helander malformed high-nu scans, invalid tail-fit configuration,
+  checked/tracked/mismatched/missing artifact statuses, git-tracking failure
+  modes, and tail-asymptotic fail-closed metadata. Validation:
+  `tests/test_validation_figures.py` passed `32/32` in `0.16 s`; source-tree
+  plus import-contract focused validation passed `85/85`; Ruff, `compileall`,
+  and `git diff --check` passed. Direct coverage for
+  `sfincs_jax/validation/figures.py` is `100%`.
 
 Remaining consolidation steps:
 
@@ -1778,10 +1788,11 @@ Remaining consolidation steps:
 
 Status: 89% CI-measured package coverage on PR #8 commit `3cce604d`
 (`TOTAL 69081 stmts, 7630 miss, 89%`). The direct public contract audit remains
-closed at `modules_with_missing 0`, and the scan-workflow owner now has `98%`
-focused coverage after Tranche 111. The final target is still 95%; the next
-coverage tranches should prioritize large under-covered owners with bounded
-behavior tests rather than slow full solves.
+closed at `modules_with_missing 0`; focused owner coverage is `98%` for
+`workflows/scans.py` after Tranche 111 and `100%` for
+`validation/figures.py` after Tranche 112. The final target is still 95%; the
+next coverage tranches should prioritize large under-covered owners with
+bounded behavior tests rather than slow full solves.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 
