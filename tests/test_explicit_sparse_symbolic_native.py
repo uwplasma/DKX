@@ -17,6 +17,11 @@ class _NaNFactor:
         return np.full_like(np.asarray(rhs, dtype=np.float64), np.nan)
 
 
+class _IdentityFactor:
+    def solve(self, rhs):
+        return np.asarray(rhs, dtype=np.float64)
+
+
 def _spd_matrix() -> sparse.csr_matrix:
     return sparse.csr_matrix(
         np.asarray(
@@ -336,6 +341,231 @@ def test_symbolic_schur_and_blr_edge_fallbacks_are_finite(monkeypatch: pytest.Mo
         gmres_failure.solve(np.asarray([4.0, 8.0], dtype=dtype)),
         np.asarray([1.0, 2.0], dtype=dtype),
     )
+
+
+def test_symbolic_schur_factor_failures_and_nonfinite_separator_are_bounded() -> None:
+    dtype = np.dtype(np.float64)
+    matrix = sparse.eye(3, format="csr", dtype=dtype)
+    analysis = _analysis(matrix, block_size=2)
+    rhs = np.asarray([1.0, 2.0, 3.0], dtype=dtype)
+    block = explicit_sparse._SymbolicSchurBlock(
+        indices=np.asarray([0, 1], dtype=np.int64),
+        factor=_FailingFactor(),
+        b_to_separator=sparse.csr_matrix(np.asarray([[1.0], [0.5]], dtype=dtype)),
+        c_from_separator=sparse.csr_matrix(np.asarray([[0.25, -0.5]], dtype=dtype)),
+    )
+    failing = explicit_sparse._SymbolicBlockSchurFactor(
+        blocks=(block,),
+        separator_indices=np.asarray([2], dtype=np.int64),
+        schur_factor=_FailingFactor(),
+        dtype=dtype,
+        n=3,
+        analysis=analysis,
+        separator_count=1,
+    )
+
+    np.testing.assert_allclose(failing.solve(rhs), np.asarray([1.0, 2.0, 0.0], dtype=dtype))
+
+    nonfinite = explicit_sparse._SymbolicBlockSchurFactor(
+        blocks=(
+            explicit_sparse._SymbolicSchurBlock(
+                indices=np.asarray([0, 1], dtype=np.int64),
+                factor=_IdentityFactor(),
+                b_to_separator=sparse.csr_matrix(np.ones((2, 1), dtype=dtype)),
+                c_from_separator=sparse.csr_matrix(np.ones((1, 2), dtype=dtype)),
+            ),
+        ),
+        separator_indices=np.asarray([2], dtype=np.int64),
+        schur_factor=_NaNFactor(),
+        dtype=dtype,
+        n=3,
+        analysis=analysis,
+        separator_count=1,
+    )
+    np.testing.assert_allclose(nonfinite.solve(rhs), np.zeros_like(rhs))
+
+
+def test_nested_dissection_node_failures_matrix_rhs_and_empty_separators() -> None:
+    dtype = np.dtype(np.float64)
+    leaf = explicit_sparse._SymbolicNDFrontalNode(
+        indices=np.asarray([0, 1], dtype=np.int64),
+        dtype=dtype,
+        global_size=2,
+        depth=0,
+        leaf_factor=_FailingFactor(),
+    )
+    rhs = np.asarray([4.0, -2.0], dtype=dtype)
+    np.testing.assert_allclose(leaf.solve_local(rhs), rhs)
+    matrix_rhs = np.column_stack([rhs, 2.0 * rhs])
+    np.testing.assert_allclose(leaf.solve_local(matrix_rhs), matrix_rhs)
+
+    child = explicit_sparse._SymbolicNDFrontalNode(
+        indices=np.asarray([0], dtype=np.int64),
+        dtype=dtype,
+        global_size=2,
+        depth=1,
+        leaf_factor=_IdentityFactor(),
+    )
+    no_separator = explicit_sparse._SymbolicNDFrontalNode(
+        indices=np.asarray([0, 1], dtype=np.int64),
+        dtype=dtype,
+        global_size=2,
+        depth=0,
+        children=(
+            explicit_sparse._SymbolicNDChild(
+                positions=np.asarray([0], dtype=np.int64),
+                indices=np.asarray([0], dtype=np.int64),
+                factor=child,
+                b_to_separator=sparse.csr_matrix((1, 0), dtype=dtype),
+                c_from_separator=sparse.csr_matrix((0, 1), dtype=dtype),
+            ),
+        ),
+        separator_positions=np.asarray([], dtype=np.int64),
+        separator_indices=np.asarray([], dtype=np.int64),
+    )
+    np.testing.assert_allclose(no_separator.solve_local(matrix_rhs), np.asarray([[4.0, 8.0], [0.0, 0.0]]))
+
+    coupled_child = explicit_sparse._SymbolicNDChild(
+        positions=np.asarray([0], dtype=np.int64),
+        indices=np.asarray([0], dtype=np.int64),
+        factor=child,
+        b_to_separator=sparse.csr_matrix((1, 1), dtype=dtype),
+        c_from_separator=sparse.csr_matrix(np.asarray([[1.0]], dtype=dtype)),
+    )
+    failing_schur = explicit_sparse._SymbolicNDFrontalNode(
+        indices=np.asarray([0, 1], dtype=np.int64),
+        dtype=dtype,
+        global_size=2,
+        depth=0,
+        children=(coupled_child,),
+        separator_positions=np.asarray([1], dtype=np.int64),
+        separator_indices=np.asarray([1], dtype=np.int64),
+        schur_factor=_FailingFactor(),
+    )
+    np.testing.assert_allclose(failing_schur.solve_local(rhs), np.asarray([4.0, 0.0], dtype=dtype))
+
+    coupled_child_with_feedback = explicit_sparse._SymbolicNDChild(
+        positions=np.asarray([0], dtype=np.int64),
+        indices=np.asarray([0], dtype=np.int64),
+        factor=child,
+        b_to_separator=sparse.csr_matrix(np.asarray([[1.0]], dtype=dtype)),
+        c_from_separator=sparse.csr_matrix(np.asarray([[1.0]], dtype=dtype)),
+    )
+    nonfinite_schur = explicit_sparse._SymbolicNDFrontalNode(
+        indices=np.asarray([0, 1], dtype=np.int64),
+        dtype=dtype,
+        global_size=2,
+        depth=0,
+        children=(coupled_child_with_feedback,),
+        separator_positions=np.asarray([1], dtype=np.int64),
+        separator_indices=np.asarray([1], dtype=np.int64),
+        schur_factor=_NaNFactor(),
+    )
+    np.testing.assert_allclose(nonfinite_schur.solve(matrix_rhs), np.zeros_like(matrix_rhs))
+
+
+def test_symbolic_superblock_factor_failures_and_builder_edge_cases() -> None:
+    dtype = np.dtype(np.float64)
+    matrix = sparse.eye(3, format="csr", dtype=dtype)
+    analysis = _analysis(matrix, block_size=2)
+    rhs = np.asarray([1.0, 2.0, 3.0], dtype=dtype)
+    factor = explicit_sparse._SymbolicSuperblockFactor(
+        blocks=(
+            explicit_sparse._SymbolicSuperblock(
+                indices=np.asarray([], dtype=np.int64),
+                base_blocks=tuple(),
+                factor=_IdentityFactor(),
+            ),
+            explicit_sparse._SymbolicSuperblock(
+                indices=np.asarray([0, 1], dtype=np.int64),
+                base_blocks=(0,),
+                factor=_FailingFactor(),
+            ),
+            explicit_sparse._SymbolicSuperblock(
+                indices=np.asarray([2], dtype=np.int64),
+                base_blocks=(1,),
+                factor=_NaNFactor(),
+            ),
+        ),
+        analysis=analysis,
+        dtype=dtype,
+        n=3,
+        max_superblock_size=2,
+        max_superblock_blocks=1,
+        retained_cross_nnz=0,
+        dropped_cross_nnz=0,
+        retained_cross_fraction=1.0,
+        factor_failures=0,
+    )
+    np.testing.assert_allclose(factor.solve(rhs), np.asarray([1.0, 2.0, 0.0], dtype=dtype))
+
+    with pytest.raises(ValueError, match="requires a square matrix"):
+        explicit_sparse._build_symbolic_superblock_factor(
+            sparse.csr_matrix(np.ones((2, 3), dtype=dtype)),
+            analysis=analysis,
+            diag_pivot_thresh=1.0,
+        )
+
+    empty_analysis = explicit_sparse.analyze_sparse_symbolic_structure(
+        sparse.csr_matrix((0, 0), dtype=dtype),
+        ordering_kind="natural",
+        block_size_target=2,
+    )
+    empty_factor, nbytes, nnz = explicit_sparse._build_symbolic_superblock_factor(
+        sparse.csr_matrix((0, 0), dtype=dtype),
+        analysis=empty_analysis,
+        diag_pivot_thresh=1.0,
+    )
+    assert empty_factor.superblock_count == 0
+    assert nbytes == 0
+    assert nnz == 0
+
+
+def test_low_rank_update_and_woodbury_builder_fail_soft(monkeypatch: pytest.MonkeyPatch) -> None:
+    dtype = np.dtype(np.float64)
+
+    def _raise_svd(*_args, **_kwargs):
+        raise np.linalg.LinAlgError("synthetic svd failure")
+
+    monkeypatch.setattr(np.linalg, "svd", _raise_svd)
+    update = explicit_sparse._compress_update_block(
+        np.asarray([[1.0, 0.0], [0.0, 2.0]], dtype=dtype),
+        columns=np.asarray([0, 1], dtype=np.int64),
+        tol=1.0e-8,
+        max_rank=1,
+        dtype=dtype,
+    )
+    assert update.rank == 1
+    assert update.relative_error_estimate == float("inf")
+
+    singular_update = explicit_sparse._BLRUpdateBlock(
+        columns=np.asarray([0], dtype=np.int64),
+        u=np.asarray([[1.0], [0.0]], dtype=dtype),
+        vt=np.asarray([[1.0]], dtype=dtype),
+        original_shape=(2, 1),
+        rank=1,
+        relative_error_estimate=0.0,
+    )
+    bad_condition = explicit_sparse._build_blr_woodbury_state(
+        _IdentityFactor(),
+        (singular_update,),
+        separator_size=2,
+        dtype=dtype,
+        max_rank=2,
+        max_condition=1.0e8,
+    )
+    assert bad_condition[0] is None
+    assert bad_condition[3] is not None
+
+    failing = explicit_sparse._build_blr_woodbury_state(
+        _FailingFactor(),
+        (singular_update,),
+        separator_size=2,
+        dtype=dtype,
+        max_rank=2,
+        max_condition=1.0e8,
+    )
+    assert failing == (None, None, None, None)
 
 
 def test_symbolic_schur_superblock_and_nd_factors_solve_with_small_matrices() -> None:

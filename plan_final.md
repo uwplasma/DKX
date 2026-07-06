@@ -5201,6 +5201,52 @@ Status:
   this local-only pass are fresh GPU validation and final CPU/GPU/Fortran
   benchmark regeneration from the exact review branch state.
 
+### 2026-07-06: Explicit Sparse Symbolic Fail-Soft Coverage Tranche
+
+Changes:
+
+- Added bounded symbolic-sparse tests for block-Schur factor failure fallback,
+  separator nonfinite cleanup, nested-dissection matrix-RHS fallback, empty
+  separator propagation, superblock empty/failing/nonfinite blocks, square
+  matrix admission, empty symbolic superblock construction, SVD failure fallback
+  in BLR update compression, and Woodbury condition/factor-failure rejection.
+- Kept all fixtures as tiny algebraic CSR/CSC operators. The tests exercise the
+  same fail-soft contracts used by the native sparse preconditioner stack but
+  do not run production solves or create benchmark artifacts.
+
+Validation:
+
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_explicit_sparse_symbolic_native.py` passed as `12 passed in
+  0.20 s`.
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_explicit_sparse_symbolic_native.py tests/test_explicit_sparse.py
+  tests/test_explicit_sparse_factor_builder.py
+  tests/test_explicit_sparse_factor_policy.py
+  tests/test_profile_sparse_helper_coverage.py` passed as `127 passed in
+  2.32 s`.
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_source_tree_consolidation.py
+  tests/test_domain_package_import_contracts.py
+  tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `73 passed in 5.65 s`.
+- `PYTHONNOUSERSITE=1 python -m ruff check
+  tests/test_explicit_sparse_symbolic_native.py`,
+  `PYTHONNOUSERSITE=1 python -m compileall -q
+  tests/test_explicit_sparse_symbolic_native.py`, and `git diff --check`
+  passed.
+- A local module-only pytest-cov probe for
+  `sfincs_jax.solvers.explicit_sparse` aborted with exit code `134`, matching
+  the known local coverage/NumPy importer anomaly. Treat the next full-package
+  or CI coverage artifact as the authoritative percentage measurement.
+
+Status:
+
+- This tranche strengthens the Python/JAX-native sparse-factor robustness tests
+  that matter for CPU production-preconditioner admission. It does not close
+  the 95% package-coverage gate by itself; the next bounded coverage tranche
+  should keep targeting high-missing owners with deterministic algebraic tests.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
