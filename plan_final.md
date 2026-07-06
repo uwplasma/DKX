@@ -65,6 +65,10 @@ The main structural refactor is functionally complete:
   `profile_policies._qi_device_solver_env` wrapper. The real QI device solver
   environment normalizer remains owned by `solvers/preconditioner_qi_device.py`;
   policy and source-tree guards passed after the deletion.
+- The runtime/memory benchmark figure generator now writes deterministic PDF
+  metadata. The tracked benchmark summary regenerates cleanly from the verified
+  CPU/GPU reports, and `tests/test_generate_fortran_suite_benchmark_summary.py`
+  checks the fixed creation date plus repeatable PDF bytes.
 - The 2026-07-05 user-facing documentation wording pass removed active prose
   labels such as "latest snapshot", "current release", "previous best", and
   progress-log phrasing from README-facing docs pages. The active-doc scan only

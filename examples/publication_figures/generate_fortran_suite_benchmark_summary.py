@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import json
 import os
 import sys
@@ -47,6 +48,12 @@ DEFAULT_ARTIFACT_DIR = _REPO_ROOT / "examples" / "publication_figures" / "artifa
 DEFAULT_OUT_DIR = _REPO_ROOT / "docs" / "_static" / "figures" / "paper"
 DEFAULT_STEM = "sfincs_jax_fortran_suite_benchmark_summary"
 DEFAULT_MIN_FORTRAN_RUNTIME_S = 10.0
+PDF_METADATA = {
+    "Creator": "sfincs_jax",
+    "Producer": "sfincs_jax",
+    "CreationDate": _dt.datetime(2026, 1, 1, tzinfo=_dt.UTC),
+    "ModDate": _dt.datetime(2026, 1, 1, tzinfo=_dt.UTC),
+}
 CANONICAL_ROWS_KEY = "canonical_rows"
 CANONICAL_CASE_ORDER_KEY = "canonical_case_order"
 README_TABLE_HEADER = (
@@ -635,7 +642,7 @@ def plot_benchmark_summary_from_payload(
         fontsize=8.0,
     )
     fig.savefig(out_dir / f"{stem}.png", dpi=180)
-    fig.savefig(out_dir / f"{stem}.pdf")
+    fig.savefig(out_dir / f"{stem}.pdf", metadata=PDF_METADATA)
     plt.close(fig)
 
 
