@@ -187,6 +187,25 @@ def test_package_readme_explains_public_surface_and_implementation_boundaries() 
         assert phrase in text
 
 
+def test_output_writer_stays_below_review_size_budget() -> None:
+    """Keep output-write orchestration from drifting back into a monolith."""
+
+    writer_path = PACKAGE_ROOT / "outputs" / "writer.py"
+    source = writer_path.read_text(encoding="utf-8")
+    line_count = len(source.splitlines())
+    assert line_count <= 2300
+
+    tree = ast.parse(source, filename=str(writer_path))
+    functions = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+    }
+    writer_fn = functions["write_sfincs_jax_output_h5"]
+    assert writer_fn.end_lineno is not None
+    assert writer_fn.end_lineno - writer_fn.lineno + 1 <= 1500
+
+
 def test_package_tree_has_no_tracked_generated_or_large_runtime_outputs() -> None:
     """Keep the importable package light and independent of local run artifacts."""
 
