@@ -19,6 +19,19 @@ class _DiagonalFactor:
         return np.asarray(rhs, dtype=np.float64) / self._diagonal
 
 
+class _SparseDiagonalLUFactor:
+    def __init__(self, diagonal: np.ndarray):
+        self._diagonal = np.asarray(diagonal, dtype=np.float64)
+        n = int(self._diagonal.size)
+        self.perm_r = np.arange(n, dtype=np.int32)
+        self.perm_c = np.arange(n, dtype=np.int32)
+        self.L = sp.eye(n, format="csr", dtype=np.float64)
+        self.U = sp.diags(self._diagonal, 0, format="csr", dtype=np.float64)
+
+    def solve(self, rhs: np.ndarray) -> np.ndarray:
+        return np.asarray(rhs, dtype=np.float64) / self._diagonal
+
+
 def _op() -> SimpleNamespace:
     return SimpleNamespace(
         rhs_mode=1,
@@ -126,6 +139,51 @@ def _patch_sparse_host(monkeypatch, diag_by_index: dict[int, float]) -> None:
     monkeypatch.setattr(tz_sparse, "factorize_sparse_matrix_csr_host", _factorize)
 
 
+def _patch_xblock_diagonal_builders(monkeypatch) -> None:
+    tz_sparse._RHSMODE1_SPARSE_ILU_CACHE.clear()
+    tz_sparse._RHSMODE1_SPARSE_XBLOCK_HOST_PRECOND_CACHE.clear()
+    tz_sparse._RHSMODE1_SPARSE_XBLOCK_PRECOND_CACHE.clear()
+    tz_sparse._RHSMODE1_SPARSE_XBLOCK_CSR_PRECOND_CACHE.clear()
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PRECOND_REG", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX", "16")
+    monkeypatch.setattr(tz_sparse, "rhsmode1_precond_cache_key", lambda _op, kind: ("unit-xblock", kind, id(_op)))
+
+    def _diag_from_cache_key(cache_key, n: int) -> np.ndarray:
+        ix = int(cache_key[-2]) if len(cache_key) >= 3 and isinstance(cache_key[-2], int) else 0
+        return np.full((int(n),), 2.0 + float(ix), dtype=np.float64)
+
+    def _probe(_op, *, col_idx, row_idx, total_size, chunk_cols):
+        del total_size, chunk_cols
+        col_idx = np.asarray(col_idx, dtype=np.int32)
+        row_idx = np.asarray(row_idx, dtype=np.int32)
+        out = np.zeros((col_idx.size, row_idx.size), dtype=np.float64)
+        for i, col in enumerate(col_idx):
+            for j, row in enumerate(row_idx):
+                if int(col) == int(row):
+                    out[i, j] = 20.0 if int(col) >= int(_op.f_size) else 1.0
+        return out
+
+    def _build_from_matvec(*, n, cache_key, build_jax_factors, **_kwargs):
+        diagonal = _diag_from_cache_key(cache_key, int(n))
+        if build_jax_factors:
+            tz_sparse._RHSMODE1_SPARSE_ILU_CACHE[cache_key] = SimpleNamespace(
+                perm_r=jnp.arange(int(n), dtype=jnp.int32),
+                inv_perm_c=jnp.arange(int(n), dtype=jnp.int32),
+                lower_idx=-jnp.ones((int(n), 0), dtype=jnp.int32),
+                lower_val=jnp.zeros((int(n), 0), dtype=jnp.float64),
+                upper_idx=-jnp.ones((int(n), 0), dtype=jnp.int32),
+                upper_val=jnp.zeros((int(n), 0), dtype=jnp.float64),
+                upper_diag=jnp.asarray(diagonal, dtype=jnp.float64),
+            )
+        else:
+            tz_sparse._RHSMODE1_SPARSE_ILU_CACHE[cache_key] = SimpleNamespace(
+                ilu=_SparseDiagonalLUFactor(diagonal)
+            )
+
+    monkeypatch.setattr(tz_sparse, "matvec_submatrix_v3_unsharded", _probe)
+    monkeypatch.setattr(tz_sparse, "build_sparse_ilu_from_matvec", _build_from_matvec)
+
+
 def test_rhsmode1_sparse_cache_key_wrappers_use_kind_and_dtype() -> None:
     op = _cache_key_op()
 
@@ -187,6 +245,83 @@ def test_xblock_tz_sparse_builder_direct_host_skip_path_is_bounded(monkeypatch) 
     rhs = jnp.asarray([1.0, -2.0, 3.0, -4.0], dtype=jnp.float64)
 
     np.testing.assert_allclose(np.asarray(preconditioner(rhs)), np.asarray(rhs), rtol=0.0, atol=0.0)
+
+
+def test_xblock_tz_sparse_host_builder_solves_x_blocks_and_extra(monkeypatch) -> None:
+    op = _op()
+    _patch_xblock_diagonal_builders(monkeypatch)
+
+    preconditioner = tz_sparse.build_rhs1_xblock_tz_sparse_preconditioner(
+        op=op,
+        build_jax_factors=False,
+        preconditioner_species=1,
+        preconditioner_xi=1,
+        drop_tol=0.0,
+        drop_rel=0.0,
+        ilu_drop_tol=0.0,
+        fill_factor=1.0,
+    )
+    rhs = jnp.asarray([2.0, 4.0, 9.0, 12.0, 20.0], dtype=jnp.float64)
+
+    np.testing.assert_allclose(
+        np.asarray(preconditioner(rhs)),
+        np.asarray([1.0, 2.0, 3.0, 12.0, 1.0], dtype=np.float64),
+        rtol=0.0,
+        atol=0.0,
+    )
+
+
+def test_xblock_tz_sparse_padded_device_builder_solves_x_blocks_and_extra(monkeypatch) -> None:
+    op = _op()
+    _patch_xblock_diagonal_builders(monkeypatch)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_FORMAT", "padded")
+
+    preconditioner = tz_sparse.build_rhs1_xblock_tz_sparse_preconditioner(
+        op=op,
+        build_jax_factors=True,
+        preconditioner_species=1,
+        preconditioner_xi=1,
+        drop_tol=0.0,
+        drop_rel=0.0,
+        ilu_drop_tol=0.0,
+        fill_factor=1.0,
+    )
+    rhs = jnp.asarray([2.0, 4.0, 9.0, 12.0, 20.0], dtype=jnp.float64)
+
+    np.testing.assert_allclose(
+        np.asarray(preconditioner(rhs)),
+        np.asarray([1.0, 2.0, 3.0, 12.0, 1.0], dtype=np.float64),
+        rtol=0.0,
+        atol=0.0,
+    )
+
+
+def test_xblock_tz_sparse_compact_csr_device_builder_solves_x_blocks_and_extra(monkeypatch) -> None:
+    op = _op()
+    _patch_xblock_diagonal_builders(monkeypatch)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_FORMAT", "csr")
+
+    messages: list[str] = []
+    preconditioner = tz_sparse.build_rhs1_xblock_tz_sparse_preconditioner(
+        op=op,
+        build_jax_factors=True,
+        preconditioner_species=1,
+        preconditioner_xi=1,
+        drop_tol=0.0,
+        drop_rel=0.0,
+        ilu_drop_tol=0.0,
+        fill_factor=1.0,
+        emit=lambda _level, message: messages.append(str(message)),
+    )
+    rhs = jnp.asarray([2.0, 4.0, 9.0, 12.0, 20.0], dtype=jnp.float64)
+
+    np.testing.assert_allclose(
+        np.asarray(preconditioner(rhs)),
+        np.asarray([1.0, 2.0, 3.0, 12.0, 1.0], dtype=np.float64),
+        rtol=0.0,
+        atol=0.0,
+    )
+    assert any("built compact JAX factors" in message for message in messages)
 
 
 def test_sxblock_sparse_host_builder_solves_active_l_blocks_and_extra(monkeypatch) -> None:

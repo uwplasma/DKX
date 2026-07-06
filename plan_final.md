@@ -2807,6 +2807,38 @@ Validation:
   matches.
 - `python -m pytest -q` passed as `4339 passed in 596.09 s`.
 
+## Tranche 144: Sparse X-Block Route Coverage
+
+Scope:
+
+- Added bounded tests for the RHSMode=1 sparse x-block preconditioner routes in
+  `tests/test_rhs1_sxblock_tz_sparse_host.py`.
+- The tests use synthetic diagonal block factors and a diagonal extra/source
+  probe, so they exercise the production route logic without assembling a full
+  SFINCS operator or running a Krylov solve.
+- Covered three route families that matter for large-run robustness:
+  host-side sparse x-block factors, padded JAX/device factors, and compact CSR
+  JAX/device factors.
+- Verified that inactive high-`L` padding remains unchanged, active x-blocks
+  receive the expected local inverse, and the extra/source block is inverted
+  through the same tail solve used by real preconditioner setup.
+
+Validation:
+
+- `python -m pytest -q tests/test_rhs1_sxblock_tz_sparse_host.py` passed as
+  `11 passed in 0.81 s`.
+- `python -m pytest -q tests/test_rhs1_sxblock_tz_sparse_host.py tests/test_sparse_assembly.py tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py`
+  passed as `78 passed in 5.57 s`.
+- `python -m ruff check tests/test_rhs1_sxblock_tz_sparse_host.py` passed.
+- `python -m compileall -q tests/test_rhs1_sxblock_tz_sparse_host.py`
+  passed.
+
+Coverage note:
+
+- A targeted local `pytest --cov` run still aborts with exit code `134`, which
+  is the same local pytest-cov limitation recorded earlier. Treat the GitHub
+  Actions coverage shards as the authoritative package-coverage measurement.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
