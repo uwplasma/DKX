@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 from importlib.util import find_spec
 from pathlib import Path
 from types import SimpleNamespace

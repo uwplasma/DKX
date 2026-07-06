@@ -2649,6 +2649,79 @@ Validation:
 - `pytest -q tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
   passed as `71 passed in 4.37 s` in the previous tranche.
 
+### Tranche 141: final PR-review validation and artifact refresh
+
+Scope:
+
+- Confirmed the branch topology for review: `refactor/v3-driver-architecture`
+  is the single active PR branch, is `0` commits behind `origin/main`, and is
+  exactly synchronized with `origin/refactor/v3-driver-architecture` before
+  this final checkpoint.
+- Regenerated the public SFINCS Fortran v3 vs `sfincs_jax` CPU/GPU
+  runtime-memory summary from the canonical checked CPU/GPU suite reports.
+  The regenerated JSON/PNG/PDF and README audit block were deterministic and
+  produced no tracked diff.
+- Rechecked the canonical benchmark JSON with the artifact policy gate. The
+  README-facing benchmark set contains `24` CPU rows and `24` GPU rows after
+  excluding the documented low-Fortran-runtime smoke rows; every included row
+  is `parity_ok` with zero practical and strict common-output mismatches.
+- Regenerated the QA/QH finite-beta bootstrap-current comparison PDFs from the
+  checked summary JSON files, including the same-resolution QA/QH panels and
+  the broader QA/QH SFINCS-JAX/SFINCS Fortran v3/Redl panels.
+- Fixed the only actionable focused-ruff issue found in the validation bundle:
+  `tests/test_jax_ecosystem_backend_probes.py` now explicitly documents the
+  intentional import ordering needed to enable JAX X64 before importing JAX
+  array modules.
+- Re-ran a fresh bounded SFINCS Fortran v3 parity check on
+  `quick_2species_FPCollisions_noEr`. Fortran v3 detected MUMPS, JAX wrote the
+  output, and the common HDF5 output comparison passed with zero mismatches.
+- Rebuilt the Sphinx documentation after plot regeneration.
+
+Validation:
+
+- `python examples/publication_figures/generate_fortran_suite_benchmark_summary.py`
+  completed and wrote the public benchmark JSON and plot.
+- `python scripts/generate_readme_fast_branch_audit.py` completed and produced
+  no tracked README diff.
+- `python scripts/check_benchmark_artifacts.py examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json`
+  passed.
+- `python scripts/check_repo_size.py` passed with `0` reviewed files above
+  `2 MiB`.
+- `python scripts/check_release_gates.py` passed.
+- `python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py --from-summary-json ...`
+  regenerated the QA/QH comparison figures from checked summaries.
+- `python -m pytest -q tests/test_generate_fortran_suite_benchmark_summary.py tests/test_benchmark_doc_claims.py`
+  passed as `14 passed in 1.50 s`.
+- `python -m pytest -q tests/test_finite_beta_vmec_example.py tests/test_examples_tree_contract.py`
+  passed as `34 passed in 1.50 s`.
+- `python -m pytest -q tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `71 passed in 4.47 s`.
+- `python -m pytest -q tests/test_generate_fortran_suite_benchmark_summary.py tests/test_benchmark_doc_claims.py tests/test_finite_beta_vmec_example.py tests/test_examples_tree_contract.py tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py`
+  passed as `103 passed in 8.88 s`.
+- `python -m pytest -q tests/test_jax_ecosystem_backend_probes.py` passed as
+  `4 passed in 3.67 s`.
+- `python -m ruff check sfincs_jax tests scripts/generate_readme_fast_branch_audit.py examples/publication_figures/generate_fortran_suite_benchmark_summary.py examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py`
+  passed.
+- `python -m compileall -q sfincs_jax tests/test_jax_ecosystem_backend_probes.py scripts/generate_readme_fast_branch_audit.py examples/publication_figures/generate_fortran_suite_benchmark_summary.py examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py`
+  passed.
+- `git diff --check` passed.
+- `python -m sphinx -b html docs docs/_build/html` passed.
+- `python scripts/compare_v3_example_suite.py --pattern quick_2species --limit 1 --fortran-exe /Users/rogeriojorge/local/sfincs/fortran/version3/sfincs --fortran-timeout-s 90 --compute-solution --rtol 1e-8 --atol 1e-8 --out-root /tmp/sfincs_jax_final_fortran_compare_review_rtol1e8 -v`
+  passed with `ok_write_output=True`, `ok_fortran=True`,
+  `ok_compare_common=True`, and zero common-output mismatches.
+- `python -m pytest -q` passed as `4336 passed in 653.68 s`.
+
+Review note:
+
+- A broad `ruff check .` and `compileall ... examples` intentionally remain
+  outside the release validation contract because they include archived
+  upstream SFINCS example utilities and path-bootstrapped scripts that are not
+  formatted as importable Python package code.
+- A fresh live all-example SFINCS Fortran/JAX rerun is not claimed in this
+  checkpoint; the public runtime/memory/parity figure is regenerated from the
+  checked CPU/GPU/Fortran suite reports, and the final live Fortran validation
+  is the bounded `quick_2species` spot comparison above.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
