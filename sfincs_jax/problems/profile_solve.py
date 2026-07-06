@@ -95,6 +95,7 @@ from sfincs_jax.problems.profile_policies import (
     rhs1_sharded_line_override_allowed as _rhs1_sharded_line_override_allowed,
     rhs1_bicgstab_preconditioner_kind,
     resolve_rhs1_full_fp_dense_auto_route,
+    resolve_rhs1_initial_sparse_shortcut_route,
     resolve_rhs1_preconditioner_route_setup,
 )
 from sfincs_jax.problems.profile_policies import (
@@ -371,8 +372,6 @@ from sfincs_jax.problems.profile_residual import (
     safe_ratio as rhs1_safe_ratio, true_residual_norm_or_inf as rhs1_true_residual_norm_or_inf,
 )
 from sfincs_jax.problems.profile_policies import (
-    rhs1_constraint0_dense_fallback_allowed as _rhs1_constraint0_dense_fallback_allowed_impl,
-    rhs1_constraint0_petsc_compat as _rhs1_constraint0_petsc_compat_impl,
     rhs1_constraint0_petsc_compat_config_from_env, rhs1_constraint0_petsc_compat_regularization,
     rhsmode1_constraint0_sparse_first_current_backend as _rhsmode1_constraint0_sparse_first,
 )
@@ -666,14 +665,6 @@ _rhsmode1_explicit_sparse_host_direct_allowed = (
 
 
 _rhsmode1_pas_adaptive_smoother_allowed = _rhs1_pas_adaptive_smoother_allowed_impl
-
-
-_rhsmode1_constraint0_petsc_compat = _rhs1_constraint0_petsc_compat_impl
-
-
-_rhsmode1_constraint0_dense_fallback_allowed = (
-    _rhs1_constraint0_dense_fallback_allowed_impl
-)
 
 
 _rhsmode1_prefer_sparse_over_dense_shortcut = (
@@ -1271,54 +1262,32 @@ def solve_v3_full_system_linear_gmres(
         sparse_prefer_over_dense_shortcut=bool(sparse_prefer_over_dense_shortcut),
         sparse_precond_mode=sparse_precond_mode,
     )
-    gpu_dkes_sparse_shortcut = bool(
-        rhs1_precond_env_user in {"", "auto"}
-        and rhs1_bicgstab_env_user in {"", "auto"}
-        and solve_method_kind not in {"dense", "dense_ksp"}
-        and jax.default_backend() != "cpu"
-        and int(op.rhs_mode) == 1
-        and (not bool(op.include_phi1))
-        and op.fblock.fp is not None
-        and op.fblock.pas is None
-        and use_dkes
-        and sparse_precond_mode != "off"
-        and int(active_size) <= int(sparse_max_size)
-    )
-    cs0_sparse_first = _rhsmode1_constraint0_sparse_first(
+    sparse_shortcut_route = resolve_rhs1_initial_sparse_shortcut_route(
         op=op,
+        rhs1_precond_env_user=str(rhs1_precond_env_user),
+        rhs1_bicgstab_env_user=str(rhs1_bicgstab_env_user),
+        rhs1_precond_kind=rhs1_precond_kind,
+        rhs1_precond_enabled=bool(rhs1_precond_enabled),
+        rhs1_bicgstab_kind=rhs1_bicgstab_kind,
         solve_method_kind=solve_method_kind,
         sparse_precond_mode=sparse_precond_mode,
         active_size=int(active_size),
         sparse_max_size=int(sparse_max_size),
+        use_dkes=bool(use_dkes),
+        backend=jax.default_backend(),
     )
-    cs0_petsc_compat = _rhsmode1_constraint0_petsc_compat(
-        op=op,
-        solve_method_kind=solve_method_kind,
-        sparse_precond_mode=sparse_precond_mode,
-        active_size=int(active_size),
-        sparse_max_size=int(sparse_max_size),
+    gpu_dkes_sparse_shortcut = bool(sparse_shortcut_route.gpu_dkes_sparse_shortcut)
+    cs0_sparse_first = bool(sparse_shortcut_route.cs0_sparse_first)
+    cs0_petsc_compat = bool(sparse_shortcut_route.cs0_petsc_compat)
+    cs0_dense_fallback_allowed = bool(
+        sparse_shortcut_route.cs0_dense_fallback_allowed
     )
-    cs0_dense_fallback_allowed = _rhsmode1_constraint0_dense_fallback_allowed(op)
-    if cs0_petsc_compat:
-        rhs1_precond_kind = None
-        rhs1_precond_enabled = False
-        rhs1_bicgstab_kind = None
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: constraintScheme=0 PETSc-compat auto mode "
-                "-> dedicated sparse ILU path",
-            )
-    if gpu_dkes_sparse_shortcut:
-        rhs1_precond_kind = None
-        rhs1_precond_enabled = False
-        rhs1_bicgstab_kind = None
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: GPU DKES auto mode -> sparse ILU shortcut "
-                f"(size={int(active_size)})",
-            )
+    rhs1_precond_kind = sparse_shortcut_route.rhs1_precond_kind
+    rhs1_precond_enabled = bool(sparse_shortcut_route.rhs1_precond_enabled)
+    rhs1_bicgstab_kind = sparse_shortcut_route.rhs1_bicgstab_kind
+    if emit is not None:
+        for level, message in sparse_shortcut_route.messages:
+            emit(int(level), str(message))
 
     linear_solve_dispatch = build_profile_linear_solve_dispatch(
         rhs_mode=int(op.rhs_mode),

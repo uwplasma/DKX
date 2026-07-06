@@ -4189,6 +4189,105 @@ def rhs1_host_sparse_direct_allowed(*, sparse_exact_lu: bool, use_implicit: bool
     return True
 
 
+@dataclass(frozen=True)
+class RHS1InitialSparseShortcutRouteDecision:
+    """Initial sparse-route decision and preconditioner-state updates."""
+
+    gpu_dkes_sparse_shortcut: bool
+    cs0_sparse_first: bool
+    cs0_petsc_compat: bool
+    cs0_dense_fallback_allowed: bool
+    rhs1_precond_kind: str | None
+    rhs1_precond_enabled: bool
+    rhs1_bicgstab_kind: str | None
+    messages: tuple[tuple[int, str], ...] = ()
+
+
+def resolve_rhs1_initial_sparse_shortcut_route(
+    *,
+    op: Any,
+    rhs1_precond_env_user: str,
+    rhs1_bicgstab_env_user: str,
+    rhs1_precond_kind: str | None,
+    rhs1_precond_enabled: bool,
+    rhs1_bicgstab_kind: str | None,
+    solve_method_kind: str,
+    sparse_precond_mode: str,
+    active_size: int,
+    sparse_max_size: int,
+    use_dkes: bool,
+    backend: str,
+) -> RHS1InitialSparseShortcutRouteDecision:
+    """Resolve sparse-first lanes that bypass the default preconditioner build."""
+
+    method_kind = str(solve_method_kind).strip().lower()
+    backend_norm = str(backend).strip().lower()
+    cs0_sparse_first = rhs1_constraint0_sparse_first(
+        op=op,
+        solve_method_kind=method_kind,
+        sparse_precond_mode=sparse_precond_mode,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+        backend=backend_norm,
+    )
+    cs0_petsc_compat = rhs1_constraint0_petsc_compat(
+        op=op,
+        solve_method_kind=method_kind,
+        sparse_precond_mode=sparse_precond_mode,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+    )
+    gpu_dkes_sparse_shortcut = bool(
+        str(rhs1_precond_env_user).strip().lower() in {"", "auto"}
+        and str(rhs1_bicgstab_env_user).strip().lower() in {"", "auto"}
+        and method_kind not in {"dense", "dense_ksp"}
+        and backend_norm != "cpu"
+        and int(op.rhs_mode) == 1
+        and (not bool(op.include_phi1))
+        and op.fblock.fp is not None
+        and op.fblock.pas is None
+        and bool(use_dkes)
+        and str(sparse_precond_mode).strip().lower() != "off"
+        and int(active_size) <= int(sparse_max_size)
+    )
+    messages: list[tuple[int, str]] = []
+    precond_kind_out = rhs1_precond_kind
+    precond_enabled_out = bool(rhs1_precond_enabled)
+    bicgstab_kind_out = rhs1_bicgstab_kind
+    if cs0_petsc_compat:
+        precond_kind_out = None
+        precond_enabled_out = False
+        bicgstab_kind_out = None
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: constraintScheme=0 PETSc-compat auto mode "
+                "-> dedicated sparse ILU path",
+            )
+        )
+    if gpu_dkes_sparse_shortcut:
+        precond_kind_out = None
+        precond_enabled_out = False
+        bicgstab_kind_out = None
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: GPU DKES auto mode -> sparse ILU shortcut "
+                f"(size={int(active_size)})",
+            )
+        )
+    return RHS1InitialSparseShortcutRouteDecision(
+        gpu_dkes_sparse_shortcut=bool(gpu_dkes_sparse_shortcut),
+        cs0_sparse_first=bool(cs0_sparse_first),
+        cs0_petsc_compat=bool(cs0_petsc_compat),
+        cs0_dense_fallback_allowed=rhs1_constraint0_dense_fallback_allowed(op),
+        rhs1_precond_kind=precond_kind_out,
+        rhs1_precond_enabled=bool(precond_enabled_out),
+        rhs1_bicgstab_kind=bicgstab_kind_out,
+        messages=tuple(messages),
+    )
+
+
 def rhs1_sparse_operator_preconditioned_rescue_allowed(
     *,
     op: Any,
@@ -7578,6 +7677,8 @@ __all__ = (
     "rhs1_dense_auto_fp_accelerator_min",
     "RHS1FullFPDenseAutoRouteDecision",
     "resolve_rhs1_full_fp_dense_auto_route",
+    "RHS1InitialSparseShortcutRouteDecision",
+    "resolve_rhs1_initial_sparse_shortcut_route",
     "rhs1_dense_fallback_max",
     "rhs1_dense_krylov_allowed",
     "rhs1_explicit_sparse_host_direct_allowed",

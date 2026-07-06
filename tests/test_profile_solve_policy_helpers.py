@@ -355,6 +355,114 @@ def test_full_fp_dense_auto_route_requires_accelerator_admission(monkeypatch) ->
     assert decision.solve_method == "dense"
 
 
+def _profile_route_op(
+    *,
+    has_fp: bool = True,
+    has_pas: bool = False,
+    rhs_mode: int = 1,
+    include_phi1: bool = False,
+    constraint_scheme: int = 1,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        rhs_mode=rhs_mode,
+        include_phi1=include_phi1,
+        constraint_scheme=constraint_scheme,
+        fblock=SimpleNamespace(
+            fp=object() if has_fp else None,
+            pas=object() if has_pas else None,
+        ),
+    )
+
+
+def test_initial_sparse_shortcut_route_selects_gpu_dkes_and_clears_preconds() -> None:
+    decision = profile_policies.resolve_rhs1_initial_sparse_shortcut_route(
+        op=_profile_route_op(),
+        rhs1_precond_env_user="auto",
+        rhs1_bicgstab_env_user="",
+        rhs1_precond_kind="schur",
+        rhs1_precond_enabled=True,
+        rhs1_bicgstab_kind="rhs1",
+        solve_method_kind="auto",
+        sparse_precond_mode="auto",
+        active_size=1200,
+        sparse_max_size=2000,
+        use_dkes=True,
+        backend="gpu",
+    )
+
+    assert decision.gpu_dkes_sparse_shortcut
+    assert not decision.cs0_petsc_compat
+    assert decision.rhs1_precond_kind is None
+    assert not decision.rhs1_precond_enabled
+    assert decision.rhs1_bicgstab_kind is None
+    assert decision.messages == (
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: GPU DKES auto mode -> sparse ILU shortcut "
+            "(size=1200)",
+        ),
+    )
+
+
+def test_initial_sparse_shortcut_route_keeps_preconds_when_only_cs0_sparse_first(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT", raising=False)
+    decision = profile_policies.resolve_rhs1_initial_sparse_shortcut_route(
+        op=_profile_route_op(constraint_scheme=0),
+        rhs1_precond_env_user="user",
+        rhs1_bicgstab_env_user="user",
+        rhs1_precond_kind="collision",
+        rhs1_precond_enabled=True,
+        rhs1_bicgstab_kind="collision",
+        solve_method_kind="incremental",
+        sparse_precond_mode="auto",
+        active_size=1200,
+        sparse_max_size=2000,
+        use_dkes=False,
+        backend="gpu",
+    )
+
+    assert decision.cs0_sparse_first
+    assert not decision.cs0_petsc_compat
+    assert not decision.gpu_dkes_sparse_shortcut
+    assert decision.rhs1_precond_kind == "collision"
+    assert decision.rhs1_precond_enabled
+    assert decision.rhs1_bicgstab_kind == "collision"
+    assert decision.messages == ()
+
+
+def test_initial_sparse_shortcut_route_selects_cs0_petsc_compat(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT", "1")
+    decision = profile_policies.resolve_rhs1_initial_sparse_shortcut_route(
+        op=_profile_route_op(constraint_scheme=0),
+        rhs1_precond_env_user="user",
+        rhs1_bicgstab_env_user="user",
+        rhs1_precond_kind="collision",
+        rhs1_precond_enabled=True,
+        rhs1_bicgstab_kind="collision",
+        solve_method_kind="auto",
+        sparse_precond_mode="auto",
+        active_size=1200,
+        sparse_max_size=2000,
+        use_dkes=False,
+        backend="cpu",
+    )
+
+    assert decision.cs0_petsc_compat
+    assert not decision.cs0_dense_fallback_allowed
+    assert decision.rhs1_precond_kind is None
+    assert not decision.rhs1_precond_enabled
+    assert decision.rhs1_bicgstab_kind is None
+    assert decision.messages == (
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: constraintScheme=0 PETSc-compat auto mode "
+            "-> dedicated sparse ILU path",
+        ),
+    )
+
+
 def test_rhsmode1_host_dense_fallback_policy_envs(monkeypatch) -> None:
     monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert profile_policies.rhsmode1_host_dense_fallback_allowed_current_backend()

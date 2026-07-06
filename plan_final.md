@@ -42,12 +42,13 @@ models overlap.
   docs/example guards, and comparison/plotting checks ran `123 passed in
   9.70 s`; Sphinx `-W` passed in `17.56 s`.
 - The transport cache and RHSMode=1 routing tranches fixed accepted
-  residual-coarse factor reuse, moved BiCGStab and dense-auto route decisions
-  out of `profile_solve.py`, and covered true-residual admission, fail-closed
-  fallback, FP/PAS/DKES/tokamak boundaries, CPU/GPU dense admission,
-  implicit-solve rejection, and explicit-method preservation. Local guards:
-  `35 passed`, `217 passed`, `49 passed`, `44 passed`, and source-tree/domain
-  import contracts `58 passed`.
+  residual-coarse factor reuse, moved BiCGStab, dense-auto, and initial
+  sparse-shortcut route decisions out of `profile_solve.py`, and covered
+  true-residual admission, fail-closed fallback, FP/PAS/DKES/tokamak
+  boundaries, CPU/GPU dense admission, constraintScheme=0 sparse/PETSc routes,
+  implicit rejection, and explicit-method preservation. Guards: `35 passed`,
+  `217 passed`, `49 passed`, `44 passed`, `102 passed`, and source/domain
+  contracts `58 passed`.
 - The last checked PR CI state after `14e0dbd5` had build and
   external-data smoke passing; coverage shards, examples-smoke, optional
   ecosystem checks, and coverage-report were still pending. Recheck CI after
