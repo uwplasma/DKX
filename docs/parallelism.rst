@@ -860,7 +860,7 @@ The corresponding differentiable-Python milestones are:
 3. then evaluate implicit-diff and gradient correctness across the distributed
    path.
 
-The new CLI flags are the public entry point for that rollout:
+The CLI flags are the public entry point for that rollout:
 
 .. code-block:: bash
 

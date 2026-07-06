@@ -574,7 +574,7 @@ Scope and status:
   residual-weighted angular probe-coarse CPU artifact pass. The matching
   one-GPU probe-coarse and QI coarse-seed artifacts still time out. The
   no-LGMRES GPU-compatible follow-up reaches ``925`` matvecs by ``409.9 s`` but
-  still writes no HDF5/trace. The active-pattern GPU follow-up observes the new
+  still writes no HDF5/trace. The active-pattern GPU follow-up observes the
   residual-selected chunked coarse path and finishes in ``231.7 s`` but stalls
   at residual ``1.622338e-5``. The remaining hard blocker is therefore still
   the scale-0.60 one-GPU seed-3 solve for the deferred differentiable

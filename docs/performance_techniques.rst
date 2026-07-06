@@ -482,7 +482,7 @@ Adaptive PAS smoother stage
 
 For PAS-heavy ``RHSMode=1`` solves, the expensive part of the fallback ladder is
 often not the base Krylov solve itself, but the sequence of progressively stronger
-preconditioner builds that follow when the residual is still above target. The new
+preconditioner builds that follow when the residual is still above target. The
 adaptive PAS smoother stage inserts a bounded Richardson-like correction before
 that escalation:
 
@@ -499,7 +499,7 @@ where :math:`P^{-1}` is the already-built PAS preconditioner application and
   ``sfincs_jax.solvers.preconditioner_pas_policy.adaptive_pas_smoother``.
 - Driver gate:
   ``sfincs_jax.solvers.preconditioner_pas_policy.adaptive_pas_smoother_allowed``.
-- Current integration point: immediately after the base PAS solve and before the
+- Integration point: immediately after the base PAS solve and before the
   strong-preconditioner tail in the linear RHSMode=1 driver.
 
 **Why this helps.**
@@ -1166,7 +1166,7 @@ Controls:
   passed admission when the separator cap retained most of the active system
   (``sep=2048``, ``max_rel=2.743e-5``, ``26.17 MB``), while
   geometry-scheme-11 still failed all tested separator/block-size settings.
-  With the new admission rescue enabled, both reduced all-RHS gates are clean:
+  With admission rescue enabled, both reduced all-RHS gates are clean:
   geometry-scheme-2 reaches relative residuals ``6.98e-11``, ``4.03e-11``, and
   ``7.66e-13`` in ``3.26 s`` after exact-Pmat LU rescue
   (``13.984 MB``), and geometry-scheme-11 reaches ``5.07e-13``,
@@ -2395,7 +2395,7 @@ Controls:
   restart-20 device-FGMRES follow-up reached ``500`` device matvecs by
   ``533.2 s`` but still timed out and increased peak host RSS to ``50.4 GB``.
   The cycle-synchronized
-  restart-20 follow-up verified the new memory knob and reached ``500`` device
+  restart-20 follow-up verified the cycle memory knob and reached ``500`` device
   matvecs by ``528.8 s``, but still timed out and peaked at ``51.0 GB`` RSS.
   That artifact is explicit blocker evidence, not a performance claim. The
   next cycle-JIT implementation changes the device-Krylov execution model: it
@@ -2550,7 +2550,7 @@ Controls:
   fail-closed because the production write tolerance is much tighter.
   The scoped claim for this specific hard-seed case is therefore only that the
   research path gets below ``3e-5`` on both CPU and GPU. Closing the
-  remaining gap requires new coarse residual variables, not more smoother,
+  remaining gap requires stronger coarse residual variables, not more smoother,
   restart, or active-pattern tuning.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE`` (default: off): opt-in
   pre-Krylov seed correction for explicit ``xblock_sparse_pc_gmres``. This uses
@@ -2597,7 +2597,7 @@ Controls:
   candidate for QI hard seeds. The checked scale-0.60 seed-3 CPU rerun
   ``docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_cpu_2026_05_14.json``
   passes in ``248.4 s`` with residual ratio ``1.36e-3``. The QI seed correction
-  itself is small, while the new angular probe-coarse directions supply the
+  itself is small, while the angular probe-coarse directions supply the
   material pre-Krylov drop. A matching one-GPU heartbeat probe
   ``docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_gpu0_heartbeat_timeout_2026_05_14.json``
   kept the process live and bounded for ``420 s`` on the same active

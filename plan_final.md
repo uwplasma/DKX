@@ -3265,6 +3265,82 @@ Status:
   `profile_full_system.py`, and the QI/preconditioner modules or remove dead
   code rather than adding narrow wrapper tests.
 
+## Tranche 155: Review-Prep Branch Consolidation and Public Artifact Check
+
+Scope:
+
+- Verified branch topology before review:
+  `main` and `origin/main` are ancestors of
+  `refactor/v3-driver-architecture`, so there is no second divergent local
+  feature branch to merge. The draft PR branch is the single branch carrying
+  the refactor work.
+- Rewrote remaining public documentation phrases that described the project as
+  a sequence of temporary branch states instead of a standalone code release.
+  The pass covered `docs/testing.rst`, `docs/performance_techniques.rst`,
+  `docs/research_lanes.rst`, `docs/parallelism.rst`, and
+  `docs/validation_matrix.rst`.
+- Regenerated the README runtime/memory figure and canonical summary JSON from
+  the tracked CPU/GPU suite reports:
+  `examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json`
+  and `docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.{png,pdf}`.
+- Regenerated the QA and QH bootstrap-current comparison figures from tracked
+  summary JSON, without rerunning kinetic solves:
+  `docs/_static/figures/vmec_jax_finite_beta/qs_paper_sfincs_jax_redl_comparison.{json,png,pdf}`
+  and
+  `docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_sfincs_jax_redl_comparison.{json,png,pdf}`.
+
+Evidence:
+
+- Branch checks:
+  `git merge-base --is-ancestor main HEAD` and
+  `git merge-base --is-ancestor origin/main HEAD` both returned success.
+  `git log --oneline main..HEAD | wc -l` reported `1000`, and
+  `git log --oneline HEAD..main | wc -l` reported `0`.
+- Public benchmark summary:
+  the tracked source reports contain `39` CPU and `39` GPU source cases.
+  The README-facing `min_fortran_runtime_s=10` filter reports `24` CPU and
+  `24` GPU rows, with `strict_mismatch_total=0` for both backends.
+- Strict production-floor audit:
+  `python examples/publication_figures/generate_fortran_suite_benchmark_summary.py --enforce-public-resolution-floor`
+  fails closed because the tracked public reports still contain `15` below-floor
+  historical rows per backend. This is an honest remaining compute gate before
+  replacing public performance claims with a fully production-floor suite.
+- QA/QH bootstrap-current artifacts:
+  the QA tracked profile has `39/39` completed SFINCS_JAX points, maximum
+  JAX-vs-Fortran relative difference `6.94%`, maximum JAX-vs-Redl relative
+  difference `23.95%`, SFINCS_JAX elapsed sum `232.55 s`, and archived
+  Fortran-v3 elapsed sum `696.07 s` on the same surfaces. The QH tracked profile
+  has `39/39` completed SFINCS_JAX points, maximum JAX-vs-Fortran relative
+  difference `18.77%`, maximum JAX-vs-Redl relative difference `15.31%`,
+  SFINCS_JAX elapsed sum `261.08 s`, and archived Fortran-v3 elapsed sum
+  `655.48 s`.
+
+Validation:
+
+- `python -m pytest -q -n auto --dist=loadscope` passed as
+  `4381 passed in 262.99 s`.
+- `python -m pytest -q tests/test_benchmark_doc_claims.py tests/test_generate_fortran_suite_benchmark_summary.py tests/test_validation_artifacts.py tests/test_finite_beta_vmec_example.py`
+  passed as `60 passed in 2.96 s`.
+- `python -m pytest -q tests/test_benchmark_doc_claims.py tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py`
+  passed as `62 passed in 4.60 s`.
+- `python -m ruff check tests/test_profile_solve_module_wrappers.py` passed.
+- `python -m compileall -q sfincs_jax tests scripts examples/getting_started examples/optimization examples/parity examples/performance examples/publication_figures examples/tutorials examples/transport examples/vmec_jax_finite_beta`
+  passed. A broader `compileall examples` intentionally hits archived upstream
+  Python-2 utilities under `examples/sfincs_examples`, which are excluded from
+  maintained-code validation.
+
+Status:
+
+- The draft PR branch is ready for user review from a branch-consolidation and
+  local-test perspective once this tranche is committed and pushed.
+- The 95% coverage gate remains open at the previously measured `90.2968%`.
+- Fresh production-floor CPU/GPU/Fortran benchmark reports remain open if the
+  README performance figure must be based only on rows satisfying
+  `Ntheta>=25`, `Nzeta>=51`, `Nxi>=100`, and `Nx>=4`.
+- QH bootstrap current is usable as checked evidence but remains the less tight
+  finite-beta comparison: it is below `20%` JAX-vs-Fortran maximum relative
+  difference in the tracked profile, not a sub-10% agreement claim.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
