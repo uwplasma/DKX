@@ -2010,7 +2010,7 @@ Remaining consolidation steps:
 ### Lane 2 - Coverage And Future-Proof Tests
 
 Status: about `91%` package coverage from the latest full local audit
-(`90.885%`, `69,136` statements, `6,302` missing). The direct public contract audit remains
+(`90.967%`, `69,136` statements, `6,245` missing). The direct public contract audit remains
 closed at `modules_with_missing 0`; focused owner coverage is `98%` for
 `workflows/scans.py` after Tranche 111 and `100%` for
 `validation/figures.py` after Tranche 112 and `validation/qi_device.py` after
@@ -4643,6 +4643,12 @@ Validation:
   from `220` to `179` missing lines; `profile_full_system.py` now has direct
   dispatch-contract tests for active projected preconditioner aliases and
   missing-layout fail-closed behavior.
+- After the active-DOF transport orchestration coverage tranche,
+  `python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax
+  --cov-report=term --cov-report=json:/tmp/sfincs_jax_coverage_after_transport_active_paths.json`
+  passed as `4562 passed, 1 skipped in 330.76 s`; total package coverage is
+  `91%` (`90.967%`) with `6245` missing lines. `transport_solve.py` improved
+  from `179` to `122` missing lines.
 - `python -m pytest -q tests/test_rhs1_true_operator_rescue.py` passed as
   `25 passed in 0.26 s`.
 - `python -m pytest -q tests/test_rhs1_true_operator_rescue.py
@@ -4674,7 +4680,7 @@ Changes:
   fallback, mixed precision, or dense preconditioner memory guards are active.
 - Updated `docs/testing.rst` to report the measured refactor-lane package
   coverage as about `91%`, matching the latest full local coverage audit
-  (`90.885%`) while keeping the `95%` target explicit.
+  (`90.967%`) while keeping the `95%` target explicit.
 
 Validation:
 
@@ -4985,11 +4991,47 @@ Validation:
 Status:
 
 - CPU-local PR readiness improved and the latest full-suite coverage baseline
-  is `90.885%`. The `95%` target remains open; reaching it still requires a
+  is `90.967%`. The `95%` target remains open; reaching it still requires a
   mix of bounded owner tests and further simplification of high-level solve
   orchestration rather than broad production solves in CI.
 - Fresh GPU benchmark regeneration remains deferred because the office GPU host
   is not reachable in this pass.
+
+### 2026-07-06: Active-DOF Transport Orchestration Coverage Tranche
+
+Changes:
+
+- Added active-DOF transport tests for reduced and full initial guesses,
+  structured `tzfft` first-attempt routing, host-GMRES first-attempt admission,
+  sparse-LU first-attempt failure, sparse-rescue failure reporting, and polish
+  retry improvement.
+- Kept all tests on the existing tiny diagonal harness so the coverage gain
+  exercises real automatic solver branches without adding slow production solves
+  or generated artifacts.
+
+Validation:
+
+- `python -m pytest -q tests/test_transport_solve_module_wrappers.py` passed as
+  `23 passed in 1.06 s`.
+- `python -m pytest -q tests/test_transport_solve_module_wrappers.py
+  tests/test_transport_solve_setup.py tests/test_transport_linear_solve.py
+  tests/test_transport_policy_coverage.py tests/test_transport_sparse_direct_solve.py
+  tests/test_transport_solve_finalization.py` passed as `104 passed in 10.78 s`.
+- Full local package coverage passed:
+  `python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax
+  --cov-report=term --cov-report=json:/tmp/sfincs_jax_coverage_after_transport_active_paths.json`
+  as `4562 passed, 1 skipped in 330.76 s`; total package coverage is
+  `90.967%` with `6245` missing lines. `transport_solve.py` is now at `87%`
+  coverage with `122` missing lines.
+- `python -m ruff check`, `python -m compileall -q`, and `git diff --check`
+  passed for the touched files.
+
+Status:
+
+- The transport orchestration owner is no longer one of the top three coverage
+  blockers. Remaining coverage work should shift to `profile_solve.py`,
+  `profile_full_system.py`, explicit sparse/QI preconditioner owners, and
+  source simplification that removes unneeded branch surfaces.
 
 ## Standard Validation Commands
 

@@ -731,3 +731,210 @@ def test_transport_solve_loop_tzfft_first_attempt_records_policy(monkeypatch) ->
     assert call["preconditioner_val"] is precond
     assert any("structured tzfft first attempt enabled" in msg for _level, msg in captured["messages"])
     assert any("uses left preconditioning" in msg for _level, msg in captured["messages"])
+
+
+@pytest.mark.parametrize(
+    ("x0_by_rhs", "expected_x0"),
+    [
+        ({1: jnp.asarray([10.0, 20.0, 30.0, 40.0], dtype=jnp.float64)}, [10.0, 30.0]),
+        ({1: jnp.asarray([7.0, 9.0], dtype=jnp.float64)}, [7.0, 9.0]),
+    ],
+)
+def test_transport_solve_active_path_reduces_initial_guesses(
+    monkeypatch,
+    x0_by_rhs: dict[int, jnp.ndarray],
+    expected_x0: list[float],
+) -> None:
+    captured = _install_transport_loop_harness(
+        monkeypatch,
+        total_size=4,
+        which_rhs_values=(1,),
+        use_active_dof_mode=True,
+        active_indices=(0, 2),
+    )
+
+    transport_solve.solve_v3_transport_matrix_linear_gmres(
+        nml=SimpleNamespace(),
+        x0_by_rhs=x0_by_rhs,
+        tol=1e-8,
+        atol=1e-12,
+        emit=lambda level, message: captured["messages"].append((int(level), str(message))),
+    )
+
+    np.testing.assert_allclose(np.asarray(captured["solve_calls"][0]["x0_vec"]), np.asarray(expected_x0))
+
+
+def test_transport_solve_active_path_tzfft_first_attempt_records_policy(monkeypatch) -> None:
+    def precond(x):
+        return x
+
+    captured = _install_transport_loop_harness(
+        monkeypatch,
+        total_size=4,
+        which_rhs_values=(1,),
+        use_active_dof_mode=True,
+        active_indices=(0, 2),
+    )
+    monkeypatch.setattr(transport_solve, "_transport_tzfft_structured_first_attempt_allowed", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(transport_solve, "_transport_tzfft_first_attempt_budget", lambda **_kwargs: ("incremental", 19, 23))
+    monkeypatch.setattr(transport_solve, "normalize_transport_preconditioner_kind", lambda env_value: "tzfft")
+    monkeypatch.setattr(transport_solve, "resolve_transport_preconditioner_choice", lambda **_kwargs: ("tzfft", "tzfft"))
+    monkeypatch.setattr(transport_solve, "build_transport_preconditioner_from_kind", lambda **_kwargs: precond)
+
+    transport_solve.solve_v3_transport_matrix_linear_gmres(
+        nml=SimpleNamespace(),
+        tol=1e-8,
+        atol=1e-12,
+        emit=lambda level, message: captured["messages"].append((int(level), str(message))),
+    )
+
+    call = captured["solve_calls"][0]
+    assert call["solve_method_val"] == "incremental"
+    assert call["restart_val"] == 19
+    assert call["maxiter_val"] == 23
+    assert call["preconditioner_val"] is precond
+    assert any("structured tzfft first attempt" in msg for _level, msg in captured["messages"])
+
+
+def test_transport_solve_active_path_accepts_host_gmres_first_attempt(monkeypatch) -> None:
+    captured = _install_transport_loop_harness(
+        monkeypatch,
+        total_size=4,
+        which_rhs_values=(1,),
+        use_active_dof_mode=True,
+        active_indices=(0, 2),
+    )
+    monkeypatch.setattr(transport_solve, "_transport_host_gmres_first_attempt_allowed", lambda **_kwargs: True)
+
+    def fake_host_gmres(**kwargs):
+        captured["host_gmres_kwargs"] = kwargs
+        x = 0.5 * kwargs["b_vec"]
+        return GMRESSolveResult(x=x, residual_norm=jnp.asarray(0.0)), jnp.zeros_like(kwargs["b_vec"])
+
+    monkeypatch.setattr(transport_solve, "_transport_host_gmres_solve", fake_host_gmres)
+
+    result = transport_solve.solve_v3_transport_matrix_linear_gmres(
+        nml=SimpleNamespace(),
+        tol=1e-8,
+        atol=1e-12,
+        emit=lambda level, message: captured["messages"].append((int(level), str(message))),
+    )
+
+    assert not captured["solve_calls"]
+    assert captured["host_gmres_kwargs"]["b_vec"].shape == (2,)
+    assert result.solver_kinds_by_rhs == {1: "gmres_scipy"}
+    assert result.solve_methods_by_rhs == {1: "incremental"}
+    assert any("host SciPy GMRES first attempt" in msg for _level, msg in captured["messages"])
+
+
+def test_transport_solve_active_path_sparse_first_attempt_failure_falls_back(monkeypatch) -> None:
+    captured = _install_transport_loop_harness(
+        monkeypatch,
+        total_size=4,
+        which_rhs_values=(1,),
+        use_active_dof_mode=True,
+        active_indices=(0, 2),
+    )
+    monkeypatch.setattr(transport_solve, "_transport_sparse_direct_first_attempt_allowed", lambda **_kwargs: True)
+    monkeypatch.setattr(
+        transport_solve,
+        "_transport_sparse_direct_context_from_env",
+        lambda **_kwargs: SimpleNamespace(solve=lambda **kwargs: (_ for _ in ()).throw(RuntimeError("factor failed"))),
+    )
+
+    result = transport_solve.solve_v3_transport_matrix_linear_gmres(
+        nml=SimpleNamespace(),
+        tol=1e-8,
+        atol=1e-12,
+        emit=lambda level, message: captured["messages"].append((int(level), str(message))),
+    )
+
+    assert len(captured["solve_calls"]) == 1
+    assert result.solver_kinds_by_rhs == {1: "bicgstab"}
+    assert any("host sparse LU first attempt failed" in msg for _level, msg in captured["messages"])
+
+
+def test_transport_solve_active_path_sparse_rescue_failure_is_reported(monkeypatch) -> None:
+    captured = _install_transport_loop_harness(
+        monkeypatch,
+        total_size=4,
+        which_rhs_values=(1,),
+        use_active_dof_mode=True,
+        active_indices=(0, 2),
+    )
+
+    class FailingCallbacks:
+        def __init__(self, *, context):
+            captured["linear_context"] = context
+
+        def solve(self, **kwargs):
+            captured["solve_calls"].append(kwargs)
+            return GMRESSolveResult(x=jnp.zeros_like(kwargs["b_vec"]), residual_norm=jnp.asarray(50.0))
+
+        def solve_with_residual(self, **kwargs):
+            captured["solve_calls"].append(kwargs)
+            return GMRESSolveResult(x=jnp.zeros_like(kwargs["b_vec"]), residual_norm=jnp.asarray(50.0)), kwargs["b_vec"]
+
+    monkeypatch.setattr(transport_solve, "TransportLinearSolveCallbacks", FailingCallbacks)
+    monkeypatch.setattr(transport_solve, "_transport_sparse_direct_rescue_allowed", lambda **_kwargs: True)
+    monkeypatch.setattr(
+        transport_solve,
+        "_transport_sparse_direct_context_from_env",
+        lambda **_kwargs: SimpleNamespace(solve=lambda **kwargs: (_ for _ in ()).throw(RuntimeError("rescue failed"))),
+    )
+
+    result = transport_solve.solve_v3_transport_matrix_linear_gmres(
+        nml=SimpleNamespace(),
+        tol=1e-8,
+        atol=1e-12,
+        emit=lambda level, message: captured["messages"].append((int(level), str(message))),
+    )
+
+    assert result.solver_kinds_by_rhs == {1: "gmres"}
+    assert any("sparse LU direct rescue failed" in msg for _level, msg in captured["messages"])
+
+
+def test_transport_solve_active_path_polish_retry_can_improve_solution(monkeypatch) -> None:
+    captured = _install_transport_loop_harness(
+        monkeypatch,
+        total_size=4,
+        which_rhs_values=(1,),
+        solve_method_use="incremental",
+        use_active_dof_mode=True,
+        active_indices=(0, 2),
+    )
+
+    class InitialThenPolishCallbacks:
+        def __init__(self, *, context):
+            captured["linear_context"] = context
+
+        def solve(self, **kwargs):
+            captured["solve_calls"].append(kwargs)
+            if kwargs["restart_val"] == 23:
+                x = 0.5 * kwargs["b_vec"]
+                return GMRESSolveResult(x=x, residual_norm=jnp.asarray(0.0))
+            return GMRESSolveResult(x=jnp.zeros_like(kwargs["b_vec"]), residual_norm=jnp.asarray(50.0))
+
+        def solve_with_residual(self, **kwargs):
+            result = self.solve(**kwargs)
+            residual = kwargs["b_vec"] - 2.0 * result.x
+            return result, residual
+
+    monkeypatch.setattr(transport_solve, "TransportLinearSolveCallbacks", InitialThenPolishCallbacks)
+    monkeypatch.setattr(
+        transport_solve,
+        "transport_polish_config_from_env",
+        lambda **_kwargs: SimpleNamespace(enabled=True, ratio=2.0, abs_tol=1e-8, restart=23, maxiter=29),
+    )
+
+    result = transport_solve.solve_v3_transport_matrix_linear_gmres(
+        nml=SimpleNamespace(),
+        tol=1e-8,
+        atol=1e-12,
+        emit=lambda level, message: captured["messages"].append((int(level), str(message))),
+    )
+
+    assert [call["restart_val"] for call in captured["solve_calls"]] == [7, 23]
+    assert result.solver_kinds_by_rhs == {1: "gmres"}
+    assert result.solve_methods_by_rhs == {1: "incremental"}
+    assert any("polish solve for RHSMode=3" in msg for _level, msg in captured["messages"])
