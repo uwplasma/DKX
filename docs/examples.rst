@@ -303,6 +303,15 @@ If those local reduced-resolution Fortran sidecars are not present, add
 Add ``--quick`` for a three-surface smoke plot, or increase the surface list to
 rerun a denser radial diagnostic.
 
+To re-render a checked figure bundle from its summary JSON without rerunning
+kinetic solves or requiring local HDF5 sidecars:
+
+.. code-block:: bash
+
+   python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+     --from-summary-json docs/_static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface.json \
+     --stem qs_paper_qa_same_resolution_11surface
+
 Add ``--jax-vs-redl`` (alias ``--hide-fortran``) for a pure ``sfincs_jax``
 versus Redl plot. The default ``--s-values all`` evaluates all 39 archived
 surfaces; increase the grid beyond ``13 x 13 x 21 x 5`` for production accuracy
