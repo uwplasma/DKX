@@ -2449,6 +2449,8 @@ Validation:
 - `python -m compileall -q examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py tests/test_finite_beta_vmec_example.py`
   passed.
 - `sphinx-build -W -b html docs docs/_build/html` passed.
+- After updating the stale pool-key assertion, the full local CPU suite passed:
+  `python -m pytest -q` as `4460 passed, 3 skipped in 935.56 s`.
 - `git diff --check` passed.
 - A bounded fresh SFINCS Fortran v3 comparison passed on
   `quick_2species_FPCollisions_noEr` using

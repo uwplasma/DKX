@@ -1510,7 +1510,7 @@ def test_transport_parallel_env_helpers_restore_and_fallback(
         assert calls == [("", None, 1)]
         assert transport_parallel_pool_key(4)[0] == 4
         assert transport_parallel_pool_key(4)[1] == "cpu"
-        assert transport_parallel_pool_key(4)[3] == "1"
+        assert transport_parallel_pool_key(4)[3] is True
         assert transport_parallel_pool_key(4)[4] == "8"
         assert transport_parallel_pool_key(4)[2] == "spawn"
         assert os.environ["XLA_FLAGS"] == "rewritten"
