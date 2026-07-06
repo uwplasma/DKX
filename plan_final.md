@@ -163,6 +163,19 @@ The main structural refactor is functionally complete:
   passed as `108 passed in 8.13 s`. The exact package-coverage delta is left to
   the next CI coverage shards because local pytest-cov still aborts before
   startup on this machine.
+- Output-writer schema coverage now also includes bounded tests for
+  geometryScheme 1 helical/tokamak metadata, geometryScheme 4 radial constants,
+  VMEC geometryScheme 5 radial interpolation and RHSMode=3 monoenergetic
+  `nu_n`/`EStar` overwrites, Boozer geometryScheme 11 header/bracketing
+  metadata, export-f grid metadata, cache-miss geometry/classical payload
+  retention, cached `uHat`, and verbose VMEC/Boozer progress messages. These
+  tests avoid production solves and real equilibrium fixtures by using tiny
+  algebraic geometry objects and monkeypatched readers. Focused writer/export
+  validation passed as `108 passed in 3.08 s`; source-tree/import validation
+  passed as `161 passed in 7.68 s`. Direct owner coverage for
+  `outputs/writer.py` improved from `36%` to `52%`; the remaining missing
+  region is mostly RHSMode=1/2/3 solve orchestration that should be split or
+  covered through targeted monkeypatched solve-owner paths.
 - Transport runtime, profile setup, sparse-direct, and diagnostics coverage now
   includes direct tests for worker-count validation, GPU subprocess policy
   injection, persistent-pool helpers, solve-method normalization, explicit
@@ -1882,6 +1895,33 @@ Completed work:
   sparse-PC plus source/import guards passed `400/400`; Ruff, `compileall`,
   and `git diff --check` passed. Direct coverage for
   `sfincs_jax/problems/profile_sparse_direct.py` improved from `90%` to `95%`.
+- Tranche 123: expanded sparse-solve orchestration coverage without production
+  solves. Added requested sparse-PC dispatch, preflight residual diagnostics,
+  auto-retry acceptance, residual candidate accept/reject, true-active/window
+  residual-correction, true-column-cache, true-coupled coarse, global-pattern,
+  direct-tail, structured-tail, and support-mode promotion tests. Validation:
+  `tests/test_profile_response_sparse_pc.py` passed `362/362` in `7.00 s`;
+  sparse-PC plus source/import guards passed `415/415`; Ruff, `compileall`,
+  and `git diff --check` passed. Direct coverage for
+  `sfincs_jax/problems/profile_sparse_solve.py` reached `74%`.
+- Tranche 124: expanded transport parallel-runtime coverage with bounded
+  policy and artifact tests. Added XLA flag rewriting, release-quality scaling
+  audits, claim-scope classification, multi-GPU case-throughput summaries,
+  sharded solve summaries/plans, environment restoration, payload construction,
+  GPU dispatch injection, and fail-closed sharding/planning gates. Validation:
+  focused transport-parallel coverage passed `59/59` in `0.64 s`; transport
+  parallel plus source/import guards passed `112/112`; Ruff, `compileall`, and
+  `git diff --check` passed. Direct coverage for
+  `sfincs_jax/problems/transport_parallel_runtime.py` reached `79%`.
+- Tranche 125: expanded output-writer schema coverage without production solves.
+  Added geometryScheme 1/4/5/11 output-dictionary branch tests, VMEC
+  monoenergetic overwrite tests, export-f metadata tests, cache-miss and cached
+  `uHat` tests, and verbose VMEC/Boozer writer-progress tests. Validation:
+  `tests/test_io_output_policy_coverage.py tests/test_io_export_and_h5_coverage.py`
+  passed `108/108` in `3.08 s`; output plus source/import guards passed
+  `161/161` in `7.68 s`; Ruff, `compileall`, and `git diff --check` passed.
+  Direct coverage for `sfincs_jax/outputs/writer.py` improved from `36%` to
+  `52%`.
 
 Remaining consolidation steps:
 
@@ -1924,9 +1964,11 @@ RHSMode-1 policy bundle after Tranche 120; `profile_preconditioner_build.py`
 is `97%` after Tranche 121; `profile_sparse_direct.py` is `95%` after
 Tranche 122; `profile_sparse_solve.py` reaches `74%` in the owner sparse-PC
 suite after Tranche 123; `transport_parallel_runtime.py` reaches `79%` in the
-focused transport-parallel bundle after Tranche 124. The final target is still
-95%; the next coverage tranche should prioritize another high-missing owner
-with bounded behavior tests rather than slow full solves.
+focused transport-parallel bundle after Tranche 124; `outputs/writer.py`
+reaches `52%` in the focused writer/export bundle after Tranche 125. The final
+target is still 95%; the next coverage tranche should prioritize remaining
+high-missing owners with bounded behavior tests or split large orchestration
+regions before adding slow full solves.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 

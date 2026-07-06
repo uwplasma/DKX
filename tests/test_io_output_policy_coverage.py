@@ -2194,13 +2194,17 @@ def _minimal_scheme2_output_namelist(
     )
 
 
-def test_output_dict_scheme2_writes_v3_flags_species_and_geometry(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def _patch_output_metric_helpers(monkeypatch: pytest.MonkeyPatch, *, shape: tuple[int, int] = (2, 2)) -> None:
     monkeypatch.setenv("SFINCS_JAX_OUTPUT_CACHE", "0")
     monkeypatch.setattr(output_writer, "vprime_hat_jax", lambda *, grids, geom: 4.0)
     monkeypatch.setattr(output_writer, "fsab_hat2_jax", lambda *, grids, geom: 1.25)
-    monkeypatch.setattr(output_writer, "u_hat_np", lambda *, grids, geom: np.full((2, 2), 0.3))
+    monkeypatch.setattr(output_writer, "u_hat_np", lambda *, grids, geom: np.full(shape, 0.3))
+
+
+def test_output_dict_scheme2_writes_v3_flags_species_and_geometry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_output_metric_helpers(monkeypatch)
     grids, geom = _toy_output_grids_and_geometry()
     nml = Namelist(
         groups={
@@ -2267,10 +2271,7 @@ def test_output_dict_preserves_user_phi_gradient_coordinate(
     output_key: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("SFINCS_JAX_OUTPUT_CACHE", "0")
-    monkeypatch.setattr(output_writer, "vprime_hat_jax", lambda *, grids, geom: 4.0)
-    monkeypatch.setattr(output_writer, "fsab_hat2_jax", lambda *, grids, geom: 1.25)
-    monkeypatch.setattr(output_writer, "u_hat_np", lambda *, grids, geom: np.full((2, 2), 0.3))
+    _patch_output_metric_helpers(monkeypatch)
     grids, geom = _toy_output_grids_and_geometry()
 
     out = sfincs_jax_output_dict(
@@ -2297,10 +2298,7 @@ def test_output_dict_preserves_user_species_gradient_coordinate(
     temperature_key: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("SFINCS_JAX_OUTPUT_CACHE", "0")
-    monkeypatch.setattr(output_writer, "vprime_hat_jax", lambda *, grids, geom: 4.0)
-    monkeypatch.setattr(output_writer, "fsab_hat2_jax", lambda *, grids, geom: 1.25)
-    monkeypatch.setattr(output_writer, "u_hat_np", lambda *, grids, geom: np.full((2, 2), 0.3))
+    _patch_output_metric_helpers(monkeypatch)
     grids, geom = _toy_output_grids_and_geometry()
 
     out = sfincs_jax_output_dict(
@@ -2420,3 +2418,349 @@ def test_output_dict_rejects_unsupported_geometry_and_singular_monoenergetic() -
     )
     with pytest.raises(ZeroDivisionError, match="GHat"):
         sfincs_jax_output_dict(nml=mono_nml, grids=grids, geom=singular_geom)
+
+
+def test_output_dict_scheme1_and_scheme4_specialized_geometry_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_output_metric_helpers(monkeypatch)
+    grids, geom = _toy_output_grids_and_geometry()
+
+    scheme1 = _minimal_scheme2_output_namelist(species={"WITHADIABATIC": True})
+    scheme1.group("geometryParameters").update(
+        {
+            "GEOMETRYSCHEME": 1,
+            "AHAT": 0.8,
+            "PSIAHAT": 0.32,
+            "EPSILON_T": 0.04,
+            "EPSILON_H": 0.02,
+            "EPSILON_ANTISYMM": 0.01,
+            "HELICITY_L": 1,
+            "HELICITY_N": 2,
+            "HELICITY_ANTISYMM_L": 3,
+            "HELICITY_ANTISYMM_N": 4,
+        }
+    )
+    out1 = sfincs_jax_output_dict(nml=scheme1, grids=grids, geom=geom)
+
+    assert int(out1["geometryScheme"]) == 1
+    np.testing.assert_allclose(out1["aHat"], 0.8)
+    np.testing.assert_allclose(out1["psiAHat"], 0.32)
+    np.testing.assert_allclose(out1["epsilon_t"], 0.04)
+    assert int(out1["helicity_l"]) == 1
+    assert int(out1["helicity_n"]) == 2
+    assert int(out1["helicity_antisymm_l"]) == 3
+    assert int(out1["helicity_antisymm_n"]) == 4
+    assert int(out1["withAdiabatic"]) == 1
+    assert int(out1["quasineutralityOption"]) == 1
+
+    scheme4 = _minimal_scheme2_output_namelist()
+    scheme4.group("geometryParameters")["GEOMETRYSCHEME"] = 4
+    out4 = sfincs_jax_output_dict(nml=scheme4, grids=grids, geom=geom)
+
+    expected_psi_a_hat, expected_a_hat = scheme4_radial_constants()
+    np.testing.assert_allclose(out4["psiAHat"], expected_psi_a_hat)
+    np.testing.assert_allclose(out4["aHat"], expected_a_hat)
+
+
+def test_output_dict_vmec_scheme_uses_wout_radial_and_flux_function_branches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_output_metric_helpers(monkeypatch)
+    grids, geom = _toy_output_grids_and_geometry()
+    geom.b_hat_sub_zeta = 2.0 * np.ones_like(geom.b_hat)
+    geom.b_hat_sub_theta = 0.5 * np.ones_like(geom.b_hat)
+    wout = SimpleNamespace(aminor_p=1.7, iotas=np.asarray([0.2, 0.25, 0.33], dtype=np.float64))
+    interp = SimpleNamespace(
+        psi_n=0.49,
+        index_half=(1, 2),
+        psi_n_half=np.asarray([0.4, 0.6], dtype=np.float64),
+    )
+
+    monkeypatch.setattr(output_writer, "_resolve_equilibrium_file_from_namelist", lambda *, nml: Path("wout_toy.nc"))
+    monkeypatch.setattr(output_writer, "read_vmec_wout", lambda _path: wout)
+    monkeypatch.setattr(output_writer, "psi_a_hat_from_wout", lambda _w: 2.5)
+    monkeypatch.setattr(output_writer, "vmec_interpolation", lambda **_kwargs: interp)
+    monkeypatch.setattr(output_writer, "_gpsipsi_from_wout_file", lambda **_kwargs: np.full((2, 2), 0.44))
+
+    nml = _minimal_scheme2_output_namelist()
+    nml.group("geometryParameters").update(
+        {
+            "GEOMETRYSCHEME": 5,
+            "EQUILIBRIUMFILE": "wout_toy.nc",
+            "VMECRADIALOPTION": 1,
+        }
+    )
+    out = sfincs_jax_output_dict(nml=nml, grids=grids, geom=geom)
+
+    assert int(out["geometryScheme"]) == 5
+    np.testing.assert_allclose(out["psiAHat"], 2.5)
+    np.testing.assert_allclose(out["aHat"], 1.7)
+    np.testing.assert_allclose(out["psiN"], 0.49)
+    np.testing.assert_allclose(out["rN"], 0.7)
+    np.testing.assert_allclose(out["gpsiHatpsiHat"], np.full((2, 2), 0.44))
+    np.testing.assert_allclose(out["uHat"], np.zeros((2, 2)))
+    np.testing.assert_allclose(out["diotadpsiHat"], (0.33 - 0.25) / 0.2 / 2.5)
+    assert float(out["B0OverBBar"]) > 0.0
+
+
+def test_output_dict_vmec_monoenergetic_overwrites_nu_and_estar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_output_metric_helpers(monkeypatch)
+    grids, geom = _toy_output_grids_and_geometry()
+    geom.b_hat_sub_zeta = 2.0 * np.ones_like(geom.b_hat)
+    geom.b_hat_sub_theta = 0.5 * np.ones_like(geom.b_hat)
+    wout = SimpleNamespace(aminor_p=1.7, iotas=np.asarray([0.2, 0.25, 0.33], dtype=np.float64))
+    interp = SimpleNamespace(
+        psi_n=0.49,
+        index_half=(1, 2),
+        psi_n_half=np.asarray([0.4, 0.6], dtype=np.float64),
+    )
+
+    monkeypatch.setattr(output_writer, "_resolve_equilibrium_file_from_namelist", lambda *, nml: Path("wout_toy.nc"))
+    monkeypatch.setattr(output_writer, "read_vmec_wout", lambda _path: wout)
+    monkeypatch.setattr(output_writer, "psi_a_hat_from_wout", lambda _w: 2.5)
+    monkeypatch.setattr(output_writer, "vmec_interpolation", lambda **_kwargs: interp)
+    monkeypatch.setattr(output_writer, "_gpsipsi_from_wout_file", lambda **_kwargs: np.full((2, 2), 0.44))
+
+    nml = _minimal_scheme2_output_namelist(
+        physics={
+            "NUPRIME": 0.25,
+            "ESTAR": 0.125,
+            "DELTA": 0.01,
+            "ALPHA": 2.0,
+        }
+    )
+    nml.group("general")["RHSMODE"] = 3
+    nml.group("geometryParameters").update(
+        {
+            "GEOMETRYSCHEME": 5,
+            "EQUILIBRIUMFILE": "wout_toy.nc",
+            "VMECRADIALOPTION": 1,
+        }
+    )
+    out = sfincs_jax_output_dict(nml=nml, grids=grids, geom=geom)
+
+    denom = float(out["GHat"]) + float(out["iota"]) * float(out["IHat"])
+    np.testing.assert_allclose(out["nu_n"], 0.25 * float(out["B0OverBBar"]) / denom)
+    np.testing.assert_allclose(out["EStar"], 0.125)
+    assert float(out["dPhiHatdpsiHat"]) != 0.0
+    assert int(out["Nxi_for_x_option"]) == 0
+
+
+def test_output_dict_boozer_scheme_uses_header_bracketing_and_export_f(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_output_metric_helpers(monkeypatch)
+    grids, geom = _toy_output_grids_and_geometry()
+    header = SimpleNamespace(psi_a_hat=1.5, a_hat=0.9, n_periods=5)
+    surf_old = SimpleNamespace(r_n=0.4, iota=0.45)
+    surf_new = SimpleNamespace(r_n=0.6, iota=0.55)
+    export_cfg = SimpleNamespace(
+        export_full_f=True,
+        export_delta_f=True,
+        theta_option=2,
+        zeta_option=3,
+        x_option=4,
+        xi_option=5,
+        export_theta=np.asarray([0.0, 0.2], dtype=np.float64),
+        export_zeta=np.asarray([0.1], dtype=np.float64),
+        export_x=np.asarray([0.3, 0.7], dtype=np.float64),
+        export_xi=np.asarray([-0.5, 0.5], dtype=np.float64),
+        n_export_theta=2,
+        n_export_zeta=1,
+        n_export_x=2,
+        n_export_xi=2,
+    )
+
+    monkeypatch.setattr(output_writer, "_resolve_equilibrium_file_from_namelist", lambda *, nml: Path("toy.bc"))
+    monkeypatch.setattr(output_writer, "read_boozer_bc_header", lambda **_kwargs: header)
+    monkeypatch.setattr(output_writer, "selected_r_n_from_bc", lambda **_kwargs: 0.6)
+    monkeypatch.setattr(output_writer, "_gpsipsi_from_bc_file", lambda **_kwargs: np.full((2, 2), 0.77))
+    monkeypatch.setattr(
+        output_writer,
+        "read_boozer_bc_bracketing_surfaces",
+        lambda **_kwargs: (header, surf_old, surf_new),
+    )
+
+    nml = _minimal_scheme2_output_namelist()
+    nml.group("geometryParameters").update(
+        {
+            "GEOMETRYSCHEME": 11,
+            "EQUILIBRIUMFILE": "toy.bc",
+            "RN_WISH": 0.55,
+            "VMECRADIALOPTION": 1,
+        }
+    )
+    out = sfincs_jax_output_dict(nml=nml, grids=grids, geom=geom, export_cfg=export_cfg)
+
+    assert int(out["geometryScheme"]) == 11
+    np.testing.assert_allclose(out["psiAHat"], 1.5)
+    np.testing.assert_allclose(out["aHat"], 0.9)
+    np.testing.assert_allclose(out["rN"], 0.6)
+    np.testing.assert_allclose(out["gpsiHatpsiHat"], np.full((2, 2), 0.77))
+    expected_delta_psi = 1.5 * (0.6**2 - 0.4**2)
+    np.testing.assert_allclose(out["diotadpsiHat"], (-0.55 + 0.45) / expected_delta_psi)
+    assert int(out["export_full_f"]) == 1
+    assert int(out["export_delta_f"]) == 1
+    assert int(out["export_f_xi_option"]) == 5
+    np.testing.assert_allclose(out["export_f_xi"], [-0.5, 0.5])
+
+
+def test_output_dict_cache_miss_populates_geometry_and_classical_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SFINCS_JAX_OUTPUT_CACHE", "1")
+    monkeypatch.setattr(output_writer, "_OUTPUT_GEOM_CACHE", {})
+    monkeypatch.setattr(output_writer, "_output_cache_enabled", lambda: True)
+    monkeypatch.setattr(output_writer, "_output_geom_cache_key", lambda *, nml, grids: ("cache-miss",))
+    monkeypatch.setattr(output_writer, "_load_output_cache", lambda key: None)
+    saved_payloads: list[dict[str, np.ndarray]] = []
+    monkeypatch.setattr(output_writer, "_save_output_cache", lambda key, payload: saved_payloads.append(dict(payload)))
+    monkeypatch.setattr(output_writer, "vprime_hat_jax", lambda *, grids, geom: 4.0)
+    monkeypatch.setattr(output_writer, "fsab_hat2_jax", lambda *, grids, geom: 1.25)
+    monkeypatch.setattr(output_writer, "u_hat_np", lambda *, grids, geom: np.full((2, 2), 0.3))
+    grids, geom = _toy_output_grids_and_geometry()
+
+    out = sfincs_jax_output_dict(nml=_minimal_scheme2_output_namelist(), grids=grids, geom=geom)
+
+    np.testing.assert_allclose(out["VPrimeHat"], 4.0)
+    np.testing.assert_allclose(out["FSABHat2"], 1.25)
+    assert saved_payloads
+    cached = output_writer._OUTPUT_GEOM_CACHE[("cache-miss",)]
+    assert "VPrimeHat" in cached
+    assert "BDotCurlB" in cached
+    assert "diotadpsiHat" in cached
+    assert "uHat" in cached
+    assert "classicalParticleFluxNoPhi1_psiHat" in cached
+    assert "classicalHeatFluxNoPhi1_rN" in cached
+
+
+def test_output_dict_uses_supplied_geometry_builder_and_cached_uhat(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SFINCS_JAX_OUTPUT_CACHE", "1")
+    monkeypatch.setattr(output_writer, "_OUTPUT_GEOM_CACHE", {})
+    monkeypatch.setattr(output_writer, "_output_cache_enabled", lambda: True)
+    monkeypatch.setattr(output_writer, "_output_geom_cache_key", lambda *, nml, grids: ("cached-uhat",))
+    monkeypatch.setattr(output_writer, "_save_output_cache", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(output_writer, "vprime_hat_jax", lambda *, grids, geom: 4.0)
+    monkeypatch.setattr(output_writer, "fsab_hat2_jax", lambda *, grids, geom: 1.25)
+    monkeypatch.setattr(
+        output_writer,
+        "u_hat_np",
+        lambda *, grids, geom: (_ for _ in ()).throw(AssertionError("cached uHat should be used")),
+    )
+    grids, geom = _toy_output_grids_and_geometry()
+    cached_uhat = np.full((2, 2), 0.91)
+    monkeypatch.setattr(output_writer, "geometry_from_namelist", lambda *, nml, grids: geom)
+    monkeypatch.setattr(
+        output_writer,
+        "_load_output_cache",
+        lambda key: {
+            "uHat": cached_uhat,
+            "classicalParticleFluxNoPhi1_psiHat": np.asarray([0.1, 0.2]),
+            "classicalParticleFluxNoPhi1_psiN": np.asarray([0.3, 0.4]),
+            "classicalParticleFluxNoPhi1_rHat": np.asarray([0.5, 0.6]),
+            "classicalParticleFluxNoPhi1_rN": np.asarray([0.7, 0.8]),
+            "classicalHeatFluxNoPhi1_psiHat": np.asarray([1.1, 1.2]),
+            "classicalHeatFluxNoPhi1_psiN": np.asarray([1.3, 1.4]),
+            "classicalHeatFluxNoPhi1_rHat": np.asarray([1.5, 1.6]),
+            "classicalHeatFluxNoPhi1_rN": np.asarray([1.7, 1.8]),
+        },
+    )
+
+    out = sfincs_jax_output_dict(nml=_minimal_scheme2_output_namelist(), grids=grids, geom=None)
+
+    np.testing.assert_allclose(out["uHat"], cached_uhat)
+    np.testing.assert_allclose(out["classicalParticleFluxNoPhi1_psiHat"], [0.1, 0.2])
+
+
+def test_write_output_verbose_preamble_and_geometry_progress_are_emitted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_path = _minimal_writer_input(tmp_path, rhs_mode=1, geometry_scheme=5)
+    output_path = tmp_path / "sfincsOutput.npz"
+    messages: list[tuple[int, str]] = []
+
+    monkeypatch.setattr(output_writer, "grids_from_namelist", lambda _nml: _minimal_writer_grids())
+    monkeypatch.setattr(output_writer, "geometry_from_namelist", lambda **_kwargs: SimpleNamespace())
+    monkeypatch.setattr(output_writer, "_export_f_config", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        output_writer,
+        "sfincs_jax_output_dict",
+        lambda **_kwargs: {
+            "RHSMode": np.asarray(1, dtype=np.int32),
+            "geometryScheme": np.asarray(5, dtype=np.int32),
+            "constraintScheme": np.asarray(1, dtype=np.int32),
+            "psiAHat": np.asarray(1.25, dtype=np.float64),
+            "aHat": np.asarray(0.75, dtype=np.float64),
+            "psiHat": np.asarray(0.5, dtype=np.float64),
+            "psiN": np.asarray(0.4, dtype=np.float64),
+            "rHat": np.asarray(0.6, dtype=np.float64),
+            "rN": np.asarray(0.7, dtype=np.float64),
+            "GHat": np.asarray(1.1, dtype=np.float64),
+            "IHat": np.asarray(0.2, dtype=np.float64),
+            "iota": np.asarray(0.45, dtype=np.float64),
+            "input.namelist": "placeholder",
+        },
+    )
+    monkeypatch.setattr(output_writer, "write_sfincs_output_file", lambda **_kwargs: None)
+
+    resolved = output_writer.write_sfincs_jax_output_h5(
+        input_namelist=input_path,
+        output_path=output_path,
+        emit=lambda level, message: messages.append((int(level), str(message))),
+    )
+
+    assert resolved == output_path.resolve()
+    text = "\n".join(message for _level, message in messages)
+    assert "Successfully read parameters from general namelist" in text
+    assert "Ntheta" in text
+    assert "VMEC: starting geometry build" in text
+    assert "Geometry scheme" in text
+    assert "Requested/actual flux surface" in text
+
+
+def test_write_output_verbose_boozer_equilibrium_messages_are_best_effort(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_path = _minimal_writer_input(tmp_path, rhs_mode=1, geometry_scheme=11)
+    output_path = tmp_path / "sfincsOutput.npz"
+    bc_path = tmp_path / "toy.bc"
+    bc_path.write_text("toy", encoding="utf-8")
+    messages: list[str] = []
+    header = SimpleNamespace(n_periods=5)
+
+    monkeypatch.setattr(output_writer, "grids_from_namelist", lambda _nml: _minimal_writer_grids())
+    monkeypatch.setattr(output_writer, "geometry_from_namelist", lambda **_kwargs: SimpleNamespace())
+    monkeypatch.setattr(output_writer, "_export_f_config", lambda **_kwargs: None)
+    monkeypatch.setattr(output_writer, "resolve_existing_path", lambda *_args, **_kwargs: SimpleNamespace(path=bc_path))
+    monkeypatch.setattr(output_writer, "read_boozer_bc_header", lambda **_kwargs: header)
+    monkeypatch.setattr(
+        output_writer,
+        "sfincs_jax_output_dict",
+        lambda **_kwargs: {
+            "RHSMode": np.asarray(1, dtype=np.int32),
+            "geometryScheme": np.asarray(11, dtype=np.int32),
+            "constraintScheme": np.asarray(1, dtype=np.int32),
+            "psiAHat": np.asarray(1.25, dtype=np.float64),
+            "aHat": np.asarray(0.75, dtype=np.float64),
+            "psiHat": np.asarray(0.5, dtype=np.float64),
+            "psiN": np.asarray(0.4, dtype=np.float64),
+            "rHat": np.asarray(0.6, dtype=np.float64),
+            "rN": np.asarray(0.7, dtype=np.float64),
+        },
+    )
+    monkeypatch.setattr(output_writer, "write_sfincs_output_file", lambda **_kwargs: None)
+
+    output_writer.write_sfincs_jax_output_h5(
+        input_namelist=input_path,
+        output_path=output_path,
+        emit=lambda _level, message: messages.append(str(message)),
+    )
+
+    text = "\n".join(messages)
+    assert "Successfully opened magnetic equilibrium file toy.bc" in text
+    assert "Successfully read magnetic equilibrium from file toy.bc" in text
