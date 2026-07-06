@@ -363,6 +363,14 @@ and the QH Fortran-errorbar sidecar for the quasi-helical benchmark. If the
 local reduced-resolution Fortran sidecar is absent, add `--hide-fortran` to
 generate the same `sfincs_jax`/Redl educational plot without the Fortran
 overlay.
+To re-render a checked figure bundle from its summary JSON without rerunning
+kinetic solves or requiring local HDF5 sidecars, use:
+
+```bash
+python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+  --from-summary-json docs/_static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface.json \
+  --stem qs_paper_qa_same_resolution_11surface
+```
 
 For an apples-to-apples SFINCS_JAX/SFINCS Fortran v3 comparison, use the
 same-resolution gate:
