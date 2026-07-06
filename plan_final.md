@@ -1732,6 +1732,23 @@ Completed work:
   `coverage report --include='sfincs_jax/profiling.py'`; the generated
   `.coverage` file was removed. Package-wide coverage remains pinned to the
   latest successful full audit until the full suite can run stably.
+- Tranche 110: used PR #8 CI as the authoritative full coverage audit after the
+  local serial coverage run was interrupted at `1111 passed, 2 skipped` in
+  `7:37` inside a long JAX-heavy section. The CI run on commit `3cce604d`
+  passed all four xdist coverage shards, examples smoke, external-data smoke,
+  optional ecosystem gates, Docs, the coverage-report job, and the final
+  required-job aggregator. The combined coverage report measured
+  `TOTAL 69081 stmts, 7630 miss, 89%`, with the largest remaining gaps in
+  `profile_solve.py`, `transport_solve.py`, `profile_system.py`, selected
+  sparse/preconditioner owners, and validation/figure helpers.
+- Tranche 111: expanded scan-workflow tests around user-facing Er scan behavior:
+  endpoint scan-grid construction, upstream utility discovery, noninteractive
+  postprocessing, missing utility/case errors, `skip_existing` reuse, and
+  parallel scan orchestration with recycle-state clearing through a fake
+  in-process executor. Validation: `tests/test_scans_progress_and_recycle.py`
+  passed `18/18` in `0.44 s`, Ruff passed, `compileall` passed,
+  `git diff --check` passed, and direct coverage for
+  `sfincs_jax/workflows/scans.py` is `98%`.
 
 Remaining consolidation steps:
 
@@ -1759,13 +1776,12 @@ Remaining consolidation steps:
 
 ### Lane 2 - Coverage And Future-Proof Tests
 
-Status: 86% local CI-mode measured package coverage
-(`3938 passed, 195 skipped, 5 stale-manifest failures before the manifest-path
-fix, in 17:22` on 2026-07-05) with the direct public contract audit closed at
-`modules_with_missing 0`. Additional bounded tests have been added since that
-audit for transport-parallel release-scope, sharded-solve, and multi-GPU
-throughput metadata gates; exact percentage movement is delegated to the next
-CI coverage shards because local pytest-cov remains unstable on this machine.
+Status: 89% CI-measured package coverage on PR #8 commit `3cce604d`
+(`TOTAL 69081 stmts, 7630 miss, 89%`). The direct public contract audit remains
+closed at `modules_with_missing 0`, and the scan-workflow owner now has `98%`
+focused coverage after Tranche 111. The final target is still 95%; the next
+coverage tranches should prioritize large under-covered owners with bounded
+behavior tests rather than slow full solves.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 
