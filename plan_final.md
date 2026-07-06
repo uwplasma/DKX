@@ -1826,6 +1826,16 @@ Completed work:
   `git diff --check` passed. Focused combined coverage for
   `sfincs_jax/problems/transport_linear_system.py` improved from `47%` to
   `71%`.
+- Tranche 119: expanded explicit sparse solver fail-soft coverage around the
+  native sparse-factor wrappers used by bounded-memory preconditioner paths.
+  Added tiny algebraic tests for symbolic block-factor local failure fallback,
+  non-finite cleanup, residual-polish fallback and refinement behavior,
+  coarse-correction wrapping with valid and empty bases, coarse-solve failure
+  fallback, and regularized SuperLU failure fallback to a Jacobi factor.
+  Validation: the focused sparse bundle passed `99/99` in `6.95 s`; adjacent
+  source-tree/import guards passed `134/134`; Ruff, `compileall`, and
+  `git diff --check` passed. Focused coverage for
+  `sfincs_jax/solvers/explicit_sparse.py` improved from `87%` to `88%`.
 
 Remaining consolidation steps:
 
@@ -1862,9 +1872,10 @@ Tranche 113; `validation/artifacts.py` is `95%` after Tranche 114,
 `validation/data_fetch.py` is `100%` after Tranche 115, and
 `validation/fortran.py` is `99%` after Tranche 116; `transport_policies.py`
 is `86%` after Tranche 117; `transport_linear_system.py` reaches `71%` in the
-combined focused transport bundle after Tranche 118. The final target is still
-95%; the next coverage tranches should prioritize large under-covered owners
-with bounded behavior tests rather than slow full solves.
+combined focused transport bundle after Tranche 118; `explicit_sparse.py` is
+`88%` after Tranche 119. The final target is still 95%; the next coverage
+tranches should prioritize large under-covered owners with bounded behavior
+tests rather than slow full solves.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 

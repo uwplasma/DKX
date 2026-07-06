@@ -1934,3 +1934,124 @@ def test_host_sparse_direct_refinement_and_polish_callbacks() -> None:
     assert polish_seen["precondition_side"] == "left"
     preconditioned = polish_seen["preconditioner"](jnp.asarray([2.0, 4.0]))
     np.testing.assert_allclose(np.asarray(preconditioned), np.asarray([1.0, 1.0]))
+
+
+def test_explicit_sparse_private_factor_wrappers_fail_soft_and_clean_nonfinite() -> None:
+    analysis = analyze_sparse_symbolic_structure(sp.eye(3, format="csr"), ordering_kind="natural", block_size_target=2)
+
+    class _BadFactor:
+        def solve(self, _rhs):
+            raise RuntimeError("synthetic factor failure")
+
+    class _NonFiniteFactor:
+        def solve(self, rhs):
+            out = np.asarray(rhs, dtype=np.float64)
+            return np.full_like(out, np.nan)
+
+    block_factor = explicit_sparse._SymbolicBlockFactor(
+        blocks=(
+            (0, 2, 0, 2, _BadFactor()),
+            (2, 3, 2, 3, _NonFiniteFactor()),
+        ),
+        analysis=analysis,
+        permutation=np.asarray([0, 1, 2], dtype=np.int64),
+        inverse_permutation=np.asarray([0, 1, 2], dtype=np.int64),
+        dtype=np.dtype(np.float64),
+    )
+    out = block_factor.solve(np.asarray([1.0, 2.0, 3.0], dtype=np.float64))
+    np.testing.assert_allclose(out, np.asarray([1.0, 2.0, 0.0]))
+
+    matrix = sp.eye(2, format="csr", dtype=np.float64)
+    polish = explicit_sparse._SparseResidualPolishFactor(
+        base_factor=_BadFactor(),
+        matrix=matrix,
+        dtype=np.dtype(np.float64),
+        steps=2,
+    )
+    np.testing.assert_allclose(polish.solve(np.asarray([3.0, 4.0])), np.asarray([3.0, 4.0]))
+
+    class _HalfFactor:
+        def solve(self, rhs):
+            return 0.5 * np.asarray(rhs, dtype=np.float64)
+
+    improving = explicit_sparse._SparseResidualPolishFactor(
+        base_factor=_HalfFactor(),
+        matrix=matrix,
+        dtype=np.dtype(np.float64),
+        steps=2,
+    )
+    np.testing.assert_allclose(improving.solve(np.asarray([4.0, 8.0])), np.asarray([3.5, 7.0]))
+
+
+def test_sparse_coarse_wrapper_uses_valid_basis_and_rejects_empty_basis() -> None:
+    matrix = sp.diags([2.0, 4.0], format="csr", dtype=np.float64)
+    operator = SparseOperatorBundle(
+        matrix=matrix,
+        operator=explicit_sparse.LinearOperator(
+            shape=(2, 2),
+            matvec=lambda x: matrix @ np.asarray(x, dtype=np.float64),
+            dtype=np.float64,
+        ),
+        metadata=SparseDecision(
+            storage_kind="csr",
+            reason="unit",
+            backend="cpu",
+            shape=(2, 2),
+            dense_nbytes=32,
+            csr_nbytes_estimate=64,
+            nnz_estimate=2,
+        ),
+    )
+
+    class _DiagonalFactor:
+        def solve(self, rhs):
+            rhs_np = np.asarray(rhs, dtype=np.float64)
+            return np.asarray([0.5 * rhs_np[0], 0.25 * rhs_np[1]], dtype=np.float64)
+
+    bundle = SparseFactorBundle(
+        factor=_DiagonalFactor(),
+        operator=operator,
+        metadata=operator.metadata,
+        kind="lu",
+        factor_nbytes_estimate=16,
+        factor_nnz_estimate=2,
+    )
+    assert wrap_sparse_factor_with_coarse_correction(bundle, sp.csr_matrix((2, 0))) is bundle
+    wrapped = wrap_sparse_factor_with_coarse_correction(bundle, sp.eye(2, format="csr", dtype=np.float64))
+    assert wrapped is not bundle
+    np.testing.assert_allclose(wrapped.solve(np.asarray([2.0, 8.0])), np.asarray([1.0, 2.0]))
+    assert wrapped.factor_nbytes_estimate is not None
+    assert wrapped.factor_nbytes_estimate > bundle.factor_nbytes_estimate
+
+    class _BadCoarseFactor:
+        def solve(self, _rhs):
+            raise RuntimeError("coarse failure")
+
+    coarse = explicit_sparse._SparseCoarseCorrectionFactor(
+        base_factor=_DiagonalFactor(),
+        matrix=matrix,
+        coarse_basis=sp.eye(2, format="csr", dtype=np.float64),
+        coarse_factor=_BadCoarseFactor(),
+        dtype=np.dtype(np.float64),
+    )
+    np.testing.assert_allclose(coarse.solve(np.asarray([2.0, 8.0])), np.asarray([1.0, 2.0]))
+
+
+def test_regularized_factor_fallback_uses_jacobi_when_superlu_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _raise_splu(*_args, **_kwargs):
+        raise RuntimeError("synthetic splu failure")
+
+    monkeypatch.setattr(explicit_sparse, "splu", _raise_splu)
+    factor, nbytes, nnz, failures = explicit_sparse._factor_csc_with_regularized_fallback(
+        sp.csc_matrix(np.diag([0.0, -2.0])),
+        dtype=np.dtype(np.float64),
+        diag_pivot_thresh=1.0,
+        regularization_rel=0.0,
+        permc_spec="COLAMD",
+    )
+    out = factor.solve(np.asarray([1.0, 4.0], dtype=np.float64))
+    assert failures == 1
+    assert nbytes == 16
+    assert nnz == 2
+    assert np.all(np.isfinite(out))
+    assert out[1] == pytest.approx(-2.0)
