@@ -252,6 +252,22 @@ def test_source_map_doc_describes_current_one_level_layout() -> None:
     for package in expected["allowed_root_packages"]:
         assert f"``sfincs_jax/{package}``" in text
 
+
+def test_source_map_doc_does_not_teach_deleted_file_history() -> None:
+    """Keep the active source map focused on canonical owners."""
+
+    text = SOURCE_MAP_DOC.read_text(encoding="utf-8")
+    stale_fragments = (
+        "historical location",
+        "historical locations",
+        "former flat",
+        "old ``rhs1_",
+        "v3_driver.py",
+    )
+
+    for fragment in stale_fragments:
+        assert fragment not in text
+
     removed_packages = {
         "benchmarks",
         "compat",
