@@ -6,6 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 import scipy.sparse as sp
+from scipy.sparse.linalg import LinearOperator
 
 import sfincs_jax.problems.transport_linear_system as tls
 from sfincs_jax.problems.transport_linear_system import (
@@ -780,3 +781,156 @@ def test_transport_fp_direct_active_block_schur_preconditioner_builds_bounded_pa
     assert metadata["admission_enabled"] is False
     assert metadata["residual_coarse_reason"] == "admission_disabled"
     assert any("fp_direct_active_block_schur selected" in message for message in messages)
+
+
+def _direct_bundle_for_active_matrix(matrix: sp.spmatrix, *, kinetic_size: int, tail_size: int):
+    matrix_csr = matrix.tocsr().astype(np.float64, copy=False)
+    size = int(matrix_csr.shape[0])
+
+    def matvec(x):
+        return np.asarray(matrix_csr @ np.asarray(x, dtype=np.float64).reshape((size,)), dtype=np.float64)
+
+    decision = tls.SparseDecision(
+        storage_kind="csr",
+        reason="unit-test direct active matrix",
+        backend="cpu",
+        shape=(size, size),
+        dense_nbytes=8 * size * size,
+        csr_nbytes_estimate=int(matrix_csr.data.nbytes + matrix_csr.indices.nbytes + matrix_csr.indptr.nbytes),
+        nnz_estimate=int(matrix_csr.nnz),
+        block_cols=None,
+        drop_tol=0.0,
+    )
+    bundle = tls.SparseOperatorBundle(
+        matrix=matrix_csr,
+        operator=LinearOperator((size, size), matvec=matvec, dtype=np.float64),
+        metadata=decision,
+    )
+    metadata = {
+        "direct_pmat": True,
+        "direct_pmat_kinetic_size": int(kinetic_size),
+        "direct_pmat_tail_size": int(tail_size),
+        "direct_true_operator": True,
+        "direct_true_operator_active_size": size,
+        "direct_true_operator_nnz": int(matrix_csr.nnz),
+        "direct_true_operator_csr_nbytes_estimate": int(decision.csr_nbytes_estimate),
+    }
+    return bundle, metadata
+
+
+def test_direct_active_block_schur_builder_admits_residual_coarse_rescue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    matrix = sp.csr_matrix(
+        np.asarray(
+            [
+                [3.0, 0.0, 2.5, 0.0],
+                [0.0, 3.0, 0.0, 2.5],
+                [2.5, 0.0, 3.0, 0.0],
+                [0.0, 2.5, 0.0, 3.0],
+            ],
+            dtype=np.float64,
+        )
+    )
+    op = SimpleNamespace(
+        rhs_mode=2,
+        fblock=SimpleNamespace(fp=object()),
+        n_theta=1,
+        n_zeta=2,
+    )
+    messages: list[str] = []
+    fallback_calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        tls,
+        "_try_build_rhsmode23_fp_direct_active_operator_bundle",
+        lambda **_kwargs: _direct_bundle_for_active_matrix(matrix, kinetic_size=4, tail_size=0),
+    )
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_MAX_MB", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_MAX_BLOCK", "2")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_REG", "0")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_ADMISSION", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_ADMISSION_MAX_REL", "1e-10")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_ADMISSION_MIN_IMPROVEMENT", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_ADMISSION_PROBES", "4")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_RESIDUAL_COARSE", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_RESIDUAL_COARSE_MAX_COLS", "4")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_RESIDUAL_COARSE_MAX_MB", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_RESIDUAL_COARSE_REGULARIZATION_REL", "1e-14")
+
+    preconditioner = build_transport_fp_direct_active_block_schur_preconditioner(
+        op=op,
+        reduce_full=lambda value: value,
+        expand_reduced=lambda value: value,
+        active_indices_np=np.arange(4, dtype=np.int64),
+        emit=lambda _level, message: messages.append(str(message)),
+        fallback_builder=lambda **kwargs: fallback_calls.append(kwargs) or (lambda value: value),
+        transport_precond_cache_key=lambda _op, label: ("unit_coarse_rescue", label, id(op)),
+    )
+
+    rhs = jnp.asarray([1.0, -2.0, 0.5, 3.0], dtype=jnp.float64)
+    actual = np.asarray(preconditioner(rhs))
+    np.testing.assert_allclose(np.asarray(matrix @ actual), np.asarray(rhs), rtol=1.0e-9, atol=1.0e-9)
+    assert not fallback_calls
+    metadata = getattr(preconditioner, "_sfincs_jax_transport_fp_direct_active_block_schur_metadata")
+    assert metadata["admission_enabled"] is True
+    assert metadata["admission_accepted"] is True
+    assert metadata["residual_coarse_enabled"] is True
+    assert metadata["residual_coarse_accepted"] is True
+    assert metadata["residual_coarse_reason"] == "accepted"
+    assert metadata["residual_coarse_max_relative_residual"] < 1.0e-9
+    assert any("fp_direct_active_block_schur selected" in message for message in messages)
+
+
+def test_direct_active_block_schur_builder_fails_closed_when_admission_rejects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    matrix = sp.csr_matrix(
+        np.asarray(
+            [
+                [3.0, 0.0, 2.5, 0.0],
+                [0.0, 3.0, 0.0, 2.5],
+                [2.5, 0.0, 3.0, 0.0],
+                [0.0, 2.5, 0.0, 3.0],
+            ],
+            dtype=np.float64,
+        )
+    )
+    op = SimpleNamespace(
+        rhs_mode=2,
+        fblock=SimpleNamespace(fp=object()),
+        n_theta=1,
+        n_zeta=2,
+    )
+    messages: list[str] = []
+    fallback_calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        tls,
+        "_try_build_rhsmode23_fp_direct_active_operator_bundle",
+        lambda **_kwargs: _direct_bundle_for_active_matrix(matrix, kinetic_size=4, tail_size=0),
+    )
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_MAX_MB", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_MAX_BLOCK", "2")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_REG", "0")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_ADMISSION", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_ADMISSION_MAX_REL", "1e-10")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_ADMISSION_MIN_IMPROVEMENT", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_ADMISSION_PROBES", "4")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_RESIDUAL_COARSE", "0")
+
+    preconditioner = build_transport_fp_direct_active_block_schur_preconditioner(
+        op=op,
+        reduce_full=lambda value: value,
+        expand_reduced=lambda value: value,
+        active_indices_np=np.arange(4, dtype=np.int64),
+        emit=lambda _level, message: messages.append(str(message)),
+        fallback_builder=lambda **kwargs: fallback_calls.append(kwargs) or (lambda value: 7.0 * value),
+        transport_precond_cache_key=lambda _op, label: ("unit_admission_reject", label, id(op)),
+    )
+
+    rhs = jnp.ones((4,), dtype=jnp.float64)
+    np.testing.assert_allclose(np.asarray(preconditioner(rhs)), 7.0 * np.ones((4,)))
+    assert len(fallback_calls) == 1
+    assert any("fp_direct_active_block_schur unavailable" in message for message in messages)
+    assert any("admission rejected direct active block-Schur" in message for message in messages)

@@ -2294,14 +2294,19 @@ def build_transport_fp_direct_active_block_schur_preconditioner(
             }
             metadata.update(direct_metadata)
             metadata.update(coarse_metadata)
+            packed_factor = getattr(factor, "base", factor)
             cached = _TransportFpDirectActiveBlockSchurPrecondCache(
                 block_inverse=(),
                 block_size=int(factor.ordering.block_size_max),
                 kinetic_size=int(kinetic_size),
                 tail_size=int(tail_size),
-                c_tail=factor.c_tail,
-                mb_tail=None if factor.mb_tail is None else np.asarray(factor.mb_tail, dtype=factor_dtype),
-                schur_inverse=None if factor.schur_inverse is None else np.asarray(factor.schur_inverse, dtype=factor_dtype),
+                c_tail=getattr(packed_factor, "c_tail", None),
+                mb_tail=None
+                if getattr(packed_factor, "mb_tail", None) is None
+                else np.asarray(packed_factor.mb_tail, dtype=factor_dtype),
+                schur_inverse=None
+                if getattr(packed_factor, "schur_inverse", None) is None
+                else np.asarray(packed_factor.schur_inverse, dtype=factor_dtype),
                 metadata=metadata,
                 factor=factor,
             )

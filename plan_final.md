@@ -32,15 +32,25 @@ models overlap.
   `4584 passed, 4 skipped in 933.46 s`, Sphinx `-W`, the quick tutorial
   HDF5/NetCDF/NPZ/PDF output path, Ruff, compile checks, `git diff --check`,
   and the large-file audit.
-- The July 6 coverage tranche `9c48d211` added bounded comparison/plotting
-  helper tests. Focused local coverage for those owners reports
-  `compare.py` at 94%, `plotting.py` at 100%, and 96% combined.
+- The July 6 coverage tranches added bounded comparison/plotting,
+  drift-operator, and discretization tests:
+  `9c48d211`, `653d6ac5`, and `14e0dbd5`. Focused local coverage reports
+  `compare.py` at 94%, `plotting.py` at 100%, `profile_exb.py` at 97%,
+  `profile_magnetic_drifts.py` at 94%, `adaptive_maps.py` at 97%,
+  `periodic_stencil.py` at 98%, and `structured_velocity.py` at 99%.
 - The latest bounded local review bundle passed: source-tree guards,
   docs/example guards, and comparison/plotting checks ran `123 passed in
   9.70 s`; Sphinx `-W` passed in `17.56 s`.
-- The last checked PR CI state had build, examples-smoke, external-data smoke,
-  optional ecosystem checks, and all four coverage shards passing; the combined
-  coverage-report job was still pending. Recheck CI after the next push.
+- The direct active block-Schur tranche fixed accepted residual-coarse factors
+  in the transport preconditioner cache and added builder-level tests for
+  true-residual coarse admission and fail-closed fallback. Local guards passed:
+  `35 passed in 0.63 s` for `tests/test_transport_active_factor.py`, and the
+  broader transport focused bundle ran `217 passed in 30.92 s` with
+  `transport_linear_system.py` at 87% focused coverage.
+- The last checked PR CI state after `14e0dbd5` had build and
+  external-data smoke passing; coverage shards, examples-smoke, optional
+  ecosystem checks, and coverage-report were still pending. Recheck CI after
+  the next coherent push rather than waiting idle on every job.
 - Fresh GPU validation is deferred until the office GPU host is reachable.
 
 ## Open Lanes
@@ -48,12 +58,12 @@ models overlap.
 | Lane | Status | Completion | Definition of done |
 | --- | --- | ---: | --- |
 | Review-ready refactor | Active | 97% | Source tree remains shallow, root modules are public, large owners have review-size guards, no generated clutter is tracked, and PR #8 has clear evidence. |
-| Coverage and future-proof tests | Active | 92% | Meaningful package coverage reaches 95% through bounded physics, numerical, unit, and regression tests without pushing CI above 10 minutes. |
+| Coverage and future-proof tests | Active | 93% | Meaningful package coverage reaches 95% through bounded physics, numerical, unit, and regression tests without pushing CI above 10 minutes. |
 | Documentation and examples | Active | 97% | README, package README, docs, tutorial notebooks, and examples describe the same workflows without branch-history or progress-log phrasing. |
 | Benchmark/parity/runtime regeneration | Active | 70% | CPU/GPU/Fortran runtime, memory, parity, and bootstrap-current figures are regenerated from the final branch state with solver provenance. |
 | Solver/performance boundaries | Active | 90% | Automatic defaults remain residual-clean and documented; expensive research candidates stay opt-in unless they pass strict residual/runtime/RSS gates. |
 
-Overall review readiness: about 90%. The gap is dominated by final coverage
+Overall review readiness: about 91%. The gap is dominated by final coverage
 evidence, fresh benchmark regeneration, and GPU validation.
 
 ## Source Structure Rules
@@ -108,8 +118,13 @@ Acceptance:
    kinetic operator identities, conservation and moment constraints, ambipolar
    derivative checks, bootstrap-current normalization, geometry interpolation,
    output schema parity, and solver residual gates.
-2. Prefer deleting obsolete code over adding tests for unused branches.
-3. Keep slow production solves out of default CI; use frozen fixtures,
+2. Treat the next large coverage tranche as solver-orchestration coverage, not
+   isolated helper coverage: `profile_solve.py`,
+   `transport_linear_system.py`, `transport_solve.py`,
+   `profile_true_operator_rescue.py`, and Schur/profile preconditioner owners
+   contain the remaining high-value uncovered branches.
+3. Prefer deleting obsolete code over adding tests for unused branches.
+4. Keep slow production solves out of default CI; use frozen fixtures,
    monkeypatched owners, tiny analytic geometries, and release-fetched data.
 
 Acceptance:
