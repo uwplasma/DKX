@@ -113,6 +113,125 @@ def test_block_schur_qi_rejects_when_no_true_residual_reduction_is_possible() ->
     np.testing.assert_allclose(solution, jnp.zeros_like(rhs), atol=0.0)
 
 
+def test_block_schur_qi_empty_basis_is_fail_closed_and_serializable() -> None:
+    layout = RHS1QICoarseBlockLayout(
+        block_sizes=(2, 2),
+        n_theta=1,
+        n_zeta=1,
+        block_x=(0, 0),
+    )
+    basis = build_rhs1_qi_block_schur_basis(
+        layout,
+        max_candidates=0,
+        max_rank=0,
+    )
+    rhs = jnp.asarray([1.0, -2.0, 3.0, -4.0], dtype=jnp.float64)
+
+    def operator(x):
+        return jnp.asarray(x, dtype=jnp.float64)
+
+    def local_smoother(r):
+        return 0.25 * jnp.asarray(r, dtype=jnp.float64)
+
+    preconditioner = build_rhs1_qi_block_schur_preconditioner(
+        operator=operator,
+        local_smoother=local_smoother,
+        basis=basis,
+        damping=0.5,
+    )
+    action = preconditioner.as_preconditioner()
+    solution, probe = probe_rhs1_qi_block_schur_correction(
+        operator=operator,
+        rhs=rhs,
+        x0=jnp.zeros_like(rhs),
+        preconditioner=preconditioner,
+    )
+
+    assert preconditioner.metadata.reason == "empty_or_rank_deficient"
+    assert preconditioner.metadata.to_dict()["rank"] == 0
+    assert preconditioner.solve_coarse(rhs).shape == (0,)
+    np.testing.assert_allclose(action(rhs), 0.125 * rhs, rtol=1.0e-12, atol=1.0e-12)
+    np.testing.assert_allclose(solution, jnp.zeros_like(rhs), atol=0.0)
+    assert probe.reason == "empty_basis"
+    assert probe.to_dict()["improvement_ratio"] == pytest.approx(1.0)
+
+
+def test_block_schur_qi_zero_and_nonfinite_residual_probes_fail_closed() -> None:
+    layout = RHS1QICoarseBlockLayout(block_sizes=(2, 2), n_theta=1, n_zeta=1)
+    basis = build_rhs1_qi_block_schur_basis(
+        layout,
+        max_candidates=1,
+        max_rank=1,
+        include_radial=False,
+        include_angular=False,
+        include_radial_angular=False,
+        include_block_schur=False,
+        include_block_schur_angular=False,
+        include_blocks=False,
+    )
+    rhs = jnp.ones((4,), dtype=jnp.float64)
+
+    def identity(x):
+        return jnp.asarray(x, dtype=jnp.float64)
+
+    preconditioner = build_rhs1_qi_block_schur_preconditioner(
+        operator=identity,
+        basis=basis,
+    )
+    unchanged, zero_probe = probe_rhs1_qi_block_schur_correction(
+        operator=identity,
+        rhs=rhs,
+        x0=rhs,
+        preconditioner=preconditioner,
+    )
+    assert zero_probe.reason == "zero_residual"
+    assert zero_probe.to_dict()["improvement_ratio"] is None
+    np.testing.assert_allclose(unchanged, rhs, atol=0.0)
+
+    def nan_smoother(r):
+        return jnp.full_like(jnp.asarray(r, dtype=jnp.float64), jnp.nan)
+
+    nan_preconditioner = build_rhs1_qi_block_schur_preconditioner(
+        operator=identity,
+        local_smoother=nan_smoother,
+        basis=basis,
+    )
+    unchanged, nan_probe = probe_rhs1_qi_block_schur_correction(
+        operator=identity,
+        rhs=rhs,
+        x0=jnp.zeros_like(rhs),
+        preconditioner=nan_preconditioner,
+    )
+    assert nan_probe.reason == "nonfinite_candidate"
+    assert nan_probe.improvement_ratio is None
+    np.testing.assert_allclose(unchanged, jnp.zeros_like(rhs), atol=0.0)
+
+
+def test_block_schur_qi_candidate_builder_rejects_unsupported_angular_blocks() -> None:
+    layout = RHS1QICoarseBlockLayout(
+        block_sizes=(5, 5),
+        n_theta=2,
+        n_zeta=2,
+        block_x=(0, 1),
+    )
+    candidates, labels = build_rhs1_qi_block_schur_candidates(
+        layout,
+        max_candidates=16,
+        max_angular_mode=1,
+        max_radial_degree=0,
+        include_global=False,
+        include_radial=False,
+        include_angular=True,
+        include_radial_angular=False,
+        include_block_schur=False,
+        include_block_schur_angular=False,
+        include_blocks=False,
+    )
+
+    assert candidates.shape == (layout.total_size, 0)
+    assert labels == ()
+
+
 def test_block_schur_qi_metadata_has_stable_rank_and_conditioning() -> None:
     layout = _coupled_layout()
     candidates, labels = build_rhs1_qi_block_schur_candidates(

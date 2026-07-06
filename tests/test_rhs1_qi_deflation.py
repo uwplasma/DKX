@@ -3,6 +3,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from sfincs_jax.solvers.preconditioner_qi_corrections import (
     RHS1QIDeflatedPreconditioner,
@@ -48,6 +49,8 @@ def test_residual_deflation_reduces_coupled_slow_mode() -> None:
     assert isinstance(preconditioner, RHS1QIDeflatedPreconditioner)
     assert isinstance(preconditioner.metadata, RHS1QIDeflationMetadata)
     assert isinstance(probe, RHS1QIDeflationProbe)
+    assert preconditioner.metadata.to_dict()["reason"] == "built"
+    assert probe.to_dict()["metadata"]["rank"] == preconditioner.metadata.rank
     assert preconditioner.metadata.rank >= 2
     assert probe.accepted is True
     assert probe.reason == "residual_reduced"
@@ -240,3 +243,85 @@ def test_residual_deflation_minres_seed_accelerates_cycle_columns() -> None:
     assert len(probe.cycle_residual_history) >= 2
     assert len(probe.cycle_coefficients) >= 1
     assert minres_residual_norm < 0.5 * raw_residual_norm
+
+
+def test_residual_deflation_empty_rank_and_minres_seed_fail_closed() -> None:
+    residual = jnp.asarray([1.0, -2.0, 3.0], dtype=jnp.float64)
+
+    def operator(x):
+        return jnp.asarray(x, dtype=jnp.float64)
+
+    def zero_smoother(r):
+        return jnp.zeros_like(jnp.asarray(r, dtype=jnp.float64))
+
+    preconditioner = build_rhs1_qi_residual_deflated_preconditioner(
+        operator=operator,
+        local_smoother=zero_smoother,
+        residual_seed=residual,
+        krylov_depth=2,
+        max_rank=4,
+        include_raw_residual=False,
+    )
+
+    assert preconditioner.metadata.reason == "empty_rank"
+    assert preconditioner.solve_coarse(residual).shape == (0,)
+    np.testing.assert_allclose(preconditioner.as_preconditioner()(residual), jnp.zeros_like(residual), atol=0.0)
+    x, probe = probe_rhs1_qi_deflated_minres_seed(
+        operator=operator,
+        rhs=residual,
+        x0=jnp.zeros_like(residual),
+        preconditioner=preconditioner,
+        cycles=3,
+    )
+    assert probe.reason == "empty_minres_seed"
+    assert probe.seed_solver == "cycle_minres"
+    assert probe.to_dict()["cycle_residual_history"] == (float(jnp.linalg.norm(residual)),)
+    np.testing.assert_allclose(x, jnp.zeros_like(residual), atol=0.0)
+
+
+def test_residual_deflation_validates_inputs_and_composition_names() -> None:
+    residual = jnp.asarray([1.0, -1.0], dtype=jnp.float64)
+
+    def operator(x):
+        return jnp.asarray(x, dtype=jnp.float64)
+
+    def smoother(r):
+        return jnp.asarray(r, dtype=jnp.float64)
+
+    with pytest.raises(ValueError, match="non-empty"):
+        build_rhs1_qi_residual_deflated_preconditioner(
+            operator=operator,
+            local_smoother=smoother,
+            residual_seed=jnp.asarray([], dtype=jnp.float64),
+        )
+
+    with pytest.raises(ValueError, match="composition"):
+        build_rhs1_qi_residual_deflated_preconditioner(
+            operator=operator,
+            local_smoother=smoother,
+            residual_seed=residual,
+            composition="unsupported",
+        )
+
+    additive = build_rhs1_qi_residual_deflated_preconditioner(
+        operator=operator,
+        local_smoother=smoother,
+        residual_seed=residual,
+        composition="add",
+        include_raw_residual=True,
+        krylov_depth=0,
+        max_rank=2,
+    )
+    multiplicative = build_rhs1_qi_residual_deflated_preconditioner(
+        operator=operator,
+        local_smoother=smoother,
+        residual_seed=residual,
+        composition="field-split",
+        include_raw_residual=True,
+        krylov_depth=0,
+        max_rank=2,
+    )
+
+    assert additive.metadata.composition == "additive"
+    assert multiplicative.metadata.composition == "multiplicative"
+    assert additive.metadata.to_dict()["device_resident"] is True

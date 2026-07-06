@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -15,6 +17,9 @@ from sfincs_jax.solvers.preconditioner_qi_device import (
     build_rhs1_qi_device_jacobi_smoother,
     extract_device_csr_diagonal,
     probe_rhs1_qi_device_smoother_correction,
+    qi_device_solver_env,
+    rhs1_qi_device_extra_coarse_controls,
+    rhs1_qi_device_residual_correction_controls,
 )
 from sfincs_jax.solvers.preconditioner_qi_corrections import (
     RHS1QITwoLevelPreconditioner,
@@ -78,6 +83,7 @@ def test_device_jacobi_smoother_reuses_csr_operator_and_is_jittable() -> None:
     assert smoother.metadata.device_resident is True
     assert smoother.metadata.reason == "built"
     assert smoother.metadata.valid_diagonal_count == 3
+    assert smoother.metadata.to_dict()["step_policy"] == "stationary"
     np.testing.assert_allclose(smoother.diagonal, diagonal)
     np.testing.assert_allclose(eager, correction, rtol=1.0e-12, atol=1.0e-12)
     np.testing.assert_allclose(compiled, eager, rtol=1.0e-12, atol=1.0e-12)
@@ -110,6 +116,132 @@ def test_device_jacobi_smoother_rejects_invalid_diagonal_by_default() -> None:
     np.testing.assert_allclose(
         smoother.apply(jnp.asarray([2.0, 8.0], dtype=jnp.float64)),
         jnp.asarray([0.0, 1.0], dtype=jnp.float64),
+    )
+
+
+def test_device_jacobi_smoother_validates_controls_and_shapes() -> None:
+    matrix = sp.csr_matrix(np.eye(2, dtype=np.float64))
+    device_operator = device_csr_from_scipy_csr(matrix, max_csr_mb=1.0)
+
+    with pytest.raises(ValueError, match="damping"):
+        build_rhs1_qi_device_jacobi_smoother(device_operator, damping=0.0)
+    with pytest.raises(ValueError, match="step_policy"):
+        build_rhs1_qi_device_jacobi_smoother(device_operator, step_policy="unknown")
+    with pytest.raises(ValueError, match="max_step_damping"):
+        build_rhs1_qi_device_jacobi_smoother(
+            device_operator,
+            max_step_damping=0.0,
+        )
+    with pytest.raises(ValueError, match="min_step_denominator"):
+        build_rhs1_qi_device_jacobi_smoother(
+            device_operator,
+            min_step_denominator=float("inf"),
+        )
+
+    smoother = build_rhs1_qi_device_jacobi_smoother(device_operator)
+    with pytest.raises(ValueError, match="residual length"):
+        smoother.apply(jnp.ones((3,), dtype=jnp.float64))
+
+    bad_policy = replace(
+        smoother,
+        metadata=replace(smoother.metadata, step_policy="unsupported"),
+    )
+    with pytest.raises(ValueError, match="unsupported device smoother"):
+        bad_policy.apply(jnp.ones((2,), dtype=jnp.float64))
+
+
+def test_device_jacobi_diagonal_edge_cases_are_reported() -> None:
+    rectangular = device_csr_from_scipy_csr(
+        sp.csr_matrix(np.ones((2, 3), dtype=np.float64)),
+        max_csr_mb=1.0,
+    )
+    with pytest.raises(ValueError, match="square operator"):
+        extract_device_csr_diagonal(rectangular)
+
+    zero_operator = device_csr_from_scipy_csr(
+        sp.csr_matrix((2, 2), dtype=np.float64),
+        max_csr_mb=1.0,
+    )
+    diagonal, hit_count = extract_device_csr_diagonal(zero_operator)
+    np.testing.assert_allclose(diagonal, jnp.zeros((2,), dtype=jnp.float64), atol=0.0)
+    np.testing.assert_array_equal(hit_count, jnp.zeros((2,), dtype=jnp.int32))
+
+    smoother = build_rhs1_qi_device_jacobi_smoother(
+        zero_operator,
+        require_all_diagonal=False,
+    )
+    assert smoother.metadata.reason == "empty_or_invalid_diagonal"
+    assert smoother.metadata.to_dict()["valid_diagonal_count"] == 0
+
+
+def test_device_jacobi_smoother_probe_guard_branches() -> None:
+    matrix = sp.csr_matrix(np.eye(2, dtype=np.float64))
+    device_operator = device_csr_from_scipy_csr(matrix, max_csr_mb=1.0)
+    smoother = build_rhs1_qi_device_jacobi_smoother(device_operator)
+    rhs = jnp.asarray([1.0, -1.0], dtype=jnp.float64)
+
+    with pytest.raises(ValueError, match="same shape"):
+        probe_rhs1_qi_device_smoother_correction(
+            rhs=rhs,
+            x0=jnp.zeros((3,), dtype=jnp.float64),
+            smoother=smoother,
+        )
+
+    unchanged, zero_probe = probe_rhs1_qi_device_smoother_correction(
+        rhs=rhs,
+        x0=rhs,
+        smoother=smoother,
+    )
+    assert zero_probe.reason == "zero_residual"
+    assert zero_probe.to_dict()["improvement_ratio"] is None
+    np.testing.assert_allclose(unchanged, rhs, atol=0.0)
+
+    unchanged, nonfinite_probe = probe_rhs1_qi_device_smoother_correction(
+        rhs=rhs,
+        x0=jnp.zeros_like(rhs),
+        smoother=smoother,
+        operator=lambda x: jnp.where(
+            jnp.all(jnp.asarray(x, dtype=jnp.float64) == 0.0),
+            jnp.asarray(x, dtype=jnp.float64),
+            jnp.full_like(jnp.asarray(x, dtype=jnp.float64), jnp.nan),
+        ),
+    )
+    assert nonfinite_probe.reason == "nonfinite_candidate"
+    assert nonfinite_probe.residual_after_norm == pytest.approx(
+        nonfinite_probe.residual_before_norm
+    )
+    np.testing.assert_allclose(unchanged, jnp.zeros_like(rhs), atol=0.0)
+
+
+def test_qi_device_environment_controls_normalize_all_supported_kinds(monkeypatch) -> None:
+    prefix = "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_"
+    monkeypatch.setenv(f"{prefix}MULTILEVEL_CURRENT_MOMENTS", "1")
+    monkeypatch.setenv(f"{prefix}GLOBAL_MOMENT_RESIDUAL_EQUATION_MAX_RANK", "7")
+    monkeypatch.setenv(f"{prefix}GLOBAL_MOMENT_RESIDUAL_EQUATION_SOLVER", "schur")
+    monkeypatch.setenv(f"{prefix}PHASE_SPACE_RESIDUAL_EQUATION_BOUNDARY", "0.25")
+    monkeypatch.setenv(
+        f"{prefix}RESIDUAL_REGION_BOUNCE_COARSE_REGION_BANDS",
+        "trapped,passing",
+    )
+    monkeypatch.setenv(f"{prefix}COUPLED_RESIDUAL_EQUATION_SOLVER", "least-squares")
+
+    extra = rhs1_qi_device_extra_coarse_controls()
+    residual = rhs1_qi_device_residual_correction_controls()
+
+    assert extra["multilevel_current_moments"] is True
+    assert extra["global_moment_residual_equation_max_rank"] == 7
+    assert extra["global_moment_residual_equation_solver"] == "galerkin"
+    assert extra["phase_space_residual_equation_boundary"] == pytest.approx(0.25)
+    assert extra["residual_region_bounce_coarse_region_bands"] == "trapped,passing"
+    assert residual["coupled_residual_equation_solver"] == "action_lstsq"
+
+    monkeypatch.setenv(f"{prefix}COUPLED_RESIDUAL_EQUATION_SOLVER", "unsupported")
+    assert (
+        qi_device_solver_env(
+            f"{prefix}COUPLED_RESIDUAL_EQUATION_SOLVER",
+            default="galerkin",
+        )
+        == "galerkin"
     )
 
 

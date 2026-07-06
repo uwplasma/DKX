@@ -4845,6 +4845,48 @@ Status:
   deterministic and CPU-local. The remaining 95% coverage push should continue
   with bounded owner tests rather than production solves.
 
+### 2026-07-06: QI Fail-Closed Preconditioner Coverage Tranche
+
+Changes:
+
+- Added CPU-only algebraic tests for RHSMode=1 QI block-Schur correction
+  metadata serialization, empty-basis admission, zero-residual and nonfinite
+  true-residual probes, and unsupported angular-block coarse candidates.
+- Added coupled residual-equation tests for zero-residual, empty-basis,
+  rank-deficient, no-reduction, Galerkin-alias, invalid-solver, and mismatched
+  basis contracts.
+- Added residual-deflation tests for metadata/probe serialization, empty-rank
+  fail-closed behavior, empty minimum-residual seed handling, input validation,
+  and additive/multiplicative composition normalization.
+- Added QI device Jacobi/control tests for environment-control normalization,
+  diagonal edge cases, invalid smoother controls, residual-shape guards,
+  zero-residual probes, and nonfinite-candidate rejection.
+
+Validation:
+
+- `python -m pytest -q tests/test_rhs1_qi_block_schur.py
+  tests/test_rhs1_qi_coupled_residual.py tests/test_rhs1_qi_deflation.py
+  tests/test_rhs1_qi_device_smoother.py` passed as
+  `29 passed in 7.39 s`.
+- `python -m pytest -q tests/test_rhs1_qi_device_preconditioner.py
+  tests/test_rhs1_qi_device_smoother.py tests/test_rhs1_qi_block_schur.py
+  tests/test_rhs1_qi_coupled_residual.py tests/test_rhs1_qi_deflation.py`
+  passed as `73 passed in 17.48 s`.
+- `python -m pytest -q tests/test_source_tree_consolidation.py
+  tests/test_domain_package_import_contracts.py tests/test_benchmark_doc_claims.py`
+  passed as `64 passed in 4.70 s`.
+- `python -m ruff check` and `python -m compileall -q` passed for the touched
+  QI test files, and `git diff --check` passed.
+
+Status:
+
+- This strengthens the QI/device preconditioner contracts that support the
+  production RHSMode=1 and device-QI lanes without adding production solves to
+  CI. The 95% coverage target remains open; the next highest-return bounded
+  owners are still `profile_solve.py`, `profile_full_system.py`,
+  `transport_solve.py`, `profile_true_operator_rescue.py`, and the remaining
+  x-block/transport preconditioner modules.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

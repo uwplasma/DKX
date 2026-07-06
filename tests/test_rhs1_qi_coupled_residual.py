@@ -3,6 +3,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from sfincs_jax.solvers.preconditioner_qi_basis import orthonormalize_rhs1_qi_coarse_basis
 from sfincs_jax.solvers.preconditioner_qi_corrections import (
@@ -59,6 +60,7 @@ def test_coupled_residual_equation_updates_earlier_stage_coefficients() -> None:
     assert jnp.linalg.norm(staged_residual) > 1.0e-1
     assert state.metadata.accepted is True
     assert state.metadata.rank == 2
+    assert state.metadata.to_dict()["solver"] == "action_lstsq"
     assert state.metadata.source_stage_ranks == (1, 1)
     assert state.metadata.residual_after < 1.0e-12
     np.testing.assert_allclose(matvec(correction), rhs, rtol=1.0e-12, atol=1.0e-12)
@@ -102,6 +104,102 @@ def test_coupled_residual_equation_batches_operator_on_basis_setup() -> None:
         rtol=1.0e-12,
         atol=1.0e-12,
     )
+
+
+def test_coupled_residual_equation_empty_rank_and_rejected_paths_fail_closed() -> None:
+    residual = jnp.asarray([1.0, -0.5], dtype=jnp.float64)
+    basis = orthonormalize_rhs1_qi_coarse_basis(
+        jnp.asarray([[1.0], [0.0]], dtype=jnp.float64),
+        labels=("x0",),
+    )
+
+    zero_state = setup_rhs1_qi_coupled_residual_equation(
+        operator=lambda x: x,
+        residual=jnp.zeros_like(residual),
+        bases=(basis,),
+    )
+    assert zero_state.metadata.reason == "zero_residual"
+    assert zero_state.solve_coefficients(residual).shape == (0,)
+    np.testing.assert_allclose(zero_state.apply(residual), jnp.zeros_like(residual), atol=0.0)
+    np.testing.assert_allclose(zero_state.residual_after_apply(residual), residual, atol=0.0)
+
+    empty_state = setup_rhs1_qi_coupled_residual_equation(
+        operator=lambda x: x,
+        residual=residual,
+        bases=(),
+    )
+    assert empty_state.metadata.reason == "empty_basis"
+    assert empty_state.metadata.to_dict()["rank"] == 0
+
+    rank_deficient = setup_rhs1_qi_coupled_residual_equation(
+        operator=lambda x: x,
+        residual=residual,
+        bases=(basis,),
+        config=RHS1QICoupledResidualEquationConfig(max_rank=0),
+    )
+    assert rank_deficient.metadata.reason == "rank_deficient"
+    assert rank_deficient.metadata.candidate_count == 1
+
+    rejected = setup_rhs1_qi_coupled_residual_equation(
+        operator=lambda x: jnp.zeros_like(x),
+        residual=residual,
+        bases=(basis,),
+        config=RHS1QICoupledResidualEquationConfig(
+            min_relative_improvement=0.1,
+            acceptance_atol=0.0,
+        ),
+    )
+    assert rejected.metadata.reason == "no_residual_reduction"
+    assert rejected.metadata.rank == 0
+    assert rejected.metadata.candidate_labels == ("coupled:stage0:x0",)
+    np.testing.assert_allclose(rejected.apply(residual), jnp.zeros_like(residual), atol=0.0)
+
+
+def test_coupled_residual_equation_galerkin_aliases_and_errors() -> None:
+    residual = jnp.asarray([1.0, -0.5], dtype=jnp.float64)
+    operator_matrix = jnp.asarray([[2.0, 0.25], [0.25, 1.5]], dtype=jnp.float64)
+    basis = orthonormalize_rhs1_qi_coarse_basis(
+        jnp.eye(2, dtype=jnp.float64),
+        labels=("x0", "x1"),
+    )
+
+    state = setup_rhs1_qi_coupled_residual_equation(
+        operator=lambda x: operator_matrix @ jnp.asarray(x, dtype=jnp.float64),
+        residual=residual,
+        bases=(basis,),
+        config=RHS1QICoupledResidualEquationConfig(
+            solver="Schur",
+            regularization_rcond=0.0,
+        ),
+    )
+
+    assert state.solver == "galerkin"
+    assert state.metadata.accepted is True
+    np.testing.assert_allclose(
+        state.residual_after_apply(residual),
+        residual - operator_matrix @ state.apply(residual),
+        rtol=1.0e-12,
+        atol=1.0e-12,
+    )
+
+    with pytest.raises(ValueError, match="solver"):
+        setup_rhs1_qi_coupled_residual_equation(
+            operator=lambda x: x,
+            residual=residual,
+            bases=(basis,),
+            config=RHS1QICoupledResidualEquationConfig(solver="not-a-solver"),
+        )
+
+    mismatched = orthonormalize_rhs1_qi_coarse_basis(
+        jnp.eye(3, dtype=jnp.float64),
+        labels=("a", "b", "c"),
+    )
+    with pytest.raises(ValueError, match="same row count"):
+        setup_rhs1_qi_coupled_residual_equation(
+            operator=lambda x: x,
+            residual=residual,
+            bases=(mismatched,),
+        )
 
 
 def test_device_preconditioner_coupled_residual_equation_can_include_flat_basis() -> None:
