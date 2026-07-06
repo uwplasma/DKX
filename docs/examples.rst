@@ -28,6 +28,11 @@ For a guided classroom-style path, open the notebooks in
 - ``02_transport_and_autodiff.ipynb``: RHSMode=2/3 transport matrices and JAX differentiation.
 - ``03_bootstrap_redl_and_optimization.ipynb``: bootstrap-current/Redl comparisons and optimization objectives.
 
+The checked catalog ``examples/workflow_catalog.json`` mirrors the tables on
+this page. It records the supported topic folders, first-pass entry points,
+typical commands, runtime budgets, and whether a workflow requires a local
+SFINCS Fortran v3 executable.
+
 One-command start points
 ------------------------
 
