@@ -3341,6 +3341,56 @@ Status:
   finite-beta comparison: it is below `20%` JAX-vs-Fortran maximum relative
   difference in the tracked profile, not a sub-10% agreement claim.
 
+## Tranche 156: Searchable Examples Workflow Browser
+
+Scope:
+
+- Added `examples/list_workflows.py`, a zero-dependency terminal browser over
+  `examples/workflow_catalog.json`.
+- Added searchable workflow keywords for the public example catalog, covering
+  CLI output, file formats, VMEC geometry, transport matrices, autodiff,
+  bootstrap-current/Redl comparisons, performance, parity, optimization,
+  VMEC-JAX/Boozer geometry, and publication-figure regeneration.
+- Updated `examples/README.md` and `docs/examples.rst` with the browser
+  commands:
+  `python examples/list_workflows.py --list-topics`,
+  `python examples/list_workflows.py --topic bootstrap --long`, and
+  `python examples/list_workflows.py --search "VMEC geometry"`.
+- Added tests that keep the workflow catalog searchable, validate the terminal
+  browser in text and JSON modes, and ensure first-run workflows remain
+  discoverable from the examples tree.
+
+Validation:
+
+- `python -m pytest -q tests/test_examples_workflow_browser.py tests/test_examples_tree_contract.py tests/test_examples_tutorials.py`
+  passed as `16 passed in 0.21 s`.
+- `python examples/list_workflows.py --topic bootstrap --long` printed both
+  the Redl/bootstrap comparison and QA/QI objective workflows with first-run
+  commands and local-Fortran requirements.
+- `python examples/list_workflows.py --topic redl --json` returned a
+  machine-readable payload with the `bootstrap_redl` workflow.
+- `python -m json.tool examples/workflow_catalog.json` passed.
+- `python -m compileall -q examples/list_workflows.py tests/test_examples_workflow_browser.py tests/test_examples_tree_contract.py`
+  passed.
+- `python -m ruff check examples/list_workflows.py tests/test_examples_workflow_browser.py tests/test_examples_tree_contract.py`
+  passed.
+- `python -m pytest -q tests/test_benchmark_doc_claims.py tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py`
+  passed as `62 passed in 4.57 s`.
+- `python -m sphinx -b html docs docs/_build/html` passed.
+- `python -m pytest -q -n auto --dist=loadscope` passed as
+  `4385 passed in 252.11 s`.
+- The public wording scan remains clean except for a historical
+  `examples/publication_figures/validation_manifest.json` provenance string.
+
+Status:
+
+- The examples tree remains folder-stable, but discoverability no longer
+  depends only on reading long README tables.
+- This tranche moves the examples-refactor lane forward without adding package
+  API complexity or generated artifacts.
+- The 95% package coverage gate is unchanged; the next code-focused tranche
+  should target larger uncovered solver/operator blocks or delete dead code.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

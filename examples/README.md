@@ -10,6 +10,13 @@ The machine-readable navigation map lives in `workflow_catalog.json`. It lists
 the supported topic folders, first-pass entry points, typical commands, runtime
 budgets, and whether a workflow needs a local SFINCS Fortran v3 executable.
 Tests keep this catalog synchronized with this README and the documentation.
+Use `list_workflows.py` when you want the catalog from the terminal:
+
+```bash
+python examples/list_workflows.py --list-topics
+python examples/list_workflows.py --topic bootstrap --long
+python examples/list_workflows.py --search "VMEC geometry"
+```
 
 ### One-Command Starts
 
@@ -42,6 +49,10 @@ temporary path, and none requires SFINCS Fortran v3 for the first run.
 
 Use this map when you are looking at `examples/` for the first time and want the
 shortest path to the relevant workflow.
+
+For an interactive terminal version of this map, run
+`python examples/list_workflows.py --list-topics` or filter by task with
+`python examples/list_workflows.py --topic transport`.
 
 | Starting question | Go here | Why |
 | --- | --- | --- |
@@ -196,6 +207,7 @@ python examples/getting_started/build_grids_and_geometry.py
 
 Common entry points:
 
+- Browse examples by task: `examples/list_workflows.py`
 - Tutorial notebook index: `examples/tutorials/README.md`
 - Fast tutorial output writer/plotter: `examples/tutorials/run_quick_output_and_plot.py`
 - Write `sfincsOutput.h5` via Python: `examples/getting_started/write_sfincs_output_python.py`
