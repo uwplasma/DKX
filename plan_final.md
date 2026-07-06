@@ -3477,8 +3477,8 @@ Validation:
 - The post-fix bounded CPU production rerun passed both launched cases with
   `parity_ok`, `0/195` practical mismatches, `0/195` strict mismatches, no
   missing output keys, and `8/9` print-parity signals. Runtime stayed bounded:
-  about `8.3 s` JAX versus `6.0 s` Fortran for the one-species case and
-  `14.8 s` JAX versus `9.2 s` Fortran for the two-species case. Peak RSS was
+  about `8.0 s` JAX versus `1.7 s` Fortran for the one-species case and
+  `14.5 s` JAX versus `7.0 s` Fortran for the two-species case. Peak RSS was
   about `3.1 GB` and `5.7 GB`, respectively.
 - `ssh office` timed out twice during this pass, so no fresh GPU rerun was
   produced. The checked GPU report remains the current GPU evidence until a
