@@ -265,6 +265,8 @@ def test_plotting_shape_helpers_and_missing_panel_paths() -> None:
     assert plotting._surface(np.arange(24.0).reshape(2, 3, 4)).shape == (2, 3)
     assert plotting._matrix(np.asarray(5.0)).shape == (1, 1)
     assert plotting._matrix(np.arange(3.0)).shape == (3, 1)
+    cube = np.arange(24.0).reshape(2, 3, 4)
+    np.testing.assert_allclose(plotting._matrix(cube), cube[:, :, 0])
 
     fig, axes = plt.subplots(1, 2)
     try:
@@ -276,6 +278,26 @@ def test_plotting_shape_helpers_and_missing_panel_paths() -> None:
             "flow",
         ) is True
         assert axes[1].get_xlabel() == "index"
+    finally:
+        plt.close(fig)
+
+
+def test_plotting_summary_and_radial_transport_matrix_panel() -> None:
+    data = {
+        "x": np.asarray([0.0, 0.5]),
+        "geometryScheme": np.asarray(5),
+        "Ntheta": np.asarray([3, 4]),
+        "transportMatrix": np.arange(4.0).reshape(2, 2),
+    }
+
+    summary = plotting._summary_text(data, Path("case.sfincsOutput.h5"))
+    assert "geometryScheme = 5" in summary
+    assert "Ntheta" not in summary
+
+    fig = plotting._radial_page(data)
+    try:
+        assert fig.axes[3].get_xlabel() == "drive index"
+        assert fig.axes[3].get_ylabel() == "flux index"
     finally:
         plt.close(fig)
 

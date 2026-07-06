@@ -7,7 +7,16 @@ import h5py
 import numpy as np
 import pytest
 
-from sfincs_jax.compare import H5DatasetParity, compare_h5_outputs, main
+from sfincs_jax.compare import (
+    H5DatasetParity,
+    _as_numpy,
+    _center_fsa,
+    _json_default,
+    _merge_tolerance_floor,
+    _numeric_datasets,
+    compare_h5_outputs,
+    main,
+)
 
 
 def _write_h5(path: Path, data: dict[str, object]) -> None:
@@ -15,6 +24,45 @@ def _write_h5(path: Path, data: dict[str, object]) -> None:
     with h5py.File(path, "w") as h5:
         for key, value in data.items():
             h5[key] = value
+
+
+def test_compare_private_array_and_json_helpers_cover_metadata_edges(tmp_path: Path) -> None:
+    assert _as_numpy(np.asarray([1.0])).shape == (1,)
+    assert _as_numpy("metadata") is None
+    assert _as_numpy(np.asarray("metadata")) is None
+    assert _as_numpy([1.0, 2.0]) is None
+
+    centered_4d = _center_fsa(np.arange(16.0).reshape(1, 2, 4, 2))
+    np.testing.assert_allclose(centered_4d.mean(axis=(1, 2)), np.zeros((1, 2)))
+    centered_3d_surface = _center_fsa(np.arange(12.0).reshape(2, 3, 2))
+    np.testing.assert_allclose(centered_3d_surface.mean(axis=(0, 1)), np.zeros((2,)))
+    centered_3d_history = _center_fsa(np.arange(6.0).reshape(2, 1, 3))
+    np.testing.assert_allclose(centered_3d_history.mean(axis=1), np.zeros((2, 3)))
+
+    tolerances = {"field": {"atol": "bad", "ignore": False}}
+    _merge_tolerance_floor(tolerances, "field", {"atol": 1.0e-5, "rtol": "bad", "center_fsa": True})
+    assert tolerances["field"]["atol"] == 1.0e-5
+    assert tolerances["field"]["center_fsa"] is True
+    assert "rtol" not in tolerances["field"]
+
+    assert _json_default(np.float64(2.5)) == 2.5
+    assert _json_default(tmp_path) == str(tmp_path)
+    with pytest.raises(TypeError, match="not JSON serializable"):
+        _json_default(object())
+
+
+def test_numeric_datasets_ignores_groups_and_non_numeric_values(tmp_path: Path) -> None:
+    path = tmp_path / "nested.h5"
+    with h5py.File(path, "w") as h5:
+        h5.create_group("metadata")
+        h5["metadata/label"] = "case"
+        h5["metadata/numeric"] = np.asarray([1.0, 2.0])
+        h5["root_numeric"] = np.asarray(3.0)
+
+    datasets = _numeric_datasets(path)
+
+    assert set(datasets) == {"metadata/numeric", "root_numeric"}
+    np.testing.assert_allclose(datasets["metadata/numeric"], np.asarray([1.0, 2.0]))
 
 
 def test_compare_h5_outputs_records_full_numeric_status(tmp_path: Path) -> None:
