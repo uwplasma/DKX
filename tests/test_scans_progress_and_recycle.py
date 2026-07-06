@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -116,6 +117,188 @@ def test_patch_scalar_in_group_appends_and_reports_malformed_namelists() -> None
         scans._patch_scalar_in_group(txt="&other\n/\n", group="physicsParameters", key="Er", value=0.0)
     with pytest.raises(ValueError, match="Missing '/' terminator"):
         scans._patch_scalar_in_group(txt="&physicsParameters\n", group="physicsParameters", key="Er", value=0.0)
+
+
+def test_linspace_including_endpoints_matches_scan_grid_contract() -> None:
+    values = scans.linspace_including_endpoints(-2.0, 1.0, 4)
+
+    assert values.tolist() == pytest.approx([-2.0, -1.0, 0.0, 1.0])
+    with pytest.raises(ValueError, match="n must be >= 2"):
+        scans.linspace_including_endpoints(0.0, 1.0, 1)
+
+
+def test_find_upstream_utils_dir_honors_override_env_and_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    override = tmp_path / "override_utils"
+    override.mkdir()
+    env_utils = tmp_path / "env_utils"
+    env_utils.mkdir()
+
+    assert scans.find_upstream_utils_dir(override=override) == override
+    with pytest.raises(FileNotFoundError, match="utils dir does not exist"):
+        scans.find_upstream_utils_dir(override=tmp_path / "missing")
+
+    monkeypatch.setenv("SFINCS_JAX_UPSTREAM_UTILS_DIR", str(env_utils))
+    assert scans.find_upstream_utils_dir() == env_utils
+
+    monkeypatch.setenv("SFINCS_JAX_UPSTREAM_UTILS_DIR", str(tmp_path / "missing_env"))
+    with pytest.raises(FileNotFoundError, match="SFINCS_JAX_UPSTREAM_UTILS_DIR does not exist"):
+        scans.find_upstream_utils_dir()
+
+    monkeypatch.delenv("SFINCS_JAX_UPSTREAM_UTILS_DIR", raising=False)
+    default_utils = scans.find_upstream_utils_dir()
+    assert default_utils.name == "utils"
+    assert (default_utils / "sfincsScanPlot_1").is_file()
+
+
+def test_run_upstream_util_executes_noninteractive_helper(tmp_path: Path) -> None:
+    utils_dir = tmp_path / "utils"
+    utils_dir.mkdir()
+    case_dir = tmp_path / "case"
+    case_dir.mkdir()
+    script = utils_dir / "plot_scan.py"
+    script.write_text(
+        "from pathlib import Path\n"
+        "import json\n"
+        "import os\n"
+        "import sys\n"
+        "answer = input('prompt:')\n"
+        "Path('result.json').write_text(json.dumps({\n"
+        "    'answer': answer,\n"
+        "    'argv': sys.argv[1:],\n"
+        "    'backend': os.environ.get('MPLBACKEND'),\n"
+        "}))\n",
+        encoding="utf-8",
+    )
+    messages: list[str] = []
+
+    scans.run_upstream_util(
+        util="plot_scan.py",
+        case_dir=case_dir,
+        args=("--quantity", "Gamma"),
+        utils_dir=utils_dir,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    payload = json.loads((case_dir / "result.json").read_text(encoding="utf-8"))
+    assert payload == {
+        "answer": "",
+        "argv": ["--quantity", "Gamma"],
+        "backend": "Agg",
+    }
+    assert messages == [f"postprocess-upstream: running {script.name} in {case_dir.resolve()}"]
+
+
+def test_run_upstream_util_reports_missing_script_and_case_dir(tmp_path: Path) -> None:
+    utils_dir = tmp_path / "utils"
+    utils_dir.mkdir()
+    case_dir = tmp_path / "case"
+    case_dir.mkdir()
+
+    with pytest.raises(FileNotFoundError, match="Upstream util not found"):
+        scans.run_upstream_util(util="missing.py", case_dir=case_dir, utils_dir=utils_dir)
+
+    script = utils_dir / "noop.py"
+    script.write_text("", encoding="utf-8")
+    with pytest.raises(FileNotFoundError, match="case_dir does not exist"):
+        scans.run_upstream_util(util="noop.py", case_dir=tmp_path / "missing_case", utils_dir=utils_dir)
+
+
+def test_run_er_scan_skip_existing_reuses_completed_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    template = _minimal_scan_input(tmp_path / "input.namelist")
+    existing_run_dir = tmp_path / "scan" / "Er0"
+    existing_run_dir.mkdir(parents=True)
+    existing_output = existing_run_dir / "sfincsOutput.h5"
+    existing_output.write_bytes(b"done")
+
+    def _unexpected_write(**_kwargs) -> None:
+        raise AssertionError("skip_existing should not write a completed point")
+
+    def _unexpected_localize(**_kwargs) -> None:
+        raise AssertionError("skip_existing should not localize a completed point")
+
+    monkeypatch.setattr(scans, "write_sfincs_jax_output_h5", _unexpected_write)
+    monkeypatch.setattr(scans, "localize_equilibrium_file_in_place", _unexpected_localize)
+    messages: list[str] = []
+
+    result = scans.run_er_scan(
+        input_namelist=template,
+        out_dir=tmp_path / "scan",
+        values=[0.0],
+        skip_existing=True,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert result.run_dirs == (existing_run_dir.resolve(),)
+    assert result.outputs == (existing_output.resolve(),)
+    assert result.values == (0.0,)
+    assert any("reused existing output" in message for message in messages)
+
+
+def test_run_er_scan_parallel_path_uses_executor_and_disables_recycle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    template = _minimal_scan_input(tmp_path / "input.namelist")
+    writes: list[tuple[str, str | None, str | None]] = []
+
+    class _FakeFuture:
+        def __init__(self, result):
+            self._result = result
+
+        def result(self):
+            return self._result
+
+    class _FakePool:
+        def __init__(self, max_workers: int):
+            assert max_workers == 2
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def submit(self, fn, payload):
+            return _FakeFuture(fn(payload))
+
+    def _fake_write(**kwargs) -> None:
+        out_path = Path(kwargs["output_path"])
+        out_path.write_bytes(b"")
+        writes.append(
+            (
+                out_path.parent.name,
+                os.environ.get("SFINCS_JAX_STATE_IN"),
+                os.environ.get("SFINCS_JAX_STATE_OUT"),
+            )
+        )
+
+    monkeypatch.setattr(scans, "localize_equilibrium_file_in_place", lambda **_kwargs: None)
+    monkeypatch.setattr(scans, "write_sfincs_jax_output_h5", _fake_write)
+    monkeypatch.setattr(scans.concurrent.futures, "ProcessPoolExecutor", _FakePool)
+    monkeypatch.setattr(scans.concurrent.futures, "as_completed", lambda futures: list(futures))
+    monkeypatch.setenv("SFINCS_JAX_SCAN_RECYCLE", "1")
+    monkeypatch.setenv("SFINCS_JAX_STATE_IN", "stale-in")
+    monkeypatch.setenv("SFINCS_JAX_STATE_OUT", "stale-out")
+    messages: list[tuple[int, str]] = []
+
+    result = scans.run_er_scan(
+        input_namelist=template,
+        out_dir=tmp_path / "scan",
+        values=[0.0, 1.0],
+        jobs=2,
+        emit=lambda level, msg: messages.append((level, msg)),
+    )
+
+    assert result.values == (1.0, 0.0)
+    assert [path.name for path in result.run_dirs] == ["Er0", "Er1"]
+    assert [name for name, _state_in, _state_out in sorted(writes)] == ["Er0", "Er1"]
+    assert all(state_in is None and state_out is None for _name, state_in, state_out in writes)
+    assert os.environ["SFINCS_JAX_SCAN_RECYCLE"] == "0"
+    assert "SFINCS_JAX_STATE_IN" not in os.environ
+    assert "SFINCS_JAX_STATE_OUT" not in os.environ
+    assert any("jobs=2 (parallel)" in message for _level, message in messages)
+    assert any("scan recycle disabled for parallel execution" in message for _level, message in messages)
+    assert sum("scan-er: progress" in message for _level, message in messages) == 2
 
 
 def test_run_er_scan_subset_and_serial_recycle_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
