@@ -856,7 +856,7 @@ def test_reduced_host_dense_shortcut_stage_solves_and_records_replay() -> None:
     assert marks == ["rhs1_host_dense_shortcut_start", "rhs1_host_dense_shortcut_done"]
     assert messages == [(
         0,
-        "solve_v3_full_system_linear_gmres: accelerator FP small system -> "
+        "solve_v3_full_system_linear_gmres: accelerator FP bounded system -> "
         "using host dense shortcut (size=2)",
     )]
 
@@ -900,7 +900,7 @@ def test_full_host_dense_shortcut_stage_solves_and_records_replay() -> None:
     assert marks == ["rhs1_host_dense_shortcut_start", "rhs1_host_dense_shortcut_done"]
     assert messages == [(
         0,
-        "solve_v3_full_system_linear_gmres: accelerator FP small system -> "
+        "solve_v3_full_system_linear_gmres: accelerator FP bounded system -> "
         "using host dense shortcut (size=2)",
     )]
 

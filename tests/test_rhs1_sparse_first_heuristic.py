@@ -185,12 +185,14 @@ def test_host_dense_shortcut_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_MAX", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", raising=False)
     monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", "900")
     assert not _rhsmode1_host_dense_shortcut_allowed(
         op=_op(constraint_scheme=1),
         active_size=901,
         use_implicit=False,
         solve_method_kind="incremental",
     )
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", raising=False)
     assert not _rhsmode1_host_dense_shortcut_allowed(
         op=_op(constraint_scheme=1),
         active_size=404,

@@ -3899,7 +3899,13 @@ def rhs1_host_dense_shortcut_allowed(
     backend: str,
     dense_fallback_max: int,
 ) -> bool:
-    """Allow the small accelerator FP branch to use host dense LU directly."""
+    """Allow bounded accelerator full-FP systems to use host dense LU directly.
+
+    GPU RHSMode=1 full-FP systems below the dense fallback budget are often
+    faster if they go straight to the host dense solve rather than first paying
+    for Krylov/preconditioner probes on the accelerator. The explicit shortcut
+    cap still lets memory-constrained users lower or disable this path.
+    """
     env = _env_bool("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT")
     if env is False:
         return False
@@ -3916,7 +3922,14 @@ def rhs1_host_dense_shortcut_allowed(
     host_dense_env = _env_bool("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU")
     if host_dense_env is False:
         return False
-    shortcut_max = _env_int("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", 900)
+    shortcut_default = min(
+        int(dense_fallback_max),
+        rhs1_dense_auto_fp_cutoff(dense_active_cutoff=int(dense_fallback_max)),
+    )
+    shortcut_max = _env_int(
+        "SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX",
+        max(0, int(shortcut_default)),
+    )
     dense_cap = min(max(0, int(shortcut_max)), max(0, int(dense_fallback_max)))
     if dense_cap <= 0:
         return False

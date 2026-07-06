@@ -343,6 +343,32 @@ def test_rhs1_host_dense_shortcut_guards_small_accelerator_fp(monkeypatch) -> No
         backend="gpu",
         dense_fallback_max=5000,
     )
+    assert rhs1_host_dense_shortcut_allowed(
+        op=_op(has_fp=True),
+        active_size=5000,
+        use_implicit=False,
+        solve_method_kind="incremental",
+        backend="gpu",
+        dense_fallback_max=5000,
+    )
+    assert not rhs1_host_dense_shortcut_allowed(
+        op=_op(has_fp=True),
+        active_size=5001,
+        use_implicit=False,
+        solve_method_kind="incremental",
+        backend="gpu",
+        dense_fallback_max=5000,
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", "900")
+    assert not rhs1_host_dense_shortcut_allowed(
+        op=_op(has_fp=True),
+        active_size=901,
+        use_implicit=False,
+        solve_method_kind="incremental",
+        backend="gpu",
+        dense_fallback_max=5000,
+    )
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", raising=False)
     assert not rhs1_host_dense_shortcut_allowed(
         op=_op(has_fp=True),
         active_size=600,

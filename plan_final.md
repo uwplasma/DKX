@@ -3836,6 +3836,58 @@ Status:
   CPU/GPU/Fortran production rerun remains an expensive replacement-report
   activity, not a prerequisite for reviewing the refactor diff.
 
+## Latest Execution Log: GPU RHSMode=1 Dense-Route Efficiency Tranche
+
+What was checked:
+
+- Confirmed PR #8 remained on a clean branch head with green GitHub checks.
+- Retried `ssh office`; the host still timed out while connecting to
+  `plasmaworkstation.physics.wisc.edu:3281`, so no live GPU run was launched
+  in this tranche.
+- Re-read the checked GPU solver-path artifacts for bounded full-FP
+  RHSMode=1 cases. They show the same qualitative bottleneck reported by
+  collaborators: when a moderate accelerator run falls into Krylov/probe work
+  before dense fallback, runtime and RSS can be worse than the direct
+  dense-host path.
+
+Source change:
+
+- `rhs1_host_dense_shortcut_allowed` now lets bounded accelerator full-FP
+  RHSMode=1 systems use the same dense fallback budget as the default host
+  dense shortcut cap instead of the old hard-coded `900` unknown cap.
+- The change keeps the existing safety guards: no PAS, no `Phi1`, no implicit
+  differentiable lane, no CPU behavior change, no explicit `dense` override
+  rewrite, and explicit environment variables can still lower or disable the
+  shortcut.
+- CLI progress text now reports `accelerator FP bounded system -> using host
+  dense shortcut`, which better matches the widened but still bounded policy.
+
+Validation:
+
+- `python -m pytest -q tests/test_rhs1_host_policy.py
+  tests/test_rhs1_sparse_first_heuristic.py tests/test_profile_response_dense.py`
+  passed as `140 passed`.
+- `python -m pytest -q tests/test_rhs1_host_policy.py
+  tests/test_rhs1_sparse_first_heuristic.py tests/test_profile_response_dense.py
+  tests/test_io_output_policy_coverage.py` passed as `236 passed`.
+- `python -m ruff check sfincs_jax/problems/profile_policies.py
+  sfincs_jax/problems/profile_dense.py tests/test_rhs1_host_policy.py
+  tests/test_rhs1_sparse_first_heuristic.py tests/test_profile_response_dense.py`
+  passed.
+- `python -m compileall -q sfincs_jax/problems/profile_policies.py
+  sfincs_jax/problems/profile_dense.py tests/test_rhs1_host_policy.py
+  tests/test_rhs1_sparse_first_heuristic.py tests/test_profile_response_dense.py`
+  passed.
+- `git diff --check` passed.
+
+Status:
+
+- This closes the local policy implementation portion of the GPU-efficiency
+  target for bounded full-FP RHSMode=1 systems.
+- A live office GPU rerun remains the next evidence step once SSH is reachable:
+  rerun the neighboring `Nxi=20/40` full-FP cases and confirm the default route
+  uses the host-dense shortcut with lower wall time and no parity drift.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

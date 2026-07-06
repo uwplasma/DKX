@@ -2224,7 +2224,7 @@ def run_rhs1_reduced_host_dense_shortcut_stage(
     if emit is not None:
         emit(
             0,
-            "solve_v3_full_system_linear_gmres: accelerator FP small system -> "
+            "solve_v3_full_system_linear_gmres: accelerator FP bounded system -> "
             f"using host dense shortcut (size={int(context.active_size)})",
         )
     result = solve_host_dense_reduced(
@@ -2273,7 +2273,7 @@ def run_rhs1_full_host_dense_shortcut_stage(
     if emit is not None:
         emit(
             0,
-            "solve_v3_full_system_linear_gmres: accelerator FP small system -> "
+            "solve_v3_full_system_linear_gmres: accelerator FP bounded system -> "
             f"using host dense shortcut (size={int(context.total_size)})",
         )
     result, residual_vec = solve_host_dense_full(
