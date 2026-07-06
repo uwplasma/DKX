@@ -3010,6 +3010,11 @@ Validation:
 - `python -m pytest -q tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
   passed as `71 passed in 5.68 s`.
 - `git diff --check` passed.
+- `python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax --cov-report=term --cov-report=json:/tmp/sfincs_jax_coverage_after_tranche149.json`
+  passed as `4361 passed in 303.15 s`. Coverage is
+  `62340 / 69108` statements, `6768` missing lines, `90.21%` total. The 95%
+  meaningful-coverage gate remains open and requires larger structural coverage
+  work in the orchestration and preconditioner modules.
 
 ## Standard Validation Commands
 
