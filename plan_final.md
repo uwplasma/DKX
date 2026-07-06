@@ -3223,6 +3223,48 @@ Status:
 - The local SFINCS Fortran v3 executable for bounded reruns is
   `/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs`.
 
+## Tranche 154: RHSMode=1 Progress/Profiler Wrapper Gate
+
+Scope:
+
+- Extended the allowed `profile_solve` wrapper-contract test to cover the
+  progress/profiler branch before expensive RHSMode=1 sparse-host-safe exits.
+- The new test verifies that:
+  - materialization marks are forwarded to the profiler hook;
+  - active-DOF PAS projection progress messages are emitted;
+  - post-active policy messages are emitted;
+  - GMRES tolerance/restart/maxiter and matrix-free Jacobian progress messages
+    are visible before the sparse-host-safe no-solve branch returns.
+- This keeps coverage on the canonical orchestration owner while preserving the
+  source-tree rule that ordinary tests should import the smaller policy/helper
+  owners instead of private `profile_solve` aliases.
+
+Validation:
+
+- `python -m pytest -q tests/test_profile_solve_module_wrappers.py` passed as
+  `12 passed in 1.01 s`.
+- `python -m ruff check tests/test_profile_solve_module_wrappers.py` passed.
+- `python -m compileall -q tests/test_profile_solve_module_wrappers.py` passed.
+- `python -m pytest -q tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_profile_solve_module_wrappers.py`
+  passed as `67 passed in 4.62 s`.
+- `python -m pytest -q tests/test_profile_solve_module_wrappers.py --cov=sfincs_jax.problems.profile_solve --cov-report=term --cov-report=json:/tmp/profile_solve_wrapper_cov.json`
+  aborted locally with exit code `134`, matching the known module-only coverage
+  anomaly. Treat full package coverage as authoritative.
+- `python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax --cov-report=term --cov-report=json:/tmp/sfincs_jax_coverage_after_profile_solve_progress.json`
+  passed as `4381 passed in 296.17 s`. Total coverage was `90.2968%`
+  (`6706` missing lines). `sfincs_jax/problems/profile_solve.py` improved from
+  `318` to `315` missing lines, while `sfincs_jax/__init__.py` varied from
+  `12` to `18` missing lines in the full-run coverage report.
+
+Status:
+
+- The new test improves direct evidence for RHSMode=1 user progress reporting
+  and fail-fast sparse-host-safe routing.
+- The global 95% gate remains open; coverage work must increasingly target
+  larger uncovered blocks in `profile_solve.py`, `transport_solve.py`,
+  `profile_full_system.py`, and the QI/preconditioner modules or remove dead
+  code rather than adding narrow wrapper tests.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

@@ -366,7 +366,14 @@ def test_profile_solve_top_level_orchestrator_can_exit_through_structured_csr(mo
     assert captured["route_setup"]["device_count"] == 2
 
 
-def _install_profile_solve_sparse_branch_scaffold(monkeypatch, *, solve_method: str) -> tuple[SimpleNamespace, dict]:
+def _install_profile_solve_sparse_branch_scaffold(
+    monkeypatch,
+    *,
+    solve_method: str,
+    use_active_dof_mode: bool = False,
+    use_pas_projection: bool = False,
+    profiler_marks: list[str] | None = None,
+) -> tuple[SimpleNamespace, dict]:
     captured: dict[str, object] = {}
     nml = SimpleNamespace(label="nml", group=lambda _name: {})
     op = SimpleNamespace(
@@ -379,6 +386,7 @@ def _install_profile_solve_sparse_branch_scaffold(monkeypatch, *, solve_method: 
 
     def fake_materialize(context):
         captured["materialize_context"] = context
+        context.mark("materialized")
         return SimpleNamespace(
             op=op,
             which_rhs=1,
@@ -407,7 +415,14 @@ def _install_profile_solve_sparse_branch_scaffold(monkeypatch, *, solve_method: 
             structured_sharded_multidevice=False,
         )
 
-    monkeypatch.setattr(profile_solve, "maybe_profiler", lambda **_kwargs: None)
+    if profiler_marks is None:
+        monkeypatch.setattr(profile_solve, "maybe_profiler", lambda **_kwargs: None)
+    else:
+        monkeypatch.setattr(
+            profile_solve,
+            "maybe_profiler",
+            lambda **_kwargs: SimpleNamespace(mark=lambda label: profiler_marks.append(label)),
+        )
     monkeypatch.setattr(profile_solve, "materialize_profile_response_linear_problem", fake_materialize)
     monkeypatch.setattr(profile_solve, "resolve_rhs1_initial_route_setup", fake_route_setup)
     monkeypatch.setattr(profile_solve, "try_rhs1_auto_host_solve", lambda _context: None)
@@ -438,11 +453,11 @@ def _install_profile_solve_sparse_branch_scaffold(monkeypatch, *, solve_method: 
             preconditioner_xi=1,
             full_preconditioner_requested=False,
             geom_scheme=1,
-            use_pas_projection=False,
-            use_active_dof_mode=False,
-            active_idx_jnp=None,
-            full_to_active_jnp=None,
-            active_size=8,
+            use_pas_projection=bool(use_pas_projection),
+            use_active_dof_mode=bool(use_active_dof_mode),
+            active_idx_jnp=jnp.asarray([0, 1], dtype=jnp.int32) if use_active_dof_mode else None,
+            full_to_active_jnp=jnp.asarray([0, 1], dtype=jnp.int32) if use_active_dof_mode else None,
+            active_size=2 if use_active_dof_mode else 8,
             messages=((1, "active setup"),),
         ),
     )
@@ -532,6 +547,45 @@ def test_profile_solve_top_level_orchestrator_can_exit_through_sparse_host_safe(
     assert result is sentinel
     assert "sparse_host_safe_context" in captured
     assert "minimum_norm_context" not in captured
+
+
+def test_profile_solve_sparse_host_safe_progress_and_profiler_are_forwarded(monkeypatch) -> None:
+    messages: list[tuple[int, str]] = []
+    profiler_marks: list[str] = []
+    nml, captured = _install_profile_solve_sparse_branch_scaffold(
+        monkeypatch,
+        solve_method="sparse_host_safe",
+        use_active_dof_mode=True,
+        use_pas_projection=True,
+        profiler_marks=profiler_marks,
+    )
+    sentinel = SimpleNamespace(kind="sparse-host-safe-result")
+
+    def fake_sparse_host_safe(context):
+        captured["sparse_host_safe_context"] = context
+        assert context.requested is True
+        assert context.restart == 31
+        assert context.maxiter == 37
+        return sentinel
+
+    monkeypatch.setattr(profile_solve, "try_rhs1_sparse_host_safe_solve", fake_sparse_host_safe)
+
+    result = profile_solve.solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="sparse_host_safe",
+        differentiable=False,
+        atol=1.0e-12,
+        emit=lambda level, message: messages.append((int(level), str(message))),
+    )
+
+    assert result is sentinel
+    assert profiler_marks == ["materialized"]
+    emitted = [message for _, message in messages]
+    assert "active setup" in emitted
+    assert "post-active setup" in emitted
+    assert any("PAS constraint projection enabled" in message for message in emitted)
+    assert any("GMRES tol=1e-08 atol=1e-12 restart=31 maxiter=37" in message for message in emitted)
+    assert any("evaluateJacobian called" in message for message in emitted)
 
 
 def test_profile_solve_top_level_orchestrator_can_exit_through_sparse_pc_replay(monkeypatch) -> None:
