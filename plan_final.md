@@ -4304,6 +4304,47 @@ Status:
   gate by itself; the next coverage tranche should use the next completed CI
   per-file report to avoid guessing at the remaining largest missing regions.
 
+## Latest Execution Log: Sensitivity API Fail-Fast Coverage Tranche
+
+What was checked:
+
+- Rechecked the last successful full coverage artifact:
+  `/tmp/sfincs_jax_coverage_after_transport_dense_mixed.json`.
+- Confirmed total package coverage remains about `90.46%`, with the largest
+  missing regions still in solve orchestration and production preconditioner
+  owners.
+- Selected `sensitivity.py` for a CPU-safe tranche because it is central to the
+  optimization/autodiff goals and has small unguarded fail-fast branches that
+  can be exercised without launching transport solves.
+
+Source/test change:
+
+- Added sensitivity API contract tests for:
+  non-RHSMode-4/5 Fortran-v3 sensitivity surface validation,
+  unshaped output-field diagnostics,
+  malformed dense linear-observable matrices/vectors,
+  invalid finite-difference steps,
+  malformed matrix-free callback dimensions, and
+  transpose-solve callback shape failures.
+- These are real optimization-path checks. They pin explicit error messages at
+  the API boundary so derivative and adjoint workflows fail before producing
+  misleading sensitivities.
+
+Validation:
+
+- `python -m pytest -q tests/test_sensitivity.py` passed as
+  `37 passed in 40.18 s`.
+- `python -m ruff check tests/test_sensitivity.py` passed.
+- `python -m compileall -q tests/test_sensitivity.py` passed.
+
+Status:
+
+- This advances the meaningful coverage/refactor-review lane for the
+  differentiability API. It does not close the 95% package-coverage gate; the
+  next high-impact work remains bounded tests or refactors for
+  `profile_solve.py`, `transport_solve.py`, `profile_full_system.py`, and the
+  QI/preconditioner owners.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

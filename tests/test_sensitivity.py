@@ -417,6 +417,146 @@ def test_fortran_v3_adjoint_sensitivity_output_surface_reports_missing_or_misran
     )
 
 
+def test_fortran_v3_adjoint_sensitivity_surface_handles_non_rhs45_and_unshaped_outputs() -> None:
+    """Guard the lightweight HDF5-summary validator used by frozen v3 fixtures."""
+
+    non_adjoint = _adjoint_config(general={"RHSMode": 1})
+    assert fortran_v3_adjoint_sensitivity_output_fields(non_adjoint) == ()
+    assert dict(fortran_v3_adjoint_sensitivity_output_ranks(non_adjoint)) == {}
+    assert validate_fortran_v3_adjoint_sensitivity_output_surface(non_adjoint, {"ignored": object()}) == (
+        "RHSMode 4 or 5 is required for Fortran-v3 adjoint sensitivities.",
+    )
+
+    heat_and_total = _adjoint_config(
+        adjointOptions={
+            "adjointHeatFluxOption": [True, False],
+            "adjointTotalHeatFluxOption": True,
+        }
+    )
+    errors = validate_fortran_v3_adjoint_sensitivity_output_surface(
+        heat_and_total,
+        {"dHeatFluxdLambda": object()},
+    )
+
+    assert errors == (
+        "Cannot determine shape for sensitivity output field: dHeatFluxdLambda.",
+        "Missing Fortran-v3 RHSMode 4/5 sensitivity output field: dTotalHeatFluxdLambda.",
+    )
+
+
+def test_linear_observable_helpers_reject_malformed_shapes() -> None:
+    """Shape failures should be explicit before optimization code sees bad derivatives."""
+
+    a0, ap, b0, bp, c0, _cp, offset0, _offsetp, p0 = _linear_system_components()
+    system = LinearObservableSystem(
+        parameter=p0,
+        matrix=a0,
+        rhs=b0,
+        matrix_derivative=ap,
+        rhs_derivative=bp,
+        observable_vector=c0,
+        observable_offset=offset0,
+    )
+
+    with pytest.raises(ValueError, match="matrix must be a square 2D matrix"):
+        evaluate_linear_observable(replace(system, matrix=jnp.ones((3,), dtype=jnp.float64)))
+    with pytest.raises(ValueError, match="rhs length must match matrix size"):
+        evaluate_linear_observable(replace(system, rhs=jnp.ones((2,), dtype=jnp.float64)))
+    with pytest.raises(ValueError, match="observable_vector length must match matrix size"):
+        evaluate_linear_observable(replace(system, observable_vector=jnp.ones((2,), dtype=jnp.float64)))
+
+    with pytest.raises(ValueError, match="matrix and matrix_derivative must have the same shape"):
+        implicit_linear_observable_derivative(
+            matrix=a0,
+            rhs=b0,
+            matrix_derivative=jnp.eye(2, dtype=jnp.float64),
+            rhs_derivative=bp,
+            observable_vector=c0,
+        )
+    with pytest.raises(ValueError, match="rhs_derivative length must match matrix size"):
+        implicit_linear_observable_derivative(
+            matrix=a0,
+            rhs=b0,
+            matrix_derivative=ap,
+            rhs_derivative=jnp.ones((2,), dtype=jnp.float64),
+            observable_vector=c0,
+        )
+    with pytest.raises(ValueError, match="observable_vector_derivative length must match matrix size"):
+        implicit_linear_observable_derivative(
+            matrix=a0,
+            rhs=b0,
+            matrix_derivative=ap,
+            rhs_derivative=bp,
+            observable_vector=c0,
+            observable_vector_derivative=jnp.ones((2,), dtype=jnp.float64),
+        )
+    with pytest.raises(ValueError, match="finite_difference_step must be positive"):
+        implicit_linear_observable_derivative(
+            matrix=a0,
+            rhs=b0,
+            matrix_derivative=ap,
+            rhs_derivative=bp,
+            observable_vector=c0,
+            finite_difference_observable=lambda _p: 0.0,
+            finite_difference_step=0.0,
+        )
+
+
+def test_matrix_free_observable_helpers_reject_malformed_callbacks() -> None:
+    """Matrix-free derivatives must fail at the offending callback boundary."""
+
+    a0, ap, b0, bp, c0, cp, offset0, offsetp, p0 = _linear_system_components()
+
+    def make_system(**overrides) -> MatrixFreeLinearObservableSystem:
+        values = {
+            "parameter": p0,
+            "size": int(a0.shape[0]),
+            "rhs": b0,
+            "rhs_derivative": bp,
+            "apply": lambda x: a0 @ x,
+            "transpose_apply": lambda x: a0.T @ x,
+            "derivative_apply": lambda x: ap @ x,
+            "solve": lambda rhs: jnp.linalg.solve(a0, rhs),
+            "transpose_solve": lambda rhs: jnp.linalg.solve(a0.T, rhs),
+            "observable_vector": c0,
+            "observable_vector_derivative": cp,
+            "observable_offset": offset0,
+            "observable_offset_derivative": offsetp,
+        }
+        values.update(overrides)
+        return MatrixFreeLinearObservableSystem(**values)
+
+    with pytest.raises(ValueError, match="rhs length must match system.size"):
+        evaluate_matrix_free_linear_observable(make_system(rhs=jnp.ones((2,), dtype=jnp.float64)))
+    with pytest.raises(ValueError, match="observable_vector length must match system.size"):
+        evaluate_matrix_free_linear_observable(
+            make_system(observable_vector=jnp.ones((2,), dtype=jnp.float64))
+        )
+    with pytest.raises(ValueError, match="solve\\(rhs\\) length must match system.size"):
+        evaluate_matrix_free_linear_observable(make_system(solve=lambda _rhs: jnp.ones((2,), dtype=jnp.float64)))
+
+    with pytest.raises(ValueError, match="rhs_derivative length must match system.size"):
+        implicit_matrix_free_linear_observable_derivative(
+            make_system(rhs_derivative=jnp.ones((2,), dtype=jnp.float64))
+        )
+    with pytest.raises(ValueError, match="observable_vector_derivative length must match system.size"):
+        implicit_matrix_free_linear_observable_derivative(
+            make_system(observable_vector_derivative=jnp.ones((2,), dtype=jnp.float64))
+        )
+    with pytest.raises(ValueError, match="apply\\(solution\\) length must match system.size"):
+        implicit_matrix_free_linear_observable_derivative(
+            make_system(apply=lambda _x: jnp.ones((2,), dtype=jnp.float64))
+        )
+    with pytest.raises(ValueError, match="derivative_apply\\(solution\\) length must match system.size"):
+        implicit_matrix_free_linear_observable_derivative(
+            make_system(derivative_apply=lambda _x: jnp.ones((2,), dtype=jnp.float64))
+        )
+    with pytest.raises(ValueError, match="transpose_solve\\(observable_vector\\) length must match system.size"):
+        implicit_matrix_free_linear_observable_derivative(
+            make_system(transpose_solve=lambda _rhs: jnp.ones((2,), dtype=jnp.float64))
+        )
+
+
 def test_implicit_linear_observable_derivative_matches_tangent_adjoint_and_finite_difference() -> None:
     a0, ap, b0, bp, c0, cp, offset0, offsetp, p0 = _linear_system_components()
 
