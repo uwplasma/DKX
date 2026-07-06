@@ -32,22 +32,28 @@ models overlap.
   `4584 passed, 4 skipped in 933.46 s`, Sphinx `-W`, the quick tutorial
   HDF5/NetCDF/NPZ/PDF output path, Ruff, compile checks, `git diff --check`,
   and the large-file audit.
+- The July 6 coverage tranche `9c48d211` added bounded comparison/plotting
+  helper tests. Focused local coverage for those owners reports
+  `compare.py` at 94%, `plotting.py` at 100%, and 96% combined.
+- The latest bounded local review bundle passed: source-tree guards,
+  docs/example guards, and comparison/plotting checks ran `123 passed in
+  9.70 s`; Sphinx `-W` passed in `17.56 s`.
 - The last checked PR CI state had build, examples-smoke, external-data smoke,
-  and optional ecosystem checks passing; coverage shards were the remaining
-  CI evidence to monitor. Recheck CI after every push.
+  optional ecosystem checks, and all four coverage shards passing; the combined
+  coverage-report job was still pending. Recheck CI after the next push.
 - Fresh GPU validation is deferred until the office GPU host is reachable.
 
 ## Open Lanes
 
 | Lane | Status | Completion | Definition of done |
 | --- | --- | ---: | --- |
-| Review-ready refactor | Active | 96% | Source tree remains shallow, root modules are public, large owners have review-size guards, no generated clutter is tracked, and PR #8 has clear evidence. |
-| Coverage and future-proof tests | Active | 91% | Meaningful package coverage reaches 95% through bounded physics, numerical, unit, and regression tests without pushing CI above 10 minutes. |
-| Documentation and examples | Active | 95% | README, package README, docs, tutorial notebooks, and examples describe the same workflows without branch-history or progress-log phrasing. |
+| Review-ready refactor | Active | 97% | Source tree remains shallow, root modules are public, large owners have review-size guards, no generated clutter is tracked, and PR #8 has clear evidence. |
+| Coverage and future-proof tests | Active | 92% | Meaningful package coverage reaches 95% through bounded physics, numerical, unit, and regression tests without pushing CI above 10 minutes. |
+| Documentation and examples | Active | 97% | README, package README, docs, tutorial notebooks, and examples describe the same workflows without branch-history or progress-log phrasing. |
 | Benchmark/parity/runtime regeneration | Active | 70% | CPU/GPU/Fortran runtime, memory, parity, and bootstrap-current figures are regenerated from the final branch state with solver provenance. |
 | Solver/performance boundaries | Active | 90% | Automatic defaults remain residual-clean and documented; expensive research candidates stay opt-in unless they pass strict residual/runtime/RSS gates. |
 
-Overall review readiness: about 88%. The gap is dominated by final coverage
+Overall review readiness: about 90%. The gap is dominated by final coverage
 evidence, fresh benchmark regeneration, and GPU validation.
 
 ## Source Structure Rules
