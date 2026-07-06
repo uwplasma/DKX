@@ -4640,6 +4640,39 @@ Status:
   `transport_solve.py`, `profile_true_operator_rescue.py`, and the QI/x-block
   preconditioner modules.
 
+### 2026-07-06: Transport linear-system note contract tranche
+
+Changes:
+
+- Added CPU-only tests for RHSMode=2/3 active-DOF and dense-policy progress
+  notes. These messages are part of the CLI/user feedback contract for
+  production transport solves, especially when active-DOF compaction, dense
+  fallback, mixed precision, or dense preconditioner memory guards are active.
+- Updated `docs/testing.rst` to report the measured refactor-lane package
+  coverage as about `91%`, matching the latest full local coverage audit
+  (`90.58%`) while keeping the `95%` target explicit.
+
+Validation:
+
+- `python -m pytest -q tests/test_transport_linear_solve.py` passed as
+  `30 passed in 7.77 s`.
+- `python -m pytest -q tests/test_transport_linear_solve.py
+  tests/test_transport_solve_setup.py tests/test_transport_sparse_direct.py
+  tests/test_transport_loop_support.py` passed as `110 passed in 16.49 s`.
+- `python -m pytest -q tests/test_benchmark_doc_claims.py
+  tests/test_public_docs_wording_contract.py
+  tests/test_source_tree_consolidation.py` passed as `51 passed in 4.75 s`.
+- `python -m ruff check tests/test_transport_linear_solve.py`,
+  `python -m compileall -q tests/test_transport_linear_solve.py
+  docs/testing.rst`, and `git diff --check` passed.
+
+Status:
+
+- This keeps the production-run progress/reporting lane covered without
+  increasing CI solve cost. Remaining coverage/refactor work should continue to
+  target large orchestration/preconditioner owners with bounded synthetic
+  contracts rather than adding full production solves to CI.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

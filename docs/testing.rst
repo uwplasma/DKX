@@ -184,7 +184,7 @@ Coverage audits use the full test suite with package instrumentation:
 The exact collected-test count changes as targeted regression tests are added,
 so release notes and the refactor plan cite dated local/CI artifacts rather
 than hard-code a permanent collected-test count here. The active refactor lane
-records about ``90%`` measured package coverage, with ``95%`` meaningful package
+records about ``91%`` measured package coverage, with ``95%`` meaningful package
 coverage as the research-grade target and CI wall time kept below ten minutes.
 
 The coverage gap is concentrated in large, risk-bearing owners rather than in

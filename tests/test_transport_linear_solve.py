@@ -10,10 +10,17 @@ import pytest
 from sfincs_jax.namelist import read_sfincs_input
 import sfincs_jax.problems.transport_linear_system as transport_linear_system
 import sfincs_jax.problems.transport_solve as transport_linear
+from sfincs_jax.problems.transport_policies import (
+    TransportActiveDOFDecision,
+    TransportDensePolicy,
+    TransportInitialSolvePolicy,
+)
 from sfincs_jax.problems.transport_linear_system import (
     TransportLinearSolveCallbacks,
     TransportLinearSolveContext,
+    _active_dof_notes,
     _build_rhsmode23_direct_pmat_physics_coarse_basis,
+    _dense_policy_notes,
     admit_active_block_schur_factor,
     build_active_block_ordering,
     build_active_block_schur_factor,
@@ -61,6 +68,171 @@ def test_transport_solver_kind_and_restart_policy() -> None:
 
     assert transport_restart_for_method("auto", rhs_mode=2, gmres_restart=30, restart=80) == 80
     assert transport_restart_for_method("incremental", rhs_mode=2, gmres_restart=30, restart=80) == 30
+
+
+def test_transport_active_dof_notes_explain_disabled_hint_and_enabled_size() -> None:
+    op = SimpleNamespace(total_size=128)
+    disabled = TransportActiveDOFDecision(
+        use_active_dof_mode=False,
+        reason=None,
+        solve_method_use="incremental",
+        emit_disabled_hint=True,
+    )
+    enabled = TransportActiveDOFDecision(
+        use_active_dof_mode=True,
+        reason="production-floor active subset",
+        solve_method_use="incremental",
+        emit_disabled_hint=False,
+    )
+
+    disabled_notes = _active_dof_notes(
+        op=op,
+        active_dof_decision=disabled,
+        active_size=128,
+    )
+    enabled_notes = _active_dof_notes(
+        op=op,
+        active_dof_decision=enabled,
+        active_size=96,
+    )
+
+    assert disabled_notes == (
+        (
+            1,
+            "solve_v3_transport_matrix_linear_gmres: active-DOF mode disabled "
+            "(set SFINCS_JAX_TRANSPORT_ACTIVE_DOF=1 to enable; "
+            "SFINCS_JAX_TRANSPORT_ACTIVE_DOF=0 to force full-size solve)",
+        ),
+    )
+    assert enabled_notes == (
+        (
+            1,
+            "solve_v3_transport_matrix_linear_gmres: active-DOF mode enabled "
+            "(size=96/128) (production-floor active subset)",
+        ),
+    )
+
+
+def _initial_transport_policy(*, dense_mem_block: bool, dense_use_mixed: bool) -> TransportInitialSolvePolicy:
+    return TransportInitialSolvePolicy(
+        geometry_scheme=5,
+        low_memory_outputs=False,
+        stream_diagnostics=False,
+        store_state_vectors=False,
+        solve_method_use="auto",
+        force_krylov=False,
+        force_dense=False,
+        dense_fallback=True,
+        dense_fallback_max=1000,
+        dense_retry_max=1000,
+        dense_mem_max_mb=32.0,
+        dense_mem_est_mb32=16.0,
+        dense_mem_est_mb64=64.0,
+        dense_mem_block=bool(dense_mem_block),
+        dense_use_mixed=bool(dense_use_mixed),
+        dense_backend_allowed=True,
+        dense_accelerator_auto_allowed=False,
+        gmres_restart=40,
+        maxiter=80,
+    )
+
+
+def _dense_transport_policy(
+    *,
+    solve_method_use: str,
+    dense_mem_block: bool,
+    dense_use_mixed: bool,
+    force_dense: bool = False,
+    dense_precond_mem_block: bool = False,
+) -> TransportDensePolicy:
+    return TransportDensePolicy(
+        solve_method_use=str(solve_method_use),
+        dense_fallback=True,
+        dense_retry_max=1000,
+        dense_mem_block=bool(dense_mem_block),
+        dense_use_mixed=bool(dense_use_mixed),
+        force_dense=bool(force_dense),
+        dense_precond_enabled=not bool(dense_precond_mem_block),
+        dense_precond_mem_block=bool(dense_precond_mem_block),
+        dense_precond_est_mb=128.0,
+        dense_precond_mem_max_mb=64.0,
+        dense_mem_est_active_mb32=48.0,
+        dense_mem_est_active_mb64=96.0,
+    )
+
+
+def test_transport_dense_policy_notes_cover_memory_mixed_and_preconditioner_messages() -> None:
+    blocked = _dense_policy_notes(
+        rhs_mode=2,
+        solve_method_before_dense="auto",
+        dense_policy=_dense_transport_policy(
+            solve_method_use="incremental",
+            dense_mem_block=True,
+            dense_use_mixed=False,
+        ),
+        initial_policy=_initial_transport_policy(
+            dense_mem_block=False,
+            dense_use_mixed=False,
+        ),
+        active_size=512,
+    )
+    assert blocked == (
+        (
+            1,
+            "solve_v3_transport_matrix_linear_gmres: dense fallback disabled "
+            "(active_est_mem32=48.0 MB > 32.0 MB)",
+        ),
+    )
+
+    mixed_and_precond = _dense_policy_notes(
+        rhs_mode=2,
+        solve_method_before_dense="auto",
+        dense_policy=_dense_transport_policy(
+            solve_method_use="dense",
+            dense_mem_block=False,
+            dense_use_mixed=True,
+            dense_precond_mem_block=True,
+        ),
+        initial_policy=_initial_transport_policy(
+            dense_mem_block=False,
+            dense_use_mixed=False,
+        ),
+        active_size=512,
+    )
+    assert mixed_and_precond == (
+        (
+            1,
+            "solve_v3_transport_matrix_linear_gmres: dense fallback using float32 "
+            "(active_est_mem64=96.0 MB > 32.0 MB)",
+        ),
+        (
+            0,
+            "solve_v3_transport_matrix_linear_gmres: auto dense solve for RHSMode=2 "
+            "(n=512)",
+        ),
+        (
+            1,
+            "solve_v3_transport_matrix_linear_gmres: dense preconditioner disabled "
+            "(est_mem=128.0 MB > 64.0 MB)",
+        ),
+    )
+
+    forced_dense = _dense_policy_notes(
+        rhs_mode=2,
+        solve_method_before_dense="auto",
+        dense_policy=_dense_transport_policy(
+            solve_method_use="dense",
+            dense_mem_block=False,
+            dense_use_mixed=False,
+            force_dense=True,
+        ),
+        initial_policy=_initial_transport_policy(
+            dense_mem_block=False,
+            dense_use_mixed=False,
+        ),
+        active_size=512,
+    )
+    assert forced_dense == ()
 
 
 def test_solve_transport_linear_uses_nonjit_or_jit_gmres(monkeypatch) -> None:
