@@ -5175,6 +5175,32 @@ Status:
   cheap to test, especially `profile_solve.py`, explicit sparse solver helpers,
   QI correction/basis helpers, and output-writer solve orchestration wrappers.
 
+### 2026-07-06: CPU-Local Documentation and Repository Hygiene Audit
+
+Validation:
+
+- Public README/docs wording scan found no active progress-log phrasing such as
+  "current main", "new benchmarks", or "not a public performance row" in active
+  user-facing prose.
+- Source/docs guard passed:
+  `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_benchmark_doc_claims.py tests/test_public_docs_wording_contract.py
+  tests/test_source_tree_consolidation.py
+  tests/test_domain_package_import_contracts.py
+  tests/test_examples_tree_contract.py` as `74 passed in 5.66 s`.
+- Local Sphinx documentation build passed with warnings as errors:
+  `PYTHONNOUSERSITE=1 python -m sphinx -b html -W docs docs/_build/html`.
+- Working-tree and tracked-file large-file audits found no files above `2 MB`
+  outside `.git`/virtualenv paths. The generated `docs/_build` tree and Python
+  caches were removed after validation.
+
+Status:
+
+- CPU-local source, docs, and repository-hygiene gates are clean for the
+  current branch state. The remaining gates that cannot be honestly closed in
+  this local-only pass are fresh GPU validation and final CPU/GPU/Fortran
+  benchmark regeneration from the exact review branch state.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
