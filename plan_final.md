@@ -1938,6 +1938,14 @@ Completed work:
   dictionary construction. Validation repeated the QI policy/source bundle as
   `155/155` in `7.52 s`; Ruff and `compileall` passed. The touched owner group
   now has `18064` lines, `158` fewer than the pre-consolidation baseline.
+- Tranche 128: tightened the source-package navigation and review contract.
+  Expanded `sfincs_jax/README.md` with root-module and domain-package tables,
+  stability/compatibility guidance, and generated-file policy. Added
+  source-tree tests that require those review sections and reject tracked
+  caches, binary solve outputs, traces, or large runtime artifacts inside the
+  importable package. Validation:
+  `tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed `69/69` in `5.28 s`; `compileall` and `git diff --check` passed.
 
 Remaining consolidation steps:
 

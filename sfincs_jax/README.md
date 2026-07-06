@@ -28,6 +28,29 @@ discretization, operators, solvers, outputs, validation, and research workflows.
 Normal users should use these public modules or the CLI. Implementation modules
 inside domain folders are for contributors and advanced research workflows.
 
+## Root Modules At A Glance
+
+The root of the package is intentionally small. A file belongs here only when it
+is a stable user-facing API, a CLI entry point, or a compatibility surface that
+keeps existing scripts working while the implementation lives in a domain folder.
+
+| Module | Role | Typical user |
+| --- | --- | --- |
+| `api.py` | High-level Python entry points for output writing, solves, and result loading. | Python users and notebooks |
+| `cli.py`, `__main__.py` | Console interface behind `python -m sfincs_jax` and `sfincs_jax`. | CLI users |
+| `__init__.py` | Public package exports, JAX precision/cache setup, and compatibility aliases. | All importers |
+| `solver.py` | Public solve orchestration and solver metadata containers. | Python users inspecting solve status |
+| `ambipolar.py` | Public ambipolar-root workflows. | Transport/profile workflows |
+| `sensitivity.py` | JVP/VJP, adjoint, and implicit differentiation helpers. | Optimization and UQ workflows |
+| `plotting.py` | Output plotting used by the CLI and examples. | CLI and postprocessing users |
+| `compare.py` | HDF5 comparison, frozen-reference parity, and benchmark-table utilities. | Validation workflows |
+| `io.py`, `namelist.py`, `input_compat.py`, `paths.py` | File formats, SFINCS-style namelist parsing, input aliases, and data/cache paths. | Input/output workflows |
+| `diagnostics.py`, `grids.py`, `profiling.py` | Stable diagnostics, v3 grid helpers, timers, and memory probes. | Advanced users and benchmark scripts |
+
+If a new feature is not meant to be imported directly by users, put it in a
+domain folder and expose it through one of the public root modules only when a
+documented workflow needs it.
+
 ## Domain Folders
 
 - `discretization/`: grids, differentiation stencils, active indices, and
@@ -51,6 +74,22 @@ inside domain folders are for contributors and advanced research workflows.
   validation-figure helpers.
 - `workflows/`: optional research workflows that combine public APIs into
   scans, optimization tasks, and reusable evidence-generation tasks.
+
+## Domain Packages At A Glance
+
+The package has one level of domain folders below `sfincs_jax/`. There are no implementation packages nested inside those folders; if a domain grows too large, split by ownership inside that same folder rather than creating another package level.
+
+| Folder | Owns | Does not own |
+| --- | --- | --- |
+| `discretization/` | Grid objects, finite-difference stencils, velocity grids, active maps. | Physics-specific solve policy. |
+| `geometry/` | Analytic Boozer geometry, Boozer files, VMEC `wout` loading, JAX geometry adapters. | Kinetic operator assembly. |
+| `operators/` | Drift-kinetic operator terms, layouts, sparse patterns, matrix-free actions. | High-level solve orchestration. |
+| `physics/` | Standalone physics formulas and analytic validation helpers. | File I/O or solver fallback policy. |
+| `problems/` | RHSMode-1 profiles, RHSMode-2/3 transport matrices, ambipolar solves. | Reusable Krylov kernels. |
+| `solvers/` | Krylov wrappers, preconditioners, native factors, memory/path policy. | Geometry parsing or output schema. |
+| `outputs/` | Output dictionaries, HDF5/NetCDF/NPZ writing, post-solve diagnostics. | Numerical solve decisions. |
+| `validation/` | Frozen references, release-data fetching, artifact policy, evidence gates. | User-facing example scripts. |
+| `workflows/` | Reusable scans, optimization support, and evidence-generation workflows. | One-off benchmark outputs. |
 
 ## Main Implementation Owners
 
@@ -108,6 +147,9 @@ owned by the canonical modules listed above and guarded by source-tree tests.
 - Keep package depth shallow. The consolidation target is one folder below
   `sfincs_jax/`; deeper folders must be explicitly justified in
   `plan_final.md` and covered by import-structure tests.
+- Keep domain folders substantive. A folder that contains only `__init__.py`, or
+  only `__init__.py` plus another folder, is a navigation smell and should be
+  removed or folded into an existing owner.
 - Prefer descriptive domain names over historical names. For example, use
   `profile_*`, `transport_*`, or `preconditioner_*` names only when they point
   to the physics or numerical role of the module.
@@ -119,6 +161,22 @@ owned by the canonical modules listed above and guarded by source-tree tests.
   should be fetched through `validation.data_fetch` from release assets. The
   embedded manifest lives in `validation/equilibria_manifest.json`; the large
   files named by that manifest remain release-hosted.
+
+## Stability And Compatibility
+
+Public root modules are the stable import surface. Domain modules are stable
+when they are documented in this file or in the API docs; private helpers remain
+free to change as long as the public CLI, Python API, validation fixtures, and
+documented examples keep working. Compatibility aliases may remain in
+`__init__.py` or package `__init__` files when removing them would break a
+documented workflow, but new implementation code should not import through those
+aliases.
+
+## Generated Files Policy
+
+The importable package must stay light. Do not commit `__pycache__`, `.pyc`,
+profiling traces, device-memory dumps, HDF5/NetCDF/NPZ solve outputs, XLA
+profiles, or large equilibrium files inside `sfincs_jax/`. Large external data belongs in release-hosted assets referenced by `validation/equilibria_manifest.json`.
 
 ## Contributor Workflow
 
