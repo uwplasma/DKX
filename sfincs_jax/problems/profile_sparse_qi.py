@@ -16,12 +16,10 @@ from .profile_residual import (
 )
 from .profile_policies import (
     rhs1_qi_device_coupled_install_on_reject_requested,
-    rhs1_qi_device_extra_coarse_controls,
     rhs1_qi_device_extra_coarse_metadata,
     rhs1_qi_device_extra_coarse_setup_kwargs,
     rhs1_qi_device_probe_uses_minres_step,
     rhs1_qi_device_rank_budget,
-    rhs1_qi_device_residual_correction_controls,
     rhs1_qi_device_residual_correction_metadata,
     rhs1_qi_device_residual_correction_setup_kwargs,
     rhs1_qi_device_setup_summary,
@@ -39,6 +37,8 @@ from sfincs_jax.solvers.preconditioner_qi_basis import (
 from sfincs_jax.solvers.preconditioner_qi_device import (
     RHS1QIDevicePreconditionerConfig,
     probe_rhs1_qi_device_preconditioner,
+    rhs1_qi_device_extra_coarse_controls,
+    rhs1_qi_device_residual_correction_controls,
     setup_rhs1_qi_device_preconditioner,
 )
 from sfincs_jax.solver import GMRESSolveResult

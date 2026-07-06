@@ -1922,6 +1922,16 @@ Completed work:
   `161/161` in `7.68 s`; Ruff, `compileall`, and `git diff --check` passed.
   Direct coverage for `sfincs_jax/outputs/writer.py` improved from `36%` to
   `52%`.
+- Tranche 126: consolidated QI-device control parsing into the existing QI
+  device preconditioner owner. Moved the QI extra-coarse and residual-correction
+  environment readers out of the generic profile-policy owner, kept thin
+  compatibility wrappers for public imports, switched the QI sparse pipeline to
+  the canonical solver import, and converted the verbose QI control dictionaries
+  into typed control specs. Validation:
+  `tests/test_rhs1_xblock_fallback_initial_guess.py tests/test_rhs1_qi_residual_galerkin.py tests/test_rhs1_xblock_policy.py tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py`
+  passed `155/155` in `7.52 s`; Ruff and `compileall` passed. This reduced
+  `problems/profile_policies.py` from `7916` to `7597` lines and reduced the
+  touched owner group by `158` lines net while keeping QI behavior unchanged.
 
 Remaining consolidation steps:
 
@@ -1931,12 +1941,13 @@ Remaining consolidation steps:
    helper-owner checks are confined to the explicit wrapper test.
 2. Problem-family consolidation: remove historical transfer-state and
    production-campaign names from implementation files by merging RHSMode-1
-   sparse setup/rescue owners into canonical profile sparse owners. The
-   sparse-solve compatibility namespace and Ruff waiver are closed; any
-   remaining cleanup should reduce owner size or clarify orchestration
-   boundaries without reintroducing broad reexport surfaces. Success is fewer
-   broad namespace surfaces, simpler canonical imports, and unchanged RHSMode-1
-   policy/output tests.
+   sparse setup/rescue owners into canonical profile sparse owners and moving
+   domain-specific knobs to their domain owners. The sparse-solve compatibility
+   namespace and Ruff waiver are closed, and QI-device control parsing now lives
+   with the QI device preconditioner. Any remaining cleanup should reduce owner
+   size or clarify orchestration boundaries without reintroducing broad reexport
+   surfaces. Success is fewer broad namespace surfaces, simpler canonical
+   imports, and unchanged RHSMode-1 policy/output tests.
 3. Solver-family consolidation: merge same-family preconditioner modules only
    at durable physics/numerics boundaries. Success is fewer solver files and no
    loss of targeted preconditioner tests, not a single oversized grab-bag file.
