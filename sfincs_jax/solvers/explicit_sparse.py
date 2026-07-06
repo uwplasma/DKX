@@ -1104,6 +1104,9 @@ class _SparseCoarseCorrectionFactor:
             z0 = np.asarray(self.base_factor.solve(rhs_np), dtype=self.dtype).reshape(rhs_np.shape)
         except Exception:
             z0 = np.array(rhs_np, copy=True)
+        z0_finite = np.isfinite(z0)
+        if not np.all(z0_finite):
+            z0 = np.where(z0_finite, z0, rhs_np)
         if self.coarse_basis.shape[1] == 0:
             return z0
         residual = rhs_np - np.asarray(self.matrix @ z0, dtype=self.dtype)

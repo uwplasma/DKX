@@ -3151,6 +3151,71 @@ Status:
   `solvers/explicit_sparse.py`, `problems/transport_solve.py`, and the
   QI/x-block preconditioner modules.
 
+## Tranche 153: Native Sparse And Structured Full-CSR Coverage Gates
+
+Scope:
+
+- Confirmed branch consolidation status for the review PR: `main` and
+  `origin/main` are ancestors of `refactor/v3-driver-architecture`; there is no
+  divergent main-side work to merge. The refactor branch is the single review
+  branch.
+- Fixed a fail-closed sparse coarse-correction bug:
+  `_SparseCoarseCorrectionFactor.solve()` now replaces non-finite base-factor
+  output entries with the incoming residual before applying the coarse
+  correction.
+- Added native sparse symbolic/factor tests for:
+  - symbolic analysis and small block factor solves;
+  - non-finite solve sanitization;
+  - sparse coarse and residual-polish fail-closed paths;
+  - BLR Schur Woodbury and GMRES fallback routes;
+  - symbolic Schur, superblock, and nested-dissection factor wrappers;
+  - deterministic probe and admission-gate edge cases.
+- Added structured RHSMode=1 full-CSR tests for:
+  - full-system CSR cache reuse and cache-time memory-budget rejection;
+  - preflight CSR-budget rejection before f-block assembly;
+  - active projection, post-build budget rejection, and sparse-bundle matvecs;
+  - direct and LGMRES solve wrapper validation/error gates.
+- Regenerated the public Fortran-v3 runtime/memory summary and QA/QH
+  bootstrap-current figures from the tracked JSON artifacts. The regenerated
+  outputs were byte-stable relative to the repository.
+
+Validation:
+
+- `python -m pytest -q tests/test_profile_full_system_structured_selection.py`
+  passed as `4 passed in 0.30 s`.
+- `python -m pytest -q tests/test_explicit_sparse_symbolic_native.py` passed
+  as `7 passed in 0.14 s`.
+- `python -m pytest -q tests/test_explicit_sparse_symbolic_native.py tests/test_explicit_sparse_factor_builder.py tests/test_profile_sparse_helper_coverage.py tests/test_profile_response_sparse_pc.py tests/test_rhs1_full_assembly.py tests/test_jax_ecosystem_backend_probes.py tests/test_v3_sparse_pattern.py`
+  passed as `660 passed in 149.20 s`.
+- `python -m ruff check sfincs_jax/solvers/explicit_sparse.py tests/test_explicit_sparse_symbolic_native.py tests/test_profile_full_system_structured_selection.py`
+  passed.
+- `python -m compileall -q sfincs_jax/solvers/explicit_sparse.py tests/test_explicit_sparse_symbolic_native.py tests/test_profile_full_system_structured_selection.py`
+  passed.
+- `python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax --cov-report=term --cov-report=json:/tmp/sfincs_jax_coverage_after_sparse_structured_tranche.json`
+  passed as `4380 passed in 285.20 s`. Coverage is `90.3011%`
+  (`6703` missing lines).
+- `sfincs_jax/solvers/explicit_sparse.py` remains at `90.26%` with `243`
+  missing lines; `sfincs_jax/operators/profile_full_system.py` remains at
+  `85.27%` with `272` missing lines.
+- `python examples/publication_figures/generate_fortran_suite_benchmark_summary.py`
+  regenerated the README runtime/memory figure and summary JSON from the
+  tracked CPU/GPU suite reports.
+- `python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py --case QA --from-summary-json docs/_static/figures/vmec_jax_finite_beta/qs_paper_sfincs_jax_redl_comparison.json --fig-dir docs/_static/figures/vmec_jax_finite_beta --stem qs_paper_sfincs_jax_redl_comparison`
+  regenerated the QA bootstrap-current plot from tracked summary data.
+- `python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py --case QH --from-summary-json docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_sfincs_jax_redl_comparison.json --fig-dir docs/_static/figures/vmec_jax_finite_beta --stem qs_paper_qh_sfincs_jax_redl_comparison`
+  regenerated the QH bootstrap-current plot from tracked summary data.
+
+Status:
+
+- PR branch consolidation is complete; continue on
+  `refactor/v3-driver-architecture` only.
+- The 95% meaningful package coverage gate remains open.
+- The public figures are regenerated from tracked artifacts, but a fresh
+  production-resolution CPU/GPU/Fortran benchmark campaign remains a separate
+  compute gate before changing performance claims.
+- The local SFINCS Fortran v3 executable for bounded reruns is
+  `/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs`.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
