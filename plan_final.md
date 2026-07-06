@@ -4602,6 +4602,44 @@ Status:
   preconditioner owners, not by missing public documentation or package
   structure.
 
+### 2026-07-06: True-operator rescue clipping and fail-fast tranche
+
+Changes:
+
+- Added deterministic true-operator rescue tests for damping/step-length
+  clipping in the window LSQ, active-block, and coupled-coarse bundles.
+- Added fail-closed builder checks for active-index shape mismatches and
+  malformed true-operator batched columns.
+- Added a sparse-factor memory-estimate edge case for factors without `L`/`U`
+  storage.
+
+Validation:
+
+- `python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax
+  --cov-report=term --cov-report=json:/tmp/sfincs_jax_coverage_after_policy_tranches.json`
+  passed as `4483 passed, 3 skipped in 303.69 s`; total package coverage is
+  `91%` with `6510` missing lines.
+- `python -m pytest -q tests/test_rhs1_true_operator_rescue.py` passed as
+  `25 passed in 0.26 s`.
+- `python -m pytest -q tests/test_rhs1_true_operator_rescue.py
+  tests/test_profile_response_sparse_pc.py tests/test_rhs1_full_assembly.py
+  tests/test_v3_sparse_pattern.py` passed as `653 passed in 178.39 s`.
+- `python -m ruff check tests/test_rhs1_true_operator_rescue.py`,
+  `python -m compileall -q tests/test_rhs1_true_operator_rescue.py`, and
+  `git diff --check` passed.
+- A module-only coverage probe for
+  `sfincs_jax.operators.profile_true_operator_rescue` aborted locally with exit
+  code `134`, matching the known local module-coverage anomaly; the full
+  package coverage audit above remains the authoritative coverage signal.
+
+Status:
+
+- This strengthens residual-rescue numerical safety without adding full solves
+  to CI. The 95% coverage target remains open; the next highest-impact owners
+  are `profile_solve.py`, `profile_full_system.py`,
+  `transport_solve.py`, `profile_true_operator_rescue.py`, and the QI/x-block
+  preconditioner modules.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

@@ -340,6 +340,52 @@ def test_true_operator_lsq_bundles_reduce_identity_residuals() -> None:
     np.testing.assert_allclose(coupled.solve(np.asarray([1.0, -2.0, 3.0])), [1.0, 0.0, 3.0])
 
 
+def test_true_operator_lsq_bundles_clip_residual_step_lengths() -> None:
+    def true_matvec(x):
+        return np.asarray(x, dtype=np.float64)
+
+    rhs = np.asarray([1.0, 0.0, 0.0], dtype=np.float64)
+    one_column = np.asarray([[1.0], [0.0], [0.0]], dtype=np.float64)
+
+    window = _TrueOperatorWindowLSQPreconditionerBundle(
+        base_factor=_ZeroFactor(),
+        true_matvec=true_matvec,
+        window_positions=np.asarray([0]),
+        a_window=one_column,
+        inv_column_scale=np.ones(1, dtype=np.float64),
+        solve_normal=lambda _rhs: np.asarray([10.0], dtype=np.float64),
+        kind="window_lsq",
+        damping=True,
+        beta_max=0.05,
+    )
+    np.testing.assert_allclose(window.solve(rhs), [0.5, 0.0, 0.0])
+
+    active = _TrueOperatorActiveSubmatrixPreconditionerBundle(
+        base_factor=_ZeroFactor(),
+        true_matvec=true_matvec,
+        block_positions=np.asarray([0]),
+        a_window=one_column,
+        solve_block=lambda _rhs: np.asarray([10.0], dtype=np.float64),
+        kind="active_block",
+        damping=True,
+        alpha_clip=0.05,
+    )
+    np.testing.assert_allclose(active.solve(rhs), [0.5, 0.0, 0.0])
+
+    coupled = _TrueOperatorCoupledCoarseLSQPreconditionerBundle(
+        base_factor=_ZeroFactor(),
+        true_matvec=true_matvec,
+        z_basis=one_column,
+        a_basis=one_column,
+        inv_column_scale=np.ones(1, dtype=np.float64),
+        solve_normal=lambda _rhs: np.asarray([10.0], dtype=np.float64),
+        kind="coupled_lsq",
+        damping=True,
+        beta_max=0.05,
+    )
+    np.testing.assert_allclose(coupled.solve(rhs), [0.5, 0.0, 0.0])
+
+
 def test_true_operator_lsq_bundles_handle_degenerate_damping_and_lsq_fallback(monkeypatch) -> None:
     def true_matvec_zero(x):
         return np.zeros_like(np.asarray(x, dtype=np.float64))
@@ -421,6 +467,7 @@ def test_rescue_budget_and_sparse_factor_memory_estimate() -> None:
         U=sp.eye(4, format="csr"),
     )
     assert _sparse_factor_nbytes_estimate(sparse_factor) > 0
+    assert _sparse_factor_nbytes_estimate(SimpleNamespace(L=None, U=None)) == 0
 
 
 def test_graph_expansion_and_window_selection_are_layout_aware() -> None:
@@ -811,6 +858,100 @@ def test_true_operator_active_block_builders_correct_small_identity_operator() -
     assert active_submatrix.metadata is not None
     assert active_submatrix.metadata["block_size"] == layout.total_size
     np.testing.assert_allclose(true_matvec(active_submatrix.solve(rhs)), rhs, rtol=1.0e-12, atol=1.0e-12)
+
+
+def test_true_operator_active_block_builders_fail_closed_on_bad_inputs() -> None:
+    layout = _small_active_layout()
+    true_matvec, true_matmat = _identity_true_actions(layout.total_size)
+    rhs = np.arange(1.0, layout.total_size + 1.0, dtype=np.float64)
+    emitted: list[str] = []
+
+    assert (
+        _try_build_true_operator_active_block_lsq_preconditioner(
+            true_matvec=true_matvec,
+            true_matmat=true_matmat,
+            factor_bundle=_ZeroFactor(),
+            residual=rhs,
+            layout=layout,
+            active_indices=np.arange(layout.total_size - 1, dtype=np.int64),
+            x_count=1,
+            ell_count=1,
+            max_nbytes=1024 * 1024,
+            regularization=0.0,
+            max_block_size=layout.total_size,
+            column_batch=2,
+            drop_tol=0.0,
+            include_tail=False,
+            max_tail=0,
+            emit=lambda _level, message: emitted.append(str(message)),
+        )
+        is None
+    )
+    assert any("active_shape_mismatch" in message for message in emitted)
+
+    assert (
+        _try_build_true_operator_active_residual_block_lsq_preconditioner(
+            true_matvec=true_matvec,
+            true_matmat=true_matmat,
+            factor_bundle=_ZeroFactor(),
+            residual=rhs,
+            layout=layout,
+            active_indices=np.arange(layout.total_size - 1, dtype=np.int64),
+            max_nbytes=1024 * 1024,
+            regularization=0.0,
+            max_block_size=layout.total_size,
+            column_batch=2,
+            drop_tol=0.0,
+            include_tail=False,
+            max_tail=0,
+            kinetic_only=True,
+            emit=lambda _level, message: emitted.append(str(message)),
+        )
+        is None
+    )
+
+    def bad_matmat(x):
+        return np.zeros((layout.total_size - 1, x.shape[1]), dtype=np.float64)
+
+    assert (
+        _try_build_true_operator_active_block_lsq_preconditioner(
+            true_matvec=true_matvec,
+            true_matmat=bad_matmat,
+            factor_bundle=_ZeroFactor(),
+            residual=rhs,
+            layout=layout,
+            active_indices=None,
+            x_count=1,
+            ell_count=1,
+            max_nbytes=1024 * 1024,
+            regularization=0.0,
+            max_block_size=layout.total_size,
+            column_batch=2,
+            drop_tol=0.0,
+            include_tail=False,
+            max_tail=0,
+        )
+        is None
+    )
+    assert (
+        _try_build_true_operator_active_residual_block_lsq_preconditioner(
+            true_matvec=true_matvec,
+            true_matmat=bad_matmat,
+            factor_bundle=_ZeroFactor(),
+            residual=rhs,
+            layout=layout,
+            active_indices=None,
+            max_nbytes=1024 * 1024,
+            regularization=0.0,
+            max_block_size=layout.total_size,
+            column_batch=2,
+            drop_tol=0.0,
+            include_tail=False,
+            max_tail=0,
+            kinetic_only=True,
+        )
+        is None
+    )
 
 
 def test_true_operator_coupled_coarse_builder_uses_window_and_tail_basis() -> None:
