@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from argparse import Namespace
 from pathlib import Path
@@ -1109,3 +1110,157 @@ def test_main_preserves_transport_workers_before_subcommand(monkeypatch, tmp_pat
     assert rc == 0
     assert captured["parallel_mode"] == "process"
     assert captured["workers"] == "3"
+
+
+def test_cmd_run_fortran_reports_output_path(monkeypatch, tmp_path: Path, capsys) -> None:
+    output_path = tmp_path / "run" / "sfincsOutput.h5"
+    captured: dict[str, object] = {}
+
+    def _fake_run_fortran(**kwargs):
+        captured.update(kwargs)
+        return output_path
+
+    monkeypatch.setattr("sfincs_jax.validation.fortran.run_sfincs_fortran", _fake_run_fortran)
+
+    rc = cli._cmd_run_fortran(
+        Namespace(
+            input=str(tmp_path / "input.namelist"),
+            exe=str(tmp_path / "sfincs"),
+            workdir=str(tmp_path / "work"),
+            quiet=False,
+            verbose=1,
+        )
+    )
+
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert captured["input_namelist"] == Path(tmp_path / "input.namelist")
+    assert captured["exe"] == Path(tmp_path / "sfincs")
+    assert captured["workdir"] == Path(tmp_path / "work")
+    assert f"wrote sfincsOutput.h5 -> {output_path}" in out
+
+
+def test_cmd_dump_h5_keys_and_json_payload(monkeypatch, tmp_path: Path, capsys) -> None:
+    data = {"zeta": np.asarray([2.0]), "alpha": np.asarray([[1, 2]])}
+    monkeypatch.setattr("sfincs_jax.io.read_sfincs_h5", lambda _path: data)
+
+    rc = cli._cmd_dump_h5(
+        Namespace(
+            sfincs_output=str(tmp_path / "sfincsOutput.h5"),
+            out_json=str(tmp_path / "unused.json"),
+            keys_only=True,
+        )
+    )
+    assert rc == 0
+    assert capsys.readouterr().out.splitlines() == ["alpha", "zeta"]
+
+    out_json = tmp_path / "dump.json"
+    rc = cli._cmd_dump_h5(
+        Namespace(
+            sfincs_output=str(tmp_path / "sfincsOutput.h5"),
+            out_json=str(out_json),
+            keys_only=False,
+        )
+    )
+    assert rc == 0
+    payload = json.loads(out_json.read_text())
+    assert payload == {"alpha": [[1, 2]], "zeta": [2.0]}
+
+
+def test_cmd_compare_h5_prints_failures_and_show_all(monkeypatch, tmp_path: Path, capsys) -> None:
+    results = [
+        SimpleNamespace(ok=True, key="ok_key", max_abs=0.0, max_rel=0.0),
+        SimpleNamespace(ok=False, key="bad_key", max_abs=1.0e-3, max_rel=2.0e-2),
+    ]
+    captured: dict[str, object] = {}
+
+    def _fake_compare(**kwargs):
+        captured.update(kwargs)
+        return results
+
+    monkeypatch.setattr("sfincs_jax.compare.compare_sfincs_outputs", _fake_compare)
+
+    tolerances = tmp_path / "tolerances.json"
+    tolerances.write_text(json.dumps({"bad_key": {"rtol": 0.1}}))
+    rc = cli._cmd_compare_h5(
+        Namespace(
+            a=str(tmp_path / "a.h5"),
+            b=str(tmp_path / "b.h5"),
+            rtol="1e-4",
+            atol="1e-6",
+            tolerances_json=str(tolerances),
+            show_all=False,
+        )
+    )
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "FAIL bad_key" in out
+    assert captured["tolerances"] == {"bad_key": {"rtol": 0.1}}
+
+    rc = cli._cmd_compare_h5(
+        Namespace(
+            a=str(tmp_path / "a.h5"),
+            b=str(tmp_path / "b.h5"),
+            rtol="1e-4",
+            atol="1e-6",
+            tolerances_json=None,
+            show_all=True,
+        )
+    )
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "OK ok_key" in out
+    assert "FAIL bad_key" in out
+
+
+def test_auto_cores_for_args_handles_no_or_unreadable_input(monkeypatch) -> None:
+    monkeypatch.setattr(cli.os, "cpu_count", lambda: 16)
+
+    assert cli._auto_cores_for_args(Namespace(func=None, input=None)) == 3
+    assert cli._auto_cores_for_args(Namespace(func=lambda: None, input="/does/not/exist")) == 3
+
+
+def test_normalize_default_argv_edge_cases() -> None:
+    assert cli._normalize_default_argv([]) == []
+    assert cli._normalize_default_argv(["--help"]) == ["--help"]
+    assert cli._normalize_default_argv(["--cores=4", "input.namelist"]) == [
+        "--cores=4",
+        "write-output",
+        "--input",
+        "input.namelist",
+    ]
+    assert cli._normalize_default_argv(["plot-output", "--input-h5", "out.h5"]) == [
+        "plot-output",
+        "--input-h5",
+        "out.h5",
+    ]
+
+
+def test_postprocess_upstream_cli_strips_separator_and_forwards_flags(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_run_upstream_util(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr("sfincs_jax.workflows.scans.run_upstream_util", _fake_run_upstream_util)
+
+    rc = cli.main(
+        [
+            "postprocess-upstream",
+            "--case-dir",
+            str(tmp_path / "case"),
+            "--util",
+            "sfincsScanPlot_1",
+            "--utils-dir",
+            str(tmp_path / "utils"),
+            "--",
+            "pdf",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["util"] == "sfincsScanPlot_1"
+    assert captured["case_dir"] == Path(tmp_path / "case")
+    assert captured["args"] == ["pdf"]
+    assert captured["utils_dir"] == Path(tmp_path / "utils")
+    assert captured["noninteractive"] is True
