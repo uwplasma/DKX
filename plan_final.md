@@ -4811,6 +4811,35 @@ Status:
   coverage tranche remains either `profile_solve.py` route orchestration or
   QI/device preconditioner metadata and fail-fast branches.
 
+### 2026-07-06: CLI Command Contract Coverage Tranche
+
+Changes:
+
+- Added bounded CLI tests for the Fortran-run wrapper, HDF5 dump command,
+  output comparison command, postprocess-upstream command, default-argv
+  normalization edge cases, and conservative auto-core fallback behavior.
+- The new tests monkeypatch command backends and exercise user-facing parser,
+  path, JSON, printing, separator-stripping, and environment contracts without
+  launching SFINCS-JAX solves or SFINCS Fortran v3.
+
+Validation:
+
+- `python -m pytest -q tests/test_cli_solve_mode.py` passed as
+  `55 passed in 1.23 s`.
+- `python -m pytest -q tests/test_cli_solve_mode.py
+  tests/test_getting_started_examples.py tests/test_examples_tree_contract.py
+  tests/test_domain_package_import_contracts.py` passed as
+  `87 passed in 15.95 s`.
+- `python -m pytest -q tests/test_benchmark_doc_claims.py
+  tests/test_public_docs_wording_contract.py tests/test_source_tree_consolidation.py`
+  passed as `51 passed in 4.70 s`.
+
+Status:
+
+- This improves the review-readiness of the public CLI while keeping tests
+  deterministic and CPU-local. The remaining 95% coverage push should continue
+  with bounded owner tests rather than production solves.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
