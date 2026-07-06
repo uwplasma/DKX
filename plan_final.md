@@ -4007,14 +4007,20 @@ Source/test change:
 - Changed `select_rhsmode1_solve_method` so the accelerator full-FP bounded
   window falls through to the explicit host-dense shortcut branch instead of
   returning `dense`.
+- Updated `scripts/summarize_solver_paths.py` to report host-dense shortcut
+  usage as a distinct solver-path provenance field and markdown column, so
+  future GPU benchmark summaries do not hide this route as generic auto/Krylov.
 - Updated policy/selector tests to require CPU dense auto, default GPU
-  host-shortcut routing, and opt-in accelerator dense behavior.
+  host-shortcut routing, opt-in accelerator dense behavior, and host-shortcut
+  solver-path summarization.
 
 Validation:
 
 - `python -m pytest -q tests/test_rhs1_host_policy.py
   tests/test_io_output_policy_coverage.py tests/test_profile_response_dense.py
   tests/test_rhs1_sparse_first_heuristic.py` passed as `236 passed in 3.48 s`.
+- `python -m pytest -q tests/test_summarize_solver_paths.py` passed as
+  `3 passed`.
 - A minimal `ssh office` GPU probe was attempted but timed out at the configured
   SSH host/port before any remote command produced output. Remote GPU evidence
   still needs a reachable session.

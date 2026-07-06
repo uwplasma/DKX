@@ -14,6 +14,10 @@ _DENSE_AUTO_MARKERS = (
     "FP RHSMode=1 small system -> using dense solve",
     "FP RHSMode=1 bounded system -> using dense solve",
 )
+_HOST_DENSE_SHORTCUT_MARKERS = (
+    "using host dense shortcut",
+    "host dense shortcut on backend=",
+)
 
 
 def _solver_iterations(text: str) -> list[dict[str, object]]:
@@ -36,6 +40,7 @@ def summarize_log(log_path: Path) -> dict[str, object]:
         "case": log_path.parent.name,
         "log_path": str(log_path),
         "dense_auto": any(marker in text for marker in _DENSE_AUTO_MARKERS),
+        "host_dense_shortcut": any(marker in text for marker in _HOST_DENSE_SHORTCUT_MARKERS),
         "default_krylov": "defaulting to Krylov GMRES" in text,
         "dense_fallback": "rhs1_dense_fallback" in text,
         "sparse_fallback": "rhs1_sparse_precond" in text or "host sparse LU direct fallback" in text,
@@ -51,8 +56,8 @@ def summarize_log(log_path: Path) -> dict[str, object]:
 def _write_markdown(rows: list[dict[str, object]], path: Path) -> None:
     lines = [
         "# Solver Path Audit\n\n",
-        "| Case | Dense auto | Default Krylov | Fallback | Last preconditioner | Peak RSS MB | Slowest profiled stage |\n",
-        "| --- | ---: | ---: | --- | --- | ---: | --- |\n",
+        "| Case | Dense auto | Host dense shortcut | Default Krylov | Fallback | Last preconditioner | Peak RSS MB | Slowest profiled stage |\n",
+        "| --- | ---: | ---: | ---: | --- | --- | ---: | --- |\n",
     ]
     for row in rows:
         stages = dict(row["profile_stage_durations_s"])
@@ -67,12 +72,14 @@ def _write_markdown(rows: list[dict[str, object]], path: Path) -> None:
             fallback.append("sparse")
         rss = row["profile_peak_rss_mb"]
         lines.append(
-            f"| {row['case']} | {bool(row['dense_auto'])} | {bool(row['default_krylov'])} | "
+            f"| {row['case']} | {bool(row['dense_auto'])} | {bool(row['host_dense_shortcut'])} | "
+            f"{bool(row['default_krylov'])} | "
             f"{','.join(fallback) or '-'} | {row['last_preconditioner'] or '-'} | "
             f"{float(rss):.1f} | {slowest} |\n"
             if rss is not None
             else (
-                f"| {row['case']} | {bool(row['dense_auto'])} | {bool(row['default_krylov'])} | "
+                f"| {row['case']} | {bool(row['dense_auto'])} | {bool(row['host_dense_shortcut'])} | "
+                f"{bool(row['default_krylov'])} | "
                 f"{','.join(fallback) or '-'} | {row['last_preconditioner'] or '-'} | - | {slowest} |\n"
             )
         )

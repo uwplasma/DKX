@@ -45,10 +45,35 @@ def test_summarize_log_extracts_solver_path(tmp_path: Path) -> None:
 
     assert summary["case"] == "case"
     assert summary["dense_auto"]
+    assert not summary["host_dense_shortcut"]
     assert summary["last_preconditioner"] == "theta_line"
     assert summary["profile_peak_rss_mb"] == 300.0
     assert summary["profile_stage_durations_s"]["rhs1_solve"] == 1.5
     assert summary["ksp_iterations"] == [{"solver": "gmres", "iterations": 7}]
+
+
+def test_summarize_log_extracts_host_dense_shortcut(tmp_path: Path) -> None:
+    module = _load_module()
+    case_dir = tmp_path / "gpu_case"
+    case_dir.mkdir()
+    log_path = case_dir / "sfincs_jax.log"
+    log_path.write_text(
+        "\n".join(
+            [
+                "write_sfincs_jax_output_h5: FP RHSMode=1 bounded system -> using host dense shortcut on backend=gpu",
+                "solve_v3_full_system_linear_gmres: accelerator FP bounded system -> using host dense shortcut (size=4096)",
+                "profiling: rhs1_host_dense_shortcut_start dt_s=0.1 total_s=0.1 rss_mb=200.0 drss_mb=2.0 device_mb=na",
+                "profiling: rhs1_host_dense_shortcut_done dt_s=2.5 total_s=2.6 rss_mb=240.0 drss_mb=3.0 device_mb=na",
+            ]
+        )
+    )
+
+    summary = module.summarize_log(log_path)
+
+    assert summary["case"] == "gpu_case"
+    assert not summary["dense_auto"]
+    assert summary["host_dense_shortcut"]
+    assert not summary["default_krylov"]
 
 
 def test_summarize_solver_paths_cli_writes_outputs(tmp_path: Path) -> None:
@@ -78,4 +103,6 @@ def test_summarize_solver_paths_cli_writes_outputs(tmp_path: Path) -> None:
 
     rows = json.loads(json_out.read_text())
     assert rows[0]["case"] == "case"
-    assert "| case |" in md_out.read_text()
+    markdown = md_out.read_text()
+    assert "| Host dense shortcut |" in markdown
+    assert "| case |" in markdown
