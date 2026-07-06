@@ -2982,6 +2982,35 @@ Validation:
   passed as `6 passed in 5.13 s`.
 - `git diff --check` passed.
 
+## Tranche 149: Profile-System Physics and Differentiability Branch Gates
+
+Scope:
+
+- Added non-solve profile-system tests for branches that matter for production
+  physics and differentiable workflows:
+  - invalid full-vector shape admission;
+  - quasineutrality option 1 with nonlinear Phi1 diagonal scaling and invalid
+    environment-value fallback;
+  - Phi1-in-kinetic Jacobian dependence on the current distribution state;
+  - cached operator fallback inside a JAX transform, ensuring transformed calls
+    stay on the local JIT path instead of entering the top-level sharded mesh.
+- These tests exercise real tiny v3 namelists and physics operators without
+  adding slow Krylov solves to CI.
+
+Validation:
+
+- `python -m pytest -q tests/test_profile_system_support.py` passed as
+  `45 passed in 17.99 s`.
+- `python -m ruff check tests/test_profile_system_support.py sfincs_jax/operators/profile_system.py`
+  passed.
+- `python -m compileall -q tests/test_profile_system_support.py sfincs_jax/operators/profile_system.py`
+  passed.
+- `python -m pytest -q tests/test_profile_system_support.py tests/test_full_system_operator_jit.py tests/test_collisionless_operator_parity.py tests/test_exb_theta_parity.py tests/test_magnetic_drifts_parity.py`
+  passed as `55 passed in 26.54 s`.
+- `python -m pytest -q tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `71 passed in 5.68 s`.
+- `git diff --check` passed.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

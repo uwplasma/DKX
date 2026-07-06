@@ -14,6 +14,7 @@ from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.operators.profile_system import (
     V3FullSystemOperator,
     apply_v3_full_system_operator,
+    apply_v3_full_system_operator_cached,
     apply_v3_full_system_jacobian,
     _fs_average_factor,
     _get_bool,
@@ -417,6 +418,86 @@ def test_operator_signature_cache_uses_object_identity_and_static_layout() -> No
     changed = replace(op, rhs_mode=2)
     assert _operator_signature(changed)[0] == 2
     assert _operator_signature(changed) != sig
+
+
+def test_full_system_operator_rejects_bad_state_vector_shape() -> None:
+    op = _tiny_phi1_scheme2_operator()
+    with pytest.raises(ValueError, match="x_full must have shape"):
+        apply_v3_full_system_operator(op, jnp.zeros((op.total_size + 1,), dtype=jnp.float64))
+
+
+def test_quasineutrality_option1_uses_nonlinear_diagonal_scale(monkeypatch: pytest.MonkeyPatch) -> None:
+    op0 = _tiny_phi1_scheme2_operator()
+    phi1_base = 0.02 * jnp.sin(jnp.arange(op0.n_theta * op0.n_zeta, dtype=jnp.float64)).reshape(
+        (op0.n_theta, op0.n_zeta)
+    )
+    op = replace(
+        op0,
+        quasineutrality_option=1,
+        with_adiabatic=True,
+        phi1_hat_base=phi1_base,
+    )
+    x_full = _deterministic_vector(op.total_size)
+
+    monkeypatch.delenv("SFINCS_JAX_PHI1_QN_DIAG_SCALE", raising=False)
+    y_default = apply_v3_full_system_operator(op, x_full, include_jacobian_terms=True)
+    monkeypatch.setenv("SFINCS_JAX_PHI1_QN_DIAG_SCALE", "0")
+    y_zero_diag = apply_v3_full_system_operator(op, x_full, include_jacobian_terms=True)
+    monkeypatch.setenv("SFINCS_JAX_PHI1_QN_DIAG_SCALE", "not-a-number")
+    y_bad_env = apply_v3_full_system_operator(op, x_full, include_jacobian_terms=True)
+
+    qn = slice(op.f_size, op.f_size + op.n_theta * op.n_zeta)
+    assert float(jnp.linalg.norm(y_default[qn] - y_zero_diag[qn])) > 0.0
+    np.testing.assert_allclose(np.asarray(y_bad_env), np.asarray(y_default))
+
+
+def test_phi1_in_kinetic_jacobian_depends_on_distribution_state() -> None:
+    op = full_system_operator_from_namelist(
+        nml=read_sfincs_input(REF / "pas_1species_PAS_noEr_tiny_withPhi1_inKinetic_linear.input.namelist"),
+        identity_shift=0.0,
+    )
+    assert op.include_phi1
+    assert op.include_phi1_in_kinetic
+
+    dx = _deterministic_vector(op.total_size)
+    state_zero = jnp.zeros((op.total_size,), dtype=jnp.float64)
+    state_with_f = state_zero.at[: op.f_size].set(_deterministic_vector(op.f_size))
+
+    y_zero = apply_v3_full_system_jacobian(op, state_zero, dx)
+    y_with_f = apply_v3_full_system_jacobian(op, state_with_f, dx)
+
+    assert y_zero.shape == (op.total_size,)
+    assert y_with_f.shape == (op.total_size,)
+    assert np.all(np.isfinite(np.asarray(y_with_f)))
+    assert float(jnp.linalg.norm(y_with_f[: op.f_size] - y_zero[: op.f_size])) > 0.0
+
+
+def test_cached_operator_uses_local_jit_fallback_inside_jax_transform(monkeypatch: pytest.MonkeyPatch) -> None:
+    op = _tiny_phi1_scheme2_operator()
+    calls: dict[str, int] = {"jit": 0}
+
+    def fake_get_jit(_signature):
+        calls["jit"] += 1
+
+        def fake_apply(_op, x_arg, include_jacobian_terms=True, pad=0):
+            assert include_jacobian_terms is True
+            assert pad == 0
+            return jnp.ones_like(x_arg) * 3.0
+
+        return fake_apply
+
+    monkeypatch.setattr(profile_system, "_get_apply_full_system_operator_jit", fake_get_jit)
+    monkeypatch.setattr(profile_system, "_matvec_shard_axis", lambda _op: "theta")
+
+    @jax.jit
+    def inside_transform(scale):
+        x_full = scale * jnp.ones((op.total_size,), dtype=jnp.float64)
+        return apply_v3_full_system_operator_cached(op, x_full, include_jacobian_terms=True)
+
+    out = inside_transform(jnp.asarray(2.0, dtype=jnp.float64))
+
+    assert calls["jit"] == 1
+    np.testing.assert_allclose(np.asarray(out), np.full((op.total_size,), 3.0))
 
 
 @pytest.mark.parametrize("axis", ["theta", "zeta", "x"])
