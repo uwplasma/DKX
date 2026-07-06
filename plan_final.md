@@ -2623,6 +2623,32 @@ Validation:
 - `python -m compileall -q tests/test_io_output_policy_coverage.py` passed.
 - `git diff --check` passed.
 
+### Tranche 140: structural review audit checkpoint
+
+Scope:
+
+- Re-audited the active source tree against the explicit review goals: the
+  importable package has only root modules plus one level of domain folders,
+  with no nested source packages beyond local `__pycache__` directories.
+- Re-ran the public README/docs/examples stale-wording scan for branch-history
+  phrasing, including the previously rejected README fragments.
+- Rechecked tracked README/docs/examples/source files for large blobs over
+  `2 MiB`; no tracked files in those public surfaces exceeded the limit.
+- Confirmed these audits are already enforced by
+  `tests/test_source_tree_consolidation.py`,
+  `tests/test_examples_tree_contract.py`, and
+  `tests/test_benchmark_doc_claims.py`, so no duplicate guard was added.
+
+Validation:
+
+- `find sfincs_jax -type d -name __pycache__ -prune -o -type d -print | awk -F/ 'NF>3 {print}'`
+  returned no nested source package directories.
+- The public wording `rg` scan returned no active prose matches.
+- The tracked-file size scan over `README.md`, `docs`, `examples`, and
+  `sfincs_jax` reported `large_count 0`.
+- `pytest -q tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `71 passed in 4.37 s` in the previous tranche.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
