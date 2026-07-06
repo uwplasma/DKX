@@ -5135,6 +5135,43 @@ Status:
   preconditioners. This advances the CPU-only refactor/test lane without
   changing runtime behavior or adding generated artifacts.
 
+### 2026-07-06: PAS Angular Preconditioner Coverage Tranche
+
+Changes:
+
+- Added bounded RHSMode=1 PAS tokamak angular tests for pseudoinverse fallback
+  admission, truncated-L application, high-L tail retention, and structured
+  multi-zeta tail solves.
+- Added bounded RHSMode=1 PAS 3D `(theta,zeta)` tests for truncated-L
+  application, alternate DKES/non-DKES ExB denominator branches, and
+  pseudoinverse fallback admission.
+- Kept the tests on tiny algebraic operators so they exercise the production
+  preconditioner formulas and fail-closed paths without launching full solves or
+  adding benchmark artifacts.
+
+Validation:
+
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_pas_angular_preconditioner.py` passed as `13 passed in 4.79 s`.
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_pas_angular_preconditioner.py tests/test_rhs1_pas_composite.py
+  tests/test_rhs1_preconditioner_auto_policy.py
+  tests/test_rhs1_schwarz_heuristic.py tests/test_source_tree_consolidation.py
+  tests/test_domain_package_import_contracts.py
+  tests/test_examples_tree_contract.py` passed as `156 passed in 19.66 s`.
+- `PYTHONNOUSERSITE=1 python -m ruff check
+  tests/test_pas_angular_preconditioner.py` and
+  `PYTHONNOUSERSITE=1 python -m compileall -q
+  tests/test_pas_angular_preconditioner.py` passed.
+
+Status:
+
+- `solvers/preconditioner_pas_angular.py` now has stronger bounded coverage for
+  numerical safety paths that matter for PAS runtime/memory policy. The next
+  CPU-local coverage tranches should prioritize high-missing owners that remain
+  cheap to test, especially `profile_solve.py`, explicit sparse solver helpers,
+  QI correction/basis helpers, and output-writer solve orchestration wrappers.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

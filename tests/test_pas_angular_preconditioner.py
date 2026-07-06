@@ -232,6 +232,66 @@ def test_pas_tokamak_theta_can_apply_independently_to_zeta_planes(monkeypatch) -
     np.testing.assert_allclose(np.asarray(result)[_inactive_indices(op)], 0.0, atol=1e-12)
 
 
+def test_pas_tokamak_theta_uses_pinv_fallback_and_truncated_pitch_tail(monkeypatch) -> None:
+    op = _pas_operator(n_zeta=1, n_theta=2, n_l=4)
+    op.fblock.identity_shift = 0.0
+    op.fblock.pas.coef = jnp.zeros_like(op.fblock.pas.coef)
+    monkeypatch.setattr(pa, "_rhsmode1_precond_cache_key", lambda _op, kind: ("tokamak-pinv", kind, id(_op)))
+    monkeypatch.setenv("SFINCS_JAX_PAS_TOKAMAK_LMAX", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_REG", "0")
+    pa._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.clear()
+
+    original_inv = pa.np.linalg.inv
+    events: list[str] = []
+
+    def inv_with_failures(matrix: np.ndarray) -> np.ndarray:
+        if matrix.shape == (4, 4) and "raise" not in events:
+            events.append("raise")
+            raise np.linalg.LinAlgError("synthetic singular combined PAS block")
+        if matrix.shape == (4, 4) and "nan" not in events:
+            events.append("nan")
+            return np.full_like(matrix, np.nan)
+        return original_inv(matrix)
+
+    monkeypatch.setattr(pa.np.linalg, "inv", inv_with_failures)
+
+    preconditioner = pa.build_rhs1_pas_tokamak_theta_preconditioner(
+        op=op,
+        block_preconditioner_builder=_fallback_builder(8.0),
+        pas_tokamak_theta_applicable=lambda _op: True,
+    )
+    result = preconditioner(_vector(op))
+
+    assert events == ["raise", "nan"]
+    assert bool(jnp.all(jnp.isfinite(result)))
+    cache = next(iter(pa._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.values()))
+    assert cache.n_l_build == 2
+    assert cache.tail_factors is None
+    np.testing.assert_allclose(np.asarray(result)[_inactive_indices(op)], 0.0, atol=1e-12)
+
+
+def test_pas_tokamak_theta_structured_tail_multi_zeta_path(monkeypatch) -> None:
+    op = _pas_operator(n_zeta=2, n_theta=2, n_l=4)
+    monkeypatch.setattr(pa, "_rhsmode1_precond_cache_key", lambda _op, kind: ("tokamak-zeta-tail", kind, id(_op)))
+    monkeypatch.setenv("SFINCS_JAX_PAS_TOKAMAK_STRUCTURED", "true")
+    monkeypatch.setenv("SFINCS_JAX_PAS_TOKAMAK_LMAX", "4")
+    pa._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.clear()
+
+    preconditioner = pa.build_rhs1_pas_tokamak_theta_preconditioner(
+        op=op,
+        block_preconditioner_builder=_fallback_builder(8.0),
+        pas_tokamak_theta_applicable=lambda _op: True,
+    )
+    result = preconditioner(_vector(op))
+
+    cache = next(iter(pa._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.values()))
+    assert cache.tail_factors is not None
+    assert cache.tail_factors[0][0] is not None
+    assert bool(jnp.all(jnp.isfinite(result)))
+    np.testing.assert_allclose(np.asarray(result[op.f_size :]), np.asarray(_vector(op)[op.f_size :]))
+    np.testing.assert_allclose(np.asarray(result)[_inactive_indices(op)], 0.0, atol=1e-12)
+
+
 def test_pas_tz_preconditioner_masks_inactive_pitch_and_reuses_cache(monkeypatch) -> None:
     op = _pas_operator(n_zeta=2, n_theta=2)
     monkeypatch.setattr(pa, "_rhsmode1_precond_cache_key", lambda _op, kind: ("tz", kind, id(_op)))
@@ -324,6 +384,74 @@ def test_pas_tz_preconditioner_reduced_application_and_exb_terms(monkeypatch) ->
     reduced_rhs = jnp.cos(0.11 * jnp.arange(active.size, dtype=jnp.float64))
     expected = reduce_full(full_preconditioner(expand_reduced(reduced_rhs)))
     np.testing.assert_allclose(np.asarray(reduced_preconditioner(reduced_rhs)), np.asarray(expected))
+
+
+def test_pas_tz_preconditioner_lmax_two_and_alternate_exb_denominators(monkeypatch) -> None:
+    op = _attach_exb_terms(_pas_operator(n_zeta=3, n_theta=2, n_l=4), theta_dkes=False, zeta_dkes=True)
+    monkeypatch.setattr(pa, "_rhsmode1_precond_cache_key", lambda _op, kind: ("tz-lmax2-exb", kind, id(_op)))
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_LMAX", "2")
+    pa._RHSMODE1_PAS_TZ_CACHE.clear()
+
+    preconditioner = pa.build_rhs1_pas_tz_preconditioner(
+        op=op,
+        pas_tz_applicable=lambda _op: True,
+        pas_tz_memory_safe=lambda _op: True,
+        matvec_shard_axis=lambda _op: None,
+        device_count=lambda: 1,
+        theta_schwarz_builder=_fallback_builder(2.0),
+        zeta_schwarz_builder=_fallback_builder(3.0),
+        pas_hybrid_builder=_fallback_builder(4.0),
+        collision_builder=_fallback_builder(5.0),
+        tzfft_builder=_fallback_builder(6.0),
+    )
+    result = preconditioner(_vector(op))
+
+    cache = next(iter(pa._RHSMODE1_PAS_TZ_CACHE.values()))
+    assert cache.n_l_use == 2
+    assert bool(jnp.all(jnp.isfinite(result)))
+    np.testing.assert_allclose(np.asarray(result)[_inactive_indices(op)], 0.0, atol=1e-12)
+
+
+def test_pas_tz_preconditioner_uses_pinv_fallback(monkeypatch) -> None:
+    op = _pas_operator(n_zeta=2, n_theta=2, n_l=4)
+    monkeypatch.setattr(pa, "_rhsmode1_precond_cache_key", lambda _op, kind: ("tz-pinv", kind, id(_op)))
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_LMAX", "3")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_REG", "0")
+    pa._RHSMODE1_PAS_TZ_CACHE.clear()
+
+    original_inv = pa.np.linalg.inv
+    events: list[str] = []
+
+    def inv_with_failures(matrix: np.ndarray) -> np.ndarray:
+        if matrix.shape == (8, 8) and "raise" not in events:
+            events.append("raise")
+            raise np.linalg.LinAlgError("synthetic singular PAS TZ block")
+        if matrix.shape == (8, 8) and "nan" not in events:
+            events.append("nan")
+            return np.full_like(matrix, np.nan)
+        return original_inv(matrix)
+
+    monkeypatch.setattr(pa.np.linalg, "inv", inv_with_failures)
+
+    preconditioner = pa.build_rhs1_pas_tz_preconditioner(
+        op=op,
+        pas_tz_applicable=lambda _op: True,
+        pas_tz_memory_safe=lambda _op: True,
+        matvec_shard_axis=lambda _op: None,
+        device_count=lambda: 1,
+        theta_schwarz_builder=_fallback_builder(2.0),
+        zeta_schwarz_builder=_fallback_builder(3.0),
+        pas_hybrid_builder=_fallback_builder(4.0),
+        collision_builder=_fallback_builder(5.0),
+        tzfft_builder=_fallback_builder(6.0),
+    )
+    result = preconditioner(_vector(op))
+
+    assert events == ["raise", "nan"]
+    assert bool(jnp.all(jnp.isfinite(result)))
+    cache = next(iter(pa._RHSMODE1_PAS_TZ_CACHE.values()))
+    assert cache.n_l_use == 3
+    np.testing.assert_allclose(np.asarray(result)[_inactive_indices(op)], 0.0, atol=1e-12)
 
 
 def test_pas_tz_falls_back_for_degenerate_angular_or_pitch_grid() -> None:
