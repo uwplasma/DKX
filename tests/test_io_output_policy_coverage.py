@@ -618,6 +618,60 @@ def test_write_output_solver_policy_helpers_are_fail_closed() -> None:
     ) is False
 
 
+def test_writer_rhs1_dense_cutoff_policy_is_fail_closed() -> None:
+    messages: list[tuple[int, str]] = []
+
+    assert output_writer._rhs1_dense_cutoffs_from_env(
+        dense_active_cutoff_env="9000",
+        dense_pas_env="3000",
+        dense_fp_env="12000",
+        emit=lambda level, message: messages.append((level, message)),
+    ) == (9000, 3000, 12000)
+    assert messages == []
+
+    active, pas, fp = output_writer._rhs1_dense_cutoffs_from_env(
+        dense_active_cutoff_env="bad-active",
+        dense_pas_env="bad-pas",
+        dense_fp_env="-5",
+        emit=lambda level, message: messages.append((level, message)),
+    )
+    assert (active, pas, fp) == (8000, 2500, 0)
+
+    default_active, _default_pas, default_fp = output_writer._rhs1_dense_cutoffs_from_env(
+        dense_active_cutoff_env="",
+        dense_pas_env="",
+        dense_fp_env="bad-fp",
+        emit=lambda level, message: messages.append((level, message)),
+    )
+    assert default_active == 8000
+    assert default_fp == output_writer.rhs1_dense_auto_fp_cutoff(
+        dense_active_cutoff=default_active
+    )
+    assert any("invalid SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF" in msg for _level, msg in messages)
+
+
+def test_writer_physics_flag_normalization_accepts_sfincs_aliases() -> None:
+    params = {
+        "useDKESExBdrift": ".true.",
+        "includeXDotTerm": 1,
+        "includeElectricFieldTermInXiDot": "yes",
+        "dPhiHatdrN": "-3.5",
+        "dPhiHatdpsiHat": "not-a-number",
+        "EParallelHat": "-0.25",
+    }
+
+    assert output_writer._use_dkes_exb_drift_from_params(params)
+    assert output_writer._physics_bool_from_params(params, "includeXDotTerm")
+    assert output_writer._physics_bool_from_params(params, "includeElectricFieldTermInXiDot")
+    assert output_writer._rhs1_radial_electric_drive_abs_from_params(params) == pytest.approx(3.5)
+    assert output_writer._physics_abs_float_from_params(params, "EParallelHat") == pytest.approx(0.25)
+    assert output_writer._physics_value_from_params(params, "missing", default="fallback") == "fallback"
+
+    assert not output_writer._use_dkes_exb_drift_from_params({"use_dkes_exb_drift": "off"})
+    assert not output_writer._physics_bool_from_params({"flag": "no"}, "flag")
+    assert output_writer._physics_abs_float_from_params(None, "Er") == 0.0
+
+
 def _rhsmode1_selector_op(*, has_fp: bool, has_pas: bool = False) -> SimpleNamespace:
     return SimpleNamespace(
         constraint_scheme=2,

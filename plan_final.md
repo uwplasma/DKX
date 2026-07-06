@@ -1972,6 +1972,15 @@ Completed work:
   paths do not silently fall back to expensive host factors, and for failed
   support-mode preflight plus invalid true-window spec reporting. Validation:
   `tests/test_profile_response_sparse_pc.py` passed `364/364` in `3.95 s`.
+- Tranche 131: extracted RHSMode-1 writer dense-cutoff parsing and physics-input
+  normalization out of the monolithic output writer body into pure module-level
+  helpers. Added bounded tests for dense cutoff defaults, invalid environment
+  fallback, nonnegative FP cutoff clamping, SFINCS logical aliases, DKES ExB
+  aliases, and radial-electric-drive magnitude selection. Validation:
+  `tests/test_io_output_policy_coverage.py tests/test_io_export_and_h5_coverage.py tests/test_output_formats.py tests/test_write_output_return_results.py`
+  passed `124/124` in `3.18 s`; source-tree/import plus writer validation
+  passed `149/149` in `8.06 s`; Ruff, `compileall`, and `git diff --check`
+  passed.
 
 Remaining consolidation steps:
 
@@ -2016,7 +2025,8 @@ is `97%` after Tranche 121; `profile_sparse_direct.py` is `95%` after
 Tranche 122; `profile_sparse_solve.py` reaches `74%` in the owner sparse-PC
 suite after Tranche 123; `transport_parallel_runtime.py` reaches `79%` in the
 focused transport-parallel bundle after Tranche 124; `outputs/writer.py`
-reaches `52%` in the focused writer/export bundle after Tranche 125. The final
+reaches `52%` in the focused writer/export bundle after Tranche 125 and has
+additional RHSMode-1 writer-policy helper coverage after Tranche 131. The final
 target is still 95%; the next coverage tranche should prioritize remaining
 high-missing owners with bounded behavior tests or split large orchestration
 regions before adding slow full solves.

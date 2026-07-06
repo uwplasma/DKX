@@ -4,7 +4,7 @@ import math
 import os
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Mapping
 
 import numpy as np
 
@@ -130,6 +130,113 @@ def _should_precompile_v3_full_system(*, env_value: str) -> bool:
 
     env = str(env_value).strip().lower()
     return env in {"1", "true", "yes", "on"}
+
+
+def _physics_value_from_params(
+    phys_params: Mapping[str, Any] | None,
+    *keys: str,
+    default: object | None = None,
+) -> object | None:
+    """Return a physics value while accepting SFINCS-style key capitalization."""
+
+    if phys_params is None:
+        return default
+    for key in keys:
+        if key in phys_params:
+            return phys_params[key]
+        key_upper = key.upper()
+        if key_upper in phys_params:
+            return phys_params[key_upper]
+        key_lower = key.lower()
+        if key_lower in phys_params:
+            return phys_params[key_lower]
+    return default
+
+
+def _physics_bool_from_params(phys_params: Mapping[str, Any] | None, *keys: str) -> bool:
+    """Parse a SFINCS logical from physics namelist parameters."""
+
+    val = _physics_value_from_params(phys_params, *keys, default=None)
+    if isinstance(val, bool):
+        return bool(val)
+    if isinstance(val, (int, np.integer)):
+        return bool(int(val))
+    if isinstance(val, (float, np.floating)):
+        return bool(float(val))
+    if isinstance(val, str):
+        return val.strip().lower() in {"t", "true", "1", "yes", ".true.", ".t."}
+    return False
+
+
+def _physics_abs_float_from_params(phys_params: Mapping[str, Any] | None, *keys: str) -> float:
+    """Return the absolute value of a physics scalar, or zero for missing/bad input."""
+
+    val = _physics_value_from_params(phys_params, *keys, default=None)
+    if val is None:
+        return 0.0
+    try:
+        return abs(float(val))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _use_dkes_exb_drift_from_params(phys_params: Mapping[str, Any] | None) -> bool:
+    """Return the canonical ``useDKESExBDrift`` flag across common input aliases."""
+
+    return _physics_bool_from_params(
+        phys_params,
+        "useDKESExBDrift",
+        "useDKESExBdrift",
+        "USEDKESEXBDRIFT",
+        "use_dkes_exb_drift",
+    )
+
+
+def _rhs1_radial_electric_drive_abs_from_params(phys_params: Mapping[str, Any] | None) -> float:
+    """Return the largest radial electric-field drive magnitude in supported units."""
+
+    return max(
+        _physics_abs_float_from_params(phys_params, "Er", "ER"),
+        _physics_abs_float_from_params(phys_params, "dPhiHatdpsiHat", "DPHIHATDPSIHAT"),
+        _physics_abs_float_from_params(phys_params, "dPhiHatdpsiN", "DPHIHATDPSIN"),
+        _physics_abs_float_from_params(phys_params, "dPhiHatdrHat", "DPHIHATDRHAT"),
+        _physics_abs_float_from_params(phys_params, "dPhiHatdrN", "DPHIHATDRN"),
+    )
+
+
+def _rhs1_dense_cutoffs_from_env(
+    *,
+    dense_active_cutoff_env: str,
+    dense_pas_env: str,
+    dense_fp_env: str,
+    emit: Callable[[int, str], None] | None = None,
+) -> tuple[int, int, int]:
+    """Parse RHSMode-1 dense shortcut cutoffs without widening CLI policy code."""
+
+    try:
+        dense_active_cutoff = int(dense_active_cutoff_env) if dense_active_cutoff_env else 8000
+    except ValueError:
+        dense_active_cutoff = 8000
+    try:
+        dense_pas_cutoff = int(dense_pas_env) if dense_pas_env else 2500
+    except ValueError:
+        dense_pas_cutoff = 2500
+    try:
+        dense_fp_cutoff = (
+            max(0, int(dense_fp_env))
+            if dense_fp_env
+            else rhs1_dense_auto_fp_cutoff(dense_active_cutoff=int(dense_active_cutoff))
+        )
+    except ValueError:
+        if emit is not None:
+            emit(
+                1,
+                "write_sfincs_jax_output_h5: invalid SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF; "
+                "using default dense FP cutoff",
+            )
+        dense_fp_cutoff = rhs1_dense_auto_fp_cutoff(dense_active_cutoff=int(dense_active_cutoff))
+    return int(dense_active_cutoff), int(dense_pas_cutoff), int(dense_fp_cutoff)
+
 
 def _output_geom_cache_key(*, nml: Namelist, grids: V3Grids) -> tuple[object, ...] | None:
     return _output_formats.output_geom_cache_key(
@@ -1204,113 +1311,25 @@ def write_sfincs_jax_output_h5(
                     " Solver note: large system detected; preconditioner setup and Krylov solve "
                     "can take several minutes.",
                 )
-        dense_active_cutoff_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF", "").strip()
-        try:
-            dense_active_cutoff = int(dense_active_cutoff_env) if dense_active_cutoff_env else 8000
-        except ValueError:
-            dense_active_cutoff = 8000
-        dense_pas_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX", "").strip()
-        try:
-            # Dense solves can be *fast* for very small RHSMode=1 systems, but for a few
-            # medium-sized PAS constrained systems JAX/XLA can transiently allocate large
-            # scratch buffers (multi-GB) in the dense branch. Keep the dense PAS default
-            # conservative and fall back to Krylov+preconditioning for n above this cutoff.
-            dense_pas_cutoff = int(dense_pas_env) if dense_pas_env else 2500
-        except ValueError:
-            dense_pas_cutoff = 2500
-        dense_fp_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", "").strip()
-        try:
-            # Full-FP moderate systems are often faster and lower-RSS with a direct
-            # dense solve than with the Krylov/strong/sparse rescue ladder. Keep the
-            # default synchronized with the dense fallback policy, while still
-            # allowing users to lower or disable this path for tight-memory hosts.
-            dense_fp_cutoff = (
-                max(0, int(dense_fp_env))
-                if dense_fp_env
-                else rhs1_dense_auto_fp_cutoff(dense_active_cutoff=int(dense_active_cutoff))
-            )
-        except ValueError:
-            if emit is not None:
-                emit(
-                    1,
-                    "write_sfincs_jax_output_h5: invalid SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF; "
-                    "using default dense FP cutoff",
-                )
-            dense_fp_cutoff = rhs1_dense_auto_fp_cutoff(dense_active_cutoff=int(dense_active_cutoff))
+        # Dense solves can be *fast* for very small RHSMode=1 systems, but
+        # medium PAS systems can allocate large XLA scratch buffers. Parse the
+        # cutoffs in one pure helper so the auto path is easy to test.
+        dense_active_cutoff, dense_pas_cutoff, dense_fp_cutoff = _rhs1_dense_cutoffs_from_env(
+            dense_active_cutoff_env=os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF", "").strip(),
+            dense_pas_env=os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX", "").strip(),
+            dense_fp_env=os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", "").strip(),
+            emit=emit,
+        )
         phys_params = nml.group("physicsParameters")
-        use_dkes_val = (
-            phys_params.get("useDKESExBDrift", None)
-            if phys_params is not None
-            else None
-        )
-        if use_dkes_val is None and phys_params is not None:
-            use_dkes_val = phys_params.get("useDKESExBdrift", None)
-        if use_dkes_val is None and phys_params is not None:
-            # Upstream SFINCS inputs typically use the all-caps namelist variable.
-            use_dkes_val = phys_params.get("USEDKESEXBDRIFT", None)
-        if use_dkes_val is None and phys_params is not None:
-            use_dkes_val = phys_params.get("use_dkes_exb_drift", None)
-        if isinstance(use_dkes_val, str):
-            use_dkes = use_dkes_val.strip().lower() in {"t", "true", "1", "yes", ".true."}
-        else:
-            use_dkes = bool(use_dkes_val) if use_dkes_val is not None else False
-
-        def _physics_value(*keys: str, default: object | None = None) -> object | None:
-            if phys_params is None:
-                return default
-            for key in keys:
-                if key in phys_params:
-                    return phys_params[key]
-                key_upper = key.upper()
-                if key_upper in phys_params:
-                    return phys_params[key_upper]
-                key_lower = key.lower()
-                if key_lower in phys_params:
-                    return phys_params[key_lower]
-            return default
-
-        def _physics_bool(*keys: str) -> bool:
-            val = _physics_value(*keys, default=None)
-            if isinstance(val, bool):
-                return bool(val)
-            if isinstance(val, (int, np.integer)):
-                return bool(int(val))
-            if isinstance(val, (float, np.floating)):
-                return bool(float(val))
-            if isinstance(val, str):
-                return val.strip().lower() in {"t", "true", "1", "yes", ".true.", ".t."}
-            return False
-
-        def _physics_abs_float(*keys: str) -> float:
-            val = _physics_value(*keys, default=None)
-            if val is None:
-                return 0.0
-            try:
-                return abs(float(val))
-            except (TypeError, ValueError):
-                return 0.0
-
-        er_abs = max(
-            _physics_abs_float("Er", "ER"),
-            _physics_abs_float("dPhiHatdpsiHat", "DPHIHATDPSIHAT"),
-            _physics_abs_float("dPhiHatdpsiN", "DPHIHATDPSIN"),
-            _physics_abs_float("dPhiHatdrHat", "DPHIHATDRHAT"),
-            _physics_abs_float("dPhiHatdrN", "DPHIHATDRN"),
-        )
-        include_xdot = _physics_bool("includeXDotTerm", "INCLUDEXDOTTERM")
-        include_electric_field_xi = _physics_bool(
+        use_dkes = _use_dkes_exb_drift_from_params(phys_params)
+        er_abs = _rhs1_radial_electric_drive_abs_from_params(phys_params)
+        include_xdot = _physics_bool_from_params(phys_params, "includeXDotTerm", "INCLUDEXDOTTERM")
+        include_electric_field_xi = _physics_bool_from_params(
+            phys_params,
             "includeElectricFieldTermInXiDot",
             "INCLUDEELECTRICFIELDTERMINXIDOT",
         )
-        epar_val = (
-            phys_params.get("EPARALLELHAT", phys_params.get("EParallelHat", None))
-            if phys_params is not None
-            else None
-        )
-        try:
-            epar_abs = abs(float(epar_val)) if epar_val is not None else 0.0
-        except (TypeError, ValueError):
-            epar_abs = 0.0
+        epar_abs = _physics_abs_float_from_params(phys_params, "EParallelHat", "EPARALLELHAT")
         solve_method_env = os.environ.get("SFINCS_JAX_RHSMODE1_SOLVE_METHOD", "").strip().lower()
         force_krylov_env = os.environ.get("SFINCS_JAX_RHSMODE1_FORCE_KRYLOV", "").strip().lower()
         force_krylov = force_krylov_env in {"1", "true", "yes", "on"}
