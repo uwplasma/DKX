@@ -1848,6 +1848,18 @@ Completed work:
   adjacent focused guards passed `112/112`; Ruff, `compileall`, and
   `git diff --check` passed. In the broad policy bundle,
   `sfincs_jax/problems/profile_policies.py` improved from `88%` to `91%`.
+- Tranche 121: expanded RHSMode=1 preconditioner-build control coverage and
+  removed unreachable PAS auto-selection branches shadowed by earlier `has_pas`
+  returns. Added bounded tests for strong-preconditioner aliases, residual and
+  retry environment parsing, weak-PAS/guarded-MINRES controls, strong-control
+  skip messages, auto-selection and adjustment helpers, reduced/full selection
+  skip gates, post-primary guarded and weak MinRes correction acceptance, and
+  guarded PAS-TZ overlay polynomial/structured branches. Validation:
+  `tests/test_profile_response_preconditioner_build.py` passed `31/31` in
+  `0.65 s`; adjacent preconditioner/source guards passed `109/109`;
+  Ruff, `compileall`, and `git diff --check` passed. Direct coverage for
+  `sfincs_jax/problems/profile_preconditioner_build.py` improved from `58%`
+  to `97%`, while source statements dropped from `977` to `957`.
 
 Remaining consolidation steps:
 
@@ -1886,10 +1898,11 @@ Tranche 113; `validation/artifacts.py` is `95%` after Tranche 114,
 is `86%` after Tranche 117; `transport_linear_system.py` reaches `71%` in the
 combined focused transport bundle after Tranche 118; `explicit_sparse.py` is
 `88%` after Tranche 119; `profile_policies.py` reaches `91%` in the broad
-RHSMode-1 policy bundle after Tranche 120. The final target is still 95%; the
-next coverage tranches should prioritize `profile_preconditioner_build.py`,
-`profile_sparse_direct.py`, and `profile_sparse_solve.py` with bounded
-behavior tests rather than slow full solves.
+RHSMode-1 policy bundle after Tranche 120; `profile_preconditioner_build.py`
+is `97%` after Tranche 121. The final target is still 95%; the next coverage
+tranches should prioritize `profile_sparse_direct.py` and
+`profile_sparse_solve.py` with bounded behavior tests rather than slow full
+solves.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 

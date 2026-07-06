@@ -934,37 +934,6 @@ def auto_rhs1_reduced_strong_kind(
         return RHS1StrongAutoSelection(
             kind="theta_line" if int(n_theta) >= int(n_zeta) else "zeta_line"
         )
-    if (
-        has_pas
-        and int(active_size) >= int(strong_precond_min)
-        and (int(n_theta) > 1 or int(n_zeta) > 1)
-    ):
-        tz_max = rhs1_tz_precond_max()
-        xblock_default = 2000 if int(geom_scheme) == 1 or bool(use_dkes) else 1200
-        xblock_tz_max = rhs1_xblock_tz_max(default=xblock_default)
-        if (
-            int(n_theta) > 1
-            and xblock_tz_max > 0
-            and (int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_max))
-        ):
-            return RHS1StrongAutoSelection(kind="xblock_tz")
-        if (
-            int(n_theta) > 1
-            and int(n_zeta) > 1
-            and (int(n_theta) * int(n_zeta) <= int(tz_max))
-        ):
-            return RHS1StrongAutoSelection(kind="theta_zeta")
-        if (
-            shard_axis in {"theta", "zeta"}
-            and int(device_count) > 1
-            and (int(active_size) >= max(1, rhs1_schwarz_auto_min()))
-        ):
-            return RHS1StrongAutoSelection(
-                kind="theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
-            )
-        return RHS1StrongAutoSelection(
-            kind="theta_line" if int(n_theta) >= int(n_zeta) else "zeta_line"
-        )
     return RHS1StrongAutoSelection(kind=None)
 
 
@@ -986,32 +955,6 @@ def auto_rhs1_full_strong_kind(
         if int(total_size) >= max(1, rhs1_pas_lite_min()):
             return RHS1StrongAutoSelection(kind="pas_lite")
         return RHS1StrongAutoSelection(kind="pas_hybrid")
-    if (
-        rhs1_precond_kind == "point"
-        and has_pas
-        and (int(total_size) >= int(strong_precond_min))
-        and (int(n_theta) > 1 or int(n_zeta) > 1)
-    ):
-        if int(total_size) >= rhs1_pas_xmg_min():
-            return RHS1StrongAutoSelection(kind="xmg")
-        xblock_tz_max = rhs1_xblock_tz_max(default=1200)
-        if (
-            int(n_theta) > 1
-            and xblock_tz_max > 0
-            and (int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_max))
-        ):
-            return RHS1StrongAutoSelection(kind="xblock_tz")
-        if (
-            shard_axis in {"theta", "zeta"}
-            and int(device_count) > 1
-            and (int(total_size) >= max(1, rhs1_schwarz_auto_min()))
-        ):
-            return RHS1StrongAutoSelection(
-                kind="theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
-            )
-        return RHS1StrongAutoSelection(
-            kind="theta_line" if int(n_theta) >= int(n_zeta) else "zeta_line"
-        )
     if (
         has_fp
         and int(total_size) >= int(strong_precond_min)
