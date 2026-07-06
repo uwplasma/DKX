@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -589,6 +590,409 @@ def test_transport_scaling_audit_rejects_malformed_evidence() -> None:
                 },
             }
         )
+
+
+def test_rewrite_xla_flags_replaces_stale_worker_limits() -> None:
+    rewritten = transport_parallel_runtime.rewrite_xla_flags(
+        "--foo=1 --xla_cpu_multi_thread_eigen_num_threads=99 "
+        "--xla_cpu_parallelism_threads=8 --xla_force_host_platform_device_count=8",
+        cpu_threads=3,
+        host_devices=2,
+    )
+
+    assert "--foo=1" in rewritten
+    assert "--xla_cpu_multi_thread_eigen=true" in rewritten
+    assert "--xla_cpu_multi_thread_eigen_num_threads=3" in rewritten
+    assert "--xla_force_host_platform_device_count=2" in rewritten
+    assert "--xla_cpu_parallelism_threads=8" not in rewritten
+
+
+def test_transport_scaling_audit_accepts_release_quality_worker_summary() -> None:
+    audit = transport_parallel_runtime.audit_transport_parallel_scaling_summary(
+        {
+            "benchmark_kind": "transport_worker_scaling",
+            "backend": "gpu",
+            "rhs_count": 4,
+            "device_ids": ["0", "1"],
+            "timing_semantics": "warm",
+            "release_scaling_claim": True,
+            "results": [
+                {"workers": 1, "mean_s": 4.0},
+                {"workers": 2, "mean_s": 2.0},
+            ],
+            "payloads_by_workers": {
+                "2": [
+                    {"which_rhs_values": [1, 3]},
+                    {"which_rhs_values": [2, 4]},
+                ]
+            },
+            "deterministic_output_check": True,
+            "compile_amortization_gate": {
+                "passes": True,
+                "timing_semantics": "warm",
+                "compile_in_timed_region": False,
+                "warm_run_amortization_pass": True,
+                "timed_repeats": 2,
+                "min_timed_repeats": 2,
+                "notes": ["cache warmed"],
+            },
+        }
+    )
+
+    assert audit.release_scaling_claim
+    assert audit.claim_speedup == pytest.approx(2.0)
+    assert audit.claim_efficiency == pytest.approx(1.0)
+    assert audit.deterministic_payload_coverage
+    assert audit.compile_amortization_gate
+    assert not audit.failures
+
+
+@pytest.mark.parametrize(
+    ("summary", "expected_scope", "supported"),
+    (
+        (
+            {
+                "benchmark_kind": "transport_worker_scaling",
+                "backend": "cpu",
+                "rhs_count": 2,
+                "workers": [1, 2],
+                "results": [
+                    {"workers": 1, "mean_s": 2.0},
+                    {"workers": 2, "mean_s": 1.0},
+                ],
+            },
+            "independent_transport_worker_throughput",
+            True,
+        ),
+        (
+            {
+                "benchmark_kind": "single_case_sharded_solve",
+                "backend": "gpu",
+                "experimental_single_case_scaling": True,
+                "devices": [1, 2],
+                "results": [
+                    {"devices": 1, "mean_s": 2.0},
+                    {"devices": 2, "mean_s": 1.5},
+                ],
+            },
+            "single_case_sharded_solve_experimental",
+            False,
+        ),
+        (
+            {
+                "benchmark_kind": "multi_gpu_case_throughput",
+                "backend": "gpu",
+                "required_gpu_count": 2,
+            },
+            "independent_case_throughput_non_release",
+            False,
+        ),
+    ),
+)
+def test_parallel_scaling_claim_scope_classifies_artifact_families(
+    summary: dict[str, object],
+    expected_scope: str,
+    supported: bool,
+) -> None:
+    audit = transport_parallel_runtime.audit_parallel_scaling_claim_scope(summary)
+
+    assert audit.claim_scope == expected_scope
+    assert audit.release_scaling_supported is supported
+    assert audit.parallel_count >= 2
+
+
+def test_multi_gpu_case_throughput_audit_accepts_non_release_evidence() -> None:
+    audit = transport_parallel_runtime.audit_multi_gpu_case_throughput_summary(
+        {
+            "benchmark_kind": "multi_gpu_case_throughput",
+            "backend": "gpu",
+            "timing_semantics": "warm",
+            "required_gpu_count": 2,
+            "sequential_one_gpu": {"wall_s": 12.0},
+            "parallel_two_gpu": {"wall_s": 6.0},
+        },
+        min_throughput_speedup=1.5,
+    )
+
+    assert audit.ci_gate_pass
+    assert audit.throughput_speedup == pytest.approx(2.0)
+    assert not audit.release_scaling_claim
+    assert any("not single-case strong scaling" in note for note in audit.notes)
+
+
+def test_sharded_solve_scaling_audit_accepts_experimental_gate_schema() -> None:
+    audit = transport_parallel_runtime.audit_sharded_solve_scaling_summary(
+        {
+            "benchmark_kind": "single_case_sharded_solve",
+            "backend": "gpu",
+            "device_ids": ["0", "1"],
+            "timing_semantics": "warm",
+            "release_scaling_claim": False,
+            "experimental_single_case_scaling": True,
+            "results": [
+                {"devices": 1, "mean_s": 10.0},
+                {"devices": 2, "mean_s": 7.5},
+            ],
+            "operator_reuse_gate": {
+                "passes": True,
+                "timing_semantics": "warm",
+                "compile_in_timed_region": False,
+                "warm_run_amortization_pass": True,
+                "timed_repeats": 2,
+                "min_timed_repeats": 2,
+            },
+            "deterministic_output_gate": {
+                "passes": True,
+                "residual_tolerance": 1.0e-10,
+                "max_relative_residual_norm": 1.0e-12,
+                "output_digest": "abc",
+                "evidence_source": "unit_fixture",
+            },
+        }
+    )
+
+    assert audit.ci_gate_pass
+    assert audit.experimental_single_case_scaling
+    assert audit.operator_reuse_gate
+    assert audit.deterministic_output_gate
+    assert not audit.release_promotion_supported
+
+
+def test_single_case_sharding_plans_and_gates_are_fail_closed() -> None:
+    plan = transport_parallel_runtime.plan_single_case_sharded_solve(
+        requested_devices=4,
+        backend="gpu",
+        available_device_ids="0,1",
+        rhs_mode=1,
+        shard_axis="theta",
+        shard_axis_size=5,
+        experimental_single_case_scaling=True,
+    )
+
+    assert plan.active_devices == 2
+    assert plan.capped
+    assert plan.eligible_for_single_case_sharding
+    assert plan.balance_diagnostics.max_to_mean_ratio == pytest.approx(1.2)
+    assert plan.to_dict()["benchmark_kind"] == "single_case_sharded_solve"
+
+    amortization = transport_parallel_runtime.estimate_sharded_solve_amortization(
+        active_devices=2,
+        serial_work_units=100.0,
+        setup_work_units=2.0,
+        krylov_iterations=3,
+        collectives_per_iteration=2,
+        collective_latency_units=0.1,
+        halo_bytes_per_iteration=10.0,
+        bandwidth_bytes_per_unit=100.0,
+    )
+    assert amortization.release_scaling_supported
+    assert amortization.predicted_speedup > 1.0
+
+    compile_gate = transport_parallel_runtime.plan_compiled_sharded_operator_reuse(
+        benchmark_kind="single_case_sharded_solve",
+        timing_semantics="warm",
+        inner_warmup_runs=1,
+        timed_repeats=2,
+        min_timed_repeats=2,
+        work_units_per_sample=4,
+    )
+    assert compile_gate.passes
+    assert compile_gate.strategy == "inner_warmup"
+
+    deterministic_gate = transport_parallel_runtime.plan_sharded_solve_deterministic_output_gate(
+        comparison_devices=2,
+        max_relative_residual_norm=1.0e-12,
+        residual_tolerance=1.0e-10,
+        baseline_output_digest="same",
+        comparison_output_digest="same",
+    )
+    assert deterministic_gate.passes
+    assert deterministic_gate.output_digest_match
+
+    reuse_plan = transport_parallel_runtime.plan_single_case_operator_coarse_reuse(
+        active_devices=2,
+        backend="gpu",
+        operator_reuse_gate_pass=True,
+        deterministic_output_gate_pass=True,
+        measured_hot_speedup=1.3,
+        memory_growth_fraction=0.0,
+        coarse_levels=1,
+        max_coarse_rank=4,
+    )
+    assert reuse_plan.plan_valid
+    assert reuse_plan.promotion_ready
+    assert reuse_plan.operator_build_scope == "once_per_child_process"
+
+
+def test_transport_parallel_environment_helpers_are_deterministic(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_MP_START_METHOD", "forkserver")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "gpu_process")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "1,2,1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PIN_THREADS", "1")
+    monkeypatch.setenv("SFINCS_JAX_CORES", "8")
+
+    assert transport_parallel_runtime.transport_parallel_start_method() == "forkserver"
+    assert transport_parallel_runtime.transport_parallel_backend() == "gpu"
+    assert transport_parallel_runtime.transport_parallel_visible_gpu_ids(4) == ["1", "2"]
+    assert transport_parallel_runtime.transport_parallel_pool_key(2)[:3] == (
+        2,
+        "gpu",
+        "forkserver",
+    )
+
+    gpu_env = transport_parallel_runtime.transport_parallel_gpu_worker_env(gpu_id="2")
+    assert gpu_env["CUDA_VISIBLE_DEVICES"] == "2"
+    assert gpu_env["SFINCS_JAX_TRANSPORT_PARALLEL_CHILD"] == "1"
+
+    messages: list[str] = []
+    kwargs = transport_parallel_runtime.transport_parallel_pool_executor_kwargs(
+        parallel_workers=2,
+        get_context=lambda method: (_ for _ in ()).throw(ValueError(method))
+        if method == "forkserver"
+        else SimpleNamespace(method=method),
+        emit=lambda _level, message: messages.append(message),
+    )
+    assert kwargs["max_workers"] == 2
+    assert kwargs["mp_context"].method == "spawn"
+    assert any("using 'spawn'" in message for message in messages)
+
+
+def test_transport_parallel_worker_env_sets_and_restores_thread_caps(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_CORES", "8")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PIN_THREADS", "1")
+    monkeypatch.setenv("XLA_FLAGS", "--foo=1 --xla_force_host_platform_device_count=8")
+    monkeypatch.setenv("OMP_NUM_THREADS", "old")
+
+    with transport_parallel_runtime.transport_parallel_worker_env(2):
+        assert os.environ["SFINCS_JAX_SHARD"] == "0"
+        assert os.environ["SFINCS_JAX_CPU_DEVICES"] == "1"
+        assert os.environ["OMP_NUM_THREADS"] == "4"
+        assert "--foo=1" in os.environ["XLA_FLAGS"]
+        assert "--xla_force_host_platform_device_count=1" in os.environ["XLA_FLAGS"]
+
+    assert os.environ["OMP_NUM_THREADS"] == "old"
+    assert os.environ["XLA_FLAGS"] == "--foo=1 --xla_force_host_platform_device_count=8"
+
+
+def test_transport_parallel_payload_policy_helpers_are_pure(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.namelist"
+    payloads = transport_parallel_runtime.build_transport_parallel_payloads(
+        chunks=[[1, 3], [2]],
+        input_namelist=input_path,
+        tol=1.0e-10,
+        atol=1.0e-14,
+        restart=20,
+        maxiter=40,
+        solve_method="auto",
+        identity_shift=1.0e-8,
+        collect_transport_output_fields=True,
+        phi1_hat_base=np.asarray([0.0, 1.0]),
+        differentiable=False,
+    )
+
+    assert transport_parallel_runtime.should_run_transport_parallel(
+        parallel_child=False,
+        parallel_workers=2,
+        which_rhs_values=[1, 2, 3],
+        input_namelist=input_path,
+    )
+    assert not transport_parallel_runtime.should_run_transport_parallel(
+        parallel_child=True,
+        parallel_workers=2,
+        which_rhs_values=[1, 2],
+        input_namelist=input_path,
+    )
+    assert payloads[0]["which_rhs_values"] == [1, 3]
+    np.testing.assert_allclose(payloads[0]["phi1_hat_base"], [0.0, 1.0])
+    assert payloads[1]["maxiter"] == 40
+
+
+def test_run_transport_parallel_payloads_uses_gpu_dispatch() -> None:
+    calls: list[dict[str, object]] = []
+
+    result = run_transport_parallel_payloads(
+        payloads=[{"which_rhs_values": [1]}],
+        parallel_workers=2,
+        parallel_backend="gpu",
+        run_gpu_subprocesses=lambda **kwargs: calls.append(kwargs) or [{"which_rhs_values": [1]}],
+        persistent_pool_enabled=False,
+        get_pool=lambda **_kwargs: pytest.fail("CPU pool was not expected"),
+        shutdown_pool=lambda: pytest.fail("shutdown was not expected"),
+        worker=lambda _payload: pytest.fail("CPU worker was not expected"),
+        worker_env=lambda _workers: pytest.fail("worker env was not expected"),
+        executor_class=object,
+        executor_kwargs=lambda **_kwargs: {},
+        emit=None,
+    )
+
+    assert result == [{"which_rhs_values": [1]}]
+    assert calls[0]["parallel_workers"] == 2
+
+
+def test_sharded_planning_gates_record_failures_without_running_solves() -> None:
+    plan = transport_parallel_runtime.plan_single_case_sharded_solve(
+        requested_devices=2,
+        backend="cpu",
+        available_device_count=0,
+        rhs_mode=2,
+        shard_axis="bad",
+        task_count=2,
+        release_scaling_claim=True,
+        experimental_single_case_scaling=False,
+    )
+    assert not plan.eligible_for_single_case_sharding
+    assert any("RHSMode=1" in failure for failure in plan.failures)
+    assert plan.balance_diagnostics.idle_device_count == 0
+
+    amortization = transport_parallel_runtime.estimate_sharded_solve_amortization(
+        active_devices=1,
+        serial_work_units=4.0,
+        setup_work_units=10.0,
+        krylov_iterations=10,
+        collectives_per_iteration=2,
+        collective_latency_units=1.0,
+        min_speedup=2.0,
+        min_efficiency=0.9,
+        max_communication_fraction=0.1,
+    )
+    assert not amortization.release_scaling_supported
+    assert any("at least 2 active devices" in failure for failure in amortization.failures)
+    assert any("setup cost exceeds" in note for note in amortization.notes)
+
+    compile_gate = transport_parallel_runtime.plan_compiled_sharded_operator_reuse(
+        benchmark_kind="bad_kind",
+        timing_semantics="cold_start",
+        global_warmup_runs=1,
+        timed_repeats=1,
+        min_timed_repeats=2,
+        persistent_compile_cache=False,
+        compile_in_timed_region=True,
+    )
+    assert not compile_gate.passes
+    assert any("unsupported" in failure for failure in compile_gate.failures)
+    assert any("compile_cache_dir" in failure for failure in compile_gate.failures)
+
+    deterministic_gate = transport_parallel_runtime.plan_sharded_solve_deterministic_output_gate(
+        comparison_devices=1,
+        max_relative_residual_norm=1.0e-3,
+        residual_tolerance=1.0e-6,
+        baseline_output_digest="a",
+        comparison_output_digest="b",
+    )
+    assert not deterministic_gate.passes
+    assert deterministic_gate.output_digest_match is False
+
+    reuse_plan = transport_parallel_runtime.plan_single_case_operator_coarse_reuse(
+        active_devices=1,
+        rhs_mode=2,
+        shard_axis="bad",
+        operator_reuse_enabled=False,
+        measured_hot_speedup=1.0,
+        memory_growth_fraction=0.5,
+    )
+    assert not reuse_plan.plan_valid
+    assert not reuse_plan.promotion_ready
+    assert "compiled operator-reuse gate has not passed" in reuse_plan.promotion_blockers
 
 
 def test_transport_worker_payload_validators_fail_closed() -> None:

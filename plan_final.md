@@ -78,6 +78,14 @@ The main structural refactor is functionally complete:
   `tests/test_transport_parallel_payload.py`,
   `tests/test_transport_parallel_runtime.py`, and
   `tests/test_transport_parallel_validation.py` as `37 passed in 0.44 s`.
+- Transport parallel-runtime coverage now also covers XLA flag rewriting,
+  release-quality transport-worker scaling audits, parallel-claim scope
+  classification, multi-GPU throughput audits, sharded-solve audit gates,
+  sharding/amortization/operator-reuse/deterministic-output plans, worker
+  environment restoration, payload construction, and GPU-dispatch injection.
+  These are bounded policy tests and launch no production solves. Focused
+  validation passed as `59 passed in 0.64 s`; source-tree/import validation
+  passed with the bundle as `112 passed in 5.43 s`.
 - Profile sparse-PC diagnostics now cover malformed structured f-block
   metadata, the non-Fortran/global sparse-PC static metadata branch,
   precomputed metadata-section injection, zero-target residual ratios, and
@@ -1914,9 +1922,11 @@ combined focused transport bundle after Tranche 118; `explicit_sparse.py` is
 `88%` after Tranche 119; `profile_policies.py` reaches `91%` in the broad
 RHSMode-1 policy bundle after Tranche 120; `profile_preconditioner_build.py`
 is `97%` after Tranche 121; `profile_sparse_direct.py` is `95%` after
-Tranche 122. The final target is still 95%; the next coverage tranche should
-prioritize `profile_sparse_solve.py` with bounded behavior tests rather than
-slow full solves.
+Tranche 122; `profile_sparse_solve.py` reaches `74%` in the owner sparse-PC
+suite after Tranche 123; `transport_parallel_runtime.py` reaches `79%` in the
+focused transport-parallel bundle after Tranche 124. The final target is still
+95%; the next coverage tranche should prioritize another high-missing owner
+with bounded behavior tests rather than slow full solves.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 
