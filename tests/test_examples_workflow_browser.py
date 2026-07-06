@@ -72,5 +72,9 @@ def test_workflow_browser_lists_topics() -> None:
     )
 
     assert "getting_started" in result.stdout
+    assert "[learning]" in result.stdout
     assert "vmec_jax_finite_beta" in result.stdout
+    assert "[capability]" in result.stdout
+    assert "sfincs_examples" in result.stdout
+    assert "[reference]" in result.stdout
     assert "Finite-beta VMEC" in result.stdout
