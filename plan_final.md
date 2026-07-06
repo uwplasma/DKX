@@ -37,7 +37,8 @@ models overlap.
   `9c48d211`, `653d6ac5`, and `14e0dbd5`. Focused local coverage reports
   `compare.py` at 94%, `plotting.py` at 100%, `profile_exb.py` at 97%,
   `profile_magnetic_drifts.py` at 94%, `adaptive_maps.py` at 97%,
-  `periodic_stencil.py` at 98%, and `structured_velocity.py` at 99%.
+  `periodic_stencil.py` at 98%, `structured_velocity.py` at 99%, and
+  `profile_residual.py` at 92% under the focused residual/preconditioner suite.
 - The latest bounded local review bundle passed: source-tree guards,
   docs/example guards, and comparison/plotting checks ran `123 passed in
   9.70 s`; Sphinx `-W` passed in `17.56 s`.
@@ -49,11 +50,12 @@ models overlap.
   boundaries, CPU/GPU dense admission, constraintScheme=0 sparse/PETSc routes,
   implicit rejection, and explicit-method preservation. Guards: `35 passed`,
   `217 passed`, `49 passed`, `44 passed`, `102 passed`, and source/domain
-  contracts `58 passed`.
-- The last checked PR CI state after `14e0dbd5` had build and
-  external-data smoke passing; coverage shards, examples-smoke, optional
-  ecosystem checks, and coverage-report were still pending. Recheck CI after
-  the next coherent push rather than waiting idle on every job.
+  contracts `58 passed`; the residual-equation tranche passed `66` focused
+  tests and added fail-closed, pseudo-inverse, clipped device-correction, and
+  RHSMode=1 polish failure/logging gates.
+- The last checked PR CI state after `b3f31d75` was green: build, tests,
+  coverage shards/report, examples-smoke, external-data smoke, optional
+  ecosystem gates, and Codecov patch passed.
 - Fresh GPU validation is deferred until the office GPU host is reachable.
 
 ## Open Lanes

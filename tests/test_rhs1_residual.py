@@ -9,7 +9,12 @@ import pytest
 
 from sfincs_jax.problems.profile_residual import (
     apply_damped_preconditioned_residual_polish,
+    apply_device_subspace_residual_equation_correction,
+    apply_preconditioned_minres_correction,
     apply_projected_residual_polish,
+    apply_subspace_minres_correction,
+    build_rhs1_xblock_post_coarse_directions,
+    compose_multilevel_minres_correction_preconditioner,
     l2_norm_float,
     recompute_true_residual_result,
     replay_left_preconditioned_residual_norms,
@@ -78,6 +83,251 @@ def test_result_with_true_residual_returns_result_and_vector() -> None:
     assert float(result.residual_norm) == 4.0
     assert jnp.array_equal(residual, jnp.asarray([0.0, 4.0], dtype=jnp.float64))
     assert jnp.array_equal(result.x, jnp.asarray([1.0, -1.0], dtype=jnp.float64))
+
+
+def test_multilevel_minres_no_levels_returns_base_preconditioner() -> None:
+    calls = {"base": 0}
+
+    def base(v):
+        calls["base"] += 1
+        return 3.0 * v
+
+    preconditioner = compose_multilevel_minres_correction_preconditioner(
+        base=base,
+        coarse_levels=(),
+        matvec=lambda v: v,
+        steps=4,
+    )
+
+    out = preconditioner(jnp.asarray([1.0, -2.0], dtype=jnp.float64))
+
+    assert calls == {"base": 1}
+    np.testing.assert_allclose(np.asarray(out), np.asarray([3.0, -6.0]))
+
+
+def test_preconditioned_minres_fails_closed_on_unsafe_directions() -> None:
+    rhs = jnp.asarray([1.0, 0.0], dtype=jnp.float64)
+    x0 = jnp.zeros((2,), dtype=jnp.float64)
+
+    _, residual, history, alphas = apply_preconditioned_minres_correction(
+        matvec=lambda v: v,
+        rhs=rhs,
+        x0=x0,
+        preconditioner=lambda _r: jnp.asarray([jnp.nan, 0.0], dtype=jnp.float64),
+        steps=2,
+    )
+    np.testing.assert_allclose(np.asarray(residual), np.asarray(rhs))
+    assert history == (1.0,)
+    assert alphas == ()
+
+    _, _, history, alphas = apply_preconditioned_minres_correction(
+        matvec=lambda _v: jnp.zeros((2,), dtype=jnp.float64),
+        rhs=rhs,
+        x0=x0,
+        preconditioner=lambda r: r,
+        steps=2,
+    )
+    assert history == (1.0,)
+    assert alphas == ()
+
+    _, _, history, alphas = apply_preconditioned_minres_correction(
+        matvec=lambda v: v,
+        rhs=rhs,
+        x0=x0,
+        preconditioner=lambda _r: jnp.asarray([0.0, 1.0], dtype=jnp.float64),
+        steps=2,
+    )
+    assert history == (1.0,)
+    assert alphas == ()
+
+    _, _, history, alphas = apply_preconditioned_minres_correction(
+        matvec=lambda v: v,
+        rhs=rhs,
+        x0=x0,
+        preconditioner=lambda _r: jnp.asarray([0.1, 0.0], dtype=jnp.float64),
+        steps=2,
+        alpha_clip=0.1,
+        min_improvement=0.5,
+    )
+    assert history == (1.0,)
+    assert alphas == ()
+
+
+def test_subspace_minres_filters_bad_columns_and_uses_pinv_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rhs = jnp.asarray([2.0, 0.0], dtype=jnp.float64)
+
+    def matvec(v):
+        arr = jnp.asarray(v, dtype=jnp.float64)
+        if float(arr[1]) > 0.5:
+            return jnp.asarray([jnp.nan, 0.0], dtype=jnp.float64)
+        return arr
+
+    def directions(_residual):
+        return (
+            ("bad_shape", jnp.asarray([1.0], dtype=jnp.float64)),
+            ("bad_action", jnp.asarray([0.0, 7.0], dtype=jnp.float64)),
+            ("good", jnp.asarray([1.0, 0.0], dtype=jnp.float64)),
+        )
+
+    def raise_lstsq(*_args, **_kwargs):
+        raise np.linalg.LinAlgError("force pseudo-inverse fallback")
+
+    monkeypatch.setattr(np.linalg, "lstsq", raise_lstsq)
+
+    x, residual, history, counts, names = apply_subspace_minres_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=jnp.zeros((2,), dtype=jnp.float64),
+        direction_builder=directions,
+        steps=1,
+        max_directions=4,
+        alpha_clip=0.5,
+    )
+
+    np.testing.assert_allclose(np.asarray(x), np.asarray([0.5, 0.0]))
+    np.testing.assert_allclose(np.asarray(residual), np.asarray([1.5, 0.0]))
+    assert history == (2.0, 1.5)
+    assert counts == (1,)
+    assert names == ("good",)
+
+
+def test_device_subspace_residual_equation_filters_invalid_basis_and_clips() -> None:
+    rhs = jnp.asarray([2.0, 0.0], dtype=jnp.float64)
+
+    def matvec(v):
+        arr = jnp.asarray(v, dtype=jnp.float64).reshape((-1,))
+        if int(arr.size) == 2 and float(arr[1]) > 0.5:
+            return jnp.asarray([1.0], dtype=jnp.float64)
+        return arr
+
+    def directions(_residual):
+        return (
+            ("bad_shape", jnp.asarray([1.0], dtype=jnp.float64)),
+            ("bad_action", jnp.asarray([0.0, 7.0], dtype=jnp.float64)),
+            ("good", jnp.asarray([1.0, 0.0], dtype=jnp.float64)),
+            ("not_reached", jnp.asarray([0.0, 1.0], dtype=jnp.float64)),
+        )
+
+    x, residual, history, counts, names = apply_device_subspace_residual_equation_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=jnp.zeros((2,), dtype=jnp.float64),
+        direction_builder=directions,
+        steps=1,
+        max_directions=1,
+        cached_basis=jnp.ones((1, 1), dtype=jnp.float64),
+        cached_operator_on_basis=jnp.ones((1, 1), dtype=jnp.float64),
+        alpha_clip=0.25,
+    )
+
+    np.testing.assert_allclose(np.asarray(x), np.asarray([0.25, 0.0]))
+    np.testing.assert_allclose(np.asarray(residual), np.asarray([1.75, 0.0]))
+    assert history == (2.0, 1.75)
+    assert counts == (1,)
+    assert names == ("good",)
+
+
+def test_device_subspace_residual_equation_noops_without_basis() -> None:
+    rhs = jnp.asarray([1.0, -1.0], dtype=jnp.float64)
+
+    x, residual, history, counts, names = apply_device_subspace_residual_equation_correction(
+        matvec=lambda v: jnp.asarray(v, dtype=jnp.float64),
+        rhs=rhs,
+        x0=jnp.zeros((2,), dtype=jnp.float64),
+        direction_builder=None,
+        steps=2,
+        max_directions=3,
+    )
+
+    np.testing.assert_allclose(np.asarray(x), np.zeros((2,)))
+    np.testing.assert_allclose(np.asarray(residual), np.asarray(rhs))
+    assert history == (pytest.approx(float(jnp.linalg.norm(rhs))),)
+    assert counts == ()
+    assert names == ()
+
+
+def _post_coarse_direction_op() -> SimpleNamespace:
+    n_species = 1
+    n_x = 3
+    n_xi = 2
+    n_theta = 3
+    n_zeta = 2
+    f_shape = (n_species, n_x, n_xi, n_theta, n_zeta)
+    f_size = int(np.prod(f_shape))
+    phi1_size = 2
+    extra_size = 3
+    return SimpleNamespace(
+        total_size=f_size + phi1_size + extra_size,
+        f_size=f_size,
+        phi1_size=phi1_size,
+        extra_size=extra_size,
+        fblock=SimpleNamespace(f_shape=f_shape),
+        theta_weights=jnp.ones((n_theta,), dtype=jnp.float64),
+        zeta_weights=jnp.ones((n_zeta,), dtype=jnp.float64),
+        d_hat=jnp.asarray(float(n_theta * n_zeta), dtype=jnp.float64),
+        n_xi=n_xi,
+        n_theta=n_theta,
+        n_zeta=n_zeta,
+        n_species=n_species,
+        constraint_scheme=1,
+        point_at_x0=True,
+        x=jnp.linspace(0.0, 1.0, n_x, dtype=jnp.float64),
+    )
+
+
+def test_xblock_post_coarse_directions_filter_projected_wrong_size() -> None:
+    op = _post_coarse_direction_op()
+    residual = jnp.arange(int(op.total_size), dtype=jnp.float64) + 1.0
+
+    directions = build_rhs1_xblock_post_coarse_directions(
+        op=op,
+        residual=residual,
+        preconditioner=lambda _r: (_ for _ in ()).throw(RuntimeError("probe failed")),
+        direction_projector=lambda v: jnp.concatenate(
+            [jnp.asarray(v, dtype=jnp.float64), jnp.asarray([0.0], dtype=jnp.float64)]
+        ),
+        expected_size=int(op.total_size),
+        include_raw=True,
+        fsavg_lmax=0,
+        max_extra_units=2,
+        max_directions=8,
+    )
+
+    assert directions == ()
+
+
+def test_xblock_post_coarse_directions_include_constraint_and_extra_modes() -> None:
+    op = _post_coarse_direction_op()
+    residual = jnp.arange(int(op.total_size), dtype=jnp.float64) + 1.0
+
+    directions = build_rhs1_xblock_post_coarse_directions(
+        op=op,
+        residual=residual,
+        preconditioner=lambda r: r,
+        include_raw=True,
+        fsavg_lmax=0,
+        max_extra_units=4,
+        max_directions=12,
+    )
+
+    names = tuple(name for name, _direction in directions)
+    assert names[:2] == ("preconditioned_residual", "raw_residual")
+    assert "extra_residual" in names
+    assert "extra_unit_0" in names
+    assert any(name.startswith("constraint1_source_s0_") for name in names)
+
+    capped = build_rhs1_xblock_post_coarse_directions(
+        op=op,
+        residual=residual,
+        preconditioner=lambda r: r,
+        include_raw=True,
+        fsavg_lmax=0,
+        max_extra_units=4,
+        max_directions=1,
+    )
+    assert tuple(name for name, _direction in capped) == ("preconditioned_residual",)
 
 
 def test_apply_damped_preconditioned_residual_polish_backtracks_to_improvement() -> None:
@@ -261,6 +511,25 @@ def test_recompute_true_residual_result_keeps_incumbent_on_nonfinite_true_norm()
     assert residual_norm == 7.0
 
 
+def test_recompute_true_residual_result_keeps_incumbent_on_matvec_error() -> None:
+    result = GMRESSolveResult(
+        x=jnp.asarray([1.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(7.0, dtype=jnp.float64),
+    )
+
+    updated, residual_vec, residual_norm = recompute_true_residual_result(
+        result=result,
+        rhs=jnp.asarray([0.0], dtype=jnp.float64),
+        matvec=lambda _x: (_ for _ in ()).throw(RuntimeError("operator failed")),
+        residual_vec=None,
+        update_residual_vec=True,
+    )
+
+    assert updated is result
+    assert residual_vec is None
+    assert residual_norm == 7.0
+
+
 def test_replay_left_preconditioned_residual_norms_noops_without_left_preconditioner() -> None:
     result = GMRESSolveResult(
         x=jnp.asarray([1.0], dtype=jnp.float64),
@@ -347,6 +616,27 @@ def test_replay_left_preconditioned_residual_norms_preserves_current_check_when_
     assert check_norm == 7.0
 
 
+def test_replay_left_preconditioned_residual_norms_fails_closed_on_operator_error() -> None:
+    result = GMRESSolveResult(
+        x=jnp.asarray([1.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(7.0, dtype=jnp.float64),
+    )
+
+    residual_vec, true_norm, check_norm = replay_left_preconditioned_residual_norms(
+        result=result,
+        rhs=jnp.asarray([0.0], dtype=jnp.float64),
+        matvec=lambda _x: (_ for _ in ()).throw(RuntimeError("operator failed")),
+        residual_vec=None,
+        preconditioner=lambda r: r,
+        precondition_side="left",
+        update_residual_vec=True,
+    )
+
+    assert residual_vec is None
+    assert true_norm == 7.0
+    assert check_norm == 7.0
+
+
 def _tiny_fp_op() -> SimpleNamespace:
     return SimpleNamespace(
         rhs_mode=1,
@@ -377,7 +667,9 @@ def _fp_post_solve_context(
     global_controls=None,
     bicgstab_controls=None,
     targeted=True,
+    build_collision=None,
     build_lmax=None,
+    pitch_mode_active_indices=None,
     solve_linear=None,
     emit=None,
 ) -> RHS1FPPostSolvePolishContext:
@@ -445,11 +737,19 @@ def _fp_post_solve_context(
             atol=0.0,
         ),
         targeted_polish_allowed=lambda **_kwargs: bool(targeted),
-        build_collision_preconditioner=_raise_collision,
+        build_collision_preconditioner=build_collision or _raise_collision,
         build_lmax_preconditioner=build_lmax or _raise_lmax,
-        pitch_mode_active_indices=lambda **kwargs: np.asarray(
-            [idx for idx in range(int(kwargs["l_min"]), int(kwargs["l_max"]) + 1)],
-            dtype=np.int32,
+        pitch_mode_active_indices=pitch_mode_active_indices
+        or (
+            lambda **kwargs: np.asarray(
+                [
+                    idx
+                    for idx in range(
+                        int(kwargs["l_min"]), int(kwargs["l_max"]) + 1
+                    )
+                ],
+                dtype=np.int32,
+            )
         ),
         solve_linear=solve_linear or _raise_solve,
         emit=emit,
@@ -504,6 +804,39 @@ def test_rhs1_fp_post_solve_polish_accepts_damped_residual_correction() -> None:
     assert polished is not result
     assert float(polished.residual_norm) < float(result.residual_norm)
     assert any("FP polish improved residual" in message for message in messages)
+
+
+def test_rhs1_fp_post_solve_polish_hybrid_uses_collision_residual_correction() -> None:
+    result = GMRESSolveResult(
+        x=jnp.zeros(1, dtype=jnp.float64),
+        residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+    )
+
+    def build_collision(**_kwargs):
+        return lambda r: 0.5 * r
+
+    polished = run_rhs1_fp_post_solve_polish(
+        _fp_post_solve_context(
+            result=result,
+            rhs=jnp.asarray([2.0], dtype=jnp.float64),
+            matvec=lambda x: x,
+            preconditioner=lambda r: jnp.zeros_like(r),
+            target=1.0e-12,
+            residual_controls=SimpleNamespace(
+                min_size=1,
+                steps=1,
+                hybrid=True,
+                omega=1.0,
+                backtrack=0,
+            ),
+            targeted=False,
+            build_collision=build_collision,
+        )
+    )
+
+    assert polished is not result
+    assert polished.x.tolist() == pytest.approx([1.0])
+    assert float(polished.residual_norm) == pytest.approx(1.0)
 
 
 def test_rhs1_fp_post_solve_polish_accepts_projected_l1_correction() -> None:
@@ -585,6 +918,73 @@ def test_rhs1_fp_post_solve_polish_accepts_low_l_block_result() -> None:
     assert float(polished.residual_norm) == pytest.approx(1.0)
 
 
+def test_rhs1_fp_post_solve_polish_reports_low_l_builder_failure() -> None:
+    messages: list[str] = []
+    result = GMRESSolveResult(
+        x=jnp.zeros(3, dtype=jnp.float64),
+        residual_norm=jnp.asarray(4.0, dtype=jnp.float64),
+    )
+
+    def build_lmax(**_kwargs):
+        raise RuntimeError("factor setup failed")
+
+    polished = run_rhs1_fp_post_solve_polish(
+        _fp_post_solve_context(
+            result=result,
+            rhs=jnp.ones(3, dtype=jnp.float64),
+            matvec=lambda x: x,
+            preconditioner=lambda r: r,
+            target=1.0e-12,
+            low_l_controls=SimpleNamespace(
+                lmax_default=2,
+                block_max=10,
+                restart=6,
+                maxiter=7,
+            ),
+            build_lmax=build_lmax,
+            emit=lambda _level, message: messages.append(message),
+        )
+    )
+
+    assert polished is result
+    assert any("FP low-L polish failed" in message for message in messages)
+
+
+def test_rhs1_fp_post_solve_polish_reports_l1_failure() -> None:
+    messages: list[str] = []
+    result = GMRESSolveResult(
+        x=jnp.zeros(3, dtype=jnp.float64),
+        residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+    )
+
+    def solve_linear(**_kwargs):
+        raise RuntimeError("projected solve failed")
+
+    polished = run_rhs1_fp_post_solve_polish(
+        _fp_post_solve_context(
+            result=result,
+            rhs=jnp.asarray([0.0, 2.0, 0.0], dtype=jnp.float64),
+            matvec=lambda x: x,
+            preconditioner=lambda r: r,
+            target=1.0e-12,
+            l1_controls=SimpleNamespace(
+                enabled=True,
+                restart=5,
+                maxiter=5,
+                ratio=1.0,
+                abs_threshold=0.0,
+                tol=1.0e-10,
+                full_accept_ratio=1.2,
+            ),
+            solve_linear=solve_linear,
+            emit=lambda _level, message: messages.append(message),
+        )
+    )
+
+    assert polished is result
+    assert any("FP L1 polish failed" in message for message in messages)
+
+
 def test_rhs1_fp_post_solve_polish_accepts_global_low_l_projected_result() -> None:
     result = GMRESSolveResult(
         x=jnp.zeros(3, dtype=jnp.float64),
@@ -626,8 +1026,81 @@ def test_rhs1_fp_post_solve_polish_accepts_global_low_l_projected_result() -> No
     assert float(polished.residual_norm) == pytest.approx(0.0)
 
 
+def test_rhs1_fp_post_solve_polish_global_low_l_noops_without_active_modes() -> None:
+    result = GMRESSolveResult(
+        x=jnp.zeros(3, dtype=jnp.float64),
+        residual_norm=jnp.asarray(math.sqrt(5.0), dtype=jnp.float64),
+    )
+
+    polished = run_rhs1_fp_post_solve_polish(
+        _fp_post_solve_context(
+            result=result,
+            rhs=jnp.asarray([1.0, 2.0, 0.0], dtype=jnp.float64),
+            matvec=lambda x: x,
+            preconditioner=lambda r: r,
+            target=1.0e-12,
+            global_controls=SimpleNamespace(
+                enabled=True,
+                lmax=1,
+                max_size=3,
+                ratio=1.0,
+                restart=8,
+                maxiter=9,
+                abs_threshold=0.0,
+                full_accept_ratio=1.2,
+                tol=1.0e-10,
+                threshold_ratio=1.0,
+            ),
+            pitch_mode_active_indices=lambda **_kwargs: np.asarray(
+                [], dtype=np.int32
+            ),
+        )
+    )
+
+    assert polished is result
+
+
+def test_rhs1_fp_post_solve_polish_reports_global_low_l_failure() -> None:
+    messages: list[str] = []
+    result = GMRESSolveResult(
+        x=jnp.zeros(3, dtype=jnp.float64),
+        residual_norm=jnp.asarray(math.sqrt(5.0), dtype=jnp.float64),
+    )
+
+    def solve_linear(**_kwargs):
+        raise RuntimeError("global projected solve failed")
+
+    polished = run_rhs1_fp_post_solve_polish(
+        _fp_post_solve_context(
+            result=result,
+            rhs=jnp.asarray([1.0, 2.0, 0.0], dtype=jnp.float64),
+            matvec=lambda x: x,
+            preconditioner=lambda r: r,
+            target=1.0e-12,
+            global_controls=SimpleNamespace(
+                enabled=True,
+                lmax=1,
+                max_size=3,
+                ratio=1.0,
+                restart=8,
+                maxiter=9,
+                abs_threshold=0.0,
+                full_accept_ratio=1.2,
+                tol=1.0e-10,
+                threshold_ratio=1.0,
+            ),
+            solve_linear=solve_linear,
+            emit=lambda _level, message: messages.append(message),
+        )
+    )
+
+    assert polished is result
+    assert any("FP global low-L polish failed" in message for message in messages)
+
+
 def test_rhs1_fp_post_solve_polish_can_run_bicgstab_after_global_gate() -> None:
     calls: list[str] = []
+    messages: list[str] = []
     result = GMRESSolveResult(
         x=jnp.zeros(3, dtype=jnp.float64),
         residual_norm=jnp.asarray(10.0, dtype=jnp.float64),
@@ -667,9 +1140,12 @@ def test_rhs1_fp_post_solve_polish_can_run_bicgstab_after_global_gate() -> None:
                 atol=0.0,
             ),
             solve_linear=solve_linear,
+            emit=lambda _level, message: messages.append(message),
         )
     )
 
     assert calls == ["bicgstab"]
     assert polished is not result
     assert float(polished.residual_norm) == pytest.approx(1.0)
+    assert any("FP BiCGStab polish" in message for message in messages)
+    assert any("FP BiCGStab polish improved residual" in message for message in messages)
