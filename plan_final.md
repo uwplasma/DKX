@@ -1860,6 +1860,15 @@ Completed work:
   Ruff, `compileall`, and `git diff --check` passed. Direct coverage for
   `sfincs_jax/problems/profile_preconditioner_build.py` improved from `58%`
   to `97%`, while source statements dropped from `977` to `957`.
+- Tranche 122: expanded sparse-direct coverage without production solves. Added
+  tiny LSQR minimum-norm and host-direct residual-fallback tests, polish-disabled
+  and factor-guard tests, forced host-direct factor-control tests, sparse-direct
+  wrapper injection tests, explicit sparse-pattern probes, sparse cache-key
+  extension tests, and sparse-JAX cache/reuse tests. Validation:
+  `tests/test_profile_response_sparse_pc.py` passed `347/347` in `5.57 s`;
+  sparse-PC plus source/import guards passed `400/400`; Ruff, `compileall`,
+  and `git diff --check` passed. Direct coverage for
+  `sfincs_jax/problems/profile_sparse_direct.py` improved from `90%` to `95%`.
 
 Remaining consolidation steps:
 
@@ -1899,10 +1908,10 @@ is `86%` after Tranche 117; `transport_linear_system.py` reaches `71%` in the
 combined focused transport bundle after Tranche 118; `explicit_sparse.py` is
 `88%` after Tranche 119; `profile_policies.py` reaches `91%` in the broad
 RHSMode-1 policy bundle after Tranche 120; `profile_preconditioner_build.py`
-is `97%` after Tranche 121. The final target is still 95%; the next coverage
-tranches should prioritize `profile_sparse_direct.py` and
-`profile_sparse_solve.py` with bounded behavior tests rather than slow full
-solves.
+is `97%` after Tranche 121; `profile_sparse_direct.py` is `95%` after
+Tranche 122. The final target is still 95%; the next coverage tranche should
+prioritize `profile_sparse_solve.py` with bounded behavior tests rather than
+slow full solves.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 

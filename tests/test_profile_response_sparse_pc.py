@@ -1125,6 +1125,233 @@ def test_sparse_pc_direct_tail_rescue_policy_setup_defaults_without_support_pref
     assert "direct_tail_residual_coarse_requested" in result.rescue_values
 
 
+def test_sparse_minimum_norm_lsqr_and_host_direct_residual_fallback() -> None:
+    matrix = scipy_sparse.eye(2, format="csr")
+    rhs = jnp.asarray([1.0, -2.0], dtype=jnp.float64)
+    policy = SparseMinimumNormPolicy(
+        solver_name="lsqr",
+        atol=1.0e-12,
+        btol=1.0e-12,
+        conlim=1.0e8,
+        damp=0.0,
+        maxiter=20,
+        show=False,
+        petsc_compat_requested=True,
+    )
+
+    payload = sparse_minimum_norm_solve_payload(
+        matrix=matrix,
+        rhs=rhs,
+        policy=policy,
+        atol=1.0e-12,
+        tol=1.0e-12,
+        rhs_norm=float(np.linalg.norm(np.asarray(rhs))),
+        elapsed_s=lambda: 0.25,
+    )
+
+    np.testing.assert_allclose(np.asarray(payload.x), np.asarray(rhs), rtol=1.0e-10)
+    assert payload.metadata["solver_kind"] == "sparse_lsmr"
+    assert payload.metadata["petsc_compat_requested"] is True
+    assert "solver=lsqr" in payload.start_message
+
+    direct_payload = sparse_host_direct_solve_payload(
+        factor_solve=lambda vec: np.asarray(vec, dtype=np.float64),
+        operator_matrix=matrix,
+        rhs=rhs,
+        factor_dtype=np.dtype(np.float64),
+        refine_steps=0,
+        matvec=lambda _vec: (_ for _ in ()).throw(RuntimeError("matvec failed")),
+        atol=1.0e-12,
+        tol=1.0e-12,
+        rhs_norm=1.0,
+        elapsed_s=lambda: 0.1,
+        direct_solve_with_refinement=lambda **_kwargs: (np.asarray(rhs), 7.0),
+    )
+
+    assert float(direct_payload.residual_norm) == pytest.approx(7.0)
+    assert not direct_payload.metadata["accepted_converged"]
+
+
+def test_sparse_host_direct_polish_disabled_and_factor_guard_errors() -> None:
+    polish = apply_sparse_host_direct_polish_if_needed(
+        x=np.asarray([1.0, 0.0], dtype=np.float64),
+        residual_norm=10.0,
+        factor_dtype=np.dtype(np.float32),
+        target=1.0,
+        matvec=lambda vec: jnp.asarray(vec, dtype=jnp.float64),
+        rhs=jnp.asarray([1.0, 0.0], dtype=jnp.float64),
+        ilu=object(),
+        tol=1.0e-9,
+        atol=1.0e-12,
+        restart=40,
+        maxiter=80,
+        precondition_side="left",
+        emit=None,
+        polish_enabled=lambda **_kwargs: False,
+        parse_polish_gmres_config=lambda **_kwargs: (10, 20),
+        host_sparse_direct_polish=lambda **_kwargs: (np.zeros(2), 0.0),
+    )
+    assert not polish.attempted
+    assert not polish.accepted
+    assert float(polish.residual_norm) == pytest.approx(10.0)
+
+    base_kwargs = dict(
+        matvec=lambda vec: vec,
+        n=2,
+        dtype=jnp.float64,
+        cache_key=("case",),
+        factor_dtype=np.dtype(np.float64),
+        drop_tol=0.0,
+        drop_rel=0.0,
+        ilu_drop_tol=0.0,
+        fill_factor=1.0,
+        build_dense_factors=False,
+        build_jax_factors=False,
+        store_dense=False,
+        factorization="lu",
+        emit=None,
+    )
+    with pytest.raises(ValueError, match="explicit sparse host factor"):
+        build_sparse_host_or_ilu_factor(
+            SparseHostOrILUFactorBuildContext(
+                **base_kwargs,
+                host_sparse_direct_wanted=True,
+                explicit_sparse_allowed=True,
+            )
+        )
+    with pytest.raises(ValueError, match="ILU factor"):
+        build_sparse_host_or_ilu_factor(
+            SparseHostOrILUFactorBuildContext(
+                **base_kwargs,
+                host_sparse_direct_wanted=False,
+                explicit_sparse_allowed=False,
+            )
+        )
+
+
+def test_sparse_factor_controls_force_host_direct_and_cache_dtype() -> None:
+    calls: list[dict[str, object]] = []
+
+    controls = resolve_sparse_host_or_ilu_factor_controls(
+        n=9,
+        cache_key=("base",),
+        sparse_exact_lu=True,
+        use_implicit=False,
+        force_host_sparse_direct=True,
+        sparse_ilu_dense_max=4,
+        sparse_dense_cache_max=16,
+        host_sparse_direct_wanted=False,
+        host_sparse_direct_allowed=lambda **_kwargs: False,
+        host_sparse_factor_dtype=lambda **kwargs: calls.append(kwargs) or np.dtype(np.float32),
+        sparse_factor_cache_key=lambda cache_key, factor_dtype: (
+            *cache_key,
+            np.dtype(factor_dtype).str,
+        ),
+        explicit_sparse_host_direct_allowed=lambda **_kwargs: True,
+    )
+
+    assert controls.host_sparse_direct_wanted
+    assert controls.factor_dtype == np.dtype(np.float32)
+    assert controls.cache_key_use == ("base", "<f4")
+    assert controls.explicit_sparse_allowed
+    assert not controls.build_dense_factors
+    assert controls.store_dense
+    assert calls == [{"size": 9, "factorization": "lu", "use_implicit": False}]
+
+
+def test_sparse_direct_wrapper_pattern_cache_and_sparse_jax(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_build_host_sparse_direct_factor_from_matvec_impl(**kwargs):
+        seen.update(kwargs)
+        return "operator", "factor"
+
+    monkeypatch.setattr(
+        sparse_direct_module,
+        "_build_host_sparse_direct_factor_from_matvec_impl",
+        fake_build_host_sparse_direct_factor_from_matvec_impl,
+    )
+    operator, factor = sparse_direct_module.build_host_sparse_direct_factor_from_matvec(
+        matvec=lambda vec: vec,
+        n=2,
+        dtype=jnp.float64,
+        factor_dtype=np.dtype(np.float64),
+        pattern=None,
+        emit=None,
+    )
+    assert (operator, factor) == ("operator", "factor")
+    assert seen["default_backend_callback"] is sparse_direct_module.jax.default_backend
+
+    emits: list[tuple[int, str]] = []
+    monkeypatch.setattr(
+        sparse_direct_module,
+        "v3_full_system_conservative_sparsity_pattern",
+        lambda op: "pattern",
+    )
+    monkeypatch.setattr(
+        sparse_direct_module,
+        "summarize_v3_sparse_pattern",
+        lambda _op, _pattern: SimpleNamespace(shape=(2, 2), nnz=3, avg_row_nnz=1.5, max_row_nnz=2),
+    )
+    pattern = sparse_direct_module.maybe_rhsmode1_full_sparse_pattern(
+        op=object(),
+        emit=lambda level, message: emits.append((level, message)),
+        env={"SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_PATTERN": "pattern"},
+    )
+    assert pattern == "pattern"
+    assert "avg_row_nnz=1.5" in emits[0][1]
+
+    monkeypatch.setattr(
+        sparse_direct_module,
+        "_rhsmode1_precond_cache_key",
+        lambda _op, kind: ("operator-key", kind),
+    )
+    cache_key = sparse_direct_module.rhsmode1_sparse_cache_key(
+        SimpleNamespace(total_size=2, rhs_mode=1),
+        kind="jacobi",
+        active_size=2,
+        use_active_dof_mode=True,
+        use_pas_projection=False,
+        drop_tol=1.0e-4,
+        drop_rel=1.0e-3,
+        ilu_drop_tol=1.0e-2,
+        fill_factor=3.0,
+    )
+    assert cache_key[-5:] == (1, 0, 1.0e-4, 1.0e-3, 1.0e-2, 3.0)[-5:]
+
+    sparse_direct_module._RHSMODE1_SPARSE_JAX_CACHE.clear()
+    sparse_emits: list[str] = []
+    preconditioner = sparse_direct_module.build_sparse_jax_preconditioner_from_matvec(
+        matvec=lambda vec: jnp.asarray(vec, dtype=jnp.float64),
+        n=2,
+        dtype=jnp.float64,
+        cache_key=("sparse-jax",),
+        drop_tol=0.0,
+        drop_rel=0.0,
+        reg=1.0,
+        omega=0.5,
+        sweeps=2,
+        emit=lambda _level, message: sparse_emits.append(message),
+    )
+    result = preconditioner(jnp.asarray([2.0, 0.0], dtype=jnp.float64))
+    assert np.all(np.isfinite(np.asarray(result)))
+    assert any("assembling dense operator" in message for message in sparse_emits)
+
+    cached = sparse_direct_module.build_sparse_jax_preconditioner_from_matvec(
+        matvec=lambda vec: jnp.asarray(vec, dtype=jnp.float64),
+        n=2,
+        dtype=jnp.float64,
+        cache_key=("sparse-jax",),
+        drop_tol=1.0,
+        drop_rel=1.0,
+        reg=9.0,
+        omega=9.0,
+        sweeps=9,
+        emit=lambda _level, message: sparse_emits.append(message),
+    )
+    np.testing.assert_allclose(np.asarray(cached(jnp.asarray([2.0, 0.0]))), np.asarray(result))
+
+
 def test_solve_fortran_reduced_xblock_backend_rejects_non_full_fp_pc() -> None:
     values = {
         dataclass_field.name: None
