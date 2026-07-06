@@ -3667,6 +3667,65 @@ Status:
   `profile_true_operator_rescue.py`, `transport_solve.py`,
   `transport_linear_system.py`, and the larger preconditioner owners.
 
+## Latest Execution Log: True-Operator Residual Rescue Edges
+
+What changed:
+
+- Added direct tests for the RHSMode=1 true-operator residual-window rescue
+  helpers: empty-window fallback, malformed one-hot cache inputs, sparse-graph
+  edge cases, duplicate/empty explicit window specs, and setup-time size/budget
+  rejection messages.
+- Revalidated the README-facing Fortran/JAX runtime and memory plot pipeline
+  from the tracked CPU/GPU suite reports. The benchmark JSON passed the release
+  artifact policy, the figure regenerated cleanly, and the README audit block
+  regenerated with no tracked artifact churn.
+
+Validation:
+
+- `python -m pytest -q tests/test_rhs1_true_operator_rescue.py
+  tests/test_rhs1_sparse_rescue_policy.py
+  tests/test_profile_response_sparse_pc.py::test_direct_tail_structured_build_uses_direct_reduced_pmat_builder
+  tests/test_profile_response_sparse_pc.py::test_direct_tail_structured_admission_allows_direct_reduced_pmat_without_bundle
+  tests/test_profile_response_diagnostics.py::test_sparse_pc_direct_tail_result_metadata_preserves_driver_conversions`
+  passed as `47 passed in 0.48 s`.
+- `python -m pytest -q tests/test_generate_fortran_suite_benchmark_summary.py
+  tests/test_benchmark_doc_claims.py tests/test_source_tree_consolidation.py
+  tests/test_examples_tree_contract.py` passed as `64 passed in 6.15 s`.
+- `python scripts/check_benchmark_artifacts.py
+  examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json`
+  passed.
+- `python -m ruff check sfincs_jax tests`, `python -m compileall -q
+  sfincs_jax tests`, and `git diff --check` passed.
+- The full local coverage audit completed and wrote
+  `/tmp/sfincs_jax_coverage_after_true_rescue_edges.json`; pytest's
+  `lastfailed` cache was empty after the run.
+
+Coverage movement:
+
+- `sfincs_jax/operators/profile_true_operator_rescue.py` improved from `247`
+  missing lines to `228` missing lines.
+- Total package missing lines improved from `6619` to `6601`.
+- Total package coverage improved from `90.422%` to `90.448%`.
+
+Benchmark/parity status from the regenerated public artifact:
+
+- Source suite rows remain `39` CPU and `39` GPU.
+- README-facing rows remain `24` CPU and `24` GPU after the `10 s` minimum
+  SFINCS Fortran v3 reference-runtime filter.
+- Public rows are all `parity_ok`, with zero practical and zero strict common
+  output mismatches.
+
+Status:
+
+- The two-branch concern is resolved: `origin/main` is an ancestor of
+  `refactor/v3-driver-architecture`, and PR #8 is the single review branch.
+- The local plot/table regeneration path is reproducible from the tracked
+  suite reports, but a genuinely fresh CPU/GPU/Fortran production rerun remains
+  an expensive compute gate before replacing the frozen reports.
+- The refactor branch remains not complete: the 95% meaningful coverage target,
+  fresh production CPU/GPU benchmark regeneration, and final PR review cleanup
+  are still open.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
