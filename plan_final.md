@@ -2457,6 +2457,29 @@ Validation:
   keys, and no missing JAX keys.
 - The full local suite passed as `4329 passed in 659.65 s`.
 
+### Tranche 134: examples workflow catalog
+
+Scope:
+
+- Added `examples/workflow_catalog.json` as a machine-readable navigation map
+  for the example tree. The catalog records supported topic folders, first-pass
+  entry points, typical commands, runtime budgets, and whether a workflow needs
+  a local SFINCS Fortran v3 executable.
+- Linked the catalog from `examples/README.md` and `docs/examples.rst` so the
+  human-readable learning path and the checked catalog stay aligned.
+- Extended `tests/test_examples_tree_contract.py` to validate catalog schema,
+  approved folder coverage, entrypoint existence, and the first-run
+  no-local-Fortran contract.
+
+Validation:
+
+- `python -m json.tool examples/workflow_catalog.json` passed.
+- `pytest -q tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `16 passed in 0.16 s`.
+- `ruff check tests/test_examples_tree_contract.py` passed.
+- `python -m compileall -q tests/test_examples_tree_contract.py` passed.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

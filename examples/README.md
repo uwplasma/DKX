@@ -6,6 +6,11 @@ already know which workflow you need. All first-pass examples avoid a local
 SFINCS Fortran v3 executable. Parity and benchmark scripts use frozen
 references or optional local Fortran only when explicitly requested.
 
+The machine-readable navigation map lives in `workflow_catalog.json`. It lists
+the supported topic folders, first-pass entry points, typical commands, runtime
+budgets, and whether a workflow needs a local SFINCS Fortran v3 executable.
+Tests keep this catalog synchronized with this README and the documentation.
+
 ### One-Command Starts
 
 Use these entries when you want a concrete command before reading the topic

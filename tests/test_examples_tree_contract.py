@@ -9,6 +9,7 @@ import subprocess
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_ROOT = REPO_ROOT / "examples"
 DOCS_EXAMPLES = REPO_ROOT / "docs" / "examples.rst"
+WORKFLOW_CATALOG = EXAMPLES_ROOT / "workflow_catalog.json"
 
 ALLOWED_EXAMPLE_FOLDERS = {
     "autodiff",
@@ -91,6 +92,11 @@ ONE_COMMAND_ENTRYPOINTS = {
     "performance/benchmark_output_formats.py",
     "parity/output_parity_vs_fortran_fixture.py",
 }
+CATALOG_ENTRYPOINTS = ONE_COMMAND_ENTRYPOINTS | {
+    "optimization/qa_nfp2_sfincs_jax_objectives.py",
+    "autodiff/vmec_jax_to_boozer_sfincs_pipeline.py",
+    "publication_figures/generate_fortran_suite_benchmark_summary.py",
+}
 
 ONE_COMMAND_LABELS = {
     "Write output files and a diagnostics panel",
@@ -171,6 +177,10 @@ def _tracked_example_files() -> list[Path]:
     return [REPO_ROOT / line for line in result.stdout.splitlines() if line]
 
 
+def _workflow_catalog() -> dict:
+    return json.loads(WORKFLOW_CATALOG.read_text(encoding="utf-8"))
+
+
 def test_examples_top_level_folders_are_intentional() -> None:
     folders = {
         path.name
@@ -179,6 +189,31 @@ def test_examples_top_level_folders_are_intentional() -> None:
     }
 
     assert folders == ALLOWED_EXAMPLE_FOLDERS
+
+
+def test_workflow_catalog_is_complete_and_first_run_safe() -> None:
+    catalog = _workflow_catalog()
+
+    assert catalog["schema_version"] == 1
+    assert set(catalog["folders"]) == ALLOWED_EXAMPLE_FOLDERS
+    assert "workflow_catalog.json" in (EXAMPLES_ROOT / "README.md").read_text(encoding="utf-8")
+    assert "examples/workflow_catalog.json" in DOCS_EXAMPLES.read_text(encoding="utf-8")
+
+    for folder, metadata in sorted(catalog["folders"].items()):
+        assert metadata["role"]
+        start_path = EXAMPLES_ROOT / metadata["start_here"]
+        assert start_path.exists(), f"{folder}: {metadata['start_here']}"
+        assert metadata["start_here"].split("/", 1)[0] == folder
+
+    workflows = catalog["workflows"]
+    assert {workflow["entrypoint"] for workflow in workflows} == CATALOG_ENTRYPOINTS
+    for workflow in workflows:
+        assert workflow["id"]
+        assert workflow["goal"]
+        assert workflow["command"].startswith("python examples/")
+        assert workflow["runtime_budget"]
+        assert workflow["requires_fortran_v3"] is False
+        assert (EXAMPLES_ROOT / workflow["entrypoint"]).is_file(), workflow["entrypoint"]
 
 
 def test_examples_readme_is_a_complete_user_navigation_map() -> None:
