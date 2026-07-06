@@ -236,6 +236,10 @@ The main structural refactor is functionally complete:
   `outputs/writer.py` is down to `2251` lines and
   `write_sfincs_jax_output_h5` is down to `1426` lines. Focused output/source
   validation passed as `202 passed in 7.54 s`.
+- `tests/test_source_tree_consolidation.py` guards the output-writer review
+  budget so `outputs/writer.py` stays below `2300` lines and
+  `write_sfincs_jax_output_h5` stays below `1500` lines unless the
+  source-tree contract is intentionally updated.
 - Transport runtime, profile setup, sparse-direct, and diagnostics coverage now
   includes direct tests for worker-count validation, GPU subprocess policy
   injection, persistent-pool helpers, solve-method normalization, explicit
@@ -5490,6 +5494,13 @@ Validation:
   passed as `202 passed in 7.54 s`.
 - `PYTHONNOUSERSITE=1 python -m pytest -q
   tests/test_io_output_policy_coverage.py` passed as `99 passed in 2.23 s`.
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py`
+  passed as `57 passed in 4.83 s` after adding the writer-size guard.
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_io_output_policy_coverage.py tests/test_source_tree_consolidation.py
+  tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py
+  tests/test_benchmark_doc_claims.py` passed as `173 passed in 7.79 s`.
 - `PYTHONNOUSERSITE=1 python -m ruff check
   sfincs_jax/outputs/writer.py sfincs_jax/outputs/rhsmode1.py
   tests/test_io_output_policy_coverage.py tests/test_io_precompile_policy.py
