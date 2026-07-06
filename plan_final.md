@@ -1801,6 +1801,19 @@ Completed work:
   passed `18/18` in `1.74 s`; source-tree plus import-contract focused
   validation passed `71/71`; Ruff, `compileall`, and `git diff --check`
   passed. Direct coverage for `sfincs_jax/validation/fortran.py` is `99%`.
+- Tranche 117: expanded RHSMode=2/3 transport-policy coverage around the
+  production solver-selection decisions without adding new source modules or
+  slow solves. Added deterministic tests for low-memory initial solve policy,
+  active-DOF compaction, dense fallback/preconditioner memory admission,
+  per-RHS loop flags, GMRES polish thresholds, residual-gate arrays,
+  preconditioner alias normalization, domain-decomposition and sparse-JAX
+  environment parsing, FP auto-preconditioner branch priority, preconditioner
+  dispatch fallbacks, sparse-JAX memory guards, and strong-preconditioner cache
+  reuse. Validation: `tests/test_transport_policy_coverage.py` passed `25/25`
+  in `0.60 s`; adjacent source-tree/import/transport-policy validation passed
+  `121/121`; Ruff, `compileall`, and `git diff --check` passed. Direct
+  coverage for `sfincs_jax/problems/transport_policies.py` improved from
+  `70%` to `86%`.
 
 Remaining consolidation steps:
 
@@ -1835,9 +1848,10 @@ closed at `modules_with_missing 0`; focused owner coverage is `98%` for
 `validation/figures.py` after Tranche 112 and `validation/qi_device.py` after
 Tranche 113; `validation/artifacts.py` is `95%` after Tranche 114,
 `validation/data_fetch.py` is `100%` after Tranche 115, and
-`validation/fortran.py` is `99%` after Tranche 116. The final target is still
-95%; the next coverage tranches should prioritize large under-covered owners
-with bounded behavior tests rather than slow full solves.
+`validation/fortran.py` is `99%` after Tranche 116; `transport_policies.py`
+is `86%` after Tranche 117. The final target is still 95%; the next coverage
+tranches should prioritize large under-covered owners with bounded behavior
+tests rather than slow full solves.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 
