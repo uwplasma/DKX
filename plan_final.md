@@ -2009,8 +2009,8 @@ Remaining consolidation steps:
 
 ### Lane 2 - Coverage And Future-Proof Tests
 
-Status: 89% CI-measured package coverage on PR #8 commit `3cce604d`
-(`TOTAL 69081 stmts, 7630 miss, 89%`). The direct public contract audit remains
+Status: about `91%` package coverage from the latest full local audit
+(`90.58%`, `69,136` statements, `6,510` missing). The direct public contract audit remains
 closed at `modules_with_missing 0`; focused owner coverage is `98%` for
 `workflows/scans.py` after Tranche 111 and `100%` for
 `validation/figures.py` after Tranche 112 and `validation/qi_device.py` after
@@ -4672,6 +4672,40 @@ Status:
   increasing CI solve cost. Remaining coverage/refactor work should continue to
   target large orchestration/preconditioner owners with bounded synthetic
   contracts rather than adding full production solves to CI.
+
+### 2026-07-06: Transport solve-loop auto-policy tranche
+
+Changes:
+
+- Expanded the tiny RHSMode=2/3 transport loop harness so it can exercise
+  active-DOF reduction/expansion and explicit solver-method selection without
+  production grids.
+- Added a CPU-only active-DOF top-level solve test that verifies reduced RHS
+  shape, full-state expansion through `full_to_active`, recorded active size,
+  and default `auto` solver provenance.
+- Added a CPU-only BiCGStab fallback test that forces the first transport solve
+  to stall, verifies the automatic GMRES retry, and checks the emitted
+  fallback progress message.
+
+Validation:
+
+- `python -m pytest -q tests/test_transport_solve_module_wrappers.py` passed
+  as `10 passed in 0.77 s`.
+- `python -m pytest -q tests/test_transport_solve_module_wrappers.py
+  tests/test_transport_solve_setup.py tests/test_transport_linear_solve.py
+  tests/test_transport_policy_coverage.py tests/test_transport_sparse_direct_solve.py`
+  passed as `87 passed in 8.23 s`.
+- `python -m ruff check tests/test_transport_solve_module_wrappers.py`,
+  `python -m compileall -q tests/test_transport_solve_module_wrappers.py`,
+  and `git diff --check` passed.
+
+Status:
+
+- This strengthens automatic transport solver-selection coverage while staying
+  CPU-local and sub-second for the direct owner suite. The `95%` package
+  coverage lane remains open; the next bounded coverage tranche should target
+  the remaining high-missing profile solve, full-system operator, true-operator
+  rescue, and QI/x-block preconditioner owners.
 
 ## Standard Validation Commands
 

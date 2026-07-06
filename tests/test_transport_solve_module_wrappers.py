@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import jax.numpy as jnp
+import numpy as np
 
 from sfincs_jax.solver import GMRESSolveResult
 import sfincs_jax.problems.transport_solve as transport_solve
@@ -215,11 +216,20 @@ def _install_transport_loop_harness(
     total_size: int = 3,
     which_rhs_values: tuple[int, ...] = (1, 2),
     dense_retry_max: int = 0,
+    solve_method_use: str = "auto",
+    use_active_dof_mode: bool = False,
+    active_indices: tuple[int, ...] | None = None,
     state_out_path: str = "",
 ) -> dict[str, object]:
     """Install a tiny diagonal transport problem for top-level loop tests."""
 
     captured: dict[str, object] = {"solve_calls": [], "messages": []}
+    if active_indices is None:
+        active_indices = tuple(range(int(total_size)))
+    active_idx_np = jnp.asarray(active_indices, dtype=jnp.int32)
+    full_to_active = [0] * int(total_size)
+    for active_position, full_position in enumerate(active_indices, start=1):
+        full_to_active[int(full_position)] = int(active_position)
     op = SimpleNamespace(
         rhs_mode=2,
         total_size=int(total_size),
@@ -323,18 +333,18 @@ def _install_transport_loop_harness(
             low_memory_outputs=False,
             stream_diagnostics=False,
             store_state_vectors=True,
-            solve_method_use="auto",
+            solve_method_use=str(solve_method_use),
             dense_retry_max=int(dense_retry_max),
             dense_mem_block=False,
             dense_use_mixed=False,
             dense_backend_allowed=False,
             gmres_restart=7,
             maxiter=11,
-            use_active_dof_mode=False,
-            active_idx_np=None,
-            active_idx_jnp=None,
-            full_to_active_jnp=None,
-            active_size=int(total_size),
+            use_active_dof_mode=bool(use_active_dof_mode),
+            active_idx_np=np.asarray(active_indices, dtype=np.int32) if use_active_dof_mode else None,
+            active_idx_jnp=active_idx_np if use_active_dof_mode else None,
+            full_to_active_jnp=jnp.asarray(full_to_active, dtype=jnp.int32) if use_active_dof_mode else None,
+            active_size=int(len(active_indices)) if use_active_dof_mode else int(total_size),
             dense_precond_enabled=False,
         ),
     )
@@ -466,3 +476,77 @@ def test_transport_solve_loop_accepts_dense_true_residual_fallback(monkeypatch) 
     assert result.solve_methods_by_rhs == {1: "dense"}
     assert float(result.residual_norms_by_rhs[1]) == 0.0
     assert any("dense fallback" in msg for _level, msg in captured["messages"])
+
+
+def test_transport_solve_loop_uses_active_dof_reduced_path(monkeypatch) -> None:
+    captured = _install_transport_loop_harness(
+        monkeypatch,
+        total_size=4,
+        which_rhs_values=(1,),
+        use_active_dof_mode=True,
+        active_indices=(0, 2),
+    )
+
+    result = transport_solve.solve_v3_transport_matrix_linear_gmres(
+        nml=SimpleNamespace(),
+        tol=1e-8,
+        atol=1e-12,
+        emit=lambda level, message: captured["messages"].append((int(level), str(message))),
+    )
+
+    assert result.use_active_dof_mode is True
+    assert result.active_size == 2
+    assert len(captured["solve_calls"]) == 1
+    call = captured["solve_calls"][0]
+    assert call["b_vec"].shape == (2,)
+    assert call["solve_method_val"] == "auto"
+    assert result.state_vectors_by_rhs[1].shape == (4,)
+    assert result.state_vectors_by_rhs[1].tolist() == [0.5, 0.0, 1.5, 0.0]
+    assert result.solver_kinds_by_rhs == {1: "bicgstab"}
+    assert result.solve_methods_by_rhs == {1: "auto"}
+
+
+def test_transport_solve_loop_falls_back_from_bicgstab_to_gmres(monkeypatch) -> None:
+    captured = _install_transport_loop_harness(
+        monkeypatch,
+        which_rhs_values=(1,),
+        solve_method_use="bicgstab",
+    )
+
+    class BicgstabThenGmresCallbacks:
+        def __init__(self, *, context):
+            captured["linear_context"] = context
+
+        def solve_with_residual(self, **kwargs):
+            captured["solve_calls"].append(kwargs)
+            if kwargs["solve_method_val"] == "bicgstab":
+                return (
+                    GMRESSolveResult(
+                        x=jnp.zeros_like(kwargs["b_vec"]),
+                        residual_norm=jnp.asarray(99.0),
+                    ),
+                    kwargs["b_vec"],
+                )
+            x = 0.5 * kwargs["b_vec"]
+            return GMRESSolveResult(x=x, residual_norm=jnp.asarray(0.0)), jnp.zeros_like(kwargs["b_vec"])
+
+        def solve(self, **kwargs):
+            captured["solve_calls"].append(kwargs)
+            return GMRESSolveResult(
+                x=jnp.zeros_like(kwargs["b_vec"]),
+                residual_norm=jnp.asarray(99.0),
+            )
+
+    monkeypatch.setattr(transport_solve, "TransportLinearSolveCallbacks", BicgstabThenGmresCallbacks)
+
+    result = transport_solve.solve_v3_transport_matrix_linear_gmres(
+        nml=SimpleNamespace(),
+        tol=1e-8,
+        atol=1e-12,
+        emit=lambda level, message: captured["messages"].append((int(level), str(message))),
+    )
+
+    assert [call["solve_method_val"] for call in captured["solve_calls"]] == ["bicgstab", "incremental"]
+    assert result.solver_kinds_by_rhs == {1: "gmres"}
+    assert result.solve_methods_by_rhs == {1: "incremental"}
+    assert any("BiCGStab fallback to GMRES" in msg for _level, msg in captured["messages"])
