@@ -55,6 +55,10 @@ from .rhsmode1 import (
     _rhsmode1_result_residual_and_target,
     _should_fail_nonconverged_rhsmode1_output,
     _solver_metadata_dict,
+    fortran_preamble_lines,
+    format_fortran_i as _fmt_fortran_i,
+    geometry_summary_lines,
+    physics_and_grid_summary_lines,
     select_rhsmode1_solve_method,
     physics_abs_float_from_params as _physics_abs_float_from_params,
     physics_bool_from_params as _physics_bool_from_params,
@@ -62,6 +66,7 @@ from .rhsmode1 import (
     rhs1_dense_cutoffs_from_env as _rhs1_dense_cutoffs_from_env,
     rhs1_radial_electric_drive_abs_from_params as _rhs1_radial_electric_drive_abs_from_params,
     should_precompile_v3_full_system as _should_precompile_v3_full_system,
+    species_result_summary_lines,
     use_dkes_exb_drift_from_params as _use_dkes_exb_drift_from_params,
     write_rhsmode1_classical_fluxes_to_data,
     write_rhsmode1_core_diagnostics_to_data,
@@ -885,22 +890,6 @@ def write_sfincs_jax_output_h5(
         if profiler is not None:
             profiler.mark(label)
 
-    def _fmt_fortran_e(val: float, width: int = 24, prec: int = 16) -> str:
-        s = f"{val:.{prec}E}"
-        if "E" in s:
-            base, exp = s.split("E")
-            sign = "+"
-            exp_num = exp
-            if exp.startswith(("+", "-")):
-                sign = exp[0]
-                exp_num = exp[1:]
-            exp_num = exp_num.zfill(3)
-            s = f"{base}E{sign}{exp_num}"
-        return s.rjust(width)
-
-    def _fmt_fortran_i(val: int, width: int = 12) -> str:
-        return f"{int(val):{width}d}"
-
     input_namelist = Path(input_namelist)
     output_path = Path(output_path)
     output_format = _output_file_format(output_path)
@@ -926,58 +915,22 @@ def write_sfincs_jax_output_h5(
     # Fortran-style preamble (subset) to ease migration from upstream v3.
     # -------------------------------------------------------------------------
     if emit is not None:
-        emit(0, " ****************************************************************************")
-        emit(0, " SFINCS: Stellarator Fokker-Plank Iterative Neoclassical Conservative Solver")
-        emit(0, " Version 3")
-        emit(0, " Using double precision.")
-        emit(0, " Serial job (1 process) detected.")
-        emit(0, " mumps detected")
-        emit(0, " superlu_dist not detected")
-
-        group_order = (
-            "general",
-            "geometryParameters",
-            "speciesParameters",
-            "physicsParameters",
-            "resolutionParameters",
-            "otherNumericalParameters",
-            "preconditionerOptions",
-            "export_f",
-        )
-        for g in group_order:
-            emit(0, f" Successfully read parameters from {g} namelist in {input_namelist.name}.")
+        for line in fortran_preamble_lines(input_name=input_namelist.name):
+            emit(0, line)
 
     grids = grids_from_namelist(nml)
     _mark("grids_from_namelist")
     if emit is not None:
         emit(1, f" timing: grids ready elapsed={format_duration(time.perf_counter() - run_t0)}")
     if emit is not None:
-        rhs_mode = int(nml.group("general").get("RHSMODE", 1))
         res = nml.group("resolutionParameters")
-        phys = nml.group("physicsParameters")
         solver_tol = _get_float(res, "solverTolerance", 1e-6)
-
-        nx = int(grids.x.size)
-        ntheta = int(grids.theta.size)
-        nzeta = int(grids.zeta.size)
-        nxi = int(grids.n_xi)
-        nl = int(grids.n_l)
-
-        if rhs_mode != 3 and nx < 4:
-            emit(0, " ******************************************************************")
-            emit(0, " ******************************************************************")
-            emit(0, " **   WARNING: You almost certainly should have Nx at least 4.")
-            emit(0, "               (The exception is when RHSMode = 3, in which case Nx = 1.)")
-            emit(0, " ******************************************************************")
-            emit(0, " ******************************************************************")
-
-        emit(0, " ---- Physics parameters: ----")
-        zs = np.atleast_1d(np.asarray(nml.group("speciesParameters").get("ZS", []), dtype=np.float64))
-        emit(0, f" Number of particle species = {_fmt_fortran_i(int(zs.size))}")
-        emit(0, f" Delta (rho* at reference parameters)          = {_fmt_fortran_e(_get_float(phys, 'Delta', 4.5694e-3))}")
-        emit(0, f" alpha (e Phi / T at reference parameters)     = {_fmt_fortran_e(_get_float(phys, 'alpha', 1.0))}")
-        emit(0, f" nu_n (collisionality at reference parameters) = {_fmt_fortran_e(_get_float(phys, 'nu_n', 0.0))}")
-        emit(0, " Nonlinear run" if bool(phys.get("INCLUDEPHI1", False)) else " Linear run")
+        for line in physics_and_grid_summary_lines(
+            nml=nml,
+            grids=grids,
+            solver_tol=solver_tol,
+        ):
+            emit(0, line)
 
         # Match v3's early equilibrium-file open message for Boozer (.bc) workflows.
         geom = nml.group("geometryParameters")
@@ -994,36 +947,6 @@ def write_sfincs_jax_output_h5(
                 )
             except Exception:
                 pass
-
-        emit(0, " ---- Numerical parameters: ----")
-        emit(0, f" Ntheta             = {_fmt_fortran_i(ntheta)}")
-        emit(0, f" Nzeta              = {_fmt_fortran_i(nzeta)}")
-        emit(0, f" Nxi                = {_fmt_fortran_i(nxi)}")
-        emit(0, f" NL                 = {_fmt_fortran_i(nl)}")
-        emit(0, f" Nx                 = {_fmt_fortran_i(nx)}")
-        emit(0, f" solverTolerance    = {_fmt_fortran_e(solver_tol)}")
-        emit(0, " Theta derivative: centered finite differences, 5-point stencil")
-        emit(0, " Zeta derivative: centered finite differences, 5-point stencil")
-        emit(0, " For solving large linear systems, an iterative Krylov solver will be used.")
-        emit(
-            0,
-            " Processor"
-            f"{_fmt_fortran_i(0)} owns theta indices{_fmt_fortran_i(1)}"
-            f" to{_fmt_fortran_i(ntheta)} and zeta indices{_fmt_fortran_i(1)}"
-            f" to{_fmt_fortran_i(nzeta)}",
-        )
-        emit(0, f" Nxi_for_x_option:{_fmt_fortran_i(int(res.get('NXI_FOR_X_OPTION', 1)))}")
-        xvals = " ".join(f"{float(v): .17g}" for v in np.asarray(grids.x, dtype=np.float64))
-        emit(0, f" x:  {xvals}")
-        nxi_for_x = np.asarray(grids.n_xi_for_x, dtype=np.int32)
-        emit(0, f" Nxi for each x: {''.join(f'{int(v):12d}' for v in nxi_for_x)}")
-        nxi_max = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
-        min_x_for_l = []
-        for ell in range(1, nxi_max + 1):
-            idx = np.where(nxi_for_x >= ell)[0]
-            min_x_for_l.append(int(idx[0] + 1) if idx.size else int(nx))
-        if min_x_for_l:
-            emit(0, f" min_x_for_L: {''.join(f'{v:12d}' for v in min_x_for_l)}")
     if emit is not None and int(geom_scheme_hint) == 5:
         eq_name = Path(str(eq_file_hint)).name if eq_file_hint else "VMEC equilibrium"
         emit(0, f" VMEC: starting geometry build from {eq_name} (this can take a while for high resolution).")
@@ -1057,7 +980,6 @@ def write_sfincs_jax_output_h5(
             r_hat_wish_in=r_hat_wish_in,
             r_n_wish_in=r_n_wish_in,
         )
-        emit(0, f" Selecting the flux surface to use based on rN_wish = {_fmt_fortran_e(r_n_wish)}")
         eq_file = effective_equilibrium_file(geom_params=geom_params)
         geom_scheme = int(np.asarray(data.get("geometryScheme", 0)).reshape(-1)[0])
         if eq_file is not None and geom_scheme in {11, 12}:
@@ -1066,42 +988,15 @@ def write_sfincs_jax_output_h5(
                 emit(0, f" Successfully read magnetic equilibrium from file {eq_res.path.name}")
             except Exception:
                 pass
-        emit(0, " ---- Geometry parameters: ----")
-        if geom_scheme:
-            emit(0, f" Geometry scheme = {_fmt_fortran_i(geom_scheme)}")
-        if "psiAHat" in data:
-            emit(0, f" psiAHat (Normalized toroidal flux at the last closed flux surface) = {_fmt_fortran_e(float(data['psiAHat']))}")
-        if "aHat" in data:
-            emit(0, f" aHat (Radius of the last closed flux surface in units of RHat) = {_fmt_fortran_e(float(data['aHat']))}")
-        if "GHat" in data:
-            emit(0, f" GHat (Boozer component multiplying grad zeta) = {_fmt_fortran_e(float(data['GHat']))}")
-        if "IHat" in data:
-            emit(0, f" IHat (Boozer component multiplying grad theta) = {_fmt_fortran_e(float(data['IHat']))}")
-        if "iota" in data:
-            emit(0, f" iota (Rotational transform) = {_fmt_fortran_e(float(data['iota']))}")
-        emit(0, " ------------------------------------------------------")
-        emit(0, " Done creating grids.")
-        emit(0, " Requested/actual flux surface for this calculation, in various radial coordinates:")
-        if "psiHat" in data:
-            emit(
-                0,
-                f"   psiHat = {_fmt_fortran_e(float(psi_hat_wish))} / {_fmt_fortran_e(float(data['psiHat']))}",
-            )
-        if "psiN" in data:
-            emit(
-                0,
-                f"   psiN   = {_fmt_fortran_e(float(psi_n_wish))} / {_fmt_fortran_e(float(data['psiN']))}",
-            )
-        if "rHat" in data:
-            emit(
-                0,
-                f"   rHat   = {_fmt_fortran_e(float(r_hat_wish))} / {_fmt_fortran_e(float(data['rHat']))}",
-            )
-        if "rN" in data:
-            emit(
-                0,
-                f"   rN     = {_fmt_fortran_e(float(r_n_wish))} / {_fmt_fortran_e(float(data['rN']))}",
-            )
+        for line in geometry_summary_lines(
+            data=data,
+            geom_scheme=geom_scheme,
+            psi_hat_wish=psi_hat_wish,
+            psi_n_wish=psi_n_wish,
+            r_hat_wish=r_hat_wish,
+            r_n_wish=r_n_wish,
+        ):
+            emit(0, line)
 
     general = nml.group("general")
     rhs_mode = int(general.get("RHSMODE", 1))
@@ -1723,36 +1618,14 @@ def write_sfincs_jax_output_h5(
         # Fortran-style diagnostics printout (per species, last iteration).
         if emit is not None and n_iter > 0:
             iter_idx = n_iter - 1
-            for s in range(int(result.op.n_species)):
-                emit(0, f" Results for species{_fmt_fortran_i(s + 1)} :")
-                fsad = float(diag_arrays["FSADensityPerturbation"][iter_idx, s])
-                fsab = float(diag_arrays["FSABFlow"][iter_idx, s])
-                fspa = float(diag_arrays["FSAPressurePerturbation"][iter_idx, s])
-                ntv = float(diag_arrays["NTV"][iter_idx, s])
-                mach = np.asarray(diag_arrays["MachUsingFSAThermalSpeed"][iter_idx, s], dtype=np.float64)
-                mach_max = float(np.max(mach))
-                mach_min = float(np.min(mach))
-                emit(0, f"    FSADensityPerturbation:    {_fmt_fortran_e(fsad)}")
-                emit(0, f"    FSABFlow:                  {_fmt_fortran_e(fsab)}")
-                emit(0, f"    max and min Mach #:       {_fmt_fortran_e(mach_max)} {_fmt_fortran_e(mach_min)}")
-                emit(0, f"    FSAPressurePerturbation:  {_fmt_fortran_e(fspa)}")
-                emit(0, f"    NTV:                       {_fmt_fortran_e(ntv)}")
-                emit(0, f"    particleFlux_vm0_psiHat    {_fmt_fortran_e(float(diag_arrays['particleFlux_vm0_psiHat'][iter_idx, s]))}")
-                emit(0, f"    particleFlux_vm_psiHat     {_fmt_fortran_e(float(diag_arrays['particleFlux_vm_psiHat'][iter_idx, s]))}")
-                emit(0, f"    classicalParticleFlux      {_fmt_fortran_e(float(classical_pf[s, iter_idx]))}")
-                emit(0, f"    classicalHeatFlux          {_fmt_fortran_e(float(classical_hf[s, iter_idx]))}")
-                emit(0, f"    momentumFlux_vm0_psiHat    {_fmt_fortran_e(float(diag_arrays['momentumFlux_vm0_psiHat'][iter_idx, s]))}")
-                emit(0, f"    momentumFlux_vm_psiHat     {_fmt_fortran_e(float(diag_arrays['momentumFlux_vm_psiHat'][iter_idx, s]))}")
-                emit(0, f"    heatFlux_vm0_psiHat        {_fmt_fortran_e(float(diag_arrays['heatFlux_vm0_psiHat'][iter_idx, s]))}")
-                emit(0, f"    heatFlux_vm_psiHat         {_fmt_fortran_e(float(diag_arrays['heatFlux_vm_psiHat'][iter_idx, s]))}")
-                if "sources" in diag_arrays:
-                    src = np.asarray(diag_arrays["sources"][iter_idx, :, s], dtype=np.float64)
-                    if src.size >= 2:
-                        emit(0, f"    particle source            {_fmt_fortran_e(float(src[0]))}")
-                        emit(0, f"    heat source                {_fmt_fortran_e(float(src[1]))}")
-
-            fsab_j = float(np.asarray(diag_arrays["FSABjHat"][iter_idx], dtype=np.float64))
-            emit(0, f" FSABjHat (bootstrap current): {_fmt_fortran_e(fsab_j)}")
+            for line in species_result_summary_lines(
+                diag_arrays=diag_arrays,
+                classical_particle_flux=classical_pf,
+                classical_heat_flux=classical_hf,
+                n_species=int(result.op.n_species),
+                iter_idx=int(iter_idx),
+            ):
+                emit(0, line)
 
         write_rhsmode1_ntv_diagnostics_to_data(
             data=data,

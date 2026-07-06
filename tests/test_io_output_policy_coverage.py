@@ -118,6 +118,100 @@ def _minimal_writer_grids() -> SimpleNamespace:
     )
 
 
+def test_rhsmode1_verbose_format_and_preamble_helpers_are_stable() -> None:
+    assert rhsmode1_output.format_fortran_e(1.25e-4).strip() == "1.2500000000000000E-004"
+    assert rhsmode1_output.format_fortran_e(2.0).endswith("2.0000000000000000E+000")
+    assert rhsmode1_output.format_fortran_i(7) == "           7"
+
+    lines = rhsmode1_output.fortran_preamble_lines(input_name="input.namelist")
+
+    assert lines[0].startswith(" ****")
+    assert "Stellarator Fokker-Plank" in lines[1]
+    assert any(line.strip() == "mumps detected" for line in lines)
+    assert any("Successfully read parameters from general namelist in input.namelist" in line for line in lines)
+
+
+def test_rhsmode1_verbose_physics_grid_and_geometry_lines(tmp_path: Path) -> None:
+    input_path = _minimal_writer_input(tmp_path, rhs_mode=1, geometry_scheme=5)
+    nml = read_sfincs_input(input_path)
+    grids = _minimal_writer_grids()
+
+    grid_lines = rhsmode1_output.physics_and_grid_summary_lines(
+        nml=nml,
+        grids=grids,
+        solver_tol=1e-7,
+    )
+
+    grid_text = "\n".join(grid_lines)
+    assert "WARNING: You almost certainly should have Nx at least 4" in grid_text
+    assert "Number of particle species" in grid_text
+    assert "Ntheta" in grid_text
+    assert "Nxi for each x" in grid_text
+    assert "min_x_for_L" in grid_text
+
+    geometry_lines = rhsmode1_output.geometry_summary_lines(
+        data={
+            "geometryScheme": np.asarray(5),
+            "psiAHat": np.asarray(1.25),
+            "aHat": np.asarray(0.75),
+            "psiHat": np.asarray(0.5),
+            "psiN": np.asarray(0.4),
+            "rHat": np.asarray(0.6),
+            "rN": np.asarray(0.7),
+            "GHat": np.asarray(1.1),
+            "IHat": np.asarray(0.2),
+            "iota": np.asarray(0.45),
+        },
+        geom_scheme=5,
+        psi_hat_wish=0.2,
+        psi_n_wish=0.3,
+        r_hat_wish=0.4,
+        r_n_wish=0.5,
+    )
+
+    geometry_text = "\n".join(geometry_lines)
+    assert "Selecting the flux surface to use based on rN_wish" in geometry_text
+    assert "Geometry scheme" in geometry_text
+    assert "Requested/actual flux surface" in geometry_text
+    assert "psiHat" in geometry_text
+    assert "rN" in geometry_text
+
+
+def test_rhsmode1_species_result_summary_lines_include_fluxes_sources_and_current() -> None:
+    diag = {
+        "FSADensityPerturbation": np.asarray([[0.1, 0.2]]),
+        "FSABFlow": np.asarray([[1.1, 1.2]]),
+        "FSAPressurePerturbation": np.asarray([[2.1, 2.2]]),
+        "NTV": np.asarray([[3.1, 3.2]]),
+        "MachUsingFSAThermalSpeed": np.asarray([[[0.5, -0.25], [0.75, -0.5]]]),
+        "particleFlux_vm0_psiHat": np.asarray([[4.1, 4.2]]),
+        "particleFlux_vm_psiHat": np.asarray([[5.1, 5.2]]),
+        "momentumFlux_vm0_psiHat": np.asarray([[6.1, 6.2]]),
+        "momentumFlux_vm_psiHat": np.asarray([[7.1, 7.2]]),
+        "heatFlux_vm0_psiHat": np.asarray([[8.1, 8.2]]),
+        "heatFlux_vm_psiHat": np.asarray([[9.1, 9.2]]),
+        "sources": np.asarray([[[0.01, 0.02], [0.03, 0.04]]]),
+        "FSABjHat": np.asarray([10.5]),
+    }
+
+    lines = rhsmode1_output.species_result_summary_lines(
+        diag_arrays=diag,
+        classical_particle_flux=np.asarray([[11.1], [11.2]]),
+        classical_heat_flux=np.asarray([[12.1], [12.2]]),
+        n_species=2,
+        iter_idx=0,
+    )
+    text = "\n".join(lines)
+
+    assert "Results for species" in text
+    assert "FSADensityPerturbation" in text
+    assert "classicalParticleFlux" in text
+    assert "particle source" in text
+    assert "heat source" in text
+    assert "FSABjHat (bootstrap current)" in text
+    assert "1.0500000000000000E+001" in text
+
+
 def test_write_output_geometry_only_trace_return_results_and_wout_override(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

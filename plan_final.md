@@ -230,6 +230,12 @@ The main structural refactor is functionally complete:
   private imports through `sfincs_jax.io`, but the canonical owner is the
   RHSMode=1 output module. Focused output/source validation passed as
   `199 passed in 7.74 s`.
+- RHSMode=1 verbose output formatting, SFINCS-style preamble lines,
+  physics/grid summaries, geometry selected-surface summaries, and per-species
+  diagnostic printout lines are also owned by `outputs/rhsmode1.py`.
+  `outputs/writer.py` is down to `2251` lines and
+  `write_sfincs_jax_output_h5` is down to `1426` lines. Focused output/source
+  validation passed as `202 passed in 7.54 s`.
 - Transport runtime, profile setup, sparse-direct, and diagnostics coverage now
   includes direct tests for worker-count validation, GPU subprocess policy
   injection, persistent-pool helpers, solve-method normalization, explicit
@@ -5450,7 +5456,7 @@ Status:
   source-refactor and solver-fallback tranches. It does not include fresh GPU
   benchmarking because the office GPU host is unavailable.
 
-### 2026-07-06: RHSMode-1 Output Policy Owner Consolidation
+### 2026-07-06: RHSMode-1 Output Policy And Verbose Summary Consolidation
 
 Changes:
 
@@ -5462,8 +5468,12 @@ Changes:
 - Kept compatibility aliases in `outputs/writer.py` so existing private
   `sfincs_jax.io` imports and monkeypatch-based tests keep working while new
   implementation ownership is clear.
-- Reduced `outputs/writer.py` from `2490` to `2378` lines without adding a new
-  file or changing output schemas, solver defaults, CLI behavior, or public
+- Moved deterministic output-run formatting, SFINCS-style preamble generation,
+  physics/grid summary lines, geometry selected-surface summary lines, and the
+  per-species result printout into `outputs/rhsmode1.py`.
+- Reduced `outputs/writer.py` from `2490` to `2251` lines and
+  `write_sfincs_jax_output_h5` from `1558` to `1426` lines without adding a
+  new file or changing output schemas, solver defaults, CLI behavior, or public
   APIs.
 
 Validation:
@@ -5477,7 +5487,9 @@ Validation:
   tests/test_output_formats.py tests/test_write_output_return_results.py
   tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py
   tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
-  passed as `199 passed in 7.74 s`.
+  passed as `202 passed in 7.54 s`.
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_io_output_policy_coverage.py` passed as `99 passed in 2.23 s`.
 - `PYTHONNOUSERSITE=1 python -m ruff check
   sfincs_jax/outputs/writer.py sfincs_jax/outputs/rhsmode1.py
   tests/test_io_output_policy_coverage.py tests/test_io_precompile_policy.py

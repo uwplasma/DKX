@@ -185,6 +185,246 @@ def rhs1_dense_cutoffs_from_env(
     return int(dense_active_cutoff), int(dense_pas_cutoff), int(dense_fp_cutoff)
 
 
+def format_fortran_e(val: float, width: int = 24, prec: int = 16) -> str:
+    """Format a scalar with the exponent width used by SFINCS-v3 logs."""
+
+    text = f"{float(val):.{int(prec)}E}"
+    if "E" in text:
+        base, exp = text.split("E")
+        sign = "+"
+        exp_num = exp
+        if exp.startswith(("+", "-")):
+            sign = exp[0]
+            exp_num = exp[1:]
+        text = f"{base}E{sign}{exp_num.zfill(3)}"
+    return text.rjust(int(width))
+
+
+def format_fortran_i(val: int, width: int = 12) -> str:
+    """Format an integer with the fixed-width style used by SFINCS-v3 logs."""
+
+    return f"{int(val):{int(width)}d}"
+
+
+def fortran_preamble_lines(*, input_name: str) -> tuple[str, ...]:
+    """Return the deterministic SFINCS-style preamble for CLI output runs."""
+
+    group_order = (
+        "general",
+        "geometryParameters",
+        "speciesParameters",
+        "physicsParameters",
+        "resolutionParameters",
+        "otherNumericalParameters",
+        "preconditionerOptions",
+        "export_f",
+    )
+    return (
+        " ****************************************************************************",
+        " SFINCS: Stellarator Fokker-Plank Iterative Neoclassical Conservative Solver",
+        " Version 3",
+        " Using double precision.",
+        " Serial job (1 process) detected.",
+        " mumps detected",
+        " superlu_dist not detected",
+        *(
+            f" Successfully read parameters from {group} namelist in {input_name}."
+            for group in group_order
+        ),
+    )
+
+
+def physics_and_grid_summary_lines(
+    *,
+    nml: Any,
+    grids: Any,
+    solver_tol: float,
+) -> tuple[str, ...]:
+    """Return verbose physics/grid summary lines before the geometry build."""
+
+    general = nml.group("general")
+    rhs_mode = int(general.get("RHSMODE", 1))
+    resolution = nml.group("resolutionParameters")
+    physics = nml.group("physicsParameters")
+    species = nml.group("speciesParameters")
+
+    nx = int(grids.x.size)
+    ntheta = int(grids.theta.size)
+    nzeta = int(grids.zeta.size)
+    nxi = int(grids.n_xi)
+    nl = int(grids.n_l)
+    z_s = np.atleast_1d(np.asarray(species.get("ZS", []), dtype=np.float64))
+    nxi_for_x = np.asarray(grids.n_xi_for_x, dtype=np.int32)
+    nxi_max = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
+    min_x_for_l: list[int] = []
+    for ell in range(1, nxi_max + 1):
+        idx = np.where(nxi_for_x >= ell)[0]
+        min_x_for_l.append(int(idx[0] + 1) if idx.size else int(nx))
+
+    lines: list[str] = []
+    if rhs_mode != 3 and nx < 4:
+        lines.extend(
+            (
+                " ******************************************************************",
+                " ******************************************************************",
+                " **   WARNING: You almost certainly should have Nx at least 4.",
+                "               (The exception is when RHSMode = 3, in which case Nx = 1.)",
+                " ******************************************************************",
+                " ******************************************************************",
+            )
+        )
+
+    include_phi1 = bool(physics.get("INCLUDEPHI1", False))
+    lines.extend(
+        (
+            " ---- Physics parameters: ----",
+            f" Number of particle species = {format_fortran_i(int(z_s.size))}",
+            " Delta (rho* at reference parameters)          = "
+            f"{format_fortran_e(_mapping_float(physics, 'Delta', 4.5694e-3))}",
+            " alpha (e Phi / T at reference parameters)     = "
+            f"{format_fortran_e(_mapping_float(physics, 'alpha', 1.0))}",
+            " nu_n (collisionality at reference parameters) = "
+            f"{format_fortran_e(_mapping_float(physics, 'nu_n', 0.0))}",
+            " Nonlinear run" if include_phi1 else " Linear run",
+            " ---- Numerical parameters: ----",
+            f" Ntheta             = {format_fortran_i(ntheta)}",
+            f" Nzeta              = {format_fortran_i(nzeta)}",
+            f" Nxi                = {format_fortran_i(nxi)}",
+            f" NL                 = {format_fortran_i(nl)}",
+            f" Nx                 = {format_fortran_i(nx)}",
+            f" solverTolerance    = {format_fortran_e(float(solver_tol))}",
+            " Theta derivative: centered finite differences, 5-point stencil",
+            " Zeta derivative: centered finite differences, 5-point stencil",
+            " For solving large linear systems, an iterative Krylov solver will be used.",
+            " Processor"
+            f"{format_fortran_i(0)} owns theta indices{format_fortran_i(1)}"
+            f" to{format_fortran_i(ntheta)} and zeta indices{format_fortran_i(1)}"
+            f" to{format_fortran_i(nzeta)}",
+            f" Nxi_for_x_option:{format_fortran_i(int(resolution.get('NXI_FOR_X_OPTION', 1)))}",
+            f" x:  {' '.join(f'{float(v): .17g}' for v in np.asarray(grids.x, dtype=np.float64))}",
+            f" Nxi for each x: {''.join(f'{int(v):12d}' for v in nxi_for_x)}",
+        )
+    )
+    if min_x_for_l:
+        lines.append(f" min_x_for_L: {''.join(f'{v:12d}' for v in min_x_for_l)}")
+    return tuple(lines)
+
+
+def geometry_summary_lines(
+    *,
+    data: Mapping[str, Any],
+    geom_scheme: int,
+    psi_hat_wish: float,
+    psi_n_wish: float,
+    r_hat_wish: float,
+    r_n_wish: float,
+) -> tuple[str, ...]:
+    """Return verbose geometry and selected-surface summary lines."""
+
+    lines = [
+        f" Selecting the flux surface to use based on rN_wish = {format_fortran_e(r_n_wish)}",
+        " ---- Geometry parameters: ----",
+    ]
+    if int(geom_scheme):
+        lines.append(f" Geometry scheme = {format_fortran_i(int(geom_scheme))}")
+    optional_scalars = (
+        ("psiAHat", "psiAHat (Normalized toroidal flux at the last closed flux surface)"),
+        ("aHat", "aHat (Radius of the last closed flux surface in units of RHat)"),
+        ("GHat", "GHat (Boozer component multiplying grad zeta)"),
+        ("IHat", "IHat (Boozer component multiplying grad theta)"),
+        ("iota", "iota (Rotational transform)"),
+    )
+    for key, label in optional_scalars:
+        if key in data:
+            lines.append(f" {label} = {format_fortran_e(float(data[key]))}")
+
+    lines.extend(
+        (
+            " ------------------------------------------------------",
+            " Done creating grids.",
+            " Requested/actual flux surface for this calculation, in various radial coordinates:",
+        )
+    )
+    radial_pairs = (
+        ("psiHat", "psiHat", psi_hat_wish),
+        ("psiN", "psiN  ", psi_n_wish),
+        ("rHat", "rHat  ", r_hat_wish),
+        ("rN", "rN    ", r_n_wish),
+    )
+    for key, label, wished in radial_pairs:
+        if key in data:
+            lines.append(
+                f"   {label} = {format_fortran_e(float(wished))} / "
+                f"{format_fortran_e(float(data[key]))}"
+            )
+    return tuple(lines)
+
+
+def species_result_summary_lines(
+    *,
+    diag_arrays: Mapping[str, Any],
+    classical_particle_flux: Any,
+    classical_heat_flux: Any,
+    n_species: int,
+    iter_idx: int,
+) -> tuple[str, ...]:
+    """Return SFINCS-style per-species diagnostic summary lines."""
+
+    cp_flux = np.asarray(classical_particle_flux, dtype=np.float64)
+    ch_flux = np.asarray(classical_heat_flux, dtype=np.float64)
+    lines: list[str] = []
+    for species_idx in range(int(n_species)):
+        lines.append(f" Results for species{format_fortran_i(species_idx + 1)} :")
+        fsad = float(np.asarray(diag_arrays["FSADensityPerturbation"])[int(iter_idx), species_idx])
+        fsab = float(np.asarray(diag_arrays["FSABFlow"])[int(iter_idx), species_idx])
+        fspa = float(np.asarray(diag_arrays["FSAPressurePerturbation"])[int(iter_idx), species_idx])
+        ntv = float(np.asarray(diag_arrays["NTV"])[int(iter_idx), species_idx])
+        mach = np.asarray(diag_arrays["MachUsingFSAThermalSpeed"])[int(iter_idx), species_idx]
+        lines.extend(
+            (
+                f"    FSADensityPerturbation:    {format_fortran_e(fsad)}",
+                f"    FSABFlow:                  {format_fortran_e(fsab)}",
+                "    max and min Mach #:       "
+                f"{format_fortran_e(float(np.max(mach)))} {format_fortran_e(float(np.min(mach)))}",
+                f"    FSAPressurePerturbation:  {format_fortran_e(fspa)}",
+                f"    NTV:                       {format_fortran_e(ntv)}",
+                "    particleFlux_vm0_psiHat    "
+                f"{format_fortran_e(float(np.asarray(diag_arrays['particleFlux_vm0_psiHat'])[int(iter_idx), species_idx]))}",
+                "    particleFlux_vm_psiHat     "
+                f"{format_fortran_e(float(np.asarray(diag_arrays['particleFlux_vm_psiHat'])[int(iter_idx), species_idx]))}",
+                f"    classicalParticleFlux      {format_fortran_e(float(cp_flux[species_idx, int(iter_idx)]))}",
+                f"    classicalHeatFlux          {format_fortran_e(float(ch_flux[species_idx, int(iter_idx)]))}",
+                "    momentumFlux_vm0_psiHat    "
+                f"{format_fortran_e(float(np.asarray(diag_arrays['momentumFlux_vm0_psiHat'])[int(iter_idx), species_idx]))}",
+                "    momentumFlux_vm_psiHat     "
+                f"{format_fortran_e(float(np.asarray(diag_arrays['momentumFlux_vm_psiHat'])[int(iter_idx), species_idx]))}",
+                "    heatFlux_vm0_psiHat        "
+                f"{format_fortran_e(float(np.asarray(diag_arrays['heatFlux_vm0_psiHat'])[int(iter_idx), species_idx]))}",
+                "    heatFlux_vm_psiHat         "
+                f"{format_fortran_e(float(np.asarray(diag_arrays['heatFlux_vm_psiHat'])[int(iter_idx), species_idx]))}",
+            )
+        )
+        if "sources" in diag_arrays:
+            src = np.asarray(diag_arrays["sources"])[int(iter_idx), :, species_idx]
+            if src.size >= 2:
+                lines.append(f"    particle source            {format_fortran_e(float(src[0]))}")
+                lines.append(f"    heat source                {format_fortran_e(float(src[1]))}")
+
+    fsab_j = float(np.asarray(diag_arrays["FSABjHat"])[int(iter_idx)])
+    lines.append(f" FSABjHat (bootstrap current): {format_fortran_e(fsab_j)}")
+    return tuple(lines)
+
+
+def _mapping_float(mapping: Mapping[str, Any], key: str, default: float) -> float:
+    """Read a float from a namelist-like mapping using SFINCS key variants."""
+
+    value = physics_value_from_params(mapping, key, key.upper(), key.lower(), default=default)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
 def _select_rhsmode1_linear_solve_method(
     *,
     default_method: str,
