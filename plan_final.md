@@ -2551,6 +2551,28 @@ Validation:
 - The public README/docs/examples wording scan returned no active prose
   matches.
 
+### Tranche 137: reduced-tail fallback assembly guard
+
+Scope:
+
+- Added a bounded direct-tail fallback-materialization test for
+  `operators/profile_reduced_tail.py`.
+- The test disables structured CSR admission, forces the pattern-probe fallback
+  path, monkeypatches the true full-system action on a tiny constraintScheme=1
+  operator, and checks kinetic diagonal shifts plus source/moment tail blocks.
+- This closes another behavior branch in the RHSMode-1 lower-memory
+  preconditioner stack without adding any production solve or benchmark runtime
+  to CI.
+
+Validation:
+
+- `pytest -q tests/test_profile_reduced_tail_operator.py tests/test_rhs1_xblock_radial.py`
+  passed as `15 passed in 1.94 s`.
+- `ruff check tests/test_profile_reduced_tail_operator.py` passed.
+- `python -m compileall -q tests/test_profile_reduced_tail_operator.py`
+  passed.
+- `git diff --check` passed.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
