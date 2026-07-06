@@ -2952,6 +2952,36 @@ Validation:
 - `python -m ruff check sfincs_jax tests` passed.
 - `git diff --check` passed.
 
+## Tranche 148: Padded Operator Matvec Preservation
+
+Scope:
+
+- Extended x-padding to the always-on collisionless operator `x` grid and to
+  the Er x-dot derivative matrices. The optional x-dependent magnetic-drift
+  terms now also carry padded `x` metadata, while ExB and Er xi-dot retain only
+  their active-L metadata padding.
+- Strengthened the optional-physics padding regression so it applies the padded
+  full-system operator, unpads the result, and checks equality with the
+  unpadded operator to `1e-10`. This verifies that sharded/device padding is not
+  only shape-consistent but also mathematically transparent on the original
+  degrees of freedom.
+- The regression covers Er x-dot, Er xi-dot, magnetic drift, PAS, and FP-with-
+  Phi1 branches using real tiny v3 namelists and no linear solves.
+
+Validation:
+
+- `python -m pytest -q tests/test_profile_system_support.py` passed as
+  `41 passed in 15.54 s`.
+- `python -m ruff check sfincs_jax/operators/profile_system.py tests/test_profile_system_support.py`
+  passed.
+- `python -m compileall -q sfincs_jax/operators/profile_system.py tests/test_profile_system_support.py`
+  passed.
+- `python -m pytest -q tests/test_profile_system_support.py tests/test_full_system_operator_jit.py tests/test_collisionless_operator_parity.py tests/test_exb_theta_parity.py tests/test_magnetic_drifts_parity.py`
+  passed as `51 passed in 21.53 s`.
+- `python -m pytest -q tests/test_pas_collision_operator_parity.py tests/test_fblock_pas_matvec_parity.py tests/test_fblock_fokker_planck_matvec_parity.py tests/test_fblock_fused_matvec.py tests/test_v3_fblock_smoke.py`
+  passed as `6 passed in 5.13 s`.
+- `git diff --check` passed.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

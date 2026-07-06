@@ -1317,7 +1317,11 @@ def _pad_magdrift_theta(
             db_hat_sub_zeta_dpsi_hat=_pad_2d_zeta(op.db_hat_sub_zeta_dpsi_hat, pad, fill=0.0),
         )
     if axis == "x":
-        return replace(op, n_xi_for_x=_pad_x_1d(op.n_xi_for_x, pad, fill=0))
+        return replace(
+            op,
+            x=_pad_x_1d(op.x, pad, fill=1.0),
+            n_xi_for_x=_pad_x_1d(op.n_xi_for_x, pad, fill=0),
+        )
     return op
 
 
@@ -1361,7 +1365,11 @@ def _pad_magdrift_zeta(
             db_hat_sub_psi_dtheta=_pad_2d_theta(op.db_hat_sub_psi_dtheta, pad, fill=0.0),
         )
     if axis == "x":
-        return replace(op, n_xi_for_x=_pad_x_1d(op.n_xi_for_x, pad, fill=0))
+        return replace(
+            op,
+            x=_pad_x_1d(op.x, pad, fill=1.0),
+            n_xi_for_x=_pad_x_1d(op.n_xi_for_x, pad, fill=0),
+        )
     return op
 
 
@@ -1395,7 +1403,11 @@ def _pad_magdrift_xidot(
             db_hat_sub_psi_dtheta=_pad_2d_zeta(op.db_hat_sub_psi_dtheta, pad, fill=0.0),
         )
     if axis == "x":
-        return replace(op, n_xi_for_x=_pad_x_1d(op.n_xi_for_x, pad, fill=0))
+        return replace(
+            op,
+            x=_pad_x_1d(op.x, pad, fill=1.0),
+            n_xi_for_x=_pad_x_1d(op.n_xi_for_x, pad, fill=0),
+        )
     return op
 
 
@@ -1451,7 +1463,13 @@ def _pad_er_xdot(op: ErXDotV3Operator, *, axis: str, pad: int) -> ErXDotV3Operat
             db_hat_dzeta=_pad_2d_zeta(op.db_hat_dzeta, pad, fill=0.0),
         )
     if axis == "x":
-        return replace(op, n_xi_for_x=_pad_x_1d(op.n_xi_for_x, pad, fill=0))
+        return replace(
+            op,
+            x=_pad_x_1d(op.x, pad, fill=1.0),
+            ddx_plus=_pad_x_square(op.ddx_plus, pad),
+            ddx_minus=_pad_x_square(op.ddx_minus, pad),
+            n_xi_for_x=_pad_x_1d(op.n_xi_for_x, pad, fill=0),
+        )
     return op
 
 

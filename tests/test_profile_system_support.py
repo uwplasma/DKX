@@ -470,6 +470,9 @@ def test_optional_physics_padding_roundtrips_real_tiny_v3_operators(fixture: str
     x_full = _deterministic_vector(op.total_size)
     x_pad = _pad_full_vector(x_full, op=op, op_pad=op_pad, axis=axis, pad=pad)
     roundtrip = _unpad_full_vector(x_pad, op=op, op_pad=op_pad, axis=axis, pad=pad)
+    y_full = apply_v3_full_system_operator(op, x_full, include_jacobian_terms=True)
+    y_pad = apply_v3_full_system_operator(op_pad, x_pad, include_jacobian_terms=True)
+    y_roundtrip = _unpad_full_vector(y_pad, op=op, op_pad=op_pad, axis=axis, pad=pad)
 
     expected_n_theta = int(op.n_theta) + (1 if axis == "theta" else 0)
     expected_n_zeta = int(op.n_zeta) + (1 if axis == "zeta" else 0)
@@ -487,9 +490,14 @@ def test_optional_physics_padding_roundtrips_real_tiny_v3_operators(fixture: str
     )
     assert x_pad.shape == (op_pad.total_size,)
     np.testing.assert_allclose(np.asarray(roundtrip), np.asarray(x_full))
+    assert y_pad.shape == (op_pad.total_size,)
+    assert np.all(np.isfinite(np.asarray(y_pad)))
+    np.testing.assert_allclose(np.asarray(y_roundtrip), np.asarray(y_full), atol=1.0e-10, rtol=1.0e-10)
 
     surface_shape = (expected_n_theta, expected_n_zeta)
     assert tuple(op_pad.fblock.collisionless.b_hat.shape) == surface_shape
+    assert op_pad.fblock.collisionless.x.shape == (expected_n_x,)
+    assert op_pad.fblock.collisionless.n_xi_for_x.shape == (expected_n_x,)
     if op_pad.fblock.exb_theta is not None:
         assert tuple(op_pad.fblock.exb_theta.d_hat.shape) == surface_shape
         assert op_pad.fblock.exb_theta.n_xi_for_x.shape == (expected_n_x,)
@@ -501,15 +509,21 @@ def test_optional_physics_padding_roundtrips_real_tiny_v3_operators(fixture: str
         assert op_pad.fblock.er_xidot.n_xi_for_x.shape == (expected_n_x,)
     if op_pad.fblock.er_xdot is not None:
         assert tuple(op_pad.fblock.er_xdot.d_hat.shape) == surface_shape
+        assert op_pad.fblock.er_xdot.x.shape == (expected_n_x,)
+        assert op_pad.fblock.er_xdot.ddx_plus.shape == (expected_n_x, expected_n_x)
+        assert op_pad.fblock.er_xdot.ddx_minus.shape == (expected_n_x, expected_n_x)
         assert op_pad.fblock.er_xdot.n_xi_for_x.shape == (expected_n_x,)
     if op_pad.fblock.magdrift_theta is not None:
         assert tuple(op_pad.fblock.magdrift_theta.d_hat.shape) == surface_shape
+        assert op_pad.fblock.magdrift_theta.x.shape == (expected_n_x,)
         assert op_pad.fblock.magdrift_theta.n_xi_for_x.shape == (expected_n_x,)
     if op_pad.fblock.magdrift_zeta is not None:
         assert tuple(op_pad.fblock.magdrift_zeta.d_hat.shape) == surface_shape
+        assert op_pad.fblock.magdrift_zeta.x.shape == (expected_n_x,)
         assert op_pad.fblock.magdrift_zeta.n_xi_for_x.shape == (expected_n_x,)
     if op_pad.fblock.magdrift_xidot is not None:
         assert tuple(op_pad.fblock.magdrift_xidot.d_hat.shape) == surface_shape
+        assert op_pad.fblock.magdrift_xidot.x.shape == (expected_n_x,)
         assert op_pad.fblock.magdrift_xidot.n_xi_for_x.shape == (expected_n_x,)
     if op_pad.fblock.pas is not None:
         assert op_pad.fblock.pas.n_xi_for_x.shape == (expected_n_x,)
