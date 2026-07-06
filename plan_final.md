@@ -3769,6 +3769,73 @@ Status:
   `preconditioner_xblock_tz_sparse.py`, and the larger QI/PAS preconditioner
   owners.
 
+## Latest Execution Log: Single-Branch Finalization and Artifact Refresh
+
+What was checked:
+
+- Confirmed the branch topology is a single PR line: `main` is an ancestor of
+  `refactor/v3-driver-architecture`, and PR #8 is the only open review branch.
+- Regenerated the README/docs SFINCS Fortran v3 versus `sfincs_jax` CPU/GPU
+  runtime-memory plot and summary JSON from the checked CPU/GPU suite reports.
+- Regenerated the artifact-backed publication figures for the validation
+  dashboard, high-collisionality trend proxy, Simakov-Helander audit, W7-X
+  high-`nu` performance, autodiff validation, and QA/QH bootstrap-current
+  comparisons.
+- Rebuilt the README audit block from the checked CPU/GPU suite reports.
+
+Benchmark and parity evidence:
+
+- Checked suite reports remain `39/39` CPU rows and `39/39` GPU rows with
+  zero practical and zero strict common-output mismatches.
+- README-facing runtime/memory rows remain `24` CPU and `24` GPU after the
+  documented `10 s` minimum SFINCS Fortran v3 runtime filter.
+- The public benchmark summary records median runtime ratios of `0.0213x`
+  CPU cold, `0.0152x` CPU warm/logged, `0.0367x` GPU cold, and `0.0303x`
+  GPU warm/logged versus SFINCS Fortran v3 on the filtered public rows.
+- Live bounded Fortran sanity with
+  `/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs` passed:
+  `quick_2species_FPCollisions_noEr`,
+  `HSX_FPCollisions_DKESTrajectories`,
+  `HSX_FPCollisions_fullTrajectories` with a `360 s` Fortran budget, and
+  `HSX_PASCollisions_DKESTrajectories` all wrote JAX output, ran Fortran, and
+  compared cleanly.
+- A live `transportMatrix_geometryScheme2` RHSMode=2 probe passed the
+  production-suite comparator (`rtol=5e-4`, `atol=1e-9`). The same run shows
+  expected `1e-5`-level flow/current differences under the stricter generic
+  `1e-10` comparator, so it is not a release parity blocker.
+
+Validation:
+
+- `python -m pytest -q tests/test_generate_fortran_suite_benchmark_summary.py
+  tests/test_benchmark_doc_claims.py tests/test_benchmark_artifact_policy.py
+  tests/test_audit_suite_runtime_drift.py` passed as `51 passed`.
+- `python -m pytest -q tests/test_validation_figures.py
+  tests/test_generate_w7x_high_nu_performance.py
+  tests/test_generate_fortran_suite_benchmark_summary.py
+  tests/test_benchmark_doc_claims.py tests/test_finite_beta_vmec_example.py`
+  passed as `73 passed`.
+- `python -m pytest -q tests/test_source_tree_consolidation.py
+  tests/test_domain_package_import_contracts.py tests/test_examples_tutorials.py
+  tests/test_validation_artifacts.py tests/test_solver_path_artifacts.py`
+  passed as `99 passed`.
+- `python -m pytest -q -n auto --dist=loadscope` passed as
+  `4452 passed in 264.42 s`.
+- `python -m pytest -q` for the CI external-data and optional ecosystem gate
+  subset passed as `20 passed`.
+- `python -m sphinx -b html docs /tmp/sfincs_jax_docs_html` succeeded.
+- `python -m ruff check sfincs_jax tests`, `python -m compileall -q
+  sfincs_jax tests`, and `git diff --check` passed.
+- GitHub PR #8 checks are green and the merge state is `CLEAN`.
+
+Status:
+
+- A fresh remote GPU rerun was not launched because `ssh office` timed out
+  while connecting to `plasmaworkstation.physics.wisc.edu:3281`.
+- The final PR review state is technically consistent with the checked
+  CPU/GPU reports and bounded live Fortran sanity. A completely fresh 39-case
+  CPU/GPU/Fortran production rerun remains an expensive replacement-report
+  activity, not a prerequisite for reviewing the refactor diff.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
