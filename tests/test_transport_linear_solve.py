@@ -550,7 +550,7 @@ def test_transport_dense_batch_solves_full_and_rejects_varying_operators(monkeyp
 
     context = TransportDenseBatchContext(
         dense_backend_allowed=True,
-        dense_use_mixed=False,
+        dense_use_mixed=True,
         use_active_dof_mode=False,
         active_size=0,
         op0=SimpleNamespace(total_size=2),
@@ -629,6 +629,109 @@ def test_transport_dense_batch_active_streaming_requires_collector(monkeypatch) 
         solve_transport_dense_batch(context=context, op_probe_ref=context.op_matvec_by_index[0], reason="unit")
 
 
+def test_transport_dense_batch_rejects_disabled_backend_and_rhs3_krylov(monkeypatch) -> None:
+    matrix = jnp.eye(2, dtype=jnp.float64)
+    monkeypatch.setattr(transport_linear_system, "_operator_signature_cached", lambda op: (op.signature,))
+    base = dict(
+        dense_use_mixed=False,
+        use_active_dof_mode=False,
+        active_size=0,
+        op0=SimpleNamespace(total_size=2),
+        op_matvec_by_index=[SimpleNamespace(signature="same", matrix=matrix)],
+        rhs_by_index=[jnp.asarray([1.0, 0.0], dtype=jnp.float64)],
+        which_rhs_values=[3],
+        rhs_norms={3: jnp.asarray(1.0)},
+        residual_norms={},
+        solver_kinds_by_rhs={},
+        solve_methods_by_rhs={},
+        elapsed_s=np.zeros(3),
+        state_vectors={},
+        store_state_vectors=False,
+        stream_diagnostics=False,
+        maybe_project_constraint_nullspace=lambda x, **_kwargs: x,
+    )
+
+    disabled = TransportDenseBatchContext(
+        dense_backend_allowed=False,
+        rhs3_krylov_flags=lambda _which_rhs: (False, False),
+        **base,
+    )
+    assert not solve_transport_dense_batch(
+        context=disabled,
+        op_probe_ref=disabled.op_matvec_by_index[0],
+        reason="unit",
+    )
+
+    rhs3_special = TransportDenseBatchContext(
+        dense_backend_allowed=True,
+        rhs3_krylov_flags=lambda _which_rhs: (True, False),
+        **base,
+    )
+    assert not solve_transport_dense_batch(
+        context=rhs3_special,
+        op_probe_ref=rhs3_special.op_matvec_by_index[0],
+        reason="unit",
+    )
+
+
+def test_transport_dense_batch_solves_active_streaming_outputs(monkeypatch) -> None:
+    matrix = jnp.asarray(
+        [
+            [2.0, 0.0, 0.0],
+            [0.0, 4.0, 0.0],
+            [0.0, 0.0, 7.0],
+        ],
+        dtype=jnp.float64,
+    )
+    rhs_vectors = [
+        jnp.asarray([2.0, -4.0, 0.0], dtype=jnp.float64),
+        jnp.asarray([6.0, 8.0, 0.0], dtype=jnp.float64),
+    ]
+    collected: dict[int, jnp.ndarray] = {}
+    state_vectors: dict[int, jnp.ndarray] = {}
+    residual_norms: dict[int, jnp.ndarray] = {}
+    emitted: list[tuple[int, str]] = []
+    monkeypatch.setattr(transport_linear_system, "apply_v3_full_system_operator_cached", lambda op, x: op.matrix @ x)
+    monkeypatch.setattr(transport_linear_system, "_operator_signature_cached", lambda op: (op.signature,))
+
+    context = TransportDenseBatchContext(
+        dense_backend_allowed=True,
+        dense_use_mixed=True,
+        use_active_dof_mode=True,
+        active_size=2,
+        op0=SimpleNamespace(total_size=3),
+        op_matvec_by_index=[SimpleNamespace(signature="same", matrix=matrix)] * 2,
+        rhs_by_index=rhs_vectors,
+        which_rhs_values=[1, 2],
+        rhs_norms={1: jnp.linalg.norm(rhs_vectors[0]), 2: jnp.linalg.norm(rhs_vectors[1])},
+        residual_norms=residual_norms,
+        solver_kinds_by_rhs={},
+        solve_methods_by_rhs={},
+        elapsed_s=np.zeros(2),
+        state_vectors=state_vectors,
+        store_state_vectors=True,
+        stream_diagnostics=True,
+        rhs3_krylov_flags=lambda _which_rhs: (False, False),
+        maybe_project_constraint_nullspace=lambda x, **_kwargs: x,
+        reduce_full=lambda x: x[:2],
+        expand_reduced=lambda x: jnp.asarray([x[0], x[1], 0.0], dtype=jnp.float64),
+        collect_transport_outputs=lambda which_rhs, x: collected.setdefault(int(which_rhs), x),
+        emit=lambda level, message: emitted.append((int(level), str(message))),
+    )
+
+    assert solve_transport_dense_batch(
+        context=context,
+        op_probe_ref=context.op_matvec_by_index[0],
+        reason="active-unit",
+    )
+
+    np.testing.assert_allclose(np.asarray(state_vectors[1]), np.asarray([1.0, -1.0, 0.0]), atol=1.0e-12)
+    np.testing.assert_allclose(np.asarray(state_vectors[2]), np.asarray([3.0, 2.0, 0.0]), atol=1.0e-12)
+    assert set(collected) == {1, 2}
+    assert max(float(value) for value in residual_norms.values()) < 1.0e-10
+    assert any("relative_residual" in message for _level, message in emitted)
+
+
 def test_active_block_ordering_variants_and_guards() -> None:
     zeta = build_active_block_ordering(
         kinetic_size=4,
@@ -664,8 +767,16 @@ def test_active_block_ordering_variants_and_guards() -> None:
 
     with pytest.raises(ValueError, match="kinetic_size"):
         build_active_block_ordering(kinetic_size=0, tail_size=0, n_theta=2, n_zeta=2)
+    with pytest.raises(ValueError, match="n_theta and n_zeta"):
+        build_active_block_ordering(kinetic_size=4, tail_size=0, n_theta=0, n_zeta=2)
     with pytest.raises(ValueError, match="divisible"):
         build_active_block_ordering(kinetic_size=3, tail_size=0, n_theta=2, n_zeta=2, block_kind="zeta_line")
+    with pytest.raises(ValueError, match="theta-line"):
+        build_active_block_ordering(kinetic_size=3, tail_size=0, n_theta=2, n_zeta=2, block_kind="theta_line")
+    with pytest.raises(ValueError, match="angular-plane"):
+        build_active_block_ordering(kinetic_size=3, tail_size=0, n_theta=2, n_zeta=2, block_kind="angular_plane")
+    with pytest.raises(ValueError, match="ell-band"):
+        build_active_block_ordering(kinetic_size=3, tail_size=0, n_theta=2, n_zeta=2, block_kind="ell_band")
     with pytest.raises(ValueError, match="unsupported"):
         build_active_block_ordering(kinetic_size=4, tail_size=0, n_theta=2, n_zeta=2, block_kind="bad")
     with pytest.raises(MemoryError, match="active block size"):
@@ -758,6 +869,29 @@ def test_active_block_schur_factor_and_residual_coarse_are_admitted() -> None:
     )
     assert not failed.accepted
     assert failed.reason in {"relative_residual_gate", "improvement_gate"}
+
+    singular_ordering = build_active_block_ordering(
+        kinetic_size=2,
+        tail_size=0,
+        n_theta=1,
+        n_zeta=2,
+        block_kind="zeta_line",
+    )
+    singular = scipy_sparse.csr_matrix(np.asarray([[1.0, 2.0], [2.0, 4.0]], dtype=np.float64))
+    singular_factor = build_active_block_schur_factor(singular, singular_ordering, reg=0.0, max_mb=1.0)
+    singular_apply = singular_factor.apply(np.asarray([1.0, 0.5], dtype=np.float64))
+    assert singular_apply.shape == (2,)
+    assert np.all(np.isfinite(singular_apply))
+
+    identity = scipy_sparse.eye(2, format="csr", dtype=np.float64)
+    identity_factor = build_active_block_schur_factor(identity, singular_ordering, reg=0.0, max_mb=1.0)
+    with pytest.raises(ValueError, match="no finite candidate"):
+        build_active_block_schur_residual_coarse_factor(
+            identity,
+            identity_factor,
+            probes=np.eye(2, dtype=np.float64),
+            max_cols=2,
+        )
 
 
 def test_rhsmode23_direct_pmat_physics_coarse_basis_uses_sources_and_tail_response() -> None:

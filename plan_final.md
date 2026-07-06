@@ -3726,6 +3726,49 @@ Status:
   fresh production CPU/GPU benchmark regeneration, and final PR review cleanup
   are still open.
 
+## Latest Execution Log: Transport Dense Batch and Block-Schur Guards
+
+What changed:
+
+- Added direct transport dense-batch tests for disabled-backend admission,
+  RHS3-special-Krylov admission rejection, active-DOF dense solves, streaming
+  output collection, residual reporting, and mixed-precision dense refinement.
+- Expanded active block-Schur numerical guard tests to cover invalid angular
+  block orderings, singular block pseudo-inverse fallback, and fail-closed
+  zero-residual coarse-correction setup.
+
+Validation:
+
+- `python -m pytest -q tests/test_transport_linear_solve.py` passed as
+  `28 passed in 7.40 s` after the final guard additions.
+- `python -m ruff check tests/test_transport_linear_solve.py`,
+  `python -m compileall -q tests/test_transport_linear_solve.py
+  sfincs_jax/problems/transport_linear_system.py`, and `git diff --check`
+  passed.
+- Full package coverage validation after the dense-batch additions passed:
+  `python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax
+  --cov-report=term
+  --cov-report=json:/tmp/sfincs_jax_coverage_after_transport_dense_mixed.json`
+  as `4452 passed in 281.47 s`.
+
+Coverage movement from the full audit:
+
+- `sfincs_jax/problems/transport_linear_system.py` improved from `210`
+  missing lines to `205` missing lines after the dense-batch additions.
+- Total package missing lines improved from `6601` to `6595`.
+- Total package coverage improved from `90.448%` to `90.457%`.
+
+Status:
+
+- The pushed PR head before this tranche (`ebc0b06a`) had all GitHub checks
+  green and merge state `CLEAN`.
+- This tranche strengthens real transport-matrix dense and block-Schur
+  numerical behavior without changing production source code.
+- The 95% coverage target remains open; the next higher-ROI coverage targets
+  remain `profile_solve.py`, `transport_solve.py`,
+  `preconditioner_xblock_tz_sparse.py`, and the larger QI/PAS preconditioner
+  owners.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
