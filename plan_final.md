@@ -4265,6 +4265,45 @@ Status:
   update `plan_final.md` only for active decisions and keep `plan.md` as
   execution history.
 
+## Latest Execution Log: Transport Block Preconditioner Coverage Tranche
+
+What was checked:
+
+- Continued the CPU-local coverage/refactor path while PR #8 coverage shards
+  were still running remotely with no visible failure.
+- Re-audited the high-ROI coverage blockers and selected
+  `solvers/preconditioner_transport_matrix.py` because it remains a large
+  meaningful owner and can be exercised with bounded synthetic operators rather
+  than production solves.
+- Confirmed the existing transport preconditioner suite already covers most
+  public builders, memory fallbacks, FP/PAS formulas, Schur wrappers, and
+  x-block/structured-factor failure paths.
+
+Source/test change:
+
+- Added a bounded RHSMode=2/3 block-preconditioner regression covering two
+  previously unguarded branches:
+  singular local block setup falling back through the pseudo-inverse path, and
+  the reduced-view wrapper matching full-space projection when `extra_size=0`.
+- The test uses synthetic zero local blocks and does not launch a transport
+  solve, so it improves coverage without increasing CI runtime materially.
+
+Validation:
+
+- `python -m pytest -q tests/test_transport_matrix_preconditioners.py` passed
+  as `20 passed in 7.36 s`.
+- `python -m ruff check tests/test_transport_matrix_preconditioners.py`
+  passed.
+- `python -m compileall -q tests/test_transport_matrix_preconditioners.py`
+  passed.
+
+Status:
+
+- This is a concrete coverage/bug-prevention step for the RHSMode=2/3
+  production preconditioner family. It does not close the 95% package-coverage
+  gate by itself; the next coverage tranche should use the next completed CI
+  per-file report to avoid guessing at the remaining largest missing regions.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

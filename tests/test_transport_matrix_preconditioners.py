@@ -390,6 +390,54 @@ def test_transport_block_preconditioner_assembles_active_local_and_tail_blocks(m
         assert chunk_cols >= 1
 
 
+def test_transport_block_preconditioner_reduced_and_singular_blocks_are_bounded(
+    monkeypatch,
+) -> None:
+    """Block preconditioner setup should fail soft on singular local systems."""
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PRECOND_BLOCK_REG", "0")
+    _clear_transport_caches()
+    op = _transport_operator()
+    op.extra_size = 0
+    op.total_size = op.f_size
+    vector = _vector(op)
+
+    def singular_local_blocks(op_pc, *, col_idx, row_idx, total_size, chunk_cols):
+        del op_pc, chunk_cols
+        col = np.asarray(col_idx, dtype=np.int32)
+        row = np.asarray(row_idx, dtype=np.int32)
+        np.testing.assert_array_equal(col, row)
+        assert int(total_size) == op.total_size
+        return np.zeros((row.size, col.size), dtype=np.float64)
+
+    monkeypatch.setattr(tm, "_build_transport_preconditioner_operator_point", lambda op_arg: op_arg)
+    monkeypatch.setattr(tm, "_matvec_submatrix", singular_local_blocks)
+
+    full_preconditioner = tm.build_rhsmode23_block_preconditioner(op=op)
+    full_result = np.asarray(full_preconditioner(vector))
+    assert full_result.shape == (op.total_size,)
+    assert np.all(np.isfinite(full_result))
+    np.testing.assert_allclose(full_result, np.zeros_like(full_result))
+
+    active = jnp.arange(op.total_size, dtype=jnp.int32)[::5]
+
+    def reduce_full(candidate: jnp.ndarray) -> jnp.ndarray:
+        return candidate[active]
+
+    def expand_reduced(candidate: jnp.ndarray) -> jnp.ndarray:
+        expanded = jnp.zeros((op.total_size,), dtype=jnp.float64)
+        return expanded.at[active].set(candidate)
+
+    reduced_preconditioner = tm.build_rhsmode23_block_preconditioner(
+        op=op,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
+    reduced_rhs = reduce_full(vector)
+    expected = reduce_full(full_preconditioner(expand_reduced(reduced_rhs)))
+    np.testing.assert_allclose(np.asarray(reduced_preconditioner(reduced_rhs)), np.asarray(expected))
+
+
 def test_transport_tzfft_and_fp_tzfft_preconditioners_are_finite_and_cached(monkeypatch) -> None:
     op = _transport_operator()
     vector = _vector(op)
