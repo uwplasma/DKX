@@ -61,6 +61,10 @@ The main structural refactor is functionally complete:
   workflow. `tests/test_benchmark_doc_claims.py` parses
   `.github/workflows/ci.yml` and verifies that `docs/testing.rst` reports the
   same fail-under gate and staged path to the `95%` target.
+- The policy-owner cleanup pass removed the dead private
+  `profile_policies._qi_device_solver_env` wrapper. The real QI device solver
+  environment normalizer remains owned by `solvers/preconditioner_qi_device.py`;
+  policy and source-tree guards passed after the deletion.
 - The 2026-07-05 user-facing documentation wording pass removed active prose
   labels such as "latest snapshot", "current release", "previous best", and
   progress-log phrasing from README-facing docs pages. The active-doc scan only

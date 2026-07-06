@@ -662,14 +662,6 @@ def parse_rhs1_pas_tz_guarded_structured_levels(raw: str) -> tuple[str, ...]:
     return tuple(levels)
 
 
-def _qi_device_solver_env(name: str, *, default: str) -> str:
-    """Compatibility wrapper for the QI device solver-env normalizer."""
-
-    from sfincs_jax.solvers.preconditioner_qi_device import qi_device_solver_env
-
-    return qi_device_solver_env(name, default=default)
-
-
 def rhs1_qi_device_extra_coarse_controls() -> dict[str, object]:
     """Compatibility wrapper for QI device coarse-equation controls."""
 
