@@ -15,6 +15,17 @@ SOURCE_MAP_DOC = REPO_ROOT / "docs" / "source_map.rst"
 ACTIVE_PLAN = REPO_ROOT / "plan_final.md"
 EXECUTION_LOG = REPO_ROOT / "plan.md"
 ALLOWED_ROOT_PLAN_FILES = ("plan.md", "plan_final.md")
+ACTIVE_PLAN_MAX_LINES = 260
+ACTIVE_PLAN_REQUIRED_SECTIONS = (
+    "## One-Sentence Goal",
+    "## Current Review State",
+    "## Open Lanes",
+    "## Source Structure Rules",
+    "## Ordered Finish Plan",
+    "## Standard Validation Commands",
+    "## Completion Gates",
+    "## Explicit Deferred Items",
+)
 PACKAGE_README_REQUIRED_SECTIONS = (
     "## Root Modules At A Glance",
     "## Domain Packages At A Glance",
@@ -137,6 +148,9 @@ def test_plan_final_is_the_single_authoritative_plan() -> None:
     assert "single active plan" in active_text
     assert "`plan.md` is the historical execution log" in active_text
     assert "Do not create another competing plan" in active_text
+    assert len(active_text.splitlines()) <= ACTIVE_PLAN_MAX_LINES
+    for section in ACTIVE_PLAN_REQUIRED_SECTIONS:
+        assert section in active_text
 
     log_text = EXECUTION_LOG.read_text(encoding="utf-8")
     assert "Historical log only" in log_text
