@@ -3943,6 +3943,46 @@ Status:
   pruning of stale scripts or generated artifacts if the strengthened tests
   expose them.
 
+## Latest Execution Log: Public Facade And Path-Resolver Coverage Tranche
+
+What was checked:
+
+- Reviewed the remaining root compatibility facades and the public path
+  resolver because these are critical during refactoring: source modules can
+  move only if old imports and equilibrium path lookup remain stable.
+- Confirmed existing tests covered many direct I/O paths but did not explicitly
+  test `sfincs_jax.io` private-compatibility delegation or release-data fallback
+  resolution from `resolve_existing_path`.
+
+Source/test change:
+
+- Added `tests/test_public_facades_and_paths.py`.
+- New tests cover:
+  - relative and stale-absolute equilibrium resolution through
+    `extra_search_dirs`,
+  - release-hosted equilibrium resolution through the external data resolver,
+  - failure diagnostics that preserve attempted paths,
+  - `sfincs_jax.io` compatibility `__getattr__` and `__setattr__` delegation to
+    domain-owned output modules,
+  - fail-closed `AttributeError` behavior for unknown compatibility names.
+
+Validation:
+
+- `python -m pytest -q tests/test_public_facades_and_paths.py
+  tests/test_helper_module_coverage.py tests/test_output_formats.py
+  tests/test_api_contracts.py` passed as `38 passed`.
+- `python -m ruff check tests/test_public_facades_and_paths.py` passed.
+- `python -m compileall -q tests/test_public_facades_and_paths.py` passed.
+- `git diff --check` passed.
+
+Status:
+
+- This improves meaningful coverage around low-cost public contracts that guard
+  the refactor, without adding solve-heavy CI time.
+- The 95% coverage lane remains open; next high-value coverage tranches should
+  continue to target public contracts and compact policy/helper modules before
+  attempting any solve-heavy coverage expansion.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
