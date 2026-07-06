@@ -2407,6 +2407,56 @@ Validation:
 - The focused stale-wording scan over `docs/validation_matrix.rst` returned no
   matches for the rejected branch-history terms.
 
+### Tranche 133: single-branch review regeneration pass
+
+Scope:
+
+- Confirmed `refactor/v3-driver-architecture` is the single review branch and
+  already contains every commit from `origin/main`; no second feature branch is
+  needed for the PR review pass.
+- Regenerated the README-facing SFINCS Fortran v3 / SFINCS_JAX CPU/GPU
+  runtime-memory summary from the checked CPU/GPU suite reports.
+- Added a `--from-summary-json` mode to
+  `examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` so the
+  checked QA/QH bootstrap-current figure bundles can be re-rendered from their
+  committed summary JSONs without rerunning expensive kinetic solves or
+  requiring ignored HDF5 sidecar directories.
+- Re-rendered the checked QA/QH same-resolution and whole-radius
+  bootstrap-current PDFs from the committed summary JSONs.
+- Documented the summary-JSON figure regeneration command in the root README
+  and `docs/examples.rst`.
+
+Validation:
+
+- GitHub PR #8 check rollup before this tranche was green and merge state was
+  `CLEAN`.
+- `python examples/publication_figures/generate_fortran_suite_benchmark_summary.py --min-fortran-runtime-s 10`
+  completed and rewrote the benchmark summary figure bundle.
+- `python scripts/generate_readme_fast_branch_audit.py --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas --min-fortran-runtime-s 10`
+  completed and refreshed the README audit block.
+- The QA/QH bootstrap-current figures were re-rendered from summary JSON with
+  `--from-summary-json` for:
+  `qs_paper_qa_same_resolution_11surface`,
+  `qs_paper_qh_same_resolution_11surface`,
+  `qs_paper_sfincs_jax_redl_comparison`, and
+  `qs_paper_qh_sfincs_jax_redl_comparison`.
+- `python scripts/check_benchmark_artifacts.py examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json`
+  passed.
+- `pytest -q tests/test_benchmark_doc_claims.py tests/test_generate_fortran_suite_benchmark_summary.py tests/test_finite_beta_vmec_example.py`
+  passed as `39 passed in 2.92 s`.
+- `ruff check examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py tests/test_finite_beta_vmec_example.py`
+  passed.
+- `python -m compileall -q examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py tests/test_finite_beta_vmec_example.py`
+  passed.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `git diff --check` passed.
+- A bounded fresh SFINCS Fortran v3 comparison passed on
+  `quick_2species_FPCollisions_noEr` using
+  `/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs` with
+  `rtol=atol=1e-8`: `ok_fortran=1`, `ok_compare_common=1`, 209 common HDF5
+  keys, and no missing JAX keys.
+- The full local suite passed as `4329 passed in 659.65 s`.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
