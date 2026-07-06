@@ -5163,6 +5163,9 @@ Validation:
   tests/test_pas_angular_preconditioner.py` and
   `PYTHONNOUSERSITE=1 python -m compileall -q
   tests/test_pas_angular_preconditioner.py` passed.
+- Full local CPU suite without coverage passed after this tranche:
+  `python -m pytest -q -n auto --dist=loadscope` as
+  `4575 passed, 1 skipped in 267.61 s`.
 
 Status:
 
