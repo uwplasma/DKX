@@ -32,6 +32,7 @@ from sfincs_jax.io import (
     _select_rhsmode1_linear_solve_method,
     _should_precompile_v3_full_system,
     read_sfincs_h5,
+    read_sfincs_output_file,
     _resolve_equilibrium_file_from_namelist,
     sfincs_jax_output_dict,
     write_sfincs_h5,
@@ -253,6 +254,143 @@ def test_write_output_transport_streaming_restores_environment(
     assert int(np.asarray(captured["stream_data"]["RHSMode"]).reshape(())) == 2
     assert os.environ.get("SFINCS_JAX_TRANSPORT_STORE_STATE") == "old-store"
     assert "SFINCS_JAX_TRANSPORT_STREAM_DIAGNOSTICS" not in os.environ
+
+
+def test_write_output_transport_npz_writes_matrix_flux_coordinates_and_trace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Transport output orchestration should be testable without a real solve."""
+
+    input_path = _minimal_writer_input(tmp_path, rhs_mode=3, geometry_scheme=1)
+    output_path = tmp_path / "transport_output.npz"
+    trace_path = tmp_path / "transport_trace.json"
+    captured: dict[str, object] = {}
+
+    monkeypatch.setenv("SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS", "1")
+    monkeypatch.setattr(output_writer, "grids_from_namelist", lambda _nml: _minimal_writer_grids())
+    monkeypatch.setattr(output_writer, "geometry_from_namelist", lambda **_kwargs: SimpleNamespace())
+    monkeypatch.setattr(output_writer, "_export_f_config", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        output_writer,
+        "sfincs_jax_output_dict",
+        lambda **_kwargs: {
+            "RHSMode": np.asarray(3, dtype=np.int32),
+            "geometryScheme": np.asarray(1, dtype=np.int32),
+            "constraintScheme": np.asarray(1, dtype=np.int32),
+            "psiAHat": np.asarray(2.0, dtype=np.float64),
+            "aHat": np.asarray(4.0, dtype=np.float64),
+            "rN": np.asarray(0.5, dtype=np.float64),
+            "BHat": np.ones((2, 2), dtype=np.float64),
+            "gpsiHatpsiHat": np.ones((2, 2), dtype=np.float64),
+            "VPrimeHat": np.asarray(1.0, dtype=np.float64),
+            "alpha": np.asarray(1.0, dtype=np.float64),
+            "Delta": np.asarray(0.01, dtype=np.float64),
+            "nu_n": np.asarray(0.2, dtype=np.float64),
+            "Zs": np.asarray([1.0], dtype=np.float64),
+            "mHats": np.asarray([2.0], dtype=np.float64),
+            "THats": np.asarray([3.0], dtype=np.float64),
+            "nHats": np.asarray([4.0], dtype=np.float64),
+        },
+    )
+
+    import sfincs_jax.operators.profile_system as profile_system
+    import sfincs_jax.physics.classical_transport as classical_transport
+    import sfincs_jax.problems.transport_solve as transport_solve
+
+    op0 = SimpleNamespace(
+        n_zeta=2,
+        n_theta=2,
+        n_species=1,
+        theta_weights=np.asarray([0.4, 0.6], dtype=np.float64),
+        zeta_weights=np.asarray([0.25, 0.75], dtype=np.float64),
+        d_hat=np.ones((2, 2), dtype=np.float64),
+        x=np.asarray([0.25, 0.75], dtype=np.float64),
+        x_weights=np.asarray([0.5, 0.5], dtype=np.float64),
+        z_s=np.asarray([1.0], dtype=np.float64),
+        t_hat=np.asarray([3.0], dtype=np.float64),
+        m_hat=np.asarray([2.0], dtype=np.float64),
+        n_hat=np.asarray([4.0], dtype=np.float64),
+    )
+    n_rhs = 2
+    transport_fields = {
+        "pressurePerturbation": np.full((2, 2, 1, n_rhs), 1.0, dtype=np.float64),
+        "momentumFluxBeforeSurfaceIntegral_vm": np.full((2, 2, 1, n_rhs), 2.0, dtype=np.float64),
+        "particleFlux_vm_psiHat": np.asarray([[1.0, 2.0]], dtype=np.float64),
+        "heatFlux_vm_psiHat": np.asarray([[4.0, 5.0]], dtype=np.float64),
+        "momentumFlux_vm_psiHat": np.asarray([[7.0, 8.0]], dtype=np.float64),
+        "particleFlux_vm0_psiHat": np.asarray([[0.1, 0.2]], dtype=np.float64),
+        "heatFlux_vm0_psiHat": np.asarray([[0.4, 0.5]], dtype=np.float64),
+        "momentumFlux_vm0_psiHat": np.asarray([[0.7, 0.8]], dtype=np.float64),
+    }
+    fake_result = SimpleNamespace(
+        op0=op0,
+        state_vectors_by_rhs={},
+        transport_matrix=np.arange(4.0, dtype=np.float64).reshape((2, 2)),
+        elapsed_time_s=np.asarray([0.1, 0.2], dtype=np.float64),
+        transport_output_fields=transport_fields,
+        metadata={"transport_solver": "fake"},
+    )
+
+    def _fake_transport_solve(**kwargs):
+        captured["force_store_state"] = kwargs["force_store_state"]
+        captured["differentiable"] = kwargs["differentiable"]
+        return fake_result
+
+    def _fake_classical_flux_v3(**kwargs):
+        captured["classical_dn"] = np.asarray(kwargs["dn_hat_dpsi_hat"], dtype=np.float64)
+        return (
+            np.asarray([10.0], dtype=np.float64),
+            np.asarray([20.0], dtype=np.float64),
+        )
+
+    monkeypatch.setattr(transport_solve, "solve_v3_transport_matrix_linear_gmres", _fake_transport_solve)
+    monkeypatch.setattr(
+        profile_system,
+        "with_transport_rhs_settings",
+        lambda op, which_rhs: SimpleNamespace(
+            **vars(op),
+            dn_hat_dpsi_hat=np.asarray([float(which_rhs)], dtype=np.float64),
+            dt_hat_dpsi_hat=np.asarray([10.0 * float(which_rhs)], dtype=np.float64),
+        ),
+    )
+    monkeypatch.setattr(classical_transport, "classical_flux_v3", _fake_classical_flux_v3)
+    monkeypatch.setattr(
+        output_writer,
+        "_transport_solver_diagnostic_arrays",
+        lambda result, n_rhs: {"solverDiagnostic": np.arange(float(n_rhs), dtype=np.float64)},
+    )
+
+    resolved = output_writer.write_sfincs_jax_output_h5(
+        input_namelist=input_path,
+        output_path=output_path,
+        compute_transport_matrix=True,
+        solver_trace_path=trace_path,
+        differentiable=False,
+        verbose=False,
+    )
+
+    assert resolved == output_path.resolve()
+    assert captured["force_store_state"] is None
+    assert captured["differentiable"] is False
+    np.testing.assert_allclose(captured["classical_dn"], [2.0])
+
+    loaded = read_sfincs_output_file(output_path)
+    np.testing.assert_allclose(loaded["transportMatrix"], fake_result.transport_matrix.T)
+    np.testing.assert_allclose(loaded["elapsed time (s)"], [0.1, 0.2])
+    np.testing.assert_allclose(loaded["particleFlux_vm_psiN"], [[0.5, 1.0]])
+    np.testing.assert_allclose(loaded["particleFlux_vm_rHat"], [[2.0, 4.0]])
+    np.testing.assert_allclose(loaded["particleFlux_vm_rN"], [[0.5, 1.0]])
+    np.testing.assert_allclose(loaded["classicalParticleFlux_psiHat"], [[10.0, 10.0]])
+    np.testing.assert_allclose(loaded["classicalHeatFlux_rN"], [[10.0, 10.0]])
+    np.testing.assert_allclose(loaded["solverDiagnostic"], [0.0, 1.0])
+    assert int(np.asarray(loaded["NIterations"]).reshape(())) == n_rhs
+
+    trace = read_solver_trace_json(trace_path)
+    assert trace.rhs_mode == 3
+    assert trace.selected_path == "transport_matrix"
+    assert trace.metadata["compute_transport_matrix"] is True
+    assert trace.metadata["output_format"] == "npz"
 
 
 def test_output_cache_path_is_stable_and_key_sensitive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

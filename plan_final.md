@@ -1946,6 +1946,14 @@ Completed work:
   importable package. Validation:
   `tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
   passed `69/69` in `5.28 s`; `compileall` and `git diff --check` passed.
+- Tranche 129: expanded top-level output writer orchestration coverage without
+  production solves. Added a deterministic RHSMode=3 transport-output test that
+  exercises the non-streaming NPZ branch, transport matrix writeout, elapsed
+  timings, coordinate-converted fluxes, classical flux per-RHS dispatch,
+  optional solver diagnostics, and versioned solver trace metadata while
+  monkeypatching only the expensive numerical solve. Validation:
+  `tests/test_io_output_policy_coverage.py tests/test_io_export_and_h5_coverage.py tests/test_transport_output_schema.py tests/test_output_formats.py`
+  passed `118/118` in `2.56 s`.
 
 Remaining consolidation steps:
 
