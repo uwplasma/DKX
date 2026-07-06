@@ -4028,6 +4028,10 @@ Validation:
 - `python -m pytest -q tests/test_profile_response_dense.py
   tests/test_profile_response_finalization.py tests/test_summarize_solver_paths.py`
   passed as `51 passed`.
+- `python -m pytest -q tests/test_gpu_solver_path_artifacts.py
+  tests/test_solver_path_artifacts.py tests/test_benchmark_case_variants.py
+  tests/test_benchmark_pas_tz_memory_fallback.py` passed as `52 passed in
+  10.72 s`.
 - A minimal `ssh office` GPU probe was attempted but timed out at the configured
   SSH host/port before any remote command produced output. Remote GPU evidence
   still needs a reachable session.
