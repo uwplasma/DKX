@@ -12,6 +12,9 @@ PACKAGE_ROOT = REPO_ROOT / "sfincs_jax"
 EXPECTED_TREE = REPO_ROOT / "tests" / "fixtures" / "source_tree_expected.json"
 PACKAGE_README = PACKAGE_ROOT / "README.md"
 SOURCE_MAP_DOC = REPO_ROOT / "docs" / "source_map.rst"
+ACTIVE_PLAN = REPO_ROOT / "plan_final.md"
+EXECUTION_LOG = REPO_ROOT / "plan.md"
+ALLOWED_ROOT_PLAN_FILES = ("plan.md", "plan_final.md")
 PACKAGE_README_REQUIRED_SECTIONS = (
     "## Root Modules At A Glance",
     "## Domain Packages At A Glance",
@@ -122,6 +125,24 @@ def test_source_tree_consolidation_target_matches_current_tree() -> None:
     assert expected["target_root_packages"] == expected["allowed_root_packages"]
     assert expected["temporary_nested_packages"] == []
     assert expected["temporary_init_only_packages"] == []
+
+
+def test_plan_final_is_the_single_authoritative_plan() -> None:
+    """Prevent competing root-level plans from drifting into PR review."""
+
+    root_plan_files = sorted(path.name for path in REPO_ROOT.glob("*plan*.md"))
+    assert root_plan_files == list(ALLOWED_ROOT_PLAN_FILES)
+
+    active_text = ACTIVE_PLAN.read_text(encoding="utf-8")
+    assert "single active plan" in active_text
+    assert "`plan.md` is the historical execution log" in active_text
+    assert "Do not create another competing plan" in active_text
+
+    log_text = EXECUTION_LOG.read_text(encoding="utf-8")
+    assert "Historical log only" in log_text
+    assert "Authoritative plan: `plan_final.md`" in log_text
+    assert "if this file conflicts with `plan_final.md`, follow" in log_text
+    assert "active implementation branch" not in log_text.lower()
 
 
 def test_package_readme_describes_current_source_layout() -> None:
