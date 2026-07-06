@@ -123,6 +123,80 @@ def test_external_equilibrium_download_extract_and_resolve(tmp_path: Path, monke
     assert (target / ".complete").read_text(encoding="ascii") == "ok\n"
 
 
+def test_external_equilibrium_download_reports_source_when_not_quiet(
+    tmp_path: Path,
+    monkeypatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.delenv("SFINCS_JAX_OFFLINE", raising=False)
+    payload = b"small release-hosted fixture\n"
+    rel_path = Path("sfincs_jax/data/equilibria/tiny_verbose.bc")
+    release_dir = tmp_path / "release"
+    release_dir.mkdir()
+    archive_path = release_dir / "tiny-verbose-data.tar.gz"
+
+    with tarfile.open(archive_path, "w:gz") as tf:
+        info = tarfile.TarInfo(rel_path.as_posix())
+        info.size = len(payload)
+        tf.addfile(info, io.BytesIO(payload))
+
+    manifest = {
+        "version": "test-v1",
+        "release_tag": "test-data",
+        "release_url": release_dir.as_uri(),
+        "asset": archive_path.name,
+        "archive_sha256": data_fetch._sha256(archive_path),
+        "files": [
+            {
+                "path": rel_path.as_posix(),
+                "size": len(payload),
+                "sha256": _sha256_bytes(payload),
+            }
+        ],
+    }
+
+    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(data_fetch, "_load_manifest", lambda: manifest)
+
+    assert data_fetch.ensure_external_equilibrium_data(quiet=False) == tmp_path / "cache" / "test-v1"
+    assert "Downloading SFINCS-JAX external equilibrium data" in capsys.readouterr().out
+
+
+def test_external_equilibrium_extract_rejects_failed_file_verification(tmp_path: Path, monkeypatch) -> None:
+    payload = b"corrupt extracted fixture\n"
+    expected_payload = b"expected extracted fixture\n"
+    rel_path = Path("sfincs_jax/data/equilibria/tiny_corrupt_after_extract.bc")
+    cache_root = tmp_path / "cache"
+    archive_path = cache_root / "tiny-corrupt-data.tar.gz"
+    archive_path.parent.mkdir(parents=True)
+
+    with tarfile.open(archive_path, "w:gz") as tf:
+        info = tarfile.TarInfo(rel_path.as_posix())
+        info.size = len(payload)
+        tf.addfile(info, io.BytesIO(payload))
+
+    manifest = {
+        "version": "test-v1",
+        "release_tag": "test-data",
+        "release_url": "https://example.invalid/release",
+        "asset": archive_path.name,
+        "archive_sha256": data_fetch._sha256(archive_path),
+        "files": [
+            {
+                "path": rel_path.as_posix(),
+                "size": len(expected_payload),
+                "sha256": _sha256_bytes(expected_payload),
+            }
+        ],
+    }
+
+    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(cache_root))
+    monkeypatch.setattr(data_fetch, "_load_manifest", lambda: manifest)
+
+    with pytest.raises(RuntimeError, match="verification failed after extraction"):
+        data_fetch.ensure_external_equilibrium_data(quiet=True)
+
+
 def test_external_equilibrium_cached_data_short_circuits_download(tmp_path: Path, monkeypatch) -> None:
     payload = b"already cached\n"
     rel_path = Path("sfincs_jax/data/equilibria/tiny_cached.bc")
