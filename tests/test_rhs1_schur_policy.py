@@ -583,3 +583,102 @@ def test_resolve_schur_base_large_pas_er_prefers_xmg(monkeypatch) -> None:
         )
         == "xmg"
     )
+
+
+def test_resolve_schur_base_point_and_final_geometry_line_fallbacks(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCHUR_BASE", raising=False)
+
+    common = dict(
+        base_kind_env="",
+        n_species=1,
+        total_size=128,
+        nxi_for_x=[3, 3],
+        has_pas=False,
+        has_fp=True,
+        has_er_xdot=False,
+        has_er_xidot=False,
+        use_dkes_exb=False,
+        pas_tokamak_theta_applicable=False,
+        pas_tz_applicable=False,
+        geom_scheme=5,
+    )
+
+    assert resolve_rhs1_schur_base_kind(n_theta=1, n_zeta=1, **common) == "point"
+    assert resolve_rhs1_schur_base_kind(n_theta=8, n_zeta=4, **common) == "theta_line"
+    assert resolve_rhs1_schur_base_kind(n_theta=4, n_zeta=8, **common) == "zeta_line"
+
+
+def test_resolve_schur_base_pas_tokamak_and_xblock_fallbacks(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPECIES_BLOCK_MAX", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "500")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TZ_PRECOND_MAX", "0")
+
+    common = dict(
+        base_kind_env="",
+        n_theta=4,
+        n_zeta=4,
+        n_species=1,
+        total_size=2048,
+        nxi_for_x=[4, 4],
+        has_pas=True,
+        has_fp=False,
+        has_er_xdot=False,
+        has_er_xidot=False,
+        use_dkes_exb=False,
+        pas_tz_applicable=False,
+        geom_scheme=5,
+    )
+
+    assert resolve_rhs1_schur_base_kind(pas_tokamak_theta_applicable=True, **common) == "pas_tokamak_theta"
+    assert resolve_rhs1_schur_base_kind(pas_tokamak_theta_applicable=False, **common) == "xblock_tz"
+
+
+def test_build_rhs1_schur_preconditioner_adi_sweeps_are_lower_bounded(monkeypatch) -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+    op = _schur_dispatch_op()
+    _patch_schur_dispatch_cache_key(monkeypatch)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCHUR_BASE", "adi")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "0")
+
+    preconditioner = build_rhs1_schur_preconditioner(
+        op=op,
+        builders=_dispatch_builders(calls),
+    )
+    vector = jnp.arange(op.total_size, dtype=jnp.float64)
+
+    np.testing.assert_allclose(np.asarray(preconditioner(vector)), np.asarray(vector + 16.0))
+    assert [name for name, _kwargs in calls[:2]] == ["theta_line", "zeta_line"]
+
+
+def test_active_field_split_policy_env_base_and_empty_solver_defaults() -> None:
+    policy = resolve_active_native_field_split_sparse_coarse_policy(
+        requested_kind="active_line_field_split_sparse_coarse",
+        env={
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_LINE_FIELD_SPLIT_BASE": " custom-base ",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_SOLVER": "",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SPARSE_COARSE_MAX_SIZE": "17",
+        },
+    )
+
+    assert policy.is_multiline is False
+    assert policy.is_angular_only is False
+    assert policy.is_coupled_kinetic is False
+    assert policy.output_kind == "active_native_xell_field_split_sparse_coarse"
+    assert policy.requested_base_kind == "custom_base"
+    assert policy.max_coarse_size == 17
+    assert policy.coarse_solver_mode == "least_squares"
+
+
+def test_active_sparse_coarse_residual_policy_default_family_and_bad_env() -> None:
+    policy = resolve_active_sparse_coarse_residual_policy(
+        requested_kind="unknown-route",
+        env={
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SPARSE_COARSE_MAX_SIZE": "bad",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SPARSE_COARSE_SOLVER": "not-a-solver",
+        },
+    )
+
+    assert policy.base_kind == "active_diagonal_schur"
+    assert policy.output_kind == "active_tail_sparse_coarse"
+    assert policy.max_coarse_size == 640
+    assert policy.coarse_solver_mode == "galerkin"

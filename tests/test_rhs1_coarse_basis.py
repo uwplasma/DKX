@@ -83,6 +83,25 @@ def test_coarse_residual_basis_has_expected_columns_and_normalized_modes() -> No
     assert np.allclose(np.asarray(basis[layout.f_size :, -layout.extra_size :].toarray()), np.eye(layout.extra_size))
 
 
+def test_coarse_surface_modes_include_orthonormal_helical_modes() -> None:
+    layout = _layout()
+    config = {
+        "coarse_lmax": 1,
+        "coarse_include_tail": False,
+        "coarse_angular_mmax": 0,
+        "coarse_angular_nmax": 0,
+        "coarse_helical_mmax": 1,
+        "coarse_helical_nmax": 1,
+    }
+
+    modes = coarse_surface_modes(layout=layout, config=config)
+    names = [name for name, _values in modes]
+
+    assert names == ["constant", "cos_helical_1_1", "sin_helical_1_1"]
+    assert all(np.isclose(np.linalg.norm(values), 1.0) for _name, values in modes)
+    assert abs(float(np.dot(modes[1][1], modes[2][1]))) < 1.0e-12
+
+
 def test_coarse_residual_basis_drops_duplicate_tiny_surface_modes_without_tail() -> None:
     layout = RHS1BlockLayout(
         n_species=1,

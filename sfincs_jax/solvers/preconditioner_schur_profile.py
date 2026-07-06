@@ -1582,6 +1582,41 @@ def build_jacobi_preconditioner(
     )
 
 
+def _build_f_only_structured_preconditioner(
+    *,
+    matrix: Any,
+    requested_kind: str,
+    selected_kind: str,
+    t0: float,
+    apply_f_inverse: Callable[[Any], np.ndarray],
+    metadata: Mapping[str, object],
+) -> RHS1StructuredFullCSRPreconditioner:
+    """Return a structured kinetic-only inverse when no global tail exists."""
+
+    from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
+
+    n_total = int(matrix.shape[0])
+
+    def apply(x: Any) -> np.ndarray:
+        arr = np.asarray(x, dtype=np.float64).reshape((-1,))
+        return np.asarray(apply_f_inverse(arr), dtype=np.float64).reshape((n_total,))
+
+    operator = LinearOperator(matrix.shape, matvec=apply, dtype=np.float64)
+    return RHS1StructuredFullCSRPreconditioner(
+        operator=operator,
+        selected=True,
+        kind=str(selected_kind),
+        reason="no_global_tail",
+        setup_s=max(0.0, time.perf_counter() - t0),
+        metadata={
+            "requested_kind": str(requested_kind),
+            "kinetic_size": int(n_total),
+            "tail_size": 0,
+            **dict(metadata),
+        },
+    )
+
+
 def build_diagonal_schur_preconditioner(
     *,
     matrix: Any,
@@ -1686,6 +1721,20 @@ def build_block_schur_preconditioner(
         out = np.einsum("bij,bj->bi", inverse_blocks, flat, optimize=True)
         return out.reshape((-1,))
 
+    if tail_size <= 0:
+        return _build_f_only_structured_preconditioner(
+            matrix=matrix,
+            requested_kind=requested_kind,
+            selected_kind="block_schur",
+            t0=t0,
+            apply_f_inverse=apply_f_inverse,
+            metadata={
+                "block_size": int(block_size),
+                "n_blocks": int(n_blocks),
+                **block_meta,
+            },
+        )
+
     schur = np.asarray(w.toarray(), dtype=np.float64)
     u_csc = u.tocsc()
     active_u_columns = 0
@@ -1774,6 +1823,20 @@ def build_xi_block_schur_preconditioner(
         out[block_indices] = block_values
         return out
 
+    if tail_size <= 0:
+        return _build_f_only_structured_preconditioner(
+            matrix=matrix,
+            requested_kind=requested_kind,
+            selected_kind="xi_block_schur",
+            t0=t0,
+            apply_f_inverse=apply_f_inverse,
+            metadata={
+                "block_size": int(layout.n_xi),
+                "n_blocks": int(block_indices.shape[0]),
+                **block_meta,
+            },
+        )
+
     schur = np.asarray(w.toarray(), dtype=np.float64)
     u_csc = u.tocsc()
     active_u_columns = 0
@@ -1861,6 +1924,20 @@ def build_x_xi_block_schur_preconditioner(
         out = np.zeros((n_f,), dtype=np.float64)
         out[block_indices] = block_values
         return out
+
+    if tail_size <= 0:
+        return _build_f_only_structured_preconditioner(
+            matrix=matrix,
+            requested_kind=requested_kind,
+            selected_kind="x_xi_block_schur",
+            t0=t0,
+            apply_f_inverse=apply_f_inverse,
+            metadata={
+                "block_size": int(layout.n_x * layout.n_xi),
+                "n_blocks": int(block_indices.shape[0]),
+                **block_meta,
+            },
+        )
 
     schur = np.asarray(w.toarray(), dtype=np.float64)
     u_csc = u.tocsc()

@@ -195,6 +195,15 @@ The main structural refactor is functionally complete:
   `outputs/writer.py` improved from `36%` to `52%`; the remaining missing
   region is mostly RHSMode=1/2/3 solve orchestration that should be split or
   covered through targeted monkeypatched solve-owner paths.
+- RHSMode=1 Schur/profile preconditioner coverage now includes point-grid and
+  final line-policy fallbacks, PAS tokamak/x-block routing, ADI sweep
+  lower-bound behavior, field-split/sparse-coarse policy default handling,
+  helical coarse-basis mode construction, and tail-free zeta/xi/x-xi structured
+  Schur factors. The tail-free factors now apply the retained kinetic inverse
+  directly instead of entering an empty dense Schur condition estimate. Focused
+  validation passed as `57 passed in 0.87 s`; adjacent profile/transport policy
+  validation passed as `123 passed in 1.46 s`; source-tree/docs guards passed
+  as `73 passed in 4.91 s`.
 - Transport runtime, profile setup, sparse-direct, and diagnostics coverage now
   includes direct tests for worker-count validation, GPU subprocess policy
   injection, persistent-pool helpers, solve-method normalization, explicit
@@ -2046,7 +2055,9 @@ Tranche 122; `profile_sparse_solve.py` reaches `74%` in the owner sparse-PC
 suite after Tranche 123; `transport_parallel_runtime.py` reaches `79%` in the
 focused transport-parallel bundle after Tranche 124; `outputs/writer.py`
 reaches `52%` in the focused writer/export bundle after Tranche 125 and has
-additional RHSMode-1 writer-policy helper coverage after Tranche 131. The final
+additional RHSMode-1 writer-policy helper coverage after Tranche 131;
+`preconditioner_schur_profile.py` has additional policy, coarse-basis, and
+tail-free structured-factor coverage after the Schur/profile tranche. The final
 target is still 95%; the next coverage tranche should prioritize remaining
 high-missing owners with bounded behavior tests or split large orchestration
 regions before adding slow full solves.
@@ -5255,6 +5266,55 @@ Status:
   that matter for CPU production-preconditioner admission. It does not close
   the 95% package-coverage gate by itself; the next bounded coverage tranche
   should keep targeting high-missing owners with deterministic algebraic tests.
+
+### 2026-07-06: Schur/Profile Policy and Tail-Free Factor Coverage Tranche
+
+Changes:
+
+- Added bounded RHSMode=1 Schur policy tests for point-grid routing, final
+  theta/zeta line fallbacks, PAS tokamak selection, x-block fallback selection,
+  ADI sweep lower-bounding, field-split sparse-coarse default handling, and
+  sparse-coarse residual default handling.
+- Added a coarse-basis regression for normalized helical residual modes. This
+  keeps the physics-aware coarse-space construction guarded without requiring a
+  production solve.
+- Fixed the zeta/xi/x-xi structured Schur builders for tail-free systems. These
+  cases now return a kinetic-only structured inverse with `reason =
+  no_global_tail` instead of entering an empty dense Schur condition estimate.
+- Added a direct regression that verifies the tail-free structured factors
+  apply the exact kinetic inverse on a bounded diagonal operator.
+
+Validation:
+
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_rhs1_schur_policy.py tests/test_rhs1_coarse_basis.py
+  tests/test_rhs1_full_csr_schur_preconditioners.py` passed as `57 passed in
+  0.87 s`.
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_source_tree_consolidation.py
+  tests/test_domain_package_import_contracts.py
+  tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `73 passed in 4.91 s`.
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_profile_response_preconditioner_build.py
+  tests/test_rhs1_preconditioner_auto_policy.py
+  tests/test_profile_sparse_helper_coverage.py
+  tests/test_transport_active_factor.py` passed as `123 passed in 1.46 s`.
+- `PYTHONNOUSERSITE=1 python -m ruff check
+  sfincs_jax/solvers/preconditioner_schur_profile.py
+  tests/test_rhs1_schur_policy.py tests/test_rhs1_coarse_basis.py
+  tests/test_rhs1_full_csr_schur_preconditioners.py`,
+  `PYTHONNOUSERSITE=1 python -m compileall -q
+  sfincs_jax/solvers/preconditioner_schur_profile.py
+  tests/test_rhs1_schur_policy.py tests/test_rhs1_coarse_basis.py
+  tests/test_rhs1_full_csr_schur_preconditioners.py`, `git diff --check`,
+  and the large-file audit passed.
+
+Status:
+
+- This closes a real fail-soft gap in host structured preconditioner setup and
+  adds more low-cost coverage to one of the remaining high-missing solver
+  owners. It does not replace the final CI coverage artifact or GPU validation.
 
 ## Standard Validation Commands
 

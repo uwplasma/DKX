@@ -45,6 +45,12 @@ class TinyRHS1Layout:
         return int(((((species * self.n_x + x) * self.n_xi + ell) * self.n_theta + theta) * self.n_zeta) + zeta)
 
 
+class TailFreeTinyRHS1Layout(TinyRHS1Layout):
+    @property
+    def total_size(self) -> int:
+        return int(self.f_size)
+
+
 def _tail_coupled_diagonal_kinetic_matrix(layout: TinyRHS1Layout) -> sp.csr_matrix:
     diag_f = np.linspace(3.0, 6.5, layout.f_size)
     u = np.zeros((layout.f_size, 2), dtype=np.float64)
@@ -148,6 +154,34 @@ def test_full_csr_schur_builders_are_exact_for_diagonal_kinetic_block() -> None:
         assert pc.selected
         assert pc.kind == expected_kind
         assert pc.metadata["tail_size"] == 2
+        assert pc.metadata["kinetic_size"] == layout.f_size
+        np.testing.assert_allclose(pc.operator.matvec(rhs), expected, rtol=1e-12, atol=1e-12)
+
+
+def test_structured_block_schur_builders_apply_kinetic_inverse_without_tail() -> None:
+    layout = TailFreeTinyRHS1Layout()
+    diagonal = np.linspace(2.0, 9.0, layout.total_size)
+    matrix = sp.diags(diagonal, format="csr")
+    rhs = np.linspace(-0.4, 0.9, layout.total_size)
+    expected = rhs / diagonal
+
+    builders = [
+        (build_block_schur_preconditioner, "block_schur"),
+        (build_xi_block_schur_preconditioner, "xi_block_schur"),
+        (build_x_xi_block_schur_preconditioner, "x_xi_block_schur"),
+    ]
+    for builder, expected_kind in builders:
+        pc = builder(
+            matrix=matrix,
+            layout=layout,
+            requested_kind=f"unit_test_{expected_kind}",
+            regularization=0.0,
+            t0=time.perf_counter(),
+        )
+        assert pc.selected
+        assert pc.kind == expected_kind
+        assert pc.reason == "no_global_tail"
+        assert pc.metadata["tail_size"] == 0
         assert pc.metadata["kinetic_size"] == layout.f_size
         np.testing.assert_allclose(pc.operator.matvec(rhs), expected, rtol=1e-12, atol=1e-12)
 
