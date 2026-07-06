@@ -7,7 +7,7 @@ import h5py
 import numpy as np
 import pytest
 
-from sfincs_jax.compare import compare_h5_outputs, main
+from sfincs_jax.compare import H5DatasetParity, compare_h5_outputs, main
 
 
 def _write_h5(path: Path, data: dict[str, object]) -> None:
@@ -106,6 +106,45 @@ def test_compare_h5_outputs_records_missing_reference_and_file_errors(tmp_path: 
 
     with pytest.raises(FileNotFoundError):
         compare_h5_outputs(reference_path=tmp_path / "missing.h5", candidate_path=candidate)
+
+
+def test_h5_dataset_parity_json_and_ok_contracts() -> None:
+    extra = H5DatasetParity(
+        key="candidate_only",
+        status="extra_in_candidate",
+        reference_shape=None,
+        candidate_shape=(2,),
+        max_abs=None,
+        max_rel=None,
+        atol=1.0e-12,
+        rtol=1.0e-12,
+    )
+    non_numeric = H5DatasetParity(
+        key="label",
+        status="non_numeric",
+        reference_shape=(),
+        candidate_shape=(),
+        max_abs=None,
+        max_rel=None,
+        atol=1.0e-12,
+        rtol=1.0e-12,
+    )
+    failing = H5DatasetParity(
+        key="bad",
+        status="missing_in_candidate",
+        reference_shape=(1,),
+        candidate_shape=None,
+        max_abs=None,
+        max_rel=None,
+        atol=1.0e-12,
+        rtol=1.0e-12,
+    )
+
+    assert extra.ok
+    assert non_numeric.ok
+    assert not failing.ok
+    assert extra.to_json()["candidate_shape"] == [2]
+    assert failing.to_json()["candidate_shape"] is None
 
 
 def test_h5_parity_cli_writes_report_and_returns_failure(tmp_path: Path) -> None:
