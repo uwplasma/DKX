@@ -1759,6 +1759,17 @@ Completed work:
   plus import-contract focused validation passed `85/85`; Ruff, `compileall`,
   and `git diff --check` passed. Direct coverage for
   `sfincs_jax/validation/figures.py` is `100%`.
+- Tranche 113: expanded QI device-validation coverage for research-lane
+  evidence gates without running solves: QI ladder mapping normalization,
+  host-fallback warnings, malformed resolution gates, observable mismatch
+  rejection, fail-closed artifact metadata, malformed JSON/scalar artifacts,
+  missing files, operator-reuse/legacy-GPU helper recognition, missing GPU
+  lanes, missing promotion JSON, bad selected roots, missing CPU/Fortran
+  references, and malformed residual summaries. Validation:
+  `tests/test_qi_device_artifact_policy.py tests/test_qi_res15_gpu_campaign.py tests/test_rhs1_qi_promotion.py`
+  passed `21/21` in `0.61 s`; source-tree plus import-contract focused
+  validation passed `74/74`; Ruff, `compileall`, and `git diff --check`
+  passed. Direct coverage for `sfincs_jax/validation/qi_device.py` is `100%`.
 
 Remaining consolidation steps:
 
@@ -1790,9 +1801,10 @@ Status: 89% CI-measured package coverage on PR #8 commit `3cce604d`
 (`TOTAL 69081 stmts, 7630 miss, 89%`). The direct public contract audit remains
 closed at `modules_with_missing 0`; focused owner coverage is `98%` for
 `workflows/scans.py` after Tranche 111 and `100%` for
-`validation/figures.py` after Tranche 112. The final target is still 95%; the
-next coverage tranches should prioritize large under-covered owners with
-bounded behavior tests rather than slow full solves.
+`validation/figures.py` after Tranche 112 and `validation/qi_device.py` after
+Tranche 113. The final target is still 95%; the next coverage tranches should
+prioritize large under-covered owners with bounded behavior tests rather than
+slow full solves.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 
