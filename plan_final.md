@@ -219,6 +219,10 @@ The main structural refactor is functionally complete:
   validation passed as `22 passed in 5.54 s`; adjacent transport validation
   passed as `104 passed in 21.02 s`; source/docs guards passed as
   `73 passed in 4.81 s`.
+- The current CPU-local review baseline passed the full no-coverage pytest
+  suite as `4584 passed, 4 skipped in 933.46 s`. Sphinx documentation built
+  with warnings as errors, and the fast tutorial output/plot script produced
+  HDF5, NetCDF, NPZ, and PDF diagnostics in a temporary directory.
 - Transport runtime, profile setup, sparse-direct, and diagnostics coverage now
   includes direct tests for worker-count validation, GPU subprocess policy
   injection, persistent-pool helpers, solve-method normalization, explicit
@@ -5417,6 +5421,27 @@ Status:
 - This closes a bounded RHSMode=2/3 fallback bug that could affect reduced
   collision-only transport inputs. It is CPU-local and does not replace the
   deferred GPU validation or final production benchmark regeneration.
+
+### 2026-07-06: CPU-Local Review Baseline
+
+Validation:
+
+- `PYTHONNOUSERSITE=1 python -m pytest -q` passed as
+  `4584 passed, 4 skipped in 933.46 s`.
+- `PYTHONNOUSERSITE=1 python -m sphinx -W -b html docs docs/_build/html`
+  passed with no warnings.
+- `PYTHONNOUSERSITE=1 python
+  examples/tutorials/run_quick_output_and_plot.py --out-dir
+  /tmp/sfincs_jax_quick_output_refactor_final` produced
+  `sfincsOutput_tutorial.h5`, `sfincsOutput_tutorial.nc`,
+  `sfincsOutput_tutorial.npz`, and `sfincsOutput_tutorial_summary.pdf` in the
+  temporary output directory.
+
+Status:
+
+- This is the strongest local CPU review baseline for PR #8 after the latest
+  source-refactor and solver-fallback tranches. It does not include fresh GPU
+  benchmarking because the office GPU host is unavailable.
 
 ## Standard Validation Commands
 
