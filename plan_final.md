@@ -4010,6 +4010,10 @@ Source/test change:
 - Updated `scripts/summarize_solver_paths.py` to report host-dense shortcut
   usage as a distinct solver-path provenance field and markdown column, so
   future GPU benchmark summaries do not hide this route as generic auto/Krylov.
+- Added stable host-dense shortcut metadata (`solver_path=host_dense_shortcut`,
+  `solver_kind=host_dense_lu`, shortcut backend/size/system) at the reduced and
+  full shortcut execution sites so solver traces and HDF5 metadata can be
+  audited without parsing logs.
 - Updated policy/selector tests to require CPU dense auto, default GPU
   host-shortcut routing, opt-in accelerator dense behavior, and host-shortcut
   solver-path summarization.
@@ -4021,6 +4025,9 @@ Validation:
   tests/test_rhs1_sparse_first_heuristic.py` passed as `236 passed in 3.48 s`.
 - `python -m pytest -q tests/test_summarize_solver_paths.py` passed as
   `3 passed`.
+- `python -m pytest -q tests/test_profile_response_dense.py
+  tests/test_profile_response_finalization.py tests/test_summarize_solver_paths.py`
+  passed as `51 passed`.
 - A minimal `ssh office` GPU probe was attempted but timed out at the configured
   SSH host/port before any remote command produced output. Remote GPU evidence
   still needs a reachable session.

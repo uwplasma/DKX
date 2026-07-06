@@ -121,7 +121,7 @@ from sfincs_jax.problems.profile_dense import (
     RHS1ReducedDenseFallbackStageContext, RHS1ReducedHostDenseShortcutContext, RHS1ScipyRescueStageContext,
     RHS1SparseHostSafeSolveContext, RHS1StructuredCSRSolveContext, build_profile_linear_solve_dispatch,
     rhs1_dense_shortcut_setup_from_env, rhs1_early_dense_shortcut_decision, rhs1_evaluate_post_krylov_dense_shortcut,
-    rhs1_fp_preconditioner_probe_kind_from_env, rhs1_small_gmres_max_from_env, run_rhs1_scipy_rescue_stage,
+    rhs1_fp_preconditioner_probe_kind_from_env, rhs1_host_dense_shortcut_metadata, rhs1_small_gmres_max_from_env, run_rhs1_scipy_rescue_stage,
     solve_rhs1_structured_full_csr_explicit, solve_rhs1_constraint0_petsc_compat, solve_rhs1_dense_ksp_full, solve_rhs1_dense_ksp_reduced,
     solve_v3_full_system_structured_csr, try_rhs1_auto_host_solve, try_rhs1_sparse_host_safe_solve,
     run_rhs1_dense_probe_stage, run_rhs1_full_dense_fallback_stage, run_rhs1_full_host_dense_shortcut_stage,
@@ -1845,6 +1845,13 @@ def solve_v3_full_system_linear_gmres(
                 host_dense_shortcut_outcome.early_dense_shortcut
             )
             probe_shortcut = bool(host_dense_shortcut_outcome.probe_shortcut)
+            rhsmode1_general_metadata.update(
+                rhs1_host_dense_shortcut_metadata(
+                    size=int(active_size),
+                    reduced_system=True,
+                    backend=str(jax.default_backend()),
+                )
+            )
         sparse_operator_admission = rhs1_sparse_operator_admission(
             operator_mode=sparse_operator_mode,
             use_matvec=bool(sparse_use_matvec),
@@ -3725,6 +3732,13 @@ def solve_v3_full_system_linear_gmres(
                 )
                 result = host_dense_shortcut_full_outcome.result
                 residual_vec = host_dense_shortcut_full_outcome.residual_vec
+                rhsmode1_general_metadata.update(
+                    rhs1_host_dense_shortcut_metadata(
+                        size=int(op.total_size),
+                        reduced_system=False,
+                        backend=str(jax.default_backend()),
+                    )
+                )
             if recycle_basis_use and (not host_dense_shortcut_full):
                 basis_full: list[jnp.ndarray] = []
                 for vec in recycle_basis_use:

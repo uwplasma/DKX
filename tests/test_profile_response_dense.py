@@ -33,6 +33,7 @@ from sfincs_jax.problems.profile_dense import (
     rhs1_early_dense_shortcut_decision,
     rhs1_evaluate_post_krylov_dense_shortcut,
     rhs1_fp_preconditioner_probe_kind_from_env,
+    rhs1_host_dense_shortcut_metadata,
     rhs1_post_krylov_dense_shortcut_decision,
     resolve_rhs1_full_dense_fallback_admission,
     resolve_rhs1_reduced_dense_fallback_admission,
@@ -903,6 +904,28 @@ def test_full_host_dense_shortcut_stage_solves_and_records_replay() -> None:
         "solve_v3_full_system_linear_gmres: accelerator FP bounded system -> "
         "using host dense shortcut (size=2)",
     )]
+
+
+def test_host_dense_shortcut_metadata_has_stable_solver_path() -> None:
+    metadata = rhs1_host_dense_shortcut_metadata(
+        size=4096,
+        reduced_system=True,
+        backend="gpu",
+    )
+
+    assert metadata == {
+        "solver_path": "host_dense_shortcut",
+        "solver_kind": "host_dense_lu",
+        "host_dense_shortcut": True,
+        "host_dense_shortcut_backend": "gpu",
+        "host_dense_shortcut_size": 4096,
+        "host_dense_shortcut_system": "reduced",
+    }
+    assert rhs1_host_dense_shortcut_metadata(
+        size=12,
+        reduced_system=False,
+        backend="cpu",
+    )["host_dense_shortcut_system"] == "full"
 
 
 def test_rhs1_dense_probe_enabled_from_env_defaults_on_and_respects_false(

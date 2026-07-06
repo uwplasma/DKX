@@ -73,7 +73,15 @@ def test_finalize_profile_response_linear_solve_metadata_and_progress(monkeypatc
             used_explicit_fp_xblock_seed=False,
             use_implicit=False,
             backend="cpu",
-            metadata_parts=({"path": "unit"}, {"extra": 7}),
+            metadata_parts=(
+                {"path": "unit"},
+                {
+                    "extra": 7,
+                    "solver_path": "host_dense_shortcut",
+                    "solver_kind": "host_dense_lu",
+                    "host_dense_shortcut": True,
+                },
+            ),
             emit=lambda level, message: messages.append((int(level), str(message))),
             elapsed_s=lambda: 12.34567,
         )
@@ -83,6 +91,9 @@ def test_finalize_profile_response_linear_solve_metadata_and_progress(monkeypatc
     assert result.metadata is not None
     assert result.metadata["path"] == "unit"
     assert result.metadata["extra"] == 7
+    assert result.metadata["solver_path"] == "host_dense_shortcut"
+    assert result.metadata["solver_kind"] == "host_dense_lu"
+    assert result.metadata["host_dense_shortcut"] is True
     assert result.metadata["accepted_converged"] is True
     assert result.metadata["acceptance_criterion"] == "post_xblock_abs_floor"
     assert result.metadata["true_residual_converged"] is False

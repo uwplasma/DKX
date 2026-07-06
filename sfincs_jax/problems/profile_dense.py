@@ -1208,6 +1208,24 @@ class RHS1FullHostDenseShortcutResult:
     residual_vec: jnp.ndarray | None
 
 
+def rhs1_host_dense_shortcut_metadata(
+    *,
+    size: int,
+    reduced_system: bool,
+    backend: str,
+) -> dict[str, object]:
+    """Return stable solver-provenance metadata for the host-dense shortcut."""
+
+    return {
+        "solver_path": "host_dense_shortcut",
+        "solver_kind": "host_dense_lu",
+        "host_dense_shortcut": True,
+        "host_dense_shortcut_backend": str(backend),
+        "host_dense_shortcut_size": int(size),
+        "host_dense_shortcut_system": "reduced" if bool(reduced_system) else "full",
+    }
+
+
 @dataclass(frozen=True)
 class RHS1ReducedDenseFallbackCandidateContext:
     """Inputs for the reduced RHSMode=1 dense fallback candidate.
@@ -3345,6 +3363,7 @@ __all__ = [
     "rhs1_dense_probe_admission",
     "rhs1_dense_probe_enabled_from_env",
     "rhs1_dense_probe_shortcut_decision",
+    "rhs1_host_dense_shortcut_metadata",
     "rhs1_early_dense_shortcut_decision",
     "rhs1_evaluate_post_krylov_dense_shortcut",
     "rhs1_post_krylov_dense_shortcut_decision",
