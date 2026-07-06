@@ -1782,6 +1782,14 @@ Completed work:
   validation passed `128/128`; Ruff, `compileall`, and `git diff --check`
   passed. Direct coverage for `sfincs_jax/validation/artifacts.py` improved
   from `86%` to `95%`.
+- Tranche 115: completed external-data fetch coverage for release-hosted
+  equilibrium fixtures without downloading real large artifacts. Added local
+  tarball tests for user-facing download progress and post-extraction
+  verification failure, preserving the small-repository policy while covering
+  the CI data-cache edge cases. Validation: `tests/test_data_fetch.py` passed
+  `15/15` in `0.13 s`; source-tree plus import-contract focused validation
+  passed `68/68`; Ruff, `compileall`, and `git diff --check` passed. Direct
+  coverage for `sfincs_jax/validation/data_fetch.py` is `100%`.
 
 Remaining consolidation steps:
 
@@ -1815,8 +1823,9 @@ closed at `modules_with_missing 0`; focused owner coverage is `98%` for
 `workflows/scans.py` after Tranche 111 and `100%` for
 `validation/figures.py` after Tranche 112 and `validation/qi_device.py` after
 Tranche 113; `validation/artifacts.py` is `95%` after Tranche 114. The final
-target is still 95%; the next coverage tranches should prioritize large
-under-covered owners with bounded behavior tests rather than slow full solves.
+target is still 95%; `validation/data_fetch.py` is also `100%` after Tranche
+115. The next coverage tranches should prioritize large under-covered owners
+with bounded behavior tests rather than slow full solves.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 
