@@ -4740,6 +4740,42 @@ Status:
   `profile_solve.py`, `profile_full_system.py`, transport orchestration, and
   QI/x-block preconditioner owners.
 
+### 2026-07-06: Direct Pmat Active Block-Schur Coverage Tranche
+
+Changes:
+
+- Added CPU-only tests for the RHSMode=2/3 direct reduced-Pmat physics coarse
+  basis, including source/constraint moment columns, tail units, tail Schur
+  response columns, and the normalized uniform flux-surface fallback used when
+  geometry weights are degenerate.
+- Added a bounded direct active block-Schur preconditioner build test that
+  exercises direct term-level active-operator emission, cache-key routing,
+  metadata publication, host callback application, and the explicit
+  admission-disabled path without falling back to the SX-block builder.
+- Kept the tests in the existing transport active-factor owner file, avoiding
+  more source or test-tree fragmentation.
+
+Validation:
+
+- `python -m pytest -q tests/test_transport_active_factor.py` passed as
+  `33 passed in 0.77 s`.
+- `python -m pytest -q tests/test_transport_active_factor.py
+  tests/test_transport_linear_solve.py tests/test_transport_solve_module_wrappers.py
+  tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py
+  tests/test_transport_sparse_direct_solve.py` passed as
+  `94 passed in 8.87 s`.
+- `python -m pytest -q tests/test_source_tree_consolidation.py
+  tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py
+  tests/test_benchmark_doc_claims.py` passed as `73 passed in 4.98 s`.
+
+Status:
+
+- This strengthens the production transport preconditioner setup/admission
+  coverage without adding production-grid solves to default CI. The `95%`
+  package-coverage lane remains open; the next bounded tranche should target
+  `profile_full_system.py`, `profile_solve.py`, or the QI/device preconditioner
+  owners.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

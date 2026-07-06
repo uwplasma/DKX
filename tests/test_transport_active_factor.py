@@ -673,3 +673,110 @@ def test_direct_reduced_pmat_reports_structured_fblock_selection_failure(
 
     assert result is None
     assert any("direct reduced Pmat unavailable" in message for message in messages)
+
+
+def test_direct_pmat_physics_coarse_basis_contains_source_constraint_and_tail_modes() -> None:
+    op = _toy_transport_op(constraint_scheme=2)
+    active = np.arange(op.total_size, dtype=np.int64)
+    matrix = sp.eye(op.total_size, format="csr", dtype=np.float64)
+    base_factor = SimpleNamespace(
+        operator=SimpleNamespace(matrix=matrix),
+        solve=lambda rhs: 0.5 * np.asarray(rhs, dtype=np.float64),
+    )
+
+    basis, names = tls._build_rhsmode23_direct_pmat_physics_coarse_basis(
+        op=op,
+        active_indices=active,
+        max_cols=32,
+        base_factor_bundle=base_factor,
+    )
+
+    assert basis is not None
+    assert basis.shape[0] == op.total_size
+    assert basis.shape[1] == len(names)
+    assert "direct_pmat_tail_unit_0" in names
+    assert "direct_pmat_tail_unit_1" in names
+    assert any(name.startswith("direct_pmat_constraint2_density_moment") for name in names)
+    assert any(name.startswith("direct_pmat_tail_schur_response") for name in names)
+    np.testing.assert_allclose(
+        np.linalg.norm(basis.toarray(), axis=0),
+        np.ones((basis.shape[1],)),
+        rtol=1.0e-12,
+        atol=1.0e-12,
+    )
+
+
+def test_direct_pmat_physics_coarse_basis_handles_zero_geometry_weight_pattern() -> None:
+    op = _toy_transport_op(constraint_scheme=1)
+    op.d_hat = jnp.zeros((op.n_theta, op.n_zeta), dtype=jnp.float64)
+    active = np.arange(op.total_size, dtype=np.int64)
+
+    basis, names = tls._build_rhsmode23_direct_pmat_physics_coarse_basis(
+        op=op,
+        active_indices=active,
+        max_cols=16,
+        base_factor_bundle=None,
+    )
+
+    assert basis is not None
+    assert any(name.startswith("direct_pmat_constraint1_particle_source_shape") for name in names)
+    assert np.all(np.isfinite(basis.data))
+    # With zero Jacobian weights, the helper falls back to a normalized uniform
+    # flux-surface pattern so production setup does not create empty columns.
+    assert np.count_nonzero(basis.toarray()[: op.f_size, :]) > 0
+
+
+def test_transport_fp_direct_active_block_schur_preconditioner_builds_bounded_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    op = _toy_transport_op(constraint_scheme=2)
+
+    def fake_select(_fblock, *, include_identity_shift: bool, require_complete: bool):
+        assert include_identity_shift
+        assert require_complete
+        return SimpleNamespace(
+            selected=True,
+            assembly=SimpleNamespace(
+                operator=_ToyProjectedFBlock(n_zeta=op.n_zeta),
+                included_terms=("identity", "fp_collision"),
+            ),
+        )
+
+    monkeypatch.setattr(tls, "select_structured_rhs1_fblock_operator", fake_select)
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_MAX_MB", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_MAX_BLOCK", "2")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_TAIL_MAX", "4")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_ADMISSION", "0")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_RESIDUAL_COARSE", "0")
+    fallback_calls: list[dict[str, object]] = []
+
+    def fallback_builder(**kwargs):
+        fallback_calls.append(kwargs)
+        return lambda value: value
+
+    active = np.arange(op.total_size, dtype=np.int64)
+    messages: list[str] = []
+    preconditioner = build_transport_fp_direct_active_block_schur_preconditioner(
+        op=op,
+        reduce_full=lambda value: value,
+        expand_reduced=lambda value: value,
+        active_indices_np=active,
+        emit=lambda _level, message: messages.append(str(message)),
+        fallback_builder=fallback_builder,
+        transport_precond_cache_key=lambda _op, label: ("test_direct_active_block_schur", label, id(op)),
+    )
+
+    rhs = jnp.arange(1, op.total_size + 1, dtype=jnp.float64)
+    actual = np.asarray(preconditioner(rhs))
+
+    assert not fallback_calls
+    assert actual.shape == (op.total_size,)
+    assert np.all(np.isfinite(actual))
+    metadata = getattr(
+        preconditioner,
+        "_sfincs_jax_transport_fp_direct_active_block_schur_metadata",
+    )
+    assert metadata["kind"] == "fp_direct_active_block_schur"
+    assert metadata["admission_enabled"] is False
+    assert metadata["residual_coarse_reason"] == "admission_disabled"
+    assert any("fp_direct_active_block_schur selected" in message for message in messages)
