@@ -795,6 +795,10 @@ Recommended parallel usage:
 
 - CPU host sharding is supported and deterministic, but the measured speedup is
   still case-dependent.
+- CPU transport-worker runs pin XLA/BLAS threads per worker by default for
+  multi-worker runs, using `SFINCS_JAX_CORES / SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS`
+  to avoid node oversubscription. Set `SFINCS_JAX_TRANSPORT_PIN_THREADS=0` to
+  leave thread pools unmanaged.
 - The sharded RHSMode=1 CPU path uses a wider Schwarz patch rule plus a bounded
   multilevel residual correction to avoid the worst 4/8-device
   fragmentation failures.
