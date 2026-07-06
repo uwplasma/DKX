@@ -3016,6 +3016,33 @@ Validation:
   meaningful-coverage gate remains open and requires larger structural coverage
   work in the orchestration and preconditioner modules.
 
+## Tranche 150: Transport-Solve Orchestration Wrapper Gates
+
+Scope:
+
+- Added `tests/test_transport_solve_module_wrappers.py` to mirror the
+  profile-solve wrapper coverage for RHSMode-2/3 transport orchestration.
+- Covered the transport-specific distributed-axis wrapper, preconditioner cache
+  key dtype injection, FP direct/reduced preconditioner wrapper hooks,
+  parallel-worker payload delegation, and the top-level early return through
+  the parallel runtime.
+- The tests are no-solve dependency-injection checks that guard the refactor
+  seams keeping `transport_solve.py` as orchestration rather than a sink for
+  helper implementations.
+
+Validation:
+
+- `python -m pytest -q tests/test_transport_solve_module_wrappers.py` passed
+  as `5 passed in 0.85 s`.
+- `python -m ruff check tests/test_transport_solve_module_wrappers.py` passed.
+- `python -m compileall -q tests/test_transport_solve_module_wrappers.py`
+  passed.
+- `python -m pytest -q tests/test_transport_solve_module_wrappers.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct.py tests/test_transport_parallel.py`
+  passed as `97 passed in 37.93 s`.
+- `python -m pytest -q tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `71 passed in 5.90 s`.
+- `git diff --check` passed.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
