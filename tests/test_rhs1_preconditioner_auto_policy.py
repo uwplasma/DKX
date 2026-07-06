@@ -967,6 +967,27 @@ def _default_selection_context(**updates) -> RHS1DefaultPreconditionerSelectionC
     return RHS1DefaultPreconditionerSelectionContext(values=values)
 
 
+def _clear_default_selection_env(monkeypatch) -> None:
+    for name in (
+        "SFINCS_JAX_RHSMODE1_COLLISION_PRECOND_MIN",
+        "SFINCS_JAX_RHSMODE1_FP_XMG_MAX",
+        "SFINCS_JAX_RHSMODE1_PAS_SCHUR_SMALL_MAX",
+        "SFINCS_JAX_RHSMODE1_PAS_XDIAG_MIN",
+        "SFINCS_JAX_RHSMODE1_PAS_XMG_MIN",
+        "SFINCS_JAX_RHSMODE1_SCHUR_AUTO_MIN",
+        "SFINCS_JAX_RHSMODE1_SCHUR_ER_ABS_MIN",
+        "SFINCS_JAX_RHSMODE1_SCHUR_TOKAMAK",
+        "SFINCS_JAX_RHSMODE1_SPECIES_BLOCK_MAX",
+        "SFINCS_JAX_RHSMODE1_SXBLOCK_MAX",
+        "SFINCS_JAX_RHSMODE1_SXBLOCK_TZ_ACTIVE_MAX",
+        "SFINCS_JAX_RHSMODE1_THETA_LINE_MAX",
+        "SFINCS_JAX_RHSMODE1_TZ_PRECOND_MAX",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_TZ_SMALL_MAX",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
 def _route_setup_context(**updates) -> tuple[RHS1PreconditionerRouteSetupContext, list[dict]]:
     hints: list[dict] = []
     values = dict(_default_selection_context(**updates).values)
@@ -1056,6 +1077,556 @@ def test_default_preconditioner_selection_delegates_fp_dkes_default() -> None:
     )
 
     assert result["rhs1_precond_kind"] == "fp_dkes_default"
+
+
+def test_default_preconditioner_selection_fp_dkes_xblock_sets_env() -> None:
+    result = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(has_fp=True, n_theta=7, n_zeta=5, total_size=3000),
+            _rhs1_fp_dkes_default_kind=lambda **_kwargs: "xblock_tz",
+            active_size=3000,
+            use_dkes=True,
+        )
+    )
+
+    assert result["rhs1_precond_kind"] == "xblock_tz"
+    assert result["rhs1_precond_env"] == "xblock_tz"
+
+
+def test_default_preconditioner_selection_disables_non_rhs1_and_phi1() -> None:
+    non_rhs1 = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(op=_default_selection_op(rhs_mode=2, has_fp=True))
+    )
+    phi1 = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(op=_default_selection_op(has_fp=True, include_phi1=True))
+    )
+
+    assert non_rhs1["rhs1_precond_kind"] is None
+    assert phi1["rhs1_precond_kind"] is None
+
+
+def test_default_preconditioner_selection_exercises_fp_fallback_order(monkeypatch) -> None:
+    _clear_default_selection_env(monkeypatch)
+
+    sxblock_tz = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(has_fp=True, n_theta=5, n_zeta=5, total_size=3000),
+            physics={"ER": 1.0},
+            active_size=3000,
+        )
+    )
+    assert sxblock_tz["rhs1_precond_kind"] == "sxblock_tz"
+
+    theta_zeta = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(has_fp=True, n_theta=7, n_zeta=5, total_size=30000),
+            physics={"ER": 1.0},
+            active_size=30000,
+        )
+    )
+    assert theta_zeta["rhs1_precond_kind"] == "theta_zeta"
+
+    sxblock = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(has_fp=True, n_theta=1, n_zeta=1, total_size=3000),
+            physics={"ER": 1.0},
+            active_size=3000,
+        )
+    )
+    assert sxblock["rhs1_precond_kind"] == "sxblock"
+
+
+def test_default_preconditioner_selection_exercises_pas_fallback_order(monkeypatch) -> None:
+    _clear_default_selection_env(monkeypatch)
+
+    species_block = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_pas=True,
+                n_theta=5,
+                n_zeta=5,
+                total_size=3000,
+                extra_size=0,
+            ),
+            physics={"ER": 1.0},
+            active_size=3000,
+        )
+    )
+    assert species_block["rhs1_precond_kind"] == "species_block"
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPECIES_BLOCK_MAX", "1")
+    pas_tz = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_pas=True,
+                n_theta=5,
+                n_zeta=5,
+                total_size=3000,
+                extra_size=0,
+            ),
+            _rhs1_pas_dkes_pas_tz_preferred=lambda **_kwargs: True,
+            emit=lambda *_args: None,
+            physics={"ER": 1.0},
+            active_size=3000,
+            use_dkes=True,
+        )
+    )
+    assert pas_tz["rhs1_precond_kind"] == "pas_tz"
+
+    xblock_tz = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_pas=True,
+                n_theta=8,
+                n_zeta=5,
+                total_size=3000,
+                extra_size=0,
+            ),
+            physics={"ER": 1.0},
+            active_size=3000,
+        )
+    )
+    assert xblock_tz["rhs1_precond_kind"] == "xblock_tz"
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "1")
+    theta_zeta = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_pas=True,
+                n_theta=8,
+                n_zeta=5,
+                total_size=3000,
+                extra_size=0,
+            ),
+            physics={"ER": 1.0},
+            active_size=3000,
+        )
+    )
+    assert theta_zeta["rhs1_precond_kind"] == "theta_zeta"
+
+
+def test_default_preconditioner_selection_exercises_pas_large_and_last_resorts(
+    monkeypatch,
+) -> None:
+    _clear_default_selection_env(monkeypatch)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPECIES_BLOCK_MAX", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "1")
+
+    large_xmg = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_pas=True,
+                n_theta=17,
+                n_zeta=17,
+                total_size=90000,
+                extra_size=0,
+            ),
+            physics={"ER": 1.0},
+            active_size=90000,
+        )
+    )
+    assert large_xmg["rhs1_precond_kind"] == "xmg"
+
+    point_xdiag = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_pas=True,
+                n_theta=1,
+                n_zeta=1,
+                total_size=1200,
+                extra_size=0,
+            ),
+            physics={"ER": 1.0},
+            active_size=1200,
+        )
+    )
+    assert point_xdiag["rhs1_precond_kind"] == "collision"
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_XDIAG_MIN", "1000")
+    point_xdiag = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_pas=True,
+                n_theta=1,
+                n_zeta=1,
+                total_size=1200,
+                extra_size=0,
+            ),
+            physics={"ER": 1.0},
+            active_size=1200,
+            full_precond_requested=True,
+        )
+    )
+    assert point_xdiag["rhs1_precond_kind"] == "point_xdiag"
+
+    point = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_pas=True,
+                n_theta=1,
+                n_zeta=1,
+                total_size=50,
+                extra_size=0,
+            ),
+            physics={"ER": 1.0},
+            active_size=50,
+        )
+    )
+    assert point["rhs1_precond_kind"] == "point"
+
+
+def test_default_preconditioner_selection_constrained_full_precond_branches(
+    monkeypatch,
+) -> None:
+    _clear_default_selection_env(monkeypatch)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCHUR_TOKAMAK", "1")
+    schur_tokamak = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_pas=True,
+                n_theta=8,
+                n_zeta=1,
+                total_size=9000,
+                extra_size=2,
+            ),
+            full_precond_requested=True,
+            geom_scheme=1,
+            active_size=9000,
+        )
+    )
+    assert schur_tokamak["rhs1_precond_kind"] == "schur"
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCHUR_TOKAMAK", "0")
+    fp_tokamak_small = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_fp=True,
+                n_theta=8,
+                n_zeta=1,
+                total_size=500,
+                extra_size=2,
+            ),
+            full_precond_requested=True,
+            geom_scheme=1,
+            active_size=500,
+        )
+    )
+    assert fp_tokamak_small["rhs1_precond_kind"] == "schur"
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_SMALL_MAX", "1")
+    fp_tokamak_xblock = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_fp=True,
+                n_theta=8,
+                n_zeta=1,
+                total_size=9000,
+                extra_size=2,
+            ),
+            full_precond_requested=True,
+            geom_scheme=1,
+            active_size=9000,
+        )
+    )
+    assert fp_tokamak_xblock["rhs1_precond_kind"] == "xblock_tz"
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "1")
+    fp_tokamak_line = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_fp=True,
+                n_theta=8,
+                n_zeta=1,
+                total_size=9000,
+                extra_size=2,
+            ),
+            full_precond_requested=True,
+            geom_scheme=1,
+            active_size=9000,
+        )
+    )
+    assert fp_tokamak_line["rhs1_precond_kind"] == "theta_line"
+
+
+def test_default_preconditioner_selection_constrained_non_tokamak_branches(
+    monkeypatch,
+) -> None:
+    _clear_default_selection_env(monkeypatch)
+
+    pas_small = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_pas=True,
+                n_theta=8,
+                n_zeta=5,
+                total_size=2000,
+                extra_size=2,
+            ),
+            full_precond_requested=True,
+            active_size=2000,
+        )
+    )
+    assert pas_small["rhs1_precond_kind"] == "pas_small_near_zero"
+
+    fp_xmg = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_fp=True,
+                n_theta=8,
+                n_zeta=5,
+                total_size=2000,
+                extra_size=2,
+            ),
+            full_precond_requested=True,
+            active_size=2000,
+        )
+    )
+    assert fp_xmg["rhs1_precond_kind"] == "xmg"
+
+    pas_large = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_pas=True,
+                n_theta=8,
+                n_zeta=5,
+                total_size=90000,
+                extra_size=2,
+            ),
+            physics={"ER": 1.0},
+            full_precond_requested=True,
+            active_size=90000,
+        )
+    )
+    assert pas_large["rhs1_precond_kind"] == "pas_lite"
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_XDIAG_MIN", "1000")
+    pas_lmax = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_pas=True,
+                n_theta=8,
+                n_zeta=5,
+                total_size=2000,
+                extra_size=2,
+            ),
+            physics={"ER": 1.0},
+            full_precond_requested=True,
+            active_size=2000,
+        )
+    )
+    assert pas_lmax["rhs1_precond_kind"] == "xblock_tz_lmax"
+    assert pas_lmax["rhs1_xblock_tz_lmax"] > 0
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "1")
+    pas_xdiag = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_pas=True,
+                n_theta=8,
+                n_zeta=5,
+                total_size=2000,
+                extra_size=2,
+            ),
+            physics={"ER": 1.0},
+            full_precond_requested=True,
+            active_size=2000,
+        )
+    )
+    assert pas_xdiag["rhs1_precond_kind"] == "point_xdiag"
+
+
+def test_default_preconditioner_selection_unconstrained_full_precond_branches(
+    monkeypatch,
+) -> None:
+    _clear_default_selection_env(monkeypatch)
+    pas_small = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_pas=True,
+                n_theta=8,
+                n_zeta=5,
+                total_size=2000,
+                extra_size=0,
+            ),
+            full_precond_requested=True,
+            active_size=2000,
+        )
+    )
+    assert pas_small["rhs1_precond_kind"] == "pas_small_near_zero"
+
+    fp_xmg = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_fp=True,
+                n_theta=8,
+                n_zeta=5,
+                total_size=2000,
+                extra_size=0,
+            ),
+            full_precond_requested=True,
+            active_size=2000,
+        )
+    )
+    assert fp_xmg["rhs1_precond_kind"] == "xmg"
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_THETA_LINE_MAX", "10")
+    theta_xdiag = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_pas=True,
+                n_theta=9,
+                n_zeta=5,
+                total_size=2000,
+                extra_size=0,
+            ),
+            physics={"ER": 1.0},
+            full_precond_requested=True,
+            active_size=2000,
+        )
+    )
+    assert theta_xdiag["rhs1_precond_kind"] == "theta_line_xdiag"
+
+
+def test_default_preconditioner_selection_final_fallback_branches(
+    monkeypatch,
+) -> None:
+    _clear_default_selection_env(monkeypatch)
+
+    pas_near_zero = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_pas=True,
+                n_theta=1,
+                n_zeta=1,
+                total_size=50,
+                extra_size=0,
+            ),
+            active_size=50,
+        )
+    )
+    assert pas_near_zero["rhs1_precond_kind"] == "pas_small_near_zero"
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SXBLOCK_MAX", "0")
+    fp_last_resort = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(
+                has_fp=True,
+                n_theta=1,
+                n_zeta=1,
+                total_size=50,
+                extra_size=0,
+            ),
+            physics={"ER": 1.0},
+            active_size=50,
+        )
+    )
+    assert fp_last_resort["rhs1_precond_kind"] == "xmg"
+
+    negative_preconditioner_axis = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=_default_selection_op(has_fp=True),
+            pre_theta=-1,
+            pre_zeta=0,
+        )
+    )
+    assert negative_preconditioner_axis["rhs1_precond_kind"] == "point"
+
+
+def test_default_preconditioner_selection_full_precond_gpu_pas_callbacks(
+    monkeypatch,
+) -> None:
+    _clear_default_selection_env(monkeypatch)
+    emitted: list[tuple[int, str]] = []
+    gpu_jax = SimpleNamespace(default_backend=lambda: "gpu", device_count=lambda: 1)
+    op = _default_selection_op(
+        has_pas=True,
+        n_theta=8,
+        n_zeta=5,
+        total_size=6000,
+        extra_size=2,
+    )
+
+    xblock = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=op,
+            physics={"ER": 1.0},
+            active_size=6000,
+            full_precond_requested=True,
+            jax=gpu_jax,
+            emit=lambda level, msg: emitted.append((level, msg)),
+            _rhs1_pas_tokamak_gpu_xblock_preferred=lambda **_kwargs: True,
+        )
+    )
+
+    assert xblock["rhs1_precond_kind"] == "xblock_tz"
+    assert "xblock_tz" in emitted[-1][1]
+
+    emitted.clear()
+    tight = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=op,
+            physics={"ER": 1.0},
+            active_size=6000,
+            full_precond_requested=True,
+            jax=gpu_jax,
+            emit=lambda level, msg: emitted.append((level, msg)),
+            _rhs1_pas_tokamak_gpu_theta_allowed=lambda **_kwargs: True,
+        )
+    )
+
+    assert tight["rhs1_precond_kind"] is None
+    assert tight["rhs1_gpu_tokamak_pas_tight_gmres"] is True
+    assert "tight unpreconditioned GMRES" in emitted[-1][1]
+
+
+def test_default_preconditioner_selection_schur_auto_routes(monkeypatch) -> None:
+    _clear_default_selection_env(monkeypatch)
+    op = _default_selection_op(
+        has_pas=True,
+        n_theta=8,
+        n_zeta=5,
+        total_size=3000,
+        extra_size=2,
+    )
+    emitted: list[tuple[int, str]] = []
+    sharded = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=op,
+            _matvec_shard_axis=lambda _op: "theta",
+            jax=SimpleNamespace(default_backend=lambda: "gpu", device_count=lambda: 2),
+            emit=lambda level, msg: emitted.append((level, msg)),
+            active_size=3000,
+        )
+    )
+    assert sharded["rhs1_precond_kind"] == "xmg"
+    assert "schur_auto -> xmg" in emitted[-1][1]
+
+    pas_tz = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=op,
+            _rhs1_pas_dkes_pas_tz_preferred=lambda **_kwargs: True,
+            emit=lambda *_args: None,
+            use_dkes=True,
+            active_size=3000,
+        )
+    )
+    assert pas_tz["rhs1_precond_kind"] == "pas_tz"
+
+    xblock = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(
+            op=op,
+            _rhs1_pas_dkes_xblock_allowed=lambda **_kwargs: True,
+            emit=lambda *_args: None,
+            use_dkes=True,
+            active_size=3000,
+        )
+    )
+    assert xblock["rhs1_precond_kind"] == "xblock_tz"
+
+    fallback = resolve_rhs1_default_preconditioner_selection(
+        _default_selection_context(op=op, active_size=3000)
+    )
+    assert fallback["rhs1_precond_kind"] == "schur"
 
 
 def test_route_setup_disables_rhs1_preconditioner_for_dense_solve(monkeypatch) -> None:

@@ -1836,6 +1836,18 @@ Completed work:
   source-tree/import guards passed `134/134`; Ruff, `compileall`, and
   `git diff --check` passed. Focused coverage for
   `sfincs_jax/solvers/explicit_sparse.py` improved from `87%` to `88%`.
+- Tranche 120: expanded RHSMode=1 default preconditioner-selector coverage
+  for production solver-path decisions without running solves. Added bounded
+  tests for explicit controls, non-RHS1/Phi1 disablement, FP-DKES xblock
+  environment propagation, constrained tokamak/PAS/FP full-preconditioner
+  branches, GPU PAS callback routing, Schur-auto sharded/DKES routing,
+  FP/PAS fallback priority, point/collision/point-xdiag fallbacks, and
+  conservative invalid-axis handling. Validation:
+  `tests/test_rhs1_preconditioner_auto_policy.py` passed `41/41` in `0.32 s`;
+  the broader RHSMode-1 policy bundle passed `540/540` in `123.00 s`;
+  adjacent focused guards passed `112/112`; Ruff, `compileall`, and
+  `git diff --check` passed. In the broad policy bundle,
+  `sfincs_jax/problems/profile_policies.py` improved from `88%` to `91%`.
 
 Remaining consolidation steps:
 
@@ -1873,9 +1885,11 @@ Tranche 113; `validation/artifacts.py` is `95%` after Tranche 114,
 `validation/fortran.py` is `99%` after Tranche 116; `transport_policies.py`
 is `86%` after Tranche 117; `transport_linear_system.py` reaches `71%` in the
 combined focused transport bundle after Tranche 118; `explicit_sparse.py` is
-`88%` after Tranche 119. The final target is still 95%; the next coverage
-tranches should prioritize large under-covered owners with bounded behavior
-tests rather than slow full solves.
+`88%` after Tranche 119; `profile_policies.py` reaches `91%` in the broad
+RHSMode-1 policy bundle after Tranche 120. The final target is still 95%; the
+next coverage tranches should prioritize `profile_preconditioner_build.py`,
+`profile_sparse_direct.py`, and `profile_sparse_solve.py` with bounded
+behavior tests rather than slow full solves.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 
