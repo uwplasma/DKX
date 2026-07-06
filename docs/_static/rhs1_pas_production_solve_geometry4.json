@@ -6,7 +6,7 @@
       "allow_solver_churn": false,
       "baseline_elapsed_s": 3.6626276669558138,
       "baseline_rss_mb": 908.953125,
-      "default_promotion_required": true,
+      "default_promotion_required": false,
       "expected_backend": "cpu",
       "guarded_pas_tz_markers": [
         "PAS-TZ structured fallback guarded out",
