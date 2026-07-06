@@ -327,7 +327,7 @@ ROOT_MODULE_CLASSIFICATIONS = {
 ROOT_MODULE_CLOSURE_MANIFEST = {
     "__init__.py": ("package root public facade", "keep at root"),
     "__main__.py": ("package root CLI entry point", "keep at root"),
-    "ambipolar.py": ("problems.ambipolar via public API facade", "keep root shim until public docs/examples migrate"),
+    "ambipolar.py": ("problems.ambipolar via public API facade", "keep root facade until public docs/examples migrate"),
     "api.py": ("package root public API", "keep at root"),
     "cli.py": ("package root CLI entry point", "keep at root"),
     "compare.py": (
@@ -336,14 +336,14 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     ),
     "diagnostics.py": ("physics/output diagnostics owner", "defer until diagnostics API split is explicit"),
     "grids.py": ("discretization public grid owner", "keep root public helper until discretization package exports are documented"),
-    "input_compat.py": ("input compatibility owner", "keep root public compatibility shim until input package exports cover callers"),
+    "input_compat.py": ("input compatibility owner", "keep root public compatibility facade until input package exports cover callers"),
     "io.py": ("outputs writer/formats owners", "keep tiny root facade until public imports migrate"),
     "namelist.py": ("input namelist owner", "keep root public parser until input package exports are documented"),
     "paths.py": ("package root path support utility", "keep at root unless a support package is introduced with broad import rewrite"),
     "plotting.py": ("outputs/plotting public helper", "keep root public helper unless API replacement is documented"),
     "profiling.py": ("solvers/validation profiling support", "defer until profiling API boundary is explicit"),
     "sensitivity.py": ("package root differentiation API", "keep at root"),
-    "solver.py": ("solvers public contracts owner", "keep root shim until solvers exports cover public contracts"),
+    "solver.py": ("solvers public contracts owner", "keep root facade until solvers exports cover public contracts"),
 }
 
 TRANSPORT_COMPATIBILITY_IMPORTS = (
