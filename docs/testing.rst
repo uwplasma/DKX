@@ -345,10 +345,10 @@ unit/regression suite:
   ``tests/test_qi_device_artifact_policy.py`` add the QI-specific offline gate
   for device/operator-reuse artifacts. The gate checks provenance and
   fail-closed metadata only; it is not a convergence certificate. The release
-  metadata checker runs the same policy over ``docs/_static`` so legacy or
-  newly checked QI-device artifacts cannot silently overclaim GPU/device status.
+  metadata checker runs the same policy over ``docs/_static`` so historical or
+  checked-in QI-device artifacts cannot silently overclaim GPU/device status.
 
-The first new lane on the refactor branch is the ``E_r`` trajectory-model sweep family:
+The ``E_r`` trajectory-model sweep family is a release-facing validation lane:
 
 - script: ``examples/publication_figures/generate_er_trajectory_sweep.py``
 - pinned tokamak-like reference artifact:
@@ -542,10 +542,10 @@ The next-scale
 ``docs/_static/qi_seed_robustness_scale055_auto_cpu_blocker.json`` artifact keeps
 that boundary honest. It raises the public-auto CPU grid to
 ``15 x 29 x 55 x 4`` with the bounded x-block sparse-PC window widened for the
-probe, but the old exact-LU cap sent the largest x-block into ILU and timed out
-after ``360 s`` before writing output or a solver trace. The successor
+probe, but the lower exact-LU cap sent the largest x-block into ILU and timed out
+after ``360 s`` before writing output or a solver trace. The
 ``docs/_static/qi_seed_robustness_scale055_xblock_lu_right_cpu.json`` artifact
-keeps the same widened auto window while using the new full-FP host exact-LU cap
+keeps the same widened auto window while using the full-FP host exact-LU cap
 of ``30000``. It writes output and solver trace in ``~21.5 s`` with active size
 ``52637`` and residual ratio ``8.25e-3``. This closes the CPU setup cliff at
 scale ``0.55``; it is still bounded evidence, not a production QI claim, because
@@ -595,13 +595,13 @@ finite RHS norm and is not a right-preconditioned coordinate state.
 
 The subsequent global-coupling/operator-reuse probe summary
 ``docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json``
-adds another negative gate. It verifies that the newly implemented opt-in
+adds another negative gate. It verifies that the opt-in
 smoothed global-coupling preconditioner, assembled-operator matvec reuse
 preflight, side-probe keep-left guard, and JAX-factor switch are wired and
 metadata-covered, but it rejects all of them for default promotion on the
 scale-0.60 seed-3 hard case. The important behavioral result is that the GPU
-left side probe reached a finite near residual, while both the old right-switch
-continuation and the new keep-left continuation timed out at ``620 s``. This
+left side probe reached a finite near residual, while both the right-switch
+continuation and the keep-left continuation timed out at ``620 s``. This
 keeps the lane honest: the next closing step must be a genuinely device-resident
 or differently structured preconditioner/Krylov formulation, not another
 threshold-only side-selection tweak.
@@ -614,8 +614,8 @@ the bounded window. They still fail the strict true-residual gate, so tests trea
 them as infrastructure coverage and negative physics evidence rather than a
 closed QI validation.
 
-The current development branch adds that next formulation as an opt-in test
-surface, not a promoted claim: ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres``
+The opt-in flexible-Krylov test surface is not a promoted claim:
+``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres``
 selects a JAX-native flexible GMRES primitive, while ``gmres-jax`` selects the
 same fixed-shape Arnoldi/least-squares primitive with a fixed left
 preconditioner so left-preconditioned device probes can be tested without SciPy
