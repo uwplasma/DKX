@@ -71,6 +71,14 @@ DOC_TREE_STALE_FRAGMENTS = (
     "not replacements for the production-resolution gates",
     "not a public performance row",
 )
+REQUIRED_CI_JOB_TIMEOUTS = {
+    "coverage": 10,
+    "coverage-report": 10,
+    "examples-smoke": 10,
+    "external-data-smoke": 10,
+    "optional-ecosystem-gates": 10,
+    "tests": 5,
+}
 
 
 def _summary() -> dict[str, object]:
@@ -246,3 +254,17 @@ def test_testing_docs_coverage_gate_matches_ci_workflow() -> None:
     testing_docs = (REPO_ROOT / "docs" / "testing.rst").read_text(encoding="utf-8")
     assert f"CI fail-under gate is ``{fail_under}%``" in testing_docs
     assert f"``{fail_under} -> 85 -> 90 -> 95``" in testing_docs
+
+
+def test_required_ci_jobs_stay_within_documented_runtime_budget() -> None:
+    """Keep required CI jobs aligned with the sub-ten-minute review budget."""
+
+    workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+    for job, timeout in REQUIRED_CI_JOB_TIMEOUTS.items():
+        pattern = re.compile(
+            rf"^  {re.escape(job)}:\n(?:    .*\n)*?    timeout-minutes: (\d+)",
+            re.MULTILINE,
+        )
+        match = pattern.search(workflow)
+        assert match is not None, f"{job} is missing timeout-minutes"
+        assert int(match.group(1)) <= int(timeout), job

@@ -184,7 +184,7 @@ Coverage audits use the full test suite with package instrumentation:
 The exact collected-test count changes as targeted regression tests are added,
 so release notes and the refactor plan cite dated local/CI artifacts rather
 than hard-code a permanent collected-test count here. The active refactor lane
-records ``88%`` measured package coverage, with ``95%`` meaningful package
+records about ``90%`` measured package coverage, with ``95%`` meaningful package
 coverage as the research-grade target and CI wall time kept below ten minutes.
 
 The coverage gap is concentrated in large, risk-bearing owners rather than in
@@ -203,6 +203,12 @@ Coverage tests must still be scientific tests. A new branch test is acceptable
 when it verifies residual admission, output-key completeness, normalization,
 fixture checksum handling, solver-policy invariants, or a recorded bug boundary. A
 test that only calls a function to cover a line is not acceptable.
+
+The required CI jobs are also part of the test contract. Coverage shards,
+coverage-report generation, example smoke tests, release-data smoke tests, and
+optional ecosystem gates are each capped at ten minutes; the final required-job
+aggregator is capped at five minutes. ``tests/test_benchmark_doc_claims.py``
+parses the workflow and fails if these required-job budgets drift upward.
 
 QI device artifacts are route-level evidence, not production claims unless the
 same run satisfies the documented residual, output, runtime, and provenance

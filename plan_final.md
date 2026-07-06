@@ -4182,6 +4182,52 @@ Status:
 - The PR review path should continue locally with source/docs/test cleanup and
   defer live GPU evidence until remote access is restored.
 
+## Latest Execution Log: CI Budget And Coverage Documentation Tranche
+
+What was checked:
+
+- Audited the CI workflow against the refactor objective that every required
+  GitHub Actions lane should remain within the fast review budget.
+- Found that the docs and plan described a ten-minute CI budget, while the
+  coverage and smoke-test jobs still had larger safety timeouts.
+- Rechecked `docs/testing.rst` and found an older measured-coverage value
+  (`88%`) that no longer matched the later branch coverage audits recorded in
+  this plan.
+
+Source/test/docs change:
+
+- Capped the required `coverage`, `examples-smoke`, and `external-data-smoke`
+  job timeouts at `10` minutes. Existing `coverage-report` and
+  `optional-ecosystem-gates` timeouts were already `10` minutes; the required
+  aggregator remains `5` minutes.
+- Added `test_required_ci_jobs_stay_within_documented_runtime_budget` to
+  `tests/test_benchmark_doc_claims.py`, parsing `.github/workflows/ci.yml` so
+  future workflow edits cannot silently relax the required-job budget.
+- Updated `docs/testing.rst` to document the required-job timeout contract and
+  to describe measured package coverage as about `90%` while the `95%`
+  meaningful-coverage target remains open.
+
+Validation:
+
+- `python -m pytest -q tests/test_benchmark_doc_claims.py
+  tests/test_public_docs_wording_contract.py tests/test_source_tree_consolidation.py`
+  passed as `50 passed in 4.72 s`.
+- `python -m pytest -q tests/test_benchmark_doc_claims.py
+  tests/test_public_docs_wording_contract.py` passed as `9 passed in 0.18 s`
+  after the coverage-text update.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `python -m ruff check tests/test_benchmark_doc_claims.py` passed.
+- `python -m compileall -q tests/test_benchmark_doc_claims.py` passed.
+- `git diff --check` passed.
+
+Status:
+
+- This closes a concrete CI/docs mismatch in the refactor objective: the fast CI
+  budget is now both enforced by workflow timeouts and guarded by a test.
+- The 95% package-coverage target remains open; the next code-coverage tranche
+  should use the next completed CI coverage artifact or a stable local coverage
+  run to choose the highest-ROI owner modules.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
