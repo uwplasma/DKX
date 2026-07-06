@@ -1132,8 +1132,8 @@ performance without changing the input file:
   the old ``pas_schur -> xblock_tz`` fallback ladder.
 - ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL``: solve tolerance for bounded
   one-GPU tokamak PAS+Er runs that use the tight unpreconditioned GMRES route
-  (default: ``1e-8``; set ``0``/``false`` to disable). The legacy
-  ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL`` name is still accepted.
+  (default: ``1e-8``; set ``0``/``false`` to disable). The compatibility alias
+  ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL`` is accepted.
 - ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MIN`` /
   ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX``: active-size window
   for bounded one-GPU tokamak PAS+Er auto-promotion to ``xblock_tz`` (defaults:

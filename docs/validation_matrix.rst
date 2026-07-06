@@ -319,7 +319,7 @@ Open lane board
   out with a large memory footprint. The compact-CSR exact-factor replacement
   lowers the factor storage footprint by avoiding padded rows and builds the
   full exact factors, but still times out before a solver trace on the same GPU
-  hard seed. The accepted CPU hard-seed path combines the legacy QI coarse
+  hard seed. The accepted CPU hard-seed path combines the baseline QI coarse
   seed with residual-weighted angular probe-coarse directions and passes the
   scale-0.60 seed-3 CPU case in ``170.7 s``. The richer block-Schur/radial/angular
   seed basis is implemented but rejected as a default because it converged more

@@ -207,8 +207,8 @@ Stable public data contracts for high-level workflows:
 - ``TransportResult`` for file-format-independent transport summaries,
 - ``OutputSchema`` and ``BenchmarkReport`` for output and performance artifacts.
 - ``write_output``, ``read_output``, and ``run_ambipolar_brent`` as lazy public
-  facades for common Python workflows that should not import legacy internals
-  directly.
+  facades for common Python workflows that should not import implementation
+  internals directly.
 
 These contracts are plain frozen dataclasses and intentionally avoid importing
 JAX at module import. Facade functions import the heavy solve/output modules
@@ -256,8 +256,8 @@ Input/output orchestration:
 - resolves equilibrium overrides (including ``wout_path``),
 - materializes output diagnostics,
 - exposes the in-memory results API,
-- keeps legacy compatibility aliases for flat output-format helpers owned by
-  ``sfincs_jax.outputs.formats``.
+- keeps documented compatibility aliases for flat output-format helpers owned
+  by ``sfincs_jax.outputs.formats``.
 
 ``sfincs_jax/outputs/formats.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

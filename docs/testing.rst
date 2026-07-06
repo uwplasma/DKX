@@ -96,7 +96,7 @@ physics invariants that come directly from the SFINCS validation literature:
   zero ``max_attempts`` cases before the release comparison figure can be regenerated.
   The public runtime/memory figure then filters to reference-runtime-window rows
   with Fortran v3 runtime at least ``10 s``; the summary JSON records which
-  legacy rows still need production-resolution reruns.
+  archived rows still need production-resolution reruns.
 
 The corresponding tests are ``tests/test_validation_artifacts.py`` and
 ``tests/test_generate_validation_dashboard.py``. The high-collisionality plot smoke
@@ -290,7 +290,7 @@ you are doing targeted device-memory diagnosis. Kernel/XLA traces should go
 through ``scripts/profile_write_output_trace.py`` or the transport-trace helpers,
 not through always-on per-phase GPU memory polling. The runtime-drift audit also
 prefers the solver's logged ``elapsed_s=...`` value when available, falling back
-to subprocess wall time only for legacy artifacts that do not record it. The suite
+to subprocess wall time only for archived artifacts that do not record it. The suite
 subprocesses also pin ``SFINCS_JAX_PRECOMPILE=0`` unless explicitly overridden, and
 they leave ``JAX_COMPILATION_CACHE_DIR`` unset unless ``--jax-cache-dir`` is requested,
 so runtime drift is not polluted by eager precompile or persistent-cache write cost.
