@@ -874,6 +874,34 @@ def test_transport_parallel_worker_env_sets_and_restores_thread_caps(monkeypatch
     assert os.environ["XLA_FLAGS"] == "--foo=1 --xla_force_host_platform_device_count=8"
 
 
+def test_transport_parallel_worker_env_pins_multi_worker_cpu_by_default(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_CORES", "12")
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_PIN_THREADS", raising=False)
+    monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
+    monkeypatch.delenv("OPENBLAS_NUM_THREADS", raising=False)
+
+    assert transport_parallel_runtime.transport_parallel_pin_threads_enabled(2)
+    assert not transport_parallel_runtime.transport_parallel_pin_threads_enabled(1)
+
+    with transport_parallel_runtime.transport_parallel_worker_env(3):
+        assert os.environ["OMP_NUM_THREADS"] == "4"
+        assert os.environ["OPENBLAS_NUM_THREADS"] == "4"
+        assert "--xla_force_host_platform_device_count=1" in os.environ["XLA_FLAGS"]
+
+    assert "OMP_NUM_THREADS" not in os.environ
+    assert "OPENBLAS_NUM_THREADS" not in os.environ
+
+
+def test_transport_parallel_worker_env_respects_thread_pin_opt_out(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_CORES", "12")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PIN_THREADS", "0")
+    monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
+
+    assert not transport_parallel_runtime.transport_parallel_pin_threads_enabled(4)
+    with transport_parallel_runtime.transport_parallel_worker_env(4):
+        assert "OMP_NUM_THREADS" not in os.environ
+
+
 def test_transport_parallel_payload_policy_helpers_are_pure(tmp_path: Path) -> None:
     input_path = tmp_path / "input.namelist"
     payloads = transport_parallel_runtime.build_transport_parallel_payloads(

@@ -1332,8 +1332,7 @@ def _transport_parallel_worker_env(
     _set("SFINCS_JAX_MATVEC_SHARD_AXIS", "off")
     _set("SFINCS_JAX_AUTO_SHARD", "0")
     _set("SFINCS_JAX_CPU_DEVICES", "1")
-    pin_threads_env = os.environ.get("SFINCS_JAX_TRANSPORT_PIN_THREADS", "").strip().lower()
-    if pin_threads_env in {"1", "true", "yes", "on"}:
+    if transport_parallel_pin_threads_enabled(workers):
         flags = rewrite_xla_flags(os.environ.get("XLA_FLAGS", ""), None, 1)
         _set("XLA_FLAGS", flags or None)
         _set("OMP_NUM_THREADS", str(int(threads)))
@@ -1378,13 +1377,33 @@ def transport_parallel_persistent_pool_enabled() -> bool:
     return env not in {"0", "false", "no", "off"}
 
 
+def transport_parallel_pin_threads_enabled(parallel_workers: int) -> bool:
+    """Return whether CPU transport workers should cap BLAS/XLA threads.
+
+    Multi-process transport solves otherwise inherit full BLAS thread pools in
+    every worker, which can oversubscribe CPUs and make benchmark timings noisy.
+    The default pins multi-worker runs and leaves single-worker runs unchanged;
+    users can still opt in or out explicitly with
+    ``SFINCS_JAX_TRANSPORT_PIN_THREADS``.
+    """
+
+    workers = validate_transport_parallel_worker_count(parallel_workers)
+    env = os.environ.get("SFINCS_JAX_TRANSPORT_PIN_THREADS", "").strip().lower()
+    if env in {"1", "true", "yes", "on"}:
+        return True
+    if env in {"0", "false", "no", "off"}:
+        return False
+    return workers > 1
+
+
 def transport_parallel_pool_key(parallel_workers: int) -> tuple[object, ...]:
     """Return the cache key for a persistent transport worker pool."""
+    workers = validate_transport_parallel_worker_count(parallel_workers)
     return (
-        validate_transport_parallel_worker_count(parallel_workers),
+        workers,
         transport_parallel_backend(),
         transport_parallel_start_method(),
-        os.environ.get("SFINCS_JAX_TRANSPORT_PIN_THREADS", "").strip().lower(),
+        transport_parallel_pin_threads_enabled(workers),
         os.environ.get("SFINCS_JAX_CORES", "").strip(),
     )
 

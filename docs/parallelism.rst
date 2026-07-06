@@ -180,9 +180,13 @@ for four fully occupied workers. Benchmark JSON records ``rhs_count`` and
 payload coverage, and release-facing audits require claimed worker counts to be
 no larger than the independent task count.
 
-Process‑parallel workers automatically disable sharded matvec and cap
-XLA CPU threads per worker to avoid oversubscription when `SFINCS_JAX_CORES`
-is set.
+Process‑parallel workers automatically disable sharded matvec. For multi-worker
+CPU runs, they also cap XLA/BLAS threads per worker to
+``max(1, SFINCS_JAX_CORES / SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS)`` so the
+process pool does not oversubscribe the node. Set
+``SFINCS_JAX_TRANSPORT_PIN_THREADS=0`` to leave thread pools unmanaged, or set
+``SFINCS_JAX_TRANSPORT_PIN_THREADS=1`` to force the same cap for one-worker
+diagnostics.
 
 Reproduce:
 

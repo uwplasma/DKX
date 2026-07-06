@@ -4134,6 +4134,52 @@ Status:
   solver traces to verify shortcut provenance, residual cleanliness, and memory
   behavior on the target hardware.
 
+## Latest Execution Log: CPU Transport Worker Thread-Pinning Tranche
+
+What was checked:
+
+- Switched to the CPU-local completion path because `ssh office` is unavailable.
+- Reviewed the transport worker runtime, process-pool cache, and parallelism
+  documentation for the main CPU performance risk in local runs: every worker
+  inheriting full BLAS/XLA thread pools and oversubscribing the node.
+
+Source/test/docs change:
+
+- Changed CPU transport-worker process pools to pin per-worker XLA/BLAS threads
+  by default whenever `SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS > 1`.
+- The per-worker cap is
+  `max(1, SFINCS_JAX_CORES / SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS)`.
+- Added `transport_parallel_pin_threads_enabled` as the single policy helper.
+  `SFINCS_JAX_TRANSPORT_PIN_THREADS=0` remains an explicit opt-out, and
+  `SFINCS_JAX_TRANSPORT_PIN_THREADS=1` forces the same cap for one-worker
+  diagnostics.
+- Updated `docs/parallelism.rst` so the public CPU parallelism docs match the
+  implementation.
+- Added tests for default multi-worker pinning, single-worker default behavior,
+  and explicit opt-out.
+
+Validation:
+
+- `python -m pytest -q tests/test_transport_parallel_runtime.py
+  tests/test_transport_parallel_execution.py tests/test_transport_parallel_payload.py
+  tests/test_transport_parallel_validation.py` passed as `83 passed in 0.76 s`.
+- `python -m pytest -q tests/test_source_tree_consolidation.py
+  tests/test_public_docs_wording_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `49 passed in 4.94 s`.
+- `python -m ruff check sfincs_jax/problems/transport_parallel_runtime.py
+  tests/test_transport_parallel_runtime.py` passed.
+- `python -m compileall -q sfincs_jax/problems/transport_parallel_runtime.py
+  tests/test_transport_parallel_runtime.py` passed.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+
+Status:
+
+- This improves CPU runtime predictability for RHSMode=2/3 transport-worker
+  benchmarks and local production runs without changing solver math,
+  differentiability paths, or sequential behavior.
+- The PR review path should continue locally with source/docs/test cleanup and
+  defer live GPU evidence until remote access is restored.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
