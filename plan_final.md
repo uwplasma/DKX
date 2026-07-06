@@ -4569,6 +4569,39 @@ Status:
   another pure-policy or lightweight-operator tranche rather than a slow
   production solve.
 
+### 2026-07-06: RHSMode-1 policy fail-closed coverage tranche
+
+Changes:
+
+- Added CPU-only policy tests for QI-device rank budgeting, constraint-scheme-0
+  sparse-first routing, safe x-block fallback initial guesses, host-factor
+  probe admission, and FP x-block global-correction admission.
+- These tests cover automatic solver-selection contracts that determine whether
+  SFINCS-JAX uses dense, sparse, x-block, or global-correction lanes without
+  requiring expensive kinetic solves in CI.
+
+Validation:
+
+- `python -m pytest -q tests/test_profile_solve_policy_coverage.py` passed as
+  `25 passed in 0.28 s`.
+- `python -m pytest -q tests/test_profile_solve_policy_coverage.py
+  tests/test_rhs1_preconditioner_auto_policy.py
+  tests/test_rhs1_sparse_rescue_policy.py tests/test_rhs1_sparse_exact_policy.py
+  tests/test_rhs1_xblock_fallback_initial_guess.py
+  tests/test_source_tree_consolidation.py` passed as
+  `171 passed in 5.73 s`.
+- `python -m ruff check tests/test_profile_solve_policy_coverage.py`,
+  `python -m compileall -q tests/test_profile_solve_policy_coverage.py`, and
+  `git diff --check` passed.
+
+Status:
+
+- This adds more fail-closed coverage around the automatic RHSMode-1 solver
+  policy without increasing the runtime of normal tests. The remaining 95%
+  coverage gap is still dominated by high-level solve orchestration and large
+  preconditioner owners, not by missing public documentation or package
+  structure.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

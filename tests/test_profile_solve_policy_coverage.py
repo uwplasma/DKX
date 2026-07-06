@@ -90,6 +90,49 @@ def test_constraint0_petsc_compat_can_be_enabled_and_respects_guards(monkeypatch
     )
 
 
+def test_constraint0_sparse_first_defaults_to_accelerator_and_respects_overrides(
+    monkeypatch,
+) -> None:
+    op = _rhs1_fp_op(constraint_scheme=0)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_CS0_SPARSE_FIRST", raising=False)
+
+    assert not profile_policies.rhs1_constraint0_sparse_first(
+        op=op,
+        solve_method_kind="incremental",
+        sparse_precond_mode="auto",
+        active_size=4096,
+        sparse_max_size=6000,
+        backend="cpu",
+    )
+    assert profile_policies.rhs1_constraint0_sparse_first(
+        op=op,
+        solve_method_kind="incremental",
+        sparse_precond_mode="auto",
+        active_size=4096,
+        sparse_max_size=6000,
+        backend="gpu",
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_CS0_SPARSE_FIRST", "1")
+    assert profile_policies.rhs1_constraint0_sparse_first(
+        op=op,
+        solve_method_kind="incremental",
+        sparse_precond_mode="auto",
+        active_size=4096,
+        sparse_max_size=6000,
+        backend="cpu",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_CS0_SPARSE_FIRST", "0")
+    assert not profile_policies.rhs1_constraint0_sparse_first(
+        op=op,
+        solve_method_kind="incremental",
+        sparse_precond_mode="auto",
+        active_size=4096,
+        sparse_max_size=6000,
+        backend="gpu",
+    )
+
+
 def test_constraint0_dense_fallback_policy() -> None:
     assert profile_policies.rhs1_constraint0_dense_fallback_allowed(_rhs1_fp_op(constraint_scheme=1))
     assert not profile_policies.rhs1_constraint0_dense_fallback_allowed(_rhs1_fp_op(constraint_scheme=0))
@@ -178,6 +221,102 @@ def test_sparse_pc_default_restart_caps_one_species_pas_er_without_env() -> None
     )
 
 
+def test_qi_device_rank_budget_covers_residual_coarse_extensions() -> None:
+    budget = profile_policies.rhs1_qi_device_rank_budget(
+        seed_max_rank=2,
+        n_species=2,
+        residual_enrichment=True,
+        residual_enrichment_depth=3,
+        residual_enrichment_include_residual=True,
+        recycle_enrichment=True,
+        recycle_cycles=2,
+        operator_krylov_enrichment=True,
+        operator_krylov_depth=4,
+        adjoint_krylov_enrichment=True,
+        adjoint_krylov_depth=5,
+        operator_action_enrichment=True,
+        operator_action_depth=1,
+        multilevel_coarse=True,
+        multilevel_max_rank=None,
+        multilevel_current_moments=True,
+        multilevel_current_max_pitch_degree=2,
+        multilevel_residual_equation=True,
+        multilevel_residual_equation_max_level_rank=7,
+        multilevel_max_levels=3,
+        global_moment_residual_equation=True,
+        global_moment_residual_equation_max_rank=11,
+        residual_galerkin_equation=True,
+        residual_galerkin_equation_max_rank=13,
+        phase_space_residual_equation=True,
+        phase_space_residual_equation_max_rank=17,
+        residual_region_bounce_coarse=True,
+        residual_region_bounce_coarse_max_rank=19,
+        active_pattern_coarse=True,
+        active_pattern_coarse_max_rank=23,
+        block_schur_residual_equation=True,
+        block_schur_residual_equation_max_rank=29,
+        coupled_residual_equation=True,
+        coupled_residual_equation_max_rank=31,
+        residual_snapshot_enrichment=True,
+        residual_snapshot_max_rank=37,
+        residual_snapshot_residual_equation=True,
+        residual_snapshot_residual_equation_max_rank=41,
+        block_schur_residual_enrichment=True,
+        block_schur_residual_max_rank=43,
+        max_rank_env_value="not-an-int",
+    )
+
+    assert budget.rank_budget == 383
+    assert budget.max_rank == 383
+
+    user_capped = profile_policies.rhs1_qi_device_rank_budget(
+        seed_max_rank=2,
+        n_species=1,
+        residual_enrichment=False,
+        residual_enrichment_depth=0,
+        residual_enrichment_include_residual=False,
+        recycle_enrichment=False,
+        recycle_cycles=0,
+        operator_krylov_enrichment=False,
+        operator_krylov_depth=0,
+        adjoint_krylov_enrichment=False,
+        adjoint_krylov_depth=0,
+        operator_action_enrichment=False,
+        operator_action_depth=0,
+        multilevel_coarse=False,
+        multilevel_max_rank=None,
+        multilevel_current_moments=False,
+        multilevel_current_max_pitch_degree=0,
+        multilevel_residual_equation=False,
+        multilevel_residual_equation_max_level_rank=0,
+        multilevel_max_levels=0,
+        global_moment_residual_equation=False,
+        global_moment_residual_equation_max_rank=0,
+        residual_galerkin_equation=False,
+        residual_galerkin_equation_max_rank=0,
+        phase_space_residual_equation=False,
+        phase_space_residual_equation_max_rank=0,
+        residual_region_bounce_coarse=False,
+        residual_region_bounce_coarse_max_rank=0,
+        active_pattern_coarse=False,
+        active_pattern_coarse_max_rank=0,
+        block_schur_residual_equation=False,
+        block_schur_residual_equation_max_rank=0,
+        coupled_residual_equation=False,
+        coupled_residual_equation_max_rank=0,
+        residual_snapshot_enrichment=False,
+        residual_snapshot_max_rank=0,
+        residual_snapshot_residual_equation=False,
+        residual_snapshot_residual_equation_max_rank=0,
+        block_schur_residual_enrichment=False,
+        block_schur_residual_max_rank=0,
+        max_rank_env_value="5",
+    )
+
+    assert user_capped.rank_budget == 2
+    assert user_capped.max_rank == 5
+
+
 def test_pas_tz_guarded_structured_levels_parse_aliases_and_empty_tokens() -> None:
     levels = profile_policies.parse_rhs1_pas_tz_guarded_structured_levels(
         " xmg_collision + , diag ; x_grid | collisions "
@@ -217,6 +356,65 @@ def test_sparse_preconditioner_config_parses_scipy_and_false_aliases(monkeypatch
     assert disabled_config.precond_mode == "off"
     assert disabled_config.precond_kind == "auto"
     assert disabled_config.operator_mode == "off"
+
+
+def test_xblock_fallback_initial_guess_rejects_bad_candidate_fail_closed() -> None:
+    class BadArray:
+        def __array__(self, dtype=None):  # noqa: ANN001
+            raise RuntimeError("bad candidate")
+
+    original = np.ones(3)
+    x0, reused, improved = profile_policies.rhs1_xblock_fallback_initial_guess(
+        candidate=BadArray(),
+        original_x0=original,
+        rhs_shape=(3,),
+        candidate_residual_norm=0.5,
+        rhs_norm=1.0,
+        precondition_side="left",
+    )
+
+    assert x0 is original
+    assert reused is False
+    assert improved is True
+
+    x0_right, reused_right, improved_right = profile_policies.rhs1_xblock_fallback_initial_guess(
+        candidate=np.zeros(3),
+        original_x0=original,
+        rhs_shape=(3,),
+        candidate_residual_norm=0.5,
+        rhs_norm=1.0,
+        precondition_side="right",
+    )
+
+    assert x0_right is original
+    assert reused_right is False
+    assert improved_right is True
+
+
+def test_host_factor_probe_rejects_invalid_solve_and_accepts_bounded_factor(
+    monkeypatch,
+) -> None:
+    class GoodFactor:
+        def solve(self, rhs):
+            return np.asarray(rhs) * 2.0
+
+    class BadShapeFactor:
+        def solve(self, rhs):
+            return np.ones((2, 2))
+
+    class RaisingFactor:
+        def solve(self, rhs):
+            raise RuntimeError("factor failed")
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_FACTOR_PROBE_MAX", "3.0")
+    assert profile_policies.rhs1_host_factor_probe_ok(factor=GoodFactor(), block_size=3)
+    assert not profile_policies.rhs1_host_factor_probe_ok(factor=None, block_size=3)
+    assert not profile_policies.rhs1_host_factor_probe_ok(factor=GoodFactor(), block_size=0)
+    assert not profile_policies.rhs1_host_factor_probe_ok(factor=BadShapeFactor(), block_size=3)
+    assert not profile_policies.rhs1_host_factor_probe_ok(factor=RaisingFactor(), block_size=3)
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_FACTOR_PROBE_MAX", "1.0")
+    assert not profile_policies.rhs1_host_factor_probe_ok(factor=GoodFactor(), block_size=3)
 
 
 def test_sparse_exact_lu_requested_covers_pas_full_and_accelerator_small_case(monkeypatch) -> None:
@@ -384,6 +582,57 @@ def test_scipy_rescue_abs_floor_invalid_override_and_large_cpu_floor(monkeypatch
     )
 
     assert floor == 1.0e-9
+
+
+def test_fp_xblock_global_correction_admission_guards(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_MIN", "1000")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_MAX", "20000")
+
+    assert profile_policies.rhs1_fp_xblock_global_correction_allowed(
+        op=_rhs1_fp_op(),
+        active_size=10_000,
+        residual_norm=1.0e-5,
+        target=1.0e-8,
+        used_large_cpu_xblock_shortcut=True,
+        used_explicit_fp_xblock_seed=True,
+        sparse_xblock_candidate_accepted=True,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert not profile_policies.rhs1_fp_xblock_global_correction_allowed(
+        op=_rhs1_fp_op(),
+        active_size=10_000,
+        residual_norm=1.0e-5,
+        target=1.0e-8,
+        used_large_cpu_xblock_shortcut=False,
+        used_explicit_fp_xblock_seed=True,
+        sparse_xblock_candidate_accepted=True,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert not profile_policies.rhs1_fp_xblock_global_correction_allowed(
+        op=_rhs1_fp_op(),
+        active_size=10_000,
+        residual_norm=1.0e-5,
+        target=1.0e-8,
+        used_large_cpu_xblock_shortcut=True,
+        used_explicit_fp_xblock_seed=False,
+        sparse_xblock_candidate_accepted=True,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert not profile_policies.rhs1_fp_xblock_global_correction_allowed(
+        op=_rhs1_fp_op(),
+        active_size=10_000,
+        residual_norm=1.0e-9,
+        target=1.0e-8,
+        used_large_cpu_xblock_shortcut=True,
+        used_explicit_fp_xblock_seed=True,
+        sparse_xblock_candidate_accepted=True,
+        use_implicit=False,
+        backend="cpu",
+    )
 
 
 def test_host_dense_shortcut_and_dense_auto_policy_guards(monkeypatch) -> None:
