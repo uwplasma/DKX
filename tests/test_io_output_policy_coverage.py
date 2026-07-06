@@ -185,6 +185,64 @@ def test_write_output_geometry_only_trace_return_results_and_wout_override(
     assert trace.metadata["compute_transport_matrix"] is False
 
 
+def test_write_output_transport_mode_without_matrix_keeps_zero_iterations_and_trace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """RHSMode=2/3 geometry-only output should not pretend a transport solve ran."""
+
+    input_path = _minimal_writer_input(tmp_path, rhs_mode=2, geometry_scheme=4)
+    output_path = tmp_path / "transport_geometry_only.npz"
+    trace_path = tmp_path / "transport_geometry_only_trace.json"
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(output_writer, "grids_from_namelist", lambda _nml: _minimal_writer_grids())
+    monkeypatch.setattr(output_writer, "geometry_from_namelist", lambda **_kwargs: SimpleNamespace())
+    monkeypatch.setattr(output_writer, "_export_f_config", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        output_writer,
+        "sfincs_jax_output_dict",
+        lambda **_kwargs: {
+            "RHSMode": np.asarray(2, dtype=np.int32),
+            "geometryScheme": np.asarray(4, dtype=np.int32),
+            "constraintScheme": np.asarray(1, dtype=np.int32),
+            "psiAHat": np.asarray(1.0, dtype=np.float64),
+            "aHat": np.asarray(1.0, dtype=np.float64),
+            "NIterations": np.asarray(99, dtype=np.int32),
+        },
+    )
+
+    def _fake_write_output_file(*, path, data, fortran_layout, overwrite):
+        captured["path"] = Path(path)
+        captured["data"] = dict(data)
+        captured["fortran_layout"] = bool(fortran_layout)
+        captured["overwrite"] = bool(overwrite)
+
+    monkeypatch.setattr(output_writer, "write_sfincs_output_file", _fake_write_output_file)
+
+    resolved, data = output_writer.write_sfincs_jax_output_h5(
+        input_namelist=input_path,
+        output_path=output_path,
+        compute_transport_matrix=False,
+        solver_trace_path=trace_path,
+        return_results=True,
+        verbose=False,
+    )
+
+    assert resolved == output_path.resolve()
+    assert captured["path"] == output_path
+    assert captured["fortran_layout"] is True
+    assert captured["overwrite"] is True
+    assert int(np.asarray(data["NIterations"]).reshape(())) == 0
+    assert int(np.asarray(captured["data"]["NIterations"]).reshape(())) == 0
+
+    trace = read_solver_trace_json(trace_path)
+    assert trace.selected_path == "geometry_only"
+    assert trace.rhs_mode == 2
+    assert trace.metadata["compute_transport_matrix"] is False
+    assert trace.metadata["output_format"] == "npz"
+
+
 def test_write_output_transport_streaming_restores_environment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

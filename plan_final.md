@@ -2599,6 +2599,30 @@ Validation:
 - `python -m compileall -q tests/test_io_output_policy_coverage.py` passed.
 - `git diff --check` passed.
 
+### Tranche 139: transport geometry-only writer guard
+
+Scope:
+
+- Added a bounded output-writer test for RHSMode=2 geometry-only output.
+- The test verifies that `compute_transport_matrix=False` forces
+  `NIterations=0` even if the base output dictionary contains a stale value,
+  writes the selected output format through the common writer route, and records
+  a solver trace with `selected_path="geometry_only"`.
+- This protects a user-facing CLI/API branch and adds coverage to the large
+  writer orchestrator without running a transport solve.
+
+Validation:
+
+- `pytest -q tests/test_io_output_policy_coverage.py -k 'geometry_only or transport_npz'`
+  passed as `3 passed, 93 deselected in 0.82 s`.
+- `pytest -q tests/test_io_output_policy_coverage.py` passed as
+  `96 passed in 2.23 s`.
+- `pytest -q tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `71 passed in 4.37 s`.
+- `ruff check tests/test_io_output_policy_coverage.py` passed.
+- `python -m compileall -q tests/test_io_output_policy_coverage.py` passed.
+- `git diff --check` passed.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
