@@ -154,20 +154,21 @@ Regenerate the exact-input upstream fixture audit if upstream inputs or support 
 
    python scripts/generate_fortran_example_audit.py
 
-Release-facing full suite run (vendored upstream inputs):
+Release-facing full suite run (vendored upstream inputs). A slim checkout does
+not include the frozen Fortran HDF5 reference root, so use either a local
+Fortran executable or a locally restored reference root:
 
 .. code-block:: bash
 
    python scripts/run_scaled_example_suite.py \
      --examples-root examples/sfincs_examples \
      --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
-     --reference-results-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
+     --fortran-exe /path/to/sfincs \
      --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
      --scale-factor 1.0 \
      --runtime-target-basis fortran \
      --fortran-min-runtime-s 0.0 \
      --runtime-adjustment-iters 0 \
-     --runtime-baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
      --jax-profile-marks on
 
 Each suite run writes:
@@ -195,7 +196,7 @@ Manual audit commands:
      --fail-on-missing
 
    python scripts/audit_suite_runtime_drift.py \
-     --baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
+     --baseline-report /path/to/frozen_cpu_baseline/suite_report.json \
      --candidate-report tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak/suite_report.json \
      --threshold-ratio 1.25 \
      --min-baseline-runtime-s 1.0
@@ -217,7 +218,6 @@ full-suite solves:
    python scripts/generate_readme_fast_branch_audit.py \
      --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
      --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas \
-     --baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
      --min-fortran-runtime-s 10
 
    python examples/publication_figures/generate_w7x_high_nu_performance.py

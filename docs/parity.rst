@@ -163,21 +163,19 @@ useful for faster debugging and historical comparison:
 - ``tests/reduced_upstream_examples/suite_report.json``
 - ``tests/reduced_upstream_examples/suite_report_strict.json``
 
-Regenerate the full release-facing suite:
+Regenerate the release-facing README table from the tracked CPU/GPU reports:
 
 .. code-block:: bash
 
-   python scripts/run_scaled_example_suite.py \
-     --examples-root examples/sfincs_examples \
-     --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
-     --reference-results-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
+   python scripts/generate_readme_fast_branch_audit.py \
      --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
-     --scale-factor 1.0 \
-     --runtime-target-basis fortran \
-     --fortran-min-runtime-s 0.0 \
-     --runtime-adjustment-iters 0 \
-     --runtime-baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
-     --jax-profile-marks on
+     --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas \
+     --min-fortran-runtime-s 10
+
+To replace the tracked reports, run ``scripts/run_scaled_example_suite.py`` with
+either ``--fortran-exe /path/to/sfincs`` or a locally restored
+``--reference-results-root``. Slim source checkouts do not include the frozen
+Fortran HDF5 reference root used to produce the release-facing report files.
 
 After a suite refresh, verify the structural output coverage explicitly:
 
@@ -187,12 +185,13 @@ After a suite refresh, verify the structural output coverage explicitly:
      --suite-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
      --fail-on-missing
 
-When refreshing a frozen CPU lane, compare runtime against the promoted reference lane:
+When refreshing a CPU lane and a local frozen baseline is available, compare
+runtime against that promoted reference lane:
 
 .. code-block:: bash
 
    python scripts/audit_suite_runtime_drift.py \
-     --baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
+     --baseline-report /path/to/frozen_cpu_baseline/suite_report.json \
      --candidate-report tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak/suite_report.json \
      --threshold-ratio 1.25 \
      --min-baseline-runtime-s 1.0

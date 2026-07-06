@@ -860,28 +860,18 @@ The main documentation entry points are:
 
 ## Example-Suite Audit
 
-Regenerate this audit block from the working tree being prepared for release:
+Regenerate the README audit block from the tracked CPU/GPU suite reports:
 
 ```bash
-python scripts/run_scaled_example_suite.py \
-  --examples-root examples/sfincs_examples \
-  --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
-  --reference-results-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
-  --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
-  --scale-factor 1.0 \
-  --runtime-target-basis fortran \
-  --fortran-min-runtime-s 0.0 \
-  --runtime-adjustment-iters 0 \
-  --runtime-baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
-  --jax-profile-marks on
 python scripts/generate_readme_fast_branch_audit.py \
   --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
   --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas \
-  --baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
   --min-fortran-runtime-s 10
 ```
 
-The benchmark policy is:
+To replace those tracked reports, run a fresh suite with either
+`--fortran-exe /path/to/sfincs` or a locally restored
+`--reference-results-root`. The benchmark policy is:
 
 - start from the original Fortran v3 example resolution,
 - only downscale when a case is too expensive for a practical suite run,

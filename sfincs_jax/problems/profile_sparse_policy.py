@@ -17,6 +17,46 @@ from .profile_setup import (
 ArrayFn = Callable[[jnp.ndarray], jnp.ndarray]
 EmitFn = Callable[[int, str], None]
 
+_SPARSE_FACTOR_ALIASES = {
+    "jacobi": "jacobi",
+    "diagonal": "jacobi",
+    "diag": "jacobi",
+    "none": "jacobi",
+    "ilu": "ilu",
+    "spilu": "ilu",
+    "lu": "lu",
+    "splu": "lu",
+    "symbolic_block_lu": "symbolic_block_lu",
+    "block_lu": "symbolic_block_lu",
+    "native_block_lu": "symbolic_block_lu",
+    "symbolic_lu": "symbolic_block_lu",
+    "symbolic_block_lu_coarse": "symbolic_block_lu_coarse",
+    "block_lu_coarse": "symbolic_block_lu_coarse",
+    "native_block_lu_coarse": "symbolic_block_lu_coarse",
+    "symbolic_lu_coarse": "symbolic_block_lu_coarse",
+    "symbolic_block_schur_lu": "symbolic_block_schur_lu",
+    "block_schur_lu": "symbolic_block_schur_lu",
+    "native_block_schur_lu": "symbolic_block_schur_lu",
+    "symbolic_schur_lu": "symbolic_block_schur_lu",
+    "symbolic_frontal_schur_lu": "symbolic_frontal_schur_lu",
+    "frontal_schur_lu": "symbolic_frontal_schur_lu",
+    "native_frontal_schur_lu": "symbolic_frontal_schur_lu",
+    "multifrontal_schur_lu": "symbolic_frontal_schur_lu",
+    "symbolic_blr_frontal_schur_lu": "symbolic_blr_frontal_schur_lu",
+    "blr_frontal_schur_lu": "symbolic_blr_frontal_schur_lu",
+    "native_blr_frontal_schur_lu": "symbolic_blr_frontal_schur_lu",
+    "compressed_frontal_schur_lu": "symbolic_blr_frontal_schur_lu",
+    "symbolic_nd_frontal_schur_lu": "symbolic_nd_frontal_schur_lu",
+    "nd_frontal_schur_lu": "symbolic_nd_frontal_schur_lu",
+    "nested_dissection_frontal_schur_lu": "symbolic_nd_frontal_schur_lu",
+    "native_nd_frontal_schur_lu": "symbolic_nd_frontal_schur_lu",
+    "multilevel_frontal_schur_lu": "symbolic_nd_frontal_schur_lu",
+    "symbolic_superblock_lu": "symbolic_superblock_lu",
+    "superblock_lu": "symbolic_superblock_lu",
+    "native_superblock_lu": "symbolic_superblock_lu",
+    "block_edge_lu": "symbolic_superblock_lu",
+}
+
 __all__ = (
     "SparsePCActiveDOFSetup",
     "SparsePCEntryPolicySetup",
@@ -469,6 +509,17 @@ def _env_bool(env: object, key: str, default: bool = False) -> bool:
     return bool(default)
 
 
+def _canonical_sparse_factor_kind(value: str, *, default: str) -> str:
+    """Resolve sparse-factor aliases for user options and auto policy."""
+
+    key = str(value).strip().lower()
+    if key:
+        resolved = _SPARSE_FACTOR_ALIASES.get(key)
+        if resolved is not None:
+            return resolved
+    return _SPARSE_FACTOR_ALIASES.get(str(default).strip().lower(), "lu")
+
+
 def resolve_sparse_pc_entry_policy(
     *,
     op: object,
@@ -634,14 +685,25 @@ def resolve_sparse_pc_factor_policy(
         if bool(fortran_reduced_sparse_pc) and int(sparse_pc_linear_size) >= 100000
         else "lu"
     )
-    if factor_kind_env in {"jacobi", "diagonal", "diag", "none"}:
-        factorization = "jacobi"
-    elif factor_kind_env in {"ilu", "spilu"}:
-        factorization = "ilu"
-    elif factor_kind_env in {"lu", "splu"}:
-        factorization = "lu"
+    explicit_factor_requested = bool(factor_kind_env)
+    if explicit_factor_requested:
+        factorization = _canonical_sparse_factor_kind(factor_kind_env, default=default_factor_kind)
     else:
         factorization = str(default_factor_kind)
+    monolithic_auto_guard_size = _env_int(
+        env,
+        "SFINCS_JAX_RHSMODE1_SPARSE_PC_MONOLITHIC_AUTO_MAX_SIZE",
+        _env_int(env, "SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_MAX_SIZE", 250_000, minimum=0),
+        minimum=0,
+    )
+    if (
+        not bool(explicit_factor_requested)
+        and factorization in {"lu", "ilu"}
+        and int(monolithic_auto_guard_size) > 0
+        and int(sparse_pc_linear_size) > int(monolithic_auto_guard_size)
+    ):
+        default_factor_kind = "symbolic_block_lu_coarse"
+        factorization = "symbolic_block_lu_coarse"
 
     default_ilu_fill_factor = (
         2.0

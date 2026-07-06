@@ -9,6 +9,7 @@ from scipy import sparse
 
 import sfincs_jax.problems.profile_policies as profile_policies
 import sfincs_jax.problems.profile_sparse_direct as sparse_direct
+import sfincs_jax.problems.profile_sparse_policy as profile_sparse_policy
 import sfincs_jax.problems.profile_solve as profile_solve
 import sfincs_jax.solvers.explicit_sparse as explicit_sparse
 import sfincs_jax.solvers.path_policy as path_policy
@@ -439,6 +440,38 @@ def test_build_host_sparse_direct_factor_from_matvec_default_ilu_and_env_overrid
     )
 
     assert seen_kinds == ["ilu", "lu", "jacobi"]
+
+
+def test_rhsmode1_sparse_factor_policy_auto_avoids_large_monolithic_default() -> None:
+    setup = profile_sparse_policy.resolve_sparse_pc_factor_policy(
+        env={},
+        constrained_pas_pc=True,
+        tokamak_fp_pc=False,
+        fortran_reduced_sparse_pc=False,
+        sparse_pc_linear_size=469_321,
+        pc_maxiter=8,
+        default_permc_spec="COLAMD",
+        host_sparse_factor_dtype=lambda **_kwargs: np.dtype(np.float64),
+    )
+
+    assert setup.default_factor_kind == "symbolic_block_lu_coarse"
+    assert setup.factorization == "symbolic_block_lu_coarse"
+
+
+def test_rhsmode1_sparse_factor_policy_keeps_explicit_large_factor_override() -> None:
+    setup = profile_sparse_policy.resolve_sparse_pc_factor_policy(
+        env={"SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND": "native_nd_frontal_schur_lu"},
+        constrained_pas_pc=True,
+        tokamak_fp_pc=False,
+        fortran_reduced_sparse_pc=False,
+        sparse_pc_linear_size=469_321,
+        pc_maxiter=8,
+        default_permc_spec="COLAMD",
+        host_sparse_factor_dtype=lambda **_kwargs: np.dtype(np.float64),
+    )
+
+    assert setup.default_factor_kind == "lu"
+    assert setup.factorization == "symbolic_nd_frontal_schur_lu"
 
 
 def test_build_host_sparse_direct_factor_from_matvec_rejects_large_monolithic_factor(monkeypatch) -> None:

@@ -2285,6 +2285,87 @@ Acceptance:
 - No hidden generated files or large artifacts are left in git.
 - The branch is ready for review without further broad refactor work.
 
+## 2026-07-05 Final-Review Consolidation Pass
+
+Branch consolidation:
+
+- `refactor/v3-driver-architecture` is the single review branch for PR #8.
+- `main` is the merge base for this branch (`0 968` ahead/behind from
+  `main...HEAD`), and `git merge main` reported already up to date.
+- The stale detached worktree at
+  `/Users/rogeriojorge/local/tests/sfincs_jax_main_clean` contains old
+  uncommitted large equilibrium data and is intentionally excluded from this
+  PR branch. It should not be merged into the review branch.
+
+Artifact and documentation regeneration:
+
+- Regenerated the artifact-backed Fortran-suite benchmark summary, validation
+  dashboard, W7-X high-nu performance figure, autodiff sensitivity figures,
+  high-collisionality proxy/audit figures, Simakov-Helander run-plan artifact,
+  QA optimization lane, QI electron-root screen, and QA bootstrap-current
+  comparison artifact.
+- Validation passed for the regenerated artifact bundle:
+  `tests/test_generate_fortran_suite_benchmark_summary.py`,
+  `tests/test_benchmark_doc_claims.py`, `tests/test_validation_artifacts.py`,
+  and `tests/test_benchmark_artifact_policy.py` as `68 passed in 1.38 s`.
+- Source-tree, import-contract, and examples-tree validation passed as
+  `63 passed in 4.92 s`.
+- The benchmark artifact index release gate passed with `total=210` and
+  `release-blocking=0`.
+- Sphinx documentation built with warnings as errors.
+
+Fresh production-suite evidence from the final branch:
+
+- A direct local production-suite attempt was stopped because it is not a
+  publishable replacement for the frozen benchmark reports, but it exposed
+  real final-review issues that were triaged.
+- Local SFINCS Fortran v3 segfaulted on
+  `tokamak_1species_FPCollisions_noEr`; this is a local direct-Fortran
+  blocker for replacing frozen references, not a JAX output mismatch.
+- `tokamak_1species_FPCollisions_noEr_withQN` produced a strict comparison
+  mismatch driven by solver-iteration metadata (`NIterations`), while physics
+  flux/current quantities agreed at the checked tolerance.
+- Monoenergetic production cases hit a JAX sharding bug:
+  `NameError: Found an unbound axis name: zeta`. The full-system operator now
+  keeps pjit placement constraints on the roll-stencil path and reserves named
+  halo exchange for future `shard_map`/`pmap` call sites. Focused regression
+  coverage passed in `tests/test_v3_system_cached_matvec.py`.
+- A bounded production `monoenergetic_geometryScheme1` rerun no longer raised
+  the unbound-axis error, but it exceeded the local 10-minute cap. This fixes
+  the correctness regression and leaves production mono runtime as a benchmark
+  item, not as a new README performance row.
+- Large RHSMode=1 PAS no-Er cases previously entered monolithic LU/ILU and
+  failed the explicit-sparse guard at `n=469321`. RHSMode=1 sparse-PC policy
+  now mirrors the transport solver policy by auto-switching large un-overridden
+  monolithic factors to `symbolic_block_lu_coarse`; explicit user overrides
+  still win.
+- A bounded production `tokamak_1species_PASCollisions_noEr` probe selected
+  `symbolic_block_lu_coarse`, built the factor in about `10.2 s` with about
+  `1.04 GB` factor estimate, and entered GMRES instead of failing the guard.
+  The residual plateaued near `6.07e3` before the 4-minute cap, so the next
+  technical target is Krylov/preconditioner quality rather than path-selection
+  failure.
+- Focused validation for the final solver-policy changes passed:
+  `tests/test_profile_sparse_helper_coverage.py`,
+  `tests/test_explicit_sparse_factor_policy.py`,
+  `tests/test_explicit_sparse_factor_builder.py`, and
+  `tests/test_v3_system_cached_matvec.py` as `36 passed in 1.08 s`; Ruff
+  passed on the touched source and tests.
+- The post-consolidation full local suite passed as `4322 passed, 3 skipped,
+  2 warnings in 993.79 s`. The two warnings are the existing nonfinite-tail
+  sanitization checks in `tests/test_transport_active_factor.py`.
+
+Review boundary:
+
+- Do not replace README runtime/memory figures or parity tables with the
+  interrupted direct local suite. The checked-in figure regeneration remains
+  artifact-backed by the verified reports until a fresh CPU/GPU/Fortran suite
+  completes cleanly.
+- The PR can be prepared for review with these fixes and with the remaining
+  production-runtime issues documented as deferred performance/preconditioner
+  work, unless the reviewer requires a fresh full production suite before
+  merge.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
