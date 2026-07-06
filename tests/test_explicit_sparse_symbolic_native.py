@@ -249,6 +249,95 @@ def test_blr_schur_factor_uses_woodbury_and_gmres_fallback_paths() -> None:
     assert rejected == (None, None, None, None)
 
 
+def test_symbolic_schur_and_blr_edge_fallbacks_are_finite(monkeypatch: pytest.MonkeyPatch) -> None:
+    dtype = np.dtype(np.float64)
+    matrix = sparse.eye(3, format="csr", dtype=dtype)
+    analysis = _analysis(matrix, block_size=2)
+    rhs = np.asarray([2.0, 4.0, -3.0], dtype=dtype)
+
+    no_separator = explicit_sparse._SymbolicBlockSchurFactor(
+        blocks=(
+            explicit_sparse._SymbolicSchurBlock(
+                indices=np.asarray([0, 1], dtype=np.int64),
+                factor=explicit_sparse._DenseInverseFactor(0.5 * np.eye(2, dtype=dtype)),
+                b_to_separator=sparse.csr_matrix((2, 0), dtype=dtype),
+                c_from_separator=sparse.csr_matrix((0, 2), dtype=dtype),
+            ),
+            explicit_sparse._SymbolicSchurBlock(
+                indices=np.asarray([2], dtype=np.int64),
+                factor=_FailingFactor(),
+                b_to_separator=sparse.csr_matrix((1, 0), dtype=dtype),
+                c_from_separator=sparse.csr_matrix((0, 1), dtype=dtype),
+            ),
+        ),
+        separator_indices=np.asarray([], dtype=np.int64),
+        schur_factor=_FailingFactor(),
+        dtype=dtype,
+        n=3,
+        analysis=analysis,
+        separator_count=0,
+    )
+    np.testing.assert_allclose(no_separator.solve(rhs), np.asarray([1.0, 2.0, -3.0], dtype=dtype))
+
+    empty_blr = explicit_sparse._BLRSchurFactor(
+        base_matrix=sparse.csr_matrix((0, 0), dtype=dtype),
+        base_factor=_FailingFactor(),
+        updates=tuple(),
+        dtype=dtype,
+        rtol=1.0e-10,
+        atol=0.0,
+        maxiter=2,
+        restart=1,
+    )
+    assert empty_blr.solve(np.asarray([], dtype=dtype)).shape == (0,)
+
+    update = explicit_sparse._BLRUpdateBlock(
+        columns=np.asarray([0], dtype=np.int64),
+        u=np.asarray([[0.1], [0.0]], dtype=dtype),
+        vt=np.asarray([[1.0]], dtype=dtype),
+        original_shape=(2, 1),
+        rank=1,
+        relative_error_estimate=0.0,
+    )
+    invalid_woodbury = explicit_sparse._BLRSchurFactor(
+        base_matrix=sparse.eye(2, format="csr", dtype=dtype),
+        base_factor=explicit_sparse._DenseInverseFactor(np.eye(2, dtype=dtype)),
+        updates=(update,),
+        dtype=dtype,
+        rtol=1.0e-10,
+        atol=0.0,
+        maxiter=3,
+        restart=2,
+        woodbury_z=np.eye(2, dtype=dtype),
+        woodbury_vt=np.ones((1, 2), dtype=dtype),
+        woodbury_core_inverse=np.ones((3, 3), dtype=dtype),
+    )
+    invalid_solution = invalid_woodbury.solve(np.asarray([1.0, -1.0], dtype=dtype))
+    assert np.all(np.isfinite(invalid_solution))
+
+    import scipy.sparse.linalg as scipy_sparse_linalg
+
+    monkeypatch.setattr(
+        scipy_sparse_linalg,
+        "gmres",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("synthetic gmres failure")),
+    )
+    gmres_failure = explicit_sparse._BLRSchurFactor(
+        base_matrix=sparse.eye(2, format="csr", dtype=dtype),
+        base_factor=explicit_sparse._DenseInverseFactor(0.25 * np.eye(2, dtype=dtype)),
+        updates=(update,),
+        dtype=dtype,
+        rtol=1.0e-10,
+        atol=0.0,
+        maxiter=3,
+        restart=2,
+    )
+    np.testing.assert_allclose(
+        gmres_failure.solve(np.asarray([4.0, 8.0], dtype=dtype)),
+        np.asarray([1.0, 2.0], dtype=dtype),
+    )
+
+
 def test_symbolic_schur_superblock_and_nd_factors_solve_with_small_matrices() -> None:
     matrix = _spd_matrix()
     analysis = explicit_sparse.analyze_sparse_symbolic_structure(

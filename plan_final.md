@@ -3543,6 +3543,43 @@ Status:
   explicit sparse/native-factor modules, since these remain among the largest
   meaningful coverage blockers.
 
+## Tranche 160: Native Sparse Factor Edge-Case Coverage
+
+Scope:
+
+- Added a compact symbolic-native sparse test covering finite fallback behavior
+  in the bounded sparse factor stack:
+  no-separator block-Schur solves, empty BLR Schur factors, invalid Woodbury
+  metadata falling through to Krylov, and GMRES exceptions falling back to the
+  base sparse factor.
+- Kept the test inside `tests/test_explicit_sparse_symbolic_native.py`; no
+  source files or package structure were changed.
+- The numerical gate is intentionally bounded but meaningful for the
+  production-memory lane: native sparse factors must fail soft and return finite
+  vectors because they are preconditioners admitted by true residual checks,
+  not the final correctness gate.
+
+Validation:
+
+- `python -m pytest -q tests/test_explicit_sparse_symbolic_native.py
+  tests/test_explicit_sparse.py` passed as `89 passed in 0.62 s`.
+- `python -m ruff check tests/test_explicit_sparse_symbolic_native.py` passed.
+- `python -m compileall -q tests/test_explicit_sparse_symbolic_native.py
+  sfincs_jax/solvers/explicit_sparse.py` passed.
+- `python -m pytest -q tests/test_explicit_sparse_symbolic_native.py
+  tests/test_explicit_sparse.py tests/test_explicit_sparse_factor_builder.py
+  tests/test_explicit_sparse_symbolic_native.py tests/test_explicit_sparse_factor_policy.py
+  tests/test_transport_solve_module_wrappers.py tests/test_source_tree_consolidation.py
+  tests/test_domain_package_import_contracts.py` passed as `164 passed in
+  5.70 s`.
+
+Status:
+
+- This closes additional native sparse fail-soft branches with negligible CI
+  cost.
+- The 95% coverage gate remains open; a fresh full package coverage audit is
+  required after this tranche is committed to measure exact movement.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
