@@ -4460,6 +4460,28 @@ Status:
   itself; the remaining larger gap is still in high-level solve orchestration
   and QI/preconditioner owners.
 
+## Latest Execution Log: Explicit Sparse Fail-Soft Coverage Tranche
+
+Scope:
+
+- Added bounded tests for the native sparse factor fail-soft paths used by the
+  lower-memory production preconditioner lane.
+- Covered matrix-RHS residual polish when a factor returns flattened arrays,
+  empty coarse-basis exits, nonfinite coarse corrections, empty BLR Schur
+  systems, failed base-solve fallback, and invalid Woodbury-state fallback to a
+  clean solve.
+
+Validation:
+
+- `python -m pytest -q tests/test_explicit_sparse.py` passed as
+  `84 passed in 0.70 s`.
+
+Status:
+
+- This strengthens regression coverage for the Python/JAX-native sparse-factor
+  architecture without running production solves or adding large fixtures.
+- GPU production gates remain deferred until office GPU access is restored.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

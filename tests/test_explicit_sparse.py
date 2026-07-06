@@ -1983,6 +1983,107 @@ def test_explicit_sparse_private_factor_wrappers_fail_soft_and_clean_nonfinite()
     np.testing.assert_allclose(improving.solve(np.asarray([4.0, 8.0])), np.asarray([3.5, 7.0]))
 
 
+def test_sparse_residual_polish_handles_matrix_rhs_and_1d_factor_outputs() -> None:
+    matrix = sp.eye(2, format="csr", dtype=np.float64)
+
+    class _FlatteningFactor:
+        def solve(self, rhs):
+            return 0.25 * np.asarray(rhs, dtype=np.float64).reshape(-1)
+
+    polish = explicit_sparse._SparseResidualPolishFactor(
+        base_factor=_FlatteningFactor(),
+        matrix=matrix,
+        dtype=np.dtype(np.float64),
+        steps=1,
+        damping=1.0,
+    )
+
+    rhs = np.asarray([[4.0, 8.0], [12.0, 16.0]], dtype=np.float64)
+    out = polish.solve(rhs)
+
+    assert out.shape == rhs.shape
+    np.testing.assert_allclose(out, 0.4375 * rhs)
+
+
+def test_sparse_coarse_wrappers_fail_soft_for_empty_basis_and_nonfinite_correction() -> None:
+    matrix = sp.eye(2, format="csr", dtype=np.float64)
+
+    class _NonFiniteBase:
+        def solve(self, rhs):
+            rhs_np = np.asarray(rhs, dtype=np.float64)
+            return np.full_like(rhs_np, np.nan)
+
+    empty_coarse = explicit_sparse._SparseCoarseCorrectionFactor(
+        base_factor=_NonFiniteBase(),
+        matrix=matrix,
+        coarse_basis=sp.csr_matrix((2, 0), dtype=np.float64),
+        coarse_factor=_NonFiniteBase(),
+        dtype=np.dtype(np.float64),
+    )
+    rhs = np.asarray([3.0, 7.0], dtype=np.float64)
+    np.testing.assert_allclose(empty_coarse.solve(rhs), rhs)
+
+    class _IdentityLocal:
+        analysis = analyze_sparse_symbolic_structure(matrix, ordering_kind="natural", block_size_target=2)
+        overlap_size = 0
+
+        def solve(self, rhs_in):
+            return np.asarray(rhs_in, dtype=np.float64)
+
+    class _NonFiniteCoarse:
+        def solve(self, rhs_in):
+            return np.full_like(np.asarray(rhs_in, dtype=np.float64), np.inf)
+
+    block_coarse = explicit_sparse._SymbolicBlockCoarseFactor(
+        local_factor=_IdentityLocal(),
+        matrix=matrix,
+        coarse_basis=sp.eye(2, format="csr", dtype=np.float64),
+        coarse_factor=_NonFiniteCoarse(),
+        coarse_matrix_nnz=2,
+        dtype=np.dtype(np.float64),
+    )
+    np.testing.assert_allclose(block_coarse.solve(rhs), rhs)
+
+
+def test_blr_schur_factor_empty_system_and_bad_woodbury_state_fall_back_cleanly() -> None:
+    class _RaisingFactor:
+        def solve(self, _rhs):
+            raise RuntimeError("synthetic base failure")
+
+    empty = explicit_sparse._BLRSchurFactor(
+        base_matrix=sp.csr_matrix((0, 0), dtype=np.float64),
+        base_factor=_RaisingFactor(),
+        updates=tuple(),
+        dtype=np.dtype(np.float64),
+        rtol=1.0e-12,
+        atol=1.0e-12,
+        maxiter=2,
+        restart=2,
+    )
+    assert empty.solve(np.asarray([], dtype=np.float64)).shape == (0,)
+    np.testing.assert_allclose(empty._base_solve(np.asarray([1.0, 2.0])), np.asarray([1.0, 2.0]))
+
+    class _IdentityFactor:
+        def solve(self, rhs):
+            return np.asarray(rhs, dtype=np.float64)
+
+    bad_woodbury = explicit_sparse._BLRSchurFactor(
+        base_matrix=sp.eye(2, format="csr", dtype=np.float64),
+        base_factor=_IdentityFactor(),
+        updates=tuple(),
+        dtype=np.dtype(np.float64),
+        rtol=1.0e-12,
+        atol=1.0e-12,
+        maxiter=4,
+        restart=2,
+        woodbury_z=np.ones((2, 1), dtype=np.float64),
+        woodbury_vt=np.ones((2, 2), dtype=np.float64),
+        woodbury_core_inverse=np.ones((1, 1), dtype=np.float64),
+    )
+    rhs = np.asarray([5.0, -2.0], dtype=np.float64)
+    np.testing.assert_allclose(bad_woodbury.solve(rhs), rhs, rtol=1.0e-12, atol=1.0e-12)
+
+
 def test_sparse_coarse_wrapper_uses_valid_basis_and_rejects_empty_basis() -> None:
     matrix = sp.diags([2.0, 4.0], format="csr", dtype=np.float64)
     operator = SparseOperatorBundle(
