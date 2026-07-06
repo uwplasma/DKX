@@ -3580,6 +3580,42 @@ Status:
 - The 95% coverage gate remains open; a fresh full package coverage audit is
   required after this tranche is committed to measure exact movement.
 
+## Tranche 161: Current-Head Bounded Production Evidence
+
+Scope:
+
+- Re-ran the locally bounded production-resolution CPU/Fortran comparison on
+  the current PR head after the sparse and transport coverage tranches.
+- The rerun used the generated production input manifest under `/tmp` and did
+  not replace the public README plot, since the README figure is generated from
+  the checked full-suite CPU/GPU reports rather than this two-case local probe.
+- The branch remains consolidated: `origin/main` is an ancestor of
+  `refactor/v3-driver-architecture`, and no second active development branch is
+  required for review.
+
+Validation:
+
+- `tokamak_1species_PASCollisions_withEr_fullTrajectories` passed with
+  `parity_ok`: JAX `9.19 s`, SFINCS Fortran v3 `1.93 s`, JAX peak RSS
+  `3.09 GB`, Fortran peak RSS `0.71 GB`.
+- `tokamak_2species_PASCollisions_withEr_fullTrajectories` passed with
+  `parity_ok`: JAX `15.56 s`, SFINCS Fortran v3 `3.45 s`, JAX peak RSS
+  `5.69 GB`, Fortran peak RSS `1.34 GB`.
+- The focused release-review test bundle passed as `213 passed in 13.83 s`.
+- `python -m ruff check sfincs_jax tests` passed.
+- `python -m compileall -q sfincs_jax tests` passed.
+- `python -m sphinx -W -b html docs docs/_build/html` passed.
+
+Status:
+
+- Local CPU correctness/parity evidence for the bounded slow PAS cases is clean
+  at the current PR head.
+- A fresh GPU rerun was not produced in this tranche because `ssh office`
+  timed out; the checked GPU reports remain the public GPU evidence until a GPU
+  host is reachable.
+- The remaining review gates are CI completion, optional fresh GPU reruns, and
+  the longer-term 95% coverage target.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
