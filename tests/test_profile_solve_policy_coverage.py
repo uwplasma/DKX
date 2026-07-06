@@ -178,6 +178,47 @@ def test_sparse_pc_default_restart_caps_one_species_pas_er_without_env() -> None
     )
 
 
+def test_pas_tz_guarded_structured_levels_parse_aliases_and_empty_tokens() -> None:
+    levels = profile_policies.parse_rhs1_pas_tz_guarded_structured_levels(
+        " xmg_collision + , diag ; x_grid | collisions "
+    )
+
+    assert levels == ("xmg", "collision")
+    assert profile_policies.parse_rhs1_pas_tz_guarded_structured_levels("off") == ()
+    assert profile_policies.parse_rhs1_pas_tz_guarded_structured_levels("unknown,,") == ()
+
+
+def test_sparse_preconditioner_config_parses_scipy_and_false_aliases(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PRECOND", "spilu")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_MATVEC", "false")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_OPERATOR", "yes")
+
+    scipy_config = profile_policies.rhs1_sparse_preconditioner_config_from_env(
+        has_pas=False,
+        use_dkes=False,
+        active_size=3000,
+        backend="cpu",
+    )
+
+    assert scipy_config.precond_mode == "on"
+    assert scipy_config.precond_kind == "scipy"
+    assert scipy_config.use_matvec is False
+    assert scipy_config.operator_mode == "on"
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PRECOND", "off")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_OPERATOR", "0")
+    disabled_config = profile_policies.rhs1_sparse_preconditioner_config_from_env(
+        has_pas=False,
+        use_dkes=False,
+        active_size=3000,
+        backend="cpu",
+    )
+
+    assert disabled_config.precond_mode == "off"
+    assert disabled_config.precond_kind == "auto"
+    assert disabled_config.operator_mode == "off"
+
+
 def test_sparse_exact_lu_requested_covers_pas_full_and_accelerator_small_case(monkeypatch) -> None:
     monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU", raising=False)
@@ -314,6 +355,190 @@ def test_large_cpu_sparse_skip_primary_allowed_positive_and_guards(monkeypatch) 
         active_size=11496,
         sparse_max_size=6000,
         use_implicit=True,
+    )
+
+
+def test_scipy_rescue_abs_floor_invalid_override_and_large_cpu_floor(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_ABS", "bad")
+    assert (
+        profile_policies.rhs1_scipy_rescue_abs_floor_after_xblock(
+            op=_rhs1_fp_op(),
+            active_size=20_000,
+            used_large_cpu_xblock_shortcut=True,
+            used_explicit_fp_xblock_seed=True,
+            use_implicit=False,
+            backend="cpu",
+        )
+        == 0.0
+    )
+
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_ABS", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_ABS_MIN", "1000")
+    floor = profile_policies.rhs1_scipy_rescue_abs_floor_after_xblock(
+        op=_rhs1_fp_op(),
+        active_size=20_000,
+        used_large_cpu_xblock_shortcut=True,
+        used_explicit_fp_xblock_seed=True,
+        use_implicit=False,
+        backend="cpu",
+    )
+
+    assert floor == 1.0e-9
+
+
+def test_host_dense_shortcut_and_dense_auto_policy_guards(monkeypatch) -> None:
+    fp_op = _rhs1_fp_op()
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX_BYTES", "0")
+
+    assert profile_policies.rhs1_host_dense_shortcut_allowed(
+        op=fp_op,
+        active_size=100,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="gpu",
+        dense_fallback_max=200,
+    )
+    assert not profile_policies.rhs1_host_dense_shortcut_allowed(
+        op=fp_op,
+        active_size=100,
+        use_implicit=True,
+        solve_method_kind="auto",
+        backend="gpu",
+        dense_fallback_max=200,
+    )
+    assert not profile_policies.rhs1_host_dense_shortcut_allowed(
+        op=fp_op,
+        active_size=100,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+        dense_fallback_max=200,
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT", "0")
+    assert not profile_policies.rhs1_host_dense_shortcut_allowed(
+        op=fp_op,
+        active_size=100,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="gpu",
+        dense_fallback_max=200,
+    )
+
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_AUTO_FP_CUTOFF", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR", "0")
+    assert not profile_policies.rhs1_dense_auto_fp_allowed(
+        backend="gpu",
+        active_size=100,
+        dense_active_cutoff=200,
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN", "50")
+    assert profile_policies.rhs1_dense_auto_fp_allowed(
+        backend="gpu",
+        active_size=100,
+        dense_active_cutoff=200,
+    )
+
+
+def test_rhs1_sparse_pc_auto_windows_cover_tokamak_and_3d_guards(monkeypatch) -> None:
+    pas_tokamak = SimpleNamespace(
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=2,
+        n_zeta=1,
+        n_xi=24,
+        fblock=SimpleNamespace(fp=None, pas=object()),
+    )
+    fp_tokamak = SimpleNamespace(
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=1,
+        n_zeta=1,
+        n_xi=24,
+        fblock=SimpleNamespace(fp=object(), pas=None),
+    )
+    fp_3d = SimpleNamespace(
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=1,
+        n_zeta=5,
+        n_xi=64,
+        fblock=SimpleNamespace(fp=object(), pas=None),
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_ER_SPARSE_PC", "1")
+    assert profile_policies.rhs1_tokamak_pas_er_sparse_pc_auto_allowed(
+        op=pas_tokamak,
+        active_size=500,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="gpu",
+        er_abs=1.0,
+        use_dkes=True,
+        include_xdot=False,
+        include_electric_field_xi=False,
+    )
+    assert not profile_policies.rhs1_tokamak_pas_er_sparse_pc_auto_allowed(
+        op=pas_tokamak,
+        active_size=500,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="gpu",
+        er_abs=0.0,
+        use_dkes=True,
+        include_xdot=False,
+        include_electric_field_xi=False,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC", "1")
+    assert profile_policies.rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(
+        op=pas_tokamak,
+        active_size=500,
+        use_implicit=False,
+        solve_method_kind="default",
+        backend="cpu",
+        er_abs=0.0,
+    )
+    assert not profile_policies.rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(
+        op=pas_tokamak,
+        active_size=500,
+        use_implicit=False,
+        solve_method_kind="default",
+        backend="cpu",
+        er_abs=1.0,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC", "1")
+    assert profile_policies.rhs1_tokamak_fp_er_sparse_pc_auto_allowed(
+        op=fp_tokamak,
+        active_size=500,
+        use_implicit=False,
+        solve_method_kind="incremental",
+        backend="gpu",
+        er_abs=1.0,
+        use_dkes=False,
+        include_xdot=True,
+        include_electric_field_xi=False,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC", "1")
+    assert profile_policies.rhs1_fp_3d_sparse_pc_auto_allowed(
+        op=fp_3d,
+        active_size=6000,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+        eparallel_abs=0.0,
+    )
+    assert not profile_policies.rhs1_fp_3d_sparse_pc_auto_allowed(
+        op=fp_3d,
+        active_size=6000,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="gpu",
+        eparallel_abs=0.0,
     )
 
 

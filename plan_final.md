@@ -4539,6 +4539,36 @@ Status:
   performance and fresh GPU runtime/memory plot regeneration remain deferred
   until GPU access is restored.
 
+### 2026-07-06: RHSMode-1 policy edge coverage tranche
+
+Changes:
+
+- Added pure policy tests for RHSMode-1 sparse preconditioner aliases,
+  PAS guarded-structured level parsing, SciPy rescue floor admission, dense
+  host/accelerator auto guards, and tokamak/3D sparse-preconditioner auto
+  windows.
+- Kept the tests CPU-only and branch-local: they exercise the policy contracts
+  without launching full transport solves or adding benchmark artifacts.
+
+Validation:
+
+- `python -m pytest -q tests/test_profile_solve_policy_coverage.py` passed as
+  `20 passed in 0.18 s`.
+- `python -m pytest -q tests/test_profile_solve_policy_coverage.py
+  tests/test_rhs1_preconditioner_auto_policy.py
+  tests/test_rhs1_sparse_rescue_policy.py tests/test_rhs1_sparse_exact_policy.py
+  tests/test_source_tree_consolidation.py` passed as `131 passed in 5.44 s`.
+- `python -m ruff check tests/test_profile_solve_policy_coverage.py`,
+  `python -m compileall -q tests/test_profile_solve_policy_coverage.py`, and
+  `git diff --check` passed.
+
+Status:
+
+- This closes another CPU-safe policy coverage gap in `profile_policies.py`
+  without increasing CI runtime materially. The next bounded coverage target is
+  another pure-policy or lightweight-operator tranche rather than a slow
+  production solve.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
