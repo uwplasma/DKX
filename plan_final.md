@@ -43,7 +43,8 @@ models overlap.
   9.70 s`; Sphinx `-W` passed in `17.56 s`.
 - The transport cache and RHSMode=1 routing tranches fixed accepted
   residual-coarse factor reuse, moved BiCGStab, dense-auto, and initial
-  sparse-shortcut route decisions out of `profile_solve.py`, and covered
+  sparse-shortcut route decisions out of `profile_solve.py`, aliased duplicate
+  profile transport wrappers to the canonical `transport_solve.py` owner, and covered
   true-residual admission, fail-closed fallback, FP/PAS/DKES/tokamak
   boundaries, CPU/GPU dense admission, constraintScheme=0 sparse/PETSc routes,
   implicit rejection, and explicit-method preservation. Guards: `35 passed`,

@@ -448,12 +448,6 @@ from sfincs_jax.problems.transport_policies import (
     transport_sparse_direct_rescue_first as _transport_sparse_direct_rescue_first_impl,
     transport_tzfft_first_attempt_budget as _transport_tzfft_first_attempt_budget_impl,
 )
-from sfincs_jax.problems.transport_linear_system import (
-    build_transport_fp_direct_active_block_schur_preconditioner,
-)
-from sfincs_jax.problems.transport_linear_system import (
-    build_transport_fp_fortran_reduced_lu_preconditioner,
-)
 from sfincs_jax.problems.transport_setup import (
     resolve_transport_maxiter_setup, resolve_transport_parallel_request, resolve_transport_state_setup,
     resolve_transport_which_rhs_setup,
@@ -521,7 +515,6 @@ from sfincs_jax.solvers.explicit_sparse import (
 from sfincs_jax.solvers.preconditioning import (
     hash_array as _hash_array, precond_chunk_cols as _precond_chunk_cols,
     rhs_mode1_precond_cache_key as _rhs_mode1_precond_cache_key_impl,
-    transport_precond_cache_key as _transport_precond_cache_key_impl,
 )
 from sfincs_jax.solvers.krylov_dispatch import (
     resolve_distributed_gmres_axis as _resolve_distributed_gmres_axis_impl,
@@ -564,6 +557,11 @@ from sfincs_jax.solvers.preconditioner_symbolic_host import (
 from sfincs_jax.problems.transport_linear_system import (
     _build_rhsmode23_direct_pmat_physics_coarse_basis, _try_build_rhsmode23_fp_direct_active_operator_bundle,
     _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle,
+)
+from sfincs_jax.problems.transport_solve import (
+    _build_rhsmode23_fp_direct_active_block_schur_preconditioner,
+    _build_rhsmode23_fp_fortran_reduced_lu_preconditioner,
+    _transport_precond_cache_key,
 )
 from sfincs_jax.operators.profile_system import (
     _source_basis_constraint_scheme_1, _matvec_shard_axis, sharding_constraints,
@@ -713,12 +711,6 @@ def _rhsmode1_dense_fallback_max(op: V3FullSystemOperator) -> int:
     return _rhs1_dense_fallback_max_impl(op)
 
 
-def _transport_precond_cache_key(
-    op: V3FullSystemOperator, kind: str
-) -> tuple[object, ...]:
-    return _transport_precond_cache_key_impl(op, kind, precond_dtype=_precond_dtype())
-
-
 _build_rhsmode23_collision_preconditioner = build_rhsmode23_collision_preconditioner
 _build_rhsmode23_sxblock_preconditioner = build_rhsmode23_sxblock_preconditioner
 _build_rhsmode23_xmg_preconditioner = build_rhsmode23_xmg_preconditioner
@@ -739,48 +731,6 @@ _build_rhsmode23_fp_xblock_tz_lu_preconditioner = (
 _build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner = (
     build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner
 )
-
-
-def _build_rhsmode23_fp_direct_active_block_schur_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    active_indices_np: np.ndarray | None = None,
-    emit: Callable[[int, str], None] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    return build_transport_fp_direct_active_block_schur_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-        active_indices_np=active_indices_np,
-        emit=emit,
-        fallback_builder=_build_rhsmode23_sxblock_preconditioner,
-        transport_precond_cache_key=_transport_precond_cache_key,
-    )
-
-
-def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    active_indices_np: np.ndarray | None = None,
-    emit: Callable[[int, str], None] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    return build_transport_fp_fortran_reduced_lu_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-        active_indices_np=active_indices_np,
-        emit=emit,
-        fallback_builder=_build_rhsmode23_sxblock_preconditioner,
-        transport_precond_cache_key=_transport_precond_cache_key,
-        build_host_sparse_direct_factor_from_matvec=_build_host_sparse_direct_factor_from_matvec,
-        host_physical_memory_mb=_host_physical_memory_mb,
-    )
-
-
 _build_rhsmode23_fp_structured_fblock_lu_preconditioner = (
     build_rhsmode23_fp_structured_fblock_lu_preconditioner
 )

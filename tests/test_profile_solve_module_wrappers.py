@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 
 import sfincs_jax.problems.profile_solve as profile_solve
+import sfincs_jax.problems.transport_solve as transport_solve
 
 
 def test_profile_solve_distributed_axis_wrapper_uses_profile_system_policy(monkeypatch) -> None:
@@ -23,70 +24,16 @@ def test_profile_solve_distributed_axis_wrapper_uses_profile_system_policy(monke
     assert captured["emit"] is None
 
 
-def test_profile_solve_transport_cache_key_wrapper_injects_current_preconditioner_dtype(monkeypatch) -> None:
-    op = SimpleNamespace(rhs_mode=1)
-    captured = {}
-
-    def fake_precond_dtype():
-        return jnp.float32
-
-    def fake_transport_impl(op_arg, kind, *, precond_dtype):
-        captured["transport"] = (op_arg, kind, precond_dtype)
-        return ("transport", kind, str(precond_dtype))
-
-    monkeypatch.setattr(profile_solve, "_precond_dtype", fake_precond_dtype)
-    monkeypatch.setattr(profile_solve, "_transport_precond_cache_key_impl", fake_transport_impl)
-
-    transport = profile_solve._transport_precond_cache_key(op, "collision")
-
-    assert transport == ("transport", "collision", str(jnp.float32))
-    assert captured["transport"][0] is op
-
-
-def test_profile_solve_transport_fp_wrapper_injects_fallback_and_cache_hooks(monkeypatch) -> None:
-    captured = {}
-
-    def fake_direct_builder(**kwargs):
-        captured["direct"] = kwargs
-        return "direct-preconditioner"
-
-    def fake_reduced_builder(**kwargs):
-        captured["reduced"] = kwargs
-        return "reduced-preconditioner"
-
-    monkeypatch.setattr(
-        profile_solve,
-        "build_transport_fp_direct_active_block_schur_preconditioner",
-        fake_direct_builder,
+def test_profile_solve_reuses_canonical_transport_preconditioner_wrappers() -> None:
+    assert profile_solve._transport_precond_cache_key is transport_solve._transport_precond_cache_key
+    assert (
+        profile_solve._build_rhsmode23_fp_direct_active_block_schur_preconditioner
+        is transport_solve._build_rhsmode23_fp_direct_active_block_schur_preconditioner
     )
-    monkeypatch.setattr(
-        profile_solve,
-        "build_transport_fp_fortran_reduced_lu_preconditioner",
-        fake_reduced_builder,
+    assert (
+        profile_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner
+        is transport_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner
     )
-    op = SimpleNamespace()
-
-    direct = profile_solve._build_rhsmode23_fp_direct_active_block_schur_preconditioner(
-        op=op,
-        active_indices_np=jnp.asarray([0, 2]),
-        emit=None,
-    )
-    reduced = profile_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
-        op=op,
-        active_indices_np=jnp.asarray([1, 3]),
-        emit=None,
-    )
-
-    assert direct == "direct-preconditioner"
-    assert reduced == "reduced-preconditioner"
-    assert captured["direct"]["fallback_builder"] is profile_solve._build_rhsmode23_sxblock_preconditioner
-    assert captured["direct"]["transport_precond_cache_key"] is profile_solve._transport_precond_cache_key
-    assert captured["reduced"]["fallback_builder"] is profile_solve._build_rhsmode23_sxblock_preconditioner
-    assert captured["reduced"]["transport_precond_cache_key"] is profile_solve._transport_precond_cache_key
-    assert captured["reduced"]["build_host_sparse_direct_factor_from_matvec"] is (
-        profile_solve._build_host_sparse_direct_factor_from_matvec
-    )
-    assert captured["reduced"]["host_physical_memory_mb"] is profile_solve._host_physical_memory_mb
 
 
 def test_profile_solve_dense_fallback_max_delegates_to_policy(monkeypatch) -> None:
