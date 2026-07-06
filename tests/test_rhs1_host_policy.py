@@ -49,6 +49,8 @@ from sfincs_jax.problems.profile_policies import (
     rhs1_explicit_sparse_host_direct_allowed,
     rhs1_host_dense_fallback_allowed,
     rhs1_host_dense_shortcut_allowed,
+    rhs1_host_dense_shortcut_estimated_nbytes,
+    rhs1_host_dense_shortcut_max_bytes,
     rhs1_host_sparse_direct_allowed,
     rhs1_host_sparse_skip_dense_ratio,
     rhs1_sparse_operator_preconditioned_rescue_allowed,
@@ -333,6 +335,8 @@ def test_rhs1_host_dense_fallback_and_krylov_policy(monkeypatch) -> None:
 def test_rhs1_host_dense_shortcut_guards_small_accelerator_fp(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX_BYTES", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_FACTOR_OVERHEAD", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", raising=False)
 
     assert rhs1_host_dense_shortcut_allowed(
@@ -393,6 +397,35 @@ def test_rhs1_host_dense_shortcut_guards_small_accelerator_fp(monkeypatch) -> No
         solve_method_kind="incremental",
         backend="gpu",
         dense_fallback_max=5000,
+    )
+
+
+def test_rhs1_host_dense_shortcut_is_capped_by_estimated_memory(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", "12000")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX_BYTES", "1000000")
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_FACTOR_OVERHEAD", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", raising=False)
+
+    assert rhs1_host_dense_shortcut_max_bytes() == 1_000_000
+    assert rhs1_host_dense_shortcut_estimated_nbytes(12000) > 1_000_000
+    assert not rhs1_host_dense_shortcut_allowed(
+        op=_op(has_fp=True),
+        active_size=12000,
+        use_implicit=False,
+        solve_method_kind="incremental",
+        backend="gpu",
+        dense_fallback_max=12000,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX_BYTES", "0")
+    assert rhs1_host_dense_shortcut_allowed(
+        op=_op(has_fp=True),
+        active_size=12000,
+        use_implicit=False,
+        solve_method_kind="incremental",
+        backend="gpu",
+        dense_fallback_max=12000,
     )
 
 

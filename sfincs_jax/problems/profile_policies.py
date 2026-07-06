@@ -3933,7 +3933,38 @@ def rhs1_host_dense_shortcut_allowed(
     dense_cap = min(max(0, int(shortcut_max)), max(0, int(dense_fallback_max)))
     if dense_cap <= 0:
         return False
-    return int(active_size) <= dense_cap
+    if int(active_size) > dense_cap:
+        return False
+    max_bytes = rhs1_host_dense_shortcut_max_bytes()
+    if max_bytes > 0 and rhs1_host_dense_shortcut_estimated_nbytes(active_size) > max_bytes:
+        return False
+    return True
+
+
+def rhs1_host_dense_shortcut_max_bytes() -> int:
+    """Return the host-dense shortcut memory admission ceiling in bytes.
+
+    The route is intended for bounded accelerator systems where avoiding GPU
+    dense scratch and preconditioner probes is faster. Keep a separate memory
+    ceiling so raising the active-size cutoff cannot silently turn the shortcut
+    into a large host factorization path. Set the environment value to ``0`` to
+    disable the byte ceiling for one-off diagnostics.
+    """
+
+    return _env_int("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX_BYTES", 1_500_000_000)
+
+
+def rhs1_host_dense_shortcut_estimated_nbytes(active_size: int) -> int:
+    """Estimate host dense matrix/factor/work storage for shortcut admission."""
+
+    n = max(0, int(active_size))
+    matrix_nbytes = n * n * 8
+    factor_overhead = _env_float(
+        "SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_FACTOR_OVERHEAD",
+        2.5,
+    )
+    work_nbytes = n * 8 * 6
+    return int(np.ceil(matrix_nbytes * max(1.0, float(factor_overhead)) + work_nbytes))
 
 
 def rhs1_dense_fallback_max(op: Any) -> int:
@@ -7440,6 +7471,8 @@ __all__ = (
     "rhs1_explicit_sparse_host_direct_allowed",
     "rhs1_host_dense_fallback_allowed",
     "rhs1_host_dense_shortcut_allowed",
+    "rhs1_host_dense_shortcut_estimated_nbytes",
+    "rhs1_host_dense_shortcut_max_bytes",
     "rhs1_host_sparse_direct_allowed",
     "rhs1_host_sparse_skip_dense_ratio",
     "rhs1_constrained_pas_sparse_pc_auto_allowed",

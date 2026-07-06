@@ -4086,6 +4086,54 @@ Status:
 - The documentation/examples lane still needs a final rendered-docs pass after
   benchmark evidence regeneration, but stale public wording is now CI-visible.
 
+## Latest Execution Log: GPU Host-Dense Memory Admission Tranche
+
+What was checked:
+
+- Revisited the bounded accelerator RHSMode=1 full-FP path after the
+  host-dense shortcut promotion.
+- Confirmed the previous tranche avoided accidental GPU dense LU by routing
+  moderate accelerator FP systems through an explicit host-dense shortcut, but
+  the shortcut was still admitted only by active-size count.
+- Retried `ssh office` twice for live GPU validation; both attempts timed out
+  on the configured SSH host/port before any remote command could run.
+
+Source/test change:
+
+- Added a byte-level admission guard for `rhs1_host_dense_shortcut_allowed`.
+  The default ceiling is `1.5e9` bytes and the estimate includes dense matrix,
+  factor-overhead, and vector work storage. Experts can set
+  `SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX_BYTES=0` for a diagnostic run,
+  but the default route now fails closed if a raised active-size cap would imply
+  excessive dense host storage.
+- Added stable shortcut memory provenance fields to
+  `rhs1_host_dense_shortcut_metadata`:
+  `host_dense_shortcut_estimated_nbytes` and
+  `host_dense_shortcut_max_nbytes`.
+- Added focused tests for the memory cap and metadata schema.
+
+Validation:
+
+- `python -m pytest -q tests/test_rhs1_host_policy.py
+  tests/test_profile_response_dense.py tests/test_io_output_policy_coverage.py`
+  passed as `167 passed in 3.26 s`.
+- `python -m ruff check sfincs_jax/problems/profile_policies.py
+  sfincs_jax/problems/profile_dense.py tests/test_rhs1_host_policy.py
+  tests/test_profile_response_dense.py` passed.
+- `python -m compileall -q sfincs_jax/problems/profile_policies.py
+  sfincs_jax/problems/profile_dense.py tests/test_rhs1_host_policy.py
+  tests/test_profile_response_dense.py` passed.
+
+Status:
+
+- This is a concrete GPU-efficiency safeguard: bounded accelerator full-FP
+  systems can still skip GPU dense scratch and Krylov/probe setup, but the host
+  shortcut cannot silently become a high-memory route when active-size caps are
+  raised.
+- The next GPU step remains a live office-GPU run once SSH is reachable, using
+  solver traces to verify shortcut provenance, residual cleanliness, and memory
+  behavior on the target hardware.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

@@ -906,7 +906,10 @@ def test_full_host_dense_shortcut_stage_solves_and_records_replay() -> None:
     )]
 
 
-def test_host_dense_shortcut_metadata_has_stable_solver_path() -> None:
+def test_host_dense_shortcut_metadata_has_stable_solver_path(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX_BYTES", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_FACTOR_OVERHEAD", raising=False)
+
     metadata = rhs1_host_dense_shortcut_metadata(
         size=4096,
         reduced_system=True,
@@ -920,6 +923,8 @@ def test_host_dense_shortcut_metadata_has_stable_solver_path() -> None:
         "host_dense_shortcut_backend": "gpu",
         "host_dense_shortcut_size": 4096,
         "host_dense_shortcut_system": "reduced",
+        "host_dense_shortcut_estimated_nbytes": 335740928,
+        "host_dense_shortcut_max_nbytes": 1_500_000_000,
     }
     assert rhs1_host_dense_shortcut_metadata(
         size=12,

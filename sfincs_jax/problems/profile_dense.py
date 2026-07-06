@@ -44,6 +44,8 @@ from .profile_policies import (
     rhsmode1_scipy_rescue_abs_floor_after_xblock_current_backend,
     rhsmode1_scipy_rescue_active_size_allowed_current_backend,
     rhs1_scipy_rescue_controls_from_env,
+    rhs1_host_dense_shortcut_estimated_nbytes,
+    rhs1_host_dense_shortcut_max_bytes,
 )
 from .profile_residual import result_with_true_residual, true_residual_norm_or_inf
 from .profile_solver_diagnostics import V3LinearSolveResult
@@ -1216,6 +1218,7 @@ def rhs1_host_dense_shortcut_metadata(
 ) -> dict[str, object]:
     """Return stable solver-provenance metadata for the host-dense shortcut."""
 
+    estimated_nbytes = rhs1_host_dense_shortcut_estimated_nbytes(size)
     return {
         "solver_path": "host_dense_shortcut",
         "solver_kind": "host_dense_lu",
@@ -1223,6 +1226,8 @@ def rhs1_host_dense_shortcut_metadata(
         "host_dense_shortcut_backend": str(backend),
         "host_dense_shortcut_size": int(size),
         "host_dense_shortcut_system": "reduced" if bool(reduced_system) else "full",
+        "host_dense_shortcut_estimated_nbytes": int(estimated_nbytes),
+        "host_dense_shortcut_max_nbytes": int(rhs1_host_dense_shortcut_max_bytes()),
     }
 
 
