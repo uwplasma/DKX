@@ -119,13 +119,18 @@ The main structural refactor is functionally complete:
   sparse-PC/source-guard bundle passed as `365 passed in 5.86 s`.
 - RHSMode=1 sparse-solve orchestration coverage now includes direct bounded
   tests for requested sparse-PC GMRES dispatch, factor preflight residual/seed
-  bookkeeping, auto-preflight retry no-op state preservation, residual
-  candidate acceptance, residual-correction no-op routing, true-coupled coarse
-  no-op routing, generic x-block backend deferral, direct-tail host-factor
-  fallback, direct-tail rescue-policy defaults, and the Fortran-reduced x-block
+  bookkeeping and diagnostics, auto-preflight retry no-op and accepted-candidate
+  routing, residual candidate acceptance/rejection, residual-correction no-op
+  routing plus true-active, true-window, residual-coarse, residual-window, and
+  column-cache rescue branches, true-coupled coarse no-op and accepted routing,
+  generic x-block backend deferral, active global-pattern setup, direct-tail
+  host-factor fallback, direct-tail structured selection, support-mode preflight
+  promotion, direct-tail rescue-policy defaults, and the Fortran-reduced x-block
   capability guard. A source/test audit for `problems/profile_sparse_solve.py`
-  reports zero production-used public helpers without direct tests. The broader
-  sparse-PC/source-guard bundle passed as `375 passed in 5.80 s`.
+  reports zero production-used public helpers without direct tests. The owner
+  suite reports `profile_sparse_solve.py` at `74%` and
+  `profile_sparse_direct.py` at `95%` with `362 passed in 7.00 s`; the
+  sparse-PC/source-guard validation bundle passed as `415 passed in 9.24 s`.
 - Speed-grid and mapped-grid numerics coverage now includes direct tests for
   SFINCS-v3 x-grid weights/derivative-ratio formulas, mapped barycentric
   differentiation, mapped-grid regularization diagnostics, vector Maxwellian
