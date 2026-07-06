@@ -4045,6 +4045,47 @@ Status:
   checking that the solver log records the host-dense shortcut and that the
   output residual/parity gate remains clean.
 
+## Latest Execution Log: Public Wording Contract Tranche
+
+What was checked:
+
+- Re-ran the existing README/docs/examples/source guards after the GPU route
+  changes.
+- Confirmed the manual public wording scan found no current README, docs, or
+  examples matches for rejected branch-history phrases such as
+  `On the current main branch`, `new version`, `new benchmarks`,
+  `currently`, and the production-manifest progress-log wording.
+- Identified that this broad scan was only documented as a manual review
+  command, while the existing docs tests covered a narrower curated page list
+  and docs-tree phrase list.
+
+Source/test change:
+
+- Added `tests/test_public_docs_wording_contract.py`.
+- The test scans tracked public text under `README.md`, `sfincs_jax/README.md`,
+  `docs/`, and `examples/` for the rejected branch-history/progress-log
+  fragments.
+- It intentionally excludes release notes, upstream/vendor examples, static
+  artifacts, generated run outputs, and provenance/output folders so public
+  prose is guarded without failing on archived evidence or binary artifacts.
+
+Validation:
+
+- `python -m pytest -q tests/test_public_docs_wording_contract.py
+  tests/test_benchmark_doc_claims.py tests/test_examples_tree_contract.py
+  tests/test_source_tree_consolidation.py` passed as `58 passed in 4.73 s`.
+- `python -m ruff check tests/test_public_docs_wording_contract.py` passed.
+- `python -m compileall -q tests/test_public_docs_wording_contract.py` passed.
+- `git diff --check` passed.
+
+Status:
+
+- This closes a review-readiness gap for the README/docs/examples wording lane:
+  the public text is now guarded as self-contained software documentation rather
+  than relying on an untracked manual scan.
+- The documentation/examples lane still needs a final rendered-docs pass after
+  benchmark evidence regeneration, but stale public wording is now CI-visible.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
