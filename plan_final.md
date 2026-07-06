@@ -223,6 +223,13 @@ The main structural refactor is functionally complete:
   suite as `4584 passed, 4 skipped in 933.46 s`. Sphinx documentation built
   with warnings as errors, and the fast tutorial output/plot script produced
   HDF5, NetCDF, NPZ, and PDF diagnostics in a temporary directory.
+- RHSMode=1 output solve-policy helpers for precompile gating, SFINCS logical
+  parsing, electric-field drive magnitude, DKES ExB aliases, and dense shortcut
+  cutoffs now live in `outputs/rhsmode1.py` instead of the monolithic output
+  writer. `outputs/writer.py` retains compatibility aliases for existing
+  private imports through `sfincs_jax.io`, but the canonical owner is the
+  RHSMode=1 output module. Focused output/source validation passed as
+  `199 passed in 7.74 s`.
 - Transport runtime, profile setup, sparse-direct, and diagnostics coverage now
   includes direct tests for worker-count validation, GPU subprocess policy
   injection, persistent-pool helpers, solve-method normalization, explicit
@@ -5442,6 +5449,51 @@ Status:
 - This is the strongest local CPU review baseline for PR #8 after the latest
   source-refactor and solver-fallback tranches. It does not include fresh GPU
   benchmarking because the office GPU host is unavailable.
+
+### 2026-07-06: RHSMode-1 Output Policy Owner Consolidation
+
+Changes:
+
+- Moved the RHSMode=1 output solve-policy helpers from
+  `outputs/writer.py` into existing `outputs/rhsmode1.py`. The moved helpers
+  cover opt-in v3 precompile gating, SFINCS-style physics namelist lookup,
+  Fortran logical parsing, radial electric-field drive magnitude, DKES ExB
+  aliases, and dense shortcut cutoff parsing.
+- Kept compatibility aliases in `outputs/writer.py` so existing private
+  `sfincs_jax.io` imports and monkeypatch-based tests keep working while new
+  implementation ownership is clear.
+- Reduced `outputs/writer.py` from `2490` to `2378` lines without adding a new
+  file or changing output schemas, solver defaults, CLI behavior, or public
+  APIs.
+
+Validation:
+
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_io_precompile_policy.py tests/test_public_facades_and_paths.py
+  tests/test_output_formats.py tests/test_io_output_policy_coverage.py`
+  passed as `110 passed in 2.19 s`.
+- `PYTHONNOUSERSITE=1 python -m pytest -q
+  tests/test_io_output_policy_coverage.py tests/test_io_export_and_h5_coverage.py
+  tests/test_output_formats.py tests/test_write_output_return_results.py
+  tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py
+  tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `199 passed in 7.74 s`.
+- `PYTHONNOUSERSITE=1 python -m ruff check
+  sfincs_jax/outputs/writer.py sfincs_jax/outputs/rhsmode1.py
+  tests/test_io_output_policy_coverage.py tests/test_io_precompile_policy.py
+  tests/test_public_facades_and_paths.py tests/test_output_formats.py`,
+  `PYTHONNOUSERSITE=1 python -m compileall -q
+  sfincs_jax/outputs/writer.py sfincs_jax/outputs/rhsmode1.py
+  tests/test_io_output_policy_coverage.py tests/test_io_precompile_policy.py
+  tests/test_public_facades_and_paths.py tests/test_output_formats.py`,
+  `git diff --check`, the public-doc stale wording scan, and the large-file
+  audit passed.
+
+Status:
+
+- This advances the review-ready refactor lane by moving a complete output
+  policy phase to an existing RHSMode-aware owner, rather than adding another
+  helper file or doing line-by-line churn.
 
 ## Standard Validation Commands
 

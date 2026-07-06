@@ -4,7 +4,7 @@ import math
 import os
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, Mapping
+from typing import Any, Callable, Dict
 
 import numpy as np
 
@@ -35,7 +35,7 @@ from ..namelist import Namelist, read_sfincs_input
 from ..paths import resolve_existing_path
 from sfincs_jax.problems.profile_policies import (
     rhs1_dense_auto_fp_accelerator_min,
-    rhs1_dense_auto_fp_cutoff,
+    rhs1_dense_auto_fp_cutoff,  # noqa: F401 - compatibility alias used through sfincs_jax.io
     rhs1_dense_backend_allowed,
 )
 from . import formats as _output_formats
@@ -56,6 +56,13 @@ from .rhsmode1 import (
     _should_fail_nonconverged_rhsmode1_output,
     _solver_metadata_dict,
     select_rhsmode1_solve_method,
+    physics_abs_float_from_params as _physics_abs_float_from_params,
+    physics_bool_from_params as _physics_bool_from_params,
+    physics_value_from_params as _physics_value_from_params,  # noqa: F401 - compatibility alias
+    rhs1_dense_cutoffs_from_env as _rhs1_dense_cutoffs_from_env,
+    rhs1_radial_electric_drive_abs_from_params as _rhs1_radial_electric_drive_abs_from_params,
+    should_precompile_v3_full_system as _should_precompile_v3_full_system,
+    use_dkes_exb_drift_from_params as _use_dkes_exb_drift_from_params,
     write_rhsmode1_classical_fluxes_to_data,
     write_rhsmode1_core_diagnostics_to_data,
     write_rhsmode1_electric_drift_diagnostics_to_data,
@@ -117,125 +124,6 @@ _align_phi1_history_for_output = _rhsmode1_outputs._align_phi1_history_for_outpu
 _phi1_fast_explicit_gmres_restart_default = _rhsmode1_outputs._phi1_fast_explicit_gmres_restart_default
 _select_phi1_newton_linear_solve_method = _rhsmode1_outputs._select_phi1_newton_linear_solve_method
 _select_phi1_use_frozen_linearization = _rhsmode1_outputs._select_phi1_use_frozen_linearization
-
-
-def _should_precompile_v3_full_system(*, env_value: str) -> bool:
-    """Return whether eager v3 precompile should run before a solve.
-
-    Precompile is valuable for targeted repeated-workflow debugging, but it adds
-    one-time compilation cost directly to single-shot CLI runs. Keep it opt-in so
-    runtime audits and ordinary example solves measure time-to-solution rather
-    than an extra eager compile pass.
-    """
-
-    env = str(env_value).strip().lower()
-    return env in {"1", "true", "yes", "on"}
-
-
-def _physics_value_from_params(
-    phys_params: Mapping[str, Any] | None,
-    *keys: str,
-    default: object | None = None,
-) -> object | None:
-    """Return a physics value while accepting SFINCS-style key capitalization."""
-
-    if phys_params is None:
-        return default
-    for key in keys:
-        if key in phys_params:
-            return phys_params[key]
-        key_upper = key.upper()
-        if key_upper in phys_params:
-            return phys_params[key_upper]
-        key_lower = key.lower()
-        if key_lower in phys_params:
-            return phys_params[key_lower]
-    return default
-
-
-def _physics_bool_from_params(phys_params: Mapping[str, Any] | None, *keys: str) -> bool:
-    """Parse a SFINCS logical from physics namelist parameters."""
-
-    val = _physics_value_from_params(phys_params, *keys, default=None)
-    if isinstance(val, bool):
-        return bool(val)
-    if isinstance(val, (int, np.integer)):
-        return bool(int(val))
-    if isinstance(val, (float, np.floating)):
-        return bool(float(val))
-    if isinstance(val, str):
-        return val.strip().lower() in {"t", "true", "1", "yes", ".true.", ".t."}
-    return False
-
-
-def _physics_abs_float_from_params(phys_params: Mapping[str, Any] | None, *keys: str) -> float:
-    """Return the absolute value of a physics scalar, or zero for missing/bad input."""
-
-    val = _physics_value_from_params(phys_params, *keys, default=None)
-    if val is None:
-        return 0.0
-    try:
-        return abs(float(val))
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def _use_dkes_exb_drift_from_params(phys_params: Mapping[str, Any] | None) -> bool:
-    """Return the canonical ``useDKESExBDrift`` flag across common input aliases."""
-
-    return _physics_bool_from_params(
-        phys_params,
-        "useDKESExBDrift",
-        "useDKESExBdrift",
-        "USEDKESEXBDRIFT",
-        "use_dkes_exb_drift",
-    )
-
-
-def _rhs1_radial_electric_drive_abs_from_params(phys_params: Mapping[str, Any] | None) -> float:
-    """Return the largest radial electric-field drive magnitude in supported units."""
-
-    return max(
-        _physics_abs_float_from_params(phys_params, "Er", "ER"),
-        _physics_abs_float_from_params(phys_params, "dPhiHatdpsiHat", "DPHIHATDPSIHAT"),
-        _physics_abs_float_from_params(phys_params, "dPhiHatdpsiN", "DPHIHATDPSIN"),
-        _physics_abs_float_from_params(phys_params, "dPhiHatdrHat", "DPHIHATDRHAT"),
-        _physics_abs_float_from_params(phys_params, "dPhiHatdrN", "DPHIHATDRN"),
-    )
-
-
-def _rhs1_dense_cutoffs_from_env(
-    *,
-    dense_active_cutoff_env: str,
-    dense_pas_env: str,
-    dense_fp_env: str,
-    emit: Callable[[int, str], None] | None = None,
-) -> tuple[int, int, int]:
-    """Parse RHSMode-1 dense shortcut cutoffs without widening CLI policy code."""
-
-    try:
-        dense_active_cutoff = int(dense_active_cutoff_env) if dense_active_cutoff_env else 8000
-    except ValueError:
-        dense_active_cutoff = 8000
-    try:
-        dense_pas_cutoff = int(dense_pas_env) if dense_pas_env else 2500
-    except ValueError:
-        dense_pas_cutoff = 2500
-    try:
-        dense_fp_cutoff = (
-            max(0, int(dense_fp_env))
-            if dense_fp_env
-            else rhs1_dense_auto_fp_cutoff(dense_active_cutoff=int(dense_active_cutoff))
-        )
-    except ValueError:
-        if emit is not None:
-            emit(
-                1,
-                "write_sfincs_jax_output_h5: invalid SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF; "
-                "using default dense FP cutoff",
-            )
-        dense_fp_cutoff = rhs1_dense_auto_fp_cutoff(dense_active_cutoff=int(dense_active_cutoff))
-    return int(dense_active_cutoff), int(dense_pas_cutoff), int(dense_fp_cutoff)
 
 
 def _output_geom_cache_key(*, nml: Namelist, grids: V3Grids) -> tuple[object, ...] | None:

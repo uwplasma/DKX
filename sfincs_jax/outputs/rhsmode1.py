@@ -13,12 +13,13 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.problems.profile_policies import (
+    rhs1_dense_auto_fp_cutoff,
     rhs1_constrained_pas_sparse_pc_auto_allowed,
     rhs1_fp_3d_sparse_pc_auto_allowed,
     rhs1_fp_3d_xblock_sparse_pc_auto_allowed,
@@ -63,6 +64,125 @@ class RHSMode1SolveMethodSelectionContext:
     emit: Callable[[int, str], None] | None
     resolve_use_implicit: Callable[..., bool]
     rhsmode1_host_dense_shortcut_allowed: Callable[..., bool]
+
+
+def should_precompile_v3_full_system(*, env_value: str) -> bool:
+    """Return whether eager v3 precompile should run before an output solve.
+
+    Precompile is valuable for targeted repeated-workflow debugging, but it adds
+    one-time compilation cost directly to single-shot CLI runs. Keep it opt-in
+    so runtime audits and ordinary example solves measure time-to-solution
+    rather than an extra eager compile pass.
+    """
+
+    env = str(env_value).strip().lower()
+    return env in {"1", "true", "yes", "on"}
+
+
+def physics_value_from_params(
+    phys_params: Mapping[str, Any] | None,
+    *keys: str,
+    default: object | None = None,
+) -> object | None:
+    """Return a physics value while accepting SFINCS-style key capitalization."""
+
+    if phys_params is None:
+        return default
+    for key in keys:
+        if key in phys_params:
+            return phys_params[key]
+        key_upper = key.upper()
+        if key_upper in phys_params:
+            return phys_params[key_upper]
+        key_lower = key.lower()
+        if key_lower in phys_params:
+            return phys_params[key_lower]
+    return default
+
+
+def physics_bool_from_params(phys_params: Mapping[str, Any] | None, *keys: str) -> bool:
+    """Parse a SFINCS logical from physics namelist parameters."""
+
+    val = physics_value_from_params(phys_params, *keys, default=None)
+    if isinstance(val, bool):
+        return bool(val)
+    if isinstance(val, (int, np.integer)):
+        return bool(int(val))
+    if isinstance(val, (float, np.floating)):
+        return bool(float(val))
+    if isinstance(val, str):
+        return val.strip().lower() in {"t", "true", "1", "yes", ".true.", ".t."}
+    return False
+
+
+def physics_abs_float_from_params(phys_params: Mapping[str, Any] | None, *keys: str) -> float:
+    """Return the absolute value of a physics scalar, or zero for missing/bad input."""
+
+    val = physics_value_from_params(phys_params, *keys, default=None)
+    if val is None:
+        return 0.0
+    try:
+        return abs(float(val))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def use_dkes_exb_drift_from_params(phys_params: Mapping[str, Any] | None) -> bool:
+    """Return the canonical ``useDKESExBDrift`` flag across common input aliases."""
+
+    return physics_bool_from_params(
+        phys_params,
+        "useDKESExBDrift",
+        "useDKESExBdrift",
+        "USEDKESEXBDRIFT",
+        "use_dkes_exb_drift",
+    )
+
+
+def rhs1_radial_electric_drive_abs_from_params(phys_params: Mapping[str, Any] | None) -> float:
+    """Return the largest radial electric-field drive magnitude in supported units."""
+
+    return max(
+        physics_abs_float_from_params(phys_params, "Er", "ER"),
+        physics_abs_float_from_params(phys_params, "dPhiHatdpsiHat", "DPHIHATDPSIHAT"),
+        physics_abs_float_from_params(phys_params, "dPhiHatdpsiN", "DPHIHATDPSIN"),
+        physics_abs_float_from_params(phys_params, "dPhiHatdrHat", "DPHIHATDRHAT"),
+        physics_abs_float_from_params(phys_params, "dPhiHatdrN", "DPHIHATDRN"),
+    )
+
+
+def rhs1_dense_cutoffs_from_env(
+    *,
+    dense_active_cutoff_env: str,
+    dense_pas_env: str,
+    dense_fp_env: str,
+    emit: Callable[[int, str], None] | None = None,
+) -> tuple[int, int, int]:
+    """Parse RHSMode-1 dense shortcut cutoffs without widening writer code."""
+
+    try:
+        dense_active_cutoff = int(dense_active_cutoff_env) if dense_active_cutoff_env else 8000
+    except ValueError:
+        dense_active_cutoff = 8000
+    try:
+        dense_pas_cutoff = int(dense_pas_env) if dense_pas_env else 2500
+    except ValueError:
+        dense_pas_cutoff = 2500
+    try:
+        dense_fp_cutoff = (
+            max(0, int(dense_fp_env))
+            if dense_fp_env
+            else rhs1_dense_auto_fp_cutoff(dense_active_cutoff=int(dense_active_cutoff))
+        )
+    except ValueError:
+        if emit is not None:
+            emit(
+                1,
+                "write_sfincs_jax_output_h5: invalid SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF; "
+                "using default dense FP cutoff",
+            )
+        dense_fp_cutoff = rhs1_dense_auto_fp_cutoff(dense_active_cutoff=int(dense_active_cutoff))
+    return int(dense_active_cutoff), int(dense_pas_cutoff), int(dense_fp_cutoff)
 
 
 def _select_rhsmode1_linear_solve_method(
