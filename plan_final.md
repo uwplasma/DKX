@@ -2573,6 +2573,32 @@ Validation:
   passed.
 - `git diff --check` passed.
 
+### Tranche 138: transport writer diagnostic-completion guard
+
+Scope:
+
+- Added a bounded output-writer orchestration test for RHSMode=2 transport
+  output when the solver returns only sparse/minimal transport fields.
+- The test monkeypatches the transport solve, VM-only diagnostic fill, and
+  classical-flux callbacks on a tiny operator fixture, then verifies that the
+  writer completes production diagnostic datasets, coordinate variants,
+  transport matrix layout, classical fluxes, and `NIterations` without running
+  a physical solve.
+- This targets one of the remaining large orchestrator coverage gaps while
+  preserving CI runtime and the simplified source-tree contract.
+
+Validation:
+
+- `pytest -q tests/test_io_output_policy_coverage.py -k 'transport_npz'`
+  passed as `2 passed, 93 deselected in 0.90 s`.
+- `pytest -q tests/test_io_output_policy_coverage.py` passed as
+  `95 passed in 2.40 s`.
+- `pytest -q tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `71 passed in 4.65 s`.
+- `ruff check tests/test_io_output_policy_coverage.py` passed.
+- `python -m compileall -q tests/test_io_output_policy_coverage.py` passed.
+- `git diff --check` passed.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

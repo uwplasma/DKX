@@ -393,6 +393,161 @@ def test_write_output_transport_npz_writes_matrix_flux_coordinates_and_trace(
     assert trace.metadata["output_format"] == "npz"
 
 
+def test_write_output_transport_npz_completes_missing_diagnostics_from_state_vectors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Transport writer should fill production diagnostics when solve output is sparse."""
+
+    input_path = _minimal_writer_input(tmp_path, rhs_mode=2, geometry_scheme=1)
+    output_path = tmp_path / "transport_completed_output.npz"
+
+    monkeypatch.setattr(output_writer, "grids_from_namelist", lambda _nml: _minimal_writer_grids())
+    monkeypatch.setattr(output_writer, "geometry_from_namelist", lambda **_kwargs: SimpleNamespace())
+    monkeypatch.setattr(output_writer, "_export_f_config", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        output_writer,
+        "sfincs_jax_output_dict",
+        lambda **_kwargs: {
+            "RHSMode": np.asarray(2, dtype=np.int32),
+            "geometryScheme": np.asarray(1, dtype=np.int32),
+            "constraintScheme": np.asarray(1, dtype=np.int32),
+            "psiAHat": np.asarray(2.0, dtype=np.float64),
+            "aHat": np.asarray(4.0, dtype=np.float64),
+            "rN": np.asarray(0.5, dtype=np.float64),
+            "BHat": np.full((2, 2), 1.2, dtype=np.float64),
+            "dBHatdtheta": np.full((2, 2), 0.1, dtype=np.float64),
+            "dBHatdzeta": np.full((2, 2), 0.2, dtype=np.float64),
+            "uHat": np.full((2, 2), 0.3, dtype=np.float64),
+            "gpsiHatpsiHat": np.ones((2, 2), dtype=np.float64),
+            "VPrimeHat": np.asarray(1.0, dtype=np.float64),
+            "FSABHat2": np.asarray(1.5, dtype=np.float64),
+            "GHat": np.asarray(0.7, dtype=np.float64),
+            "IHat": np.asarray(0.2, dtype=np.float64),
+            "iota": np.asarray(0.6, dtype=np.float64),
+            "alpha": np.asarray(1.0, dtype=np.float64),
+            "Delta": np.asarray(0.01, dtype=np.float64),
+            "nu_n": np.asarray(0.2, dtype=np.float64),
+            "Zs": np.asarray([1.0], dtype=np.float64),
+            "mHats": np.asarray([2.0], dtype=np.float64),
+            "THats": np.asarray([3.0], dtype=np.float64),
+            "nHats": np.asarray([4.0], dtype=np.float64),
+        },
+    )
+
+    import sfincs_jax.operators.profile_system as profile_system
+    import sfincs_jax.physics.classical_transport as classical_transport
+    import sfincs_jax.problems.transport_diagnostics as transport_diagnostics
+    import sfincs_jax.problems.transport_solve as transport_solve
+
+    f_shape = (1, 2, 2, 2, 2)
+    op0 = SimpleNamespace(
+        n_zeta=2,
+        n_theta=2,
+        n_species=1,
+        n_x=2,
+        n_xi=2,
+        theta_weights=np.asarray([0.5, 0.5], dtype=np.float64),
+        zeta_weights=np.asarray([0.25, 0.75], dtype=np.float64),
+        d_hat=np.ones((2, 2), dtype=np.float64),
+        x=np.asarray([0.25, 0.75], dtype=np.float64),
+        x_weights=np.asarray([0.5, 0.5], dtype=np.float64),
+        z_s=np.asarray([1.0], dtype=np.float64),
+        t_hat=np.asarray([3.0], dtype=np.float64),
+        m_hat=np.asarray([2.0], dtype=np.float64),
+        n_hat=np.asarray([4.0], dtype=np.float64),
+        f_size=int(np.prod(f_shape)),
+        fblock=SimpleNamespace(f_shape=f_shape),
+    )
+    n_rhs = 3
+    fake_result = SimpleNamespace(
+        op0=op0,
+        state_vectors_by_rhs={
+            which_rhs: np.zeros((op0.f_size,), dtype=np.float64)
+            for which_rhs in range(1, n_rhs + 1)
+        },
+        transport_matrix=np.arange(9.0, dtype=np.float64).reshape((3, 3)),
+        elapsed_time_s=np.asarray([0.1, 0.2, 0.3], dtype=np.float64),
+        transport_output_fields={
+            "particleFlux_vm_psiHat": np.asarray([[1.0, 2.0, 3.0]], dtype=np.float64),
+            "heatFlux_vm_psiHat": np.asarray([[4.0, 5.0, 6.0]], dtype=np.float64),
+            "particleFlux_vm0_psiHat": np.asarray([[0.1, 0.2, 0.3]], dtype=np.float64),
+            "heatFlux_vm0_psiHat": np.asarray([[0.4, 0.5, 0.6]], dtype=np.float64),
+        },
+        metadata={"transport_solver": "fake"},
+    )
+
+    def _fake_transport_solve(**_kwargs):
+        return fake_result
+
+    def _fake_transport_output_fields(**_kwargs):
+        return dict(fake_result.transport_output_fields)
+
+    def _fake_rhs1_fields(op, x_full):
+        scale = float(getattr(op, "which_rhs", 1))
+        _ = x_full
+        stz = np.full((1, 2, 2), scale, dtype=np.float64)
+        return {
+            "densityPerturbation": stz + 1.0,
+            "pressurePerturbation": stz + 2.0,
+            "pressureAnisotropy": stz + 3.0,
+            "flow": stz + 4.0,
+            "totalDensity": stz + 5.0,
+            "totalPressure": stz + 6.0,
+            "velocityUsingFSADensity": stz + 7.0,
+            "velocityUsingTotalDensity": stz + 8.0,
+            "MachUsingFSAThermalSpeed": stz + 9.0,
+            "jHat": np.full((2, 2), scale + 10.0, dtype=np.float64),
+            "FSADensityPerturbation": np.asarray([scale + 11.0], dtype=np.float64),
+            "FSAPressurePerturbation": np.asarray([scale + 12.0], dtype=np.float64),
+            "momentumFluxBeforeSurfaceIntegral_vm": stz + 13.0,
+            "momentumFluxBeforeSurfaceIntegral_vm0": stz + 14.0,
+            "momentumFluxBeforeSurfaceIntegral_vE": stz + 15.0,
+            "momentumFluxBeforeSurfaceIntegral_vE0": stz + 16.0,
+            "momentumFlux_vm_psiHat": np.asarray([scale + 17.0], dtype=np.float64),
+            "momentumFlux_vm0_psiHat": np.asarray([scale + 18.0], dtype=np.float64),
+        }
+
+    def _fake_classical_flux_v3(**kwargs):
+        which_rhs = float(np.asarray(kwargs["dn_hat_dpsi_hat"], dtype=np.float64)[0])
+        return (
+            np.asarray([10.0 * which_rhs], dtype=np.float64),
+            np.asarray([20.0 * which_rhs], dtype=np.float64),
+        )
+
+    monkeypatch.setattr(transport_solve, "solve_v3_transport_matrix_linear_gmres", _fake_transport_solve)
+    monkeypatch.setattr(transport_diagnostics, "v3_transport_output_fields_vm_only", _fake_transport_output_fields)
+    monkeypatch.setattr(transport_diagnostics, "v3_rhsmode1_output_fields_vm_only_jit", _fake_rhs1_fields)
+    monkeypatch.setattr(
+        profile_system,
+        "with_transport_rhs_settings",
+        lambda op, which_rhs: SimpleNamespace(
+            **vars(op),
+            which_rhs=int(which_rhs),
+            dn_hat_dpsi_hat=np.asarray([float(which_rhs)], dtype=np.float64),
+            dt_hat_dpsi_hat=np.asarray([10.0 * float(which_rhs)], dtype=np.float64),
+        ),
+    )
+    monkeypatch.setattr(classical_transport, "classical_flux_v3", _fake_classical_flux_v3)
+
+    resolved = output_writer.write_sfincs_jax_output_h5(
+        input_namelist=input_path,
+        output_path=output_path,
+        compute_transport_matrix=True,
+        verbose=False,
+    )
+
+    assert resolved == output_path.resolve()
+    loaded = read_sfincs_output_file(output_path)
+    assert int(np.asarray(loaded["NIterations"]).reshape(())) == n_rhs
+    np.testing.assert_allclose(loaded["transportMatrix"], fake_result.transport_matrix.T)
+    np.testing.assert_allclose(loaded["particleFlux_vm_rN"], [[0.5, 1.0, 1.5]])
+    np.testing.assert_allclose(loaded["momentumFlux_vm_psiHat"], [[18.0, 19.0, 20.0]])
+    np.testing.assert_allclose(loaded["classicalParticleFlux_psiHat"], [[10.0, 20.0, 30.0]])
+    assert np.asarray(loaded["densityPerturbation"]).size > 0
+    assert np.asarray(loaded["NTV"]).shape[-1] == n_rhs
+
+
 def test_output_cache_path_is_stable_and_key_sensitive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_OUTPUT_CACHE_DIR", str(tmp_path / "cache"))
     path1 = output_cache_path(("a", 1))
