@@ -2480,6 +2480,44 @@ Validation:
 - `python -m compileall -q tests/test_examples_tree_contract.py` passed.
 - `sphinx-build -W -b html docs docs/_build/html` passed.
 
+### Tranche 135: final consolidated review checkpoint
+
+Scope:
+
+- Verified that `refactor/v3-driver-architecture` is the only active PR branch
+  needed for review and that it contains every commit from `origin/main`.
+- Regenerated the README/docs runtime-memory benchmark summary from the checked
+  CPU/GPU suite reports; the generator produced no content diff for the
+  checked JSON, PNG, or README table.
+- Re-rendered the QA/QH bootstrap-current comparison figures from committed
+  summary JSONs; the checked PNGs were stable and the PDFs were refreshed.
+- Rechecked the public benchmark artifact, docs build, examples catalog, and a
+  fresh bounded SFINCS Fortran v3 parity comparison before handing the PR back
+  for human review.
+
+Validation:
+
+- `git fetch origin --prune` followed by
+  `git rev-list --left-right --count origin/main...HEAD` returned `0 977`
+  before the final PDF-regeneration commit, confirming that the PR branch
+  included all of `main`.
+- `python examples/publication_figures/generate_fortran_suite_benchmark_summary.py --min-fortran-runtime-s 10`
+  passed.
+- `python scripts/generate_readme_fast_branch_audit.py --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas --min-fortran-runtime-s 10`
+  passed and produced no README diff.
+- `python scripts/check_benchmark_artifacts.py examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json`
+  passed.
+- The four QA/QH bootstrap-current comparison figures were re-rendered with
+  `--from-summary-json` for the same-resolution and whole-radius QA/QH stems.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `python scripts/compare_v3_example_suite.py --pattern quick_2species --limit 1 --fortran-exe /Users/rogeriojorge/local/sfincs/fortran/version3/sfincs --fortran-timeout-s 90 --compute-solution --rtol 1e-8 --atol 1e-8 --out-root /tmp/sfincs_jax_final_fortran_compare_review_rtol1e8 -v`
+  passed with `ok_fortran=1`, `ok_compare_common=1`, and 209 common HDF5 keys.
+- `git diff --check` passed.
+- `python -m compileall -q sfincs_jax tests` passed.
+- `ruff check sfincs_jax tests/test_examples_tree_contract.py tests/test_finite_beta_vmec_example.py tests/test_benchmark_doc_claims.py`
+  passed.
+- The full local suite passed as `4330 passed in 669.00 s`.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
