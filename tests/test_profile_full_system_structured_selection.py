@@ -77,6 +77,110 @@ def _selected_preconditioner(kind: str = "sentinel") -> profile_full_system.RHS1
     )
 
 
+def test_active_projected_preconditioner_dispatch_routes_supported_aliases(monkeypatch) -> None:
+    matrix = sparse.eye(3, format="csr", dtype=np.float64)
+    layout = _layout(total_size=3)
+    active = np.arange(3, dtype=np.int32)
+    calls: list[tuple[str, str]] = []
+
+    def fake_builder(tag: str):
+        def _builder(**kwargs):
+            calls.append((tag, str(kwargs["requested_kind"])))
+            return _selected_preconditioner(kind=tag)
+
+        return _builder
+
+    dispatch_cases = [
+        ("active_diagonal_schur", "_build_active_projected_diagonal_schur_preconditioner", "diag"),
+        ("active_tail_sparse_coarse", "_build_active_projected_sparse_coarse_residual_preconditioner", "sparse-coarse"),
+        ("active_fortran_v3_reduced_lu", "_build_active_fortran_v3_reduced_sparse_factor_preconditioner", "fortran-reduced"),
+        ("active_coarse", "_build_active_projected_coarse_residual_preconditioner", "coarse"),
+        ("active_low_l_schur", "_build_active_projected_low_l_schur_preconditioner", "low-l"),
+        ("active_ell_band_schur", "_build_active_projected_ell_band_schur_preconditioner", "ell-band"),
+        ("active_xell_window_lsq_schur", "_build_active_projected_xell_window_lsq_schur_preconditioner", "xell-window"),
+        ("active_coupled_kinetic_block", "_build_active_projected_coupled_kinetic_block_preconditioner", "coupled-kinetic"),
+        ("active_filtered_sparse_factor", "_build_active_projected_filtered_sparse_factor_preconditioner", "filtered"),
+        ("active_symbolic_frontal_schur_lu", "_build_active_projected_symbolic_frontal_schur_lu_preconditioner", "frontal"),
+        ("active_symbolic_superblock_lu", "_build_active_projected_symbolic_superblock_lu_preconditioner", "superblock"),
+        ("active_symbolic_block_schur_lu", "_build_active_projected_symbolic_block_schur_lu_preconditioner", "block-schur"),
+        ("active_symbolic_coupled_schur", "_build_active_projected_symbolic_coupled_schur_preconditioner", "coupled-schur"),
+        ("active_bounded_native_stack", "_build_active_projected_bounded_native_stack_preconditioner", "native-stack"),
+        ("active_fortran_v3_reduced_native_stack", "_build_active_fortran_v3_reduced_native_stack_preconditioner", "v3-native-stack"),
+        (
+            "active_native_xell_field_split_sparse_coarse",
+            "_build_active_projected_native_xell_field_split_sparse_coarse_preconditioner",
+            "native-xell-coarse",
+        ),
+        ("active_global_field_split_schur", "_build_active_projected_global_field_split_schur_preconditioner", "global-schur"),
+        ("active_overlap_schwarz", "_build_active_projected_overlap_schwarz_preconditioner", "schwarz"),
+        ("active_angular_line", "_build_active_projected_angular_line_preconditioner", "angular-line"),
+        ("active_native_indexed_schwarz", "_build_active_projected_native_indexed_schwarz_preconditioner", "indexed-schwarz"),
+        ("active_xblock", "_build_active_projected_xblock_preconditioner", "xblock"),
+        ("active_ilu_coarse", "_build_active_projected_coarse_residual_preconditioner", "ilu-coarse"),
+        ("active_global_sparse_factor", "_build_active_global_sparse_factor_preconditioner", "global-factor"),
+        ("active_scaled_ilu", "_build_active_scaled_sparse_factor_preconditioner", "scaled-factor"),
+    ]
+    for kind, builder_name, tag in dispatch_cases:
+        monkeypatch.setattr(profile_full_system, builder_name, fake_builder(tag))
+        result = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+            matrix=matrix,
+            layout=layout,
+            active_indices=active,
+            kind=kind,
+            max_factor_nbytes=4096,
+        )
+        assert result.selected
+        assert result.kind == tag
+
+    assert calls == [(tag, kind) for kind, _builder_name, tag in dispatch_cases]
+
+
+@pytest.mark.parametrize(
+    ("kind", "expected_kind"),
+    [
+        ("active_diagonal_schur", "active_diagonal_schur"),
+        ("active_tail_sparse_coarse", "active_tail_sparse_coarse"),
+        ("active_fortran_v3_reduced_lu", "active_fortran_v3_pc_matrix"),
+        ("active_coarse", "active_coarse"),
+        ("active_low_l_schur", "active_low_l_schur"),
+        ("active_ell_band_schur", "active_ell_band_schur"),
+        ("active_xell_window_lsq_schur", "active_xell_window_lsq_schur"),
+        ("active_coupled_kinetic_block", "active_coupled_kinetic_block"),
+        ("active_filtered_sparse_factor", "active_filtered_sparse_factor"),
+        ("active_symbolic_frontal_schur_lu", "active_symbolic_frontal_schur_lu"),
+        ("active_symbolic_superblock_lu", "active_symbolic_superblock_lu"),
+        ("active_symbolic_block_schur_lu", "active_symbolic_block_schur_lu"),
+        ("active_symbolic_coupled_schur", "active_symbolic_coupled_schur"),
+        ("active_bounded_native_stack", "active_bounded_native_stack"),
+        ("active_fortran_v3_reduced_native_stack", "active_fortran_v3_reduced_native_stack"),
+        ("active_native_xell_field_split_sparse_coarse", "active_native_xell_field_split_sparse_coarse"),
+        ("active_angular_line_field_split_sparse_coarse", "active_angular_line_field_split_sparse_coarse"),
+        ("active_multiline_field_split_sparse_coarse", "active_multiline_field_split_sparse_coarse"),
+        ("active_global_field_split_schur", "active_global_field_split_schur"),
+        ("active_overlap_schwarz", "active_overlap_schwarz"),
+        ("active_angular_line", "active_angular_line"),
+        ("active_native_indexed_schwarz", "active_native_indexed_schwarz"),
+        ("active_xblock", "active_xblock"),
+        ("active_ilu_coarse", "active_ilu_coarse"),
+    ],
+)
+def test_active_projected_preconditioner_dispatch_fails_closed_without_layout(
+    kind: str,
+    expected_kind: str,
+) -> None:
+    result = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=sparse.eye(3, format="csr", dtype=np.float64),
+        layout=None,
+        active_indices=None,
+        kind=kind,
+        max_factor_nbytes=4096,
+    )
+
+    assert not result.selected
+    assert result.kind == expected_kind
+    assert result.reason == "missing_active_layout"
+
+
 def test_structured_full_csr_selection_cache_budget_and_fblock_fail_closed(monkeypatch) -> None:
     profile_full_system.clear_structured_rhs1_full_csr_cache(clear_fblock_cache=True)
     op = _fake_op(total_size=4, f_size=2)

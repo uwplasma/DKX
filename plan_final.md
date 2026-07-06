@@ -2010,7 +2010,7 @@ Remaining consolidation steps:
 ### Lane 2 - Coverage And Future-Proof Tests
 
 Status: about `91%` package coverage from the latest full local audit
-(`90.824%`, `69,136` statements, `6,344` missing). The direct public contract audit remains
+(`90.885%`, `69,136` statements, `6,302` missing). The direct public contract audit remains
 closed at `modules_with_missing 0`; focused owner coverage is `98%` for
 `workflows/scans.py` after Tranche 111 and `100%` for
 `validation/figures.py` after Tranche 112 and `validation/qi_device.py` after
@@ -4634,6 +4634,15 @@ Validation:
   --cov-report=term --cov-report=json:/tmp/sfincs_jax_coverage_after_device_csr.json`
   passed as `4522 passed, 3 skipped in 292.87 s`; total package coverage is
   `91%` (`90.824%`) with `6344` missing lines.
+- After the transport orchestration and RHSMode-1 preconditioner-dispatch
+  coverage tranche,
+  `python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax
+  --cov-report=term --cov-report=json:/tmp/sfincs_jax_coverage_after_transport_profile_dispatch.json`
+  passed as `4555 passed, 1 skipped in 307.10 s`; total package coverage is
+  `91%` (`90.885%`) with `6302` missing lines. `transport_solve.py` improved
+  from `220` to `179` missing lines; `profile_full_system.py` now has direct
+  dispatch-contract tests for active projected preconditioner aliases and
+  missing-layout fail-closed behavior.
 - `python -m pytest -q tests/test_rhs1_true_operator_rescue.py` passed as
   `25 passed in 0.26 s`.
 - `python -m pytest -q tests/test_rhs1_true_operator_rescue.py
@@ -4665,7 +4674,7 @@ Changes:
   fallback, mixed precision, or dense preconditioner memory guards are active.
 - Updated `docs/testing.rst` to report the measured refactor-lane package
   coverage as about `91%`, matching the latest full local coverage audit
-  (`90.824%`) while keeping the `95%` target explicit.
+  (`90.885%`) while keeping the `95%` target explicit.
 
 Validation:
 
@@ -4932,6 +4941,55 @@ Status:
   QI and sparse-preconditioner paths without adding production solves. The next
   coverage tranche should return to larger orchestration owners or the
   remaining x-block/transport preconditioner modules.
+
+### 2026-07-06: Transport Orchestration And Full-CSR Dispatch Coverage Tranche
+
+Changes:
+
+- Extended the CPU-only transport solve harness to record selected matrix-vector
+  operators and configurable RHSMode-3 loop policy flags.
+- Added bounded orchestration tests for environment-selected transport matvec
+  mode, loose E_parallel Krylov tolerances, sparse-direct rescue after a failed
+  Krylov path, strong-preconditioner retry, and structured `tzfft` first-attempt
+  policy with preconditioner-side override.
+- Added direct dispatch-contract tests for active projected RHSMode-1 full-CSR
+  preconditioner aliases, including fail-closed behavior when required active
+  layout metadata is absent. This protects automatic solver selection without
+  running production-grid solves.
+
+Validation:
+
+- `python -m pytest -q tests/test_transport_solve_module_wrappers.py` passed as
+  `16 passed in 1.06 s`.
+- `python -m pytest -q tests/test_transport_solve_module_wrappers.py
+  tests/test_transport_solve_setup.py tests/test_transport_linear_solve.py
+  tests/test_transport_policy_coverage.py tests/test_transport_sparse_direct_solve.py
+  tests/test_transport_solve_finalization.py` passed as `97 passed in 10.75 s`.
+- `python -m pytest -q tests/test_profile_full_system_structured_selection.py`
+  passed as `87 passed in 0.36 s`.
+- `python -m pytest -q tests/test_profile_full_system_structured_selection.py
+  tests/test_rhs1_full_csr_kinetic_pc.py
+  tests/test_rhs1_full_csr_schur_preconditioners.py
+  tests/test_transport_solve_module_wrappers.py tests/test_transport_solve_setup.py
+  tests/test_transport_linear_solve.py tests/test_transport_policy_coverage.py
+  tests/test_transport_sparse_direct_solve.py tests/test_transport_solve_finalization.py`
+  passed as `199 passed in 11.03 s`.
+- Full local package coverage passed:
+  `python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax
+  --cov-report=term --cov-report=json:/tmp/sfincs_jax_coverage_after_transport_profile_dispatch.json`
+  as `4555 passed, 1 skipped in 307.10 s`; total package coverage is
+  `90.885%` with `6302` missing lines.
+- `python -m ruff check`, `python -m compileall -q`, and `git diff --check`
+  passed for the touched files.
+
+Status:
+
+- CPU-local PR readiness improved and the latest full-suite coverage baseline
+  is `90.885%`. The `95%` target remains open; reaching it still requires a
+  mix of bounded owner tests and further simplification of high-level solve
+  orchestration rather than broad production solves in CI.
+- Fresh GPU benchmark regeneration remains deferred because the office GPU host
+  is not reachable in this pass.
 
 ## Standard Validation Commands
 
