@@ -1,15 +1,20 @@
 # SFINCS_JAX Refactor And Release-Readiness Execution Log
 
-Last updated: 2026-06-26 (America/Chicago)
+Historical log only. The authoritative active plan is `plan_final.md`. Do not
+use this file to determine active branches, milestones, or next steps unless
+`plan_final.md` points here for evidence.
 
-Active implementation branch: `refactor/rhs1-full-assembly-preconditioners`
+Last active-log update: 2026-06-26 (America/Chicago)
 
-Intended review PR: #8, `refactor/v3-driver-architecture`
+Historical implementation branch recorded here:
+`refactor/rhs1-full-assembly-preconditioners`
 
-PR state: draft. The active implementation branch has been pushed to the PR
-branch at the latest clean commit. Do not open additional refactor PRs; keep PR
-#8 as the single review surface until the authoritative `plan_final.md` gates
-reach the review-ready boundary.
+Review surface recorded here: PR #8, `refactor/v3-driver-architecture`
+
+Historical PR note: the implementation branch recorded in this log was pushed
+to the PR branch during the earlier refactor cycle. Do not open additional
+refactor PRs; keep PR #8 as the single review surface until the authoritative
+`plan_final.md` gates reach the review-ready boundary.
 
 Authoritative plan: `plan_final.md`. This file is the execution log and
 historical record only; if this file conflicts with `plan_final.md`, follow
@@ -687,7 +692,7 @@ Goal: keep one draft PR and no hidden branch divergence.
 
 Actions:
 
-1. Push coherent tranches to both the active implementation branch and PR #8
+1. Push coherent tranches to the recorded implementation branch and PR #8
    branch.
 2. Keep PR #8 in draft until the review-ready boundary is met.
 3. Check CI after meaningful pushes, not after every local edit.

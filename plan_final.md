@@ -4228,6 +4228,43 @@ Status:
   should use the next completed CI coverage artifact or a stable local coverage
   run to choose the highest-ROI owner modules.
 
+## Latest Execution Log: Active Plan Contract Tranche
+
+What was checked:
+
+- Re-audited the root planning files before the PR review pass.
+- Confirmed that `plan_final.md` is the single active plan and that `plan.md`
+  is only a historical execution log.
+- Found one stale `plan.md` header label that still said "Active implementation
+  branch" even though it referred to an older branch and conflicted with the
+  review branch recorded in `plan_final.md`.
+
+Source/test/docs change:
+
+- Reworded the top of `plan.md` so it explicitly says the file is historical
+  evidence only and must not be used to determine active branches, milestones,
+  or next steps.
+- Added `test_plan_final_is_the_single_authoritative_plan` to
+  `tests/test_source_tree_consolidation.py`.
+- The guard allows only `plan.md` and `plan_final.md` at the repository root,
+  requires `plan_final.md` to declare itself the single active plan, requires
+  `plan.md` to defer to `plan_final.md`, and rejects the stale "Active
+  implementation branch" label.
+
+Validation:
+
+- `python -m pytest -q tests/test_source_tree_consolidation.py
+  tests/test_benchmark_doc_claims.py tests/test_public_docs_wording_contract.py`
+  passed as `51 passed in 6.71 s`.
+- `python -m ruff check tests/test_source_tree_consolidation.py` passed.
+- `python -m compileall -q tests/test_source_tree_consolidation.py` passed.
+
+Status:
+
+- This closes the remaining plan-hygiene risk for PR review. Future work should
+  update `plan_final.md` only for active decisions and keep `plan.md` as
+  execution history.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
