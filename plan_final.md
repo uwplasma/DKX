@@ -4482,6 +4482,32 @@ Status:
   architecture without running production solves or adding large fixtures.
 - GPU production gates remain deferred until office GPU access is restored.
 
+## Latest Execution Log: Explicit Sparse Host-Copy Reduction Tranche
+
+Scope:
+
+- Removed an unconditional host copy from `_host_array()` so explicit sparse
+  dense, block, matvec, and pattern assembly paths do not duplicate same-dtype
+  host arrays before immediately materializing CSR or dense outputs.
+- Kept `SparseFactorBundle.solve()` copy-isolated so factor implementations can
+  safely use in-place work arrays without mutating user-provided RHS arrays.
+- Added a regression test that verifies the no-copy assembly path and the
+  solve-path mutation isolation.
+
+Validation:
+
+- `python -m pytest -q tests/test_explicit_sparse.py` passed as
+  `85 passed in 0.96 s`.
+- `python -m ruff check sfincs_jax/solvers/explicit_sparse.py tests/test_explicit_sparse.py`
+  passed.
+- `python -m compileall -q sfincs_jax/solvers/explicit_sparse.py tests/test_explicit_sparse.py`
+  passed.
+
+Status:
+
+- This is a bounded peak-memory improvement for explicit sparse operator setup.
+  It does not change solver numerics or public APIs.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

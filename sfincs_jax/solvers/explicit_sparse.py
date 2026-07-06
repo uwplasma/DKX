@@ -749,9 +749,9 @@ def _backend_name(backend: str | None = None) -> str:
         return "cpu"
 
 
-def _host_array(value, *, dtype=None) -> np.ndarray:
+def _host_array(value, *, dtype=None, copy: bool = False) -> np.ndarray:
     arr = np.asarray(jax.device_get(value), dtype=dtype)
-    return np.array(arr, copy=True)
+    return np.array(arr, copy=True) if copy else arr
 
 
 def csr_matvec(
@@ -884,7 +884,13 @@ class SparseFactorBundle:
     factor_s: float | None = None
 
     def solve(self, rhs) -> np.ndarray:
-        rhs_host = _host_array(rhs, dtype=self.operator.matrix.dtype if self.operator.matrix is not None else None)
+        # Factor implementations are allowed to use in-place work arrays. Keep
+        # user input isolated while avoiding extra copies during assembly paths.
+        rhs_host = _host_array(
+            rhs,
+            dtype=self.operator.matrix.dtype if self.operator.matrix is not None else None,
+            copy=True,
+        )
         sol = self.factor.solve(rhs_host)
         return np.asarray(sol)
 

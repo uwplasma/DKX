@@ -293,6 +293,32 @@ def test_sparse_operator_and_factor_bundles_preserve_host_dtype() -> None:
     np.testing.assert_allclose(solution, np.asarray([1.0, 2.0], dtype=np.float32))
 
 
+def test_host_array_avoids_assembly_copy_but_factor_solve_isolates_rhs() -> None:
+    arr = np.asarray([[1.0, 0.0], [0.0, 2.0]], dtype=np.float64)
+    no_copy = explicit_sparse._host_array(arr, dtype=np.float64)
+
+    assert np.shares_memory(no_copy, arr)
+
+    class _MutatingFactor:
+        def solve(self, rhs):
+            rhs_np = np.asarray(rhs)
+            rhs_np[...] = -99.0
+            return rhs_np
+
+    bundle = build_operator_from_dense(arr, backend="cpu", force_sparse=True)
+    factor = SparseFactorBundle(
+        factor=_MutatingFactor(),
+        operator=bundle,
+        metadata=bundle.metadata,
+        kind="lu",
+    )
+    rhs = np.asarray([3.0, 4.0], dtype=np.float64)
+    solution = factor.solve(rhs)
+
+    np.testing.assert_allclose(rhs, np.asarray([3.0, 4.0], dtype=np.float64))
+    np.testing.assert_allclose(solution, np.asarray([-99.0, -99.0], dtype=np.float64))
+
+
 def test_build_operator_from_blocks_assembles_sparse_matrix() -> None:
     blocks = [
         [np.array([[1.0, 2.0], [3.0, 4.0]]), np.array([[5.0], [6.0]])],
