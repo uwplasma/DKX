@@ -230,6 +230,24 @@ def test_apply_periodic_stencil_halo_zero_and_empty_stencils() -> None:
     )
 
 
+def test_apply_periodic_stencil_halo_single_axis_nonfallback_uses_halo_slices() -> None:
+    f = jnp.asarray([1.0, 3.0, 6.0, 10.0], dtype=jnp.float64)
+    shifts = (-1, 0, 1)
+    coeffs = (0.5, 0.0, -0.25)
+
+    y_halo = apply_periodic_stencil_halo(
+        f,
+        shifts=shifts,
+        coeffs=coeffs,
+        axis=0,
+        axis_name="theta",
+        axis_size=1,
+    )
+    expected = 0.5 * jnp.asarray([10.0, 1.0, 3.0, 6.0]) - 0.25 * jnp.asarray([3.0, 6.0, 10.0, 1.0])
+
+    np.testing.assert_allclose(np.asarray(y_halo), np.asarray(expected), rtol=0.0, atol=1.0e-12)
+
+
 def test_apply_periodic_stencil_roll_skips_zero_coefficients() -> None:
     f = jnp.asarray([1.0, 2.0, 4.0], dtype=jnp.float64)
     out = apply_periodic_stencil_roll(f, shifts=(1, -1), coeffs=(0.0, 2.0), axis=0)

@@ -7,6 +7,7 @@ import pytest
 
 from sfincs_jax.discretization.adaptive_maps import (
     AffineXMap,
+    MappedXGrid,
     RationalTailXMap,
     SoftplusCellXMap,
     SplineDensityXMap,
@@ -149,3 +150,51 @@ def test_spline_density_map_gradients_are_finite():
     perturb = jnp.zeros_like(coeffs).at[idx].set(eps)
     fd = float((objective(coeffs + perturb) - objective(coeffs - perturb)) / (2.0 * eps))
     np.testing.assert_allclose(float(grad[idx]), fd, rtol=1.0e-5, atol=1.0e-5)
+
+
+def test_mapped_grid_pytree_roundtrip_preserves_regularization() -> None:
+    eta, weights = make_reference_eta_grid(5, kind="uniform")
+    grid = AffineXMap()(0.4, eta=eta, eta_weights=weights)
+
+    children, aux = grid.tree_flatten()
+    restored = MappedXGrid.tree_unflatten(aux, children)
+
+    np.testing.assert_allclose(np.asarray(restored.x), np.asarray(grid.x), rtol=0.0, atol=0.0)
+    assert set(restored.regularization) == set(grid.regularization)
+    for key in grid.regularization:
+        np.testing.assert_allclose(
+            np.asarray(restored.regularization[key]),
+            np.asarray(grid.regularization[key]),
+            rtol=0.0,
+            atol=0.0,
+        )
+
+
+def test_reference_and_barycentric_inputs_fail_fast() -> None:
+    with pytest.raises(ValueError, match="at least 2"):
+        make_reference_eta_grid(1)
+    with pytest.raises(ValueError, match="kind"):
+        make_reference_eta_grid(3, kind="chebyshev")
+    with pytest.raises(ValueError, match="one-dimensional"):
+        barycentric_diff_matrix(jnp.zeros((2, 2), dtype=jnp.float64))
+    with pytest.raises(ValueError, match="at least two"):
+        barycentric_diff_matrix(jnp.asarray([0.0], dtype=jnp.float64))
+
+
+def test_mapped_xgrid_builders_validate_shape_and_derivative_options() -> None:
+    eta, weights = make_reference_eta_grid(4, kind="uniform")
+
+    with pytest.raises(ValueError, match="derivative"):
+        AffineXMap(derivative="spectral-ish")(0.0, eta=eta, eta_weights=weights)
+
+    softplus = SoftplusCellXMap()
+    with pytest.raises(ValueError, match="one-dimensional"):
+        softplus(jnp.zeros((2, 2), dtype=jnp.float64), eta=eta, eta_weights=weights)
+    with pytest.raises(ValueError, match="same length"):
+        softplus(jnp.zeros((3,), dtype=jnp.float64), eta=eta, eta_weights=weights)
+
+    spline = SplineDensityXMap()
+    with pytest.raises(ValueError, match="one-dimensional"):
+        spline(jnp.zeros((2, 2), dtype=jnp.float64), eta=eta, eta_weights=weights)
+    with pytest.raises(ValueError, match="at least two"):
+        spline(jnp.asarray([0.0], dtype=jnp.float64), eta=eta[:1], eta_weights=weights[:1])
