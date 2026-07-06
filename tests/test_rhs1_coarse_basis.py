@@ -37,7 +37,8 @@ def _layout() -> RHS1BlockLayout:
 
 def test_coarse_residual_config_clamps_modes_and_estimates_storage(monkeypatch) -> None:
     layout = _layout()
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_XBLOCK_LMAX", "99")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_XBLOCK_LMAX", "not-an-int")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_XBLOCK_DROP_TOL", "not-a-float")
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_XBLOCK_FACTOR_KIND", "invalid")
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_COARSE_LMAX", "3")
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_COARSE_ANGULAR_MMAX", "99")
@@ -48,7 +49,8 @@ def test_coarse_residual_config_clamps_modes_and_estimates_storage(monkeypatch) 
     xblock_config = xblock_tz_low_l_config(layout)
     config = coarse_residual_config(layout)
 
-    assert xblock_config["lmax"] == layout.n_xi
+    assert xblock_config["lmax"] == min(8, layout.n_xi)
+    assert xblock_config["drop_tol"] == 0.0
     assert xblock_config["factor_kind"] == "splu"
     assert config["coarse_lmax"] == 3
     assert config["coarse_angular_mmax"] == layout.n_theta // 2
@@ -184,12 +186,15 @@ def test_active_native_xell_window_basis_returns_empty_for_disabled_or_invalid_s
     assert disabled.shape == (layout.total_size, 0)
     assert disabled_metadata["window_basis_requested"] is False
 
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_WINDOW_SPECS", "9:1:1,bad,0:9:1")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_WINDOW_SPECS",
+        "9:1:1,bad,,0:9:1,0:nope:1",
+    )
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_WINDOW_MAX_COLUMNS", "10")
     invalid, invalid_metadata = build_active_native_xell_coarse_window_basis_csc(layout=layout)
     assert invalid.shape == (layout.total_size, 0)
     assert invalid_metadata["window_basis_requested"] is True
-    assert invalid_metadata["window_basis_skipped_specs"] == 3
+    assert invalid_metadata["window_basis_skipped_specs"] == 4
     assert invalid_metadata["window_basis_truncated"] is False
 
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_WINDOW_SPECS", "all:all:all")

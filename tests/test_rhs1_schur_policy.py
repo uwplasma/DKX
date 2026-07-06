@@ -422,8 +422,8 @@ def test_active_field_split_policy_classifies_requested_solver_families() -> Non
         env={
             "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_MAX_SIZE": "256",
             "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_ADMISSION_PROBES": "0",
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_ADMISSION_MAX_RELATIVE_RESIDUAL": "-1",
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_ADMISSION_MIN_IMPROVEMENT": "-2",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_ADMISSION_MAX_RELATIVE_RESIDUAL": "bad",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_ADMISSION_MIN_IMPROVEMENT": "bad",
         },
     )
     assert coupled.is_coupled_kinetic is True
@@ -431,8 +431,8 @@ def test_active_field_split_policy_classifies_requested_solver_families() -> Non
     assert coupled.requested_base_kind == "active_coupled_kinetic_block"
     assert coupled.max_coarse_size == 256
     assert coupled.admission_probes == 1
-    assert coupled.admission_max_relative_residual == 0.0
-    assert coupled.admission_min_improvement == 0.0
+    assert coupled.admission_max_relative_residual == 0.01
+    assert coupled.admission_min_improvement == 1.0
 
 
 def test_active_sparse_coarse_residual_policy_maps_physics_families() -> None:
