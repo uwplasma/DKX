@@ -206,6 +206,7 @@ def test_xmg_radial_preconditioner_fp_with_er_coupling_is_finite(monkeypatch) ->
     assert np.all(np.isfinite(result))
     np.testing.assert_allclose(result[op.f_size :], np.asarray(vector[op.f_size :]))
     assert cached.coarse_inv_lblock is None
+    assert cached.lblock == 0
     assert cached.coarse_inv.shape[-2:] == (2, 2)
     assert np.any(np.abs(np.asarray(cached.coarse_inv)) > 0.0)
 

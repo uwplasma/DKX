@@ -186,88 +186,11 @@ def build_rhs1_xmg_preconditioner(
                 xdot_coef_l = None
                 xdot_rms = 0.0
 
-        # If PAS+Er includes ΔL=±2 xDot coupling, build a small coupled (L,x) coarse inverse
-        # for low Legendre modes. This is much stronger than per-L coarse inverses, while still
-        # cheap: we only couple a few low-L modes and only on the coarse x grid.
-        coarse_inv_lblock: np.ndarray | None = None  # (S, Lb*Xc, Lb*Xc)
-        lblock = 0
         pinv_env = os.environ.get("SFINCS_JAX_RHSMODE1_XMG_PINV_RCOND", "").strip()
         try:
             pinv_rcond = float(pinv_env) if pinv_env else 1e-12
         except ValueError:
             pinv_rcond = 1e-12
-        if (
-            xdot_x_part is not None
-            and xdot_coef_l is not None
-            and float(xdot_rms) != 0.0
-            and op.fblock.pas is not None
-            and mat_fp is None
-            and n_l >= 3
-        ):
-            # Default to a small block that captures the first few ΔL=±2 couplings.
-            # L is small (Nxi is usually O(10)), so a block of size 6 is still cheap.
-            lblock = int(min(int(n_l), 6))
-            n_block = int(lblock * n_coarse)
-            coarse_inv_lblock = np.zeros((n_species, n_block, n_block), dtype=np.float64)
-
-            # Coefficients for ΔL=±2 couplings in `apply_er_xdot_v3`:
-            #   row L gets col L+2 with coef sup2[L]
-            #   row L gets col L-2 with coef sub2[L]
-            l_vec = np.arange(n_l, dtype=np.float64)
-            sup2 = np.zeros((n_l,), dtype=np.float64)
-            sub2 = np.zeros((n_l,), dtype=np.float64)
-            if n_l >= 3:
-                l0 = l_vec[:-2]
-                sup2[:-2] = (l0 + 1.0) * (l0 + 2.0) / ((2.0 * l0 + 5.0) * (2.0 * l0 + 3.0))
-                l2 = l_vec[2:]
-                sub2[2:] = l2 * (l2 - 1.0) / ((2.0 * l2 - 3.0) * (2.0 * l2 - 1.0))
-
-            for s in range(n_species):
-                a = np.zeros((n_block, n_block), dtype=np.float64)
-                # Base diagonal blocks (PAS + identity shift + regularization).
-                for ell in range(lblock):
-                    i0 = int(ell * n_coarse)
-                    i1 = i0 + n_coarse
-                    block = np.zeros((n_coarse, n_coarse), dtype=np.float64)
-                    reg_eff = reg_l0 if ell == 0 else float(reg)
-                    diag_vec = np.full((n_coarse,), identity_shift + reg_eff, dtype=np.float64)
-                    if pas_diag is not None:
-                        diag_vec = diag_vec + pas_diag[s, coarse_idx, ell]
-                    block[np.arange(n_coarse), np.arange(n_coarse)] += diag_vec
-                    a[i0:i1, i0:i1] += block
-
-                # Add xDot dense-x coupling (diagonal + ΔL=±2 couplings) using an RMS magnitude.
-                for ell in range(lblock):
-                    i0 = int(ell * n_coarse)
-                    i1 = i0 + n_coarse
-                    a[i0:i1, i0:i1] += float(xdot_coef_l[ell]) * xdot_x_part
-                    if ell + 2 < lblock:
-                        j0 = int((ell + 2) * n_coarse)
-                        j1 = j0 + n_coarse
-                        a[i0:i1, j0:j1] += float(sup2[ell] * xdot_rms) * xdot_x_part
-                    if ell - 2 >= 0:
-                        j0 = int((ell - 2) * n_coarse)
-                        j1 = j0 + n_coarse
-                        a[i0:i1, j0:j1] += float(sub2[ell] * xdot_rms) * xdot_x_part
-
-                # Identity rows/cols for inactive (x,L) combinations.
-                for ell in range(lblock):
-                    inactive_x = np.where(nxi_for_x <= ell)[0]
-                    if not inactive_x.size:
-                        continue
-                    for ix in inactive_x:
-                        idx = coarse_map.get(int(ix))
-                        if idx is None:
-                            continue
-                        p = int(ell * n_coarse + idx)
-                        a[p, :] = 0.0
-                        a[:, p] = 0.0
-                        a[p, p] = 1.0
-
-                inv = np.linalg.pinv(a, rcond=pinv_rcond)
-                if not np.all(np.isfinite(inv)):
-                    inv = np.linalg.pinv(a, rcond=pinv_rcond)
-                coarse_inv_lblock[s, :, :] = inv
 
         for s in range(n_species):
             for ell in range(n_l):
@@ -310,18 +233,14 @@ def build_rhs1_xmg_preconditioner(
             inv_diag_f=jnp.asarray(inv_diag_f, dtype=precond_dtype),
             coarse_inv=jnp.asarray(coarse_inv, dtype=precond_dtype),
             coarse_idx=jnp.asarray(coarse_idx, dtype=jnp.int32),
-            coarse_inv_lblock=(
-                None if coarse_inv_lblock is None else jnp.asarray(coarse_inv_lblock, dtype=precond_dtype)
-            ),
-            lblock=int(lblock),
+            coarse_inv_lblock=None,
+            lblock=0,
         )
         _RHSMODE1_XMG_PRECOND_CACHE[cache_key] = cached
 
     inv_diag_f = cached.inv_diag_f
     coarse_inv = cached.coarse_inv
     coarse_idx = cached.coarse_idx
-    coarse_inv_lblock = cached.coarse_inv_lblock
-    lblock = int(cached.lblock)
 
     def _apply_full(r_full: jnp.ndarray) -> jnp.ndarray:
         r_full = jnp.asarray(r_full, dtype=precond_dtype)
@@ -329,21 +248,9 @@ def build_rhs1_xmg_preconditioner(
         z_f = f * inv_diag_f
         f_sl = jnp.transpose(f, (0, 2, 1, 3, 4))  # (S,L,X,T,Z)
         corr_sl = jnp.zeros_like(f_sl)
-        if coarse_inv_lblock is not None and lblock > 0:
-            n_coarse = int(coarse_idx.shape[0])
-            lblock_use = int(min(lblock, int(f_sl.shape[1])))
-            f_block = f_sl[:, :lblock_use, coarse_idx, :, :].reshape((f_sl.shape[0], lblock_use * n_coarse) + f_sl.shape[3:])
-            z_block = jnp.einsum("sij,sjtz->sitz", coarse_inv_lblock, f_block)
-            z_block = z_block.reshape((f_sl.shape[0], lblock_use, n_coarse) + f_sl.shape[3:])
-            corr_sl = corr_sl.at[:, :lblock_use, coarse_idx, :, :].set(z_block, unique_indices=True)
-            if lblock_use < int(f_sl.shape[1]):
-                f_high = f_sl[:, lblock_use:, coarse_idx, :, :]
-                z_high = jnp.einsum("slij,sljtz->slitz", coarse_inv[:, lblock_use:, :, :], f_high)
-                corr_sl = corr_sl.at[:, lblock_use:, coarse_idx, :, :].set(z_high, unique_indices=True)
-        else:
-            f_coarse = f_sl[:, :, coarse_idx, :, :]
-            z_coarse = jnp.einsum("slij,sljtz->slitz", coarse_inv, f_coarse)
-            corr_sl = corr_sl.at[:, :, coarse_idx, :, :].set(z_coarse, unique_indices=True)
+        f_coarse = f_sl[:, :, coarse_idx, :, :]
+        z_coarse = jnp.einsum("slij,sljtz->slitz", coarse_inv, f_coarse)
+        corr_sl = corr_sl.at[:, :, coarse_idx, :, :].set(z_coarse, unique_indices=True)
         corr = jnp.transpose(corr_sl, (0, 2, 1, 3, 4))
         z_f = z_f + corr
         tail = r_full[op.f_size :]
