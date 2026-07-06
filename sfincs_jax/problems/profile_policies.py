@@ -2605,6 +2605,47 @@ def rhs1_pas_source_zero_tolerance_from_env() -> float:
     return _env_float("SFINCS_JAX_PAS_SOURCE_ZERO_TOL", 2.0e-9)
 
 
+def rhs1_bicgstab_preconditioner_kind(
+    *,
+    env_value: str,
+    tokamak_pas: bool,
+    has_fp: bool,
+    has_pas: bool,
+    use_dkes: bool,
+    rhs1_precond_kind: str | None,
+) -> str | None:
+    """Resolve the first-attempt BiCGStab preconditioner for RHSMode=1.
+
+    The default path mirrors the historical driver behavior: try a cheap
+    collision preconditioner unless the problem family is known to waste time
+    before falling back to GMRES.  FP and PAS+DKES systems with a stronger RHS1
+    preconditioner should reuse that stronger path so the first attempt is a
+    meaningful numerical probe rather than an avoidable setup cost.
+    """
+
+    token = str(env_value).strip().lower()
+    if token in _FALSE_VALUES:
+        kind = None
+    elif token in {"rhs1", "same", "preconditioner"}:
+        kind = "rhs1"
+    elif token in {"", "auto", *_TRUE_VALUES, "collision", "diag"}:
+        kind = "collision"
+    else:
+        kind = None
+    if bool(tokamak_pas) and token in {"", "auto"}:
+        return None
+    if kind == "collision" and bool(has_fp) and rhs1_precond_kind not in {None, "collision"}:
+        return "rhs1"
+    if (
+        kind == "collision"
+        and bool(has_pas)
+        and bool(use_dkes)
+        and rhs1_precond_kind not in {None, "collision"}
+    ):
+        return "rhs1"
+    return kind
+
+
 def rhs1_bicgstab_fallback_controls_from_env(
     *,
     pas_large_bicgstab_fastpath: bool,
@@ -7572,6 +7613,7 @@ __all__ = (
     "rhs1_bicgstab_fallback_controls_from_env",
     "rhs1_bicgstab_fallback_decision",
     "rhs1_bicgstab_fallback_target_from_env",
+    "rhs1_bicgstab_preconditioner_kind",
     "rhs1_constraint0_dense_fallback_allowed",
     "rhs1_constraint0_petsc_compat",
     "rhs1_constraint0_petsc_compat_config_from_env",

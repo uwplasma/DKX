@@ -47,6 +47,11 @@ models overlap.
   `35 passed in 0.63 s` for `tests/test_transport_active_factor.py`, and the
   broader transport focused bundle ran `217 passed in 30.92 s` with
   `transport_linear_system.py` at 87% focused coverage.
+- The RHSMode=1 BiCGStab route selection was moved out of `profile_solve.py`
+  into the policy owner and covered with FP, PAS+DKES, tokamak-PAS, disabled,
+  default, and explicit-RHS1 boundary tests. Local guards passed:
+  `49 passed in 0.49 s` for the policy subset and `58 passed in 5.60 s` for
+  source-tree/domain import contracts.
 - The last checked PR CI state after `14e0dbd5` had build and
   external-data smoke passing; coverage shards, examples-smoke, optional
   ecosystem checks, and coverage-report were still pending. Recheck CI after

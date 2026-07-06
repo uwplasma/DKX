@@ -93,6 +93,7 @@ from sfincs_jax.problems.profile_policies import (
     rhs1_pas_tokamak_gpu_xblock_preferred as _rhs1_pas_tokamak_gpu_xblock_preferred,
     rhs1_pas_weak_auto_override_kind as _rhs1_pas_weak_auto_override_kind,
     rhs1_sharded_line_override_allowed as _rhs1_sharded_line_override_allowed,
+    rhs1_bicgstab_preconditioner_kind,
     resolve_rhs1_preconditioner_route_setup,
 )
 from sfincs_jax.problems.profile_policies import (
@@ -1175,34 +1176,14 @@ def solve_v3_full_system_linear_gmres(
         use_collision_precond = rhs1_route_setup["use_collision_precond"]
     if "xblock_tz_max" in rhs1_route_setup:
         xblock_tz_max = rhs1_route_setup["xblock_tz_max"]
-    if rhs1_bicgstab_env in {"0", "false", "no", "off"}:
-        rhs1_bicgstab_kind = None
-    elif rhs1_bicgstab_env in {"rhs1", "same", "preconditioner"}:
-        rhs1_bicgstab_kind = "rhs1"
-    elif rhs1_bicgstab_env in {"", "1", "true", "yes", "on", "collision", "diag"}:
-        rhs1_bicgstab_kind = "collision"
-    else:
-        rhs1_bicgstab_kind = None
-    if tokamak_pas and rhs1_bicgstab_env in {"", "auto"}:
-        # Tokamak PAS systems converge more reliably with GMRES-only.
-        rhs1_bicgstab_kind = None
-    if (
-        rhs1_bicgstab_kind == "collision"
-        and op.fblock.fp is not None
-        and rhs1_precond_kind not in {None, "collision"}
-    ):
-        rhs1_bicgstab_kind = "rhs1"
-    if (
-        rhs1_bicgstab_kind == "collision"
-        and op.fblock.pas is not None
-        and use_dkes
-        and rhs1_precond_kind not in {None, "collision"}
-    ):
-        # For PAS+DKES, BiCGStab only pays off if it uses the same strong RHS1
-        # preconditioner as GMRES (typically Schur + sparse PAS blocks). A cheap
-        # collision-only preconditioner often stagnates and just triggers a GMRES
-        # fallback (wasting compile/runtime).
-        rhs1_bicgstab_kind = "rhs1"
+    rhs1_bicgstab_kind = rhs1_bicgstab_preconditioner_kind(
+        env_value=rhs1_bicgstab_env,
+        tokamak_pas=bool(tokamak_pas),
+        has_fp=op.fblock.fp is not None,
+        has_pas=op.fblock.pas is not None,
+        use_dkes=bool(use_dkes),
+        rhs1_precond_kind=rhs1_precond_kind,
+    )
     solve_method_kind = str(solve_method).strip().lower()
     use_implicit = _resolve_use_implicit(differentiable=differentiable)
     if (

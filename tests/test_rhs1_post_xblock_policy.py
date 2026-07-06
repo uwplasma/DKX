@@ -16,6 +16,7 @@ from sfincs_jax.problems.profile_policies import (
     rhs1_bicgstab_fallback_controls_from_env,
     rhs1_bicgstab_fallback_decision,
     rhs1_bicgstab_fallback_target_from_env,
+    rhs1_bicgstab_preconditioner_kind,
     rhs1_fast_post_xblock_polish_allowed,
     rhs1_fast_post_xblock_polish_controls_from_env,
     rhs1_fp_bicgstab_polish_controls_from_env,
@@ -44,6 +45,62 @@ def _op(*, has_fp: bool = True, has_pas: bool = False, has_phi1: bool = False, r
             fp=object() if has_fp else None,
             pas=object() if has_pas else None,
         ),
+    )
+
+
+def test_bicgstab_preconditioner_kind_preserves_driver_route_boundaries() -> None:
+    common = dict(
+        tokamak_pas=False,
+        has_fp=False,
+        has_pas=False,
+        use_dkes=False,
+        rhs1_precond_kind=None,
+    )
+
+    assert rhs1_bicgstab_preconditioner_kind(env_value="0", **common) is None
+    assert rhs1_bicgstab_preconditioner_kind(env_value="off", **common) is None
+    assert rhs1_bicgstab_preconditioner_kind(env_value="same", **common) == "rhs1"
+    assert rhs1_bicgstab_preconditioner_kind(env_value="", **common) == "collision"
+    assert rhs1_bicgstab_preconditioner_kind(env_value="diag", **common) == "collision"
+    assert rhs1_bicgstab_preconditioner_kind(env_value="unknown", **common) is None
+
+    assert (
+        rhs1_bicgstab_preconditioner_kind(
+            env_value="auto",
+            **{**common, "tokamak_pas": True},
+        )
+        is None
+    )
+    assert (
+        rhs1_bicgstab_preconditioner_kind(
+            env_value="collision",
+            **{**common, "has_fp": True, "rhs1_precond_kind": "xblock_tz"},
+        )
+        == "rhs1"
+    )
+    assert (
+        rhs1_bicgstab_preconditioner_kind(
+            env_value="collision",
+            **{
+                **common,
+                "has_pas": True,
+                "use_dkes": True,
+                "rhs1_precond_kind": "pas_schur",
+            },
+        )
+        == "rhs1"
+    )
+    assert (
+        rhs1_bicgstab_preconditioner_kind(
+            env_value="collision",
+            **{
+                **common,
+                "has_pas": True,
+                "use_dkes": False,
+                "rhs1_precond_kind": "pas_schur",
+            },
+        )
+        == "collision"
     )
 
 
