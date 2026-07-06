@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import jax.numpy as jnp
 
+from sfincs_jax.solver import GMRESSolveResult
 import sfincs_jax.problems.transport_solve as transport_solve
 
 
@@ -206,3 +207,262 @@ def test_transport_solve_top_level_can_exit_through_parallel_runtime(monkeypatch
     runtime = parallel_kwargs["runtime"]
     assert runtime.worker is transport_solve._transport_parallel_worker
     assert runtime.persistent_pool_enabled is False
+
+
+def _install_transport_loop_harness(
+    monkeypatch,
+    *,
+    total_size: int = 3,
+    which_rhs_values: tuple[int, ...] = (1, 2),
+    dense_retry_max: int = 0,
+    state_out_path: str = "",
+) -> dict[str, object]:
+    """Install a tiny diagonal transport problem for top-level loop tests."""
+
+    captured: dict[str, object] = {"solve_calls": [], "messages": []}
+    op = SimpleNamespace(
+        rhs_mode=2,
+        total_size=int(total_size),
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        fblock=SimpleNamespace(pas=None, fp=object()),
+        n_species=1,
+        n_x=1,
+        n_xi=1,
+        n_theta=1,
+        n_zeta=1,
+        constraint_scheme=2,
+        quasineutrality_option=1,
+        with_adiabatic=False,
+        point_at_x0=False,
+        phi1_size=0,
+        extra_size=0,
+        scale=2.0,
+    )
+
+    def fake_op_with_rhs(op_in, *, which_rhs):
+        return SimpleNamespace(**{**op_in.__dict__, "which_rhs": int(which_rhs)})
+
+    def fake_rhs(op_rhs):
+        base = float(getattr(op_rhs, "which_rhs", 1))
+        return jnp.asarray([base + i for i in range(int(total_size))], dtype=jnp.float64)
+
+    class FakeCallbacks:
+        def __init__(self, *, context):
+            captured["linear_context"] = context
+
+        def solve_with_residual(self, **kwargs):
+            captured["solve_calls"].append(kwargs)
+            x = 0.5 * kwargs["b_vec"]
+            return GMRESSolveResult(x=x, residual_norm=jnp.asarray(0.0)), jnp.zeros_like(kwargs["b_vec"])
+
+        def solve(self, **kwargs):
+            captured["solve_calls"].append(kwargs)
+            x = 0.5 * kwargs["b_vec"]
+            return GMRESSolveResult(x=x, residual_norm=jnp.asarray(0.0))
+
+    class FakeMatvecCache:
+        def __init__(self, **_kwargs):
+            pass
+
+        def get_full(self, op_arg):
+            return lambda x: op_arg.scale * x
+
+        def get_reduced(self, op_arg):
+            return lambda x: op_arg.scale * x
+
+    monkeypatch.setattr(
+        transport_solve,
+        "resolve_transport_maxiter_setup",
+        lambda maxiter: SimpleNamespace(maxiter=maxiter, notes=()),
+    )
+    monkeypatch.setattr(transport_solve, "full_system_operator_from_namelist", lambda **_kwargs: op)
+    monkeypatch.setattr(transport_solve, "_set_precond_size_hint", lambda _size: None)
+    monkeypatch.setattr(transport_solve, "_set_precond_policy_hints", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        transport_solve,
+        "resolve_transport_state_setup",
+        lambda **kwargs: SimpleNamespace(
+            state_in_path="",
+            state_out_path=str(state_out_path),
+            x0=kwargs["x0"],
+            x0_by_rhs=kwargs["x0_by_rhs"] or {},
+            state_x_by_rhs={},
+        ),
+    )
+    monkeypatch.setattr(
+        transport_solve,
+        "resolve_transport_which_rhs_setup",
+        lambda **_kwargs: SimpleNamespace(
+            rhs_mode=2,
+            n_rhs=len(which_rhs_values),
+            which_rhs_values=list(which_rhs_values),
+            subset_mode=False,
+        ),
+    )
+    monkeypatch.setattr(
+        transport_solve,
+        "resolve_transport_parallel_request",
+        lambda **kwargs: SimpleNamespace(
+            parallel_child=False,
+            parallel_workers=0,
+            parallel_backend=kwargs["parallel_backend"],
+        ),
+    )
+    monkeypatch.setattr(transport_solve, "maybe_run_transport_parallel_solve", lambda **_kwargs: None)
+    monkeypatch.setattr(transport_solve, "_transport_parallel_backend", lambda: "process")
+    monkeypatch.setattr(transport_solve, "_transport_parallel_visible_gpu_ids", lambda _workers=None: [])
+    monkeypatch.setattr(transport_solve, "transport_geometry_scheme_from_namelist", lambda _nml: 2)
+    monkeypatch.setattr(
+        transport_solve,
+        "resolve_transport_active_dense_setup",
+        lambda **_kwargs: SimpleNamespace(
+            initial_notes=(),
+            active_notes=(),
+            dense_notes=(),
+            low_memory_outputs=False,
+            stream_diagnostics=False,
+            store_state_vectors=True,
+            solve_method_use="auto",
+            dense_retry_max=int(dense_retry_max),
+            dense_mem_block=False,
+            dense_use_mixed=False,
+            dense_backend_allowed=False,
+            gmres_restart=7,
+            maxiter=11,
+            use_active_dof_mode=False,
+            active_idx_np=None,
+            active_idx_jnp=None,
+            full_to_active_jnp=None,
+            active_size=int(total_size),
+            dense_precond_enabled=False,
+        ),
+    )
+    monkeypatch.setattr(transport_solve, "_resolve_use_implicit", lambda *, differentiable: False)
+    monkeypatch.setattr(transport_solve, "_transport_precondition_side", lambda **_kwargs: "left")
+    monkeypatch.setattr(transport_solve, "_resolve_distributed_gmres_axis", lambda **_kwargs: None)
+    monkeypatch.setattr(transport_solve, "_use_solver_jit", lambda _size: False)
+    monkeypatch.setattr(transport_solve, "_transport_sparse_direct_rescue_allowed", lambda **_kwargs: False)
+    monkeypatch.setattr(transport_solve, "_transport_sparse_direct_first_attempt_allowed", lambda **_kwargs: False)
+    monkeypatch.setattr(transport_solve, "normalize_transport_preconditioner_kind", lambda env_value: None)
+    monkeypatch.setattr(transport_solve, "transport_sparse_jax_config_from_env", lambda: SimpleNamespace())
+    monkeypatch.setattr(transport_solve, "transport_dd_config_from_env", lambda *, op: SimpleNamespace())
+    monkeypatch.setattr(transport_solve, "grids_from_namelist", lambda _nml: SimpleNamespace())
+    monkeypatch.setattr(transport_solve, "geometry_from_namelist", lambda **_kwargs: SimpleNamespace())
+    monkeypatch.setattr(transport_solve, "with_transport_rhs_settings", fake_op_with_rhs)
+    monkeypatch.setattr(transport_solve, "rhs_v3_full_system_jit", fake_rhs)
+    monkeypatch.setattr(transport_solve, "transport_residual_gate_thresholds_from_env", lambda: (0.0, 0.0))
+    monkeypatch.setattr(transport_solve, "_operator_signature_cached", lambda _op: ("mini-op",))
+    monkeypatch.setattr(transport_solve, "apply_v3_full_system_operator_cached", lambda op_arg, x: op_arg.scale * x)
+    monkeypatch.setattr(transport_solve, "resolve_transport_recycle_k", lambda **_kwargs: 0)
+    monkeypatch.setattr(transport_solve, "TransportMatvecCache", FakeMatvecCache)
+    monkeypatch.setattr(
+        transport_solve,
+        "resolve_transport_per_rhs_loop_policy",
+        lambda **_kwargs: SimpleNamespace(
+            dense_batch_fallback_enabled=False,
+            iter_stats_enabled=False,
+            iter_stats_max_size=None,
+            rhs3_krylov_flags=lambda _which_rhs: (False, False),
+            projection_candidate=lambda _which_rhs: False,
+            projection_needed=lambda _which_rhs: False,
+        ),
+    )
+    monkeypatch.setattr(transport_solve, "TransportLinearSolveCallbacks", FakeCallbacks)
+    monkeypatch.setattr(
+        transport_solve,
+        "_transport_sparse_direct_context_from_env",
+        lambda **_kwargs: SimpleNamespace(
+            solve=lambda **kwargs: GMRESSolveResult(x=0.5 * kwargs["b_vec"], residual_norm=jnp.asarray(0.0))
+        ),
+    )
+    monkeypatch.setattr(
+        transport_solve,
+        "compute_transport_postsolve_diagnostics",
+        lambda **kwargs: SimpleNamespace(
+            transport_matrix=jnp.asarray([[len(kwargs["state_vectors"])]]),
+            particle_flux_vm_psi_hat=jnp.ones((1, len(kwargs["which_rhs_values"]))),
+            heat_flux_vm_psi_hat=2.0 * jnp.ones((1, len(kwargs["which_rhs_values"]))),
+            fsab_flow=3.0 * jnp.ones((1, len(kwargs["which_rhs_values"]))),
+            transport_output_fields=None,
+        ),
+    )
+    return captured
+
+
+def test_transport_solve_loop_falls_back_after_host_gmres_failure(monkeypatch) -> None:
+    captured = _install_transport_loop_harness(monkeypatch, which_rhs_values=(1, 2))
+    monkeypatch.setattr(transport_solve, "_transport_host_gmres_first_attempt_allowed", lambda **_kwargs: True)
+
+    def fail_host_gmres(**_kwargs):
+        raise RuntimeError("host gmres unavailable")
+
+    monkeypatch.setattr(transport_solve, "_transport_host_gmres_solve", fail_host_gmres)
+
+    result = transport_solve.solve_v3_transport_matrix_linear_gmres(
+        nml=SimpleNamespace(),
+        tol=1e-8,
+        atol=1e-12,
+        emit=lambda level, message: captured["messages"].append((int(level), str(message))),
+    )
+
+    assert result.transport_matrix.tolist() == [[2]]
+    assert set(result.state_vectors_by_rhs) == {1, 2}
+    assert len(captured["solve_calls"]) == 2
+    assert any("host SciPy GMRES first attempt failed" in msg for _level, msg in captured["messages"])
+
+
+def test_transport_solve_loop_uses_sparse_lu_first_attempt_and_contains_state_write_failure(monkeypatch) -> None:
+    captured = _install_transport_loop_harness(
+        monkeypatch,
+        which_rhs_values=(1,),
+        state_out_path="/tmp/sfincs_jax_unit_state.npz",
+    )
+    monkeypatch.setattr(transport_solve, "_transport_sparse_direct_first_attempt_allowed", lambda **_kwargs: True)
+
+    import sfincs_jax.solvers.diagnostics as diagnostics
+
+    monkeypatch.setattr(diagnostics, "save_krylov_state", lambda **_kwargs: (_ for _ in ()).throw(OSError("no write")))
+
+    result = transport_solve.solve_v3_transport_matrix_linear_gmres(
+        nml=SimpleNamespace(),
+        tol=1e-8,
+        atol=1e-12,
+        emit=lambda level, message: captured["messages"].append((int(level), str(message))),
+    )
+
+    assert result.solver_kinds_by_rhs == {1: "sparse_lu"}
+    assert result.solve_methods_by_rhs == {1: "sparse_lu"}
+    assert not captured["solve_calls"]
+    assert any("failed to write state" in msg for _level, msg in captured["messages"])
+
+
+def test_transport_solve_loop_accepts_dense_true_residual_fallback(monkeypatch) -> None:
+    captured = _install_transport_loop_harness(monkeypatch, which_rhs_values=(1,), dense_retry_max=8)
+
+    class FailingCallbacks:
+        def __init__(self, *, context):
+            captured["linear_context"] = context
+
+        def solve_with_residual(self, **kwargs):
+            captured["solve_calls"].append(kwargs)
+            return GMRESSolveResult(x=jnp.zeros_like(kwargs["b_vec"]), residual_norm=jnp.asarray(10.0)), kwargs["b_vec"]
+
+        def solve(self, **kwargs):
+            captured["solve_calls"].append(kwargs)
+            return GMRESSolveResult(x=jnp.zeros_like(kwargs["b_vec"]), residual_norm=jnp.asarray(10.0))
+
+    monkeypatch.setattr(transport_solve, "TransportLinearSolveCallbacks", FailingCallbacks)
+    monkeypatch.setattr(transport_solve, "_dense_solver_for_matvec", lambda **_kwargs: (lambda rhs: 0.5 * rhs))
+
+    result = transport_solve.solve_v3_transport_matrix_linear_gmres(
+        nml=SimpleNamespace(),
+        tol=1e-8,
+        atol=1e-12,
+        emit=lambda level, message: captured["messages"].append((int(level), str(message))),
+    )
+
+    assert result.solver_kinds_by_rhs == {1: "dense"}
+    assert result.solve_methods_by_rhs == {1: "dense"}
+    assert float(result.residual_norms_by_rhs[1]) == 0.0
+    assert any("dense fallback" in msg for _level, msg in captured["messages"])

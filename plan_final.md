@@ -3495,6 +3495,54 @@ Status:
   the main evidence-refresh item before final merge if reviewers require all
   public performance claims to be regenerated from this branch state.
 
+## Tranche 159: Transport Solve-Loop Branch Coverage
+
+Scope:
+
+- Added a bounded diagonal-operator harness to
+  `tests/test_transport_solve_module_wrappers.py` so the top-level RHSMode=2/3
+  transport orchestration can be tested without launching production-scale
+  geometry or matrix assembly.
+- Covered three production-relevant solver-policy branches in
+  `solve_v3_transport_matrix_linear_gmres`:
+  host SciPy GMRES first-attempt failure followed by the normal matrix-free
+  fallback, host sparse-LU first attempt with safe containment of state-write
+  failures, and dense true-residual fallback acceptance when the Krylov
+  candidate misses the requested residual gate.
+- Kept the tranche inside an existing test file and avoided new package files,
+  so it supports the simplification/refactor goal rather than expanding the
+  public source tree.
+
+Validation:
+
+- `python -m pytest -q tests/test_transport_solve_module_wrappers.py` passed
+  as `8 passed in 0.54 s`.
+- `python -m ruff check tests/test_transport_solve_module_wrappers.py` passed.
+- `python -m pytest -q tests/test_transport_solve_module_wrappers.py
+  tests/test_transport_linear_solve.py tests/test_transport_solve_finalization.py
+  tests/test_transport_loop_support.py tests/test_transport_postsolve_diagnostics.py`
+  passed as `62 passed in 7.40 s`.
+- `python -m pytest -q tests/test_transport_solve_module_wrappers.py
+  tests/test_transport_linear_solve.py tests/test_transport_solve_finalization.py
+  tests/test_transport_loop_support.py tests/test_transport_postsolve_diagnostics.py
+  tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py
+  tests/test_benchmark_doc_claims.py` passed as `124 passed in 12.36 s`.
+- `python -m compileall -q tests/test_transport_solve_module_wrappers.py
+  sfincs_jax/problems/transport_solve.py sfincs_jax/problems/transport_finalize.py
+  sfincs_jax/problems/transport_linear_system.py` passed.
+- A package-level coverage probe for just this wrapper file reported
+  `sfincs_jax/problems/transport_solve.py` at `41.81%` within that isolated
+  run; the project-wide 95% gate still requires the full coverage campaign.
+
+Status:
+
+- This tranche closes several untested solver fallback branches while keeping
+  the source layout stable.
+- The next coverage/refactor tranche should target either
+  `profile_full_system.py` branch-heavy operator assembly paths or the
+  explicit sparse/native-factor modules, since these remain among the largest
+  meaningful coverage blockers.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
