@@ -250,9 +250,9 @@ The staged path is:
    output writing, release-data lookup, or geometry loading gets a regression
    test at the smallest level that reproduces it, plus a higher-level test only
    when the bug was caused by orchestration.
-6. **Raise CI thresholds in steps.** The CI fail-under gate is ``75%``. Move the
+6. **Raise CI thresholds in steps.** The CI fail-under gate is ``80%``. Move the
    gate only after each extraction/test batch makes the denominator meaningful:
-   ``75 -> 85 -> 90 -> 95``. Each increase requires full CI, strict docs,
+   ``80 -> 85 -> 90 -> 95``. Each increase requires full CI, strict docs,
    release-data smoke, and the fast release gates to pass within the target
    wall-time budget.
 7. **Keep size and runtime bounded.** New tests should use generated synthetic

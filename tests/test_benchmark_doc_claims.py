@@ -13,6 +13,7 @@ SUMMARY_JSON = (
     / "artifacts"
     / "sfincs_jax_fortran_suite_benchmark_summary.json"
 )
+CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 FIGURE_ROOT = REPO_ROOT / "docs" / "_static" / "figures" / "paper"
 BENCHMARK_STEM = "sfincs_jax_fortran_suite_benchmark_summary"
 PUBLIC_STANDALONE_DOCS = [
@@ -233,3 +234,14 @@ def test_rejected_benchmark_history_fragments_are_not_in_public_docs_tree() -> N
         text = path.read_text(encoding="utf-8")
         for fragment in DOC_TREE_STALE_FRAGMENTS:
             assert fragment not in text, f"{fragment!r} appears in {path}"
+
+
+def test_testing_docs_coverage_gate_matches_ci_workflow() -> None:
+    workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+    match = re.search(r"coverage report --fail-under=(\d+)", workflow)
+    assert match is not None
+    fail_under = match.group(1)
+
+    testing_docs = (REPO_ROOT / "docs" / "testing.rst").read_text(encoding="utf-8")
+    assert f"CI fail-under gate is ``{fail_under}%``" in testing_docs
+    assert f"``{fail_under} -> 85 -> 90 -> 95``" in testing_docs

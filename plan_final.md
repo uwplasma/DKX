@@ -57,6 +57,10 @@ The main structural refactor is functionally complete:
 - The 2026-07-05 example/docs wording guard passed:
   `tests/test_examples_tree_contract.py` and
   `tests/test_benchmark_doc_claims.py` as `13 passed in 0.15 s`.
+- The testing documentation coverage threshold is synchronized with the CI
+  workflow. `tests/test_benchmark_doc_claims.py` parses
+  `.github/workflows/ci.yml` and verifies that `docs/testing.rst` reports the
+  same fail-under gate and staged path to the `95%` target.
 - The 2026-07-05 user-facing documentation wording pass removed active prose
   labels such as "latest snapshot", "current release", "previous best", and
   progress-log phrasing from README-facing docs pages. The active-doc scan only
