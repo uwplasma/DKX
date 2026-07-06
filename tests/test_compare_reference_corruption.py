@@ -508,6 +508,80 @@ def test_compare_applies_rhs1_fulltraj_fp_fsa_pressure_floor(tmp_path: Path) -> 
     assert all(result.ok for result in results), results
 
 
+def test_compare_phi1_uses_final_newton_iteration_for_different_history_lengths(tmp_path: Path) -> None:
+    ref_path = tmp_path / "fortran_phi1.h5"
+    jax_path = tmp_path / "jax_phi1.h5"
+
+    _write_compare_case_h5(
+        ref_path,
+        rhs_mode=1,
+        constraint_scheme=2,
+        fields={
+            "includePhi1": np.asarray(1, dtype=np.int32),
+            "NIterations": np.asarray(2, dtype=np.int32),
+            "differentLengthHistory": np.asarray([8.0, 2.0], dtype=np.float64),
+        },
+    )
+    _write_compare_case_h5(
+        jax_path,
+        rhs_mode=1,
+        constraint_scheme=2,
+        fields={
+            "includePhi1": np.asarray(1, dtype=np.int32),
+            "NIterations": np.asarray(3, dtype=np.int32),
+            "differentLengthHistory": np.asarray([9.0, 7.0, 2.0], dtype=np.float64),
+        },
+    )
+
+    results = compare_sfincs_outputs(
+        a_path=jax_path,
+        b_path=ref_path,
+        keys=["differentLengthHistory", "NIterations"],
+        rtol=0.0,
+        atol=1.0e-12,
+    )
+
+    assert [result.key for result in results] == ["differentLengthHistory"]
+    assert all(result.ok for result in results), results
+
+
+def test_compare_phi1_uses_final_newton_iteration_for_same_history_lengths(tmp_path: Path) -> None:
+    ref_path = tmp_path / "fortran_phi1_same.h5"
+    jax_path = tmp_path / "jax_phi1_same.h5"
+
+    _write_compare_case_h5(
+        ref_path,
+        rhs_mode=1,
+        constraint_scheme=2,
+        fields={
+            "includePhi1": np.asarray(1, dtype=np.int32),
+            "NIterations": np.asarray(2, dtype=np.int32),
+            "sameLengthHistory": np.asarray([10.0, 2.0], dtype=np.float64),
+        },
+    )
+    _write_compare_case_h5(
+        jax_path,
+        rhs_mode=1,
+        constraint_scheme=2,
+        fields={
+            "includePhi1": np.asarray(1, dtype=np.int32),
+            "NIterations": np.asarray(2, dtype=np.int32),
+            "sameLengthHistory": np.asarray([99.0, 2.0], dtype=np.float64),
+        },
+    )
+
+    results = compare_sfincs_outputs(
+        a_path=jax_path,
+        b_path=ref_path,
+        keys=["sameLengthHistory", "NIterations"],
+        rtol=0.0,
+        atol=1.0e-12,
+    )
+
+    assert [result.key for result in results] == ["sameLengthHistory"]
+    assert all(result.ok for result in results), results
+
+
 def test_compare_applies_vmec_fulltraj_fp_total_density_floor(tmp_path: Path) -> None:
     ref_path = tmp_path / "fortran_rhs1_vmec_fulltraj_fp.h5"
     jax_path = tmp_path / "jax_rhs1_vmec_fulltraj_fp.h5"
