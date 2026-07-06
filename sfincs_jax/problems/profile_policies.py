@@ -4012,15 +4012,19 @@ def rhs1_dense_auto_fp_allowed(
     """Return whether full-FP RHSMode=1 auto mode should start with dense LU.
 
     CPU defaults use the dense path for all systems below the FP cutoff. On
-    accelerators, keep tiny fixtures on the lower-overhead matrix-free path but
-    use dense LU for moderate systems that otherwise pay a long Krylov/probe
-    ladder before falling back.
+    accelerators, the default dense route is the explicit host-dense shortcut
+    because it avoids XLA dense-solve scratch allocations and the Krylov/probe
+    ladder. Users can still opt into accelerator dense linear algebra with
+    ``SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR=1``.
     """
     cutoff = rhs1_dense_auto_fp_cutoff(dense_active_cutoff=dense_active_cutoff)
     if cutoff <= 0 or int(active_size) > int(cutoff):
         return False
-    if str(backend).strip().lower() == "cpu":
+    backend_norm = str(backend).strip().lower()
+    if backend_norm == "cpu":
         return True
+    if not rhs1_dense_backend_allowed(backend=backend_norm):
+        return False
     return int(active_size) >= int(rhs1_dense_auto_fp_accelerator_min())
 
 

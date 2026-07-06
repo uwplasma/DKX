@@ -419,20 +419,21 @@ def select_rhsmode1_solve_method(
         and (not context.include_phi1)
         and int(context.active_total_size) <= int(context.dense_fp_cutoff)
         and (not context.force_krylov)
-        and (context.dense_auto_ok or context.dense_auto_accelerator_fp_window)
+        and context.dense_auto_ok
     ):
         solve_method = "dense"
         if emit is not None:
             msg = "write_sfincs_jax_output_h5: FP RHSMode=1 bounded system -> using dense solve"
-            if context.dense_auto_accelerator_fp_window:
-                msg += f" on backend={context.dense_auto_backend}"
             emit(1, msg)
     elif (
         op.fblock.fp is not None
         and (not context.include_phi1)
         and int(context.active_total_size) <= int(context.dense_fp_cutoff)
         and (not context.force_krylov)
-        and (not context.dense_auto_ok)
+        and (
+            (not context.dense_auto_ok)
+            or context.dense_auto_accelerator_fp_window
+        )
     ):
         host_dense_shortcut = context.rhsmode1_host_dense_shortcut_allowed(
             op=op,

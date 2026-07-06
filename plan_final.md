@@ -3983,6 +3983,51 @@ Status:
   continue to target public contracts and compact policy/helper modules before
   attempting any solve-heavy coverage expansion.
 
+## Latest Execution Log: Bounded GPU Dense-Route Performance Tranche
+
+What was checked:
+
+- Reviewed the RHSMode=1 full-FP GPU auto-selection path in
+  `outputs/rhsmode1.py`, `problems/profile_solve.py`, and
+  `problems/profile_dense.py`.
+- Confirmed the execution layer already has real reduced/full host-dense
+  shortcut stages that skip preconditioner construction and Krylov probes for
+  bounded accelerator full-FP systems.
+- Found that the policy helper and output selector could still promote moderate
+  accelerator systems directly to `solve_method="dense"` before those shortcut
+  stages, which obscures solver provenance and can route through accelerator
+  dense/Krylov machinery unless accelerator dense linear algebra is explicitly
+  intended.
+
+Source/test change:
+
+- Changed `rhs1_dense_auto_fp_allowed` so default accelerator runs no longer
+  auto-promote to backend dense LU unless
+  `SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR=1` is set.
+- Changed `select_rhsmode1_solve_method` so the accelerator full-FP bounded
+  window falls through to the explicit host-dense shortcut branch instead of
+  returning `dense`.
+- Updated policy/selector tests to require CPU dense auto, default GPU
+  host-shortcut routing, and opt-in accelerator dense behavior.
+
+Validation:
+
+- `python -m pytest -q tests/test_rhs1_host_policy.py
+  tests/test_io_output_policy_coverage.py tests/test_profile_response_dense.py
+  tests/test_rhs1_sparse_first_heuristic.py` passed as `236 passed in 3.48 s`.
+- A minimal `ssh office` GPU probe was attempted but timed out at the configured
+  SSH host/port before any remote command produced output. Remote GPU evidence
+  still needs a reachable session.
+
+Status:
+
+- This tightens the default GPU path for bounded full-FP RHSMode=1 cases without
+  changing CPU behavior, differentiable implicit paths, explicit user solver
+  overrides, or the strict residual gates.
+- The next GPU step is one bounded office-GPU provenance run once SSH connects,
+  checking that the solver log records the host-dense shortcut and that the
+  output residual/parity gate remains clean.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

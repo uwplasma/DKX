@@ -1086,6 +1086,7 @@ def test_rhsmode1_selector_records_host_dense_shortcut_when_accelerator_dense_is
         _rhsmode1_selector_context(
             dense_auto_ok=False,
             dense_auto_backend="gpu",
+            dense_auto_accelerator_fp_window=True,
             rhsmode1_host_dense_shortcut_allowed=lambda **_kwargs: True,
             emit=lambda _level, message: messages.append(str(message)),
         )
