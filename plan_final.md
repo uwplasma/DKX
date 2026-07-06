@@ -4707,6 +4707,39 @@ Status:
   the remaining high-missing profile solve, full-system operator, true-operator
   rescue, and QI/x-block preconditioner owners.
 
+### 2026-07-06: True-Operator Coupled Coarse Coverage Tranche
+
+Changes:
+
+- Added a CPU-only RHSMode=1 true-operator rescue test for the coupled coarse
+  residual builder with a tiny identity true operator and a physics-structured
+  layout.
+- The test exercises constraint-source columns, flux-surface-average residual
+  columns, profile moment columns, angular residual and angular basis columns,
+  preconditioned-load response columns, tail units, and dominant kinetic
+  residual windows in one bounded fixture.
+- The assertions check both metadata provenance (`basis_names` and inclusion
+  flags) and residual improvement, without requiring a production solve or a
+  SFINCS Fortran v3 executable.
+
+Validation:
+
+- `python -m pytest -q tests/test_rhs1_true_operator_rescue.py` passed as
+  `26 passed in 0.62 s`.
+- `python -m pytest -q tests/test_rhs1_true_operator_rescue.py
+  tests/test_profile_response_sparse_pc.py tests/test_rhs1_full_assembly.py
+  tests/test_v3_sparse_pattern.py` passed as `654 passed in 180.65 s`.
+- `python -m ruff check tests/test_rhs1_true_operator_rescue.py` and
+  `python -m compileall -q tests/test_rhs1_true_operator_rescue.py` passed.
+
+Status:
+
+- This improves future-proof coverage for the true-operator residual correction
+  architecture used by large RHSMode=1 rescue paths. The `95%` package coverage
+  lane remains open; the remaining highest-impact targets are
+  `profile_solve.py`, `profile_full_system.py`, transport orchestration, and
+  QI/x-block preconditioner owners.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

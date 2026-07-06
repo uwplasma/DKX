@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import jax.numpy as jnp
 import numpy as np
 import scipy.sparse as sp
 from scipy.sparse.linalg import aslinearoperator
@@ -1007,6 +1008,102 @@ def test_true_operator_coupled_coarse_builder_uses_window_and_tail_basis() -> No
     assert bundle.metadata["tail_included"] is True
     assert bundle.metadata["coarse_size"] >= 2
     np.testing.assert_allclose(true_matvec(bundle.solve(rhs)), rhs, rtol=1.0e-10, atol=1.0e-10)
+
+
+def test_true_operator_coupled_coarse_builder_adds_physics_structured_columns() -> None:
+    """The coupled coarse basis should include physical moment/source columns."""
+
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=2,
+        n_xi=2,
+        n_theta=2,
+        n_zeta=2,
+        f_size=16,
+        phi1_size=4,
+        extra_size=1,
+        total_size=21,
+        constraint_scheme=1,
+        include_phi1=True,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    true_matvec, true_matmat = _identity_true_actions(layout.total_size)
+    residual = np.zeros((layout.total_size,), dtype=np.float64)
+    residual[layout.kinetic_flat_index(0, 0, 0, 0, 0)] = 2.0
+    residual[layout.kinetic_flat_index(0, 1, 1, 1, 1)] = -3.0
+    residual[layout.f_size + 1] = 0.75
+    residual[-1] = -0.5
+    op = SimpleNamespace(
+        constraint_scheme=1,
+        point_at_x0=False,
+        n_species=1,
+        n_x=2,
+        n_xi=2,
+        n_theta=2,
+        n_zeta=2,
+        x=jnp.asarray([0.25, 0.75], dtype=jnp.float64),
+        x_weights=jnp.asarray([0.4, 0.6], dtype=jnp.float64),
+        theta_weights=jnp.asarray([0.5, 0.5], dtype=jnp.float64),
+        zeta_weights=jnp.asarray([0.5, 0.5], dtype=jnp.float64),
+        d_hat=jnp.ones((2, 2), dtype=jnp.float64),
+        fblock=SimpleNamespace(f_shape=layout.f_shape),
+    )
+
+    bundle = _try_build_true_operator_coupled_coarse_lsq_preconditioner(
+        true_matvec=true_matvec,
+        true_matmat=true_matmat,
+        factor_bundle=_IdentityFactor(),
+        residual=residual,
+        op=op,
+        layout=layout,
+        active_indices=None,
+        max_windows=2,
+        x_radius=0,
+        ell_radius=0,
+        max_nbytes=1024 * 1024,
+        regularization=1.0e-12,
+        max_coarse_size=64,
+        column_batch=3,
+        drop_tol=0.0,
+        low_lmax=1,
+        profile_moment_count=4,
+        angular_lmax=1,
+        angular_mode_max=1,
+        max_tail_units=8,
+        include_tail=True,
+        include_constraint_sources=True,
+        include_fsavg=True,
+        include_window_residual=True,
+        include_profile_moments=True,
+        include_angular_residual=True,
+        include_angular_basis=True,
+        include_preconditioned_loads=True,
+        preconditioned_load_max_columns=3,
+        preconditioned_load_max_nnz=4,
+        preconditioned_load_drop_tol=0.0,
+        damping=True,
+        beta_max=2.0,
+    )
+
+    assert bundle is not None
+    assert bundle.metadata is not None
+    metadata = bundle.metadata
+    assert metadata["constraint_sources_included"] is True
+    assert metadata["fsavg_included"] is True
+    assert metadata["profile_moments_included"] is True
+    assert metadata["angular_residual_included"] is True
+    assert metadata["angular_basis_included"] is True
+    assert metadata["preconditioned_loads_included"] is True
+    assert metadata["preconditioned_load_column_count"] > 0
+    names = tuple(str(name) for name in metadata["basis_names"])
+    assert any(name.startswith("constraint1_source") for name in names)
+    assert any(name.startswith("profile_density_moment") for name in names)
+    assert any(name.startswith("fsavg_residual") for name in names)
+    assert any(name.startswith("angular_residual") for name in names)
+    assert any(name.startswith("angular_basis") for name in names)
+    assert any(name.startswith("preconditioned_") for name in names)
+    assert np.linalg.norm(true_matvec(bundle.solve(residual)) - residual) < np.linalg.norm(residual)
 
 
 def test_residual_window_builder_corrects_targeted_kinetic_window() -> None:
