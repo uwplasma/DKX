@@ -2722,6 +2722,50 @@ Review note:
   checked CPU/GPU/Fortran suite reports, and the final live Fortran validation
   is the bounded `quick_2species` spot comparison above.
 
+### Tranche 142: coverage-directed direct-tail operator gates
+
+Scope:
+
+- Downloaded and remapped the completed CI coverage shards from run
+  `28771095543` to get a valid per-file coverage table without re-running the
+  full coverage suite locally.
+- Confirmed the current package coverage baseline is `90%`
+  (`69,098` statements, `6,968` missing). The 95% objective remains open and
+  requires broad coverage over the largest solver/orchestrator modules rather
+  than a small final patch.
+- Ranked the largest gaps: `problems/profile_solve.py` at `68%`,
+  `problems/transport_solve.py` at `70%`,
+  `solvers/preconditioner_xblock_tz_sparse.py` at `77%`,
+  `operators/profile_system.py` at `79%`, and
+  `operators/profile_true_operator_rescue.py` at `82%`.
+- Added bounded unit/regression tests for
+  `operators/profile_reduced_tail.py`, which is a smaller but important
+  solver-admission module used by the lower-memory RHSMode=1 path.
+- The new tests cover three direct-tail active term-level cases:
+  incomplete active f-block blocks fall back safely, projected CSR budget
+  rejection falls back safely, and successful whichMatrix=0 active f-block
+  projection assembles the kinetic, source, moment, and shifted tail blocks
+  without pattern-probing the f-block.
+
+Validation:
+
+- `python -m pytest -q tests/test_profile_reduced_tail_operator.py` passed as
+  `6 passed in 0.67 s`.
+- `python -m pytest -q tests/test_profile_reduced_tail_operator.py tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py`
+  passed as `61 passed in 4.79 s`.
+- `python -m ruff check tests/test_profile_reduced_tail_operator.py` passed.
+- `python -m compileall -q tests/test_profile_reduced_tail_operator.py`
+  passed.
+- `git diff --check` passed.
+
+Next coverage target:
+
+- Continue with bounded tests for the largest low-coverage modules in this
+  order unless CI coverage shows a different ranking:
+  `profile_solve.py`, `transport_solve.py`,
+  `preconditioner_xblock_tz_sparse.py`, `profile_system.py`, and
+  `profile_true_operator_rescue.py`.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

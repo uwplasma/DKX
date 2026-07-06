@@ -87,6 +87,19 @@ def _identity_reduced_maps(size: int):
     return reduce_full, expand_reduced
 
 
+def _active_reduced_maps(total_size: int, active_indices: np.ndarray):
+    active = np.asarray(active_indices, dtype=np.int32)
+
+    def reduce_full(vec):
+        return jnp.asarray(vec, dtype=jnp.float64).reshape((total_size,))[jnp.asarray(active)]
+
+    def expand_reduced(vec):
+        out = jnp.zeros((total_size,), dtype=jnp.float64)
+        return out.at[jnp.asarray(active)].set(jnp.asarray(vec, dtype=jnp.float64).reshape((active.size,)))
+
+    return reduce_full, expand_reduced
+
+
 def _structured_bundle(matrix: sp.spmatrix) -> SparseOperatorBundle:
     matrix = matrix.tocsr()
     decision = SparseDecision(
@@ -106,6 +119,40 @@ def _structured_bundle(matrix: sp.spmatrix) -> SparseOperatorBundle:
         dtype=np.float64,
     )
     return SparseOperatorBundle(matrix=matrix, operator=operator, metadata=decision)
+
+
+class _ProjectedFBlock:
+    def __init__(self, matrix: sp.spmatrix, *, nnz_blocks: int | None = None) -> None:
+        self._matrix = matrix.tocsr()
+        self.shape = tuple(int(v) for v in self._matrix.shape)
+        self.nnz_blocks = int(self._matrix.nnz if nnz_blocks is None else nnz_blocks)
+
+    def to_scipy_csr_matrix(self):
+        return self._matrix
+
+
+class _StructuredFBlockOperator:
+    block_size = 2
+
+    def __init__(self, *, nnz_blocks: int | None = None) -> None:
+        self.projected_blocks: list[int] = []
+        self._nnz_blocks = nnz_blocks
+
+    def project_block_indices(self, active_blocks):
+        blocks = np.asarray(active_blocks, dtype=np.int64).reshape((-1,))
+        self.projected_blocks = [int(v) for v in blocks]
+        size = int(blocks.size) * int(self.block_size)
+        diag = np.arange(11.0, 11.0 + size, dtype=np.float64)
+        return _ProjectedFBlock(sp.diags(diag, format="csr"), nnz_blocks=self._nnz_blocks)
+
+
+def _patch_structured_fblock_selection(monkeypatch, operator: _StructuredFBlockOperator) -> None:
+    selection = SimpleNamespace(
+        selected=True,
+        assembly=SimpleNamespace(operator=operator),
+        reason="unit structured f-block",
+    )
+    monkeypatch.setattr(profile_reduced_tail, "select_structured_rhs1_fblock_operator", lambda *_args, **_kwargs: selection)
 
 
 def test_fortran_reduced_direct_tail_rejects_non_constraint1_layouts() -> None:
@@ -238,3 +285,140 @@ def test_fortran_reduced_direct_tail_pattern_fallback_builds_source_and_moment_b
     assert "direct-tail materialization" in bundle.metadata.reason
     assert any("kinetic_pattern_nnz" in message for message in emitted)
     assert any("source_nnz" in message and "moment_nnz" in message for message in emitted)
+
+
+def test_fortran_reduced_direct_tail_active_term_rejects_incomplete_fblock_blocks(
+    monkeypatch,
+) -> None:
+    op = _constraint1_pattern_op()
+    active_indices = np.asarray([0, 2, 4, 5], dtype=np.int32)
+    pattern = sp.eye(int(active_indices.size), format="csr", dtype=np.float64)
+    reduce_full, expand_reduced = _active_reduced_maps(op.total_size, active_indices)
+    emitted: list[str] = []
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_ASSEMBLY", "whichmatrix0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_CSR", "0")
+    _patch_structured_fblock_selection(monkeypatch, _StructuredFBlockOperator())
+
+    diag = jnp.arange(1.0, float(op.total_size) + 1.0, dtype=jnp.float64)
+
+    def _apply(_op, x_full):
+        return diag * jnp.asarray(x_full, dtype=jnp.float64)
+
+    monkeypatch.setattr(profile_reduced_tail, "apply_v3_full_system_operator_cached", _apply)
+
+    bundle = profile_reduced_tail._try_build_fortran_reduced_constraint1_direct_tail_bundle(
+        op=op,
+        op_pc=op,
+        pattern=pattern,
+        active_indices=active_indices,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        pc_shift=0.0,
+        dtype=jnp.float64,
+        factor_dtype=np.dtype(np.float64),
+        csr_max_mb=4.0,
+        drop_tol=0.0,
+        color_batch=2,
+        emit=lambda _level, message: emitted.append(str(message)),
+        build_structured_rhs1_full_csr_operator_bundle_callback=lambda **_kwargs: None,
+    )
+
+    assert bundle is not None
+    assert bundle.matrix is not None
+    assert "direct-tail materialization" in bundle.metadata.reason
+    assert any("active_indices_do_not_form_complete_fblock_blocks" in message for message in emitted)
+
+
+def test_fortran_reduced_direct_tail_active_term_falls_back_when_projected_csr_exceeds_budget(
+    monkeypatch,
+) -> None:
+    op = _constraint1_pattern_op()
+    active_indices = np.asarray([0, 1, 4, 5], dtype=np.int32)
+    pattern = sp.eye(int(active_indices.size), format="csr", dtype=np.float64)
+    reduce_full, expand_reduced = _active_reduced_maps(op.total_size, active_indices)
+    emitted: list[str] = []
+    fake_operator = _StructuredFBlockOperator(nnz_blocks=32)
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_ASSEMBLY", "whichmatrix0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_CSR", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_WHICHMATRIX0_FBLOCK_MAX_MB", "0.000001")
+    _patch_structured_fblock_selection(monkeypatch, fake_operator)
+
+    diag = jnp.arange(2.0, float(op.total_size) + 2.0, dtype=jnp.float64)
+
+    def _apply(_op, x_full):
+        return diag * jnp.asarray(x_full, dtype=jnp.float64)
+
+    monkeypatch.setattr(profile_reduced_tail, "apply_v3_full_system_operator_cached", _apply)
+
+    bundle = profile_reduced_tail._try_build_fortran_reduced_constraint1_direct_tail_bundle(
+        op=op,
+        op_pc=op,
+        pattern=pattern,
+        active_indices=active_indices,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        pc_shift=0.0,
+        dtype=jnp.float64,
+        factor_dtype=np.dtype(np.float64),
+        csr_max_mb=4.0,
+        drop_tol=0.0,
+        color_batch=2,
+        emit=lambda _level, message: emitted.append(str(message)),
+        build_structured_rhs1_full_csr_operator_bundle_callback=lambda **_kwargs: None,
+    )
+
+    assert bundle is not None
+    assert bundle.matrix is not None
+    assert fake_operator.projected_blocks == [0]
+    assert "direct-tail materialization" in bundle.metadata.reason
+    assert any("projected_csr_budget_exceeded" in message for message in emitted)
+
+
+def test_fortran_reduced_direct_tail_active_term_uses_projected_fblock_without_pattern_probe(
+    monkeypatch,
+) -> None:
+    op = _constraint1_pattern_op()
+    pattern = sp.eye(op.total_size, format="csr", dtype=np.float64)
+    reduce_full, expand_reduced = _identity_reduced_maps(op.total_size)
+    emitted: list[str] = []
+    fake_operator = _StructuredFBlockOperator()
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_ASSEMBLY", "whichmatrix0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_CSR", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_WHICHMATRIX0_FBLOCK_MAX_MB", "4")
+    _patch_structured_fblock_selection(monkeypatch, fake_operator)
+
+    def _unexpected_pattern_probe(*_args, **_kwargs):
+        raise AssertionError("active term-level path should not pattern-probe the f-block")
+
+    monkeypatch.setattr(profile_reduced_tail, "build_operator_from_pattern", _unexpected_pattern_probe)
+
+    bundle = profile_reduced_tail._try_build_fortran_reduced_constraint1_direct_tail_bundle(
+        op=op,
+        op_pc=op,
+        pattern=pattern,
+        active_indices=np.arange(op.total_size, dtype=np.int32),
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        pc_shift=0.5,
+        dtype=jnp.float64,
+        factor_dtype=np.dtype(np.float64),
+        csr_max_mb=4.0,
+        drop_tol=0.0,
+        color_batch=2,
+        emit=lambda _level, message: emitted.append(str(message)),
+        build_structured_rhs1_full_csr_operator_bundle_callback=lambda **_kwargs: None,
+    )
+
+    assert bundle is not None
+    assert bundle.matrix is not None
+    assert fake_operator.projected_blocks == [0, 1]
+    matrix = bundle.matrix.tocsr()
+    np.testing.assert_allclose(matrix.diagonal()[: op.f_size], [11.5, 12.5, 13.5, 14.5])
+    np.testing.assert_allclose(matrix.diagonal()[op.f_size :], [0.5, 0.5])
+    assert matrix[: op.f_size, op.f_size :].nnz > 0
+    assert matrix[op.f_size :, : op.f_size].nnz > 0
+    assert "whichMatrix=0 active term-level" in bundle.metadata.reason
+    assert any("whichMatrix=0 active term CSR built" in message for message in emitted)
