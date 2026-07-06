@@ -253,6 +253,96 @@ def test_symbolic_host_cache_can_add_dense_and_jax_factors_lazily() -> None:
     assert any("factorization cache hit" in message for message in messages)
 
 
+def test_symbolic_host_dense_assembly_stores_thresholded_operator(monkeypatch) -> None:
+    """Dense assembly should keep the optional stored matrix small and deterministic."""
+
+    symbolic_host._RHSMODE1_SPARSE_ILU_CACHE.clear()
+    matrix = jnp.asarray(
+        [
+            [3.0, 5.0e-10, 0.0],
+            [0.5, 2.0, -0.25],
+            [0.0, 0.75, 4.0],
+        ],
+        dtype=jnp.float64,
+    )
+    messages: list[str] = []
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ASSEMBLE_BLOCK", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ASSEMBLE_BLOCK_MIN", "100")
+    monkeypatch.setenv("SFINCS_JAX_SPARSE_STRUCTURAL_TOL", "1e-8")
+
+    a_csr_full, a_csr_drop, ilu, a_dense, l_dense, u_dense, _l_unit_diag = build_sparse_ilu_from_matvec(
+        matvec=lambda x: matrix @ x,
+        n=3,
+        dtype=jnp.float64,
+        cache_key=("symbolic-host-dense-store-test",),
+        factor_dtype=np.dtype(np.float32),
+        drop_tol=0.0,
+        drop_rel=0.0,
+        ilu_drop_tol=0.0,
+        fill_factor=10.0,
+        build_dense_factors=False,
+        build_jax_factors=False,
+        build_ilu=False,
+        store_dense=True,
+        emit=lambda _level, message: messages.append(message),
+    )
+
+    expected = np.asarray(
+        [
+            [3.0, 0.0, 0.0],
+            [0.5, 2.0, -0.25],
+            [0.0, 0.75, 4.0],
+        ],
+        dtype=np.float32,
+    )
+    assert ilu is None
+    assert l_dense is None
+    assert u_dense is None
+    assert a_dense is not None
+    assert np.asarray(a_dense).dtype == np.float32
+    np.testing.assert_allclose(np.asarray(a_csr_full.toarray()), expected, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(np.asarray(a_dense), expected, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(np.asarray(a_csr_drop.toarray()), expected, rtol=0.0, atol=2.0e-11)
+    assert any("mode=dense" in message for message in messages)
+
+
+def test_symbolic_host_chunked_empty_operator_can_store_dense_zero_matrix(monkeypatch) -> None:
+    """Chunked assembly must handle all-zero operators without materializing bogus rows."""
+
+    symbolic_host._RHSMODE1_SPARSE_ILU_CACHE.clear()
+    messages: list[str] = []
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ASSEMBLE_BLOCK", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ASSEMBLE_BLOCK_MIN", "1")
+    monkeypatch.setenv("SFINCS_JAX_DENSE_ASSEMBLE_JIT", "off")
+
+    a_csr_full, a_csr_drop, ilu, a_dense, l_dense, u_dense, l_unit_diag = build_sparse_ilu_from_matvec(
+        matvec=lambda x: jnp.zeros_like(x),
+        n=4,
+        dtype=jnp.float64,
+        cache_key=("symbolic-host-zero-chunked-test",),
+        drop_tol=0.0,
+        drop_rel=0.0,
+        ilu_drop_tol=0.0,
+        fill_factor=10.0,
+        build_dense_factors=False,
+        build_jax_factors=False,
+        build_ilu=False,
+        store_dense=True,
+        emit=lambda _level, message: messages.append(message),
+    )
+
+    assert ilu is None
+    assert l_dense is None
+    assert u_dense is None
+    assert l_unit_diag is True
+    assert a_csr_full.nnz == 0
+    assert a_csr_drop.nnz == 0
+    assert a_dense is not None
+    np.testing.assert_allclose(np.asarray(a_dense), np.zeros((4, 4), dtype=np.float64), rtol=0.0, atol=0.0)
+    assert any("mode=column_blocks" in message for message in messages)
+    assert any("nnz=0" in message for message in messages)
+
+
 def test_selected_theta_tz_operator_matches_expected_rows() -> None:
     dd_plus = np.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)
     dd_minus = np.asarray([[-1.0, -2.0], [-3.0, -4.0]], dtype=np.float64)

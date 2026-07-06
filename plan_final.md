@@ -4426,6 +4426,40 @@ Status:
   upstream SFINCS-v3 documents, and static evidence artifacts are intentionally
   excluded from this prose guard.
 
+## Latest Execution Log: Symbolic Sparse Assembly Edge Coverage Tranche
+
+What was checked:
+
+- Re-audited the symbolic host sparse-factor owner after the lazy-cache tests.
+- Confirmed additional unguarded branches remained in the setup path used by
+  lower-memory preconditioner admission: dense assembly with stored operator
+  payloads and chunked assembly when the structural pattern is empty.
+- Removed local generated `examples/**/__pycache__` directories so the review
+  workspace matches the repository's light-clone policy.
+
+Source/test change:
+
+- Added a dense-assembly test that stores the thresholded operator, preserves
+  the requested factor dtype, and verifies structural-threshold removal of tiny
+  entries without launching a solve.
+- Added a chunked all-zero operator test that exercises the empty-row sparse
+  pattern path and verifies that optional dense storage remains a zero matrix
+  rather than a malformed sparse reconstruction.
+
+Validation:
+
+- `python -m pytest -q tests/test_sparse_assembly.py` passed as
+  `15 passed in 0.45 s`.
+- `python -m ruff check tests/test_sparse_assembly.py` passed.
+- `python -m compileall -q tests/test_sparse_assembly.py` passed.
+
+Status:
+
+- This further hardens the lower-memory host sparse setup path with bounded
+  deterministic tests. It does not close the 95% package-coverage gate by
+  itself; the remaining larger gap is still in high-level solve orchestration
+  and QI/preconditioner owners.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
