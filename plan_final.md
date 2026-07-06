@@ -2388,6 +2388,25 @@ Review boundary:
   work, unless the reviewer requires a fresh full production suite before
   merge.
 
+### Tranche 132: standalone validation-matrix wording guard
+
+Scope:
+
+- Remove branch-history/progress-log phrasing from
+  `docs/validation_matrix.rst` so the page reads as standalone validation
+  documentation rather than a running development log.
+- Add `docs/validation_matrix.rst` to the public standalone-doc guard in
+  `tests/test_benchmark_doc_claims.py`. The guard rejects stale terms such as
+  `now`, `previous`, `currently`, `new version`, and the previously rejected
+  benchmark-manifest fragments.
+
+Validation:
+
+- `python -m pytest tests/test_benchmark_doc_claims.py -q`
+  passed as `7 passed in 0.06 s`.
+- The focused stale-wording scan over `docs/validation_matrix.rst` returned no
+  matches for the rejected branch-history terms.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

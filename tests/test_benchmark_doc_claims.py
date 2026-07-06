@@ -32,6 +32,7 @@ PUBLIC_STANDALONE_DOCS = [
     REPO_ROOT / "docs" / "outputs.rst",
     REPO_ROOT / "docs" / "performance.rst",
     REPO_ROOT / "docs" / "parity.rst",
+    REPO_ROOT / "docs" / "validation_matrix.rst",
     REPO_ROOT / "docs" / "optimization.rst",
     REPO_ROOT / "docs" / "testing.rst",
     REPO_ROOT / "docs" / "source_map.rst",

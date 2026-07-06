@@ -156,36 +156,36 @@ Literature anchor:
 
 - [Landreman et al. 2014](https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf)
 
-Current scripts:
+Scripts:
 
 - ``examples/publication_figures/generate_sfincs_paper_figs.py --case lhd``
 - ``examples/publication_figures/generate_sfincs_paper_figs.py --case w7x``
 
-Current artifacts:
+Artifacts:
 
 - ``docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality.png``
 - ``docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality.png``
 - ``docs/_static/figures/paper/sfincs_jax_fig3_simakov_helander.png``
 
-The standard LHD and W7-X collisionality figures have now been regenerated from the
-corrected scan-input writer and promoted as audited full-resolution validation
-artifacts. They are still regression and manuscript-scaffold figures, not a claim that
-every plotted point should reproduce the original paper image digit-for-digit.
+The standard LHD and W7-X collisionality figures are generated from the
+corrected scan-input writer and recorded as audited full-resolution validation
+artifacts. They are regression and manuscript-scaffold figures, not a claim that
+every plotted point reproduces the original paper image digit-for-digit.
 
-Current status note:
+Status note:
 
-- the scan writer in ``generate_sfincs_paper_figs.py`` was fixed on this branch after
-  finding that duplicate namelist assignments could override the intended
+- the scan writer in ``generate_sfincs_paper_figs.py`` rejects duplicate
+  namelist assignments that would otherwise override the intended
   ``collisionOperator`` and fast-resolution settings
-- the generator now emits machine-readable collisionality summaries with top-level
+- the generator emits machine-readable collisionality summaries with top-level
   metadata and sorted rows so full-resolution reruns have pinned provenance
   instead of relying only on figure files
 - the checked-in full LHD and W7-X summaries each contain 14 rows: both FP and PAS
   labels on a seven-point collisionality ladder
 - corrected bounded fast reruns are retained as branch-level regression scaffolds, but
-  the main LHD/W7-X figure family now points at the full audited artifacts
+  the main LHD/W7-X figure family points at the full audited artifacts
 
-Current audited full artifacts:
+Audited full artifacts:
 
 - full LHD summary:
   ``examples/publication_figures/artifacts/lhd_collisionality_summary.json``
@@ -207,10 +207,10 @@ Corrected bounded branch artifacts:
    :alt: Corrected bounded LHD collisionality scan for sfincs_jax
    :width: 85%
 
-   Corrected bounded LHD collisionality rerun after fixing the scan-input writer.
-   This branch artifact now resolves the expected FP/PAS separation again and is backed
-   by direct JSON-based assertions, but it is still a bounded fast branch lane rather
-   than the final audited paper figure.
+   Corrected bounded LHD collisionality rerun with the guarded scan-input writer.
+   This artifact resolves the expected FP/PAS separation and is backed by direct
+   JSON-based assertions, but it is a bounded fast branch lane rather than the
+   final audited paper figure.
 
 - bounded corrected W7-X summary:
   ``examples/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json``
@@ -301,8 +301,8 @@ publication claims unless and until they are added to
 ``examples/publication_figures/validation_manifest.json`` with explicit
 ``release_gate`` metadata.
 
-Current open lane board
-^^^^^^^^^^^^^^^^^^^^^^^
+Open lane board
+^^^^^^^^^^^^^^^
 
 - QI device-compatible preconditioning/operator reuse: bounded CPU scale-0.60
   hard-seed rescue exists, and the documented non-autodiff host fallback closes
@@ -319,18 +319,18 @@ Current open lane board
   out with a large memory footprint. The compact-CSR exact-factor replacement
   lowers the factor storage footprint by avoiding padded rows and builds the
   full exact factors, but still times out before a solver trace on the same GPU
-  hard seed. The accepted CPU hard-seed path now combines the legacy QI coarse
+  hard seed. The accepted CPU hard-seed path combines the legacy QI coarse
   seed with residual-weighted angular probe-coarse directions and passes the
   scale-0.60 seed-3 CPU case in ``170.7 s``. The richer block-Schur/radial/angular
   seed basis is implemented but rejected as a default because it converged more
   slowly and used more memory on the same CPU gate. The one-GPU counterpart
   remains the next bounded gate: no-LGMRES host Krylov reaches ``925`` matvecs
   before timeout, compact-factor exact device Krylov originally built factors
-  but did not return a cycle, and the newer compact-factor diagonal apply
+  but did not return a cycle, and the compact-factor diagonal apply
   returns restart cycles but leaves the true residual near ``3.02e-5``. A
   row-cap-16 exact triangular apply reduces factor storage but does not improve
   the residual, so storage-only and diagonal/one-sided apply changes are
-  rejected as closure strategies. A documented non-autodiff host fallback now
+  rejected as closure strategies. A documented non-autodiff host fallback
   rewrites explicit large-QI device-Krylov requests to the accepted host
   x-block auto policy before JAX factors are built, preserving the side-probe
   seed plus LGMRES rescue and recording the fallback in solver metadata. This
@@ -344,7 +344,7 @@ Current open lane board
   forced x-block run and correctly rejected itself because its probe increased
   the true residual. The 2026-05-20 operator-reuse update adds a bounded
   residual Arnoldi/Krylov coarse space. The 2026-05-20 installed
-  operator-Krylov/multilevel run now exercises the intended GPU route without
+  operator-Krylov/multilevel run exercises the intended GPU route without
   the old transpose/CUDA-address failure and records
   ``observed_installed_krylov=true`` plus ``observed_coarse_reuse=true``. It is
   still nonpassing: public auto ends at ``3.949394e-5`` in ``342 s``, installed
@@ -373,7 +373,7 @@ Current open lane board
   these families reduce synthetic errors that the baseline coarse families
   miss; scale-0.60 evidence shows they still do not close the production hard
   seed. Promotion still requires HDF5 output and solver trace.
-  The solver now also has an opt-in augmented-FGMRES operator-reuse hook that
+  The solver also has an opt-in augmented-FGMRES operator-reuse hook that
   projects restart residuals over the stored QI ``(U, A U)`` basis. This is a
   real residual-equation change and is tracked by the
   ``augmented-krylov-device-qi`` preset. The first bounded CPU and GPU0
@@ -398,7 +398,7 @@ Current open lane board
   accepts the seed correction ``3.021487e-5 -> 2.840364e-5`` but ends at
   ``2.306911e-5`` in ``269 s``, worse than the augmented-FGMRES CPU baseline.
   It is therefore not promoted to GPU or production-resolution QI ladders.
-  The newer ``residual-snapshot-device-qi`` path adds block/aggregate residual
+  The ``residual-snapshot-device-qi`` path adds block/aggregate residual
   snapshots and setup-time adjoint-normal snapshots to the same reusable
   ``A Q`` coarse solve. Its bounded CPU artifact improves the hard-seed final
   residual to ``2.103015e-5`` in ``250 s`` after accepting
@@ -422,7 +422,7 @@ Current open lane board
   This is negative evidence relative to the residual-snapshot CPU artifact, so
   it is retained as a tested research path but not promoted to GPU or production
   ladders.
-  The newer GPU0 best-of artifact improves the final residual to
+  The GPU0 best-of artifact improves the final residual to
   ``1.992464e-5`` in ``292 s`` but still fails the production write gate. The
   adaptive multilevel residual-equation grouping was also tested on GPU0 and
   finishes at ``2.307995e-5`` in ``288 s``; it is negative evidence relative to
@@ -438,7 +438,7 @@ Current open lane board
   research evidence. The matched GPU0 rerun is CUDA-safe and numerically
   consistent, finishing at the same residual in ``302 s`` before the same
   nonconverged-output guard. A separate mid-size ``13 x 13 x 15 x 4`` QI
-  operator-reuse GPU artifact now verifies route activation, skipped local
+  operator-reuse GPU artifact verifies route activation, skipped local
   x-block factors, fail-safe trace metadata, and corrected device-cycle
   accounting, but it also fails the residual gate and remains route-level
   evidence rather than a production-resolution QI claim.
@@ -715,8 +715,8 @@ Current fixed artifacts:
    :width: 85%
 
    Fixed tokamak-like ``E_r`` sweep across DKES, partial, and full trajectory
-   models. This lane is now pinned to checked-in JSON and figure artifacts, and
-   it is backed by direct numerical assertions on zero-field agreement and
+   models. This lane is pinned to checked-in JSON and figure artifacts, and it
+   is backed by direct numerical assertions on zero-field agreement and
    finite-field model separation.
 
 .. figure:: _static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.png
