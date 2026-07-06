@@ -1770,6 +1770,18 @@ Completed work:
   passed `21/21` in `0.61 s`; source-tree plus import-contract focused
   validation passed `74/74`; Ruff, `compileall`, and `git diff --check`
   passed. Direct coverage for `sfincs_jax/validation/qi_device.py` is `100%`.
+- Tranche 114: expanded release-artifact and benchmark-policy coverage without
+  generated outputs or solves: high-collisionality helper edge cases,
+  phase-timer error recording, suite/autodiff loader fail-closed paths,
+  resolution-floor and Appendix-B geometry validation errors, PAS benchmark
+  artifact policy/classification, Fortran-suite summary release gates,
+  research-lane malformed entries, and collisionality slope error gates.
+  Validation:
+  `tests/test_validation_artifacts.py tests/test_benchmark_artifact_policy.py tests/test_validation_policy_coverage.py tests/test_research_lane_policy.py`
+  passed `75/75` in `0.36 s`; source-tree plus import-contract focused
+  validation passed `128/128`; Ruff, `compileall`, and `git diff --check`
+  passed. Direct coverage for `sfincs_jax/validation/artifacts.py` improved
+  from `86%` to `95%`.
 
 Remaining consolidation steps:
 
@@ -1802,9 +1814,9 @@ Status: 89% CI-measured package coverage on PR #8 commit `3cce604d`
 closed at `modules_with_missing 0`; focused owner coverage is `98%` for
 `workflows/scans.py` after Tranche 111 and `100%` for
 `validation/figures.py` after Tranche 112 and `validation/qi_device.py` after
-Tranche 113. The final target is still 95%; the next coverage tranches should
-prioritize large under-covered owners with bounded behavior tests rather than
-slow full solves.
+Tranche 113; `validation/artifacts.py` is `95%` after Tranche 114. The final
+target is still 95%; the next coverage tranches should prioritize large
+under-covered owners with bounded behavior tests rather than slow full solves.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 
