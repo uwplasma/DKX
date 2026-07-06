@@ -13,7 +13,7 @@ concurrency:
 jobs:
   coverage:
     runs-on: ubuntu-22.04
-    timeout-minutes: 25
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -88,7 +88,7 @@ jobs:
 
   examples-smoke:
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
@@ -136,7 +136,7 @@ jobs:
 
   external-data-smoke:
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
