@@ -2518,6 +2518,39 @@ Validation:
   passed.
 - The full local suite passed as `4330 passed in 669.00 s`.
 
+### Tranche 136: RHSMode-1 preconditioner coverage checkpoint
+
+Scope:
+
+- Ran a fresh package-wide coverage audit on the refactor branch. The local
+  measurement is `90%` package coverage with `4330 passed in 831.95 s`; the
+  `95%` review target remains open and should be closed by behavior-owner
+  tests rather than slow full-solve tests.
+- Added a finite FP xMG radial-preconditioner test that exercises valid
+  electric-field xDot metadata, invalid numeric environment fallbacks, cached
+  coarse factors, and tail passthrough on a bounded operator fixture.
+- Added direct reduced-tail operator tests covering fail-closed layout
+  admission and the structured-CSR direct-tail callback path, including the
+  shifted matrix, matvec, metadata, and progress-message contract.
+- Rechecked source-tree, domain-package, examples-tree, and benchmark-doc
+  guards so this coverage tranche does not disturb the simplified package
+  layout or public wording contracts.
+
+Validation:
+
+- `python -m pytest -q --cov=sfincs_jax --cov-report=term-missing:skip-covered --cov-report=json:coverage.json`
+  passed as `4330 passed in 831.95 s` with `90%` package coverage.
+- `pytest -q tests/test_profile_reduced_tail_operator.py tests/test_rhs1_xblock_radial.py`
+  passed as `14 passed in 1.30 s`.
+- `pytest -q tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `71 passed in 4.82 s`.
+- `ruff check tests/test_rhs1_xblock_radial.py tests/test_profile_reduced_tail_operator.py`
+  passed.
+- `python -m compileall -q tests/test_rhs1_xblock_radial.py tests/test_profile_reduced_tail_operator.py`
+  passed.
+- The public README/docs/examples wording scan returned no active prose
+  matches.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

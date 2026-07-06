@@ -144,6 +144,31 @@ def _pas_er_op() -> SimpleNamespace:
     )
 
 
+def _er_xdot_for_op(op: SimpleNamespace) -> SimpleNamespace:
+    """Build a tiny valid Er xDot fixture matching an existing test operator."""
+
+    x = np.asarray(op.x, dtype=np.float64)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    shape_tz = (n_theta, n_zeta)
+    ddx = np.tril(np.ones((int(op.n_x), int(op.n_x)), dtype=np.float64), k=0)
+    return SimpleNamespace(
+        alpha=1.0,
+        delta=0.75,
+        dphi_hat_dpsi_hat=-0.5,
+        d_hat=np.ones(shape_tz, dtype=np.float64),
+        b_hat=np.full(shape_tz, 1.25, dtype=np.float64),
+        b_hat_sub_theta=np.full(shape_tz, 0.9, dtype=np.float64),
+        b_hat_sub_zeta=np.full(shape_tz, -0.2, dtype=np.float64),
+        db_dtheta=np.full(shape_tz, 0.15, dtype=np.float64),
+        db_dzeta=np.full(shape_tz, 0.4, dtype=np.float64),
+        db_hat_dtheta=np.full(shape_tz, 0.15, dtype=np.float64),
+        db_hat_dzeta=np.full(shape_tz, 0.4, dtype=np.float64),
+        x=x,
+        ddx_plus=ddx,
+    )
+
+
 def test_xmg_radial_preconditioner_builds_cached_fp_coarse_factor(monkeypatch) -> None:
     op = _fp_op()
     _RHSMODE1_XMG_PRECOND_CACHE.clear()
@@ -161,6 +186,28 @@ def test_xmg_radial_preconditioner_builds_cached_fp_coarse_factor(monkeypatch) -
     second = radial.build_rhs1_xmg_preconditioner(op=op, stride_override=2)
     assert len(_RHSMODE1_XMG_PRECOND_CACHE) == 1
     np.testing.assert_allclose(np.asarray(second(vector)), result)
+
+
+def test_xmg_radial_preconditioner_fp_with_er_coupling_is_finite(monkeypatch) -> None:
+    """FP xMG should include valid Er xDot metadata without changing tail data."""
+
+    op = _fp_op()
+    op.fblock.er_xdot = _er_xdot_for_op(op)
+    _RHSMODE1_XMG_PRECOND_CACHE.clear()
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PRECOND_REG", "not-a-float")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XMG_PINV_RCOND", "not-a-float")
+
+    vector = jnp.linspace(-2.0, 2.0, op.total_size, dtype=jnp.float64)
+    precond = radial.build_rhs1_xmg_preconditioner(op=op, stride_override=2)
+    result = np.asarray(precond(vector))
+    cached = next(iter(_RHSMODE1_XMG_PRECOND_CACHE.values()))
+
+    assert result.shape == (op.total_size,)
+    assert np.all(np.isfinite(result))
+    np.testing.assert_allclose(result[op.f_size :], np.asarray(vector[op.f_size :]))
+    assert cached.coarse_inv_lblock is None
+    assert cached.coarse_inv.shape[-2:] == (2, 2)
+    assert np.any(np.abs(np.asarray(cached.coarse_inv)) > 0.0)
 
 
 def test_xmg_radial_preconditioner_supports_reduced_vectors() -> None:
