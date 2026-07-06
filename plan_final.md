@@ -41,17 +41,13 @@ models overlap.
 - The latest bounded local review bundle passed: source-tree guards,
   docs/example guards, and comparison/plotting checks ran `123 passed in
   9.70 s`; Sphinx `-W` passed in `17.56 s`.
-- The direct active block-Schur tranche fixed accepted residual-coarse factors
-  in the transport preconditioner cache and added builder-level tests for
-  true-residual coarse admission and fail-closed fallback. Local guards passed:
-  `35 passed in 0.63 s` for `tests/test_transport_active_factor.py`, and the
-  broader transport focused bundle ran `217 passed in 30.92 s` with
-  `transport_linear_system.py` at 87% focused coverage.
-- The RHSMode=1 BiCGStab route selection was moved out of `profile_solve.py`
-  into the policy owner and covered with FP, PAS+DKES, tokamak-PAS, disabled,
-  default, and explicit-RHS1 boundary tests. Local guards passed:
-  `49 passed in 0.49 s` for the policy subset and `58 passed in 5.60 s` for
-  source-tree/domain import contracts.
+- The transport cache and RHSMode=1 routing tranches fixed accepted
+  residual-coarse factor reuse, moved BiCGStab and dense-auto route decisions
+  out of `profile_solve.py`, and covered true-residual admission, fail-closed
+  fallback, FP/PAS/DKES/tokamak boundaries, CPU/GPU dense admission,
+  implicit-solve rejection, and explicit-method preservation. Local guards:
+  `35 passed`, `217 passed`, `49 passed`, `44 passed`, and source-tree/domain
+  import contracts `58 passed`.
 - The last checked PR CI state after `14e0dbd5` had build and
   external-data smoke passing; coverage shards, examples-smoke, optional
   ecosystem checks, and coverage-report were still pending. Recheck CI after
@@ -62,13 +58,13 @@ models overlap.
 
 | Lane | Status | Completion | Definition of done |
 | --- | --- | ---: | --- |
-| Review-ready refactor | Active | 97% | Source tree remains shallow, root modules are public, large owners have review-size guards, no generated clutter is tracked, and PR #8 has clear evidence. |
-| Coverage and future-proof tests | Active | 93% | Meaningful package coverage reaches 95% through bounded physics, numerical, unit, and regression tests without pushing CI above 10 minutes. |
+| Review-ready refactor | Active | 98% | Source tree remains shallow, root modules are public, large owners have review-size guards, no generated clutter is tracked, and PR #8 has clear evidence. |
+| Coverage and future-proof tests | Active | 94% | Meaningful package coverage reaches 95% through bounded physics, numerical, unit, and regression tests without pushing CI above 10 minutes. |
 | Documentation and examples | Active | 97% | README, package README, docs, tutorial notebooks, and examples describe the same workflows without branch-history or progress-log phrasing. |
 | Benchmark/parity/runtime regeneration | Active | 70% | CPU/GPU/Fortran runtime, memory, parity, and bootstrap-current figures are regenerated from the final branch state with solver provenance. |
 | Solver/performance boundaries | Active | 90% | Automatic defaults remain residual-clean and documented; expensive research candidates stay opt-in unless they pass strict residual/runtime/RSS gates. |
 
-Overall review readiness: about 91%. The gap is dominated by final coverage
+Overall review readiness: about 92%. The gap is dominated by final coverage
 evidence, fresh benchmark regeneration, and GPU validation.
 
 ## Source Structure Rules

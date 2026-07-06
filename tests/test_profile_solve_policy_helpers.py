@@ -259,6 +259,103 @@ def test_rhsmode1_dense_and_host_dense_policy_envs(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_KRYLOV", raising=False)
     assert profile_policies.rhs1_dense_krylov_allowed()
 
+
+def test_full_fp_dense_auto_route_selects_bounded_cpu_auto(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", raising=False)
+    decision = profile_policies.resolve_rhs1_full_fp_dense_auto_route(
+        solve_method="auto",
+        solve_method_kind="auto",
+        use_implicit=False,
+        has_fp=True,
+        has_pas=False,
+        include_phi1=False,
+        rhs_mode=1,
+        active_size=1200,
+        dense_active_cutoff=8000,
+        backend="cpu",
+    )
+
+    assert decision.selected
+    assert decision.solve_method == "dense"
+    assert decision.solve_method_kind == "dense"
+    assert decision.cutoff == 8000
+    assert decision.messages == (
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: auto-selected dense "
+            "full-FP solve (size=1200 <= cutoff=8000)",
+        ),
+    )
+
+
+def test_full_fp_dense_auto_route_rejects_non_full_fp_or_implicit() -> None:
+    base = dict(
+        solve_method="default",
+        solve_method_kind="default",
+        use_implicit=False,
+        has_fp=True,
+        has_pas=False,
+        include_phi1=False,
+        rhs_mode=1,
+        active_size=1200,
+        dense_active_cutoff=8000,
+        backend="cpu",
+    )
+
+    for override in (
+        {"use_implicit": True},
+        {"has_fp": False},
+        {"has_pas": True},
+        {"include_phi1": True},
+        {"rhs_mode": 2},
+        {"active_size": 9000},
+        {"solve_method": "gmres", "solve_method_kind": "gmres"},
+    ):
+        decision = profile_policies.resolve_rhs1_full_fp_dense_auto_route(
+            **{**base, **override}
+        )
+        assert not decision.selected
+        assert decision.solve_method == str(override.get("solve_method", "default"))
+        assert decision.solve_method_kind == str(
+            override.get("solve_method_kind", "default")
+        )
+        assert decision.messages == ()
+
+
+def test_full_fp_dense_auto_route_requires_accelerator_admission(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR", raising=False)
+    decision = profile_policies.resolve_rhs1_full_fp_dense_auto_route(
+        solve_method="incremental",
+        solve_method_kind="incremental",
+        use_implicit=False,
+        has_fp=True,
+        has_pas=False,
+        include_phi1=False,
+        rhs_mode=1,
+        active_size=1200,
+        dense_active_cutoff=8000,
+        backend="gpu",
+    )
+    assert not decision.selected
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR", "1")
+    decision = profile_policies.resolve_rhs1_full_fp_dense_auto_route(
+        solve_method="incremental",
+        solve_method_kind="incremental",
+        use_implicit=False,
+        has_fp=True,
+        has_pas=False,
+        include_phi1=False,
+        rhs_mode=1,
+        active_size=1200,
+        dense_active_cutoff=8000,
+        backend="gpu",
+    )
+    assert decision.selected
+    assert decision.solve_method == "dense"
+
+
+def test_rhsmode1_host_dense_fallback_policy_envs(monkeypatch) -> None:
     monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
     assert profile_policies.rhsmode1_host_dense_fallback_allowed_current_backend()
     monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")

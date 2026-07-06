@@ -94,6 +94,7 @@ from sfincs_jax.problems.profile_policies import (
     rhs1_pas_weak_auto_override_kind as _rhs1_pas_weak_auto_override_kind,
     rhs1_sharded_line_override_allowed as _rhs1_sharded_line_override_allowed,
     rhs1_bicgstab_preconditioner_kind,
+    resolve_rhs1_full_fp_dense_auto_route,
     resolve_rhs1_preconditioner_route_setup,
 )
 from sfincs_jax.problems.profile_policies import (
@@ -420,8 +421,6 @@ from sfincs_jax.solvers import path_policy as _solver_path_policy
 from sfincs_jax.problems.profile_policies import (
     host_sparse_factor_dtype_current_backend as _host_sparse_factor_dtype,
     host_sparse_direct_refine_steps as _host_sparse_direct_refine_steps_impl,
-    rhs1_dense_auto_fp_allowed as _rhs1_dense_auto_fp_allowed_impl,
-    rhs1_dense_auto_fp_cutoff as _rhs1_dense_auto_fp_cutoff_impl,
     rhs1_dense_fallback_max as _rhs1_dense_fallback_max_impl,
     rhs1_dense_krylov_allowed as _rhs1_dense_krylov_allowed_impl,
     rhs1_explicit_sparse_host_direct_allowed as _rhs1_explicit_sparse_host_direct_allowed_impl,
@@ -1186,30 +1185,23 @@ def solve_v3_full_system_linear_gmres(
     )
     solve_method_kind = str(solve_method).strip().lower()
     use_implicit = _resolve_use_implicit(differentiable=differentiable)
-    if (
-        solve_method_kind in {"auto", "default", "incremental"}
-        and (not use_implicit)
-        and op.fblock.fp is not None
-        and op.fblock.pas is None
-        and (not bool(op.include_phi1))
-        and int(op.rhs_mode) == 1
-    ):
-        dense_auto_cutoff = _rhs1_dense_auto_fp_cutoff_impl(
-            dense_active_cutoff=_rhsmode1_dense_fallback_max(op),
-        )
-        if _rhs1_dense_auto_fp_allowed_impl(
-            backend=jax.default_backend(),
-            active_size=int(active_size),
-            dense_active_cutoff=_rhsmode1_dense_fallback_max(op),
-        ):
-            solve_method = "dense"
-            solve_method_kind = "dense"
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: auto-selected dense "
-                    f"full-FP solve (size={int(active_size)} <= cutoff={int(dense_auto_cutoff)})",
-                )
+    dense_auto_route = resolve_rhs1_full_fp_dense_auto_route(
+        solve_method=str(solve_method),
+        solve_method_kind=solve_method_kind,
+        use_implicit=bool(use_implicit),
+        has_fp=op.fblock.fp is not None,
+        has_pas=op.fblock.pas is not None,
+        include_phi1=bool(op.include_phi1),
+        rhs_mode=int(op.rhs_mode),
+        active_size=int(active_size),
+        dense_active_cutoff=_rhsmode1_dense_fallback_max(op),
+        backend=jax.default_backend(),
+    )
+    solve_method = dense_auto_route.solve_method
+    solve_method_kind = dense_auto_route.solve_method_kind
+    if emit is not None:
+        for level, message in dense_auto_route.messages:
+            emit(int(level), str(message))
     if solve_method_kind == "dense_ksp":
         # `dense_ksp` uses its own PETSc-like block preconditioner on the assembled dense system.
         rhs1_precond_enabled = False

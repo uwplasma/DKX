@@ -4100,6 +4100,75 @@ def rhs1_dense_auto_fp_allowed(
     return int(active_size) >= int(rhs1_dense_auto_fp_accelerator_min())
 
 
+@dataclass(frozen=True)
+class RHS1FullFPDenseAutoRouteDecision:
+    """Route decision for bounded full-FP RHSMode=1 dense auto solves."""
+
+    solve_method: str
+    solve_method_kind: str
+    selected: bool
+    cutoff: int
+    messages: tuple[tuple[int, str], ...] = ()
+
+
+def resolve_rhs1_full_fp_dense_auto_route(
+    *,
+    solve_method: str,
+    solve_method_kind: str,
+    use_implicit: bool,
+    has_fp: bool,
+    has_pas: bool,
+    include_phi1: bool,
+    rhs_mode: int,
+    active_size: int,
+    dense_active_cutoff: int,
+    backend: str,
+) -> RHS1FullFPDenseAutoRouteDecision:
+    """Resolve the first full-FP RHSMode=1 auto route before Krylov setup.
+
+    The dense route is intentionally a policy decision rather than solve logic:
+    it prevents moderate full-FP systems from paying the Krylov/preconditioner
+    setup cost when the bounded dense path is admitted by the memory policy.
+    """
+
+    method = str(solve_method)
+    method_kind = str(solve_method_kind).strip().lower()
+    cutoff = rhs1_dense_auto_fp_cutoff(dense_active_cutoff=int(dense_active_cutoff))
+    selected = bool(
+        method_kind in {"auto", "default", "incremental"}
+        and (not bool(use_implicit))
+        and bool(has_fp)
+        and (not bool(has_pas))
+        and (not bool(include_phi1))
+        and int(rhs_mode) == 1
+        and rhs1_dense_auto_fp_allowed(
+            backend=str(backend),
+            active_size=int(active_size),
+            dense_active_cutoff=int(dense_active_cutoff),
+        )
+    )
+    if not selected:
+        return RHS1FullFPDenseAutoRouteDecision(
+            solve_method=method,
+            solve_method_kind=method_kind,
+            selected=False,
+            cutoff=int(cutoff),
+        )
+    return RHS1FullFPDenseAutoRouteDecision(
+        solve_method="dense",
+        solve_method_kind="dense",
+        selected=True,
+        cutoff=int(cutoff),
+        messages=(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: auto-selected dense "
+                f"full-FP solve (size={int(active_size)} <= cutoff={int(cutoff)})",
+            ),
+        ),
+    )
+
+
 def rhs1_dense_krylov_allowed() -> bool:
     """Return whether dense Krylov fallback is enabled."""
     env = _env_bool("SFINCS_JAX_RHSMODE1_DENSE_KRYLOV")
@@ -7507,6 +7576,8 @@ __all__ = (
     "rhs1_dense_auto_fp_cutoff",
     "rhs1_dense_auto_fp_allowed",
     "rhs1_dense_auto_fp_accelerator_min",
+    "RHS1FullFPDenseAutoRouteDecision",
+    "resolve_rhs1_full_fp_dense_auto_route",
     "rhs1_dense_fallback_max",
     "rhs1_dense_krylov_allowed",
     "rhs1_explicit_sparse_host_direct_allowed",
