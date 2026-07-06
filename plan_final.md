@@ -1790,6 +1790,17 @@ Completed work:
   `15/15` in `0.13 s`; source-tree plus import-contract focused validation
   passed `68/68`; Ruff, `compileall`, and `git diff --check` passed. Direct
   coverage for `sfincs_jax/validation/data_fetch.py` is `100%`.
+- Tranche 116: expanded Fortran/PETSc validation-wrapper coverage without
+  requiring a local SFINCS Fortran v3 build in CI. Added fake-executable tests
+  for `SFINCS_FORTRAN_EXE` discovery, missing-input and missing-executable
+  errors, successful output creation, tolerated MPI-finalization failure after
+  HDF5 diagnostics are written, hard command failures, missing outputs,
+  automatic temporary work directories, caller environment merging, and the
+  equilibrium-localization hook. Validation:
+  `tests/test_fortran_profile.py tests/test_validation_petsc_and_upstream_helpers.py`
+  passed `18/18` in `1.74 s`; source-tree plus import-contract focused
+  validation passed `71/71`; Ruff, `compileall`, and `git diff --check`
+  passed. Direct coverage for `sfincs_jax/validation/fortran.py` is `99%`.
 
 Remaining consolidation steps:
 
@@ -1822,9 +1833,10 @@ Status: 89% CI-measured package coverage on PR #8 commit `3cce604d`
 closed at `modules_with_missing 0`; focused owner coverage is `98%` for
 `workflows/scans.py` after Tranche 111 and `100%` for
 `validation/figures.py` after Tranche 112 and `validation/qi_device.py` after
-Tranche 113; `validation/artifacts.py` is `95%` after Tranche 114. The final
-target is still 95%; `validation/data_fetch.py` is also `100%` after Tranche
-115. The next coverage tranches should prioritize large under-covered owners
+Tranche 113; `validation/artifacts.py` is `95%` after Tranche 114,
+`validation/data_fetch.py` is `100%` after Tranche 115, and
+`validation/fortran.py` is `99%` after Tranche 116. The final target is still
+95%; the next coverage tranches should prioritize large under-covered owners
 with bounded behavior tests rather than slow full solves.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.

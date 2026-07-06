@@ -6,7 +6,15 @@ import subprocess
 import numpy as np
 import pytest
 
-from sfincs_jax.validation.fortran import parse_fortran_v3_profile_text, read_petsc_mat_aij, read_petsc_vec
+import sfincs_jax.validation.fortran as fortran_validation
+from sfincs_jax.validation.fortran import (
+    default_fortran_exe,
+    parse_fortran_v3_profile_file,
+    parse_fortran_v3_profile_text,
+    read_petsc_mat_aij,
+    read_petsc_vec,
+    run_sfincs_fortran,
+)
 from sfincs_jax.workflows.scans import find_upstream_utils_dir, run_upstream_util
 
 
@@ -197,6 +205,166 @@ def test_fortran_profile_parser_extracts_mumps_infog_and_tolerates_empty_logs() 
     assert empty["matrix_shape"] is None
     assert empty["ksp"]["history"] == []
     assert empty["timings_s"]["last_solve_driver"] is None
+
+
+def test_fortran_profile_file_parser_and_default_executable_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    log = tmp_path / "sfincs.log"
+    log.write_text("Solver package which will be used:\n mumps\n", encoding="utf-8")
+    assert parse_fortran_v3_profile_file(log)["solver_package"] == "mumps"
+
+    monkeypatch.delenv("SFINCS_FORTRAN_EXE", raising=False)
+    assert default_fortran_exe() is None
+    monkeypatch.setenv("SFINCS_FORTRAN_EXE", str(tmp_path / "sfincs"))
+    assert default_fortran_exe() == tmp_path / "sfincs"
+
+
+def _write_fake_fortran_exe(path: Path, body: str) -> Path:
+    path.write_text("#!/bin/sh\nset -eu\n" + body, encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
+def test_fortran_runner_validates_inputs_and_executable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SFINCS_FORTRAN_EXE", raising=False)
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text("&general\n/\n", encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError, match="missing_input"):
+        run_sfincs_fortran(input_namelist=tmp_path / "missing_input.namelist")
+    with pytest.raises(ValueError, match="Fortran executable not specified"):
+        run_sfincs_fortran(input_namelist=input_path)
+    with pytest.raises(FileNotFoundError, match="missing_exe"):
+        run_sfincs_fortran(input_namelist=input_path, exe=tmp_path / "missing_exe")
+
+
+def test_fortran_runner_accepts_successful_output_and_mpi_finalize_failure(tmp_path: Path) -> None:
+    input_path = tmp_path / "input_source.namelist"
+    input_path.write_text("&general\n/\n", encoding="utf-8")
+
+    success_exe = _write_fake_fortran_exe(
+        tmp_path / "sfincs_success.sh",
+        "printf 'Saving diagnostics to h5 file\\nGoodbye!\\n'\n"
+        "printf 'fake h5' > sfincsOutput.h5\n"
+        "exit 0\n",
+    )
+    output = run_sfincs_fortran(
+        input_namelist=input_path,
+        exe=success_exe,
+        workdir=tmp_path / "success",
+        localize_equilibrium=False,
+    )
+    assert output == (tmp_path / "success" / "sfincsOutput.h5").resolve()
+    assert (tmp_path / "success" / "input.namelist").read_text(encoding="utf-8") == "&general\n/\n"
+
+    mpi_finalize_exe = _write_fake_fortran_exe(
+        tmp_path / "sfincs_mpi_finalize.sh",
+        "printf 'Saving diagnostics to h5 file\\nGoodbye!\\nMPI_Finalize failed\\n'\n"
+        "printf 'fake h5' > sfincsOutput.h5\n"
+        "exit 7\n",
+    )
+    assert run_sfincs_fortran(
+        input_namelist=input_path,
+        exe=mpi_finalize_exe,
+        workdir=tmp_path / "mpi_finalize",
+        localize_equilibrium=False,
+    ).exists()
+
+
+def test_fortran_runner_rejects_failed_or_missing_outputs(tmp_path: Path) -> None:
+    input_path = tmp_path / "input_source.namelist"
+    input_path.write_text("&general\n/\n", encoding="utf-8")
+
+    no_output_exe = _write_fake_fortran_exe(
+        tmp_path / "sfincs_no_output.sh",
+        "printf 'Goodbye!\\n'\nexit 0\n",
+    )
+    with pytest.raises(RuntimeError, match="did not create"):
+        run_sfincs_fortran(
+            input_namelist=input_path,
+            exe=no_output_exe,
+            workdir=tmp_path / "no_output",
+            localize_equilibrium=False,
+        )
+
+    hard_fail_no_output = _write_fake_fortran_exe(
+        tmp_path / "sfincs_hard_fail_no_output.sh",
+        "printf 'boom\\n'\nexit 5\n",
+    )
+    with pytest.raises(subprocess.CalledProcessError):
+        run_sfincs_fortran(
+            input_namelist=input_path,
+            exe=hard_fail_no_output,
+            workdir=tmp_path / "hard_fail_no_output",
+            localize_equilibrium=False,
+        )
+
+    hard_fail_with_output = _write_fake_fortran_exe(
+        tmp_path / "sfincs_hard_fail_with_output.sh",
+        "printf 'Saving diagnostics to h5 file\\nnot clean\\n'\n"
+        "printf 'fake h5' > sfincsOutput.h5\n"
+        "exit 6\n",
+    )
+    with pytest.raises(subprocess.CalledProcessError):
+        run_sfincs_fortran(
+            input_namelist=input_path,
+            exe=hard_fail_with_output,
+            workdir=tmp_path / "hard_fail_with_output",
+            localize_equilibrium=False,
+        )
+
+
+def test_fortran_runner_uses_default_executable_and_can_skip_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    input_path = workdir / "input.namelist"
+    input_path.write_text("&general\n/\n", encoding="utf-8")
+    exe = _write_fake_fortran_exe(
+        tmp_path / "sfincs_default.sh",
+        "printf 'Saving diagnostics to h5 file\\nGoodbye!\\n'\n"
+        "printf 'fake h5' > sfincsOutput.h5\n"
+        "exit 0\n",
+    )
+    monkeypatch.setattr(fortran_validation, "default_fortran_exe", lambda: exe)
+
+    assert run_sfincs_fortran(
+        input_namelist=input_path,
+        workdir=workdir,
+        localize_equilibrium=False,
+    ) == (workdir / "sfincsOutput.h5").resolve()
+
+
+def test_fortran_runner_auto_workdir_localizes_and_merges_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sfincs_jax.io as io_module
+
+    input_path = tmp_path / "input_source.namelist"
+    input_path.write_text("&general\n/\n", encoding="utf-8")
+    calls: list[Path] = []
+
+    def _fake_localize(*, input_namelist: Path, overwrite: bool) -> None:
+        calls.append(input_namelist)
+        assert overwrite is False
+
+    monkeypatch.setattr(io_module, "localize_equilibrium_file_in_place", _fake_localize)
+    exe = _write_fake_fortran_exe(
+        tmp_path / "sfincs_env.sh",
+        "test \"${SFINCS_JAX_UNIT_ENV:-}\" = expected\n"
+        "printf 'Saving diagnostics to h5 file\\nGoodbye!\\n'\n"
+        "printf 'fake h5' > sfincsOutput.h5\n"
+        "exit 0\n",
+    )
+
+    output = run_sfincs_fortran(
+        input_namelist=input_path,
+        exe=exe,
+        env={"SFINCS_JAX_UNIT_ENV": "expected"},
+    )
+
+    assert output.name == "sfincsOutput.h5"
+    assert output.exists()
+    assert calls == [output.parent / "input.namelist"]
 
 
 def test_find_upstream_utils_dir_resolves_override_and_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
