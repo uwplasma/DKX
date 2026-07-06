@@ -78,7 +78,8 @@ def _matching_workflows(catalog: dict[str, Any], *, topic: str, search: str) -> 
 
 def _print_topics(catalog: dict[str, Any]) -> None:
     for name, metadata in sorted(catalog.get("folders", {}).items()):
-        print(f"{name:22s} {metadata.get('role', '')}")
+        category = metadata.get("category", "uncategorized")
+        print(f"{name:22s} [{category}] {metadata.get('role', '')}")
 
 
 def _print_workflows(workflows: list[dict[str, Any]], *, long: bool) -> None:

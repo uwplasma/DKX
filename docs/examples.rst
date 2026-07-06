@@ -172,6 +172,38 @@ convergence, or profiling detail.
      - ``examples/parity/output_parity_vs_fortran_fixture.py``
      - ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``
 
+Top-level folder categories
+---------------------------
+
+The top-level folders are grouped by user intent. Start with the ``learning``
+folders when exploring the code, use ``capability`` folders for physics or
+differentiability workflows, and use ``validation`` folders when producing
+parity, performance, or publication evidence. The ``reference`` and ``support``
+folders are not the recommended first stop for new workflows.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 18 32 50
+
+   * - Category
+     - Folders
+     - Use when
+   * - ``learning``
+     - ``examples/tutorials/``, ``examples/getting_started/``
+     - You want to learn the CLI, Python API, plots, output formats, and first operator or geometry concepts.
+   * - ``capability``
+     - ``examples/transport/``, ``examples/autodiff/``, ``examples/optimization/``, ``examples/vmec_jax_finite_beta/``
+     - You need a specific physics, optimization, VMEC, Redl, bootstrap-current, or differentiability workflow.
+   * - ``validation``
+     - ``examples/parity/``, ``examples/performance/``, ``examples/publication_figures/``
+     - You need parity checks, runtime/memory evidence, CPU/GPU benchmark drivers, or regenerated documentation figures.
+   * - ``reference``
+     - ``examples/data/``, ``examples/sfincs_examples/``, ``examples/upstream/``
+     - You need small shared inputs or recognizable SFINCS Fortran v3 decks for audits and compatibility checks.
+   * - ``support``
+     - ``examples/utils/``
+     - You need helper scripts used by the documented examples.
+
 Some geometry examples reference public W7-X/HSX/QI equilibrium fixtures by
 basename. Those multi-megabyte files are fetched from the
 ``sfincs-jax-data-v1`` release into the local `sfincs_jax` data cache on first

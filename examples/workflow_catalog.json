@@ -3,54 +3,67 @@
   "purpose": "Machine-readable navigation map for public sfincs_jax examples.",
   "folders": {
     "autodiff": {
+      "category": "capability",
       "role": "JAX gradients, JVP/VJP examples, and implicit differentiation.",
       "start_here": "autodiff/autodiff_gradient_nu_n_residual.py"
     },
     "data": {
+      "category": "reference",
       "role": "Small shared input files used by public examples.",
       "start_here": "data/geometryScheme4_quick_2species.input.namelist"
     },
     "getting_started": {
+      "category": "learning",
       "role": "Minimal CLI and Python workflows for outputs, plots, and geometry setup.",
       "start_here": "getting_started/write_sfincs_output_python.py"
     },
     "optimization": {
+      "category": "capability",
       "role": "Optimization objectives, candidate screening, and kinetic-promotion helpers.",
       "start_here": "optimization/qa_nfp2_sfincs_jax_objectives.py"
     },
     "parity": {
+      "category": "validation",
       "role": "Frozen-reference parity checks against SFINCS Fortran v3 artifacts.",
       "start_here": "parity/output_parity_vs_fortran_fixture.py"
     },
     "performance": {
+      "category": "validation",
       "role": "JIT, memory, output-format, CPU/GPU, and parallel scaling benchmarks.",
       "start_here": "performance/benchmark_output_formats.py"
     },
     "publication_figures": {
+      "category": "validation",
       "role": "Documentation and paper-figure regeneration from checked summaries or explicit runs.",
       "start_here": "publication_figures/generate_fortran_suite_benchmark_summary.py"
     },
     "sfincs_examples": {
+      "category": "reference",
       "role": "Vendored upstream SFINCS v3 examples for parity and benchmark audits.",
       "start_here": "sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist"
     },
     "transport": {
+      "category": "capability",
       "role": "RHSMode=2/3 transport-matrix workflows and scan utilities.",
       "start_here": "transport/transport_matrix_rhsmode2_and_rhsmode3.py"
     },
     "tutorials": {
+      "category": "learning",
       "role": "Notebook-led learning path and fast tutorial output writer.",
       "start_here": "tutorials/00_start_here.ipynb"
     },
     "upstream": {
+      "category": "reference",
       "role": "Curated upstream SFINCS input decks used by tests and validation lanes.",
       "start_here": "upstream/fortran_v3/quick_2species_FPCollisions_noEr/input.namelist"
     },
     "utils": {
+      "category": "support",
       "role": "Shared helper scripts used by example documentation.",
       "start_here": "utils/generate_utils_gallery.py"
     },
     "vmec_jax_finite_beta": {
+      "category": "capability",
       "role": "Finite-beta VMEC, ambipolar electric field, Redl, and bootstrap-current workflows.",
       "start_here": "vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py"
     }

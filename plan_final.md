@@ -3895,6 +3895,54 @@ Status:
   rerun the neighboring `Nxi=20/40` full-FP cases and confirm the default route
   uses the host-dense shortcut with lower wall time and no parity drift.
 
+## Latest Execution Log: Examples Navigation Category Tranche
+
+What was checked:
+
+- Rechecked the package source tree: it remains one level deep under
+  `sfincs_jax/` except ignored `__pycache__` folders, and
+  `sfincs_jax/README.md` documents the current package ownership map.
+- Re-ran the public stale-wording scan for README/docs/examples wording such as
+  `On the current main branch`, `new version`, and `currently`; the configured
+  public paths returned no matches.
+- Audited `examples/`: the tree already has a workflow catalog and topic
+  READMEs, but the top-level folders still mixed first-pass learning folders
+  with reference/support folders in a way that could confuse new users.
+
+Source/docs change:
+
+- Added a `category` field to every top-level folder in
+  `examples/workflow_catalog.json`: `learning`, `capability`, `validation`,
+  `reference`, or `support`.
+- Updated `examples/list_workflows.py --list-topics` to print those categories
+  so users can distinguish tutorials and capability workflows from vendored
+  upstream/reference/support folders at the terminal.
+- Added a `Top-Level Folder Categories` section to `examples/README.md` and
+  the matching `Top-level folder categories` section to `docs/examples.rst`.
+- Strengthened `tests/test_examples_tree_contract.py` so future example folders
+  must have an intentional category and the README/docs must describe it.
+
+Validation:
+
+- `python -m pytest -q tests/test_examples_tree_contract.py
+  tests/test_examples_workflow_browser.py tests/test_examples_tutorials.py
+  tests/test_getting_started_examples.py` passed as `25 passed`.
+- `python -m ruff check examples/list_workflows.py
+  tests/test_examples_tree_contract.py tests/test_examples_workflow_browser.py`
+  passed.
+- `python -m compileall -q examples/list_workflows.py
+  tests/test_examples_tree_contract.py tests/test_examples_workflow_browser.py`
+  passed.
+- `git diff --check` passed.
+
+Status:
+
+- This moves the examples-refactor lane toward review readiness by making the
+  current folder structure explicit and enforceable instead of relying on prose.
+- The remaining examples work is not a broad folder move; it is periodic
+  pruning of stale scripts or generated artifacts if the strengthened tests
+  expose them.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:

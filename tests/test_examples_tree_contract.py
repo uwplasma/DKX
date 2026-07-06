@@ -29,6 +29,22 @@ ALLOWED_EXAMPLE_FOLDERS = {
 
 FOLDERS_REQUIRING_README = ALLOWED_EXAMPLE_FOLDERS
 
+FOLDER_CATEGORIES = {
+    "autodiff": "capability",
+    "data": "reference",
+    "getting_started": "learning",
+    "optimization": "capability",
+    "parity": "validation",
+    "performance": "validation",
+    "publication_figures": "validation",
+    "sfincs_examples": "reference",
+    "transport": "capability",
+    "tutorials": "learning",
+    "upstream": "reference",
+    "utils": "support",
+    "vmec_jax_finite_beta": "capability",
+}
+
 REQUIRED_TASK_ENTRYPOINTS = {
     "list_workflows.py",
     "tutorials/00_start_here.ipynb",
@@ -242,10 +258,13 @@ def test_workflow_catalog_is_complete_and_first_run_safe() -> None:
     assert "examples/workflow_catalog.json" in DOCS_EXAMPLES.read_text(encoding="utf-8")
 
     for folder, metadata in sorted(catalog["folders"].items()):
+        assert metadata["category"] == FOLDER_CATEGORIES[folder]
         assert metadata["role"]
         start_path = EXAMPLES_ROOT / metadata["start_here"]
         assert start_path.exists(), f"{folder}: {metadata['start_here']}"
         assert metadata["start_here"].split("/", 1)[0] == folder
+
+    assert set(FOLDER_CATEGORIES.values()) == {"capability", "learning", "reference", "support", "validation"}
 
     workflows = catalog["workflows"]
     assert {workflow["entrypoint"] for workflow in workflows} == CATALOG_ENTRYPOINTS
@@ -272,10 +291,12 @@ def test_examples_readme_is_a_complete_user_navigation_map() -> None:
     assert "### Choose By Task" in readme
     assert "### Application Recipes" in readme
     assert "### Canonical Workflow Catalog" in readme
+    assert "### Top-Level Folder Categories" in readme
     assert "### Folder Map" in readme
 
     for folder in sorted(ALLOWED_EXAMPLE_FOLDERS):
         assert f"`{folder}/`" in readme or f"`{folder}" in readme, folder
+        assert FOLDER_CATEGORIES[folder] in readme, folder
 
     for folder in sorted(FOLDERS_REQUIRING_README):
         assert (EXAMPLES_ROOT / folder / "README.md").is_file(), folder
@@ -315,6 +336,7 @@ def test_docs_examples_page_matches_application_recipe_map() -> None:
     assert "One-command start points" in docs
     assert "Decision map" in docs
     assert "Application recipe map" in docs
+    assert "Top-level folder categories" in docs
 
     for label in sorted(ONE_COMMAND_LABELS):
         rst_label = label.replace("`", "``")
@@ -342,6 +364,10 @@ def test_docs_examples_page_matches_application_recipe_map() -> None:
         docs_path = f"examples/{target}"
         assert f"``{docs_path}``" in docs, docs_path
         assert (EXAMPLES_ROOT / target.rstrip("/")).exists(), target
+
+    for folder, category in sorted(FOLDER_CATEGORIES.items()):
+        assert f"``examples/{folder}/``" in docs, folder
+        assert category in docs, folder
 
 
 def test_example_readmes_are_standalone_and_reference_existing_scripts() -> None:

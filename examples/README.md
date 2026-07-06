@@ -132,6 +132,20 @@ heavier workflow when you need release-quality evidence.
 | Frozen Fortran-v3 parity | `parity/output_parity_vs_fortran_fixture.py` | Compare output fields against checked frozen references. | `publication_figures/generate_fortran_suite_benchmark_summary.py` |
 | CPU/GPU performance | `performance/benchmark_output_formats.py` | Time output formats and inspect memory behavior. | `performance/benchmark_transport_parallel_scaling.py` |
 
+### Top-Level Folder Categories
+
+The example tree has a small number of top-level domains. The category tells
+you whether a folder is a first-pass learning surface, a capability workflow, a
+validation or benchmark workflow, reference data, or shared support code.
+
+| Category | Folders | Use when |
+| --- | --- | --- |
+| `learning` | `tutorials/`, `getting_started/` | You want to learn the CLI, Python API, plots, output formats, and first operator/geometry concepts. |
+| `capability` | `transport/`, `autodiff/`, `optimization/`, `vmec_jax_finite_beta/` | You need a specific physics or differentiability workflow. |
+| `validation` | `parity/`, `performance/`, `publication_figures/` | You need parity checks, runtime/memory evidence, or regenerated documentation figures. |
+| `reference` | `data/`, `sfincs_examples/`, `upstream/` | You need small shared inputs or recognizable SFINCS Fortran v3 decks for audits. |
+| `support` | `utils/` | You need helper scripts used by the documented examples. |
+
 ### Folder Map
 
 - `tutorials/`: notebook-led learning path plus one fast script that writes
