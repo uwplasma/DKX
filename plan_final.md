@@ -2766,6 +2766,47 @@ Next coverage target:
   `preconditioner_xblock_tz_sparse.py`, `profile_system.py`, and
   `profile_true_operator_rescue.py`.
 
+## Tranche 143: PR Integration And Final Review Pass
+
+Status:
+
+- The active review branch is `refactor/v3-driver-architecture`; `origin/main`
+  is an ancestor of the branch, so there is no separate main-line work to merge.
+  The only additional checkout observed locally is the detached
+  `sfincs_jax_main_clean` worktree used for clean-run comparisons.
+- Regenerated the runtime/memory benchmark summary and README audit block from
+  the checked CPU/GPU suite reports. The public benchmark still has 39 audited
+  CPU/GPU parity rows and 24 plotted rows after applying the 10 s Fortran-v3
+  runtime floor.
+- Regenerated the QA/QH bootstrap-current comparison figure bundles from their
+  checked summary JSONs. The re-render touched only the small PDF artifacts; the
+  scientific JSON/PNG data stayed stable.
+- Ran a live bounded SFINCS Fortran v3 parity check for
+  `quick_2species_FPCollisions_noEr` with `--compute-solution` and `1e-8`
+  tolerances. Fortran v3 detected MUMPS, the JAX HDF5 output was written, and
+  common-output comparison passed with zero mismatches.
+
+Validation:
+
+- `python scripts/check_repo_size.py` passed.
+- `python scripts/check_release_gates.py` passed.
+- `python scripts/check_benchmark_artifacts.py examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json`
+  passed.
+- `python -m sphinx -b html docs docs/_build/html` passed.
+- `python examples/publication_figures/generate_fortran_suite_benchmark_summary.py`
+  passed.
+- `python scripts/generate_readme_fast_branch_audit.py --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas --min-fortran-runtime-s 10`
+  passed.
+- `python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py --from-summary-json ...`
+  passed for the QA/QH same-resolution and README comparison summaries.
+- `python -m ruff check sfincs_jax tests scripts/generate_readme_fast_branch_audit.py examples/publication_figures/generate_fortran_suite_benchmark_summary.py examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py`
+  passed.
+- `python -m compileall -q sfincs_jax tests/test_jax_ecosystem_backend_probes.py scripts/generate_readme_fast_branch_audit.py examples/publication_figures/generate_fortran_suite_benchmark_summary.py examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py`
+  passed.
+- The public stale-wording `rg` scan over README/docs/examples passed with no
+  matches.
+- `python -m pytest -q` passed as `4339 passed in 596.09 s`.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
