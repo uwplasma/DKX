@@ -10,6 +10,22 @@
     "transport_sparse_direct_max": 30000,
     "transport_workers": 2
   },
+  "deferred_reasons": [
+    {
+      "code": "run_plan_not_completed_validation",
+      "gate": "run_plan_only_not_completed_validation",
+      "message": "This artifact contains commands for future scans, not checked converged scan outputs."
+    }
+  ],
+  "gates": {
+    "checked_in_converged_artifact": false,
+    "commands_require_residual_gates": true,
+    "full_simakov_helander_reproduction_closed": true,
+    "ready_for_literature_claim": false,
+    "ready_to_run": true,
+    "run_plan_only_not_completed_validation": true,
+    "source_audit_keeps_full_reproduction_closed": true
+  },
   "metadata": {
     "kind": "simakov_helander_high_nu_run_plan",
     "notes": [
@@ -18,8 +34,16 @@
       "Start with each pilot_command to estimate wall time before launching the full FP/PAS extension.",
       "The residual gates are intentionally strict; if W7-X FP high-nu fails, treat it as a preconditioner lane, not a completed validation."
     ],
+    "publication_figure": {
+      "artifact_class": "executable_high_nu_run_plan",
+      "checked_in_converged_artifact": false,
+      "claim_status": "proxy_or_deferred",
+      "manuscript_label": "deferred Simakov-Helander high-nu run plan",
+      "ready_for_physics_validation_claim": false
+    },
     "schema_version": 1,
-    "source_audit": "examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json"
+    "source_audit": "examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json",
+    "validation_state": "deferred_run_plan"
   },
   "ready_to_run": true,
   "runs": [

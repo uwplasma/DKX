@@ -2,7 +2,7 @@
 
 Last updated: 2026-07-05
 
-Active branch: `refactor/rhs1-full-assembly-preconditioners`
+Active branch: `refactor/v3-driver-architecture`
 
 Review branch / PR: `refactor/v3-driver-architecture` / PR #8
 
@@ -2102,6 +2102,34 @@ Rules:
   document that limitation rather than hiding it.
 
 ## Ordered Execution Plan
+
+## Review Stop Pass - Branch Consolidation And Evidence Refresh
+
+2026-07-05 review-stop pass:
+
+- Confirmed `main` is an ancestor of `refactor/v3-driver-architecture`; the
+  refactor PR branch is the single authoritative branch for review.
+- Regenerated artifact-backed publication figures and summaries:
+  Fortran-suite runtime/memory, publication validation dashboard,
+  W7-X high-`nu'` performance, high-collisionality trend proxy,
+  Simakov-Helander limit audit, Simakov-Helander high-`nu'` run plan, and
+  autodiff/sensitivity validation.
+- The full collisionality `generate_sfincs_paper_figs.py --plot-only` command
+  was not rerun because local scan work directories are intentionally absent;
+  the checked full-resolution JSON summaries remain the source for the
+  retained figures. Rebuilding those scan work directories is a separate
+  long-run campaign, not a review-stop blocker.
+- Updated the high-`nu'` run-plan JSON to mark it explicitly as a deferred run
+  plan, not a completed converged validation artifact.
+- Validation completed:
+  `tests/test_generate_fortran_suite_benchmark_summary.py`,
+  `tests/test_benchmark_doc_claims.py`, `tests/test_validation_artifacts.py`,
+  and `tests/test_benchmark_artifact_policy.py` as `68 passed`;
+  benchmark artifact index release gate as `release-blocking=0`;
+  source/example/public-doc guards as `69 passed`;
+  Sphinx `-W` build passed; Python-file Ruff passed; `git diff --check`
+  passed; full local suite passed as `4319 passed, 3 skipped, 2 warnings`
+  in `16:43`.
 
 ### Phase A - Lock The Structure And Baseline
 
