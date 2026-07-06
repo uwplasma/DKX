@@ -3043,6 +3043,69 @@ Validation:
   passed as `71 passed in 5.90 s`.
 - `git diff --check` passed.
 
+## Tranche 151: Consolidated PR Review Checkpoint
+
+Scope:
+
+- Verified branch hygiene for the review pass:
+  - `refactor/v3-driver-architecture` is the only active PR branch.
+  - `origin/main` is already an ancestor of the PR branch.
+  - The branch is `995` commits ahead of `origin/main` and `0` commits behind,
+    so no additional merge from `main` is required before review.
+- Regenerated the release-facing runtime/memory comparison artifacts from the
+  canonical CPU/GPU suite reports:
+  - CPU report:
+    `tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak/suite_report.json`
+  - GPU report:
+    `tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas/suite_report.json`
+  - summary JSON:
+    `examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json`
+  - figure:
+    `docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png`
+- Regenerated the README example-suite audit block from the same CPU/GPU suite
+  reports. The README audit remains `39/39` CPU parity and `39/39` GPU parity,
+  with no practical or strict mismatches.
+- Re-rendered the QA and QH SFINCS-JAX / SFINCS Fortran v3 / Redl bootstrap
+  current comparison figures from their checked summary JSON files so the PNG,
+  PDF, JSON, and README text remain synchronized.
+- Confirmed the public runtime/memory plot is still a reference-runtime-window
+  comparison filtered to SFINCS Fortran v3 rows with runtime at least `10 s`.
+  The summary JSON still records production-resolution floor violations for
+  lower-resolution historical/smoke rows instead of silently presenting them as
+  production-resolution performance claims.
+
+Validation:
+
+- `python examples/publication_figures/generate_fortran_suite_benchmark_summary.py --cpu-report tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak/suite_report.json --gpu-report tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas/suite_report.json --out-dir docs/_static/figures/paper --summary-json examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json --min-fortran-runtime-s 10`
+  passed and rewrote the benchmark summary artifact/figure.
+- `python scripts/generate_readme_fast_branch_audit.py --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas --min-fortran-runtime-s 10`
+  passed and refreshed the README audit block.
+- `python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py --from-summary-json docs/_static/figures/vmec_jax_finite_beta/qs_paper_sfincs_jax_redl_comparison.json --fig-dir docs/_static/figures/vmec_jax_finite_beta --stem qs_paper_sfincs_jax_redl_comparison`
+  passed.
+- `python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py --from-summary-json docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_sfincs_jax_redl_comparison.json --fig-dir docs/_static/figures/vmec_jax_finite_beta --stem qs_paper_qh_sfincs_jax_redl_comparison`
+  passed.
+- `python scripts/check_benchmark_artifacts.py examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json`
+  passed.
+- `python -m pytest -q tests/test_validation_figures.py tests/test_validation_artifacts.py tests/test_benchmark_doc_claims.py tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py tests/test_examples_tree_contract.py`
+  passed as `124 passed in 4.78 s`.
+- `python -m ruff check sfincs_jax tests scripts/generate_readme_fast_branch_audit.py scripts/check_benchmark_artifacts.py examples/publication_figures/generate_fortran_suite_benchmark_summary.py examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py`
+  passed.
+- `python -m compileall -q sfincs_jax tests scripts/generate_readme_fast_branch_audit.py scripts/check_benchmark_artifacts.py examples/publication_figures/generate_fortran_suite_benchmark_summary.py examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py`
+  passed.
+- `python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax --cov-report=term --cov-report=json:/tmp/sfincs_jax_coverage_final_review.json`
+  passed as `4366 passed in 320.30 s`. Coverage is
+  `62340 / 69108` statements, `6768` missing lines, `90.21%` total.
+- PR #8 GitHub checks passed: build, four coverage shards, coverage report,
+  examples smoke, external-data smoke, optional ecosystem gates, and tests.
+
+Review status:
+
+- This checkpoint is ready for PR review.
+- It does not close the 95% coverage gate.
+- It does not replace the tracked CPU/GPU suite reports with a fresh
+  production-resolution SFINCS Fortran v3 rerun; that remains a separate
+  explicitly budgeted compute campaign.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
