@@ -2010,7 +2010,7 @@ Remaining consolidation steps:
 ### Lane 2 - Coverage And Future-Proof Tests
 
 Status: about `91%` package coverage from the latest full local audit
-(`90.691%`, `69,136` statements, `6,436` missing). The direct public contract audit remains
+(`90.791%`, `69,136` statements, `6,367` missing). The direct public contract audit remains
 closed at `modules_with_missing 0`; focused owner coverage is `98%` for
 `workflows/scans.py` after Tranche 111 and `100%` for
 `validation/figures.py` after Tranche 112 and `validation/qi_device.py` after
@@ -4624,6 +4624,11 @@ Validation:
   --cov-report=term --cov-report=json:/tmp/sfincs_jax_coverage_after_tranches.json`
   passed as `4508 passed, 3 skipped in 330.42 s`; total package coverage is
   `91%` (`90.691%`) with `6436` missing lines.
+- After the QI fail-closed preconditioner coverage tranche,
+  `python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax
+  --cov-report=term --cov-report=json:/tmp/sfincs_jax_coverage_after_qi_failclosed.json`
+  passed as `4519 passed, 3 skipped in 286.74 s`; total package coverage is
+  `91%` (`90.791%`) with `6367` missing lines.
 - `python -m pytest -q tests/test_rhs1_true_operator_rescue.py` passed as
   `25 passed in 0.26 s`.
 - `python -m pytest -q tests/test_rhs1_true_operator_rescue.py
@@ -4655,7 +4660,7 @@ Changes:
   fallback, mixed precision, or dense preconditioner memory guards are active.
 - Updated `docs/testing.rst` to report the measured refactor-lane package
   coverage as about `91%`, matching the latest full local coverage audit
-  (`90.691%`) while keeping the `95%` target explicit.
+  (`90.791%`) while keeping the `95%` target explicit.
 
 Validation:
 
