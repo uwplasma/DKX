@@ -481,26 +481,116 @@ def test_sxblock_active_indices_follow_v3_flattening_and_skip_inactive_x() -> No
     assert indices_l3.size == 0
 
 
-def test_explicit_fp_xblock_matrix_and_diagonal_share_domain_implementation() -> None:
-    """A minimal full-FP x-block keeps the diagonal fallback consistent with CSR assembly."""
-
+def _fp_xblock_operator_fixture(*, optional_drifts: bool = False, point_at_x0: bool = False) -> SimpleNamespace:
     ddtheta = np.asarray([[-1.0, 1.0], [1.0, -1.0]], dtype=np.float64)
-    ddzeta = np.zeros((2, 2), dtype=np.float64)
-    n_tz = 4
+    ddzeta = np.asarray([[-0.5, 0.5], [0.25, -0.25]], dtype=np.float64) if optional_drifts else np.zeros((2, 2), dtype=np.float64)
+    ones = np.ones((2, 2), dtype=np.float64)
+    zeros = np.zeros((2, 2), dtype=np.float64)
     colless = SimpleNamespace(
         x=np.asarray([1.0], dtype=np.float64),
         n_xi_for_x=np.asarray([2], dtype=np.int32),
         ddtheta=ddtheta,
         ddzeta=ddzeta,
-        b_hat=np.ones((2, 2), dtype=np.float64),
-        b_hat_sup_theta=np.ones((2, 2), dtype=np.float64),
-        b_hat_sup_zeta=np.zeros((2, 2), dtype=np.float64),
-        db_hat_dtheta=np.zeros((2, 2), dtype=np.float64),
-        db_hat_dzeta=np.zeros((2, 2), dtype=np.float64),
+        b_hat=ones,
+        b_hat_sup_theta=ones,
+        b_hat_sup_zeta=0.25 * ones if optional_drifts else zeros,
+        db_hat_dtheta=0.2 * ones if optional_drifts else zeros,
+        db_hat_dzeta=-0.1 * ones if optional_drifts else zeros,
         t_hats=np.asarray([1.0], dtype=np.float64),
         m_hats=np.asarray([1.0], dtype=np.float64),
     )
-    op = SimpleNamespace(
+
+    exb_theta = exb_zeta = mag_theta = mag_zeta = mag_xidot = er_xidot = er_xdot = None
+    if optional_drifts:
+        exb_theta = SimpleNamespace(
+            fsab_hat2=2.0,
+            use_dkes_exb_drift=True,
+            d_hat=ones,
+            b_hat_sub_zeta=0.5 * ones,
+            b_hat=ones,
+            alpha=1.0,
+            delta=1.0,
+            dphi_hat_dpsi_hat=0.75,
+        )
+        exb_zeta = SimpleNamespace(
+            fsab_hat2=2.0,
+            use_dkes_exb_drift=False,
+            d_hat=ones,
+            b_hat_sub_theta=0.25 * ones,
+            b_hat=ones,
+            alpha=1.0,
+            delta=1.0,
+            dphi_hat_dpsi_hat=0.75,
+        )
+        mag_theta = SimpleNamespace(
+            b_hat_sub_zeta=0.5 * ones,
+            db_hat_dpsi_hat=0.4 * ones,
+            b_hat_sub_psi=0.2 * ones,
+            db_hat_dzeta=-0.1 * ones,
+            db_hat_sub_psi_dzeta=0.3 * ones,
+            db_hat_sub_zeta_dpsi_hat=0.05 * ones,
+            delta=1.0,
+            t_hat=1.0,
+            d_hat=ones,
+            z=1.0,
+            b_hat=ones,
+            ddtheta_plus=ddtheta,
+            ddtheta_minus=-ddtheta,
+        )
+        mag_zeta = SimpleNamespace(
+            b_hat_sub_psi=0.2 * ones,
+            db_hat_dtheta=0.15 * ones,
+            b_hat_sub_theta=0.35 * ones,
+            db_hat_dpsi_hat=0.25 * ones,
+            db_hat_sub_theta_dpsi_hat=0.12 * ones,
+            db_hat_sub_psi_dtheta=0.02 * ones,
+            delta=1.0,
+            t_hat=1.0,
+            d_hat=ones,
+            z=1.0,
+            b_hat=ones,
+            ddzeta_plus=ddzeta,
+            ddzeta_minus=-ddzeta,
+        )
+        mag_xidot = SimpleNamespace(
+            db_hat_sub_psi_dzeta=0.3 * ones,
+            db_hat_sub_zeta_dpsi_hat=0.05 * ones,
+            db_hat_dtheta=0.2 * ones,
+            db_hat_sub_theta_dpsi_hat=0.12 * ones,
+            db_hat_sub_psi_dtheta=0.02 * ones,
+            db_hat_dzeta=-0.1 * ones,
+            delta=1.0,
+            t_hat=1.0,
+            d_hat=ones,
+            z=1.0,
+            b_hat=ones,
+        )
+        er_xidot = SimpleNamespace(
+            b_hat_sub_zeta=0.5 * ones,
+            b_hat_sub_theta=0.35 * ones,
+            db_hat_dtheta=0.2 * ones,
+            db_hat_dzeta=-0.1 * ones,
+            alpha=1.0,
+            delta=1.0,
+            dphi_hat_dpsi_hat=0.75,
+            d_hat=ones,
+            b_hat=ones,
+        )
+        er_xdot = SimpleNamespace(
+            alpha=1.0,
+            delta=1.0,
+            dphi_hat_dpsi_hat=0.75,
+            d_hat=ones,
+            b_hat=ones,
+            b_hat_sub_theta=0.35 * ones,
+            db_hat_dzeta=-0.1 * ones,
+            b_hat_sub_zeta=0.5 * ones,
+            db_hat_dtheta=0.2 * ones,
+            ddx_plus=np.asarray([[2.0]], dtype=np.float64),
+            ddx_minus=np.asarray([[-3.0]], dtype=np.float64),
+        )
+
+    return SimpleNamespace(
         rhs_mode=1,
         n_species=1,
         n_x=1,
@@ -514,7 +604,7 @@ def test_explicit_fp_xblock_matrix_and_diagonal_share_domain_implementation() ->
         with_adiabatic=False,
         alpha=1.0,
         delta=1.0,
-        dphi_hat_dpsi_hat=0.0,
+        dphi_hat_dpsi_hat=0.75 if optional_drifts else 0.0,
         adiabatic_z=np.zeros((0,), dtype=np.float64),
         adiabatic_nhat=np.zeros((0,), dtype=np.float64),
         adiabatic_that=np.zeros((0,), dtype=np.float64),
@@ -527,24 +617,32 @@ def test_explicit_fp_xblock_matrix_and_diagonal_share_domain_implementation() ->
         b_hat=np.ones((2, 2), dtype=np.float64),
         d_hat=np.ones((2, 2), dtype=np.float64),
         b_hat_sub_theta=np.ones((2, 2), dtype=np.float64),
-        b_hat_sub_zeta=np.zeros((2, 2), dtype=np.float64),
+        b_hat_sub_zeta=0.25 * ones if optional_drifts else zeros,
         x=np.asarray([1.0], dtype=np.float64),
         x_weights=np.ones((1,), dtype=np.float64),
-        point_at_x0=False,
+        point_at_x0=bool(point_at_x0),
         fblock=SimpleNamespace(
             collisionless=colless,
             fp=SimpleNamespace(mat=np.asarray([[[[[5.0]], [[6.0]]]]], dtype=np.float64)),
             pas=None,
             identity_shift=2.0,
-            exb_theta=None,
-            exb_zeta=None,
-            magdrift_theta=None,
-            magdrift_zeta=None,
-            magdrift_xidot=None,
-            er_xidot=None,
-            er_xdot=None,
+            exb_theta=exb_theta,
+            exb_zeta=exb_zeta,
+            magdrift_theta=mag_theta,
+            magdrift_zeta=mag_zeta,
+            magdrift_xidot=mag_xidot,
+            er_xidot=er_xidot,
+            er_xdot=er_xdot,
         ),
     )
+
+
+def test_explicit_fp_xblock_matrix_and_diagonal_share_domain_implementation() -> None:
+    """A minimal full-FP x-block keeps the diagonal fallback consistent with CSR assembly."""
+
+    n_tz = 4
+    tz_sparse._RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST_CACHE.clear()
+    op = _fp_xblock_operator_fixture()
 
     host = get_rhsmode1_fp_xblock_assembled_host_cache(op=op)
     matrix = assemble_rhsmode1_fp_xblock_tz_sparse_matrix(
@@ -565,3 +663,83 @@ def test_explicit_fp_xblock_matrix_and_diagonal_share_domain_implementation() ->
     assert matrix.shape == (2 * n_tz, 2 * n_tz)
     np.testing.assert_allclose(matrix.diagonal(), diagonal, rtol=0.0, atol=0.0)
     np.testing.assert_allclose(diagonal, np.asarray([7.0] * n_tz + [8.0] * n_tz), rtol=0.0, atol=0.0)
+
+
+def test_explicit_fp_xblock_optional_drift_terms_keep_diagonal_consistent() -> None:
+    tz_sparse._RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST_CACHE.clear()
+    op = _fp_xblock_operator_fixture(optional_drifts=True)
+
+    host = get_rhsmode1_fp_xblock_assembled_host_cache(op=op)
+    assert host.exb_op_tz is not None
+    assert host.mag_theta_m1_tz_by_species is not None
+    assert host.mag_zeta_m1_tz_by_species is not None
+    assert host.mag_xidot_factor_flat is not None
+    assert host.er_xidot_factor_flat is not None
+    assert host.er_xdot_factor_flat is not None
+
+    matrix = assemble_rhsmode1_fp_xblock_tz_sparse_matrix(
+        op=op,
+        species=0,
+        ix=0,
+        preconditioner_xi=1,
+        host_cache=host,
+    )
+    diagonal = rhsmode1_fp_xblock_tz_sparse_diagonal(
+        op=op,
+        species=0,
+        ix=0,
+        preconditioner_xi=1,
+        host_cache=host,
+    )
+
+    assert matrix.shape == (8, 8)
+    assert matrix.nnz > 8
+    np.testing.assert_allclose(matrix.diagonal(), diagonal, rtol=1.0e-12, atol=1.0e-12)
+    assert np.all(np.isfinite(diagonal))
+    assert not np.allclose(diagonal, np.asarray([7.0] * 4 + [8.0] * 4))
+
+
+def test_explicit_fp_xblock_matrix_and_diagonal_reject_unsupported_contracts() -> None:
+    no_fp = _fp_xblock_operator_fixture()
+    no_fp.fblock.fp = None
+    with pytest.raises(ValueError, match="requires an FP operator"):
+        assemble_rhsmode1_fp_xblock_tz_sparse_matrix(op=no_fp, species=0, ix=0, preconditioner_xi=1)
+    with pytest.raises(ValueError, match="requires an FP operator"):
+        rhsmode1_fp_xblock_tz_sparse_diagonal(op=no_fp, species=0, ix=0, preconditioner_xi=1)
+
+    bad_xi = _fp_xblock_operator_fixture()
+    with pytest.raises(ValueError, match="requires preconditioner_xi=1"):
+        assemble_rhsmode1_fp_xblock_tz_sparse_matrix(op=bad_xi, species=0, ix=0, preconditioner_xi=2)
+    with pytest.raises(ValueError, match="requires preconditioner_xi=1"):
+        rhsmode1_fp_xblock_tz_sparse_diagonal(op=bad_xi, species=0, ix=0, preconditioner_xi=2)
+
+    point_at_x0 = _fp_xblock_operator_fixture(point_at_x0=True)
+    with pytest.raises(ValueError, match="requires pointAtX0=false"):
+        assemble_rhsmode1_fp_xblock_tz_sparse_matrix(op=point_at_x0, species=0, ix=0, preconditioner_xi=1)
+    with pytest.raises(ValueError, match="requires pointAtX0=false"):
+        rhsmode1_fp_xblock_tz_sparse_diagonal(op=point_at_x0, species=0, ix=0, preconditioner_xi=1)
+
+
+def test_explicit_fp_xblock_inactive_speed_returns_empty_matrix_and_diagonal() -> None:
+    tz_sparse._RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST_CACHE.clear()
+    op = _fp_xblock_operator_fixture()
+    op.fblock.collisionless.n_xi_for_x = np.asarray([0], dtype=np.int32)
+    host = get_rhsmode1_fp_xblock_assembled_host_cache(op=op)
+
+    matrix = assemble_rhsmode1_fp_xblock_tz_sparse_matrix(
+        op=op,
+        species=0,
+        ix=0,
+        preconditioner_xi=1,
+        host_cache=host,
+    )
+    diagonal = rhsmode1_fp_xblock_tz_sparse_diagonal(
+        op=op,
+        species=0,
+        ix=0,
+        preconditioner_xi=1,
+        host_cache=host,
+    )
+
+    assert matrix.shape == (0, 0)
+    assert diagonal.shape == (0,)

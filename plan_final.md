@@ -137,6 +137,13 @@ The main structural refactor is functionally complete:
   point. A source/test audit for `problems/profile_sparse_xblock.py` reports
   zero production-used public helpers without direct tests. The broader
   sparse-PC/source-guard bundle passed as `365 passed in 5.86 s`.
+- RHSMode=1 sparse x-block assembly coverage now includes a reusable tiny
+  full-FP fixture, optional ExB/magnetic-drift/Er-drift assembly and diagonal
+  consistency, unsupported-contract rejections, and inactive-speed empty-block
+  behavior. These tests exercise the direct host-side x-block assembly used by
+  bounded production preconditioners without running a solve. Focused
+  validation passed: `tests/test_sparse_assembly.py` and
+  `tests/test_profile_sparse_helper_coverage.py` as `36 passed in 0.90 s`.
 - RHSMode=1 sparse-solve orchestration coverage now includes direct bounded
   tests for requested sparse-PC GMRES dispatch, factor preflight residual/seed
   bookkeeping and diagnostics, auto-preflight retry no-op and accepted-candidate
@@ -5092,6 +5099,38 @@ Status:
   owners, while keeping generated artifacts out of the branch.
 - Fresh GPU benchmark regeneration remains deferred because the office GPU host
   is not reachable in this pass.
+
+### 2026-07-06: Sparse X-Block Assembly Coverage Tranche
+
+Changes:
+
+- Refactored the tiny RHSMode=1 full-FP x-block test fixture into a reusable
+  local helper so future sparse-assembly tests can vary physics terms without
+  duplicating a long fake operator.
+- Added optional-drift assembly coverage for ExB theta/zeta terms, magnetic
+  theta/zeta terms, magnetic and electric xi-dot terms, and radial electric
+  x-dot terms. The test checks that the assembled sparse matrix diagonal and
+  the diagonal-only fallback remain consistent.
+- Added fail-closed tests for missing FP operators, unsupported
+  `preconditioner_xi`, `pointAtX0=true`, and inactive speed nodes returning
+  empty matrix/diagonal outputs.
+
+Validation:
+
+- `PYTHONNOUSERSITE=1 python -m pytest -q tests/test_sparse_assembly.py
+  tests/test_profile_sparse_helper_coverage.py` passed as `36 passed in
+  0.90 s`.
+- `python -m ruff check tests/test_sparse_assembly.py`,
+  `python -m compileall -q tests/test_sparse_assembly.py
+  sfincs_jax/solvers/preconditioner_xblock_tz_sparse.py`, and
+  `git diff --check` passed.
+
+Status:
+
+- The RHSMode=1 FP x-block assembly owner now has better physics-term and
+  contract coverage for the bounded host sparse path used by production
+  preconditioners. This advances the CPU-only refactor/test lane without
+  changing runtime behavior or adding generated artifacts.
 
 ## Standard Validation Commands
 
