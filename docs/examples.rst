@@ -33,6 +33,14 @@ this page. It records the supported topic folders, first-pass entry points,
 typical commands, runtime budgets, and whether a workflow requires a local
 SFINCS Fortran v3 executable.
 
+For a terminal browser over the same catalog:
+
+.. code-block:: bash
+
+   python examples/list_workflows.py --list-topics
+   python examples/list_workflows.py --topic bootstrap --long
+   python examples/list_workflows.py --search "VMEC geometry"
+
 One-command start points
 ------------------------
 

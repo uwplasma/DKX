@@ -30,6 +30,7 @@ ALLOWED_EXAMPLE_FOLDERS = {
 FOLDERS_REQUIRING_README = ALLOWED_EXAMPLE_FOLDERS
 
 REQUIRED_TASK_ENTRYPOINTS = {
+    "list_workflows.py",
     "tutorials/00_start_here.ipynb",
     "tutorials/04_geometry_validation_and_performance.ipynb",
     "tutorials/run_quick_output_and_plot.py",
@@ -96,6 +97,22 @@ CATALOG_ENTRYPOINTS = ONE_COMMAND_ENTRYPOINTS | {
     "optimization/qa_nfp2_sfincs_jax_objectives.py",
     "autodiff/vmec_jax_to_boozer_sfincs_pipeline.py",
     "publication_figures/generate_fortran_suite_benchmark_summary.py",
+}
+
+CATALOG_REQUIRED_KEYWORDS = {
+    "autodiff",
+    "bootstrap",
+    "cpu",
+    "fortran",
+    "gpu",
+    "hdf5",
+    "memory",
+    "netcdf",
+    "optimization",
+    "plot",
+    "redl",
+    "transport",
+    "vmec",
 }
 
 ONE_COMMAND_LABELS = {
@@ -232,13 +249,18 @@ def test_workflow_catalog_is_complete_and_first_run_safe() -> None:
 
     workflows = catalog["workflows"]
     assert {workflow["entrypoint"] for workflow in workflows} == CATALOG_ENTRYPOINTS
+    all_keywords: set[str] = set()
     for workflow in workflows:
         assert workflow["id"]
         assert workflow["goal"]
         assert workflow["command"].startswith("python examples/")
+        assert workflow["keywords"]
+        all_keywords.update(str(keyword).lower() for keyword in workflow["keywords"])
         assert workflow["runtime_budget"]
         assert workflow["requires_fortran_v3"] is False
         assert (EXAMPLES_ROOT / workflow["entrypoint"]).is_file(), workflow["entrypoint"]
+
+    assert CATALOG_REQUIRED_KEYWORDS <= all_keywords
 
 
 def test_examples_readme_is_a_complete_user_navigation_map() -> None:
