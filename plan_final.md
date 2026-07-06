@@ -3204,6 +3204,13 @@ Validation:
   regenerated the QA bootstrap-current plot from tracked summary data.
 - `python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py --case QH --from-summary-json docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_sfincs_jax_redl_comparison.json --fig-dir docs/_static/figures/vmec_jax_finite_beta --stem qs_paper_qh_sfincs_jax_redl_comparison`
   regenerated the QH bootstrap-current plot from tracked summary data.
+- `python scripts/compare_v3_example_suite.py --fortran-exe /Users/rogeriojorge/local/sfincs/fortran/version3/sfincs --out-root /tmp/sfincs_jax_final_parity_sanity --limit 3 --fortran-timeout-s 180 -v`
+  wrote JAX outputs for the first three upstream HSX examples and completed
+  two Fortran comparisons with `0` common-key mismatches. The third Fortran
+  solve hit the 180 s cap.
+- `python scripts/compare_v3_example_suite.py --fortran-exe /Users/rogeriojorge/local/sfincs/fortran/version3/sfincs --out-root /tmp/sfincs_jax_final_parity_sanity_fulltraj --pattern '^.*/HSX_FPCollisions_fullTrajectories/input\\.namelist$|HSX_FPCollisions_fullTrajectories' --limit 1 --fortran-timeout-s 360 -v`
+  reran the timed-out HSX full-trajectory case and completed with
+  `ok_fortran=1`, `ok_compare_common=1`.
 
 Status:
 
