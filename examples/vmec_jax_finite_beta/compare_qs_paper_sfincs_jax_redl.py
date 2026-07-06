@@ -18,6 +18,7 @@ use NTX or NEOPAX data.
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import json
 import os
 import re
@@ -57,6 +58,12 @@ DEFAULT_ZENODO_ROOT = Path("/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_
 BENCHMARK_REL = Path("calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark")
 DEFAULT_S_VALUES = "all"
 QUICK_S_VALUES = "0.3,0.5,0.7"
+PDF_METADATA = {
+    "Creator": "sfincs_jax",
+    "Producer": "sfincs_jax",
+    "CreationDate": _dt.datetime(2026, 1, 1, tzinfo=_dt.UTC),
+    "ModDate": _dt.datetime(2026, 1, 1, tzinfo=_dt.UTC),
+}
 
 
 @dataclass(frozen=True)
@@ -1189,7 +1196,7 @@ def _plot(payload: dict[str, Any], *, png_path: Path, pdf_path: Path) -> None:
         )
     png_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(png_path, dpi=220, bbox_inches="tight")
-    fig.savefig(pdf_path, bbox_inches="tight")
+    fig.savefig(pdf_path, bbox_inches="tight", metadata=PDF_METADATA)
     plt.close(fig)
 
 

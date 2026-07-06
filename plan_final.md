@@ -2860,6 +2860,66 @@ Validation:
 - `python -m ruff check tests/test_examples_tree_contract.py` passed.
 - `python -m compileall -q tests/test_examples_tree_contract.py` passed.
 
+## Tranche 146: Single-Branch Review Validation and Figure Refresh
+
+Scope:
+
+- Verified that the only active review branch is
+  `refactor/v3-driver-architecture` and that `origin/main` is already an
+  ancestor of it. The extra checkout at
+  `/Users/rogeriojorge/local/tests/sfincs_jax_main_clean` is detached and holds
+  uncommitted large equilibrium blobs; those files are intentionally excluded
+  from this PR and from the release-data policy.
+- Regenerated the README-facing SFINCS Fortran v3 / SFINCS_JAX CPU/GPU runtime
+  and memory summary from the checked CPU/GPU suite reports.
+- Regenerated the QA/QH bootstrap-current figure bundles from their checked
+  summary JSON files.
+- Made the QS-paper bootstrap-current PDF writer deterministic by pinning PDF
+  metadata. Future plot refreshes should no longer create timestamp-only PDF
+  diffs.
+
+Validation:
+
+- GitHub PR #8 checks are green for head `cc05cc79`: coverage shards,
+  coverage-report, examples smoke, external-data smoke, optional ecosystem
+  gates, tests, and docs all passed.
+- The combined CI coverage artifacts report `TOTAL 69098 stmts, 6921 miss,
+  90%`. The 95% coverage gate is still open and should stay explicit in this
+  plan.
+- `python scripts/check_benchmark_artifacts.py examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json`
+  passed.
+- `python scripts/benchmark_artifact_index.py examples/publication_figures/artifacts docs/_static/figures/vmec_jax_finite_beta`
+  reported `release-blocking=0`.
+- `python -m pytest -q tests/test_benchmark_doc_claims.py tests/test_validation_artifacts.py tests/test_benchmark_artifact_policy.py tests/test_examples_tree_contract.py tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py`
+  passed as `126 passed in 4.69 s`.
+- The public stale-wording `rg` scan over README/docs/examples passed with no
+  matches.
+- The targeted frozen Fortran/operator/HDF5 parity bundle passed as
+  `220 passed in 217.44 s`.
+- The targeted physics/validation/benchmark bundle passed as
+  `1598 passed in 99.27 s`.
+- `python -m pytest -q` passed as `4342 passed in 613.35 s`.
+- `python -m sphinx -b html docs docs/_build/html` passed.
+- `python -m ruff check sfincs_jax tests` passed.
+- `python -m pytest -q tests/test_finite_beta_vmec_example.py tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py`
+  passed as `41 passed in 1.64 s` after the deterministic PDF metadata change.
+- `python -m ruff check examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py tests/test_finite_beta_vmec_example.py`
+  passed.
+- `python -m compileall -q examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py tests/test_finite_beta_vmec_example.py`
+  passed.
+- `git diff --check` passed.
+
+Live Fortran note:
+
+- A bounded local one-case Fortran-v3/JAX runner probe on
+  `quick_2species_FPCollisions_noEr` completed but reported two tiny
+  solver-bucket mismatches (`full_f`, `totalDensity`) at maximum absolute
+  difference `5.39e-10`. The runner classified the blocker as
+  `reference solver quality` because the Fortran final residual was
+  `5.524e-09`, more than `10x` the estimated target. This was not promoted into
+  tracked generated docs or fixtures; the production README figures remain
+  backed by the checked suite reports.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
