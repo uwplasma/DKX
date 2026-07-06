@@ -7,6 +7,7 @@ import pytest
 from scipy import sparse
 
 import sfincs_jax.operators.profile_full_system as profile_full_system
+from sfincs_jax.operators.profile_layout import RHS1BlockLayout
 
 
 def _fake_op(*, rhs_mode: int = 1, total_size: int = 4, f_size: int = 2) -> SimpleNamespace:
@@ -44,6 +45,35 @@ def _fblock_selection(*, selected: bool = True, matrix: sparse.spmatrix | None =
             "reason": str(reason),
             "csr_nbytes_actual": 0 if matrix is None else profile_full_system._scipy_csr_nbytes(matrix.tocsr()),
         },
+    )
+
+
+def _layout(total_size: int = 3) -> RHS1BlockLayout:
+    return RHS1BlockLayout(
+        n_species=1,
+        n_x=1,
+        n_xi=1,
+        n_theta=1,
+        n_zeta=1,
+        f_size=1,
+        phi1_size=1 if total_size > 1 else 0,
+        extra_size=max(0, int(total_size) - 2),
+        total_size=int(total_size),
+        constraint_scheme=1,
+        include_phi1=total_size > 1,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+
+
+def _selected_preconditioner(kind: str = "sentinel") -> profile_full_system.RHS1StructuredFullCSRPreconditioner:
+    return profile_full_system.RHS1StructuredFullCSRPreconditioner(
+        operator=object(),
+        selected=True,
+        kind=kind,
+        reason="complete",
+        setup_s=0.0,
+        metadata={"builder": kind},
     )
 
 
@@ -262,3 +292,150 @@ def test_structured_full_csr_solve_error_gates_and_lgmres_branch(monkeypatch) ->
     )
     assert direct.converged
     assert direct.metadata["factor_kind"] == "splu"
+
+
+@pytest.mark.parametrize(
+    ("kind", "expected_kind"),
+    [
+        ("active_diagonal_schur", "active_diagonal_schur"),
+        ("active_schwarz_sparse_coarse", "active_tail_sparse_coarse"),
+        ("active_fortran_v3_reduced_lu", "active_fortran_v3_pc_matrix"),
+        ("active_coarse", "active_coarse"),
+        ("active_low_l_schur", "active_low_l_schur"),
+        ("active_ell_band_schur", "active_ell_band_schur"),
+        ("active_xell_window_lsq_schur", "active_xell_window_lsq_schur"),
+        ("active_coupled_kinetic_block", "active_coupled_kinetic_block"),
+        ("active_filtered_sparse_factor", "active_filtered_sparse_factor"),
+        ("active_symbolic_frontal_schur_lu", "active_symbolic_frontal_schur_lu"),
+        ("active_symbolic_superblock_lu", "active_symbolic_superblock_lu"),
+        ("active_symbolic_block_schur_lu", "active_symbolic_block_schur_lu"),
+        ("active_symbolic_coupled_schur", "active_symbolic_coupled_schur"),
+        ("active_bounded_native_stack", "active_bounded_native_stack"),
+        ("active_fortran_v3_reduced_native_stack", "active_fortran_v3_reduced_native_stack"),
+        ("active_native_xell_field_split_sparse_coarse", "active_native_xell_field_split_sparse_coarse"),
+        ("active_angular_line_field_split_sparse_coarse", "active_angular_line_field_split_sparse_coarse"),
+        ("active_multiline_field_split_sparse_coarse", "active_multiline_field_split_sparse_coarse"),
+        ("active_coupled_kinetic_field_split_sparse_coarse", "active_coupled_kinetic_field_split_sparse_coarse"),
+        ("active_global_field_split_schur", "active_global_field_split_schur"),
+        ("active_overlap_schwarz", "active_overlap_schwarz"),
+        ("active_angular_line", "active_angular_line"),
+        ("active_native_indexed_schwarz", "active_native_indexed_schwarz"),
+        ("active_xblock", "active_xblock"),
+        ("active_ilu_coarse", "active_ilu_coarse"),
+    ],
+)
+def test_active_projected_preconditioner_aliases_fail_closed_without_layout(kind: str, expected_kind: str) -> None:
+    matrix = sparse.eye(3, format="csr", dtype=np.float64)
+
+    pc = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=None,
+        active_indices=None,
+        kind=kind,
+    )
+
+    assert not pc.selected
+    assert pc.kind == expected_kind
+    assert pc.reason == "missing_active_layout"
+
+
+@pytest.mark.parametrize(
+    ("kind", "builder_attr", "active_required"),
+    [
+        ("active_diagonal_schur", "_build_active_projected_diagonal_schur_preconditioner", False),
+        ("active_schwarz_sparse_coarse", "_build_active_projected_sparse_coarse_residual_preconditioner", False),
+        ("active_fortran_v3_reduced_lu", "_build_active_fortran_v3_reduced_sparse_factor_preconditioner", False),
+        ("active_coarse", "_build_active_projected_coarse_residual_preconditioner", False),
+        ("active_low_l_schur", "_build_active_projected_low_l_schur_preconditioner", False),
+        ("active_ell_band_schur", "_build_active_projected_ell_band_schur_preconditioner", True),
+        ("active_xell_window_lsq_schur", "_build_active_projected_xell_window_lsq_schur_preconditioner", True),
+        ("active_coupled_kinetic_block", "_build_active_projected_coupled_kinetic_block_preconditioner", False),
+        ("active_filtered_sparse_factor", "_build_active_projected_filtered_sparse_factor_preconditioner", False),
+        ("active_symbolic_frontal_schur_lu", "_build_active_projected_symbolic_frontal_schur_lu_preconditioner", False),
+        ("active_symbolic_superblock_lu", "_build_active_projected_symbolic_superblock_lu_preconditioner", False),
+        ("active_symbolic_block_schur_lu", "_build_active_projected_symbolic_block_schur_lu_preconditioner", False),
+        ("active_symbolic_coupled_schur", "_build_active_projected_symbolic_coupled_schur_preconditioner", False),
+        ("active_bounded_native_stack", "_build_active_projected_bounded_native_stack_preconditioner", False),
+        ("active_fortran_v3_reduced_native_stack", "_build_active_fortran_v3_reduced_native_stack_preconditioner", False),
+        (
+            "active_native_xell_field_split_sparse_coarse",
+            "_build_active_projected_native_xell_field_split_sparse_coarse_preconditioner",
+            False,
+        ),
+        ("active_global_field_split_schur", "_build_active_projected_global_field_split_schur_preconditioner", False),
+        ("active_overlap_schwarz", "_build_active_projected_overlap_schwarz_preconditioner", False),
+        ("active_angular_line", "_build_active_projected_angular_line_preconditioner", True),
+        ("active_native_indexed_schwarz", "_build_active_projected_native_indexed_schwarz_preconditioner", True),
+        ("active_xblock", "_build_active_projected_xblock_preconditioner", False),
+        ("active_global_sparse_factor", "_build_active_global_sparse_factor_preconditioner", False),
+        ("active_scaled_ilu", "_build_active_scaled_sparse_factor_preconditioner", False),
+    ],
+)
+def test_active_projected_preconditioner_aliases_route_to_builder(
+    monkeypatch,
+    kind: str,
+    builder_attr: str,
+    active_required: bool,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_builder(**kwargs):
+        calls.append(kwargs)
+        return _selected_preconditioner(kind=f"built:{builder_attr}")
+
+    monkeypatch.setattr(profile_full_system, builder_attr, fake_builder)
+    matrix = sparse.eye(3, format="csr", dtype=np.float64)
+    active = np.arange(3, dtype=np.int64) if active_required else None
+
+    pc = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=_layout(3),
+        active_indices=active,
+        kind=kind,
+        max_factor_nbytes=12345,
+        regularization=1.0e-9,
+    )
+
+    assert pc.selected
+    assert pc.kind == f"built:{builder_attr}"
+    assert len(calls) == 1
+    assert calls[0]["requested_kind"] == kind
+    assert calls[0]["max_factor_nbytes"] == 12345
+    if active_required:
+        active_key = "active_kinetic_indices" if kind == "active_angular_line" else "active_indices"
+        np.testing.assert_array_equal(calls[0][active_key], active)
+
+
+def test_active_projected_preconditioner_ilu_budget_and_unsupported_paths(monkeypatch) -> None:
+    matrix = sparse.eye(4, format="csr", dtype=np.float64)
+    monkeypatch.setattr(
+        profile_full_system,
+        "_estimate_spilu_factor_nbytes",
+        lambda **_kwargs: 1024,
+    )
+
+    explicit = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        kind="active_ilu",
+        max_factor_nbytes=16,
+    )
+    assert not explicit.selected
+    assert explicit.kind == "active_spilu"
+    assert explicit.reason == "active_spilu_budget_exceeded:1024>16"
+    assert explicit.metadata["factor_nbytes_estimate"] == 1024
+
+    auto = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        kind="auto",
+        max_factor_nbytes=16,
+    )
+    assert auto.selected
+    assert auto.kind == "jacobi"
+    assert auto.reason.startswith("auto_selected:")
+
+    unsupported = profile_full_system.build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        kind="not_a_preconditioner",
+    )
+    assert not unsupported.selected
+    assert unsupported.reason == "unsupported_active_projected_preconditioner"

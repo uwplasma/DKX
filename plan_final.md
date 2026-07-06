@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Review Plan
 
-Last updated: 2026-07-05
+Last updated: 2026-07-06
 
 Active branch: `refactor/v3-driver-architecture`
 
@@ -3615,6 +3615,57 @@ Status:
   host is reachable.
 - The remaining review gates are CI completion, optional fresh GPU reruns, and
   the longer-term 95% coverage target.
+
+## Tranche 162: Active Full-System Preconditioner Dispatch Coverage
+
+Scope:
+
+- Extended `tests/test_profile_full_system_structured_selection.py` to cover
+  the active RHSMode=1 full-CSR preconditioner dispatcher without adding any
+  production-scale solves.
+- Added alias and fail-closed checks for the active diagonal Schur, sparse
+  coarse, Fortran-v3 reduced, low-l, ell-band, xell-window, coupled kinetic,
+  filtered sparse-factor, symbolic frontal/superblock/block/coupled Schur,
+  native-stack, native xell/angular/multiline sparse-coarse, global Schur,
+  Schwarz, angular-line, native-indexed-Schwarz, xblock, and ILU-coarse
+  families.
+- Added builder-routing checks that monkeypatch the corresponding builder
+  hooks and verify the normalized requested kind, memory cap, and active-index
+  payloads. This guards solver-policy refactors without coupling the tests to
+  expensive factorization setup.
+- Added explicit ILU budget and unsupported-kind checks so active sparse
+  preconditioners fail closed when memory admission rejects a candidate.
+
+Validation:
+
+- `python -m pytest -q tests/test_profile_full_system_structured_selection.py`
+  passed as `53 passed in 0.38 s`.
+- `python -m pytest -q tests/test_profile_full_system_structured_selection.py
+  tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py
+  tests/test_profile_response_sparse_pc.py::test_direct_tail_structured_build_uses_direct_reduced_pmat_builder
+  tests/test_profile_response_sparse_pc.py::test_direct_tail_structured_admission_allows_direct_reduced_pmat_without_bundle`
+  passed as `319 passed in 141.86 s`.
+- `python -m ruff check sfincs_jax tests`, `python -m compileall -q
+  sfincs_jax tests`, and `git diff --check` passed.
+- Full package coverage validation passed:
+  `python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax
+  --cov-report=term --cov-report=json:/tmp/sfincs_jax_coverage_after_active_pc_dispatch.json`
+  as `4445 passed in 279.75 s`.
+
+Coverage movement:
+
+- `sfincs_jax/operators/profile_full_system.py` improved from `272` missing
+  lines to `259` missing lines.
+- Total package missing lines improved from `6632` to `6619`.
+- Total package coverage remains about `90%`; the 95% target remains open.
+
+Status:
+
+- This tranche strengthens the active solver-policy contract and measurably
+  advances the coverage target without increasing package source complexity.
+- The next high-impact coverage targets remain `profile_solve.py`,
+  `profile_true_operator_rescue.py`, `transport_solve.py`,
+  `transport_linear_system.py`, and the larger preconditioner owners.
 
 ## Standard Validation Commands
 
