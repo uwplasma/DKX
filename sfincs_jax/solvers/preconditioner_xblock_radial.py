@@ -110,12 +110,6 @@ def build_rhs1_xmg_preconditioner(
         except ValueError:
             reg = 1e-10
         reg_l0 = float(reg)
-        if op.fblock.pas is not None and op.fblock.fp is None and op.fblock.er_xdot is not None:
-            # The PAS operator can have an exactly-zero L=0 diagonal (krook=0). With Er xDot enabled,
-            # the x-coupled block can be near-singular if we only add an extremely small regularization,
-            # leading to huge preconditioner entries and GMRES blow-up. Use a modest L=0 shift here to
-            # keep the xmg inverse numerically stable.
-            reg_l0 = max(reg_l0, 1.0)
         reg_by_l = np.full((n_l,), float(reg), dtype=np.float64)
         if n_l > 0:
             reg_by_l[0] = reg_l0
@@ -133,12 +127,9 @@ def build_rhs1_xmg_preconditioner(
             factor_l = 0.5 * (l_arr * (l_arr + 1.0) + 2.0 * float(pas.krook))
             pas_diag = float(pas.nu_n) * np.asarray(pas.nu_d_hat, dtype=np.float64)[:, :, None] * factor_l[None, None, :]
 
-        # Optional dense-x coupling from the v3 Er xDot term.
-        #
-        # For PAS-only systems, the collision operator is diagonal in x, so the x-multigrid
-        # preconditioner is otherwise ineffective. The Er xDot term introduces dense ddx
-        # coupling in x (see `apply_er_xdot_v3`), so we include a flux-surface-averaged
-        # diagonal-in-L approximation here to recover useful x-coupling at low cost.
+        # Optional dense-x coupling from the v3 Er xDot term. PAS+Er is routed
+        # to the stable x-upwind preconditioner above; xMG keeps only the
+        # diagonal-in-L coarse-x approximation used by FP+Er and mixed systems.
         xdot_x_part: np.ndarray | None = None  # (Xc,Xc)
         xdot_coef_l: np.ndarray | None = None  # (L,)
         xdot_rms = 0.0
