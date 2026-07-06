@@ -1814,6 +1814,18 @@ Completed work:
   `121/121`; Ruff, `compileall`, and `git diff --check` passed. Direct
   coverage for `sfincs_jax/problems/transport_policies.py` improved from
   `70%` to `86%`.
+- Tranche 118: expanded RHSMode=2/3 transport linear-system and active-block
+  preconditioner coverage with tiny algebraic fixtures instead of full
+  production solves. Added tests for active symbolic block orderings, exact
+  block-Schur application on a sparse system with tail closure, deterministic
+  admission probes, residual-derived coarse correction construction, memory
+  and malformed-probe guards, and direct-Pmat physics coarse-basis columns for
+  constraint schemes 1 and 2 plus tail Schur response columns. Validation:
+  the combined transport-linear focused bundle passed `138/138` in `21.55 s`;
+  adjacent source-tree/import guards passed `79/79`; Ruff, `compileall`, and
+  `git diff --check` passed. Focused combined coverage for
+  `sfincs_jax/problems/transport_linear_system.py` improved from `47%` to
+  `71%`.
 
 Remaining consolidation steps:
 
@@ -1849,9 +1861,10 @@ closed at `modules_with_missing 0`; focused owner coverage is `98%` for
 Tranche 113; `validation/artifacts.py` is `95%` after Tranche 114,
 `validation/data_fetch.py` is `100%` after Tranche 115, and
 `validation/fortran.py` is `99%` after Tranche 116; `transport_policies.py`
-is `86%` after Tranche 117. The final target is still 95%; the next coverage
-tranches should prioritize large under-covered owners with bounded behavior
-tests rather than slow full solves.
+is `86%` after Tranche 117; `transport_linear_system.py` reaches `71%` in the
+combined focused transport bundle after Tranche 118. The final target is still
+95%; the next coverage tranches should prioritize large under-covered owners
+with bounded behavior tests rather than slow full solves.
 
 Goal: reach 95% meaningful package coverage without slow CI or fixture bloat.
 

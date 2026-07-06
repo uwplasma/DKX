@@ -13,6 +13,12 @@ import sfincs_jax.problems.transport_solve as transport_linear
 from sfincs_jax.problems.transport_linear_system import (
     TransportLinearSolveCallbacks,
     TransportLinearSolveContext,
+    _build_rhsmode23_direct_pmat_physics_coarse_basis,
+    admit_active_block_schur_factor,
+    build_active_block_ordering,
+    build_active_block_schur_factor,
+    build_active_block_schur_residual_coarse_factor,
+    deterministic_probe_matrix,
     solve_transport_linear,
     solve_transport_linear_with_residual,
     transport_restart_for_method,
@@ -621,6 +627,209 @@ def test_transport_dense_batch_active_streaming_requires_collector(monkeypatch) 
 
     with pytest.raises(RuntimeError, match="streaming diagnostics"):
         solve_transport_dense_batch(context=context, op_probe_ref=context.op_matvec_by_index[0], reason="unit")
+
+
+def test_active_block_ordering_variants_and_guards() -> None:
+    zeta = build_active_block_ordering(
+        kinetic_size=4,
+        tail_size=1,
+        n_theta=2,
+        n_zeta=2,
+        block_kind="zeta_line",
+        max_block_size=2,
+    )
+    assert zeta.block_kind == "zeta_line"
+    assert [block.tolist() for block in zeta.blocks] == [[0, 1], [2, 3]]
+    assert zeta.active_size == 5
+
+    theta = build_active_block_ordering(
+        kinetic_size=4,
+        tail_size=0,
+        n_theta=2,
+        n_zeta=2,
+        block_kind="theta_line",
+    )
+    assert [block.tolist() for block in theta.blocks] == [[0, 2], [1, 3]]
+
+    plane = build_active_block_ordering(
+        kinetic_size=8,
+        tail_size=0,
+        n_theta=2,
+        n_zeta=2,
+        block_kind="ell_band",
+        ell_block=2,
+    )
+    assert plane.block_kind == "ell_band"
+    assert [block.tolist() for block in plane.blocks] == [[0, 1, 2, 3, 4, 5, 6, 7]]
+
+    with pytest.raises(ValueError, match="kinetic_size"):
+        build_active_block_ordering(kinetic_size=0, tail_size=0, n_theta=2, n_zeta=2)
+    with pytest.raises(ValueError, match="divisible"):
+        build_active_block_ordering(kinetic_size=3, tail_size=0, n_theta=2, n_zeta=2, block_kind="zeta_line")
+    with pytest.raises(ValueError, match="unsupported"):
+        build_active_block_ordering(kinetic_size=4, tail_size=0, n_theta=2, n_zeta=2, block_kind="bad")
+    with pytest.raises(MemoryError, match="active block size"):
+        build_active_block_ordering(kinetic_size=4, tail_size=0, n_theta=2, n_zeta=2, block_kind="angular_plane", max_block_size=3)
+
+
+def test_active_block_schur_factor_and_residual_coarse_are_admitted() -> None:
+    scipy_sparse = pytest.importorskip("scipy.sparse")
+    ordering = build_active_block_ordering(
+        kinetic_size=4,
+        tail_size=1,
+        n_theta=2,
+        n_zeta=2,
+        block_kind="zeta_line",
+        max_block_size=2,
+    )
+    matrix = scipy_sparse.csr_matrix(
+        np.asarray(
+            [
+                [4.0, 1.0, 0.0, 0.0, 0.2],
+                [1.0, 3.0, 0.0, 0.0, 0.1],
+                [0.0, 0.0, 2.5, 0.4, 0.3],
+                [0.0, 0.0, 0.4, 5.0, 0.4],
+                [0.5, 0.2, 0.1, 0.3, 2.0],
+            ],
+            dtype=np.float64,
+        )
+    )
+    factor = build_active_block_schur_factor(matrix, ordering, reg=0.0, max_mb=1.0)
+    rhs = np.asarray([1.0, -0.5, 0.25, 0.75, -0.2], dtype=np.float64)
+    y = factor.apply(rhs)
+    np.testing.assert_allclose(matrix @ y, rhs, rtol=1.0e-10, atol=1.0e-10)
+    assert factor.metadata["block_count"] == 2
+
+    probes = deterministic_probe_matrix(
+        active_size=5,
+        kinetic_size=4,
+        tail_size=1,
+        count=4,
+    )
+    assert probes.shape == (5, 4)
+    np.testing.assert_allclose(np.linalg.norm(probes, axis=0), np.ones(4), rtol=1.0e-12, atol=1.0e-12)
+    admission = admit_active_block_schur_factor(
+        matrix,
+        factor,
+        probes=probes,
+        max_relative_residual=1.0e-8,
+        min_improvement_vs_identity=1.0,
+    )
+    assert admission.accepted
+    assert admission.reason == "accepted"
+
+    coupled = scipy_sparse.csr_matrix(matrix.toarray() + np.asarray(
+        [
+            [0.0, 0.0, 0.2, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.1, 0.0],
+            [0.3, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.2, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+        ],
+        dtype=np.float64,
+    ))
+    coarse = build_active_block_schur_residual_coarse_factor(
+        coupled,
+        factor,
+        probes=probes,
+        max_cols=3,
+        damping=0.5,
+        max_mb=1.0,
+    )
+    corrected = coarse.apply(rhs)
+    assert corrected.shape == rhs.shape
+    assert np.all(np.isfinite(corrected))
+    assert coarse.metadata["residual_coarse_cols"] <= 3
+
+    with pytest.raises(ValueError, match="probe length"):
+        build_active_block_schur_residual_coarse_factor(
+            coupled,
+            factor,
+            probes=np.ones((4, 1)),
+        )
+    with pytest.raises(MemoryError, match="exceeds"):
+        build_active_block_schur_factor(matrix, ordering, reg=0.0, max_mb=1.0e-12)
+    failed = admit_active_block_schur_factor(
+        coupled,
+        factor,
+        probes=probes,
+        max_relative_residual=1.0e-16,
+        min_improvement_vs_identity=1.0e6,
+    )
+    assert not failed.accepted
+    assert failed.reason in {"relative_residual_gate", "improvement_gate"}
+
+
+def test_rhsmode23_direct_pmat_physics_coarse_basis_uses_sources_and_tail_response() -> None:
+    scipy_sparse = pytest.importorskip("scipy.sparse")
+
+    def _operator(*, constraint_scheme: int) -> SimpleNamespace:
+        n_species = 1
+        n_x = 2
+        n_xi = 2
+        n_theta = 2
+        n_zeta = 2
+        f_size = n_species * n_x * n_xi * n_theta * n_zeta
+        extra_size = 2
+        return SimpleNamespace(
+            n_species=n_species,
+            n_x=n_x,
+            n_xi=n_xi,
+            n_theta=n_theta,
+            n_zeta=n_zeta,
+            f_size=f_size,
+            phi1_size=0,
+            extra_size=extra_size,
+            total_size=f_size + extra_size,
+            constraint_scheme=constraint_scheme,
+            point_at_x0=False,
+            theta_weights=jnp.asarray([0.4, 0.6], dtype=jnp.float64),
+            zeta_weights=jnp.asarray([0.25, 0.75], dtype=jnp.float64),
+            d_hat=jnp.ones((n_theta, n_zeta), dtype=jnp.float64),
+            x=jnp.asarray([0.5, 1.5], dtype=jnp.float64),
+            x_weights=jnp.asarray([0.7, 1.3], dtype=jnp.float64),
+        )
+
+    op1 = _operator(constraint_scheme=1)
+    active = np.arange(op1.total_size, dtype=np.int64)
+    matrix_dense = np.eye(op1.total_size, dtype=np.float64)
+    matrix_dense[:, op1.f_size] = np.linspace(0.1, 0.9, op1.total_size)
+    matrix = scipy_sparse.csr_matrix(matrix_dense)
+    bundle = SimpleNamespace(
+        operator=SimpleNamespace(matrix=matrix),
+        solve=lambda rhs: 0.5 * np.asarray(rhs, dtype=np.float64),
+    )
+
+    basis1, names1 = _build_rhsmode23_direct_pmat_physics_coarse_basis(
+        op=op1,
+        active_indices=active,
+        max_cols=12,
+        base_factor_bundle=bundle,
+    )
+    assert basis1 is not None
+    assert basis1.shape[0] == op1.total_size
+    assert len(names1) == basis1.shape[1]
+    assert "direct_pmat_tail_unit_0" in names1
+    assert any("constraint1_particle_source_shape" in name for name in names1)
+    assert any("tail_schur_response" in name for name in names1)
+
+    op2 = _operator(constraint_scheme=2)
+    basis2, names2 = _build_rhsmode23_direct_pmat_physics_coarse_basis(
+        op=op2,
+        active_indices=active,
+        max_cols=10,
+    )
+    assert basis2 is not None
+    assert any("constraint2_density_moment" in name for name in names2)
+    assert any("constraint2_l0_source" in name for name in names2)
+
+    empty_basis, empty_names = _build_rhsmode23_direct_pmat_physics_coarse_basis(
+        op=op2,
+        active_indices=np.asarray([], dtype=np.int64),
+        max_cols=4,
+    )
+    assert empty_basis is None
+    assert empty_names == ()
 
 
 def test_transport_matvec_cache_and_recycle_state() -> None:
