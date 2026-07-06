@@ -37,8 +37,8 @@ models overlap.
   `9c48d211`, `653d6ac5`, and `14e0dbd5`. Focused local coverage reports
   `compare.py` at 94%, `plotting.py` at 100%, `profile_exb.py` at 97%,
   `profile_magnetic_drifts.py` at 94%, `adaptive_maps.py` at 97%,
-  `periodic_stencil.py` at 98%, `structured_velocity.py` at 99%, and
-  `profile_residual.py` at 92% under the focused residual/preconditioner suite.
+  `periodic_stencil.py` at 98%, `structured_velocity.py` at 99%,
+  `profile_residual.py` at 92%, and `preconditioner_full_fp_csr.py` at 98%.
 - The latest bounded local review bundle passed: source-tree guards,
   docs/example guards, and comparison/plotting checks ran `123 passed in
   9.70 s`; Sphinx `-W` passed in `17.56 s`.
