@@ -266,7 +266,8 @@ def test_active_block_schur_factor_sanitizes_nonfinite_tail_outputs() -> None:
         metadata={},
     )
 
-    actual = factor.apply(np.ones((2,), dtype=np.float64))
+    with np.errstate(invalid="ignore"):
+        actual = factor.apply(np.ones((2,), dtype=np.float64))
 
     np.testing.assert_allclose(actual, np.zeros((2,), dtype=np.float64))
 
@@ -462,7 +463,8 @@ def test_residual_coarse_factor_sanitizes_nonfinite_corrections() -> None:
         metadata={},
     )
 
-    actual = coarse.apply(np.asarray([1.0, 0.0], dtype=np.float64))
+    with np.errstate(invalid="ignore"):
+        actual = coarse.apply(np.asarray([1.0, 0.0], dtype=np.float64))
 
     np.testing.assert_allclose(actual, np.zeros((2,), dtype=np.float64))
 

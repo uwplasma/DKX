@@ -4508,6 +4508,37 @@ Status:
 - This is a bounded peak-memory improvement for explicit sparse operator setup.
   It does not change solver numerics or public APIs.
 
+## Latest Execution Log: Local CPU PR-Readiness Validation Tranche
+
+Scope:
+
+- Ran the full local CPU pytest suite after the sparse-factor coverage and
+  host-copy reduction changes.
+- Ran docs/readme/source-tree PR-readiness contracts and a warning-free Sphinx
+  build.
+- Removed generated local Sphinx build artifacts and bytecode caches after the
+  checks.
+- Made the two transport active-factor nonfinite-sanitization tests explicitly
+  suppress their expected NumPy invalid-value warnings, so test output remains
+  clean without changing production code.
+
+Validation:
+
+- `python -m pytest -q` passed as `4472 passed, 4 skipped` in `975.91 s`.
+- `python -m pytest -q tests/test_public_docs_wording_contract.py
+  tests/test_benchmark_doc_claims.py tests/test_release_gate_metadata.py
+  tests/test_validation_manifest_schema.py tests/test_source_tree_consolidation.py`
+  passed as `61 passed in 4.97 s`.
+- `python -m sphinx -b html -W docs docs/_build/html` passed.
+- `python -m pytest -q tests/test_transport_active_factor.py` passed as
+  `30 passed in 0.62 s` after expected-warning cleanup.
+
+Status:
+
+- CPU-only PR readiness is strong for the refactor branch. GPU production
+  performance and fresh GPU runtime/memory plot regeneration remain deferred
+  until GPU access is restored.
+
 ## Standard Validation Commands
 
 Use focused checks after each tranche:
