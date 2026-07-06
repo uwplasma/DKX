@@ -1799,6 +1799,114 @@ def test_sparse_pc_direct_tail_factor_setup_selects_structured_path(monkeypatch)
     assert any("structured preconditioner selected" in message for message in emits)
 
 
+def test_sparse_pc_direct_tail_factor_setup_required_structured_path_fails_fast(
+    monkeypatch,
+) -> None:
+    operator_bundle = SimpleNamespace(kind="operator", matrix=scipy_sparse.eye(1))
+    materialization = sparse_pc_module.DirectTailMaterializationResult(
+        direct_tail_default=False,
+        enabled=True,
+        built=True,
+        error=None,
+        operator_bundle=operator_bundle,
+        pc_env="active_dense!",
+        direct_reduced_pmat_requested=True,
+    )
+    admission = sparse_pc_module.DirectTailStructuredAdmissionResult(
+        pc_env="active_dense!",
+        requested="active_dense",
+        auto_default=False,
+        fail_closed_size=0,
+        auto_large_fail_closed=False,
+        required=True,
+        setup_allowed=True,
+        max_mb_auto=False,
+        max_mb=1.0,
+        regularization=1.0e-12,
+    )
+    structured_build = SimpleNamespace(
+        layout=object(),
+        active_indices=np.asarray([0], dtype=np.int64),
+        max_nbytes=1024,
+        preconditioner=None,
+        factor_bundle=None,
+        operator_bundle_pc=None,
+        ready=False,
+        selected=False,
+        reason="memory_gate",
+        metadata={"kind": "active_dense", "reason": "memory_gate"},
+        error="factor estimate exceeds budget",
+        cache_hit=False,
+        cache_key=None,
+    )
+    emits: list[str] = []
+
+    monkeypatch.setattr(
+        sparse_pc_module,
+        "build_direct_tail_materialization_setup",
+        lambda _context: materialization,
+    )
+    monkeypatch.setattr(
+        sparse_pc_module,
+        "resolve_direct_tail_structured_admission",
+        lambda _context: admission,
+    )
+    monkeypatch.setattr(
+        sparse_pc_module,
+        "build_direct_tail_structured_preconditioner_setup",
+        lambda _context: structured_build,
+    )
+
+    with pytest.raises(RuntimeError, match="explicitly requested but not selected"):
+        sparse_pc_module.build_sparse_pc_direct_tail_factor_setup(
+            sparse_pc_module.SparsePCDirectTailFactorSetupContext(
+                env={},
+                op=SimpleNamespace(),
+                op_pc=SimpleNamespace(),
+                rhs_dtype=jnp.float64,
+                pattern=SimpleNamespace(nnz=1),
+                active_indices=None,
+                sparse_pc_use_active_dof=False,
+                reduce_full=lambda vec: vec,
+                expand_reduced=lambda vec: vec,
+                factor_matvec=lambda vec: vec,
+                pc_shift=0.0,
+                factor_dtype_initial=np.dtype(np.float64),
+                factorization="lu",
+                default_factor_kind="lu",
+                default_ilu_fill_factor=1.0,
+                default_ilu_drop_tol=0.0,
+                default_pattern_color_batch=1,
+                default_permc_spec="COLAMD",
+                permc_spec="COLAMD",
+                sparse_pc_linear_size=1,
+                constrained_pas_pc=False,
+                tokamak_fp_pc=False,
+                fortran_reduced_sparse_pc=True,
+                preconditioner_x=0,
+                preconditioner_x_min_l=0,
+                preconditioner_xi=0,
+                preconditioner_species=0,
+                sparse_timer=SimpleNamespace(elapsed_s=lambda: 2.0),
+                emit=lambda level, message: emits.append(f"{level}:{message}"),
+                default_direct_tail_max_mb=lambda **_kwargs: 1.0,
+                is_direct_reduced_pmat_pc_kind=lambda _kind: True,
+                build_direct_tail_bundle=lambda **_kwargs: None,
+                build_structured_full_csr_operator_bundle=lambda **_kwargs: None,
+                layout_from_operator=lambda _op: None,
+                build_direct_active_preconditioner=lambda **_kwargs: None,
+                build_active_projected_preconditioner=lambda **_kwargs: None,
+                structured_cache={},
+                structured_cache_key=lambda **_kwargs: (),
+                structured_cache_metadata=lambda _value: None,
+                structured_factor_bundle_factory=lambda **_kwargs: None,
+                host_factor_builder=lambda **_kwargs: pytest.fail("required structured path must not fall back"),
+            )
+        )
+
+    assert any("required path will fail fast" in message for message in emits)
+
+
 def test_sparse_pc_direct_tail_rescue_policy_setup_defaults_without_support_preflight() -> None:
     factor = SimpleNamespace(kind="host_factor")
     result = sparse_pc_module.build_sparse_pc_direct_tail_rescue_policy_setup(
@@ -1908,6 +2016,70 @@ def test_sparse_pc_direct_tail_rescue_policy_setup_promotes_support_mode(monkeyp
     assert result.direct_tail_support_mode_preflight_selected
     assert result.direct_tail_structured_pc_metadata["kind"] == "active_dense"
     assert any("support-mode preflight selected" in message for message in emits)
+
+
+def test_sparse_pc_direct_tail_rescue_policy_setup_reports_support_failure_and_bad_window_spec(
+    monkeypatch,
+) -> None:
+    factor = SimpleNamespace(kind="active_fortran_v3_reduced_lu")
+    emits: list[str] = []
+    monkeypatch.setattr(
+        sparse_pc_module,
+        "run_direct_tail_support_mode_preflight",
+        lambda _context: SimpleNamespace(
+            metadata={"attempted": True},
+            error="support candidates exhausted",
+            selected=False,
+            preconditioner=None,
+            factor_bundle=None,
+        ),
+    )
+
+    result = sparse_pc_module.build_sparse_pc_direct_tail_rescue_policy_setup(
+        sparse_pc_module.SparsePCDirectTailRescuePolicySetupContext(
+            env={
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_PREFLIGHT": "1",
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_SPEC": "bad-window",
+            },
+            op=SimpleNamespace(),
+            rhs_dtype=jnp.float64,
+            sparse_pc_rhs=jnp.asarray([1.0], dtype=jnp.float64),
+            sparse_pc_linear_size=1,
+            fortran_reduced_sparse_pc=True,
+            factor_bundle_pc=factor,
+            structured_pc_ready=True,
+            direct_tail_operator_bundle=SimpleNamespace(matrix=scipy_sparse.eye(1)),
+            direct_tail_structured_layout=object(),
+            direct_tail_structured_active_indices=np.asarray([0], dtype=np.int64),
+            direct_tail_structured_max_nbytes=1024,
+            direct_tail_structured_pc_selected=True,
+            direct_tail_structured_pc_reason="initial",
+            direct_tail_structured_pc_metadata={"kind": "active_dense"},
+            pc_reg=1.0e-12,
+            preconditioner_x=0,
+            preconditioner_xi=0,
+            preconditioner_species=0,
+            preconditioner_x_min_l=0,
+            emit=lambda level, message: emits.append(f"{level}:{message}"),
+            true_matvec=lambda vec: vec,
+            support_mode_selector=lambda **_kwargs: None,
+            structured_factor_bundle_factory=lambda **_kwargs: None,
+            layout_from_operator=lambda _op: object(),
+            parse_true_operator_window_specs=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                ValueError("bad spec")
+            ),
+        )
+    )
+
+    assert result.factor_bundle_pc is factor
+    assert result.direct_tail_support_mode_preflight_requested
+    assert not result.direct_tail_support_mode_preflight_selected
+    assert result.direct_tail_support_mode_preflight_error == "support candidates exhausted"
+    assert result.direct_tail_structured_pc_selected
+    assert result.direct_tail_structured_pc_reason == "initial"
+    assert result.direct_tail_structured_pc_metadata == {"kind": "active_dense"}
+    assert any("support-mode preflight failed" in message for message in emits)
+    assert any("skipped explicit specs" in message for message in emits)
 
 
 def test_sparse_minimum_norm_lsqr_and_host_direct_residual_fallback() -> None:

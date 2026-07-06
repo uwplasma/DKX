@@ -1954,6 +1954,12 @@ Completed work:
   monkeypatching only the expensive numerical solve. Validation:
   `tests/test_io_output_policy_coverage.py tests/test_io_export_and_h5_coverage.py tests/test_transport_output_schema.py tests/test_output_formats.py`
   passed `118/118` in `2.56 s`.
+- Tranche 130: expanded RHSMode-1 sparse-PC orchestration coverage around
+  production-safety branches. Added tests for required direct-tail structured
+  preconditioner fail-fast behavior, ensuring explicitly requested low-memory
+  paths do not silently fall back to expensive host factors, and for failed
+  support-mode preflight plus invalid true-window spec reporting. Validation:
+  `tests/test_profile_response_sparse_pc.py` passed `364/364` in `3.95 s`.
 
 Remaining consolidation steps:
 
