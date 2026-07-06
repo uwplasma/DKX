@@ -136,7 +136,27 @@ def test_generate_fortran_suite_benchmark_summary_from_reports(tmp_path: Path) -
 
     assert rc == 0
     assert (out_dir / "suite_benchmark_test.png").exists()
-    assert (out_dir / "suite_benchmark_test.pdf").exists()
+    pdf_path = out_dir / "suite_benchmark_test.pdf"
+    assert pdf_path.exists()
+    pdf_bytes = pdf_path.read_bytes()
+    assert b"/Creator (sfincs_jax)" in pdf_bytes
+    assert b"/CreationDate (D:20260101000000Z)" in pdf_bytes
+    rc = mod.main(
+        [
+            "--cpu-report",
+            str(cpu_report),
+            "--gpu-report",
+            str(gpu_report),
+            "--out-dir",
+            str(out_dir),
+            "--summary-json",
+            str(summary_json),
+            "--stem",
+            "suite_benchmark_test",
+        ]
+    )
+    assert rc == 0
+    assert pdf_path.read_bytes() == pdf_bytes
     payload = json.loads(summary_json.read_text())
     assert payload["metadata"]["kind"] == "fortran_v3_suite_benchmark_summary"
     assert payload["reports"]["cpu"]["parity_ok_cases"] == 39
