@@ -5,6 +5,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import pytest
 
 from sfincs_jax.compare import compare_h5_outputs, main
 
@@ -84,6 +85,29 @@ def test_compare_h5_outputs_supports_keys_ignore_and_tolerances(tmp_path: Path) 
     assert report["datasets"][0]["status"] == "ok"
 
 
+def test_compare_h5_outputs_records_missing_reference_and_file_errors(tmp_path: Path) -> None:
+    reference = tmp_path / "fortran.h5"
+    candidate = tmp_path / "jax.h5"
+    _write_h5(reference, {"a": 1.0})
+    _write_h5(candidate, {"a": 1.0, "candidate_only": 2.0})
+
+    report = compare_h5_outputs(
+        reference_path=reference,
+        candidate_path=candidate,
+        keys=["a", "candidate_only", "missing_everywhere"],
+        include_extra=False,
+    )
+    by_key = {item["key"]: item for item in report["datasets"]}
+
+    assert report["overall_status"] == "fail"
+    assert by_key["a"]["status"] == "ok"
+    assert by_key["candidate_only"]["status"] == "missing_in_reference"
+    assert by_key["missing_everywhere"]["status"] == "missing_in_reference"
+
+    with pytest.raises(FileNotFoundError):
+        compare_h5_outputs(reference_path=tmp_path / "missing.h5", candidate_path=candidate)
+
+
 def test_h5_parity_cli_writes_report_and_returns_failure(tmp_path: Path) -> None:
     reference = tmp_path / "fortran.h5"
     candidate = tmp_path / "jax.h5"
@@ -106,3 +130,15 @@ def test_h5_parity_cli_passes_identical_outputs(tmp_path: Path) -> None:
     _write_h5(candidate, {"a": np.array([1.0, 2.0])})
 
     assert main([str(reference), str(candidate), "--no-extra"]) == 0
+
+
+def test_h5_parity_cli_prints_success_report_to_stdout(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    reference = tmp_path / "fortran.h5"
+    candidate = tmp_path / "jax.h5"
+    _write_h5(reference, {"a": np.array([1.0, 2.0])})
+    _write_h5(candidate, {"a": np.array([1.0, 2.0])})
+
+    assert main([str(reference), str(candidate), "--key", "a", "--ignore-key", "ignored"]) == 0
+
+    captured = capsys.readouterr()
+    assert '"overall_status": "pass"' in captured.out

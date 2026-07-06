@@ -88,3 +88,41 @@ def test_phi1_line_search_falls_back_to_last_accepted_when_all_trials_nonfinite(
         maxiter=4,
     )
     np.testing.assert_allclose(np.asarray(out), np.array([-3.0]))
+
+
+def test_phi1_line_search_returns_best_finite_trial_when_no_trial_passes_gate() -> None:
+    x = jnp.array([0.0])
+    s = jnp.array([1.0])
+
+    out = advance_phi1_newton_iterate(
+        x=x,
+        step_direction=s,
+        residual_norm0=0.01,
+        residual_fn=lambda y: y + 1.0,
+        accepted=[],
+        mode="petsc",
+        step_scale=1.0,
+        factor=1.0e-6,
+        c1=1e-4,
+        maxiter=3,
+    )
+    np.testing.assert_allclose(np.asarray(out), np.array([0.25]))
+
+
+def test_phi1_line_search_uses_small_step_when_no_finite_or_accepted_state_exists() -> None:
+    x = jnp.array([2.0])
+    s = jnp.array([4.0])
+
+    out = advance_phi1_newton_iterate(
+        x=x,
+        step_direction=s,
+        residual_norm0=1.0,
+        residual_fn=lambda y: jnp.array([jnp.inf]),
+        accepted=[],
+        mode="petsc",
+        step_scale=1.0,
+        factor=None,
+        c1=1e-4,
+        maxiter=2,
+    )
+    np.testing.assert_allclose(np.asarray(out), np.array([2.0625]))

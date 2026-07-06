@@ -13,9 +13,11 @@ def test_host_scipy_krylov_requested_and_labels() -> None:
     assert not kd.host_scipy_krylov_requested("incremental")
     assert kd.ksp_iteration_solver_label(solver_kind="gmres", solve_method="lgmres") == "lgmres"
     assert kd.ksp_iteration_solver_label(solver_kind="gmres", solve_method="auto") == "gmres"
+    assert kd.ksp_iteration_solver_label(solver_kind="gmres", solve_method="householder") == "householder"
     assert kd.ksp_iteration_solver_label(solver_kind="bicgstab", solve_method="lgmres") == "bicgstab"
     assert kd.solver_kind_for_label("bicgstab_jax") == ("bicgstab", "batched")
     assert kd.solver_kind_for_label("default") == ("gmres", "incremental")
+    assert kd.solver_kind_for_label("restarted") == ("gmres", "restarted")
 
 
 def test_gmres_dispatch_uses_host_only_path_and_rejects_distributed() -> None:
@@ -76,6 +78,26 @@ def test_gmres_with_residual_dispatch_uses_injected_paths() -> None:
         use_solver_jit_fn=lambda size_hint: True,
     ) == "jit"
 
+    assert kd.gmres_solve_with_residual_dispatch(
+        solve_method="incremental",
+        distributed_axis="theta",
+        gmres_solve_with_residual_distributed_fn=lambda **kwargs: ("distributed_residual", kwargs["axis_name"]),
+    ) == ("distributed_residual", "theta")
+
+    assert kd.gmres_solve_with_residual_dispatch(
+        solve_method="incremental",
+        distributed_axis=None,
+        gmres_solve_with_residual_distributed_fn=lambda **kwargs: ("distributed_residual", kwargs.get("axis_name")),
+        distributed_gmres_enabled_fn=lambda: True,
+    ) == ("distributed_residual", None)
+
+    with pytest.raises(ValueError, match="host-only"):
+        kd.gmres_solve_with_residual_dispatch(
+            solve_method="lgmres",
+            distributed_axis=None,
+            distributed_gmres_enabled_fn=lambda: True,
+        )
+
 
 def test_rhs_krylov_method_for_context_downgrades_host_only_cases() -> None:
     assert (
@@ -126,3 +148,15 @@ def test_resolve_distributed_gmres_axis_env_and_backend_policy(monkeypatch: pyte
 
     monkeypatch.setenv("SFINCS_JAX_GMRES_DISTRIBUTED_ALLOW_ACCELERATOR", "1")
     assert kd.resolve_distributed_gmres_axis(op=op, emit=emit, matvec_shard_axis_fn=lambda op: "theta") == "theta"
+
+    monkeypatch.setenv("SFINCS_JAX_GMRES_DISTRIBUTED", "theta")
+    monkeypatch.setattr(kd.jax, "default_backend", lambda: "cpu")
+    monkeypatch.setattr(kd.jax, "local_device_count", lambda: 1)
+    assert kd.resolve_distributed_gmres_axis(op=op, emit=emit, matvec_shard_axis_fn=lambda op: "zeta") is None
+
+    monkeypatch.setenv("SFINCS_JAX_GMRES_DISTRIBUTED", "zeta")
+    monkeypatch.setattr(kd.jax, "local_device_count", lambda: 4)
+    assert kd.resolve_distributed_gmres_axis(op=op, emit=emit, matvec_shard_axis_fn=lambda op: "theta") == "zeta"
+
+    monkeypatch.setenv("SFINCS_JAX_GMRES_DISTRIBUTED", "auto")
+    assert kd.resolve_distributed_gmres_axis(op=None, emit=emit, matvec_shard_axis_fn=lambda op: "theta") is None

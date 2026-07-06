@@ -10,14 +10,23 @@ import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 
 from sfincs_jax.solvers.native_block_factor import (  # noqa: E402
+    _regularized_matrix,
     apply_dense_block_jacobi,
+    apply_native_x_ell_kinetic_factor,
     apply_native_padded_indexed_block_factor,
     apply_two_field_schur,
     build_dense_block_jacobi,
+    build_native_x_ell_kinetic_factor,
     build_native_padded_indexed_block_factor,
     build_native_padded_indexed_block_factor_from_matrix,
     build_two_field_schur_factor,
 )
+
+
+def test_regularized_matrix_handles_empty_block() -> None:
+    empty = jnp.zeros((0, 0), dtype=jnp.float64)
+    out = _regularized_matrix(empty, regularization=1.0e-6)
+    assert out.shape == (0, 0)
 
 
 def test_two_field_schur_matches_dense_solve_and_jit() -> None:
@@ -121,6 +130,8 @@ def test_dense_block_jacobi_rejects_bad_shapes() -> None:
     factor = build_dense_block_jacobi(jnp.eye(3), block_size=2)
     with pytest.raises(ValueError, match="leading dimension"):
         apply_dense_block_jacobi(factor, jnp.ones(4))
+    with pytest.raises(ValueError, match="two-dimensional"):
+        apply_dense_block_jacobi(factor, jnp.ones((3, 1, 1)))
 
 
 def test_padded_indexed_block_factor_matches_variable_block_solve_and_jit() -> None:
@@ -217,6 +228,12 @@ def test_padded_indexed_block_factor_rejects_bad_inputs() -> None:
             block_mask=jnp.ones((2, 2), dtype=bool),
             total_size=2,
         )
+    with pytest.raises(ValueError, match="at least one"):
+        build_native_padded_indexed_block_factor(
+            block_inverses=jnp.ones((0, 0, 0), dtype=jnp.float64),
+            block_indices=jnp.ones((0, 0), dtype=jnp.int32),
+            total_size=2,
+        )
     with pytest.raises(ValueError, match="inside"):
         build_native_padded_indexed_block_factor(
             block_inverses=jnp.eye(2, dtype=jnp.float64)[None, :, :],
@@ -228,6 +245,27 @@ def test_padded_indexed_block_factor_rejects_bad_inputs() -> None:
             jnp.ones((2, 3)),
             block_indices=jnp.ones((1, 2), dtype=jnp.int32),
         )
+    with pytest.raises(ValueError, match="block_indices"):
+        build_native_padded_indexed_block_factor_from_matrix(
+            jnp.eye(2),
+            block_indices=jnp.ones((2,), dtype=jnp.int32),
+        )
+    with pytest.raises(ValueError, match="block_mask"):
+        build_native_padded_indexed_block_factor_from_matrix(
+            jnp.eye(2),
+            block_indices=jnp.ones((1, 2), dtype=jnp.int32),
+            block_mask=jnp.ones((2, 2), dtype=bool),
+        )
+    from_matrix_no_mask = build_native_padded_indexed_block_factor_from_matrix(
+        jnp.eye(2),
+        block_indices=jnp.asarray([[0, 1]], dtype=jnp.int32),
+    )
+    np.testing.assert_allclose(
+        apply_native_padded_indexed_block_factor(from_matrix_no_mask, jnp.asarray([3.0, 4.0])),
+        jnp.asarray([3.0, 4.0]),
+        rtol=1e-12,
+        atol=1e-12,
+    )
     factor = build_native_padded_indexed_block_factor(
         block_inverses=jnp.eye(2, dtype=jnp.float64)[None, :, :],
         block_indices=jnp.array([[0, 1]], dtype=jnp.int32),
@@ -235,9 +273,149 @@ def test_padded_indexed_block_factor_rejects_bad_inputs() -> None:
     )
     with pytest.raises(ValueError, match="leading dimension"):
         apply_native_padded_indexed_block_factor(factor, jnp.ones(3))
+    with pytest.raises(ValueError, match="two-dimensional"):
+        apply_native_padded_indexed_block_factor(factor, jnp.ones((2, 1, 1)))
+
+
+def test_padded_indexed_block_factor_rejects_empty_and_bad_weights() -> None:
+    with pytest.raises(ValueError, match="positive"):
+        build_native_padded_indexed_block_factor(
+            block_inverses=jnp.ones((1, 1, 1)),
+            block_indices=jnp.zeros((1, 1), dtype=jnp.int32),
+            total_size=0,
+        )
+    with pytest.raises(ValueError, match="at least one"):
+        build_native_padded_indexed_block_factor(
+            block_inverses=jnp.ones((1, 1, 1)),
+            block_indices=jnp.zeros((1, 1), dtype=jnp.int32),
+            block_mask=jnp.zeros((1, 1), dtype=bool),
+            total_size=1,
+        )
+    with pytest.raises(ValueError, match="overlap_weights"):
+        build_native_padded_indexed_block_factor(
+            block_inverses=jnp.ones((1, 1, 1)),
+            block_indices=jnp.zeros((1, 1), dtype=jnp.int32),
+            overlap_weights=jnp.ones((2,), dtype=jnp.float64),
+            total_size=1,
+        )
+    with pytest.raises(ValueError, match="positive"):
+        build_native_padded_indexed_block_factor(
+            block_inverses=jnp.ones((1, 1, 1)),
+            block_indices=jnp.zeros((1, 1), dtype=jnp.int32),
+            overlap_weights=jnp.asarray([0.0], dtype=jnp.float64),
+            total_size=1,
+        )
+
+
+def test_native_x_ell_kinetic_factor_applies_tail_and_rejects_bad_inputs() -> None:
+    block_inverses = jnp.stack(
+        [
+            jnp.asarray([[0.5, 0.0], [0.0, 0.25]], dtype=jnp.float64),
+            jnp.asarray([[2.0, 0.0], [0.0, 4.0]], dtype=jnp.float64),
+        ]
+    )
+    block_indices = jnp.asarray([[0, 1], [2, 3]], dtype=jnp.int32)
+    factor = build_native_x_ell_kinetic_factor(
+        block_inverses=block_inverses,
+        block_indices=block_indices,
+        f_size=4,
+        total_size=6,
+        inv_tail=jnp.asarray([10.0, 20.0], dtype=jnp.float64),
+    )
+    rhs = jnp.asarray([2.0, 8.0, 3.0, 5.0, 0.5, -0.25], dtype=jnp.float64)
+
+    np.testing.assert_allclose(
+        apply_native_x_ell_kinetic_factor(factor, rhs),
+        jnp.asarray([1.0, 2.0, 6.0, 20.0, 5.0, -5.0], dtype=jnp.float64),
+        rtol=1e-12,
+        atol=1e-12,
+    )
+    rhs_cols = jnp.stack([rhs, 2.0 * rhs], axis=1)
+    np.testing.assert_allclose(
+        apply_native_x_ell_kinetic_factor(factor, rhs_cols)[:, 1],
+        2.0 * apply_native_x_ell_kinetic_factor(factor, rhs),
+        rtol=1e-12,
+        atol=1e-12,
+    )
+
+    identity_tail = build_native_x_ell_kinetic_factor(
+        block_inverses=block_inverses,
+        block_indices=block_indices,
+        f_size=4,
+        total_size=5,
+    )
+    assert float(apply_native_x_ell_kinetic_factor(identity_tail, jnp.arange(5, dtype=jnp.float64))[-1]) == 4.0
+
+    no_tail = build_native_x_ell_kinetic_factor(
+        block_inverses=block_inverses,
+        block_indices=block_indices,
+        f_size=4,
+        total_size=4,
+    )
+    np.testing.assert_allclose(
+        apply_native_x_ell_kinetic_factor(no_tail, rhs[:4]),
+        jnp.asarray([1.0, 2.0, 6.0, 20.0], dtype=jnp.float64),
+        rtol=1e-12,
+        atol=1e-12,
+    )
+
+    with pytest.raises(ValueError, match="block_inverses"):
+        build_native_x_ell_kinetic_factor(
+            block_inverses=jnp.ones((2, 2)),
+            block_indices=block_indices,
+            f_size=4,
+            total_size=4,
+        )
+    with pytest.raises(ValueError, match="block_indices"):
+        build_native_x_ell_kinetic_factor(
+            block_inverses=block_inverses,
+            block_indices=jnp.asarray([[0, 1, 2]], dtype=jnp.int32),
+            f_size=4,
+            total_size=4,
+        )
+    with pytest.raises(ValueError, match="greater than or equal"):
+        build_native_x_ell_kinetic_factor(
+            block_inverses=block_inverses,
+            block_indices=block_indices,
+            f_size=0,
+            total_size=4,
+        )
+    with pytest.raises(ValueError, match="inside"):
+        build_native_x_ell_kinetic_factor(
+            block_inverses=block_inverses,
+            block_indices=jnp.asarray([[0, 1], [2, 4]], dtype=jnp.int32),
+            f_size=4,
+            total_size=4,
+        )
+    with pytest.raises(ValueError, match="inv_tail"):
+        build_native_x_ell_kinetic_factor(
+            block_inverses=block_inverses,
+            block_indices=block_indices,
+            f_size=4,
+            total_size=6,
+            inv_tail=jnp.ones((3,), dtype=jnp.float64),
+        )
+    with pytest.raises(ValueError, match="two-dimensional"):
+        apply_native_x_ell_kinetic_factor(factor, jnp.ones((6, 1, 1)))
+    with pytest.raises(ValueError, match="leading dimension"):
+        apply_native_x_ell_kinetic_factor(factor, jnp.ones((5,), dtype=jnp.float64))
 
 
 def test_two_field_schur_rejects_inconsistent_blocks() -> None:
+    with pytest.raises(ValueError, match="a_ff"):
+        build_two_field_schur_factor(
+            jnp.ones((2, 3)),
+            jnp.ones((2, 1)),
+            jnp.ones((1, 2)),
+            jnp.eye(1),
+        )
+    with pytest.raises(ValueError, match="a_cc"):
+        build_two_field_schur_factor(
+            jnp.eye(2),
+            jnp.ones((2, 1)),
+            jnp.ones((1, 2)),
+            jnp.ones((1, 2)),
+        )
     with pytest.raises(ValueError, match="off-diagonal"):
         build_two_field_schur_factor(
             jnp.eye(2),
@@ -253,3 +431,5 @@ def test_two_field_schur_rejects_inconsistent_blocks() -> None:
     )
     with pytest.raises(ValueError, match="leading dimension"):
         apply_two_field_schur(factor, jnp.ones(4))
+    with pytest.raises(ValueError, match="two-dimensional"):
+        apply_two_field_schur(factor, jnp.ones((3, 1, 1)))

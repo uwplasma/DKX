@@ -51,12 +51,16 @@ def test_phi1_frozen_jacobian_policy_defaults_and_env(monkeypatch) -> None:
     assert pol.every == 1
 
     monkeypatch.setenv("SFINCS_JAX_PHI1_FROZEN_JAC_MODE", "frozen_op")
-    monkeypatch.setenv("SFINCS_JAX_PHI1_FROZEN_JAC_CACHE", "0")
+    monkeypatch.setenv("SFINCS_JAX_PHI1_FROZEN_JAC_CACHE", "1")
     monkeypatch.setenv("SFINCS_JAX_PHI1_FROZEN_JAC_CACHE_EVERY", "5")
     pol = phi1_frozen_jacobian_policy(include_phi1=False)
     assert pol.mode == "frozen_op"
-    assert pol.use_cache is False
+    assert pol.use_cache is True
     assert pol.every == 5
+
+    monkeypatch.setenv("SFINCS_JAX_PHI1_FROZEN_JAC_CACHE", "0")
+    pol = phi1_frozen_jacobian_policy(include_phi1=False)
+    assert pol.use_cache is False
 
     monkeypatch.setenv("SFINCS_JAX_PHI1_FROZEN_JAC_MODE", "invalid")
     monkeypatch.setenv("SFINCS_JAX_PHI1_FROZEN_JAC_CACHE", "maybe")
