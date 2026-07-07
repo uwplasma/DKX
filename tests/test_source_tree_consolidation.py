@@ -10,6 +10,7 @@ import subprocess
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = REPO_ROOT / "sfincs_jax"
 EXPECTED_TREE = REPO_ROOT / "tests" / "fixtures" / "source_tree_expected.json"
+CORE_SLIM_INVENTORY = REPO_ROOT / "tests" / "fixtures" / "core_slim_inventory.json"
 PACKAGE_README = PACKAGE_ROOT / "README.md"
 SOURCE_MAP_DOC = REPO_ROOT / "docs" / "source_map.rst"
 ACTIVE_PLAN = REPO_ROOT / "plan_final.md"
@@ -51,10 +52,61 @@ DISALLOWED_TRACKED_PACKAGE_SUFFIXES = {
     ".pyc",
     ".pyo",
 }
+INVENTORY_CATEGORIES = {
+    "core",
+    "compat",
+    "test-fixture",
+    "extract-pr",
+    "delete",
+}
+INVENTORY_ACTIONS = {
+    "retain",
+    "trim",
+    "split",
+    "extract",
+    "delete",
+    "promote",
+}
+REQUIRED_CORE_SLIM_SOURCE_OWNERS = {
+    "sfincs_jax/problems/profile_policies.py",
+    "sfincs_jax/problems/profile_sparse_xblock.py",
+    "sfincs_jax/operators/profile_full_system.py",
+    "sfincs_jax/solvers/preconditioner_qi_device.py",
+    "sfincs_jax/solvers/explicit_sparse.py",
+    "sfincs_jax/problems/profile_sparse_solve.py",
+    "sfincs_jax/problems/profile_sparse_qi.py",
+    "sfincs_jax/solvers/preconditioner_qi_corrections.py",
+    "sfincs_jax/problems/profile_solve.py",
+    "sfincs_jax/problems/transport_linear_system.py",
+    "sfincs_jax/solvers/preconditioner_qi_basis.py",
+    "sfincs_jax/problems/profile_sparse_direct.py",
+    "sfincs_jax/problems/transport_parallel_runtime.py",
+    "sfincs_jax/problems/profile_dense.py",
+    "sfincs_jax/solver.py",
+    "sfincs_jax/outputs/rhsmode1.py",
+    "sfincs_jax/validation/artifacts.py",
+}
+REQUIRED_CORE_SLIM_NONPACKAGE_OWNERS = {
+    "examples",
+    "tests",
+    "benchmarks",
+    "scripts",
+}
+REQUIRED_RESEARCH_BRANCHES = {
+    "research/qi-device-hard-seed",
+    "research/native-sparse-direct",
+    "research/parallel-performance",
+    "research/publication-audits",
+}
 
 
 def _expected_tree() -> dict[str, list[str]]:
     with EXPECTED_TREE.open(encoding="utf-8") as stream:
+        return json.load(stream)
+
+
+def _core_slim_inventory() -> dict[str, object]:
+    with CORE_SLIM_INVENTORY.open(encoding="utf-8") as stream:
         return json.load(stream)
 
 
@@ -157,6 +209,58 @@ def test_plan_final_is_the_single_authoritative_plan() -> None:
     assert "Authoritative plan: `plan_final.md`" in log_text
     assert "if this file conflicts with `plan_final.md`, follow" in log_text
     assert "active implementation branch" not in log_text.lower()
+
+
+def test_core_slim_inventory_covers_large_phase_a_owners() -> None:
+    """Make Phase A actionable before any broad source deletion happens."""
+
+    payload = _core_slim_inventory()
+    assert payload["schema_version"] == 1
+    assert set(payload["categories"]) == INVENTORY_CATEGORIES
+    assert set(payload["actions"]) == INVENTORY_ACTIONS
+
+    entries = payload["entries"]
+    assert isinstance(entries, list)
+    assert entries
+
+    by_path: dict[str, dict[str, object]] = {}
+    extract_branches: set[str] = set()
+    for entry in entries:
+        path = str(entry["path"])
+        assert path not in by_path
+        by_path[path] = entry
+
+        category = str(entry["category"])
+        action = str(entry["action"])
+        assert category in INVENTORY_CATEGORIES
+        assert action in INVENTORY_ACTIONS
+        assert isinstance(entry["lines_at_audit"], int)
+        assert int(entry["lines_at_audit"]) >= 0
+        assert isinstance(entry["public_imports"], list)
+        assert isinstance(entry["internal_callers"], list)
+        assert isinstance(entry["tests"], list)
+        assert isinstance(entry["docs_examples"], list)
+        assert len(str(entry["retention_reason"])) >= 40
+        assert len(str(entry["next_step"])) >= 20
+
+        repo_path = REPO_ROOT / path
+        if category in {"core", "compat", "test-fixture"}:
+            assert repo_path.exists(), path
+        if repo_path.is_file() and repo_path.suffix == ".py":
+            current_lines = len(repo_path.read_text(encoding="utf-8").splitlines())
+            assert current_lines <= int(entry["lines_at_audit"]), path
+        for key in ("tests", "docs_examples", "internal_callers"):
+            for referenced in entry[key]:
+                referenced_path = REPO_ROOT / str(referenced)
+                assert referenced_path.exists(), f"{path} references missing {referenced}"
+        if category == "extract-pr":
+            branch = str(entry.get("extract_branch", ""))
+            assert branch in REQUIRED_RESEARCH_BRANCHES
+            extract_branches.add(branch)
+
+    assert REQUIRED_CORE_SLIM_SOURCE_OWNERS <= set(by_path)
+    assert REQUIRED_CORE_SLIM_NONPACKAGE_OWNERS <= set(by_path)
+    assert REQUIRED_RESEARCH_BRANCHES <= extract_branches
 
 
 def test_package_readme_describes_current_source_layout() -> None:
