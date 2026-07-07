@@ -22,8 +22,9 @@ bootstrap current, transport coefficients, plotting, and optimization.
 - Current branch head includes the release/data/hygiene script consolidation,
   generated-output removal, and direct-tail experiment removal.
 - Current tracked Python volume is still too large for review:
-  115 package Python files / 137.6k source lines, 312 test files / 124.9k test
-  lines, 122 example Python files, and 5 tracked Python scripts.
+  115 package Python files / 137.6k source lines, 313 test files / 124.9k test
+  lines, 122 example Python files, 5 tracked Python scripts, and one shell
+  wrapper.
 - Largest source owners to audit first:
   `profile_sparse_xblock.py`, `profile_policies.py`,
   `profile_full_system.py`, `explicit_sparse.py`, `profile_solve.py`,
@@ -117,6 +118,65 @@ Per file, perform this exact loop:
    package import checks.
 8. Commit only when retained files, lines, knobs, duplicated concepts, generated
    artifacts, or test burden decrease. A pure move is not progress.
+
+## Repository-Wide Line Sweep
+
+Every tracked source, test, example, script, docs, and fixture file must be
+classified in `core_slim_inventory.json` before the PR leaves draft. The line
+sweep is done in this order so the largest complexity owners are removed before
+fine polishing:
+
+1. Stable source files over 1500 lines, largest first.
+2. Solver/preconditioner files containing research words:
+   `qi`, `native`, `symbolic`, `nested`, `multifrontal`, `hss`, `blr`,
+   `candidate`, `probe`, `rescue`, `campaign`, or `hard_seed`.
+3. Problem orchestration files in `problems/`, because they decide runtime,
+   memory, solver policy, branch selection, output keys, and differentiability.
+4. Tests over 1200 lines, especially tests coupled to extracted research paths.
+5. Examples and scripts, keeping only curated user workflows and release tools.
+6. README/docs text, removing branch-history language after source decisions are
+   final so public claims only describe retained stable software.
+
+For every file, record these fields in the inventory: `decision`, `owner_tags`,
+`stable_callers`, `public_symbols`, `test_proofs`, `docs_owner`,
+`autodiff_scope`, `runtime_memory_scope`, `delete_candidates`,
+`extract_candidates`, and `line_target`. A file cannot be marked `core` unless
+it has at least one stable caller, one proof test, and a docs/API reason.
+
+Line-level deletion rules are mandatory:
+
+- Delete wrappers that only rename another function unless the wrapper is the
+  public API or names a real equation/numerical boundary.
+- Delete env-var-only solver branches unless the same route is admitted by the
+  automatic policy and has strict residual/runtime/RSS proof.
+- Delete duplicate diagnostics/output dictionaries; one result schema per
+  problem family owns all public keys.
+- Delete historical comments, old benchmark caveats, dead compatibility aliases,
+  and branch-history prose from public docs.
+- Delete generated artifacts, run outputs, local profiles, and uncompressed
+  figures unless they are compact checked evidence with a claim test.
+- Extract, rather than keep, any code whose only justification is future
+  research, partial accuracy, partial parity, GPU-only experiments, or long
+  campaign generation.
+
+The refactor must reduce complexity, not redistribute it. A tranche is accepted
+only if it lowers at least one of these without failing tests: source lines,
+test lines, public knobs, solver route count, env-var branches, duplicated
+schema builders, examples, scripts, or docs pages carrying unstable claims.
+
+## Stable-Core Triage Matrix
+
+| Area | First action | Keep only | Move/delete |
+| --- | --- | --- | --- |
+| root package | keep facades thin | API/CLI/I/O/plot/solver entry points | implementation helpers and duplicate facades |
+| `problems/` | collapse orchestration | one profile path, one transport path, one ambipolar path | probe/candidate/rescue/research policy branches |
+| `solvers/` | admit by residual gate | Krylov dispatch, memory model, default sparse/x-block routes | symbolic/native/ND/HSS/QI paths without stable proof |
+| `operators/` | expose equations | DKE term blocks with shape contracts | duplicate reduced/device helpers not tied to equations |
+| `outputs/` | unify schema | one schema and writers for HDF5/NetCDF/NPZ | experiment-only fields and duplicated writers |
+| `validation/` | keep evidence readers | compact fixtures, release gates, figure-claim checks | long campaign runners and raw trace analyzers |
+| examples | curate workflows | <=10 user-facing scripts/notebooks plus Fortran-v3 references | performance/publication/optimization campaigns |
+| tests | parametrize by domain | unit, physics, numerical, regression, CLI/I/O, compact parity | one-off scaffolds for extracted paths |
+| scripts | eliminate by default | documented release-only exceptions | anything better represented as CLI, test, or example |
 
 ## Extraction PR Plan
 
