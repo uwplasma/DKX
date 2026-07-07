@@ -149,9 +149,6 @@ from sfincs_jax.problems.profile_preconditioner_build import (
     build_rhs1_reduced_preconditioner_with_fallback, run_rhs1_full_strong_retry_stage,
     run_rhs1_reduced_strong_retry_stage, setup_rhs1_full_base_preconditioner,
 )
-from sfincs_jax.problems.profile_sparse_qi import (
-    attempt_matrixfree_qi_device_seed_if_requested, build_matrixfree_qi_device_seed_setup,
-)
 from sfincs_jax.problems.profile_sparse_direct import (
     build_host_sparse_direct_factor_from_matvec as _build_host_sparse_direct_factor_from_matvec,
     build_sparse_jax_preconditioner_from_matvec as _build_sparse_jax_preconditioner_from_matvec,
@@ -189,9 +186,6 @@ from sfincs_jax.problems.profile_sparse_fortran_reduced import (
 )
 from sfincs_jax.problems.profile_sparse_policy import (
     resolve_sparse_pc_gmres_control_policy, resolve_sparse_pc_entry_policy,
-)
-from sfincs_jax.problems.profile_sparse_qi import (
-    run_xblock_qi_preconditioner_pipeline, build_xblock_qi_stage_pipeline_context,
 )
 from sfincs_jax.problems.profile_sparse_xblock import (
     XBlockAugmentedKrylovStageContext, XBlockFirstKrylovAttemptContext, XBlockGlobalCouplingStageContext,
@@ -2238,27 +2232,7 @@ def solve_v3_full_system_linear_gmres(
         strong_precond_trigger = bool(strong_trigger_controls.trigger)
         fp_force_strong = bool(strong_trigger_controls.fp_force)
 
-        qi_device_seed_setup = build_matrixfree_qi_device_seed_setup(
-            op=op,
-            active_size=int(active_size),
-            target_reduced=float(target_reduced),
-            mv_reduced=mv_reduced,
-            rhs_reduced=rhs_reduced,
-            emit=emit,
-            timer_elapsed_s=t.elapsed_s,
-            rhsmode1_general_metadata=rhsmode1_general_metadata,
-        )
-
-        qi_device_skip_strong = bool(qi_device_seed_setup.skip_strong)
-        early_qi_attempt = attempt_matrixfree_qi_device_seed_if_requested(
-            res_reduced,
-            hook="early_active_dof",
-            setup=qi_device_seed_setup,
-            enabled=bool(
-                qi_device_seed_setup.early_enabled or qi_device_seed_setup.skip_strong
-            ),
-        )
-        res_reduced = early_qi_attempt.result
+        qi_device_skip_strong = False
 
         pas_smoother_allowed = (
             rhs1_precond_kind
@@ -2646,25 +2620,6 @@ def solve_v3_full_system_linear_gmres(
         fp_xblock_highx_residual_correction_elapsed_s: float | None = None
         fp_xblock_highx_residual_correction_direction_count: int | None = None
         fp_xblock_highx_residual_correction_direction_names: tuple[str, ...] = ()
-        pre_sparse_qi_attempt = attempt_matrixfree_qi_device_seed_if_requested(
-            res_reduced,
-            hook="pre_sparse_active_dof",
-            setup=qi_device_seed_setup,
-            enabled=bool(
-                qi_device_seed_setup.pre_sparse_enabled
-                and sparse_enabled
-                and float(res_reduced.residual_norm) > target_reduced
-                and not bool(
-                    rhsmode1_general_metadata.get(
-                        "xblock_qi_device_preconditioner_built", False
-                    )
-                )
-            ),
-        )
-        res_reduced = pre_sparse_qi_attempt.result
-        if bool(pre_sparse_qi_attempt.improved):
-            ksp_replay.x0_vec = res_reduced.x
-
         if emit is not None:
             for _level, _message in rhs1_sparse_rescue_tail_skip_messages(
                 ordering=sparse_order,

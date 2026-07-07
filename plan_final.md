@@ -63,6 +63,25 @@ Overall readiness under this stricter core-slim goal is about 55-60%.
 - Each tranche must reduce net files or net lines unless it adds a required
   public feature, accuracy gate, or performance gate.
 
+## Line Audit Protocol
+
+For every touched file, classify code in this order before editing:
+
+1. Public surface: keep only imports/classes/functions documented in README,
+   API docs, examples, or compatibility tests.
+2. Physics/numerics: keep equations, operator assembly, quadrature, collision,
+   drift, solve, and diagnostic code only when tied to a retained model and a
+   bounded accuracy/residual/parity test.
+3. Runtime-critical implementation: keep only paths used by automatic defaults
+   or a documented advanced option that passes runtime/RSS gates.
+4. Differentiability: keep JAX-native code needed for supported JVP/VJP,
+   implicit sensitivity, optimization, and ambipolar derivative workflows.
+5. Compatibility: keep thin aliases only if migration tests require them; no
+   compatibility file may own new logic.
+6. Experimental/research/profiling/history: extract to a preservation branch or
+   delete from core; do not leave dormant imports, env-only routes, or unused
+   policy branches in stable modules.
+
 ## Ordered Finish Plan
 
 ### Phase A - Build The Auditable Inventory
@@ -88,16 +107,13 @@ Overall readiness under this stricter core-slim goal is about 55-60%.
 
 ### Phase B - Extract Research Families First
 
-1. Create preservation branches/PRs, then remove from core:
-   `research/qi-device-hard-seed` for `preconditioner_qi_*`,
-   `profile_sparse_qi.py`, QI validation, QI scripts, QI examples, and QI tests.
-2. Create `research/native-sparse-direct` for symbolic/native sparse direct,
-   true-operator rescue, reduced-Pmat, active-factor, multifrontal/Schur, and
-   related audit/profile scripts and tests.
-3. Create `research/parallel-performance` for multi-GPU/sharded/worker scaling
-   campaigns, long profiling scripts, and performance-only docs/artifacts.
-4. Create `research/publication-audits` for historical figure/collisionality/
-   high-nu/Zenodo campaigns that are not needed for core installation or use.
+1. Preservation branches already exist. Remove core imports in this order:
+   QI/device-QI, native sparse-direct/reduced-Pmat rescue, parallel campaigns,
+   then publication audits.
+2. After each import cut, delete or move the associated source/tests/examples/
+   scripts and update the inventory so missing extracted paths are intentional.
+3. Keep only small summary fixtures/figures needed by stable README/docs; all
+   large or regenerable artifacts stay in releases or research branches.
 
 - Core imports no longer reach extracted modules.
 - Extracted research PRs preserve useful work but are not required by main.
@@ -105,15 +121,14 @@ Overall readiness under this stricter core-slim goal is about 55-60%.
 
 ### Phase C - Reduce Core Solvers And Operators
 
-1. Keep only solver paths that pass strict residual/parity gates and have
-   competitive runtime/RSS on the supported examples.
-2. Remove duplicated routing layers, fail-closed probes, and solver policies
-   whose only purpose is to select unpromoted experimental paths.
-3. Simplify RHSMode-1 and RHSMode-2/3 orchestration so physics assembly,
-   linear solve, diagnostics, and output are visible in short modules.
-4. Re-profile retained examples after each solver cut; if runtime regresses,
-   fix JIT boundaries, operator reuse, sparse/dense selection, and output I/O
-   before adding new algorithms.
+1. Keep only solver paths passing strict residual/parity gates and acceptable
+   runtime/RSS on supported examples.
+2. Delete duplicated routing layers, fail-closed probes, env-only policies, and
+   unpromoted experimental paths.
+3. Collapse RHSMode-1 and RHSMode-2/3 orchestration into visible stages:
+   setup, operator/RHS assembly, solve, diagnostics, output.
+4. Re-profile retained examples after each solver cut; fix JIT boundaries,
+   operator reuse, sparse/dense selection, and output I/O before adding code.
 
 - Supported examples run without solver environment variables.
 - Retained defaults are faster or no worse within documented tolerance.
@@ -229,10 +244,6 @@ python examples/run_cli_and_plot.py --out-dir /tmp/sfincs_jax_quick_review
 ## Explicit Deferred Items
 
 These move out of the stable core unless they satisfy all production gates:
-
-- Experimental QI and true device-QI solver/preconditioner research.
-- Native MUMPS/SuperLU_DIST-equivalent sparse-direct replacement research.
-- Lower-memory production preconditioner experiments not promoted by strict
-  residual, parity, runtime, and RSS gates.
-- Long-run GPU/multi-GPU performance campaigns while GPU evidence is absent.
-- Historical benchmark campaigns, profiler traces, and publication audits.
+experimental QI/device-QI, native MUMPS/SuperLU_DIST-equivalent sparse-direct
+research, unpromoted lower-memory preconditioners, long GPU/multi-GPU
+campaigns without fresh evidence, and historical profiler/publication audits.
