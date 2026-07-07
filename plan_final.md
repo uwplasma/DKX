@@ -9,203 +9,196 @@ This file is the single active plan for making the refactor branch review-ready.
 
 ## One-Sentence Goal
 
-Ship `sfincs_jax` as a small, understandable, research-grade core package:
-users provide a geometry and input file and get accurate CPU/GPU results with
-automatic robust defaults, parity with SFINCS Fortran v3 where models overlap,
-competitive runtime/memory for supported examples, and differentiable Python
-workflows for validated sensitivities, ambipolar solves, bootstrap current,
-transport coefficients, plotting, and optimization.
+Ship a small, understandable, fast, research-grade `sfincs_jax` core: one input
+file plus geometry should run accurate CPU/GPU neoclassical calculations with
+automatic robust defaults, SFINCS Fortran v3 parity where models overlap,
+competitive runtime/memory, clear physics/numerics in the code, and validated
+differentiable Python workflows for sensitivities, ambipolar solves, bootstrap
+current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Latest pushed branch head: `5be6ad72`.
-- Last green PR CI evidence: `96fb2677`; coverage shards/report, examples
-  smoke, external-data smoke, optional ecosystem gates, build, tests, and
-  Codecov patch passed. Latest exact aggregate coverage was 91.753% (`92%`).
-- Package structure is one-level deep under `sfincs_jax/`, but the branch is
-  still too large: 120 Python source files and about 166k package source lines.
-  Most complexity is concentrated in `problems/` and `solvers/`.
-- Tracked non-package volume is also too high: `tests/` has 726 files,
-  `examples/` has 497 files, `benchmarks/` has 268 files, and `scripts/` has
-  47 files.
-- No tracked file larger than 2 MB was found in the latest audit.
-- There is no tracked `sfincs_jax/data/` package directory. Release-data
-  plumbing lives under `sfincs_jax/validation/data_fetch.py`; any future data
-  package must be justified as validation/release-asset infrastructure.
+- Latest audited branch head: `9bfa7dc4`; last green CI evidence: `96fb2677`.
+  Exact aggregate coverage from that CI was 91.753% (`92%`).
+- Package layout is shallow, but the branch is too large: 120 Python source
+  files and about 166k source lines. Largest complexity owners are
+  `problems/`, `solvers/`, and RHSMode-1/QI/preconditioner infrastructure.
+- Non-package volume is also too high: `tests/` has 726 files, `examples/` has
+  497 files, `benchmarks/` has 268 files, and `scripts/` has 47 files.
+- No tracked file larger than 2 MB was found. There is no tracked
+  `sfincs_jax/data/`; release-data logic is `validation/data_fetch.py`.
+- The product target changed: PR #8 should become a small stable core, while
+  experimental or not-yet-competitive work moves to separate research PRs.
 
 ## Open Lanes
 
 | Lane | Status | Completion | Definition of done |
 | --- | --- | ---: | --- |
-| Core-main slimming | Active | 35% | Main keeps only stable, parity-clean, runtime-acceptable solvers and public APIs; experimental code is moved to research PR branches or deleted. |
-| Source simplification | Active | 45% | Package is reduced toward <=50 source files and <=50k lines, with a stretch target near 10x smaller if functionality permits. |
-| Example consolidation | Active | 40% | Examples contain original SFINCS Fortran-v3 reference inputs plus at most 10 curated user-facing workflows. |
-| Test consolidation and 95% coverage | Active | 45% | Tests are organized into a small folder set, avoid historical script bloat, and reach 95% by deleting unused code plus targeted physics/numerics gates. |
-| Benchmark/script cleanup | Active | 30% | `benchmarks/` is removed from the release tree; reusable benchmark logic is one tested module/fixture path, and scripts are promoted to examples/tests or removed. |
-| Docs/readme regeneration | Active | 80% | README/docs describe the slim core, extracted research PRs, curated examples, and fresh parity/runtime/memory evidence. |
-| Final parity/performance evidence | Active | 70% | Supported core examples rerun against SFINCS Fortran v3 on CPU and GPU when available; unsupported research lanes are not marketed as core. |
+| Line-by-line audit | Active | 10% | Every retained file/function/line has a core reason, a caller, and a test/doc owner; everything else is extracted or deleted. |
+| Core-main slimming | Active | 35% | Main keeps only stable, parity-clean, runtime-acceptable solvers and public APIs; research code is outside core. |
+| Source simplification | Active | 45% | Package moves toward <=50 source files and <=50k lines, with a 10x reduction as stretch if functionality permits. |
+| Examples/tests/scripts cleanup | Active | 35% | Examples are <=10 curated workflows plus Fortran-v3 references; tests are smaller, organized, and >=95% coverage; scripts/benchmarks are removed or promoted. |
+| Parity/performance evidence | Active | 70% | Supported examples rerun against SFINCS Fortran v3 with runtime/RSS/bootstrap evidence; unsupported research lanes are not marketed. |
+| Docs/readme regeneration | Active | 80% | README/docs describe only the stable core plus explicit external research PR lanes. |
 
-Overall review readiness: about 60% under the new core-slim goal. The previous
-refactor structure is useful, but the product target changed from "organized
-large branch" to "small stable main plus separate research PRs."
+Overall readiness under this stricter core-slim goal is about 55-60%.
 
 ## Source Structure Rules
 
-- Main branch contains only production-supported code paths with demonstrated
-  accuracy, parity, and bounded runtime/memory for documented examples.
-- Experimental QI, native sparse-direct replacements, unfinished GPU/device QI,
-  unpromoted preconditioners, profiling-only routes, and solver-policy probes
-  move to separate branches/PRs before deletion from the core branch if they
-  have research value. Obsolete dead code is deleted without a preservation PR.
-- Root modules stay limited to public API, CLI, I/O, plotting, comparison,
-  sensitivity, ambipolar, grids, namelist, paths, profiling, and solver facade
-  surfaces. Implementation stays in one-level domain folders only.
-- Domain folders must be physics/numerics oriented: `discretization/`,
-  `geometry/`, `operators/`, `outputs/`, `physics/`, `problems/`, `solvers/`,
-  `validation/`, and `workflows/`. Do not add helper-only folders.
-- Prefer deleting or extracting whole unused families over moving small helper
-  functions around. A refactor tranche must reduce net files or net lines unless
-  it adds a required public feature or test gate.
-- No tracked generated outputs, profiler traces, caches, large equilibria, or
-  release artifacts in the source tree.
+- A retained line must satisfy at least one reason: public API, physics equation,
+  numerical method, validated default solver path, I/O schema, plotting path,
+  differentiability path, compatibility facade, or test/validation support.
+- A retained function must have a caller or documented public import, a bounded
+  test, and a clear physics/numerics/output role. Otherwise extract or delete.
+- Core defaults must be automatic: users should not need environment variables
+  or solver-path knowledge for supported examples.
+- Experimental QI, unfinished device-QI, native sparse-direct replacements,
+  unpromoted preconditioners, profiling/probe-only routes, long benchmark
+  campaigns, and historical audits move to research PR branches before removal
+  if they have research value. Dead code is deleted directly.
+- Root modules remain public API/CLI/I/O/plotting/comparison/sensitivity/
+  ambipolar/grids/namelist/paths/profiling/solver facades. Implementation stays
+  in one-level domain folders: `discretization/`, `geometry/`, `operators/`,
+  `outputs/`, `physics/`, `problems/`, `solvers/`, `validation/`, `workflows/`.
+- Each tranche must reduce net files or net lines unless it adds a required
+  public feature, accuracy gate, or performance gate.
 
 ## Ordered Finish Plan
 
-### Phase A - Freeze And Classify
+### Phase A - Build The Auditable Inventory
 
-1. Record the current branch head and CI state, then stop adding new features to
-   PR #8 until the slimming inventory is complete.
-2. Classify every large package module as one of: core, compatibility facade,
-   test-only, extract-to-research-PR, or delete.
-3. Classify every example, script, benchmark file, and test fixture using the
-   same categories.
-4. Create a preservation list for research-value code before removing it from
-   the core branch.
+1. Generate a checked inventory with columns: path, lines, public imports,
+   internal callers, tests, docs/examples, category, action, and justification.
+2. Classify every file as `core`, `compat`, `test-fixture`, `extract-pr`, or
+   `delete`. Classify high-line functions inside the largest files the same way.
+3. Start with the top owners: `profile_policies.py`, `profile_sparse_xblock.py`,
+   `profile_full_system.py`, `preconditioner_qi_device.py`, `explicit_sparse.py`,
+   `profile_sparse_solve.py`, `profile_sparse_qi.py`,
+   `preconditioner_qi_corrections.py`, `profile_solve.py`,
+   `transport_linear_system.py`, `preconditioner_qi_basis.py`,
+   `profile_sparse_direct.py`, `transport_parallel_runtime.py`,
+   `profile_dense.py`, `solver.py`, `outputs/rhsmode1.py`, and
+   `validation/artifacts.py`.
+4. Use `rg`, import graphs, coverage JSON, tests, README/docs references, and
+   example calls to decide each action. No broad deletion without this record.
 
-- A checked inventory maps each large source/example/test/script/benchmark
-  owner to core, extract, or delete.
-- No code is deleted before research-value extraction is identified.
+- Inventory exists and maps the large source/test/example/script/benchmark
+  owners to core, extract, or delete.
+- Each high-line retained module has a specific reduction target and owner.
 
-### Phase B - Extract Or Delete Experimental Solvers
+### Phase B - Extract Research Families First
 
-1. Move QI experimental solvers, unfinished device-QI paths, unpromoted
-   native-MUMPS-like sparse-direct work, broad preconditioner experiments, and
-   profiling/probe-only solver branches out of the core branch.
-2. Keep only automatic default solver paths that pass strict residual/parity
-   gates on the supported example set.
-3. Collapse compatibility aliases after users and docs no longer import the
-   extracted modules.
-4. Recompute source-tree budgets after each deletion/extraction tranche.
+1. Create preservation branches/PRs, then remove from core:
+   `research/qi-device-hard-seed` for `preconditioner_qi_*`,
+   `profile_sparse_qi.py`, QI validation, QI scripts, QI examples, and QI tests.
+2. Create `research/native-sparse-direct` for symbolic/native sparse direct,
+   true-operator rescue, reduced-Pmat, active-factor, multifrontal/Schur, and
+   related audit/profile scripts and tests.
+3. Create `research/parallel-performance` for multi-GPU/sharded/worker scaling
+   campaigns, long profiling scripts, and performance-only docs/artifacts.
+4. Create `research/publication-audits` for historical figure/collisionality/
+   high-nu/Zenodo campaigns that are not needed for core installation or use.
 
-- Supported examples still run with no environment-variable solver selection.
-- Package target is <=50 source files and <=50k lines, or a documented blocker
-  explains why more core code is required.
-- `tests/test_source_tree_consolidation.py` enforces the new slim source list.
+- Core imports no longer reach extracted modules.
+- Extracted research PRs preserve useful work but are not required by main.
+- Core source count and line count drop materially after each extraction.
 
-### Phase C - Slim Examples To Teaching And Parity
+### Phase C - Reduce Core Solvers And Operators
 
-1. Keep original SFINCS Fortran-v3 reference input examples needed for parity
-   and migration.
-2. Keep at most 10 curated workflows:
-   CLI run and plot; Python run and output; VMEC/wout geometry; RHSMode=2/3
-   transport coefficients; ambipolar electric-field solve; autodiff
-   sensitivity; bootstrap current and Redl comparison; optimization objective;
-   output-format/plotting; parity check against frozen Fortran-v3 fixture.
-3. Move historical upstream examples, large publication figure scripts,
-   performance campaigns, and one-off audit examples to docs/release assets or
-   research PR branches.
-4. Keep `examples/README.md` short and task-based; detailed background belongs
-   in docs.
+1. Keep only solver paths that pass strict residual/parity gates and have
+   competitive runtime/RSS on the supported examples.
+2. Remove duplicated routing layers, fail-closed probes, and solver policies
+   whose only purpose is to select unpromoted experimental paths.
+3. Simplify RHSMode-1 and RHSMode-2/3 orchestration so physics assembly,
+   linear solve, diagnostics, and output are visible in short modules.
+4. Re-profile retained examples after each solver cut; if runtime regresses,
+   fix JIT boundaries, operator reuse, sparse/dense selection, and output I/O
+   before adding new algorithms.
 
-- `examples/` has no more than the original Fortran-v3 reference set plus 10
-  curated workflows.
-- No example folder exists for a single file unless it is one of the curated
-  workflows.
-- `examples/workflow_catalog.json` and docs point only to retained workflows.
+- Supported examples run without solver environment variables.
+- Retained defaults are faster or no worse within documented tolerance.
+- Source-tree guards enforce the reduced allowed module list.
 
-### Phase D - Replace Benchmark Folder With Tests
+### Phase D - Slim Examples To Teaching And Parity
 
-1. Remove the release `benchmarks/` folder from the core tree.
-2. Preserve only a small checked summary fixture and one test module that
-   verifies benchmark JSON, plotted numbers, and README/docs consistency.
-3. Move long-run benchmark campaigns to release assets or a separate benchmark
-   PR branch.
+1. Keep original SFINCS Fortran-v3 reference input examples needed for migration
+   and parity.
+2. Keep at most 10 curated workflows: CLI run/plot, Python run/output,
+   VMEC/wout geometry, transport coefficients, ambipolar solve, autodiff,
+   bootstrap current/Redl, optimization objective, output formats/plotting, and
+   frozen Fortran-v3 parity.
+3. Move historical upstream examples, performance campaigns, publication figure
+   generators, QI examples, one-off audits, and single-file folders to research
+   PRs, docs release assets, or deletion.
 
-- No top-level `benchmarks/` directory is required for install, tests, or docs.
-- Benchmark claims are checked by one bounded test file and small fixtures.
+- `examples/README.md`, `workflow_catalog.json`, docs, and CI point only to the
+  retained workflows.
+- Examples are small enough for a new user to scan in minutes.
 
-### Phase E - Reorganize Tests Without Losing Coverage
+### Phase E - Remove Benchmarks And Triage Scripts
 
-1. Replace hundreds of scattered tests with a few folders:
-   `tests/unit/`, `tests/physics/`, `tests/regression/`, `tests/cli_io/`,
-   `tests/fixtures/`, and `tests/integration_optional/`.
-2. Delete historical scripts and duplicated fixtures after the corresponding
-   code paths are extracted or removed.
-3. Reach 95% coverage primarily by deleting unused branches, then by targeted
-   literature-anchored physics/numerics tests for retained core functions.
-4. Keep default CI under 10 minutes; production and GPU gates remain optional
-   or release-asset backed.
+1. Remove top-level `benchmarks/` from core. Keep only small summary fixtures
+   and one bounded test path for README/docs number consistency.
+2. For `scripts/`, promote user commands to examples, validation generators to
+   tests/docs helpers, release-maintenance commands to documented scripts, and
+   one-off audit/profiling/benchmark scripts to research PRs or deletion.
+
+- No install/test/docs path depends on `benchmarks/`.
+- Every remaining script has a public purpose, a test, and docs mention.
+
+### Phase F - Rebuild Tests Around The Slim Core
+
+1. Replace scattered tests with `tests/unit/`, `tests/physics/`,
+   `tests/regression/`, `tests/cli_io/`, `tests/fixtures/`, and
+   `tests/integration_optional/`.
+2. Delete historical output directories and duplicated fixtures after their code
+   is extracted or removed.
+3. Reach 95% coverage mostly by deleting unused code, then by targeted tests for
+   retained physics/numerics: drift-kinetic identities, conservation/moments,
+   residual gates, geometry interpolation, Redl/bootstrap normalization,
+   ambipolar derivatives, output schema parity, CLI behavior, and Fortran-v3
+   frozen fixtures.
 
 - Coverage is >=95% for the slim core.
-- Test file count and line count are substantially lower than today; no
-  historical output directories are tracked under `tests/`.
-- Tests check real equations, conservation/moment constraints, residual gates,
-  output schema parity, Redl/bootstrap normalization, geometry interpolation,
-  ambipolar derivatives, CLI behavior, and Fortran-v3 fixture parity.
+- Default CI stays under 10 minutes.
+- Tests validate science and numerics, not just smoke imports.
 
-### Phase F - Promote Or Remove Scripts
+### Phase G - Refresh Documentation And Evidence
 
-1. Promote user-facing scripts to curated examples.
-2. Promote validation/report generators to tests or docs build helpers.
-3. Remove one-off profiling, audit, and historical campaign scripts from the
-   core branch after extracting research-value copies.
-
-- `scripts/` is empty or contains only documented release-maintenance commands.
-- Every remaining script has an owner, a test, and README/docs mention.
-
-### Phase G - Refresh Docs, README, And Evidence
-
-1. Rewrite README around the slim core: install, one command, plotting,
-   supported physics, curated examples, parity/performance summary, and honest
-   exclusions.
-2. Update docs/source map, examples docs, testing docs, performance docs, and
-   research-lane docs to describe extracted PR lanes instead of shipping them
-   as core.
-3. Rerun supported CPU parity/runtime/memory/bootstrap-current evidence against
-   SFINCS Fortran v3. Rerun GPU evidence only when available.
+1. Rewrite README around the slim core: install, one command, plotting, physics,
+   curated examples, supported solvers, parity/performance, and exclusions.
+2. Update package README, source map, examples docs, testing docs, performance
+   docs, and research-lane docs to match the extracted core/research split.
+3. Rerun supported CPU parity/runtime/RSS/bootstrap evidence against SFINCS
+   Fortran v3; rerun GPU evidence only when available.
 
 - Public docs contain no branch-history or progress-log phrasing.
-- Figures/tables match checked summary fixtures.
-- Research lanes are clearly outside the stable core.
+- Figures/tables match checked summary fixtures and retained examples.
 
 ### Phase H - Review Handoff
 
 1. Run focused source/docs/example/test guards after each tranche.
-2. Run full default CI locally before review.
+2. Run full default CI and coverage locally before review.
 3. Update PR #8 with final source/test/example counts, coverage, benchmark
    scope, extracted PR branches, and deferred research lanes.
 4. Stop before merge; PR #8 remains the review surface until approval.
 
 - PR #8 is green, small enough to review, and contains no generated clutter.
-- Main can be merged as a stable core without experimental baggage.
 
 ## Standard Validation Commands
 
-Use focused checks after each tranche:
+Use after each tranche:
 
 ```bash
-PYTHONNOUSERSITE=1 python -m pytest -q \
-  tests/test_source_tree_consolidation.py \
-  tests/test_domain_package_import_contracts.py
-PYTHONNOUSERSITE=1 python -m pytest -q \
-  tests/test_examples_tree_contract.py \
-  tests/test_benchmark_doc_claims.py
+PYTHONNOUSERSITE=1 python -m pytest -q tests/test_source_tree_consolidation.py tests/test_domain_package_import_contracts.py
+PYTHONNOUSERSITE=1 python -m pytest -q tests/test_examples_tree_contract.py tests/test_benchmark_doc_claims.py
 PYTHONNOUSERSITE=1 python -m ruff check <touched files>
 PYTHONNOUSERSITE=1 python -m compileall -q sfincs_jax <touched tests>
 git diff --check
+find . -path ./.git -prune -o -type f -size +2M -print
 ```
 
-Use the slim-core baseline before review:
+Use before review:
 
 ```bash
 PYTHONNOUSERSITE=1 python -m pytest -q
@@ -215,34 +208,23 @@ PYTHONNOUSERSITE=1 python -m sphinx -W -b html docs docs/_build/html
 python examples/run_cli_and_plot.py --out-dir /tmp/sfincs_jax_quick_review
 ```
 
-Use the public wording and size scans before review:
-
-```bash
-rg -n "current main|new benchmarks|At the moment|new version|previous version|\\bcurrently\\b" \
-  README.md sfincs_jax/README.md examples docs \
-  --glob '!docs/_build/**' --glob '!docs/release_notes.rst' \
-  --glob '!docs/upstream/**' --glob '!docs/_static/**'
-find . -path ./.git -prune -o -type f -size +2M -print
-```
-
 ## Completion Gates
 
-The plan is complete only when all gates pass:
-
-- Core source is <=50 Python files and <=50k lines, or the blocker is justified
-  by retained stable functionality.
-- Experimental solver/preconditioner/QI/profiling lanes are in separate
-  branches/PRs or deleted.
+- Core source is <=50 Python files and <=50k lines, or every excess file/line
+  has a documented core-retention justification.
+- Experimental solver/preconditioner/QI/profiling lanes are in separate PRs or
+  deleted.
 - `examples/` contains only original Fortran-v3 reference inputs plus at most
   10 curated workflows.
 - Top-level `benchmarks/` is gone; benchmark claims are tested through one
   bounded fixture/test path.
 - `scripts/` is empty or limited to documented release-maintenance commands.
-- Tests are reorganized, much smaller, scientifically meaningful, and >=95%
+- Tests are organized, much smaller, scientifically meaningful, and >=95%
   coverage on the slim core.
-- CI stays under 10 minutes.
-- README/docs/plots/tables match fresh supported parity/runtime/memory evidence.
-- PR #8 is review-ready and contains no generated clutter.
+- Supported examples have fresh Fortran-v3 parity, runtime, memory, and
+  bootstrap-current evidence.
+- CI stays under 10 minutes, README/docs match the slim core, and PR #8 is
+  review-ready with no generated clutter.
 
 ## Explicit Deferred Items
 
@@ -252,5 +234,5 @@ These move out of the stable core unless they satisfy all production gates:
 - Native MUMPS/SuperLU_DIST-equivalent sparse-direct replacement research.
 - Lower-memory production preconditioner experiments not promoted by strict
   residual, parity, runtime, and RSS gates.
-- Long-run GPU and multi-GPU performance campaigns while GPU evidence is absent.
-- Historical benchmark campaigns, profiler traces, and publication audit scripts.
+- Long-run GPU/multi-GPU performance campaigns while GPU evidence is absent.
+- Historical benchmark campaigns, profiler traces, and publication audits.
