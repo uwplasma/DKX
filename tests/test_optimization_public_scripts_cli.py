@@ -65,7 +65,6 @@ def test_public_optimization_scripts_show_help() -> None:
         _OPTIMIZATION_DIR / "evaluate_sfincs_jax_promotion_scan.py": ["--out-dir", "--stem"],
         _OPTIMIZATION_DIR / "launch_sfincs_jax_candidate_scan.py": ["--out-dir", "--promotion-stem"],
         _OPTIMIZATION_DIR / "compare_sfincs_jax_promotion_runs.py": ["--out-dir", "--stem"],
-        _OPTIMIZATION_DIR / "run_promotion_evidence_campaign.py": ["--run-cpu", "--run-gpu", "--run-fortran"],
     }
 
     for script, expected_flags in scripts.items():

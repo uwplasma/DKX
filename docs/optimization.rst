@@ -267,32 +267,11 @@ directory; anything before that is proxy provenance or scan planning.
      --impurity-species-index 2 \
      --target-impurity-flux 0.01
 
-For production evidence, the one-command campaign wrapper is preferred because
-it records the CPU, GPU, optional Fortran, audit, and comparison commands in one
-JSON plan before launching any expensive solves:
-
-.. code-block:: bash
-
-   python examples/optimization/run_promotion_evidence_campaign.py \
-     --input runs/qa_candidate01/input_r0p50.namelist \
-     --out-dir runs/qa_candidate01/evidence_r0p50 \
-     --values -3 -2 -1 0 1 2 3 \
-     --run-cpu \
-     --run-gpu \
-     --gpu-device 0 \
-     --run-fortran \
-     --fortran-exe /path/to/sfincs \
-     --jobs 4 \
-     --impurity-species-index 2 \
-     --target-impurity-flux 0.01
-
-Add ``--dry-run`` to write ``promotion_evidence_plan.json`` without executing
-the scans.  The manual commands below are equivalent and are useful when a
-cluster scheduler should own each lane separately.  Fortran-v3 HDF5 files often
-do not contain the JAX linear-residual datasets, so the campaign wrapper allows
-missing residuals only for the Fortran lane by default; JAX CPU/GPU promotion
-still requires residual diagnostics unless the user explicitly relaxes the
-standalone evaluator with ``--allow-missing-residuals``.
+Run production evidence as explicit scan, audit, and comparison commands. This
+keeps the stable examples small and makes each expensive CPU, GPU, or optional
+Fortran-v3 lane scheduler-friendly. Fortran-v3 HDF5 files often do not contain
+the JAX linear-residual datasets, so only relax residual requirements for
+Fortran-derived promotion JSON files when that absence is documented.
 
 .. code-block:: bash
 

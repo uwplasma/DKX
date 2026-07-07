@@ -173,17 +173,9 @@ Concise real-promotion sequence:
 ```bash
 python examples/optimization/qa_nfp2_sfincs_jax_objectives.py --objective balanced --steps 120 --out-dir runs/qa_candidate01/proxy --stem candidate01_proxy
 python examples/optimization/launch_sfincs_jax_candidate_scan.py --proxy-summary runs/qa_candidate01/proxy/candidate01_proxy.json --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/scan_cpu/r0p50 --er-min -3 --er-max 3 --n-er 7 --jobs 4
-python examples/optimization/run_promotion_evidence_campaign.py --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/evidence_r0p50 --values -3 -2 -1 0 1 2 3 --run-cpu --run-gpu --gpu-device 0 --run-fortran --fortran-exe /path/to/sfincs --jobs 4 --impurity-species-index 2 --target-impurity-flux 0.01
 ```
 
-The campaign command writes a JSON plan, launches matching CPU/GPU/Fortran scan
-lanes, audits each completed scan, and compares the resulting promotion JSON
-files. To inspect commands without launching solves, add `--dry-run`. Fortran
-v3 outputs often do not contain JAX linear-residual datasets, so the campaign
-allows missing residuals only for the Fortran lane by default; CPU/GPU JAX lanes
-still require residual diagnostics.
-
-Equivalent manual commands are:
+Then run and audit the CPU/GPU scan lanes explicitly:
 
 ```bash
 JAX_PLATFORM_NAME=cpu sfincs_jax scan-er --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/scan_cpu/r0p50 --values -3 -2 -1 0 1 2 3 --compute-solution --skip-existing --jobs 4
