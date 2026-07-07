@@ -18,7 +18,7 @@ current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Latest audited code-change head: `27c7fa8f`; last green CI evidence: `96fb2677`.
+- Latest audited code-change head: `e2851cdd`; last green CI evidence: `96fb2677`.
   Exact aggregate coverage from that CI was 91.753% (`92%`).
 - Package layout is shallow, but the branch is too large: 114 Python source
   files and about 142.6k source lines. Largest complexity owners remain
