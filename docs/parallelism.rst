@@ -891,25 +891,9 @@ until a cheaper preconditioner is demonstrated.
    earlier no-reuse sparse-LU route, but performs one host sparse factorization
    instead of three.
 
-A focused single-RHS harness is checked in so preconditioner candidates can be
-tested before launching the full high-``nu'`` figure workflow:
-
-.. code-block:: bash
-
-   CUDA_VISIBLE_DEVICES=0 \
-   python examples/performance/benchmark_w7x_high_nu_preconditioners.py \
-     --preconditioners auto,fp_tzfft,xmg \
-     --which-rhs 2 \
-     --sparse-direct-max 40000 \
-     --sparse-factor-dtype float32 \
-     --maxiter 800 \
-     --timeout-s 900
-
-The harness writes one generated W7-X high-``nu'`` input, runs each candidate in
-a fresh subprocess, and records residual norms, RHS norms, relative residuals,
-elapsed time, peak RSS, command environment, and logs. Use
-``--reduced-resolution`` for local smoke tests, and keep full-resolution W7-X
-runs on GPU nodes with explicit residual gates.
+Candidate preconditioner sweeps are research/performance material. The stable
+docs keep the residual-clean checked artifact above and the full scan command;
+ad hoc single-RHS candidate harnesses live outside the slim example tree.
 
 For multi-host bootstrap, keep one process per host/rank and pass the shared
 coordinator address explicitly:
