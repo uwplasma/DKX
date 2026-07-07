@@ -627,8 +627,7 @@ Promotion gates:
   bounded operator-Krylov enrichment was active, no automatic host fallback hid
   the device path, the residual history stayed finite through the Krylov solve,
   and HDF5 plus solver-trace output were written,
-- for the augmented-FGMRES route, require metadata proving
-  ``xblock_device_fgmres_qi_augmented_krylov_used=true``, finite
+- for any future augmented-FGMRES route, require metadata proving finite
   projected-or-combined residual history, no automatic host fallback, and lower
   final true residual than the non-augmented installed operator-Krylov artifact,
 - for the multilevel/angular-radial route, require an explicit opt-in driver

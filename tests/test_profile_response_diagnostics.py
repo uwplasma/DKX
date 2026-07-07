@@ -855,19 +855,6 @@ def test_xblock_device_krylov_diagnostics_preserve_transfer_free_logic() -> None
             "xblock_device_fgmres_jit": True,
             "xblock_device_fgmres_jit_mode": "cycle",
             "xblock_device_fgmres_jit_outer_k": 7,
-            "qi_device_augmented_krylov_requested": True,
-            "qi_device_augmented_krylov_used": False,
-            "qi_device_augmented_krylov_rank": 3,
-            "qi_device_augmented_krylov_reason": "seed_only",
-            "qi_device_augmented_krylov_mode": "right",
-            "qi_device_augmented_seed_requested": True,
-            "qi_device_augmented_seed_available": True,
-            "qi_device_augmented_seed_used": False,
-            "qi_device_augmented_seed_rank": 2,
-            "qi_device_augmented_seed_max_rank": 5,
-            "qi_device_augmented_seed_reason": "accepted",
-            "qi_device_augmented_seed_projection_residual": 1.0e-4,
-            "qi_device_augmented_seed_labels": ("constant", "current"),
             "tfqmr_replacement_interval": 11,
             "xblock_device_krylov_forced_jax_factors": True,
             "xblock_device_fgmres_forced_right_pc": True,
@@ -885,10 +872,6 @@ def test_xblock_device_krylov_diagnostics_preserve_transfer_free_logic() -> None
     assert metadata["xblock_device_fgmres_jit_enabled"] is True
     assert metadata["xblock_device_fgmres_jit_mode"] == "cycle"
     assert metadata["xblock_device_fgmres_jit_outer_k"] == 7
-    assert metadata["xblock_device_fgmres_qi_augmented_seed_labels"] == (
-        "constant",
-        "current",
-    )
     assert metadata["xblock_device_tfqmr_replacement_interval"] == 11
     assert metadata["xblock_device_fgmres_forced_jax_factors"] is True
     assert metadata["xblock_estimated_tfqmr_work_nbytes"] == 300

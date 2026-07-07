@@ -1982,45 +1982,6 @@ def xblock_device_krylov_diagnostics(scope: Mapping[str, object]) -> dict[str, o
             if fgmres_jit_active and scope["xblock_device_fgmres_jit_mode"] == "cycle"
             else 0
         ),
-        "xblock_device_fgmres_qi_augmented_krylov_requested": bool(
-            scope["qi_device_augmented_krylov_requested"]
-        ),
-        "xblock_device_fgmres_qi_augmented_krylov_used": bool(
-            scope["qi_device_augmented_krylov_used"]
-        ),
-        "xblock_device_fgmres_qi_augmented_krylov_rank": int(
-            scope["qi_device_augmented_krylov_rank"]
-        ),
-        "xblock_device_fgmres_qi_augmented_krylov_reason": scope[
-            "qi_device_augmented_krylov_reason"
-        ],
-        "xblock_device_fgmres_qi_augmented_krylov_mode": scope[
-            "qi_device_augmented_krylov_mode"
-        ],
-        "xblock_device_fgmres_qi_augmented_seed_requested": bool(
-            scope["qi_device_augmented_seed_requested"]
-        ),
-        "xblock_device_fgmres_qi_augmented_seed_available": bool(
-            scope["qi_device_augmented_seed_available"]
-        ),
-        "xblock_device_fgmres_qi_augmented_seed_used": bool(
-            scope["qi_device_augmented_seed_used"]
-        ),
-        "xblock_device_fgmres_qi_augmented_seed_rank": int(
-            scope["qi_device_augmented_seed_rank"]
-        ),
-        "xblock_device_fgmres_qi_augmented_seed_max_rank": int(
-            scope["qi_device_augmented_seed_max_rank"]
-        ),
-        "xblock_device_fgmres_qi_augmented_seed_reason": scope[
-            "qi_device_augmented_seed_reason"
-        ],
-        "xblock_device_fgmres_qi_augmented_seed_projection_residual_norm": scope[
-            "qi_device_augmented_seed_projection_residual"
-        ],
-        "xblock_device_fgmres_qi_augmented_seed_labels": scope[
-            "qi_device_augmented_seed_labels"
-        ],
         "xblock_device_bicgstab_enabled": bool(method == "bicgstab_jax"),
         "xblock_device_tfqmr_enabled": bool(method == "tfqmr_jax"),
         "xblock_device_tfqmr_replacement_interval": int(

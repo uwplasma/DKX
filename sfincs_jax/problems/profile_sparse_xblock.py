@@ -2041,14 +2041,6 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
                         f"constraint1 moment-Schur seed failed ({type(exc).__name__}: {exc})",
                     )
         qi_disabled_scope = xblock_disabled_qi_diagnostic_scope()
-        qi_device_augmented_krylov_requested = False
-        qi_device_augmented_krylov_mode = "disabled"
-        qi_device_augmented_krylov_used = False
-        qi_device_augmented_krylov_rank = 0
-        qi_device_augmented_krylov_reason = "extracted_qi_device_research"
-        qi_device_augmented_seed_available = False
-        qi_device_augmented_seed_used = False
-        qi_device_augmented_seed_rank = 0
         xblock_side_probe_controls = _rhs1_xblock_policy.rhs1_xblock_side_probe_controls_from_env(
             env=os.environ,
             explicit_side_env_value=side_env,
@@ -2278,8 +2270,6 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
                 "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
                 f"using {solve_space.transform_label}-equilibrated assembled operator for Krylov solve",
             )
-        augmentation_basis_for_solve = None
-        operator_on_augmentation_for_solve = None
         solve_start_s = sparse_timer.elapsed_s()
         progress_callbacks = build_xblock_krylov_progress_callbacks(
             XBlockKrylovProgressCallbacksContext(
@@ -2313,10 +2303,10 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
                     device_fgmres_jit=bool(xblock_device_fgmres_jit),
                     device_fgmres_jit_mode=str(xblock_device_fgmres_jit_mode),
                     device_fgmres_jit_outer_k=int(xblock_device_fgmres_jit_outer_k),
-                    augmented_krylov_used=bool(qi_device_augmented_krylov_used),
-                    augmentation_basis=augmentation_basis_for_solve,
-                    operator_on_augmentation=operator_on_augmentation_for_solve,
-                    augmentation_mode=str(qi_device_augmented_krylov_mode),
+                    augmented_krylov_used=False,
+                    augmentation_basis=None,
+                    operator_on_augmentation=None,
+                    augmentation_mode="projected",
                     tfqmr_replacement_interval=int(tfqmr_replacement_interval),
                     mv_count=int(mv_count),
                     host_progress_callback=progress_callbacks.host_progress_callback,
@@ -4251,19 +4241,6 @@ _XBLOCK_SPARSE_PC_FINAL_METADATA_NESTED_STATE_KEYS = (
     "xblock_initial_seed_residual_norm",
     "xblock_initial_seed_residual_ratio",
     "xblock_initial_seed_used",
-    "qi_device_augmented_krylov_mode",
-    "qi_device_augmented_krylov_rank",
-    "qi_device_augmented_krylov_reason",
-    "qi_device_augmented_krylov_requested",
-    "qi_device_augmented_krylov_used",
-    "qi_device_augmented_seed_available",
-    "qi_device_augmented_seed_labels",
-    "qi_device_augmented_seed_max_rank",
-    "qi_device_augmented_seed_projection_residual",
-    "qi_device_augmented_seed_rank",
-    "qi_device_augmented_seed_reason",
-    "qi_device_augmented_seed_requested",
-    "qi_device_augmented_seed_used",
     "qi_deflated_preconditioner_built",
     "qi_deflated_preconditioner_candidate_count",
     "qi_deflated_preconditioner_enabled",
@@ -4347,19 +4324,6 @@ _XBLOCK_SPARSE_PC_FINAL_METADATA_DEVICE_STATE_KEYS = (
     "fgmres_block_between_cycles",
     "global_coupling_built",
     "global_coupling_metadata",
-    "qi_device_augmented_krylov_mode",
-    "qi_device_augmented_krylov_rank",
-    "qi_device_augmented_krylov_reason",
-    "qi_device_augmented_krylov_requested",
-    "qi_device_augmented_krylov_used",
-    "qi_device_augmented_seed_available",
-    "qi_device_augmented_seed_labels",
-    "qi_device_augmented_seed_max_rank",
-    "qi_device_augmented_seed_projection_residual",
-    "qi_device_augmented_seed_rank",
-    "qi_device_augmented_seed_reason",
-    "qi_device_augmented_seed_requested",
-    "qi_device_augmented_seed_used",
     "tfqmr_replacement_interval",
     "two_level_built",
     "xblock_device_fgmres_forced_right_pc",
@@ -4484,19 +4448,6 @@ class XBlockSparsePCFinalDeviceState:
     fgmres_block_between_cycles: object
     global_coupling_built: object
     global_coupling_metadata: object
-    qi_device_augmented_krylov_mode: object
-    qi_device_augmented_krylov_rank: object
-    qi_device_augmented_krylov_reason: object
-    qi_device_augmented_krylov_requested: object
-    qi_device_augmented_krylov_used: object
-    qi_device_augmented_seed_available: object
-    qi_device_augmented_seed_labels: object
-    qi_device_augmented_seed_max_rank: object
-    qi_device_augmented_seed_projection_residual: object
-    qi_device_augmented_seed_rank: object
-    qi_device_augmented_seed_reason: object
-    qi_device_augmented_seed_requested: object
-    qi_device_augmented_seed_used: object
     tfqmr_replacement_interval: object
     two_level_built: object
     xblock_device_fgmres_forced_right_pc: object
