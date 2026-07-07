@@ -8674,10 +8674,13 @@ def test_xblock_sparse_pc_branch_setup_composes_fallback_side_and_reuse() -> Non
     assert setup.xblock_device_fgmres_forced_right_pc
     assert setup.pc_restart == 41
     assert setup.xblock_default_restart_capped
-    assert setup.xblock_qi_device_operator_reuse_skip_factors
-    assert not setup.xblock_jax_factors
+    assert not setup.xblock_qi_device_operator_reuse_skip_factors
+    assert setup.xblock_jax_factors
     assert any("ignoring unknown" in message for _, message in setup.messages)
-    assert any("skipping local x-block factors" in message for _, message in setup.messages)
+    assert any(
+        "ignoring extracted QI-device operator-reuse request" in message
+        for _, message in setup.messages
+    )
 
 
 def test_xblock_local_preconditioner_skips_to_identity_for_qi_reuse() -> None:

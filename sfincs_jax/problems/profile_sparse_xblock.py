@@ -37,11 +37,6 @@ from .profile_sparse_finalization import (
     apply_sparse_pc_post_minres_if_needed,
 )
 from .profile_sparse_policy import _env_bool, _env_float, _env_int, _env_value
-from .profile_sparse_qi import (
-    build_xblock_qi_stage_pipeline_context,
-    resolve_xblock_qi_device_operator_reuse_setup,
-    run_xblock_qi_preconditioner_pipeline,
-)
 from .profile_residual import (
     l2_norm_float as profile_l2_norm_float,
     residual_converged as profile_residual_converged,
@@ -54,10 +49,8 @@ from sfincs_jax.solvers.memory_model import (
 )
 from ..solver import GMRESSolveResult
 
-
 ArrayFn = Callable[[jnp.ndarray], jnp.ndarray]
 EmitFn = Callable[[int, str], None]
-
 
 def _unique_state_keys(*groups: Sequence[str]) -> tuple[str, ...]:
     """Return keys in first-seen order for diagnostic state contracts."""
@@ -70,7 +63,6 @@ def _unique_state_keys(*groups: Sequence[str]) -> tuple[str, ...]:
                 seen.add(key)
                 ordered.append(key)
     return tuple(ordered)
-
 
 @dataclass(frozen=True)
 class SparseXBlockRescueBuildContext:
@@ -93,7 +85,6 @@ class SparseXBlockRescueBuildContext:
     assembled_host_allowed: Callable[..., bool]
     builder: Callable[..., ArrayFn]
 
-
 @dataclass(frozen=True)
 class SparseXBlockRescueBuildResult:
     """Result from building the generic sparse x-block rescue preconditioner."""
@@ -101,7 +92,6 @@ class SparseXBlockRescueBuildResult:
     preconditioner: ArrayFn
     preconditioner_xi: int
     force_assembled_host_fp: bool
-
 
 @dataclass(frozen=True)
 class SparseXBlockExplicitSeedContext:
@@ -121,7 +111,6 @@ class SparseXBlockExplicitSeedContext:
     emit: EmitFn | None
     polish_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
 
-
 @dataclass(frozen=True)
 class SparseXBlockExplicitSeedResult:
     """Explicit FP x-block seed outcome and diagnostics."""
@@ -133,7 +122,6 @@ class SparseXBlockExplicitSeedResult:
     refine_steps: int
     refines_performed: int
     reason: str
-
 
 @dataclass(frozen=True)
 class SparseXBlockRescueSolveContext:
@@ -157,7 +145,6 @@ class SparseXBlockRescueSolveContext:
     solve_linear: Callable[..., GMRESSolveResult]
     host_gmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
 
-
 @dataclass(frozen=True)
 class SparseXBlockRescueSolveResult:
     """Solve candidate and diagnostics for generic sparse x-block rescue."""
@@ -170,7 +157,6 @@ class SparseXBlockRescueSolveResult:
     seed_accept_ratio: float | None = None
     seed_refine_steps: int | None = None
     seed_refines_performed: int | None = None
-
 
 @dataclass(frozen=True)
 class SparseXBlockRescueAcceptanceContext:
@@ -191,7 +177,6 @@ class SparseXBlockRescueAcceptanceContext:
     maxiter: int | None
     record_replay_problem: Callable[..., None]
 
-
 @dataclass(frozen=True)
 class SparseXBlockRescueAcceptanceResult:
     """Accepted sparse x-block rescue state and replay diagnostics."""
@@ -201,7 +186,6 @@ class SparseXBlockRescueAcceptanceResult:
     reason: str
     candidate_residual: float | None = None
     explicit_seed_used: bool = False
-
 
 @dataclass(frozen=True)
 class SparseSXBlockRescueContext:
@@ -233,7 +217,6 @@ class SparseSXBlockRescueContext:
     parse_polish_gmres_config: Callable[..., tuple[int, int]]
     record_replay_problem: Callable[..., None]
 
-
 @dataclass(frozen=True)
 class SparseSXBlockRescueResult:
     """Updated state and diagnostics from the sparse sxblock_tz rescue stage."""
@@ -246,7 +229,6 @@ class SparseSXBlockRescueResult:
     polish_residual: float | None
     polish_restart: int | None
     polish_maxiter: int | None
-
 
 @dataclass(frozen=True)
 class FPXBlockGlobalCorrectionContext:
@@ -268,7 +250,6 @@ class FPXBlockGlobalCorrectionContext:
     safe_preconditioner: Callable[..., ArrayFn]
     correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[float]]]
 
-
 @dataclass(frozen=True)
 class FPXBlockGlobalCorrectionResult:
     """Updated state and diagnostics from the FP x-block global correction."""
@@ -285,7 +266,6 @@ class FPXBlockGlobalCorrectionResult:
     residual_after: float | None
     improvement_ratio: float | None
     elapsed_s: float | None
-
 
 @dataclass(frozen=True)
 class FPXBlockHighXCorrectionContext:
@@ -320,7 +300,6 @@ class FPXBlockHighXCorrectionContext:
     block_factor_allowed: Callable[..., bool]
     correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[int], Sequence[str]]]
 
-
 @dataclass(frozen=True)
 class FPXBlockHighXCorrectionResult:
     """Updated state and diagnostics from the FP high-x correction."""
@@ -336,7 +315,6 @@ class FPXBlockHighXCorrectionResult:
     elapsed_s: float | None
     direction_count: int | None
     direction_names: tuple[str, ...]
-
 
 def build_sparse_xblock_rescue_preconditioner(
     *,
@@ -397,7 +375,6 @@ def build_sparse_xblock_rescue_preconditioner(
         preconditioner_xi=int(preconditioner_xi),
         force_assembled_host_fp=bool(force_assembled_host_fp),
     )
-
 
 def apply_sparse_xblock_explicit_seed(
     *,
@@ -537,7 +514,6 @@ def apply_sparse_xblock_explicit_seed(
         reason=reason,
     )
 
-
 def run_sparse_xblock_rescue_solve_stage(
     *,
     context: SparseXBlockRescueSolveContext,
@@ -617,7 +593,6 @@ def run_sparse_xblock_rescue_solve_stage(
     finally:
         context.mark("rhs1_sparse_precond_solve_done")
 
-
 def accept_sparse_xblock_rescue_candidate(
     *,
     context: SparseXBlockRescueAcceptanceContext,
@@ -659,7 +634,6 @@ def accept_sparse_xblock_rescue_candidate(
         candidate_residual=float(candidate.residual_norm),
         explicit_seed_used=bool(explicit_seed_used),
     )
-
 
 def run_sparse_sxblock_rescue_stage(
     *,
@@ -802,7 +776,6 @@ def run_sparse_sxblock_rescue_stage(
             polish_maxiter=None,
         )
 
-
 def run_fp_xblock_global_correction_stage(
     *,
     context: FPXBlockGlobalCorrectionContext,
@@ -930,7 +903,6 @@ def run_fp_xblock_global_correction_stage(
             improvement_ratio=None,
             elapsed_s=elapsed_s,
         )
-
 
 def run_fp_xblock_highx_residual_correction_stage(
     *,
@@ -1117,8 +1089,6 @@ def run_fp_xblock_highx_residual_correction_stage(
             direction_names=(),
         )
 
-
-
 class MatvecCounter:
     """Mutable matvec counter that preserves ``int(counter)`` call sites."""
 
@@ -1283,8 +1253,6 @@ def prepare_xblock_initial_guess(
         ),
     )
 
-
-
 @dataclass(frozen=True)
 class XBlockMomentSchurPolicySetup:
     """Admission and probe policy for x-block constraint moment-Schur correction."""
@@ -1312,7 +1280,6 @@ class XBlockGlobalCouplingPolicySetup:
     rcond: float
     include_rhs: bool
     setup_max_s: float
-
 
 @dataclass(frozen=True)
 class XBlockSparsePCSetup:
@@ -1342,7 +1309,6 @@ class XBlockSparsePCSetup:
     qi_device_use_in_krylov_requested_for_fallback: bool
     messages: tuple[tuple[int, str], ...]
 
-
 @dataclass(frozen=True)
 class XBlockSparsePCSidePolicySetup:
     """JAX-factor and side-preconditioner policy for x-block sparse-PC solves."""
@@ -1362,9 +1328,6 @@ class XBlockSparsePCSidePolicySetup:
     pc_restart: int
     xblock_default_restart_capped: bool
     messages: tuple[tuple[int, str], ...]
-
-
-
 
 @dataclass(frozen=True)
 class XBlockSparsePCBranchSetup:
@@ -1408,6 +1371,15 @@ class XBlockSparsePCBranchSetup:
     xblock_qi_device_operator_reuse_skip_factors: bool
     messages: tuple[tuple[int, str], ...]
 
+@dataclass(frozen=True)
+class XBlockOperatorReuseSetup:
+    """Operator-reuse decision used before local x-block factor construction."""
+
+    decision: object
+    skip_xblock_factors: bool
+    xblock_jax_factors: bool
+    xblock_device_krylov_forced_jax_factors: bool
+    messages: tuple[tuple[int, str], ...]
 
 @dataclass(frozen=True)
 class XBlockLocalPreconditionerBuildResult:
@@ -1416,11 +1388,6 @@ class XBlockLocalPreconditionerBuildResult:
     preconditioner: ArrayFn
     factor_s: float
     built: bool
-
-
-
-
-
 
 @dataclass(frozen=True)
 class XBlockAssembledEquilibrationSetup:
@@ -1438,7 +1405,6 @@ class XBlockAssembledEquilibrationSetup:
     inv_col_scale: jnp.ndarray | None
     messages: tuple[tuple[int, str], ...]
 
-
 class XBlockAssembledPreflightMemoryError(MemoryError):
     """Preflight rejection that carries metadata for solver diagnostics."""
 
@@ -1446,9 +1412,7 @@ class XBlockAssembledPreflightMemoryError(MemoryError):
         super().__init__(message)
         self.metadata = dict(metadata)
 
-
 XBlockAssembledPreflightError = XBlockAssembledPreflightMemoryError
-
 
 @dataclass(frozen=True)
 class XBlockAssembledOperatorPreflightSetup:
@@ -1464,7 +1428,6 @@ class XBlockAssembledOperatorPreflightSetup:
     summary: object
     metadata: dict[str, object]
 
-
 @dataclass(frozen=True)
 class XBlockAssembledDeviceSetup:
     """Optional device-resident CSR operator setup for assembled x-block matvecs."""
@@ -1475,14 +1438,12 @@ class XBlockAssembledDeviceSetup:
     error: str | None
     messages: tuple[tuple[int, str], ...]
 
-
 @dataclass(frozen=True)
 class XBlockAssembledMatvecSetup:
     """Matvec closure for an assembled x-block operator."""
 
     matvec: ArrayFn
     location: str
-
 
 @dataclass(frozen=True)
 class XBlockAssembledOperatorBuildResult:
@@ -1505,9 +1466,6 @@ class XBlockAssembledOperatorBuildResult:
     col_scale: jnp.ndarray | None
     inv_col_scale: jnp.ndarray | None
 
-
-
-
 @dataclass(frozen=True)
 class XBlockMomentSchurProbeResult:
     """Decision from probing a moment-Schur seed against the true residual."""
@@ -1518,7 +1476,6 @@ class XBlockMomentSchurProbeResult:
     residual_after: float
     improvement_ratio: float
     messages: tuple[tuple[int, str], ...]
-
 
 @dataclass(frozen=True)
 class XBlockTwoLevelPolicySetup:
@@ -1532,9 +1489,6 @@ class XBlockTwoLevelPolicySetup:
     max_extra_units: int
     rcond: float
     include_rhs: bool
-
-
-
 
 @dataclass(frozen=True)
 class XBlockMomentSchurStageContext:
@@ -1552,7 +1506,6 @@ class XBlockMomentSchurStageContext:
     emit: EmitFn | None
     builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]]
 
-
 @dataclass(frozen=True)
 class XBlockMomentSchurStageResult:
     """Result from optional primary x-block moment-Schur setup."""
@@ -1567,7 +1520,6 @@ class XBlockMomentSchurStageResult:
     probe_residual_after: float | None
     probe_improvement_ratio: float | None
     setup_s: float
-
 
 @dataclass(frozen=True)
 class XBlockTwoLevelStageContext:
@@ -1584,7 +1536,6 @@ class XBlockTwoLevelStageContext:
     emit: EmitFn | None
     builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]] | None = None
 
-
 @dataclass(frozen=True)
 class XBlockTwoLevelStageResult:
     """Result from optional primary x-block two-level setup."""
@@ -1594,7 +1545,6 @@ class XBlockTwoLevelStageResult:
     metadata: dict[str, object]
     stats: dict[str, int]
     setup_s: float
-
 
 @dataclass(frozen=True)
 class XBlockGlobalCouplingStageContext:
@@ -1612,7 +1562,6 @@ class XBlockGlobalCouplingStageContext:
     host_builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]] | None = None
     device_builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]] | None = None
 
-
 @dataclass(frozen=True)
 class XBlockGlobalCouplingStageResult:
     """Result from optional primary x-block global-coupling setup."""
@@ -1623,48 +1572,12 @@ class XBlockGlobalCouplingStageResult:
     stats: dict[str, int]
     setup_s: float
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 @dataclass(frozen=True)
 class XBlockSeedPolicySetup:
     """Initial preconditioner seed controls for x-block Krylov solves."""
 
     initial_seed_enabled: bool
     moment_schur_seed_enabled: bool
-
-
-
-
-
-
-
 
 @dataclass(frozen=True)
 class XBlockSparsePCBranchContext:
@@ -1730,7 +1643,6 @@ class XBlockSparsePCBranchContext:
     x0: object
     xblock_sparse_pc: object
     xblock_use_active_dof: object
-
 
 def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
     """Run the RHSMode=1 x-block sparse-PC GMRES branch outside solve.py."""
@@ -2166,59 +2078,16 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
                         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
                         f"constraint1 moment-Schur seed failed ({type(exc).__name__}: {exc})",
                     )
-        qi_pipeline = run_xblock_qi_preconditioner_pipeline(
-            build_xblock_qi_stage_pipeline_context(
-                op=op,
-                rhs=rhs,
-                x0_full=x0_full,
-                xblock_rhs=xblock_rhs,
-                xblock_rhs_norm=float(xblock_rhs_norm),
-                base_preconditioner=precond_xblock_krylov,
-                matvec=_mv_xblock_krylov,
-                true_matvec_no_count=_mv_true_no_count,
-                direction_projector=(
-                    _xblock_reduce_full if xblock_use_active_dof else None
-                ),
-                active_dof=bool(xblock_use_active_dof),
-                linear_size=int(xblock_linear_size),
-                host_fallback_used=bool(xblock_device_host_fallback_decision.used),
-                precondition_side=str(precondition_side),
-                assembled_device_operator=assembled_device_operator,
-                assembled_operator_metadata=assembled_operator_metadata,
-                assembled_operator_enabled=bool(assembled_operator_enabled),
-                assembled_operator_built=bool(assembled_operator_built),
-                assembled_operator_device_resident=bool(
-                    assembled_operator_device_resident
-                ),
-                assembled_operator_device_error=assembled_operator_metadata.get(
-                    "device_error"
-                ),
-                elapsed_s=sparse_timer.elapsed_s,
-                emit=emit,
-                env=os.environ,
-                reduce_full=_xblock_reduce_full,
-            )
+        qi_disabled_scope = xblock_disabled_qi_diagnostic_scope()
+        qi_device_state_for_augmented_krylov = None
+        qi_device_augmented_seed_basis_for_krylov = None
+        qi_device_augmented_seed_action_for_krylov = None
+        qi_device_augmented_seed_available = False
+        qi_device_augmented_seed_used = False
+        qi_device_augmented_seed_rank = 0
+        qi_device_preconditioner_metadata = dict(
+            qi_disabled_scope["qi_device_preconditioner_metadata"]
         )
-        precond_xblock_krylov = qi_pipeline.preconditioner
-        x0_full = qi_pipeline.x0_full
-        qi_device_state_for_augmented_krylov = (
-            qi_pipeline.qi_device_state_for_augmented_krylov
-        )
-        qi_device_augmented_seed_basis_for_krylov = (
-            qi_pipeline.qi_device_augmented_seed_basis_for_krylov
-        )
-        qi_device_augmented_seed_action_for_krylov = (
-            qi_pipeline.qi_device_augmented_seed_action_for_krylov
-        )
-        qi_device_augmented_seed_available = (
-            qi_pipeline.qi_device_augmented_seed_available
-        )
-        qi_device_augmented_seed_used = qi_pipeline.qi_device_augmented_seed_used
-        qi_device_augmented_seed_rank = qi_pipeline.qi_device_augmented_seed_rank
-        qi_device_preconditioner_metadata = (
-            qi_pipeline.qi_device_preconditioner_metadata
-        )
-        pc_factor_s += float(qi_pipeline.pc_factor_s)
         xblock_side_probe_controls = _rhs1_xblock_policy.rhs1_xblock_side_probe_controls_from_env(
             env=os.environ,
             explicit_side_env_value=side_env,
@@ -2608,7 +2477,7 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
         x_np = np.asarray(post_completion.x, dtype=np.float64)
         residual_norm_xblock_pc = float(post_completion.residual_norm)
         solve_s = float(post_completion.solve_s)
-        xblock_final_solve_state = {**qi_pipeline.diagnostic_scope(), **locals()}
+        xblock_final_solve_state = {**qi_disabled_scope, **locals()}
         xblock_final_metadata_state = (
             xblock_sparse_pc_final_metadata_state_from_solve_scope(
                 xblock_final_solve_state
@@ -2637,7 +2506,6 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
         )
     return None
 
-
 def _xblock_device_flags(method: str) -> tuple[bool, bool, bool, bool, bool]:
     method_s = str(method)
     fgmres = method_s == "fgmres_jax"
@@ -2645,7 +2513,6 @@ def _xblock_device_flags(method: str) -> tuple[bool, bool, bool, bool, bool]:
     bicgstab = method_s == "bicgstab_jax"
     tfqmr = method_s == "tfqmr_jax"
     return fgmres, gmres, bicgstab, tfqmr, bool(fgmres or gmres or bicgstab or tfqmr)
-
 
 def resolve_xblock_sparse_pc_setup(
     *,
@@ -2816,13 +2683,11 @@ def resolve_xblock_sparse_pc_setup(
         messages=tuple(messages),
     )
 
-
 def _normalize_jax_factor_format(value: str) -> str:
     token = str(value).strip().lower().replace("-", "_")
     if token in {"csr", "compact", "compact_csr", "ragged_csr"}:
         return "csr"
     return "padded"
-
 
 def _normalize_jax_factor_apply(value: str) -> str:
     token = str(value).strip().lower().replace("-", "_")
@@ -2835,7 +2700,6 @@ def _normalize_jax_factor_apply(value: str) -> str:
     if token in {"lower", "lower_only", "l", "l_only"}:
         return "lower"
     return "exact"
-
 
 def resolve_xblock_sparse_pc_side_policy_setup(
     *,
@@ -2940,8 +2804,77 @@ def resolve_xblock_sparse_pc_side_policy_setup(
         messages=tuple(messages),
     )
 
+def resolve_xblock_operator_reuse_setup(
+    *,
+    op: object,
+    xblock_krylov_method: str,
+    xblock_device_host_fallback_decision: object,
+    qi_device_preconditioner_requested: bool,
+    qi_device_matrix_free_requested: bool,
+    qi_device_use_in_krylov_requested: bool,
+    precondition_side: str,
+    xblock_jax_factors: bool,
+    xblock_device_krylov_forced_jax_factors: bool,
+    xblock_preconditioner_xi: int,
+    reuse_decision: Callable[..., object],
+    env: Mapping[str, str] | None = None,
+) -> XBlockOperatorReuseSetup:
+    """Resolve factor reuse without importing experimental QI solver modules."""
 
+    decision = reuse_decision(
+        env_value=_env_value(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_QI_DEVICE_OPERATOR_REUSE",
+        ),
+        requested_krylov_method=str(xblock_krylov_method),
+        host_fallback_used=bool(
+            getattr(xblock_device_host_fallback_decision, "used", False)
+        ),
+        rhs_mode=int(op.rhs_mode),
+        constraint_scheme=int(op.constraint_scheme),
+        include_phi1=bool(op.include_phi1),
+        has_fp=op.fblock.fp is not None,
+        has_pas=op.fblock.pas is not None,
+        n_zeta=int(getattr(op, "n_zeta", 1)),
+        qi_device_preconditioner_requested=bool(
+            qi_device_preconditioner_requested
+        ),
+        qi_device_matrix_free_requested=bool(qi_device_matrix_free_requested),
+        qi_device_use_in_krylov_requested=bool(qi_device_use_in_krylov_requested),
+        precondition_side=str(precondition_side),
+    )
+    requested_skip_factors = bool(getattr(decision, "skip_xblock_factors", False))
+    skip_factors = False
+    jax_factors = bool(xblock_jax_factors)
+    forced_jax_factors = bool(xblock_device_krylov_forced_jax_factors)
+    messages: list[tuple[int, str]] = []
+    if requested_skip_factors:
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "ignoring extracted QI-device operator-reuse request in stable core",
+            )
+        )
+    factor_backend = "jax" if bool(jax_factors) else "host"
+    factor_reason = " device-krylov" if bool(forced_jax_factors) else ""
+    messages.append(
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            f"building {factor_backend} x-block preconditioner "
+            f"preconditioner_xi={int(xblock_preconditioner_xi)}"
+            f"{factor_reason}",
+        )
+    )
 
+    return XBlockOperatorReuseSetup(
+        decision=decision,
+        skip_xblock_factors=bool(skip_factors),
+        xblock_jax_factors=bool(jax_factors),
+        xblock_device_krylov_forced_jax_factors=bool(forced_jax_factors),
+        messages=tuple(messages),
+    )
 
 def resolve_xblock_sparse_pc_branch_setup(
     *,
@@ -2993,7 +2926,7 @@ def resolve_xblock_sparse_pc_branch_setup(
         resolve_xblock_policy=resolve_xblock_policy,
         env=env,
     )
-    reuse = resolve_xblock_qi_device_operator_reuse_setup(
+    reuse = resolve_xblock_operator_reuse_setup(
         op=op,
         xblock_krylov_method=str(side.xblock_krylov_method),
         xblock_device_host_fallback_decision=setup.xblock_device_host_fallback_decision,
@@ -3057,7 +2990,6 @@ def resolve_xblock_sparse_pc_branch_setup(
         messages=tuple((*setup.messages, *side.messages, *reuse.messages)),
     )
 
-
 def build_xblock_local_preconditioner(
     *,
     skip_factors: bool,
@@ -3106,9 +3038,6 @@ def build_xblock_local_preconditioner(
         built=True,
     )
 
-
-
-
 def _normalized_equilibration_norm(value: str) -> str:
     norm = str(value).strip().lower().replace("-", "_")
     if norm in {"inf", "max", "maximum"}:
@@ -3116,7 +3045,6 @@ def _normalized_equilibration_norm(value: str) -> str:
     if norm in {"linf", "l1", "l2"}:
         return norm
     return "linf"
-
 
 def build_xblock_assembled_equilibration_setup(
     *,
@@ -3297,13 +3225,11 @@ def build_xblock_assembled_equilibration_setup(
         messages=tuple(messages),
     )
 
-
 def _csr_storage_nbytes(*, nnz: int, n_rows: int) -> int:
     return int(
         int(nnz) * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize)
         + (int(n_rows) + 1) * np.dtype(np.int32).itemsize
     )
-
 
 def build_xblock_assembled_operator_preflight_setup(
     *,
@@ -3437,7 +3363,6 @@ def build_xblock_assembled_operator_preflight_setup(
         metadata=metadata,
     )
 
-
 def build_xblock_assembled_device_setup(
     *,
     assembled_matrix: object,
@@ -3501,7 +3426,6 @@ def build_xblock_assembled_device_setup(
             messages=tuple(messages),
     )
 
-
 def build_xblock_assembled_matvec_setup(
     *,
     assembled_matvec: Callable[[np.ndarray], np.ndarray],
@@ -3542,7 +3466,6 @@ def build_xblock_assembled_matvec_setup(
         return jnp.asarray(assembled_matvec(v_np), dtype=jnp.float64)
 
     return XBlockAssembledMatvecSetup(matvec=matvec, location="host")
-
 
 def build_xblock_assembled_operator_if_requested(
     *,
@@ -3778,7 +3701,6 @@ def build_xblock_assembled_operator_if_requested(
             inv_col_scale=None,
         )
 
-
 def finalize_xblock_assembled_operator_metadata(
     *,
     metadata: Mapping[str, object],
@@ -3823,7 +3745,6 @@ def finalize_xblock_assembled_operator_metadata(
         "device_validation_rel_errors": tuple(float(v) for v in device_validation_errors),
         "device_error": device_error,
     }
-
 
 def resolve_xblock_moment_schur_policy_setup(
     *,
@@ -3905,7 +3826,6 @@ def resolve_xblock_moment_schur_policy_setup(
         messages=tuple(messages),
     )
 
-
 def evaluate_xblock_moment_schur_probe_result(
     *,
     residual_before: float,
@@ -3943,7 +3863,6 @@ def evaluate_xblock_moment_schur_probe_result(
         messages=messages,
     )
 
-
 def finalize_xblock_moment_schur_metadata(
     *,
     metadata: Mapping[str, object],
@@ -3954,7 +3873,6 @@ def finalize_xblock_moment_schur_metadata(
     out = dict(metadata)
     out["setup_s"] = float(setup_s)
     return out
-
 
 def failed_xblock_moment_schur_metadata(
     *,
@@ -3967,7 +3885,6 @@ def failed_xblock_moment_schur_metadata(
         "error": f"{type(exc).__name__}: {exc}",
         "setup_s": float(setup_s),
     }
-
 
 def resolve_xblock_two_level_policy_setup(
     *,
@@ -4018,7 +3935,6 @@ def resolve_xblock_two_level_policy_setup(
         ),
     )
 
-
 def finalize_xblock_two_level_metadata(
     *,
     metadata: Mapping[str, object],
@@ -4029,7 +3945,6 @@ def finalize_xblock_two_level_metadata(
     out = dict(metadata)
     out["setup_s"] = float(setup_s)
     return out
-
 
 def failed_xblock_two_level_metadata(
     *,
@@ -4043,10 +3958,8 @@ def failed_xblock_two_level_metadata(
         "setup_s": float(setup_s),
     }
 
-
 def _xblock_device_krylov_method(method: str) -> bool:
     return str(method) in {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"}
-
 
 def resolve_xblock_global_coupling_policy_setup(
     *,
@@ -4114,7 +4027,6 @@ def resolve_xblock_global_coupling_policy_setup(
         ),
     )
 
-
 def finalize_xblock_global_coupling_metadata(
     *,
     metadata: Mapping[str, object],
@@ -4125,7 +4037,6 @@ def finalize_xblock_global_coupling_metadata(
     out = dict(metadata)
     out["setup_s"] = float(setup_s)
     return out
-
 
 def failed_xblock_global_coupling_metadata(
     *,
@@ -4138,7 +4049,6 @@ def failed_xblock_global_coupling_metadata(
         "error": f"{type(exc).__name__}: {exc}",
         "setup_s": float(setup_s),
     }
-
 
 def apply_xblock_moment_schur_stage(
     *,
@@ -4238,7 +4148,6 @@ def apply_xblock_moment_schur_stage(
             setup_s=float(setup_s),
         )
 
-
 def apply_xblock_two_level_stage(
     *,
     context: XBlockTwoLevelStageContext,
@@ -4308,7 +4217,6 @@ def apply_xblock_two_level_stage(
             stats={"applies": 0, "coarse_applies": 0},
             setup_s=float(setup_s),
         )
-
 
 def apply_xblock_global_coupling_stage(
     *,
@@ -4394,11 +4302,6 @@ def apply_xblock_global_coupling_stage(
             setup_s=float(setup_s),
         )
 
-
-
-
-
-
 def resolve_xblock_seed_policy_setup(
     *,
     moment_schur_used: bool,
@@ -4418,41 +4321,6 @@ def resolve_xblock_seed_policy_setup(
             default=bool(moment_schur_used),
         ),
     )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 _XBLOCK_SPARSE_PC_FINAL_METADATA_CORE_STATE_KEYS = (
     "assembled_operator_built",
@@ -4768,6 +4636,54 @@ _XBLOCK_SPARSE_PC_FINAL_METADATA_SCOPE_KEYS = _unique_state_keys(
     _XBLOCK_SPARSE_PC_FINAL_METADATA_PREFLIGHT_STATE_KEYS,
 )
 
+def _disabled_qi_diagnostic_value(key: str) -> object:
+    """Return a schema-compatible disabled value for extracted QI diagnostics."""
+
+    if key.endswith(("_metadata", "_stats")):
+        return {}
+    if key.endswith(("_labels", "_shape", "_basis")):
+        return ()
+    if key.endswith("_coarse_solver") or key.endswith("_selected_index"):
+        return None
+    if key.endswith(("_reason", "_mode", "_basis_kind")):
+        return "disabled_extracted_research_path"
+    if key.endswith(
+        (
+            "_enabled",
+            "_built",
+            "_used",
+            "_requested",
+            "_reused_from_seed",
+            "_augmented",
+            "_probe_reduced",
+            "_use_in_krylov",
+            "_used_in_krylov",
+            "_include_residuals",
+        )
+    ):
+        return False
+    if key.endswith(
+        (
+            "_rank",
+            "_count",
+            "_candidates",
+            "_max_candidates",
+            "_max_angular_mode",
+            "_max_extra",
+            "_steps",
+        )
+    ):
+        return 0
+    return 0.0
+
+def xblock_disabled_qi_diagnostic_scope() -> dict[str, object]:
+    """Return disabled QI metadata defaults for the stable core x-block path."""
+
+    return {
+        key: _disabled_qi_diagnostic_value(key)
+        for key in _XBLOCK_SPARSE_PC_FINAL_METADATA_SCOPE_KEYS
+        if key.startswith("qi_")
+    }
 
 @dataclass(frozen=True)
 class XBlockSparsePCFinalCoreState:
@@ -4804,7 +4720,6 @@ class XBlockSparsePCFinalCoreState:
     xblock_preconditioner_xi: object
     xblock_use_active_dof: object
 
-
 @dataclass(frozen=True)
 class XBlockSparsePCFinalDeviceState:
     """Device, QI, and global-coupling state for x-block diagnostics."""
@@ -4839,7 +4754,6 @@ class XBlockSparsePCFinalDeviceState:
     xblock_krylov_env_requested: object
     xblock_qi_device_operator_reuse_decision: object
 
-
 @dataclass(frozen=True)
 class XBlockSparsePCFinalPreflightState:
     """Pre-Krylov probe and residual-gate state for x-block diagnostics."""
@@ -4861,7 +4775,6 @@ class XBlockSparsePCFinalPreflightState:
     probe_coarse_seed_initialized: object
     probe_coarse_steps_requested: object
 
-
 @dataclass(frozen=True)
 class XBlockSparsePCFinalNestedMetadata:
     """Precomputed nested x-block diagnostic groups."""
@@ -4873,7 +4786,6 @@ class XBlockSparsePCFinalNestedMetadata:
     xblock_qi_deflated_preconditioner_metadata: object
     xblock_side_probe_metadata: object
 
-
 @dataclass(frozen=True)
 class XBlockSparsePCFinalMetadataStateContext:
     """Grouped state used to build final x-block sparse-PC metadata."""
@@ -4883,22 +4795,18 @@ class XBlockSparsePCFinalMetadataStateContext:
     preflight: XBlockSparsePCFinalPreflightState
     nested: XBlockSparsePCFinalNestedMetadata
 
-
 def _dataclass_field_mapping(value: object) -> dict[str, object]:
     return {field.name: getattr(value, field.name) for field in fields(value)}
-
 
 def xblock_sparse_pc_final_metadata_solve_state_keys() -> tuple[str, ...]:
     """Return solve-scope keys copied into x-block final metadata."""
 
     return _XBLOCK_SPARSE_PC_FINAL_METADATA_STATE_KEYS
 
-
 def xblock_sparse_pc_final_metadata_solve_scope_keys() -> tuple[str, ...]:
     """Return raw solve-scope keys needed to derive x-block final metadata."""
 
     return _XBLOCK_SPARSE_PC_FINAL_METADATA_SCOPE_KEYS
-
 
 def _xblock_metadata_or_compute(
     scope: Mapping[str, object],
@@ -4908,7 +4816,6 @@ def _xblock_metadata_or_compute(
     if key in scope:
         return scope[key]
     return builder(scope)
-
 
 def xblock_sparse_pc_final_metadata_state_from_context(
     context: XBlockSparsePCFinalMetadataStateContext,
@@ -4940,7 +4847,6 @@ def xblock_sparse_pc_final_metadata_state_from_context(
             for key in _XBLOCK_SPARSE_PC_FINAL_METADATA_PRECOMPUTED_KEYS
         },
     }
-
 
 def xblock_sparse_pc_final_metadata_state_from_solve_scope(
     scope: Mapping[str, object],
@@ -5053,15 +4959,12 @@ def xblock_sparse_pc_final_metadata_state_from_solve_scope(
         )
     )
 
-
-
 @dataclass(frozen=True)
 class XBlockKrylovReport:
     """Reported xblock Krylov work counters after optional device execution."""
 
     iterations: int
     matvecs: int
-
 
 @dataclass(frozen=True)
 class XBlockSparsePCCompletionContext:
@@ -5075,7 +4978,6 @@ class XBlockSparsePCCompletionContext:
     residual_norm: float
     target: float
     history: Sequence[float] | None
-
 
 @dataclass(frozen=True)
 class XBlockSparsePCFinalPayloadContext:
@@ -5091,7 +4993,6 @@ class XBlockSparsePCFinalPayloadContext:
     diagnostic_state: Mapping[str, object]
     post_corrections: object | None = None
 
-
 def xblock_sparse_pc_final_metadata_from_solve_state(
     state: Mapping[str, object],
     *,
@@ -5106,7 +5007,6 @@ def xblock_sparse_pc_final_metadata_from_solve_state(
         ),
         **build_rhs1_xblock_correction_metadata_from_solve_state(state),
     }
-
 
 def xblock_sparse_pc_final_payload_from_solve_state(
     state: Mapping[str, object],
@@ -5134,7 +5034,6 @@ def xblock_sparse_pc_final_payload_from_solve_state(
         ),
         expand_reduced=expand_reduced,
     )
-
 
 def xblock_sparse_pc_final_payload(
     context: XBlockSparsePCFinalPayloadContext,
@@ -5197,13 +5096,11 @@ def xblock_sparse_pc_final_payload(
         ),
     )
 
-
 @dataclass(frozen=True)
 class XBlockGMRESFallbackDecision:
     """Admission result for a non-GMRES xblock solve retrying with GMRES."""
 
     run: bool
-
 
 @dataclass(frozen=True)
 class XBlockGMRESFallbackContext:
@@ -5238,7 +5135,6 @@ class XBlockGMRESFallbackContext:
     device_iterations: int | None = None
     device_estimated_matvecs: int | None = None
 
-
 @dataclass(frozen=True)
 class XBlockGMRESFallbackResult:
     """Updated xblock solve state after optional GMRES fallback."""
@@ -5254,7 +5150,6 @@ class XBlockGMRESFallbackResult:
     fallback_started_from_candidate: bool
     fallback_candidate_improved_rhs: bool
 
-
 @dataclass(frozen=True)
 class XBlockDeviceKrylovState:
     """Host-side arrays and counters from a device xblock Krylov solve."""
@@ -5264,7 +5159,6 @@ class XBlockDeviceKrylovState:
     history: tuple[float, ...]
     n_iterations: int
     estimated_matvecs: int | None
-
 
 @dataclass(frozen=True)
 class XBlockFirstKrylovAttemptContext:
@@ -5304,7 +5198,6 @@ class XBlockFirstKrylovAttemptContext:
     bicgstab_jax_solver: Callable[..., tuple[object, object]]
     tfqmr_jax_solver: Callable[..., tuple[object, object]]
 
-
 @dataclass(frozen=True)
 class XBlockFirstKrylovAttemptResult:
     """Result from the first xblock sparse-PC Krylov attempt."""
@@ -5314,7 +5207,6 @@ class XBlockFirstKrylovAttemptResult:
     history: tuple[float, ...]
     device_iterations: int | None
     device_estimated_matvecs: int | None
-
 
 @dataclass(frozen=True)
 class XBlockSideProbeStageContext:
@@ -5339,7 +5231,6 @@ class XBlockSideProbeStageContext:
     matvec_count: Callable[[], int]
     emit: EmitFn | None
     gmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
-
 
 @dataclass(frozen=True)
 class XBlockSideProbeStageResult:
@@ -5372,7 +5263,6 @@ class XBlockSideProbeStageResult:
     failed: bool
     failure_reason: str | None
 
-
 @dataclass(frozen=True)
 class XBlockProbeCoarseStageContext:
     """Inputs for the optional pre-Krylov projected coarse seed correction."""
@@ -5386,7 +5276,6 @@ class XBlockProbeCoarseStageContext:
     correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[int], Sequence[str]]]
     elapsed_s: Callable[[], float]
     emit: EmitFn | None
-
 
 @dataclass(frozen=True)
 class XBlockProbeCoarseStageResult:
@@ -5414,7 +5303,6 @@ class XBlockProbeCoarseStageResult:
     failed: bool
     failure_reason: str | None
 
-
 @dataclass(frozen=True)
 class XBlockPreflightGateContext:
     """Inputs for the optional x-block seed residual preflight gate."""
@@ -5428,7 +5316,6 @@ class XBlockPreflightGateContext:
     target: float
     emit: EmitFn | None
 
-
 @dataclass(frozen=True)
 class XBlockPreflightGateResult:
     """Diagnostics from the optional x-block seed residual preflight gate."""
@@ -5440,7 +5327,6 @@ class XBlockPreflightGateResult:
     failed: bool
     failure_reason: str | None
 
-
 @dataclass(frozen=True)
 class XBlockKrylovControlSetupContext:
     """Inputs for resolving x-block Krylov runtime controls and messages."""
@@ -5451,7 +5337,6 @@ class XBlockKrylovControlSetupContext:
     pc_maxiter: int | None
     precondition_side: str
     emit: EmitFn | None
-
 
 @dataclass(frozen=True)
 class XBlockKrylovControlSetup:
@@ -5465,7 +5350,6 @@ class XBlockKrylovControlSetup:
     qi_device_augmented_krylov_requested: bool
     qi_device_augmented_krylov_mode: str
 
-
 @dataclass(frozen=True)
 class XBlockKrylovProgressCallbacksContext:
     """Inputs for x-block Krylov host/device progress callbacks."""
@@ -5474,14 +5358,12 @@ class XBlockKrylovProgressCallbacksContext:
     elapsed_s: Callable[[], float]
     progress_every: int
 
-
 @dataclass(frozen=True)
 class XBlockKrylovProgressCallbacks:
     """Host and device progress callbacks passed to the first Krylov attempt."""
 
     host_progress_callback: Callable[[int, float], None]
     device_cycle_progress_callback: Callable[..., None]
-
 
 @dataclass(frozen=True)
 class XBlockKrylovSolveState:
@@ -5500,7 +5382,6 @@ class XBlockKrylovSolveState:
     fallback_started_from_candidate: bool = False
     fallback_candidate_improved_rhs: bool = False
 
-
 @dataclass(frozen=True)
 class XBlockFirstKrylovSolveStateContext:
     """Inputs for converting a first xblock Krylov attempt to physical state."""
@@ -5512,7 +5393,6 @@ class XBlockFirstKrylovSolveStateContext:
     physical_rhs: jnp.ndarray
     physical_matvec: ArrayFn
     mv_count: int
-
 
 @dataclass(frozen=True)
 class XBlockKrylovSolveStageContext:
@@ -5533,7 +5413,6 @@ class XBlockKrylovSolveStageContext:
     emit: EmitFn | None
     initial_guess_builder: Callable[..., tuple[jnp.ndarray | None, bool, bool]]
 
-
 @dataclass(frozen=True)
 class XBlockKrylovSolveStageResult:
     """Candidate and final x-block Krylov state after optional GMRES fallback."""
@@ -5542,7 +5421,6 @@ class XBlockKrylovSolveStageResult:
     fallback: XBlockGMRESFallbackResult
     candidate_state: XBlockKrylovSolveState
     final_state: XBlockKrylovSolveState
-
 
 @dataclass(frozen=True)
 class XBlockKrylovSolveSpaceContext:
@@ -5560,7 +5438,6 @@ class XBlockKrylovSolveSpaceContext:
     col_scale: jnp.ndarray | None
     inv_col_scale: jnp.ndarray | None
 
-
 @dataclass(frozen=True)
 class XBlockKrylovSolveSpace:
     """Krylov solve-space callbacks after optional row/column equilibration."""
@@ -5571,7 +5448,6 @@ class XBlockKrylovSolveSpace:
     x0: jnp.ndarray | None
     solution_to_physical: ArrayFn
     transform_label: str | None
-
 
 @dataclass(frozen=True)
 class XBlockAugmentedKrylovBasisContext:
@@ -5590,7 +5466,6 @@ class XBlockAugmentedKrylovBasisContext:
     precondition_side: str
     solve_preconditioner: ArrayFn | None
 
-
 @dataclass(frozen=True)
 class XBlockAugmentedKrylovBasisResult:
     """Prepared QI augmented Krylov basis and diagnostic state."""
@@ -5601,7 +5476,6 @@ class XBlockAugmentedKrylovBasisResult:
     rank: int
     reason: str
     seed_used: bool
-
 
 @dataclass(frozen=True)
 class XBlockAugmentedKrylovStageContext:
@@ -5626,7 +5500,6 @@ class XBlockAugmentedKrylovStageContext:
     emit: EmitFn | None
     basis_builder: Callable[[XBlockAugmentedKrylovBasisContext], XBlockAugmentedKrylovBasisResult]
 
-
 @dataclass(frozen=True)
 class XBlockAugmentedKrylovStageResult:
     """Optional QI augmented-Krylov basis and updated diagnostic metadata."""
@@ -5639,7 +5512,6 @@ class XBlockAugmentedKrylovStageResult:
     seed_used: bool
     metadata: dict[str, object]
 
-
 @dataclass(frozen=True)
 class XBlockSparsePCWorkEstimates:
     """User-facing solver-kind and Krylov work-memory estimates."""
@@ -5650,14 +5522,12 @@ class XBlockSparsePCWorkEstimates:
     bicgstab_work_nbytes: int
     tfqmr_work_nbytes: int
 
-
 @dataclass(frozen=True)
 class XBlockPhysicalResidual:
     """Physical-space xblock solution and true residual norm."""
 
     x_physical: np.ndarray
     residual_norm: float
-
 
 def xblock_krylov_report(
     *,
@@ -5671,7 +5541,6 @@ def xblock_krylov_report(
     iterations = int(device_iterations) if device_iterations is not None else int(len(history or ()))
     matvecs = int(device_estimated_matvecs) if device_estimated_matvecs is not None else int(mv_count)
     return XBlockKrylovReport(iterations=int(iterations), matvecs=int(matvecs))
-
 
 def apply_xblock_side_probe_stage(
     context: XBlockSideProbeStageContext,
@@ -5896,7 +5765,6 @@ def apply_xblock_side_probe_stage(
         failure_reason=failure_reason,
     )
 
-
 def apply_xblock_probe_coarse_stage(
     context: XBlockProbeCoarseStageContext,
 ) -> XBlockProbeCoarseStageResult:
@@ -6040,7 +5908,6 @@ def apply_xblock_probe_coarse_stage(
         failure_reason=failure_reason,
     )
 
-
 def evaluate_xblock_preflight_gate(
     context: XBlockPreflightGateContext,
 ) -> XBlockPreflightGateResult:
@@ -6125,7 +5992,6 @@ def evaluate_xblock_preflight_gate(
             failed=True,
             failure_reason=failure_reason,
         )
-
 
 def resolve_xblock_krylov_control_setup(
     context: XBlockKrylovControlSetupContext,
@@ -6223,7 +6089,6 @@ def resolve_xblock_krylov_control_setup(
         qi_device_augmented_krylov_mode=str(qi_device_augmented_krylov_mode),
     )
 
-
 def xblock_krylov_state_from_first_attempt(
     context: XBlockFirstKrylovSolveStateContext,
 ) -> XBlockKrylovSolveState:
@@ -6256,7 +6121,6 @@ def xblock_krylov_state_from_first_attempt(
         reported_matvecs=int(report.matvecs),
     )
 
-
 def xblock_krylov_state_from_gmres_fallback(
     *,
     fallback: XBlockGMRESFallbackResult,
@@ -6284,7 +6148,6 @@ def xblock_krylov_state_from_gmres_fallback(
         fallback_started_from_candidate=bool(fallback.fallback_started_from_candidate),
         fallback_candidate_improved_rhs=bool(fallback.fallback_candidate_improved_rhs),
     )
-
 
 def run_xblock_krylov_solve_stage(
     context: XBlockKrylovSolveStageContext,
@@ -6352,7 +6215,6 @@ def run_xblock_krylov_solve_stage(
         final_state=final_state,
     )
 
-
 def xblock_device_cycle_progress_message(
     *,
     cycle: int,
@@ -6371,7 +6233,6 @@ def xblock_device_cycle_progress_message(
         f"ratio={float(ratio):.6e} elapsed_s={float(elapsed_s):.3f}"
     )
 
-
 def xblock_host_krylov_progress_message(
     *,
     iteration: int,
@@ -6385,7 +6246,6 @@ def xblock_host_krylov_progress_message(
         f"iters={int(iteration)} ksp_residual={float(residual_norm):.6e} "
         f"elapsed_s={float(elapsed_s):.3f}"
     )
-
 
 def build_xblock_krylov_progress_callbacks(
     context: XBlockKrylovProgressCallbacksContext,
@@ -6431,7 +6291,6 @@ def build_xblock_krylov_progress_callbacks(
         device_cycle_progress_callback=device_cycle_progress_callback,
     )
 
-
 def xblock_device_krylov_state(
     result: object,
     *,
@@ -6458,7 +6317,6 @@ def xblock_device_krylov_state(
         n_iterations=int(n_iterations),
         estimated_matvecs=estimated_matvecs,
     )
-
 
 def prepare_xblock_krylov_solve_space(
     context: XBlockKrylovSolveSpaceContext,
@@ -6537,7 +6395,6 @@ def prepare_xblock_krylov_solve_space(
         solution_to_physical=solution_to_physical,
         transform_label=transform_label,
     )
-
 
 def prepare_xblock_augmented_krylov_basis(
     context: XBlockAugmentedKrylovBasisContext,
@@ -6626,7 +6483,6 @@ def prepare_xblock_augmented_krylov_basis(
             seed_used=False,
         )
 
-
 def apply_xblock_augmented_krylov_stage(
     context: XBlockAugmentedKrylovStageContext,
 ) -> XBlockAugmentedKrylovStageResult:
@@ -6680,7 +6536,6 @@ def apply_xblock_augmented_krylov_stage(
         seed_used=bool(seed_used),
         metadata=metadata,
     )
-
 
 def run_xblock_first_krylov_attempt(
     context: XBlockFirstKrylovAttemptContext,
@@ -6827,7 +6682,6 @@ def run_xblock_first_krylov_attempt(
         device_estimated_matvecs=device_estimated_matvecs,
     )
 
-
 def xblock_gmres_fallback_decision(
     *,
     krylov_method: str,
@@ -6844,7 +6698,6 @@ def xblock_gmres_fallback_decision(
         and ((not np.isfinite(residual)) or residual > float(target))
     )
     return XBlockGMRESFallbackDecision(run=bool(should_retry))
-
 
 def run_xblock_gmres_fallback_if_needed(
     context: XBlockGMRESFallbackContext,
@@ -6936,7 +6789,6 @@ def run_xblock_gmres_fallback_if_needed(
         fallback_candidate_improved_rhs=bool(fallback_candidate_improved_rhs),
     )
 
-
 def xblock_sparse_pc_work_estimates(
     *,
     krylov_method: str,
@@ -6965,7 +6817,6 @@ def xblock_sparse_pc_work_estimates(
         tfqmr_work_nbytes=tfqmr_work_nbytes(int(linear_size), dtype=dtype),
     )
 
-
 def xblock_sparse_pc_completion_message(
     *,
     krylov_method: str,
@@ -6989,7 +6840,6 @@ def xblock_sparse_pc_completion_message(
         f"target={float(target):.6e}{ksp_suffix}"
     )
 
-
 def emit_xblock_sparse_pc_completion(
     context: XBlockSparsePCCompletionContext,
 ) -> None:
@@ -7010,7 +6860,6 @@ def emit_xblock_sparse_pc_completion(
         ),
     )
 
-
 def emit_xblock_sparse_pc_completion_from_solve_state(
     state: Mapping[str, object],
 ) -> None:
@@ -7030,7 +6879,6 @@ def emit_xblock_sparse_pc_completion_from_solve_state(
             history=state["history"],
         ),
     )
-
 
 def xblock_physical_solution_and_residual(
     *,
@@ -7060,8 +6908,6 @@ def xblock_physical_solution_and_residual(
         residual_norm=float(residual_norm),
     )
 
-
-
 @dataclass(frozen=True)
 class XBlockSubspaceCorrectionContext:
     """Dependencies for an x-block sparse-PC subspace correction."""
@@ -7085,7 +6931,6 @@ class XBlockSubspaceCorrectionContext:
     correction_label: str = "post-coarse"
     diagnostic_suffix: str = ""
 
-
 @dataclass(frozen=True)
 class XBlockSubspaceCorrectionResult:
     """Accepted x-block subspace correction state and diagnostics."""
@@ -7099,7 +6944,6 @@ class XBlockSubspaceCorrectionResult:
     residual_after: float | None
     error: str | None
     solve_s: float
-
 
 @dataclass(frozen=True)
 class XBlockPostSolveCorrectionContext:
@@ -7127,7 +6971,6 @@ class XBlockPostSolveCorrectionContext:
         ...,
         tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[int], Sequence[str]],
     ]
-
 
 @dataclass(frozen=True)
 class XBlockPostSolveCorrectionResult:
@@ -7185,7 +7028,6 @@ class XBlockPostSolveCorrectionResult:
             if name not in {"x", "residual_norm", "solve_s"}
         }
 
-
 @dataclass(frozen=True)
 class XBlockPostKrylovCompletionContext:
     """Inputs for post-Krylov correction followed by completion emission."""
@@ -7198,7 +7040,6 @@ class XBlockPostKrylovCompletionContext:
     target: float
     history: Sequence[float] | None
 
-
 @dataclass(frozen=True)
 class XBlockPostKrylovCompletionResult:
     """Final x-block state after post-solve corrections and completion emission."""
@@ -7207,7 +7048,6 @@ class XBlockPostKrylovCompletionResult:
     x: np.ndarray
     residual_norm: float
     solve_s: float
-
 
 def apply_xblock_subspace_correction_if_needed(
     context: XBlockSubspaceCorrectionContext,
@@ -7303,7 +7143,6 @@ def apply_xblock_subspace_correction_if_needed(
         error=error,
         solve_s=float(context.elapsed_s()) - start_s,
     )
-
 
 def run_xblock_post_solve_corrections(
     context: XBlockPostSolveCorrectionContext,
@@ -7546,7 +7385,6 @@ def run_xblock_post_solve_corrections(
         post_residual_equation_residual_after=post_residual_equation.residual_after,
     )
 
-
 def complete_xblock_post_krylov_stage(
     context: XBlockPostKrylovCompletionContext,
 ) -> XBlockPostKrylovCompletionResult:
@@ -7571,8 +7409,6 @@ def complete_xblock_post_krylov_stage(
         residual_norm=float(corrections.residual_norm),
         solve_s=float(corrections.solve_s),
     )
-
-
 
 __all__ = (
     "XBlockSparsePCFinalCoreState",
