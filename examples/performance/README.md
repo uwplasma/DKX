@@ -1,19 +1,16 @@
 # Performance Examples
 
-This folder contains stable benchmark drivers for JIT compilation, memory
-behavior, output formats, CPU parallelism, GPU execution, and transport-worker
-scaling. Start with the small format and JIT benchmarks, then move to the
-transport-worker or production-floor scripts when you need release evidence.
+This folder contains stable benchmark drivers for output formats, CPU/GPU
+transport solves, structured solver kernels, and transport-worker scaling.
+Start with the small format benchmark, then move to the transport-worker or
+production-floor scripts when you need release evidence.
 
 ## Where To Start
 
 - `benchmark_output_formats.py`: compare HDF5, NetCDF, and NPZ output write/read
   costs on a small reproducible case.
-- `benchmark_jit_matvec.py`: measure cold and warm JIT matvec timing.
 - `benchmark_transport_l11_vs_fortran.py`: reproduce the compact L11
   parity/runtime figure used in the README and docs.
-- `profile_reduced_examples.py`: profile the reduced upstream suite and write
-  runtime/memory summaries.
 
 ## Scaling And Parallelism
 
@@ -32,8 +29,6 @@ documentation gates.
   block-tridiagonal benchmark. It supports deterministic synthetic systems and
   `--case sfincs-pas-block`, which extracts a local PAS block from a SFINCS
   fixture.
-- `profile_transport_compile_runtime_cache.py`: profile transport-solve
-  compile/runtime split with the persistent JAX cache.
 
 Optional solver-library adoption studies are research-lane material until they
 are promoted through accuracy, runtime, memory, differentiability, and
