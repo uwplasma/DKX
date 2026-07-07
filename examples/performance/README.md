@@ -26,19 +26,18 @@ are research-lane material, not stable examples. They are preserved outside the
 stable core until they have production-grid accuracy, runtime, memory, and
 documentation gates.
 
-## Solver And Ecosystem Benchmarks
+## Solver Benchmarks
 
-- `benchmark_optional_lineax_implicit_solve.py`: optional Lineax gate for
-  differentiable linear solves. It compares against the in-tree
-  `custom_linear_solve` path on a synthetic nonsymmetric system, a tiny SFINCS
-  implicit-diff operator, and a repeated-RHS reuse case, and it skips cleanly
-  when `lineax` is not installed.
 - `benchmark_structured_solve.py`: bounded factor-once/repeated-RHS
   block-tridiagonal benchmark. It supports deterministic synthetic systems and
   `--case sfincs-pas-block`, which extracts a local PAS block from a SFINCS
   fixture.
 - `profile_transport_compile_runtime_cache.py`: profile transport-solve
   compile/runtime split with the persistent JAX cache.
+
+Optional solver-library adoption studies are research-lane material until they
+are promoted through accuracy, runtime, memory, differentiability, and
+dependency-policy gates.
 
 ## Generated Output Data
 

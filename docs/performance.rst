@@ -313,77 +313,20 @@ VMEC monoenergetic memory policy:
 
 - ``monoenergetic_geometryScheme5_ASCII`` and ``monoenergetic_geometryScheme5_netCDF`` use the low-memory Krylov/``tzfft`` transport path by default for bounded CPU ``RHSMode=3`` VMEC cases. The focused CLI probes stayed parity-clean and reduced profiled RSS from about ``2950-3066 MB`` to ``506.5 MB`` for the ASCII fixture and ``603.2 MB`` for the netCDF fixture. Set ``SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY=0`` to restore the dense batched fallback for comparison.
 
-External solver-library gates
------------------------------
+External solver-library research lanes
+--------------------------------------
 
-Additional JAX-ecosystem solver libraries are evaluated behind measured gates, not adopted on sight.
+The stable core uses the in-tree JAX Krylov and implicit-differentiation paths.
+Optional solver-library adoption studies, including Lineax, Equinox-wrapper, and
+JAXopt benchmark drivers, are research-lane material until they provide a
+reviewed real-case accuracy, runtime, memory, and dependency-policy advantage.
 
-- ``lineax`` remains the strongest candidate for bounded differentiable linear-solve experiments, but it is not part of the default CLI path.
-- On a deterministic nonsymmetric stress matrix, the local benchmark showed ``lineax.GMRES`` faster than the in-tree path while staying residual-clean (about ``0.39 s`` versus ``0.99 s``).
-- On the tiny real SFINCS implicit-diff operator and its repeated-RHS reuse lane, the same local benchmark reached tiny residuals with ``lineax`` (about ``3.2e-16`` and ``7.5e-16``) but still returned failure statuses (maximum-step reached or iterative breakdown), while the in-tree solver stayed admissible and residual-clean (about ``1.4e-14`` and ``4.3e-12``).
-
-The policy is:
-
-- do not add ``lineax`` to the production CLI solve ladder yet,
-- keep it as a candidate for explicitly bounded differentiable/reference-path experiments,
-- require a pinned real-case runtime/RSS/parity win with clean solver status before any production integration.
-
-The executable gate for this decision is:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_optional_lineax_implicit_solve.py \
-     --backend all \
-     --suite all \
-     --out-json examples/performance/output/lineax_implicit_gate.json
-
-This benchmark is intentionally optional. It always runs the in-tree
-``jax.lax.custom_linear_solve`` path, and it records ``lineax`` as skipped when the
-library is not installed. Its summary JSON also counts
-``residual_clean_status_mismatch_rows`` so a Lineax solve that has a tiny residual but
-a non-success solver result remains a blocker instead of being promoted by residuals
-alone. A future Lineax-backed implementation should only be promoted
-after all three gates below stay healthy:
-
-- a synthetic deterministic nonsymmetric stress system,
-- a tiny real SFINCS implicit-diff solve on
-  ``tests/ref/pas_1species_PAS_noEr_tiny_scheme5.input.namelist``,
-- and a repeated-RHS reuse case on that same tiny real operator.
-
-For the in-tree solver, the tiny real gate is already residual-clean with the
-benchmark's parity-safe Krylov window. The remaining question is whether a Lineax-backed
-path can match that reliability and then provide a real runtime or memory win.
-
-A second optional ecosystem gate checks objective-wrapper libraries on a real
-``geometryScheme=4`` differentiable task:
-
-.. code-block:: bash
-
-   python examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py \
-     --backend all \
-     --n-theta 17 \
-     --n-zeta 17 \
-     --maxiter 5 \
-     --stepsize 0.1
-
-This gate keeps ``equinox`` and the historical ``jaxopt`` backend outside the
-production solver path while verifying that objective-wrapper tooling can wrap a
-real repository objective cleanly. The default CI optional-dependency lane
-installs ``equinox`` and exercises the ``jaxopt`` skip-safe path rather than
-installing JAXopt. In the local opt-in run, the ``equinox`` wrapper
-matched a centered finite-difference directional derivative to about
-``1.1e-11`` absolute error, and the bounded ``jaxopt.GradientDescent`` lane
-reduced the loss by about ``4.1e-14`` relative to the initial value while
-recovering the target harmonic amplitudes to about ``1.6e-08`` in Euclidean
-norm.
-
-A no-optional-dependency VMEC/Boozer readiness gate also runs as part of
-``tests/test_optional_ecosystem_gates.py``. It evaluates a small Boozer spectrum
-through ``boozer_spectrum_proxy_transport_objective``, checks the full spectral
-gradient against centered finite differences, and checks a JVP against the
-gradient dot product. This is a proxy transport-objective differentiability gate,
-not execution of ``vmec_jax``, ``booz_xform_jax``, or the kinetic SFINCS transport
-solve.
+Stable differentiability evidence remains in direct package tests such as
+``tests/test_implicit_linear_solve_grad.py``,
+``tests/test_full_system_residual_jvp.py``, ``tests/test_sensitivity.py``, and
+the VMEC/Boozer proxy-gradient tests. These tests exercise the retained
+production code paths without requiring optional benchmark scripts or optional
+solver packages.
 
 
 What is differentiable today?
@@ -837,9 +780,8 @@ The package uses a lightweight in-repo GMRES implementation for parity control. 
 workflows, the JAX ecosystem can be integrated cleanly once the residual is expressed in a differentiable way:
 
 - `optax`: gradient-based optimization with schedules, constraints, and modern optimizers.
-- `lineax`: optional benchmark target for differentiable linear solves, gated
-  by ``examples/performance/benchmark_optional_lineax_implicit_solve.py`` and not used
-  by the production CLI solver.
+- `lineax`: useful research target for differentiable linear solves; not used
+  by the production CLI solver or stable examples.
 
 
 Parity tuning environment variables (developer)

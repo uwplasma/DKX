@@ -448,16 +448,16 @@
           "path": "sfincs_jax/geometry/jax_adapters.py"
         },
         {
-          "claim": "Optional workflow tests cover backend readiness and measured adoption summaries without hard dependencies.",
-          "path": "tests/test_optional_ecosystem_gates.py"
+          "claim": "Retained workflow tests cover backend readiness and no-solve provenance without hard optional solver dependencies.",
+          "path": "tests/test_vmec_jax_workflow.py"
         },
         {
           "claim": "Shared pure-JAX Boozer-spectrum proxy transport objective checks full spectral finite-difference gradients and JVP/dot-product consistency without optional dependencies.",
           "path": "sfincs_jax/geometry/jax_adapters.py"
         },
         {
-          "claim": "Optional workflow tests exercise the shared proxy transport gradient gate in default CI.",
-          "path": "tests/test_optional_ecosystem_gates.py"
+          "claim": "Geometry adapter tests exercise the shared proxy transport gradient gate in default CI.",
+          "path": "tests/test_jax_geometry_adapters.py"
         },
         {
           "claim": "VMEC/Boozer workflow status and pipeline summaries now include a no-solve provenance gate that records proxy-vs-kinetic scope and confirms no kinetic solve was executed.",
@@ -501,8 +501,8 @@
       "current_percent": 89,
       "evidence": [
         {
-          "claim": "New tests run measured optional Lineax, Equinox, and JAXopt gates while skipping safely if optional packages are absent.",
-          "path": "tests/test_optional_ecosystem_gates.py"
+          "claim": "Optional Lineax, Equinox, and JAXopt benchmark gates were evaluated and later extracted to research-lane material.",
+          "path": "docs/research_lanes.rst"
         },
         {
           "claim": "Docs record the memory/runtime rationale for short-recurrence Krylov, checkpointing, and JAX profiling.",
@@ -517,16 +517,16 @@
           "path": "sfincs_jax/solvers/path_policy.py"
         },
         {
-          "claim": "Lineax benchmark now writes adoption summaries that separate synthetic speedups from real SFINCS solver-error statuses.",
-          "path": "examples/performance/benchmark_optional_lineax_implicit_solve.py"
+          "claim": "Lineax adoption summaries separated synthetic speedups from real SFINCS solver-error statuses before the benchmark driver was extracted.",
+          "path": "docs/research_lanes.rst"
         },
         {
-          "claim": "Equinox/JAXopt gate now reports measured directional-gradient and optimization summary decisions.",
-          "path": "examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py"
+          "claim": "Equinox/JAXopt directional-gradient and optimization benchmark decisions were evaluated before the driver was extracted.",
+          "path": "docs/research_lanes.rst"
         },
         {
-          "claim": "Lineax adoption summaries now fail closed when real SFINCS rows are residual-clean but return non-success Lineax statuses, preventing residual-only promotion.",
-          "path": "tests/test_optional_lineax_implicit_gate.py"
+          "claim": "Residual-only promotion remains disallowed for extracted optional solver-library research lanes.",
+          "path": "docs/performance.rst"
         }
       ],
       "gates": [
@@ -536,11 +536,11 @@
       ],
       "id": "jax_ecosystem_solver_evaluation",
       "next_actions": [
-        "Resolve Lineax real-SFINCS non-success statuses before any solver promotion; residual-clean status mismatches are now explicit blockers.",
-        "Keep Equinox/JAXopt examples as optional bounded optimization workflows rather than hard dependencies."
+        "Resolve Lineax real-SFINCS non-success statuses before any solver promotion; residual-clean status mismatches remain explicit blockers.",
+        "Keep Equinox/JAXopt adoption studies outside the stable examples until a reviewed implementation satisfies the stable gates."
       ],
       "second_push_delta_percent": 39,
-      "second_push_result": "optional Lineax, Equinox, and JAXopt gates are target-saturated for release: useful workflows are documented, real-SFINCS Lineax residual-clean status mismatches remain unpromoted, and no hard dependency is added",
+      "second_push_result": "optional Lineax, Equinox, and JAXopt gates were evaluated for release, then extracted from the stable examples because no hard dependency or production solver path was admitted",
       "status": "evidence_ready",
       "target_percent": 89,
       "title": "JAX ecosystem solver/preconditioner evaluation"
