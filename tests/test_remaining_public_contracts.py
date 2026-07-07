@@ -400,7 +400,6 @@ def test_remaining_solver_policy_container_contracts() -> None:
         trigger="residual",
         skipped_weak_pas=True,
         skipped_guarded_pas_tz=False,
-        skipped_qi_device=True,
     )
     full_selection = RHS1FullStrongPreconditionerSelection(kind="full_csr", xblock_tz_lmax=3)
     post_primary = RHS1PostPrimaryMinresCorrectionOutcome(
@@ -439,7 +438,7 @@ def test_remaining_solver_policy_container_contracts() -> None:
         preconditioner=lambda x: x,
     )
     assert strong.kind == "xblock"
-    assert reduced_selection.skipped_qi_device
+    assert reduced_selection.skipped_weak_pas
     assert full_selection.xblock_tz_lmax == 3
     assert post_primary.accepted_guarded
     assert reduced_build.rhs1_precond_kind == "xblock"

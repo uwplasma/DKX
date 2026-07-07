@@ -794,7 +794,6 @@ class RHS1ReducedStrongPreconditionerSelection:
     trigger: bool
     skipped_weak_pas: bool = False
     skipped_guarded_pas_tz: bool = False
-    skipped_qi_device: bool = False
 
 
 @dataclass(frozen=True)
@@ -824,11 +823,6 @@ def rhs1_reduced_strong_selection_skip_messages(
             "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
             "after guarded PAS-TZ fallback; set "
             "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry"
-        )
-    if selection.skipped_qi_device:
-        messages.append(
-            "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
-            "for QI device preconditioner experiment"
         )
     return tuple(messages)
 
@@ -1091,14 +1085,12 @@ def resolve_rhs1_reduced_strong_preconditioner_selection(
     res_ratio: float,
     pas_tz_guarded_fallback: bool,
     pas_tz_guarded_strong_retry: bool,
-    qi_device_skip_strong: bool,
 ) -> RHS1ReducedStrongPreconditionerSelection:
     """Resolve the reduced-space strong-preconditioner kind and skip gates.
 
-    The driver has several late guards that disable strong retries for PAS,
-    guarded PAS-TZ, and QI-device experiments. Centralizing the pure routing
-    here keeps the solve orchestration focused on building and testing the
-    chosen preconditioner.
+    The driver has late guards that disable strong retries for weak PAS and
+    guarded PAS-TZ attempts. Centralizing the pure routing here keeps the solve
+    orchestration focused on building and testing the chosen preconditioner.
     """
 
     kind: str | None = None
@@ -1186,11 +1178,6 @@ def resolve_rhs1_reduced_strong_preconditioner_selection(
         kind = None
         trigger = False
 
-    skipped_qi_device = bool(qi_device_skip_strong)
-    if skipped_qi_device:
-        kind = None
-        trigger = False
-
     return RHS1ReducedStrongPreconditionerSelection(
         kind=kind,
         candidate_kind_before_skips=candidate_kind_before_skips,
@@ -1198,7 +1185,6 @@ def resolve_rhs1_reduced_strong_preconditioner_selection(
         trigger=bool(trigger),
         skipped_weak_pas=bool(skipped_weak_pas),
         skipped_guarded_pas_tz=bool(skipped_guarded_pas_tz),
-        skipped_qi_device=bool(skipped_qi_device),
     )
 
 

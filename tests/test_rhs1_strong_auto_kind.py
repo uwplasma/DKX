@@ -141,7 +141,6 @@ def test_resolve_rhs1_reduced_strong_selection_preserves_explicit_request() -> N
         res_ratio=10.0,
         pas_tz_guarded_fallback=False,
         pas_tz_guarded_strong_retry=False,
-        qi_device_skip_strong=False,
     )
 
     assert selection.kind == "theta_line"
@@ -170,14 +169,13 @@ def test_resolve_rhs1_reduced_strong_selection_extra_constraint_uses_schur() -> 
         res_ratio=10.0,
         pas_tz_guarded_fallback=False,
         pas_tz_guarded_strong_retry=False,
-        qi_device_skip_strong=False,
     )
 
     assert selection.kind == "schur"
     assert selection.candidate_kind_before_skips == "schur"
 
 
-def test_resolve_rhs1_reduced_strong_selection_tracks_pas_and_device_skip_gates(
+def test_resolve_rhs1_reduced_strong_selection_tracks_pas_skip_gates(
     monkeypatch,
 ) -> None:
     monkeypatch.delenv("SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO", raising=False)
@@ -201,7 +199,6 @@ def test_resolve_rhs1_reduced_strong_selection_tracks_pas_and_device_skip_gates(
         res_ratio=1.0e13,
         pas_tz_guarded_fallback=True,
         pas_tz_guarded_strong_retry=False,
-        qi_device_skip_strong=True,
     )
 
     assert selection.kind is None
@@ -209,7 +206,6 @@ def test_resolve_rhs1_reduced_strong_selection_tracks_pas_and_device_skip_gates(
     assert not selection.trigger
     assert selection.skipped_weak_pas
     assert selection.skipped_guarded_pas_tz
-    assert selection.skipped_qi_device
     messages = rhs1_reduced_strong_selection_skip_messages(selection)
     assert messages == (
         "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
@@ -218,8 +214,6 @@ def test_resolve_rhs1_reduced_strong_selection_tracks_pas_and_device_skip_gates(
         "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
         "after guarded PAS-TZ fallback; set "
         "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
-        "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
-        "for QI device preconditioner experiment",
     )
 
 
@@ -244,7 +238,6 @@ def test_resolve_rhs1_reduced_strong_selection_allows_guarded_pas_retry() -> Non
         res_ratio=10.0,
         pas_tz_guarded_fallback=True,
         pas_tz_guarded_strong_retry=True,
-        qi_device_skip_strong=False,
     )
 
     assert selection.kind == "theta_line"

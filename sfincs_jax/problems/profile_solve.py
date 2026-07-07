@@ -2275,8 +2275,6 @@ def solve_v3_full_system_linear_gmres(
         strong_precond_trigger = bool(strong_trigger_controls.trigger)
         fp_force_strong = bool(strong_trigger_controls.fp_force)
 
-        qi_device_skip_strong = False
-
         pas_smoother_allowed = (
             rhs1_precond_kind
             in {"pas_lite", "pas_hybrid", "pas_tz", "pas_schur", "pas_tokamak_theta"}
@@ -2467,7 +2465,6 @@ def solve_v3_full_system_linear_gmres(
             res_ratio=float(res_ratio),
             pas_tz_guarded_fallback=bool(rhs1_pas_tz_guarded_fallback),
             pas_tz_guarded_strong_retry=rhs1_pas_tz_guarded_strong_retry_from_env(),
-            qi_device_skip_strong=bool(qi_device_skip_strong),
         )
         strong_precond_kind = reduced_strong_selection.kind
         strong_xblock_tz_lmax = reduced_strong_selection.xblock_tz_lmax

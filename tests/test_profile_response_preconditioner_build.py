@@ -1138,7 +1138,6 @@ def test_adjust_and_resolve_strong_selection_helpers(monkeypatch) -> None:
         res_ratio=2.0,
         pas_tz_guarded_fallback=False,
         pas_tz_guarded_strong_retry=False,
-        qi_device_skip_strong=False,
     )
     assert reduced.kind == "schur"
     assert reduced.trigger
@@ -1163,14 +1162,12 @@ def test_adjust_and_resolve_strong_selection_helpers(monkeypatch) -> None:
         res_ratio=1.0e13,
         pas_tz_guarded_fallback=True,
         pas_tz_guarded_strong_retry=False,
-        qi_device_skip_strong=True,
     )
     assert skipped.kind is None
     assert skipped.skipped_weak_pas
     assert skipped.skipped_guarded_pas_tz
-    assert skipped.skipped_qi_device
     messages = pb.rhs1_reduced_strong_selection_skip_messages(skipped)
-    assert len(messages) == 3
+    assert len(messages) == 2
     assert pb.rhs1_reduced_strong_selection_skip_messages(
         pb.RHS1ReducedStrongPreconditionerSelection(
             kind=None,
@@ -1200,7 +1197,6 @@ def test_adjust_and_resolve_strong_selection_helpers(monkeypatch) -> None:
         res_ratio=2.0,
         pas_tz_guarded_fallback=False,
         pas_tz_guarded_strong_retry=False,
-        qi_device_skip_strong=False,
     )
     assert reduced_auto_pas.kind == "pas_lite"
 
