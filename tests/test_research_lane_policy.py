@@ -4,9 +4,9 @@ import copy
 import json
 from pathlib import Path
 
-from scripts.check_research_lanes import main as check_research_lanes_main
 import pytest
 
+from sfincs_jax.validation.release import check_research_lanes_main
 from sfincs_jax.validation.artifacts import (
     ResearchLanePolicyError,
     check_research_lane_completion_file,

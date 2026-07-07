@@ -211,7 +211,7 @@ use. To prefetch them before running examples, use:
 
 .. code-block:: bash
 
-   python scripts/fetch_equilibria.py
+   python -m sfincs_jax.validation.data_fetch
 
 Writing `sfincsOutput.h5` (Python + CLI):
 
