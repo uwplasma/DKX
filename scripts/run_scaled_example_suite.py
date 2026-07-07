@@ -14,9 +14,8 @@ import socket
 import sys
 from pathlib import Path
 
-from audit_suite_output_keys import audit_suite_output_keys
-from audit_suite_runtime_drift import audit_suite_runtime_drift
 from sfincs_jax.io import localize_equilibrium_file_in_place
+from sfincs_jax.validation.release import audit_suite_output_keys, audit_suite_runtime_drift
 
 from run_reduced_upstream_suite import (
     CaseResult,
