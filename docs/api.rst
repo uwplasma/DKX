@@ -156,15 +156,6 @@ research workflows.
 .. automodule:: sfincs_jax.solvers.preconditioner_pas_policy
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioner_qi_basis
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioner_qi_corrections
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioner_qi_device
-   :members:
-
 .. automodule:: sfincs_jax.problems.profile_residual
    :members:
 
@@ -178,9 +169,6 @@ research workflows.
    :members:
 
 .. automodule:: sfincs_jax.problems.profile_sparse_solve
-   :members:
-
-.. automodule:: sfincs_jax.problems.profile_sparse_qi
    :members:
 
 .. automodule:: sfincs_jax.problems.profile_sparse_xblock
@@ -202,9 +190,6 @@ research workflows.
    :members:
 
 .. automodule:: sfincs_jax.validation.fortran
-   :members:
-
-.. automodule:: sfincs_jax.validation.qi_device
    :members:
 
 .. automodule:: sfincs_jax.solvers.implicit

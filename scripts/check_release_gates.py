@@ -10,13 +10,10 @@ from pathlib import Path
 import sys
 from typing import Iterable
 
-from sfincs_jax.validation.qi_device import check_qi_device_artifact_files
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = REPO_ROOT / "examples" / "publication_figures" / "validation_manifest.json"
 DEFAULT_DOCS = (REPO_ROOT / "docs" / "validation_matrix.rst",)
-DEFAULT_QI_DEVICE_ARTIFACT_PATHS = (REPO_ROOT / "docs" / "_static",)
 
 DEFERRED_STATUS = "deferred_post_release"
 VALID_RECORD_STATUSES = {"implemented", DEFERRED_STATUS}
@@ -81,7 +78,6 @@ def release_gate_errors(
     manifest_path: Path = DEFAULT_MANIFEST,
     *,
     docs_paths: Iterable[Path] = DEFAULT_DOCS,
-    qi_device_paths: Iterable[Path] = DEFAULT_QI_DEVICE_ARTIFACT_PATHS,
     repo_root: Path = REPO_ROOT,
 ) -> list[str]:
     """Return release-gate metadata errors for CI-fast checks."""
@@ -169,18 +165,6 @@ def release_gate_errors(
         for phrase in REQUIRED_DOC_PHRASES:
             if phrase not in text:
                 errors.append(f"{doc_path}: missing release-gate docs phrase {phrase!r}")
-
-    qi_paths = [
-        candidate
-        for path in qi_device_paths
-        for candidate in (sorted(path.rglob("*.json")) if path.is_dir() else [path])
-    ]
-    qi_checks = check_qi_device_artifact_files(qi_paths)
-    relevant_qi_checks = [check for check in qi_checks if check.relevant]
-    if not relevant_qi_checks:
-        errors.append("QI device artifact release gate found no relevant artifacts")
-    for check in relevant_qi_checks:
-        errors.extend(check.errors)
 
     return errors
 

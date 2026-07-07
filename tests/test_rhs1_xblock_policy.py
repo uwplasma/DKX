@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 
-from scripts.run_qi_seed_robustness import build_evidence_manifest
 from sfincs_jax.solvers.preconditioner_xblock_policy import (
     DEFAULT_FULL_FP_3D_DEVICE_HOST_FALLBACK_MIN_ACTIVE_SIZE,
     DEFAULT_FULL_FP_3D_LGMRES_RESCUE_MAXITER,
@@ -919,85 +915,3 @@ def test_resolve_xblock_sparse_pc_policy_preserves_unknown_krylov_warning_bit() 
     assert policy.ignored_krylov_env
     assert policy.gmres_restart == 80
     assert not policy.restart_capped
-
-
-def test_qi_evidence_manifest_separates_host_fallback_from_true_device_qi(tmp_path: Path) -> None:
-    source_input = tmp_path / "input.namelist"
-    source_input.write_text(
-        (
-            "&resolutionParameters\n"
-            "  Ntheta = 25\n"
-            "  Nzeta = 51\n"
-            "  Nx = 8\n"
-            "  Nxi = 100\n"
-            "/\n"
-        ),
-        encoding="utf-8",
-    )
-    host_fallback = tmp_path / "qi_seed_robustness_scale060_device_host_fallback_seed3_cpu_2026_05_15.json"
-    host_fallback.write_text(
-        json.dumps(
-            {
-                "artifact_kind": "qi_seed_execution_summary",
-                "schema_version": 2,
-                "lane": "qi_seed_robustness",
-                "case_count": 1,
-                "public_cli_default_path": False,
-                "resolution": {"NTHETA": 15, "NZETA": 31, "NX": 5, "NXI": 60},
-                "total_size_estimate": 139502,
-                "active_size": 81377,
-                "execution_summary": {
-                    "backends": ["cpu"],
-                    "max_elapsed_s": 156.8,
-                    "max_residual_ratio": 0.0034,
-                    "process_failed": 0,
-                    "timed_out": 0,
-                },
-                "gates": {"passed": True, "failures": []},
-            }
-        ),
-        encoding="utf-8",
-    )
-    device_timeout = tmp_path / "qi_seed_robustness_scale060_galerkin_forced_xblock_seed3_gpu1_2026_05_15.json"
-    device_timeout.write_text(
-        json.dumps(
-            {
-                "artifact_kind": "qi_seed_execution_summary",
-                "schema_version": 2,
-                "lane": "qi_seed_robustness",
-                "case_count": 1,
-                "public_cli_default_path": False,
-                "resolution": {"NTHETA": 15, "NZETA": 31, "NX": 5, "NXI": 60},
-                "total_size_estimate": 139502,
-                "active_size": 81377,
-                "execution_summary": {
-                    "backends": [],
-                    "max_elapsed_s": 600.3,
-                    "max_residual_ratio": None,
-                    "process_failed": 1,
-                    "timed_out": 1,
-                },
-                "gates": {"passed": False, "failures": [{"reason": "process_failed"}]},
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    manifest = build_evidence_manifest(
-        artifact_paths=[host_fallback, device_timeout],
-        source_input=source_input,
-        production_seed_count=5,
-        production_timeout_s=3600.0,
-    )
-
-    assert manifest["release_gate"] == "bounded_proxy"
-    claims = manifest["release_claims"]
-    assert claims["production_non_autodiff_host_fallback"]["claim_status"] == "release_ready"
-    assert claims["production_non_autodiff_host_fallback"]["blocks_current_release"] is False
-    assert "not a differentiable or true device-resident" in claims["production_non_autodiff_host_fallback"]["scope"]
-    assert claims["true_device_qi"]["claim_status"] == "closed_deferred"
-    assert claims["true_device_qi"]["blocks_current_release"] is False
-    assert "post-release" in claims["true_device_qi"]["closed_or_deferred_reason"]
-    assert str(device_timeout.name) in claims["true_device_qi"]["evidence"][0]
-    assert claims["public_auto_production_ladder"]["claim_status"] == "bounded_proxy"
-    assert any("Do not use the non-autodiff host fallback" in blocker for blocker in manifest["open_blockers"])

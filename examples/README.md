@@ -59,7 +59,7 @@ For an interactive terminal version of this map, run
 | I want to run one case and plot the output. | `tutorials/run_quick_output_and_plot.py` | It writes HDF5, NetCDF, NPZ, and a PDF panel in one bounded command. |
 | I want to learn the file formats and CLI/API basics. | `getting_started/` | These scripts isolate input parsing, output writing, VMEC paths, and plotting. |
 | I need transport coefficients. | `transport/` | These examples cover RHSMode=2/3 transport matrices and scan postprocessing. |
-| I need gradients or optimization hooks. | `autodiff/` then `optimization/` | Start with residual/JVP examples, then move to QA/QI objectives and promotion gates. |
+| I need gradients or optimization hooks. | `autodiff/` then `optimization/` | Start with residual/JVP examples, then move to QA objectives and promotion gates. |
 | I need bootstrap current or Redl comparisons. | `vmec_jax_finite_beta/` | This folder owns the VMEC, Redl, ambipolar-root, and bootstrap-current profile scripts. |
 | I need to validate against SFINCS Fortran v3 behavior. | `parity/` then `publication_figures/` | The first folder has frozen fixtures; the second regenerates release-facing comparison plots. |
 | I need CPU/GPU runtime or memory evidence. | `performance/` | These scripts benchmark output formats, JIT, sharding, transport workers, and optional backends. |
@@ -91,7 +91,6 @@ For an interactive terminal version of this map, run
 | choose geometry, validate outputs, and benchmark CPU/GPU | `tutorials/04_geometry_validation_and_performance.ipynb` | `getting_started/write_sfincs_output_vmec.py`, `performance/benchmark_transport_parallel_scaling.py` |
 | check CPU/GPU performance or output formats | `performance/benchmark_output_formats.py` | `performance/benchmark_sharded_solve_scaling.py` |
 | validate against frozen SFINCS Fortran v3 data | `parity/output_parity_vs_fortran_fixture.py` | `publication_figures/` and `sfincs_examples/` |
-| reproduce the QI benchmark input used in validation reports | `data/qi_nfp2_reference.input.namelist` | `optimization/materialize_qi_nfp2_promotion_input.py` |
 
 ### Application Recipes
 
@@ -156,8 +155,8 @@ validation or benchmark workflow, reference data, or shared support code.
   scan-plot utilities.
 - `autodiff/`: JAX `grad`, JVP/VJP, implicit differentiation, and
   VMEC/Boozer-to-SFINCS differentiable workflow examples.
-- `optimization/`: JAX-native proxy objectives, kinetic promotion scripts, QI
-  electron-root screens, and QA bootstrap-current optimization helpers.
+- `optimization/`: JAX-native proxy objectives, kinetic promotion scripts, and
+  QA bootstrap-current optimization helpers.
 - `vmec_jax_finite_beta/`: finite-beta VMEC-to-SFINCS radial profiles,
   ambipolar `E_r`, bootstrap-current comparisons, Redl formula checks, and
   convergence plots.
@@ -172,8 +171,7 @@ validation or benchmark workflow, reference data, or shared support code.
   point for first-time users.
 - `upstream/`: curated upstream SFINCS v3 inputs used by tests, docs, and
   validation lanes.
-- `data/`: small input data needed by public examples, including the QI/VMEC
-  reference namelist used by validation and benchmark scripts.
+- `data/`: small input data needed by public VMEC and teaching examples.
 - `utils/`: helper code shared by example scripts; users normally call the
   topic scripts rather than importing this folder directly.
 
@@ -261,5 +259,4 @@ for runtime, memory, parity, or solver-policy changes.
 
 Detailed release-audit commands live in `docs/parity.rst`,
 `docs/performance.rst`, and `docs/fortran_examples.rst`. The scaled-suite
-driver is `../scripts/run_scaled_example_suite.py`, and the QI robustness
-campaign driver is `../scripts/run_qi_seed_robustness.py`.
+driver is `../scripts/run_scaled_example_suite.py`.

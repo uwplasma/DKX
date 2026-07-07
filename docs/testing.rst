@@ -448,12 +448,11 @@ mapped-grid machinery can run through a real transport-matrix solve, but it is n
 evidence for full-FP compatibility, a default-grid replacement, or a
 production-resolution speedup.
 
-The QI seed-robustness runner is guarded by
-``tests/test_run_qi_seed_robustness.py``. It materializes deterministic
-neighboring cases, localizes the VMEC equilibrium beside each generated
-``input.namelist``, perturbs ``nu_n`` and ``Er`` by seed, and can optionally run
-``sfincs_jax write-output`` while recording stdout, stderr, and solver-trace paths.
-The checked summaries in ``docs/_static/qi_seed_robustness_smoke.json``,
+QI seed-robustness runner code and tests are preserved on the
+``research/qi-device-hard-seed`` branch. The stable core keeps the checked
+summaries in ``docs/_static`` as historical research-lane evidence rather than
+as default CI commands. The checked summaries in
+``docs/_static/qi_seed_robustness_smoke.json``,
 ``docs/_static/qi_seed_robustness_multiseed.json``, and
 ``docs/_static/qi_seed_robustness_multiseed5_cpu.json`` record low-resolution
 default CLI evidence. The three-seed CPU/GPU artifacts run neighboring seeds at

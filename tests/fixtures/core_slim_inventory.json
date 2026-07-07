@@ -37,6 +37,7 @@
   "extraction_groups": [
     {
       "branch": "research/qi-device-hard-seed",
+      "core_extracted": true,
       "purpose": "Preserve QI and true device-QI solver research outside the stable core.",
       "source_paths": [
         "sfincs_jax/problems/profile_sparse_qi.py",

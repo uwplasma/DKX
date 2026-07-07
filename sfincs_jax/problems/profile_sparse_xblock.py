@@ -4628,6 +4628,18 @@ def _disabled_qi_diagnostic_value(key: str) -> object:
         return {}
     if key.endswith(("_labels", "_shape", "_basis")):
         return ()
+    if key.endswith(
+        (
+            "_rank",
+            "_count",
+            "_candidates",
+            "_max_candidates",
+            "_max_angular_mode",
+            "_max_extra",
+            "_steps",
+        )
+    ):
+        return 0
     if key.endswith("_coarse_solver") or key.endswith("_selected_index"):
         return None
     if key.endswith(("_reason", "_mode", "_basis_kind")):
@@ -4647,18 +4659,6 @@ def _disabled_qi_diagnostic_value(key: str) -> object:
         )
     ):
         return False
-    if key.endswith(
-        (
-            "_rank",
-            "_count",
-            "_candidates",
-            "_max_candidates",
-            "_max_angular_mode",
-            "_max_extra",
-            "_steps",
-        )
-    ):
-        return 0
     return 0.0
 
 def xblock_disabled_qi_diagnostic_scope() -> dict[str, object]:

@@ -82,6 +82,128 @@ For every touched file, classify code in this order before editing:
    delete from core; do not leave dormant imports, env-only routes, or unused
    policy branches in stable modules.
 
+## Concrete Code-Audit Rules
+
+The refactor is not a file-shuffle exercise. Each tranche must prove that the
+remaining code is necessary, simpler, and still accurate. Apply these rules to
+every source, test, example, script, and documentation file.
+
+### Required Inventory Columns
+
+Every retained or removed file must have one row in the checked inventory with:
+
+- `path`: current repository path.
+- `kind`: `source`, `test`, `example`, `script`, `docs`, `fixture`, or
+  `generated-artifact`.
+- `line_count`: current physical lines.
+- `public_surface`: documented import, CLI command, example entry point, or
+  `none`.
+- `callers`: internal callers found by import/call search, or `none`.
+- `physics_or_numerics`: the equation, model, discretization, solver,
+  diagnostic, or output contract owned by the file, or `none`.
+- `tests`: bounded tests that fail if the file is wrong, or `missing`.
+- `docs_examples`: README/docs/example references, or `none`.
+- `runtime_role`: `default`, `advanced`, `validation-only`, `research-only`,
+  or `none`.
+- `autodiff_role`: `primal`, `jvp`, `vjp`, `implicit`, `custom-rule`, or
+  `none`.
+- `action`: `keep`, `merge`, `thin-compat`, `extract-pr`, or `delete`.
+- `justification`: one sentence explaining why this exact action is the
+  simplest safe choice.
+
+Rows with `tests=missing`, `callers=none`, `public_surface=none`, and
+`runtime_role=none` default to `delete` unless they are small fixtures required
+by another retained test.
+
+### Per-Line Keep/Delete Questions
+
+When touching a file, each import, constant, helper, branch, dataclass field,
+environment variable, diagnostic key, and compatibility alias must answer:
+
+1. What retained user workflow, physics equation, numerical method, or output
+   schema needs this line?
+2. What test would fail if this line were removed or simplified?
+3. Is the same behavior already implemented elsewhere under a clearer name?
+4. Is this an automatic default path, or only an experimental/manual knob?
+5. Can this be expressed as data/configuration instead of another branch?
+6. Can this line be moved to a research branch without reducing stable parity?
+7. Does it help runtime, memory, differentiability, or clarity enough to pay for
+   its complexity?
+
+If the answer to questions 1, 2, and 7 is weak, remove the line, merge it into a
+clearer retained helper, or extract it to a research PR.
+
+### Function-Level Rules
+
+- Functions over 80 lines require a stated stage boundary and should be split
+  only when the split creates a physics/numerics stage with a direct test.
+- Functions under 10 lines that are used once should usually be inlined unless
+  they name a physics equation or public API concept.
+- Two functions with the same inputs/outputs and different policy names should
+  collapse into one implementation plus explicit data/options.
+- Environment-variable-only functions are not stable core features. Promote
+  them to documented advanced options with tests, or extract/delete them.
+- Fail-closed/probe functions are allowed only if they prevent expensive or
+  inaccurate default solves and have direct admission/rejection tests.
+- Compatibility functions must delegate without owning logic and must have a
+  removal note or migration test.
+
+### File-Structure Rules
+
+- Prefer fewer, domain-named modules over many narrow policy files. A new file
+  is allowed only when it owns a stable domain concept: geometry loading,
+  discretization, operator assembly, physics diagnostics, solver policy,
+  output, plotting, validation, or workflow orchestration.
+- Do not keep folders that only contain `__init__.py` plus one nested folder.
+  Flatten them into the nearest domain package or remove the package.
+- Avoid names based on historical implementation details (`v3_`, `rhs1_`,
+  `transport_` everywhere, `probe`, `campaign`, `qi_*`) in stable core unless
+  the name is a public migration facade.
+- Stable source should be readable in this order: public API/CLI, physics
+  models, discretization/operators, solver defaults, outputs/plotting,
+  validation.
+
+### Extraction And Deletion Gates
+
+- `extract-pr`: code has research value but lacks production parity,
+  acceptable runtime/RSS, automatic defaults, or stable docs. It must be
+  preserved on a named branch before deletion from the stable core.
+- `delete`: code is obsolete, duplicated, uncalled, a generated artifact, a
+  stale audit/profiling script, or a test for deleted behavior.
+- `thin-compat`: public import names that users may still import. These files
+  must contain no solver logic and should only delegate to the new stable
+  module.
+- No deleted/extracted module may remain in API docs, public import contracts,
+  source-tree fixtures, examples catalogues, README figures, or default solver
+  policy imports.
+
+### Complexity Budgets
+
+The final PR should meet these budgets or document each exception:
+
+- `sfincs_jax/`: <=50 Python files and <=50k lines; stretch target is a 10x
+  reduction from the pre-slim source-line count.
+- `tests/`: <=120 Python files with grouped domain ownership and >=95%
+  coverage of the slim core.
+- `examples/`: original Fortran-v3 reference inputs plus <=10 curated workflows.
+- `scripts/`: zero or only documented release-maintenance commands.
+- `benchmarks/`: removed from core; benchmark evidence lives in bounded tests,
+  fixtures, docs, or release assets.
+- Tracked artifacts over 2 MB are forbidden unless explicitly fetched from
+  release data by tests/docs.
+
+### Tranche Acceptance Checklist
+
+Each commit-level tranche must report:
+
+- Net source/test/example/script/docs files added and removed.
+- Net line-count change.
+- Modules extracted, deleted, merged, or retained with justification.
+- Focused tests run and their results.
+- Ruff/compile/diff/large-file checks.
+- Any parity/performance claim changed by the tranche.
+- Remaining open lanes and completion estimate.
+
 ## Ordered Finish Plan
 
 ### Phase A - Build The Auditable Inventory

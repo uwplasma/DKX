@@ -113,7 +113,6 @@
       "profile_sparse_finalization.py",
       "profile_sparse_fortran_reduced.py",
       "profile_sparse_policy.py",
-      "profile_sparse_qi.py",
       "profile_sparse_solve.py",
       "profile_sparse_xblock.py",
       "transport_diagnostics.py",
@@ -141,9 +140,6 @@
       "preconditioner_pas_matrix_free.py",
       "preconditioner_pas_policy.py",
       "preconditioner_pas_xblock_ilu.py",
-      "preconditioner_qi_basis.py",
-      "preconditioner_qi_corrections.py",
-      "preconditioner_qi_device.py",
       "preconditioner_schur_profile.py",
       "preconditioner_symbolic_active.py",
       "preconditioner_symbolic_host.py",
@@ -163,8 +159,7 @@
       "artifacts.py",
       "data_fetch.py",
       "figures.py",
-      "fortran.py",
-      "qi_device.py"
+      "fortran.py"
     ],
     "workflows": [
       "mapped_xgrid.py",
@@ -172,9 +167,7 @@
       "scans.py"
     ]
   },
-  "temporary_nested_packages": [
-  ],
-  "temporary_init_only_packages": [
-  ],
+  "temporary_nested_packages": [],
+  "temporary_init_only_packages": [],
   "final_depth_policy": "One package level below sfincs_jax is the target. temporary_nested_packages must remain empty unless a justified exception is documented."
 }

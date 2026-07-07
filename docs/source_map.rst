@@ -343,12 +343,12 @@ Optimization-facing workflow owner. It contains the differentiable
 neoclassical proxy objectives, high-fidelity scan-promotion gates,
 candidate-scan plan builders, promotion evidence campaign builders,
 CPU/GPU/Fortran promotion comparison gates, and finite-beta convergence-ladder
-checks. Fixed-artifact QI device campaign ingestion belongs to
-``sfincs_jax/validation/qi_device.py`` so workflow code stays focused on
-reusable execution and evidence-generation tasks. Historical ``optimization_*``
-workflow modules resolve through
-package-level compatibility aliases in ``sfincs_jax.workflows`` instead of
-separate implementation files.
+checks. Experimental QI/device-QI campaign ingestion is preserved on the
+``research/qi-device-hard-seed`` branch, not in the stable core, so workflow
+code stays focused on reusable execution and evidence-generation tasks.
+Historical ``optimization_*`` workflow modules resolve through package-level
+compatibility aliases in ``sfincs_jax.workflows`` instead of separate
+implementation files.
 
 ``sfincs_jax/workflows/mapped_xgrid.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -371,17 +371,6 @@ Release-hosted external-equilibrium fixture owner:
 
 This module replaces the former root ``sfincs_jax/data_fetch.py``
 implementation.
-
-``sfincs_jax/validation/qi_device.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-QI device evidence owner:
-
-- checks route-level QI device artifacts for fail-closed metadata,
-- rejects GPU evidence that lacks backend/provenance fields,
-- gates bounded QI ``15x`` GPU campaign JSON against residual and
-  CPU/Fortran root-agreement criteria,
-- keeps campaign-specific promotion policy out of reusable workflow modules.
 
 ``sfincs_jax/input_compat.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -856,24 +845,14 @@ owners are:
   GMRES fallback routing, work estimates, progress messages, physical-residual
   measurement, post-Krylov post-solve correction/completion orchestration,
   x-block branch orchestration, and final x-block sparse-PC diagnostic metadata
-  assembly. This module owns generic x-block stage mechanics; QI-specific
-  coarse-basis choices remain in ``sparse/qi.py``.
+  assembly. This module owns generic x-block stage mechanics in the stable
+  core; QI-specific coarse-basis research is preserved on
+  ``research/qi-device-hard-seed``.
 - ``sfincs_jax/problems/profile_sparse_fortran_reduced.py``:
   Fortran-reduced x-block backend policy, factor-build, Krylov setup/solve,
   optional moment/global coarse stages, and final payload construction. The
-  optional global-coupling stage uses the canonical QI host builder by default
-  when no test builder is injected.
-- ``sfincs_jax/problems/profile_sparse_qi.py``:
-  QI-specific x-block device/operator-reuse policy, coarse-seed, Galerkin,
-  two-level, QI-device admission/build/probe/install, and residual-deflated
-  stages. It also owns ``run_xblock_qi_preconditioner_pipeline()``, the
-  aggregate runner that owns QI stage ordering, setup-time accounting,
-  fail-closed reasons, and seed/device/deflated diagnostic scope. These helpers
-  are separated from generic sparse-PC logic because they encode QI-specific
-  coarse-basis and residual-space choices;
-  ``build_xblock_qi_stage_pipeline_context()`` owns production default-builder
-  wiring, while the profile-response solve owner supplies solve-local arrays,
-  operators, timing, and active-DOF maps.
+  optional global-coupling stage is injected by tests or advanced callers; the
+  stable core no longer imports QI host builders by default.
 - ``sfincs_jax/problems/profile_dense.py``:
   RHSMode=1/profile-response dense and linear-solve helpers. This module owns
   Krylov routing for implicit, JIT, distributed, GMRES, and BiCGStab solve
@@ -881,14 +860,6 @@ owners are:
   sparse-ILU; host SciPy rescue; the reduced row-scaled LU path; and the
   full/reduced least-squares dense fallback used by non-differentiable host
   shortcut paths.
-- ``sfincs_jax/problems/profile_sparse_qi.py``:
-  matrix-free QI device seed correction for RHSMode=1 active-DOF solves. The
-  driver passes solve-local state through a typed setup/context while the
-  module owns env-gate resolution for early and pre-sparse seed hooks, QI
-  coarse-basis setup, residual-improvement admission, metadata updates, and
-  fail-closed diagnostics. The returned attempt object reports whether a hook
-  was attempted and whether it improved the residual so the driver only updates
-  replay state when the domain helper accepts a better seed.
 - ``sfincs_jax/problems/profile_solver_diagnostics.py``:
   typed RHSMode=1 x-block correction diagnostic records, solver
   metadata key assembly, and KSP replay diagnostic context forwarding. This
@@ -935,24 +906,6 @@ owners are:
   bounded JAX-device CSR materialization, active-index slicing, sparse matvec
   closures, and host-vs-device validation utilities for opt-in RHSMode=1
   device-QI and operator-reuse experiments.
-- ``sfincs_jax/solvers/preconditioner_qi_basis.py``:
-  deterministic QI basis, coarse-space, phase-space, residual-region,
-  active-pattern, global-moment, and Galerkin/action coarse utilities.
-- ``sfincs_jax/solvers/preconditioner_qi_corrections.py``:
-  reusable QI correction primitives: local-plus-coarse two-level actions,
-  block-Schur/angular/radial corrections, residual-deflated corrections,
-  multilevel residual equations, residual-derived Galerkin selection, and the
-  coupled residual equation.
-- ``sfincs_jax/solvers/preconditioner_qi_device.py``:
-  device-local QI preconditioner and smoother primitives, including
-  CSR-backed Jacobi, matrix-free residual-minimizing steps, fail-closed seed
-  probes, and the production-shaped device-QI local-plus-coarse state.
-- ``sfincs_jax/validation/qi_device.py``:
-  QI device and production-ladder evidence policy. It checks fail-closed
-  QI-device artifacts, bounded GPU-campaign provenance, and production
-  promotion evidence requiring complete seed/backend coverage, convergence,
-  output and trace provenance, residual/observable bounds, and no host fallback
-  before a true device-QI claim can be promoted.
 - ``sfincs_jax/problems/profile_setup.py``:
   shared RHSMode=1 preconditioner-kind dispatch.
 - ``sfincs_jax/problems/profile_policies.py``:
