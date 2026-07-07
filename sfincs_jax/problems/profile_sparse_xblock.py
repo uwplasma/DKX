@@ -4166,11 +4166,9 @@ def apply_xblock_two_level_stage(
     start_s = float(context.elapsed_s())
     try:
         if context.builder is None:
-            from sfincs_jax.solvers.preconditioner_qi_corrections import (
-                build_rhs1_xblock_two_level_preconditioner,
+            raise RuntimeError(
+                "default two-level builder moved to research QI branch"
             )
-
-            builder = build_rhs1_xblock_two_level_preconditioner
         else:
             builder = context.builder
         preconditioner, metadata, stats = builder(
@@ -4235,26 +4233,13 @@ def apply_xblock_global_coupling_stage(
 
     start_s = float(context.elapsed_s())
     try:
-        if context.host_builder is None or context.device_builder is None:
-            from sfincs_jax.solvers.preconditioner_qi_corrections import (
-                build_rhs1_xblock_device_global_coupling_preconditioner,
-                build_rhs1_xblock_smoothed_global_coupling_preconditioner,
-            )
-
-            host_builder = (
-                build_rhs1_xblock_smoothed_global_coupling_preconditioner
-                if context.host_builder is None
-                else context.host_builder
-            )
-            device_builder = (
-                build_rhs1_xblock_device_global_coupling_preconditioner
-                if context.device_builder is None
-                else context.device_builder
-            )
-        else:
-            host_builder = context.host_builder
-            device_builder = context.device_builder
+        host_builder = context.host_builder
+        device_builder = context.device_builder
         builder = device_builder if bool(context.policy.use_device_builder) else host_builder
+        if builder is None:
+            raise RuntimeError(
+                "default global-coupling builder moved to research QI branch"
+            )
         preconditioner, metadata, stats = builder(
             op=context.op,
             rhs=context.rhs,

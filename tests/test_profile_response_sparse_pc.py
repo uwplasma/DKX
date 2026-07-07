@@ -8123,7 +8123,7 @@ def test_fortran_reduced_xblock_global_coupling_stage_builds_and_records_stats()
     assert any("global-coupling build start" in message for message in messages)
 
 
-def test_fortran_reduced_xblock_global_coupling_stage_uses_canonical_default_builder() -> None:
+def test_fortran_reduced_xblock_global_coupling_stage_without_builder_stays_disabled() -> None:
     policy = resolve_fortran_reduced_xblock_global_coupling_policy(
         precondition_side="left",
         env={
@@ -8131,29 +8131,23 @@ def test_fortran_reduced_xblock_global_coupling_stage_uses_canonical_default_bui
             "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_MAX_DIRECTIONS": "8",
         },
     )
-    op = _tiny_qi_xblock_operator()
-    matrix = _tiny_qi_xblock_matrix(op.total_size)
-    rhs = jnp.arange(1, op.total_size + 1, dtype=jnp.float64)
-    diag = jnp.diag(matrix)
-
     result = apply_fortran_reduced_xblock_global_coupling_stage(
         context=FortranReducedXBlockGlobalCouplingStageContext(
-            op=op,
-            rhs=rhs,
-            matvec=lambda v: matrix @ v,
-            base_preconditioner=lambda v: v / diag,
+            op=SimpleNamespace(),
+            rhs=jnp.asarray([1.0, 2.0]),
+            matvec=lambda v: v,
+            base_preconditioner=_identity,
             direction_projector=None,
-            expected_size=int(op.total_size),
+            expected_size=2,
             policy=policy,
             elapsed_s=lambda: 0.0,
             emit=None,
         )
     )
 
-    assert result.built
-    assert result.metadata["rank"] >= 1
-    assert result.metadata["mode"] == "additive"
-    assert np.all(np.isfinite(np.asarray(result.preconditioner(rhs))))
+    assert not result.built
+    assert result.preconditioner is _identity
+    assert "moved to research QI branch" in result.metadata["error"]
 
 
 def test_fortran_reduced_xblock_global_coupling_stage_records_failure() -> None:
@@ -9624,7 +9618,7 @@ def test_xblock_two_level_stage_builds_and_records_stats() -> None:
     assert result.preconditioner(jnp.asarray([3.0])).tolist() == [6.0]
 
 
-def test_xblock_two_level_stage_uses_canonical_default_builder() -> None:
+def test_xblock_two_level_stage_without_injected_builder_stays_disabled() -> None:
     policy = resolve_xblock_two_level_policy_setup(
         precondition_side="right",
         env={
@@ -9632,29 +9626,23 @@ def test_xblock_two_level_stage_uses_canonical_default_builder() -> None:
             "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MAX_DIRECTIONS": "8",
         },
     )
-    op = _tiny_qi_xblock_operator()
-    matrix = _tiny_qi_xblock_matrix(op.total_size)
-    rhs = jnp.arange(1, op.total_size + 1, dtype=jnp.float64)
-    diag = jnp.diag(matrix)
-
     result = apply_xblock_two_level_stage(
         context=XBlockTwoLevelStageContext(
-            op=op,
-            rhs=rhs,
-            matvec=lambda v: matrix @ v,
-            base_preconditioner=lambda v: v / diag,
+            op=SimpleNamespace(),
+            rhs=jnp.asarray([1.0, 2.0]),
+            matvec=lambda v: v,
+            base_preconditioner=_identity,
             direction_projector=None,
-            expected_size=int(op.total_size),
+            expected_size=2,
             policy=policy,
             elapsed_s=lambda: 0.0,
             emit=None,
         )
     )
 
-    assert result.built
-    assert result.metadata["rank"] >= 1
-    assert result.metadata["expected_size"] == op.total_size
-    assert np.all(np.isfinite(np.asarray(result.preconditioner(rhs))))
+    assert not result.built
+    assert result.preconditioner is _identity
+    assert "moved to research QI branch" in result.metadata["error"]
 
 
 def test_xblock_two_level_stage_records_failure() -> None:
@@ -9799,12 +9787,7 @@ def test_xblock_global_coupling_stage_selects_device_builder() -> None:
     assert result.preconditioner(jnp.asarray([2.0])).tolist() == [6.0]
 
 
-def test_xblock_global_coupling_stage_uses_canonical_default_builders() -> None:
-    op = _tiny_qi_xblock_operator()
-    matrix = _tiny_qi_xblock_matrix(op.total_size)
-    rhs = jnp.arange(1, op.total_size + 1, dtype=jnp.float64)
-    diag = jnp.diag(matrix)
-
+def test_xblock_global_coupling_stage_without_injected_builder_stays_disabled() -> None:
     for method in ("gmres", "gmres_jax"):
         policy = resolve_xblock_global_coupling_policy_setup(
             precondition_side="right",
@@ -9817,23 +9800,21 @@ def test_xblock_global_coupling_stage_uses_canonical_default_builders() -> None:
         )
         result = apply_xblock_global_coupling_stage(
             context=XBlockGlobalCouplingStageContext(
-                op=op,
-                rhs=rhs,
-                matvec=lambda v: matrix @ v,
-                base_preconditioner=lambda v: v / diag,
+                op=SimpleNamespace(),
+                rhs=jnp.asarray([1.0, 2.0]),
+                matvec=lambda v: v,
+                base_preconditioner=_identity,
                 direction_projector=None,
-                expected_size=int(op.total_size),
+                expected_size=2,
                 policy=policy,
                 elapsed_s=lambda: 0.0,
                 emit=None,
             )
         )
 
-        assert result.built
-        assert result.metadata["rank"] >= 1
-        assert result.metadata["mode"] == "additive"
-        assert result.metadata.get("device_resident", False) is (method == "gmres_jax")
-        assert np.all(np.isfinite(np.asarray(result.preconditioner(rhs))))
+        assert not result.built
+        assert result.preconditioner is _identity
+        assert "moved to research QI branch" in result.metadata["error"]
 
 
 def test_xblock_global_coupling_stage_records_failure() -> None:

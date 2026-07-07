@@ -186,7 +186,9 @@ def test_qi_device_probe_minres_policy_rejects_fixed_step(monkeypatch) -> None:
     assert rhs1_qi_device_probe_uses_minres_step() is False
 
 
-def test_qi_device_extra_coarse_controls_parse_bounded_overrides(monkeypatch) -> None:
+def test_qi_device_extra_coarse_controls_ignore_research_env_overrides(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv(
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION",
         "yes",
@@ -206,14 +208,16 @@ def test_qi_device_extra_coarse_controls_parse_bounded_overrides(monkeypatch) ->
 
     controls = rhs1_qi_device_extra_coarse_controls()
 
-    assert controls["global_moment_residual_equation"] is True
-    assert controls["global_moment_residual_equation_max_rank"] == 7
-    assert controls["global_moment_residual_equation_solver"] == "action_lstsq"
+    assert controls["global_moment_residual_equation"] is False
+    assert controls["global_moment_residual_equation_max_rank"] == 1
+    assert controls["global_moment_residual_equation_solver"] == "disabled"
     assert controls["active_pattern_coarse_max_rank"] == 1
-    assert controls["multilevel_species_current_moments"] is True
+    assert controls["multilevel_species_current_moments"] is False
 
 
-def test_qi_device_residual_correction_controls_parse_bounded_overrides(monkeypatch) -> None:
+def test_qi_device_residual_correction_controls_ignore_research_env_overrides(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv(
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION",
         "yes",
@@ -241,13 +245,13 @@ def test_qi_device_residual_correction_controls_parse_bounded_overrides(monkeypa
 
     controls = rhs1_qi_device_residual_correction_controls()
 
-    assert controls["block_schur_residual_equation"] is True
+    assert controls["block_schur_residual_equation"] is False
     assert controls["block_schur_residual_equation_max_rank"] == 1
-    assert controls["coupled_residual_equation_solver"] == "galerkin"
+    assert controls["coupled_residual_equation_solver"] == "disabled"
     assert controls["coupled_residual_equation_min_improvement"] == pytest.approx(0.0)
-    assert controls["residual_snapshot_residual_equation_solver"] == "action_lstsq"
+    assert controls["residual_snapshot_residual_equation_solver"] == "disabled"
     assert controls["block_schur_residual_include_aggregates"] is False
-    assert controls["residual_snapshot_include_primal"] is True
+    assert controls["residual_snapshot_include_primal"] is False
 
 
 def _rank_budget(**overrides):

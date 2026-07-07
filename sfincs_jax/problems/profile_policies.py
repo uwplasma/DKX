@@ -30,7 +30,6 @@ _FALSE_VALUES = {"0", "false", "no", "off"}
 TRUE_ENV_VALUES = {"1", "true", "t", "yes", "on", ".true.", ".t."}
 FALSE_ENV_VALUES = {"0", "false", "f", "no", "off", ".false.", ".f."}
 
-
 def resolve_use_implicit(*, differentiable: bool | None = None) -> bool:
     """Resolve whether to use the implicit/differentiable linear-solve path."""
 
@@ -39,10 +38,8 @@ def resolve_use_implicit(*, differentiable: bool | None = None) -> bool:
     implicit_env = os.environ.get("SFINCS_JAX_IMPLICIT_SOLVE", "").strip().lower()
     return implicit_env not in _FALSE_VALUES
 
-
 def _env_token(name: str) -> str:
     return str(os.environ.get(name, "")).strip().lower()
-
 
 def _env_int(name: str, default: int) -> int:
     raw = str(os.environ.get(name, "")).strip()
@@ -51,7 +48,6 @@ def _env_int(name: str, default: int) -> int:
     except ValueError:
         return int(default)
 
-
 def _env_float(name: str, default: float) -> float:
     raw = str(os.environ.get(name, "")).strip()
     try:
@@ -59,11 +55,9 @@ def _env_float(name: str, default: float) -> float:
     except ValueError:
         return float(default)
 
-
 def _env_get(env: Mapping[str, str] | None, name: str) -> str:
     source = os.environ if env is None else env
     return str(source.get(name, "")).strip()
-
 
 def read_bool_env(name: str, *, default: bool = False, env: Mapping[str, str] | None = None) -> bool:
     """Parse a Fortran/Python-style boolean environment value."""
@@ -76,7 +70,6 @@ def read_bool_env(name: str, *, default: bool = False, env: Mapping[str, str] | 
     if raw in FALSE_ENV_VALUES:
         return False
     return bool(default)
-
 
 def read_int_env(
     name: str,
@@ -94,7 +87,6 @@ def read_int_env(
         value = int(default)
     return max(int(minimum), int(value))
 
-
 def read_float_env(
     name: str,
     *,
@@ -111,11 +103,9 @@ def read_float_env(
         value = float(default)
     return max(float(minimum), float(value))
 
-
 _read_bool_env = read_bool_env
 _read_int_env = read_int_env
 _read_float_env = read_float_env
-
 
 @dataclass(frozen=True)
 class RHS1PostMinresPolicy:
@@ -124,7 +114,6 @@ class RHS1PostMinresPolicy:
     steps_requested: int
     alpha_clip: float
     min_improvement: float
-
 
 @dataclass(frozen=True)
 class RHS1SubspaceCorrectionPolicy:
@@ -143,7 +132,6 @@ class RHS1SubspaceCorrectionPolicy:
     include_post_coarse: bool = True
     include_qi_basis: bool = True
 
-
 @dataclass(frozen=True)
 class RHS1PostSolveCorrectionPolicy:
     """All post-Krylov x-block correction policies used by profile-response solves."""
@@ -151,7 +139,6 @@ class RHS1PostSolveCorrectionPolicy:
     post_minres: RHS1PostMinresPolicy
     post_coarse: RHS1SubspaceCorrectionPolicy
     post_residual_equation: RHS1SubspaceCorrectionPolicy
-
 
 def read_post_minres_policy(*, env: Mapping[str, str] | None = None) -> RHS1PostMinresPolicy:
     """Read the post-minres cleanup policy."""
@@ -176,7 +163,6 @@ def read_post_minres_policy(*, env: Mapping[str, str] | None = None) -> RHS1Post
             env=env,
         ),
     )
-
 
 def read_subspace_correction_policy(
     prefix: str,
@@ -270,7 +256,6 @@ def read_subspace_correction_policy(
         ),
     )
 
-
 def read_probe_coarse_policy(*, env: Mapping[str, str] | None = None) -> RHS1SubspaceCorrectionPolicy:
     """Read the pre-Krylov probe-coarse policy."""
 
@@ -284,7 +269,6 @@ def read_probe_coarse_policy(*, env: Mapping[str, str] | None = None) -> RHS1Sub
         env=env,
     )
 
-
 def read_post_coarse_policy(*, env: Mapping[str, str] | None = None) -> RHS1SubspaceCorrectionPolicy:
     """Read the post-Krylov coarse correction policy."""
 
@@ -297,7 +281,6 @@ def read_post_coarse_policy(*, env: Mapping[str, str] | None = None) -> RHS1Subs
         include_angular_residual_default=False,
         env=env,
     )
-
 
 def read_post_residual_equation_policy(
     *,
@@ -318,7 +301,6 @@ def read_post_residual_equation_policy(
         env=env,
     )
 
-
 def read_post_solve_correction_policy(
     *,
     env: Mapping[str, str] | None = None,
@@ -330,7 +312,6 @@ def read_post_solve_correction_policy(
         post_coarse=read_post_coarse_policy(env=env),
         post_residual_equation=read_post_residual_equation_policy(env=env),
     )
-
 
 _DEFAULT_ACTIVE_AUTO_CANDIDATES = (
     "active_fortran_v3_reduced_lu",
@@ -371,7 +352,6 @@ _ACTIVE_LARGE_FALLBACK_CANDIDATES = frozenset(
     }
 )
 
-
 @dataclass(frozen=True)
 class ActiveProjectedPreconditionerAutoPolicy:
     """Resolved auto-policy for active projected RHSMode=1 preconditioners."""
@@ -383,14 +363,12 @@ class ActiveProjectedPreconditionerAutoPolicy:
     large_default_used: bool
     log_progress: bool
 
-
 def _parse_active_candidates(candidate_env: str) -> tuple[str, ...]:
     return tuple(
         item.strip().lower().replace("-", "_")
         for item in str(candidate_env).split(",")
         if item.strip()
     )
-
 
 def resolve_active_projected_preconditioner_auto_policy(
     *,
@@ -456,7 +434,6 @@ def resolve_active_projected_preconditioner_auto_policy(
         log_progress=bool(log_progress),
     )
 
-
 @dataclass(frozen=True)
 class _StructuredHostSparsePreconditionerBundle:
     """Adapter exposing structured CSR preconditioners through the factor API."""
@@ -474,7 +451,6 @@ class _StructuredHostSparsePreconditionerBundle:
             raise RuntimeError(f"structured host preconditioner {self.kind!r} was not selected")
         return np.asarray(preconditioner_operator.matvec(np.asarray(rhs, dtype=np.float64).reshape((-1,))))
 
-
 _DIRECT_TAIL_STRUCTURED_PC_CACHE: dict[tuple[object, ...], object] = {}
 _DIRECT_REDUCED_PMAT_PC_KINDS = frozenset(
     {
@@ -487,13 +463,11 @@ _DIRECT_REDUCED_PMAT_PC_KINDS = frozenset(
     }
 )
 
-
 def _is_direct_reduced_pmat_pc_kind(kind: str | None) -> bool:
     """Return true for explicit preconditioner aliases that avoid active CSR assembly."""
 
     normalized = str(kind or "").strip().lower().replace("-", "_")
     return normalized in _DIRECT_REDUCED_PMAT_PC_KINDS
-
 
 def _hash_numpy_array_for_cache(array: Any) -> str:
     """Return a stable content hash for NumPy-like cache-key arrays."""
@@ -504,7 +478,6 @@ def _hash_numpy_array_for_cache(array: Any) -> str:
     digest.update(np.asarray(arr.shape, dtype=np.int64).tobytes())
     digest.update(arr.view(np.uint8))
     return digest.hexdigest()
-
 
 def _direct_tail_structured_pc_cache_key(
     *,
@@ -543,7 +516,6 @@ def _direct_tail_structured_pc_cache_key(
         env_signature,
     )
 
-
 def _direct_tail_structured_pc_with_cache_metadata(
     preconditioner: object,
     *,
@@ -562,7 +534,6 @@ def _direct_tail_structured_pc_with_cache_metadata(
         metadata["direct_tail_structured_pc_cached_setup_s"] = float(getattr(preconditioner, "setup_s", 0.0) or 0.0)
         return replace(preconditioner, setup_s=0.0, metadata=metadata)
     return replace(preconditioner, metadata=metadata)
-
 
 def _rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
     *,
@@ -619,7 +590,6 @@ def _rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         adaptive_mb = min(float(adaptive_mb), max(float(base_mb), float(auto_max_mb)))
     return float(adaptive_mb)
 
-
 def parse_rhs1_pas_tz_guarded_structured_levels(raw: str) -> tuple[str, ...]:
     """Parse low-memory coarse levels for guarded PAS-TZ fallback trials."""
 
@@ -661,26 +631,15 @@ def parse_rhs1_pas_tz_guarded_structured_levels(raw: str) -> tuple[str, ...]:
             levels.append(token)
     return tuple(levels)
 
-
 def rhs1_qi_device_extra_coarse_controls() -> dict[str, object]:
-    """Compatibility wrapper for QI device coarse-equation controls."""
+    """Return disabled QI-device coarse controls for the stable core."""
 
-    from sfincs_jax.solvers.preconditioner_qi_device import (
-        rhs1_qi_device_extra_coarse_controls as _controls,
-    )
-
-    return _controls()
-
+    return _disabled_qi_device_extra_coarse_controls()
 
 def rhs1_qi_device_residual_correction_controls() -> dict[str, object]:
-    """Compatibility wrapper for QI device residual-correction controls."""
+    """Return disabled QI-device residual-correction controls for stable core."""
 
-    from sfincs_jax.solvers.preconditioner_qi_device import (
-        rhs1_qi_device_residual_correction_controls as _controls,
-    )
-
-    return _controls()
-
+    return _disabled_qi_device_residual_correction_controls()
 
 def rhs1_qi_device_extra_coarse_setup_kwargs(
     controls: Mapping[str, object],
@@ -816,7 +775,6 @@ def rhs1_qi_device_extra_coarse_setup_kwargs(
         ),
     }
 
-
 def rhs1_qi_device_residual_correction_setup_kwargs(
     controls: Mapping[str, object],
 ) -> dict[str, object]:
@@ -898,7 +856,6 @@ def rhs1_qi_device_residual_correction_setup_kwargs(
             controls["block_schur_residual_include_aggregates"]
         ),
     }
-
 
 _QI_EXTRA_COARSE_BOOL_METADATA_FIELDS = (
     "global_moment_residual_equation",
@@ -1007,6 +964,45 @@ _QI_RESIDUAL_CORRECTION_METADATA_ALIASES = (
     ),
 )
 
+def _disabled_qi_device_extra_coarse_controls() -> dict[str, object]:
+    """Return complete disabled controls for the extracted QI research path."""
+
+    controls: dict[str, object] = {
+        name: False for name in _QI_EXTRA_COARSE_BOOL_METADATA_FIELDS
+    }
+    controls.update({name: 1 for name in _QI_EXTRA_COARSE_INT_METADATA_FIELDS})
+    controls.update({name: 0.0 for name in _QI_EXTRA_COARSE_FLOAT_METADATA_FIELDS})
+    controls.update({name: "disabled" for name in _QI_EXTRA_COARSE_STR_METADATA_FIELDS})
+    controls.update(
+        {
+            "multilevel_current_moments": False,
+            "multilevel_species_current_moments": False,
+            "multilevel_radial_current_moments": False,
+            "multilevel_tail_constraint_moments": False,
+            "multilevel_current_max_pitch_degree": 1,
+            "residual_region_bounce_coarse_min_energy": 0.0,
+            "active_pattern_coarse_min_chunk_energy": 0.0,
+        }
+    )
+    return controls
+
+def _disabled_qi_device_residual_correction_controls() -> dict[str, object]:
+    """Return complete disabled residual controls for extracted QI research."""
+
+    controls: dict[str, object] = {
+        name: False for name in _QI_RESIDUAL_CORRECTION_BOOL_METADATA_FIELDS
+    }
+    controls.update({name: 1 for name in _QI_RESIDUAL_CORRECTION_INT_METADATA_FIELDS})
+    controls.update(
+        {name: "disabled" for name in _QI_RESIDUAL_CORRECTION_STR_METADATA_FIELDS}
+    )
+    controls.update(
+        {
+            "coupled_residual_equation_min_improvement": 0.0,
+            "coupled_residual_equation_install_on_reject": False,
+        }
+    )
+    return controls
 
 def _requested_control_metadata(
     controls: Mapping[str, object],
@@ -1029,7 +1025,6 @@ def _requested_control_metadata(
         metadata[output_key] = caster(controls[control_key])
     return metadata
 
-
 def rhs1_qi_device_extra_coarse_metadata(
     controls: Mapping[str, object],
 ) -> dict[str, object]:
@@ -1044,7 +1039,6 @@ def rhs1_qi_device_extra_coarse_metadata(
         aliases=_QI_EXTRA_COARSE_METADATA_ALIASES,
     )
 
-
 def rhs1_qi_device_residual_correction_metadata(
     controls: Mapping[str, object],
 ) -> dict[str, object]:
@@ -1057,7 +1051,6 @@ def rhs1_qi_device_residual_correction_metadata(
         str_fields=_QI_RESIDUAL_CORRECTION_STR_METADATA_FIELDS,
         aliases=_QI_RESIDUAL_CORRECTION_METADATA_ALIASES,
     )
-
 
 def rhs1_qi_device_tail_block_required(
     *,
@@ -1074,14 +1067,12 @@ def rhs1_qi_device_tail_block_required(
         )
     )
 
-
 def rhs1_qi_device_coupled_install_on_reject_requested(
     residual_correction_controls: Mapping[str, object],
 ) -> bool:
     """Return whether an accepted coupled residual stage may install after reject."""
 
     return bool(residual_correction_controls["coupled_residual_equation_install_on_reject"])
-
 
 def rhs1_qi_device_status_fields(
     *,
@@ -1120,14 +1111,12 @@ def rhs1_qi_device_status_fields(
         f"block_schur={int(_residual_requested('block_schur_residual_enrichment'))}"
     )
 
-
 @dataclass(frozen=True)
 class RHS1QIDeviceRankBudget:
     """Rank budget and optional rank cap for a QI-device coarse space."""
 
     rank_budget: int
     max_rank: int | None
-
 
 @dataclass(frozen=True)
 class RHS1QIDeviceSetupSummary:
@@ -1137,7 +1126,6 @@ class RHS1QIDeviceSetupSummary:
     max_rank: int | None
     progress_messages: tuple[str, ...]
     residual_seed_required: bool
-
 
 def rhs1_qi_device_rank_budget(
     *,
@@ -1265,7 +1253,6 @@ def rhs1_qi_device_rank_budget(
         max_rank = None
 
     return RHS1QIDeviceRankBudget(rank_budget=max(1, int(rank_budget)), max_rank=max_rank)
-
 
 def rhs1_qi_device_setup_summary(
     *,
@@ -1630,7 +1617,6 @@ def rhs1_qi_device_setup_summary(
         residual_seed_required=bool(residual_seed_required),
     )
 
-
 _QI_DEVICE_PROGRESS_SPECS: tuple[
     tuple[str, str, tuple[tuple[str, str, str], ...]], ...
 ] = (
@@ -1855,7 +1841,6 @@ _QI_DEVICE_PROGRESS_SPECS: tuple[
     ),
 )
 
-
 def _format_qi_device_progress_value(value: object, style: str) -> str:
     if style == "int":
         return str(int(value))
@@ -1864,7 +1849,6 @@ def _format_qi_device_progress_value(value: object, style: str) -> str:
     if style == "sci":
         return f"{float(value):.3e}"
     return str(value)
-
 
 def _format_qi_device_progress_message(
     prefix: str,
@@ -1877,7 +1861,6 @@ def _format_qi_device_progress_message(
         for label, value_key, style in fields
     )
     return prefix + f"QI device preconditioner {title} ({details})"
-
 
 def rhs1_qi_device_progress_messages(**values: object) -> tuple[str, ...]:
     """Return progress messages for optional QI-device coarse/residual features."""
@@ -1896,7 +1879,6 @@ def rhs1_qi_device_progress_messages(**values: object) -> tuple[str, ...]:
             )
     return tuple(messages)
 
-
 def rhs1_qi_device_probe_uses_minres_step() -> bool:
     """Return whether QI-device seed probes should line-search each correction."""
 
@@ -1910,7 +1892,6 @@ def rhs1_qi_device_probe_uses_minres_step() -> bool:
         .replace("-", "_")
     )
     return raw in {"minres", "residual_minimizing", "line_search", "linesearch"}
-
 
 def rhs1_xblock_fallback_initial_guess(
     *,
@@ -1949,7 +1930,6 @@ def rhs1_xblock_fallback_initial_guess(
         pass
     return original_x0, False, candidate_improved_rhs
 
-
 # From sfincs_jax.problems.profile_policies
 def rhs1_pas_fast_accept(
     *,
@@ -1981,7 +1961,6 @@ def rhs1_pas_fast_accept(
         abs_floor=_env_float("SFINCS_JAX_PAS_FAST_ACCEPT_ABS", 1e-07),
     )
 
-
 def rhs1_host_factor_probe_ok(*, factor: object | None, block_size: int) -> bool:
     """Return whether a host factor solve passes a bounded unit-vector probe."""
     if factor is None or int(block_size) <= 0:
@@ -1999,7 +1978,6 @@ def rhs1_host_factor_probe_ok(*, factor: object | None, block_size: int) -> bool
     ratio = float(np.linalg.norm(solved)) / max(float(np.linalg.norm(probe)), 1e-300)
     return np.isfinite(ratio) and ratio <= probe_max
 
-
 # From sfincs_jax.problems.profile_policies
 @dataclass(frozen=True)
 class RHS1Constraint0PETScCompatConfig:
@@ -2011,14 +1989,12 @@ class RHS1Constraint0PETScCompatConfig:
     restart: int
     maxiter: int
 
-
 def _has_constraint0_fp_rhs1(op: Any) -> bool:
     if int(op.rhs_mode) != 1 or bool(op.include_phi1):
         return False
     if int(op.constraint_scheme) != 0:
         return False
     return op.fblock.fp is not None
-
 
 def _sparse_method_allowed(
     *,
@@ -2032,7 +2008,6 @@ def _sparse_method_allowed(
     if str(sparse_precond_mode).strip().lower() == "off":
         return False
     return int(active_size) <= int(sparse_max_size)
-
 
 def rhs1_constraint0_sparse_first(
     *,
@@ -2063,7 +2038,6 @@ def rhs1_constraint0_sparse_first(
         sparse_max_size=sparse_max_size,
     )
 
-
 def rhs1_constraint0_petsc_compat(
     *,
     op: Any,
@@ -2087,14 +2061,12 @@ def rhs1_constraint0_petsc_compat(
         return False
     return env in _TRUE_VALUES
 
-
 def rhs1_constraint0_dense_fallback_allowed(op: Any) -> bool:
     """Return whether dense fallback is allowed for constraint-scheme-0 solves."""
     if int(op.constraint_scheme) != 0:
         return True
     env = _env_token("SFINCS_JAX_RHSMODE1_CS0_DENSE_FALLBACK")
     return env in _TRUE_VALUES
-
 
 def rhs1_constraint0_petsc_compat_config_from_env(
     *,
@@ -2121,14 +2093,12 @@ def rhs1_constraint0_petsc_compat_config_from_env(
         ),
     )
 
-
 def rhs1_constraint0_petsc_compat_regularization(*, max_abs: float) -> float:
     """Parse/floor the PETSc-compatible diagonal regularization."""
 
     default_reg = 1.0e-12 * float(max_abs)
     regularization = _env_float("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT_REG", default_reg)
     return max(0.0, float(regularization))
-
 
 # From sfincs_jax.problems.profile_policies
 def _is_explicit_cpu_rhs1_fp_only(*, op: Any, use_implicit: bool, backend: str) -> bool:
@@ -2139,7 +2109,6 @@ def _is_explicit_cpu_rhs1_fp_only(*, op: Any, use_implicit: bool, backend: str) 
     if int(op.rhs_mode) != 1 or bool(op.include_phi1):
         return False
     return op.fblock.fp is not None and getattr(op.fblock, "pas", None) is None
-
 
 def rhs1_fast_post_xblock_polish_allowed(
     *,
@@ -2174,7 +2143,6 @@ def rhs1_fast_post_xblock_polish_allowed(
     threshold = max(float(polish_abs), float(target) * max(1.0, float(polish_ratio)))
     return float(residual_norm) > float(threshold)
 
-
 @dataclass(frozen=True)
 class RHS1FastPostXBlockPolishControls:
     """Bounded Krylov controls for the fast post-xblock polish pass."""
@@ -2182,7 +2150,6 @@ class RHS1FastPostXBlockPolishControls:
     restart: int
     maxiter: int
     tol: float
-
 
 def rhs1_fast_post_xblock_polish_controls_from_env(
     *,
@@ -2209,7 +2176,6 @@ def rhs1_fast_post_xblock_polish_controls_from_env(
         maxiter=max(5, int(maxiter_use)),
         tol=float(tol_use),
     )
-
 
 def rhs1_fp_targeted_polish_allowed(
     *,
@@ -2239,7 +2205,6 @@ def rhs1_fp_targeted_polish_allowed(
     threshold = max(float(polish_abs), float(target) * max(1.0, float(polish_ratio)))
     return float(residual_norm) > float(threshold)
 
-
 @dataclass(frozen=True)
 class RHS1FPResidualPolishControls:
     """Controls for the cheap damped FP residual-polish pass."""
@@ -2250,7 +2215,6 @@ class RHS1FPResidualPolishControls:
     omega: float
     backtrack: int
 
-
 @dataclass(frozen=True)
 class RHS1FPLowLPolishControls:
     """Controls for the FP low-L angular/x polish pass."""
@@ -2259,7 +2223,6 @@ class RHS1FPLowLPolishControls:
     block_max: int
     restart: int
     maxiter: int
-
 
 @dataclass(frozen=True)
 class RHS1FPL1PolishControls:
@@ -2272,7 +2235,6 @@ class RHS1FPL1PolishControls:
     abs_threshold: float
     tol: float
     full_accept_ratio: float
-
 
 @dataclass(frozen=True)
 class RHS1FPGlobalLowLPolishControls:
@@ -2289,7 +2251,6 @@ class RHS1FPGlobalLowLPolishControls:
     tol: float = 1.0e-10
     threshold_ratio: float = 2.0
 
-
 @dataclass(frozen=True)
 class RHS1FPBiCGStabPolishControls:
     """Controls for the optional FP BiCGStab residual-polish pass."""
@@ -2299,7 +2260,6 @@ class RHS1FPBiCGStabPolishControls:
     maxiter: int
     tol: float
     atol: float
-
 
 @dataclass(frozen=True)
 class RHS1ScipyRescueControls:
@@ -2312,13 +2272,11 @@ class RHS1ScipyRescueControls:
     use_strong: bool
     method: str
 
-
 @dataclass(frozen=True)
 class RHS1BiCGStabFallbackControls:
     """Controls for strict BiCGStab-to-GMRES fallback."""
 
     strict: bool
-
 
 @dataclass(frozen=True)
 class RHS1BiCGStabFallbackDecision:
@@ -2327,14 +2285,12 @@ class RHS1BiCGStabFallbackDecision:
     target: float
     run_fallback: bool
 
-
 @dataclass(frozen=True)
 class RHS1KrylovRoutingControls:
     """Shared Krylov routing controls for RHSMode=1 profile-response solves."""
 
     gmres_precondition_side: str
     distributed_auto_solver: str
-
 
 def rhs1_fp_residual_polish_controls_from_env() -> RHS1FPResidualPolishControls:
     """Parse damped FP residual-polish controls with bounded defaults."""
@@ -2349,7 +2305,6 @@ def rhs1_fp_residual_polish_controls_from_env() -> RHS1FPResidualPolishControls:
         omega=max(1.0e-3, min(float(omega), 1.5)),
         backtrack=max(0, min(int(backtrack), 6)),
     )
-
 
 def rhs1_fp_l1_polish_controls_from_env() -> RHS1FPL1PolishControls:
     """Parse FP L=1 projected-polish controls with legacy bounds."""
@@ -2376,7 +2331,6 @@ def rhs1_fp_l1_polish_controls_from_env() -> RHS1FPL1PolishControls:
         ),
     )
 
-
 def rhs1_fp_low_l_polish_controls_from_env(
     *,
     has_fp: bool,
@@ -2401,7 +2355,6 @@ def rhs1_fp_low_l_polish_controls_from_env(
         restart=_env_int("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_RESTART", 80),
         maxiter=_env_int("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_MAXITER", 120),
     )
-
 
 def rhs1_fp_global_low_l_polish_controls_from_env(
     *,
@@ -2433,7 +2386,6 @@ def rhs1_fp_global_low_l_polish_controls_from_env(
         full_accept_ratio=max(1.0, float(full_ratio)),
     )
 
-
 def rhs1_fp_bicgstab_polish_controls_from_env(
     *,
     tol: float,
@@ -2451,7 +2403,6 @@ def rhs1_fp_bicgstab_polish_controls_from_env(
         tol=_env_float("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_TOL", default_tol),
         atol=_env_float("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_ATOL", float(atol)),
     )
-
 
 def rhs1_skip_global_sparse_after_xblock_allowed(
     *,
@@ -2490,7 +2441,6 @@ def rhs1_skip_global_sparse_after_xblock_allowed(
     threshold = max(float(skip_abs), float(target) * max(1.0, float(skip_ratio)))
     return float(residual_norm) <= float(threshold)
 
-
 def rhs1_scipy_rescue_abs_floor_after_xblock(
     *,
     op: Any,
@@ -2527,7 +2477,6 @@ def rhs1_scipy_rescue_abs_floor_after_xblock(
         return 0.0
     return 1e-09
 
-
 def rhs1_scipy_rescue_active_size_allowed(
     *,
     op: Any,
@@ -2558,7 +2507,6 @@ def rhs1_scipy_rescue_active_size_allowed(
     if int(max_active) <= 0:
         return True
     return int(active_size) <= int(max_active)
-
 
 def rhs1_scipy_rescue_controls_from_env(
     *,
@@ -2598,12 +2546,10 @@ def rhs1_scipy_rescue_controls_from_env(
         method=method,
     )
 
-
 def rhs1_pas_source_zero_tolerance_from_env() -> float:
     """Parse the tiny PAS source cleanup tolerance shared by RHSMode=1 exits."""
 
     return _env_float("SFINCS_JAX_PAS_SOURCE_ZERO_TOL", 2.0e-9)
-
 
 def rhs1_bicgstab_preconditioner_kind(
     *,
@@ -2645,7 +2591,6 @@ def rhs1_bicgstab_preconditioner_kind(
         return "rhs1"
     return kind
 
-
 def rhs1_bicgstab_fallback_controls_from_env(
     *,
     pas_large_bicgstab_fastpath: bool,
@@ -2663,7 +2608,6 @@ def rhs1_bicgstab_fallback_controls_from_env(
         strict = False
     return RHS1BiCGStabFallbackControls(strict=bool(strict))
 
-
 def rhs1_bicgstab_fallback_target_from_env(
     *,
     target: float,
@@ -2678,7 +2622,6 @@ def rhs1_bicgstab_fallback_target_from_env(
         default_floor = 1.0e-7
     floor = _env_float("SFINCS_JAX_BICGSTAB_FALLBACK_ABS_FLOOR", default_floor)
     return max(float(target), max(0.0, float(floor)))
-
 
 def rhs1_bicgstab_fallback_decision(
     *,
@@ -2715,7 +2658,6 @@ def rhs1_bicgstab_fallback_decision(
         run_fallback=bool(run_fallback),
     )
 
-
 def rhs1_gmres_precondition_side_from_env() -> str:
     """Return the validated GMRES precondition side with legacy left default."""
 
@@ -2723,7 +2665,6 @@ def rhs1_gmres_precondition_side_from_env() -> str:
     if side not in {"", "left", "right", "none"}:
         side = ""
     return side or "left"
-
 
 def rhs1_distributed_auto_solver_from_env() -> str:
     """Return the distributed Krylov solver family used for sharded matvecs."""
@@ -2742,7 +2683,6 @@ def rhs1_distributed_auto_solver_from_env() -> str:
         return "gmres"
     return "bicgstab"
 
-
 def rhs1_krylov_routing_controls_from_env() -> RHS1KrylovRoutingControls:
     """Parse shared RHSMode=1 Krylov routing controls."""
 
@@ -2750,7 +2690,6 @@ def rhs1_krylov_routing_controls_from_env() -> RHS1KrylovRoutingControls:
         gmres_precondition_side=rhs1_gmres_precondition_side_from_env(),
         distributed_auto_solver=rhs1_distributed_auto_solver_from_env(),
     )
-
 
 def rhs1_fp_xblock_global_correction_allowed(
     *,
@@ -2794,7 +2733,6 @@ def rhs1_fp_xblock_global_correction_allowed(
     if int(active_max) > 0 and int(active_size) > int(active_max):
         return False
     return True
-
 
 # From sfincs_jax.problems.profile_policies
 def rhs1_sparse_exact_lu_requested(
@@ -2848,7 +2786,6 @@ def rhs1_sparse_exact_lu_requested(
         backend_name != "cpu" and (bool(use_dkes) or bool(accel_small_case))
     )
 
-
 def rhs1_prefer_sparse_over_dense_shortcut(
     *, op: Any, active_size: int, sparse_max_size: int, use_implicit: bool
 ) -> bool:
@@ -2867,7 +2804,6 @@ def rhs1_prefer_sparse_over_dense_shortcut(
     )
     return int(active_size) >= int(min_size)
 
-
 def rhs1_sparse_prefer_skips_stage2(
     *, sparse_prefer_over_dense_shortcut: bool, sparse_precond_mode: str
 ) -> bool:
@@ -2879,7 +2815,6 @@ def rhs1_sparse_prefer_skips_stage2(
         bool(sparse_prefer_over_dense_shortcut)
         and str(sparse_precond_mode).strip().lower() != "off"
     )
-
 
 # From sfincs_jax.problems.profile_policies
 @dataclass(frozen=True)
@@ -2901,7 +2836,6 @@ class RHS1SparseRescueOrdering:
     reason_pas_fast_accept: bool = False
     reason_gpu_sparse_skip: bool = False
 
-
 @dataclass(frozen=True)
 class RHS1SparseRescuePolicySetup:
     """Complete sparse-rescue policy setup shared by full and active systems."""
@@ -2911,7 +2845,6 @@ class RHS1SparseRescuePolicySetup:
     ordering: RHS1SparseRescueOrdering
     sparse_jax_est_mb: float | None = None
     sparse_jax_memory_disabled_message: str | None = None
-
 
 @dataclass(frozen=True)
 class RHS1FullSparseRescueSetupContext:
@@ -2940,7 +2873,6 @@ class RHS1FullSparseRescueSetupContext:
     host_sparse_direct_allowed: Any = None
     large_cpu_sparse_exact_lu_allowed: Any = None
 
-
 @dataclass(frozen=True)
 class RHS1FullSparseRescueSetupResult:
     """Full-system sparse-rescue setup state handed back to the driver."""
@@ -2953,7 +2885,6 @@ class RHS1FullSparseRescueSetupResult:
     sparse_exact_lu: bool
     large_cpu_sparse_rescue: bool
 
-
 @dataclass(frozen=True)
 class RHS1SparseJAXConfig:
     """Environment-controlled sparse-JAX retry controls for RHSMode=1."""
@@ -2962,7 +2893,6 @@ class RHS1SparseJAXConfig:
     sweeps: int
     omega: float
     reg: float
-
 
 @dataclass(frozen=True)
 class RHS1SparsePreconditionerConfig:
@@ -2982,14 +2912,12 @@ class RHS1SparsePreconditionerConfig:
     ilu_dense_max: int
     dense_cache_max: int
 
-
 @dataclass(frozen=True)
 class RHS1SparseOperatorAdmission:
     """Admission result for replacing a reduced matvec with a sparse operator."""
 
     use_sparse_operator: bool
     messages: tuple[tuple[int, str], ...] = ()
-
 
 def rhs1_sparse_enabled_initial(
     *,
@@ -3012,7 +2940,6 @@ def rhs1_sparse_enabled_initial(
     if enabled:
         enabled = int(rhs_mode) == 1 and (not bool(include_phi1))
     return bool(enabled)
-
 
 def rhs1_sparse_preconditioner_config_from_env(
     *,
@@ -3089,7 +3016,6 @@ def rhs1_sparse_preconditioner_config_from_env(
         dense_cache_max=int(_env_int("SFINCS_JAX_RHSMODE1_SPARSE_DENSE_CACHE_MAX", 3000)),
     )
 
-
 def rhs1_sparse_operator_admission(
     *,
     operator_mode: str,
@@ -3137,7 +3063,6 @@ def rhs1_sparse_operator_admission(
         messages=tuple(messages),
     )
 
-
 def rhs1_sparse_jax_config_from_env() -> RHS1SparseJAXConfig:
     """Parse sparse-JAX retry controls with bounded, stable defaults."""
 
@@ -3152,11 +3077,9 @@ def rhs1_sparse_jax_config_from_env() -> RHS1SparseJAXConfig:
         reg=float(reg),
     )
 
-
 def rhs1_sparse_kind_use(*, sparse_precond_kind: str) -> str:
     """Resolve the concrete sparse backend kind used for rescue."""
     return "scipy" if str(sparse_precond_kind) == "auto" else str(sparse_precond_kind)
-
 
 def rhs1_resolved_sparse_rescue_ordering(
     *,
@@ -3242,7 +3165,6 @@ def rhs1_resolved_sparse_rescue_ordering(
         reason_gpu_sparse_skip=bool(reason_gpu_sparse_skip),
     )
 
-
 def rhs1_sparse_rescue_policy_setup(
     *,
     sparse_precond_mode: str,
@@ -3311,7 +3233,6 @@ def rhs1_sparse_rescue_policy_setup(
         sparse_jax_memory_disabled_message=sparse_jax_memory_disabled_message,
     )
 
-
 def rhs1_sparse_rescue_initial_messages(
     *,
     ordering: RHS1SparseRescueOrdering,
@@ -3367,7 +3288,6 @@ def rhs1_sparse_rescue_initial_messages(
         messages.append((1, sparse_jax_memory_disabled_message))
     return tuple(messages)
 
-
 def rhs1_sparse_rescue_tail_skip_messages(
     *,
     ordering: RHS1SparseRescueOrdering,
@@ -3402,7 +3322,6 @@ def rhs1_sparse_rescue_tail_skip_messages(
             )
         )
     return tuple(messages)
-
 
 def rhs1_full_sparse_rescue_setup(
     context: RHS1FullSparseRescueSetupContext,
@@ -3473,13 +3392,11 @@ def rhs1_full_sparse_rescue_setup(
         large_cpu_sparse_rescue=bool(context.large_cpu_sparse_rescue),
     )
 
-
 # From sfincs_jax.problems.profile_policies
 def rhs1_polish_enabled(*, env_name: str) -> bool:
     """Return whether a polish stage is enabled by its boolean-like env var."""
     env = os.environ.get(env_name, "").strip().lower()
     return env not in {"0", "false", "no", "off"}
-
 
 def rhs1_parse_accept_ratio(*, env_name: str, default: float) -> float:
     """Parse an acceptance ratio with a floor of 1."""
@@ -3489,7 +3406,6 @@ def rhs1_parse_accept_ratio(*, env_name: str, default: float) -> float:
     except ValueError:
         value = float(default)
     return max(1.0, float(value))
-
 
 def rhs1_parse_polish_gmres_config(
     *,
@@ -3568,7 +3484,6 @@ def rhs1_parse_polish_gmres_config(
         maxiter = int(default_maxiter_use)
     return (max(int(min_restart), int(restart)), max(int(min_maxiter), int(maxiter)))
 
-
 # From sfincs_jax.problems.profile_policies
 _PAS_STAGE2_SKIP_BASE_KINDS = frozenset(
     {"pas_lite", "pas_hybrid", "pas_tz", "pas_schur", "pas_tokamak_theta"}
@@ -3580,7 +3495,6 @@ _PAS_STAGE2_EXTENDED_SKIP_BASE_KINDS = frozenset(
 
 _PAS_STAGE2_WEAK_SKIP_KINDS = frozenset({"collision", "point", "xmg"})
 
-
 @dataclass(frozen=True)
 class RHS1Stage2RetryControls:
     """Restart/maxiter/method controls for a Stage-2 RHSMode=1 Krylov retry."""
@@ -3589,14 +3503,12 @@ class RHS1Stage2RetryControls:
     maxiter: int
     method: str
 
-
 @dataclass(frozen=True)
 class RHS1Stage2AdmissionControls:
     """Admission and elapsed-time budget controls for Stage-2 fallback solves."""
 
     enabled: bool
     time_cap_s: float
-
 
 @dataclass(frozen=True)
 class RHS1Stage2TriggerDecision:
@@ -3606,14 +3518,12 @@ class RHS1Stage2TriggerDecision:
     fp_force_stage2: bool
     messages: tuple[tuple[int, str], ...] = ()
 
-
 @dataclass(frozen=True)
 class RHS1Stage2RetryAdmissionDecision:
     """Resolved Stage-2 retry execution gate and progress messages."""
 
     run_retry: bool
     messages: tuple[tuple[int, str], ...] = ()
-
 
 def rhs1_stage2_ratio(*, use_dkes: bool) -> float:
     """Return the stage-2 residual-ratio trigger with DKES tightening."""
@@ -3626,12 +3536,10 @@ def rhs1_stage2_ratio(*, use_dkes: bool) -> float:
         stage2_ratio = min(float(stage2_ratio), 1.0)
     return float(stage2_ratio)
 
-
 def rhs1_stage2_trigger(*, res_ratio: float, use_dkes: bool) -> bool:
     """Return whether stage-2 should be considered from the residual ratio."""
     ratio = rhs1_stage2_ratio(use_dkes=use_dkes)
     return bool(res_ratio > ratio) if ratio > 0 else True
-
 
 def rhs1_stage2_admission_controls_from_env(
     *,
@@ -3674,7 +3582,6 @@ def rhs1_stage2_admission_controls_from_env(
         time_cap_s = 2400.0
     return RHS1Stage2AdmissionControls(enabled=bool(enabled), time_cap_s=float(time_cap_s))
 
-
 def rhs1_stage2_retry_controls_from_env(
     *,
     restart: int,
@@ -3711,7 +3618,6 @@ def rhs1_stage2_retry_controls_from_env(
         method=method,
     )
 
-
 def rhs1_fp_force_stage2(
     *, has_fp: bool, include_phi1: bool, residual_norm: float
 ) -> bool:
@@ -3724,7 +3630,6 @@ def rhs1_fp_force_stage2(
     return bool(
         has_fp and (not include_phi1) and (float(residual_norm) > float(fp_stage2_abs))
     )
-
 
 def rhs1_pas_stage2_skip(
     *, has_pas: bool, rhs1_precond_kind: str | None, res_ratio: float
@@ -3769,7 +3674,6 @@ def rhs1_pas_stage2_skip(
         pas_stage2_skip_ratio = 1000000.0
     return float(res_ratio) >= float(pas_stage2_skip_ratio)
 
-
 def rhs1_pas_tz_guarded_stage2_retry() -> bool:
     """Return whether guarded PAS-TZ fallbacks should attempt stage-2 GMRES.
 
@@ -3785,7 +3689,6 @@ def rhs1_pas_tz_guarded_stage2_retry() -> bool:
         .lower()
     )
     return env in {"1", "true", "yes", "on"}
-
 
 def rhs1_stage2_trigger_decision(
     *,
@@ -3859,7 +3762,6 @@ def rhs1_stage2_trigger_decision(
         messages=tuple(messages),
     )
 
-
 def rhs1_stage2_retry_admission_decision(
     *,
     residual_norm: float,
@@ -3903,7 +3805,6 @@ def rhs1_stage2_retry_admission_decision(
         messages=tuple(messages),
     )
 
-
 # Consolidated host/dense/sparse policy section
 
 def _env_bool(name: str) -> bool | None:
@@ -3914,7 +3815,6 @@ def _env_bool(name: str) -> bool | None:
         return False
     return None
 
-
 def rhs1_dense_backend_allowed(*, backend: str) -> bool:
     """Return whether RHSMode=1 dense linear algebra may run on the active backend."""
     env = _env_bool("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR")
@@ -3922,14 +3822,12 @@ def rhs1_dense_backend_allowed(*, backend: str) -> bool:
         return bool(env)
     return str(backend).strip().lower() == "cpu"
 
-
 def rhs1_host_dense_fallback_allowed(*, backend: str) -> bool:
     """Return whether host dense LU fallback is allowed for RHSMode=1."""
     if str(backend).strip().lower() == "cpu":
         return True
     env = _env_bool("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU")
     return bool(env)
-
 
 def rhs1_host_dense_shortcut_allowed(
     *,
@@ -3981,7 +3879,6 @@ def rhs1_host_dense_shortcut_allowed(
         return False
     return True
 
-
 def rhs1_host_dense_shortcut_max_bytes() -> int:
     """Return the host-dense shortcut memory admission ceiling in bytes.
 
@@ -3994,7 +3891,6 @@ def rhs1_host_dense_shortcut_max_bytes() -> int:
 
     return _env_int("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX_BYTES", 1_500_000_000)
 
-
 def rhs1_host_dense_shortcut_estimated_nbytes(active_size: int) -> int:
     """Estimate host dense matrix/factor/work storage for shortcut admission."""
 
@@ -4006,7 +3902,6 @@ def rhs1_host_dense_shortcut_estimated_nbytes(active_size: int) -> int:
     )
     work_nbytes = n * 8 * 6
     return int(np.ceil(matrix_nbytes * max(1.0, float(factor_overhead)) + work_nbytes))
-
 
 def rhs1_dense_fallback_max(op: Any) -> int:
     """Resolve the RHSMode=1 dense fallback active-size ceiling.
@@ -4044,7 +3939,6 @@ def rhs1_dense_fallback_max(op: Any) -> int:
         return base_max
     return max(base_max, dense_fp_max)
 
-
 def rhs1_dense_auto_fp_cutoff(*, dense_active_cutoff: int) -> int:
     """Resolve the initial dense-solve cutoff for full-FP RHSMode=1 systems.
 
@@ -4063,7 +3957,6 @@ def rhs1_dense_auto_fp_cutoff(*, dense_active_cutoff: int) -> int:
             pass
     return min(max(0, int(dense_active_cutoff)), 8000)
 
-
 def rhs1_dense_auto_fp_accelerator_min() -> int:
     """Minimum active size for default accelerator dense auto-selection.
 
@@ -4073,7 +3966,6 @@ def rhs1_dense_auto_fp_accelerator_min() -> int:
     above this floor unless the user explicitly overrides the solve method.
     """
     return max(0, _env_int("SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN", 1000))
-
 
 def rhs1_dense_auto_fp_allowed(
     *,
@@ -4099,7 +3991,6 @@ def rhs1_dense_auto_fp_allowed(
         return False
     return int(active_size) >= int(rhs1_dense_auto_fp_accelerator_min())
 
-
 @dataclass(frozen=True)
 class RHS1FullFPDenseAutoRouteDecision:
     """Route decision for bounded full-FP RHSMode=1 dense auto solves."""
@@ -4109,7 +4000,6 @@ class RHS1FullFPDenseAutoRouteDecision:
     selected: bool
     cutoff: int
     messages: tuple[tuple[int, str], ...] = ()
-
 
 def resolve_rhs1_full_fp_dense_auto_route(
     *,
@@ -4168,14 +4058,12 @@ def resolve_rhs1_full_fp_dense_auto_route(
         ),
     )
 
-
 def rhs1_dense_krylov_allowed() -> bool:
     """Return whether dense Krylov fallback is enabled."""
     env = _env_bool("SFINCS_JAX_RHSMODE1_DENSE_KRYLOV")
     if env is not None:
         return bool(env)
     return True
-
 
 def rhs1_host_sparse_direct_allowed(*, sparse_exact_lu: bool, use_implicit: bool = False) -> bool:
     """Return whether exact sparse LU may be built and solved on the host."""
@@ -4187,7 +4075,6 @@ def rhs1_host_sparse_direct_allowed(*, sparse_exact_lu: bool, use_implicit: bool
     if env is not None:
         return bool(env)
     return True
-
 
 @dataclass(frozen=True)
 class RHS1InitialSparseShortcutRouteDecision:
@@ -4201,7 +4088,6 @@ class RHS1InitialSparseShortcutRouteDecision:
     rhs1_precond_enabled: bool
     rhs1_bicgstab_kind: str | None
     messages: tuple[tuple[int, str], ...] = ()
-
 
 def resolve_rhs1_initial_sparse_shortcut_route(
     *,
@@ -4287,7 +4173,6 @@ def resolve_rhs1_initial_sparse_shortcut_route(
         messages=tuple(messages),
     )
 
-
 def rhs1_sparse_operator_preconditioned_rescue_allowed(
     *,
     op: Any,
@@ -4314,7 +4199,6 @@ def rhs1_sparse_operator_preconditioned_rescue_allowed(
     if env is False:
         return False
     return True
-
 
 def rhs1_constrained_pas_sparse_pc_auto_allowed(
     *,
@@ -4355,7 +4239,6 @@ def rhs1_constrained_pas_sparse_pc_auto_allowed(
     if int(max_size) > 0 and int(active_size) > int(max_size):
         return False
     return int(active_size) >= max(0, int(min_size))
-
 
 def rhs1_tokamak_pas_er_sparse_pc_auto_allowed(
     *,
@@ -4412,7 +4295,6 @@ def rhs1_tokamak_pas_er_sparse_pc_auto_allowed(
         return False
     return int(active_size) >= max(0, int(min_size))
 
-
 def rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(
     *,
     op: Any,
@@ -4460,7 +4342,6 @@ def rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(
     if int(max_size) > 0 and int(active_size) > int(max_size):
         return False
     return int(active_size) >= max(0, int(min_size))
-
 
 def rhs1_tokamak_fp_er_sparse_pc_auto_allowed(
     *,
@@ -4515,7 +4396,6 @@ def rhs1_tokamak_fp_er_sparse_pc_auto_allowed(
     if int(max_size) > 0 and int(active_size) > int(max_size):
         return False
     return int(active_size) >= max(0, int(min_size))
-
 
 def rhs1_tokamak_fp_noer_sparse_pc_auto_allowed(
     *,
@@ -4572,7 +4452,6 @@ def rhs1_tokamak_fp_noer_sparse_pc_auto_allowed(
         return False
     return int(active_size) >= max(0, int(min_size))
 
-
 def rhs1_fp_3d_sparse_pc_auto_allowed(
     *,
     op: Any,
@@ -4622,7 +4501,6 @@ def rhs1_fp_3d_sparse_pc_auto_allowed(
     if int(max_size) > 0 and int(active_size) > int(max_size):
         return False
     return int(active_size) >= max(0, int(min_size))
-
 
 def rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
     *,
@@ -4696,7 +4574,6 @@ def rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
         return False
     return int(active_size) >= max(0, int(min_size))
 
-
 def rhs1_structured_full_csr_auto_allowed(
     *,
     op: Any,
@@ -4758,7 +4635,6 @@ def rhs1_structured_full_csr_auto_allowed(
         return False
     return int(active_size) >= max(0, int(min_size))
 
-
 def rhs1_tokamak_er_dense_auto_allowed(
     *,
     op: Any,
@@ -4812,7 +4688,6 @@ def rhs1_tokamak_er_dense_auto_allowed(
         return False
     return int(active_size) >= max(0, int(min_size))
 
-
 def host_sparse_factor_dtype(
     *,
     size: int,
@@ -4837,16 +4712,13 @@ def host_sparse_factor_dtype(
         return np.dtype(np.float32)
     return np.dtype(np.float64)
 
-
 def host_sparse_direct_refine_steps(env_name: str, default: int = 2) -> int:
     """Parse nonnegative iterative-refinement step count for host direct solves."""
     return max(0, _env_int(env_name, int(default)))
 
-
 def rhs1_host_sparse_skip_dense_ratio() -> float:
     """Residual ratio above which sparse direct paths may skip dense fallback."""
     return _env_float("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_SKIP_DENSE_RATIO", 1.0e4)
-
 
 def rhs1_explicit_sparse_host_direct_allowed(
     *,
@@ -4865,14 +4737,11 @@ def rhs1_explicit_sparse_host_direct_allowed(
 
 # Consolidated large explicit-FP host-rescue policy section
 
-
 def _is_explicit_rhs1_fp(op: Any) -> bool:
     return int(op.rhs_mode) == 1 and (not bool(op.include_phi1)) and op.fblock.fp is not None
 
-
 def _is_explicit_rhs1_fp_only(op: Any) -> bool:
     return _is_explicit_rhs1_fp(op) and getattr(op.fblock, "pas", None) is None
-
 
 def _host_sparse_rescue_backend_allowed(*, backend: str, active_size: int | None = None) -> bool:
     """Return whether this backend may use non-differentiable host sparse rescue."""
@@ -4894,7 +4763,6 @@ def _host_sparse_rescue_backend_allowed(*, backend: str, active_size: int | None
     rescue_max = _env_int("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE_MAX", 30000)
     return int(active_size) <= max(1, int(rescue_max))
 
-
 def rhs1_large_cpu_sparse_exact_lu_allowed(*, active_size: int) -> bool:
     """Return whether the large-CPU sparse rescue may use exact sparse LU."""
     env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU")
@@ -4902,7 +4770,6 @@ def rhs1_large_cpu_sparse_exact_lu_allowed(*, active_size: int) -> bool:
         return False
     exact_max = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_MAX", 30000)
     return int(active_size) <= max(0, int(exact_max))
-
 
 def rhs1_large_cpu_sparse_rescue_allowed(
     *,
@@ -4941,7 +4808,6 @@ def rhs1_large_cpu_sparse_rescue_allowed(
     rescue_ratio = _env_float("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_RATIO", 1.0e3)
     return float(residual_norm) > float(target) * float(rescue_ratio)
 
-
 def rhs1_large_cpu_sparse_rescue_first(
     *,
     large_cpu_sparse_rescue: bool,
@@ -4952,7 +4818,6 @@ def rhs1_large_cpu_sparse_rescue_first(
     if env in _FALSE_VALUES:
         return False
     return bool(large_cpu_sparse_rescue) and str(strong_precond_env).strip().lower() in {"", "auto"}
-
 
 def rhs1_large_cpu_sparse_skip_primary_allowed(
     *,
@@ -4991,7 +4856,6 @@ def rhs1_large_cpu_sparse_skip_primary_allowed(
         return False
     return rhs1_large_cpu_sparse_exact_lu_allowed(active_size=int(active_size))
 
-
 def rhs1_large_cpu_sparse_exact_lu_xblock_allowed(
     *,
     op: Any,
@@ -5027,7 +4891,6 @@ def rhs1_large_cpu_sparse_exact_lu_xblock_allowed(
         return False
     improvement_ratio = _env_float("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_XBLOCK_RATIO", 100.0)
     return float(xblock_seed_improvement_ratio) >= max(1.0, float(improvement_ratio))
-
 
 def rhs1_sparse_xblock_rescue_allowed(
     *,
@@ -5070,7 +4933,6 @@ def rhs1_sparse_xblock_rescue_allowed(
     rescue_ratio = _env_float("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE_RATIO", 1.0e2)
     return float(residual_norm) > float(target) * float(rescue_ratio)
 
-
 def rhs1_fp_xblock_assembled_host_allowed(
     *,
     op: Any,
@@ -5103,7 +4965,6 @@ def rhs1_fp_xblock_assembled_host_allowed(
     if bool(op.point_at_x0):
         return False
     return True
-
 
 def rhs1_large_cpu_xblock_skip_primary_allowed(
     *,
@@ -5144,7 +5005,6 @@ def rhs1_large_cpu_xblock_skip_primary_allowed(
         backend=backend,
         active_size=int(active_size),
     )
-
 
 def rhs1_sparse_sxblock_rescue_allowed(
     *,
@@ -5362,20 +5222,17 @@ _RHS1_PRECONDITIONER_KIND_ALIASES = {
     "block_coo_fp_tail_coupled_minres": "structured_fblock_fp_tail_coupled_schur",
 }
 
-
 @dataclass(frozen=True)
 class RHS1DefaultPreconditionerSelectionContext:
     """Driver scope for automatic RHSMode-1 preconditioner selection."""
 
     values: Mapping[str, Any]
 
-
 @dataclass(frozen=True)
 class RHS1PreconditionerRouteSetupContext:
     """Driver scope for RHSMode-1 preconditioner routing setup."""
 
     values: Mapping[str, Any]
-
 
 def resolve_rhs1_default_preconditioner_selection(
     context: RHS1DefaultPreconditionerSelectionContext,
@@ -5906,7 +5763,6 @@ def resolve_rhs1_default_preconditioner_selection(
     if 'xblock_tz_max' in locals():
         result['xblock_tz_max'] = xblock_tz_max
     return result
-
 
 def resolve_rhs1_preconditioner_route_setup(
     context: RHS1PreconditionerRouteSetupContext,
@@ -6508,7 +6364,6 @@ def resolve_rhs1_preconditioner_route_setup(
         result["xblock_tz_max"] = xblock_tz_max
     return result
 
-
 def canonical_rhs1_preconditioner_kind(raw: str | None) -> str | None:
     """Canonicalize ``SFINCS_JAX_RHSMODE1_PRECONDITIONER`` aliases.
 
@@ -6519,7 +6374,6 @@ def canonical_rhs1_preconditioner_kind(raw: str | None) -> str | None:
     if not key:
         return None
     return _RHS1_PRECONDITIONER_KIND_ALIASES.get(key)
-
 
 def rhs1_measured_auto_promotion_gate(
     *,
@@ -6543,14 +6397,12 @@ def rhs1_measured_auto_promotion_gate(
         return SolverCandidateGate(accepted=True, reasons=("unmeasured_historical_policy",))
     return solver_candidate_gate(candidate_metrics, baseline=baseline_metrics, criteria=criteria)
 
-
 def rhs1_pas_auto_large_base_kind(*, active_size: int) -> str:
     """Keep large auto-selected PAS solves in the PAS-native preconditioner family."""
     pas_lite_min = _env_int("SFINCS_JAX_PAS_LITE_MIN", 20000)
     if int(active_size) >= max(1, int(pas_lite_min)):
         return "pas_lite"
     return "pas_hybrid"
-
 
 def rhs1_pas_weak_auto_override_kind(
     *,
@@ -6599,7 +6451,6 @@ def rhs1_pas_weak_auto_override_kind(
     )
     return candidate_kind if gate.accepted else current_kind
 
-
 def rhs1_measured_auto_promotion_allowed(
     *,
     current_kind: str | None,
@@ -6616,7 +6467,6 @@ def rhs1_measured_auto_promotion_allowed(
         baseline_metrics=baseline_metrics,
         criteria=criteria,
     ).accepted
-
 
 def rhs1_pas_family_refinement_kind(
     *,
@@ -6658,7 +6508,6 @@ def rhs1_pas_family_refinement_kind(
             return "pas_ilu"
     return result
 
-
 def rhs1_fp_dkes_env_preconditioner_kind(
     *,
     rhs1_precond_env: str,
@@ -6691,7 +6540,6 @@ def rhs1_fp_dkes_env_preconditioner_kind(
         return "xblock_tz"
     return env
 
-
 def rhs1_fp_dkes_default_kind(
     *,
     active_size: int,
@@ -6711,7 +6559,6 @@ def rhs1_fp_dkes_default_kind(
     ):
         return "xblock_tz"
     return "xmg"
-
 
 def rhs1_large_fp_near_zero_er_override_kind(
     *,
@@ -6740,7 +6587,6 @@ def rhs1_large_fp_near_zero_er_override_kind(
         return "xmg"
     return current_kind
 
-
 def pas_auto_skip_strong_retry(
     *,
     has_pas: bool,
@@ -6758,7 +6604,6 @@ def pas_auto_skip_strong_retry(
     if rhs1_precond_kind not in PAS_AUTO_STRONG_BASE_KINDS:
         return False
     return float(residual_norm) <= float(target) * float(ratio)
-
 
 def rhs1_pas_dkes_xblock_allowed(
     *,
@@ -6781,7 +6626,6 @@ def rhs1_pas_dkes_xblock_allowed(
     if int(xblock_tz_limit) <= 0:
         return False
     return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
-
 
 def rhs1_pas_dkes_pas_tz_preferred(
     *,
@@ -6812,7 +6656,6 @@ def rhs1_pas_dkes_pas_tz_preferred(
     block_size = int(max_l) * int(n_theta) * int(n_zeta)
     return block_size >= max(1, int(min_block)) and int(active_size) <= max(1, int(max_active))
 
-
 def rhs1_pas_dkes_cpu_pas_tz_preferred(
     *,
     has_pas: bool,
@@ -6833,7 +6676,6 @@ def rhs1_pas_dkes_cpu_pas_tz_preferred(
         max_l=max_l,
         active_size=active_size,
     )
-
 
 def rhs1_pas_full_cpu_pas_tz_preferred(
     *,
@@ -6874,7 +6716,6 @@ def rhs1_pas_full_cpu_pas_tz_preferred(
         and block_size >= max(1, int(min_block))
         and int(active_size) <= max(1, int(max_active))
     )
-
 
 def rhs1_pas_full_pas_tz_preferred(
     *,
@@ -6934,7 +6775,6 @@ def rhs1_pas_full_pas_tz_preferred(
         and int(active_size) <= max(1, int(max_active))
     )
 
-
 def rhs1_geometry4_pas_memory_pas_tz_preferred(
     *,
     rhs1_precond_env: str | None,
@@ -6984,7 +6824,6 @@ def rhs1_geometry4_pas_memory_pas_tz_preferred(
         and int(active_size) <= max(1, int(max_active))
     )
 
-
 def rhs1_pas_tokamak_gpu_theta_allowed(
     *,
     has_pas: bool,
@@ -7010,7 +6849,6 @@ def rhs1_pas_tokamak_gpu_theta_allowed(
         return False
     theta_max = _env_int("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_MAX", 8000)
     return int(active_size) <= max(1, int(theta_max))
-
 
 def rhs1_pas_tokamak_gpu_xblock_preferred(
     *,
@@ -7058,7 +6896,6 @@ def rhs1_pas_tokamak_gpu_xblock_preferred(
         return False
     return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
 
-
 def rhs1_pas_tokamak_gpu_tight_tol(
     *,
     enabled: bool,
@@ -7098,7 +6935,6 @@ def rhs1_pas_tokamak_gpu_tight_tol(
         tol = 1.0e-8
     return tol if tol > 0.0 else None
 
-
 def rhs1_pas_tokamak_cpu_xblock_preferred(
     *,
     has_pas: bool,
@@ -7131,7 +6967,6 @@ def rhs1_pas_tokamak_cpu_xblock_preferred(
         return False
     return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
 
-
 def rhs1_gpu_sparse_fallback_skip_allowed(
     *,
     backend: str,
@@ -7159,7 +6994,6 @@ def rhs1_gpu_sparse_fallback_skip_allowed(
         return False
     return float(residual_norm) <= float(skip_ratio) * max(float(target), 1.0e-300)
 
-
 def rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
     *,
     op: object,
@@ -7181,18 +7015,15 @@ def rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
         target=float(target),
     )
 
-
 def rhsmode1_dense_backend_allowed_current_backend() -> bool:
     """Return whether dense RHSMode-1 fallback is allowed on the current backend."""
 
     return rhs1_dense_backend_allowed(backend=jax.default_backend())
 
-
 def rhsmode1_host_dense_fallback_allowed_current_backend() -> bool:
     """Return whether host dense fallback is allowed on the current backend."""
 
     return rhs1_host_dense_fallback_allowed(backend=jax.default_backend())
-
 
 def rhsmode1_host_dense_shortcut_allowed_current_backend(
     *,
@@ -7212,7 +7043,6 @@ def rhsmode1_host_dense_shortcut_allowed_current_backend(
         dense_fallback_max=rhs1_dense_fallback_max(op),
     )
 
-
 def rhsmode1_sparse_operator_preconditioned_rescue_allowed_current_backend(
     *,
     op: object,
@@ -7227,7 +7057,6 @@ def rhsmode1_sparse_operator_preconditioned_rescue_allowed_current_backend(
         host_sparse_direct_wanted=host_sparse_direct_wanted,
         backend=jax.default_backend(),
     )
-
 
 def host_sparse_factor_dtype_current_backend(
     *,
@@ -7244,7 +7073,6 @@ def host_sparse_factor_dtype_current_backend(
         backend=jax.default_backend(),
     )
 
-
 def rhsmode1_sparse_pc_default_permc_spec(
     *,
     constrained_pas_pc: bool,
@@ -7258,7 +7086,6 @@ def rhsmode1_sparse_pc_default_permc_spec(
         tokamak_pas_er_pc=tokamak_pas_er_pc,
         n_species=n_species,
     )
-
 
 def rhsmode1_sparse_pc_default_restart(
     *,
@@ -7275,7 +7102,6 @@ def rhsmode1_sparse_pc_default_restart(
         tokamak_pas_er_pc=tokamak_pas_er_pc,
         n_species=n_species,
     )
-
 
 def rhsmode1_pas_fast_accept_current_backend(
     *,
@@ -7296,7 +7122,6 @@ def rhsmode1_pas_fast_accept_current_backend(
         backend=jax.default_backend(),
     )
 
-
 def rhsmode1_constraint0_sparse_first_current_backend(
     *,
     op: object,
@@ -7315,7 +7140,6 @@ def rhsmode1_constraint0_sparse_first_current_backend(
         sparse_max_size=int(sparse_max_size),
         backend=jax.default_backend(),
     )
-
 
 def rhsmode1_sparse_exact_lu_requested_current_backend(
     *,
@@ -7340,7 +7164,6 @@ def rhsmode1_sparse_exact_lu_requested_current_backend(
         backend=jax.default_backend(),
     )
 
-
 def rhsmode1_large_cpu_sparse_rescue_allowed_current_backend(
     *,
     op: object,
@@ -7364,7 +7187,6 @@ def rhsmode1_large_cpu_sparse_rescue_allowed_current_backend(
         backend=jax.default_backend(),
     )
 
-
 def rhsmode1_large_cpu_sparse_skip_primary_allowed_current_backend(
     *,
     op: object,
@@ -7383,7 +7205,6 @@ def rhsmode1_large_cpu_sparse_skip_primary_allowed_current_backend(
         use_implicit=bool(use_implicit),
         backend=jax.default_backend(),
     )
-
 
 def rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed_current_backend(
     *,
@@ -7409,7 +7230,6 @@ def rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed_current_backend(
         use_implicit=bool(use_implicit),
         backend=jax.default_backend(),
     )
-
 
 def rhsmode1_sparse_xblock_rescue_allowed_current_backend(
     *,
@@ -7437,7 +7257,6 @@ def rhsmode1_sparse_xblock_rescue_allowed_current_backend(
         target=float(target),
         backend=jax.default_backend(),
     )
-
 
 def rhsmode1_large_cpu_xblock_skip_primary_allowed_current_backend(
     *,
@@ -7470,7 +7289,6 @@ def rhsmode1_large_cpu_xblock_skip_primary_allowed_current_backend(
         backend=jax.default_backend(),
     )
 
-
 def rhsmode1_fast_post_xblock_polish_allowed_current_backend(
     *,
     op: object,
@@ -7492,7 +7310,6 @@ def rhsmode1_fast_post_xblock_polish_allowed_current_backend(
         backend=jax.default_backend(),
     )
 
-
 def rhsmode1_fp_targeted_polish_allowed_current_backend(
     *,
     op: object,
@@ -7513,7 +7330,6 @@ def rhsmode1_fp_targeted_polish_allowed_current_backend(
         use_implicit=bool(use_implicit),
         backend=jax.default_backend(),
     )
-
 
 def rhsmode1_skip_global_sparse_after_xblock_allowed_current_backend(
     *,
@@ -7537,7 +7353,6 @@ def rhsmode1_skip_global_sparse_after_xblock_allowed_current_backend(
         use_implicit=bool(use_implicit),
         backend=jax.default_backend(),
     )
-
 
 def rhsmode1_fp_xblock_global_correction_allowed_current_backend(
     *,
@@ -7564,7 +7379,6 @@ def rhsmode1_fp_xblock_global_correction_allowed_current_backend(
         backend=jax.default_backend(),
     )
 
-
 def rhsmode1_scipy_rescue_abs_floor_after_xblock_current_backend(
     *,
     op: object,
@@ -7584,7 +7398,6 @@ def rhsmode1_scipy_rescue_abs_floor_after_xblock_current_backend(
         backend=jax.default_backend(),
     )
 
-
 def rhsmode1_scipy_rescue_active_size_allowed_current_backend(
     *,
     op: object,
@@ -7603,7 +7416,6 @@ def rhsmode1_scipy_rescue_active_size_allowed_current_backend(
         use_implicit=bool(use_implicit),
         backend=jax.default_backend(),
     )
-
 
 def rhsmode1_sparse_sxblock_rescue_allowed_current_backend(
     *,
@@ -7629,7 +7441,6 @@ def rhsmode1_sparse_sxblock_rescue_allowed_current_backend(
         use_implicit=bool(use_implicit),
         backend=jax.default_backend(),
     )
-
 
 def rhs1_sharded_line_override_allowed(rhs1_precond_kind: str | None) -> bool:
     """Return whether sharded auto-selection may demote the current preconditioner to line DD."""
