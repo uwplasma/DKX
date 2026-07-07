@@ -345,7 +345,7 @@ Code links:
 ``sfincs_jax/problems/profile_solve.py`` and
 ``sfincs_jax/problems/profile_preconditioner_build.py`` (constraint projections
 and preconditioners),
-``sfincs_jax/solver.py`` (nullspace-aware diagnostics).
+``sfincs_jax/solvers/krylov.py`` (nullspace-aware diagnostics).
 
 Classical radial fluxes
 -----------------------
@@ -447,7 +447,7 @@ The Krylov methods and preconditioning choices follow standard references
 preconditioning survey: Benzi 2002). See :doc:`references` for the citation list.
 
 Code links:
-``sfincs_jax/solver.py`` (Krylov wrappers),
+``sfincs_jax/solvers/krylov.py`` (Krylov wrappers),
 ``sfincs_jax/problems/profile_solve.py`` (RHSMode-1 solve orchestration),
 ``sfincs_jax/problems/profile_preconditioner_build.py`` and
 ``sfincs_jax/solvers/preconditioning.py`` (preconditioners and

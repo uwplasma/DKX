@@ -273,7 +273,7 @@ Unreleased
   Phi1 participation, PAS/FP signatures, and dtype partitioning. The
   post-extraction local full suite passed with ``2556 passed in 543.16 s``.
 - Extracted the backend-safe tiny regularized least-squares kernel; it now
-  lives in ``solver.py`` with the recycled Krylov initial-guess helper. The
+  lives in ``sfincs_jax.solvers.krylov`` with the recycled Krylov initial-guess helper. The
   driver keeps the historical private alias, while direct tests now cover
   dense-reference agreement, near-rank-deficient systems, empty coarse bases,
   and finite autodiff through the helper. The

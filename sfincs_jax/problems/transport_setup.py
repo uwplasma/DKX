@@ -16,7 +16,7 @@ from sfincs_jax.operators.profile_system import (
 )
 from sfincs_jax.problems.transport_diagnostics import transport_matrix_size_from_rhs_mode
 from sfincs_jax.problems.transport_policies import transport_residual_gate_failure
-from sfincs_jax.solver import recycled_initial_guess
+from sfincs_jax.solvers.krylov import recycled_initial_guess
 from sfincs_jax.solvers.diagnostics import transport_progress_message
 
 

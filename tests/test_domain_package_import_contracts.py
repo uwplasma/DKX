@@ -307,7 +307,7 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "plotting.py": "public plotting API",
     "profiling.py": "stable support utility",
     "sensitivity.py": "public differentiation API",
-    "solver.py": "stable solver kernel",
+    "solver.py": "compatibility facade",
 }
 
 ROOT_MODULE_CLOSURE_MANIFEST = {
@@ -329,7 +329,10 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "plotting.py": ("outputs/plotting public helper", "keep root public helper unless API replacement is documented"),
     "profiling.py": ("solvers/validation profiling support", "defer until profiling API boundary is explicit"),
     "sensitivity.py": ("package root differentiation API", "keep at root"),
-    "solver.py": ("solvers public contracts owner", "keep root facade until solvers exports cover public contracts"),
+    "solver.py": (
+        "solvers.krylov public contracts owner",
+        "root facade aliases ``sfincs_jax.solvers.krylov`` for compatibility",
+    ),
 }
 
 TRANSPORT_COMPATIBILITY_IMPORTS = (
@@ -799,6 +802,9 @@ def test_existing_legacy_modules_keep_their_import_paths() -> None:
 
     for module_name in LEGACY_MODULES_THAT_KEEP_THEIR_IMPORT_PATHS:
         module = _import_module(module_name)
+        if module_name == "sfincs_jax.solver":
+            assert module.__name__ == "sfincs_jax.solvers.krylov"
+            continue
         assert module.__name__ == module_name
 
 

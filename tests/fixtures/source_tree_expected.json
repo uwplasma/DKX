@@ -126,6 +126,7 @@
       "diagnostics.py",
       "explicit_sparse.py",
       "implicit.py",
+      "krylov.py",
       "krylov_dispatch.py",
       "memory_model.py",
       "native_block_factor.py",

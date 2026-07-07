@@ -17,7 +17,7 @@ from ..namelist import Namelist
 from ..operators.profile_full_system import solve_structured_rhs1_full_csr
 from ..solvers.implicit import linear_custom_solve, linear_custom_solve_with_residual
 from ..solvers.krylov_dispatch import gmres_solve_dispatch, rhs_krylov_method_for_context
-from ..solver import (
+from ..solvers.krylov import (
     GMRESSolveResult,
     assemble_dense_matrix_from_matvec,
     bicgstab_solve_with_history_scipy,

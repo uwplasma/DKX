@@ -301,7 +301,7 @@ different nullspace gauges.
 
 The implementations live in:
 
-- `sfincs_jax/solver.py` (Krylov wrappers and history tracking),
+- `sfincs_jax/solvers/krylov.py` (Krylov wrappers and history tracking),
 - `sfincs_jax/solvers/` (preconditioners, path selection, and sparse/native
   factors),
 - `sfincs_jax/problems/` (problem setup, projections, residual gates, and

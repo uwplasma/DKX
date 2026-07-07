@@ -21,8 +21,8 @@ from ..solvers.preconditioning import (
     project_constraint_scheme1_nullspace_solution_with_residual,
 )
 from ..operators.profile_system import _fs_average_factor, _ix_min
-from ..solver import GMRESSolveResult
-from ..solver import recycled_initial_guess as _recycled_initial_guess
+from ..solvers.krylov import GMRESSolveResult
+from ..solvers.krylov import recycled_initial_guess as _recycled_initial_guess
 from .profile_policies import rhs1_pas_source_zero_tolerance_from_env
 
 

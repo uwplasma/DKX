@@ -43,7 +43,7 @@ from sfincs_jax.solvers.memory_model import (
     gmres_basis_nbytes,
     tfqmr_work_nbytes,
 )
-from ..solver import GMRESSolveResult
+from ..solvers.krylov import GMRESSolveResult
 
 ArrayFn = Callable[[jnp.ndarray], jnp.ndarray]
 EmitFn = Callable[[int, str], None]

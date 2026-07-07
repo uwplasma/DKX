@@ -19,7 +19,7 @@ from sfincs_jax.solvers.path_policy import (
     SolverCandidateMetrics,
     solver_candidate_gate,
 )
-from sfincs_jax.solver import (
+from sfincs_jax.solvers.krylov import (
     GMRESSolveResult,
     bicgstab_solve_with_history_scipy,
     gmres_solve_with_history_scipy,

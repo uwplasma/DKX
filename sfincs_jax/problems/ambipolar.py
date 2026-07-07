@@ -1218,7 +1218,7 @@ def dense_rhs1_vm_radial_current_linear_observable_system(
     import jax.numpy as jnp  # noqa: PLC0415
 
     from ..sensitivity import LinearObservableSystem  # noqa: PLC0415
-    from ..solver import assemble_dense_matrix_from_matvec  # noqa: PLC0415
+    from ..solvers.krylov import assemble_dense_matrix_from_matvec  # noqa: PLC0415
     from sfincs_jax.operators.profile_system import apply_v3_full_system_operator_cached, rhs_v3_full_system_jit  # noqa: PLC0415
     from .transport_diagnostics import radial_current_vm_observable_vector  # noqa: PLC0415
 
@@ -1387,7 +1387,7 @@ def _dense_validation_linear_algebra_for_operator(
     import numpy as np  # noqa: PLC0415
 
     from sfincs_jax.operators.profile_layout import build_rhs1_compressed_pitch_layout  # noqa: PLC0415
-    from ..solver import assemble_dense_matrix_from_matvec  # noqa: PLC0415
+    from ..solvers.krylov import assemble_dense_matrix_from_matvec  # noqa: PLC0415
     from sfincs_jax.operators.profile_system import apply_v3_full_system_operator_cached  # noqa: PLC0415
 
     layout = build_rhs1_compressed_pitch_layout(op)

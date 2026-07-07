@@ -56,7 +56,7 @@ from sfincs_jax.discretization.periodic_stencil import (
     extract_sparse_circulant_stencil,
     extract_sparse_row_stencil,
 )
-from sfincs_jax.solver import GMRESSolveResult, gmres_solve
+from sfincs_jax.solvers.krylov import GMRESSolveResult, gmres_solve
 from sfincs_jax.discretization.v3 import V3Grids, geometry_from_namelist, grids_from_namelist
 from sfincs_jax.geometry.vmec_wout import psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
 

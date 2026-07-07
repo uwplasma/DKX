@@ -33,7 +33,7 @@ from sfincs_jax.solvers.implicit import (
     linear_custom_solve,
     linear_custom_solve_with_residual,
 )
-from sfincs_jax.solver import (
+from sfincs_jax.solvers.krylov import (
     GMRESSolveResult,
     assemble_dense_matrix_from_matvec,
     bicgstab_solve_with_residual,

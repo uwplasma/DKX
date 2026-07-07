@@ -31,7 +31,7 @@ from sfincs_jax.operators.profile_system import (
 )
 from sfincs_jax.profiling import Timer
 from sfincs_jax.solvers.explicit_sparse import build_operator_from_matvec, estimate_csr_nbytes, factorize_host_sparse_operator
-from sfincs_jax.solver import (
+from sfincs_jax.solvers.krylov import (
     GMRESSolveResult,
     assemble_dense_matrix_from_matvec,
     dense_solve_from_matrix,

@@ -38,14 +38,14 @@ from sfincs_jax.problems.profile_solver_diagnostics import (
     rhs1_fortran_stdout_from_env,
     rhs1_ksp_history_limits_from_env,
 )
-from ..solver import (
+from ..solvers.krylov import (
     GMRESSolveResult,
     distributed_gmres_enabled,
     gmres_solve,
     gmres_solve_distributed,
     gmres_solve_jit,
 )
-from ..solver import gmres_result_is_finite
+from ..solvers.krylov import gmres_result_is_finite
 from ..solvers.preconditioner_full_fp_kinetic import (
     build_rhs1_block_preconditioner,
     build_rhs1_collision_preconditioner,

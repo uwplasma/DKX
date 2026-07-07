@@ -13,7 +13,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from . import path_policy as solver_path_policy
-from ..solver import small_regularized_lstsq
+from .krylov import small_regularized_lstsq
 from sfincs_jax.operators.profile_system import (
     V3FullSystemOperator,
     _source_basis_constraint_scheme_1,

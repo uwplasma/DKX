@@ -19,7 +19,7 @@ import jax
 import jax.numpy as jnp
 
 from ..profiling import Timer
-from ..solver import gmres_solve_with_history_scipy
+from .krylov import gmres_solve_with_history_scipy
 
 StorageKind = Literal["dense", "csr", "linear_operator"]
 FactorKind = Literal[

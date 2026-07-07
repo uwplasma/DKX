@@ -15,7 +15,7 @@ from typing import Any
 import jax
 
 from .preconditioning import use_solver_jit
-from ..solver import (
+from .krylov import (
     distributed_gmres_enabled,
     gmres_solve,
     gmres_solve_distributed,

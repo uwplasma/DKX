@@ -24,7 +24,7 @@ from sfincs_jax.namelist import Namelist, read_sfincs_input
 from sfincs_jax.problems.profile_solver_diagnostics import (
     emit_newton_krylov_ksp_history as _emit_newton_krylov_ksp_history,
 )
-from sfincs_jax.solver import (
+from sfincs_jax.solvers.krylov import (
     GMRESSolveResult, bicgstab_solve_with_residual, bicgstab_solve_with_history_scipy,
     dense_krylov_solve_from_matrix_with_residual, dense_solve_from_matrix, dense_solve_from_matrix_row_scaled,
     gmres_solve, gmres_solve_jit, gmres_solve_with_residual, gmres_solve_with_residual_jit, gmres_solve_distributed,
@@ -33,7 +33,7 @@ from sfincs_jax.solver import (
     gmres_solve_with_history_scipy, gcrotmk_solve_with_history_scipy, lgmres_solve_with_history_scipy,
     tfqmr_solve_with_residual,
 )
-from sfincs_jax.solver import (
+from sfincs_jax.solvers.krylov import (
     recycled_initial_guess as _recycled_initial_guess, small_regularized_lstsq as _small_regularized_lstsq,
 )
 from sfincs_jax.discretization.structured_velocity import factor_block_tridiagonal
@@ -475,7 +475,7 @@ from sfincs_jax.problems.transport_finalize import (
     compute_transport_postsolve_diagnostics,
 )
 from sfincs_jax.outputs.transport import TransportStreamingOutputAccumulator
-from sfincs_jax.solver import (
+from sfincs_jax.solvers.krylov import (
     block_gmres_result_ready as _block_gmres_result_ready, gmres_result_is_finite as _gmres_result_is_finite,
 )
 from sfincs_jax.solvers.preconditioning import (

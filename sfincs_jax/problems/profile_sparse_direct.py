@@ -48,7 +48,7 @@ from .profile_residual import (
 )
 from .profile_setup import SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS
 from .profile_sparse_policy import _env_bool, _env_float, _env_int, _env_value
-from ..solver import (
+from ..solvers.krylov import (
     GMRESSolveResult,
     assemble_dense_matrix_from_matvec,
     gmres_solve_with_history_scipy,

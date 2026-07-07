@@ -76,7 +76,7 @@ maintained domain modules.
 .. automodule:: sfincs_jax.problems.transport_finalize
    :members:
 
-.. automodule:: sfincs_jax.solver
+.. automodule:: sfincs_jax.solvers.krylov
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioning

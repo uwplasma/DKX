@@ -50,7 +50,7 @@ not by historical helper prefixes. The importable package folders are:
   postprocessing tasks.
 
 The root modules are the stable user-facing surface: ``api.py``, ``cli.py``,
-``solver.py``, ``ambipolar.py``, ``sensitivity.py``, ``plotting.py``,
+``solver.py`` (compatibility alias), ``ambipolar.py``, ``sensitivity.py``, ``plotting.py``,
 ``compare.py``, ``io.py``, ``namelist.py``, ``input_compat.py``, ``grids.py``,
 ``diagnostics.py``, ``paths.py``, and ``profiling.py``. Historical monolithic
 driver imports have been retired; use the profile and transport problem owners
@@ -124,8 +124,8 @@ facades.
      - stable support utility
      - Phase timing and optional memory profiling helpers.
    * - ``solver.py``
-     - stable solver kernel
-     - Krylov result contracts, XLA synchronization, and linear algebra utilities.
+     - compatibility facade
+     - Historical import path that aliases the implementation in ``solvers/krylov.py``.
 
 Closure move/delete manifest
 ----------------------------
@@ -188,8 +188,8 @@ documented compatibility facade, and passes the corresponding owner tests.
      - solvers/validation profiling support
      - defer until profiling API boundary is explicit
    * - ``solver.py``
-     - solvers public contracts owner
-     - keep root facade until solvers exports cover public contracts
+     - solvers.krylov public contracts owner
+     - root facade aliases ``sfincs_jax.solvers.krylov`` for compatibility
 
 Core modules
 ------------
@@ -517,7 +517,7 @@ owners are:
 - ``sfincs_jax/problems/transport_finalize.py``:
   RHSMode=2/3 transport-matrix result dataclass plus per-RHS finalization,
   constraint projection, residual bookkeeping, and KSP replay request contracts.
-- ``sfincs_jax/solver.py``:
+- ``sfincs_jax/solvers/krylov.py``:
   Krylov solve results, result finite-state checks, and XLA synchronization
   helpers around solver timing/profiling, plus small differentiable JAX-native
   linear algebra kernels such as the regularized tiny least-squares solve and
@@ -1076,7 +1076,7 @@ owners are:
   sparse-PC auto lanes. These helpers keep solver path promotion rules explicit
   and unit-testable without assembling a kinetic operator.
 
-``sfincs_jax/solver.py`` and ``sfincs_jax/solvers/implicit.py``
+``sfincs_jax/solvers/krylov.py`` and ``sfincs_jax/solvers/implicit.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Linear-algebra infrastructure:

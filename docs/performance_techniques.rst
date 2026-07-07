@@ -330,8 +330,8 @@ time rebuilding a Krylov basis on hard nonsymmetric systems.
 
 **Implementation.**
 
-- Wrapper: ``sfincs_jax.solver.lgmres_solve_with_history_scipy``.
-- Dispatch point: ``sfincs_jax.solver._gmres_solve_core``.
+- Wrapper: ``sfincs_jax.solvers.krylov.lgmres_solve_with_history_scipy``.
+- Dispatch point: ``sfincs_jax.solvers.krylov._gmres_solve_core``.
 - Accepted methods: ``solve_method in {"lgmres", "lgmres_scipy"}``.
 
 **Behavior.**
@@ -2807,7 +2807,7 @@ where :math:`n` is the active unknown count, :math:`r` is the GMRES restart,
 :math:`b` is scalar storage, :math:`b_i` is index storage, and
 :math:`M_\mathrm{pc}` / :math:`M_\mathrm{tmp}` are preconditioner and compiled
 temporary estimates when available. The GMRES restart cap in
-``sfincs_jax.solver`` uses this shared model, and
+``sfincs_jax.solvers.krylov`` uses this shared model, and
 ``sfincs_jax.solvers.path_policy`` can compare candidate routes using paired
 memory metrics in priority order: device peak memory, active RSS, compiled
 temporary memory, and finally archived process peak RSS. This avoids promoting a
@@ -3031,7 +3031,7 @@ Key modules and functions referenced above:
 
 - **Solver backends**:
 
-  - ``sfincs_jax/solver.py``: GMRES/BiCGStab wrappers, dense fallback options,
+  - ``sfincs_jax/solvers/krylov.py``: GMRES/BiCGStab wrappers, dense fallback options,
     memory-aware restart logic.
 
 

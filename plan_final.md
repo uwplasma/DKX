@@ -24,7 +24,7 @@ bootstrap current, transport coefficients, plotting, and optimization.
   sharding-campaign extraction, and high-nu publication-audit generator
   extraction.
 - Current tracked Python volume is still too large for review:
-  115 package Python files / 137.6k source lines, 304 test files / 123.1k test
+  116 package Python files / 137.6k source lines, 304 test files / 123.1k test
   lines, 109 example Python files / 18.0k lines, 5 tracked Python scripts /
   5.9k lines, and one shell wrapper.
 - Largest source owners to audit first:
@@ -42,8 +42,8 @@ bootstrap current, transport coefficients, plotting, and optimization.
   multifrontal, HSS/BLR, long profiling campaigns, publication generators, and
   solver tuning variants are preservation-branch material unless they pass the
   stable admission gates below.
-- Root cleanup has started by deleting duplicate private `sfincs_jax.compare.main`;
-  the supported user entry point remains `sfincs_jax compare-h5`.
+- Root cleanup has started by deleting duplicate private `sfincs_jax.compare.main`
+  and moving Krylov implementation to `sfincs_jax.solvers.krylov`.
 - Overall PR readiness under this stricter small-core goal is about 88-90%.
 
 ## Open Lanes
