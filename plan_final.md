@@ -1,8 +1,6 @@
 # SFINCS_JAX Core-Slim Final Plan
 
-Last updated: 2026-07-07
-
-Active branch / PR: `refactor/v3-driver-architecture` / PR #8
+Last updated: 2026-07-07. Active branch / PR: `refactor/v3-driver-architecture` / PR #8
 
 This is the single active plan for the refactor branch. `plan.md` is the historical execution log. Do not create another competing plan. If any README,
 docs page, old branch note, issue, benchmark artifact, or checklist conflicts
@@ -24,11 +22,7 @@ bootstrap current, transport coefficients, plotting, and optimization.
   extraction, high-nu publication-audit extraction, Krylov implementation moved
   from the package root to `sfincs_jax.solvers.krylov`, and the retained Python
   release/profiling scripts promoted to `sfincs_jax.validation`.
-- Tracked code is still too large for review: current working tree audit shows
-  116 package Python files / 143.4k source lines, 303 test Python files /
-  123.1k test lines, 413 tracked example files with 43.8k selected text lines,
-  427 docs files with 20.7k selected text lines, and one shell wrapper. These
-  counts must drop by deletion or extraction, not merely move between folders.
+- Tracked code is still too large for review: current audit shows 116 package Python files / 141.5k source lines, 303 test Python files, 461 tracked example files, and 993 tracked source/test/example/docs text candidates outside `docs/upstream`. These counts must drop by deletion or extraction, not merely move between folders.
 - The package root is still too broad: `ambipolar.py`, `diagnostics.py`,
   `grids.py`, `input_compat.py`, `profiling.py`, and `sensitivity.py` are
   implementation owners or mixed facades that must move behind domain modules
@@ -57,7 +51,7 @@ bootstrap current, transport coefficients, plotting, and optimization.
 
 | Lane | Status | Done when |
 | --- | --- | --- |
-| Whole-repo line audit | Active | `core_slim_inventory.json` classifies every tracked source, test, example, script, benchmark, docs, and fixture file with owner, caller, proof, docs, line target, and keep/merge/delete/extract decision. |
+| Whole-repo line audit | Active | `core_slim_inventory.json` classifies every tracked source, test, example, script, benchmark, docs, and fixture file with owner, caller, proof, docs, line target, keep/merge/delete/extract decision, and first public-symbol/env-var/output-key disposition. |
 | Core-main slimming | Active | Stable branch keeps only parity-clean, runtime-acceptable, documented defaults; all research-only QI/device-QI/native sparse/long-campaign code is deleted or preserved on research PRs. |
 | Source simplification | Active | Package falls first to <=68 Python files / <=80k lines, then <=50 files / <=50k lines unless ledger exceptions are justified by stable callers and proof tests. |
 | Examples/tests/scripts cleanup | Active | Examples are original SFINCS-v3 references plus <=10 curated workflows; tests are smaller, meaningful, >=95% coverage, and default CI is under 10 minutes. |
@@ -108,14 +102,18 @@ Everything else is `RESEARCH`, `DUPLICATE`, `GENERATED`, or `OBSOLETE`.
 docs, env vars, fixtures, and examples.
 
 For each file, perform this loop. This is the required "every line" review
-mechanism; no file is exempt because it is old, covered, or difficult:
+mechanism; no file is exempt because it is old, covered, or difficult. A line
+is not kept because it is already written; it is kept only because it is the
+simplest tested expression of a stable physics, numerics, API, autodiff,
+performance, evidence, or compatibility requirement:
 
 1. Record path, line count, public symbols, imports, callers, env vars, output
    keys, tests, docs, examples, and current line target in
    `tests/fixtures/core_slim_inventory.json`.
 2. Decide exactly one action: `keep`, `merge`, `delete`, or `extract-pr`.
-3. For every public symbol, record owner tag, stable caller, proof test, docs
-   owner, autodiff scope, and runtime/memory scope.
+3. For every public symbol, env var, CLI flag, namelist alias, output key, and
+   diagnostics field, record owner tag, stable caller, proof test, docs owner,
+   autodiff scope, and runtime/memory scope.
 4. For every top-level constant and env var, keep it only if it is part of the
    public API, namelist compatibility, an output schema, or a tested automatic
    policy. Hidden tuning knobs and one-off campaign flags are research debt.
@@ -125,7 +123,8 @@ mechanism; no file is exempt because it is old, covered, or difficult:
 6. Delete one-call wrappers unless they are the public API or name a real
    physics/numerics boundary.
 7. Collapse duplicate diagnostics dictionaries, policy branches, shape helpers,
-   namelist aliases, solver option parsing, and output-key builders.
+   namelist aliases, solver option parsing, preconditioner metadata builders,
+   profiler wrappers, and output-key builders.
 8. Delete tests for extracted code; keep compact absence tests that prevent
    stable imports from silently returning.
 9. Run focused tests, Ruff, compileall, JSON validation, diff hygiene, package
@@ -206,21 +205,22 @@ whole sections before moving retained lines.
 
 | Queue | Files | Main decision | First stop condition |
 | --- | --- | --- | --- |
-| Solver research | `solvers/explicit_sparse.py`, `native_block_factor.py`, `preconditioner_symbolic_*`, `preconditioner_xblock_active.py` | keep CSR/Krylov/admitted defaults; BLR/HSS and nested-dissection frontal routes are removed from stable; extract multifrontal, true-operator rescue, QI hard-seed, and env-var-only native factors unless they are automatic residual-clean defaults | no stable import or default policy names `multifrontal`, `true_operator_rescue`, QI hard-seed, or manual rescue routes; `blr`/`hss`/`symbolic_nd` remain absent outside this plan/inventory and fail-closed tests |
-| RHSMode-1 orchestration | `problems/profile_policies.py`, `profile_sparse_xblock.py`, `profile_solve.py`, `profile_sparse_solve.py`, `profile_dense.py` | one readable setup -> policy -> solve -> residual -> output pipeline | one automatic policy table, one diagnostics schema, no duplicate route predicates |
-| RHSMode-1 operators | `operators/profile_full_system.py`, `profile_system.py`, `profile_layout.py`, term files | keep equation-owned DKE terms; merge duplicate shape/layout helpers; extract device/reduced-tail/sparse-pattern experiments not used by defaults | operator files explain physics terms, not campaign routes |
-| RHSMode-2/3 transport | `problems/transport_*`, `solvers/preconditioner_transport_matrix.py` | one setup/linear-system/solve/finalize path, optional parallel evidence outside stable | transport examples pass parity with no hidden tuning env vars |
-| Validation/evidence | `validation/artifacts.py`, `validation/suite.py`, `validation/release.py`, docs figures | keep compact claim/evidence readers; extract long publication/campaign generators | validation package stays <=5 implementation files and falls below 6k lines total |
+| Solver research | `solvers/explicit_sparse.py`, `native_block_factor.py`, `preconditioner_symbolic_*`, `preconditioner_xblock_active.py` | keep CSR/Krylov/admitted defaults; BLR/HSS and nested-dissection frontal routes are removed from stable; extract multifrontal, true-operator rescue, QI hard-seed, env-var-only native factors, and manual rescue routes unless `auto` selects them with strict true-residual/runtime/RSS proof | no stable import/default policy names `multifrontal`, `true_operator_rescue`, QI hard-seed, manual rescue, `blr`, `hss`, or `symbolic_nd` outside this plan/inventory and absence tests |
+| RHSMode-1 orchestration | `profile_policies.py`, `profile_sparse_xblock.py`, `profile_solve.py`, `profile_sparse_solve.py`, `profile_dense.py` | one setup -> policy -> solve -> residual -> output pipeline; one advanced policy dataclass; one diagnostics schema | duplicate route predicates, dense/sparse split wrappers, QI metadata, and one-off policy probes removed |
+| RHSMode-1 operators | `profile_full_system.py`, `profile_system.py`, `profile_layout.py`, term files | equation-owned DKE terms only; common layout/shape helpers have one owner | device/reduced-tail/sparse-pattern experiments not used by defaults are extracted or deleted |
+| RHSMode-2/3 transport | `transport_*`, `preconditioner_transport_matrix.py` | one setup/linear-system/solve/finalize path and one transport policy table | examples pass parity with no hidden tuning env vars; scaling campaigns are not stable source |
+| Validation/evidence | `validation/artifacts.py`, `validation/suite.py`, `validation/release.py`, docs figures | compact claim/evidence readers plus data fetch/release gates | long publication/campaign generators and raw QI/device-QI artifacts are extracted |
 | Examples/tests | `examples/`, `tests/`, `benchmarks/`, `scripts/` | original v3 examples plus <=10 workflows; tests grouped by behavior, not history | default CI under 10 minutes with >=95% meaningful coverage target |
-| Root/API | root modules and `sfincs_jax/README.md` | root stays public API/CLI/I/O/plot/compat only | root has <=9 implementation-light modules or ledger exceptions |
+| Root/API | root modules and `sfincs_jax/README.md` | root stays public API/CLI/I/O/plot/namelist/paths/compare plus tiny facades | root has <=9 implementation-light modules or ledger exceptions |
 
 Exact removals are tracked in order. Done: BLR/HSS compressed separator solver
 route and nested-dissection frontal solver route with their stable tests/docs/
-policy aliases. Next: unsupported QI/device-QI imports, multifrontal/native
-factor experiments that are not admitted by `auto`, historical
-campaign/profiling generators, examples that are only benchmark artifacts,
-tests that only pin extracted research behavior, and README/docs text that
-markets deferred paths as stable.
+policy aliases. Next: unsupported QI/device-QI imports and artifacts
+(`docs/_static/qi_seed_robustness_*`, `docs/_static/figures/optimization/qi_*`,
+`tests/test_qi_nfp2_electron_root_ladder_artifacts.py`, QI-only reference inputs,
+and README/docs QI promotion prose), unadmitted multifrontal/native factors,
+historical campaign/profiling generators, benchmark-only examples, tests that
+only pin extracted research behavior, and README/docs deferred-path marketing.
 
 ## File Disposition Targets
 
@@ -233,8 +233,8 @@ markets deferred paths as stable.
 | `outputs/` | profile schema, transport schema, writer/format dispatch | duplicate result dictionaries, HDF5-only ad hoc key builders, internal history fields not in public outputs. |
 | `validation/` | compact release artifact readers, fixture fetch, docs-claim figures | large publication generators, raw profiling traces, stale manifest rows. |
 | `workflows/` | curated autodiff/scans/optimization helpers used by docs/examples | long campaigns, promotion experiments, one-off optimization evidence scripts. |
-| `examples/` | original SFINCS-v3 examples plus <=10 curated workflows | most campaign/performance/publication folders and single-file folders without a teaching purpose. |
-| `tests/` | compact unit, physics, numerical, parity, API, docs-claim tests | tests for extracted code, implementation-history pins, duplicate coverage-only files. |
+| `examples/` | original SFINCS-v3 examples plus <=10 curated workflows: CLI solve/plot, Python solve, output formats, transport, bootstrap/Redl, ambipolarity, autodiff, VMEC/Boozer, optimization, validation comparison | most campaign/performance/publication folders and single-file folders without a teaching purpose. |
+| `tests/` | compact unit, physics, numerical, parity, API, docs-claim tests, parameterized by behavior | tests for extracted code, implementation-history pins, duplicate coverage-only private-helper files. |
 | `benchmarks/` | nothing as a directory | move small benchmark contract into tests; move large inputs/artifacts to releases. |
 | `scripts/` | documented release/data-fetch tooling only | convert to CLIs/tests/examples or delete. |
 | `utils/` | nothing unless a user-facing utility is documented | delete obsolete upstream helpers or move to examples/tests. |
@@ -257,6 +257,15 @@ explain why a smaller change unlocks the next deletion.
 | H. Output/schema collapse | output files | one typed schema per problem family and one suffix-based writer/reader | output schema, plot, readback tests |
 | I. Tests/examples/scripts | tests, examples, scripts, benchmarks, utils | curate examples, parametrize tests, delete clutter, move data to releases | coverage >=95%, CI <=10 min |
 | J. Docs/evidence | README, docs, figures, tables | regenerate claims from retained evidence and scrub branch-history text | docs build and docs-claim tests |
+
+## Review Granularity For This PR
+
+Use these unit sizes so the refactor finishes in a few large passes:
+- File over 1500 lines: classify sections and delete/extract at least one section; reject helper-only renames or attempt-named files.
+- Policy/solver route: keep exactly one route name, parser, metadata schema, docs row, and test owner; reject dense/sparse/native/rescue aliases for the same route.
+- Output/diagnostics key: one schema owner and one writer/readback test; reject duplicated dictionaries and campaign-only keys.
+- Example folder: one README-backed teaching purpose and one runnable command; reject artifact, promotion-scan, or historical-output folders.
+- Test file: prove physics, numerical identity, API/CLI/output, autodiff, parity fixture, or docs claim; reject private-history or extracted-research tests.
 
 ## Extraction Protocol
 
