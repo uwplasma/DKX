@@ -28,7 +28,7 @@ bootstrap current, transport coefficients, plotting, and optimization.
   137.6k source lines, 304 test Python files / 123.1k test lines, 109 example
   Python files / 18.0k lines, 5 tracked Python scripts / 5.9k lines, and one
   shell wrapper at the last committed audit. The current working tree is about
-  119 package Python files / 143.6k source lines, 303 test Python files /
+  116 package Python files / 143.6k source lines, 303 test Python files /
   123.4k lines, 110 example Python files / 18.3k lines, and no tracked Python
   scripts; this count must drop, not merely move between folders.
 - The package root is still too broad: `ambipolar.py`, `diagnostics.py`,
@@ -165,12 +165,12 @@ exception has a ledger entry with proof:
 
 | Area | Current pressure point | Hard target for this PR |
 | --- | --- | --- |
-| package files | 119 Python files in the working tree | <=68 first, <=50 final or justified exceptions |
+| package files | 116 Python files in the working tree | <=68 first, <=50 final or justified exceptions |
 | package lines | 143.6k source lines in the working tree | <=80k first, <=50k final or justified exceptions |
 | tests | 303 Python files / 123.4k lines | <=120 files / <=70k lines while keeping >=95% coverage |
 | examples | 110 Python files / 18.3k lines | original v3 examples plus <=10 curated workflows |
 | scripts | no Python scripts after promotion | only documented shell/release tooling, otherwise empty |
-| validation package | 9 Python files after figure and suite-runner merge | <=5 compact evidence/fetch/release modules |
+| validation package | 5 implementation modules plus `__init__.py` after command consolidation | target met; next reduce lines |
 
 Inventory entries must include: `decision`, `owner_tags`, `stable_callers`,
 `public_symbols`, `test_proofs`, `docs_owner`, `autodiff_scope`,

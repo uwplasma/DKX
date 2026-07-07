@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sfincs_jax.validation import production_inputs as bench_inputs
+from sfincs_jax.validation import release as bench_inputs
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -70,7 +70,7 @@ def test_generator_enforces_research_baseline_on_examples_and_external_inputs(tm
 
     out_root = tmp_path / "production_inputs"
     assert (
-        bench_inputs.main(
+        bench_inputs.production_inputs_main(
             [
                 "--examples-root",
                 str(examples_root),
@@ -123,7 +123,7 @@ def test_generator_can_preserve_external_resolution_for_reproduction(tmp_path: P
 
     out_root = tmp_path / "production_inputs"
     assert (
-        bench_inputs.main(
+        bench_inputs.production_inputs_main(
             [
                 "--examples-root",
                 str(examples_root),
@@ -163,7 +163,7 @@ def test_generator_relabels_historic_external_deck_with_benchmark_resolution(tmp
 
     out_root = tmp_path / "production_inputs"
     assert (
-        bench_inputs.main(
+        bench_inputs.production_inputs_main(
             [
                 "--examples-root",
                 str(examples_root),
@@ -212,7 +212,7 @@ def test_generator_uses_calibrated_floor_for_tokamak_pas_noer(tmp_path: Path) ->
 
     out_root = tmp_path / "production_inputs"
     assert (
-        bench_inputs.main(
+        bench_inputs.production_inputs_main(
             [
                 "--examples-root",
                 str(examples_root),
@@ -261,7 +261,7 @@ def test_generator_estimates_large_pas_xdot_case_as_remote_only(tmp_path: Path) 
 
     out_root = tmp_path / "production_inputs"
     assert (
-        bench_inputs.main(
+        bench_inputs.production_inputs_main(
             [
                 "--examples-root",
                 str(examples_root),
@@ -310,7 +310,7 @@ def test_generator_does_not_overestimate_zero_er_xdot_case(tmp_path: Path) -> No
 
     out_root = tmp_path / "production_inputs"
     assert (
-        bench_inputs.main(
+        bench_inputs.production_inputs_main(
             [
                 "--examples-root",
                 str(examples_root),
@@ -347,7 +347,7 @@ def test_generator_default_floor_keeps_hsx_fp_at_authored_large_resolution(tmp_p
 
     out_root = tmp_path / "production_inputs"
     assert (
-        bench_inputs.main(
+        bench_inputs.production_inputs_main(
             [
                 "--examples-root",
                 str(examples_root),

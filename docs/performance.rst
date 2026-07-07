@@ -78,7 +78,7 @@ production-resolution input tier:
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.production_inputs --clean
+   python -m sfincs_jax.validation.release production-inputs --clean
 
 By default this writes ``outputs/benchmarks/production_resolution_inputs_2026-05-04``
 from the public SFINCS_JAX example decks only. It enforces at least
@@ -92,7 +92,7 @@ Additional local decks can be added without changing the public manifest:
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.production_inputs \
+   python -m sfincs_jax.validation.release production-inputs \
      --external-input /path/to/input.namelist \
      --out-root outputs/benchmarks/my_production_inputs \
      --clean
@@ -196,7 +196,7 @@ In other words, all examples run on CPU and GPU, but a handful of cases remain t
 Targeted solver profiling
 -------------------------
 
-Use ``python -m sfincs_jax.validation.write_output_trace`` for one-case kernel, phase, and
+Use ``python -m sfincs_jax.validation.release write-output-trace`` for one-case kernel, phase, and
 device-memory investigations. The wrapper matches the CLI ``write-output`` path
 by default, meaning it uses the fast non-differentiable solve policy. Opt into
 the differentiable implicit path only when that is the object of the profile:
@@ -207,7 +207,7 @@ the differentiable implicit path only when that is the object of the profile:
    JAX_ENABLE_X64=True \
    XLA_PYTHON_CLIENT_PREALLOCATE=false \
    SFINCS_JAX_PROFILE=full \
-   python -m sfincs_jax.validation.write_output_trace \
+   python -m sfincs_jax.validation.release write-output-trace \
      --input outputs/benchmarks/production_resolution_inputs_2026-05-04/inputs/tokamak_1species_FPCollisions_withEr_fullTrajectories/input.namelist \
      --trace-dir outputs/profile_tokamak_fp_er \
      --out outputs/profile_tokamak_fp_er/sfincsOutput.h5 \
@@ -959,7 +959,7 @@ For full XLA/kernel traces, prefer the dedicated write-output trace helper:
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.write_output_trace \
+   python -m sfincs_jax.validation.release write-output-trace \
      --input tests/reduced_inputs/tokamak_2species_PASCollisions_noEr.input.namelist \
      --trace-dir /tmp/sfincs_trace_tokamak2 \
      --perfetto

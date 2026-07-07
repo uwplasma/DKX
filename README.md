@@ -875,7 +875,7 @@ The main documentation entry points are:
 Regenerate the README audit block from the tracked CPU/GPU suite reports:
 
 ```bash
-python -m sfincs_jax.validation.readme_audit \
+python -m sfincs_jax.validation.release readme-audit \
   --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
   --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas \
   --min-fortran-runtime-s 10
@@ -896,7 +896,7 @@ keeps the GPU lane tied to a deterministic reference, and makes the additional e
 of the same artifact set as the standard suite.
 
 Production-resolution inputs are generated separately with
-``python -m sfincs_jax.validation.production_inputs``. When
+``python -m sfincs_jax.validation.release production-inputs``. When
 ``python -m sfincs_jax.validation.suite scaled`` is pointed at one of those generated
 `inputs/` trees, it detects the sibling `manifest.json` and launches only
 `bounded_local_ok` rows by default. Use `--max-run-recommendation bounded_remote`,
