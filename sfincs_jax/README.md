@@ -11,7 +11,7 @@ discretization, operators, solvers, outputs, validation, and research workflows.
   notebooks.
 - `__init__.py`: stable package exports and compatibility aliases.
 - `cli.py` and `__main__.py`: command-line entry points used by `sfincs_jax`.
-- `solver.py`: public solve orchestration and solver-result metadata.
+- `solver.py`: compatibility import path for Krylov solver contracts.
 - `ambipolar.py`: public ambipolar electric-field workflows.
 - `sensitivity.py`: differentiable JVP, VJP, adjoint, and implicit derivative
   helpers.
@@ -39,7 +39,7 @@ keeps existing scripts working while the implementation lives in a domain folder
 | `api.py` | High-level Python entry points for output writing, solves, and result loading. | Python users and notebooks |
 | `cli.py`, `__main__.py` | Console interface behind `python -m sfincs_jax` and `sfincs_jax`. | CLI users |
 | `__init__.py` | Public package exports, JAX precision/cache setup, and compatibility aliases. | All importers |
-| `solver.py` | Public solve orchestration and solver metadata containers. | Python users inspecting solve status |
+| `solver.py` | Compatibility alias for `solvers/krylov.py`. | Existing scripts importing `sfincs_jax.solver` |
 | `ambipolar.py` | Public ambipolar-root workflows. | Transport/profile workflows |
 | `sensitivity.py` | JVP/VJP, adjoint, and implicit differentiation helpers. | Optimization and UQ workflows |
 | `plotting.py` | Output plotting used by the CLI and examples. | CLI and postprocessing users |
@@ -66,7 +66,8 @@ documented workflow needs it.
   `profile_*.py` modules, flat RHSMode-2/3 `transport_*.py` modules, and
   ambipolar root solves.
 - `solvers/`: Krylov dispatch, solver-path selection, sparse/native factors,
-  memory models, and flat `preconditioner_*.py` modules.
+  memory models, Krylov result contracts, and flat `preconditioner_*.py`
+  modules.
 - `outputs/`: HDF5/NetCDF/NPZ schemas, writer logic, and post-solve
   diagnostics.
 - `validation/`: frozen-reference loading, Fortran/PETSc fixture readers,
@@ -117,6 +118,9 @@ Use this map before adding a file or following an internal import:
 - `problems/transport_parallel_runtime.py`: RHSMode-2/3 whichRHS
   parallelism, GPU subprocess worker CLI, worker payload schemas, and result
   merging.
+- `solvers/krylov.py`: GMRES, flexible GMRES, BiCGStab, TFQMR, dense fallback,
+  recycled initial guesses, residual histories, JIT wrappers, and distributed
+  GMRES contracts.
 - `input_compat.py`: SFINCS-v3 input aliases, radial-coordinate conversions,
   equilibrium-file overrides, VMEC/Boozer path resolution, and staged-run
   equilibrium localization.
