@@ -22,11 +22,13 @@ bootstrap current, transport coefficients, plotting, and optimization.
   removal, sharding/high-nu audit extraction, root Krylov cleanup, BLR/HSS and
   nested-dissection frontal route removal, and first examples cleanup.
 - Current burden after the last cleanup is 116 package Python files / 141,442
-  package lines, 300 test Python files / 121,406 test lines, 100 example Python
-  files / 16,377 example Python lines, and 451 tracked example files after the
-  staged W7-X high-nu harness cleanup. These numbers must decrease by
-  deletion, merging, or research extraction; moving lines into more files is a
-  failed tranche.
+  package lines, 300 test files / 121,406 test lines, 100 example Python files
+  / 16,377 example lines, and 451 tracked example files. These numbers must
+  decrease by deletion, merging, or research extraction; moving lines into more
+  files is a failed tranche.
+- `core_slim_inventory.json` is file-complete only at broad path-rule
+  granularity; before edits, add section/symbol cards for every source/test
+  file over 500 lines and every example folder.
 - Root files still hiding implementation are `ambipolar.py`, `diagnostics.py`,
   `grids.py`, `input_compat.py`, `profiling.py`, and `sensitivity.py`. Each
   must become a tiny documented facade, move into a domain owner, or disappear.
@@ -42,8 +44,8 @@ bootstrap current, transport coefficients, plotting, and optimization.
   `test_profile_response_dense.py`, `test_explicit_sparse.py`,
   `examples/publication_figures`, `examples/performance`,
   `examples/optimization`, and `benchmarks/`.
-- Overall PR readiness is about 88-90%. The blocker is reviewability and stable
-  surface discipline, not adding more experimental solver code.
+- Overall PR readiness is about 88-90%; the blocker is reviewability and stable
+  surface discipline, not more experimental solver code.
 
 ## Open Lanes
 
@@ -99,7 +101,10 @@ Allowed owner tags and proof are:
 | `EVIDENCE` | compact validation fixture, release evidence, docs claim data | schema/docs-claim test |
 | `COMPAT` | documented SFINCS Fortran v3 input/output compatibility | compatibility fixture or parser/output test |
 
-Every line gets one disposition during the section review:
+Every retained line gets one disposition during the section review. The default
+disposition is `delete-core`; a line is promoted from that default only when
+the file card names its owner tag, caller, proof, public/domain purpose, and
+simpler alternative that was rejected.
 
 | Disposition | Keep/move rule | Required result |
 | --- | --- | --- |
@@ -108,11 +113,15 @@ Every line gets one disposition during the section review:
 | `delete-core` | dead, duplicate, generated, obsolete, coverage-only, historical, or branch-prose code | removed with imports, tests, docs, env vars, fixtures, and examples |
 | `extract-research` | useful but not stable: QI/device-QI, native direct factors, long campaigns, special GPU work, publication experiments, unsupported optimization studies | preserved on a research branch/PR, then removed from stable imports and README claims |
 
-The per-file procedure is fixed:
+The required file card is: path, current lines, target lines, imports, callers,
+public symbols, private helpers over 20 lines, env vars, CLI flags, namelist
+aliases, output/diagnostic keys, docs/examples, tests, section line ranges,
+section dispositions, extraction branch, and reviewer note. The per-file
+procedure is fixed:
 
 1. Build the file card from `git ls-files`, AST public symbols, `rg` callers,
    tests, docs, examples, env vars, and output keys.
-2. Divide files over 1500 lines into named sections before editing; classify
+2. Divide files over 500 lines into named sections before editing; classify
    each section as stable, duplicate, research, generated, or obsolete.
 3. Classify every public symbol, env var, CLI flag, namelist alias, output key,
    diagnostics key, and private helper over 20 lines.
@@ -134,13 +143,13 @@ plan.
 
 ## Repository-Wide Line Sweep
 
-The line sweep is mandatory and file-complete. The first pass may classify a
-file at module granularity; the second pass must classify every public symbol,
-every env var, every output key, every hidden solver knob, and every private
-helper over 20 lines. The third pass deletes, merges, or extracts the code. The
-sweep order is:
+The line sweep is mandatory and file-complete. The first pass classifies every
+tracked path exactly once. The second pass adds section cards for large files
+and folder cards for examples/tests. The third pass deletes, merges, or
+extracts code. Do not edit a large owner until its card lists line ranges and a
+target line count. The sweep order is:
 
-1. Package source files over 1500 lines, largest first.
+1. Package source files over 500 lines, largest first.
 2. Solver/preconditioner files containing research words: `qi`, `native`,
    `symbolic`, `nested`, `multifrontal`, `hss`, `blr`, `candidate`, `probe`,
    `rescue`, `campaign`, or `hard_seed`.
@@ -149,6 +158,14 @@ sweep order is:
 4. Tests over 1200 lines and tests coupled to extracted research paths.
 5. Examples, scripts, benchmark inputs, and fixture directories.
 6. README/docs text and figures, after source decisions are stable.
+
+The first concrete audit batches are:
+| Batch | Files/folders | Required simplification |
+| --- | --- | --- |
+| 1 | `profile_sparse_xblock.py`, `profile_policies.py`, `profile_full_system.py`, `explicit_sparse.py`, `transport_linear_system.py`, `validation/suite.py` | keep one stable route/pipeline per physics problem; extract native-symbolic, rescue, probe, campaign, and hidden-env branches |
+| 2 | `test_profile_response_sparse_pc.py`, `test_rhs1_full_assembly.py`, `test_io_output_policy_coverage.py`, `test_v3_sparse_pattern.py`, `test_rhs1_solver_replay.py`, `test_solver_gmres.py`, `test_explicit_sparse.py`, `test_transport_policy_coverage.py` | merge into behavior suites: physics, numerical identities, API/output, autodiff, parity fixtures, docs claims |
+| 3 | `tests/solver_policy_trace_gate_*`, `tests/scaled_example_suite_*`, `tests/reference_solver_path_artifacts/`, `examples/publication_figures/`, `examples/performance/` | move long reports/generators to research PRs or release assets; keep compact checked evidence only |
+| 4 | `examples/getting_started/`, `examples/parity/`, `examples/optimization/`, `examples/transport/`, `examples/vmec_jax_finite_beta/`, `examples/autodiff/` | reduce to <=10 workflows with one README-backed teaching purpose and one runnable command each |
 
 The sweep is complete only when these repo-level budgets are met or each
 exception has a ledger entry with proof:
@@ -275,11 +292,11 @@ Follow this sequence without inserting unrelated micro-tranches.
 | Examples/tests cleanup | `examples/`, `tests/`, `benchmarks/`, `scripts/` | proves physics, numerical identity, API/output, parity fixture, autodiff, or docs claim | historical examples and coverage-only private-helper tests |
 | Docs/evidence | README, docs, figures, tables | backed by retained compact evidence | branch-history prose and rejected solver-campaign claims |
 
-Each gate has the same completion checklist: `rg` proves removed route names are
-absent from source/tests/public docs, focused tests pass, package imports compile,
-the inventory line target improves, and the commit deletes more stable code than
-it adds unless the added code replaces multiple deleted branches with one clearer
-domain owner.
+Each gate has the same completion checklist: the file cards are updated first,
+`rg` proves removed route names are absent from source/tests/public docs,
+focused tests pass, package imports compile, the inventory line target improves,
+and the commit deletes more stable code than it adds unless the added code
+replaces multiple deleted branches with one clearer domain owner.
 
 The next implementation passes must be coarse-grained:
 
