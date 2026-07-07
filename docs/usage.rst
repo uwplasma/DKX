@@ -448,9 +448,9 @@ performance without changing the input file:
   passes.
 
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK``: non-autodiff production
-  fallback for large RHSMode=1 QI-like systems when an explicit JAX-native
+  fallback for large RHSMode=1 3D full-FP systems when an explicit JAX-native
   x-block Krylov method is requested. The default ``auto`` mode rewrites
-  qualifying large ConstraintScheme=1 full-FP/QI requests to the host x-block
+  qualifying large ConstraintScheme=1 full-FP requests to the host x-block
   auto policy before JAX factor arrays are built, preserving the measured
   side-probe seed plus host ``lgmres`` rescue. Set to ``0`` to force the
   experimental device-Krylov lane, or ``force``/``host`` to use the host policy
