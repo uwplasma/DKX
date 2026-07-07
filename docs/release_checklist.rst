@@ -82,11 +82,12 @@ the gate does not allow percentages to exceed the target just to satisfy a
 requested point increase.
 The benchmark-doc checks make the README/docs runtime and memory claims fail if
 they drift from the checked-in CPU/GPU suite reports or benchmark summary JSON.
-The QI device-artifact check is a no-solve guard against accidentally promoting
-nonconverged GPU/operator-reuse evidence into a production true-device-QI claim.
+QI/device-QI promotion evidence is preserved on the
+``research/qi-device-hard-seed`` branch and is not part of the stable release
+checklist.
 
-For mapped-grid, QI, or solver-path integration branches, also run the
-bounded integration checks before promoting any of those lanes into release-facing
+For mapped-grid or solver-path integration branches, also run the bounded
+integration checks before promoting any of those lanes into release-facing
 metadata:
 
 .. code-block:: bash
@@ -97,27 +98,11 @@ metadata:
      tests/test_mapped_xgrid_v3.py \
      tests/test_mapped_xgrid_transport_evidence.py \
      tests/test_run_mapped_xgrid_transport_evidence.py \
-     tests/test_run_qi_seed_robustness.py \
      tests/test_solver_path_policy.py
 
 Those tests are not a substitute for full-suite parity or production-resolution
-benchmark evidence. They only prove that the opt-in mapped grid, QI seed runner,
-and solver-path policy seams are wired and reproducible on bounded inputs.
-
-For a bounded QI smoke rerun, use the default CLI solver policy first:
-
-.. code-block:: bash
-
-   python scripts/run_qi_seed_robustness.py \
-     --input examples/data/qi_nfp2_reference.input.namelist \
-     --out-root tests/qi_seed_robustness_smoke \
-     --seeds 0 1 2 \
-     --resolution-scale 0.25 \
-     --min-ntheta 7 --min-nzeta 11 --min-nx 4 --min-nxi 16 \
-     --execute \
-     --max-residual-ratio 1 \
-     --require-converged \
-     --clean
+benchmark evidence. They only prove that the opt-in mapped grid and
+solver-path policy seams are wired and reproducible on bounded inputs.
 
 The checked summaries in ``docs/_static/qi_seed_robustness_smoke.json`` and
 ``docs/_static/qi_seed_robustness_multiseed.json`` record bounded passing
