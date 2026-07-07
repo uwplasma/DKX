@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "case": "geometryScheme4_2species_PAS_noEr",
-  "input": "benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_PAS_noEr/input.namelist",
+  "input": "outputs/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_PAS_noEr/input.namelist",
   "resolution": {
     "Ntheta": 25,
     "Nzeta": 51,
