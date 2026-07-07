@@ -2,11 +2,11 @@
   "schema_version": 1,
   "metadata": {
     "audited_branch": "refactor/v3-driver-architecture",
-    "audited_commit": "e5a3cf04+direct-tail-rescue-tranche",
+    "audited_commit": "69de75cb+true-operator-stage-removal",
     "audit_date": "2026-07-07",
     "purpose": "Phase A inventory for the core-slim refactor: every large owner is marked core, compat, test-fixture, extract-pr, or delete before code is removed.",
     "source_file_count_at_audit": 114,
-    "source_line_count_at_audit": 140540,
+    "source_line_count_at_audit": 139348,
     "test_file_count_at_audit": 313,
     "example_file_count_at_audit": 122,
     "benchmark_file_count_at_audit": 0,
@@ -303,7 +303,7 @@
     },
     {
       "path": "sfincs_jax/problems/profile_sparse_solve.py",
-      "lines_at_audit": 4848,
+      "lines_at_audit": 3656,
       "category": "core",
       "action": "trim",
       "reduction_target_lines": 2300,
@@ -312,7 +312,7 @@
       "tests": ["tests/test_profile_response_sparse_pc.py", "tests/test_profile_sparse_helper_coverage.py"],
       "docs_examples": ["docs/numerics.rst"],
       "retention_reason": "Sparse RHSMode-1 solve orchestration is core only for parity-clean automatic routes.",
-      "next_step": "Delete route duplication after extracted preconditioner experiments are removed."
+      "next_step": "Continue collapsing generic branch setup and direct-tail policy wiring after disconnected true-operator rescue stages were removed."
     },
     {
       "path": "sfincs_jax/problems/profile_sparse_qi.py",

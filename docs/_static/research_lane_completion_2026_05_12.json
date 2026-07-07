@@ -4,6 +4,7 @@
     {
       "before_percent": 23,
       "current_percent": 99,
+      "deferred_reason": "The current release can ship the documented non-autodiff large-QI host fallback, but true differentiable/device-QI and production-resolution CPU/GPU QI ladders remain post-release research until GPU hard-seed and production ladder artifacts pass.",
       "evidence": [
         {
           "claim": "Production-readiness manifest rolls up all checked QI CPU/GPU seed artifacts and explicitly keeps the gate bounded until production CPU/GPU ladders exist.",
@@ -16,14 +17,6 @@
         {
           "claim": "Bounded QI CPU and one-GPU auto policy now converges at the higher scale-0.35 probe after host-sparse rescue.",
           "path": "docs/_static/qi_seed_robustness_scale035_cpu_gpu.json"
-        },
-        {
-          "claim": "Runner materializes deterministic QI neighboring decks with residual and acceptance gates.",
-          "path": "scripts/run_qi_seed_robustness.py"
-        },
-        {
-          "claim": "CI-fast runner tests lock deterministic generation and gate semantics.",
-          "path": "tests/test_run_qi_seed_robustness.py"
         },
         {
           "claim": "New scale-0.45 CPU QI probe passes at 11 x 23 x 45 x 4 in 106.0 s with public auto path and residual ratio below 5e-7.",
@@ -114,38 +107,6 @@
           "path": "docs/_static/qi_seed_robustness_scale060_device_host_fallback_seed3_cpu_2026_05_15.json"
         },
         {
-          "claim": "Reusable JAX-compatible Galerkin QI coarse preconditioner infrastructure eliminates synthetic residuals to roundoff with DeviceCSR/JIT coverage, but remains to be wired into the production GPU hard-seed loop.",
-          "path": "sfincs_jax/solvers/preconditioner_qi_basis.py"
-        },
-        {
-          "claim": "Focused QI coarse tests cover regularized JAX normal-equation solves, Galerkin correction reuse, and JIT/device CSR application without requiring a large solve.",
-          "path": "tests/test_rhs1_qi_coarse.py"
-        },
-        {
-          "claim": "The opt-in production Galerkin QI preconditioner is now fail-closed: additive/multiplicative/damping probe candidates are selected only when they reduce the true residual, otherwise the base preconditioner remains active.",
-          "path": "sfincs_jax/solvers/preconditioner_qi_corrections.py"
-        },
-        {
-          "claim": "Focused policy tests cover Galerkin mode parsing, damping parsing, residual-reduction selection, nonfinite rejection, and required-drop gates.",
-          "path": "tests/test_rhs1_qi_galerkin_policy.py"
-        },
-        {
-          "claim": "Standalone device-local QI smoother infrastructure now provides a pure-JAX CSR damped-Jacobi/stationary smoother with fail-closed diagonal validation and JIT-safe DeviceCSR matvec reuse.",
-          "path": "sfincs_jax/solvers/preconditioner_qi_device.py"
-        },
-        {
-          "claim": "Focused QI smoother tests cover CSR diagonal extraction, missing-diagonal rejection, permissive partial diagnostics, JIT stationary sweeps, and compatibility with the existing two-level true-residual probe.",
-          "path": "tests/test_rhs1_qi_device_smoother.py"
-        },
-        {
-          "claim": "Device-local QI smoother now has an opt-in residual-minimizing step policy and fail-closed true-residual seed probe; the bounded synthetic gate reduces residual norm from 1.0 to 0.8944 and rejects stricter non-material improvements.",
-          "path": "sfincs_jax/solvers/preconditioner_qi_device.py"
-        },
-        {
-          "claim": "Focused QI smoother tests cover the residual-minimizing accepted seed, fail-closed strict-improvement rejection, and JSON-safe probe metadata.",
-          "path": "tests/test_rhs1_qi_device_smoother.py"
-        },
-        {
           "claim": "Scale-0.60 public-auto one-GPU QI hard seed timed out at 600 s on office after the xmg/strong-fallback route reached residual 2.262e-6 against target 3.021e-13, with no output or solver trace.",
           "path": "docs/_static/qi_seed_robustness_scale060_galerkin_failclosed_seed3_gpu0_2026_05_15.json"
         },
@@ -179,7 +140,6 @@
       "second_push_result": "scale-0.50 and scale-0.55 public auto CPU and one-GPU five-seed QI ladders pass; scale-0.60 CPU now also passes seeds 0..4 with the bounded side-probe/LGMRES rescue. The large-QI production escape hatch is closed by a release-ready non-autodiff host fallback for explicit device-Krylov requests. True differentiable/device-QI is closed deferred post-release: the JAX Galerkin coarse preconditioner is implemented and fail-closed, and the new residual-minimizing device smoother improves a bounded local probe, but the scale-0.60 GPU hard seed still lacks a residual-clean accepted device-local artifact.",
       "status": "evidence_ready",
       "target_percent": 100,
-      "deferred_reason": "The current release can ship the documented non-autodiff large-QI host fallback, but true differentiable/device-QI and production-resolution CPU/GPU QI ladders remain post-release research until GPU hard-seed and production ladder artifacts pass.",
       "title": "Production-resolution QI CPU/GPU robustness"
     },
     {
@@ -195,10 +155,6 @@
           "path": "sfincs_jax/solvers/preconditioner_pas_matrix_free.py"
         },
         {
-          "claim": "Benchmark harness now rejects default-promotion candidates that regress elapsed time or peak RSS against baseline.",
-          "path": "scripts/benchmark_pas_tz_memory_fallback.py"
-        },
-        {
           "claim": "Docs now distinguish promoted PAS memory routes from rejected experimental routes.",
           "path": "docs/performance_techniques.rst"
         },
@@ -211,32 +167,12 @@
           "path": "tests/test_rhs1_pas_matrixfree.py"
         },
         {
-          "claim": "PAS-TZ fallback benchmark rows now require guarded fallback provenance before any candidate can pass all gates or be listed as promotion eligible.",
-          "path": "scripts/benchmark_pas_tz_memory_fallback.py"
-        },
-        {
-          "claim": "Regression tests lock guarded PAS-TZ provenance requirements for benchmark promotion summaries.",
-          "path": "tests/test_benchmark_rhs1_pas_matrixfree.py"
-        },
-        {
           "claim": "Production-floor PAS-TZ tzfft GPU artifact converges at the collaborator floor with residual matching the CPU floor artifact.",
           "path": "examples/performance/output/pas_tz_prod_floor_gpu_tzfft_25x51x100x4.json"
         },
         {
-          "claim": "Release checker rejects malformed or policy-invalid PAS benchmark artifacts before they can support runtime/memory claims.",
-          "path": "scripts/check_benchmark_artifacts.py"
-        },
-        {
           "claim": "Matrix-free PAS correction now has a fail-fast live-byte preflight that rejects oversized candidates before update allocation or candidate residual matvecs.",
           "path": "sfincs_jax/solvers/preconditioner_pas_matrix_free.py"
-        },
-        {
-          "claim": "PAS matrix-free benchmark dry-runs can record a maximum candidate byte budget so unsafe production-floor probes fail before allocating the candidate path.",
-          "path": "scripts/benchmark_rhs1_pas_matrixfree.py"
-        },
-        {
-          "claim": "Opt-in PAS production real-solve probes now require --max-candidate-bytes by default, with explicit opt-out provenance for unbudgeted diagnostics.",
-          "path": "scripts/benchmark_rhs1_pas_matrixfree.py"
         },
         {
           "claim": "Checked byte-budget dry-run records geometry4 and HSX as byte-safe launchable short probes while holding geometry11 for missing promotion-facing artifact evidence.",
@@ -253,10 +189,6 @@
         {
           "claim": "PAS matrix-free correction now has an opt-in streamed update path that builds candidates from bounded residual chunks without materializing a full dense update vector.",
           "path": "sfincs_jax/solvers/preconditioner_pas_matrix_free.py"
-        },
-        {
-          "claim": "PAS benchmark gates now reject guarded-correction variants unless metadata proves streamed/no-full-update behavior, and focused tests cover chunk equivalence, byte-budget rejection, and residual-gate semantics.",
-          "path": "tests/test_benchmark_pas_tz_memory_fallback.py"
         },
         {
           "claim": "Bounded streamed-update artifact records geometry4, HSX, and geometry11 metadata probes with stream_update_chunks=true, full_update_materialized=false, 8 ok rows, and all_expected_gates_met=true.",
@@ -451,10 +383,6 @@
           "path": "tests/test_rhs1_host_policy.py"
         },
         {
-          "claim": "Artifact tests ensure CPU/GPU QI public-auto evidence stays checked and solver traces remain present.",
-          "path": "tests/test_qi_seed_smoke_artifact.py"
-        },
-        {
           "claim": "Release-gate checker validates status, kind, non-empty literature/claim/source/test/gate lists, and source/test/script/artifact path existence for release-ready and closed-deferred lanes.",
           "path": "scripts/check_release_gates.py"
         },
@@ -465,10 +393,6 @@
         {
           "claim": "Fast CLI, plotting, validation-figure, and benchmark-artifact tests cover I/O/error branches without launching expensive solves.",
           "path": "tests/test_cli_validation_io_fast_coverage.py"
-        },
-        {
-          "claim": "QI Galerkin residual-selection policy is split out of the driver with direct fast tests, reducing the remaining untested hard-seed branch surface without adding slow solves.",
-          "path": "sfincs_jax/solvers/preconditioner_qi_corrections.py"
         },
         {
           "claim": "RHSMode=1 sparse-PC residual-improvement logic is owned by the canonical sparse solve module with direct finite/nonfinite boundary tests, reducing driver acceptance-branch surface without launching solves.",
@@ -640,10 +564,6 @@
         {
           "claim": "Validation manifest records release-ready, bounded-proxy, and deferred lanes explicitly.",
           "path": "examples/publication_figures/validation_manifest.json"
-        },
-        {
-          "claim": "Benchmark artifact policy prevents stale or inconsistent runtime/memory claims.",
-          "path": "scripts/check_benchmark_artifacts.py"
         },
         {
           "claim": "New doc-claim tests prevent stale benchmark ratio, figure, and scope wording from shipping.",

@@ -17,10 +17,10 @@ bootstrap current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Latest audited code-change head: `f7674def`; last green CI evidence:
+- Latest audited code-change head: `69de75cb+true-operator-stage-removal`; last green CI evidence:
   `96fb2677`. Exact aggregate coverage from that CI was 91.753% (`92%`).
 - Current tracked Python volume is the problem to solve before review:
-  114 package files / 140.5k source lines, 313 test files / 126.7k test lines,
+  114 package files / 139.3k source lines, 313 test files / 126.0k test lines,
   122 example Python files, and 12 tracked scripts.
 - Largest source owners are the first audit targets:
   `problems/profile_sparse_xblock.py`, `problems/profile_policies.py`,
@@ -47,14 +47,14 @@ bootstrap current, transport coefficients, plotting, and optimization.
 
 | Lane | Status | Completion | Definition of done |
 | --- | --- | ---: | --- |
-| Line-by-line audit | Active | 40% | Every retained file/function/line has a caller, a physics/numerics/API reason, and a test/doc/perf owner. |
-| Core-main slimming | Active | 55% | Main keeps only stable, parity-clean, runtime-acceptable solvers/APIs; research code is outside core. |
-| Source simplification | Active | 55% | Package moves first to <=68 files, then <=50 files and <=50k lines unless exceptions are justified. |
+| Line-by-line audit | Active | 43% | Every retained file/function/line has a caller, a physics/numerics/API reason, and a test/doc/perf owner. |
+| Core-main slimming | Active | 57% | Main keeps only stable, parity-clean, runtime-acceptable solvers/APIs; research code is outside core. |
+| Source simplification | Active | 57% | Package moves first to <=68 files, then <=50 files and <=50k lines unless exceptions are justified. |
 | Tests/examples/scripts cleanup | Active | 77% | Examples are curated, tests are smaller but reach >=95% coverage, scripts are removed or documented release tooling. |
 | Parity/performance evidence | Active | 70% | Supported examples have checked SFINCS Fortran v3 parity/runtime/RSS/bootstrap evidence. |
 | Docs/readme | Active | 80% | Public docs describe stable software, not branch history or unpromoted campaigns. |
 
-Overall readiness under this stricter core-slim goal is about 83-86%.
+Overall readiness under this stricter core-slim goal is about 84-87%.
 
 ## Concrete Code-Audit Rules
 
@@ -165,9 +165,9 @@ ledger.
 
 ### Delete or Extract First
 
-- `profile_sparse_solve.py`: remove disconnected true-operator residual rescue
-  stage dataclasses/functions/exports/tests unless currently called by stable
-  defaults.
+- `profile_sparse_solve.py`: disconnected true-operator residual rescue stage
+  APIs/tests are removed; next collapse generic branch setup and direct-tail
+  policy wiring that still belongs to extracted native sparse-direct research.
 - `profile_sparse_direct.py`: keep only stable sparse direct policy that passes
   admission gates; move native direct-factor research to
   `research/native-sparse-direct`.
@@ -228,8 +228,7 @@ research residue, long profiler/campaign scripts, and publication generators.
 
 Actions:
 
-- Delete disconnected true-operator rescue stage APIs/tests from
-  `profile_sparse_solve.py` and RHSMode-1 tests.
+- Keep deleted true-operator rescue stage APIs/tests out of stable core.
 - Remove stable imports/env vars/docs for QI/device-QI and native direct-factor
   research.
 - Move or delete long-run profiler/campaign scripts and generated example

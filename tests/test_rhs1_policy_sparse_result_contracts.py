@@ -32,9 +32,6 @@ from sfincs_jax.problems.profile_sparse_solve import (
     SparsePCDirectTailRescuePolicySetupResult,
     SparsePCFactorPreflightRunResult,
     SparsePCGenericBranchSetupResult,
-    SparsePCResidualCandidateUpdateResult,
-    SparsePCResidualCorrectionStageResult,
-    SparsePCTrueCoupledCoarseStageResult,
 )
 
 
@@ -177,89 +174,8 @@ def test_sparse_pc_stage_results_preserve_orchestration_state() -> None:
         factor_preflight_seed_used=preflight.seed_used,
         x0_sparse=x0,
     )
-    true_coarse = SparsePCTrueCoupledCoarseStageResult(
-        factor_bundle_pc=factor_bundle,
-        pc_factor_s=0.4,
-        setup_s=0.6,
-        factor_preflight_residual_after=0.1,
-        factor_preflight_residual_diagnostics={"relative_residual": 0.1},
-        factor_preflight_improvement_ratio=0.1,
-        factor_preflight_target_ratio=1.0,
-        factor_preflight_passed=True,
-        factor_preflight_seed_used=False,
-        residual_vec_current=residual_vec,
-        x0_sparse=x0,
-        requested=True,
-        auto_selected=True,
-        selected=True,
-        residual_after=0.1,
-        metadata={"coarse_rank": 3},
-        error=None,
-        base_improvement_override_used=False,
-    )
-    candidate = SparsePCResidualCandidateUpdateResult(
-        accepted=True,
-        factor_bundle_pc=factor_bundle,
-        pc_factor_s=0.5,
-        setup_s=0.7,
-        factor_preflight_residual_after=0.08,
-        factor_preflight_residual_diagnostics={"relative_residual": 0.08},
-        factor_preflight_improvement_ratio=0.08,
-        factor_preflight_target_ratio=0.8,
-        factor_preflight_passed=True,
-        factor_preflight_seed_used=True,
-        residual_vec_current=residual_vec,
-        x0_sparse=x0,
-        metadata={"candidate": "residual_window"},
-        base_improvement_override_used=True,
-        improves_current_residual=True,
-        improves_original_residual=True,
-    )
-    correction = SparsePCResidualCorrectionStageResult(
-        factor_bundle_pc=factor_bundle,
-        pc_factor_s=0.6,
-        setup_s=0.9,
-        factor_preflight_residual_after=0.05,
-        factor_preflight_residual_diagnostics={"relative_residual": 0.05},
-        factor_preflight_improvement_ratio=0.05,
-        factor_preflight_target_ratio=0.5,
-        factor_preflight_passed=True,
-        factor_preflight_seed_used=True,
-        residual_vec_current=residual_vec,
-        x0_sparse=x0,
-        true_active_submatrix_selected=False,
-        true_active_submatrix_residual_after=None,
-        true_active_submatrix_error=None,
-        true_active_submatrix_metadata=None,
-        true_active_block_selected=True,
-        true_active_block_residual_after=0.05,
-        true_active_block_error=None,
-        true_active_block_metadata={"blocks": 2},
-        true_active_residual_block_selected=False,
-        true_active_residual_block_residual_after=None,
-        true_active_residual_block_error=None,
-        true_active_residual_block_metadata=None,
-        true_active_residual_block_base_improvement_override_used=False,
-        true_window_selected=False,
-        true_window_residual_after=None,
-        true_window_error=None,
-        true_window_metadata=None,
-        residual_coarse_selected=False,
-        residual_coarse_residual_after=None,
-        residual_coarse_error=None,
-        residual_coarse_metadata=None,
-        residual_window_selected=False,
-        residual_window_residual_after=None,
-        residual_window_error=None,
-        residual_window_metadata=None,
-        true_active_column_cache_metadata={"cache": "hit"},
-    )
-
     assert preflight.passed is True
     assert retry.factor_bundle_pc is factor_bundle
-    assert true_coarse.metadata == {"coarse_rank": 3}
-    assert candidate.accepted is True
-    assert correction.true_active_block_metadata == {"blocks": 2}
     np.testing.assert_allclose(retry.residual_vec_current, residual_vec)
 
 
