@@ -13,8 +13,6 @@ The literature-facing validation/figure map is tracked in
 `examples/publication_figures/validation_manifest.json`.
 
 Examples:
-- `magnetic_drifts_publication_figures.py`
-- `er_terms_publication_figures.py`
 - `generate_sfincs_paper_figs.py`
 - `generate_er_trajectory_sweep.py`
 - `generate_autodiff_sensitivity_validation.py`
