@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax.namelist import parse_sfincs_input_text, read_sfincs_input
 
 
 def test_parse_input_namelist_quick_example() -> None:
@@ -22,6 +22,17 @@ def test_parse_input_namelist_quick_example() -> None:
     assert abs(float(physics["DELTA"]) - 4.5694e-3) < 1e-12
     assert physics["INCLUDEXDOTTERM"] is True
     assert physics["INCLUDEPHI1"] is False
+
+
+def test_parse_sfincs_input_text_preserves_embedded_fixture_source_label() -> None:
+    nml = parse_sfincs_input_text(
+        "&physicsParameters\n  RHSMode = 1\n/\n",
+        source_path="tests/fixtures/fortran_v3_reference_fixture.json:case.namelist",
+    )
+
+    assert nml.group("physicsParameters")["RHSMODE"] == 1
+    assert str(nml.source_path) == "tests/fixtures/fortran_v3_reference_fixture.json:case.namelist"
+    assert "RHSMode" in nml.source_text
 
 
 def test_parse_double_quoted_string_and_comment_marker(tmp_path: Path) -> None:
