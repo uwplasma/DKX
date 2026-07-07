@@ -80,7 +80,7 @@ production-resolution input tier:
 
    python scripts/create_production_benchmark_inputs.py --clean
 
-By default this writes ``benchmarks/production_resolution_inputs_2026-05-04``
+By default this writes ``outputs/benchmarks/production_resolution_inputs_2026-05-04``
 from the public SFINCS_JAX example decks only. It enforces at least
 ``25 x 51 x 4 x 100`` (``Ntheta x Nzeta x Nx x Nxi``) on 3D grids and
 ``33 x 1 x 12 x 140`` on tokamak grids. RHSMode=1 PAS/no-``E_r`` tokamak rows
@@ -94,13 +94,12 @@ Additional local decks can be added without changing the public manifest:
 
    python scripts/create_production_benchmark_inputs.py \
      --external-input /path/to/input.namelist \
-     --out-root benchmarks/my_production_inputs \
+     --out-root outputs/benchmarks/my_production_inputs \
      --clean
 
-The default checked-in manifest contains ``39`` example-derived cases and no
-downstream project decks. Historical downstream inputs can still be imported
-with compatibility flags for private reproduction, but they are not part of the
-SFINCS_JAX-owned production benchmark tier.
+The generated manifest is intentionally untracked. Historical downstream inputs
+can still be imported with compatibility flags for private reproduction, but
+they are not part of the SFINCS_JAX-owned production benchmark tier.
 
 The GitHub workflow ``Production Benchmark Inputs`` is manual-only and validates
 this tier without running expensive solves. It regenerates the production input
@@ -117,11 +116,11 @@ The scaled-suite runner also understands these manifest recommendations. When
 .. code-block:: bash
 
    python scripts/run_scaled_example_suite.py \
-     --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs \
+     --examples-root outputs/benchmarks/production_resolution_inputs_2026-05-04/inputs \
      --fortran-exe /path/to/sfincs/fortran/version3/sfincs \
      --fortran-min-runtime-s 10.0 \
      --runtime-adjustment-iters 0 \
-     --out-root benchmarks/production_resolution_cpu_local
+     --out-root outputs/benchmarks/production_resolution_cpu_local
 
 ``--fortran-min-runtime-s`` is a floor. It does not cap valid slower
 production references. Add ``--fortran-max-runtime-s`` only when an explicitly
@@ -209,7 +208,7 @@ the differentiable implicit path only when that is the object of the profile:
    XLA_PYTHON_CLIENT_PREALLOCATE=false \
    SFINCS_JAX_PROFILE=full \
    python scripts/profile_write_output_trace.py \
-     --input benchmarks/production_resolution_inputs_2026-05-04/inputs/tokamak_1species_FPCollisions_withEr_fullTrajectories/input.namelist \
+     --input outputs/benchmarks/production_resolution_inputs_2026-05-04/inputs/tokamak_1species_FPCollisions_withEr_fullTrajectories/input.namelist \
      --trace-dir outputs/profile_tokamak_fp_er \
      --out outputs/profile_tokamak_fp_er/sfincsOutput.h5 \
      --compute-solution \
