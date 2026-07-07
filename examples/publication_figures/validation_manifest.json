@@ -453,7 +453,7 @@
     "source_code": [
       "sfincs_jax/ambipolar.py",
       "sfincs_jax/io.py",
-      "sfincs_jax/validation/figures.py"
+      "sfincs_jax/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_er_scan_and_ambipolar.py",
