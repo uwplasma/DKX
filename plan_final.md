@@ -18,14 +18,14 @@ current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Latest audited code-change head: `141be05b`; last green CI evidence: `96fb2677`.
+- Latest audited code-change head: `3108f352+qi-diagnostics`; last green CI evidence: `96fb2677`.
   Exact aggregate coverage from that CI was 91.753% (`92%`).
 - Package layout is shallow, but the branch is too large: 114 tracked Python
-  source files and about 141.5k tracked source lines. Largest complexity owners remain
+  source files and about 140.9k tracked source lines. Largest complexity owners remain
   `problems/`, `solvers/`, RHSMode-1/QI/preconditioner infrastructure, and
   compatibility layers around those paths.
 - Non-package Python volume is still too high: `tests/` has 313 tracked Python
-  files and about 127.1k lines, `examples/` has 122 tracked Python files, and
+  files and about 126.8k lines, `examples/` has 122 tracked Python files, and
   `scripts/` has 12 tracked Python files.
   Top-level `benchmarks/` is removed from the active tracked tree; compact
   Fortran-v3 references live in `tests/fixtures/fortran_v3_reference_fixture.json`.
@@ -40,9 +40,9 @@ current, transport coefficients, plotting, and optimization.
 
 | Lane | Status | Completion | Definition of done |
 | --- | --- | ---: | --- |
-| Line-by-line audit | Active | 36% | Every retained file/function/line has a core reason, a caller, and a test/doc owner; everything else is extracted or deleted. |
-| Core-main slimming | Active | 51% | Main keeps only stable, parity-clean, runtime-acceptable solvers and public APIs; research code is outside core. |
-| Source simplification | Active | 51% | Package moves toward <=50 source files and <=50k lines, with a 10x reduction as stretch if functionality permits. |
+| Line-by-line audit | Active | 37% | Every retained file/function/line has a core reason, a caller, and a test/doc owner; everything else is extracted or deleted. |
+| Core-main slimming | Active | 52% | Main keeps only stable, parity-clean, runtime-acceptable solvers and public APIs; research code is outside core. |
+| Source simplification | Active | 52% | Package moves toward <=50 source files and <=50k lines, with a 10x reduction as stretch if functionality permits. |
 | Examples/tests/scripts cleanup | Active | 77% | Examples are <=10 curated workflows plus Fortran-v3 references; tests are smaller, organized, and >=95% coverage; scripts are removed or promoted; benchmarks are gone. |
 | Parity/performance evidence | Active | 70% | Supported examples rerun against SFINCS Fortran v3 with runtime/RSS/bootstrap evidence; unsupported research lanes are not marketed. |
 | Docs/readme regeneration | Active | 80% | README/docs describe only the stable core plus explicit external research PR lanes. |
@@ -50,36 +50,27 @@ current, transport coefficients, plotting, and optimization.
 Overall readiness under this stricter core-slim goal is about 81-84%.
 
 ## Concrete Code-Audit Rules
+Default action for every line is removal. Retain a line only with one of three
+proofs: `PHYSICS/NUMERICS` equation or algorithm, `API/SCHEMA` public contract,
+or `EVIDENCE/PERF/AUTODIFF` testable research-grade value. Everything else is
+`OBSOLETE`, `MERGE`, or `RESEARCH` and is deleted or extracted with its imports,
+env vars, tests, docs, fixtures, examples, and diagnostics.
 
-Default action for every line is removal. Retain a line only when it protects a
-stable workflow, physics equation, numerical method, output schema, parity gate,
-runtime/RSS gate, or differentiability workflow. Each retained file needs one
-inventory row with `path`, `kind`, `line_count`, public surface, callers,
-physics/numerics role, tests, docs/examples, runtime role, autodiff role,
-`action`, and a one-sentence justification. Rows missing callers, tests, public
-surface, and runtime role default to `delete`.
-
-For every touched import, constant, helper, branch, dataclass field, env token,
-diagnostic key, test, example, and doc paragraph, answer:
-
-1. Which retained workflow/equation/method/schema needs this?
-2. Which bounded test fails if it is removed?
-3. Is this duplicated elsewhere under a clearer name?
-4. Is it an automatic default or only an experimental/manual knob?
-5. Can it be data/configuration instead of another branch?
-6. Can it move to a research PR without reducing stable parity?
-7. Does it improve runtime, memory, differentiability, or clarity enough to pay
-   for its complexity?
-
-Weak answers to 1, 2, or 7 mean `delete`, `merge`, or `extract-pr`. Lines for an
-extracted feature move as a family: imports, constants, env vars, tests, docs,
-fixtures, examples, and source hooks in the same tranche.
+For each file, run this loop before editing: identify public imports/callers
+with `rg`, classify each top-level object, map it to a retained workflow/test/doc
+row, delete one-call wrappers and dead compatibility, merge duplicate
+dictionaries/policies, then rerun the smallest bounded tests that would fail if
+the removed line mattered. Every import, helper, branch, dataclass field, env
+token, diagnostic key, fixture, test, example, and doc paragraph must answer:
+what needs it; what test proves it; is it duplicate or historical; is it default
+or experiment; can it be data/config; can it move to a research PR; and does it
+improve runtime, memory, differentiability, accuracy, or clarity enough to pay
+rent? Weak answers mean `delete`, `merge`, or `extract-pr`.
 
 ### Mandatory Line-Review Ledger
-
-The review is executed through `tests/fixtures/core_slim_inventory.json`, not
-ad-hoc notes. It must cover every tracked Python file and high-line non-Python
-file affecting docs, examples, CI, packaging, or release artifacts.
+The review uses `tests/fixtures/core_slim_inventory.json`, not ad-hoc notes, and
+covers every tracked Python file plus high-line docs, examples, CI, packaging,
+and release files.
 
 Each row records `path`, `owner_domain`, `public_surface`, `callers`, `proof`,
 `runtime_role`, `autodiff_role`, `decision`, `target`, and one-sentence
@@ -89,12 +80,22 @@ transport_coefficients, ambipolar, outputs, plotting, solver_core,
 solver_research, validation, examples, tests, docs, release_tooling, or delete.
 
 Rows with no public surface, no runtime role, and no focused proof are deleted
-or extracted unless they are private helpers inside one retained equation or
-method block. Env-only routes are extracted unless promoted to documented
-advanced API options with tests and unchanged automatic defaults.
+or extracted unless they are private helpers inside one retained equation block.
+Env-only routes are extracted unless promoted to documented advanced API options
+with tests and unchanged automatic defaults.
+
+### Ordered File Sweep
+Review files in this exact queue: public API/CLI/I/O; namelist/output schemas;
+physics; geometry/discretization; operators; RHSMode-1 policy/x-block paths;
+RHSMode-2/3 transport; sparse primitives/preconditioners; validation; examples/
+scripts; tests; README/docs. Do not skip ahead while the current queue has stale
+research hooks or unowned files.
+
+For each queue, produce a diff that reduces either files, lines, public knobs,
+or duplicated concepts. A queue is rejected if it only moves code to another
+stable file without deleting complexity or clarifying physics/numerics.
 
 ### Per-Line Decision Tags
-
 During each tranche, classify touched lines as `PHYSICS`, `NUMERICS`, `API`,
 `EVIDENCE`, `PERF`, `AUTODIFF`, `COMPAT`, `RESEARCH`, or `OBSOLETE`.
 `RESEARCH` means promising but not stable/parity-clean/runtime-clean; extract.
@@ -105,16 +106,15 @@ failed experiments. `RESEARCH` and `OBSOLETE` tags must not remain in core code
 at review handoff.
 
 ### Complexity-Reduction Heuristics
-
 For every retained function, prefer these before adding logic: inline one-call
 wrappers unless they name an equation/API boundary; replace Boolean clusters
 with one enum/config; delete non-user-visible branches; replace duplicated
 diagnostic dictionaries with one typed builder; keep equations near assembly;
 avoid generic `probe`, `candidate`, `rescue`, and `legacy` modules; collapse
-route selection to one policy table per problem family; use compact data
-fixtures instead of campaign scripts; separate fast CLI-only paths from
-differentiable Python paths when that removes complexity; delete compatibility
-after migration tests prove no retained caller uses it.
+route selection to one policy table per problem family; use compact fixtures
+instead of campaign scripts; split fast CLI-only paths from differentiable
+Python paths only when that removes complexity; delete compatibility after
+migration tests prove no retained caller uses it.
 
 ## Source Structure Rules
 

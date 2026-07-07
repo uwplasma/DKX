@@ -1289,7 +1289,6 @@ class RHS1SubspaceCorrectionDiagnostics:
     angular_residual: bool = False
     seed_initialized: bool | None = None
     setup_s: float | None = None
-    include_qi_basis: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -1312,15 +1311,6 @@ class RHS1PreflightDiagnostics:
     residual_norm: float | None = None
     improvement: float | None = None
     passed: bool | None = None
-
-
-@dataclass(frozen=True)
-class RHS1CachedQICorrectionBasis:
-    """Cached QI basis payload for post residual-equation corrections."""
-
-    vectors: jnp.ndarray | None = None
-    operator_on_basis: jnp.ndarray | None = None
-    labels: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1554,31 +1544,6 @@ def build_profile_response_linear_metadata(
     return metadata
 
 
-def prepare_cached_qi_correction_basis(
-    *,
-    active: bool,
-    include_qi_basis: bool,
-    qi_device_state: object | None,
-) -> RHS1CachedQICorrectionBasis:
-    """Return cached QI basis arrays when a post correction can use them."""
-
-    if not bool(active) or not bool(include_qi_basis) or qi_device_state is None:
-        return RHS1CachedQICorrectionBasis()
-    metadata = getattr(qi_device_state, "metadata", None)
-    if int(getattr(metadata, "rank", 0)) <= 0:
-        return RHS1CachedQICorrectionBasis()
-    basis = getattr(qi_device_state, "basis")
-    basis_metadata = getattr(basis, "metadata")
-    return RHS1CachedQICorrectionBasis(
-        vectors=jnp.asarray(basis.vectors, dtype=jnp.float64),
-        operator_on_basis=jnp.asarray(
-            getattr(qi_device_state, "operator_on_basis"),
-            dtype=jnp.float64,
-        ),
-        labels=tuple(str(label) for label in basis_metadata.accepted_labels),
-    )
-
-
 def build_rhs1_xblock_correction_metadata(
     *,
     probe_coarse: RHS1SubspaceCorrectionDiagnostics,
@@ -1661,9 +1626,6 @@ def build_rhs1_xblock_correction_metadata(
         "xblock_post_residual_equation_angular_residual": bool(
             post_residual_equation.angular_residual
         ),
-        "xblock_post_residual_equation_include_qi_basis": bool(
-            post_residual_equation.include_qi_basis
-        ),
     }
     return metadata
 
@@ -1727,9 +1689,6 @@ def build_rhs1_xblock_correction_metadata_from_solve_state(
             angular_lmax=int(state["post_residual_equation_angular_lmax"]),
             angular_residual=bool(
                 state["post_residual_equation_include_angular_residual"]
-            ),
-            include_qi_basis=bool(
-                state["post_residual_equation_include_qi_basis"]
             ),
         ),
     )

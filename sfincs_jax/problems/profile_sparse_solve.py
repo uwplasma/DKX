@@ -5157,9 +5157,7 @@ _DIAGNOSTIC_EXPORTS = (
     "fp_xblock_highx_residual_correction_metadata", "sparse_rescue_tail_metadata",
     "sparse_xblock_rescue_metadata", "xblock_assembled_operator_diagnostics",
     "xblock_coarse_correction_diagnostics", "xblock_device_krylov_diagnostics",
-    "xblock_qi_deflated_preconditioner_diagnostics",
-    "xblock_qi_seed_preconditioner_diagnostics", "xblock_side_probe_diagnostics",
-    "xblock_sparse_pc_core_diagnostics",
+    "xblock_side_probe_diagnostics", "xblock_sparse_pc_core_diagnostics",
     "xblock_sparse_pc_result_diagnostics_from_solve_state",
 )
 

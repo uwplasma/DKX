@@ -130,7 +130,6 @@ class RHS1SubspaceCorrectionPolicy:
     rcond: float
     min_improvement: float
     include_post_coarse: bool = True
-    include_qi_basis: bool = True
 
 @dataclass(frozen=True)
 class RHS1PostSolveCorrectionPolicy:
@@ -179,7 +178,6 @@ def read_subspace_correction_policy(
     rcond_default: float = 1.0e-12,
     min_improvement_default: float = 0.0,
     include_post_coarse_default: bool = True,
-    include_qi_basis_default: bool = True,
     env: Mapping[str, str] | None = None,
 ) -> RHS1SubspaceCorrectionPolicy:
     """Read a named small-subspace correction policy."""
@@ -249,11 +247,6 @@ def read_subspace_correction_policy(
             default=include_post_coarse_default,
             env=env,
         ),
-        include_qi_basis=read_bool_env(
-            f"{prefix}_INCLUDE_QI_BASIS",
-            default=include_qi_basis_default,
-            env=env,
-        ),
     )
 
 def read_probe_coarse_policy(*, env: Mapping[str, str] | None = None) -> RHS1SubspaceCorrectionPolicy:
@@ -297,7 +290,6 @@ def read_post_residual_equation_policy(
         include_angular_residual_default=True,
         include_raw_default=True,
         include_post_coarse_default=True,
-        include_qi_basis_default=True,
         env=env,
     )
 

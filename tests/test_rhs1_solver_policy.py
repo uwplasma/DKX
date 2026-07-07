@@ -62,7 +62,6 @@ def test_post_residual_equation_policy_reads_opt_in_controls() -> None:
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_ANGULAR_RESIDUAL": "0",
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_RAW": "false",
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_POST_COARSE": "0",
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_QI_BASIS": "no",
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_ALPHA_CLIP": "4.0",
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_RCOND": "1e-10",
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_MIN_IMPROVEMENT": "1e-3",
@@ -78,7 +77,6 @@ def test_post_residual_equation_policy_reads_opt_in_controls() -> None:
     assert policy.include_angular_residual is False
     assert policy.include_raw is False
     assert policy.include_post_coarse is False
-    assert policy.include_qi_basis is False
     assert policy.alpha_clip == 4.0
     assert policy.rcond == 1.0e-10
     assert policy.min_improvement == 1.0e-3

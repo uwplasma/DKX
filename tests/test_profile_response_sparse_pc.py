@@ -3413,7 +3413,6 @@ def _xblock_post_policy(
     post_coarse_steps: int,
     post_residual_steps: int,
     include_post_coarse: bool = True,
-    include_qi_basis: bool = True,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         post_minres=SimpleNamespace(
@@ -3442,7 +3441,6 @@ def _xblock_post_policy(
             include_angular_residual=False,
             include_raw=True,
             include_post_coarse=include_post_coarse,
-            include_qi_basis=include_qi_basis,
             alpha_clip=8.0,
             rcond=1.0e-9,
             min_improvement=0.0,
@@ -3455,14 +3453,6 @@ def test_run_xblock_post_solve_corrections_applies_ordered_stages() -> None:
     direction_kwargs: list[dict[str, object]] = []
     messages: list[tuple[int, str]] = []
     clock = {"t": 0.0}
-    qi_state = SimpleNamespace(
-        metadata=SimpleNamespace(rank=1),
-        basis=SimpleNamespace(
-            vectors=jnp.asarray([[1.0, 0.0]], dtype=jnp.float64),
-            metadata=SimpleNamespace(accepted_labels=("qi0",)),
-        ),
-        operator_on_basis=jnp.asarray([[2.0, 0.0]], dtype=jnp.float64),
-    )
 
     def elapsed_s() -> float:
         clock["t"] += 0.5
@@ -3474,9 +3464,6 @@ def test_run_xblock_post_solve_corrections_applies_ordered_stages() -> None:
 
     def residual_equation_correction(**kwargs):
         calls.append("post_residual_equation")
-        assert kwargs["cached_basis"] is not None
-        assert kwargs["cached_operator_on_basis"] is not None
-        assert kwargs["cached_labels"] == ("qi0",)
         directions = kwargs["direction_builder"](jnp.asarray([1.0, 0.0]))
         assert directions[0][0] == "coarse"
         return (
@@ -3523,7 +3510,6 @@ def test_run_xblock_post_solve_corrections_applies_ordered_stages() -> None:
                 post_coarse_steps=1,
                 post_residual_steps=1,
             ),
-            qi_device_state=qi_state,
             coarse_direction_builder=coarse_direction_builder,
             emit=lambda level, message: messages.append((level, message)),
             elapsed_s=elapsed_s,
@@ -3552,7 +3538,6 @@ def test_run_xblock_post_solve_corrections_applies_ordered_stages() -> None:
     assert any("post-coarse improved" in message for _, message in messages)
 
     state = result.metadata_state()
-    assert state["post_residual_equation_include_qi_basis"] is True
     assert state["post_residual_equation_direction_counts"] == (1,)
     assert state["post_minres_alphas"] == (0.5,)
     assert state["post_coarse_direction_names"] == ("coarse-space",)
@@ -3577,9 +3562,7 @@ def test_run_xblock_post_solve_corrections_preserves_state_when_inactive() -> No
                 post_coarse_steps=0,
                 post_residual_steps=0,
                 include_post_coarse=False,
-                include_qi_basis=False,
             ),
-            qi_device_state=None,
             coarse_direction_builder=lambda residual_vec, **_kwargs: (("raw", residual_vec),),
             emit=None,
             elapsed_s=lambda: 0.0,
@@ -3596,7 +3579,6 @@ def test_run_xblock_post_solve_corrections_preserves_state_when_inactive() -> No
     assert result.post_coarse_direction_counts == ()
     assert result.post_residual_equation_direction_counts == ()
     assert result.post_residual_equation_include_post_coarse is False
-    assert result.post_residual_equation_include_qi_basis is False
 
 
 def test_complete_xblock_post_krylov_stage_emits_completion_and_returns_state() -> None:
@@ -3621,9 +3603,7 @@ def test_complete_xblock_post_krylov_stage_emits_completion_and_returns_state() 
                     post_coarse_steps=0,
                     post_residual_steps=0,
                     include_post_coarse=False,
-                    include_qi_basis=False,
                 ),
-                qi_device_state=None,
                 coarse_direction_builder=lambda residual_vec, **_kwargs: (
                     ("raw", residual_vec),
                 ),
@@ -10688,7 +10668,6 @@ def test_xblock_subspace_correction_accepts_improved_residual() -> None:
     def correction(**kwargs):
         assert kwargs["steps"] == 2
         assert kwargs["max_directions"] == 4
-        assert kwargs["cached_labels"] == ("qi",)
         return (
             jnp.asarray([0.5, 0.5]),
             jnp.asarray([0.1, 0.2]),
@@ -10713,9 +10692,7 @@ def test_xblock_subspace_correction_accepts_improved_residual() -> None:
             emit=lambda _level, msg: messages.append(msg),
             elapsed_s=lambda: next(times),
             correction=correction,
-            correction_kwargs={"cached_labels": ("qi",)},
             correction_label="post-residual-equation",
-            diagnostic_suffix=" cached_qi=1",
         )
     )
 
@@ -10728,7 +10705,6 @@ def test_xblock_subspace_correction_accepts_improved_residual() -> None:
     assert result.solve_s == pytest.approx(0.25)
     assert any(
         "xblock_sparse_pc_gmres post-residual-equation improved" in msg
-        and "cached_qi=1" in msg
         for msg in messages
     )
 
@@ -11891,8 +11867,6 @@ def test_xblock_sparse_pc_final_metadata_state_from_solve_scope_filters_scope() 
     precomputed_metadata = {
         "xblock_assembled_operator_result_metadata": {"assembled": True},
         "xblock_coarse_correction_metadata": {"coarse": True},
-        "xblock_qi_seed_preconditioner_metadata": {"seed": True},
-        "xblock_qi_deflated_preconditioner_metadata": {"deflated": True},
         "xblock_side_probe_metadata": {"side": True},
     }
     scope = {key: object() for key in keys}
@@ -11923,8 +11897,6 @@ def test_xblock_sparse_pc_final_metadata_state_context_matches_solve_scope() -> 
     precomputed_metadata = {
         "xblock_assembled_operator_result_metadata": {"assembled": True},
         "xblock_coarse_correction_metadata": {"coarse": True},
-        "xblock_qi_seed_preconditioner_metadata": {"seed": True},
-        "xblock_qi_deflated_preconditioner_metadata": {"deflated": True},
         "xblock_side_probe_metadata": {"side": True},
     }
     scope = {key: object() for key in keys}

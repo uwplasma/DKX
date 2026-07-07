@@ -16,8 +16,6 @@ from .profile_diagnostics import (
     XBlockSideProbeDiagnosticsContext,
     xblock_assembled_operator_diagnostics,
     xblock_coarse_correction_diagnostics,
-    xblock_qi_deflated_preconditioner_diagnostics,
-    xblock_qi_seed_preconditioner_diagnostics,
     xblock_sparse_pc_result_diagnostics_from_solve_state,
     xblock_side_probe_diagnostics,
 )
@@ -28,7 +26,6 @@ from .profile_policies import (
 )
 from .profile_solver_diagnostics import (
     build_rhs1_xblock_correction_metadata_from_solve_state,
-    prepare_cached_qi_correction_basis,
 )
 from .profile_sparse_finalization import (
     SparsePCGMRESFinalPayload,
@@ -2040,7 +2037,6 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
                         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
                         f"constraint1 moment-Schur seed failed ({type(exc).__name__}: {exc})",
                     )
-        qi_disabled_scope = xblock_disabled_qi_diagnostic_scope()
         xblock_side_probe_controls = _rhs1_xblock_policy.rhs1_xblock_side_probe_controls_from_env(
             env=os.environ,
             explicit_side_env_value=side_env,
@@ -2369,7 +2365,6 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
                     preconditioner=precond_xblock_krylov,
                     precondition_side=str(precondition_side),
                     post_solve_policy=_read_rhs1_post_solve_correction_policy(),
-                    qi_device_state=None,
                     coarse_direction_builder=_xblock_coarse_direction_builder,
                     emit=emit,
                     elapsed_s=sparse_timer.elapsed_s,
@@ -2391,7 +2386,7 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
         x_np = np.asarray(post_completion.x, dtype=np.float64)
         residual_norm_xblock_pc = float(post_completion.residual_norm)
         solve_s = float(post_completion.solve_s)
-        xblock_final_solve_state = {**qi_disabled_scope, **locals()}
+        xblock_final_solve_state = dict(locals())
         xblock_final_metadata_state = (
             xblock_sparse_pc_final_metadata_state_from_solve_scope(
                 xblock_final_solve_state
@@ -4338,8 +4333,6 @@ _XBLOCK_SPARSE_PC_FINAL_METADATA_DEVICE_STATE_KEYS = (
 _XBLOCK_SPARSE_PC_FINAL_METADATA_PRECOMPUTED_KEYS = (
     "xblock_assembled_operator_result_metadata",
     "xblock_coarse_correction_metadata",
-    "xblock_qi_seed_preconditioner_metadata",
-    "xblock_qi_deflated_preconditioner_metadata",
     "xblock_side_probe_metadata",
 )
 
@@ -4354,55 +4347,6 @@ _XBLOCK_SPARSE_PC_FINAL_METADATA_SCOPE_KEYS = _unique_state_keys(
     _XBLOCK_SPARSE_PC_FINAL_METADATA_NESTED_STATE_KEYS,
     _XBLOCK_SPARSE_PC_FINAL_METADATA_PREFLIGHT_STATE_KEYS,
 )
-
-def _disabled_qi_diagnostic_value(key: str) -> object:
-    """Return a schema-compatible disabled value for extracted QI diagnostics."""
-
-    if key.endswith(("_metadata", "_stats")):
-        return {}
-    if key.endswith(("_labels", "_shape", "_basis")):
-        return ()
-    if key.endswith(
-        (
-            "_rank",
-            "_count",
-            "_candidates",
-            "_max_candidates",
-            "_max_angular_mode",
-            "_max_extra",
-            "_steps",
-        )
-    ):
-        return 0
-    if key.endswith("_coarse_solver") or key.endswith("_selected_index"):
-        return None
-    if key.endswith(("_reason", "_mode", "_basis_kind")):
-        return "disabled_extracted_research_path"
-    if key.endswith(
-        (
-            "_enabled",
-            "_built",
-            "_used",
-            "_requested",
-            "_reused_from_seed",
-            "_augmented",
-            "_probe_reduced",
-            "_use_in_krylov",
-            "_used_in_krylov",
-            "_include_residuals",
-        )
-    ):
-        return False
-    return 0.0
-
-def xblock_disabled_qi_diagnostic_scope() -> dict[str, object]:
-    """Return disabled QI metadata defaults for the stable core x-block path."""
-
-    return {
-        key: _disabled_qi_diagnostic_value(key)
-        for key in _XBLOCK_SPARSE_PC_FINAL_METADATA_SCOPE_KEYS
-        if key.startswith("qi_")
-    }
 
 @dataclass(frozen=True)
 class XBlockSparsePCFinalCoreState:
@@ -4441,7 +4385,7 @@ class XBlockSparsePCFinalCoreState:
 
 @dataclass(frozen=True)
 class XBlockSparsePCFinalDeviceState:
-    """Device, QI, and global-coupling state for x-block diagnostics."""
+    """Device and global-coupling state for x-block diagnostics."""
 
     assembled_operator_built: object
     assembled_operator_device_resident: object
@@ -4485,8 +4429,6 @@ class XBlockSparsePCFinalNestedMetadata:
 
     xblock_assembled_operator_result_metadata: object
     xblock_coarse_correction_metadata: object
-    xblock_qi_seed_preconditioner_metadata: object
-    xblock_qi_deflated_preconditioner_metadata: object
     xblock_side_probe_metadata: object
 
 @dataclass(frozen=True)
@@ -4585,16 +4527,6 @@ def xblock_sparse_pc_final_metadata_state_from_solve_scope(
             scope,
             "xblock_coarse_correction_metadata",
             xblock_coarse_correction_diagnostics,
-        ),
-        xblock_qi_seed_preconditioner_metadata=_xblock_metadata_or_compute(
-            scope,
-            "xblock_qi_seed_preconditioner_metadata",
-            xblock_qi_seed_preconditioner_diagnostics,
-        ),
-        xblock_qi_deflated_preconditioner_metadata=_xblock_metadata_or_compute(
-            scope,
-            "xblock_qi_deflated_preconditioner_metadata",
-            xblock_qi_deflated_preconditioner_diagnostics,
         ),
         xblock_side_probe_metadata=_xblock_metadata_or_compute(
             scope,
@@ -6432,7 +6364,6 @@ class XBlockPostSolveCorrectionContext:
     preconditioner: ArrayFn
     precondition_side: str
     post_solve_policy: object
-    qi_device_state: object | None
     coarse_direction_builder: Callable[..., tuple[tuple[str, jnp.ndarray], ...]]
     emit: EmitFn | None
     elapsed_s: Callable[[], float]
@@ -6483,7 +6414,6 @@ class XBlockPostSolveCorrectionResult:
     post_residual_equation_include_angular_residual: bool
     post_residual_equation_include_raw: bool
     post_residual_equation_include_post_coarse: bool
-    post_residual_equation_include_qi_basis: bool
     post_residual_equation_alpha_clip: float
     post_residual_equation_rcond: float
     post_residual_equation_min_improvement: float
@@ -6655,9 +6585,6 @@ def run_xblock_post_solve_corrections(
     post_residual_equation_include_post_coarse = bool(
         post_residual_policy.include_post_coarse
     )
-    post_residual_equation_include_qi_basis = bool(
-        post_residual_policy.include_qi_basis
-    )
     post_residual_equation_alpha_clip = float(post_residual_policy.alpha_clip)
     post_residual_equation_rcond = float(post_residual_policy.rcond)
     post_residual_equation_min_improvement = float(
@@ -6685,16 +6612,6 @@ def run_xblock_post_solve_corrections(
             ),
         )
 
-    post_residual_equation_active = (
-        post_residual_equation_steps_requested > 0
-        and np.isfinite(float(residual_norm))
-        and float(residual_norm) > float(context.target)
-    )
-    cached_qi_basis = prepare_cached_qi_correction_basis(
-        active=bool(post_residual_equation_active),
-        include_qi_basis=bool(post_residual_equation_include_qi_basis),
-        qi_device_state=context.qi_device_state,
-    )
     post_residual_equation = apply_xblock_subspace_correction_if_needed(
         XBlockSubspaceCorrectionContext(
             matvec=context.matvec,
@@ -6711,14 +6628,8 @@ def run_xblock_post_solve_corrections(
             emit=context.emit,
             elapsed_s=context.elapsed_s,
             correction=context.residual_equation_correction,
-            correction_kwargs={
-                "cached_basis": cached_qi_basis.vectors,
-                "cached_operator_on_basis": cached_qi_basis.operator_on_basis,
-                "cached_labels": cached_qi_basis.labels,
-            },
             solver_label="xblock_sparse_pc_gmres",
             correction_label="post-residual-equation",
-            diagnostic_suffix=f" cached_qi={int(cached_qi_basis.vectors is not None)}",
         )
     )
     x_np = np.asarray(post_residual_equation.x, dtype=np.float64)
@@ -6839,9 +6750,6 @@ def run_xblock_post_solve_corrections(
         ),
         post_residual_equation_include_post_coarse=bool(
             post_residual_equation_include_post_coarse
-        ),
-        post_residual_equation_include_qi_basis=bool(
-            post_residual_equation_include_qi_basis
         ),
         post_residual_equation_alpha_clip=float(post_residual_equation_alpha_clip),
         post_residual_equation_rcond=float(post_residual_equation_rcond),

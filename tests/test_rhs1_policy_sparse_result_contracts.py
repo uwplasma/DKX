@@ -130,7 +130,6 @@ def test_rhs1_policy_dataclasses_capture_solver_routing_contracts() -> None:
 
     assert post_minres.steps_requested == 2
     assert subspace.include_post_coarse is True
-    assert subspace.include_qi_basis is True
     assert active_auto.skipped_large_fallbacks == ("active_diag_schur",)
     assert petsc_compat.restart == 80
     assert policy_setup.ordering is ordering

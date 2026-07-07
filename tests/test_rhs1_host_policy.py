@@ -120,7 +120,6 @@ def test_post_solve_correction_policy_readers_are_bounded_and_namespaced() -> No
     assert probe.rcond == 1.0e-9
     assert probe.min_improvement == 0.02
     assert not probe.include_post_coarse
-    assert not probe.include_qi_basis
 
 
 def test_post_solve_correction_policy_defaults_and_disabled_steps() -> None:

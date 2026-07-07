@@ -61,14 +61,13 @@ def test_rhs1_xblock_correction_metadata_preserves_historical_keys() -> None:
         post_residual_equation=RHS1SubspaceCorrectionDiagnostics(
             steps_requested=1,
             direction_counts=(5, 6),
-            direction_names=("qi", "residual"),
+            direction_names=("fsavg", "residual"),
             residual_before=0.8,
             residual_after=0.3,
             history=(0.6, 0.3),
             fsavg_lmax=4,
             angular_lmax=3,
             angular_residual=True,
-            include_qi_basis=True,
         ),
     )
 
@@ -119,13 +118,12 @@ def test_rhs1_xblock_correction_metadata_preserves_historical_keys() -> None:
     assert metadata["xblock_post_residual_equation_history"] == (0.6, 0.3)
     assert metadata["xblock_post_residual_equation_direction_counts"] == (5, 6)
     assert metadata["xblock_post_residual_equation_direction_names"] == (
-        "qi",
+        "fsavg",
         "residual",
     )
     assert metadata["xblock_post_residual_equation_fsavg_lmax"] == 4
     assert metadata["xblock_post_residual_equation_angular_lmax"] == 3
     assert metadata["xblock_post_residual_equation_angular_residual"] is True
-    assert metadata["xblock_post_residual_equation_include_qi_basis"] is True
 
 
 def test_rhs1_xblock_correction_metadata_defaults_are_output_safe() -> None:
@@ -148,7 +146,6 @@ def test_rhs1_xblock_correction_metadata_defaults_are_output_safe() -> None:
     assert metadata["xblock_post_minres_alphas"] == ()
     assert metadata["xblock_post_coarse_direction_names"] == ()
     assert metadata["xblock_post_residual_equation_direction_count"] == 0
-    assert metadata["xblock_post_residual_equation_include_qi_basis"] is False
 
 
 def test_profile_response_linear_metadata_merges_parts_without_acceptance() -> None:
@@ -222,14 +219,13 @@ def test_rhs1_xblock_correction_metadata_from_solve_state_matches_typed_builder(
         "post_coarse_include_angular_residual": False,
         "post_residual_equation_steps_requested": 1,
         "post_residual_equation_direction_counts": (5, 6),
-        "post_residual_equation_direction_names": ("qi", "residual"),
+        "post_residual_equation_direction_names": ("fsavg", "residual"),
         "post_residual_equation_residual_before": 0.8,
         "post_residual_equation_residual_after": 0.3,
         "post_residual_equation_history": (0.6, 0.3),
         "post_residual_equation_fsavg_lmax": 4,
         "post_residual_equation_angular_lmax": 3,
         "post_residual_equation_include_angular_residual": True,
-        "post_residual_equation_include_qi_basis": True,
     }
     expected = build_rhs1_xblock_correction_metadata(
         probe_coarse=RHS1SubspaceCorrectionDiagnostics(
@@ -273,14 +269,13 @@ def test_rhs1_xblock_correction_metadata_from_solve_state_matches_typed_builder(
         post_residual_equation=RHS1SubspaceCorrectionDiagnostics(
             steps_requested=1,
             direction_counts=(5, 6),
-            direction_names=("qi", "residual"),
+            direction_names=("fsavg", "residual"),
             residual_before=0.8,
             residual_after=0.3,
             history=(0.6, 0.3),
             fsavg_lmax=4,
             angular_lmax=3,
             angular_residual=True,
-            include_qi_basis=True,
         ),
     )
 
