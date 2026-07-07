@@ -85,8 +85,7 @@
       "profile_magnetic_drifts.py",
       "profile_reduced_tail.py",
       "profile_sparse_pattern.py",
-      "profile_system.py",
-      "profile_true_operator_rescue.py"
+      "profile_system.py"
     ],
     "outputs": [
       "formats.py",
