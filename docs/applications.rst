@@ -76,8 +76,7 @@ problem structure.
 Examples:
 
 - ``examples/performance/benchmark_transport_parallel_scaling.py``
-- ``examples/performance/benchmark_multi_gpu_case_throughput.py``
-- ``examples/performance/benchmark_sharded_solve_scaling.py``
+- ``examples/performance/benchmark_transport_parallel_scaling.py``
 
 Plotting and postprocessing
 ---------------------------

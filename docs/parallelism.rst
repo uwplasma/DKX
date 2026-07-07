@@ -286,34 +286,15 @@ allocator/timeout semantics without launching SFINCS solves:
      --global-warmup 1 \
      --plan-only
 
-   python examples/performance/benchmark_sharded_solve_scaling.py \
-     --backend cpu \
-     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
-     --devices 1 2 4 \
-     --inner-warmup-solves 1 \
-     --sample-timeout-s 300 \
-     --rhs1-precond theta_schwarz \
-     --schwarz-coarse-levels 2 \
-     --plan-only
-
-   python examples/performance/benchmark_multi_gpu_case_throughput.py \
-     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
-     --nsolve 4 \
-     --rhs1-precond theta_schwarz \
-     --schwarz-coarse-levels 2 \
-     --plan-only
-
-   python examples/performance/benchmark_sharded_matvec_scaling.py \
-     --input examples/performance/transport_parallel_sharded.input.namelist \
-     --axis theta \
-     --pad \
-     --devices 1 2 4 \
-     --plan-only
-
 Plan JSON files are written under the selected ``--out-dir`` unless
 ``--plan-json`` is supplied. The artifacts are intentionally marked
 ``launches_solves=false``. They are not performance results; they are executable
 contracts for the benchmark run that will follow.
+
+Single-case sharded solve and one-GPU-per-case throughput campaign drivers are
+preserved on the ``research/parallel-performance`` branch. They are not stable
+example commands until they satisfy production-grid residual, runtime, memory,
+and documentation gates.
 
 Gate semantics are explicit in the plans:
 
@@ -565,17 +546,9 @@ For the same operator (`transport_parallel_xxlarge`), enabling sparse derivative
 kernels reduced single-device matvec time from ``7.49e-4 s`` to ``5.87e-4 s``
 (about ``1.28x`` faster, cache-warm).
 
-Reproduce:
-
-.. code-block:: bash
-
-   SFINCS_JAX_PERIODIC_STENCIL=0 python examples/performance/benchmark_sharded_matvec_scaling.py \
-     --input examples/performance/transport_parallel_xxlarge.input.namelist \
-     --axis theta --devices 1 --nrep 100 --repeats 3 --global-warmup 1
-
-   SFINCS_JAX_PERIODIC_STENCIL=1 python examples/performance/benchmark_sharded_matvec_scaling.py \
-     --input examples/performance/transport_parallel_xxlarge.input.namelist \
-     --axis theta --devices 1 --nrep 100 --repeats 3 --global-warmup 1
+The sharded matvec drivers that produced this historical figure live on the
+``research/parallel-performance`` branch. The stable example tree keeps the
+transport-worker benchmark as the supported parallel throughput entry point.
 
 .. figure:: _static/figures/parallel/transport_sharded_matvec_scaling.png
    :alt: Sharded matvec scaling on Macbook M3 Max
@@ -624,50 +597,16 @@ Notes:
   only and is not enabled by default.
 - Latest measurement (Macbook M3 Max, 4 devices, theta axis): 0.679 s per call.
 
-Reproduce:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_sharded_matvec_scaling.py \
-     --input examples/performance/transport_parallel_sharded.input.namelist \
-     --axis theta \
-     --pad \
-     --devices 1 2 3 4 5 6 7 8 \
-     --repeats 1 \
-     --nrep 2000 \
-     --global-warmup 1
-
-   python examples/performance/benchmark_sharded_matvec_scaling.py \
-     --input examples/performance/transport_parallel_sharded.input.namelist \
-     --axis x \
-     --pad \
-     --devices 1 2 3 4 5 6 7 8 \
-     --repeats 1 \
-     --nrep 2000 \
-     --global-warmup 1
+The reproduction scripts for these historical sharded matvec measurements are
+kept with the extracted parallel-performance research lane.
 
 Sharded solve scaling (single RHSMode=1)
 ----------------------------------------
 
-We also benchmarked a **single RHSMode=1 solve** with theta-sharded matvecs:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_sharded_solve_scaling.py \
-     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
-     --devices 1 2 3 4 \
-     --warmup 0 \
-     --repeats 1 \
-     --global-warmup 0 \
-     --nsolve 240 \
-     --inner-warmup-solves 1 \
-     --sample-timeout-s 300 \
-     --shard-axis theta \
-     --gmres-distributed 1 \
-     --distributed-krylov auto
-
-Input: `examples/performance/rhsmode1_sharded_scaling.input.namelist`
-(``Ntheta=30, Nzeta=10, Nxi=12, NL=8, Nx=12``).
+We also benchmarked a **single RHSMode=1 solve** with theta-sharded matvecs.
+The driver and input deck are preserved on ``research/parallel-performance``,
+not in the stable example tree, because this lane is not a release-facing
+strong-scaling feature.
 
 Historical long-run measurement (Macbook M3 Max, ``nsolve=240``, baseline >2 min):
 
@@ -683,24 +622,8 @@ and ``--sample-timeout-s`` to keep cold XLA setup bounded. Pre-audit sharded
 timings are retained only as regression context and should be regenerated before
 publication claims.
 
-For A/B comparison against distributed GMRES on the same setup, run:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_sharded_solve_scaling.py \
-     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
-     --devices 1 2 3 4 \
-     --warmup 0 \
-     --repeats 1 \
-     --global-warmup 0 \
-     --nsolve 240 \
-     --inner-warmup-solves 1 \
-     --sample-timeout-s 300 \
-     --shard-axis theta \
-     --gmres-distributed 1 \
-     --distributed-krylov gmres
-
-In A/B runs, ``distributed_krylov=auto`` remains the best default on this host.
+In historical A/B runs, ``distributed_krylov=auto`` remained the best default
+on this host.
 
 This confirms that the sharded execution path can run deterministically under
 controlled conditions, but it is **not** a release-facing strong-scaling claim.
@@ -1035,8 +958,8 @@ measurements. Treat single-case sharded entries as non-publication snapshots
 until they are regenerated with the audited child-option propagation,
 ``--inner-warmup-solves``, and ``--sample-timeout-s`` controls:
 
-- Local CPU sharded RHSMode=1 benchmark on
-  ``examples/performance/rhsmode1_sharded_scaling.input.namelist``:
+- Local CPU sharded RHSMode=1 benchmark on the extracted
+  ``research/parallel-performance`` input:
 
   - `1` device: `3.99 s`
   - `2` devices: `3.56 s`
@@ -1067,15 +990,15 @@ until they are regenerated with the audited child-option propagation,
   - measured speedup: `1.48x`
   - finite-task ideal for this 3-RHS case: `1.50x`
 
-- Office workstation GPU sharded RHSMode=1 benchmark on the medium-large input
-  ``examples/performance/rhsmode1_sharded_scaling.input.namelist``:
+- Office workstation GPU sharded RHSMode=1 benchmark on the extracted
+  medium-large input:
 
   - older stable snapshot: `1` GPU `44.91 s`, `2` GPUs `67.48 s`
   - fresh current-tip rerun with bounded multilevel Schwarz and distributed GMRES:
     `1` GPU `56.70 s`, `2` GPUs `169.36 s`
 
-- Office workstation GPU sharded RHSMode=1 benchmark on the larger input
-  ``examples/performance/rhsmode1_sharded.input.namelist``:
+- Office workstation GPU sharded RHSMode=1 benchmark on the extracted larger
+  input:
 
   - `1` GPU: `16.58 s`
   - unbounded PAS-TZ allocation would require about `155 GiB`
@@ -1097,17 +1020,9 @@ These results support the deployment recommendation:
 Two-GPU throughput rerun
 ------------------------
 
-A practical production-style GPU lane on office compares
-two sequential one-GPU runs against two concurrent one-GPU runs on the same
-2-GPU workstation, using:
-
-.. code-block:: bash
-
-   PYTHONPATH=. python examples/performance/benchmark_multi_gpu_case_throughput.py \
-     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
-     --nsolve 4 \
-     --rhs1-precond theta_schwarz \
-     --schwarz-coarse-levels 2
+A practical research-lane GPU audit on office compared two sequential one-GPU
+runs against two concurrent one-GPU runs on the same 2-GPU workstation using the
+extracted throughput driver.
 
 The measured result is below ideal:
 
@@ -1191,9 +1106,8 @@ Sharded-solve patch-width policy
 --------------------------------
 
 The RHSMode=1 theta/zeta Schwarz auto path does not clamp the local
-patch width to a single sharded slice. On the measured CPU benchmark
-``examples/performance/rhsmode1_sharded_scaling.input.namelist``, a single-slice
-rule
+patch width to a single sharded slice. On the extracted measured CPU benchmark,
+a single-slice rule
 caused an 8-device collapse because the additive-Schwarz patches became too
 small to capture cross-shard angular coupling. The auto rule grows each
 patch to roughly one local shard plus one DOF-target angular span, which keeps
@@ -1224,32 +1138,9 @@ preconditioner as a residual correction; on 8-device runs, a second still-wider
 correction level can be enabled automatically. This improves the worst
 high-device fragmentation cases without changing the operator or output parity.
 
-The sharded solve benchmark driver also supports explicit backend
+The extracted sharded solve benchmark driver supports explicit backend
 selection, hot-solve timing, bounded child-process samples, and an optional
-deterministic output probe:
-
-.. code-block:: bash
-
-   # CPU host-sharded benchmark
-   python examples/performance/benchmark_sharded_solve_scaling.py \
-     --backend cpu \
-     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
-     --devices 1 2 4 8 \
-     --inner-warmup-solves 1 \
-     --sample-timeout-s 300 \
-     --rhs1-precond theta_schwarz \
-     --schwarz-coarse-levels 2
-
-   # One-node GPU benchmark
-   PYTHONPATH=. python examples/performance/benchmark_sharded_solve_scaling.py \
-     --backend gpu \
-     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
-     --devices 1 2 \
-     --inner-warmup-solves 1 \
-     --sample-timeout-s 300 \
-     --rhs1-precond theta_schwarz \
-     --schwarz-coarse-levels 2 \
-     --deterministic-output-probe
+deterministic output probe.
 
 For the GPU benchmark path, the runner uses ``CUDA_VISIBLE_DEVICES`` and
 disables JAX preallocation by default in the subprocess. It also enables the

@@ -1,9 +1,9 @@
 # Performance Examples
 
-This folder contains benchmark drivers for JIT compilation, memory behavior,
-output formats, CPU parallelism, GPU execution, and transport-worker scaling.
-Start with the small format and JIT benchmarks, then move to the sharding or
-production-floor scripts when you need release evidence.
+This folder contains stable benchmark drivers for JIT compilation, memory
+behavior, output formats, CPU parallelism, GPU execution, and transport-worker
+scaling. Start with the small format and JIT benchmarks, then move to the
+transport-worker or production-floor scripts when you need release evidence.
 
 ## Where To Start
 
@@ -20,14 +20,11 @@ production-floor scripts when you need release evidence.
 - `benchmark_transport_parallel_scaling.py`: benchmark transport-worker scaling
   on CPU or GPU (`--backend cpu|gpu`). The multi-GPU transport-worker path uses
   `--backend gpu` on `transport_parallel_2min.input.namelist`.
-- `benchmark_sharded_solve_scaling.py`: benchmark single-case CPU/GPU sharded
-  RHSMode=1 solves. For hot-solve scaling checks, use
-  `--inner-warmup-solves 1 --sample-timeout-s 300 --rhs1-precond theta_schwarz
-  --schwarz-coarse-levels 2`; add `--deterministic-output-probe` to record a
-  bounded 1-vs-N residual/digest gate.
-- `benchmark_multi_gpu_case_throughput.py`: benchmark one-GPU-per-case
-  throughput by comparing sequential one-GPU execution with concurrent runs on
-  a two-GPU node.
+
+Single-case sharded RHSMode=1 and one-GPU-per-case throughput campaign drivers
+are research-lane material, not stable examples. They are preserved outside the
+stable core until they have production-grid accuracy, runtime, memory, and
+documentation gates.
 
 ## Solver And Ecosystem Benchmarks
 

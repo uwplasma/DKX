@@ -226,15 +226,15 @@
         },
         {
           "claim": "Single-case sharded-solve benchmark now has a plan-only mode that records timeout, backend, sharding, and non-release scaling semantics before launching expensive samples.",
-          "path": "examples/performance/benchmark_sharded_solve_scaling.py"
+          "path": "docs/research_lanes.rst"
         },
         {
           "claim": "Multi-GPU case-throughput benchmark now has a plan-only mode that records warmup, sequential one-GPU, and parallel two-GPU child process plans before launching GPU work.",
-          "path": "examples/performance/benchmark_multi_gpu_case_throughput.py"
+          "path": "docs/research_lanes.rst"
         },
         {
           "claim": "Sharded matvec benchmark now records deterministic plan-only metadata for device counts, padding, compiled-hot-loop timing, and memory-gate semantics.",
-          "path": "examples/performance/benchmark_sharded_matvec_scaling.py"
+          "path": "docs/research_lanes.rst"
         },
         {
           "claim": "New tests validate capped worker plans, cold-start rejection semantics, and GPU worker schedule coalescing.",
@@ -242,11 +242,11 @@
         },
         {
           "claim": "New tests keep multi-GPU throughput plans non-release and verify the internal sharded-solve command contract.",
-          "path": "tests/test_benchmark_multi_gpu_case_throughput.py"
+          "path": "docs/research_lanes.rst"
         },
         {
           "claim": "New tests validate single-case sharded plan JSON and ensure it remains an experimental non-release claim.",
-          "path": "tests/test_benchmark_sharded_solve_scaling.py"
+          "path": "docs/research_lanes.rst"
         },
         {
           "claim": "Release-facing GPU transport-worker throughput figure is checked in.",
@@ -302,7 +302,7 @@
         },
         {
           "claim": "Single-case sharded solve benchmark can now run a deterministic 1-vs-N output probe that writes solution-vector digests, relative L2 difference, evidence source, and vector paths before any scaling promotion.",
-          "path": "examples/performance/benchmark_sharded_solve_scaling.py"
+          "path": "docs/research_lanes.rst"
         },
         {
           "claim": "Dry-run 1-vs-2 GPU sharded-solve artifact records operator_reuse_gate.passes=true, deterministic_output_gate.passes=false with plan_only_probe_requested evidence, and release_scaling_supported=false because office was dirty/outdated.",
