@@ -84,7 +84,7 @@ REQUIRED_CORE_SLIM_SOURCE_OWNERS = {
     "sfincs_jax/problems/profile_sparse_direct.py",
     "sfincs_jax/problems/transport_parallel_runtime.py",
     "sfincs_jax/problems/profile_dense.py",
-    "sfincs_jax/solver.py",
+    "sfincs_jax/solvers/krylov.py",
     "sfincs_jax/outputs/rhsmode1.py",
     "sfincs_jax/validation/artifacts.py",
 }
