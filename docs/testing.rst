@@ -432,7 +432,6 @@ bounded solve-facing evidence. The primitive and objective tests are:
 - ``tests/test_mapped_xgrid_objectives.py``
 - ``tests/test_mapped_xgrid_v3.py``
 - ``tests/test_mapped_xgrid_transport_evidence.py``
-- ``tests/test_run_mapped_xgrid_transport_evidence.py``
 
 The checked reviewer artifacts are bounded PAS RHSMode=2 comparisons, not default
 production claims:
