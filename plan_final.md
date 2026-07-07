@@ -46,205 +46,95 @@ current, transport coefficients, plotting, and optimization.
 
 Overall readiness under this stricter core-slim goal is about 78-82%.
 
-## Source Structure Rules
-
-- A retained line must satisfy at least one audited reason: public API, physics
-  equation, numerical method, validated default solver path, I/O schema,
-  plotting path, differentiability path, compatibility facade, or
-  test/validation support. "May be useful later" is not a core reason.
-- A retained function must have a caller or documented public import, a bounded
-  test, and a clear physics/numerics/output role. Otherwise extract or delete.
-  Helpers used once are inlined unless their name teaches a domain concept.
-- Core defaults must be automatic: users should not need environment variables
-  or solver-path knowledge for supported examples.
-- Experimental QI, unfinished device-QI, native sparse-direct replacements,
-  unpromoted preconditioners, profiling/probe-only routes, long benchmark
-  campaigns, and historical audits move to research PR branches before removal
-  if they have research value. Dead code is deleted directly.
-- Root modules remain public API/CLI/I/O/plotting/comparison/sensitivity/
-  ambipolar/grids/namelist/paths/profiling/solver facades. Implementation stays
-  in one-level domain folders: `discretization/`, `geometry/`, `operators/`,
-  `outputs/`, `physics/`, `problems/`, `solvers/`, `validation/`, `workflows/`.
-- Each tranche must reduce net files or net lines unless it adds a required
-  public feature, accuracy gate, or performance gate.
-- Experimental lines/functions are preserved only by moving them to named
-  research PR branches before deletion. Obsolete duplicated code is deleted.
-
-## Line Audit Protocol
-
-For every touched file, classify code in this order before editing. The
-inventory row is the decision record; code without a row is not review-ready.
-
-1. Public surface: keep only imports/classes/functions documented in README,
-   API docs, examples, or compatibility tests.
-2. Physics/numerics: keep equations, operator assembly, quadrature, collision,
-   drift, solve, and diagnostic code only when tied to a retained model and a
-   bounded accuracy/residual/parity test.
-3. Runtime-critical implementation: keep only paths used by automatic defaults
-   or a documented advanced option that passes runtime/RSS gates.
-4. Differentiability: keep JAX-native code needed for supported JVP/VJP,
-   implicit sensitivity, optimization, and ambipolar derivative workflows.
-5. Compatibility: keep thin aliases only if migration tests require them; no
-   compatibility file may own new logic.
-6. Experimental/research/profiling/history: extract to a preservation branch or
-   delete from core; do not leave dormant imports, env-only routes, unused
-   policy branches, or "temporary" fallbacks in stable modules.
-
 ## Concrete Code-Audit Rules
 
-The refactor is not a file-shuffle exercise. Each tranche must prove that the
-remaining code is necessary, simpler, and still accurate. Apply these rules to
-every source, test, example, script, and documentation file.
+Default action for every line is removal. Retain a line only when it protects a
+stable workflow, physics equation, numerical method, output schema, parity gate,
+runtime/RSS gate, or differentiability workflow. Each retained file needs one
+inventory row with `path`, `kind`, `line_count`, public surface, callers,
+physics/numerics role, tests, docs/examples, runtime role, autodiff role,
+`action`, and a one-sentence justification. Rows missing callers, tests, public
+surface, and runtime role default to `delete`.
 
-### Required Inventory Columns
+For every touched import, constant, helper, branch, dataclass field, env token,
+diagnostic key, test, example, and doc paragraph, answer:
 
-Every retained or removed file must have one row in the checked inventory with:
+1. Which retained workflow/equation/method/schema needs this?
+2. Which bounded test fails if it is removed?
+3. Is this duplicated elsewhere under a clearer name?
+4. Is it an automatic default or only an experimental/manual knob?
+5. Can it be data/configuration instead of another branch?
+6. Can it move to a research PR without reducing stable parity?
+7. Does it improve runtime, memory, differentiability, or clarity enough to pay
+   for its complexity?
 
-- `path`: current repository path.
-- `kind`: `source`, `test`, `example`, `script`, `docs`, `fixture`, or
-  `generated-artifact`.
-- `line_count`: current physical lines.
-- `public_surface`: documented import, CLI command, example entry point, or
-  `none`.
-- `callers`: internal callers found by import/call search, or `none`.
-- `physics_or_numerics`: the equation, model, discretization, solver,
-  diagnostic, or output contract owned by the file, or `none`.
-- `tests`: bounded tests that fail if the file is wrong, or `missing`.
-- `docs_examples`: README/docs/example references, or `none`.
-- `runtime_role`: `default`, `advanced`, `validation-only`, `research-only`,
-  or `none`.
-- `autodiff_role`: `primal`, `jvp`, `vjp`, `implicit`, `custom-rule`, or
-  `none`.
-- `action`: `keep`, `merge`, `thin-compat`, `extract-pr`, or `delete`.
-- `justification`: one sentence explaining why this exact action is the
-  simplest safe choice.
+Weak answers to 1, 2, or 7 mean `delete`, `merge`, or `extract-pr`. Lines for an
+extracted feature move as a family: imports, constants, env vars, tests, docs,
+fixtures, examples, and source hooks in the same tranche.
 
-Rows with `tests=missing`, `callers=none`, `public_surface=none`, and
-`runtime_role=none` default to `delete` unless they are small fixtures required
-by another retained test.
+## Source Structure Rules
 
-### Per-Line Keep/Delete Questions
+Package root remains public API/CLI/I/O/plotting/namelist/paths/solver facades
+plus `README.md`. Implementation stays in one-level domain packages:
+`discretization`, `geometry`, `operators`, `outputs`, `physics`, `problems`,
+`solvers`, `validation`, and `workflows`. Avoid stable names based on historical
+details (`v3_`, broad `rhs1_`, `probe`, `campaign`, `qi_*`) unless they are thin
+compatibility facades with no logic.
 
-When touching a file, each import, constant, helper, branch, dataclass field,
-environment variable, diagnostic key, and compatibility alias must answer:
+Non-package targets:
 
-1. What retained user workflow, physics equation, numerical method, or output
-   schema needs this line?
-2. What test would fail if this line were removed or simplified?
-3. Is the same behavior already implemented elsewhere under a clearer name?
-4. Is this an automatic default path, or only an experimental/manual knob?
-5. Can this be expressed as data/configuration instead of another branch?
-6. Can this line be moved to a research branch without reducing stable parity?
-7. Does it help runtime, memory, differentiability, or clarity enough to pay for
-   its complexity?
+- `examples/`: original Fortran-v3 references plus <=10 curated workflows: CLI
+  run/plot, Python solve, geometry loading, transport coefficients, ambipolar
+  solve, autodiff, bootstrap/Redl, optimization, output/plotting, frozen parity.
+- `tests/`: grouped into unit, physics, regression, cli_io, optional
+  integration, and fixtures; fewer files, less scaffolding, >=95% coverage.
+- `scripts/`: zero by default; user commands become examples, validators become
+  tests, and release-maintenance commands need docs and tests.
+- `benchmarks/`: absent; benchmark claims use compact fixtures, bounded tests,
+  docs, or release assets.
 
-If the answer to questions 1, 2, and 7 is weak, remove the line, merge it into a
-clearer retained helper, or extract it to a research PR.
+## Extraction Map And File Budgets
 
-Lines supporting an extracted feature must move with that feature: imports,
-constants, env vars, tests, docs, fixture references, and examples are removed
-from the stable branch in the same tranche.
+| Family | Stable action | Destination / gate |
+| --- | --- | --- |
+| QI/device-QI hard-seed machinery | Remove policy helpers, env tokens, examples, tests, docs from core; keep only research pointer. | `research/qi-device-hard-seed`; returns after CPU/GPU production residual/runtime/RSS/differentiability gates. |
+| Native sparse-direct, reduced-Pmat, nested-dissection, multifrontal, HSS | Extract source/tests/docs and default hooks; keep only sparse primitives used by stable defaults. | `research/native-sparse-direct`; returns after true-residual admission and production-floor runtime/RSS gates. |
+| Parallel/GPU/multi-device campaigns | Keep only public helpers with docs/tests; move runners, traces, raw regenerators out. | `research/parallel-performance` or release assets. |
+| Publication/audit generators | Keep final compressed figures only when referenced; move generators/raw outputs out. | `research/publication-audits`. |
+| Legacy wrappers | Thin delegates if public; otherwise delete. | Stable only with migration/import tests. |
+| Env-only solver branches | Promote to documented advanced options with gates or extract/delete. | Stable only if automatic defaults stay simple. |
+| Duplicated test scaffolds | Merge into physics/numerics/regression tests; delete extracted-path tests. | Stable CI under 10 minutes. |
+| Single-file example/campaign folders | Merge into curated examples or extract/delete. | Stable examples readable in minutes. |
 
-### Function-Level Rules
+Review budgets requiring inventory exceptions if exceeded:
 
-- Functions over 80 lines require a stated stage boundary and should be split
-  only when the split creates a physics/numerics stage with a direct test.
-- Functions under 10 lines that are used once should usually be inlined unless
-  they name a physics equation or public API concept.
-- Two functions with the same inputs/outputs and different policy names should
-  collapse into one implementation plus explicit data/options.
-- Environment-variable-only functions are not stable core features. Promote
-  them to documented advanced options with tests, or extract/delete them.
-- Fail-closed/probe functions are allowed only if they prevent expensive or
-  inaccurate default solves and have direct admission/rejection tests.
-- Compatibility functions must delegate without owning logic and must have a
-  removal note or migration test.
+- `profile_policies.py`: <=1,500 lines after QI/device-QI residue deletion.
+- `profile_sparse_xblock.py`: <=2,500 lines after experimental rescue extraction.
+- `profile_full_system.py`: <=3,000 lines with physics assembly preserved.
+- `explicit_sparse.py`: <=2,000 lines; keep primitives, extract research factors.
+- `profile_sparse_solve.py` + `profile_solve.py`: <=4,000 combined lines.
+- Transport solve/policy/linear-system family: <=4,000 combined lines.
+- `solver.py`: <=800 lines as a facade.
+- `outputs/*`: <=4,000 combined lines.
+- `validation/*`: <=2,500 combined lines.
+- `tests/test_profile_response_sparse_pc.py` and related solver tests:
+  <=4,000 combined lines after extracted-path tests are removed.
 
-### File-Structure Rules
+## Audit Order And Tranche Gates
 
-- Prefer fewer, domain-named modules over many narrow policy files. A new file
-  is allowed only when it owns a stable domain concept: geometry loading,
-  discretization, operator assembly, physics diagnostics, solver policy,
-  output, plotting, validation, or workflow orchestration.
-- Do not keep folders that only contain `__init__.py` plus one nested folder.
-  Flatten them into the nearest domain package or remove the package.
-- Avoid names based on historical implementation details (`v3_`, `rhs1_`,
-  `transport_` everywhere, `probe`, `campaign`, `qi_*`) in stable core unless
-  the name is a public migration facade.
-- Stable source should be readable in this order: public API/CLI, physics
-  models, discretization/operators, solver defaults, outputs/plotting,
-  validation.
+Audit in this fixed order: public surface; physics models; discretization and
+operators; solver defaults; differentiability; validation/tests; examples,
+scripts, and benchmarks; docs. Each tranche must edit the inventory first,
+remove/merge/extract code, run focused guards, and report net file/line change,
+modules changed, tests run, static checks, parity/performance claim changes, and
+remaining lane completion. No tranche is accepted if it only creates more files
+or moves complexity without reducing user-visible complexity or total lines.
 
-### Extraction And Deletion Gates
-
-- `extract-pr`: code has research value but lacks production parity,
-  acceptable runtime/RSS, automatic defaults, or stable docs. It must be
-  preserved on a named branch before deletion from the stable core.
-- `delete`: code is obsolete, duplicated, uncalled, a generated artifact, a
-  stale audit/profiling script, or a test for deleted behavior.
-- `thin-compat`: public import names that users may still import. These files
-  must contain no solver logic and should only delegate to the new stable
-  module.
-- No deleted/extracted module may remain in API docs, public import contracts,
-  source-tree fixtures, examples catalogues, README figures, or default solver
-  policy imports.
-
-### Complexity Budgets
-
-The final PR should meet these budgets or document each exception:
-
-- `sfincs_jax/`: <=50 Python files and <=50k lines; stretch target is a 10x
-  reduction from the pre-slim source-line count.
-- `tests/`: <=120 Python files with grouped domain ownership and >=95%
-  coverage of the slim core.
-- `examples/`: original Fortran-v3 reference inputs plus <=10 curated workflows.
-- `scripts/`: zero or only documented release-maintenance commands.
-- `benchmarks/`: removed from core; benchmark evidence lives in bounded tests,
-  fixtures, docs, or release assets.
-- Tracked artifacts over 2 MB are forbidden unless explicitly fetched from
-  release data by tests/docs.
-
-### Tranche Acceptance Checklist
-
-Each commit-level tranche must report:
-
-- Net source/test/example/script/docs files added and removed.
-- Net line-count change.
-- Modules extracted, deleted, merged, or retained with justification.
-- Focused tests run and their results.
-- Ruff/compile/diff/large-file checks.
-- Any parity/performance claim changed by the tranche.
-- Remaining open lanes and completion estimate.
-
-### Repository-Wide Audit Tranches
-
-Finish the simplification by auditing in this fixed order. Each tranche must
-edit the inventory first, then remove or merge code, then run focused guards.
-
-1. Public surface: `api.py`, `cli.py`, `namelist.py`, `io.py`, plotting,
-   output formats, examples used in README, and documented imports. Delete
-   undocumented aliases unless migration tests require a thin facade.
-2. Physics models: collisions, drifts, classical transport, bootstrap/Redl,
-   ambipolarity, and geometry loaders. Keep equations with tests and citations;
-   merge duplicate normalization helpers.
-3. Discretization/operators: velocity grids, periodic stencils, RHSMode-1
-   full-system operators, transport operators, and sparse patterns. Keep only
-   operators used by supported automatic defaults or frozen parity tests.
-4. Solver defaults: dense, structured, sparse, PAS, FP, x-block, and
-   transport-matrix paths. Delete env-only experiments and retain only routes
-   with residual, parity, runtime, and RSS gates.
-5. Differentiability: primal/JVP/VJP/implicit sensitivity paths used by
-   examples and tests. Remove branches that break JAX transforms or lack a
-   documented non-differentiable CLI-only boundary.
-6. Validation and tests: collapse duplicated smoke tests into physics,
-   regression, unit, CLI/I/O, and optional-integration groups; keep only small
-   fixtures or release-fetched artifacts.
-7. Examples, scripts, and benchmarks: keep <=10 curated workflows plus
-   Fortran-v3 reference inputs; move campaigns/profilers/publication one-offs
-   to research branches or delete generated outputs.
-8. Documentation: rewrite docs after code cuts, not before. Docs must describe
-   the stable core as standalone software and list extracted research lanes
-   only in the research-lanes page.
+Final budgets: <=50 package Python files and <=50k source lines unless every
+exception is justified, <=120 test files, <=10 curated workflows, zero benchmark
+tree, zero undocumented scripts, no tracked artifact over 2 MB, >=95% slim-core
+coverage, and fresh parity/runtime/RSS/bootstrap evidence for supported
+examples.
 
 ## Ordered Finish Plan
 
