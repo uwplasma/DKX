@@ -687,16 +687,6 @@ python examples/publication_figures/generate_sfincs_paper_figs.py \
   --max-transport-relative-residual 1e-6 \
   --scan-only
 
-# To compare candidate preconditioners before widening W7-X high-nu scans,
-# isolate single-RHS behavior:
-CUDA_VISIBLE_DEVICES=0 \
-python examples/performance/benchmark_w7x_high_nu_preconditioners.py \
-  --preconditioners auto,fp_tzfft,fp_tzfft_line,fp_tzfft_line_schur,fp_xblock_tz_lu,fp_xblock_tz_lu_schur,xmg \
-  --which-rhs 2 \
-  --sparse-direct-max 40000 \
-  --sparse-factor-dtype float32 \
-  --maxiter 800 \
-  --timeout-s 900
 ```
 
 ![W7-X high-nu sparse-helper factor reuse](docs/_static/figures/paper/sfincs_jax_w7x_high_nu_performance.png)
