@@ -8,9 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from sfincs_jax.namelist import read_sfincs_input
-
-
 _REPO = Path(__file__).resolve().parents[1]
 _OPTIMIZATION_DIR = _REPO / "examples" / "optimization"
 
@@ -65,13 +62,10 @@ def test_public_optimization_scripts_show_help() -> None:
             "--vmec-jax-root",
             "--comparison-result-dir",
         ],
-        _OPTIMIZATION_DIR / "screen_qi_electron_root_nfp.py": ["--candidates", "--target-electron-root-drive"],
         _OPTIMIZATION_DIR / "evaluate_sfincs_jax_promotion_scan.py": ["--out-dir", "--stem"],
         _OPTIMIZATION_DIR / "launch_sfincs_jax_candidate_scan.py": ["--out-dir", "--promotion-stem"],
         _OPTIMIZATION_DIR / "compare_sfincs_jax_promotion_runs.py": ["--out-dir", "--stem"],
         _OPTIMIZATION_DIR / "run_promotion_evidence_campaign.py": ["--run-cpu", "--run-gpu", "--run-fortran"],
-        _OPTIMIZATION_DIR / "ingest_qi_res15_gpu_campaign.py": ["--campaign", "--reference"],
-        _OPTIMIZATION_DIR / "materialize_qi_nfp2_promotion_input.py": ["--source", "--out-dir", "--equilibrium-file"],
     }
 
     for script, expected_flags in scripts.items():
@@ -147,71 +141,6 @@ def test_vmec_jax_bootstrap_optimization_script_is_reviewable_max_mode3() -> Non
     assert "vj.JDotB" in text
     assert "RedlBootstrapMismatch" in text
     assert "SFINCS_JAX_VMEC_JAX_ROOT" in text
-
-
-def test_qi_screen_public_script_pivots_to_qi_nfp2_when_qa_is_deferred(tmp_path: Path) -> None:
-    stem = "qi_screen_cli"
-    script = _OPTIMIZATION_DIR / "screen_qi_electron_root_nfp.py"
-
-    _run_script(
-        script,
-        [
-            "--steps",
-            "2",
-            "--out-dir",
-            str(tmp_path),
-            "--stem",
-            stem,
-        ],
-    )
-
-    payload = _assert_artifacts(tmp_path, stem)
-    assert payload["workflow"] == "sfincs_jax_qi_qa_electron_root_nfp_screening_proxy"
-    assert "not a kinetic SFINCS transport claim" in payload["claim_boundary"]
-    assert payload["recommended_candidate"]["candidate"] == "qi:nfp2"
-    assert payload["recommended_candidate"]["symmetry"] == "qi"
-    assert payload["recommended_candidate"]["nfp"] == 2
-    assert "sfincs_jax scan-er" in " ".join(payload["promotion_plan"]["next_commands"])
-
-
-def test_qi_nfp2_promotion_input_helper_materializes_low_resolution_two_species_candidate(tmp_path: Path) -> None:
-    stem = "qi_nfp2_input"
-    script = _OPTIMIZATION_DIR / "materialize_qi_nfp2_promotion_input.py"
-
-    _run_script(script, ["--out-dir", str(tmp_path), "--stem", stem])
-
-    input_path = tmp_path / f"{stem}.input.namelist"
-    summary_path = tmp_path / f"{stem}.json"
-    assert input_path.is_file()
-    assert summary_path.is_file()
-
-    text = input_path.read_text(encoding="utf-8")
-    payload = json.loads(summary_path.read_text(encoding="utf-8"))
-    nml = read_sfincs_input(input_path)
-
-    assert payload["workflow"] == "sfincs_jax_qi_nfp2_kinetic_promotion_input"
-    assert payload["candidate"] == {
-        "nfp": 2,
-        "resolution": "low",
-        "species": "ion_electron",
-        "symmetry": "QI",
-    }
-    assert "kinetic promotion candidate" in payload["claim_boundary"]
-    assert "CPU/GPU/Fortran Er scans" in payload["claim_boundary"]
-    assert any("--run-cpu --run-gpu --run-fortran" in command for command in payload["next_commands"])
-
-    species = nml.group("speciesParameters")
-    resolution = nml.group("resolutionParameters")
-    assert species["ZS"] == [1.0, -1.0]
-    assert species["MHATS"] == [1.0, 5.446170214e-4]
-    assert species["NHATS"] == [1.0, 1.0]
-    assert resolution["NTHETA"] == 7
-    assert resolution["NZETA"] == 7
-    assert resolution["NXI"] == 7
-    assert resolution["NX"] == 4
-    assert "wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc" in text
-    assert "!ss scanType = 1" in text
-    assert "runSpecFile" not in text
 
 
 def test_promotion_public_script_writes_fast_demo_artifacts(tmp_path: Path) -> None:
