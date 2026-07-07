@@ -5,7 +5,7 @@
     "audited_commit": "75ce6f0a",
     "audit_date": "2026-07-07",
     "purpose": "Core-slim line-review ledger: every retained file, function, and public knob must be classified as keep, merge, delete, or extract-pr before the refactor PR is review-ready.",
-    "source_file_count_at_audit": 115,
+    "source_file_count_at_audit": 116,
     "source_line_count_at_audit": 137620,
     "test_file_count_at_audit": 304,
     "example_file_count_at_audit": 109,
@@ -19,7 +19,7 @@
       "research/publication-audits"
     ],
     "next_step": "Follow plan_final.md tranches A-I: finish research extraction, then collapse root facades, RHSMode-1 orchestration, solvers, operators, transport, outputs, tests, and public evidence/docs around admitted stable defaults.",
-    "latest_tranche_evidence": "Removed direct-tail support-mode preflight and stable-output plumbing; deleted 13 tracked generated performance-output JSON files; consolidated seven release/data/audit/hygiene scripts into sfincs_jax.validation.release and sfincs_jax.validation.data_fetch CLIs; rewrote plan_final.md as the single specific core-slim execution plan with file-family targets, extraction PR groups, and per-file line-audit rules; fixed the scaled-suite runner to import consolidated release validators and added a source-tree guard against stale script-to-script imports; extracted unsupported single-case sharded and multi-GPU performance campaign examples/tests from the stable example tree while keeping transport-worker and output-format benchmarks; extracted high-nu publication-audit generators from the stable examples and tests while retaining compact checked artifacts and validation gates; tightened plan_final.md with a no-complexity-redistribution rule, a per-file review worksheet, explicit consolidation tranches, and stable-vs-research decision gates; extracted the deferred W7-X ambipolar publication scaffold generator while retaining core ambipolar tests, provenance template, and package-level fail-closed artifact gates; extracted optional Lineax and Equinox/JAXopt adoption benchmark drivers from stable examples while keeping retained in-tree implicit-gradient, sensitivity, and VMEC/Boozer proxy-gradient tests; deleted obsolete Python-2 ModelTest_AI upstream utility files and the stale generated figure so the stable examples tree no longer contains that non-runnable helper. Focused local checks: 554 touched tests, 93 sparse-pattern tests, 76 tree/doc-claim contract tests, 59 release/data/audit tests, 65 hygiene/source-tree tests, 59 source-tree/domain contract tests, 46 scaled-suite/source-tree checks, 142 publication-audit extraction checks, package CLI checks, Ruff, compileall, JSON validation, diff hygiene, and size guard."
+    "latest_tranche_evidence": "Removed direct-tail support-mode preflight and stable-output plumbing; deleted 13 tracked generated performance-output JSON files; consolidated seven release/data/audit/hygiene scripts into sfincs_jax.validation.release and sfincs_jax.validation.data_fetch CLIs; rewrote plan_final.md as the single specific core-slim execution plan with file-family targets, extraction PR groups, and per-file line-audit rules; fixed the scaled-suite runner to import consolidated release validators and added a source-tree guard against stale script-to-script imports; extracted unsupported single-case sharded and multi-GPU performance campaign examples/tests from the stable example tree while keeping transport-worker and output-format benchmarks; extracted high-nu publication-audit generators from the stable examples and tests while retaining compact checked artifacts and validation gates; tightened plan_final.md with a no-complexity-redistribution rule, a per-file review worksheet, explicit consolidation tranches, and stable-vs-research decision gates; extracted the deferred W7-X ambipolar publication scaffold generator while retaining core ambipolar tests, provenance template, and package-level fail-closed artifact gates; extracted optional Lineax and Equinox/JAXopt adoption benchmark drivers from stable examples while keeping retained in-tree implicit-gradient, sensitivity, and VMEC/Boozer proxy-gradient tests; deleted obsolete Python-2 ModelTest_AI upstream utility files and the stale generated figure so the stable examples tree no longer contains that non-runnable helper; moved the Krylov implementation from the package root to sfincs_jax.solvers.krylov while keeping sfincs_jax.solver as a compatibility alias and rewriting internal package imports to the domain module. Focused local checks: 554 touched tests, 93 sparse-pattern tests, 76 tree/doc-claim contract tests, 59 release/data/audit tests, 65 hygiene/source-tree tests, 59 source-tree/domain contract tests, 46 scaled-suite/source-tree checks, 142 publication-audit extraction checks, package CLI checks, Ruff, compileall, JSON validation, diff hygiene, and size guard."
   },
   "categories": [
     "core",
@@ -471,7 +471,7 @@
       "reduction_target_lines": 1800,
       "public_imports": [],
       "internal_callers": [
-        "sfincs_jax/solver.py",
+        "sfincs_jax/solvers/krylov.py",
         "sfincs_jax/outputs/rhsmode1.py"
       ],
       "tests": [
@@ -590,12 +590,13 @@
       "next_step": "Keep simple dense solve and remove research admission/probe branches."
     },
     {
-      "path": "sfincs_jax/solver.py",
+      "path": "sfincs_jax/solvers/krylov.py",
       "lines_at_audit": 2918,
       "category": "core",
       "action": "trim",
       "reduction_target_lines": 1400,
       "public_imports": [
+        "sfincs_jax.solvers.krylov",
         "sfincs_jax.solver"
       ],
       "internal_callers": [
@@ -611,7 +612,7 @@
         "docs/usage.rst"
       ],
       "retention_reason": "Public solver facade and generic Krylov helpers are core but should not contain policy experiments.",
-      "next_step": "Move implementation-only helpers to canonical solver modules or delete unused branches."
+      "next_step": "Keep sfincs_jax.solver as a small compatibility alias; trim unused Krylov branches inside sfincs_jax.solvers.krylov."
     },
     {
       "path": "sfincs_jax/outputs/rhsmode1.py",
