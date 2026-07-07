@@ -105,11 +105,9 @@ Autodiff and sensitivity validation
 High-collisionality trend proxy
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Generate the trend proxy with
-
-.. code-block:: bash
-
-   python examples/publication_figures/generate_high_collisionality_trend_proxy.py
+The checked trend proxy is retained as compact JSON and figure evidence. The
+long generator lives on the publication-audits research branch; stable docs use
+the checked artifact and package-level validation tests.
 
 .. figure:: _static/figures/paper/sfincs_jax_high_collisionality_trend_proxy.png
    :alt: High-collisionality trend proxy from checked-in collisionality artifacts
@@ -126,12 +124,9 @@ Generate the trend proxy with
 Simakov-Helander limit audit
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Generate the normalization/readiness audit with
-
-.. code-block:: bash
-
-   python examples/publication_figures/generate_simakov_helander_limit_audit.py
-   python examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py
+The normalization/readiness audit is retained as compact JSON and figure
+evidence. The long audit and high-nu run-plan generators live on the
+publication-audits research branch.
 
 .. figure:: _static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png
    :alt: Simakov-Helander high-collisionality normalization audit for sfincs_jax
