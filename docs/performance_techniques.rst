@@ -201,7 +201,7 @@ and enable persistent compilation caching for repeated runs.
 **Implementation.**
 
 - `sfincs_jax` JITs the matvec and solver wrappers (GMRES/BiCGStab).
-- The reduced-suite runner (`scripts/run_reduced_upstream_suite.py`) supports a
+- The reduced-suite runner (``python -m sfincs_jax.validation.reduced_suite``) supports a
   persistent cache via ``--jax-cache-dir``.
 - The CLI defaults to a user cache directory (``~/.cache/sfincs_jax/jax_compilation_cache``)
   and enables ``jax.experimental.compilation_cache`` automatically unless disabled.

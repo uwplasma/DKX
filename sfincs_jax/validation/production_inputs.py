@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Iterable
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUT_ROOT = REPO_ROOT / "outputs" / "benchmarks" / "production_resolution_inputs_2026-05-04"
 DEFAULT_EXAMPLES_ROOT = REPO_ROOT / "examples" / "sfincs_examples"
 DEFAULT_ADDITIONAL_INPUT = REPO_ROOT / "examples" / "data" / "qi_nfp2_reference.input.namelist"

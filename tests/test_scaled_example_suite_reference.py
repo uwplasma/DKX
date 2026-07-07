@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -9,37 +8,35 @@ import sys
 import h5py
 import pytest
 
+from sfincs_jax.validation import reduced_suite
+from sfincs_jax.validation import scaled_suite
+from sfincs_jax.validation.reduced_suite import (
+    CaseResult,
+    _classify_blocker,
+    _jax_attempt_metrics_from_log,
+    _parse_elapsed_s_from_log,
+    _parse_fortran_solver_profile_from_log,
+    _parse_jax_rhs_norm_from_log,
+    _parse_max_rss_mb_from_time_log,
+    _reference_solve_quality_note,
+    _run_case,
+    _runtime_metric_for_basis,
+    _solver_tolerance_from_namelist,
+)
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "run_scaled_example_suite.py"
-sys.path.insert(0, str(_SCRIPT_PATH.parent))
-_SPEC = importlib.util.spec_from_file_location("run_scaled_example_suite", _SCRIPT_PATH)
-assert _SPEC is not None and _SPEC.loader is not None
-_MODULE = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(_MODULE)
-_stage_reference_fortran_artifacts = _MODULE._stage_reference_fortran_artifacts
-_run_prepared_case = _MODULE._run_prepared_case
-_write_suite_audits = _MODULE._write_suite_audits
-_write_suite_outputs = _MODULE._write_suite_outputs
-_iter_inputs = _MODULE._iter_inputs
-_load_reference_case_metrics = _MODULE._load_reference_case_metrics
-_auto_production_manifest_path = _MODULE._auto_production_manifest_path
-_filter_inputs_by_production_recommendation = _MODULE._filter_inputs_by_production_recommendation
-_load_production_manifest_cases = _MODULE._load_production_manifest_cases
-_run_recommendation_allowed = _MODULE._run_recommendation_allowed
-_default_extra_inputs_for_run = _MODULE._default_extra_inputs_for_run
 
-from run_reduced_upstream_suite import CaseResult  # noqa: E402
-from run_reduced_upstream_suite import _run_case  # noqa: E402
-from run_reduced_upstream_suite import _classify_blocker  # noqa: E402
-from run_reduced_upstream_suite import _parse_jax_rhs_norm_from_log  # noqa: E402
-from run_reduced_upstream_suite import _parse_fortran_solver_profile_from_log  # noqa: E402
-from run_reduced_upstream_suite import _parse_elapsed_s_from_log  # noqa: E402
-from run_reduced_upstream_suite import _parse_max_rss_mb_from_time_log  # noqa: E402
-from run_reduced_upstream_suite import _jax_attempt_metrics_from_log  # noqa: E402
-from run_reduced_upstream_suite import _reference_solve_quality_note  # noqa: E402
-from run_reduced_upstream_suite import _runtime_metric_for_basis  # noqa: E402
-from run_reduced_upstream_suite import _solver_tolerance_from_namelist  # noqa: E402
-import run_reduced_upstream_suite as reduced_suite  # noqa: E402
+_MODULE = scaled_suite
+_stage_reference_fortran_artifacts = scaled_suite._stage_reference_fortran_artifacts
+_run_prepared_case = scaled_suite._run_prepared_case
+_write_suite_audits = scaled_suite._write_suite_audits
+_write_suite_outputs = scaled_suite._write_suite_outputs
+_iter_inputs = scaled_suite._iter_inputs
+_load_reference_case_metrics = scaled_suite._load_reference_case_metrics
+_auto_production_manifest_path = scaled_suite._auto_production_manifest_path
+_filter_inputs_by_production_recommendation = scaled_suite._filter_inputs_by_production_recommendation
+_load_production_manifest_cases = scaled_suite._load_production_manifest_cases
+_run_recommendation_allowed = scaled_suite._run_recommendation_allowed
+_default_extra_inputs_for_run = scaled_suite._default_extra_inputs_for_run
 
 
 def test_reduced_suite_can_disable_reduced_seed_for_production_inputs(

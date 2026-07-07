@@ -130,7 +130,7 @@ Fortran executable or a locally restored reference root:
 
 .. code-block:: bash
 
-   python scripts/run_scaled_example_suite.py \
+   python -m sfincs_jax.validation.scaled_suite \
      --examples-root examples/sfincs_examples \
      --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
      --fortran-exe /path/to/sfincs \
@@ -185,7 +185,7 @@ full-suite solves:
 
    python examples/publication_figures/generate_fortran_suite_benchmark_summary.py
 
-   python scripts/generate_readme_fast_branch_audit.py \
+   python -m sfincs_jax.validation.readme_audit \
      --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
      --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas \
      --min-fortran-runtime-s 10

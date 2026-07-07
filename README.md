@@ -875,7 +875,7 @@ The main documentation entry points are:
 Regenerate the README audit block from the tracked CPU/GPU suite reports:
 
 ```bash
-python scripts/generate_readme_fast_branch_audit.py \
+python -m sfincs_jax.validation.readme_audit \
   --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
   --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas \
   --min-fortran-runtime-s 10
@@ -896,8 +896,8 @@ keeps the GPU lane tied to a deterministic reference, and makes the additional e
 of the same artifact set as the standard suite.
 
 Production-resolution inputs are generated separately with
-`scripts/create_production_benchmark_inputs.py`. When
-`scripts/run_scaled_example_suite.py` is pointed at one of those generated
+``python -m sfincs_jax.validation.production_inputs``. When
+``python -m sfincs_jax.validation.scaled_suite`` is pointed at one of those generated
 `inputs/` trees, it detects the sibling `manifest.json` and launches only
 `bounded_local_ok` rows by default. Use `--max-run-recommendation bounded_remote`,
 `--max-run-recommendation remote_or_cluster_only`, or
@@ -905,7 +905,7 @@ Production-resolution inputs are generated separately with
 lanes. The Fortran wrapper used for reference generation defaults to one MPI
 rank so local parity runs avoid concurrent HDF5 output writes; set
 `SFINCS_FORTRAN_MPI_NP` explicitly only for a Fortran scaling study.
-If `scripts/run_reduced_upstream_suite.py` is used against a generated
+If ``python -m sfincs_jax.validation.reduced_suite`` is used against a generated
 production input tree, pass `--production-inputs` so the runner uses the
 manifest decks exactly and does not substitute or promote reduced CI fixtures.
 

@@ -21,12 +21,16 @@ bootstrap current, transport coefficients, plotting, and optimization.
 
 - Branch head has release/data/hygiene script consolidation, generated-output
   removal, direct-tail experiment removal, unsupported sharding-campaign
-  extraction, high-nu publication-audit extraction, and Krylov implementation
-  moved from the package root to `sfincs_jax.solvers.krylov`.
+  extraction, high-nu publication-audit extraction, Krylov implementation moved
+  from the package root to `sfincs_jax.solvers.krylov`, and the retained Python
+  release/profiling scripts promoted to `sfincs_jax.validation`.
 - Tracked code is still too large for review: 116 package Python files /
   137.6k source lines, 304 test Python files / 123.1k test lines, 109 example
   Python files / 18.0k lines, 5 tracked Python scripts / 5.9k lines, and one
-  shell wrapper.
+  shell wrapper at the last committed audit. The current working tree is about
+  121 package Python files / 143.6k source lines, 303 test Python files /
+  123.4k lines, 110 example Python files / 18.3k lines, and no tracked Python
+  scripts; this count must drop, not merely move between folders.
 - The package root is still too broad: `ambipolar.py`, `diagnostics.py`,
   `grids.py`, `input_compat.py`, `profiling.py`, and `sensitivity.py` are
   implementation owners or mixed facades that must move behind domain modules
@@ -99,7 +103,8 @@ Everything else is `RESEARCH`, `DUPLICATE`, `GENERATED`, or `OBSOLETE`.
 `DUPLICATE`, `GENERATED`, and `OBSOLETE` are deleted with their imports, tests,
 docs, env vars, fixtures, and examples.
 
-For each file, perform this loop:
+For each file, perform this loop. This is the required "every line" review
+mechanism; no file is exempt because it is old, covered, or difficult:
 
 1. Record path, line count, public symbols, imports, callers, env vars, output
    keys, tests, docs, examples, and current line target in
@@ -107,19 +112,37 @@ For each file, perform this loop:
 2. Decide exactly one action: `keep`, `merge`, `delete`, or `extract-pr`.
 3. For every public symbol, record owner tag, stable caller, proof test, docs
    owner, autodiff scope, and runtime/memory scope.
-4. For every private helper over 20 lines, inline it, move it beside the
+4. For every top-level constant and env var, keep it only if it is part of the
+   public API, namelist compatibility, an output schema, or a tested automatic
+   policy. Hidden tuning knobs and one-off campaign flags are research debt.
+5. For every private helper over 20 lines, inline it, move it beside the
    equation/numerical method it supports, or record why the abstraction reduces
    cognitive load.
-5. Delete one-call wrappers unless they are the public API or name a real
+6. Delete one-call wrappers unless they are the public API or name a real
    physics/numerics boundary.
-6. Collapse duplicate diagnostics dictionaries, policy branches, shape helpers,
+7. Collapse duplicate diagnostics dictionaries, policy branches, shape helpers,
    namelist aliases, solver option parsing, and output-key builders.
-7. Delete tests for extracted code; keep compact absence tests that prevent
+8. Delete tests for extracted code; keep compact absence tests that prevent
    stable imports from silently returning.
-8. Run focused tests, Ruff, compileall, JSON validation, diff hygiene, package
+9. Run focused tests, Ruff, compileall, JSON validation, diff hygiene, package
    import checks, and size guard.
-9. Commit only when files, lines, public knobs, solver routes, duplicated
+10. Commit only when files, lines, public knobs, solver routes, duplicated
    schemas, examples, scripts, generated artifacts, or test burden decrease.
+
+Line-level dispositions must be explicit in review notes or inventory:
+
+| Disposition | Meaning | Required result |
+| --- | --- | --- |
+| `keep-core` | Stable physics, numerics, API, output, or validation evidence. | Has caller, proof test, docs/API owner, and no simpler local expression. |
+| `merge-core` | Correct code in the wrong place or duplicated under another name. | Moved into the canonical domain owner and old import deleted. |
+| `delete-core` | Dead, duplicate, generated, obsolete, coverage-only, or historical code. | Removed with imports, docs, tests, env vars, fixtures, and examples. |
+| `extract-research` | Useful but not stable: QI/device-QI, native direct factors, long campaigns, special GPU work, publication experiments, or unsupported optimization studies. | Preserved on a research branch/PR, then deleted from stable imports and README claims. |
+
+Large files are reviewed by section, not by helper churn. For each file over
+1500 lines, first split an outline into stable sections, duplicate sections,
+research sections, and delete sections. Only then move or delete code. A commit
+that moves code from one large file into many small attempt-named files without
+reducing total stable lines fails this plan.
 
 ## Repository-Wide Line Sweep
 
@@ -136,6 +159,18 @@ and every private helper over 20 lines. The sweep order is:
 4. Tests over 1200 lines and tests coupled to extracted research paths.
 5. Examples, scripts, benchmark inputs, and fixture directories.
 6. README/docs text and figures, after source decisions are stable.
+
+The sweep is complete only when these repo-level budgets are met or each
+exception has a ledger entry with proof:
+
+| Area | Current pressure point | Hard target for this PR |
+| --- | --- | --- |
+| package files | 121 Python files in the working tree | <=68 first, <=50 final or justified exceptions |
+| package lines | 143.6k source lines in the working tree | <=80k first, <=50k final or justified exceptions |
+| tests | 303 Python files / 123.4k lines | <=120 files / <=70k lines while keeping >=95% coverage |
+| examples | 110 Python files / 18.3k lines | original v3 examples plus <=10 curated workflows |
+| scripts | no Python scripts after promotion | only documented shell/release tooling, otherwise empty |
+| validation package | 11 Python files after promotion | <=5 compact evidence/fetch/release modules |
 
 Inventory entries must include: `decision`, `owner_tags`, `stable_callers`,
 `public_symbols`, `test_proofs`, `docs_owner`, `autodiff_scope`,
@@ -192,6 +227,26 @@ explain why a smaller change unlocks the next deletion.
 | H. Output/schema collapse | output files | one typed schema per problem family and one suffix-based writer/reader | output schema, plot, readback tests |
 | I. Tests/examples/scripts | tests, examples, scripts, benchmarks, utils | curate examples, parametrize tests, delete clutter, move data to releases | coverage >=95%, CI <=10 min |
 | J. Docs/evidence | README, docs, figures, tables | regenerate claims from retained evidence and scrub branch-history text | docs build and docs-claim tests |
+
+The next implementation passes must be coarse-grained:
+
+1. Finish the validation-script promotion, then immediately shrink
+   `validation/` by merging release/report/figure helpers into at most five
+   files and deleting docs-only one-off code.
+2. Extract or delete unpromoted solver research in `solvers/` and
+   `problems/profile_*`: QI-only hard-seed routes, native-symbolic direct
+   experiments, nested-dissection/multifrontal/HSS sketches, and env-var-only
+   rescue branches.
+3. Collapse RHSMode-1 into one visible pipeline and one advanced policy table;
+   remove all parallel private policy readers that cannot be explained to a
+   user as an equation, discretization, solver, or output stage.
+4. Collapse RHSMode-2/3 transport into one setup/solve/finalize path; move
+   scaling campaigns and production-floor generation out of stable source.
+5. Consolidate tests by behavior, not by historical file: physics gates,
+   numerical identities, API/CLI/output contracts, autodiff checks, parity
+   fixtures, and docs/evidence claims.
+6. Curate examples last, after stable APIs stop moving, so examples teach the
+   final code instead of preserving temporary workflows.
 
 ## Stable vs Research Decision Gates
 

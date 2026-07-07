@@ -78,7 +78,7 @@ production-resolution input tier:
 
 .. code-block:: bash
 
-   python scripts/create_production_benchmark_inputs.py --clean
+   python -m sfincs_jax.validation.production_inputs --clean
 
 By default this writes ``outputs/benchmarks/production_resolution_inputs_2026-05-04``
 from the public SFINCS_JAX example decks only. It enforces at least
@@ -92,7 +92,7 @@ Additional local decks can be added without changing the public manifest:
 
 .. code-block:: bash
 
-   python scripts/create_production_benchmark_inputs.py \
+   python -m sfincs_jax.validation.production_inputs \
      --external-input /path/to/input.namelist \
      --out-root outputs/benchmarks/my_production_inputs \
      --clean
@@ -115,7 +115,7 @@ The scaled-suite runner also understands these manifest recommendations. When
 
 .. code-block:: bash
 
-   python scripts/run_scaled_example_suite.py \
+   python -m sfincs_jax.validation.scaled_suite \
      --examples-root outputs/benchmarks/production_resolution_inputs_2026-05-04/inputs \
      --fortran-exe /path/to/sfincs/fortran/version3/sfincs \
      --fortran-min-runtime-s 10.0 \
@@ -196,7 +196,7 @@ In other words, all examples run on CPU and GPU, but a handful of cases remain t
 Targeted solver profiling
 -------------------------
 
-Use ``scripts/profile_write_output_trace.py`` for one-case kernel, phase, and
+Use ``python -m sfincs_jax.validation.write_output_trace`` for one-case kernel, phase, and
 device-memory investigations. The wrapper matches the CLI ``write-output`` path
 by default, meaning it uses the fast non-differentiable solve policy. Opt into
 the differentiable implicit path only when that is the object of the profile:
@@ -207,7 +207,7 @@ the differentiable implicit path only when that is the object of the profile:
    JAX_ENABLE_X64=True \
    XLA_PYTHON_CLIENT_PREALLOCATE=false \
    SFINCS_JAX_PROFILE=full \
-   python scripts/profile_write_output_trace.py \
+   python -m sfincs_jax.validation.write_output_trace \
      --input outputs/benchmarks/production_resolution_inputs_2026-05-04/inputs/tokamak_1species_FPCollisions_withEr_fullTrajectories/input.namelist \
      --trace-dir outputs/profile_tokamak_fp_er \
      --out outputs/profile_tokamak_fp_er/sfincsOutput.h5 \
@@ -439,7 +439,7 @@ JAX-native performance patterns used in `sfincs_jax`
 - **Auto active-DOF reduction for RHSMode=1 (no Phi1)**: when ``Nxi_for_x`` truncates
   the pitch basis, the linear solve reduces to active unknowns by default, cutting
   both matrix-free solve cost and JIT work on upstream-style reduced cases.
-- **Persistent cache in automated suite runs**: ``scripts/run_reduced_upstream_suite.py`` and
+- **Persistent cache in automated suite runs**: ``python -m sfincs_jax.validation.reduced_suite`` and
   the full example-suite runners can reuse a persistent JAX compilation cache when
   ``--jax-cache-dir`` is set explicitly.
 - **Opt-in eager precompile**: ``SFINCS_JAX_PRECOMPILE`` is explicit opt-in. A persistent
@@ -959,7 +959,7 @@ For full XLA/kernel traces, prefer the dedicated write-output trace helper:
 
 .. code-block:: bash
 
-   python scripts/profile_write_output_trace.py \
+   python -m sfincs_jax.validation.write_output_trace \
      --input tests/reduced_inputs/tokamak_2species_PASCollisions_noEr.input.namelist \
      --trace-dir /tmp/sfincs_trace_tokamak2 \
      --perfetto

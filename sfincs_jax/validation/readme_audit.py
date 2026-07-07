@@ -7,7 +7,7 @@ from collections import Counter
 from pathlib import Path
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 README = REPO_ROOT / "README.md"
 DEFAULT_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_release_cpu_2026-05-08_production_tokamak"
 DEFAULT_GPU_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas"

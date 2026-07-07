@@ -706,7 +706,7 @@ def load_er_sweep_records(path: Path) -> list[ErSweepRecord]:
 
 
 def load_suite_report(path: Path) -> list[Mapping[str, object]]:
-    """Load a frozen CPU/GPU suite report from ``scripts/run_scaled_example_suite.py``.
+    """Load a frozen CPU/GPU suite report from ``python -m sfincs_jax.validation.scaled_suite``.
 
     The release-facing report is a list of per-case dictionaries. Some archived
     summary artifacts wrap that list in a top-level ``rows`` key, so this loader

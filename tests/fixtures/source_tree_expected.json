@@ -160,7 +160,12 @@
       "data_fetch.py",
       "figures.py",
       "fortran.py",
-      "release.py"
+      "production_inputs.py",
+      "readme_audit.py",
+      "reduced_suite.py",
+      "release.py",
+      "scaled_suite.py",
+      "write_output_trace.py"
     ],
     "workflows": [
       "mapped_xgrid.py",

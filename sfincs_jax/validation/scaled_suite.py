@@ -17,7 +17,7 @@ from pathlib import Path
 from sfincs_jax.io import localize_equilibrium_file_in_place
 from sfincs_jax.validation.release import audit_suite_output_keys, audit_suite_runtime_drift
 
-from run_reduced_upstream_suite import (
+from .reduced_suite import (
     CaseResult,
     REPO_ROOT,
     _executable_metadata,

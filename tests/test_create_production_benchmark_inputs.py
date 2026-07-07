@@ -1,18 +1,9 @@
 from __future__ import annotations
 
-import importlib.util
 import json
 from pathlib import Path
-import sys
 
-
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "create_production_benchmark_inputs.py"
-sys.path.insert(0, str(_SCRIPT_PATH.parent))
-_SPEC = importlib.util.spec_from_file_location("create_production_benchmark_inputs", _SCRIPT_PATH)
-assert _SPEC is not None and _SPEC.loader is not None
-bench_inputs = importlib.util.module_from_spec(_SPEC)
-sys.modules[_SPEC.name] = bench_inputs
-_SPEC.loader.exec_module(bench_inputs)
+from sfincs_jax.validation import production_inputs as bench_inputs
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

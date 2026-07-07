@@ -286,7 +286,7 @@ default to ``--jax-profile-marks off`` so runtime drift is measured without
 profiler interference. Only opt into ``on`` or ``full`` when the goal is an
 explicit profiling lane, and leave per-mark device-memory sampling off unless
 you are doing targeted device-memory diagnosis. Kernel/XLA traces should go
-through ``scripts/profile_write_output_trace.py`` or the transport-trace helpers,
+through ``python -m sfincs_jax.validation.write_output_trace`` or the transport-trace helpers,
 not through always-on per-phase GPU memory polling. The runtime-drift audit also
 prefers the solver's logged ``elapsed_s=...`` value when available, falling back
 to subprocess wall time only for archived artifacts that do not record it. The suite
