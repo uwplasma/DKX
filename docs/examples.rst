@@ -716,14 +716,15 @@ Some advanced examples require optional dependencies:
 Optimization + figures
 ----------------------
 
-Two examples that showcase autodiff-driven optimization (and write publication-style figures when `matplotlib`
-is available):
+The retained optimization examples focus on a QA nfp=2 workflow: a fast
+differentiable proxy objective, an editable VMEC-JAX-style QA script with an
+optional bootstrap-current term, and promotion audits from completed
+``sfincs_jax scan-er`` outputs.
 
 .. code-block:: bash
 
-   pip install optax
-   python examples/optimization/optimize_scheme4_harmonics_publication_figures.py
-   python examples/optimization/calibrate_nu_n_to_fortran_residual_fixture.py
+   python examples/optimization/qa_nfp2_sfincs_jax_objectives.py --objective balanced --steps 20
+   python examples/optimization/QA_optimization_bootstrap_current.py
 
 Optional ecosystem solver-library comparisons are research-lane material rather
 than stable user examples. The retained examples use the in-tree JAX
