@@ -6,11 +6,11 @@
     "audit_date": "2026-07-07",
     "purpose": "Core-slim line-review ledger: every retained file, function, and public knob must be classified as keep, merge, delete, or extract-pr before the refactor PR is review-ready.",
     "source_file_count_at_audit": 115,
-    "source_line_count_at_audit": 137551,
+    "source_line_count_at_audit": 137735,
     "test_file_count_at_audit": 313,
     "example_file_count_at_audit": 122,
     "benchmark_file_count_at_audit": 0,
-    "script_file_count_at_audit": 7,
+    "script_file_count_at_audit": 5,
     "preservation_branches_created_from_commit": "6e1c3d33",
     "preservation_branches": [
       "research/qi-device-hard-seed",
@@ -19,7 +19,7 @@
       "research/publication-audits"
     ],
     "next_step": "Follow plan_final.md file-disposition map: convert remaining suite/profiling scripts to package CLIs or release tooling, then extract/delete remaining native/symbolic sparse-direct research from stable defaults.",
-    "latest_tranche_evidence": "Removed direct-tail support-mode preflight and stable-output plumbing; refreshed plan_final.md with explicit line-owner rules and a file-disposition map; deleted 13 tracked generated performance-output JSON files; consolidated five release/data/audit scripts into sfincs_jax.validation.release and sfincs_jax.validation.data_fetch CLIs. Focused local checks: 554 touched tests, 93 sparse-pattern tests, 76 tree/doc-claim contract tests, 59 release/data/audit tests, package CLI checks, Ruff, compileall, JSON validation, diff hygiene, and size guard."
+    "latest_tranche_evidence": "Removed direct-tail support-mode preflight and stable-output plumbing; refreshed plan_final.md with explicit line-owner rules and a file-disposition map; deleted 13 tracked generated performance-output JSON files; consolidated seven release/data/audit/hygiene scripts into sfincs_jax.validation.release and sfincs_jax.validation.data_fetch CLIs. Focused local checks: 554 touched tests, 93 sparse-pattern tests, 76 tree/doc-claim contract tests, 59 release/data/audit tests, 65 hygiene/source-tree tests, package CLI checks, Ruff, compileall, JSON validation, diff hygiene, and size guard."
   },
   "categories": [
     "core",
