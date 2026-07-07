@@ -792,7 +792,7 @@ It intentionally does not close the full analytic-limit reproduction, because th
 current audited collisionality scans stop near ``nu'=10``.
 
 The deferred Simakov-Helander panel-data scaffold is also executable in
-``sfincs_jax.validation.figures`` and guarded by
+``sfincs_jax.validation.artifacts`` and guarded by
 ``tests/test_validation_figures.py``. It consumes a compact payload of
 ``nuprime``, computed value, and analytic-limit rows, then records:
 
@@ -828,7 +828,7 @@ mistaken for a closed W7-X or Simakov-Helander physics validation.
 
 The W7-X ambipolar literature lane is kept as a deferred artifact gate, not as a
 stable long-run figure generator. The retained package-level validation is
-``sfincs_jax.validation.figures.build_w7x_ambipolar_root_provenance_panel`` with
+``sfincs_jax.validation.artifacts.build_w7x_ambipolar_root_provenance_panel`` with
 focused coverage in ``tests/test_validation_figures.py`` and the core ambipolar
 scan/solve tests. The gate records explicit ``deferred_reasons``, provenance
 completeness scores, finite-root checks, current-bracket checks, and matching

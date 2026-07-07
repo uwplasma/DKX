@@ -76,7 +76,7 @@ preserving differentiability:
    cases or scan points. The suite runner supports `--jobs` to execute
    multiple cases concurrently.
 
-   Implementation: ``python -m sfincs_jax.validation.reduced_suite``.
+   Implementation: ``python -m sfincs_jax.validation.suite reduced``.
 
 3. **Sharded matvec (SPMD)**
 
@@ -403,7 +403,7 @@ The reduced suite runner can execute multiple cases in parallel:
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.reduced_suite --jobs 4 --reuse-fortran
+   python -m sfincs_jax.validation.suite reduced --jobs 4 --reuse-fortran
 
 Each case runs in its own process, with independent Fortran and JAX runs.
 This is the highest‑ROI parallel mode for large test campaigns.
@@ -434,7 +434,7 @@ For large ensembles, use job arrays on clusters and slice the work with
 .. code-block:: bash
 
    #SBATCH --array=0-63
-   python -m sfincs_jax.validation.reduced_suite \
+   python -m sfincs_jax.validation.suite reduced \
      --case-index ${SLURM_ARRAY_TASK_ID} \
      --case-stride 64 \
      --reuse-fortran

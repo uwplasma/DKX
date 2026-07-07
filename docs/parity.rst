@@ -173,7 +173,7 @@ Regenerate the release-facing README table from the tracked CPU/GPU reports:
      --min-fortran-runtime-s 10
 
 To replace the tracked reports, run
-``python -m sfincs_jax.validation.scaled_suite`` with
+``python -m sfincs_jax.validation.suite scaled`` with
 either ``--fortran-exe /path/to/sfincs`` or a locally restored
 ``--reference-results-root``. Slim source checkouts do not include the frozen
 Fortran HDF5 reference root used to produce the release-facing report files.
@@ -201,7 +201,7 @@ For faster targeted debugging, regenerate the reduced-suite files:
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.reduced_suite --timeout-s 120 --max-attempts 1
+   python -m sfincs_jax.validation.suite reduced --timeout-s 120 --max-attempts 1
 
 Reduced-suite default tolerances are ``rtol=5e-4`` and ``atol=1e-9``; override with ``--rtol``/``--atol``.
 
@@ -209,7 +209,7 @@ Target a single case family:
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.reduced_suite \
+   python -m sfincs_jax.validation.suite reduced \
      --pattern 'HSX_FPCollisions|filteredW7XNetCDF_2species_magneticDrifts|geometryScheme4_2species' \
      --timeout-s 120 --max-attempts 1
 
