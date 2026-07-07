@@ -228,7 +228,16 @@ def test_core_slim_inventory_covers_large_phase_a_owners() -> None:
         group_branches.add(branch)
         assert len(str(group["purpose"])) >= 40
         assert len(str(group["core_removal_gate"])) >= 40
-        for key in ("source_paths", "test_paths", "example_paths", "script_paths", "doc_paths"):
+        for key in (
+            "source_paths",
+            "test_paths",
+            "example_paths",
+            "script_paths",
+            "core_coupling_paths",
+            "doc_paths",
+        ):
+            if key not in group:
+                continue
             assert isinstance(group[key], list)
             for referenced in group[key]:
                 referenced_path = REPO_ROOT / str(referenced)
