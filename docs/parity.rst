@@ -167,12 +167,13 @@ Regenerate the release-facing README table from the tracked CPU/GPU reports:
 
 .. code-block:: bash
 
-   python scripts/generate_readme_fast_branch_audit.py \
+   python -m sfincs_jax.validation.readme_audit \
      --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
      --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas \
      --min-fortran-runtime-s 10
 
-To replace the tracked reports, run ``scripts/run_scaled_example_suite.py`` with
+To replace the tracked reports, run
+``python -m sfincs_jax.validation.scaled_suite`` with
 either ``--fortran-exe /path/to/sfincs`` or a locally restored
 ``--reference-results-root``. Slim source checkouts do not include the frozen
 Fortran HDF5 reference root used to produce the release-facing report files.
@@ -200,7 +201,7 @@ For faster targeted debugging, regenerate the reduced-suite files:
 
 .. code-block:: bash
 
-   python scripts/run_reduced_upstream_suite.py --timeout-s 120 --max-attempts 1
+   python -m sfincs_jax.validation.reduced_suite --timeout-s 120 --max-attempts 1
 
 Reduced-suite default tolerances are ``rtol=5e-4`` and ``atol=1e-9``; override with ``--rtol``/``--atol``.
 
@@ -208,7 +209,7 @@ Target a single case family:
 
 .. code-block:: bash
 
-   python scripts/run_reduced_upstream_suite.py \
+   python -m sfincs_jax.validation.reduced_suite \
      --pattern 'HSX_FPCollisions|filteredW7XNetCDF_2species_magneticDrifts|geometryScheme4_2species' \
      --timeout-s 120 --max-attempts 1
 

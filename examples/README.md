@@ -259,4 +259,4 @@ for runtime, memory, parity, or solver-policy changes.
 
 Detailed release-audit commands live in `docs/parity.rst`,
 `docs/performance.rst`, and `docs/fortran_examples.rst`. The scaled-suite
-driver is `../scripts/run_scaled_example_suite.py`.
+driver is `python -m sfincs_jax.validation.scaled_suite`.
