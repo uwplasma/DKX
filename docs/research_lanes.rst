@@ -113,7 +113,8 @@ illegal-address crash are closed for the tested paths, while residual
 convergence, HDF5/solver-trace output, and installed-Krylov runtime effectiveness
 remain open.
 
-Relevant implementation:
+Relevant implementation on the ``research/qi-device-hard-seed`` preservation
+branch:
 
 - ``sfincs_jax/solvers/preconditioner_qi_basis.py`` builds deterministic
   QI coarse bases, phase-space and residual-region bases, active-pattern
@@ -529,7 +530,7 @@ does not promote projected smoothing as the closure strategy; the GPU evidence
 above shows it is a useful local component but not sufficient by itself.
 
 The alternative coarse direction is a standalone multilevel/angular-radial
-prototype in ``sfincs_jax/solvers/preconditioner_qi_corrections.py``. It constructs radial
+prototype on the ``research/qi-device-hard-seed`` branch. It constructs radial
 aggregate hierarchies, angular harmonics, radial polynomial modes, and
 radial-angular products, then applies a pure-JAX action least-squares coarse
 correction after a local smoother. Unit tests show deterministic hierarchy

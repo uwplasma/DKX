@@ -523,15 +523,14 @@ Promotion gates:
 - and keep default ``xGridScheme`` behavior unchanged unless full-suite parity and
   runtime/memory gates justify promotion.
 
-QI seed-robustness smoke
-^^^^^^^^^^^^^^^^^^^^^^^^
+QI seed-robustness artifacts
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Current script and tests:
+QI seed-robustness scripts and tests are preserved on the
+``research/qi-device-hard-seed`` branch. The stable core keeps historical
+artifacts only as research-lane evidence, not as release-facing commands.
 
-- ``scripts/run_qi_seed_robustness.py``
-- ``tests/test_run_qi_seed_robustness.py``
-
-Current smoke artifact:
+Historical smoke artifact:
 
 - ``docs/_static/qi_seed_robustness_smoke.json``
 - ``docs/_static/qi_seed_robustness_multiseed.json``

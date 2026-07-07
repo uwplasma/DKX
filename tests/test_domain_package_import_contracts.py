@@ -120,20 +120,6 @@ ACTIVE_MODULE_EXPORTS = {
         "validate_fortran_v3_adjoint_sensitivity_output_surface",
         "vjp_flux",
     ),
-    "sfincs_jax.validation.qi_device": (
-        "DEFAULT_GPU_CPU_ROOT_ATOL",
-        "DEFAULT_GPU_FORTRAN_ROOT_ATOL",
-        "QIDeviceArtifactCheck",
-        "QILadderPromotionResult",
-        "QIRunEvidence",
-        "check_qi_device_artifact_file",
-        "check_qi_device_artifact_files",
-        "evaluate_qi_production_ladder_promotion",
-        "evaluate_qi_res15_gpu_campaign",
-        "evaluate_qi_res15_gpu_campaign_files",
-        "load_json_object",
-        "qi_device_artifact_errors",
-    ),
 }
 
 LEGACY_MODULES_THAT_KEEP_THEIR_IMPORT_PATHS = (
@@ -524,21 +510,6 @@ PRECONDITIONER_COMPATIBILITY_IMPORTS = (
         "sfincs_jax.solvers.preconditioner_full_fp_kinetic",
         "sfincs_jax.solvers.preconditioner_full_fp_kinetic",
         "build_rhs1_collision_preconditioner",
-    ),
-    (
-        "sfincs_jax.solvers.preconditioner_qi_basis",
-        "sfincs_jax.solvers.preconditioner_qi_basis",
-        "build_rhs1_qi_coarse_basis",
-    ),
-    (
-        "sfincs_jax.solvers.preconditioner_qi_corrections",
-        "sfincs_jax.solvers.preconditioner_qi_corrections",
-        "build_rhs1_qi_two_level_preconditioner",
-    ),
-    (
-        "sfincs_jax.solvers.preconditioner_qi_device",
-        "sfincs_jax.solvers.preconditioner_qi_device",
-        "setup_rhs1_qi_device_preconditioner",
     ),
     (
         "sfincs_jax.solvers.preconditioner_schur_profile",
