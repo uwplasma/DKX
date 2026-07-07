@@ -6,7 +6,6 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 import pytest
-import scipy.sparse as sp
 
 from sfincs_jax.solvers.explicit_sparse import factorize_host_sparse_operator
 from sfincs_jax.namelist import read_sfincs_input
@@ -351,48 +350,6 @@ def test_host_sparse_builder_env_accepts_symbolic_superblock(monkeypatch: pytest
     np.testing.assert_allclose(a @ factor.solve(rhs), rhs, rtol=1e-11, atol=1e-11)
 
 
-def test_host_sparse_builder_env_accepts_symbolic_nd_frontal(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", "nested_dissection_frontal_schur_lu")
-    n = 12
-    a = sp.diags(
-        [
-            -0.35 * np.ones(n - 1),
-            5.0 + 0.1 * np.arange(n),
-            -0.6 * np.ones(n - 1),
-        ],
-        offsets=[-1, 0, 1],
-        format="csr",
-    ).toarray()
-
-    def _matvec(x: jnp.ndarray) -> jnp.ndarray:
-        return jnp.asarray(a) @ x
-
-    _operator, factor = sparse_direct.build_host_sparse_direct_factor_from_matvec(
-        matvec=_matvec,
-        n=n,
-        dtype=jnp.float64,
-        factor_dtype=np.dtype(np.float64),
-        default_factor_kind="jacobi",
-        default_symbolic_ordering_kind="natural",
-        default_symbolic_block_size=3,
-        default_symbolic_nd_max_leaf_size=3,
-        default_symbolic_nd_max_terminal_factor_size=12,
-        default_symbolic_nd_max_depth=4,
-        default_symbolic_nd_separator_width=2,
-        default_symbolic_nd_max_separator_cols=3,
-        default_symbolic_nd_high_degree_cols=0,
-        default_symbolic_nd_regularization_rel=0.0,
-        default_symbolic_nd_max_setup_s=60.0,
-    )
-
-    rhs = np.linspace(-1.0, 1.0, n, dtype=np.float64)
-    assert factor.kind == "symbolic_nd_frontal_schur_lu"
-    assert factor.factor.node_count > 1
-    assert factor.factor.metadata["max_terminal_factor_size"] == 12
-    assert factor.factor.metadata["max_setup_s"] == 60.0
-    np.testing.assert_allclose(a @ factor.solve(rhs), rhs, rtol=1e-11, atol=1e-11)
-
-
 @pytest.mark.parametrize(
     "input_path",
     (
@@ -610,54 +567,6 @@ def test_transport_fortran_reduced_symbolic_prefill_guard_skips_factorization(mo
     assert not hasattr(preconditioner, "_sfincs_jax_transport_fp_fortran_reduced_lu_metadata")
 
 
-def test_transport_fortran_reduced_nd_setup_guard_skips_pattern_probe(monkeypatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_FACTOR", "symbolic_nd_frontal_schur_lu")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_DIRECT", "1")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_PREFILL_SAFETY_FACTOR", "1")
-
-    def fail_factorize(*_args, **_kwargs):
-        raise RuntimeError(
-            "Host sparse factorization failed. Underlying factorization error: "
-            "symbolic_nd_frontal_schur_lu setup time budget exceeded "
-            "(92.0s>90.0s; stage=separator_update; node_size=55796 depth=3)"
-        )
-
-    def fail_pattern(*_args, **_kwargs):
-        raise AssertionError("ND setup-budget rejection should skip the pattern-probe fallback")
-
-    monkeypatch.setattr(sparse_direct, "factorize_host_sparse_operator", fail_factorize)
-    monkeypatch.setattr(sparse_direct, "build_operator_from_pattern", fail_pattern)
-
-    nml = read_sfincs_input("tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist")
-    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active = np.asarray(transport_active_dof_indices(op), dtype=np.int64)
-    active_jnp = jnp.asarray(active, dtype=jnp.int32)
-    full_to_active = np.zeros((int(op.total_size) + 1,), dtype=np.int32)
-    full_to_active[active + 1] = np.arange(1, int(active.size) + 1, dtype=np.int32)
-    full_to_active_jnp = jnp.asarray(full_to_active, dtype=jnp.int32)
-
-    def _reduce_full(v_full: jnp.ndarray) -> jnp.ndarray:
-        return v_full[active_jnp]
-
-    def _expand_reduced(v_reduced: jnp.ndarray) -> jnp.ndarray:
-        padded = jnp.concatenate([jnp.zeros((1,), dtype=v_reduced.dtype), v_reduced], axis=0)
-        return padded[full_to_active_jnp[1:]]
-
-    preconditioner = transport_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
-        op=op,
-        reduce_full=_reduce_full,
-        expand_reduced=_expand_reduced,
-        active_indices_np=active,
-        emit=None,
-    )
-
-    rhs = jnp.ones((int(active.size),), dtype=jnp.float64)
-    actual = preconditioner(rhs)
-    assert actual.shape == rhs.shape
-    assert np.all(np.isfinite(np.asarray(actual)))
-    assert not hasattr(preconditioner, "_sfincs_jax_transport_fp_fortran_reduced_lu_metadata")
-
-
 def test_transport_fortran_reduced_auto_exact_rescue_after_symbolic_prefill_guard(monkeypatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_DIRECT", "1")
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_FACTOR", raising=False)
@@ -798,81 +707,6 @@ def test_transport_fortran_reduced_lu_rescues_rejected_symbolic_factor_with_dire
     assert rescue["accepted"] is True
     assert rescue["max_relative_residual"] < 1.0e-2
     assert metadata["factor_nbytes_estimate"] > 0
-
-
-@pytest.mark.parametrize(
-    "input_path",
-    (
-        Path("tests/reduced_inputs/transportMatrix_geometryScheme2.input.namelist"),
-        Path("tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist"),
-    ),
-)
-def test_transport_fortran_reduced_lu_admits_nd_frontal_residual_polish_on_reduced_geometry_rich_cases(
-    monkeypatch,
-    input_path: Path,
-) -> None:
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_FACTOR", "symbolic_nd_frontal_schur_lu")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_DIRECT", "1")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ADMISSION", "1")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ADMISSION_MAX_REL", "1e-2")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ADMISSION_MIN_IMPROVEMENT", "10")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ADMISSION_RESCUE_LU", "0")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ORDERING", "rcm")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_LEAF_SIZE", "384")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_TERMINAL_FACTOR_SIZE", "4096")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_DEPTH", "1")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_SEPARATOR_WIDTH", "128")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_SEPARATOR_COLS", "4096")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_HIGH_DEGREE_COLS", "256")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES", "400000000")
-    monkeypatch.setenv(
-        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES_PER_CHILD",
-        "200000000",
-    )
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_SETUP_S", "60")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_RESIDUAL_POLISH_STEPS", "2")
-
-    nml = read_sfincs_input(input_path)
-    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    active = np.asarray(transport_active_dof_indices(op), dtype=np.int64)
-    active_jnp = jnp.asarray(active, dtype=jnp.int32)
-    full_to_active = np.zeros((int(op.total_size) + 1,), dtype=np.int32)
-    full_to_active[active + 1] = np.arange(1, int(active.size) + 1, dtype=np.int32)
-    full_to_active_jnp = jnp.asarray(full_to_active, dtype=jnp.int32)
-
-    def _reduce_full(v_full: jnp.ndarray) -> jnp.ndarray:
-        return v_full[active_jnp]
-
-    def _expand_reduced(v_reduced: jnp.ndarray) -> jnp.ndarray:
-        padded = jnp.concatenate([jnp.zeros((1,), dtype=v_reduced.dtype), v_reduced], axis=0)
-        return padded[full_to_active_jnp[1:]]
-
-    preconditioner = transport_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
-        op=op,
-        reduce_full=_reduce_full,
-        expand_reduced=_expand_reduced,
-        active_indices_np=active,
-        emit=None,
-    )
-    metadata = getattr(preconditioner, "_sfincs_jax_transport_fp_fortran_reduced_lu_metadata", {})
-    admission = metadata.get("symbolic_admission", {})
-    factor_metadata = metadata.get("symbolic_factor_metadata", {})
-
-    assert metadata["factor_kind"] == "symbolic_nd_frontal_schur_lu"
-    assert admission["accepted"] is True
-    assert admission["max_relative_residual"] < 1.0e-2
-    assert admission["min_improvement_vs_identity"] > 10.0
-    assert factor_metadata["architecture"] == "symbolic_nd_frontal_schur_lu"
-    assert factor_metadata["max_terminal_factor_size"] == 4096
-    assert factor_metadata["max_setup_s"] == 60.0
-    assert factor_metadata["max_dense_rhs_entries_per_child"] == 200000000
-    assert factor_metadata["separator_update_mode"] == "csc_column_chunks"
-    assert factor_metadata["separator_update_chunks"] > 0
-    assert metadata["symbolic_nd_max_terminal_factor_size"] == 4096
-    assert metadata["symbolic_nd_max_dense_rhs_entries_per_child"] == 200000000
-    assert metadata["symbolic_nd_max_setup_s"] == 60.0
-    assert factor_metadata["node_count"] >= 3
-    assert factor_metadata["residual_polish_steps"] == 2
 
 
 def test_transport_direct_pmat_physics_coarse_basis_includes_constraint_modes() -> None:

@@ -8,7 +8,6 @@ from dataclasses import dataclass
 import hashlib
 import os
 import time
-from threading import Lock
 from typing import Callable, Literal
 
 import numpy as np
@@ -31,7 +30,6 @@ FactorKind = Literal[
     "symbolic_block_schur_lu",
     "symbolic_superblock_lu",
     "symbolic_frontal_schur_lu",
-    "symbolic_nd_frontal_schur_lu",
 ]
 
 
@@ -188,11 +186,6 @@ _FACTOR_KIND_ALIASES = {
     "frontal_schur_lu": "symbolic_frontal_schur_lu",
     "native_frontal_schur_lu": "symbolic_frontal_schur_lu",
     "multifrontal_schur_lu": "symbolic_frontal_schur_lu",
-    "symbolic_nd_frontal_schur_lu": "symbolic_nd_frontal_schur_lu",
-    "nd_frontal_schur_lu": "symbolic_nd_frontal_schur_lu",
-    "nested_dissection_frontal_schur_lu": "symbolic_nd_frontal_schur_lu",
-    "native_nd_frontal_schur_lu": "symbolic_nd_frontal_schur_lu",
-    "multilevel_frontal_schur_lu": "symbolic_nd_frontal_schur_lu",
     "symbolic_superblock_lu": "symbolic_superblock_lu",
     "superblock_lu": "symbolic_superblock_lu",
     "native_superblock_lu": "symbolic_superblock_lu",
@@ -330,20 +323,6 @@ class ExplicitSparseFactorSettings:
     symbolic_frontal_regularization_rel: float
     symbolic_frontal_max_dense_rhs_entries: int
     symbolic_frontal_max_dense_rhs_cols_per_block: int
-    symbolic_nd_max_leaf_size: int
-    symbolic_nd_max_terminal_factor_size: int
-    symbolic_nd_max_depth: int
-    symbolic_nd_separator_width: int
-    symbolic_nd_max_separator_cols: int
-    symbolic_nd_high_degree_cols: int
-    symbolic_nd_regularization_rel: float
-    symbolic_nd_max_dense_rhs_entries: int
-    symbolic_nd_max_dense_rhs_entries_per_child: int
-    symbolic_nd_max_dense_rhs_cols_per_child: int
-    symbolic_nd_max_setup_s: float
-    symbolic_nd_parallel_update_workers: int
-    symbolic_nd_residual_polish_steps: int
-    symbolic_nd_residual_polish_damping: float
     symbolic_superblock_max_size: int
     symbolic_superblock_max_blocks: int
     symbolic_superblock_min_cross_nnz: int
@@ -404,20 +383,6 @@ def explicit_sparse_factor_settings_from_env(
     default_symbolic_frontal_regularization_rel: float = 1.0e-12,
     default_symbolic_frontal_max_dense_rhs_entries: int = 0,
     default_symbolic_frontal_max_dense_rhs_cols_per_block: int = 0,
-    default_symbolic_nd_max_leaf_size: int = 4096,
-    default_symbolic_nd_max_terminal_factor_size: int = 32768,
-    default_symbolic_nd_max_depth: int = 4,
-    default_symbolic_nd_separator_width: int = 64,
-    default_symbolic_nd_max_separator_cols: int = 4096,
-    default_symbolic_nd_high_degree_cols: int = 64,
-    default_symbolic_nd_regularization_rel: float = 1.0e-12,
-    default_symbolic_nd_max_dense_rhs_entries: int = 0,
-    default_symbolic_nd_max_dense_rhs_entries_per_child: int = 0,
-    default_symbolic_nd_max_dense_rhs_cols_per_child: int = 0,
-    default_symbolic_nd_max_setup_s: float = 0.0,
-    default_symbolic_nd_parallel_update_workers: int = 1,
-    default_symbolic_nd_residual_polish_steps: int = 0,
-    default_symbolic_nd_residual_polish_damping: float = 1.0,
     default_symbolic_superblock_max_size: int = 32768,
     default_symbolic_superblock_max_blocks: int = 8,
     default_symbolic_superblock_min_cross_nnz: int = 1,
@@ -543,76 +508,6 @@ def explicit_sparse_factor_settings_from_env(
             _env_value(env_map, "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MAX_DENSE_RHS_COLS_PER_BLOCK"),
             int(default_symbolic_frontal_max_dense_rhs_cols_per_block),
             minimum=0,
-        ),
-        symbolic_nd_max_leaf_size=parse_explicit_sparse_int(
-            _env_value(env_map, "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_LEAF_SIZE"),
-            int(default_symbolic_nd_max_leaf_size),
-            minimum=1,
-        ),
-        symbolic_nd_max_terminal_factor_size=parse_explicit_sparse_int(
-            _env_value(env_map, "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_TERMINAL_FACTOR_SIZE"),
-            int(default_symbolic_nd_max_terminal_factor_size),
-            minimum=1,
-        ),
-        symbolic_nd_max_depth=parse_explicit_sparse_int(
-            _env_value(env_map, "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_DEPTH"),
-            int(default_symbolic_nd_max_depth),
-            minimum=0,
-        ),
-        symbolic_nd_separator_width=parse_explicit_sparse_int(
-            _env_value(env_map, "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_SEPARATOR_WIDTH"),
-            int(default_symbolic_nd_separator_width),
-            minimum=1,
-        ),
-        symbolic_nd_max_separator_cols=parse_explicit_sparse_int(
-            _env_value(env_map, "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_SEPARATOR_COLS"),
-            int(default_symbolic_nd_max_separator_cols),
-            minimum=1,
-        ),
-        symbolic_nd_high_degree_cols=parse_explicit_sparse_int(
-            _env_value(env_map, "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_HIGH_DEGREE_COLS"),
-            int(default_symbolic_nd_high_degree_cols),
-            minimum=0,
-        ),
-        symbolic_nd_regularization_rel=parse_explicit_sparse_float(
-            _env_value(env_map, "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_REG_REL"),
-            float(default_symbolic_nd_regularization_rel),
-            minimum=0.0,
-        ),
-        symbolic_nd_max_dense_rhs_entries=parse_explicit_sparse_int(
-            _env_value(env_map, "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES"),
-            int(default_symbolic_nd_max_dense_rhs_entries),
-            minimum=0,
-        ),
-        symbolic_nd_max_dense_rhs_entries_per_child=parse_explicit_sparse_int(
-            _env_value(env_map, "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES_PER_CHILD"),
-            int(default_symbolic_nd_max_dense_rhs_entries_per_child),
-            minimum=0,
-        ),
-        symbolic_nd_max_dense_rhs_cols_per_child=parse_explicit_sparse_int(
-            _env_value(env_map, "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_DENSE_RHS_COLS_PER_CHILD"),
-            int(default_symbolic_nd_max_dense_rhs_cols_per_child),
-            minimum=0,
-        ),
-        symbolic_nd_max_setup_s=parse_explicit_sparse_float(
-            _env_value(env_map, "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_SETUP_S"),
-            float(default_symbolic_nd_max_setup_s),
-            minimum=0.0,
-        ),
-        symbolic_nd_parallel_update_workers=parse_explicit_sparse_int(
-            _env_value(env_map, "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_PARALLEL_UPDATE_WORKERS"),
-            int(default_symbolic_nd_parallel_update_workers),
-            minimum=1,
-        ),
-        symbolic_nd_residual_polish_steps=parse_explicit_sparse_int(
-            _env_value(env_map, "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_RESIDUAL_POLISH_STEPS"),
-            int(default_symbolic_nd_residual_polish_steps),
-            minimum=0,
-        ),
-        symbolic_nd_residual_polish_damping=parse_explicit_sparse_float(
-            _env_value(env_map, "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_RESIDUAL_POLISH_DAMPING"),
-            float(default_symbolic_nd_residual_polish_damping),
-            minimum=0.0,
         ),
         symbolic_superblock_max_size=parse_explicit_sparse_int(
             _env_value(env_map, "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SUPERBLOCK_MAX_SIZE"),
@@ -1180,125 +1075,6 @@ class _SymbolicBlockSchurFactor:
         if not np.all(finite):
             out = np.where(finite, out, 0.0)
         return np.asarray(out, dtype=self.dtype)
-
-
-@dataclass(frozen=True)
-class _SymbolicNDChild:
-    positions: np.ndarray
-    indices: np.ndarray
-    factor: "_SymbolicNDFrontalNode"
-    b_to_separator: sp.csr_matrix
-    c_from_separator: sp.csr_matrix
-
-
-@dataclass(frozen=True)
-class _SymbolicNDFrontalNode:
-    """Recursive nested-dissection frontal factor over a symbolic ordering.
-
-    Each node eliminates one or two child interiors and keeps an explicit
-    separator Schur complement.  The top-level solve is exact for the reduced
-    operator represented by the recursive separators, while setup-time
-    admission still decides whether this bounded native factor is strong enough
-    for a production Krylov solve.
-    """
-
-    indices: np.ndarray
-    dtype: np.dtype
-    global_size: int
-    depth: int
-    children: tuple[_SymbolicNDChild, ...] = tuple()
-    separator_positions: np.ndarray | None = None
-    separator_indices: np.ndarray | None = None
-    leaf_factor: object | None = None
-    schur_factor: object | None = None
-    node_count: int = 1
-    leaf_count: int = 0
-    max_depth_reached: int = 0
-    separator_count_total: int = 0
-    max_separator_count: int = 0
-    dense_update_entries: int = 0
-    peak_dense_update_entries: int = 0
-    separator_update_chunks: int = 0
-    factor_failures: int = 0
-    total_nbytes_estimate: int = 0
-    total_nnz_estimate: int = 0
-    metadata: dict[str, object] | None = None
-
-    @property
-    def separator_count(self) -> int:
-        return 0 if self.separator_indices is None else int(np.asarray(self.separator_indices).size)
-
-    def solve_local(self, rhs) -> np.ndarray:
-        rhs_np = np.asarray(rhs, dtype=self.dtype)
-        was_vector = rhs_np.ndim == 1
-        if was_vector:
-            rhs_2d = rhs_np.reshape((int(self.indices.size), 1))
-        else:
-            rhs_2d = rhs_np.reshape((int(self.indices.size), -1))
-        if self.leaf_factor is not None:
-            try:
-                out = np.asarray(self.leaf_factor.solve(rhs_2d), dtype=self.dtype)
-            except Exception:
-                out = np.asarray(rhs_2d, dtype=self.dtype)
-            return out[:, 0] if was_vector else out
-
-        sep_pos = np.asarray(self.separator_positions, dtype=np.int64)
-        sep_count = int(sep_pos.size)
-        out = np.zeros_like(rhs_2d, dtype=self.dtype)
-        if sep_count == 0:
-            for child in self.children:
-                child_pos = np.asarray(child.positions, dtype=np.int64)
-                out[child_pos, :] = np.asarray(child.factor.solve_local(rhs_2d[child_pos, :]), dtype=self.dtype)
-            return out[:, 0] if was_vector else out
-
-        sep_rhs = np.array(rhs_2d[sep_pos, :], dtype=self.dtype, copy=True)
-        child_solutions: list[tuple[_SymbolicNDChild, np.ndarray]] = []
-        for child in self.children:
-            child_pos = np.asarray(child.positions, dtype=np.int64)
-            y_child = np.asarray(child.factor.solve_local(rhs_2d[child_pos, :]), dtype=self.dtype)
-            if y_child.ndim == 1:
-                y_child = y_child.reshape((int(child_pos.size), 1))
-            child_solutions.append((child, y_child))
-            if child.c_from_separator.shape[0] == sep_count and child.c_from_separator.nnz:
-                sep_rhs -= np.asarray(child.c_from_separator @ y_child, dtype=self.dtype)
-
-        try:
-            y_sep = np.asarray(self.schur_factor.solve(sep_rhs), dtype=self.dtype)
-        except Exception:
-            y_sep = np.zeros_like(sep_rhs, dtype=self.dtype)
-        if y_sep.ndim == 1:
-            y_sep = y_sep.reshape((sep_count, 1))
-        out[sep_pos, :] = y_sep
-
-        for child, y_child in child_solutions:
-            child_pos = np.asarray(child.positions, dtype=np.int64)
-            if child.b_to_separator.nnz:
-                rhs_corr = np.asarray(child.b_to_separator @ y_sep, dtype=self.dtype)
-                delta = np.asarray(child.factor.solve_local(rhs_corr), dtype=self.dtype)
-                if delta.ndim == 1:
-                    delta = delta.reshape((int(child_pos.size), 1))
-                out[child_pos, :] = y_child - delta
-            else:
-                out[child_pos, :] = y_child
-        finite = np.isfinite(out)
-        if not np.all(finite):
-            out = np.where(finite, out, 0.0)
-        return np.asarray(out[:, 0] if was_vector else out, dtype=self.dtype)
-
-    def solve(self, rhs) -> np.ndarray:
-        rhs_np = np.asarray(rhs, dtype=self.dtype)
-        was_vector = rhs_np.ndim == 1
-        if was_vector:
-            rhs_2d = rhs_np.reshape((int(self.global_size), 1))
-        else:
-            rhs_2d = rhs_np.reshape((int(self.global_size), -1))
-        idx = np.asarray(self.indices, dtype=np.int64)
-        local_solution = np.asarray(self.solve_local(rhs_2d[idx, :]), dtype=self.dtype)
-        if local_solution.ndim == 1:
-            local_solution = local_solution.reshape((idx.size, 1))
-        out = np.zeros((int(self.global_size), int(rhs_2d.shape[1])), dtype=self.dtype)
-        out[idx, :] = local_solution
-        return np.asarray(out[:, 0] if was_vector else out, dtype=self.dtype)
 
 
 @dataclass(frozen=True)
@@ -1942,465 +1718,6 @@ def _factor_csc_with_regularized_fallback(
         nbytes = int(factor.inverse.nbytes)
         nnz = int(factor.inverse.size)
     return factor, int(nbytes or 0), int(nnz or 0), int(failures)
-
-
-def _build_symbolic_nd_frontal_schur_factor(
-    matrix: sp.spmatrix,
-    *,
-    analysis: SparseSymbolicAnalysis,
-    diag_pivot_thresh: float,
-    max_leaf_size: int = 4096,
-    max_terminal_factor_size: int = 32768,
-    max_depth: int = 4,
-    separator_width: int = 64,
-    max_separator_cols: int = 4096,
-    high_degree_cols: int = 64,
-    regularization_rel: float = 1.0e-12,
-    max_dense_rhs_entries: int = 0,
-    max_dense_rhs_entries_per_child: int = 0,
-    max_dense_rhs_cols_per_child: int = 0,
-    max_setup_s: float = 0.0,
-    parallel_child_workers: int = 1,
-    parallel_update_workers: int = 1,
-) -> tuple[_SymbolicNDFrontalNode, int, int]:
-    """Build a recursive nested-dissection Schur factor over a symbolic order.
-
-    This is the native Python/JAX-side analogue of the elimination-tree layer
-    that PETSc+MUMPS/SuperLU_DIST provide in the Fortran path.  It recursively
-    eliminates child interiors, forms separator Schur complements, and exposes
-    enough metadata for production admission gates to reject weak or oversized
-    candidates before they enter Krylov.
-    """
-
-    matrix_csr = matrix.tocsr()
-    n = int(matrix_csr.shape[0])
-    if n != int(matrix_csr.shape[1]):
-        raise ValueError("symbolic nested-dissection frontal factor requires a square matrix")
-    dtype = np.dtype(matrix_csr.dtype)
-    permutation = np.asarray(analysis.permutation, dtype=np.int64)
-    if permutation.size != n:
-        permutation = np.arange(n, dtype=np.int64)
-    if np.unique(permutation).size != n:
-        permutation = np.arange(n, dtype=np.int64)
-    max_leaf = max(1, int(max_leaf_size))
-    max_terminal = max(max_leaf, int(max_terminal_factor_size))
-    depth_cap = max(0, int(max_depth))
-    sep_width_default = max(1, int(separator_width))
-    max_sep = max(1, int(max_separator_cols))
-    high_degree = max(0, int(high_degree_cols))
-    max_dense_entries = max(0, int(max_dense_rhs_entries))
-    max_dense_entries_per_child = max(0, int(max_dense_rhs_entries_per_child))
-    max_cols_per_child = max(0, int(max_dense_rhs_cols_per_child))
-    max_setup_seconds = max(0.0, float(max_setup_s))
-    child_workers = max(1, int(parallel_child_workers))
-    update_workers = max(1, int(parallel_update_workers))
-    setup_start_s = time.perf_counter()
-    row_degree = np.diff(matrix_csr.indptr).astype(np.int64, copy=False)
-    col_degree = np.diff(matrix_csr.tocsc().indptr).astype(np.int64, copy=False)
-    degree = row_degree + col_degree
-    dense_entries_global = 0
-    parallel_child_nodes = 0
-    parallel_child_factor_tasks = 0
-    stats_lock = Lock()
-
-    def _check_setup_budget(*, stage: str, node_size: int, depth: int) -> None:
-        if max_setup_seconds <= 0.0:
-            return
-        elapsed_s = time.perf_counter() - setup_start_s
-        if elapsed_s > max_setup_seconds:
-            raise RuntimeError(
-                "symbolic_nd_frontal_schur_lu setup time budget exceeded "
-                f"({elapsed_s:.3f}s>{max_setup_seconds:.3f}s; "
-                f"stage={stage}; node_size={int(node_size)} depth={int(depth)})"
-            )
-
-    def _build_node(indices: np.ndarray, depth: int) -> _SymbolicNDFrontalNode:
-        nonlocal dense_entries_global, parallel_child_nodes, parallel_child_factor_tasks
-        idx = np.asarray(indices, dtype=np.int64).reshape((-1,))
-        node_n = int(idx.size)
-        _check_setup_budget(stage="node_start", node_size=node_n, depth=int(depth))
-        if node_n == 0:
-            return _SymbolicNDFrontalNode(
-                indices=idx,
-                dtype=dtype,
-                global_size=n,
-                depth=int(depth),
-                leaf_factor=_DenseInverseFactor(inverse=np.zeros((0, 0), dtype=dtype)),
-                leaf_count=1,
-                max_depth_reached=int(depth),
-            )
-        if node_n <= max_leaf or int(depth) >= depth_cap:
-            if node_n > max_terminal:
-                raise RuntimeError(
-                    "symbolic_nd_frontal_schur_lu terminal leaf factor size exceeded "
-                    f"({int(node_n)}>{int(max_terminal)}; depth={int(depth)} max_depth={int(depth_cap)})"
-                )
-            local = matrix_csr[idx, :][:, idx].tocsc()
-            factor, nbytes, nnz, failures = _factor_csc_with_regularized_fallback(
-                local,
-                dtype=dtype,
-                diag_pivot_thresh=float(diag_pivot_thresh),
-                regularization_rel=float(regularization_rel),
-                permc_spec="COLAMD",
-            )
-            return _SymbolicNDFrontalNode(
-                indices=idx,
-                dtype=dtype,
-                global_size=n,
-                depth=int(depth),
-                leaf_factor=factor,
-                leaf_count=1,
-                max_depth_reached=int(depth),
-                factor_failures=int(failures),
-                total_nbytes_estimate=int(nbytes),
-                total_nnz_estimate=int(nnz),
-                metadata={"node_kind": "leaf", "node_size": int(node_n)},
-            )
-
-        sep_width = min(max_sep, max(1, min(sep_width_default, max(1, node_n - 2))))
-        middle = int(node_n // 2)
-        sep_start = max(0, min(node_n - sep_width, middle - sep_width // 2))
-        sep_stop = min(node_n, sep_start + sep_width)
-        separator_mask = np.zeros((node_n,), dtype=bool)
-        separator_mask[sep_start:sep_stop] = True
-        remaining_sep_budget = max(0, max_sep - int(np.count_nonzero(separator_mask)))
-        if remaining_sep_budget:
-            local_side = np.zeros((node_n,), dtype=np.int8)
-            tentative_interior = np.flatnonzero(~separator_mask)
-            left_tentative = tentative_interior[tentative_interior < middle]
-            right_tentative = tentative_interior[tentative_interior >= middle]
-            if left_tentative.size == 0 or right_tentative.size == 0:
-                split = int(tentative_interior.size // 2)
-                left_tentative = tentative_interior[:split]
-                right_tentative = tentative_interior[split:]
-            local_side[left_tentative] = 1
-            local_side[right_tentative] = 2
-            if left_tentative.size and right_tentative.size:
-                local_pattern = matrix_csr[idx, :][:, idx].tocoo()
-                row_side = local_side[np.asarray(local_pattern.row, dtype=np.int64)]
-                col_side = local_side[np.asarray(local_pattern.col, dtype=np.int64)]
-                cross = (row_side > 0) & (col_side > 0) & (row_side != col_side)
-                if np.any(cross):
-                    endpoints = np.concatenate(
-                        [
-                            np.asarray(local_pattern.row[cross], dtype=np.int64),
-                            np.asarray(local_pattern.col[cross], dtype=np.int64),
-                        ]
-                    )
-                    counts = np.bincount(endpoints, minlength=node_n)
-                    candidate_positions = np.flatnonzero((counts > 0) & (~separator_mask))
-                    if candidate_positions.size:
-                        take = min(int(remaining_sep_budget), int(candidate_positions.size))
-                        scores = counts[candidate_positions]
-                        selected = candidate_positions[np.argpartition(-scores, kth=take - 1)[:take]]
-                        separator_mask[selected] = True
-                        remaining_sep_budget = max(0, max_sep - int(np.count_nonzero(separator_mask)))
-        if high_degree and remaining_sep_budget:
-            candidate_positions = np.flatnonzero(~separator_mask)
-            if candidate_positions.size:
-                take = min(int(remaining_sep_budget), int(high_degree), int(candidate_positions.size))
-                scores = degree[idx[candidate_positions]]
-                selected = candidate_positions[np.argpartition(-scores, kth=take - 1)[:take]]
-                separator_mask[selected] = True
-
-        sep_positions = np.flatnonzero(separator_mask).astype(np.int64, copy=False)
-        if sep_positions.size == 0 or sep_positions.size >= node_n:
-            if node_n > max_terminal:
-                raise RuntimeError(
-                    "symbolic_nd_frontal_schur_lu degenerate separator leaf size exceeded "
-                    f"({int(node_n)}>{int(max_terminal)}; depth={int(depth)})"
-                )
-            local = matrix_csr[idx, :][:, idx].tocsc()
-            factor, nbytes, nnz, failures = _factor_csc_with_regularized_fallback(
-                local,
-                dtype=dtype,
-                diag_pivot_thresh=float(diag_pivot_thresh),
-                regularization_rel=float(regularization_rel),
-                permc_spec="COLAMD",
-            )
-            return _SymbolicNDFrontalNode(
-                indices=idx,
-                dtype=dtype,
-                global_size=n,
-                depth=int(depth),
-                leaf_factor=factor,
-                leaf_count=1,
-                max_depth_reached=int(depth),
-                factor_failures=int(failures),
-                total_nbytes_estimate=int(nbytes),
-                total_nnz_estimate=int(nnz),
-                metadata={"node_kind": "leaf_degenerate_separator", "node_size": int(node_n)},
-            )
-
-        all_positions = np.arange(node_n, dtype=np.int64)
-        interior_positions = all_positions[~separator_mask]
-        left_positions = interior_positions[interior_positions < middle]
-        right_positions = interior_positions[interior_positions >= middle]
-        if left_positions.size == 0 or right_positions.size == 0:
-            split = int(interior_positions.size // 2)
-            left_positions = interior_positions[:split]
-            right_positions = interior_positions[split:]
-        child_position_groups = [positions for positions in (left_positions, right_positions) if int(positions.size) > 0]
-        if not child_position_groups:
-            if node_n > max_terminal:
-                raise RuntimeError(
-                    "symbolic_nd_frontal_schur_lu no-child leaf size exceeded "
-                    f"({int(node_n)}>{int(max_terminal)}; depth={int(depth)})"
-                )
-            local = matrix_csr[idx, :][:, idx].tocsc()
-            factor, nbytes, nnz, failures = _factor_csc_with_regularized_fallback(
-                local,
-                dtype=dtype,
-                diag_pivot_thresh=float(diag_pivot_thresh),
-                regularization_rel=float(regularization_rel),
-                permc_spec="COLAMD",
-            )
-            return _SymbolicNDFrontalNode(
-                indices=idx,
-                dtype=dtype,
-                global_size=n,
-                depth=int(depth),
-                leaf_factor=factor,
-                leaf_count=1,
-                max_depth_reached=int(depth),
-                factor_failures=int(failures),
-                total_nbytes_estimate=int(nbytes),
-                total_nnz_estimate=int(nnz),
-                metadata={"node_kind": "leaf_no_children", "node_size": int(node_n)},
-            )
-
-        sep_indices = np.asarray(idx[sep_positions], dtype=np.int64)
-        sep_count = int(sep_indices.size)
-        schur_base_csc = matrix_csr[sep_indices, :][:, sep_indices].tocsc().astype(dtype, copy=False)
-        schur = schur_base_csc.toarray().astype(dtype, copy=False)
-        children: list[_SymbolicNDChild] = []
-        total_nbytes = int(schur.nbytes)
-        total_nnz = int(np.count_nonzero(schur))
-        node_count = 1
-        leaf_count = 0
-        max_depth_reached = int(depth)
-        separator_count_total = sep_count
-        max_separator_count = sep_count
-        dense_update_entries = 0
-        peak_dense_update_entries = 0
-        separator_update_chunks = 0
-        factor_failures = 0
-        child_inputs = [
-            (
-                np.asarray(positions, dtype=np.int64),
-                np.asarray(idx[np.asarray(positions, dtype=np.int64)], dtype=np.int64),
-            )
-            for positions in child_position_groups
-        ]
-
-        if child_workers > 1 and int(depth) == 0 and len(child_inputs) > 1:
-            with stats_lock:
-                parallel_child_nodes += 1
-                parallel_child_factor_tasks += int(len(child_inputs))
-            with ThreadPoolExecutor(max_workers=min(child_workers, len(child_inputs))) as executor:
-                child_factors = list(
-                    executor.map(lambda item: _build_node(item[1], int(depth) + 1), child_inputs)
-                )
-        else:
-            child_factors = [_build_node(child_indices, int(depth) + 1) for _, child_indices in child_inputs]
-
-        for (positions, child_indices), child_factor in zip(child_inputs, child_factors, strict=True):
-            b_mat = matrix_csr[child_indices, :][:, sep_indices].tocsr().astype(dtype, copy=False)
-            c_mat = matrix_csr[sep_indices, :][:, child_indices].tocsr().astype(dtype, copy=False)
-            b_csc = b_mat.tocsc()
-            local_cols = (
-                np.flatnonzero(np.diff(b_csc.indptr) > 0).astype(np.int64, copy=False)
-                if b_csc.nnz
-                else np.asarray([], dtype=np.int64)
-            )
-            if b_mat.nnz and c_mat.nnz and local_cols.size:
-                cols_per_chunk = int(max_cols_per_child) if max_cols_per_child > 0 else int(local_cols.size)
-                cols_per_chunk = max(1, int(cols_per_chunk))
-                child_work_entries = 0
-                child_peak_entries = 0
-                col_chunks = [
-                    local_cols[col_start : col_start + cols_per_chunk]
-                    for col_start in range(0, int(local_cols.size), cols_per_chunk)
-                ]
-
-                def _build_separator_update_chunk(
-                    col_chunk: np.ndarray,
-                ) -> tuple[np.ndarray, np.ndarray, int, int]:
-                    _check_setup_budget(stage="separator_update", node_size=node_n, depth=int(depth))
-                    if int(col_chunk.size) == 1:
-                        b_block = b_csc[:, int(col_chunk[0]) : int(col_chunk[0]) + 1]
-                    elif np.all(np.diff(col_chunk) == 1):
-                        b_block = b_csc[:, int(col_chunk[0]) : int(col_chunk[-1]) + 1]
-                    else:
-                        b_block = b_csc[:, col_chunk]
-                    b_dense = b_block.toarray().astype(dtype, copy=False)
-                    peak_entries = int(child_indices.size) * int(col_chunk.size)
-                    try:
-                        eliminated = np.asarray(child_factor.solve_local(b_dense), dtype=dtype)
-                    except Exception:
-                        eliminated = np.zeros((int(child_indices.size), int(col_chunk.size)), dtype=dtype)
-                    if eliminated.ndim == 1:
-                        eliminated = eliminated.reshape((int(child_indices.size), 1))
-                    update = np.asarray(c_mat @ eliminated, dtype=dtype)
-                    return (
-                        np.asarray(col_chunk, dtype=np.int64),
-                        update,
-                        int(child_indices.size) * int(col_chunk.size),
-                        peak_entries,
-                    )
-
-                if update_workers > 1 and len(col_chunks) > 1:
-                    with ThreadPoolExecutor(max_workers=min(update_workers, len(col_chunks))) as executor:
-                        chunk_results = list(executor.map(_build_separator_update_chunk, col_chunks))
-                else:
-                    chunk_results = [_build_separator_update_chunk(col_chunk) for col_chunk in col_chunks]
-
-                for col_chunk, dense_update, work_entries, peak_entries in chunk_results:
-                    separator_update_chunks += 1
-                    child_work_entries += int(work_entries)
-                    child_peak_entries = max(child_peak_entries, int(peak_entries))
-                    schur[:, col_chunk] -= np.asarray(dense_update, dtype=dtype)
-                if max_dense_entries_per_child and child_work_entries > max_dense_entries_per_child:
-                    raise RuntimeError(
-                        "symbolic_nd_frontal_schur_lu dense separator RHS child work budget exceeded "
-                        f"({int(child_work_entries)}>{int(max_dense_entries_per_child)}; "
-                        f"node_size={int(node_n)} depth={int(depth)} "
-                        f"separator={int(sep_count)} child={int(child_indices.size)} "
-                        f"local_cols={int(local_cols.size)})"
-                    )
-                with stats_lock:
-                    dense_entries_global += child_work_entries
-                    dense_entries_global_now = int(dense_entries_global)
-                dense_update_entries += child_work_entries
-                peak_dense_update_entries = max(peak_dense_update_entries, child_peak_entries)
-                if max_dense_entries and dense_entries_global_now > max_dense_entries:
-                    raise RuntimeError(
-                        "symbolic_nd_frontal_schur_lu dense separator RHS work budget exceeded "
-                        f"({int(dense_entries_global_now)}>{int(max_dense_entries)}; "
-                        f"node_size={int(node_n)} separator={int(sep_count)} child={int(child_indices.size)})"
-                    )
-            b_nbytes = estimate_csr_nbytes(b_mat.shape, int(b_mat.nnz), data_dtype=b_mat.dtype, index_dtype=b_mat.indices.dtype)
-            c_nbytes = estimate_csr_nbytes(c_mat.shape, int(c_mat.nnz), data_dtype=c_mat.dtype, index_dtype=c_mat.indices.dtype)
-            total_nbytes += int(child_factor.total_nbytes_estimate) + int(b_nbytes) + int(c_nbytes)
-            total_nnz += int(child_factor.total_nnz_estimate) + int(b_mat.nnz) + int(c_mat.nnz)
-            node_count += int(child_factor.node_count)
-            leaf_count += int(child_factor.leaf_count)
-            max_depth_reached = max(max_depth_reached, int(child_factor.max_depth_reached))
-            separator_count_total += int(child_factor.separator_count_total)
-            max_separator_count = max(max_separator_count, int(child_factor.max_separator_count))
-            dense_update_entries += int(child_factor.dense_update_entries)
-            peak_dense_update_entries = max(peak_dense_update_entries, int(child_factor.peak_dense_update_entries))
-            separator_update_chunks += int(child_factor.separator_update_chunks)
-            factor_failures += int(child_factor.factor_failures)
-            children.append(
-                _SymbolicNDChild(
-                    positions=np.asarray(positions, dtype=np.int64),
-                    indices=child_indices,
-                    factor=child_factor,
-                    b_to_separator=b_mat,
-                    c_from_separator=c_mat,
-                )
-            )
-
-        schur_csc = sp.csc_matrix(schur)
-        schur_csc.sum_duplicates()
-        base_schur_factor, schur_nbytes, schur_nnz, schur_failures = _factor_csc_with_regularized_fallback(
-            schur_csc,
-            dtype=dtype,
-            diag_pivot_thresh=1.0,
-            regularization_rel=float(regularization_rel),
-            permc_spec="COLAMD",
-        )
-        schur_factor = base_schur_factor
-        total_nbytes += int(schur_nbytes) + estimate_csr_nbytes(
-            schur_csc.shape,
-            int(schur_csc.nnz),
-            data_dtype=schur_csc.dtype,
-            index_dtype=schur_csc.indices.dtype,
-        )
-        total_nnz += int(schur_nnz) + int(schur_csc.nnz)
-        factor_failures += int(schur_failures)
-        return _SymbolicNDFrontalNode(
-            indices=idx,
-            dtype=dtype,
-            global_size=n,
-            depth=int(depth),
-            children=tuple(children),
-            separator_positions=sep_positions,
-            separator_indices=sep_indices,
-            schur_factor=schur_factor,
-            node_count=int(node_count),
-            leaf_count=int(leaf_count),
-            max_depth_reached=int(max_depth_reached),
-            separator_count_total=int(separator_count_total),
-            max_separator_count=int(max_separator_count),
-            dense_update_entries=int(dense_update_entries),
-            peak_dense_update_entries=int(peak_dense_update_entries),
-            separator_update_chunks=int(separator_update_chunks),
-            factor_failures=int(factor_failures),
-            total_nbytes_estimate=int(total_nbytes),
-            total_nnz_estimate=int(total_nnz),
-            metadata={
-                "node_kind": "separator",
-                "node_size": int(node_n),
-                "separator_count": int(sep_count),
-                "child_count": int(len(children)),
-            },
-        )
-
-    root = _build_node(permutation, 0)
-    root_metadata = {
-        "architecture": "symbolic_nd_frontal_schur_lu",
-        "analysis": analysis.to_dict(include_permutation=False),
-        "max_leaf_size": int(max_leaf),
-        "max_terminal_factor_size": int(max_terminal),
-        "max_depth": int(depth_cap),
-        "max_setup_s": float(max_setup_seconds),
-        "separator_width": int(sep_width_default),
-        "max_separator_cols": int(max_sep),
-        "high_degree_cols": int(high_degree),
-        "max_dense_rhs_entries": int(max_dense_entries),
-        "max_dense_rhs_entries_per_child": int(max_dense_entries_per_child),
-        "max_dense_rhs_cols_per_child": int(max_cols_per_child),
-        "parallel_child_workers": int(child_workers),
-        "parallel_child_nodes": int(parallel_child_nodes),
-        "parallel_child_factor_tasks": int(parallel_child_factor_tasks),
-        "parallel_update_workers": int(update_workers),
-        "node_count": int(root.node_count),
-        "leaf_count": int(root.leaf_count),
-        "max_depth_reached": int(root.max_depth_reached),
-        "separator_count_total": int(root.separator_count_total),
-        "max_separator_count": int(root.max_separator_count),
-        "dense_update_entries": int(root.dense_update_entries),
-        "peak_dense_update_entries": int(root.peak_dense_update_entries),
-        "separator_update_chunks": int(root.separator_update_chunks),
-        "separator_update_mode": "csc_column_chunks",
-        "factor_failures": int(root.factor_failures),
-    }
-    root = _SymbolicNDFrontalNode(
-        indices=root.indices,
-        dtype=root.dtype,
-        global_size=root.global_size,
-        depth=root.depth,
-        children=root.children,
-        separator_positions=root.separator_positions,
-        separator_indices=root.separator_indices,
-        leaf_factor=root.leaf_factor,
-        schur_factor=root.schur_factor,
-        node_count=root.node_count,
-        leaf_count=root.leaf_count,
-        max_depth_reached=root.max_depth_reached,
-        separator_count_total=root.separator_count_total,
-        max_separator_count=root.max_separator_count,
-        dense_update_entries=root.dense_update_entries,
-        peak_dense_update_entries=root.peak_dense_update_entries,
-        separator_update_chunks=root.separator_update_chunks,
-        factor_failures=root.factor_failures,
-        total_nbytes_estimate=root.total_nbytes_estimate,
-        total_nnz_estimate=root.total_nnz_estimate,
-        metadata=root_metadata,
-    )
-    return root, int(root.total_nbytes_estimate), int(root.total_nnz_estimate)
 
 
 def wrap_sparse_factor_with_coarse_correction(
@@ -3820,20 +3137,6 @@ def factorize_host_sparse_operator(
     symbolic_frontal_regularization_rel: float = 1.0e-12,
     symbolic_frontal_max_dense_rhs_entries: int = 0,
     symbolic_frontal_max_dense_rhs_cols_per_block: int = 0,
-    symbolic_nd_max_leaf_size: int = 4096,
-    symbolic_nd_max_terminal_factor_size: int = 32768,
-    symbolic_nd_max_depth: int = 4,
-    symbolic_nd_separator_width: int = 64,
-    symbolic_nd_max_separator_cols: int = 4096,
-    symbolic_nd_high_degree_cols: int = 64,
-    symbolic_nd_regularization_rel: float = 1.0e-12,
-    symbolic_nd_max_dense_rhs_entries: int = 0,
-    symbolic_nd_max_dense_rhs_entries_per_child: int = 0,
-    symbolic_nd_max_dense_rhs_cols_per_child: int = 0,
-    symbolic_nd_max_setup_s: float = 0.0,
-    symbolic_nd_parallel_update_workers: int = 1,
-    symbolic_nd_residual_polish_steps: int = 0,
-    symbolic_nd_residual_polish_damping: float = 1.0,
     symbolic_superblock_max_size: int = 32768,
     symbolic_superblock_max_blocks: int = 8,
     symbolic_superblock_min_cross_nnz: int = 1,
@@ -3944,7 +3247,6 @@ def factorize_host_sparse_operator(
             "symbolic_block_schur_lu",
             "symbolic_superblock_lu",
             "symbolic_frontal_schur_lu",
-            "symbolic_nd_frontal_schur_lu",
         }:
             analysis = symbolic_analysis
             if analysis is None:
@@ -3982,38 +3284,6 @@ def factorize_host_sparse_operator(
                     max_dense_rhs_entries=int(symbolic_frontal_max_dense_rhs_entries),
                     max_dense_rhs_cols_per_block=int(symbolic_frontal_max_dense_rhs_cols_per_block),
                 )
-            elif kind == "symbolic_nd_frontal_schur_lu":
-                factor, symbolic_nbytes, symbolic_nnz = _build_symbolic_nd_frontal_schur_factor(
-                    matrix,
-                    analysis=analysis,
-                    diag_pivot_thresh=float(diag_pivot_thresh),
-                    max_leaf_size=int(symbolic_nd_max_leaf_size),
-                    max_terminal_factor_size=int(symbolic_nd_max_terminal_factor_size),
-                    max_depth=int(symbolic_nd_max_depth),
-                    separator_width=int(symbolic_nd_separator_width),
-                    max_separator_cols=int(symbolic_nd_max_separator_cols),
-                    high_degree_cols=int(symbolic_nd_high_degree_cols),
-                    regularization_rel=float(symbolic_nd_regularization_rel),
-                    max_dense_rhs_entries=int(symbolic_nd_max_dense_rhs_entries),
-                    max_dense_rhs_entries_per_child=int(symbolic_nd_max_dense_rhs_entries_per_child),
-                    max_dense_rhs_cols_per_child=int(symbolic_nd_max_dense_rhs_cols_per_child),
-                    max_setup_s=float(symbolic_nd_max_setup_s),
-                    parallel_child_workers=int(symbolic_numeric_parallel_workers),
-                    parallel_update_workers=int(symbolic_nd_parallel_update_workers),
-                )
-                polish_steps = max(0, int(symbolic_nd_residual_polish_steps))
-                if polish_steps:
-                    base_metadata = dict(factor.metadata or {})
-                    base_metadata["residual_polish_steps"] = int(polish_steps)
-                    base_metadata["residual_polish_damping"] = float(symbolic_nd_residual_polish_damping)
-                    factor = _SparseResidualPolishFactor(
-                        base_factor=factor,
-                        matrix=matrix.tocsr(),
-                        dtype=np.dtype(matrix.dtype),
-                        steps=int(polish_steps),
-                        damping=float(symbolic_nd_residual_polish_damping),
-                        metadata=base_metadata,
-                    )
             elif kind == "symbolic_superblock_lu":
                 factor, symbolic_nbytes, symbolic_nnz = _build_symbolic_superblock_factor(
                     matrix,
@@ -4061,10 +3331,9 @@ def factorize_host_sparse_operator(
     elif kind in {
         "symbolic_block_lu",
         "symbolic_block_lu_coarse",
-        "symbolic_block_schur_lu",
-        "symbolic_superblock_lu",
-        "symbolic_frontal_schur_lu",
-        "symbolic_nd_frontal_schur_lu",
+            "symbolic_block_schur_lu",
+            "symbolic_superblock_lu",
+            "symbolic_frontal_schur_lu",
     }:
         factor_nbytes, factor_nnz = int(symbolic_nbytes), int(symbolic_nnz)
     else:
@@ -4119,20 +3388,6 @@ def build_host_sparse_direct_factor_from_matvec(
     default_symbolic_frontal_regularization_rel: float = 1.0e-12,
     default_symbolic_frontal_max_dense_rhs_entries: int = 0,
     default_symbolic_frontal_max_dense_rhs_cols_per_block: int = 0,
-    default_symbolic_nd_max_leaf_size: int = 4096,
-    default_symbolic_nd_max_terminal_factor_size: int = 32768,
-    default_symbolic_nd_max_depth: int = 4,
-    default_symbolic_nd_separator_width: int = 64,
-    default_symbolic_nd_max_separator_cols: int = 4096,
-    default_symbolic_nd_high_degree_cols: int = 64,
-    default_symbolic_nd_regularization_rel: float = 1.0e-12,
-    default_symbolic_nd_max_dense_rhs_entries: int = 0,
-    default_symbolic_nd_max_dense_rhs_entries_per_child: int = 0,
-    default_symbolic_nd_max_dense_rhs_cols_per_child: int = 0,
-    default_symbolic_nd_max_setup_s: float = 0.0,
-    default_symbolic_nd_parallel_update_workers: int = 1,
-    default_symbolic_nd_residual_polish_steps: int = 0,
-    default_symbolic_nd_residual_polish_damping: float = 1.0,
     default_symbolic_superblock_max_size: int = 32768,
     default_symbolic_superblock_max_blocks: int = 8,
     default_symbolic_superblock_min_cross_nnz: int = 1,
@@ -4178,20 +3433,6 @@ def build_host_sparse_direct_factor_from_matvec(
         default_symbolic_frontal_regularization_rel=default_symbolic_frontal_regularization_rel,
         default_symbolic_frontal_max_dense_rhs_entries=default_symbolic_frontal_max_dense_rhs_entries,
         default_symbolic_frontal_max_dense_rhs_cols_per_block=default_symbolic_frontal_max_dense_rhs_cols_per_block,
-        default_symbolic_nd_max_leaf_size=default_symbolic_nd_max_leaf_size,
-        default_symbolic_nd_max_terminal_factor_size=default_symbolic_nd_max_terminal_factor_size,
-        default_symbolic_nd_max_depth=default_symbolic_nd_max_depth,
-        default_symbolic_nd_separator_width=default_symbolic_nd_separator_width,
-        default_symbolic_nd_max_separator_cols=default_symbolic_nd_max_separator_cols,
-        default_symbolic_nd_high_degree_cols=default_symbolic_nd_high_degree_cols,
-        default_symbolic_nd_regularization_rel=default_symbolic_nd_regularization_rel,
-        default_symbolic_nd_max_dense_rhs_entries=default_symbolic_nd_max_dense_rhs_entries,
-        default_symbolic_nd_max_dense_rhs_entries_per_child=default_symbolic_nd_max_dense_rhs_entries_per_child,
-        default_symbolic_nd_max_dense_rhs_cols_per_child=default_symbolic_nd_max_dense_rhs_cols_per_child,
-        default_symbolic_nd_max_setup_s=default_symbolic_nd_max_setup_s,
-        default_symbolic_nd_parallel_update_workers=default_symbolic_nd_parallel_update_workers,
-        default_symbolic_nd_residual_polish_steps=default_symbolic_nd_residual_polish_steps,
-        default_symbolic_nd_residual_polish_damping=default_symbolic_nd_residual_polish_damping,
         default_symbolic_superblock_max_size=default_symbolic_superblock_max_size,
         default_symbolic_superblock_max_blocks=default_symbolic_superblock_max_blocks,
         default_symbolic_superblock_min_cross_nnz=default_symbolic_superblock_min_cross_nnz,
@@ -4337,22 +3578,6 @@ def build_host_sparse_direct_factor_from_matvec(
             symbolic_frontal_max_dense_rhs_cols_per_block=int(
                 sparse_settings.symbolic_frontal_max_dense_rhs_cols_per_block
             ),
-            symbolic_nd_max_leaf_size=int(sparse_settings.symbolic_nd_max_leaf_size),
-            symbolic_nd_max_terminal_factor_size=int(sparse_settings.symbolic_nd_max_terminal_factor_size),
-            symbolic_nd_max_depth=int(sparse_settings.symbolic_nd_max_depth),
-            symbolic_nd_separator_width=int(sparse_settings.symbolic_nd_separator_width),
-            symbolic_nd_max_separator_cols=int(sparse_settings.symbolic_nd_max_separator_cols),
-            symbolic_nd_high_degree_cols=int(sparse_settings.symbolic_nd_high_degree_cols),
-            symbolic_nd_regularization_rel=float(sparse_settings.symbolic_nd_regularization_rel),
-            symbolic_nd_max_dense_rhs_entries=int(sparse_settings.symbolic_nd_max_dense_rhs_entries),
-            symbolic_nd_max_dense_rhs_entries_per_child=int(
-                sparse_settings.symbolic_nd_max_dense_rhs_entries_per_child
-            ),
-            symbolic_nd_max_dense_rhs_cols_per_child=int(sparse_settings.symbolic_nd_max_dense_rhs_cols_per_child),
-            symbolic_nd_max_setup_s=float(sparse_settings.symbolic_nd_max_setup_s),
-            symbolic_nd_parallel_update_workers=int(sparse_settings.symbolic_nd_parallel_update_workers),
-            symbolic_nd_residual_polish_steps=int(sparse_settings.symbolic_nd_residual_polish_steps),
-            symbolic_nd_residual_polish_damping=float(sparse_settings.symbolic_nd_residual_polish_damping),
             symbolic_superblock_max_size=int(sparse_settings.symbolic_superblock_max_size),
             symbolic_superblock_max_blocks=int(sparse_settings.symbolic_superblock_max_blocks),
             symbolic_superblock_min_cross_nnz=int(sparse_settings.symbolic_superblock_min_cross_nnz),

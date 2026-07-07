@@ -1016,8 +1016,8 @@ Controls:
   sparse factor kind, factor precision, factor memory guard, and diagonal shift.
   Supported diagnostic factors are ``lu``, ``ilu``, ``jacobi``,
   ``symbolic_block_lu``, ``symbolic_block_lu_coarse``, and
-  ``symbolic_block_schur_lu``, ``symbolic_superblock_lu``, and
-  ``symbolic_nd_frontal_schur_lu``.  The symbolic options are native
+  ``symbolic_block_schur_lu``, ``symbolic_frontal_schur_lu``, and
+  ``symbolic_superblock_lu``.  The symbolic options are native
   lower-memory block/coarse/Schur/frontal experiments and are not automatic
   defaults unless they pass setup-time admission.
 - ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ORDERING`` controls the
@@ -1041,22 +1041,10 @@ Controls:
 - ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_NUMERIC_PARALLEL_WORKERS``
   controls bounded native parallel numeric setup for symbolic factors.  The
   direct reduced ``whichMatrix=0`` Pmat still uses the same symbolic metadata
-  and strict true-residual admission, but independent ``symbolic_superblock_lu``
-  superblocks and root children in ``symbolic_nd_frontal_schur_lu`` can be
-  factored concurrently before chunked Schur updates are applied.  The generic
+  and strict true-residual admission, and independent ``symbolic_superblock_lu``
+  superblocks can be factored concurrently.  The generic
   explicit-sparse equivalent is
   ``SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_NUMERIC_PARALLEL_WORKERS``.
-- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_PARALLEL_UPDATE_WORKERS``
-  controls opt-in parallel execution of nested-dissection separator-update
-  chunks.  This is intentionally separate from
-  ``..._SYMBOLIC_NUMERIC_PARALLEL_WORKERS`` because production profiles show
-  that sparse triangular solves and BLAS calls can contend when too many
-  separator chunks are threaded.  The generic explicit-sparse equivalent is
-  ``SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_PARALLEL_UPDATE_WORKERS``.  These
-  nested-dissection controls are opt-in rather than part of the default
-  ``auto`` policy: production ``geom11`` probes reject the path on setup-time
-  grounds before admission, so this is documented as an optimization lane
-  rather than a correctness path required for robust solves.
 - ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLOCK_OVERLAP``
   extends each symbolic block by a fixed number of neighboring unknowns before
   factorization and restricts the local solution back to the owned block. This

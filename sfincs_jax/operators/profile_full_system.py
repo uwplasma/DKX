@@ -1471,10 +1471,6 @@ def build_active_projected_rhs1_full_csr_preconditioner(
         "active_frontal_schur_lu",
         "active_reduced_pmat_frontal_schur",
         "active_native_frontal_schur",
-        "active_symbolic_nd_frontal_schur_lu",
-        "active_nd_frontal_schur_lu",
-        "active_nested_dissection_frontal_schur_lu",
-        "active_multilevel_frontal_schur_lu",
     }:
         if layout is None:
             return RHS1StructuredFullCSRPreconditioner(
@@ -2803,7 +2799,6 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
         active_size=int(active_size),
         regularization=float(regularization),
     )
-    use_nd_frontal = bool(policy.use_nd_frontal)
     active_symbolic_kind = str(policy.active_symbolic_kind)
     active_architecture = str(policy.active_architecture)
     max_active_size = int(policy.max_active_size)
@@ -2856,18 +2851,6 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
     max_dense_rhs_cols_per_block = int(policy.max_dense_rhs_cols_per_block)
     min_cross_separator_fraction = float(policy.min_cross_separator_fraction)
     regularization_rel = float(policy.regularization_rel)
-    nd_max_leaf_size = int(policy.nd_max_leaf_size)
-    nd_max_terminal_factor_size = int(policy.nd_max_terminal_factor_size)
-    nd_max_depth = int(policy.nd_max_depth)
-    nd_separator_width = int(policy.nd_separator_width)
-    nd_max_separator_cols = int(policy.nd_max_separator_cols)
-    nd_high_degree_cols = int(policy.nd_high_degree_cols)
-    nd_max_dense_rhs_entries = int(policy.nd_max_dense_rhs_entries)
-    nd_max_dense_rhs_entries_per_child = int(policy.nd_max_dense_rhs_entries_per_child)
-    nd_max_dense_rhs_cols_per_child = int(policy.nd_max_dense_rhs_cols_per_child)
-    nd_max_setup_s = float(policy.nd_max_setup_s)
-    nd_residual_polish_steps = int(policy.nd_residual_polish_steps)
-    nd_residual_polish_damping = float(policy.nd_residual_polish_damping)
     analysis = analyze_sparse_symbolic_structure(
         matrix_csr,
         ordering_kind=ordering_kind,
@@ -2906,7 +2889,7 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
     try:
         factor = factorize_host_sparse_operator(
             matrix_csr,
-            kind="symbolic_nd_frontal_schur_lu" if bool(use_nd_frontal) else "symbolic_frontal_schur_lu",
+            kind="symbolic_frontal_schur_lu",
             symbolic_analysis=analysis,
             symbolic_block_size=block_size,
             symbolic_frontal_max_separator_cols=separator_cols,
@@ -2920,19 +2903,6 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
             symbolic_frontal_regularization_rel=regularization_rel,
             symbolic_frontal_max_dense_rhs_entries=max_dense_rhs_entries,
             symbolic_frontal_max_dense_rhs_cols_per_block=max_dense_rhs_cols_per_block,
-            symbolic_nd_max_leaf_size=nd_max_leaf_size,
-            symbolic_nd_max_terminal_factor_size=nd_max_terminal_factor_size,
-            symbolic_nd_max_depth=nd_max_depth,
-            symbolic_nd_separator_width=nd_separator_width,
-            symbolic_nd_max_separator_cols=nd_max_separator_cols,
-            symbolic_nd_high_degree_cols=nd_high_degree_cols,
-            symbolic_nd_regularization_rel=regularization_rel,
-            symbolic_nd_max_dense_rhs_entries=nd_max_dense_rhs_entries,
-            symbolic_nd_max_dense_rhs_entries_per_child=nd_max_dense_rhs_entries_per_child,
-            symbolic_nd_max_dense_rhs_cols_per_child=nd_max_dense_rhs_cols_per_child,
-            symbolic_nd_max_setup_s=nd_max_setup_s,
-            symbolic_nd_residual_polish_steps=nd_residual_polish_steps,
-            symbolic_nd_residual_polish_damping=nd_residual_polish_damping,
         )
     except Exception as exc:  # noqa: BLE001
         root_exc: BaseException = exc
@@ -3075,24 +3045,10 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
             "min_cross_nnz": int(min_cross_nnz),
             "min_cross_separator_fraction": float(min_cross_separator_fraction),
             "regularization_rel": float(regularization_rel),
-            "symbolic_nd_max_leaf_size": int(nd_max_leaf_size),
-            "symbolic_nd_max_terminal_factor_size": int(nd_max_terminal_factor_size),
-            "symbolic_nd_max_depth": int(nd_max_depth),
-            "symbolic_nd_separator_width": int(nd_separator_width),
-            "symbolic_nd_max_separator_cols": int(nd_max_separator_cols),
-            "symbolic_nd_high_degree_cols": int(nd_high_degree_cols),
-            "symbolic_nd_max_dense_rhs_entries": int(nd_max_dense_rhs_entries),
-            "symbolic_nd_max_dense_rhs_entries_per_child": int(nd_max_dense_rhs_entries_per_child),
-            "symbolic_nd_max_dense_rhs_cols_per_child": int(nd_max_dense_rhs_cols_per_child),
-            "symbolic_nd_max_setup_s": float(nd_max_setup_s),
-            "symbolic_nd_residual_polish_steps": int(nd_residual_polish_steps),
-            "symbolic_nd_residual_polish_damping": float(nd_residual_polish_damping),
             "symbolic_factor_metadata": dict(inner_factor_metadata) if isinstance(inner_factor_metadata, dict) else {},
             "admission": admission.to_dict(),
             "requires_preflight": True,
-            "note": "bounded_nd_frontal_schur_reduced_pmat_candidate"
-            if bool(use_nd_frontal)
-            else "bounded_frontal_schur_reduced_pmat_candidate",
+            "note": "bounded_frontal_schur_reduced_pmat_candidate",
         },
     )
 

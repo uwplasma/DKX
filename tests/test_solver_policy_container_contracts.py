@@ -326,9 +326,8 @@ def test_xblock_symbolic_and_native_policy_contracts_are_json_ready() -> None:
     assert ActiveSymbolicBlockSchurPolicy(1, "rcm", 2, 3, 4, 1, 2, 1e-8, 1.5, 2, 1e-6, 1.0).separator_cols == 4
     assert ActiveSymbolicFrontalPolicy(
         requested_kind="auto",
-        use_nd_frontal=True,
         active_symbolic_kind="frontal",
-        active_architecture="nd",
+        active_architecture="frontal",
         max_active_size=1,
         ordering_kind="rcm",
         block_size=2,
@@ -347,19 +346,7 @@ def test_xblock_symbolic_and_native_policy_contracts_are_json_ready() -> None:
         admission_probes=2,
         admission_max_relative_residual=1e-6,
         admission_min_improvement=1.0,
-        nd_max_leaf_size=32,
-        nd_max_terminal_factor_size=64,
-        nd_max_depth=3,
-        nd_separator_width=2,
-        nd_max_separator_cols=8,
-        nd_high_degree_cols=4,
-        nd_max_dense_rhs_entries=128,
-        nd_max_dense_rhs_entries_per_child=64,
-        nd_max_dense_rhs_cols_per_child=8,
-        nd_max_setup_s=30.0,
-        nd_residual_polish_steps=2,
-        nd_residual_polish_damping=0.5,
-    ).nd_max_leaf_size == 32
+    ).active_architecture == "frontal"
     assert ActiveFortranV3ReducedFactorPolicy("auto", "ilu", True, 1000, False, 5.0, 1e-4, 0.01, "COLAMD", ("COLAMD",), "COLAMD", "row", 1e6, False, 2000, 1.5).factor_kind == "ilu"
 
     dense = NativeDenseBlockJacobi(

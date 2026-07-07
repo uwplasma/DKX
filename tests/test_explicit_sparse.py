@@ -46,14 +46,13 @@ def test_storage_estimates_are_consistent() -> None:
 
 def test_explicit_sparse_settings_parse_aliases_and_fail_closed_bounds() -> None:
     env = {
-        "SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND": "native_nd_frontal_schur_lu",
+        "SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND": "native_frontal_schur_lu",
         "SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_GUARD": ".false.",
         "SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_LU_MAX_SIZE": "123",
         "SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_ILU_MAX_SIZE": "bad",
         "SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_MAX_SIZE": "456",
         "SFINCS_JAX_EXPLICIT_SPARSE_BLOCK_COLS": "-9",
         "SFINCS_JAX_EXPLICIT_SPARSE_PATTERN_COLOR_BATCH": "0",
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_PARALLEL_UPDATE_WORKERS": "0",
         "SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC": "bad_permc",
         "SFINCS_JAX_EXPLICIT_SPARSE_DIAG_PIVOT_THRESH": "-1.5",
         "SFINCS_JAX_EXPLICIT_SPARSE_ILU_FILL_FACTOR": "0",
@@ -69,15 +68,14 @@ def test_explicit_sparse_settings_parse_aliases_and_fail_closed_bounds() -> None
 
     assert canonical_explicit_sparse_factor_kind("block_schur_lu") == "symbolic_block_schur_lu"
     assert canonical_explicit_sparse_factor_kind("unknown", default="spilu") == "ilu"
-    assert explicit_sparse_factor_kind_from_env("lu", env=env) == "symbolic_nd_frontal_schur_lu"
+    assert explicit_sparse_factor_kind_from_env("lu", env=env) == "symbolic_frontal_schur_lu"
     assert explicit_sparse_monolithic_guard_enabled(True, env=env) is False
     assert explicit_sparse_monolithic_max_size("lu", env=env, default=999) == 123
     assert explicit_sparse_monolithic_max_size("ilu", env=env, default=999) == 999
-    assert settings.factor_kind == "symbolic_nd_frontal_schur_lu"
+    assert settings.factor_kind == "symbolic_frontal_schur_lu"
     assert settings.monolithic_guard_enabled is False
     assert settings.block_cols == 0
     assert settings.pattern_color_batch == 1
-    assert settings.symbolic_nd_parallel_update_workers == 1
     assert settings.permc_spec == "MMD_AT_PLUS_A"
     assert settings.diag_pivot_thresh == pytest.approx(0.0)
     assert settings.ilu_fill_factor == pytest.approx(0.0)
@@ -1103,290 +1101,6 @@ def test_symbolic_frontal_schur_lu_rejects_dense_rhs_work_budget() -> None:
             symbolic_frontal_max_dense_rhs_entries=1,
         )
 
-
-def _nested_dissection_tridiagonal_matrix(n: int = 14) -> sp.csr_matrix:
-    diagonal = 6.0 + 0.2 * np.arange(n, dtype=np.float64)
-    upper = -0.7 + 0.01 * np.arange(n - 1, dtype=np.float64)
-    lower = -0.4 - 0.015 * np.arange(n - 1, dtype=np.float64)
-    matrix = sp.diags([lower, diagonal, upper], offsets=[-1, 0, 1], format="lil")
-    # These same-side longer-range terms keep the toy operator close to the
-    # geometry-rich active matrices without jumping across recursive separators.
-    for row, col, value in [(0, 2, 0.12), (2, 0, -0.08), (9, 11, 0.09), (11, 9, -0.07)]:
-        if row < n and col < n:
-            matrix[row, col] = value
-    return matrix.tocsr()
-
-
-def test_symbolic_nd_frontal_schur_lu_recursively_solves_separated_operator() -> None:
-    matrix = _nested_dissection_tridiagonal_matrix()
-    rhs = np.linspace(-1.0, 2.0, matrix.shape[0], dtype=np.float64)
-
-    factor = factorize_host_sparse_operator(
-        matrix,
-        kind="symbolic_nd_frontal_schur_lu",
-        symbolic_ordering_kind="natural",
-        symbolic_block_size=3,
-        symbolic_nd_max_leaf_size=3,
-        symbolic_nd_max_depth=4,
-        symbolic_nd_separator_width=2,
-        symbolic_nd_max_separator_cols=3,
-        symbolic_nd_high_degree_cols=0,
-        symbolic_nd_regularization_rel=0.0,
-    )
-    admission = admit_sparse_factor_against_operator(
-        factor.operator,
-        factor,
-        max_relative_residual=1.0e-11,
-        min_improvement_vs_identity=1.0,
-    )
-
-    np.testing.assert_allclose(
-        factor.solve(rhs),
-        np.linalg.solve(matrix.toarray(), rhs),
-        rtol=1.0e-11,
-        atol=1.0e-11,
-    )
-    assert factor.kind == "symbolic_nd_frontal_schur_lu"
-    assert factor.factor.node_count > 3
-    assert factor.factor.leaf_count >= 4
-    assert factor.factor.max_depth_reached >= 2
-    assert factor.factor.separator_count_total > factor.factor.max_separator_count
-    assert factor.factor.dense_update_entries > 0
-    assert factor.factor.separator_update_chunks > 0
-    assert factor.factor.metadata["architecture"] == "symbolic_nd_frontal_schur_lu"
-    assert factor.factor.metadata["separator_update_mode"] == "csc_column_chunks"
-    assert admission.accepted is True
-
-
-def test_symbolic_nd_frontal_schur_lu_rejects_dense_update_budget() -> None:
-    matrix = _nested_dissection_tridiagonal_matrix()
-
-    with pytest.raises(RuntimeError, match="dense separator RHS work budget exceeded"):
-        factorize_host_sparse_operator(
-            matrix,
-            kind="symbolic_nd_frontal_schur_lu",
-            symbolic_ordering_kind="natural",
-            symbolic_block_size=3,
-            symbolic_nd_max_leaf_size=3,
-            symbolic_nd_max_depth=4,
-            symbolic_nd_separator_width=2,
-            symbolic_nd_max_separator_cols=3,
-            symbolic_nd_high_degree_cols=0,
-            symbolic_nd_regularization_rel=0.0,
-            symbolic_nd_max_dense_rhs_entries=1,
-        )
-
-
-def test_symbolic_nd_frontal_schur_lu_parallel_child_setup_preserves_solution() -> None:
-    matrix = _nested_dissection_tridiagonal_matrix()
-    rhs = np.linspace(2.0, -1.0, matrix.shape[0], dtype=np.float64)
-
-    factor = factorize_host_sparse_operator(
-        matrix,
-        kind="symbolic_nd_frontal_schur_lu",
-        symbolic_ordering_kind="natural",
-        symbolic_block_size=3,
-        symbolic_nd_max_leaf_size=3,
-        symbolic_nd_max_depth=4,
-        symbolic_nd_separator_width=2,
-        symbolic_nd_max_separator_cols=3,
-        symbolic_nd_high_degree_cols=0,
-        symbolic_nd_regularization_rel=0.0,
-        symbolic_numeric_parallel_workers=2,
-    )
-    admission = admit_sparse_factor_against_operator(
-        factor.operator,
-        factor,
-        max_relative_residual=1.0e-11,
-        min_improvement_vs_identity=1.0,
-    )
-
-    np.testing.assert_allclose(
-        factor.solve(rhs),
-        np.linalg.solve(matrix.toarray(), rhs),
-        rtol=1.0e-11,
-        atol=1.0e-11,
-    )
-    assert factor.factor.metadata["parallel_child_workers"] == 2
-    assert factor.factor.metadata["parallel_child_nodes"] == 1
-    assert factor.factor.metadata["parallel_child_factor_tasks"] == 2
-    assert admission.accepted is True
-
-
-def test_symbolic_nd_frontal_schur_lu_column_chunk_separator_updates_preserve_solution() -> None:
-    matrix = _nested_dissection_tridiagonal_matrix()
-    rhs = np.linspace(-1.0, 2.0, matrix.shape[0], dtype=np.float64)
-
-    factor = factorize_host_sparse_operator(
-        matrix,
-        kind="symbolic_nd_frontal_schur_lu",
-        symbolic_ordering_kind="natural",
-        symbolic_block_size=3,
-        symbolic_nd_max_leaf_size=3,
-        symbolic_nd_max_depth=4,
-        symbolic_nd_separator_width=2,
-        symbolic_nd_max_separator_cols=3,
-        symbolic_nd_high_degree_cols=0,
-        symbolic_nd_regularization_rel=0.0,
-        symbolic_nd_parallel_update_workers=2,
-    )
-    admission = admit_sparse_factor_against_operator(
-        factor.operator,
-        factor,
-        max_relative_residual=1.0e-11,
-        min_improvement_vs_identity=1.0,
-    )
-
-    np.testing.assert_allclose(
-        factor.solve(rhs),
-        np.linalg.solve(matrix.toarray(), rhs),
-        rtol=1.0e-11,
-        atol=1.0e-11,
-    )
-    assert factor.factor.metadata["separator_update_mode"] == "csc_column_chunks"
-    assert factor.factor.metadata["parallel_update_workers"] == 2
-    assert factor.factor.metadata["separator_update_chunks"] > 0
-    assert admission.accepted is True
-
-
-def test_symbolic_nd_frontal_schur_lu_residual_polish_preserves_true_residual_gate() -> None:
-    matrix = _nested_dissection_tridiagonal_matrix()
-    rhs = np.linspace(-0.75, 1.25, matrix.shape[0], dtype=np.float64)
-    rhs_batch = np.column_stack([rhs, rhs[::-1]])
-
-    factor = factorize_host_sparse_operator(
-        matrix,
-        kind="symbolic_nd_frontal_schur_lu",
-        symbolic_ordering_kind="natural",
-        symbolic_block_size=3,
-        symbolic_nd_max_leaf_size=3,
-        symbolic_nd_max_depth=4,
-        symbolic_nd_separator_width=2,
-        symbolic_nd_max_separator_cols=3,
-        symbolic_nd_high_degree_cols=0,
-        symbolic_nd_regularization_rel=0.0,
-        symbolic_nd_residual_polish_steps=2,
-        symbolic_nd_residual_polish_damping=1.0,
-    )
-    admission = admit_sparse_factor_against_operator(
-        factor.operator,
-        factor,
-        max_relative_residual=1.0e-11,
-        min_improvement_vs_identity=1.0,
-    )
-
-    assert factor.kind == "symbolic_nd_frontal_schur_lu"
-    assert factor.factor.metadata["architecture"] == "symbolic_nd_frontal_schur_lu"
-    assert factor.factor.metadata["residual_polish_steps"] == 2
-    assert factor.factor.metadata["residual_polish_damping"] == pytest.approx(1.0)
-    np.testing.assert_allclose(
-        factor.solve(rhs),
-        np.linalg.solve(matrix.toarray(), rhs),
-        rtol=1.0e-11,
-        atol=1.0e-11,
-    )
-    np.testing.assert_allclose(
-        factor.solve(rhs_batch),
-        np.linalg.solve(matrix.toarray(), rhs_batch),
-        rtol=1.0e-11,
-        atol=1.0e-11,
-    )
-    assert admission.accepted is True
-
-
-def test_symbolic_nd_frontal_schur_lu_rejects_dense_update_child_budget() -> None:
-    matrix = _nested_dissection_tridiagonal_matrix()
-
-    with pytest.raises(RuntimeError, match="dense separator RHS child work budget exceeded"):
-        factorize_host_sparse_operator(
-            matrix,
-            kind="symbolic_nd_frontal_schur_lu",
-            symbolic_ordering_kind="natural",
-            symbolic_block_size=3,
-            symbolic_nd_max_leaf_size=3,
-            symbolic_nd_max_depth=4,
-            symbolic_nd_separator_width=2,
-            symbolic_nd_max_separator_cols=3,
-            symbolic_nd_high_degree_cols=0,
-            symbolic_nd_regularization_rel=0.0,
-            symbolic_nd_max_dense_rhs_entries=1000,
-            symbolic_nd_max_dense_rhs_entries_per_child=1,
-        )
-
-
-def test_symbolic_nd_frontal_schur_lu_rejects_oversized_terminal_leaf() -> None:
-    matrix = _nested_dissection_tridiagonal_matrix(n=12)
-
-    with pytest.raises(RuntimeError, match="terminal leaf factor size exceeded"):
-        factorize_host_sparse_operator(
-            matrix,
-            kind="symbolic_nd_frontal_schur_lu",
-            symbolic_ordering_kind="natural",
-            symbolic_block_size=3,
-            symbolic_nd_max_leaf_size=2,
-            symbolic_nd_max_terminal_factor_size=4,
-            symbolic_nd_max_depth=0,
-            symbolic_nd_separator_width=2,
-            symbolic_nd_max_separator_cols=3,
-            symbolic_nd_high_degree_cols=0,
-            symbolic_nd_regularization_rel=0.0,
-        )
-
-
-def test_symbolic_nd_frontal_schur_lu_rejects_setup_time_budget() -> None:
-    matrix = _nested_dissection_tridiagonal_matrix(n=12)
-
-    with pytest.raises(RuntimeError, match="setup time budget exceeded"):
-        factorize_host_sparse_operator(
-            matrix,
-            kind="symbolic_nd_frontal_schur_lu",
-            symbolic_ordering_kind="natural",
-            symbolic_block_size=3,
-            symbolic_nd_max_leaf_size=3,
-            symbolic_nd_max_depth=4,
-            symbolic_nd_separator_width=2,
-            symbolic_nd_max_separator_cols=8,
-            symbolic_nd_high_degree_cols=0,
-            symbolic_nd_regularization_rel=0.0,
-            symbolic_nd_max_setup_s=1.0e-12,
-        )
-
-
-def test_symbolic_nd_frontal_schur_lu_promotes_cross_graph_edges_to_separator() -> None:
-    matrix = _nested_dissection_tridiagonal_matrix(n=12).tolil()
-    matrix[1, 10] = 0.25
-    matrix[10, 1] = -0.18
-    matrix = matrix.tocsr()
-    rhs = np.linspace(0.5, -1.5, matrix.shape[0], dtype=np.float64)
-
-    factor = factorize_host_sparse_operator(
-        matrix,
-        kind="symbolic_nd_frontal_schur_lu",
-        symbolic_ordering_kind="natural",
-        symbolic_block_size=3,
-        symbolic_nd_max_leaf_size=3,
-        symbolic_nd_max_depth=4,
-        symbolic_nd_separator_width=2,
-        symbolic_nd_max_separator_cols=8,
-        symbolic_nd_high_degree_cols=0,
-        symbolic_nd_regularization_rel=0.0,
-    )
-    admission = admit_sparse_factor_against_operator(
-        factor.operator,
-        factor,
-        max_relative_residual=1.0e-11,
-        min_improvement_vs_identity=1.0,
-    )
-
-    np.testing.assert_allclose(
-        factor.solve(rhs),
-        np.linalg.solve(matrix.toarray(), rhs),
-        rtol=1.0e-11,
-        atol=1.0e-11,
-    )
-    assert factor.factor.max_separator_count >= 4
-    assert factor.factor.metadata["separator_update_mode"] == "csc_column_chunks"
-    assert admission.accepted is True
 
 
 def test_symbolic_block_lu_overlap_retains_boundary_couplings() -> None:

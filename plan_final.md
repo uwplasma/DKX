@@ -45,12 +45,12 @@ bootstrap current, transport coefficients, plotting, and optimization.
   `test_explicit_sparse.py`, `test_rhs1_solver_replay.py`, generated
   suite-report directories, `examples/publication_figures`,
   `examples/performance`, `examples/optimization`, and `benchmarks/`.
-- First solver-research extraction tranche removed the unsupported BLR/HSS
-  compressed separator route from stable code, tests, policy aliases, and public
-  docs. The remaining solver-research work is nested-dissection/multifrontal
-  opt-in paths, true-operator rescue branches, QI/device-QI hard-seed helpers,
-  and manual native-factor routes that are not automatic residual-clean
-  defaults.
+- Solver-research extraction has removed unsupported BLR/HSS compressed
+  separator and nested-dissection frontal routes from stable code, tests, policy
+  aliases, env knobs, metadata, and public docs. The remaining solver-research
+  work is multifrontal opt-in paths, true-operator rescue branches,
+  QI/device-QI hard-seed helpers, and manual native-factor routes that are not
+  automatic residual-clean defaults.
 - Overall PR readiness under the strict small-core goal is about 88-90%.
 
 ## Open Lanes
@@ -206,7 +206,7 @@ whole sections before moving retained lines.
 
 | Queue | Files | Main decision | First stop condition |
 | --- | --- | --- | --- |
-| Solver research | `solvers/explicit_sparse.py`, `native_block_factor.py`, `preconditioner_symbolic_*`, `preconditioner_xblock_active.py` | keep CSR/Krylov/admitted defaults; BLR/HSS is removed from stable; extract nested-dissection, multifrontal, true-operator rescue, QI hard-seed, and env-var-only native factors unless they are automatic residual-clean defaults | no stable import or default policy names `nested`, `multifrontal`, `true_operator_rescue`, QI hard-seed, or manual rescue routes; `blr`/`hss` remain absent outside this plan/inventory |
+| Solver research | `solvers/explicit_sparse.py`, `native_block_factor.py`, `preconditioner_symbolic_*`, `preconditioner_xblock_active.py` | keep CSR/Krylov/admitted defaults; BLR/HSS and nested-dissection frontal routes are removed from stable; extract multifrontal, true-operator rescue, QI hard-seed, and env-var-only native factors unless they are automatic residual-clean defaults | no stable import or default policy names `multifrontal`, `true_operator_rescue`, QI hard-seed, or manual rescue routes; `blr`/`hss`/`symbolic_nd` remain absent outside this plan/inventory and fail-closed tests |
 | RHSMode-1 orchestration | `problems/profile_policies.py`, `profile_sparse_xblock.py`, `profile_solve.py`, `profile_sparse_solve.py`, `profile_dense.py` | one readable setup -> policy -> solve -> residual -> output pipeline | one automatic policy table, one diagnostics schema, no duplicate route predicates |
 | RHSMode-1 operators | `operators/profile_full_system.py`, `profile_system.py`, `profile_layout.py`, term files | keep equation-owned DKE terms; merge duplicate shape/layout helpers; extract device/reduced-tail/sparse-pattern experiments not used by defaults | operator files explain physics terms, not campaign routes |
 | RHSMode-2/3 transport | `problems/transport_*`, `solvers/preconditioner_transport_matrix.py` | one setup/linear-system/solve/finalize path, optional parallel evidence outside stable | transport examples pass parity with no hidden tuning env vars |
@@ -215,11 +215,12 @@ whole sections before moving retained lines.
 | Root/API | root modules and `sfincs_jax/README.md` | root stays public API/CLI/I/O/plot/compat only | root has <=9 implementation-light modules or ledger exceptions |
 
 Exact removals are tracked in order. Done: BLR/HSS compressed separator solver
-route and its stable tests/docs/policy aliases. Next: unsupported QI/device-QI
-imports, nested-dissection/multifrontal/native factor experiments that are not
-admitted by `auto`, historical campaign/profiling generators, examples that are
-only benchmark artifacts, tests that only pin extracted research behavior, and
-README/docs text that markets deferred paths as stable.
+route and nested-dissection frontal solver route with their stable tests/docs/
+policy aliases. Next: unsupported QI/device-QI imports, multifrontal/native
+factor experiments that are not admitted by `auto`, historical
+campaign/profiling generators, examples that are only benchmark artifacts,
+tests that only pin extracted research behavior, and README/docs text that
+markets deferred paths as stable.
 
 ## File Disposition Targets
 
@@ -247,7 +248,7 @@ explain why a smaller change unlocks the next deletion.
 | Tranche | Main files | Action | Required proof |
 | --- | --- | --- | --- |
 | A. Inventory expansion | every tracked file | expand `core_slim_inventory.json` from large-owner sample to full-repo ledger | source-tree and inventory tests |
-| B. Research extraction | QI/device-QI/native sparse/multifrontal/HSS/performance/publication code | preserve on research PRs, then delete stable imports, knobs, tests, docs, examples | absence tests and focused policy tests |
+| B. Research extraction | QI/device-QI/native sparse/multifrontal/performance/publication code | preserve on research PRs, then delete stable imports, knobs, tests, docs, examples | absence tests and focused policy tests |
 | C. Root cleanup | root implementation files | root becomes API/CLI/I/O/plot/namelist/paths/compare plus tiny facades | API, CLI, output, plotting tests |
 | D. RHSMode-1 collapse | profile policy/solve/sparse/dense files | one policy table and one pipeline: prepare, choose, solve, residual-check, finalize | RHSMode-1 parity, residual, bootstrap, autodiff tests |
 | E. Operator cleanup | profile operator files | equation-oriented DKE blocks; delete historical sparse/device/reduced helpers | conservation, symmetry, drift-switch, collision, JVP tests |
@@ -295,8 +296,7 @@ The next implementation passes must be coarse-grained:
    files and deleting docs-only one-off code.
 2. Extract or delete unpromoted solver research in `solvers/` and
    `problems/profile_*`: QI-only hard-seed routes, native-symbolic direct
-   experiments, nested-dissection/multifrontal/HSS sketches, and env-var-only
-   rescue branches.
+   experiments, multifrontal sketches, and env-var-only rescue branches.
 3. Collapse RHSMode-1 into one visible pipeline and one advanced policy table;
    remove all parallel private policy readers that cannot be explained to a
    user as an equation, discretization, solver, or output stage.
@@ -404,8 +404,8 @@ Fortran-v3 parity/runtime/RSS/bootstrap comparison suite.
 ## Explicit Deferred Items
 
 Deferred unless production-gated: experimental QI/device-QI, native
-sparse-direct research, nested-dissection/multifrontal/HSS replacements,
-lower-memory preconditioner research, GPU/multi-GPU campaigns, publication
-audits, and long stellarator optimization campaigns. They may be referenced in
-`docs/research_lanes.rst` only; they must not remain as stable source,
-examples, tests, README claims, or default solver branches.
+sparse-direct research, multifrontal replacements, lower-memory preconditioner
+research, GPU/multi-GPU campaigns, publication audits, and long stellarator
+optimization campaigns. They may be referenced in `docs/research_lanes.rst`
+only; they must not remain as stable source, examples, tests, README claims, or
+default solver branches.

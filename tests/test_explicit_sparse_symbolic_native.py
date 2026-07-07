@@ -248,85 +248,6 @@ def test_symbolic_schur_factor_failures_and_nonfinite_separator_are_bounded() ->
     np.testing.assert_allclose(nonfinite.solve(rhs), np.zeros_like(rhs))
 
 
-def test_nested_dissection_node_failures_matrix_rhs_and_empty_separators() -> None:
-    dtype = np.dtype(np.float64)
-    leaf = explicit_sparse._SymbolicNDFrontalNode(
-        indices=np.asarray([0, 1], dtype=np.int64),
-        dtype=dtype,
-        global_size=2,
-        depth=0,
-        leaf_factor=_FailingFactor(),
-    )
-    rhs = np.asarray([4.0, -2.0], dtype=dtype)
-    np.testing.assert_allclose(leaf.solve_local(rhs), rhs)
-    matrix_rhs = np.column_stack([rhs, 2.0 * rhs])
-    np.testing.assert_allclose(leaf.solve_local(matrix_rhs), matrix_rhs)
-
-    child = explicit_sparse._SymbolicNDFrontalNode(
-        indices=np.asarray([0], dtype=np.int64),
-        dtype=dtype,
-        global_size=2,
-        depth=1,
-        leaf_factor=_IdentityFactor(),
-    )
-    no_separator = explicit_sparse._SymbolicNDFrontalNode(
-        indices=np.asarray([0, 1], dtype=np.int64),
-        dtype=dtype,
-        global_size=2,
-        depth=0,
-        children=(
-            explicit_sparse._SymbolicNDChild(
-                positions=np.asarray([0], dtype=np.int64),
-                indices=np.asarray([0], dtype=np.int64),
-                factor=child,
-                b_to_separator=sparse.csr_matrix((1, 0), dtype=dtype),
-                c_from_separator=sparse.csr_matrix((0, 1), dtype=dtype),
-            ),
-        ),
-        separator_positions=np.asarray([], dtype=np.int64),
-        separator_indices=np.asarray([], dtype=np.int64),
-    )
-    np.testing.assert_allclose(no_separator.solve_local(matrix_rhs), np.asarray([[4.0, 8.0], [0.0, 0.0]]))
-
-    coupled_child = explicit_sparse._SymbolicNDChild(
-        positions=np.asarray([0], dtype=np.int64),
-        indices=np.asarray([0], dtype=np.int64),
-        factor=child,
-        b_to_separator=sparse.csr_matrix((1, 1), dtype=dtype),
-        c_from_separator=sparse.csr_matrix(np.asarray([[1.0]], dtype=dtype)),
-    )
-    failing_schur = explicit_sparse._SymbolicNDFrontalNode(
-        indices=np.asarray([0, 1], dtype=np.int64),
-        dtype=dtype,
-        global_size=2,
-        depth=0,
-        children=(coupled_child,),
-        separator_positions=np.asarray([1], dtype=np.int64),
-        separator_indices=np.asarray([1], dtype=np.int64),
-        schur_factor=_FailingFactor(),
-    )
-    np.testing.assert_allclose(failing_schur.solve_local(rhs), np.asarray([4.0, 0.0], dtype=dtype))
-
-    coupled_child_with_feedback = explicit_sparse._SymbolicNDChild(
-        positions=np.asarray([0], dtype=np.int64),
-        indices=np.asarray([0], dtype=np.int64),
-        factor=child,
-        b_to_separator=sparse.csr_matrix(np.asarray([[1.0]], dtype=dtype)),
-        c_from_separator=sparse.csr_matrix(np.asarray([[1.0]], dtype=dtype)),
-    )
-    nonfinite_schur = explicit_sparse._SymbolicNDFrontalNode(
-        indices=np.asarray([0, 1], dtype=np.int64),
-        dtype=dtype,
-        global_size=2,
-        depth=0,
-        children=(coupled_child_with_feedback,),
-        separator_positions=np.asarray([1], dtype=np.int64),
-        separator_indices=np.asarray([1], dtype=np.int64),
-        schur_factor=_NaNFactor(),
-    )
-    np.testing.assert_allclose(nonfinite_schur.solve(matrix_rhs), np.zeros_like(matrix_rhs))
-
-
 def test_symbolic_superblock_factor_failures_and_builder_edge_cases() -> None:
     dtype = np.dtype(np.float64)
     matrix = sparse.eye(3, format="csr", dtype=dtype)
@@ -452,26 +373,6 @@ def test_symbolic_schur_superblock_and_nd_factors_solve_with_small_matrices() ->
     assert superblock_bytes > 0
     assert superblock_nnz > 0
     assert np.all(np.isfinite(super_solution))
-
-    nd_factor, nd_bytes, nd_nnz = explicit_sparse._build_symbolic_nd_frontal_schur_factor(
-        matrix,
-        analysis=analysis,
-        diag_pivot_thresh=1.0,
-        max_leaf_size=2,
-        max_terminal_factor_size=3,
-        max_depth=2,
-        separator_width=1,
-        max_separator_cols=3,
-        high_degree_cols=1,
-        max_dense_rhs_cols_per_child=1,
-    )
-    nd_solution = nd_factor.solve(rhs)
-    assert nd_factor.global_size == matrix.shape[0]
-    assert nd_factor.max_depth_reached <= 2
-    assert nd_bytes > 0
-    assert nd_nnz > 0
-    assert np.all(np.isfinite(nd_solution))
-
 
 def test_regularized_factorization_and_admission_gates_fail_closed() -> None:
     singular = sparse.csc_matrix((3, 3), dtype=np.float64)

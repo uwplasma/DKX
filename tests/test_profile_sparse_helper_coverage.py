@@ -460,7 +460,7 @@ def test_rhsmode1_sparse_factor_policy_auto_avoids_large_monolithic_default() ->
 
 def test_rhsmode1_sparse_factor_policy_keeps_explicit_large_factor_override() -> None:
     setup = profile_sparse_policy.resolve_sparse_pc_factor_policy(
-        env={"SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND": "native_nd_frontal_schur_lu"},
+        env={"SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND": "native_frontal_schur_lu"},
         constrained_pas_pc=True,
         tokamak_fp_pc=False,
         fortran_reduced_sparse_pc=False,
@@ -471,7 +471,7 @@ def test_rhsmode1_sparse_factor_policy_keeps_explicit_large_factor_override() ->
     )
 
     assert setup.default_factor_kind == "lu"
-    assert setup.factorization == "symbolic_nd_frontal_schur_lu"
+    assert setup.factorization == "symbolic_frontal_schur_lu"
 
 
 def test_build_host_sparse_direct_factor_from_matvec_rejects_large_monolithic_factor(monkeypatch) -> None:

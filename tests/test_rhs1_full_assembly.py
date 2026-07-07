@@ -285,7 +285,6 @@ def test_symbolic_frontal_policy_keeps_default_frontal_controls() -> None:
         env={},
     )
 
-    assert policy.use_nd_frontal is False
     assert policy.active_symbolic_kind == "active_symbolic_frontal_schur_lu"
     assert policy.active_architecture == "active_true_operator_symbolic_frontal_schur_lu"
     assert policy.max_active_size == 300000
@@ -298,23 +297,6 @@ def test_symbolic_frontal_policy_keeps_default_frontal_controls() -> None:
     assert policy.admission_probes == 4
     assert policy.admission_max_relative_residual == 1.0e-2
     assert policy.admission_min_improvement == 1.0
-
-
-def test_symbolic_frontal_policy_routes_nested_dissection_aliases() -> None:
-    policy = resolve_active_symbolic_frontal_policy(
-        requested_kind="active_symbolic_nested_dissection_frontal_schur_lu",
-        active_size=400001,
-        regularization=0.0,
-        env={},
-    )
-
-    assert policy.use_nd_frontal is True
-    assert policy.active_symbolic_kind == "active_symbolic_nd_frontal_schur_lu"
-    assert policy.active_architecture == "active_true_operator_symbolic_nd_frontal_schur_lu"
-    assert policy.min_cross_separator_fraction == 0.20
-    assert policy.nd_max_separator_cols == policy.separator_cols
-    assert policy.nd_high_degree_cols == policy.high_degree_cols
-    assert policy.nd_max_dense_rhs_entries == policy.max_dense_rhs_entries
 
 
 def test_symbolic_frontal_policy_clamps_invalid_or_out_of_range_values() -> None:
@@ -331,8 +313,6 @@ def test_symbolic_frontal_policy_clamps_invalid_or_out_of_range_values() -> None
             "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ADMISSION_PROBES": "0",
             "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ADMISSION_MAX_RELATIVE_RESIDUAL": "-1",
             "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ADMISSION_MIN_IMPROVEMENT": "-2",
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DEPTH": "-1",
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_RESIDUAL_POLISH_DAMPING": "-0.5",
         },
     )
 
@@ -344,33 +324,6 @@ def test_symbolic_frontal_policy_clamps_invalid_or_out_of_range_values() -> None
     assert policy.admission_probes == 1
     assert policy.admission_max_relative_residual == 0.0
     assert policy.admission_min_improvement == 0.0
-    assert policy.nd_max_depth == 0
-    assert policy.nd_residual_polish_damping == 0.0
-
-
-def test_symbolic_frontal_policy_nd_overrides_follow_frontal_defaults() -> None:
-    policy = resolve_active_symbolic_frontal_policy(
-        requested_kind="active_symbolic_multilevel_frontal_schur_lu",
-        active_size=20,
-        regularization=1.0e-6,
-        env={
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_SEPARATOR_COLS": "17",
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_HIGH_DEGREE_COLS": "5",
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_DENSE_RHS_ENTRIES": "123",
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_SEPARATOR_COLS": "23",
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_HIGH_DEGREE_COLS": "7",
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES": "456",
-        },
-    )
-
-    assert policy.use_nd_frontal is True
-    assert policy.separator_cols == 17
-    assert policy.high_degree_cols == 5
-    assert policy.max_dense_rhs_entries == 123
-    assert policy.nd_max_separator_cols == 23
-    assert policy.nd_high_degree_cols == 7
-    assert policy.nd_max_dense_rhs_entries == 456
-    assert policy.regularization_rel == 1.0e-6
 
 
 def test_symbolic_superblock_policy_keeps_default_controls() -> None:
@@ -3127,84 +3080,6 @@ def test_active_symbolic_frontal_schur_lu_solves_separator_coupled_active_system
     assert pc.metadata["cross_separator_fraction"] == 1.0
     assert pc.metadata["admission"]["accepted"] is True
     assert pc.metadata["requires_preflight"] is True
-    rhs = _deterministic_vector(layout.total_size)
-    recovered = np.asarray(pc.operator.matvec(rhs), dtype=np.float64)
-    np.testing.assert_allclose(recovered, np.linalg.solve(matrix.toarray(), rhs), rtol=1.0e-11, atol=1.0e-11)
-
-
-def test_active_symbolic_nd_frontal_schur_lu_solves_cross_coupled_active_system(monkeypatch) -> None:
-    layout = RHS1BlockLayout(
-        n_species=1,
-        n_x=3,
-        n_xi=2,
-        n_theta=2,
-        n_zeta=1,
-        f_size=12,
-        phi1_size=0,
-        extra_size=0,
-        total_size=12,
-        constraint_scheme=1,
-        include_phi1=False,
-        include_phi1_in_kinetic=False,
-        rhs_mode=1,
-    )
-    n = layout.total_size
-    matrix = sp.diags(
-        [
-            -0.35 * np.ones(n - 1),
-            5.0 + 0.1 * np.arange(n),
-            -0.6 * np.ones(n - 1),
-        ],
-        offsets=[-1, 0, 1],
-        format="lil",
-    )
-    matrix[1, 10] = 0.25
-    matrix[10, 1] = -0.18
-    matrix = matrix.tocsr()
-    active = np.arange(layout.total_size, dtype=np.int64)
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ORDERING", "natural")
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_BLOCK_SIZE", "3")
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_SEPARATOR_COLS", "8")
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_BOUNDARY_WIDTH", "0")
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_HIGH_DEGREE_COLS", "0")
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_LEAF_SIZE", "3")
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_TERMINAL_FACTOR_SIZE", "12")
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DEPTH", "4")
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_SEPARATOR_WIDTH", "2")
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_SEPARATOR_COLS", "8")
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_HIGH_DEGREE_COLS", "0")
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES_PER_CHILD", "100000")
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_SETUP_S", "60")
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_RESIDUAL_POLISH_STEPS", "1")
-    monkeypatch.setenv(
-        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ADMISSION_MAX_RELATIVE_RESIDUAL",
-        "1e-11",
-    )
-
-    pc = build_active_projected_rhs1_full_csr_preconditioner(
-        matrix=matrix,
-        layout=layout,
-        active_indices=active,
-        kind="active_symbolic_nd_frontal_schur_lu",
-        max_factor_nbytes=2_000_000,
-        regularization=0.0,
-    )
-
-    assert pc.selected, pc.to_dict()
-    assert pc.kind == "active_symbolic_nd_frontal_schur_lu"
-    assert pc.metadata["architecture"] == "active_true_operator_symbolic_nd_frontal_schur_lu"
-    assert pc.metadata["symbolic_factor_kind"] == "symbolic_nd_frontal_schur_lu"
-    assert pc.metadata["symbolic_nd_max_terminal_factor_size"] == 12
-    assert pc.metadata["symbolic_nd_max_setup_s"] == 60.0
-    assert pc.metadata["symbolic_factor_metadata"]["architecture"] == "symbolic_nd_frontal_schur_lu"
-    assert pc.metadata["symbolic_factor_metadata"]["max_terminal_factor_size"] == 12
-    assert pc.metadata["symbolic_factor_metadata"]["max_setup_s"] == 60.0
-    assert pc.metadata["symbolic_factor_metadata"]["max_dense_rhs_entries_per_child"] == 100000
-    assert pc.metadata["symbolic_nd_max_dense_rhs_entries_per_child"] == 100000
-    assert pc.metadata["symbolic_factor_metadata"]["separator_update_mode"] == "csc_column_chunks"
-    assert pc.metadata["symbolic_factor_metadata"]["separator_update_chunks"] > 0
-    assert pc.metadata["symbolic_factor_metadata"]["residual_polish_steps"] == 1
-    assert pc.metadata["admission"]["accepted"] is True
     rhs = _deterministic_vector(layout.total_size)
     recovered = np.asarray(pc.operator.matvec(rhs), dtype=np.float64)
     np.testing.assert_allclose(recovered, np.linalg.solve(matrix.toarray(), rhs), rtol=1.0e-11, atol=1.0e-11)

@@ -261,7 +261,6 @@ class ActiveSymbolicFrontalPolicy:
     """Resolved controls for the active symbolic frontal/Schur factor."""
 
     requested_kind: str
-    use_nd_frontal: bool
     active_symbolic_kind: str
     active_architecture: str
     max_active_size: int
@@ -282,18 +281,6 @@ class ActiveSymbolicFrontalPolicy:
     admission_probes: int
     admission_max_relative_residual: float
     admission_min_improvement: float
-    nd_max_leaf_size: int
-    nd_max_terminal_factor_size: int
-    nd_max_depth: int
-    nd_separator_width: int
-    nd_max_separator_cols: int
-    nd_high_degree_cols: int
-    nd_max_dense_rhs_entries: int
-    nd_max_dense_rhs_entries_per_child: int
-    nd_max_dense_rhs_cols_per_child: int
-    nd_max_setup_s: float
-    nd_residual_polish_steps: int
-    nd_residual_polish_damping: float
 
 
 def resolve_active_symbolic_frontal_policy(
@@ -303,25 +290,11 @@ def resolve_active_symbolic_frontal_policy(
     regularization: float,
     env: Mapping[str, str] | None = None,
 ) -> ActiveSymbolicFrontalPolicy:
-    """Resolve env-driven controls for the symbolic frontal/ND preconditioner."""
+    """Resolve env-driven controls for the admitted symbolic frontal preconditioner."""
 
     env_map = os.environ if env is None else env
-    requested_kind_l = str(requested_kind).strip().lower()
-    use_nd_frontal = (
-        "nd_frontal" in requested_kind_l
-        or "nested_dissection" in requested_kind_l
-        or "multilevel" in requested_kind_l
-    )
-    active_symbolic_kind = (
-        "active_symbolic_nd_frontal_schur_lu"
-        if bool(use_nd_frontal)
-        else "active_symbolic_frontal_schur_lu"
-    )
-    active_architecture = (
-        "active_true_operator_symbolic_nd_frontal_schur_lu"
-        if bool(use_nd_frontal)
-        else "active_true_operator_symbolic_frontal_schur_lu"
-    )
+    active_symbolic_kind = "active_symbolic_frontal_schur_lu"
+    active_architecture = "active_true_operator_symbolic_frontal_schur_lu"
     separator_cols = max(
         0,
         int(_env_int(env_map, "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_SEPARATOR_COLS", 1024)),
@@ -343,7 +316,6 @@ def resolve_active_symbolic_frontal_policy(
     large_separator_default = 0.20 if int(active_size) > 300_000 else 0.0
     return ActiveSymbolicFrontalPolicy(
         requested_kind=str(requested_kind),
-        use_nd_frontal=bool(use_nd_frontal),
         active_symbolic_kind=str(active_symbolic_kind),
         active_architecture=str(active_architecture),
         max_active_size=int(
@@ -460,90 +432,6 @@ def resolve_active_symbolic_frontal_policy(
                 _env_float(
                     env_map,
                     "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ADMISSION_MIN_IMPROVEMENT",
-                    1.0,
-                )
-            ),
-        ),
-        nd_max_leaf_size=max(
-            1,
-            int(_env_int(env_map, "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_LEAF_SIZE", 4096)),
-        ),
-        nd_max_terminal_factor_size=max(
-            1,
-            int(
-                _env_int(
-                    env_map,
-                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_TERMINAL_FACTOR_SIZE",
-                    32768,
-                )
-            ),
-        ),
-        nd_max_depth=max(
-            0,
-            int(_env_int(env_map, "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DEPTH", 1)),
-        ),
-        nd_separator_width=max(
-            1,
-            int(_env_int(env_map, "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_SEPARATOR_WIDTH", 128)),
-        ),
-        nd_max_separator_cols=max(
-            1,
-            int(
-                _env_int(
-                    env_map,
-                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_SEPARATOR_COLS",
-                    max(1, int(separator_cols)),
-                )
-            ),
-        ),
-        nd_high_degree_cols=max(
-            0,
-            int(_env_int(env_map, "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_HIGH_DEGREE_COLS", high_degree_cols)),
-        ),
-        nd_max_dense_rhs_entries=max(
-            0,
-            int(
-                _env_int(
-                    env_map,
-                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES",
-                    max_dense_rhs_entries,
-                )
-            ),
-        ),
-        nd_max_dense_rhs_entries_per_child=max(
-            0,
-            int(
-                _env_int(
-                    env_map,
-                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES_PER_CHILD",
-                    0,
-                )
-            ),
-        ),
-        nd_max_dense_rhs_cols_per_child=max(
-            0,
-            int(
-                _env_int(
-                    env_map,
-                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DENSE_RHS_COLS_PER_CHILD",
-                    0,
-                )
-            ),
-        ),
-        nd_max_setup_s=max(
-            0.0,
-            float(_env_float(env_map, "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_SETUP_S", 0.0)),
-        ),
-        nd_residual_polish_steps=max(
-            0,
-            int(_env_int(env_map, "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_RESIDUAL_POLISH_STEPS", 2)),
-        ),
-        nd_residual_polish_damping=max(
-            0.0,
-            float(
-                _env_float(
-                    env_map,
-                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_RESIDUAL_POLISH_DAMPING",
                     1.0,
                 )
             ),
