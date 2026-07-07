@@ -530,8 +530,8 @@ parity while allowing SPMD sharding on otherwise incompatible grids.
 Sharded matvec scaling (single RHS)
 -----------------------------------
 
-We also benchmarked sharded matvec performance for a larger single‑RHS operator:
-`examples/performance/transport_parallel_sharded.input.namelist`.
+We also benchmarked sharded matvec performance for a larger single‑RHS operator
+in the extracted ``research/parallel-performance`` lane.
 
 Latest run (cache warm, Macbook M3 Max, theta‑sharded with padding):
 1 device 1.74 ms, 2 devices 4.08 ms, 3 devices 6.26 ms, 4 devices 8.06 ms,
@@ -542,9 +542,9 @@ for **very large grids** or multi‑GPU nodes.
 Single-device derivative-kernel speedup
 ---------------------------------------
 
-For the same operator (`transport_parallel_xxlarge`), enabling sparse derivative
-kernels reduced single-device matvec time from ``7.49e-4 s`` to ``5.87e-4 s``
-(about ``1.28x`` faster, cache-warm).
+For the same extracted operator, enabling sparse derivative kernels reduced
+single-device matvec time from ``7.49e-4 s`` to ``5.87e-4 s`` (about ``1.28x``
+faster, cache-warm).
 
 The sharded matvec drivers that produced this historical figure live on the
 ``research/parallel-performance`` branch. The stable example tree keeps the
@@ -578,15 +578,8 @@ computing the collisionless :math:`\partial/\partial\theta` term. This is not
 wired into production runs; it is a research benchmark to quantify the
 communication cost of explicit halos for dense derivative operators.
 
-Reproduce:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_shard_map_halo.py \
-     --input examples/performance/transport_parallel_sharded.input.namelist \
-     --devices 4 \
-     --axis theta \
-     --repeats 5
+The prototype driver and sharded input deck are kept on
+``research/parallel-performance`` until this path has production-grid gates.
 
 Notes:
 
