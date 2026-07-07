@@ -45,6 +45,12 @@ bootstrap current, transport coefficients, plotting, and optimization.
   `test_explicit_sparse.py`, `test_rhs1_solver_replay.py`, generated
   suite-report directories, `examples/publication_figures`,
   `examples/performance`, `examples/optimization`, and `benchmarks/`.
+- First solver-research extraction tranche removed the unsupported BLR/HSS
+  compressed separator route from stable code, tests, policy aliases, and public
+  docs. The remaining solver-research work is nested-dissection/multifrontal
+  opt-in paths, true-operator rescue branches, QI/device-QI hard-seed helpers,
+  and manual native-factor routes that are not automatic residual-clean
+  defaults.
 - Overall PR readiness under the strict small-core goal is about 88-90%.
 
 ## Open Lanes
@@ -200,7 +206,7 @@ whole sections before moving retained lines.
 
 | Queue | Files | Main decision | First stop condition |
 | --- | --- | --- | --- |
-| Solver research | `solvers/explicit_sparse.py`, `native_block_factor.py`, `preconditioner_symbolic_*`, `preconditioner_xblock_active.py` | keep CSR/Krylov/admitted defaults; extract BLR, HSS, nested-dissection, multifrontal, true-operator rescue, and env-var-only native factors | no stable import or default policy names `blr`, `hss`, `nested`, `multifrontal`, `true_operator_rescue`, or manual rescue routes |
+| Solver research | `solvers/explicit_sparse.py`, `native_block_factor.py`, `preconditioner_symbolic_*`, `preconditioner_xblock_active.py` | keep CSR/Krylov/admitted defaults; BLR/HSS is removed from stable; extract nested-dissection, multifrontal, true-operator rescue, QI hard-seed, and env-var-only native factors unless they are automatic residual-clean defaults | no stable import or default policy names `nested`, `multifrontal`, `true_operator_rescue`, QI hard-seed, or manual rescue routes; `blr`/`hss` remain absent outside this plan/inventory |
 | RHSMode-1 orchestration | `problems/profile_policies.py`, `profile_sparse_xblock.py`, `profile_solve.py`, `profile_sparse_solve.py`, `profile_dense.py` | one readable setup -> policy -> solve -> residual -> output pipeline | one automatic policy table, one diagnostics schema, no duplicate route predicates |
 | RHSMode-1 operators | `operators/profile_full_system.py`, `profile_system.py`, `profile_layout.py`, term files | keep equation-owned DKE terms; merge duplicate shape/layout helpers; extract device/reduced-tail/sparse-pattern experiments not used by defaults | operator files explain physics terms, not campaign routes |
 | RHSMode-2/3 transport | `problems/transport_*`, `solvers/preconditioner_transport_matrix.py` | one setup/linear-system/solve/finalize path, optional parallel evidence outside stable | transport examples pass parity with no hidden tuning env vars |
@@ -208,8 +214,10 @@ whole sections before moving retained lines.
 | Examples/tests | `examples/`, `tests/`, `benchmarks/`, `scripts/` | original v3 examples plus <=10 workflows; tests grouped by behavior, not history | default CI under 10 minutes with >=95% meaningful coverage target |
 | Root/API | root modules and `sfincs_jax/README.md` | root stays public API/CLI/I/O/plot/compat only | root has <=9 implementation-light modules or ledger exceptions |
 
-Exact first removals are: unsupported QI/device-QI imports, BLR/HSS/ND/native
-factor experiments, historical campaign/profiling generators, examples that are
+Exact removals are tracked in order. Done: BLR/HSS compressed separator solver
+route and its stable tests/docs/policy aliases. Next: unsupported QI/device-QI
+imports, nested-dissection/multifrontal/native factor experiments that are not
+admitted by `auto`, historical campaign/profiling generators, examples that are
 only benchmark artifacts, tests that only pin extracted research behavior, and
 README/docs text that markets deferred paths as stable.
 
@@ -220,7 +228,7 @@ README/docs text that markets deferred paths as stable.
 | package root | `__init__.py`, `__main__.py`, `api.py`, `cli.py`, `compare.py`, `io.py`, `namelist.py`, `paths.py`, `plotting.py`, `README.md`, and tiny compatibility facades only when documented | Move `ambipolar.py`, `diagnostics.py`, `grids.py`, `input_compat.py`, `profiling.py`, `sensitivity.py`, and implementation-heavy facades to domain owners or delete. |
 | `problems/profile_*` | one RHSMode-1 setup/solve/finalize pipeline plus diagnostics | candidate/probe/rescue/history variants, env-var-only paths, duplicate policy readers, QI-only hard-seed helpers. |
 | `operators/profile_*` | streaming, electric-field, magnetic-drift, ExB, collisions, constraints, source moments, Phi1 coupling, shared layout | device/reduced-tail variants not used by defaults, duplicate geometry/shape helpers, historical sparse-pattern probes. |
-| `solvers/` | Krylov dispatch, admitted preconditioners, sparse utilities, memory model | unpromoted native-symbolic/ND/multifrontal/HSS/BLR/true-operator rescue families and duplicate wrappers. |
+| `solvers/` | Krylov dispatch, admitted preconditioners, sparse utilities, memory model | unpromoted native-symbolic/ND/multifrontal/true-operator rescue families and duplicate wrappers; BLR/HSS stable routes are already removed and must stay absent. |
 | `outputs/` | profile schema, transport schema, writer/format dispatch | duplicate result dictionaries, HDF5-only ad hoc key builders, internal history fields not in public outputs. |
 | `validation/` | compact release artifact readers, fixture fetch, docs-claim figures | large publication generators, raw profiling traces, stale manifest rows. |
 | `workflows/` | curated autodiff/scans/optimization helpers used by docs/examples | long campaigns, promotion experiments, one-off optimization evidence scripts. |
@@ -260,6 +268,25 @@ surface, delete hidden env vars and README claims, add an absence test, and
 record the removed paths in `core_slim_inventory.json`. Do not leave a
 compatibility alias for extracted research code unless a documented stable API
 uses it.
+
+## Immediate Execution Sequence
+
+Follow this sequence without inserting unrelated micro-tranches.
+
+| Gate | Files | Keep only if | Same-commit deletion |
+| --- | --- | --- | --- |
+| Solver family removal | `solvers/explicit_sparse.py`, `problems/transport_linear_system.py`, `problems/profile_sparse_policy.py`, solver tests | `auto` can select the route without hidden env vars and strict true-residual tests prove it on a representative parity fixture | aliases, settings fields, env vars, metadata keys, tests, docs, README prose |
+| QI/device-QI extraction | all `qi_*`, `hard_seed`, `device_qi`, `production_qi` symbols | helper is general physics/numerics used by non-QI workflows | stable imports plus absence/import tests after preservation on `research/qi-device-hard-seed` |
+| RHSMode-1 policy collapse | `profile_*` problem/solver files | branch is clearly `geometry`, `operator`, `preconditioner`, `linear solve`, `residual gate`, or `output` | duplicate route predicates and one-off diagnostics schemas |
+| Transport collapse | RHSMode-2/3 transport files | documented automatic policy used by examples/parity tests | campaign/profiling knobs and duplicate setup/solve/finalize code |
+| Examples/tests cleanup | `examples/`, `tests/`, `benchmarks/`, `scripts/` | proves physics, numerical identity, API/output, parity fixture, autodiff, or docs claim | historical examples and coverage-only private-helper tests |
+| Docs/evidence | README, docs, figures, tables | backed by retained compact evidence | branch-history prose and rejected solver-campaign claims |
+
+Each gate has the same completion checklist: `rg` proves removed route names are
+absent from source/tests/public docs, focused tests pass, package imports compile,
+the inventory line target improves, and the commit deletes more stable code than
+it adds unless the added code replaces multiple deleted branches with one clearer
+domain owner.
 
 The next implementation passes must be coarse-grained:
 

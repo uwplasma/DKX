@@ -2567,51 +2567,6 @@ def build_transport_fp_fortran_reduced_lu_preconditioner(
         0,
         minimum=0,
     )
-    symbolic_blr_frontal_tol = _float_env(
-        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_TOL",
-        1.0e-6,
-        minimum=0.0,
-    )
-    symbolic_blr_frontal_max_rank = _int_env(
-        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_MAX_RANK",
-        64,
-        minimum=1,
-    )
-    symbolic_blr_frontal_min_cols = _int_env(
-        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_MIN_COLS",
-        8,
-        minimum=1,
-    )
-    symbolic_blr_frontal_gmres_rtol = _float_env(
-        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_GMRES_RTOL",
-        1.0e-6,
-        minimum=0.0,
-    )
-    symbolic_blr_frontal_gmres_atol = _float_env(
-        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_GMRES_ATOL",
-        0.0,
-        minimum=0.0,
-    )
-    symbolic_blr_frontal_gmres_maxiter = _int_env(
-        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_GMRES_MAXITER",
-        50,
-        minimum=1,
-    )
-    symbolic_blr_frontal_gmres_restart = _int_env(
-        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_GMRES_RESTART",
-        64,
-        minimum=1,
-    )
-    symbolic_blr_frontal_woodbury_max_rank = _int_env(
-        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_WOODBURY_MAX_RANK",
-        512,
-        minimum=0,
-    )
-    symbolic_blr_frontal_woodbury_max_condition = _float_env(
-        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_WOODBURY_MAX_CONDITION",
-        1.0e8,
-        minimum=1.0,
-    )
     symbolic_nd_max_leaf_size = _int_env(
         "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_LEAF_SIZE",
         4096,
@@ -2666,10 +2621,6 @@ def build_transport_fp_fortran_reduced_lu_preconditioner(
         "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_SETUP_S",
         0.0,
         minimum=0.0,
-    )
-    symbolic_nd_compress_updates = _bool_env(
-        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_COMPRESS_UPDATES",
-        False,
     )
     symbolic_nd_residual_polish_steps = _int_env(
         "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_RESIDUAL_POLISH_STEPS",
@@ -2827,10 +2778,6 @@ def build_transport_fp_fortran_reduced_lu_preconditioner(
             "frontal_schur_lu",
             "native_frontal_schur_lu",
             "multifrontal_schur_lu",
-            "symbolic_blr_frontal_schur_lu",
-            "blr_frontal_schur_lu",
-            "native_blr_frontal_schur_lu",
-            "compressed_frontal_schur_lu",
             "symbolic_nd_frontal_schur_lu",
             "nd_frontal_schur_lu",
             "nested_dissection_frontal_schur_lu",
@@ -2851,12 +2798,6 @@ def build_transport_fp_fortran_reduced_lu_preconditioner(
         default_factor_kind = "symbolic_block_schur_lu"
     elif default_factor_kind in {"frontal_schur_lu", "native_frontal_schur_lu", "multifrontal_schur_lu"}:
         default_factor_kind = "symbolic_frontal_schur_lu"
-    elif default_factor_kind in {
-        "blr_frontal_schur_lu",
-        "native_blr_frontal_schur_lu",
-        "compressed_frontal_schur_lu",
-    }:
-        default_factor_kind = "symbolic_blr_frontal_schur_lu"
     elif default_factor_kind in {
         "nd_frontal_schur_lu",
         "nested_dissection_frontal_schur_lu",
@@ -2922,12 +2863,6 @@ def build_transport_fp_fortran_reduced_lu_preconditioner(
             f"{float(symbolic_frontal_regularization_rel):.3e}_"
             f"{int(symbolic_frontal_max_dense_rhs_entries)}_"
             f"{int(symbolic_frontal_max_dense_rhs_cols_per_block)}_"
-            f"blr{float(symbolic_blr_frontal_tol):.3e}_{int(symbolic_blr_frontal_max_rank)}_"
-            f"{int(symbolic_blr_frontal_min_cols)}_{float(symbolic_blr_frontal_gmres_rtol):.3e}_"
-            f"{float(symbolic_blr_frontal_gmres_atol):.3e}_{int(symbolic_blr_frontal_gmres_maxiter)}_"
-            f"{int(symbolic_blr_frontal_gmres_restart)}_"
-            f"wb{int(symbolic_blr_frontal_woodbury_max_rank)}_"
-            f"{float(symbolic_blr_frontal_woodbury_max_condition):.3e}_"
             f"nd{int(symbolic_nd_max_leaf_size)}_{int(symbolic_nd_max_depth)}_"
             f"terminal{int(symbolic_nd_max_terminal_factor_size)}_"
             f"{int(symbolic_nd_separator_width)}_{int(symbolic_nd_max_separator_cols)}_"
@@ -2936,7 +2871,7 @@ def build_transport_fp_fortran_reduced_lu_preconditioner(
             f"{int(symbolic_nd_max_dense_rhs_entries_per_child)}_"
             f"{int(symbolic_nd_max_dense_rhs_cols_per_child)}_"
             f"setups{float(symbolic_nd_max_setup_s):.3e}_"
-            f"ndblr{int(symbolic_nd_compress_updates)}_upd{int(symbolic_nd_parallel_update_workers)}_"
+            f"ndupd{int(symbolic_nd_parallel_update_workers)}_"
             f"polish{int(symbolic_nd_residual_polish_steps)}_"
             f"{float(symbolic_nd_residual_polish_damping):.3e}_"
             f"super{int(symbolic_superblock_max_size)}_{int(symbolic_superblock_max_blocks)}_"
@@ -3011,7 +2946,6 @@ def build_transport_fp_fortran_reduced_lu_preconditioner(
                         "symbolic_block_lu_coarse",
                         "symbolic_block_schur_lu",
                         "symbolic_frontal_schur_lu",
-                        "symbolic_blr_frontal_schur_lu",
                         "symbolic_nd_frontal_schur_lu",
                         "symbolic_superblock_lu",
                     }
@@ -3190,19 +3124,6 @@ def build_transport_fp_fortran_reduced_lu_preconditioner(
                         default_symbolic_frontal_max_dense_rhs_cols_per_block=int(
                             symbolic_frontal_max_dense_rhs_cols_per_block
                         ),
-                        default_symbolic_blr_frontal_tol=float(symbolic_blr_frontal_tol),
-                        default_symbolic_blr_frontal_max_rank=int(symbolic_blr_frontal_max_rank),
-                        default_symbolic_blr_frontal_min_cols=int(symbolic_blr_frontal_min_cols),
-                        default_symbolic_blr_frontal_gmres_rtol=float(symbolic_blr_frontal_gmres_rtol),
-                        default_symbolic_blr_frontal_gmres_atol=float(symbolic_blr_frontal_gmres_atol),
-                        default_symbolic_blr_frontal_gmres_maxiter=int(symbolic_blr_frontal_gmres_maxiter),
-                        default_symbolic_blr_frontal_gmres_restart=int(symbolic_blr_frontal_gmres_restart),
-                        default_symbolic_blr_frontal_woodbury_max_rank=int(
-                            symbolic_blr_frontal_woodbury_max_rank
-                        ),
-                        default_symbolic_blr_frontal_woodbury_max_condition=float(
-                            symbolic_blr_frontal_woodbury_max_condition
-                        ),
                         default_symbolic_nd_max_leaf_size=int(symbolic_nd_max_leaf_size),
                         default_symbolic_nd_max_terminal_factor_size=int(symbolic_nd_max_terminal_factor_size),
                         default_symbolic_nd_max_depth=int(symbolic_nd_max_depth),
@@ -3218,7 +3139,6 @@ def build_transport_fp_fortran_reduced_lu_preconditioner(
                             symbolic_nd_max_dense_rhs_cols_per_child
                         ),
                         default_symbolic_nd_max_setup_s=float(symbolic_nd_max_setup_s),
-                        default_symbolic_nd_compress_updates=bool(symbolic_nd_compress_updates),
                         default_symbolic_nd_parallel_update_workers=int(symbolic_nd_parallel_update_workers),
                         default_symbolic_nd_residual_polish_steps=int(symbolic_nd_residual_polish_steps),
                         default_symbolic_nd_residual_polish_damping=float(symbolic_nd_residual_polish_damping),
@@ -3340,17 +3260,6 @@ def build_transport_fp_fortran_reduced_lu_preconditioner(
                     default_symbolic_frontal_max_dense_rhs_cols_per_block=int(
                         symbolic_frontal_max_dense_rhs_cols_per_block
                     ),
-                    default_symbolic_blr_frontal_tol=float(symbolic_blr_frontal_tol),
-                    default_symbolic_blr_frontal_max_rank=int(symbolic_blr_frontal_max_rank),
-                    default_symbolic_blr_frontal_min_cols=int(symbolic_blr_frontal_min_cols),
-                    default_symbolic_blr_frontal_gmres_rtol=float(symbolic_blr_frontal_gmres_rtol),
-                    default_symbolic_blr_frontal_gmres_atol=float(symbolic_blr_frontal_gmres_atol),
-                    default_symbolic_blr_frontal_gmres_maxiter=int(symbolic_blr_frontal_gmres_maxiter),
-                    default_symbolic_blr_frontal_gmres_restart=int(symbolic_blr_frontal_gmres_restart),
-                    default_symbolic_blr_frontal_woodbury_max_rank=int(symbolic_blr_frontal_woodbury_max_rank),
-                    default_symbolic_blr_frontal_woodbury_max_condition=float(
-                        symbolic_blr_frontal_woodbury_max_condition
-                    ),
                     default_symbolic_nd_max_leaf_size=int(symbolic_nd_max_leaf_size),
                     default_symbolic_nd_max_terminal_factor_size=int(symbolic_nd_max_terminal_factor_size),
                     default_symbolic_nd_max_depth=int(symbolic_nd_max_depth),
@@ -3364,7 +3273,6 @@ def build_transport_fp_fortran_reduced_lu_preconditioner(
                     ),
                     default_symbolic_nd_max_dense_rhs_cols_per_child=int(symbolic_nd_max_dense_rhs_cols_per_child),
                     default_symbolic_nd_max_setup_s=float(symbolic_nd_max_setup_s),
-                    default_symbolic_nd_compress_updates=bool(symbolic_nd_compress_updates),
                     default_symbolic_nd_parallel_update_workers=int(symbolic_nd_parallel_update_workers),
                     default_symbolic_nd_residual_polish_steps=int(symbolic_nd_residual_polish_steps),
                     default_symbolic_nd_residual_polish_damping=float(symbolic_nd_residual_polish_damping),
@@ -3493,7 +3401,6 @@ def build_transport_fp_fortran_reduced_lu_preconditioner(
             "symbolic_block_lu_coarse",
             "symbolic_block_schur_lu",
             "symbolic_frontal_schur_lu",
-            "symbolic_blr_frontal_schur_lu",
             "symbolic_nd_frontal_schur_lu",
             "symbolic_superblock_lu",
         } and bool(symbolic_admission_enabled):
@@ -3699,15 +3606,6 @@ def build_transport_fp_fortran_reduced_lu_preconditioner(
             "symbolic_frontal_regularization_rel": float(symbolic_frontal_regularization_rel),
             "symbolic_frontal_max_dense_rhs_entries": int(symbolic_frontal_max_dense_rhs_entries),
             "symbolic_frontal_max_dense_rhs_cols_per_block": int(symbolic_frontal_max_dense_rhs_cols_per_block),
-            "symbolic_blr_frontal_tol": float(symbolic_blr_frontal_tol),
-            "symbolic_blr_frontal_max_rank": int(symbolic_blr_frontal_max_rank),
-            "symbolic_blr_frontal_min_cols": int(symbolic_blr_frontal_min_cols),
-            "symbolic_blr_frontal_gmres_rtol": float(symbolic_blr_frontal_gmres_rtol),
-            "symbolic_blr_frontal_gmres_atol": float(symbolic_blr_frontal_gmres_atol),
-            "symbolic_blr_frontal_gmres_maxiter": int(symbolic_blr_frontal_gmres_maxiter),
-            "symbolic_blr_frontal_gmres_restart": int(symbolic_blr_frontal_gmres_restart),
-            "symbolic_blr_frontal_woodbury_max_rank": int(symbolic_blr_frontal_woodbury_max_rank),
-            "symbolic_blr_frontal_woodbury_max_condition": float(symbolic_blr_frontal_woodbury_max_condition),
             "symbolic_nd_max_leaf_size": int(symbolic_nd_max_leaf_size),
             "symbolic_nd_max_terminal_factor_size": int(symbolic_nd_max_terminal_factor_size),
             "symbolic_nd_max_depth": int(symbolic_nd_max_depth),
@@ -3719,7 +3617,6 @@ def build_transport_fp_fortran_reduced_lu_preconditioner(
             "symbolic_nd_max_dense_rhs_entries_per_child": int(symbolic_nd_max_dense_rhs_entries_per_child),
             "symbolic_nd_max_dense_rhs_cols_per_child": int(symbolic_nd_max_dense_rhs_cols_per_child),
             "symbolic_nd_max_setup_s": float(symbolic_nd_max_setup_s),
-            "symbolic_nd_compress_updates": bool(symbolic_nd_compress_updates),
             "symbolic_nd_parallel_update_workers": int(symbolic_nd_parallel_update_workers),
             "symbolic_nd_residual_polish_steps": int(symbolic_nd_residual_polish_steps),
             "symbolic_nd_residual_polish_damping": float(symbolic_nd_residual_polish_damping),

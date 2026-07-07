@@ -349,7 +349,7 @@ Unreleased
   while the driver keeps the monkeypatch-sensitive operator/factorization seam.
 - Moved the remaining explicit sparse host-factor environment bundle into the
   typed ``ExplicitSparseFactorSettings`` policy object. Default/override
-  parsing for dense/CSR budgets, pattern probing, symbolic Schur/frontal/ND/BLR
+  parsing for dense/CSR budgets, pattern probing, symbolic Schur/frontal/ND
   settings, SuperLU options, and ILU options is now tested in one focused
   owner.
 - Extracted explicit sparse host-factor assembly/factorization orchestration
@@ -400,7 +400,7 @@ Unreleased
   ``sfincs_jax.problems.transport_linear_system``. Focused tests verify
   the emitted CSR matrices against the matrix-free active operator, physics
   coarse-basis source/constraint columns, direct block-Schur callback path, and
-  Fortran-reduced LU symbolic/BLR/ND metadata.
+  Fortran-reduced LU symbolic/ND metadata.
 - Moved the RHSMode=1 full-FP sparse x-block/TZ preconditioner into
   ``sfincs_jax.solvers.preconditioner_xblock_tz_sparse``. The module owns
   host/JAX x-block factor setup, compact CSR and padded triangular apply,

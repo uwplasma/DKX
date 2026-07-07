@@ -36,9 +36,7 @@ def test_canonical_explicit_sparse_factor_kind_aliases() -> None:
     assert canonical_explicit_sparse_factor_kind("spilu", default="lu") == "ilu"
     assert canonical_explicit_sparse_factor_kind("native_block_schur_lu", default="lu") == "symbolic_block_schur_lu"
     assert canonical_explicit_sparse_factor_kind("multifrontal_schur_lu", default="lu") == "symbolic_frontal_schur_lu"
-    assert canonical_explicit_sparse_factor_kind("compressed_frontal_schur_lu", default="lu") == (
-        "symbolic_blr_frontal_schur_lu"
-    )
+    assert canonical_explicit_sparse_factor_kind("compressed_frontal_schur_lu", default="lu") == "lu"
     assert canonical_explicit_sparse_factor_kind("nested_dissection_frontal_schur_lu", default="lu") == (
         "symbolic_nd_frontal_schur_lu"
     )
@@ -115,10 +113,8 @@ def test_explicit_sparse_factor_settings_env_overrides() -> None:
         "SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB": "1024",
         "SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL": "1e-12",
         "SFINCS_JAX_EXPLICIT_SPARSE_PATTERN_COLOR_BATCH": "5",
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_COMPRESS_UPDATES": ".true.",
         "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_PARALLEL_UPDATE_WORKERS": "3",
         "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MAX_SEPARATOR_COLS": "99",
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_MAX_RANK": "17",
         "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SUPERBLOCK_MIN_RETAINED_CROSS_FRACTION": "0.25",
         "SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND": "native_nd_frontal_schur_lu",
         "SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_GUARD": "off",
@@ -135,10 +131,8 @@ def test_explicit_sparse_factor_settings_env_overrides() -> None:
     assert settings.csr_max_mb == 1024.0
     assert settings.drop_tol == 1.0e-12
     assert settings.pattern_color_batch == 5
-    assert settings.symbolic_nd_compress_updates is True
     assert settings.symbolic_nd_parallel_update_workers == 3
     assert settings.symbolic_frontal_max_separator_cols == 99
-    assert settings.symbolic_blr_frontal_max_rank == 17
     assert settings.symbolic_superblock_min_retained_cross_fraction == 0.25
     assert settings.factor_kind == "symbolic_nd_frontal_schur_lu"
     assert settings.monolithic_guard_enabled is False
@@ -153,7 +147,6 @@ def test_explicit_sparse_factor_settings_bounds_and_invalid_permc_fallback() -> 
         env={
             "SFINCS_JAX_EXPLICIT_SPARSE_PATTERN_COLOR_BATCH": "-5",
             "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_PARALLEL_UPDATE_WORKERS": "0",
-            "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_WOODBURY_MAX_CONDITION": "0",
             "SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC": "not-a-permc",
         },
         default_permc_spec="also-bad",
@@ -162,5 +155,4 @@ def test_explicit_sparse_factor_settings_bounds_and_invalid_permc_fallback() -> 
 
     assert settings.pattern_color_batch == 1
     assert settings.symbolic_nd_parallel_update_workers == 1
-    assert settings.symbolic_blr_frontal_woodbury_max_condition == 1.0
     assert settings.permc_spec == "COLAMD"

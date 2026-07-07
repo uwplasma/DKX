@@ -175,86 +175,7 @@ def test_sparse_coarse_and_residual_polish_wrappers_have_bounded_fallbacks() -> 
     np.testing.assert_allclose(polish_nonfinite.solve(rhs), np.zeros_like(rhs))
 
 
-def test_blr_schur_factor_uses_woodbury_and_gmres_fallback_paths() -> None:
-    dtype = np.dtype(np.float64)
-    base_matrix = sparse.eye(3, format="csr", dtype=dtype) * 3.0
-    base_factor = explicit_sparse._DenseInverseFactor(np.eye(3, dtype=dtype) / 3.0)
-    update = explicit_sparse._compress_update_block(
-        np.asarray([[0.2, 0.0], [0.0, 0.1], [0.1, 0.2]], dtype=dtype),
-        columns=np.asarray([0, 2], dtype=np.int64),
-        tol=1.0e-12,
-        max_rank=2,
-        dtype=dtype,
-    )
-    rank0 = explicit_sparse._compress_update_block(
-        np.zeros((3, 0), dtype=dtype),
-        columns=np.asarray([], dtype=np.int64),
-        tol=1.0e-12,
-        max_rank=2,
-        dtype=dtype,
-    )
-    z, vt, core_inv, condition = explicit_sparse._build_blr_woodbury_state(
-        base_factor,
-        (update, rank0),
-        separator_size=3,
-        dtype=dtype,
-        max_rank=4,
-        max_condition=1.0e8,
-    )
-
-    assert update.rank > 0
-    assert rank0.rank == 0
-    assert z is not None and vt is not None and core_inv is not None
-    assert condition is not None and np.isfinite(condition)
-
-    factor = explicit_sparse._BLRSchurFactor(
-        base_matrix=base_matrix,
-        base_factor=base_factor,
-        updates=(update, rank0),
-        dtype=dtype,
-        rtol=1.0e-10,
-        atol=0.0,
-        maxiter=20,
-        restart=3,
-        woodbury_z=z,
-        woodbury_vt=vt,
-        woodbury_core_inverse=core_inv,
-        woodbury_condition=condition,
-    )
-    rhs = np.asarray([1.0, -0.5, 0.25], dtype=dtype)
-    woodbury_solution = factor.solve(rhs)
-
-    assert factor.woodbury_rank == update.rank
-    assert factor.woodbury_nbytes > 0
-    assert np.all(np.isfinite(woodbury_solution))
-    np.testing.assert_allclose(factor.matvec(woodbury_solution), rhs, rtol=1.0e-8, atol=1.0e-8)
-
-    gmres_factor = explicit_sparse._BLRSchurFactor(
-        base_matrix=base_matrix,
-        base_factor=base_factor,
-        updates=(update,),
-        dtype=dtype,
-        rtol=1.0e-10,
-        atol=0.0,
-        maxiter=20,
-        restart=3,
-    )
-    gmres_solution = gmres_factor.solve(np.column_stack([rhs, 2.0 * rhs]))
-    assert gmres_solution.shape == (3, 2)
-    assert np.all(np.isfinite(gmres_solution))
-
-    rejected = explicit_sparse._build_blr_woodbury_state(
-        base_factor,
-        (update,),
-        separator_size=3,
-        dtype=dtype,
-        max_rank=0,
-        max_condition=1.0e8,
-    )
-    assert rejected == (None, None, None, None)
-
-
-def test_symbolic_schur_and_blr_edge_fallbacks_are_finite(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_symbolic_schur_edge_fallbacks_are_finite() -> None:
     dtype = np.dtype(np.float64)
     matrix = sparse.eye(3, format="csr", dtype=dtype)
     analysis = _analysis(matrix, block_size=2)
@@ -283,64 +204,6 @@ def test_symbolic_schur_and_blr_edge_fallbacks_are_finite(monkeypatch: pytest.Mo
         separator_count=0,
     )
     np.testing.assert_allclose(no_separator.solve(rhs), np.asarray([1.0, 2.0, -3.0], dtype=dtype))
-
-    empty_blr = explicit_sparse._BLRSchurFactor(
-        base_matrix=sparse.csr_matrix((0, 0), dtype=dtype),
-        base_factor=_FailingFactor(),
-        updates=tuple(),
-        dtype=dtype,
-        rtol=1.0e-10,
-        atol=0.0,
-        maxiter=2,
-        restart=1,
-    )
-    assert empty_blr.solve(np.asarray([], dtype=dtype)).shape == (0,)
-
-    update = explicit_sparse._BLRUpdateBlock(
-        columns=np.asarray([0], dtype=np.int64),
-        u=np.asarray([[0.1], [0.0]], dtype=dtype),
-        vt=np.asarray([[1.0]], dtype=dtype),
-        original_shape=(2, 1),
-        rank=1,
-        relative_error_estimate=0.0,
-    )
-    invalid_woodbury = explicit_sparse._BLRSchurFactor(
-        base_matrix=sparse.eye(2, format="csr", dtype=dtype),
-        base_factor=explicit_sparse._DenseInverseFactor(np.eye(2, dtype=dtype)),
-        updates=(update,),
-        dtype=dtype,
-        rtol=1.0e-10,
-        atol=0.0,
-        maxiter=3,
-        restart=2,
-        woodbury_z=np.eye(2, dtype=dtype),
-        woodbury_vt=np.ones((1, 2), dtype=dtype),
-        woodbury_core_inverse=np.ones((3, 3), dtype=dtype),
-    )
-    invalid_solution = invalid_woodbury.solve(np.asarray([1.0, -1.0], dtype=dtype))
-    assert np.all(np.isfinite(invalid_solution))
-
-    import scipy.sparse.linalg as scipy_sparse_linalg
-
-    monkeypatch.setattr(
-        scipy_sparse_linalg,
-        "gmres",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("synthetic gmres failure")),
-    )
-    gmres_failure = explicit_sparse._BLRSchurFactor(
-        base_matrix=sparse.eye(2, format="csr", dtype=dtype),
-        base_factor=explicit_sparse._DenseInverseFactor(0.25 * np.eye(2, dtype=dtype)),
-        updates=(update,),
-        dtype=dtype,
-        rtol=1.0e-10,
-        atol=0.0,
-        maxiter=3,
-        restart=2,
-    )
-    np.testing.assert_allclose(
-        gmres_failure.solve(np.asarray([4.0, 8.0], dtype=dtype)),
-        np.asarray([1.0, 2.0], dtype=dtype),
-    )
 
 
 def test_symbolic_schur_factor_failures_and_nonfinite_separator_are_bounded() -> None:
@@ -521,53 +384,6 @@ def test_symbolic_superblock_factor_failures_and_builder_edge_cases() -> None:
     assert nnz == 0
 
 
-def test_low_rank_update_and_woodbury_builder_fail_soft(monkeypatch: pytest.MonkeyPatch) -> None:
-    dtype = np.dtype(np.float64)
-
-    def _raise_svd(*_args, **_kwargs):
-        raise np.linalg.LinAlgError("synthetic svd failure")
-
-    monkeypatch.setattr(np.linalg, "svd", _raise_svd)
-    update = explicit_sparse._compress_update_block(
-        np.asarray([[1.0, 0.0], [0.0, 2.0]], dtype=dtype),
-        columns=np.asarray([0, 1], dtype=np.int64),
-        tol=1.0e-8,
-        max_rank=1,
-        dtype=dtype,
-    )
-    assert update.rank == 1
-    assert update.relative_error_estimate == float("inf")
-
-    singular_update = explicit_sparse._BLRUpdateBlock(
-        columns=np.asarray([0], dtype=np.int64),
-        u=np.asarray([[1.0], [0.0]], dtype=dtype),
-        vt=np.asarray([[1.0]], dtype=dtype),
-        original_shape=(2, 1),
-        rank=1,
-        relative_error_estimate=0.0,
-    )
-    bad_condition = explicit_sparse._build_blr_woodbury_state(
-        _IdentityFactor(),
-        (singular_update,),
-        separator_size=2,
-        dtype=dtype,
-        max_rank=2,
-        max_condition=1.0e8,
-    )
-    assert bad_condition[0] is None
-    assert bad_condition[3] is not None
-
-    failing = explicit_sparse._build_blr_woodbury_state(
-        _FailingFactor(),
-        (singular_update,),
-        separator_size=2,
-        dtype=dtype,
-        max_rank=2,
-        max_condition=1.0e8,
-    )
-    assert failing == (None, None, None, None)
-
-
 def test_symbolic_schur_superblock_and_nd_factors_solve_with_small_matrices() -> None:
     matrix = _spd_matrix()
     analysis = explicit_sparse.analyze_sparse_symbolic_structure(
@@ -612,10 +428,7 @@ def test_symbolic_schur_superblock_and_nd_factors_solve_with_small_matrices() ->
         max_superblock_blocks=2,
         max_separator_cols=3,
         high_degree_cols=1,
-        compress_updates=True,
         max_dense_rhs_cols_per_block=1,
-        blr_max_rank=2,
-        blr_min_cols=1,
     )
     frontal_solution = frontal_factor.solve(rhs)
     assert frontal_factor.coarse_size == frontal_factor.separator_count
@@ -651,9 +464,6 @@ def test_symbolic_schur_superblock_and_nd_factors_solve_with_small_matrices() ->
         max_separator_cols=3,
         high_degree_cols=1,
         max_dense_rhs_cols_per_child=1,
-        compress_updates=True,
-        blr_max_rank=2,
-        blr_min_cols=1,
     )
     nd_solution = nd_factor.solve(rhs)
     assert nd_factor.global_size == matrix.shape[0]
@@ -755,25 +565,6 @@ def test_deterministic_probe_and_symbolic_helpers_cover_edge_cases() -> None:
     assert dsu.union_if_fits(0, 1, max_rows=5, max_blocks=2)
     assert not dsu.union_if_fits(0, 2, max_rows=5, max_blocks=3)
     assert not dsu.union_if_fits(1, 0, max_rows=10, max_blocks=3)
-
-    bad_update = np.ones((2, 2, 1))
-    with pytest.raises(ValueError, match="2D matrix"):
-        explicit_sparse._compress_update_block(
-            bad_update,
-            columns=np.asarray([0, 1]),
-            tol=1.0e-6,
-            max_rank=2,
-            dtype=np.dtype(np.float64),
-        )
-
-    with pytest.raises(ValueError, match="column list"):
-        explicit_sparse._compress_update_block(
-            np.ones((2, 2)),
-            columns=np.asarray([0]),
-            tol=1.0e-6,
-            max_rank=2,
-            dtype=np.dtype(np.float64),
-        )
 
     payload = explicit_sparse.SparseDecision(
         storage_kind="dense",

@@ -347,7 +347,7 @@
         ],
         "proof_owner": "domain tests plus source-tree contracts",
         "line_target": "<=50 Python files and <=50k package lines unless ledger exception",
-        "next_action": "Start with solver research: remove or extract BLR/HSS/nested-dissection/multifrontal/true-operator rescue/manual native-factor routes, then collapse RHSMode-1 policy tables."
+        "next_action": "Continue solver research after BLR/HSS stable-route removal: remove or extract nested-dissection/multifrontal/true-operator rescue/manual native-factor routes that are not auto-admitted, then collapse RHSMode-1 policy tables."
       },
       {
         "name": "compact_test_fixtures",
