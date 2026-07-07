@@ -828,7 +828,7 @@ Validation goal:
 
 Stable artifact gate:
 
-- ``sfincs_jax.validation.figures.build_w7x_ambipolar_root_provenance_panel``
+- ``sfincs_jax.validation.artifacts.build_w7x_ambipolar_root_provenance_panel``
 - ``examples/publication_figures/provenance/w7x_ambipolar_provenance_template.json``
 
 The stable branch keeps the ambipolar solver API, scan/readback tests, and a
