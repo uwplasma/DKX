@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from importlib.util import find_spec
 from pathlib import Path
-from types import SimpleNamespace
 
 from jax import config as jax_config
 
@@ -21,7 +20,6 @@ from sfincs_jax.operators.profile_system import full_system_operator_from_nameli
 
 
 REF = Path(__file__).parent / "ref"
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_jax_sparse_bcoo_matches_rhs1_structured_csr_matvec() -> None:
@@ -82,32 +80,3 @@ def test_optional_interpax_profile_interpolation_matches_expected_linear_profile
     np.testing.assert_allclose(actual, expected, rtol=1.0e-13, atol=1.0e-13)
     gradient = jax.grad(lambda q: jnp.sum(interpax.interp1d(q, radius, density, method="linear")))(query)
     np.testing.assert_allclose(gradient, -0.4 * jnp.ones_like(query), rtol=1.0e-12, atol=1.0e-12)
-
-
-def test_jax_ecosystem_benchmark_probe_returns_core_payload() -> None:
-    import importlib.util
-
-    script = REPO_ROOT / "scripts" / "benchmark_jax_ecosystem_backends.py"
-    spec = importlib.util.spec_from_file_location("benchmark_jax_ecosystem_backends", script)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-
-    payload = module.run_probe(
-        SimpleNamespace(
-            input=REF / "quick_2species_FPCollisions_noEr.input.namelist",
-            identity_shift=0.5,
-            max_csr_mb=128.0,
-            repeats=1,
-            lineax_max_dense_size=0,
-            native_max_factor_mb=128.0,
-        )
-    )
-
-    assert payload["selected"] is True
-    assert payload["probes"]["jax_sparse_bcoo_matvec"]["selected"] is True
-    assert payload["probes"]["jax_sparse_bcoo_matvec"]["relative_error"] < 1.0e-11
-    assert payload["probes"]["native_xell_preconditioner"]["selected"] is True
-    assert payload["probes"]["native_xell_tail_schur_preconditioner"]["selected"] is True
-    assert payload["probes"]["native_xell_tail_schur_preconditioner"]["kind"] == "native_xell_tail_schur"
-    assert payload["probes"]["lineax_dense_gmres"]["selected"] is False

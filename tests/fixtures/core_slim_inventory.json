@@ -82,7 +82,11 @@
         "sfincs_jax/operators/profile_true_operator_rescue.py",
         "tests/test_rhs1_true_operator_rescue.py",
         "scripts/audit_rhs1_solver_stack.py",
-        "scripts/compare_fortran_matrix_to_jax_operator.py"
+        "scripts/compare_fortran_matrix_to_jax_operator.py",
+        "scripts/benchmark_jax_ecosystem_backends.py",
+        "scripts/benchmark_rhs1_fblock_csr_reuse.py",
+        "scripts/benchmark_rhs1_full_csr_reuse.py",
+        "scripts/benchmark_structured_fblock_preconditioners.py"
       ],
       "source_paths": [
         "sfincs_jax/operators/profile_true_operator_rescue.py",
@@ -105,7 +109,11 @@
       "example_paths": [],
       "script_paths": [
         "scripts/audit_rhs1_solver_stack.py",
-        "scripts/compare_fortran_matrix_to_jax_operator.py"
+        "scripts/compare_fortran_matrix_to_jax_operator.py",
+        "scripts/benchmark_jax_ecosystem_backends.py",
+        "scripts/benchmark_rhs1_fblock_csr_reuse.py",
+        "scripts/benchmark_rhs1_full_csr_reuse.py",
+        "scripts/benchmark_structured_fblock_preconditioners.py"
       ],
       "doc_paths": [
         "docs/research_lanes.rst",
@@ -116,6 +124,10 @@
     {
       "branch": "research/parallel-performance",
       "purpose": "Preserve sharded, multi-worker, multi-GPU, and long profiling campaigns outside the stable core.",
+      "core_extracted_paths": [
+        "scripts/generate_parallel_scaling_snapshot.py",
+        "scripts/profile_transport_traces.py"
+      ],
       "source_paths": [
         "sfincs_jax/problems/transport_parallel_runtime.py"
       ],
@@ -143,6 +155,11 @@
     {
       "branch": "research/publication-audits",
       "purpose": "Preserve historical benchmark campaigns, publication figures, Zenodo audits, and long-run validation scripts outside the stable core.",
+      "core_extracted_paths": [
+        "scripts/audit_qs_paper_terms.py",
+        "scripts/compare_v3_example_suite.py",
+        "scripts/generate_fortran_fixture.py"
+      ],
       "source_paths": [
         "sfincs_jax/validation/artifacts.py"
       ],
@@ -155,6 +172,9 @@
         "examples/publication_figures"
       ],
       "script_paths": [
+        "scripts/audit_qs_paper_terms.py",
+        "scripts/compare_v3_example_suite.py",
+        "scripts/generate_fortran_fixture.py",
         "scripts/run_zenodo_vmec_parity_campaign.py",
         "scripts/generate_fortran_example_audit.py",
         "scripts/summarize_production_stress_campaign.py"
