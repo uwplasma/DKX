@@ -713,12 +713,10 @@ driver to build multilevel, residual-snapshot, block-Schur, and flat coarse
 sources, then solve one joint cached ``A Q`` residual equation. If the coupled
 stage is internally accepted but the seed probe is too weak, the opt-in preset
 can install the stage as the Krylov preconditioner without changing ``x0``.
-This is the reviewer-facing test of the Schur/coarse-residual
-hypothesis: a passing artifact must report
-``xblock_qi_device_preconditioner_coupled_residual_equation=True``, write HDF5
-and solver trace, satisfy the residual gate, and remain on the device-QI path
-without host fallback. Until such an artifact exists, the evidence manifest
-keeps the lane fail-closed.
+This is the reviewer-facing test of the Schur/coarse-residual hypothesis: a
+passing artifact must write HDF5 and solver trace, satisfy the residual gate,
+and remain on a device-resident path without host fallback. Until such an
+artifact exists, the evidence manifest keeps the lane fail-closed.
 The first one-GPU Krylov-install artifact,
 ``docs/_static/qi_seed_robustness_scale060_coupled_residual_krylov_install_device_qi_gpu1.json``,
 does report observed coupled residual-equation setup and installation inside
