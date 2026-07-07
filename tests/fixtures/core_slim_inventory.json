@@ -88,7 +88,10 @@
         "scripts/benchmark_rhs1_full_csr_reuse.py",
         "scripts/benchmark_structured_fblock_preconditioners.py",
         "scripts/benchmark_pas_tz_memory_fallback.py",
-        "scripts/benchmark_rhs1_pas_matrixfree.py"
+        "scripts/benchmark_rhs1_pas_matrixfree.py",
+        "scripts/audit_fortran_jax_operator.py",
+        "scripts/compare_petsc_operator.py",
+        "tests/test_audit_fortran_jax_operator.py"
       ],
       "source_paths": [
         "sfincs_jax/operators/profile_true_operator_rescue.py",
@@ -105,6 +108,7 @@
         "tests/test_rhs1_active_sparse_factors.py",
         "tests/test_rhs1_reduced_pmat_plan.py",
         "tests/test_rhs1_true_operator_rescue.py",
+        "tests/test_audit_fortran_jax_operator.py",
         "tests/test_transport_active_factor.py",
         "tests/test_transport_sparse_direct.py"
       ],
@@ -117,7 +121,9 @@
         "scripts/benchmark_rhs1_full_csr_reuse.py",
         "scripts/benchmark_structured_fblock_preconditioners.py",
         "scripts/benchmark_pas_tz_memory_fallback.py",
-        "scripts/benchmark_rhs1_pas_matrixfree.py"
+        "scripts/benchmark_rhs1_pas_matrixfree.py",
+        "scripts/audit_fortran_jax_operator.py",
+        "scripts/compare_petsc_operator.py"
       ],
       "doc_paths": [
         "docs/research_lanes.rst",
@@ -168,7 +174,8 @@
         "scripts/summarize_production_stress_campaign.py",
         "scripts/build_zenodo_vmec_manifest.py",
         "scripts/select_zenodo_vmec_benchmark_cases.py",
-        "scripts/run_zenodo_vmec_parity_campaign.py"
+        "scripts/run_zenodo_vmec_parity_campaign.py",
+        "scripts/compare_rhsmode1_diagnostics_from_state.py"
       ],
       "source_paths": [
         "sfincs_jax/validation/artifacts.py"
@@ -190,6 +197,7 @@
         "scripts/build_zenodo_vmec_manifest.py",
         "scripts/select_zenodo_vmec_benchmark_cases.py",
         "scripts/run_zenodo_vmec_parity_campaign.py",
+        "scripts/compare_rhsmode1_diagnostics_from_state.py",
         "scripts/generate_fortran_example_audit.py",
         "scripts/summarize_production_stress_campaign.py"
       ],
