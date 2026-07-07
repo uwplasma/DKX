@@ -552,7 +552,7 @@ def test_xblock_device_krylov_diagnostics_preserve_transfer_free_logic() -> None
         requested_method="fgmres_jax",
         effective_krylov_env_value="fgmres_jax",
         min_active_size=128,
-        qi_like_full_fp_3d=True,
+        large_full_fp_3d=True,
         ignored_env=False,
         non_autodiff=False,
     )

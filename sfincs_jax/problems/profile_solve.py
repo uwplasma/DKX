@@ -1367,7 +1367,7 @@ def solve_v3_full_system_linear_gmres(
         if cpu_large_sparse_shortcut:
             # This path intentionally bypasses the setup-time RHSMode=1
             # preconditioner and primary Krylov attempt. For the measured
-            # mid-size QI full-FP rung, those stages only gate the exact active
+            # mid-size 3D full-FP rung, those stages only gate the exact active
             # sparse-LU rescue that actually writes the converged solution.
             rhs1_precond_enabled = False
             rhs1_precond_kind = None

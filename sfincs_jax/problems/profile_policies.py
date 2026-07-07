@@ -3197,7 +3197,7 @@ def rhs1_fp_3d_sparse_pc_auto_allowed(
     branch can beat the dense FP shortcut on runtime and memory for some
     geometry-rich systems while preserving Fortran parity. Keep the promotion
     narrow and CPU-only, and do not take it for small or low-pitch-resolution
-    systems by default: dense LU is more robust for QI-like smoke decks and
+    systems by default: dense LU is more robust for large 3D full-FP smoke decks and
     avoids sparse-factorization failures before a solver trace is written.
     """
     env = _env_bool("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC")
@@ -3243,7 +3243,7 @@ def rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
 ) -> bool:
     """Return whether 3D full-FP RHSMode=1 should use x-block sparse-PC GMRES.
 
-    The scale-0.50 QI CPU/GPU ladder and measured finite-beta two-species QA
+    Bounded 3D full-FP CPU/GPU ladders and measured finite-beta two-species QA
     electron-root decks are too large for dense fallback but converge with
     host-assembled x-block sparse LU as a right preconditioner. Keep this as a
     bounded non-differentiable output/CLI route: small systems still use dense

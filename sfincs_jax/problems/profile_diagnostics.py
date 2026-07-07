@@ -1363,8 +1363,8 @@ def xblock_device_krylov_diagnostics(scope: Mapping[str, object]) -> dict[str, o
         "xblock_device_host_fallback_min_active_size": int(
             fallback_decision.min_active_size
         ),
-        "xblock_device_host_fallback_qi_like_full_fp_3d": bool(
-            fallback_decision.qi_like_full_fp_3d
+        "xblock_device_host_fallback_large_full_fp_3d": bool(
+            fallback_decision.large_full_fp_3d
         ),
         "xblock_device_host_fallback_ignored_env": bool(fallback_decision.ignored_env),
         "xblock_device_host_fallback_non_autodiff": bool(
@@ -1524,7 +1524,7 @@ def xblock_sparse_pc_result_diagnostics_from_solve_state(
 ) -> dict[str, object]:
     """Build final x-block sparse-PC diagnostics from the solve state.
 
-    The driver now passes precomputed coarse, QI, device, and side-probe
+    The driver now passes precomputed coarse, device, and side-probe
     payloads through typed contexts. This helper keeps the stable public
     metadata keys used by downstream reports and tests.
     """

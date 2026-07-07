@@ -1965,8 +1965,8 @@ def _fgmres_restart_cycle_fixed(
 
     This helper is intentionally one cycle only. JIT-compiling the whole
     multi-cycle Python FGMRES loop creates very large HLO graphs for production
-    QI cases. A single-cycle kernel retains accelerator-side Arnoldi work while
-    letting the caller synchronize and reuse the same compiled cycle.
+    large 3D full-FP cases. A single-cycle kernel keeps accelerator-side Arnoldi
+    work while the caller synchronizes and reuses the compiled cycle.
     """
 
     dtype = work_b.dtype

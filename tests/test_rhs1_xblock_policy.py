@@ -386,7 +386,7 @@ def test_side_probe_switch_ratio_and_fallback_to_gmres_policy() -> None:
     )
 
 
-def test_device_host_fallback_defaults_to_large_qi_device_requests_only() -> None:
+def test_device_host_fallback_defaults_to_large_full_fp_device_requests_only() -> None:
     decision = rhs1_xblock_device_host_fallback_decision(
         env_value="",
         requested_krylov_method="fgmres_jax",
@@ -401,7 +401,7 @@ def test_device_host_fallback_defaults_to_large_qi_device_requests_only() -> Non
     )
 
     assert decision.used
-    assert decision.reason == "large-qi-full-fp-3d"
+    assert decision.reason == "large-full-fp-3d"
     assert decision.effective_krylov_env_value == "auto"
     assert decision.non_autodiff
     assert decision.to_metadata()["used"] is True

@@ -69,7 +69,7 @@ class RHS1XBlockSideProbeControls:
 
 @dataclass(frozen=True)
 class RHS1XBlockDeviceHostFallbackDecision:
-    """Resolved non-autodiff host fallback for large device-Krylov QI solves."""
+    """Resolved non-autodiff host fallback for large 3D full-FP device-Krylov solves."""
 
     mode: str
     used: bool
@@ -78,7 +78,7 @@ class RHS1XBlockDeviceHostFallbackDecision:
     requested_method: str
     effective_krylov_env_value: str
     min_active_size: int
-    qi_like_full_fp_3d: bool
+    large_full_fp_3d: bool
     ignored_env: bool
     non_autodiff: bool = True
 
@@ -92,7 +92,7 @@ class RHS1XBlockDeviceHostFallbackDecision:
             "requested_method": self.requested_method,
             "effective_krylov_env_value": self.effective_krylov_env_value,
             "min_active_size": int(self.min_active_size),
-            "qi_like_full_fp_3d": bool(self.qi_like_full_fp_3d),
+            "large_full_fp_3d": bool(self.large_full_fp_3d),
             "ignored_env": bool(self.ignored_env),
             "non_autodiff": bool(self.non_autodiff),
         }
@@ -587,7 +587,7 @@ def rhs1_xblock_side_probe_enabled(
 ) -> bool:
     """Return whether to run the bounded precondition-side probe.
 
-    The automatic probe is deliberately scoped to larger 3D full-FP QI-like
+    The automatic probe is deliberately scoped to larger 3D full-FP
     systems on the host GMRES path, where bounded evidence has shown
     seed-dependent left/right slow modes. Device-resident Krylov methods can
     still opt in explicitly, but they skip the default probe because the probe
@@ -646,7 +646,7 @@ def rhs1_xblock_side_probe_switch_ratio(env_value: str) -> float:
 
 
 def rhs1_xblock_lgmres_rescue_enabled(*, env_value: str, krylov_env_value: str) -> bool:
-    """Return whether a weak large-QI GMRES probe may switch to LGMRES.
+    """Return whether a weak large 3D full-FP GMRES probe may switch to LGMRES.
 
     Explicit Krylov method requests are treated as user intent and are not
     rewritten by the automatic rescue. Users can still force this rescue with
@@ -788,7 +788,7 @@ def rhs1_xblock_device_host_fallback_decision(
 ) -> RHS1XBlockDeviceHostFallbackDecision:
     """Return whether to replace a device-Krylov x-block solve by the host policy.
 
-    This is deliberately scoped to the measured hard-seed family: large
+    This is deliberately scoped to the measured large-system family: large
     RHSMode=1, ConstraintScheme=1, three-dimensional full-FP systems without
     Phi1. The replacement is non-autodiff and intended as a robust production
     fallback when the user has requested a JAX-native device Krylov method. It
@@ -824,7 +824,7 @@ def rhs1_xblock_device_host_fallback_decision(
         min_active_size_env_value,
         DEFAULT_FULL_FP_3D_DEVICE_HOST_FALLBACK_MIN_ACTIVE_SIZE,
     )
-    qi_like_full_fp_3d = bool(
+    large_full_fp_3d = bool(
         int(rhs_mode) == 1
         and int(constraint_scheme) == 1
         and not bool(include_phi1)
@@ -846,13 +846,13 @@ def rhs1_xblock_device_host_fallback_decision(
     elif mode == "force":
         used = True
         reason = "forced"
-    elif not qi_like_full_fp_3d:
-        reason = "not-large-qi-full-fp-3d"
+    elif not large_full_fp_3d:
+        reason = "not-large-full-fp-3d"
     elif not active_ok:
         reason = "below-active-size-floor"
     else:
         used = True
-        reason = "large-qi-full-fp-3d"
+        reason = "large-full-fp-3d"
 
     return RHS1XBlockDeviceHostFallbackDecision(
         mode=mode,
@@ -862,7 +862,7 @@ def rhs1_xblock_device_host_fallback_decision(
         requested_method=requested_method,
         effective_krylov_env_value="auto" if bool(used) else requested_method,
         min_active_size=int(min_active_size),
-        qi_like_full_fp_3d=bool(qi_like_full_fp_3d),
+        large_full_fp_3d=bool(large_full_fp_3d),
         ignored_env=bool(ignored_env),
     )
 
@@ -886,7 +886,7 @@ def rhs1_xblock_lgmres_rescue_maxiter(env_value: str, current_maxiter: int) -> t
 
 
 def rhs1_xblock_lgmres_rescue_outer_k(env_value: str) -> int:
-    """Return the LGMRES augmentation-space size for the large-QI rescue."""
+    """Return the LGMRES augmentation-space size for the large 3D full-FP rescue."""
     raw = str(env_value).strip()
     if raw:
         try:
@@ -910,8 +910,8 @@ def rhs1_xblock_precondition_side(
     """Return the x-block sparse-PC side and whether right-PC was auto-selected.
 
     The measured production-floor GPU tokamak full-FP Er full-trajectory row
-    and the bounded scale-0.50 3D full-FP QI lane are Krylov dominated and
-    benefit from right preconditioning. Larger 3D full-FP QI cases can enter a
+    and bounded 3D full-FP lanes are Krylov dominated and benefit from right
+    preconditioning. Larger 3D full-FP cases can enter a
     seed-dependent right-PC slow mode, so the 3D default is capped by active
     system size and remains overrideable through
     ``SFINCS_JAX_GMRES_PRECONDITION_SIDE``.

@@ -71,8 +71,8 @@ documented workflow needs it.
 - `outputs/`: HDF5/NetCDF/NPZ schemas, writer logic, and post-solve
   diagnostics.
 - `validation/`: frozen-reference loading, Fortran/PETSc fixture readers,
-  parity checks, release-data manifest/fetching, QI device evidence gates, and
-  validation-figure helpers.
+  parity checks, release-data manifest/fetching, claim gates, and validation
+  figure helpers.
 - `workflows/`: optional research workflows that combine public APIs into
   scans, optimization tasks, and reusable evidence-generation tasks.
 

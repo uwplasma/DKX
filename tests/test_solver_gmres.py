@@ -493,7 +493,7 @@ def test_fgmres_true_residual_is_preconditioner_side_invariant() -> None:
 
 
 def test_fgmres_right_preconditioner_is_transpose_safe() -> None:
-    """Guard the device-QI installed-Krylov path against scatter transpose failures."""
+    """Guard right-preconditioned device Krylov against scatter transpose failures."""
 
     a = jnp.asarray(
         [

@@ -3945,9 +3945,7 @@ def apply_xblock_two_level_stage(
     start_s = float(context.elapsed_s())
     try:
         if context.builder is None:
-            raise RuntimeError(
-                "default two-level builder moved to research QI branch"
-            )
+            raise RuntimeError("optional two-level builder is not configured")
         else:
             builder = context.builder
         preconditioner, metadata, stats = builder(
@@ -4016,9 +4014,7 @@ def apply_xblock_global_coupling_stage(
         device_builder = context.device_builder
         builder = device_builder if bool(context.policy.use_device_builder) else host_builder
         if builder is None:
-            raise RuntimeError(
-                "default global-coupling builder moved to research QI branch"
-            )
+            raise RuntimeError("optional global-coupling builder is not configured")
         preconditioner, metadata, stats = builder(
             op=context.op,
             rhs=context.rhs,

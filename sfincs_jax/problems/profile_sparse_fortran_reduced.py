@@ -1019,9 +1019,7 @@ def apply_fortran_reduced_xblock_global_coupling_stage(
         )
     try:
         if context.builder is None:
-            raise RuntimeError(
-                "default global-coupling builder moved to research QI branch"
-            )
+            raise RuntimeError("optional global-coupling builder is not configured")
         else:
             builder = context.builder
         preconditioner, metadata, stats = builder(

@@ -6088,7 +6088,7 @@ def test_fortran_reduced_xblock_global_coupling_stage_without_builder_stays_disa
 
     assert not result.built
     assert result.preconditioner is _identity
-    assert "moved to research QI branch" in result.metadata["error"]
+    assert "optional global-coupling builder is not configured" in result.metadata["error"]
 
 
 def test_fortran_reduced_xblock_global_coupling_stage_records_failure() -> None:
@@ -6313,7 +6313,7 @@ def test_xblock_sparse_pc_setup_resolves_host_assembly_and_device_fallback() -> 
             requested_method=kwargs["requested_krylov_method"],
             effective_krylov_env_value="auto",
             min_active_size=1,
-            qi_like_full_fp_3d=False,
+            large_full_fp_3d=False,
             non_autodiff=True,
         )
 
@@ -6446,7 +6446,7 @@ def test_xblock_sparse_pc_branch_setup_composes_fallback_side_and_reuse() -> Non
             requested_method=kwargs["requested_krylov_method"],
             effective_krylov_env_value=kwargs["env_value"],
             min_active_size=1,
-            qi_like_full_fp_3d=False,
+            large_full_fp_3d=False,
             non_autodiff=False,
         )
 
@@ -7439,7 +7439,7 @@ def test_xblock_two_level_stage_without_injected_builder_stays_disabled() -> Non
 
     assert not result.built
     assert result.preconditioner is _identity
-    assert "moved to research QI branch" in result.metadata["error"]
+    assert "optional two-level builder is not configured" in result.metadata["error"]
 
 
 def test_xblock_two_level_stage_records_failure() -> None:
@@ -7611,7 +7611,7 @@ def test_xblock_global_coupling_stage_without_injected_builder_stays_disabled() 
 
         assert not result.built
         assert result.preconditioner is _identity
-        assert "moved to research QI branch" in result.metadata["error"]
+        assert "optional global-coupling builder is not configured" in result.metadata["error"]
 
 
 def test_xblock_global_coupling_stage_records_failure() -> None:

@@ -387,7 +387,7 @@ def _active_transport_structured_pattern(
     velocity mode, followed by all Phi1/constraint tail variables. In that case
     the kinetic block is a Kronecker product of the conservative velocity graph
     and the conservative angular stencil, which avoids Python appends over every
-    ``(velocity,theta,zeta)`` candidate in large QI/FP grids.
+    ``(velocity,theta,zeta)`` candidate in large 3D full-FP grids.
     """
 
     n_tz = int(op.n_theta) * int(op.n_zeta)
