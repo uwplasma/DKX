@@ -52,8 +52,10 @@ python examples/sfincs_examples/run_sfincs_jax.py \\
 
 ## Upstream utils
 
-The scripts in `utils/` are copied from upstream (e.g. `utils/sfincsScanPlot_1`).
-They expect specific fields inside `sfincsOutput.h5`.
+The scripts in `utils/` are copied from upstream (e.g. `utils/sfincsScanPlot_1`)
+and lightly ported for Python 3, noninteractive plotting, and local
+`sfincs_jax` output generation through the sibling driver helper. They expect
+specific fields inside `sfincsOutput.h5`.
 
 Many of these scripts also read default parameters from `globalVariables.F90`. In the upstream
 layout, this file lives next to `utils/`, so this repo vendors it as:
