@@ -1,6 +1,6 @@
 # SFINCS_JAX Review-Ready Refactor Plan
 
-Last updated: 2026-07-06
+Last updated: 2026-07-07
 
 Active branch: `refactor/v3-driver-architecture`
 
@@ -38,7 +38,7 @@ models overlap.
   `compare.py` at 94%, `plotting.py` at 100%, `profile_exb.py` at 97%,
   `profile_magnetic_drifts.py` at 94%, `adaptive_maps.py` at 97%,
   `periodic_stencil.py` at 98%, `structured_velocity.py` at 99%,
-  `profile_residual.py` at 92%, and `preconditioner_full_fp_csr.py` at 98%.
+  `profile_residual.py` at 95%, and `preconditioner_full_fp_csr.py` at 98%.
 - The latest bounded local review bundle passed: source-tree guards,
   docs/example guards, and comparison/plotting checks ran `123 passed in
   9.70 s`; Sphinx `-W` passed in `17.56 s`.
@@ -53,8 +53,8 @@ models overlap.
   contracts `58 passed`; the residual-equation tranche passed `66` focused
   tests and added fail-closed, pseudo-inverse, clipped device-correction, and
   RHSMode=1 polish failure/logging gates.
-- The last checked PR CI state after `b3f31d75` was green: build, tests,
-  coverage shards/report, examples-smoke, external-data smoke, optional
+- The last checked PR CI state after `96fb2677` was green: build, tests,
+  coverage shards/report at 92%, examples-smoke, external-data smoke, optional
   ecosystem gates, and Codecov patch passed.
 - Fresh GPU validation is deferred until the office GPU host is reachable.
 
@@ -68,7 +68,7 @@ models overlap.
 | Benchmark/parity/runtime regeneration | Active | 70% | CPU/GPU/Fortran runtime, memory, parity, and bootstrap-current figures are regenerated from the final branch state with solver provenance. |
 | Solver/performance boundaries | Active | 90% | Automatic defaults remain residual-clean and documented; expensive research candidates stay opt-in unless they pass strict residual/runtime/RSS gates. |
 
-Overall review readiness: about 92%. The gap is dominated by final coverage
+Overall review readiness: about 93%. The gap is dominated by final coverage
 evidence, fresh benchmark regeneration, and GPU validation.
 
 ## Source Structure Rules
