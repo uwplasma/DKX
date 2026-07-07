@@ -2,11 +2,11 @@
   "schema_version": 1,
   "metadata": {
     "audited_branch": "refactor/v3-driver-architecture",
-    "audited_commit": "3108f352+qi-diagnostics-tranche",
+    "audited_commit": "e5a3cf04+direct-tail-rescue-tranche",
     "audit_date": "2026-07-07",
     "purpose": "Phase A inventory for the core-slim refactor: every large owner is marked core, compat, test-fixture, extract-pr, or delete before code is removed.",
     "source_file_count_at_audit": 114,
-    "source_line_count_at_audit": 140897,
+    "source_line_count_at_audit": 140540,
     "test_file_count_at_audit": 313,
     "example_file_count_at_audit": 122,
     "benchmark_file_count_at_audit": 0,
@@ -303,7 +303,7 @@
     },
     {
       "path": "sfincs_jax/problems/profile_sparse_solve.py",
-      "lines_at_audit": 5167,
+      "lines_at_audit": 4848,
       "category": "core",
       "action": "trim",
       "reduction_target_lines": 2300,
@@ -344,7 +344,7 @@
     },
     {
       "path": "sfincs_jax/problems/profile_solve.py",
-      "lines_at_audit": 4206,
+      "lines_at_audit": 4164,
       "category": "core",
       "action": "trim",
       "reduction_target_lines": 1800,
@@ -492,7 +492,7 @@
     },
     {
       "path": "tests",
-      "lines_at_audit": 126756,
+      "lines_at_audit": 126733,
       "category": "test-fixture",
       "action": "trim",
       "reduction_target_lines": 70000,
