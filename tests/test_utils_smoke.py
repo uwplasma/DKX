@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from sfincs_jax.io import write_sfincs_jax_output_h5
+
 
 def _inject_group(text: str, group: str, lines: list[str]) -> str:
     out: list[str] = []
@@ -40,10 +42,16 @@ def _run_script(script: Path, cwd: Path, args: list[str]) -> None:
 
 def test_utils_sfincs_plot_smoke(tmp_path: Path) -> None:
     repo = Path(__file__).resolve().parents[1]
-    script = repo / "utils" / "sfincsPlot"
+    script = repo / "examples" / "sfincs_examples" / "utils" / "sfincsPlot"
     base = repo / "tests" / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
     input_path = tmp_path / "input.namelist"
     input_path.write_text(base.read_text())
+    write_sfincs_jax_output_h5(
+        input_namelist=input_path,
+        output_path=tmp_path / "sfincsOutput.h5",
+        compute_solution=True,
+        verbose=False,
+    )
 
     out_prefix = tmp_path / "sfincsPlot"
     _run_script(script, tmp_path, ["--save-prefix", str(out_prefix)])
@@ -54,7 +62,7 @@ def test_utils_sfincs_plot_smoke(tmp_path: Path) -> None:
 
 def test_utils_sfincs_plotf_smoke(tmp_path: Path) -> None:
     repo = Path(__file__).resolve().parents[1]
-    script = repo / "utils" / "sfincsPlotF"
+    script = repo / "examples" / "sfincs_examples" / "utils" / "sfincsPlotF"
     base = repo / "tests" / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
     input_path = tmp_path / "input.namelist"
 
@@ -67,6 +75,12 @@ def test_utils_sfincs_plotf_smoke(tmp_path: Path) -> None:
         ],
     )
     input_path.write_text(text)
+    write_sfincs_jax_output_h5(
+        input_namelist=input_path,
+        output_path=tmp_path / "sfincsOutput.h5",
+        compute_solution=True,
+        verbose=False,
+    )
 
     out_path = tmp_path / "sfincsPlotF.png"
     _run_script(script, tmp_path, ["--save", str(out_path)])

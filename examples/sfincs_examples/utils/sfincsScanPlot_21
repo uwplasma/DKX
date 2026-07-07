@@ -1,5 +1,12 @@
 #!/usr/bin/env python
 
+"""Plot arbitrary x/y datasets from a scan (scanType=21/22).
+
+This script is interactive by default. For batch usage, pass:
+``--x <dataset> --y <dataset> --xscale <lin/log> --yscale <lin/log> --save <png>``.
+``--x`` and ``--y`` can include array indices like ``particleFlux_vm_psiHat_1``.
+"""
+
 # This python script plots the output of a SFINCS scan for scanType = 3
 # This is a scan in which any 1 numeric input parameter is varied.
 
@@ -12,7 +19,6 @@ import numpy
 import inspect, math, os
 import pickle
 import sys
-from subprocess import call
 from builtins import input
 
 #print ("This is "+ inspect.getfile(inspect.currentframe()))
@@ -20,9 +26,35 @@ this_filename = "sfincsScanPlot_21"
 print ("This is "+ this_filename)
 
 makePDF = False
+save_path = None
+arg_x = None
+arg_y = None
+arg_xscale = None
+arg_yscale = None
 for arg in sys.argv:
    if arg.lower()=='pdf':
       makePDF = True
+   if arg.startswith('--save='):
+      save_path = arg.split('=',1)[1]
+   if arg.startswith('--x='):
+      arg_x = arg.split('=',1)[1]
+   if arg.startswith('--y='):
+      arg_y = arg.split('=',1)[1]
+   if arg.startswith('--xscale='):
+      arg_xscale = arg.split('=',1)[1]
+   if arg.startswith('--yscale='):
+      arg_yscale = arg.split('=',1)[1]
+for i,arg in enumerate(sys.argv):
+   if arg == '--save' and i+1 < len(sys.argv):
+      save_path = sys.argv[i+1]
+   if arg == '--x' and i+1 < len(sys.argv):
+      arg_x = sys.argv[i+1]
+   if arg == '--y' and i+1 < len(sys.argv):
+      arg_y = sys.argv[i+1]
+   if arg == '--xscale' and i+1 < len(sys.argv):
+      arg_xscale = sys.argv[i+1]
+   if arg == '--yscale' and i+1 < len(sys.argv):
+      arg_yscale = sys.argv[i+1]
 
 if makePDF:
    matplotlib.use('PDF')
@@ -43,7 +75,7 @@ yArrayPosition = -1
 
 def print_options() :
    # Get a list of the subdirectories:                                                                                                                                        
-   directories = filter(os.path.isdir, os.listdir("."))
+   directories = [d for d in os.listdir(".") if os.path.isdir(d)]
    atLeastOneOutputExists = False
    
    for directory in directories:
@@ -66,8 +98,10 @@ def print_options() :
          finished = f["finished"]
       except KeyError:
          continue
-      #if reaching this far the run is ok                                                                                                                                     
-      call(["h5dump", "-n", filename])
+      #if reaching this far the run is ok
+      print("Datasets in "+filename+":")
+      for key in sorted(f.keys()):
+          print(" - "+key)
       atLeastOneOutputExists = True
       break
    
@@ -81,7 +115,13 @@ def print_options() :
 
 while True:
     #xVariableName = raw_input("Which variable on x-axis? [to quit write quit; to get a list of datasets (quantities to plot) in the output .h5 files write options] ")
-    xVariableName = input("Which variable on x-axis? [to quit write quit; to get a list of datasets (quantities to plot) in the output .h5 files write options] ")
+    if arg_x is not None:
+        xVariableName = arg_x
+    else:
+        try:
+            xVariableName = input("Which variable on x-axis? [to quit write quit; to get a list of datasets (quantities to plot) in the output .h5 files write options] ")
+        except EOFError:
+            xVariableName = "quit"
     if xVariableName.lower() == "quit":
         exit(0)
     elif xVariableName.lower() == "options":
@@ -103,7 +143,13 @@ if len(str(xVariableName).split("_")) != 1 :
     
 while True:
     #yVariableName = raw_input("Which variable on y-axis? [to quit write quit; to get a list of datasets (quantities to plot) in the output .h5 files write options] ")
-    yVariableName = input("Which variable on y-axis? [to quit write quit; to get a list of datasets (quantities to plot) in the output .h5 files write options] ")
+    if arg_y is not None:
+        yVariableName = arg_y
+    else:
+        try:
+            yVariableName = input("Which variable on y-axis? [to quit write quit; to get a list of datasets (quantities to plot) in the output .h5 files write options] ")
+        except EOFError:
+            yVariableName = "quit"
     if yVariableName.lower() == "quit":
         exit(0)
     elif yVariableName.lower() == "options":
@@ -140,8 +186,8 @@ def uniq(seq):
            checked.append(e)
    return checked
 
-# Get a list of the subdirectories:                                                                        
-directories = filter(os.path.isdir, os.listdir("."))
+# Get a list of the subdirectories:
+directories = [d for d in os.listdir(".") if os.path.isdir(d)]
 
 atLeastOneDirectorySucceeded = False
 
@@ -268,14 +314,26 @@ symlogXaxis = False
 symlogYaxis = False
 
 #inputXscale = raw_input("Scale on x-axis? [linear (default) / log / symlog] ")
-inputXscale = input("Scale on x-axis? [linear (default) / log / symlog] ")
+if arg_xscale is not None:
+    inputXscale = arg_xscale
+else:
+    try:
+        inputXscale = input("Scale on x-axis? [linear (default) / log / symlog] ")
+    except EOFError:
+        inputXscale = ""
 if inputXscale.lower() == "log":
     logXaxis = True
 elif inputXscale.lower() == "symlog":
    symlogXaxis = True
 
 #inputYscale = raw_input("Scale on y-axis? [linear (default) / log / symlog] ")
-inputYscale = input("Scale on y-axis? [linear (default) / log / symlog] ")
+if arg_yscale is not None:
+    inputYscale = arg_yscale
+else:
+    try:
+        inputYscale = input("Scale on y-axis? [linear (default) / log / symlog] ")
+    except EOFError:
+        inputYscale = ""
 if inputYscale.lower() == "log":
     logYaxis = True
 elif inputYscale.lower() == "symlog":
@@ -377,19 +435,21 @@ pickle.dump(data,outputFile)
 outputFile.close()
 
 #titleString = "Plot generated by "+ inspect.getfile(inspect.currentframe()) + "\nRun in "+os.getcwd()
-titleString = "Plot generated by "+ this_filename + "\nRun in "+os.getcwd()
+titleString = "Plot generated by " + os.path.basename(this_filename) + "\nRun in " + os.path.basename(os.getcwd())
 ax = fig.add_axes([0,0,1,1], frameon=False)
 ax.text(0.5,0.99,titleString,horizontalalignment='center',verticalalignment='top')
 
 # If this script was called with any command-line arguments, then do not actually display the plot:
-if len(sys.argv) == 1:
+if len(sys.argv) == 1 and save_path is None:
     plt.show()
 
-if makePDF:
+if save_path:
+   print ("Writing plot to " + os.path.abspath(save_path))
+   plt.savefig(save_path, dpi=200)
+elif makePDF:
    if len(sys.argv)>2 : #Use the substituted name as file name
       print ("Writing plot to " + os.getcwd() + "/" + sys.argv[2] + ".pdf.")
       plt.savefig(sys.argv[2] + ".pdf")
    else: #Use script name as file name
       print ("Writing plot to " + os.getcwd() + "/" + os.path.basename(__file__) + ".pdf.")
       plt.savefig(os.path.basename(__file__) + ".pdf")
-
