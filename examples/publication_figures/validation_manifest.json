@@ -432,7 +432,7 @@
     "release_gate": {
       "claim_status": "closed_deferred",
       "blocks_current_release": false,
-      "evidence": "checked-in scaffold script and incomplete provenance template only",
+      "evidence": "checked-in incomplete provenance template and package-level deferred artifact gates",
       "closed_or_deferred_reason": "Closed for the tagged release as post-release profile validation until defensible W7-X equilibrium/profile provenance is supplied",
       "promotion_gate": "Promote only after complete provenance, bracketed ambipolar roots, checked-in source artifacts, and ready_for_literature_claim=true"
     },
@@ -442,9 +442,7 @@
       "https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2018er.pdf",
       "https://www.nature.com/articles/s41586-021-03687-w"
     ],
-    "scripts": [
-      "examples/publication_figures/generate_w7x_ambipolar_validation.py --fast --n-points 7 --provenance-json examples/publication_figures/provenance/w7x_ambipolar_provenance_template.json"
-    ],
+    "scripts": [],
     "artifacts": [
       "examples/publication_figures/provenance/w7x_ambipolar_provenance_template.json"
     ],
@@ -453,18 +451,18 @@
       "This lane is closed for the tagged release as a post-release/nightly validation target because it requires a defensible W7-X profile and equilibrium reconstruction"
     ],
     "source_code": [
-      "examples/publication_figures/generate_w7x_ambipolar_validation.py",
       "sfincs_jax/ambipolar.py",
-      "sfincs_jax/io.py"
+      "sfincs_jax/io.py",
+      "sfincs_jax/validation/figures.py"
     ],
     "tests": [
       "tests/test_er_scan_and_ambipolar.py",
-      "tests/test_generate_w7x_ambipolar_validation.py"
+      "tests/test_validation_figures.py"
     ],
     "acceptance_gates": [
       "Document the exact VMEC/Boozer/profile inputs used for the comparison",
       "Solve a finite ambipolar-Er root with bracket/provenance stored in the artifact",
-      "Generated summaries must report ready_for_literature_claim=false unless complete provenance is supplied",
+      "Deferred artifact gates must report ready_for_literature_claim=false unless complete provenance and a matching checked-in source artifact are supplied",
       "Compare heat-flux ordering and Er sign/magnitude trend against the published W7-X validation context without claiming experimental agreement beyond the reconstructed inputs"
     ]
   },
