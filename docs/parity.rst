@@ -215,13 +215,3 @@ Target a single case family:
 Matrix/operator parity diagnosis against raw Fortran PETSc dumps is a
 research-branch workflow. The stable core keeps frozen-state diagnostic checks
 and public output parity gates rather than shipping dense matrix-dump tooling.
-
-Frozen-state diagnostics isolation (solver-vs-diagnostics for RHSMode=1 moment families):
-
-.. code-block:: bash
-
-   python scripts/compare_rhsmode1_diagnostics_from_state.py \
-     --input /path/to/input.namelist \
-     --state /path/to/sfincsBinary_iteration_000_stateVector \
-     --fortran-h5 /path/to/sfincsOutput.h5 \
-     --out-json diagnostics_from_frozen_state.json

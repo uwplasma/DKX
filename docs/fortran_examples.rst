@@ -100,29 +100,13 @@ The strict table with tolerance overrides ignored is:
 
 .. include:: _generated/reduced_upstream_suite_status_strict.rst
 
-Recent operator-audit subset (PETSc matrix parity)
---------------------------------------------------
-
-To isolate solver-branch vs operator-assembly differences, we also run
-``scripts/compare_petsc_operator.py`` on reduced cases with
-``saveMatricesAndVectorsInBinary=.true.`` enabled. This compares Fortran PETSc
-matrix action directly against the JAX matrix-free operator action.
-
-Audited subset:
-
-- ``tests/reduced_inputs/geometryScheme4_2species_noEr.input.namelist``
-- ``tests/reduced_inputs/HSX_FPCollisions_DKESTrajectories.input.namelist``
-- ``tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist``
-- ``tests/reduced_inputs/filteredW7XNetCDF_2species_magneticDrifts_noEr.input.namelist``
-- ``tests/reduced_inputs/filteredW7XNetCDF_2species_magneticDrifts_withEr.input.namelist``
-
-For these cases, PETSc-vs-JAX operator deltas are already near roundoff
-(``~1e-10`` to ``~1e-14`` in matrix-action checks), so remaining output mismatches
-are tracked as diagnostics/solver-branch effects rather than missing operator terms.
-
 Field-wise reduced-suite tolerances are stored in
 ``tests/reduced_inputs/*.compare_tolerances.json`` and applied automatically in
 the practical report. The strict report ignores all of these overrides.
+
+Detailed matrix-dump and PETSc operator triage is preserved on the research
+audit branches. The stable repository keeps the reduced-suite output gates and
+small frozen fixtures needed for reviewable parity evidence.
 
 Promoted reduced-input fixtures
 -------------------------------
