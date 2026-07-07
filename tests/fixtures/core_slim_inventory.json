@@ -7,8 +7,8 @@
     "purpose": "Core-slim line-review ledger: every retained file, function, and public knob must be classified as keep, merge, delete, or extract-pr before the refactor PR is review-ready.",
     "source_file_count_at_audit": 115,
     "source_line_count_at_audit": 137620,
-    "test_file_count_at_audit": 311,
-    "example_file_count_at_audit": 118,
+    "test_file_count_at_audit": 308,
+    "example_file_count_at_audit": 115,
     "benchmark_file_count_at_audit": 0,
     "script_file_count_at_audit": 5,
     "preservation_branches_created_from_commit": "6e1c3d33",
@@ -213,7 +213,13 @@
         "tests/test_benchmark_case_variants.py",
         "tests/test_summarize_solver_paths.py",
         "tests/test_solver_profile_compare.py",
-        "tests/test_fortran_profile.py"
+        "tests/test_fortran_profile.py",
+        "examples/publication_figures/generate_high_collisionality_trend_proxy.py",
+        "examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py",
+        "examples/publication_figures/generate_simakov_helander_limit_audit.py",
+        "tests/test_generate_high_collisionality_trend_proxy.py",
+        "tests/test_generate_simakov_helander_high_nu_run_plan.py",
+        "tests/test_generate_simakov_helander_limit_audit.py"
       ],
       "source_paths": [
         "sfincs_jax/validation/artifacts.py"
@@ -226,10 +232,16 @@
         "tests/test_summarize_solver_paths.py",
         "tests/test_solver_profile_compare.py",
         "tests/test_fortran_profile.py",
+        "tests/test_generate_high_collisionality_trend_proxy.py",
+        "tests/test_generate_simakov_helander_high_nu_run_plan.py",
+        "tests/test_generate_simakov_helander_limit_audit.py",
         "tests/test_validation_figures.py"
       ],
       "example_paths": [
-        "examples/publication_figures"
+        "examples/publication_figures",
+        "examples/publication_figures/generate_high_collisionality_trend_proxy.py",
+        "examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py",
+        "examples/publication_figures/generate_simakov_helander_limit_audit.py"
       ],
       "script_paths": [
         "scripts/audit_qs_paper_terms.py",
@@ -740,7 +752,7 @@
     },
     {
       "path": "examples/publication_figures",
-      "lines_at_audit": 0,
+      "lines_at_audit": 4218,
       "category": "extract-pr",
       "action": "extract",
       "extract_branch": "research/publication-audits",

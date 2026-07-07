@@ -121,11 +121,7 @@ The full collisionality figure family is checked in as:
 The full artifacts are the validation-facing collisionality lane. The bounded
 artifacts are cheap regression inputs for branch-level checks.
 
-Simakov-Helander high-collisionality audit:
-
-```bash
-python examples/publication_figures/generate_simakov_helander_limit_audit.py
-```
+Simakov-Helander high-collisionality audit artifacts:
 
 This writes a bounded normalization/readiness audit for the full Appendix-B analytic
 limit lane. It uses the checked-in LHD/W7-X collisionality summaries plus
@@ -140,7 +136,8 @@ Pinned outputs:
 - `docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.pdf`
 - `examples/publication_figures/artifacts/sfincs_jax_simakov_helander_high_nu_run_plan.json`
 
-Launch high-`nu` pilots before widening to full FP/PAS scans:
+Launch high-`nu` pilots before widening to full FP/PAS scans using the retained
+`generate_sfincs_paper_figs.py` scan driver:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0,1 \
