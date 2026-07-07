@@ -808,26 +808,24 @@ For transport-matrix throughput on a 2-GPU node:
      --input examples/performance/transport_parallel_2min.input.namelist \
      --workers 1 2
 
-For sharded single-RHS solves on CPU or GPU:
+Single-case sharded RHSMode=1 scaling remains a research lane rather than a
+stable example. Use transport-worker scaling for supported parallel throughput:
 
 .. code-block:: bash
 
-   python examples/performance/benchmark_sharded_solve_scaling.py \
+   python examples/performance/benchmark_transport_parallel_scaling.py \
      --backend cpu \
-     --input examples/performance/rhsmode1_sharded.input.namelist \
-     --devices 1 2 4 8 \
-     --inner-warmup-solves 1 \
-     --sample-timeout-s 300 \
-     --rhs1-precond theta_schwarz \
-     --schwarz-coarse-levels 2
+     --input examples/performance/transport_parallel_2min.input.namelist \
+     --workers 1 2 4
 
-For the one-GPU-per-case throughput benchmark on a 2-GPU node:
+For transport-worker throughput on a 2-GPU node:
 
 .. code-block:: bash
 
-   PYTHONPATH=. python examples/performance/benchmark_multi_gpu_case_throughput.py \
-     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
-     --nsolve 4
+   PYTHONPATH=. python examples/performance/benchmark_transport_parallel_scaling.py \
+     --backend gpu \
+     --input examples/performance/transport_parallel_2min.input.namelist \
+     --workers 1 2
 
 .. note::
 
