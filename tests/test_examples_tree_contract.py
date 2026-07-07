@@ -72,7 +72,7 @@ CANONICAL_WORKFLOW_ENTRYPOINTS = {
     "optimization/QA_optimization_bootstrap_current.py",
     "parity/collisionless_operator_matvec_parity.py",
     "publication_figures/generate_fortran_suite_benchmark_summary.py",
-    "performance/benchmark_transport_parallel_scaling.py",
+    "performance/benchmark_output_formats.py",
 }
 
 APPLICATION_RECIPE_ENTRYPOINTS = {
@@ -94,7 +94,6 @@ APPLICATION_RECIPE_ENTRYPOINTS = {
     "optimization/qa_nfp2_sfincs_jax_objectives.py",
     "optimization/QA_optimization_bootstrap_current.py",
     "performance/benchmark_output_formats.py",
-    "performance/benchmark_transport_parallel_scaling.py",
     "parity/output_parity_vs_fortran_fixture.py",
     "publication_figures/generate_fortran_suite_benchmark_summary.py",
 }
