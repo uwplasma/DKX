@@ -388,24 +388,6 @@ def main() -> None:
         timeout_s=timeout_s,
     )
 
-    # ModelTest_AI (uses sfincsOutput.h5 from sfincsPlotF run)
-    _stage("Running ModelTest_AI")
-    model_dir = WORK_DIR / "sfincsPlotF"
-    _run(
-        [
-            sys.executable,
-            str(UTILS / "ModelTest_AI" / "testModel.py"),
-            str(model_dir) + "/",
-            "epsilont",
-            "data0",
-            "--save",
-            str(FIG_DIR / "ModelTest_AI.png"),
-        ],
-        cwd=model_dir,
-        label="modeltest",
-        timeout_s=timeout_s,
-    )
-
     # Monoenergetic transport coefficients vs collisionality for multiple EStar
     _stage("Running monoenergetic collisionality scans")
     mono_dirs = []
