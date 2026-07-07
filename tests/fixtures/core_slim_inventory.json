@@ -580,7 +580,35 @@
         "docs/source_map.rst"
       ],
       "retention_reason": "RHSMode-1 automatic solver policy is core, but experimental policy branches and duplicated route predicates must be removed or extracted.",
-      "next_step": "Separate parity-clean default route predicates from research/probe routes, then delete unreferenced helpers."
+      "next_step": "Separate parity-clean default route predicates from research/probe routes, then delete unreferenced helpers.",
+      "review_status": "section_card_seeded",
+      "line_target": "<=2500",
+      "section_cards": [
+        {
+          "lines": "1-347",
+          "disposition": "keep-core",
+          "owner_tags": ["API", "NUMERICS"],
+          "reason": "public/default policy readers and stable automatic selection helpers"
+        },
+        {
+          "lines": "348-2123",
+          "disposition": "merge-core",
+          "owner_tags": ["NUMERICS", "PERF"],
+          "reason": "duplicate sparse/direct/rescue policy predicates must collapse into one RHSMode-1 policy table"
+        },
+        {
+          "lines": "2124-3773",
+          "disposition": "extract-research",
+          "owner_tags": ["PERF"],
+          "reason": "stage-2, scipy rescue, sparse rescue, and hidden-env route probes are not stable user API"
+        },
+        {
+          "lines": "3774-6177",
+          "disposition": "merge-core",
+          "owner_tags": ["API", "PERF"],
+          "reason": "backend-specific wrappers should reduce to one automatic default policy surface"
+        }
+      ]
     },
     {
       "path": "sfincs_jax/problems/profile_sparse_xblock.py",
@@ -601,7 +629,35 @@
         "docs/performance.rst"
       ],
       "retention_reason": "The promoted x-block/tz sparse route is part of the current automatic RHSMode-1 path, but lower-confidence variants should move to research.",
-      "next_step": "Keep the strict residual-clean route and extract fallback experiments to research/native-sparse-direct."
+      "next_step": "Keep the strict residual-clean route and extract fallback experiments to research/native-sparse-direct.",
+      "review_status": "section_card_seeded",
+      "line_target": "<=2800",
+      "section_cards": [
+        {
+          "lines": "1-1087",
+          "disposition": "extract-research",
+          "owner_tags": ["PERF"],
+          "reason": "rescue/seed/global/high-x correction experiments are not a single stable default route"
+        },
+        {
+          "lines": "1088-3248",
+          "disposition": "keep-core",
+          "owner_tags": ["NUMERICS", "PERF"],
+          "reason": "x-block matvec, initial guess, assembled preflight, and stable sparse-PC setup"
+        },
+        {
+          "lines": "3249-4527",
+          "disposition": "merge-core",
+          "owner_tags": ["API", "PERF"],
+          "reason": "metadata builders and route-state dictionaries duplicate output and policy owners"
+        },
+        {
+          "lines": "4528-6874",
+          "disposition": "keep-core",
+          "owner_tags": ["NUMERICS", "PERF"],
+          "reason": "Krylov execution and final residual gate remain until RHSMode-1 pipeline collapse"
+        }
+      ]
     },
     {
       "path": "sfincs_jax/operators/profile_full_system.py",
@@ -623,7 +679,35 @@
         "docs/source_map.rst"
       ],
       "retention_reason": "RHSMode-1 full-system operator assembly is core physics/numerics and must remain readable.",
-      "next_step": "Remove unused assembly variants, collapse duplicated layout glue, and keep equation blocks close to their tests."
+      "next_step": "Remove unused assembly variants, collapse duplicated layout glue, and keep equation blocks close to their tests.",
+      "review_status": "section_card_seeded",
+      "line_target": "<=3000",
+      "section_cards": [
+        {
+          "lines": "1-2088",
+          "disposition": "keep-core",
+          "owner_tags": ["PHYSICS", "NUMERICS"],
+          "reason": "structured RHSMode-1 CSR assembly and active projected full-system preconditioner"
+        },
+        {
+          "lines": "2089-3888",
+          "disposition": "extract-research",
+          "owner_tags": ["NUMERICS", "PERF"],
+          "reason": "coupled kinetic, symbolic frontal/superblock/block-schur, and coupled-schur experiments"
+        },
+        {
+          "lines": "3889-5583",
+          "disposition": "merge-core",
+          "owner_tags": ["NUMERICS"],
+          "reason": "native x-ell and low-l/ell-band/window coarse variants must reduce to admitted defaults"
+        },
+        {
+          "lines": "5584-6078",
+          "disposition": "keep-core",
+          "owner_tags": ["PHYSICS", "NUMERICS"],
+          "reason": "tail assembly and source/constraint/Phi1 helpers used by structured full CSR"
+        }
+      ]
     },
     {
       "path": "sfincs_jax/solvers/preconditioner_qi_device.py",
@@ -666,7 +750,29 @@
         "docs/numerics.rst"
       ],
       "retention_reason": "Sparse CSR primitives needed by default solvers are core; native direct-factor experiments should be extracted.",
-      "next_step": "Keep CSR construction/solve primitives with strict tests and move symbolic/native factor experiments out."
+      "next_step": "Keep CSR construction/solve primitives with strict tests and move symbolic/native factor experiments out.",
+      "review_status": "section_card_seeded",
+      "line_target": "<=2200",
+      "section_cards": [
+        {
+          "lines": "1-720",
+          "disposition": "keep-core",
+          "owner_tags": ["NUMERICS"],
+          "reason": "CSR matvec, triangular solves, storage estimates, and factor admission contracts"
+        },
+        {
+          "lines": "721-2175",
+          "disposition": "extract-research",
+          "owner_tags": ["NUMERICS", "PERF"],
+          "reason": "symbolic block/coarse/schur/frontal/superblock factors are native sparse-direct research"
+        },
+        {
+          "lines": "2176-3713",
+          "disposition": "merge-core",
+          "owner_tags": ["NUMERICS", "API"],
+          "reason": "operator construction, pattern coloring, host direct solve, and refinement should keep only stable default paths"
+        }
+      ]
     },
     {
       "path": "sfincs_jax/problems/profile_sparse_solve.py",
@@ -771,7 +877,29 @@
         "docs/method.rst"
       ],
       "retention_reason": "RHSMode-2/3 transport matrix linear systems are core for transport coefficients.",
-      "next_step": "Retain default system build/solve; move experimental factor/preconditioner branches out."
+      "next_step": "Retain default system build/solve; move experimental factor/preconditioner branches out.",
+      "review_status": "section_card_seeded",
+      "line_target": "<=1800",
+      "section_cards": [
+        {
+          "lines": "1-964",
+          "disposition": "keep-core",
+          "owner_tags": ["NUMERICS", "API"],
+          "reason": "transport linear solve, dense batch solve, and active dense setup"
+        },
+        {
+          "lines": "965-2031",
+          "disposition": "keep-core",
+          "owner_tags": ["NUMERICS", "PERF"],
+          "reason": "active block-Schur factor and residual coarse correction are admitted transport defaults"
+        },
+        {
+          "lines": "2032-3513",
+          "disposition": "extract-research",
+          "owner_tags": ["NUMERICS", "PERF"],
+          "reason": "direct reduced-Pmat symbolic/native sparse controls and hidden-env variants need research extraction or collapse"
+        }
+      ]
     },
     {
       "path": "sfincs_jax/solvers/preconditioner_qi_basis.py",
@@ -902,6 +1030,57 @@
       ],
       "retention_reason": "RHSMode-1 output fields and diagnostics are core output-schema functionality.",
       "next_step": "Remove solver-policy hooks that disappear with extracted research routes."
+    },
+    {
+      "path": "sfincs_jax/validation/suite.py",
+      "lines_at_audit": 4199,
+      "category": "core",
+      "action": "trim",
+      "extract_branch": "research/publication-audits",
+      "reduction_target_lines": 1800,
+      "public_imports": [
+        "sfincs_jax.validation.suite"
+      ],
+      "internal_callers": [],
+      "tests": [
+        "tests/test_scaled_example_suite_reference.py",
+        "tests/test_validation_policy_coverage.py"
+      ],
+      "docs_examples": [
+        "docs/fortran_examples.rst",
+        "docs/parity.rst",
+        "docs/performance.rst"
+      ],
+      "retention_reason": "Validation suite commands are useful release tooling, but long reduced/scaled campaign orchestration should not own core solve logic.",
+      "next_step": "Keep compact parser/report helpers and public reduced/scaled command shims; extract long campaign generation and duplicated runner plumbing.",
+      "review_status": "section_card_seeded",
+      "line_target": "<=1800",
+      "section_cards": [
+        {
+          "lines": "1-1103",
+          "disposition": "keep-core",
+          "owner_tags": ["EVIDENCE", "COMPAT"],
+          "reason": "case result schema, parsers, resolution helpers, and compact log/metric readers"
+        },
+        {
+          "lines": "1104-2693",
+          "disposition": "merge-core",
+          "owner_tags": ["EVIDENCE", "COMPAT"],
+          "reason": "single-case runner and Fortran/JAX comparison helpers should be shared by reduced and scaled commands"
+        },
+        {
+          "lines": "2694-3650",
+          "disposition": "extract-research",
+          "owner_tags": ["EVIDENCE", "PERF"],
+          "reason": "reduced/scaled campaign drivers are release tooling, not importable solver architecture"
+        },
+        {
+          "lines": "3651-4199",
+          "disposition": "merge-core",
+          "owner_tags": ["API", "EVIDENCE"],
+          "reason": "scaled-suite command and dispatcher should reduce to small public CLI wrappers"
+        }
+      ]
     },
     {
       "path": "sfincs_jax/validation/artifacts.py",
