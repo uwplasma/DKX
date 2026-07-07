@@ -18,7 +18,7 @@ current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Latest audited branch head: `cac7fb3a`; last green CI evidence: `96fb2677`.
+- Latest audited branch head: `d44462c3`; last green CI evidence: `96fb2677`.
   Exact aggregate coverage from that CI was 91.753% (`92%`).
 - Package layout is shallow, but the branch is too large: 114 Python source
   files and about 144k source lines. Largest complexity owners remain
@@ -40,11 +40,11 @@ current, transport coefficients, plotting, and optimization.
 | Line-by-line audit | Active | 20% | Every retained file/function/line has a core reason, a caller, and a test/doc owner; everything else is extracted or deleted. |
 | Core-main slimming | Active | 40% | Main keeps only stable, parity-clean, runtime-acceptable solvers and public APIs; research code is outside core. |
 | Source simplification | Active | 45% | Package moves toward <=50 source files and <=50k lines, with a 10x reduction as stretch if functionality permits. |
-| Examples/tests/scripts cleanup | Active | 45% | Examples are <=10 curated workflows plus Fortran-v3 references; tests are smaller, organized, and >=95% coverage; scripts are removed or promoted; benchmarks are gone. |
+| Examples/tests/scripts cleanup | Active | 47% | Examples are <=10 curated workflows plus Fortran-v3 references; tests are smaller, organized, and >=95% coverage; scripts are removed or promoted; benchmarks are gone. |
 | Parity/performance evidence | Active | 70% | Supported examples rerun against SFINCS Fortran v3 with runtime/RSS/bootstrap evidence; unsupported research lanes are not marketed. |
 | Docs/readme regeneration | Active | 80% | README/docs describe only the stable core plus explicit external research PR lanes. |
 
-Overall readiness under this stricter core-slim goal is about 60-65%.
+Overall readiness under this stricter core-slim goal is about 63-68%.
 
 ## Source Structure Rules
 
