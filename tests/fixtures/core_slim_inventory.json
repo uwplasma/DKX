@@ -86,7 +86,9 @@
         "scripts/benchmark_jax_ecosystem_backends.py",
         "scripts/benchmark_rhs1_fblock_csr_reuse.py",
         "scripts/benchmark_rhs1_full_csr_reuse.py",
-        "scripts/benchmark_structured_fblock_preconditioners.py"
+        "scripts/benchmark_structured_fblock_preconditioners.py",
+        "scripts/benchmark_pas_tz_memory_fallback.py",
+        "scripts/benchmark_rhs1_pas_matrixfree.py"
       ],
       "source_paths": [
         "sfincs_jax/operators/profile_true_operator_rescue.py",
@@ -113,7 +115,9 @@
         "scripts/benchmark_jax_ecosystem_backends.py",
         "scripts/benchmark_rhs1_fblock_csr_reuse.py",
         "scripts/benchmark_rhs1_full_csr_reuse.py",
-        "scripts/benchmark_structured_fblock_preconditioners.py"
+        "scripts/benchmark_structured_fblock_preconditioners.py",
+        "scripts/benchmark_pas_tz_memory_fallback.py",
+        "scripts/benchmark_rhs1_pas_matrixfree.py"
       ],
       "doc_paths": [
         "docs/research_lanes.rst",
