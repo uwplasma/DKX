@@ -1,7 +1,7 @@
 {
   "generated_at": "2026-05-01",
   "description": "Bounded CPU variant probes for PAS/geometry-rich offenders. These are negative performance gates: available alternative preconditioners must not become defaults unless they beat the current structured path on parity, runtime, and memory.",
-  "command_family": "python scripts/benchmark_case_variants.py --profile --timeout-s <budget> --case-dir <case>",
+  "command_family": "research-branch solver/preconditioner variant probe with profiling and timeout gates",
   "cases": {
     "geometryScheme4_2species_PAS_noEr": {
       "case_dir": "tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106/geometryScheme4_2species_PAS_noEr",

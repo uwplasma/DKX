@@ -449,29 +449,9 @@ longer used as a public production baseline.
 Frozen-case variant benchmarking
 --------------------------------
 
-Use ``scripts/benchmark_case_variants.py`` to compare solver/preconditioner env
-overrides on one promoted suite case without disturbing the full-suite artifacts:
-
-.. code-block:: bash
-
-   python scripts/benchmark_case_variants.py \
-     --case-dir tests/scaled_example_suite_fast_cpu_full_v7_refresh/geometryScheme5_3species_loRes \
-     --variant 'lgmres=SFINCS_JAX_RHSMODE1_SOLVE_METHOD=lgmres'
-
-The helper runs the default variant plus any requested overrides, records wall
-time and ``ru_maxrss``, and compares each output H5 against both the frozen
-Fortran output (when present) and the default variant.
-
-For targeted rescue testing, skip the known default route with ``--no-default``:
-
-.. code-block:: bash
-
-   python scripts/benchmark_case_variants.py \
-     --case-dir tests/production_floor_cpu_bounded_2026-05-04/tokamak_1species_PASCollisions_withEr_fullTrajectories/variant_prod_case \
-     --no-default \
-     --variant 'schur=SFINCS_JAX_RHSMODE1_PRECONDITIONER=schur' \
-     --timeout-s 300 \
-     --profile
+Historical solver/preconditioner variant probes are preserved on research
+branches with their JSON summaries. The stable core keeps only automatic solver
+defaults, bounded parity/performance fixtures, and package-level profiling APIs.
 
 Use this mode only for controlled profiling. A variant is not eligible for
 automatic selection unless it is residual-clean, parity-clean against the frozen

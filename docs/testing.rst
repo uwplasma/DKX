@@ -294,9 +294,8 @@ to subprocess wall time only for archived artifacts that do not record it. The s
 subprocesses also pin ``SFINCS_JAX_PRECOMPILE=0`` unless explicitly overridden, and
 they leave ``JAX_COMPILATION_CACHE_DIR`` unset unless ``--jax-cache-dir`` is requested,
 so runtime drift is not polluted by eager precompile or persistent-cache write cost.
-When a run changes solver branches unexpectedly, summarize the emitted profiling
-marks and preconditioner ladder with ``scripts/summarize_solver_paths.py``; this
-is the lightweight audit used to close the full-FP dense/Krylov GPU policy issue.
+When a run changes solver branches unexpectedly, keep the emitted profiling
+marks and preconditioner ladder in the research-branch artifact bundle.
 For long RHSMode=1 profiling runs, keep the trace helper's phase log in the artifact
 bundle. Its default ``profile_write_output_trace_phases.json`` sidecar makes it
 clear whether a nonzero wrapper status came from the solve itself or from profiler

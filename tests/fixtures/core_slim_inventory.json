@@ -177,7 +177,15 @@
         "scripts/run_zenodo_vmec_parity_campaign.py",
         "scripts/compare_rhsmode1_diagnostics_from_state.py",
         "scripts/run_mapped_xgrid_transport_evidence.py",
-        "tests/test_run_mapped_xgrid_transport_evidence.py"
+        "tests/test_run_mapped_xgrid_transport_evidence.py",
+        "scripts/benchmark_case_variants.py",
+        "scripts/summarize_solver_paths.py",
+        "scripts/compare_fortran_jax_solver_profiles.py",
+        "scripts/summarize_fortran_v3_profile.py",
+        "tests/test_benchmark_case_variants.py",
+        "tests/test_summarize_solver_paths.py",
+        "tests/test_solver_profile_compare.py",
+        "tests/test_fortran_profile.py"
       ],
       "source_paths": [
         "sfincs_jax/validation/artifacts.py"
@@ -186,6 +194,10 @@
         "tests/test_benchmark_artifact_policy.py",
         "tests/test_generate_fortran_suite_benchmark_summary.py",
         "tests/test_run_mapped_xgrid_transport_evidence.py",
+        "tests/test_benchmark_case_variants.py",
+        "tests/test_summarize_solver_paths.py",
+        "tests/test_solver_profile_compare.py",
+        "tests/test_fortran_profile.py",
         "tests/test_validation_figures.py"
       ],
       "example_paths": [
@@ -202,6 +214,10 @@
         "scripts/run_zenodo_vmec_parity_campaign.py",
         "scripts/compare_rhsmode1_diagnostics_from_state.py",
         "scripts/run_mapped_xgrid_transport_evidence.py",
+        "scripts/benchmark_case_variants.py",
+        "scripts/summarize_solver_paths.py",
+        "scripts/compare_fortran_jax_solver_profiles.py",
+        "scripts/summarize_fortran_v3_profile.py",
         "scripts/generate_fortran_example_audit.py",
         "scripts/summarize_production_stress_campaign.py"
       ],
