@@ -480,7 +480,6 @@ Mapped x-grid PAS transport evidence
 
 Current scripts and source anchors:
 
-- ``scripts/run_mapped_xgrid_transport_evidence.py``
 - ``sfincs_jax/discretization/adaptive_maps.py``
 - ``sfincs_jax/workflows/mapped_xgrid.py``
 - opt-in ``xGridScheme = 50`` construction in ``sfincs_jax/discretization/v3.py``
@@ -498,7 +497,6 @@ Current tests:
 - ``tests/test_mapped_xgrid_objectives.py``
 - ``tests/test_mapped_xgrid_v3.py``
 - ``tests/test_mapped_xgrid_transport_evidence.py``
-- ``tests/test_run_mapped_xgrid_transport_evidence.py``
 
 Scope and status:
 

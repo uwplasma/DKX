@@ -97,7 +97,6 @@ metadata:
      tests/test_mapped_xgrid_objectives.py \
      tests/test_mapped_xgrid_v3.py \
      tests/test_mapped_xgrid_transport_evidence.py \
-     tests/test_run_mapped_xgrid_transport_evidence.py \
      tests/test_solver_path_policy.py
 
 Those tests are not a substitute for full-suite parity or production-resolution
@@ -110,17 +109,9 @@ default-CLI seeds. Only claim production QI robustness after production-resoluti
 CPU/GPU ladders record passing executions and the solver-trace/output checks
 needed for the claim.
 
-If claiming mapped x-grid transport evidence, regenerate the bounded artifacts and
-review their residuals and transport-matrix errors before updating docs:
-
-.. code-block:: bash
-
-   python scripts/run_mapped_xgrid_transport_evidence.py \
-     --case reduced_pas_tokamak_rhsmode2 \
-     --json-out docs/_static/mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.json \
-     --csv-out docs/_static/mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.csv
-
-Keep the claim scoped to PAS RHSMode=2 bounded evidence unless a broader
+Mapped x-grid transport artifacts in ``docs/_static`` are bounded historical
+evidence. Regeneration campaigns live on research-audit branches; keep any
+stable-branch claim scoped to PAS RHSMode=2 bounded evidence unless a broader
 production-resolution comparison is checked in and gated.
 
 Smoke-run the examples that do not require optional dependencies:
