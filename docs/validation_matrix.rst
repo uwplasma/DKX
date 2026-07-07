@@ -623,11 +623,10 @@ Promotion gates:
 - prefer installing the depth-64 operator-Krylov coarse state into Krylov, or
   moving to a true multilevel/coarse-grid correction, over any further local
   smoother parameter sweeps,
-- for the installed operator-Krylov route, require metadata proving
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1``,
-  operator-Krylov enrichment enabled at bounded depth/rank, no automatic host
-  fallback, finite residual history through the Krylov solve, and HDF5 plus
-  solver-trace output,
+- for any future installed operator-Krylov route, require metadata proving that
+  bounded operator-Krylov enrichment was active, no automatic host fallback hid
+  the device path, the residual history stayed finite through the Krylov solve,
+  and HDF5 plus solver-trace output were written,
 - for the augmented-FGMRES route, require metadata proving
   ``xblock_device_fgmres_qi_augmented_krylov_used=true``, finite
   projected-or-combined residual history, no automatic host fallback, and lower
