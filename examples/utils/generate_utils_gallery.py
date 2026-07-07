@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-UTILS = REPO_ROOT / "utils"
+UTILS = REPO_ROOT / "examples" / "sfincs_examples" / "utils"
 FIG_DIR = REPO_ROOT / "docs" / "_static" / "figures" / "utils"
 WORK_DIR = REPO_ROOT / "examples" / "utils" / "output"
 

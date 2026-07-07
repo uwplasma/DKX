@@ -1,34 +1,30 @@
 Utils (ported SFINCS v3 scripts)
 ================================
 
-The ``utils/`` folder at the repository root is a direct, Python‑3 port of
-``sfincs/fortran/version3/utils``. Every script runs **only** via ``sfincs_jax`` —
-no Fortran executable is required. These utilities are intended for quick
-diagnostics, scan workflows, and plotting in a layout that matches upstream
-SFINCS v3.
+The vendored scripts in ``examples/sfincs_examples/utils/`` are a Python-3 port
+of ``sfincs/fortran/version3/utils``. They are kept with the upstream example
+suite so compatibility workflows can use the same plotting and scan
+post-processing layout as SFINCS Fortran v3.
 
-All scripts can be run from any directory. If an ``sfincsOutput.h5`` file is not
-present, the scripts will call ``utils/sfincs_jax_driver.py`` to generate one
-from a local ``input.namelist``. For scan workflows, the scripts create run
-directories and populate them with ``sfincsOutput.h5`` outputs.
+The supported public entry point is the ``sfincs_jax postprocess-upstream`` CLI.
+Generate ``sfincsOutput.h5`` first with ``sfincs_jax write-output`` or the
+Python output writer, then run the selected upstream plotting script
+non-interactively through the CLI wrapper.
 
 Execution mode
 --------------
 
-The utility driver is performance-oriented by default. It calls
-``write_sfincs_jax_output_h5(..., differentiable=False)`` so scan jobs can use
-the explicit host/direct rescue paths needed by difficult transport cases such
-as high-collisionality FP/PAS scans. Request the implicit/differentiable solve
-path only for gradient experiments:
+Use the normal solver path to produce the output file. CLI runs are
+performance-oriented by default; Python workflows can request differentiable
+paths explicitly when a gradient calculation is required:
 
 .. code-block:: bash
 
-   python utils/sfincs_jax_driver.py --input input.namelist --out sfincsOutput.h5
-   python utils/sfincs_jax_driver.py --input input.namelist --out sfincsOutput.h5 --differentiable
+   sfincs_jax write-output --input input.namelist --out sfincsOutput.h5
+   sfincs_jax postprocess-upstream --case-dir . --util sfincsPlot -- --save-prefix /tmp/sfincsPlot
 
-The first command is the default scan/parity path. The second command keeps the
-solve on the implicit-differentiation path and intentionally disables host-only
-direct-rescue shortcuts.
+For differentiable Python workflows, call ``write_sfincs_jax_output_h5`` with
+``differentiable=True`` before post-processing the resulting HDF5 file.
 
 .. note::
    The export‑f grid uses the **full internal grids**. ``sfincsPlotF``
@@ -42,15 +38,16 @@ Single run:
 
 .. code-block:: bash
 
-   python utils/sfincsPlot --save-prefix /tmp/sfincsPlot
-   python utils/sfincsPlotF --save /tmp/sfincsPlotF.png
+   sfincs_jax write-output --input input.namelist --out sfincsOutput.h5
+   sfincs_jax postprocess-upstream --case-dir . --util sfincsPlot -- --save-prefix /tmp/sfincsPlot
+   sfincs_jax postprocess-upstream --case-dir . --util sfincsPlotF -- --save /tmp/sfincsPlotF.png
 
 Scan:
 
 .. code-block:: bash
 
-   python utils/sfincsScan --input input.namelist --yes
-   python utils/sfincsScanPlot_2 --save /tmp/scan_er.png
+   sfincs_jax scan-er --input input.namelist --out scan_er
+   sfincs_jax postprocess-upstream --case-dir scan_er --util sfincsScanPlot_2 -- --save /tmp/scan_er.png
 
 The following sections document each script and show example figures generated
 via ``examples/utils/generate_utils_gallery.py``.
