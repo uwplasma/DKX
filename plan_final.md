@@ -24,13 +24,11 @@ bootstrap current, transport coefficients, plotting, and optimization.
   extraction, high-nu publication-audit extraction, Krylov implementation moved
   from the package root to `sfincs_jax.solvers.krylov`, and the retained Python
   release/profiling scripts promoted to `sfincs_jax.validation`.
-- Tracked code is still too large for review: 116 package Python files /
-  137.6k source lines, 304 test Python files / 123.1k test lines, 109 example
-  Python files / 18.0k lines, 5 tracked Python scripts / 5.9k lines, and one
-  shell wrapper at the last committed audit. The current working tree is about
-  116 package Python files / 143.6k source lines, 303 test Python files /
-  123.4k lines, 110 example Python files / 18.3k lines, and no tracked Python
-  scripts; this count must drop, not merely move between folders.
+- Tracked code is still too large for review: current working tree audit shows
+  116 package Python files / 143.4k source lines, 303 test Python files /
+  123.1k test lines, 413 tracked example files with 43.8k selected text lines,
+  427 docs files with 20.7k selected text lines, and one shell wrapper. These
+  counts must drop by deletion or extraction, not merely move between folders.
 - The package root is still too broad: `ambipolar.py`, `diagnostics.py`,
   `grids.py`, `input_compat.py`, `profiling.py`, and `sensitivity.py` are
   implementation owners or mixed facades that must move behind domain modules
@@ -147,8 +145,10 @@ reducing total stable lines fails this plan.
 ## Repository-Wide Line Sweep
 
 The line sweep is mandatory and file-complete. The first pass may classify a
-file at module granularity; the second pass must classify every public symbol
-and every private helper over 20 lines. The sweep order is:
+file at module granularity; the second pass must classify every public symbol,
+every env var, every output key, every hidden solver knob, and every private
+helper over 20 lines. The third pass deletes, merges, or extracts the code. The
+sweep order is:
 
 1. Package source files over 1500 lines, largest first.
 2. Solver/preconditioner files containing research words: `qi`, `native`,
@@ -192,6 +192,27 @@ Line-level deletion rules are mandatory:
 - Extract any code justified only by future research, partial parity, special
   env vars, GPU-only experiments, or long campaign generation.
 
+## File-Level Execution Queues
+
+The next refactor passes use these queues. Do not start from arbitrary helpers.
+For every row, first classify sections in the inventory, then remove/extract
+whole sections before moving retained lines.
+
+| Queue | Files | Main decision | First stop condition |
+| --- | --- | --- | --- |
+| Solver research | `solvers/explicit_sparse.py`, `native_block_factor.py`, `preconditioner_symbolic_*`, `preconditioner_xblock_active.py` | keep CSR/Krylov/admitted defaults; extract BLR, HSS, nested-dissection, multifrontal, true-operator rescue, and env-var-only native factors | no stable import or default policy names `blr`, `hss`, `nested`, `multifrontal`, `true_operator_rescue`, or manual rescue routes |
+| RHSMode-1 orchestration | `problems/profile_policies.py`, `profile_sparse_xblock.py`, `profile_solve.py`, `profile_sparse_solve.py`, `profile_dense.py` | one readable setup -> policy -> solve -> residual -> output pipeline | one automatic policy table, one diagnostics schema, no duplicate route predicates |
+| RHSMode-1 operators | `operators/profile_full_system.py`, `profile_system.py`, `profile_layout.py`, term files | keep equation-owned DKE terms; merge duplicate shape/layout helpers; extract device/reduced-tail/sparse-pattern experiments not used by defaults | operator files explain physics terms, not campaign routes |
+| RHSMode-2/3 transport | `problems/transport_*`, `solvers/preconditioner_transport_matrix.py` | one setup/linear-system/solve/finalize path, optional parallel evidence outside stable | transport examples pass parity with no hidden tuning env vars |
+| Validation/evidence | `validation/artifacts.py`, `validation/suite.py`, `validation/release.py`, docs figures | keep compact claim/evidence readers; extract long publication/campaign generators | validation package stays <=5 implementation files and falls below 6k lines total |
+| Examples/tests | `examples/`, `tests/`, `benchmarks/`, `scripts/` | original v3 examples plus <=10 workflows; tests grouped by behavior, not history | default CI under 10 minutes with >=95% meaningful coverage target |
+| Root/API | root modules and `sfincs_jax/README.md` | root stays public API/CLI/I/O/plot/compat only | root has <=9 implementation-light modules or ledger exceptions |
+
+Exact first removals are: unsupported QI/device-QI imports, BLR/HSS/ND/native
+factor experiments, historical campaign/profiling generators, examples that are
+only benchmark artifacts, tests that only pin extracted research behavior, and
+README/docs text that markets deferred paths as stable.
+
 ## File Disposition Targets
 
 | Area | Keep in stable | Merge/delete/extract |
@@ -227,6 +248,18 @@ explain why a smaller change unlocks the next deletion.
 | H. Output/schema collapse | output files | one typed schema per problem family and one suffix-based writer/reader | output schema, plot, readback tests |
 | I. Tests/examples/scripts | tests, examples, scripts, benchmarks, utils | curate examples, parametrize tests, delete clutter, move data to releases | coverage >=95%, CI <=10 min |
 | J. Docs/evidence | README, docs, figures, tables | regenerate claims from retained evidence and scrub branch-history text | docs build and docs-claim tests |
+
+## Extraction Protocol
+
+Research code is preserved before it is removed from this PR. Use only these
+branches unless the plan is edited: `research/qi-device-hard-seed`,
+`research/native-sparse-direct`, `research/parallel-performance`, and
+`research/publication-audits`. For each extracted family, verify the branch
+contains the source/tests/examples/docs artifact, delete the stable import
+surface, delete hidden env vars and README claims, add an absence test, and
+record the removed paths in `core_slim_inventory.json`. Do not leave a
+compatibility alias for extracted research code unless a documented stable API
+uses it.
 
 The next implementation passes must be coarse-grained:
 
