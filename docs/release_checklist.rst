@@ -212,14 +212,9 @@ full-suite solves:
      --out-dir docs/_static/figures/parallel \
      --figure-name transport_parallel_scaling_gpu.png
 
-   python scripts/benchmark_pas_tz_memory_fallback.py \
-     --input examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist \
-     --out tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json \
-     --variants hybrid zeta theta \
-     --timeout-s 15 \
-     --maxiter 4 \
-     --restart 8 \
-     --tol 1e-6
+   # Historical PAS fallback campaign scripts live on the research branch.
+   # Stable releases should rely on checked solver-policy artifacts unless a
+   # promoted default route is added with residual/runtime/RSS gates.
 
 The manual GitHub workflow ``Production Benchmark Inputs`` should also pass
 before a release. It validates that the generated SFINCS_JAX-owned benchmark
