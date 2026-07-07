@@ -2,11 +2,11 @@
   "schema_version": 1,
   "metadata": {
     "audited_branch": "refactor/v3-driver-architecture",
-    "audited_commit": "2e162bb3+direct-tail-rescue-policy-removal",
+    "audited_commit": "79e0981f+direct-tail-support-mode-removal",
     "audit_date": "2026-07-07",
     "purpose": "Phase A inventory for the core-slim refactor: every large owner is marked core, compat, test-fixture, extract-pr, or delete before code is removed.",
     "source_file_count_at_audit": 114,
-    "source_line_count_at_audit": 137561,
+    "source_line_count_at_audit": 136928,
     "test_file_count_at_audit": 313,
     "example_file_count_at_audit": 122,
     "benchmark_file_count_at_audit": 0,
@@ -18,7 +18,8 @@
       "research/parallel-performance",
       "research/publication-audits"
     ],
-    "next_step": "Continue Tranche 1 by collapsing remaining generic branch setup/direct-tail naming, then move to profile_policies.py policy-table consolidation."
+    "next_step": "Continue Tranche 1 by collapsing remaining generic branch setup/direct-tail naming, then move to profile_policies.py policy-table consolidation.",
+    "latest_tranche_evidence": "Removed direct-tail support-mode preflight and stable-output plumbing; kept ordinary xblock seed metadata. Focused local checks: 554 touched tests, 93 sparse-pattern tests, Ruff, compileall."
   },
   "categories": [
     "core",
@@ -259,7 +260,7 @@
     },
     {
       "path": "sfincs_jax/problems/profile_sparse_xblock.py",
-      "lines_at_audit": 6939,
+      "lines_at_audit": 6953,
       "category": "core",
       "action": "split",
       "reduction_target_lines": 2800,
@@ -361,9 +362,9 @@
         "docs/numerics.rst"
       ],
       "retention_reason": "Sparse RHSMode-1 solve orchestration is core only for parity-clean automatic routes.",
-      "next_step": "Continue collapsing generic branch setup and direct-tail policy wiring after disconnected true-operator rescue stages were removed.",
+      "next_step": "Continue collapsing generic branch setup and direct-tail policy wiring after disconnected true-operator rescue stages and direct-tail support-mode preflight were removed.",
       "decision": "trim",
-      "justification": "Stable sparse-PC orchestration keeps support-mode/factor-preflight flow; disconnected direct-tail residual/true-active/coupled-coarse rescue policy expansion was removed."
+      "justification": "Stable sparse-PC orchestration keeps factor-preflight flow; disconnected direct-tail residual/true-active/coupled-coarse rescue policy expansion and support-mode preflight were removed."
     },
     {
       "path": "sfincs_jax/problems/profile_sparse_qi.py",
@@ -490,7 +491,7 @@
       "retention_reason": "Native sparse-direct replacement remains a research lane until it is smaller, faster, and production-clean.",
       "next_step": "Extract with symbolic/native sparse factor code.",
       "decision": "trim",
-      "justification": "Stable direct-tail direct/structured preconditioner helpers remain; residual/true-active/coupled-coarse rescue policies and resolvers were deleted from stable core."
+      "justification": "Stable direct-tail direct/structured preconditioner helpers remain; residual/true-active/coupled-coarse rescue policies, support-mode preflight dataclasses, and resolvers were deleted from stable core."
     },
     {
       "path": "sfincs_jax/problems/transport_parallel_runtime.py",
