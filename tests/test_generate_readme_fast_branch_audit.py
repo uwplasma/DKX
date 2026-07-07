@@ -1,17 +1,10 @@
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
+from sfincs_jax.validation import readme_audit
 
 
 def _load_module():
-    module_path = Path(__file__).resolve().parents[1] / "scripts" / "generate_readme_fast_branch_audit.py"
-    spec = importlib.util.spec_from_file_location("generate_readme_fast_branch_audit", module_path)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return readme_audit
 
 
 def test_case_table_reports_cold_and_warm_logged_runtimes() -> None:
