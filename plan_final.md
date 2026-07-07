@@ -4,344 +4,357 @@ Last updated: 2026-07-07
 
 Active branch / PR: `refactor/v3-driver-architecture` / PR #8
 
-This file is the single active plan for making the refactor branch review-ready.
-`plan.md` is the historical execution log. Do not create another competing plan.
+This is the single active plan for the refactor branch. `plan.md` is the historical execution log. Do not create another competing plan.
 
 ## One-Sentence Goal
 
-Ship a small, understandable, fast, research-grade `sfincs_jax` core: one input
-file plus geometry should run accurate CPU/GPU neoclassical calculations with
+Ship a small, understandable, fast, research-grade `sfincs_jax` core where one
+input file plus geometry runs accurate CPU/GPU neoclassical calculations with
 automatic robust defaults, SFINCS Fortran v3 parity where models overlap,
-competitive runtime/memory, clear physics/numerics in the code, and validated
-differentiable Python workflows for sensitivities, ambipolar solves, bootstrap
-current, transport coefficients, plotting, and optimization.
+competitive runtime and memory, evident physics/numerics in the source, and
+validated differentiable Python workflows for sensitivities, ambipolar solves,
+bootstrap current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Latest audited code-change head: `e5a3cf04+direct-tail-rescue`; last green CI evidence: `96fb2677`.
-  Exact aggregate coverage from that CI was 91.753% (`92%`).
-- Package layout is shallow, but the branch is too large: 114 tracked Python
-  source files and about 140.5k tracked source lines. Largest complexity owners remain
-  `problems/`, `solvers/`, RHSMode-1/QI/preconditioner infrastructure, and
-  compatibility layers around those paths.
-- Non-package Python volume is still too high: `tests/` has 313 tracked Python
-  files and about 126.7k lines, `examples/` has 122 tracked Python files, and
-  `scripts/` has 12 tracked Python files.
-  Top-level `benchmarks/` is removed from the active tracked tree; compact
-  Fortran-v3 references live in `tests/fixtures/fortran_v3_reference_fixture.json`.
-- No tracked file larger than 2 MB was found. There is no tracked
-  `sfincs_jax/data/`; release-data logic is `validation/data_fetch.py`.
-  Ignored local outputs such as `benchmarks/` and `__pycache__/` are not counted
-  in review budgets and must not be committed.
-- The product target changed: PR #8 should become a small stable core, while
-  experimental or not-yet-competitive work moves to separate research PRs.
+- Latest audited code-change head: `f7674def`; last green CI evidence:
+  `96fb2677`. Exact aggregate coverage from that CI was 91.753% (`92%`).
+- Current tracked Python volume is the problem to solve before review:
+  114 package files / 140.5k source lines, 313 test files / 126.7k test lines,
+  122 example Python files, and 12 tracked scripts.
+- Largest source owners are the first audit targets:
+  `problems/profile_sparse_xblock.py`, `problems/profile_policies.py`,
+  `operators/profile_full_system.py`, `solvers/explicit_sparse.py`,
+  `problems/profile_sparse_solve.py`, `problems/profile_solve.py`,
+  `problems/transport_linear_system.py`, `problems/profile_sparse_direct.py`,
+  `problems/transport_parallel_runtime.py`, `problems/profile_dense.py`,
+  `solver.py`, `outputs/rhsmode1.py`, and
+  `solvers/preconditioner_transport_matrix.py`.
+- Largest test owners are the second audit targets:
+  `tests/test_profile_response_sparse_pc.py`, `tests/test_rhs1_full_assembly.py`,
+  `tests/test_io_output_policy_coverage.py`, `tests/test_v3_sparse_pattern.py`,
+  `tests/test_explicit_sparse.py`, `tests/test_rhs1_solver_replay.py`, dense
+  profile tests, transport policy tests, and all extracted-path tests.
+- The stable branch must stop carrying the history of solver experiments.
+  Experimental QI/device-QI, native sparse-direct, nested-dissection,
+  multifrontal, HSS/BLR, long profiling campaigns, and publication generators
+  are preserved only in research PRs unless they satisfy the stable admission
+  gates below.
+- No tracked file larger than 2 MB was found. Ignored local outputs,
+  `__pycache__`, and generated traces must not be committed.
 
 ## Open Lanes
 
 | Lane | Status | Completion | Definition of done |
 | --- | --- | ---: | --- |
-| Line-by-line audit | Active | 38% | Every retained file/function/line has a core reason, a caller, and a test/doc owner; everything else is extracted or deleted. |
-| Core-main slimming | Active | 53% | Main keeps only stable, parity-clean, runtime-acceptable solvers and public APIs; research code is outside core. |
-| Source simplification | Active | 53% | Package moves toward <=50 source files and <=50k lines, with a 10x reduction as stretch if functionality permits. |
-| Examples/tests/scripts cleanup | Active | 77% | Examples are <=10 curated workflows plus Fortran-v3 references; tests are smaller, organized, and >=95% coverage; scripts are removed or promoted; benchmarks are gone. |
-| Parity/performance evidence | Active | 70% | Supported examples rerun against SFINCS Fortran v3 with runtime/RSS/bootstrap evidence; unsupported research lanes are not marketed. |
-| Docs/readme regeneration | Active | 80% | README/docs describe only the stable core plus explicit external research PR lanes. |
+| Line-by-line audit | Active | 40% | Every retained file/function/line has a caller, a physics/numerics/API reason, and a test/doc/perf owner. |
+| Core-main slimming | Active | 55% | Main keeps only stable, parity-clean, runtime-acceptable solvers/APIs; research code is outside core. |
+| Source simplification | Active | 55% | Package moves first to <=68 files, then <=50 files and <=50k lines unless exceptions are justified. |
+| Tests/examples/scripts cleanup | Active | 77% | Examples are curated, tests are smaller but reach >=95% coverage, scripts are removed or documented release tooling. |
+| Parity/performance evidence | Active | 70% | Supported examples have checked SFINCS Fortran v3 parity/runtime/RSS/bootstrap evidence. |
+| Docs/readme | Active | 80% | Public docs describe stable software, not branch history or unpromoted campaigns. |
 
-Overall readiness under this stricter core-slim goal is about 82-85%.
+Overall readiness under this stricter core-slim goal is about 83-86%.
 
 ## Concrete Code-Audit Rules
-Default action for every line is removal. Retain a line only with one of three
-proofs: `PHYSICS/NUMERICS` equation or algorithm, `API/SCHEMA` public contract,
-or `EVIDENCE/PERF/AUTODIFF` testable research-grade value. Everything else is
-`OBSOLETE`, `MERGE`, or `RESEARCH` and is deleted or extracted with its imports,
-env vars, tests, docs, fixtures, examples, and diagnostics.
 
-For each file, run this loop before editing: identify public imports/callers
-with `rg`, classify each top-level object, map it to a retained workflow/test/doc
-row, delete one-call wrappers and dead compatibility, merge duplicate
-dictionaries/policies, then rerun the smallest bounded tests that would fail if
-the removed line mattered. Every import, helper, branch, dataclass field, env
-token, diagnostic key, fixture, test, example, and doc paragraph must answer:
-what needs it; what test proves it; is it duplicate or historical; is it default
-or experiment; can it be data/config; can it move to a research PR; and does it
-improve runtime, memory, differentiability, accuracy, or clarity enough to pay
-rent? Weak answers mean `delete`, `merge`, or `extract-pr`.
+Default action for every line is removal. A retained line needs one of these
+proofs:
 
-### Mandatory Line-Review Ledger
-The review uses `tests/fixtures/core_slim_inventory.json`, not ad-hoc notes, and
-covers every tracked Python file plus high-line docs, examples, CI, packaging,
-and release files.
+- `PHYSICS`: it implements a documented drift-kinetic, collision, geometry,
+  normalization, flux, bootstrap, ambipolar, or transport equation.
+- `NUMERICS`: it implements a retained discretization, residual, linear solve,
+  preconditioner, error estimate, output schema, or differentiability method.
+- `API`: it is part of a documented public Python/CLI/namelist/output contract.
+- `EVIDENCE`: it is required by a compact parity, physics, regression,
+  coverage, benchmark, or documentation gate.
+- `PERF`: it measurably reduces runtime or memory for a supported default path.
+- `AUTODIFF`: it is needed for differentiable solves, sensitivities, or
+  optimization through a supported stable workflow.
 
-Each row records `path`, `owner_domain`, `public_surface`, `callers`, `proof`,
-`runtime_role`, `autodiff_role`, `decision`, `target`, and one-sentence
-`justification`. `owner_domain` is one of public_api, cli_io, namelist,
-geometry, discretization, physics, operators, rhs1_profile,
-transport_coefficients, ambipolar, outputs, plotting, solver_core,
-solver_research, validation, examples, tests, docs, release_tooling, or delete.
+Everything else is one of:
+
+- `COMPAT`: keep only as a thin import/argument shim with a migration test and
+  deletion date.
+- `RESEARCH`: move to a research PR, remove stable imports/env vars/tests/docs,
+  and leave at most one docs pointer.
+- `OBSOLETE`: delete together with imports, tests, docs, fixtures, examples,
+  env vars, diagnostics, and generated artifacts.
+
+For each file, use this exact loop:
+
+1. List public symbols and callers with `rg`.
+2. Mark each top-level object `PHYSICS`, `NUMERICS`, `API`, `EVIDENCE`, `PERF`,
+   `AUTODIFF`, `COMPAT`, `RESEARCH`, or `OBSOLETE`.
+3. Delete unreachable, one-call, historical, duplicated, and env-only objects.
+4. Merge wrappers that do not name a real equation/API boundary.
+5. Move formulas toward `physics/`, `operators/`, or `discretization/`; move
+   route orchestration toward one policy table per problem family.
+6. Remove matching tests/docs/examples/fixtures for deleted or extracted paths.
+7. Run the smallest tests that would fail if the retained line mattered.
+8. Record line/file deltas in `tests/fixtures/core_slim_inventory.json`.
+
+No touched function may remain without an obvious caller and a testable reason.
+No public docs sentence may describe a non-default research path as supported.
+No solver branch may be stable only because an environment variable can reach it.
+
+## Stable-Core Admission Gates
+
+A solver, preconditioner, workflow, example, or documentation claim stays on
+this branch only if it satisfies all relevant gates: strict residual or frozen
+Fortran-v3 parity; useful runtime; bounded local CPU memory; device-safe GPU
+claim or explicit GPU exclusion; JAX-compatible differentiable Python path or
+isolated non-differentiable CLI path; no required internal solver/env knowledge;
+compact tests under CI budget; and docs that state the exact supported scope.
+
+Any path failing one gate is `RESEARCH`, not stable core.
+
+## Mandatory Line-Review Ledger
+
+`tests/fixtures/core_slim_inventory.json` is the line-review ledger. It records
+each retained, extracted, or deleted large family with `path`, `owner_domain`,
+`public_surface`, `callers`, `proof`, `runtime_role`, `autodiff_role`,
+`decision`, `target`, and `justification`.
+
+Allowed owner domains are public_api, cli_io, namelist, geometry,
+discretization, physics, operators, rhs1_profile, transport_coefficients,
+ambipolar, outputs, plotting, solver_core, solver_research, validation,
+examples, tests, docs, release_tooling, and delete.
 
 Rows with no public surface, no runtime role, and no focused proof are deleted
 or extracted unless they are private helpers inside one retained equation block.
-Env-only routes are extracted unless promoted to documented advanced API options
-with tests and unchanged automatic defaults.
-
-### Ordered File Sweep
-Review files in this exact queue: public API/CLI/I/O; namelist/output schemas;
-physics; geometry/discretization; operators; RHSMode-1 policy/x-block paths;
-RHSMode-2/3 transport; sparse primitives/preconditioners; validation; examples/
-scripts; tests; README/docs. Do not skip ahead while the current queue has stale
-research hooks or unowned files.
-
-For each queue, produce a diff that reduces either files, lines, public knobs,
-or duplicated concepts. A queue is rejected if it only moves code to another
-stable file without deleting complexity or clarifying physics/numerics.
-
-### Per-Line Decision Tags
-During each tranche, classify touched lines as `PHYSICS`, `NUMERICS`, `API`,
-`EVIDENCE`, `PERF`, `AUTODIFF`, `COMPAT`, `RESEARCH`, or `OBSOLETE`.
-`RESEARCH` means promising but not stable/parity-clean/runtime-clean; extract.
-`OBSOLETE` means duplicate, unreachable, historical, or no caller/proof; delete.
-
-The retained source should read as physics and numerics, not as a history of
-failed experiments. `RESEARCH` and `OBSOLETE` tags must not remain in core code
-at review handoff.
-
-### Complexity-Reduction Heuristics
-For every retained function, prefer these before adding logic: inline one-call
-wrappers unless they name an equation/API boundary; replace Boolean clusters
-with one enum/config; delete non-user-visible branches; replace duplicated
-diagnostic dictionaries with one typed builder; keep equations near assembly;
-avoid generic `probe`, `candidate`, `rescue`, and `legacy` modules; collapse
-route selection to one policy table per problem family; use compact fixtures
-instead of campaign scripts; split fast CLI-only paths from differentiable
-Python paths only when that removes complexity; delete compatibility after
-migration tests prove no retained caller uses it.
 
 ## Source Structure Rules
 
-Package root remains public API/CLI/I/O/plotting/namelist/paths/solver facades
-plus `README.md`. Implementation stays in one-level domain packages:
+The package root is for public API/CLI/I/O/plotting/namelist/paths/solver
+facades plus `README.md`. Implementation stays in one-level domain packages:
 `discretization`, `geometry`, `operators`, `outputs`, `physics`, `problems`,
-`solvers`, `validation`, and `workflows`. Avoid stable names based on historical
-details (`v3_`, broad `rhs1_`, `probe`, `campaign`, `qi_*`) unless they are thin
-compatibility facades with no logic.
+`solvers`, `validation`, and `workflows`.
 
-Non-package targets:
+Stable module names should describe physics or numerics, not history. Avoid
+new stable names based on `v3_`, broad `rhs1_`, `probe`, `campaign`, `rescue`,
+`candidate`, `legacy`, or `qi_*`. Existing names with those terms are debt and
+must be deleted, renamed, or justified as temporary compatibility.
 
-- `examples/`: original Fortran-v3 references plus <=10 curated workflows: CLI
-  run/plot, Python solve, geometry loading, transport coefficients, ambipolar
-  solve, autodiff, bootstrap/Redl, optimization, output/plotting, frozen parity.
-- `tests/`: grouped into unit, physics, regression, cli_io, optional
-  integration, and fixtures; fewer files, less scaffolding, >=95% coverage.
-- `scripts/`: zero by default; user commands become examples, validators become
-  tests, and release-maintenance commands need docs and tests.
-- `benchmarks/`: absent; benchmark claims use compact fixtures, bounded tests,
-  docs, or release assets.
+Non-package targets: `examples/` keeps original SFINCS Fortran v3 references
+plus <=10 curated workflows; `tests/` is grouped into unit, physics,
+regression, cli_io, optional integration, and fixtures with >=95% coverage;
+`scripts/` is zero by default except documented release tooling; `benchmarks/`
+is absent and benchmark claims use compact fixtures, docs, or release assets.
 
 ## Target Stable Source Shape
 
-The final stable tree should have these modules and no deeper nesting. File
-counts are budgets, not aspirations; exceeding a budget requires an inventory
-exception with a test and retained workflow.
-
 | Domain | Budget | Retain | Delete/extract |
 | --- | ---: | --- | --- |
-| Package root | <=14 files | `api`, `cli`, `io`, `namelist`, `plotting`, `solver` facade, `paths`, `sensitivity`, `ambipolar`, compatibility imports | historical wrappers, duplicate compare/profiling helpers without public docs |
-| `geometry/` | <=5 files | VMEC/wout/Boozer/adapters with tests | generated campaigns and one-off validation loaders |
-| `discretization/` | <=5 files | grids, velocity maps, periodic stencils | historical v3 wrappers with no direct caller |
-| `physics/` | <=4 files | collision/transport formulas and normalizations | duplicated formula copies in problem modules |
-| `operators/` | <=8 files | profile system assembly, collision/drift/electric/field terms, sparse pattern | true-operator rescue and experimental operator probes |
-| `problems/` | <=10 files | profile solve, transport solve, ambipolar solve, setup, diagnostics, policies | QI/device-QI, native sparse-direct research, duplicated route orchestration |
-| `solvers/` | <=10 files | Krylov dispatch, explicit sparse primitives, path policy, stable preconditioners, implicit differentiation | unpromoted direct-factor/ND/HSS/multifrontal and hard-seed experiments |
-| `outputs/` | <=4 files | writer, formats, profile/transport output schemas | solver-experiment diagnostics keys |
-| `validation/` | <=4 files | release-data fetch, compact artifacts, Fortran fixture helpers | publication campaign generators and QI device validators |
-| `workflows/` | <=4 files | curated high-level Python workflows | campaign wrappers and research optimization experiments |
+| Package root | <=14 files | public facades, CLI, I/O, namelist, plotting, paths, sensitivity, ambipolar | duplicate compare/profiling helpers, hidden release scripts |
+| `geometry/` | <=5 files | VMEC/wout/Boozer/JAX adapters with tests | generated campaigns, one-off loaders |
+| `discretization/` | <=5 files | grids, velocity maps, periodic stencils | historical wrappers with no direct caller |
+| `physics/` | <=4 files | collisions, classical transport, Redl/bootstrap normalizations | formula copies in problem modules |
+| `operators/` | <=8 files | collision/drift/electric/field/system assembly | true-operator rescue/probe experiments |
+| `problems/` | <=10 files | profile solve, transport solve, ambipolar solve, setup, diagnostics, policies | QI/device-QI, native sparse-direct, duplicated route orchestration |
+| `solvers/` | <=10 files | Krylov dispatch, sparse primitives, path policy, stable preconditioners, implicit diff | ND/HSS/multifrontal/hard-seed experiments |
+| `outputs/` | <=4 files | writer, formats, profile and transport schemas | experiment-only diagnostics |
+| `validation/` | <=4 files | release-data fetch, compact artifacts, Fortran fixture helpers | publication campaign generators |
+| `workflows/` | <=4 files | curated high-level workflows | campaign wrappers and research optimization experiments |
 
-The target package is therefore roughly <=68 files by first review, then <=50
-after compatibility deletion. The preferred end state is not many tiny files; it
-is a small number of domain files whose names match the physics/numerics.
+First review budget: <=68 package Python files. Final budget: <=50 package
+Python files and <=50k package lines unless each exception is justified in the
+ledger.
 
-## Extraction Map And File Budgets
+## Exact Source Backlog
 
-| Family | Stable action | Destination / gate |
+### Delete or Extract First
+
+- `profile_sparse_solve.py`: remove disconnected true-operator residual rescue
+  stage dataclasses/functions/exports/tests unless currently called by stable
+  defaults.
+- `profile_sparse_direct.py`: keep only stable sparse direct policy that passes
+  admission gates; move native direct-factor research to
+  `research/native-sparse-direct`.
+- `solvers/native_block_factor.py` and symbolic preconditioner files: retain
+  only primitives used by stable defaults; extract ND/HSS/multifrontal research.
+- `transport_parallel_runtime.py`: keep public serial/default helper if needed;
+  extract multi-worker/GPU campaign runners and trace plumbing.
+- Publication/performance campaign examples: move to research/release assets
+  unless they are one of the curated workflows.
+- `scripts/`: delete, convert to tests, or move to examples/release tooling.
+
+### Collapse Next
+
+- `profile_policies.py`: one default policy table, one advanced-options parser,
+  no duplicated probe/candidate/rescue logic.
+- `profile_sparse_xblock.py`: stable x-block/preconditioner path only; remove
+  research hooks and duplicate diagnostics.
+- `profile_solve.py` and `profile_sparse_solve.py`: read as setup, assembly,
+  policy selection, solve, residual validation, diagnostics/output.
+- `solver.py`: shrink to facade plus public contracts; move implementation into
+  domain modules.
+- `outputs/rhsmode1.py` and `outputs/writer.py`: one schema builder and one
+  writer path per format; remove experiment-only output keys.
+
+### Move Equations to Domain Modules
+
+- `operators/profile_full_system.py`: retain equation blocks, shape contracts,
+  and sparse/JAX assembly; move duplicated normalizations to `physics/`.
+- Drift/electric/collision modules: consolidate repeated term assembly and keep
+  tests close to equation identities.
+- `physics/collisions.py` and `physics/classical_transport.py`: own collision,
+  Redl/bootstrap, and transport normalization formulas.
+
+### Transport Cleanup
+
+- `transport_linear_system.py`, `transport_solve.py`, `transport_policies.py`,
+  `preconditioner_transport_matrix.py`: one linear-system builder, one policy
+  table, stable preconditioners only, shared diagnostics/output builders.
+
+## Extraction Map
+
+| Family | Stable action | Destination / return gate |
 | --- | --- | --- |
-| QI/device-QI hard-seed machinery | Remove policy helpers, env tokens, examples, tests, docs from core; keep only research pointer. | `research/qi-device-hard-seed`; returns after CPU/GPU production residual/runtime/RSS/differentiability gates. |
-| Native sparse-direct, reduced-Pmat, nested-dissection, multifrontal, HSS | Extract source/tests/docs and default hooks; keep only sparse primitives used by stable defaults. | `research/native-sparse-direct`; returns after true-residual admission and production-floor runtime/RSS gates. |
-| Parallel/GPU/multi-device campaigns | Keep only public helpers with docs/tests; move runners, traces, raw regenerators out. | `research/parallel-performance` or release assets. |
+| QI/device-QI hard-seed machinery | Remove policy helpers, env tokens, examples, tests, docs; leave research pointer only. | `research/qi-device-hard-seed`; returns after CPU/GPU production residual/runtime/RSS/autodiff gates. |
+| Native sparse-direct, reduced-Pmat, ND, multifrontal, HSS | Extract source/tests/docs/default hooks; keep stable sparse primitives only. | `research/native-sparse-direct`; returns after true-residual admission and production-floor runtime/RSS gates. |
+| Parallel/GPU/multi-device campaigns | Keep only documented public helpers with tests; move runners/traces/regenerators out. | `research/parallel-performance` or release assets. |
 | Publication/audit generators | Keep final compressed figures only when referenced; move generators/raw outputs out. | `research/publication-audits`. |
-| Legacy wrappers | Thin delegates if public; otherwise delete. | Stable only with migration/import tests. |
-| Env-only solver branches | Promote to documented advanced options with gates or extract/delete. | Stable only if automatic defaults stay simple. |
-| Duplicated test scaffolds | Merge into physics/numerics/regression tests; delete extracted-path tests. | Stable CI under 10 minutes. |
-| Single-file example/campaign folders | Merge into curated examples or extract/delete. | Stable examples readable in minutes. |
-
-Review budgets requiring inventory exceptions if exceeded:
-
-- `profile_policies.py`: <=1,500 lines after QI/device-QI residue deletion.
-- `profile_sparse_xblock.py`: <=2,500 lines after experimental rescue extraction.
-- `profile_full_system.py`: <=3,000 lines with physics assembly preserved.
-- `explicit_sparse.py`: <=2,000 lines; keep primitives, extract research factors.
-- `profile_sparse_solve.py` + `profile_solve.py`: <=4,000 combined lines.
-- Transport solve/policy/linear-system family: <=4,000 combined lines.
-- `solver.py`: <=800 lines as a facade.
-- `outputs/*`: <=4,000 combined lines.
-- `validation/*`: <=2,500 combined lines.
-- `tests/test_profile_response_sparse_pc.py` and related solver tests:
-  <=4,000 combined lines after extracted-path tests are removed.
+| Legacy wrappers | Thin delegates only if public; otherwise delete. | Stable only with migration/import tests. |
+| Env-only solver branches | Promote to documented advanced API or extract/delete. | Stable only if automatic defaults remain simple. |
+| Duplicated test scaffolds | Merge into focused physics/numerics/regression tests. | Stable CI under 10 minutes. |
 
 ## Ordered Finish Plan
 
-These tranches replace open-ended "continue refactoring" work. Each tranche is
-large enough to change reviewability, but bounded enough to validate locally.
-Do not start a later tranche if an earlier one leaves stale imports, stale
-tests, or stale README/docs claims.
-
 ### Tranche 1 - Finish Research Extraction From Core
 
-Scope: QI/device-QI, native sparse-direct/reduced-Pmat rescue, parallel
-campaigns, and publication/audit generators.
+Scope: QI/device-QI residue, true-operator rescue residue, native sparse-direct
+research residue, long profiler/campaign scripts, and publication generators.
 
-Required actions:
+Actions:
 
-- Remove any remaining imports, env tokens, diagnostics, examples, tests, and
-  docs that expose extracted QI/device-QI as a stable feature.
-- Extract or delete unpromoted direct-factor/nested-dissection/HSS/multifrontal
-  hooks unless they are part of the retained default sparse primitive layer.
-- Remove long-run profiler/campaign scripts from stable docs and tests.
-- Update `research_lanes.rst` with one short pointer per extracted branch.
+- Delete disconnected true-operator rescue stage APIs/tests from
+  `profile_sparse_solve.py` and RHSMode-1 tests.
+- Remove stable imports/env vars/docs for QI/device-QI and native direct-factor
+  research.
+- Move or delete long-run profiler/campaign scripts and generated example
+  outputs.
+- Update `docs/research_lanes.rst` with short research pointers only.
 
-Acceptance gate:
+Gate:
 
-- `rg "qi_device|device-QI|true_operator_rescue|native_sparse_direct|nested_dissection|multifrontal|HSS|campaign" sfincs_jax tests examples scripts README.md docs`
-  returns only explicit research-lane text or retained generic sparse terms.
-- Net source/test/example/script lines decrease materially.
-- Focused solver, docs-claim, and source-tree tests pass.
+```bash
+rg "qi_device|device-QI|true_operator_rescue|native_sparse_direct|nested_dissection|multifrontal|HSS|campaign" sfincs_jax tests examples scripts README.md docs
+```
+
+returns only research-lane text, generic sparse terminology, or retained stable
+features with ledger entries. Net source/test/example/script lines decrease.
 
 ### Tranche 2 - Collapse RHSMode-1 Stable Solve Path
 
-Scope: `profile_policies.py`, `profile_sparse_xblock.py`,
-`profile_sparse_solve.py`, `profile_solve.py`, `profile_dense.py`,
-`profile_preconditioner_build.py`, and related solver tests.
+Scope: profile policies, sparse/x-block solve, dense solve, setup,
+preconditioner build, diagnostics, and related tests.
 
-Required actions:
+Actions:
 
-- Reduce route selection to one default policy table and one advanced-options
-  parser; delete duplicated candidate/probe/rescue branches.
-- Keep a small dense path, a strict sparse/x-block path, and explicit residual
-  admission; extract everything else.
-- Move repeated diagnostic metadata construction into one builder.
-- Make the solve code read in this order: setup, operator/RHS assembly,
-  preconditioner selection, Krylov/direct solve, residual validation,
-  diagnostics/output.
+- Replace duplicated candidate/probe/rescue branches with one default policy
+  table and one advanced-options parser.
+- Keep dense, sparse/x-block, residual validation, and output diagnostics.
+- Merge repeated diagnostics dictionaries into one typed builder.
+- Delete tests for extracted paths; keep parity/residual/policy tests for
+  stable defaults.
 
-Acceptance gate:
+Gate:
 
-- `profile_policies.py <= 2500` lines, `profile_sparse_xblock.py <= 2800`,
-  `profile_sparse_solve.py <= 2300`, `profile_solve.py <= 1800`, or each excess
-  line has an inventory exception.
-- Supported RHSMode-1 smoke/parity fixtures pass with no solver env vars.
-- Solver policy tests prove automatic defaults choose a stable path.
+- `profile_policies.py <= 2500` lines.
+- `profile_sparse_xblock.py <= 2800` lines.
+- `profile_sparse_solve.py <= 2300` lines.
+- `profile_solve.py <= 1800` lines.
+- Supported RHSMode-1 fixtures pass without solver env vars.
 
 ### Tranche 3 - Collapse Transport/RHSMode-2/3 Path
 
-Scope: `transport_linear_system.py`, `transport_solve.py`,
-`transport_policies.py`, `preconditioner_transport_matrix.py`, transport
-diagnostics/finalization, and transport tests.
+Scope: transport linear system, transport solve, transport policy, transport
+preconditioner, transport diagnostics/finalization, and tests.
 
-Required actions:
+Actions:
 
-- Keep one transport linear-system builder, one policy table, and stable
-  preconditioners that satisfy residual gates.
-- Extract parallel worker/campaign code unless it is a documented, tested public
+- Keep one transport linear-system builder and one policy table.
+- Extract multi-worker/parallel campaign logic unless it is a documented public
   helper.
-- Remove duplicated RHS assembly/diagnostic logic already present in operators
-  or outputs.
+- Reuse output and residual diagnostics from shared builders.
 
-Acceptance gate:
+Gate:
 
-- Transport solve/policy/linear-system family <=4k combined lines or inventory
+- Transport solve/policy/linear-system family <=4k combined lines or ledger
   exceptions.
 - GeometryScheme 2/11 compact production-floor fixtures pass strict residual
   gates.
-- README/docs performance claims use checked fixtures, not generated campaign
-  scripts.
 
-### Tranche 4 - Move Physics Equations Into Clear Domain Modules
+### Tranche 4 - Make Physics And Numerics Evident
 
-Scope: `operators/profile_full_system.py`, `operators/profile_system.py`,
-collision/drift/electric/ExB/magnetic terms, `physics/*`, and normalization
-helpers.
+Scope: operators, physics, discretization, normalizations, and term-level tests.
 
-Required actions:
+Actions:
 
-- Keep formulas where the physics is visible: term name, equation reference,
-  units/normalization, and shape contract.
-- Delete duplicated normalization or drift/collision formula copies.
-- Replace long internal helper chains with small equation blocks and typed
-  assembly records.
+- Keep each equation in a named block with units/normalization and shape
+  contract.
+- Delete duplicated formula copies.
+- Add/retain focused tests for collision symmetry, conservation moments, drift
+  switches, electric-field terms, Redl/bootstrap normalization, geometry
+  interpolation, residual JVP, and ambipolar derivatives.
 
-Acceptance gate:
+Gate:
 
-- `profile_full_system.py <= 3000` lines or inventory exception.
-- Unit tests check term-level identities, conservation/moment relations, and
-  finite-beta/electric-field switches.
-- Method docs link each retained equation to its source module.
+- `profile_full_system.py <= 3000` lines or ledger exception.
+- Docs link retained equations to source modules.
 
 ### Tranche 5 - Shrink Outputs, Validation, Examples, Scripts
 
-Scope: `outputs/*`, `validation/*`, `examples/`, `scripts/`, docs/static
-claim data, and tests that refer to these paths.
+Scope: outputs, validation, examples, scripts, docs/static claim data, and tests.
 
-Required actions:
+Actions:
 
-- Keep only output schema fields that are public, parity-required, or plotted.
-- Move publication/raw benchmark generators out; keep compact JSON/HDF5 fixtures
-  only when they are small and directly tested.
+- Keep only output fields that are public, parity-required, or plotted.
 - Reduce examples to original Fortran-v3 references plus <=10 curated workflows.
-- Empty `scripts/` unless a script is documented release tooling with tests.
+- Convert scripts to examples/tests/release tooling or delete.
+- Move raw benchmark/publication generators out of stable core.
 
-Acceptance gate:
+Gate:
 
-- `examples/README.md` is a curated workflow guide, not a file dump.
-- `scripts/` has zero undocumented commands.
-- No tracked file exceeds 2 MB; no ignored output is staged.
+- `examples/README.md` is a curated workflow map.
+- `scripts/` contains zero undocumented commands.
+- No tracked file exceeds 2 MB.
 
 ### Tranche 6 - Test Consolidation And Coverage To 95%
 
-Scope: all `tests/`.
+Scope: all tests.
 
-Required actions:
+Actions:
 
-- Reorganize tests into unit, physics, regression, cli_io, fixtures, and
-  optional integration without increasing total test lines.
+- Merge one-off solver tests into parametrized unit/physics/regression suites.
 - Delete tests for extracted research paths.
-- Prefer fewer parametrized tests over many one-off files.
-- Raise coverage primarily by deleting dead code, then by targeted physics and
-  numerical tests.
+- Raise coverage first by deleting dead code, then by targeted meaningful tests.
+- Keep default CI under 10 minutes.
 
-Acceptance gate:
+Gate:
 
-- Default CI under 10 minutes.
-- Coverage >=95% on slim core.
-- Tests include drift-kinetic identities, residual gates, geometry
-  interpolation, Redl/bootstrap normalization, ambipolar derivatives,
-  Fortran-v3 frozen fixtures, output schemas, CLI, plotting, and autodiff.
+- Coverage >=95% on the slim core.
+- Test files <=120 unless each exception is justified.
+- Tests include physics gates, numerical identities, frozen Fortran-v3 fixtures,
+  CLI/output/plotting, and autodiff.
 
 ### Tranche 7 - Evidence Regeneration And Documentation
 
 Scope: README, docs, package README, checked figures/tables, parity/runtime/RSS
 fixtures.
 
-Required actions:
+Actions:
 
 - Rewrite public docs as standalone software documentation, not branch history.
-- Regenerate only supported CPU evidence locally; GPU evidence is refreshed when
-  an available GPU is confirmed.
+- Regenerate supported CPU evidence locally; refresh GPU evidence only when a
+  GPU is available.
 - Remove public claims for extracted research lanes from README.
 
-Acceptance gate:
+Gate:
 
 - README has install, one command, Python API, physics summary, curated
-  examples, parity/performance figure, and clear unsupported/deferred research
-  language.
+  examples, parity/performance figure, and explicit research-lane boundaries.
 - Docs build with warnings as errors.
 - Checked tables/figures match fixtures.
 
@@ -349,38 +362,25 @@ Acceptance gate:
 
 Scope: final PR #8 state.
 
-Required actions:
+Actions:
 
 - Run full tests, coverage, docs build, examples smoke, size guard, and diff
   hygiene.
-- Commit a final inventory with before/after counts.
+- Commit final inventory with before/after counts.
 - Push PR #8 and leave it unmerged for review.
 
-Acceptance gate:
+Gate:
 
 - Branch is clean, PR is green, no generated clutter is tracked, and every
-  remaining exception to file/line budgets is explicitly justified.
-
-## Audit Order And Tranche Gates
-
-Audit in this order: public surface; physics; discretization/operators; solver
-defaults; differentiability; validation/tests; examples/scripts/benchmarks;
-docs. Each tranche edits the inventory first, removes/merges/extracts code, runs
-focused guards, and reports net file/line change, tests, static checks,
-parity/performance claim changes, and lane completion. No tranche is accepted if
-it only moves complexity without reducing retained lines or user-facing concepts.
-
-Final budgets: <=50 package Python files, <=50k source lines unless justified,
-<=120 test files, <=10 curated workflows, zero benchmark tree, zero undocumented
-scripts, no tracked artifact over 2 MB, >=95% slim-core coverage, and fresh
-parity/runtime/RSS/bootstrap evidence for supported examples.
+  remaining exception to file/line budgets is justified.
 
 ## Per-Tranche Operating Loop
 
-Every tranche follows the same loop: update inventory, remove/merge/extract/
-replace code, remove matching tests/docs/fixtures/examples/env vars/diagnostics,
-run focused checks, record net tracked file/line changes and lane percentages,
-then commit and push before the next tranche.
+Every tranche: update inventory decisions; remove/merge/extract code plus
+matching tests/docs/fixtures/examples/env vars/diagnostics; run focused/static
+checks; record net file/line changes and lane percentages; commit and push. A
+tranche is rejected if it only moves code without reducing retained lines,
+files, public knobs, or duplicated concepts.
 
 ## Standard Validation Commands
 
@@ -395,26 +395,20 @@ git diff --check
 find . -path ./.git -prune -o -type f -size +2M -print
 ```
 
-Use before review:
-
-```bash
-PYTHONNOUSERSITE=1 python -m pytest -q
-PYTHONNOUSERSITE=1 python -m coverage run -m pytest -q
-PYTHONNOUSERSITE=1 python -m coverage report --fail-under=95
-PYTHONNOUSERSITE=1 python -m sphinx -W -b html docs docs/_build/html
-python examples/run_cli_and_plot.py --out-dir /tmp/sfincs_jax_quick_review
-```
+Before review, also run the full test suite, coverage with `--fail-under=95`,
+docs with `sphinx -W`, and the quick CLI/plot example.
 
 ## Completion Gates
-- Core source is <=50 Python files and <=50k lines, or each exception is
-  justified; experimental solver/preconditioner/QI/profiling lanes are separate
-  PRs or deleted.
-- `examples/` keeps original Fortran-v3 references plus <=10 curated workflows;
-  `benchmarks/` is absent; `scripts/` is empty or documented release tooling.
-- Tests are organized, smaller, scientifically meaningful, >=95% coverage, and
-  CI stays under 10 minutes.
-- Supported examples have fresh Fortran-v3 parity, runtime, memory, and
-  bootstrap-current evidence; README/docs match the slim core; PR #8 is clean.
+
+- Core source is <=50 Python files and <=50k lines, or every exception is justified in the ledger.
+- Experimental solver/preconditioner/QI/profiling lanes are separate PRs or deleted from stable.
+- `examples/` keeps original Fortran-v3 references plus <=10 curated workflows.
+- `benchmarks/` is absent; `scripts/` is empty or documented release tooling.
+- Tests are smaller, meaningful, >=95% coverage, and default CI stays under 10 minutes.
+- Supported examples have fresh Fortran-v3 parity/runtime/memory/bootstrap evidence.
+- README/docs match the slim core and do not market research paths as stable.
+- PR #8 is clean and ready for review.
+
 ## Explicit Deferred Items
-Deferred unless production-gated: experimental QI/device-QI, native sparse-direct
-research, lower-memory preconditioners, GPU/multi-GPU campaigns, and audits.
+
+Deferred unless production-gated: experimental QI/device-QI, native sparse-direct research, nested-dissection/multifrontal/HSS replacements, lower-memory preconditioner research, GPU/multi-GPU campaigns, and publication audits. They may be referenced in `docs/research_lanes.rst` only; they should not remain as stable source, examples, tests, README claims, or default solver branches.
