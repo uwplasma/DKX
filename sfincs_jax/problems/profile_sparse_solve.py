@@ -139,11 +139,8 @@ def try_run_requested_sparse_pc_gmres_branch(
     SparsePCFactorPreflightRunContext = context.values['SparsePCFactorPreflightRunContext']
     SparsePCGMRESContext = context.values['SparsePCGMRESContext']
     SparsePCGenericBranchSetupContext = context.values['SparsePCGenericBranchSetupContext']
-    SparsePCResidualCorrectionStageContext = context.values['SparsePCResidualCorrectionStageContext']
-    SparsePCTrueCoupledCoarseStageContext = context.values['SparsePCTrueCoupledCoarseStageContext']
     Timer = context.values['Timer']
     _DIRECT_TAIL_STRUCTURED_PC_CACHE = context.values['_DIRECT_TAIL_STRUCTURED_PC_CACHE']
-    _ReusableTrueActionColumnCache = context.values['_ReusableTrueActionColumnCache']
     _SPARSE_HOST_PC_GMRES_SOLVE_METHODS = context.values['_SPARSE_HOST_PC_GMRES_SOLVE_METHODS']
     _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS = context.values['_SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS']
     _StructuredHostSparsePreconditionerBundle = context.values['_StructuredHostSparsePreconditionerBundle']
@@ -159,11 +156,9 @@ def try_run_requested_sparse_pc_gmres_branch(
     _direct_tail_structured_pc_with_cache_metadata = context.values['_direct_tail_structured_pc_with_cache_metadata']
     _host_sparse_factor_dtype = context.values['_host_sparse_factor_dtype']
     _is_direct_reduced_pmat_pc_kind = context.values['_is_direct_reduced_pmat_pc_kind']
-    _parse_true_operator_window_specs = context.values['_parse_true_operator_window_specs']
     _read_rhs1_post_solve_correction_policy = context.values['_read_rhs1_post_solve_correction_policy']
     _read_rhs1_probe_coarse_policy = context.values['_read_rhs1_probe_coarse_policy']
     _rhs1_active_reduced_residual_diagnostics = context.values['_rhs1_active_reduced_residual_diagnostics']
-    _rhs1_additive_rescue_nbytes = context.values['_rhs1_additive_rescue_nbytes']
     _rhs1_bool_env = context.values['_rhs1_bool_env']
     _rhs1_float_env = context.values['_rhs1_float_env']
     _rhs1_xblock_fallback_initial_guess = context.values['_rhs1_xblock_fallback_initial_guess']
@@ -176,14 +171,7 @@ def try_run_requested_sparse_pc_gmres_branch(
     _rhsmode1_sparse_pc_default_restart = context.values['_rhsmode1_sparse_pc_default_restart']
     _transport_active_dof_indices = context.values['_transport_active_dof_indices']
     _try_build_fortran_reduced_constraint1_direct_tail_bundle = context.values['_try_build_fortran_reduced_constraint1_direct_tail_bundle']
-    _try_build_residual_coarse_host_sparse_preconditioner = context.values['_try_build_residual_coarse_host_sparse_preconditioner']
-    _try_build_residual_window_host_sparse_preconditioner = context.values['_try_build_residual_window_host_sparse_preconditioner']
     _try_build_structured_rhs1_full_csr_operator_bundle = context.values['_try_build_structured_rhs1_full_csr_operator_bundle']
-    _try_build_true_operator_active_block_lsq_preconditioner = context.values['_try_build_true_operator_active_block_lsq_preconditioner']
-    _try_build_true_operator_active_residual_block_lsq_preconditioner = context.values['_try_build_true_operator_active_residual_block_lsq_preconditioner']
-    _try_build_true_operator_active_submatrix_preconditioner = context.values['_try_build_true_operator_active_submatrix_preconditioner']
-    _try_build_true_operator_coupled_coarse_lsq_preconditioner = context.values['_try_build_true_operator_coupled_coarse_lsq_preconditioner']
-    _try_build_true_operator_residual_window_lsq_preconditioner = context.values['_try_build_true_operator_residual_window_lsq_preconditioner']
     active_idx_jnp = context.values['active_idx_jnp']
     active_size = context.values['active_size']
     apply_v3_full_system_operator_cached = context.values['apply_v3_full_system_operator_cached']
@@ -240,8 +228,6 @@ def try_run_requested_sparse_pc_gmres_branch(
     run_sparse_pc_auto_preflight_retry_stage = context.values['run_sparse_pc_auto_preflight_retry_stage']
     run_sparse_pc_factor_preflight = context.values['run_sparse_pc_factor_preflight']
     run_sparse_pc_gmres_once_for_retry = context.values['run_sparse_pc_gmres_once_for_retry']
-    run_sparse_pc_residual_correction_stage = context.values['run_sparse_pc_residual_correction_stage']
-    run_sparse_pc_true_coupled_coarse_stage = context.values['run_sparse_pc_true_coupled_coarse_stage']
     run_xblock_sparse_pc_branch = context.values['run_xblock_sparse_pc_branch']
     select_active_fortran_v3_reduced_support_mode_preconditioner = context.values['select_active_fortran_v3_reduced_support_mode_preconditioner']
     solve_fortran_reduced_xblock_backend = context.values['solve_fortran_reduced_xblock_backend']
@@ -784,10 +770,6 @@ def try_run_requested_sparse_pc_gmres_branch(
                     structured_factor_bundle_factory=(
                         _StructuredHostSparsePreconditionerBundle
                     ),
-                    layout_from_operator=RHS1BlockLayout.from_operator,
-                    parse_true_operator_window_specs=(
-                        _parse_true_operator_window_specs
-                    ),
                 )
             )
         )
@@ -1033,278 +1015,6 @@ def try_run_requested_sparse_pc_gmres_branch(
                 residual_vec_current = factor_preflight_run.residual_vec
                 if factor_preflight_run.x0_seed is not None:
                     x0_sparse = factor_preflight_run.x0_seed
-                true_coupled_stage = run_sparse_pc_true_coupled_coarse_stage(
-                    SparsePCTrueCoupledCoarseStageContext(
-                        factor_bundle_pc=factor_bundle_pc,
-                        pc_factor_s=float(pc_factor_s),
-                        setup_s=float(setup_s),
-                        sparse_pc_rhs=sparse_pc_rhs,
-                        sparse_pc_linear_size=int(sparse_pc_linear_size),
-                        target=float(target),
-                        factor_preflight_residual_before=factor_preflight_residual_before,
-                        factor_preflight_residual_after=factor_preflight_residual_after,
-                        factor_preflight_residual_diagnostics=factor_preflight_residual_diagnostics,
-                        factor_preflight_improvement_ratio=factor_preflight_improvement_ratio,
-                        factor_preflight_target_ratio=factor_preflight_target_ratio,
-                        factor_preflight_passed=factor_preflight_passed,
-                        factor_preflight_seed_enabled=bool(factor_preflight_seed_enabled),
-                        factor_preflight_seed_used=bool(factor_preflight_seed_used),
-                        factor_preflight_max_target_ratio=float(factor_preflight_max_target_ratio),
-                        residual_vec_current=residual_vec_current,
-                        x0_sparse=x0_sparse,
-                        matvec_no_count=_mv_true_no_count,
-                        matmat=_mv_true_matmat,
-                        diagnostics=_rhs1_active_reduced_residual_diagnostics,
-                        op=op,
-                        layout=RHS1BlockLayout.from_operator(op),
-                        active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                        elapsed_s=sparse_timer.elapsed_s,
-                        emit=emit,
-                        builder=_try_build_true_operator_coupled_coarse_lsq_preconditioner,
-                        additive_rescue_nbytes=_rhs1_additive_rescue_nbytes,
-                        explicit_requested=bool(direct_tail_true_coupled_coarse_explicit_requested),
-                        auto_enabled=bool(direct_tail_true_coupled_coarse_auto_enabled),
-                        auto_native_enabled=bool(direct_tail_true_coupled_coarse_auto_native_enabled),
-                        auto_target_ratio=float(direct_tail_true_coupled_coarse_auto_target_ratio),
-                        auto_min_size=int(direct_tail_true_coupled_coarse_auto_min_size),
-                        max_windows=int(direct_tail_true_coupled_coarse_max_windows),
-                        x_radius=int(direct_tail_true_coupled_coarse_x_radius),
-                        ell_radius=int(direct_tail_true_coupled_coarse_ell_radius),
-                        max_mb=float(direct_tail_true_coupled_coarse_max_mb),
-                        regularization=float(direct_tail_true_coupled_coarse_regularization),
-                        max_size=int(direct_tail_true_coupled_coarse_max_size),
-                        column_batch=int(direct_tail_true_coupled_coarse_column_batch),
-                        drop_tol=float(direct_tail_true_coupled_coarse_drop_tol),
-                        low_lmax=int(direct_tail_true_coupled_coarse_low_lmax),
-                        profile_moment_count=int(direct_tail_true_coupled_coarse_profile_moment_count),
-                        angular_lmax=int(direct_tail_true_coupled_coarse_angular_lmax),
-                        angular_mode_max=int(direct_tail_true_coupled_coarse_angular_mode_max),
-                        max_tail_units=int(direct_tail_true_coupled_coarse_max_tail_units),
-                        include_tail=bool(direct_tail_true_coupled_coarse_include_tail),
-                        include_constraint_sources=bool(direct_tail_true_coupled_coarse_include_constraint_sources),
-                        include_fsavg=bool(direct_tail_true_coupled_coarse_include_fsavg),
-                        include_window_residual=bool(direct_tail_true_coupled_coarse_include_window_residual),
-                        include_profile_moments=bool(direct_tail_true_coupled_coarse_include_profile_moments),
-                        include_angular_residual=bool(direct_tail_true_coupled_coarse_include_angular_residual),
-                        include_angular_basis=bool(direct_tail_true_coupled_coarse_include_angular_basis),
-                        include_preconditioned_loads=bool(
-                            direct_tail_true_coupled_coarse_include_preconditioned_loads
-                        ),
-                        preconditioned_load_max_columns=int(
-                            direct_tail_true_coupled_coarse_preconditioned_load_max_columns
-                        ),
-                        preconditioned_load_max_nnz=int(
-                            direct_tail_true_coupled_coarse_preconditioned_load_max_nnz
-                        ),
-                        preconditioned_load_drop_tol=float(
-                            direct_tail_true_coupled_coarse_preconditioned_load_drop_tol
-                        ),
-                        damping=bool(direct_tail_true_coupled_coarse_damping),
-                        beta_max=float(direct_tail_true_coupled_coarse_beta_max),
-                        accept_base_improvement=bool(direct_tail_true_coupled_coarse_accept_base_improvement),
-                    )
-                )
-                factor_bundle_pc = true_coupled_stage.factor_bundle_pc
-                pc_factor_s = float(true_coupled_stage.pc_factor_s)
-                setup_s = float(true_coupled_stage.setup_s)
-                factor_preflight_residual_after = true_coupled_stage.factor_preflight_residual_after
-                factor_preflight_residual_diagnostics = true_coupled_stage.factor_preflight_residual_diagnostics
-                factor_preflight_improvement_ratio = true_coupled_stage.factor_preflight_improvement_ratio
-                factor_preflight_target_ratio = true_coupled_stage.factor_preflight_target_ratio
-                factor_preflight_passed = true_coupled_stage.factor_preflight_passed
-                factor_preflight_seed_used = bool(true_coupled_stage.factor_preflight_seed_used)
-                residual_vec_current = true_coupled_stage.residual_vec_current
-                x0_sparse = true_coupled_stage.x0_sparse
-                direct_tail_true_coupled_coarse_requested = bool(true_coupled_stage.requested)
-                direct_tail_true_coupled_coarse_auto_selected = bool(true_coupled_stage.auto_selected)
-                direct_tail_true_coupled_coarse_selected = bool(true_coupled_stage.selected)
-                direct_tail_true_coupled_coarse_residual_after = true_coupled_stage.residual_after
-                direct_tail_true_coupled_coarse_metadata = true_coupled_stage.metadata
-                direct_tail_true_coupled_coarse_error = true_coupled_stage.error
-                direct_tail_true_coupled_coarse_base_improvement_override_used = bool(
-                    true_coupled_stage.base_improvement_override_used
-                )
-
-                residual_correction_stage = run_sparse_pc_residual_correction_stage(
-                    SparsePCResidualCorrectionStageContext(
-                        factor_bundle_pc=factor_bundle_pc,
-                        operator_bundle_pc=_operator_bundle_pc,
-                        structured_pc_ready=bool(structured_pc_ready),
-                        pc_factor_s=float(pc_factor_s),
-                        setup_s=float(setup_s),
-                        sparse_pc_rhs=sparse_pc_rhs,
-                        sparse_pc_linear_size=int(sparse_pc_linear_size),
-                        target=float(target),
-                        factor_preflight_residual_before=factor_preflight_residual_before,
-                        factor_preflight_residual_after=factor_preflight_residual_after,
-                        factor_preflight_residual_diagnostics=factor_preflight_residual_diagnostics,
-                        factor_preflight_improvement_ratio=factor_preflight_improvement_ratio,
-                        factor_preflight_target_ratio=factor_preflight_target_ratio,
-                        factor_preflight_passed=factor_preflight_passed,
-                        factor_preflight_seed_enabled=bool(factor_preflight_seed_enabled),
-                        factor_preflight_seed_used=bool(factor_preflight_seed_used),
-                        factor_preflight_max_target_ratio=float(factor_preflight_max_target_ratio),
-                        residual_vec_current=residual_vec_current,
-                        x0_sparse=x0_sparse,
-                        matvec=_mv_true,
-                        matvec_no_count=_mv_true_no_count,
-                        matmat=_mv_true_matmat,
-                        diagnostics=_rhs1_active_reduced_residual_diagnostics,
-                        layout=RHS1BlockLayout.from_operator(op),
-                        active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                        elapsed_s=sparse_timer.elapsed_s,
-                        emit=emit,
-                        additive_rescue_nbytes=_rhs1_additive_rescue_nbytes,
-                        true_action_column_cache_factory=_ReusableTrueActionColumnCache,
-                        true_active_submatrix_builder=_try_build_true_operator_active_submatrix_preconditioner,
-                        true_active_block_builder=_try_build_true_operator_active_block_lsq_preconditioner,
-                        true_active_residual_block_builder=(
-                            _try_build_true_operator_active_residual_block_lsq_preconditioner
-                        ),
-                        true_window_builder=_try_build_true_operator_residual_window_lsq_preconditioner,
-                        residual_coarse_builder=_try_build_residual_coarse_host_sparse_preconditioner,
-                        residual_window_builder=_try_build_residual_window_host_sparse_preconditioner,
-                        continue_after_base_improvement=_rhs1_bool_env(
-                            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESCUE_AFTER_BASE_IMPROVEMENT",
-                            default=True,
-                        ),
-                        true_coupled_base_improvement_override_used=bool(
-                            direct_tail_true_coupled_coarse_base_improvement_override_used
-                        ),
-                        true_active_submatrix_requested=bool(direct_tail_true_active_submatrix_requested),
-                        true_active_block_requested=bool(direct_tail_true_active_block_requested),
-                        true_active_residual_block_requested=bool(direct_tail_true_active_residual_block_requested),
-                        true_window_requested=bool(direct_tail_true_window_requested),
-                        residual_coarse_requested=bool(direct_tail_residual_coarse_requested),
-                        residual_window_requested=bool(direct_tail_residual_window_requested),
-                        true_active_column_cache_requested=bool(direct_tail_true_active_column_cache_requested),
-                        true_active_column_cache_max_mb=float(direct_tail_true_active_column_cache_max_mb),
-                        true_active_block_x_count=int(direct_tail_true_active_block_x_count),
-                        true_active_block_ell_count=int(direct_tail_true_active_block_ell_count),
-                        true_active_block_species_count=direct_tail_true_active_block_species_count,
-                        true_active_block_theta_stride=int(direct_tail_true_active_block_theta_stride),
-                        true_active_block_zeta_stride=int(direct_tail_true_active_block_zeta_stride),
-                        true_active_block_max_mb=float(direct_tail_true_active_block_max_mb),
-                        true_active_block_regularization=float(direct_tail_true_active_block_regularization),
-                        true_active_block_max_size=int(direct_tail_true_active_block_max_size),
-                        true_active_block_column_batch=int(direct_tail_true_active_block_column_batch),
-                        true_active_block_drop_tol=float(direct_tail_true_active_block_drop_tol),
-                        true_active_block_include_tail=bool(direct_tail_true_active_block_include_tail),
-                        true_active_block_max_tail=int(direct_tail_true_active_block_max_tail),
-                        true_active_block_damping=bool(direct_tail_true_active_block_damping),
-                        true_active_block_beta_max=float(direct_tail_true_active_block_beta_max),
-                        true_active_submatrix_damping=bool(direct_tail_true_active_submatrix_damping),
-                        true_active_submatrix_alpha_clip=float(direct_tail_true_active_submatrix_alpha_clip),
-                        true_active_submatrix_min_improvement=float(
-                            direct_tail_true_active_submatrix_min_improvement
-                        ),
-                        true_active_residual_block_max_mb=float(direct_tail_true_active_residual_block_max_mb),
-                        true_active_residual_block_regularization=float(
-                            direct_tail_true_active_residual_block_regularization
-                        ),
-                        true_active_residual_block_max_size=int(direct_tail_true_active_residual_block_max_size),
-                        true_active_residual_block_column_batch=int(
-                            direct_tail_true_active_residual_block_column_batch
-                        ),
-                        true_active_residual_block_drop_tol=float(direct_tail_true_active_residual_block_drop_tol),
-                        true_active_residual_block_include_tail=bool(
-                            direct_tail_true_active_residual_block_include_tail
-                        ),
-                        true_active_residual_block_max_tail=int(direct_tail_true_active_residual_block_max_tail),
-                        true_active_residual_block_kinetic_only=bool(
-                            direct_tail_true_active_residual_block_kinetic_only
-                        ),
-                        true_active_residual_block_damping=bool(direct_tail_true_active_residual_block_damping),
-                        true_active_residual_block_beta_max=float(direct_tail_true_active_residual_block_beta_max),
-                        true_active_residual_block_min_improvement=float(
-                            direct_tail_true_active_residual_block_min_improvement
-                        ),
-                        true_active_residual_block_accept_base_improvement=bool(
-                            direct_tail_true_active_residual_block_accept_base_improvement
-                        ),
-                        true_window_max_windows=int(direct_tail_true_window_max_windows),
-                        true_window_x_radius=int(direct_tail_true_window_x_radius),
-                        true_window_ell_radius=int(direct_tail_true_window_ell_radius),
-                        true_window_max_mb=float(direct_tail_true_window_max_mb),
-                        true_window_regularization=float(direct_tail_true_window_regularization),
-                        true_window_max_size=int(direct_tail_true_window_max_size),
-                        true_window_column_batch=int(direct_tail_true_window_column_batch),
-                        true_window_drop_tol=float(direct_tail_true_window_drop_tol),
-                        true_window_include_tail=bool(direct_tail_true_window_include_tail),
-                        true_window_specs=tuple(direct_tail_true_window_specs),
-                        true_window_damping=bool(direct_tail_true_window_damping),
-                        true_window_beta_max=float(direct_tail_true_window_beta_max),
-                        residual_coarse_rank=int(direct_tail_residual_coarse_rank),
-                        residual_coarse_max_mb=float(direct_tail_residual_coarse_max_mb),
-                        residual_coarse_regularization=float(direct_tail_residual_coarse_regularization),
-                        residual_window_max_windows=int(direct_tail_residual_window_max_windows),
-                        residual_window_x_radius=int(direct_tail_residual_window_x_radius),
-                        residual_window_ell_radius=int(direct_tail_residual_window_ell_radius),
-                        residual_window_max_mb=float(direct_tail_residual_window_max_mb),
-                        residual_window_regularization=float(direct_tail_residual_window_regularization),
-                        residual_window_coefficient_mode=str(direct_tail_residual_window_coefficient_mode),
-                        residual_window_combine_mode=str(direct_tail_residual_window_combine_mode),
-                        residual_window_interface_depth=int(direct_tail_residual_window_interface_depth),
-                        residual_window_max_size=int(direct_tail_residual_window_max_size),
-                    )
-                )
-                factor_bundle_pc = residual_correction_stage.factor_bundle_pc
-                pc_factor_s = float(residual_correction_stage.pc_factor_s)
-                setup_s = float(residual_correction_stage.setup_s)
-                factor_preflight_residual_after = residual_correction_stage.factor_preflight_residual_after
-                factor_preflight_residual_diagnostics = (
-                    residual_correction_stage.factor_preflight_residual_diagnostics
-                )
-                factor_preflight_improvement_ratio = residual_correction_stage.factor_preflight_improvement_ratio
-                factor_preflight_target_ratio = residual_correction_stage.factor_preflight_target_ratio
-                factor_preflight_passed = residual_correction_stage.factor_preflight_passed
-                factor_preflight_seed_used = bool(residual_correction_stage.factor_preflight_seed_used)
-                residual_vec_current = residual_correction_stage.residual_vec_current
-                x0_sparse = residual_correction_stage.x0_sparse
-                direct_tail_true_active_submatrix_selected = bool(
-                    residual_correction_stage.true_active_submatrix_selected
-                )
-                direct_tail_true_active_submatrix_residual_after = (
-                    residual_correction_stage.true_active_submatrix_residual_after
-                )
-                direct_tail_true_active_submatrix_error = residual_correction_stage.true_active_submatrix_error
-                direct_tail_true_active_submatrix_metadata = residual_correction_stage.true_active_submatrix_metadata
-                direct_tail_true_active_block_selected = bool(residual_correction_stage.true_active_block_selected)
-                direct_tail_true_active_block_residual_after = (
-                    residual_correction_stage.true_active_block_residual_after
-                )
-                direct_tail_true_active_block_error = residual_correction_stage.true_active_block_error
-                direct_tail_true_active_block_metadata = residual_correction_stage.true_active_block_metadata
-                direct_tail_true_active_residual_block_selected = bool(
-                    residual_correction_stage.true_active_residual_block_selected
-                )
-                direct_tail_true_active_residual_block_residual_after = (
-                    residual_correction_stage.true_active_residual_block_residual_after
-                )
-                direct_tail_true_active_residual_block_error = (
-                    residual_correction_stage.true_active_residual_block_error
-                )
-                direct_tail_true_active_residual_block_metadata = (
-                    residual_correction_stage.true_active_residual_block_metadata
-                )
-                direct_tail_true_active_residual_block_base_improvement_override_used = bool(
-                    residual_correction_stage.true_active_residual_block_base_improvement_override_used
-                )
-                direct_tail_true_window_selected = bool(residual_correction_stage.true_window_selected)
-                direct_tail_true_window_residual_after = residual_correction_stage.true_window_residual_after
-                direct_tail_true_window_error = residual_correction_stage.true_window_error
-                direct_tail_true_window_metadata = residual_correction_stage.true_window_metadata
-                direct_tail_residual_coarse_selected = bool(residual_correction_stage.residual_coarse_selected)
-                direct_tail_residual_coarse_residual_after = residual_correction_stage.residual_coarse_residual_after
-                direct_tail_residual_coarse_error = residual_correction_stage.residual_coarse_error
-                direct_tail_residual_coarse_metadata = residual_correction_stage.residual_coarse_metadata
-                direct_tail_residual_window_selected = bool(residual_correction_stage.residual_window_selected)
-                direct_tail_residual_window_residual_after = residual_correction_stage.residual_window_residual_after
-                direct_tail_residual_window_error = residual_correction_stage.residual_window_error
-                direct_tail_residual_window_metadata = residual_correction_stage.residual_window_metadata
-                direct_tail_true_active_column_cache_metadata = (
-                    residual_correction_stage.true_active_column_cache_metadata
-                )
             except Exception as exc:  # noqa: BLE001
                 factor_preflight_passed = False
                 factor_preflight_error = f"{type(exc).__name__}: {exc}"
@@ -3709,8 +3419,6 @@ class SparsePCDirectTailRescuePolicySetupContext:
     true_matvec: Callable[[np.ndarray], np.ndarray]
     support_mode_selector: Callable[..., object]
     structured_factor_bundle_factory: Callable[..., object]
-    layout_from_operator: Callable[[object], object]
-    parse_true_operator_window_specs: Callable[..., tuple[object, ...]]
 
 
 @dataclass(frozen=True)
@@ -4720,39 +4428,15 @@ def build_sparse_pc_direct_tail_rescue_policy_setup(
             sparse_pc_linear_size=int(context.sparse_pc_linear_size),
         )
     )
-    direct_tail_residual_rescue_policy = resolve_direct_tail_residual_rescue_policy(
-        context.env
-    )
-    direct_tail_true_window_specs_env = (
-        _env_value(
-            context.env,
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_SPECS",
-        ).strip()
-        or _env_value(
-            context.env,
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_SPEC",
-        ).strip()
-    )
+    direct_tail_residual_rescue_policy = resolve_direct_tail_residual_rescue_policy({})
+    direct_tail_true_window_specs_env = ""
     direct_tail_true_window_specs: tuple[object, ...] = ()
-    if direct_tail_true_window_specs_env:
-        try:
-            direct_tail_true_window_specs = context.parse_true_operator_window_specs(
-                direct_tail_true_window_specs_env,
-                layout=context.layout_from_operator(context.op),
-            )
-        except (AttributeError, TypeError, ValueError) as exc:
-            if emit is not None:
-                emit(
-                    1,
-                    "fortran_reduced_direct_tail_true_window: "
-                    f"skipped explicit specs ({type(exc).__name__}: {exc})",
-                )
 
     direct_tail_true_active_rescue_policy = (
-        resolve_direct_tail_true_active_rescue_policy(context.env)
+        resolve_direct_tail_true_active_rescue_policy({})
     )
     direct_tail_true_coupled_coarse_policy = (
-        resolve_direct_tail_coupled_coarse_rescue_policy(context.env)
+        resolve_direct_tail_coupled_coarse_rescue_policy({})
     )
     direct_tail_true_coupled_coarse_explicit_requested = bool(
         direct_tail_residual_rescue_policy.true_coupled_coarse_explicit_requested

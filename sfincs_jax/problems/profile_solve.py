@@ -164,11 +164,9 @@ from sfincs_jax.problems.profile_diagnostics import (
 from sfincs_jax.problems.profile_sparse_solve import (
     FortranReducedXBlockBackendContext, RequestedSparsePCGMRESBranchContext, SparsePCDirectTailFactorSetupContext,
     SparsePCDirectTailRescuePolicySetupContext, SparsePCGenericBranchSetupContext, SparsePCFactorPreflightRunContext,
-    SparsePCResidualCorrectionStageContext, SparsePCAutoPreflightRetryStageContext,
-    SparsePCTrueCoupledCoarseStageContext, RHS1FullSparseRetryStageContext,
+    SparsePCAutoPreflightRetryStageContext, RHS1FullSparseRetryStageContext,
     build_sparse_pc_direct_tail_factor_setup, build_sparse_pc_direct_tail_rescue_policy_setup,
     build_sparse_pc_generic_branch_setup, run_sparse_pc_auto_preflight_retry_stage, run_sparse_pc_factor_preflight,
-    run_sparse_pc_residual_correction_stage, run_sparse_pc_true_coupled_coarse_stage,
     run_rhs1_full_sparse_retry_stage, solve_fortran_reduced_xblock_backend, try_run_requested_sparse_pc_gmres_branch,
 )
 from sfincs_jax.problems.profile_sparse_direct import (
@@ -570,30 +568,6 @@ from sfincs_jax.operators.profile_sparse_pattern import (
 from sfincs_jax.profiling import _rss_mb, maybe_profiler
 
 
-class _ReusableTrueActionColumnCache:
-    def __init__(self, *, true_matvec, true_matmat, **_kwargs) -> None:
-        self._true_matvec = true_matvec
-        self._true_matmat = true_matmat
-
-    def matvec(self, vector):
-        return self._true_matvec(vector)
-
-    def matmat(self, matrix):
-        return self._true_matmat(matrix)
-
-    def metadata(self) -> dict[str, object]:
-        return {"enabled": False, "stored_columns": 0, "extracted_research_path": True}
-
-
-def _rhs1_additive_rescue_nbytes(_factor_bundle: object, max_additional_mb: float) -> int:
-    return int(max(0.0, float(max_additional_mb)) * 1024.0 * 1024.0)
-
-
-def _parse_true_operator_window_specs(_spec: str, *, layout: RHS1BlockLayout) -> tuple[tuple[int, int, int], ...]:
-    del _spec, layout
-    return ()
-
-
 def _rhs1_active_reduced_residual_diagnostics(
     *,
     residual: object,
@@ -609,21 +583,6 @@ def _rhs1_active_reduced_residual_diagnostics(
         "max_abs": float(np.max(np.abs(residual_np))) if residual_np.size else 0.0,
         "extracted_research_path": True,
     }
-
-
-def _true_operator_rescue_extracted_stub(*_args, **_kwargs) -> None:
-    return None
-
-
-(
-    _try_build_residual_coarse_host_sparse_preconditioner,
-    _try_build_residual_window_host_sparse_preconditioner,
-    _try_build_true_operator_active_block_lsq_preconditioner,
-    _try_build_true_operator_active_residual_block_lsq_preconditioner,
-    _try_build_true_operator_active_submatrix_preconditioner,
-    _try_build_true_operator_coupled_coarse_lsq_preconditioner,
-    _try_build_true_operator_residual_window_lsq_preconditioner,
-) = (_true_operator_rescue_extracted_stub,) * 7
 
 
 _rhs1_xblock_precondition_side = _rhs1_xblock_policy.rhs1_xblock_precondition_side

@@ -1820,8 +1820,6 @@ def test_sparse_pc_direct_tail_rescue_policy_setup_defaults_without_support_pref
             true_matvec=lambda vec: vec,
             support_mode_selector=lambda **_kwargs: None,
             structured_factor_bundle_factory=lambda **_kwargs: None,
-            layout_from_operator=lambda _op: None,
-            parse_true_operator_window_specs=lambda *_args, **_kwargs: (),
         )
     )
 
@@ -1891,8 +1889,6 @@ def test_sparse_pc_direct_tail_rescue_policy_setup_promotes_support_mode(monkeyp
             true_matvec=lambda vec: vec,
             support_mode_selector=lambda **_kwargs: None,
             structured_factor_bundle_factory=lambda **_kwargs: None,
-            layout_from_operator=lambda _op: None,
-            parse_true_operator_window_specs=lambda *_args, **_kwargs: (),
         )
     )
 
@@ -1903,7 +1899,7 @@ def test_sparse_pc_direct_tail_rescue_policy_setup_promotes_support_mode(monkeyp
     assert any("support-mode preflight selected" in message for message in emits)
 
 
-def test_sparse_pc_direct_tail_rescue_policy_setup_reports_support_failure_and_bad_window_spec(
+def test_sparse_pc_direct_tail_rescue_policy_setup_reports_support_failure(
     monkeypatch,
 ) -> None:
     factor = SimpleNamespace(kind="active_fortran_v3_reduced_lu")
@@ -1924,7 +1920,6 @@ def test_sparse_pc_direct_tail_rescue_policy_setup_reports_support_failure_and_b
         sparse_pc_module.SparsePCDirectTailRescuePolicySetupContext(
             env={
                 "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_PREFLIGHT": "1",
-                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_SPEC": "bad-window",
             },
             op=SimpleNamespace(),
             rhs_dtype=jnp.float64,
@@ -1949,10 +1944,6 @@ def test_sparse_pc_direct_tail_rescue_policy_setup_reports_support_failure_and_b
             true_matvec=lambda vec: vec,
             support_mode_selector=lambda **_kwargs: None,
             structured_factor_bundle_factory=lambda **_kwargs: None,
-            layout_from_operator=lambda _op: object(),
-            parse_true_operator_window_specs=lambda *_args, **_kwargs: (_ for _ in ()).throw(
-                ValueError("bad spec")
-            ),
         )
     )
 
@@ -1964,7 +1955,6 @@ def test_sparse_pc_direct_tail_rescue_policy_setup_reports_support_failure_and_b
     assert result.direct_tail_structured_pc_reason == "initial"
     assert result.direct_tail_structured_pc_metadata == {"kind": "active_dense"}
     assert any("support-mode preflight failed" in message for message in emits)
-    assert any("skipped explicit specs" in message for message in emits)
 
 
 def test_sparse_minimum_norm_lsqr_and_host_direct_residual_fallback() -> None:

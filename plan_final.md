@@ -18,14 +18,14 @@ current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Latest audited code-change head: `3108f352+qi-diagnostics`; last green CI evidence: `96fb2677`.
+- Latest audited code-change head: `e5a3cf04+direct-tail-rescue`; last green CI evidence: `96fb2677`.
   Exact aggregate coverage from that CI was 91.753% (`92%`).
 - Package layout is shallow, but the branch is too large: 114 tracked Python
-  source files and about 140.9k tracked source lines. Largest complexity owners remain
+  source files and about 140.5k tracked source lines. Largest complexity owners remain
   `problems/`, `solvers/`, RHSMode-1/QI/preconditioner infrastructure, and
   compatibility layers around those paths.
 - Non-package Python volume is still too high: `tests/` has 313 tracked Python
-  files and about 126.8k lines, `examples/` has 122 tracked Python files, and
+  files and about 126.7k lines, `examples/` has 122 tracked Python files, and
   `scripts/` has 12 tracked Python files.
   Top-level `benchmarks/` is removed from the active tracked tree; compact
   Fortran-v3 references live in `tests/fixtures/fortran_v3_reference_fixture.json`.
@@ -40,14 +40,14 @@ current, transport coefficients, plotting, and optimization.
 
 | Lane | Status | Completion | Definition of done |
 | --- | --- | ---: | --- |
-| Line-by-line audit | Active | 37% | Every retained file/function/line has a core reason, a caller, and a test/doc owner; everything else is extracted or deleted. |
-| Core-main slimming | Active | 52% | Main keeps only stable, parity-clean, runtime-acceptable solvers and public APIs; research code is outside core. |
-| Source simplification | Active | 52% | Package moves toward <=50 source files and <=50k lines, with a 10x reduction as stretch if functionality permits. |
+| Line-by-line audit | Active | 38% | Every retained file/function/line has a core reason, a caller, and a test/doc owner; everything else is extracted or deleted. |
+| Core-main slimming | Active | 53% | Main keeps only stable, parity-clean, runtime-acceptable solvers and public APIs; research code is outside core. |
+| Source simplification | Active | 53% | Package moves toward <=50 source files and <=50k lines, with a 10x reduction as stretch if functionality permits. |
 | Examples/tests/scripts cleanup | Active | 77% | Examples are <=10 curated workflows plus Fortran-v3 references; tests are smaller, organized, and >=95% coverage; scripts are removed or promoted; benchmarks are gone. |
 | Parity/performance evidence | Active | 70% | Supported examples rerun against SFINCS Fortran v3 with runtime/RSS/bootstrap evidence; unsupported research lanes are not marketed. |
 | Docs/readme regeneration | Active | 80% | README/docs describe only the stable core plus explicit external research PR lanes. |
 
-Overall readiness under this stricter core-slim goal is about 81-84%.
+Overall readiness under this stricter core-slim goal is about 82-85%.
 
 ## Concrete Code-Audit Rules
 Default action for every line is removal. Retain a line only with one of three

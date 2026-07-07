@@ -1667,18 +1667,6 @@ def test_fortran_reduced_pc_gmres_direct_tail_active_native_stack_production_ali
         "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_MIN_SIZE",
         "1",
     )
-    true_coupled_called = False
-
-    def _unexpected_true_coupled_builder(*_args, **_kwargs):
-        nonlocal true_coupled_called
-        true_coupled_called = True
-        raise AssertionError("native-stack true-coupled auto rescue should be opt-in")
-
-    monkeypatch.setattr(
-        profile_solve_module,
-        "_try_build_true_operator_coupled_coarse_lsq_preconditioner",
-        _unexpected_true_coupled_builder,
-    )
     messages: list[str] = []
 
     try:
@@ -1698,7 +1686,6 @@ def test_fortran_reduced_pc_gmres_direct_tail_active_native_stack_production_ali
         "structured preconditioner selected kind=active_fortran_v3_reduced_native_stack" in msg
         for msg in messages
     )
-    assert true_coupled_called is False
 
 
 def test_fortran_reduced_direct_tail_structured_pc_preflight_can_fail_fast(monkeypatch) -> None:
