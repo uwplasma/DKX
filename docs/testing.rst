@@ -843,37 +843,13 @@ For the current benchmark/performance state, see :doc:`performance` and
 :doc:`parallelism`. For the external validation story, see :doc:`fortran_comparison`.
 For the manuscript-facing literature/figure lanes, see :doc:`validation_matrix`.
 
-Optional ecosystem gates
-------------------------
+Optional ecosystem research lanes
+---------------------------------
 
-External JAX ecosystem libraries are evaluated through benchmark gates before they are
-allowed into production code. The current bounded examples are:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_optional_lineax_implicit_solve.py --backend all --suite all
-   python examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py --backend all
-
-The Lineax gate always benchmarks the in-tree implicit solve and only runs the Lineax branch
-when ``lineax`` is installed. The associated test
-``tests/test_optional_lineax_implicit_gate.py`` verifies the deterministic
-nonsymmetric stress system, the tiny real scheme-5 SFINCS implicit-diff lane, the
-repeated-RHS reuse lane on that same tiny operator, and clean skip behavior when Lineax
-is absent.
-
-The measured conclusion from the current local Lineax run is intentionally conservative:
-the synthetic system is faster and residual-clean with ``lineax``, but the tiny real
-matrix-free SFINCS operator still returns Lineax failure statuses despite tiny residuals,
-so the in-tree implicit solve remains the only admissible production path. The summary
-gate records these as ``residual_clean_status_mismatch_rows`` and keeps the adoption
-decision at ``do_not_promote_lineax_status_mismatch`` for real SFINCS rows.
-
-The Equinox/JAXopt gate is a separate objective-wrapper check on a real differentiable
-``geometryScheme=4`` harmonic-fit problem. Its associated test
-``tests/test_optional_eqx_jaxopt_scheme4_gate.py`` verifies deterministic problem
-construction, directional-derivative agreement for an ``equinox.Module`` wrapper,
-the opt-in JAXopt gradient-descent row when that package is installed, JSON
-output, and clean skip behavior when either optional package is absent. Default
-CI installs ``equinox`` but not ``jaxopt`` so the maintained wrapper path and the
-historical JAXopt skip path are both exercised without making JAXopt a release
-dependency.
+External JAX ecosystem libraries are not production dependencies. Lineax,
+Equinox-wrapper, and JAXopt benchmark drivers are preserved as research-lane
+material until they satisfy the accuracy, runtime, memory, differentiability, and
+dependency-policy gates. Stable tests instead exercise the retained in-tree
+paths directly: implicit solve gradients, full-system residual JVPs,
+sensitivity checks, optimization proxies, and VMEC/Boozer geometry proxy
+gradients.
