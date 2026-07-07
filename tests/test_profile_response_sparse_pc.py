@@ -179,29 +179,16 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     SparseXBlockRescueAcceptanceContext,
     SparseXBlockRescueBuildContext,
     SparseXBlockRescueSolveContext,
-    XBlockAugmentedKrylovBasisContext,
-    XBlockAugmentedKrylovBasisResult,
-    XBlockAugmentedKrylovStageContext,
-    XBlockAugmentedKrylovStageResult,
-    XBlockDeviceKrylovState,
     XBlockFirstKrylovAttemptContext,
     XBlockFirstKrylovAttemptResult,
-    XBlockFirstKrylovSolveStateContext,
     XBlockSideProbeStageContext,
     XBlockSideProbeStageResult,
     XBlockGMRESFallbackDecision,
     XBlockGMRESFallbackContext,
     XBlockGMRESFallbackResult,
     XBlockGlobalCouplingStageContext,
-    XBlockKrylovProgressCallbacks,
-    XBlockKrylovProgressCallbacksContext,
     XBlockKrylovControlSetup,
     XBlockKrylovControlSetupContext,
-    XBlockKrylovSolveStageContext,
-    XBlockKrylovSolveStageResult,
-    XBlockKrylovSolveState,
-    XBlockKrylovSolveSpaceContext,
-    XBlockKrylovReport,
     XBlockMomentSchurStageContext,
     XBlockPostKrylovCompletionContext,
     XBlockPostKrylovCompletionResult,
@@ -222,7 +209,6 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     XBlockTwoLevelStageContext,
     XBlockAssembledPreflightError,
     apply_xblock_global_coupling_stage,
-    apply_xblock_augmented_krylov_stage,
     apply_xblock_moment_schur_stage,
     apply_xblock_probe_coarse_stage,
     apply_xblock_side_probe_stage,
@@ -236,7 +222,6 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     build_xblock_assembled_matvec_setup,
     build_xblock_assembled_operator_if_requested,
     build_xblock_assembled_operator_preflight_setup,
-    build_xblock_krylov_progress_callbacks,
     build_xblock_krylov_matvec_setup,
     build_xblock_local_preconditioner,
     emit_xblock_sparse_pc_completion_from_solve_state,
@@ -259,28 +244,19 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     resolve_xblock_sparse_pc_side_policy_setup,
     resolve_xblock_two_level_policy_setup,
     complete_xblock_post_krylov_stage,
-    prepare_xblock_augmented_krylov_basis,
-    prepare_xblock_krylov_solve_space,
     run_xblock_first_krylov_attempt,
-    run_xblock_krylov_solve_stage,
     run_fp_xblock_global_correction_stage,
     run_fp_xblock_highx_residual_correction_stage,
     run_sparse_sxblock_rescue_stage,
     run_sparse_xblock_rescue_solve_stage,
     run_xblock_gmres_fallback_if_needed,
     run_xblock_post_solve_corrections,
-    xblock_device_krylov_state,
-    xblock_device_cycle_progress_message,
-    xblock_host_krylov_progress_message,
     xblock_sparse_pc_final_metadata_solve_scope_keys,
     xblock_sparse_pc_final_metadata_solve_state_keys,
     xblock_sparse_pc_final_metadata_state_from_context,
     xblock_sparse_pc_final_metadata_state_from_solve_scope,
-    xblock_krylov_state_from_first_attempt,
-    xblock_krylov_state_from_gmres_fallback,
     xblock_sparse_pc_completion_message,
     xblock_gmres_fallback_decision,
-    xblock_krylov_report,
     xblock_physical_solution_and_residual,
     xblock_sparse_pc_final_payload,
     xblock_sparse_pc_work_estimates,
@@ -356,10 +332,6 @@ def test_sparse_xblock_module_exposes_canonical_public_contract() -> None:
         "XBlockKrylovSolveStageResult",
         "XBlockKrylovSolveSpaceContext",
         "XBlockKrylovSolveSpace",
-        "XBlockAugmentedKrylovBasisContext",
-        "XBlockAugmentedKrylovBasisResult",
-        "XBlockAugmentedKrylovStageContext",
-        "XBlockAugmentedKrylovStageResult",
         "XBlockSparsePCWorkEstimates",
         "XBlockPhysicalResidual",
         "build_sparse_xblock_rescue_preconditioner",
@@ -384,8 +356,6 @@ def test_sparse_xblock_module_exposes_canonical_public_contract() -> None:
         "build_xblock_krylov_progress_callbacks",
         "xblock_device_krylov_state",
         "prepare_xblock_krylov_solve_space",
-        "prepare_xblock_augmented_krylov_basis",
-        "apply_xblock_augmented_krylov_stage",
         "run_xblock_first_krylov_attempt",
         "xblock_gmres_fallback_decision",
         "run_xblock_gmres_fallback_if_needed",
@@ -2528,601 +2498,6 @@ def _qi_device_state(*, rank: int = 2) -> SimpleNamespace:
     )
 
 
-def _augmented_krylov_context(**overrides: object) -> XBlockAugmentedKrylovBasisContext:
-    values: dict[str, object] = {
-        "krylov_method": "fgmres_jax",
-        "qi_device_state": _qi_device_state(),
-        "seed_available": False,
-        "seed_rank": 0,
-        "seed_basis": None,
-        "seed_operator_on_basis": None,
-        "row_equilibration_built": False,
-        "col_equilibration_built": False,
-        "row_scale": None,
-        "inv_col_scale": None,
-        "precondition_side": "right",
-        "solve_preconditioner": None,
-    }
-    values.update(overrides)
-    return XBlockAugmentedKrylovBasisContext(**values)  # type: ignore[arg-type]
-
-
-def test_prepare_xblock_augmented_krylov_basis_rejects_missing_state() -> None:
-    result = prepare_xblock_augmented_krylov_basis(
-        _augmented_krylov_context(
-            qi_device_state=None,
-            seed_available=True,
-            seed_rank=1,
-            seed_basis=jnp.ones((2, 1), dtype=jnp.float64),
-            seed_operator_on_basis=jnp.ones((2, 1), dtype=jnp.float64),
-        )
-    )
-
-    assert isinstance(result, XBlockAugmentedKrylovBasisResult)
-    assert not result.used
-    assert not result.seed_used
-    assert result.rank == 0
-    assert result.reason == "disabled_missing_qi_device_state"
-    assert result.basis is None
-    assert result.operator_on_basis is None
-
-
-def test_prepare_xblock_augmented_krylov_basis_rejects_non_jax_method() -> None:
-    result = prepare_xblock_augmented_krylov_basis(
-        _augmented_krylov_context(krylov_method="lgmres")
-    )
-
-    assert not result.used
-    assert result.reason == "disabled_non_jax_fgmres_method"
-
-
-def test_prepare_xblock_augmented_krylov_basis_rejects_empty_state_without_seed() -> None:
-    result = prepare_xblock_augmented_krylov_basis(
-        _augmented_krylov_context(qi_device_state=_qi_device_state(rank=0))
-    )
-
-    assert not result.used
-    assert result.reason == "disabled_empty_qi_device_basis"
-
-
-def test_prepare_xblock_augmented_krylov_basis_uses_state_basis() -> None:
-    result = prepare_xblock_augmented_krylov_basis(_augmented_krylov_context())
-
-    assert result.used
-    assert not result.seed_used
-    assert result.rank == 2
-    assert result.reason == "enabled"
-    np.testing.assert_allclose(np.asarray(result.basis), np.eye(2))
-    np.testing.assert_allclose(np.asarray(result.operator_on_basis), np.diag([2.0, 3.0]))
-
-
-def test_prepare_xblock_augmented_krylov_basis_prefers_seed_and_scales_left_preconditioned_action() -> None:
-    seed_basis = jnp.asarray([[10.0, 20.0], [30.0, 40.0]], dtype=jnp.float64)
-    seed_action = jnp.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=jnp.float64)
-    row_scale = jnp.asarray([2.0, 3.0], dtype=jnp.float64)
-    inv_col_scale = jnp.asarray([0.5, 0.25], dtype=jnp.float64)
-
-    def left_preconditioner(v: jnp.ndarray) -> jnp.ndarray:
-        return 2.0 * jnp.asarray(v, dtype=jnp.float64)
-
-    result = prepare_xblock_augmented_krylov_basis(
-        _augmented_krylov_context(
-            seed_available=True,
-            seed_rank=2,
-            seed_basis=seed_basis,
-            seed_operator_on_basis=seed_action,
-            row_equilibration_built=True,
-            col_equilibration_built=True,
-            row_scale=row_scale,
-            inv_col_scale=inv_col_scale,
-            precondition_side="left",
-            solve_preconditioner=left_preconditioner,
-        )
-    )
-
-    assert result.used
-    assert result.seed_used
-    assert result.rank == 2
-    assert result.reason == "enabled_from_augmented_seed"
-    np.testing.assert_allclose(
-        np.asarray(result.basis),
-        np.asarray(inv_col_scale.reshape((-1, 1)) * seed_basis),
-    )
-    np.testing.assert_allclose(
-        np.asarray(result.operator_on_basis),
-        np.asarray(2.0 * row_scale.reshape((-1, 1)) * seed_action),
-    )
-
-
-def _augmented_krylov_stage_context(
-    **overrides: object,
-) -> XBlockAugmentedKrylovStageContext:
-    values: dict[str, object] = {
-        "requested": True,
-        "krylov_method": "fgmres_jax",
-        "qi_device_state": _qi_device_state(),
-        "seed_available": False,
-        "seed_rank": 0,
-        "seed_basis": None,
-        "seed_operator_on_basis": None,
-        "seed_used": False,
-        "row_equilibration_built": False,
-        "col_equilibration_built": False,
-        "row_scale": None,
-        "inv_col_scale": None,
-        "precondition_side": "right",
-        "solve_preconditioner": None,
-        "mode": "combined",
-        "metadata": {"existing": True},
-        "emit": None,
-        "basis_builder": prepare_xblock_augmented_krylov_basis,
-    }
-    values.update(overrides)
-    return XBlockAugmentedKrylovStageContext(**values)  # type: ignore[arg-type]
-
-
-def test_apply_xblock_augmented_krylov_stage_skips_when_not_requested() -> None:
-    result = apply_xblock_augmented_krylov_stage(
-        _augmented_krylov_stage_context(requested=False, seed_used=True)
-    )
-
-    assert isinstance(result, XBlockAugmentedKrylovStageResult)
-    assert result.used is False
-    assert result.rank == 0
-    assert result.reason is None
-    assert result.seed_used is True
-    assert result.basis is None
-    assert result.operator_on_basis is None
-    assert result.metadata == {"existing": True}
-
-
-def test_apply_xblock_augmented_krylov_stage_updates_metadata_and_emits_success() -> None:
-    emitted: list[tuple[int, str]] = []
-    seed_basis = jnp.asarray([[1.0], [0.0]], dtype=jnp.float64)
-    seed_action = jnp.asarray([[2.0], [0.0]], dtype=jnp.float64)
-
-    result = apply_xblock_augmented_krylov_stage(
-        _augmented_krylov_stage_context(
-            seed_available=True,
-            seed_rank=1,
-            seed_basis=seed_basis,
-            seed_operator_on_basis=seed_action,
-            mode="projected",
-            emit=lambda level, message: emitted.append((level, message)),
-        )
-    )
-
-    assert result.used is True
-    assert result.rank == 1
-    assert result.reason == "enabled_from_augmented_seed"
-    assert result.seed_used is True
-    assert result.metadata["augmented_seed_used"] is True
-    assert result.metadata["augmented_seed_available"] is True
-    np.testing.assert_allclose(np.asarray(result.basis), np.asarray(seed_basis))
-    assert emitted[-1][0] == 0
-    assert "QI augmented Krylov enabled_from_augmented_seed" in emitted[-1][1]
-    assert "mode=projected" in emitted[-1][1]
-
-
-def test_apply_xblock_augmented_krylov_stage_emits_rejection() -> None:
-    emitted: list[tuple[int, str]] = []
-
-    result = apply_xblock_augmented_krylov_stage(
-        _augmented_krylov_stage_context(
-            krylov_method="lgmres",
-            seed_available=False,
-            emit=lambda level, message: emitted.append((level, message)),
-        )
-    )
-
-    assert result.used is False
-    assert result.rank == 0
-    assert result.reason == "disabled_non_jax_fgmres_method"
-    assert result.seed_used is False
-    assert result.metadata["augmented_seed_used"] is False
-    assert result.metadata["augmented_seed_available"] is False
-    assert emitted[-1][0] == 1
-    assert "QI augmented Krylov disabled_non_jax_fgmres_method" in emitted[-1][1]
-
-
-def test_prepare_xblock_krylov_solve_space_unscaled_preserves_callbacks() -> None:
-    rhs = jnp.asarray([1.0, 2.0], dtype=jnp.float64)
-    x0 = jnp.asarray([0.5, 1.5], dtype=jnp.float64)
-
-    solve_space = prepare_xblock_krylov_solve_space(
-        XBlockKrylovSolveSpaceContext(
-            matvec=_identity,
-            rhs=rhs,
-            preconditioner=_identity,
-            x0=x0,
-            precondition_side="right",
-            row_equilibration_built=False,
-            col_equilibration_built=False,
-            row_scale=None,
-            inv_row_scale=None,
-            col_scale=None,
-            inv_col_scale=None,
-        )
-    )
-
-    assert solve_space.matvec is _identity
-    assert solve_space.preconditioner is _identity
-    assert solve_space.x0 is x0
-    assert solve_space.transform_label is None
-    np.testing.assert_allclose(np.asarray(solve_space.rhs), np.asarray(rhs))
-    np.testing.assert_allclose(
-        np.asarray(solve_space.solution_to_physical(jnp.asarray([3.0, 4.0]))),
-        np.asarray([3.0, 4.0]),
-    )
-
-
-def test_prepare_xblock_krylov_solve_space_row_column_scaled() -> None:
-    rhs = jnp.asarray([1.0, 2.0], dtype=jnp.float64)
-    x0 = jnp.asarray([10.0, 20.0], dtype=jnp.float64)
-    row_scale = jnp.asarray([2.0, 3.0], dtype=jnp.float64)
-    inv_row_scale = 1.0 / row_scale
-    col_scale = jnp.asarray([5.0, 7.0], dtype=jnp.float64)
-    inv_col_scale = 1.0 / col_scale
-
-    def matvec(v: jnp.ndarray) -> jnp.ndarray:
-        return 10.0 * jnp.asarray(v, dtype=jnp.float64)
-
-    def preconditioner(v: jnp.ndarray) -> jnp.ndarray:
-        return 4.0 * jnp.asarray(v, dtype=jnp.float64)
-
-    solve_space = prepare_xblock_krylov_solve_space(
-        XBlockKrylovSolveSpaceContext(
-            matvec=matvec,
-            rhs=rhs,
-            preconditioner=preconditioner,
-            x0=x0,
-            precondition_side="right",
-            row_equilibration_built=True,
-            col_equilibration_built=True,
-            row_scale=row_scale,
-            inv_row_scale=inv_row_scale,
-            col_scale=col_scale,
-            inv_col_scale=inv_col_scale,
-        )
-    )
-
-    trial = jnp.asarray([2.0, 3.0], dtype=jnp.float64)
-    residual = jnp.asarray([8.0, 12.0], dtype=jnp.float64)
-    np.testing.assert_allclose(np.asarray(solve_space.rhs), np.asarray(row_scale * rhs))
-    np.testing.assert_allclose(
-        np.asarray(solve_space.matvec(trial)),
-        np.asarray(row_scale * (10.0 * col_scale * trial)),
-    )
-    np.testing.assert_allclose(
-        np.asarray(solve_space.preconditioner(residual)),
-        np.asarray(inv_col_scale * (4.0 * inv_row_scale * residual)),
-    )
-    np.testing.assert_allclose(np.asarray(solve_space.x0), np.asarray(inv_col_scale * x0))
-    np.testing.assert_allclose(
-        np.asarray(solve_space.solution_to_physical(trial)),
-        np.asarray(col_scale * trial),
-    )
-    assert solve_space.transform_label == "row/column"
-
-
-def test_xblock_krylov_report_prefers_device_counters() -> None:
-    assert xblock_krylov_report(
-        device_iterations=7,
-        device_estimated_matvecs=11,
-        history=(1.0, 0.5, 0.25),
-        mv_count=99,
-    ) == XBlockKrylovReport(iterations=7, matvecs=11)
-
-
-def test_xblock_krylov_report_falls_back_to_host_history_and_matvec_count() -> None:
-    assert xblock_krylov_report(
-        device_iterations=None,
-        device_estimated_matvecs=None,
-        history=(1.0, 0.5, 0.25),
-        mv_count=13,
-    ) == XBlockKrylovReport(iterations=3, matvecs=13)
-
-
-def test_xblock_device_cycle_progress_message_formats_ratio_and_elapsed_time() -> None:
-    assert xblock_device_cycle_progress_message(
-        cycle=2,
-        iterations=11,
-        residual_norm=1.5e-4,
-        target=3.0e-5,
-        elapsed_s=12.3456,
-    ) == (
-        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-        "device-cycle cycle=2 iterations=11 residual=1.500000e-04 "
-        "target=3.000000e-05 ratio=5.000000e+00 elapsed_s=12.346"
-    )
-
-
-def test_xblock_host_krylov_progress_message_formats_residual_and_elapsed_time() -> None:
-    assert xblock_host_krylov_progress_message(
-        iteration=20,
-        residual_norm=4.25e-7,
-        elapsed_s=8.0,
-    ) == (
-        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-        "iters=20 ksp_residual=4.250000e-07 elapsed_s=8.000"
-    )
-
-
-def test_build_xblock_krylov_progress_callbacks_emits_device_cycle_progress() -> None:
-    emitted: list[tuple[int, str]] = []
-
-    callbacks = build_xblock_krylov_progress_callbacks(
-        XBlockKrylovProgressCallbacksContext(
-            emit=lambda level, message: emitted.append((level, message)),
-            elapsed_s=lambda: 12.3456,
-            progress_every=10,
-        )
-    )
-
-    callbacks.device_cycle_progress_callback(
-        cycle=2,
-        iterations=11,
-        residual_norm=1.5e-4,
-        target=3.0e-5,
-    )
-
-    assert isinstance(callbacks, XBlockKrylovProgressCallbacks)
-    assert emitted == [
-        (
-            0,
-            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-            "device-cycle cycle=2 iterations=11 residual=1.500000e-04 "
-            "target=3.000000e-05 ratio=5.000000e+00 elapsed_s=12.346",
-        )
-    ]
-
-
-def test_build_xblock_krylov_progress_callbacks_emits_host_only_on_stride() -> None:
-    emitted: list[tuple[int, str]] = []
-
-    callbacks = build_xblock_krylov_progress_callbacks(
-        XBlockKrylovProgressCallbacksContext(
-            emit=lambda level, message: emitted.append((level, message)),
-            elapsed_s=lambda: 8.0,
-            progress_every=5,
-        )
-    )
-
-    callbacks.host_progress_callback(4, 4.25e-7)
-    callbacks.host_progress_callback(10, 4.25e-7)
-
-    assert emitted == [
-        (
-            1,
-            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-            "iters=10 ksp_residual=4.250000e-07 elapsed_s=8.000",
-        )
-    ]
-
-
-def test_build_xblock_krylov_progress_callbacks_noops_when_progress_disabled() -> None:
-    callbacks_without_emit = build_xblock_krylov_progress_callbacks(
-        XBlockKrylovProgressCallbacksContext(
-            emit=None,
-            elapsed_s=lambda: 0.0,
-            progress_every=5,
-        )
-    )
-    callbacks_without_emit.device_cycle_progress_callback(
-        cycle=1,
-        iterations=2,
-        residual_norm=1.0,
-        target=0.5,
-    )
-    callbacks_without_emit.host_progress_callback(5, 1.0)
-
-    emitted: list[tuple[int, str]] = []
-    callbacks_without_stride = build_xblock_krylov_progress_callbacks(
-        XBlockKrylovProgressCallbacksContext(
-            emit=lambda level, message: emitted.append((level, message)),
-            elapsed_s=lambda: 0.0,
-            progress_every=0,
-        )
-    )
-    callbacks_without_stride.host_progress_callback(5, 1.0)
-
-    assert emitted == []
-
-
-def test_xblock_krylov_state_from_first_attempt_measures_physical_residual() -> None:
-    first_attempt = XBlockFirstKrylovAttemptResult(
-        x=np.asarray([1.0, 2.0], dtype=np.float64),
-        residual_norm=99.0,
-        history=(3.0, 1.0),
-        device_iterations=4,
-        device_estimated_matvecs=8,
-    )
-
-    state = xblock_krylov_state_from_first_attempt(
-        XBlockFirstKrylovSolveStateContext(
-            krylov_method="fgmres_jax",
-            first_attempt=first_attempt,
-            solve_s=1.25,
-            solution_to_physical=lambda v: 2.0 * jnp.asarray(v, dtype=jnp.float64),
-            physical_rhs=jnp.asarray([1.0, 1.0], dtype=jnp.float64),
-            physical_matvec=lambda v: jnp.asarray(v, dtype=jnp.float64),
-            mv_count=123,
-        )
-    )
-
-    assert isinstance(state, XBlockKrylovSolveState)
-    assert state.krylov_method == "fgmres_jax"
-    np.testing.assert_allclose(state.x_solution, np.asarray([1.0, 2.0]))
-    np.testing.assert_allclose(state.x_physical, np.asarray([2.0, 4.0]))
-    assert state.residual_norm == pytest.approx(np.linalg.norm(np.asarray([1.0, 3.0])))
-    assert state.history == (3.0, 1.0)
-    assert state.solve_s == pytest.approx(1.25)
-    assert state.device_iterations == 4
-    assert state.device_estimated_matvecs == 8
-    assert state.reported_iterations == 4
-    assert state.reported_matvecs == 8
-    assert not state.fallback_started_from_candidate
-    assert not state.fallback_candidate_improved_rhs
-
-
-def test_xblock_krylov_state_from_gmres_fallback_preserves_fallback_flags_and_host_report() -> None:
-    fallback = XBlockGMRESFallbackResult(
-        krylov_method="gmres",
-        x_solution=np.asarray([3.0, 4.0], dtype=np.float64),
-        x_physical=np.asarray([6.0, 8.0], dtype=np.float64),
-        residual_norm=0.125,
-        history=(1.0, 0.5, 0.125),
-        solve_s=2.5,
-        device_iterations=None,
-        device_estimated_matvecs=None,
-        fallback_started_from_candidate=True,
-        fallback_candidate_improved_rhs=True,
-    )
-
-    state = xblock_krylov_state_from_gmres_fallback(fallback=fallback, mv_count=17)
-
-    assert state.krylov_method == "gmres"
-    np.testing.assert_allclose(state.x_solution, np.asarray([3.0, 4.0]))
-    np.testing.assert_allclose(state.x_physical, np.asarray([6.0, 8.0]))
-    assert state.residual_norm == pytest.approx(0.125)
-    assert state.history == (1.0, 0.5, 0.125)
-    assert state.solve_s == pytest.approx(2.5)
-    assert state.reported_iterations == 3
-    assert state.reported_matvecs == 17
-    assert state.fallback_started_from_candidate
-    assert state.fallback_candidate_improved_rhs
-
-
-def test_run_xblock_krylov_solve_stage_preserves_candidate_when_fallback_disabled() -> None:
-    def gmres_solver(**_kwargs: object) -> tuple[np.ndarray, float, list[float]]:
-        return np.asarray([1.0, 2.0], dtype=np.float64), 0.99, [1.0, 0.99]
-
-    stage = run_xblock_krylov_solve_stage(
-        XBlockKrylovSolveStageContext(
-            first_attempt=_first_krylov_context(
-                gmres_solver=gmres_solver,
-                mv_count=12,
-            ),
-            solve_start_s=4.0,
-            side_probe_s=1.0,
-            probe_coarse_s=0.5,
-            elapsed_s=lambda: 10.0,
-            solution_to_physical=lambda v: jnp.asarray(v, dtype=jnp.float64),
-            physical_rhs=jnp.asarray([1.0, 2.0], dtype=jnp.float64),
-            physical_matvec=lambda v: jnp.asarray(v, dtype=jnp.float64),
-            target=1e-8,
-            rhs_norm=2.0,
-            fallback_enabled=False,
-            progress_callback=None,
-            emit=None,
-            initial_guess_builder=lambda **_kwargs: (None, False, False),
-        )
-    )
-
-    assert isinstance(stage, XBlockKrylovSolveStageResult)
-    assert stage.final_state is not stage.candidate_state
-    assert stage.candidate_state.krylov_method == "gmres"
-    assert stage.final_state.krylov_method == "gmres"
-    np.testing.assert_allclose(stage.final_state.x_physical, np.asarray([1.0, 2.0]))
-    assert stage.final_state.residual_norm == pytest.approx(0.0)
-    assert stage.final_state.solve_s == pytest.approx(7.5)
-    assert stage.final_state.reported_iterations == 2
-    assert stage.final_state.reported_matvecs == 12
-    assert not stage.final_state.fallback_started_from_candidate
-    assert not stage.final_state.fallback_candidate_improved_rhs
-
-
-def test_run_xblock_krylov_solve_stage_runs_fallback_and_keeps_candidate_report() -> None:
-    emitted: list[tuple[int, str]] = []
-    progress: list[tuple[int, float]] = []
-
-    def bicgstab_solver(**_kwargs: object) -> tuple[np.ndarray, float, list[float]]:
-        return np.asarray([0.0, 0.0], dtype=np.float64), 2.0, [2.0]
-
-    def gmres_solver(**kwargs: object) -> tuple[np.ndarray, float, list[float]]:
-        callback = kwargs["progress_callback"]
-        assert callback is not None
-        callback(3, 0.25)
-        return np.asarray([1.0, 1.0], dtype=np.float64), 0.25, [2.0, 0.25]
-
-    stage = run_xblock_krylov_solve_stage(
-        XBlockKrylovSolveStageContext(
-            first_attempt=_first_krylov_context(
-                krylov_method="bicgstab",
-                rhs=jnp.asarray([1.0, 1.0], dtype=jnp.float64),
-                bicgstab_solver=bicgstab_solver,
-                gmres_solver=gmres_solver,
-                mv_count=5,
-            ),
-            solve_start_s=0.0,
-            side_probe_s=0.0,
-            probe_coarse_s=0.0,
-            elapsed_s=lambda: 3.0,
-            solution_to_physical=lambda v: jnp.asarray(v, dtype=jnp.float64),
-            physical_rhs=jnp.asarray([1.0, 1.0], dtype=jnp.float64),
-            physical_matvec=lambda v: jnp.asarray(v, dtype=jnp.float64),
-            target=0.5,
-            rhs_norm=2.0,
-            fallback_enabled=True,
-            progress_callback=lambda iteration, residual: progress.append(
-                (iteration, residual)
-            ),
-            emit=lambda level, message: emitted.append((level, message)),
-            initial_guess_builder=lambda **_kwargs: (
-                jnp.asarray([0.0, 0.0], dtype=jnp.float64),
-                True,
-                False,
-            ),
-        )
-    )
-
-    assert stage.candidate_state.krylov_method == "bicgstab"
-    assert stage.candidate_state.residual_norm == pytest.approx(np.sqrt(2.0))
-    assert stage.candidate_state.reported_iterations == 1
-    assert stage.final_state.krylov_method == "gmres"
-    np.testing.assert_allclose(stage.final_state.x_physical, np.asarray([1.0, 1.0]))
-    assert stage.final_state.residual_norm == pytest.approx(0.0)
-    assert stage.final_state.reported_iterations == 2
-    assert stage.final_state.reported_matvecs == 5
-    assert stage.final_state.fallback_started_from_candidate
-    assert not stage.final_state.fallback_candidate_improved_rhs
-    assert progress == [(3, 0.25)]
-    assert emitted
-    assert "falling back to gmres" in emitted[0][1]
-
-
-def test_xblock_device_krylov_state_transfers_finite_history() -> None:
-    result = SimpleNamespace(
-        x=jnp.asarray([1.0, 2.0], dtype=jnp.float64),
-        residual_norm=jnp.asarray(0.125, dtype=jnp.float64),
-        residual_history=jnp.asarray([1.0, np.nan, 0.25, 0.125], dtype=jnp.float64),
-        n_iterations=jnp.asarray(3),
-    )
-
-    state = xblock_device_krylov_state(result)
-
-    assert isinstance(state, XBlockDeviceKrylovState)
-    np.testing.assert_allclose(state.x, np.asarray([1.0, 2.0]))
-    assert state.residual_norm == pytest.approx(0.125)
-    assert state.history == (1.0, 0.25, 0.125)
-    assert state.n_iterations == 3
-    assert state.estimated_matvecs is None
-
-
-def test_xblock_device_krylov_state_estimates_cycle_matvecs() -> None:
-    result = SimpleNamespace(
-        x=jnp.asarray([0.0], dtype=jnp.float64),
-        residual_norm=jnp.asarray(0.0, dtype=jnp.float64),
-        residual_history=jnp.asarray([1.0, 0.5, 0.25], dtype=jnp.float64),
-        n_iterations=jnp.asarray(2),
-    )
-
-    state = xblock_device_krylov_state(result, estimated_matvecs_floor=9)
-
-    assert state.history == (1.0, 0.5, 0.25)
-    assert state.estimated_matvecs == 9
-
-
 def _krylov_control_context(
     *,
     env: dict[str, str] | None = None,
@@ -3152,8 +2527,6 @@ def test_resolve_xblock_krylov_control_setup_defaults_emit_solve_start() -> None
     assert setup.device_fgmres_jit is False
     assert setup.device_fgmres_jit_mode == "cycle"
     assert setup.device_fgmres_jit_outer_k == 0
-    assert setup.qi_device_augmented_krylov_requested is False
-    assert setup.qi_device_augmented_krylov_mode == "combined"
     assert len(emitted) == 1
     assert "solve start method=gmres restart=8 maxiter=13" in emitted[0][1]
 
@@ -3169,8 +2542,6 @@ def test_resolve_xblock_krylov_control_setup_normalizes_modes_and_emits_device_l
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT": "1",
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE": "bad-mode",
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K": "5",
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV": "1",
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE": "projected",
             },
         )
     )
@@ -3179,8 +2550,6 @@ def test_resolve_xblock_krylov_control_setup_normalizes_modes_and_emits_device_l
     assert setup.device_fgmres_jit is True
     assert setup.device_fgmres_jit_mode == "cycle"
     assert setup.device_fgmres_jit_outer_k == 5
-    assert setup.qi_device_augmented_krylov_requested is True
-    assert setup.qi_device_augmented_krylov_mode == "projected"
     messages = [message for _, message in emitted]
     assert any("FGMRES cycle-boundary synchronization enabled" in m for m in messages)
     assert any("JIT-compiled device FGMRES enabled mode=cycle" in m for m in messages)
@@ -3194,13 +2563,11 @@ def test_resolve_xblock_krylov_control_setup_tfqmr_note_and_clamps_interval() ->
             emitted=emitted,
             env={
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TFQMR_REPLACE_INTERVAL": "-4",
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE": "invalid",
             },
         )
     )
 
     assert setup.tfqmr_replacement_interval == 0
-    assert setup.qi_device_augmented_krylov_mode == "combined"
     assert "tfqmr_replacement_interval=0" in emitted[0][1]
 
 

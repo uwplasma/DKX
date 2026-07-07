@@ -2079,15 +2079,17 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
                         f"constraint1 moment-Schur seed failed ({type(exc).__name__}: {exc})",
                     )
         qi_disabled_scope = xblock_disabled_qi_diagnostic_scope()
-        qi_device_state_for_augmented_krylov = None
-        qi_device_augmented_seed_basis_for_krylov = None
-        qi_device_augmented_seed_action_for_krylov = None
-        qi_device_augmented_seed_available = False
-        qi_device_augmented_seed_used = False
-        qi_device_augmented_seed_rank = 0
         qi_device_preconditioner_metadata = dict(
             qi_disabled_scope["qi_device_preconditioner_metadata"]
         )
+        qi_device_augmented_krylov_requested = False
+        qi_device_augmented_krylov_mode = "disabled"
+        qi_device_augmented_krylov_used = False
+        qi_device_augmented_krylov_rank = 0
+        qi_device_augmented_krylov_reason = "extracted_qi_device_research"
+        qi_device_augmented_seed_available = False
+        qi_device_augmented_seed_used = False
+        qi_device_augmented_seed_rank = 0
         xblock_side_probe_controls = _rhs1_xblock_policy.rhs1_xblock_side_probe_controls_from_env(
             env=os.environ,
             explicit_side_env_value=side_env,
@@ -2287,12 +2289,6 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
         xblock_device_fgmres_jit_outer_k = int(
             xblock_krylov_controls.device_fgmres_jit_outer_k
         )
-        qi_device_augmented_krylov_requested = bool(
-            xblock_krylov_controls.qi_device_augmented_krylov_requested
-        )
-        qi_device_augmented_krylov_mode = (
-            xblock_krylov_controls.qi_device_augmented_krylov_mode
-        )
         solve_matvec = _mv_xblock_krylov
         solve_rhs = xblock_rhs
         solve_preconditioner = precond_xblock_krylov if precondition_side != "none" else None
@@ -2325,37 +2321,6 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
             )
         augmentation_basis_for_solve = None
         operator_on_augmentation_for_solve = None
-        augmented_krylov_stage = apply_xblock_augmented_krylov_stage(
-            XBlockAugmentedKrylovStageContext(
-                requested=bool(qi_device_augmented_krylov_requested),
-                krylov_method=str(xblock_krylov_method),
-                qi_device_state=qi_device_state_for_augmented_krylov,
-                seed_available=bool(qi_device_augmented_seed_available),
-                seed_rank=int(qi_device_augmented_seed_rank),
-                seed_basis=qi_device_augmented_seed_basis_for_krylov,
-                seed_operator_on_basis=qi_device_augmented_seed_action_for_krylov,
-                seed_used=bool(qi_device_augmented_seed_used),
-                row_equilibration_built=bool(xblock_row_equilibration_built),
-                col_equilibration_built=bool(xblock_col_equilibration_built),
-                row_scale=xblock_row_scale_jnp,
-                inv_col_scale=xblock_inv_col_scale_jnp,
-                precondition_side=str(precondition_side),
-                solve_preconditioner=solve_preconditioner,
-                mode=str(qi_device_augmented_krylov_mode),
-                metadata=qi_device_preconditioner_metadata,
-                emit=emit,
-                basis_builder=prepare_xblock_augmented_krylov_basis,
-            )
-        )
-        augmentation_basis_for_solve = augmented_krylov_stage.basis
-        operator_on_augmentation_for_solve = (
-            augmented_krylov_stage.operator_on_basis
-        )
-        qi_device_augmented_krylov_used = bool(augmented_krylov_stage.used)
-        qi_device_augmented_krylov_rank = int(augmented_krylov_stage.rank)
-        qi_device_augmented_krylov_reason = augmented_krylov_stage.reason
-        qi_device_augmented_seed_used = bool(augmented_krylov_stage.seed_used)
-        qi_device_preconditioner_metadata = augmented_krylov_stage.metadata
         solve_start_s = sparse_timer.elapsed_s()
         progress_callbacks = build_xblock_krylov_progress_callbacks(
             XBlockKrylovProgressCallbacksContext(
@@ -2455,7 +2420,7 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
                     preconditioner=precond_xblock_krylov,
                     precondition_side=str(precondition_side),
                     post_solve_policy=_read_rhs1_post_solve_correction_policy(),
-                    qi_device_state=qi_device_state_for_augmented_krylov,
+                    qi_device_state=None,
                     coarse_direction_builder=_xblock_coarse_direction_builder,
                     emit=emit,
                     elapsed_s=sparse_timer.elapsed_s,
@@ -5332,8 +5297,6 @@ class XBlockKrylovControlSetup:
     device_fgmres_jit: bool
     device_fgmres_jit_mode: str
     device_fgmres_jit_outer_k: int
-    qi_device_augmented_krylov_requested: bool
-    qi_device_augmented_krylov_mode: str
 
 @dataclass(frozen=True)
 class XBlockKrylovProgressCallbacksContext:
@@ -5433,69 +5396,6 @@ class XBlockKrylovSolveSpace:
     x0: jnp.ndarray | None
     solution_to_physical: ArrayFn
     transform_label: str | None
-
-@dataclass(frozen=True)
-class XBlockAugmentedKrylovBasisContext:
-    """Inputs for preparing a QI augmented Krylov basis in solve coordinates."""
-
-    krylov_method: str
-    qi_device_state: object | None
-    seed_available: bool
-    seed_rank: int
-    seed_basis: jnp.ndarray | None
-    seed_operator_on_basis: jnp.ndarray | None
-    row_equilibration_built: bool
-    col_equilibration_built: bool
-    row_scale: jnp.ndarray | None
-    inv_col_scale: jnp.ndarray | None
-    precondition_side: str
-    solve_preconditioner: ArrayFn | None
-
-@dataclass(frozen=True)
-class XBlockAugmentedKrylovBasisResult:
-    """Prepared QI augmented Krylov basis and diagnostic state."""
-
-    basis: jnp.ndarray | None
-    operator_on_basis: jnp.ndarray | None
-    used: bool
-    rank: int
-    reason: str
-    seed_used: bool
-
-@dataclass(frozen=True)
-class XBlockAugmentedKrylovStageContext:
-    """Inputs for optional QI augmented-Krylov solve setup and diagnostics."""
-
-    requested: bool
-    krylov_method: str
-    qi_device_state: object | None
-    seed_available: bool
-    seed_rank: int
-    seed_basis: jnp.ndarray | None
-    seed_operator_on_basis: jnp.ndarray | None
-    seed_used: bool
-    row_equilibration_built: bool
-    col_equilibration_built: bool
-    row_scale: jnp.ndarray | None
-    inv_col_scale: jnp.ndarray | None
-    precondition_side: str
-    solve_preconditioner: ArrayFn | None
-    mode: str
-    metadata: Mapping[str, object]
-    emit: EmitFn | None
-    basis_builder: Callable[[XBlockAugmentedKrylovBasisContext], XBlockAugmentedKrylovBasisResult]
-
-@dataclass(frozen=True)
-class XBlockAugmentedKrylovStageResult:
-    """Optional QI augmented-Krylov basis and updated diagnostic metadata."""
-
-    basis: jnp.ndarray | None
-    operator_on_basis: jnp.ndarray | None
-    used: bool
-    rank: int
-    reason: str | None
-    seed_used: bool
-    metadata: dict[str, object]
 
 @dataclass(frozen=True)
 class XBlockSparsePCWorkEstimates:
@@ -6027,20 +5927,6 @@ def resolve_xblock_krylov_control_setup(
         default=0,
         minimum=0,
     )
-    qi_device_augmented_krylov_requested = _env_bool(
-        env,
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV",
-        default=False,
-    )
-    qi_device_augmented_krylov_mode = (
-        _env_value(
-            env,
-            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE",
-        )
-        or "combined"
-    ).lower().replace("-", "_")
-    if qi_device_augmented_krylov_mode not in {"projected", "combined"}:
-        qi_device_augmented_krylov_mode = "combined"
     if (
         context.emit is not None
         and method in {"fgmres_jax", "gmres_jax"}
@@ -6068,10 +5954,6 @@ def resolve_xblock_krylov_control_setup(
         device_fgmres_jit=bool(device_fgmres_jit),
         device_fgmres_jit_mode=str(device_fgmres_jit_mode),
         device_fgmres_jit_outer_k=int(device_fgmres_jit_outer_k),
-        qi_device_augmented_krylov_requested=bool(
-            qi_device_augmented_krylov_requested
-        ),
-        qi_device_augmented_krylov_mode=str(qi_device_augmented_krylov_mode),
     )
 
 def xblock_krylov_state_from_first_attempt(
@@ -6379,147 +6261,6 @@ def prepare_xblock_krylov_solve_space(
         x0=x0,
         solution_to_physical=solution_to_physical,
         transform_label=transform_label,
-    )
-
-def prepare_xblock_augmented_krylov_basis(
-    context: XBlockAugmentedKrylovBasisContext,
-) -> XBlockAugmentedKrylovBasisResult:
-    """Prepare the optional QI augmented Krylov basis for the solve-space operator."""
-
-    seed_available = bool(
-        context.seed_available
-        and context.seed_basis is not None
-        and context.seed_operator_on_basis is not None
-        and int(context.seed_rank) > 0
-    )
-    if context.qi_device_state is None:
-        return XBlockAugmentedKrylovBasisResult(
-            basis=None,
-            operator_on_basis=None,
-            used=False,
-            rank=0,
-            reason="disabled_missing_qi_device_state",
-            seed_used=False,
-        )
-    if str(context.krylov_method) not in {"fgmres_jax", "gmres_jax"}:
-        return XBlockAugmentedKrylovBasisResult(
-            basis=None,
-            operator_on_basis=None,
-            used=False,
-            rank=0,
-            reason="disabled_non_jax_fgmres_method",
-            seed_used=False,
-        )
-    if int(context.qi_device_state.metadata.rank) <= 0 and not seed_available:
-        return XBlockAugmentedKrylovBasisResult(
-            basis=None,
-            operator_on_basis=None,
-            used=False,
-            rank=0,
-            reason="disabled_empty_qi_device_basis",
-            seed_used=False,
-        )
-
-    try:
-        if seed_available:
-            basis = jnp.asarray(context.seed_basis, dtype=jnp.float64)
-            operator_on_basis = jnp.asarray(context.seed_operator_on_basis, dtype=jnp.float64)
-            reason = "enabled_from_augmented_seed"
-            seed_used = True
-        else:
-            basis = jnp.asarray(context.qi_device_state.basis.vectors, dtype=jnp.float64)
-            operator_on_basis = jnp.asarray(context.qi_device_state.operator_on_basis, dtype=jnp.float64)
-            reason = "enabled"
-            seed_used = False
-
-        if bool(context.col_equilibration_built) and context.inv_col_scale is not None:
-            basis = jnp.asarray(context.inv_col_scale, dtype=jnp.float64).reshape((-1, 1)) * basis
-        if bool(context.row_equilibration_built) and context.row_scale is not None:
-            operator_on_basis = (
-                jnp.asarray(context.row_scale, dtype=jnp.float64).reshape((-1, 1))
-                * operator_on_basis
-            )
-        if str(context.precondition_side) == "left" and context.solve_preconditioner is not None:
-            operator_on_basis = jnp.stack(
-                [
-                    jnp.asarray(
-                        context.solve_preconditioner(operator_on_basis[:, idx]),
-                        dtype=jnp.float64,
-                    )
-                    for idx in range(int(operator_on_basis.shape[1]))
-                ],
-                axis=1,
-            )
-        return XBlockAugmentedKrylovBasisResult(
-            basis=basis,
-            operator_on_basis=operator_on_basis,
-            used=True,
-            rank=int(basis.shape[1]),
-            reason=reason,
-            seed_used=seed_used,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return XBlockAugmentedKrylovBasisResult(
-            basis=None,
-            operator_on_basis=None,
-            used=False,
-            rank=0,
-            reason=f"{type(exc).__name__}: {exc}",
-            seed_used=False,
-        )
-
-def apply_xblock_augmented_krylov_stage(
-    context: XBlockAugmentedKrylovStageContext,
-) -> XBlockAugmentedKrylovStageResult:
-    """Prepare optional QI augmented-Krylov inputs and update metadata."""
-
-    metadata = dict(context.metadata)
-    if not bool(context.requested):
-        return XBlockAugmentedKrylovStageResult(
-            basis=None,
-            operator_on_basis=None,
-            used=False,
-            rank=0,
-            reason=None,
-            seed_used=bool(context.seed_used),
-            metadata=metadata,
-        )
-
-    augmented_krylov = context.basis_builder(
-        XBlockAugmentedKrylovBasisContext(
-            krylov_method=str(context.krylov_method),
-            qi_device_state=context.qi_device_state,
-            seed_available=bool(context.seed_available),
-            seed_rank=int(context.seed_rank),
-            seed_basis=context.seed_basis,
-            seed_operator_on_basis=context.seed_operator_on_basis,
-            row_equilibration_built=bool(context.row_equilibration_built),
-            col_equilibration_built=bool(context.col_equilibration_built),
-            row_scale=context.row_scale,
-            inv_col_scale=context.inv_col_scale,
-            precondition_side=str(context.precondition_side),
-            solve_preconditioner=context.solve_preconditioner,
-        )
-    )
-    seed_used = bool(context.seed_used or augmented_krylov.seed_used)
-    metadata["augmented_seed_used"] = bool(seed_used)
-    metadata["augmented_seed_available"] = bool(context.seed_available)
-    if context.emit is not None:
-        context.emit(
-            0 if bool(augmented_krylov.used) else 1,
-            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-            f"QI augmented Krylov {augmented_krylov.reason} "
-            f"rank={int(augmented_krylov.rank)} "
-            f"mode={context.mode}",
-        )
-    return XBlockAugmentedKrylovStageResult(
-        basis=augmented_krylov.basis,
-        operator_on_basis=augmented_krylov.operator_on_basis,
-        used=bool(augmented_krylov.used),
-        rank=int(augmented_krylov.rank),
-        reason=str(augmented_krylov.reason),
-        seed_used=bool(seed_used),
-        metadata=metadata,
     )
 
 def run_xblock_first_krylov_attempt(
@@ -7442,10 +7183,6 @@ __all__ = (
     "XBlockKrylovSolveStageResult",
     "XBlockKrylovSolveSpaceContext",
     "XBlockKrylovSolveSpace",
-    "XBlockAugmentedKrylovBasisContext",
-    "XBlockAugmentedKrylovBasisResult",
-    "XBlockAugmentedKrylovStageContext",
-    "XBlockAugmentedKrylovStageResult",
     "XBlockSparsePCWorkEstimates",
     "XBlockPhysicalResidual",
     "xblock_krylov_report",
@@ -7461,8 +7198,6 @@ __all__ = (
     "build_xblock_krylov_progress_callbacks",
     "xblock_device_krylov_state",
     "prepare_xblock_krylov_solve_space",
-    "prepare_xblock_augmented_krylov_basis",
-    "apply_xblock_augmented_krylov_stage",
     "run_xblock_first_krylov_attempt",
     "xblock_gmres_fallback_decision",
     "run_xblock_gmres_fallback_if_needed",
