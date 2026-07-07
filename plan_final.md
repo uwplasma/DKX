@@ -18,13 +18,16 @@ current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Latest audited branch head: `9bfa7dc4`; last green CI evidence: `96fb2677`.
+- Latest audited branch head: `7e46e8a3`; last green CI evidence: `96fb2677`.
   Exact aggregate coverage from that CI was 91.753% (`92%`).
-- Package layout is shallow, but the branch is too large: 120 Python source
-  files and about 166k source lines. Largest complexity owners are
-  `problems/`, `solvers/`, and RHSMode-1/QI/preconditioner infrastructure.
-- Non-package volume is also too high: `tests/` has 726 files, `examples/` has
-  497 files, `benchmarks/` has 268 files, and `scripts/` has 47 files.
+- Package layout is shallow, but the branch is too large: 114 Python source
+  files and about 144k source lines. Largest complexity owners remain
+  `problems/`, `solvers/`, RHSMode-1/QI/preconditioner infrastructure, and
+  compatibility layers around those paths.
+- Non-package Python volume is still too high: `tests/` has 332 Python files,
+  `examples/` has 122 Python files, and `scripts/` has 44 Python files.
+  Top-level `benchmarks/` is removed from the active tracked tree; compact
+  Fortran-v3 references live in `tests/fixtures/fortran_v3_reference_fixture.json`.
 - No tracked file larger than 2 MB was found. There is no tracked
   `sfincs_jax/data/`; release-data logic is `validation/data_fetch.py`.
 - The product target changed: PR #8 should become a small stable core, while
@@ -34,14 +37,14 @@ current, transport coefficients, plotting, and optimization.
 
 | Lane | Status | Completion | Definition of done |
 | --- | --- | ---: | --- |
-| Line-by-line audit | Active | 10% | Every retained file/function/line has a core reason, a caller, and a test/doc owner; everything else is extracted or deleted. |
-| Core-main slimming | Active | 35% | Main keeps only stable, parity-clean, runtime-acceptable solvers and public APIs; research code is outside core. |
+| Line-by-line audit | Active | 20% | Every retained file/function/line has a core reason, a caller, and a test/doc owner; everything else is extracted or deleted. |
+| Core-main slimming | Active | 40% | Main keeps only stable, parity-clean, runtime-acceptable solvers and public APIs; research code is outside core. |
 | Source simplification | Active | 45% | Package moves toward <=50 source files and <=50k lines, with a 10x reduction as stretch if functionality permits. |
-| Examples/tests/scripts cleanup | Active | 35% | Examples are <=10 curated workflows plus Fortran-v3 references; tests are smaller, organized, and >=95% coverage; scripts/benchmarks are removed or promoted. |
+| Examples/tests/scripts cleanup | Active | 45% | Examples are <=10 curated workflows plus Fortran-v3 references; tests are smaller, organized, and >=95% coverage; scripts are removed or promoted; benchmarks are gone. |
 | Parity/performance evidence | Active | 70% | Supported examples rerun against SFINCS Fortran v3 with runtime/RSS/bootstrap evidence; unsupported research lanes are not marketed. |
 | Docs/readme regeneration | Active | 80% | README/docs describe only the stable core plus explicit external research PR lanes. |
 
-Overall readiness under this stricter core-slim goal is about 55-60%.
+Overall readiness under this stricter core-slim goal is about 60-65%.
 
 ## Source Structure Rules
 
@@ -304,11 +307,14 @@ edit the inventory first, then remove or merge code, then run focused guards.
 
 ### Phase E - Remove Benchmarks And Triage Scripts
 
-1. Remove top-level `benchmarks/` from core. Keep only small summary fixtures
-   and one bounded test path for README/docs number consistency.
+1. Top-level `benchmarks/` is removed from core. Keep only small summary
+   fixtures and bounded test paths for README/docs number consistency.
 2. For `scripts/`, promote user commands to examples, validation generators to
    tests/docs helpers, release-maintenance commands to documented scripts, and
    one-off audit/profiling/benchmark scripts to research PRs or deletion.
+3. Next script tranche: delete or move standalone audit/profiler/campaign
+   scripts that are not documented CLI workflows, not test helpers, and not
+   needed for release maintenance.
 
 - No install/test/docs path depends on `benchmarks/`.
 - Every remaining script has a public purpose, a test, and docs mention.

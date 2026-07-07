@@ -75,13 +75,13 @@ docs/_build/
 examples/**/output/
 examples/**/figures/
 examples/additional_examples/run_compare_local/
+outputs/
 
 # Public multi-megabyte equilibrium fixtures are release-hosted and fetched into
 # a user cache, not tracked in git.
 sfincs_jax/data/equilibria/*.bc
 sfincs_jax/data/equilibria/wout_w7x_standardConfig.*
 examples/additional_examples/wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc
-benchmarks/production_resolution_inputs_2026-04-30/inputs/additional_examples/wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc
 
 tests/debug_*/
 tests/gating_*/

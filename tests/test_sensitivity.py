@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from functools import lru_cache
 import json
 from pathlib import Path
 
@@ -47,12 +48,38 @@ from sfincs_jax.sensitivity import (
     validate_fortran_v3_adjoint_sensitivity_output_surface,
     vjp_flux,
 )
-from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax.namelist import parse_sfincs_input_text, read_sfincs_input
 from sfincs_jax.operators.profile_system import apply_v3_full_system_operator_cached, full_system_operator_from_namelist
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+REFERENCE_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "fortran_v3_reference_fixture.json"
 SENSITIVITY_REFERENCE_SUMMARY = "small_rhsmode45_summary_2026-06-25.json"
 SENSITIVITY_DEBUG_REFERENCE_SUMMARY = "small_rhsmode4_debug_summary_2026-06-25.json"
+
+
+@lru_cache(maxsize=1)
+def _reference_fixture() -> dict:
+    return json.loads(REFERENCE_FIXTURE.read_text(encoding="utf-8"))
+
+
+def _sensitivity_summary(name: str) -> dict:
+    return _reference_fixture()["sensitivity"]["summaries"][name]
+
+
+def _sensitivity_namelist(name: str):
+    text = _reference_fixture()["sensitivity"]["namelists"][name]
+    return parse_sfincs_input_text(
+        text,
+        source_path=f"tests/fixtures/fortran_v3_reference_fixture.json:sensitivity/{name}",
+    )
+
+
+def _ambipolar_namelist(name: str):
+    text = _reference_fixture()["ambipolar"]["namelists"][name]
+    return parse_sfincs_input_text(
+        text,
+        source_path=f"tests/fixtures/fortran_v3_reference_fixture.json:ambipolar/{name}",
+    )
 
 
 def _linear_system_components():
@@ -206,11 +233,9 @@ def test_fortran_v3_adjoint_output_fields_preserve_parallel_flow_source_gate() -
 
 
 def test_fortran_v3_rhs4_reference_summary_pins_radial_current_sensitivity() -> None:
-    reference_root = REPO_ROOT / "benchmarks" / "fortran_v3_sensitivity_reference"
-    input_path = reference_root / "namelists" / "geometry4_w7x_like_small_rhs4_radial_current.namelist"
-    summary = json.loads((reference_root / SENSITIVITY_REFERENCE_SUMMARY).read_text())
+    summary = _sensitivity_summary(SENSITIVITY_REFERENCE_SUMMARY)
     case = next(item for item in summary["cases"] if item["case"] == "geometry4_w7x_like_small_rhs4_radial_current")
-    nml = read_sfincs_input(input_path)
+    nml = _sensitivity_namelist("geometry4_w7x_like_small_rhs4_radial_current.namelist")
 
     assert validate_fortran_v3_adjoint_sensitivity_constraints(nml) == ()
     assert fortran_v3_adjoint_sensitivity_output_fields(nml) == (
@@ -236,11 +261,9 @@ def test_fortran_v3_rhs4_reference_summary_pins_radial_current_sensitivity() -> 
 
 
 def test_fortran_v3_rhs4_reference_summary_pins_heat_flux_sensitivity() -> None:
-    reference_root = REPO_ROOT / "benchmarks" / "fortran_v3_sensitivity_reference"
-    input_path = reference_root / "namelists" / "geometry4_w7x_like_small_rhs4_heat_flux.namelist"
-    summary = json.loads((reference_root / SENSITIVITY_REFERENCE_SUMMARY).read_text())
+    summary = _sensitivity_summary(SENSITIVITY_REFERENCE_SUMMARY)
     case = next(item for item in summary["cases"] if item["case"] == "geometry4_w7x_like_small_rhs4_heat_flux")
-    nml = read_sfincs_input(input_path)
+    nml = _sensitivity_namelist("geometry4_w7x_like_small_rhs4_heat_flux.namelist")
 
     assert validate_fortran_v3_adjoint_sensitivity_constraints(nml) == ()
     assert fortran_v3_adjoint_sensitivity_output_fields(nml) == (
@@ -263,11 +286,9 @@ def test_fortran_v3_rhs4_reference_summary_pins_heat_flux_sensitivity() -> None:
 
 
 def test_fortran_v3_rhs4_reference_summary_pins_parallel_flow_and_bootstrap_sensitivity() -> None:
-    reference_root = REPO_ROOT / "benchmarks" / "fortran_v3_sensitivity_reference"
-    input_path = reference_root / "namelists" / "geometry4_w7x_like_small_rhs4_parallel_bootstrap.namelist"
-    summary = json.loads((reference_root / SENSITIVITY_REFERENCE_SUMMARY).read_text())
+    summary = _sensitivity_summary(SENSITIVITY_REFERENCE_SUMMARY)
     case = next(item for item in summary["cases"] if item["case"] == "geometry4_w7x_like_small_rhs4_parallel_bootstrap")
-    nml = read_sfincs_input(input_path)
+    nml = _sensitivity_namelist("geometry4_w7x_like_small_rhs4_parallel_bootstrap.namelist")
 
     assert validate_fortran_v3_adjoint_sensitivity_constraints(nml) == ()
     assert fortran_v3_adjoint_sensitivity_output_fields(nml) == (
@@ -294,11 +315,9 @@ def test_fortran_v3_rhs4_reference_summary_pins_parallel_flow_and_bootstrap_sens
 
 
 def test_fortran_v3_rhs5_reference_summary_pins_constant_current_heat_sensitivity() -> None:
-    reference_root = REPO_ROOT / "benchmarks" / "fortran_v3_sensitivity_reference"
-    input_path = reference_root / "namelists" / "geometry4_w7x_like_small_rhs5_heat_flux.namelist"
-    summary = json.loads((reference_root / SENSITIVITY_REFERENCE_SUMMARY).read_text())
+    summary = _sensitivity_summary(SENSITIVITY_REFERENCE_SUMMARY)
     case = next(item for item in summary["cases"] if item["case"] == "geometry4_w7x_like_small_rhs5_heat_flux")
-    nml = read_sfincs_input(input_path)
+    nml = _sensitivity_namelist("geometry4_w7x_like_small_rhs5_heat_flux.namelist")
 
     assert validate_fortran_v3_adjoint_sensitivity_constraints(nml) == ()
     assert fortran_v3_adjoint_sensitivity_output_fields(nml) == (
@@ -327,10 +346,8 @@ def test_fortran_v3_rhs5_reference_summary_pins_constant_current_heat_sensitivit
 
 
 def test_fortran_v3_rhs4_debug_reference_summary_pins_finite_difference_outputs() -> None:
-    reference_root = REPO_ROOT / "benchmarks" / "fortran_v3_sensitivity_reference"
-    input_path = reference_root / "namelists" / "geometry4_w7x_like_small_rhs4_debug_radial_current.namelist"
-    summary = json.loads((reference_root / SENSITIVITY_DEBUG_REFERENCE_SUMMARY).read_text())
-    nml = read_sfincs_input(input_path)
+    summary = _sensitivity_summary(SENSITIVITY_DEBUG_REFERENCE_SUMMARY)
+    nml = _sensitivity_namelist("geometry4_w7x_like_small_rhs4_debug_radial_current.namelist")
     fields = summary["hdf5_fields"]
 
     assert validate_fortran_v3_adjoint_sensitivity_constraints(nml) == ()
@@ -366,9 +383,8 @@ def test_fortran_v3_rhs4_debug_reference_summary_pins_finite_difference_outputs(
 def test_fortran_v3_rhs45_reference_summaries_cover_all_public_sensitivity_families() -> None:
     """The checked fixtures cover every release-facing RHSMode 4/5 output family."""
 
-    reference_root = REPO_ROOT / "benchmarks" / "fortran_v3_sensitivity_reference"
-    summary = json.loads((reference_root / SENSITIVITY_REFERENCE_SUMMARY).read_text())
-    debug = json.loads((reference_root / SENSITIVITY_DEBUG_REFERENCE_SUMMARY).read_text())
+    summary = _sensitivity_summary(SENSITIVITY_REFERENCE_SUMMARY)
+    debug = _sensitivity_summary(SENSITIVITY_DEBUG_REFERENCE_SUMMARY)
     field_names = {
         field_name
         for case in summary["cases"]
@@ -1195,15 +1211,8 @@ def test_rhsmode1_namelist_response_uses_fixed_shape_er_derivative_provider() ->
 
 
 def test_rhsmode1_namelist_response_replays_fortran_active_rn_current() -> None:
-    input_path = (
-        Path(__file__).parents[1]
-        / "benchmarks"
-        / "fortran_v3_ambipolar_reference"
-        / "namelists"
-        / "geometry1_helical_small_option1.namelist"
-    )
     response = rhsmode1_radial_current_response_from_namelist(
-        nml=input_path,
+        nml=_ambipolar_namelist("geometry1_helical_small_option1.namelist"),
         derivative_step=1.0e-5,
         max_dense_size=1000,
         observable_chunk_size=128,
@@ -1251,15 +1260,8 @@ def test_rhsmode1_namelist_response_replays_fortran_option3_currents(
     case_name: str,
     points: tuple[tuple[float, float], ...],
 ) -> None:
-    input_path = (
-        Path(__file__).parents[1]
-        / "benchmarks"
-        / "fortran_v3_ambipolar_reference"
-        / "namelists"
-        / f"{case_name}.namelist"
-    )
     response = rhsmode1_radial_current_response_from_namelist(
-        nml=input_path,
+        nml=_ambipolar_namelist(f"{case_name}.namelist"),
         derivative_step=1.0e-5,
         max_dense_size=1000,
         observable_chunk_size=128,

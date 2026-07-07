@@ -125,10 +125,14 @@ class Namelist:
         return self.groups.get(name.lower(), {})
 
 
-def read_sfincs_input(path: str | Path) -> Namelist:
-    """Parse a SFINCS `input.namelist` file into groups."""
-    source_path = Path(path).resolve()
-    text = source_path.read_text()
+def parse_sfincs_input_text(text: str, *, source_path: str | Path | None = None) -> Namelist:
+    """Parse SFINCS namelist text into groups.
+
+    This helper is useful for compact regression fixtures that embed small
+    Fortran-v3 decks without keeping a directory of one-file inputs.
+    """
+
+    source = None if source_path is None else Path(source_path)
     lines = [_strip_fortran_comments(ln) for ln in text.splitlines()]
 
     groups: Dict[str, List[str]] = {}
@@ -193,4 +197,11 @@ def read_sfincs_input(path: str | Path) -> Namelist:
         parsed_groups[gname] = scalars
         parsed_indexed[gname] = {k: v for k, v in indexed.items()}
 
-    return Namelist(groups=parsed_groups, indexed=parsed_indexed, source_path=source_path, source_text=text)
+    return Namelist(groups=parsed_groups, indexed=parsed_indexed, source_path=source, source_text=text)
+
+
+def read_sfincs_input(path: str | Path) -> Namelist:
+    """Parse a SFINCS `input.namelist` file into groups."""
+
+    source_path = Path(path).resolve()
+    return parse_sfincs_input_text(source_path.read_text(), source_path=source_path)

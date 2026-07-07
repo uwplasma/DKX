@@ -15,16 +15,40 @@ sys.modules[_SPEC.name] = campaign
 _SPEC.loader.exec_module(campaign)
 
 
-def test_campaign_plan_lists_exact_unique_public_performance_cases() -> None:
+def _write_stress_manifest(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "benchmark_floor_gaps": {
+            "cpu": [
+                {"case": "additional_examples", "total_unknowns_estimate": 100_000},
+                {"case": "transportMatrix_geometryScheme2", "total_unknowns_estimate": 900_000},
+            ],
+            "gpu": [
+                {"case": "HSX_FPCollisions_DKESTrajectories", "total_unknowns_estimate": 1_800_000},
+            ],
+        },
+        "short_fortran_runtime_cases": [],
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_campaign_plan_lists_exact_unique_public_performance_cases(tmp_path: Path) -> None:
+    stress_manifest = tmp_path / "stress_manifest.json"
+    _write_stress_manifest(stress_manifest)
+    examples_root = Path("outputs/benchmarks/production_resolution_inputs_2026-05-04/inputs")
+    production_manifest = Path("outputs/benchmarks/production_resolution_inputs_2026-05-04/manifest.json")
     plan = campaign.build_campaign_plan(
+        stress_manifest_path=stress_manifest,
+        examples_root=examples_root,
+        production_manifest=production_manifest,
         fortran_exe="/opt/sfincs/bin/sfincs",
         gpu_device="1",
     )
 
     assert plan["kind"] == "sfincs_jax_production_stress_campaign_plan"
-    assert plan["case_count"] == 31
+    assert plan["case_count"] == 3
     cases = {row["case"]: row for row in plan["cases"]}
-    assert len(cases) == 31
+    assert len(cases) == 3
     assert "additional_examples" in cases
     assert "transportMatrix_geometryScheme2" in cases
     assert "HSX_FPCollisions_DKESTrajectories" in cases
@@ -32,8 +56,8 @@ def test_campaign_plan_lists_exact_unique_public_performance_cases() -> None:
     additional = cases["additional_examples"]
     assert additional["reasons"] == ["below_public_benchmark_resolution_floor"]
     assert "--pattern '^additional_examples$'" in additional["commands"]["cpu"]
-    assert "--examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs" in additional["commands"]["cpu"]
-    assert "--production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json" in additional["commands"]["cpu"]
+    assert "--examples-root outputs/benchmarks/production_resolution_inputs_2026-05-04/inputs" in additional["commands"]["cpu"]
+    assert "--production-manifest outputs/benchmarks/production_resolution_inputs_2026-05-04/manifest.json" in additional["commands"]["cpu"]
     assert "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu" in additional["commands"]["gpu"]
     assert "--fortran-exe /opt/sfincs/bin/sfincs" in additional["commands"]["gpu"]
 
@@ -43,14 +67,30 @@ def test_campaign_plan_lists_exact_unique_public_performance_cases() -> None:
 
 
 def test_campaign_writer_emits_json_and_shell_index(tmp_path: Path) -> None:
-    assert campaign.main(["--out-root", str(tmp_path), "--fortran-exe", "/opt/sfincs", "--json"]) == 0
+    stress_manifest = tmp_path / "stress_manifest.json"
+    _write_stress_manifest(stress_manifest)
+    out_root = tmp_path / "campaign_plan"
+    assert (
+        campaign.main(
+            [
+                "--stress-manifest",
+                str(stress_manifest),
+                "--out-root",
+                str(out_root),
+                "--fortran-exe",
+                "/opt/sfincs",
+                "--json",
+            ]
+        )
+        == 0
+    )
 
-    plan_path = tmp_path / "campaign_plan.json"
-    commands_path = tmp_path / "commands.sh"
+    plan_path = out_root / "campaign_plan.json"
+    commands_path = out_root / "commands.sh"
     plan = json.loads(plan_path.read_text(encoding="utf-8"))
     commands = commands_path.read_text(encoding="utf-8")
 
-    assert plan["case_count"] == 31
+    assert plan["case_count"] == 3
     assert commands_path.exists()
     assert "Run selected lines manually" in commands
     assert "# CPU:" in commands

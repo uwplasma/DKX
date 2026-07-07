@@ -20,7 +20,7 @@ from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUT_ROOT = REPO_ROOT / "benchmarks" / "production_stress_manifest_2026-06-11"
+DEFAULT_OUT_ROOT = REPO_ROOT / "outputs" / "benchmarks" / "production_stress_manifest_2026-06-11"
 DEFAULT_BENCHMARK_SUMMARY = (
     REPO_ROOT
     / "examples"
@@ -29,7 +29,7 @@ DEFAULT_BENCHMARK_SUMMARY = (
     / "sfincs_jax_fortran_suite_benchmark_summary.json"
 )
 DEFAULT_PRODUCTION_INPUT_MANIFEST = (
-    REPO_ROOT / "benchmarks" / "production_resolution_inputs_2026-05-04" / "manifest.json"
+    REPO_ROOT / "outputs" / "benchmarks" / "production_resolution_inputs_2026-05-04" / "manifest.json"
 )
 DEFAULT_QA_BOOTSTRAP = (
     REPO_ROOT

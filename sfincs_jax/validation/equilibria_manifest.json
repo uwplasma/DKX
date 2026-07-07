@@ -34,11 +34,6 @@
       "path": "examples/additional_examples/wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc",
       "size": 2754500,
       "sha256": "46c9448c600243243fe5e860f3837c5b5e87779e8f7b312e3eee61e8eaabc04d"
-    },
-    {
-      "path": "benchmarks/production_resolution_inputs_2026-04-30/inputs/additional_examples/wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc",
-      "size": 2754500,
-      "sha256": "46c9448c600243243fe5e860f3837c5b5e87779e8f7b312e3eee61e8eaabc04d"
     }
   ]
 }

@@ -23,7 +23,7 @@ DEFAULT_ROOTS = (
     REPO_ROOT / "tests" / "production_stress_cpu_campaign_2026-06-11",
     REPO_ROOT / "tests" / "production_stress_gpu_campaign_2026-06-11",
 )
-DEFAULT_OUT = REPO_ROOT / "benchmarks" / "production_stress_manifest_2026-06-11" / "campaign_summary.json"
+DEFAULT_OUT = REPO_ROOT / "outputs" / "benchmarks" / "production_stress_manifest_2026-06-11" / "campaign_summary.json"
 
 
 def _repo_rel(path: Path) -> str:

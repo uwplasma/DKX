@@ -261,11 +261,12 @@ Fortran-v3 RHSMode 4/5 source-contract gates:
 - ``tests/test_sensitivity.py`` checks valid and invalid RHSMode 4/5 decks,
   including the Fortran source-code gate that writes ``dParallelFlowdLambda``
   from ``adjointParticleFluxOption`` or ``debugAdjoint``.
-- ``benchmarks/fortran_v3_sensitivity_reference`` contains compact RHSMode=4/5
-  reference summaries. The checked W7-X-like analytic decks pin radial-current,
-  heat-flux, total-heat-flux, parallel-flow, bootstrap, and RHSMode=5
-  ``dPhidPsidLambda`` sensitivity outputs from SFINCS Fortran v3 without
-  committing generated HDF5 files, including
+- ``tests/fixtures/fortran_v3_reference_fixture.json`` contains compact
+  RHSMode=4/5 reference summaries and embedded namelist text. The checked
+  W7-X-like analytic decks pin radial-current, heat-flux, total-heat-flux,
+  parallel-flow, bootstrap, and RHSMode=5 ``dPhidPsidLambda`` sensitivity
+  outputs from SFINCS Fortran v3 without committing generated HDF5 files,
+  including
   ``dRadialCurrentdLambda = sum_s Z_s dParticleFlux_s/dLambda`` and
   ``dTotalHeatFluxdLambda = sum_s dHeatFluxdLambda_s`` and
   ``dBootstrapdLambda = sum_s Z_s dParallelFlowdLambda_s``.

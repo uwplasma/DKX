@@ -13,11 +13,11 @@ from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_STRESS_MANIFEST = REPO_ROOT / "benchmarks" / "production_stress_manifest_2026-06-11" / "manifest.json"
-DEFAULT_OUT_ROOT = REPO_ROOT / "benchmarks" / "production_stress_manifest_2026-06-11" / "campaign_plan"
-DEFAULT_EXAMPLES_ROOT = REPO_ROOT / "benchmarks" / "production_resolution_inputs_2026-05-04" / "inputs"
+DEFAULT_STRESS_MANIFEST = REPO_ROOT / "outputs" / "benchmarks" / "production_stress_manifest_2026-06-11" / "manifest.json"
+DEFAULT_OUT_ROOT = REPO_ROOT / "outputs" / "benchmarks" / "production_stress_manifest_2026-06-11" / "campaign_plan"
+DEFAULT_EXAMPLES_ROOT = REPO_ROOT / "outputs" / "benchmarks" / "production_resolution_inputs_2026-05-04" / "inputs"
 DEFAULT_PRODUCTION_MANIFEST = (
-    REPO_ROOT / "benchmarks" / "production_resolution_inputs_2026-05-04" / "manifest.json"
+    REPO_ROOT / "outputs" / "benchmarks" / "production_resolution_inputs_2026-05-04" / "manifest.json"
 )
 
 

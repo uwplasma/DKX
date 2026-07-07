@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 import json
 import math
 from pathlib import Path
@@ -10,7 +11,7 @@ import pytest
 
 from sfincs_jax.ambipolar import radial_current_from_output
 from sfincs_jax.io import read_sfincs_h5
-from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax.namelist import parse_sfincs_input_text
 import sfincs_jax.problems.ambipolar as ambipolar_problem
 from sfincs_jax.problems.ambipolar import (
     AmbipolarProblem,
@@ -33,11 +34,28 @@ from sfincs_jax.sensitivity import MatrixFreeLinearObservableSystem, evaluate_ma
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-REFERENCE_ROOT = REPO_ROOT / "benchmarks" / "fortran_v3_ambipolar_reference"
+REFERENCE_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "fortran_v3_reference_fixture.json"
+
+
+@lru_cache(maxsize=1)
+def _reference_fixture() -> dict:
+    return json.loads(REFERENCE_FIXTURE.read_text(encoding="utf-8"))
+
+
+def _ambipolar_summary(summary_name: str) -> dict:
+    return _reference_fixture()["ambipolar"]["summaries"][summary_name]
+
+
+def _ambipolar_namelist(name: str):
+    text = _reference_fixture()["ambipolar"]["namelists"][name]
+    return parse_sfincs_input_text(
+        text,
+        source_path=f"tests/fixtures/fortran_v3_reference_fixture.json:ambipolar/{name}",
+    )
 
 
 def _summary_case(summary_name: str, case_name: str) -> dict:
-    data = json.loads((REFERENCE_ROOT / summary_name).read_text())
+    data = _ambipolar_summary(summary_name)
     for case in data["cases"]:
         if case["case"] == case_name:
             return case
@@ -365,8 +383,8 @@ def test_new_profile_summary_replays_geometry1_safeguarded_newton_sequence() -> 
 def test_new_profile_summaries_preserve_solver_counts_rss_bounds_and_marker_residual_split() -> None:
     """Reference summaries distinguish physical residuals from Fortran success markers."""
 
-    small = json.loads((REFERENCE_ROOT / "small_profile_summary_2026-06-23.json").read_text())
-    production = json.loads((REFERENCE_ROOT / "production_profile_summary_2026-06-23.json").read_text())
+    small = _ambipolar_summary("small_profile_summary_2026-06-23.json")
+    production = _ambipolar_summary("production_profile_summary_2026-06-23.json")
 
     assert len(small["cases"]) == 6
     assert len(production["cases"]) == 6
@@ -408,7 +426,7 @@ def test_new_profile_summaries_preserve_solver_counts_rss_bounds_and_marker_resi
 def test_production_option13_summaries_pin_derivative_solve_metadata() -> None:
     """Production option-1/3 references include one adjoint derivative solve per physical solve."""
 
-    production = json.loads((REFERENCE_ROOT / "production_profile_summary_2026-06-23.json").read_text())
+    production = _ambipolar_summary("production_profile_summary_2026-06-23.json")
     option13_cases = [case for case in production["cases"] if str(case["case"]).endswith(("option1", "option3"))]
     assert len(option13_cases) == 4
 
@@ -452,11 +470,10 @@ def test_brent_failure_returns_nonconverged_unbracketed_certificate() -> None:
 
 
 def test_fortran_v3_ambipolar_validator_accepts_reference_decks_and_rejects_adjoint_incompatibilities() -> None:
-    namelist_dir = REFERENCE_ROOT / "namelists"
-    for path in sorted(namelist_dir.glob("*.namelist")):
-        nml = read_sfincs_input(path)
+    for name in sorted(_reference_fixture()["ambipolar"]["namelists"]):
+        nml = _ambipolar_namelist(name)
         option = int(nml.group("general")["AMBIPOLARSOLVEOPTION"])
-        assert validate_fortran_v3_ambipolar_constraints(nml, option=option) == (), path.name
+        assert validate_fortran_v3_ambipolar_constraints(nml, option=option) == (), name
 
     errors = validate_fortran_v3_ambipolar_constraints(
         {
@@ -483,10 +500,8 @@ def test_fortran_v3_ambipolar_validator_accepts_reference_decks_and_rejects_adjo
 def test_rhsmode1_namelist_ambipolar_option1_replays_fortran_active_root() -> None:
     """The real active response drives the safeguarded Newton option-1 root."""
 
-    input_path = REFERENCE_ROOT / "namelists" / "geometry1_helical_small_option1.namelist"
-
     result = solve_rhsmode1_ambipolar_from_namelist(
-        nml=input_path,
+        nml=_ambipolar_namelist("geometry1_helical_small_option1.namelist"),
         derivative_step=1.0e-5,
         max_dense_size=1000,
         observable_chunk_size=128,
@@ -509,10 +524,8 @@ def test_rhsmode1_namelist_ambipolar_option1_replays_fortran_active_root() -> No
 def test_rhsmode1_namelist_ambipolar_option3_replays_fortran_active_root() -> None:
     """The same active response drives the pure Newton option-3 root."""
 
-    input_path = REFERENCE_ROOT / "namelists" / "geometry1_helical_small_option3.namelist"
-
     result = solve_rhsmode1_ambipolar_from_namelist(
-        nml=input_path,
+        nml=_ambipolar_namelist("geometry1_helical_small_option3.namelist"),
         derivative_step=1.0e-5,
         max_dense_size=1000,
         observable_chunk_size=128,
