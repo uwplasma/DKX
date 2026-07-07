@@ -159,11 +159,8 @@
       "artifacts.py",
       "data_fetch.py",
       "fortran.py",
-      "production_inputs.py",
-      "readme_audit.py",
       "release.py",
-      "suite.py",
-      "write_output_trace.py"
+      "suite.py"
     ],
     "workflows": [
       "mapped_xgrid.py",
