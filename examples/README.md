@@ -62,7 +62,7 @@ For an interactive terminal version of this map, run
 | I need gradients or optimization hooks. | `autodiff/` then `optimization/` | Start with residual/JVP examples, then move to QA objectives and promotion gates. |
 | I need bootstrap current or Redl comparisons. | `vmec_jax_finite_beta/` | This folder owns the VMEC, Redl, ambipolar-root, and bootstrap-current profile scripts. |
 | I need to validate against SFINCS Fortran v3 behavior. | `parity/` then `publication_figures/` | The first folder has frozen fixtures; the second regenerates release-facing comparison plots. |
-| I need CPU/GPU runtime or memory evidence. | `performance/` | These scripts benchmark output formats, JIT, sharding, transport workers, and optional backends. |
+| I need CPU/GPU runtime or memory evidence. | `performance/` | These scripts benchmark output formats, JIT behavior, transport workers, and optional backends. |
 | I recognize an upstream SFINCS input name. | `sfincs_examples/` or `upstream/` | These folders preserve upstream decks for parity and benchmark audits, not first-pass learning. |
 
 ### Learning Path
@@ -76,7 +76,7 @@ For an interactive terminal version of this map, run
 | 4 | Choose geometry, validation, and performance workflows | `tutorials/04_geometry_validation_and_performance.ipynb` |
 | 5 | Understand grids, geometry, and one operator action | `getting_started/build_grids_and_geometry.py`, `getting_started/apply_collisionless_operator.py` |
 | 6 | Compare outputs with frozen SFINCS Fortran v3 references | `parity/output_parity_vs_fortran_fixture.py` |
-| 7 | Profile CPU/GPU, JIT, output formats, and parallelism | `performance/benchmark_sharded_solve_scaling.py`, `performance/benchmark_output_formats.py` |
+| 7 | Profile CPU/GPU, JIT, output formats, and transport-worker parallelism | `performance/benchmark_output_formats.py`, `performance/benchmark_transport_parallel_scaling.py` |
 
 ### Choose By Task
 
@@ -89,7 +89,7 @@ For an interactive terminal version of this map, run
 | compute bootstrap current and compare Redl | `tutorials/03_bootstrap_redl_and_optimization.ipynb` | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` |
 | add neoclassical objectives to optimization | `optimization/qa_nfp2_sfincs_jax_objectives.py` | `optimization/QA_optimization_bootstrap_current.py` |
 | choose geometry, validate outputs, and benchmark CPU/GPU | `tutorials/04_geometry_validation_and_performance.ipynb` | `getting_started/write_sfincs_output_vmec.py`, `performance/benchmark_transport_parallel_scaling.py` |
-| check CPU/GPU performance or output formats | `performance/benchmark_output_formats.py` | `performance/benchmark_sharded_solve_scaling.py` |
+| check CPU/GPU performance or output formats | `performance/benchmark_output_formats.py` | `performance/benchmark_transport_parallel_scaling.py` |
 | validate against frozen SFINCS Fortran v3 data | `parity/output_parity_vs_fortran_fixture.py` | `publication_figures/` and `sfincs_examples/` |
 
 ### Application Recipes
@@ -162,8 +162,10 @@ validation or benchmark workflow, reference data, or shared support code.
   convergence plots.
 - `parity/`: frozen-reference parity checks against SFINCS Fortran v3 outputs
   without requiring Fortran in CI.
-- `performance/`: JIT, memory, output-format, sharding, multi-GPU, and
-  production-floor benchmark drivers.
+- `performance/`: JIT, memory, output-format, transport-worker scaling, and
+  production-floor benchmark drivers. Single-case sharded and multi-GPU
+  campaign drivers stay outside the stable example tree until they pass the
+  stable-core gates.
 - `publication_figures/`: scripts that regenerate documentation and paper
   figures from checked summaries or explicit benchmark runs.
 - `sfincs_examples/`: vendored upstream SFINCS v3 example inputs plus helpers
@@ -235,9 +237,7 @@ Common entry points:
 - Transport matrices with Krylov recycling: `examples/transport/transport_matrix_recycle_demo.py`
 - Differentiate a residual norm w.r.t. `nu_n`: `examples/autodiff/autodiff_gradient_nu_n_residual.py`
 - Implicit differentiation through BiCGStab: `examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py --solver bicgstab`
-- CPU sharding benchmark: `examples/performance/benchmark_sharded_solve_scaling.py --backend cpu --devices 1 2 4 8`
 - Transport-worker benchmark: `examples/performance/benchmark_transport_parallel_scaling.py --workers 1 2 4`
-- Two-GPU throughput benchmark: `examples/performance/benchmark_multi_gpu_case_throughput.py`
 - Output writer/readback benchmark: `examples/performance/benchmark_output_formats.py --repeats 5`
 
 ### Validation And Benchmark Sweeps
@@ -250,8 +250,8 @@ for runtime, memory, parity, or solver-policy changes.
 
 - `examples/parity/`: frozen-reference output checks that do not require a
   local SFINCS Fortran v3 executable.
-- `examples/performance/`: CPU/GPU timing, output-format, sharding,
-  multi-worker, and optional ecosystem benchmark drivers.
+- `examples/performance/`: CPU/GPU timing, output-format, transport-worker,
+  and optional ecosystem benchmark drivers.
 - `examples/publication_figures/`: scripts that rebuild documentation and paper
   figures from checked summaries or explicit benchmark runs.
 - `examples/sfincs_examples/`: vendored upstream SFINCS v3 inputs used by the
