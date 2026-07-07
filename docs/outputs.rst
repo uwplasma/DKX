@@ -49,11 +49,9 @@ main file:
   ``active_fortran_v3_reduced_native_stack`` for a preflight-gated lower-memory
   candidate or ``active_fortran_v3_reduced_lu`` for the robust active-LU
   fallback. Direct-tail fields such as
-  ``linearSolverDirectTailStructuredPCMaxMB*``,
-  ``linearSolverDirectTailSupportMode*``, and
-  ``linearSolverDirectTailTrueCoupledCoarse*`` expose memory caps, preflight
-  support-mode decisions, and coarse-correction diagnostics when the selected
-  route provides them.
+  ``linearSolverDirectTailStructuredPCMaxMB*`` expose memory caps when the
+  selected route provides them; experimental support-mode and coarse-correction
+  diagnostics are not part of the stable output schema.
 - ``linearSolverResidualNorm`` and ``linearSolverResidualTarget`` record the
   true residual norm and requested target used by the output safety gate.
 - ``linearSolverResidualTargetRatio`` is residual divided by target.
