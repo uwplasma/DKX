@@ -18,14 +18,14 @@ current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Latest audited branch head: `7e46e8a3`; last green CI evidence: `96fb2677`.
+- Latest audited branch head: `cac7fb3a`; last green CI evidence: `96fb2677`.
   Exact aggregate coverage from that CI was 91.753% (`92%`).
 - Package layout is shallow, but the branch is too large: 114 Python source
   files and about 144k source lines. Largest complexity owners remain
   `problems/`, `solvers/`, RHSMode-1/QI/preconditioner infrastructure, and
   compatibility layers around those paths.
-- Non-package Python volume is still too high: `tests/` has 332 Python files,
-  `examples/` has 122 Python files, and `scripts/` has 44 Python files.
+- Non-package Python volume is still too high: `tests/` has 331 Python files,
+  `examples/` has 122 Python files, and `scripts/` has 42 Python files.
   Top-level `benchmarks/` is removed from the active tracked tree; compact
   Fortran-v3 references live in `tests/fixtures/fortran_v3_reference_fixture.json`.
 - No tracked file larger than 2 MB was found. There is no tracked

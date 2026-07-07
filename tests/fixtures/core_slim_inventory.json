@@ -80,7 +80,9 @@
       "purpose": "Preserve native sparse-direct, symbolic factor, true-operator rescue, and active-factor research outside the stable core.",
       "core_extracted_paths": [
         "sfincs_jax/operators/profile_true_operator_rescue.py",
-        "tests/test_rhs1_true_operator_rescue.py"
+        "tests/test_rhs1_true_operator_rescue.py",
+        "scripts/audit_rhs1_solver_stack.py",
+        "scripts/compare_fortran_matrix_to_jax_operator.py"
       ],
       "source_paths": [
         "sfincs_jax/operators/profile_true_operator_rescue.py",

@@ -212,16 +212,9 @@ Target a single case family:
      --pattern 'HSX_FPCollisions|filteredW7XNetCDF_2species_magneticDrifts|geometryScheme4_2species' \
      --timeout-s 120 --max-attempts 1
 
-Matrix/operator parity diagnosis (Fortran PETSc matrix vs JAX matvec):
-
-.. code-block:: bash
-
-   python scripts/compare_fortran_matrix_to_jax_operator.py \
-     --input /path/to/input.namelist \
-     --fortran-matrix /path/to/sfincsBinary_iteration_000_whichMatrix_3 \
-     --fortran-state /path/to/sfincsBinary_iteration_000_stateVector \
-     --project-active-dofs \
-     --out-json matrix_compare.json
+Matrix/operator parity diagnosis against raw Fortran PETSc dumps is a
+research-branch workflow. The stable core keeps frozen-state diagnostic checks
+and public output parity gates rather than shipping dense matrix-dump tooling.
 
 Frozen-state diagnostics isolation (solver-vs-diagnostics for RHSMode=1 moment families):
 
