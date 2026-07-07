@@ -1,15 +1,13 @@
 # Optimization (Optax / JAX-native)
 
 Optimization examples that leverage differentiability:
-- fitting geometry harmonics
-- calibrating parameters against frozen Fortran fixtures
-- end-to-end objective optimization (with publication-style plots in some scripts)
 - QA nfp=2 neoclassical optimization proxies with explicit `sfincs_jax`
   high-fidelity promotion gates from completed `scan-er` outputs
+- editable VMEC-JAX-style QA optimization with an optional bootstrap-current
+  objective
+- CPU/GPU/Fortran promotion audits for completed high-fidelity scans
 
 Examples:
-- `fit_geometry_harmonics_with_optax.py`
-- `calibrate_nu_n_to_fortran_residual_fixture.py`
 - `qa_nfp2_sfincs_jax_objectives.py` — fast JAX proxy lane for adding
   neoclassical objectives to QA optimization. It supports bootstrap-current,
   electron-root, flux-selective, and balanced presets, writes JSON provenance,
