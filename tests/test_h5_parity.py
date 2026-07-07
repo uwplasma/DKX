@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import h5py
@@ -11,11 +10,9 @@ from sfincs_jax.compare import (
     H5DatasetParity,
     _as_numpy,
     _center_fsa,
-    _json_default,
     _merge_tolerance_floor,
     _numeric_datasets,
     compare_h5_outputs,
-    main,
 )
 
 
@@ -26,7 +23,7 @@ def _write_h5(path: Path, data: dict[str, object]) -> None:
             h5[key] = value
 
 
-def test_compare_private_array_and_json_helpers_cover_metadata_edges(tmp_path: Path) -> None:
+def test_compare_private_array_helpers_cover_metadata_edges() -> None:
     assert _as_numpy(np.asarray([1.0])).shape == (1,)
     assert _as_numpy("metadata") is None
     assert _as_numpy(np.asarray("metadata")) is None
@@ -44,11 +41,6 @@ def test_compare_private_array_and_json_helpers_cover_metadata_edges(tmp_path: P
     assert tolerances["field"]["atol"] == 1.0e-5
     assert tolerances["field"]["center_fsa"] is True
     assert "rtol" not in tolerances["field"]
-
-    assert _json_default(np.float64(2.5)) == 2.5
-    assert _json_default(tmp_path) == str(tmp_path)
-    with pytest.raises(TypeError, match="not JSON serializable"):
-        _json_default(object())
 
 
 def test_numeric_datasets_ignores_groups_and_non_numeric_values(tmp_path: Path) -> None:
@@ -195,37 +187,13 @@ def test_h5_dataset_parity_json_and_ok_contracts() -> None:
     assert failing.to_json()["candidate_shape"] is None
 
 
-def test_h5_parity_cli_writes_report_and_returns_failure(tmp_path: Path) -> None:
-    reference = tmp_path / "fortran.h5"
-    candidate = tmp_path / "jax.h5"
-    out = tmp_path / "report.json"
-    _write_h5(reference, {"a": 1.0})
-    _write_h5(candidate, {"a": 2.0})
-
-    rc = main([str(reference), str(candidate), "--out", str(out)])
-
-    assert rc == 1
-    payload = json.loads(out.read_text(encoding="utf-8"))
-    assert payload["overall_status"] == "fail"
-    assert payload["datasets"][0]["status"] == "value_mismatch"
-
-
-def test_h5_parity_cli_passes_identical_outputs(tmp_path: Path) -> None:
+def test_compare_h5_outputs_suppresses_candidate_extras_when_requested(tmp_path: Path) -> None:
     reference = tmp_path / "fortran.h5"
     candidate = tmp_path / "jax.h5"
     _write_h5(reference, {"a": np.array([1.0, 2.0])})
-    _write_h5(candidate, {"a": np.array([1.0, 2.0])})
+    _write_h5(candidate, {"a": np.array([1.0, 2.0]), "candidate_only": 3.0})
 
-    assert main([str(reference), str(candidate), "--no-extra"]) == 0
+    report = compare_h5_outputs(reference_path=reference, candidate_path=candidate, include_extra=False)
 
-
-def test_h5_parity_cli_prints_success_report_to_stdout(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    reference = tmp_path / "fortran.h5"
-    candidate = tmp_path / "jax.h5"
-    _write_h5(reference, {"a": np.array([1.0, 2.0])})
-    _write_h5(candidate, {"a": np.array([1.0, 2.0])})
-
-    assert main([str(reference), str(candidate), "--key", "a", "--ignore-key", "ignored"]) == 0
-
-    captured = capsys.readouterr()
-    assert '"overall_status": "pass"' in captured.out
+    assert report["overall_status"] == "pass"
+    assert report["status_counts"] == {"ok": 1}
