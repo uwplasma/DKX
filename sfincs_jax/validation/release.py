@@ -12,7 +12,9 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
+import subprocess
 import sys
+import tempfile
 from typing import Iterable
 
 import h5py
@@ -24,6 +26,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_VALIDATION_MANIFEST = REPO_ROOT / "examples" / "publication_figures" / "validation_manifest.json"
 DEFAULT_VALIDATION_DOCS = (REPO_ROOT / "docs" / "validation_matrix.rst",)
 DEFAULT_RESEARCH_MANIFEST = REPO_ROOT / "docs" / "_static" / "research_lane_completion_2026_05_12.json"
+DEFAULT_SIZE_THRESHOLD_MIB = 2.0
+RASTER_EXTENSIONS = {".png", ".jpg", ".jpeg"}
+REVIEWED_LARGE_FILES: dict[str, str] = {}
 
 DEFERRED_STATUS = "deferred_post_release"
 VALID_RECORD_STATUSES = {"implemented", DEFERRED_STATUS}
@@ -83,6 +88,20 @@ class RuntimeDrift:
     baseline_runtime_s: float
     candidate_runtime_s: float
     ratio: float
+
+
+@dataclass(frozen=True)
+class CompressionResult:
+    """Image-compression outcome for one raster file."""
+
+    path: Path
+    before: int
+    after: int
+    changed: bool
+
+    @property
+    def saved(self) -> int:
+        return max(0, self.before - self.after) if self.changed else 0
 
 
 def _load_manifest(path: Path) -> list[dict[str, object]]:
@@ -316,6 +335,88 @@ def audit_suite_runtime_drift(
     return flagged
 
 
+def _tracked_files(root: Path) -> list[Path]:
+    raw = subprocess.check_output(["git", "ls-files", "-z"], cwd=root)
+    return [root / item.decode() for item in raw.split(b"\0") if item]
+
+
+def _relative(path: Path, root: Path) -> str:
+    return path.relative_to(root).as_posix()
+
+
+def large_tracked_files(*, root: Path = REPO_ROOT, threshold_bytes: int) -> dict[str, int]:
+    """Return tracked files larger than ``threshold_bytes``."""
+
+    large: dict[str, int] = {}
+    for path in _tracked_files(root):
+        if not path.exists():
+            continue
+        size = path.stat().st_size
+        if size > threshold_bytes:
+            large[_relative(path, root)] = int(size)
+    return large
+
+
+def _iter_images(roots: list[Path]) -> list[Path]:
+    images: list[Path] = []
+    for root in roots:
+        candidates = [root] if root.is_file() else [p for p in root.rglob("*") if p.is_file()]
+        images.extend(p for p in candidates if p.suffix.lower() in RASTER_EXTENSIONS)
+    return sorted(set(images))
+
+
+def _save_optimized(image, source: Path, target: Path, *, jpeg_quality: int) -> None:
+    suffix = source.suffix.lower()
+    if suffix == ".png":
+        image.save(target, format="PNG", optimize=True, compress_level=9)
+        return
+    if suffix in {".jpg", ".jpeg"}:
+        if image.mode not in {"RGB", "L"}:
+            image = image.convert("RGB")
+        image.save(
+            target,
+            format="JPEG",
+            optimize=True,
+            progressive=True,
+            quality=jpeg_quality,
+        )
+        return
+    raise ValueError(f"Unsupported image suffix: {source}")
+
+
+def compress_image(path: Path, *, apply: bool, jpeg_quality: int) -> CompressionResult:
+    """Compress one raster image and replace it only when the payload shrinks."""
+
+    try:
+        from PIL import Image
+    except ImportError as exc:  # pragma: no cover - depends on local environment
+        raise SystemExit("Pillow is required: python -m pip install pillow") from exc
+
+    before = path.stat().st_size
+    with Image.open(path) as image:
+        with tempfile.NamedTemporaryFile(
+            prefix=path.name + ".",
+            suffix=path.suffix,
+            dir=str(path.parent),
+            delete=False,
+        ) as tmp_file:
+            tmp = Path(tmp_file.name)
+        try:
+            _save_optimized(image, path, tmp, jpeg_quality=jpeg_quality)
+            after = tmp.stat().st_size
+            if after < before:
+                if apply:
+                    tmp.replace(path)
+                else:
+                    tmp.unlink(missing_ok=True)
+                return CompressionResult(path=path, before=before, after=after, changed=True)
+            tmp.unlink(missing_ok=True)
+            return CompressionResult(path=path, before=before, after=before, changed=False)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
+
+
 def check_release_gates_main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Validate release claim metadata for validation/doc gates."
@@ -455,6 +556,83 @@ def audit_runtime_drift_main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def check_size_main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Fail if large tracked files have not been explicitly reviewed."
+    )
+    parser.add_argument(
+        "--threshold-mib",
+        type=float,
+        default=DEFAULT_SIZE_THRESHOLD_MIB,
+        help="Tracked-file review threshold in MiB.",
+    )
+    args = parser.parse_args(argv)
+
+    threshold_bytes = int(float(args.threshold_mib) * 1024 * 1024)
+    large = large_tracked_files(root=REPO_ROOT, threshold_bytes=threshold_bytes)
+    missing = sorted(path for path in large if path not in REVIEWED_LARGE_FILES)
+    stale = sorted(path for path in REVIEWED_LARGE_FILES if path not in large)
+
+    if missing or stale:
+        print("Repository size audit failed.", file=sys.stderr)
+        if missing:
+            print("\nTracked files above threshold without review:", file=sys.stderr)
+            for path in missing:
+                print(f"  {large[path] / 1024 / 1024:7.2f} MiB  {path}", file=sys.stderr)
+        if stale:
+            print("\nReviewed-large-file entries that no longer exist or are below threshold:", file=sys.stderr)
+            for path in stale:
+                print(f"  {path}", file=sys.stderr)
+        return 1
+
+    print(f"Repository size audit passed: {len(large)} reviewed files above {args.threshold_mib:g} MiB.")
+    for path in sorted(large):
+        print(f"  {large[path] / 1024 / 1024:7.2f} MiB  {path} - {REVIEWED_LARGE_FILES[path]}")
+    return 0
+
+
+def compress_images_main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Compress documentation raster images when a smaller encoding is available."
+    )
+    parser.add_argument(
+        "roots",
+        nargs="*",
+        type=Path,
+        default=[Path("docs")],
+        help="Image files or directories to scan. Defaults to docs/.",
+    )
+    parser.add_argument("--apply", action="store_true", help="Replace files with smaller optimized payloads.")
+    parser.add_argument(
+        "--jpeg-quality",
+        type=int,
+        default=95,
+        help="JPEG quality used when reencoding .jpg/.jpeg files.",
+    )
+    args = parser.parse_args(argv)
+
+    if not (1 <= args.jpeg_quality <= 100):
+        parser.error("--jpeg-quality must be between 1 and 100")
+
+    results = [
+        compress_image(path, apply=args.apply, jpeg_quality=args.jpeg_quality)
+        for path in _iter_images(args.roots)
+    ]
+    changed = [item for item in results if item.changed]
+    saved = sum(item.saved for item in changed)
+    mode = "applied" if args.apply else "dry-run"
+    print(
+        f"Image compression {mode}: {len(changed)}/{len(results)} files smaller, "
+        f"saved {saved / 1024 / 1024:.3f} MiB."
+    )
+    for item in changed:
+        print(
+            f"  {item.before / 1024:.1f} KiB -> {item.after / 1024:.1f} KiB  "
+            f"{item.path.as_posix()}"
+        )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run lightweight SFINCS_JAX release validation helpers.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -462,6 +640,8 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser("check-research-lanes", help="Validate research-lane completion metadata.")
     subparsers.add_parser("audit-output-keys", help="Audit Fortran/JAX HDF5 output key coverage.")
     subparsers.add_parser("audit-runtime-drift", help="Audit runtime drift between suite reports.")
+    subparsers.add_parser("check-size", help="Audit tracked files above the reviewed size threshold.")
+    subparsers.add_parser("compress-images", help="Compress documentation raster images.")
 
     if argv is None:
         argv = sys.argv[1:]
@@ -478,6 +658,10 @@ def main(argv: list[str] | None = None) -> int:
         return audit_output_keys_main(rest)
     if command == "audit-runtime-drift":
         return audit_runtime_drift_main(rest)
+    if command == "check-size":
+        return check_size_main(rest)
+    if command == "compress-images":
+        return compress_images_main(rest)
     parser.error(f"unknown command: {command}")
     return 2
 

@@ -22,9 +22,9 @@ bootstrap current, transport coefficients, plotting, and optimization.
   last green CI evidence: `96fb2677`. Exact aggregate coverage from that CI was
   91.753% (`92%`); this tranche has focused local evidence listed below.
 - Current tracked Python volume is the problem to solve before review:
-  115 package files / 137.6k source lines, 313 test files / 125.3k test lines,
-  122 example Python files, and 7 tracked Python scripts after consolidating
-  lightweight release/data/audit scripts into package validation modules.
+  115 package files / 137.7k source lines, 313 test files / 125.2k test lines,
+  122 example Python files, and 5 tracked Python scripts after consolidating
+  lightweight release/data/audit/hygiene scripts into package validation modules.
 - Largest source owners are the first audit targets: `profile_sparse_xblock.py`, `profile_policies.py`, `profile_full_system.py`, `explicit_sparse.py`, `profile_sparse_solve.py`, `profile_solve.py`, `transport_linear_system.py`, `profile_sparse_direct.py`, `transport_parallel_runtime.py`, `profile_dense.py`, `solver.py`, `outputs/rhsmode1.py`, and `preconditioner_transport_matrix.py`.
 - Largest test owners are the second audit targets: `test_profile_response_sparse_pc.py`, `test_rhs1_full_assembly.py`, `test_io_output_policy_coverage.py`, `test_v3_sparse_pattern.py`, `test_explicit_sparse.py`, `test_rhs1_solver_replay.py`, dense profile tests, transport policy tests, and all extracted-path tests.
 - The stable branch must stop carrying the history of solver experiments.
@@ -130,7 +130,7 @@ move target, unless the destination is explicitly listed.
 | `outputs/` | 5 files, 7.6k lines | one schema builder plus one writer/format module | delete experiment-only keys and duplicate HDF5/NPZ/NetCDF plumbing | output schema, HDF5/NPZ/NetCDF, plot tests |
 | `validation/` | 5 files, 2.4k artifact reader | compact fixtures plus claim validators | move publication campaign readers to release assets unless used by docs/tests | artifact schema and docs claim tests |
 | `examples/` | 122 Python scripts | <=10 curated user workflows plus original Fortran-v3 examples | move performance/publication/long-run optimization campaigns to research branches or release assets | examples tree contract and smoke CLI/Python examples |
-| `scripts/` | 7 Python files, 6.1k lines | zero by default, or `scripts/release_*` only | convert remaining suite/profiling/release tooling to tests/examples/package CLIs or delete | script contract test |
+| `scripts/` | 5 Python files, 5.9k lines | zero by default, or `scripts/release_*` only | convert remaining suite/profiling/release tooling to tests/examples/package CLIs or delete | script contract test |
 | `tests/` | 313 Python files, 125.3k lines | unit, physics, regression, cli_io, integration, fixtures | consolidate one-off extracted-path tests and generated historical tests | coverage >=95%, CI <10 min |
 
 ## Stable-Core Admission Gates
