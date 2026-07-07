@@ -229,6 +229,7 @@ def test_core_slim_inventory_covers_large_phase_a_owners() -> None:
         group_branches.add(branch)
         assert len(str(group["purpose"])) >= 40
         assert len(str(group["core_removal_gate"])) >= 40
+        extracted_paths = {str(path) for path in group.get("core_extracted_paths", [])}
         for key in (
             "source_paths",
             "test_paths",
@@ -243,12 +244,18 @@ def test_core_slim_inventory_covers_large_phase_a_owners() -> None:
             for referenced in group[key]:
                 referenced_path = REPO_ROOT / str(referenced)
                 if (
-                    bool(group.get("core_extracted", False))
+                    (bool(group.get("core_extracted", False)) or str(referenced) in extracted_paths)
                     and key in {"source_paths", "test_paths", "example_paths", "script_paths"}
                     and not referenced_path.exists()
                 ):
                     continue
                 assert referenced_path.exists(), f"{branch} references missing {referenced}"
+        grouped_paths = {
+            str(path)
+            for key in ("source_paths", "test_paths", "example_paths", "script_paths")
+            for path in group.get(key, [])
+        }
+        assert extracted_paths <= grouped_paths
     assert REQUIRED_RESEARCH_BRANCHES <= group_branches
 
     entries = payload["entries"]

@@ -726,17 +726,6 @@ owners are:
   ``SparseOperatorBundle`` adapter used by sparse-PC solver paths. Unsupported
   or over-budget cases return ``None`` so callers can fall back to the
   established matrix-free or pattern-probed path.
-- ``sfincs_jax/operators/profile_true_operator_rescue.py``:
-  support bundles and low-level helpers for RHSMode=1 true-operator
-  residual-window, active-submatrix, coupled-coarse, and residual-coarse rescue
-  preconditioners. The module owns the reusable true-action column cache,
-  sparse-factor storage estimator, additive-rescue budget accounting, graph
-  expansion, residual-window target parsing, and residual-driven window
-  selection. It also owns the residual sparse-window/coarse builders, true-
-  operator residual-window LSQ, active-block LSQ, active-residual-block LSQ,
-  active-submatrix, coupled-coarse builders, and active residual diagnostic
-  summaries. Orchestration-only private names are exposed through the
-  profile-response solve owner only when that owner still needs them.
 - ``sfincs_jax/solvers/krylov_dispatch.py``:
   concrete Krylov solver routing for host-only SciPy methods, JIT/non-JIT JAX
   GMRES, distributed GMRES, diagnostic solver labels, and
