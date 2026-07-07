@@ -168,8 +168,8 @@ On the contended ``office`` host it took ``13.6 s`` wall and
 ``3.26 GB`` for SFINCS Fortran v3/MUMPS. The sparse-pattern host-LU
 route remains the strict-residual rescue if the structured attempt fails, but it
 is no longer the default performance path for this mono/PAS production row.
-The public README plot should be regenerated only after the remaining CPU and
-GPU production rows are collected from the checked-in manifest floor.
+Public runtime and memory figures are generated from checked summary manifests;
+rows without completed CPU/GPU evidence stay out of release-facing plots.
 
 For local SFINCS Fortran v3 references, use
 ``scripts/sfincs_fortran_mpi_wrapper.sh`` when a wrapper is needed. It defaults
