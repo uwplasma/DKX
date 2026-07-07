@@ -24,9 +24,9 @@ bootstrap current, transport coefficients, plotting, and optimization.
   sharding-campaign extraction, and high-nu publication-audit generator
   extraction.
 - Current tracked Python volume is still too large for review:
-  115 package Python files / 137.6k source lines, 304 test files / 123.2k test
-  lines, 109 example Python files, 5 tracked Python scripts, and one shell
-  wrapper.
+  115 package Python files / 137.6k source lines, 304 test files / 123.1k test
+  lines, 109 example Python files / 18.0k lines, 5 tracked Python scripts /
+  5.9k lines, and one shell wrapper.
 - Largest source owners to audit first:
   `profile_sparse_xblock.py`, `profile_policies.py`,
   `profile_full_system.py`, `explicit_sparse.py`, `profile_solve.py`,
@@ -42,6 +42,8 @@ bootstrap current, transport coefficients, plotting, and optimization.
   multifrontal, HSS/BLR, long profiling campaigns, publication generators, and
   solver tuning variants are preservation-branch material unless they pass the
   stable admission gates below.
+- Root cleanup has started by deleting duplicate private `sfincs_jax.compare.main`;
+  the supported user entry point remains `sfincs_jax compare-h5`.
 - Overall PR readiness under this stricter small-core goal is about 88-90%.
 
 ## Open Lanes
@@ -81,8 +83,7 @@ special env vars", the line belongs on a research branch, not in this PR.
 
 ## Source Structure Rules
 
-The stable package keeps one-level domain packages only:
-
+The stable package keeps one-level domain packages:
 | Area | Purpose | Target files |
 | --- | --- | ---: |
 | package root | public API, CLI, I/O, namelist, plotting, solver facade, paths, README | <=9 |
@@ -236,6 +237,104 @@ small group of commits with focused tests.
 Do not start a new source family while a previous tranche still has stale
 imports, tests, docs claims, or inventory entries. If a tranche exposes a bug,
 fix the minimal stable path first, then resume deletion/extraction.
+
+## Commit-Sized Execution Queue
+
+The remaining refactor must proceed as a finite queue, not open-ended audit work.
+A commit is acceptable only if it deletes/extracts code, collapses duplicate
+routes, or proves a retained file; except for bug fixes, it should remove at
+least 500 stable-core lines or 3 stable-core files, or explain why a smaller cut
+unlocks the next deletion.
+
+1. **Finish root duplicate cleanup.**
+   Remove private duplicate entry points and tests. Keep public `api.py`,
+   `cli.py`, `io.py`, `namelist.py`, `paths.py`, `plotting.py`, and
+   `compare.py`; move/delete implementation files
+   (`ambipolar.py`, `diagnostics.py`, `grids.py`, `input_compat.py`,
+   `profiling.py`, `sensitivity.py`, `solver.py`) behind domain facades. Root
+   target: <=9 Python files and <=4.5k lines.
+2. **Extract research solver families before simplifying defaults.**
+   Preserve any still-useful QI/device-QI, native sparse-direct,
+   nested-dissection, multifrontal, BLR/HSS, true-operator rescue, and
+   multi-GPU campaign code on the matching `research/*` branches, then delete
+   stable imports, env vars, docs claims, tests, and examples. Stable default
+   solvers may only reference residual-clean automatic policies.
+3. **Collapse RHSMode-1 policy and solve orchestration.**
+   Replace scattered candidate/probe/rescue functions in
+   `profile_solve.py`, `profile_policies.py`, `profile_sparse_policy.py`,
+   `profile_preconditioner_build.py`, `profile_sparse_solve.py`,
+   `profile_sparse_xblock.py`, and `profile_dense.py` with one small policy
+   table and one solve pipeline:
+   `prepare_problem -> choose_policy -> solve -> strict_residual_check ->
+   finalize_outputs`. Keep advanced user knobs only when they are documented
+   and tested. Target: RHSMode-1 problem family <=14k lines.
+4. **Collapse operator files around equations, not implementation history.**
+   Keep terms named by physics:
+   streaming, electric-field, magnetic-drift, ExB, collisions, constraints,
+   source moments, and Phi1 coupling. Delete or merge files whose primary
+   boundary is historical (`profile_device_sparse`, `profile_reduced_tail`,
+   duplicated layout/index helpers). Every retained operator must have a
+   local numerical identity or parity test.
+5. **Collapse transport RHSMode-2/3.**
+   Keep one assembly, one policy, one solve, one finalize path. Move
+   parallel-scaling campaigns and long benchmark orchestration out of stable.
+   Target: transport family <=8k lines with geometryScheme 2/11 parity and
+   runtime/RSS evidence.
+6. **Collapse output schemas and writers.**
+   Keep one typed result schema for profile solves, one for transport solves,
+   and one writer/reader path that dispatches HDF5/NetCDF/NPZ by file suffix.
+   Delete duplicated output-key builders and tests that assert implementation
+   history rather than public output contracts.
+7. **Curate examples and scripts.**
+   Keep original SFINCS-v3 examples plus at most 10 teaching workflows:
+   CLI solve/plot, Python solve, output formats, transport coefficients,
+   bootstrap-current/Redl comparison, ambipolar root, autodiff/JVP,
+   VMEC/Boozer geometry loading, optimization objective, and validation
+   fixture comparison. Convert useful scripts into CLIs/tests/examples; delete
+   unclear scripts and long campaign launchers from stable.
+8. **Consolidate tests while increasing meaningful coverage.**
+   Replace one-off path coverage with parametrized physics/numerics/API suites.
+   Keep fast analytic, fixture, and parity gates; move long production
+   campaigns to optional release workflows. Target first <=180 test files, then
+   <=120 files, with >=95% meaningful coverage and default CI under 10 min.
+9. **Regenerate public evidence and scrub public text.**
+   Regenerate parity/runtime/memory/bootstrap figures only from retained
+   stable workflows. README and docs must describe standalone software, not
+   branch history, "current main", "new version", unpromoted candidates, or
+   partial research campaigns.
+
+This queue supersedes older tranche notes. Work in order unless a failing test
+blocks the current step; then fix only the minimal stable path.
+
+## File Disposition Targets
+
+These targets make the line-by-line audit concrete. Any exception must be
+recorded in `core_slim_inventory.json` with owner, caller, proof, docs, and
+line target.
+
+| Current area | Keep in stable | Merge/delete/extract |
+| --- | --- | --- |
+| package root | `__init__.py`, `__main__.py`, `api.py`, `cli.py`, `compare.py`, `io.py`, `namelist.py`, `paths.py`, `plotting.py`, `README.md` | Move `solver.py`, `sensitivity.py`, `grids.py`, `diagnostics.py`, `profiling.py`, `input_compat.py`, and `ambipolar.py` behind domain facades or delete duplicates. |
+| `problems/profile_*` | one RHSMode-1 setup/solve/finalize pipeline plus diagnostics | candidate/probe/rescue/history variants, env-var-only paths, duplicated policy readers, and QI-only hard-seed helpers. |
+| `operators/profile_*` | equation-oriented DKE term builders and shared layout/index code | device/reduced-tail variants not used by default policies, duplicated geometry/shape helpers, historical sparse pattern probes. |
+| `solvers/` | Krylov dispatch, admitted preconditioners, sparse utilities, memory model | unpromoted native-symbolic/ND/multifrontal/HSS/BLR/true-operator rescue families and duplicate wrappers. |
+| `outputs/` | profile schema, transport schema, writer/format dispatch | duplicate result dictionaries, HDF5-only ad hoc key builders, internal history fields not used by public outputs. |
+| `validation/` | release artifact readers, compact fixture fetch, claim figure helpers | large publication generators, raw profiling traces, stale manifest rows. |
+| `workflows/` | curated autodiff/scans/optimization helpers used by docs/examples | long campaigns, promotion experiments, one-off optimization evidence scripts. |
+| `examples/` | original v3 examples plus <=10 curated workflows | most campaign/performance/publication folders and single-file folders without a teaching purpose. |
+| `tests/` | compact unit, physics, numerical, parity, API, docs-claim tests | tests for extracted code, tests that only pin implementation history, duplicate coverage-only files. |
+| `scripts/` | release/data fetch tooling only if documented | anything better represented as a CLI, test, or curated example. |
+
+## No-Microtranche Rule
+
+Do not spend a commit on a single private helper unless it immediately unlocks
+a larger deletion. Each normal work block starts from one largest owner table
+(root, RHSMode-1, transport, outputs, examples, tests, or docs), deletes or
+extracts before moving code, keeps file count flat or lower, prefers one clear
+domain file over many attempt-named files, adds absence tests for extracted
+paths instead of new tests for soon-deleted code, and runs focused tests plus
+one import/compile guard before committing. Full coverage runs happen only at
+queue milestones.
 
 ## Stable vs Research Decision Gates
 

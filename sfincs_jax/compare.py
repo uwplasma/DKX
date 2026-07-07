@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import argparse
-import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Sequence
@@ -110,14 +108,6 @@ def _merge_tolerance_floor(
             current_value = None
         merged[name] = floor_value if current_value is None else max(current_value, floor_value)
     tolerances[key] = merged
-
-
-def _json_default(value: Any) -> Any:
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, Path):
-        return str(value)
-    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
 def _is_numeric_array(array: np.ndarray) -> bool:
@@ -879,35 +869,3 @@ def compare_sfincs_outputs(
         results.append(CompareResult(key=k, max_abs=max_abs, max_rel=max_rel, ok=ok))
 
     return results
-
-
-def main(argv: list[str] | None = None) -> int:
-    """CLI-compatible strict numeric HDF5 parity check."""
-
-    parser = argparse.ArgumentParser(description="Strict numeric HDF5 parity check.")
-    parser.add_argument("reference", type=Path)
-    parser.add_argument("candidate", type=Path)
-    parser.add_argument("--out", type=Path, help="Optional JSON report path")
-    parser.add_argument("--atol", type=float, default=1.0e-12)
-    parser.add_argument("--rtol", type=float, default=1.0e-12)
-    parser.add_argument("--ignore-key", action="append", default=[])
-    parser.add_argument("--key", action="append", default=None, help="Dataset key to compare; may be repeated")
-    parser.add_argument("--no-extra", action="store_true", help="Do not report candidate-only datasets")
-    args = parser.parse_args(argv)
-
-    report = compare_h5_outputs(
-        reference_path=args.reference,
-        candidate_path=args.candidate,
-        keys=args.key,
-        ignore_keys=args.ignore_key,
-        include_extra=not args.no_extra,
-        atol=args.atol,
-        rtol=args.rtol,
-    )
-    text = json.dumps(report, indent=2, sort_keys=True, default=_json_default) + "\n"
-    if args.out is not None:
-        args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(text, encoding="utf-8")
-    else:
-        print(text, end="")
-    return 0 if report["overall_status"] == "pass" else 1
