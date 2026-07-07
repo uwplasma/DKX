@@ -22,8 +22,8 @@ bootstrap current, transport coefficients, plotting, and optimization.
   removal, sharding/high-nu audit extraction, root Krylov cleanup, BLR/HSS and
   nested-dissection frontal route removal, and first examples cleanup.
 - Current burden after the last cleanup is 116 package Python files / 141,442
-  package lines, 300 test files / 121,406 test lines, 100 example Python files
-  / 16,377 example lines, and 451 tracked example files. These numbers must
+  package lines, 301 test files / 121,375 test lines, 99 example Python files
+  / 16,027 example lines, and 451 tracked example files. These numbers must
   decrease by deletion, merging, or research extraction; moving lines into more
   files is a failed tranche.
 - `core_slim_inventory.json` is file-complete only at broad path-rule
@@ -83,12 +83,10 @@ No nested package directories are allowed under `sfincs_jax/`.
 
 ## Concrete Code-Audit Rules
 
-The audit is file-card driven, not exploratory. For every tracked file, create
-or update one inventory card before editing: path, line count, imports, callers,
-public symbols, env vars, CLI flags, namelist aliases, output keys, diagnostics
-keys, examples, tests, docs, owner tags, line target, decision, and extraction
-branch if applicable. A file with no card is not refactored.
-
+The audit is reductive and file-card driven. Before editing any tracked file,
+record path, lines, imports, callers, public symbols, env vars, CLI flags,
+namelist aliases, output/diagnostic keys, examples, tests, docs, owner tags,
+line target, decision, and extraction branch. A file with no card is not edited.
 Allowed owner tags and proof are:
 
 | Owner | Retain only if it supports | Required proof |
@@ -100,11 +98,13 @@ Allowed owner tags and proof are:
 | `PERF` | runtime, memory, JIT, setup, output-write reduction | benchmark fixture or policy gate |
 | `EVIDENCE` | compact validation fixture, release evidence, docs claim data | schema/docs-claim test |
 | `COMPAT` | documented SFINCS Fortran v3 input/output compatibility | compatibility fixture or parser/output test |
-
 Every retained line gets one disposition during the section review. The default
 disposition is `delete-core`; a line is promoted from that default only when
 the file card names its owner tag, caller, proof, public/domain purpose, and
-simpler alternative that was rejected.
+rejected simpler owner. Review line ranges as imports/constants, public API,
+helpers over 20 lines, policy/solver branches, output/diagnostic keys,
+comments/docstrings, tests, or examples. Lines kept only by habit, coverage,
+history, manual env-var tuning, or unpromoted campaigns are deleted/extracted.
 
 | Disposition | Keep/move rule | Required result |
 | --- | --- | --- |
@@ -113,11 +113,10 @@ simpler alternative that was rejected.
 | `delete-core` | dead, duplicate, generated, obsolete, coverage-only, historical, or branch-prose code | removed with imports, tests, docs, env vars, fixtures, and examples |
 | `extract-research` | useful but not stable: QI/device-QI, native direct factors, long campaigns, special GPU work, publication experiments, unsupported optimization studies | preserved on a research branch/PR, then removed from stable imports and README claims |
 
-The required file card is: path, current lines, target lines, imports, callers,
-public symbols, private helpers over 20 lines, env vars, CLI flags, namelist
-aliases, output/diagnostic keys, docs/examples, tests, section line ranges,
-section dispositions, extraction branch, and reviewer note. The per-file
-procedure is fixed:
+The required file card is: path, current/target lines, imports, callers, public
+symbols, helpers over 20 lines, env vars, CLI flags, namelist aliases,
+output/diagnostic keys, docs/examples, tests, section ranges/dispositions,
+rejected simpler owner, extraction branch, and reviewer note. Procedure:
 
 1. Build the file card from `git ls-files`, AST public symbols, `rg` callers,
    tests, docs, examples, env vars, and output keys.
@@ -128,14 +127,16 @@ procedure is fixed:
 4. Delete one-call wrappers unless they are the public API or the clearest name
    for a physics/numerics boundary.
 5. Collapse duplicate diagnostics dictionaries, policy predicates, shape
-   helpers, parser aliases, metadata builders, profiler wrappers, and output-key
-   builders into one owner per problem family.
+   helpers, parser aliases, metadata builders, profiler wrappers, output-key
+   builders, and one-call compatibility wrappers into one owner per problem
+   family.
 6. Delete tests for extracted code; keep only compact absence tests and stable
    behavior tests.
 7. Run focused tests, Ruff, compileall, JSON validation, diff hygiene, import
    checks, and size guards.
 8. Commit only when stable files, lines, public knobs, solver routes, schemas,
-   examples, scripts, generated artifacts, or test burden decrease.
+   examples, scripts, generated artifacts, or test burden decrease. A commit
+   that keeps the same complexity must name the larger deletion it unlocks.
 
 A commit that only moves code from one large file into many attempt-named files
 without decreasing stable lines, file count, or duplicated branches fails this
@@ -146,8 +147,10 @@ plan.
 The line sweep is mandatory and file-complete. The first pass classifies every
 tracked path exactly once. The second pass adds section cards for large files
 and folder cards for examples/tests. The third pass deletes, merges, or
-extracts code. Do not edit a large owner until its card lists line ranges and a
-target line count. The sweep order is:
+extracts code. Do not edit a large owner until its card lists line ranges,
+target line count, and each range as stable physics/numerics, public API,
+compatibility, test evidence, obsolete, duplicate, or research. The sweep order
+is:
 
 1. Package source files over 500 lines, largest first.
 2. Solver/preconditioner files containing research words: `qi`, `native`,
@@ -333,36 +336,33 @@ and stable docs keep only a short pointer in `docs/research_lanes.rst`.
 
 ## Ordered Finish Plan
 
-1. Expand `core_slim_inventory.json` to cover every tracked file and every
-   public symbol in the package; add tests that fail on missing inventory rows.
-2. Create/refresh preservation branches for QI/device-QI, native sparse-direct,
-   parallel performance, publication audits, and optimization experiments; then
-   remove those paths from stable.
-3. Finish root cleanup by moving `grids`, `input_compat`, `profiling`,
-   `diagnostics`, `ambipolar`, and `sensitivity` implementation into existing
-   domain modules or deleting them; root target is <=9 implementation-light
-   Python files.
-4. Collapse RHSMode-1 orchestration into one readable policy/solve/finalize
-   path and one public advanced-options surface; delete all hidden
-   env-var-only branches and duplicate rescue labels.
-5. Collapse operator files around DKE terms and numerical identities; delete
-   reduced/device/sparse-pattern helpers that no default policy uses.
-6. Collapse RHSMode-2/3 transport into one assembly/policy/solve/finalize path;
-   move scaling campaigns out of stable.
-7. Collapse solver/preconditioner families to admitted defaults with strict
-   residual gates; extract experimental factorization research.
-8. Collapse output schemas and writer/reader dispatch; keep all public output
-   keys tested against compact fixtures.
-9. Curate examples to original v3 examples plus <=10 workflows: CLI solve/plot,
-   Python solve, output formats, transport coefficients, bootstrap/Redl,
+1. Finish inventory section cards for every source file over 500 lines, test
+   file over 1200 lines, and example folder; cards must name keep/merge/delete/
+   extract line ranges before code edits.
+2. Extract research families to preservation branches, then remove stable
+   imports, hidden env vars, settings fields, metadata keys, examples, tests,
+   and docs for QI/device-QI, native sparse-direct, profiling campaigns,
+   publication audits, and long optimization campaigns.
+3. Make the root package a facade: public API/CLI/I/O/plot/namelist/paths/
+   compare plus compatibility aliases only; move/delete implementation-heavy
+   `grids`, `input_compat`, `profiling`, `diagnostics`, `ambipolar`, and
+   `sensitivity`.
+4. Collapse physics/numerics owners: one RHSMode-1 pipeline, one RHSMode-2/3
+   pipeline, equation-owned DKE operator blocks, residual-clean solver defaults,
+   and one output schema per problem family.
+5. Curate examples to original v3 references plus <=10 workflows: CLI solve/
+   plot, Python solve, output formats, transport coefficients, bootstrap/Redl,
    ambipolar root, autodiff/JVP, VMEC/Boozer loading, optimization objective,
    and validation fixture comparison.
-10. Consolidate tests to domain-parametrized physics/numerics/API suites; reach
-    >=95% meaningful coverage without default CI exceeding 10 minutes.
-11. Regenerate README/docs parity/runtime/memory/bootstrap figures and tables
-    from retained workflows only; remove unsupported claims.
-12. Run final checks, push PR #8 as the single draft/review PR, and do not merge
-    until review is complete.
+6. Consolidate tests into behavior suites: physics gates, numerical identities,
+   API/CLI/output contracts, autodiff checks, parity fixtures, docs/evidence
+   claims, and absence tests. Target >=95% meaningful coverage with default CI
+   under 10 minutes.
+7. Regenerate README/docs parity/runtime/memory/bootstrap figures and tables
+   from retained workflows only; remove branch-history prose and unsupported
+   performance or research claims.
+8. Run final checks, push PR #8 as the single draft/review PR, and do not merge
+   until review is complete.
 
 ## No-Microtranche Rule
 
