@@ -869,10 +869,11 @@ Relevant implementation:
   byte budgets.
 - ``sfincs_jax/solvers/preconditioner_pas_policy.py`` contains PAS
   applicability and memory gates.
-- ``scripts/benchmark_pas_tz_memory_fallback.py`` records promotion/rejection
-  evidence. Its dry-runs are explicitly non-promoting; a row becomes
-  ``promotion_ready`` only after real child solves pass residual, stall, RSS,
-  backend, solver-path, guarded-fallback, and baseline-improvement gates.
+- Historical PAS fallback promotion/rejection scripts are preserved on the
+  research branch. In the stable core, dry-run evidence is explicitly
+  non-promoting; a candidate route becomes default-eligible only after real
+  solves pass residual, stall, RSS, backend, solver-path, guarded-fallback, and
+  baseline-improvement gates.
 
 Next implementation
 ~~~~~~~~~~~~~~~~~~~

@@ -1697,12 +1697,10 @@ so scan points can reuse the same preconditioner blocks. Controls:
 - ``SFINCS_JAX_PRECOND_FP32_MIN_SIZE`` (threshold for auto mixed precision)
 
 The PAS benchmark promotion gate is intentionally stricter than a single
-threshold comparison. When ``scripts/benchmark_pas_tz_memory_fallback.py`` is
-run with ``--require-default-promotion-gate``, a residual-clean candidate must
-not regress either elapsed time or peak RSS against the supplied baseline, and
-must still show a material runtime or memory win. This prevents a PAS policy
-from being promoted when it is faster but higher-memory, or lower-memory but
-slower.
+threshold comparison. A residual-clean candidate must not regress either elapsed
+time or peak RSS against the supplied baseline, and must still show a material
+runtime or memory win. This prevents a PAS policy from being promoted when it
+is faster but higher-memory, or lower-memory but slower.
 
 **PAS-lite / PAS-hybrid / PAS-Schur preconditioners.** For PAS-only RHSMode=1
 systems, ``sfincs_jax`` defaults to lightweight PAS-specific preconditioners
@@ -2857,14 +2855,11 @@ factor storage estimates. This makes the next optimization pass auditable: a
 claimed memory win must reduce the measured active/device metric and should also
 reduce the estimated dominant storage term.
 
-The structured PAS-TZ memory fallback remains benchmark-only until a bounded
-route clears both runtime and residual gates. Use
-``scripts/benchmark_pas_tz_memory_fallback.py`` to run forced ``collision``,
-``hybrid``, ``theta``, ``zeta``, and ``tzfft`` fallback variants in subprocesses
-with hard timeouts.
-The companion ``scripts/benchmark_rhs1_pas_matrixfree.py`` production-solve
-planner can pass the same default-promotion baseline gate into those subprocess
-runs via the ``--production-solve-require-default-promotion-gate`` controls.
+The structured PAS-TZ memory fallback remains research-only until a bounded
+route clears both runtime and residual gates. Historical forced ``collision``,
+``hybrid``, ``theta``, ``zeta``, and ``tzfft`` fallback variants are preserved
+on the research branch; the stable core keeps only the underlying solver-policy
+gates and checked artifacts.
 The fallback benchmark also requires provenance that the guarded PAS-TZ fallback
 path actually ran. Rows must contain a guarded PAS-TZ message such as the
 structured-fallback guard, guarded correction, or guarded retry-skip trace before
@@ -2903,9 +2898,8 @@ running a candidate residual matvec, so no-op PAS correction probes spend one
 matrix-free operator application instead of two while preserving the same reject
 reason and residual history.
 It also preflights candidate vector element and byte budgets before calling the
-correction builder. ``scripts/benchmark_rhs1_pas_matrixfree.py`` exposes this as
-``--max-candidate-elements`` and ``--max-candidate-bytes`` so production-floor
-PAS probes can fail closed before materializing large update or residual arrays.
+correction builder so production-floor PAS probes can fail closed before
+materializing large update or residual arrays.
 The byte budget is also a promotion gate: every planned bounded probe writes
 ``byte_preflight`` provenance, metadata-backed production-floor probes write a
 conservative ``production_floor_byte_preflight`` record using the estimated full
