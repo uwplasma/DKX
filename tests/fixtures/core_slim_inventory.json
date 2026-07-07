@@ -18,8 +18,8 @@
       "research/parallel-performance",
       "research/publication-audits"
     ],
-    "next_step": "Follow plan_final.md tranches A-J: first expand this inventory from the largest-owner sample to a whole-repo keep/merge/delete/extract ledger, then execute research extraction, root cleanup, RHSMode-1 collapse, operator/transport/solver/output consolidation, tests/examples cleanup, and public evidence regeneration.",
-    "latest_tranche_evidence": "Removed direct-tail support-mode preflight and stable-output plumbing; deleted 13 tracked generated performance-output JSON files; consolidated seven release/data/audit/hygiene scripts into validation CLIs; extracted unsupported single-case sharded and multi-GPU performance campaign examples/tests; extracted high-nu and W7-X publication-audit generators while retaining compact checked artifacts; extracted optional Lineax and Equinox/JAXopt adoption benchmark drivers; moved Krylov implementation from the package root to sfincs_jax.solvers.krylov while keeping sfincs_jax.solver as a compatibility alias; rewrote plan_final.md into a stricter finite work order and added rule-expanded whole-repo inventory coverage; deleted the duplicate root utils/ tree and promoted the enhanced noninteractive upstream utility behavior into examples/sfincs_examples/utils, leaving one canonical vendored utility location; promoted the remaining Python release/profiling scripts into sfincs_jax.validation modules so scripts/ is no longer a Python implementation area; merged validation figure-panel helpers into validation artifacts so evidence schemas and docs-panel gates have one owner; merged reduced and scaled suite runners into sfincs_jax.validation.suite with explicit reduced/scaled subcommands and legacy script-name dispatch for archived tests; consolidated production-input generation, README audit regeneration, and write-output tracing into sfincs_jax.validation.release subcommands so validation reaches five implementation modules plus __init__. Focused local checks across those tranches covered source-tree/domain contracts, release/data/audit tests, scaled-suite source-tree checks, publication-audit extraction checks, package CLI checks, upstream utility smoke tests, Ruff, compileall, JSON validation, diff hygiene, and size guard."
+    "next_step": "Execute plan_final.md file-level queues in order: solver research extraction, RHSMode-1 orchestration collapse, operator cleanup, transport collapse, validation/evidence shrink, examples/tests curation, and root/API cleanup.",
+    "latest_tranche_evidence": "Removed direct-tail support-mode preflight and stable-output plumbing; deleted 13 tracked generated performance-output JSON files; consolidated seven release/data/audit/hygiene scripts into validation CLIs; extracted unsupported single-case sharded and multi-GPU performance campaign examples/tests; extracted high-nu and W7-X publication-audit generators while retaining compact checked artifacts; extracted optional Lineax and Equinox/JAXopt adoption benchmark drivers; moved Krylov implementation from the package root to sfincs_jax.solvers.krylov while keeping sfincs_jax.solver as a compatibility alias; rewrote plan_final.md into a stricter finite work order and added rule-expanded whole-repo inventory coverage; deleted the duplicate root utils/ tree and promoted the enhanced noninteractive upstream utility behavior into examples/sfincs_examples/utils, leaving one canonical vendored utility location; promoted the remaining Python release/profiling scripts into sfincs_jax.validation modules so scripts/ is no longer a Python implementation area; merged validation figure-panel helpers into validation artifacts so evidence schemas and docs-panel gates have one owner; merged reduced and scaled suite runners into sfincs_jax.validation.suite with explicit reduced/scaled subcommands and legacy script-name dispatch for archived tests; consolidated production-input generation, README audit regeneration, and write-output tracing into sfincs_jax.validation.release subcommands so validation reaches five implementation modules plus __init__; added the explicit file-level queue and extraction protocol to plan_final.md. Focused local checks across those tranches covered source-tree/domain contracts, release/data/audit tests, scaled-suite source-tree checks, publication-audit extraction checks, package CLI checks, upstream utility smoke tests, Ruff, compileall, JSON validation, diff hygiene, and size guard."
   },
   "categories": [
     "core",
@@ -347,7 +347,7 @@
         ],
         "proof_owner": "domain tests plus source-tree contracts",
         "line_target": "<=50 Python files and <=50k package lines unless ledger exception",
-        "next_action": "Move root implementation files into domains, collapse RHSMode-1, transport, solver, and output families."
+        "next_action": "Start with solver research: remove or extract BLR/HSS/nested-dissection/multifrontal/true-operator rescue/manual native-factor routes, then collapse RHSMode-1 policy tables."
       },
       {
         "name": "compact_test_fixtures",
@@ -428,7 +428,7 @@
         ],
         "proof_owner": "pytest coverage and domain regression suites",
         "line_target": "<=180 test files first, <=120 final, coverage >=95%",
-        "next_action": "Collapse large one-off tests into parametrized physics/numerics/API suites."
+        "next_action": "Delete tests that only pin extracted research paths; merge the retained tests into parametrized physics, numerics, API, autodiff, parity, and docs-claim suites."
       },
       {
         "name": "docs_static_evidence",
@@ -499,7 +499,7 @@
         ],
         "proof_owner": "research/publication-audits and research/parallel-performance",
         "line_target": "move long generators/campaigns out of stable examples",
-        "next_action": "Retain only compact checked figures referenced by README/docs."
+        "next_action": "Move long publication/performance generators to preservation branches; keep only compact checked figures and their source data when public docs still cite them."
       },
       {
         "name": "optimization_examples",
@@ -532,7 +532,7 @@
         ],
         "proof_owner": "examples tree contract and smoke-free API tests",
         "line_target": "<=10 curated workflows outside original v3 references",
-        "next_action": "Consolidate single-file folders into a navigable teaching set."
+        "next_action": "Reduce to original v3 references plus no more than 10 teaching workflows: CLI solve/plot, Python solve, output formats, transport, bootstrap/Redl, ambipolar root, autodiff, geometry loading, optimization, and validation comparison."
       },
       {
         "name": "temporary_scripts",
