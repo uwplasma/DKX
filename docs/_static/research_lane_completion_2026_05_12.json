@@ -147,8 +147,8 @@
       "current_percent": 97,
       "evidence": [
         {
-          "claim": "Production-floor PAS-TZ tzfft CPU artifact converges at the collaborator floor without dense allocation.",
-          "path": "examples/performance/output/pas_tz_prod_floor_cpu_tzfft_25x51x100x4.json"
+          "claim": "Performance documentation preserves the production-floor PAS-TZ CPU evidence scope while generated run outputs remain untracked.",
+          "path": "docs/performance_techniques.rst"
         },
         {
           "claim": "No-op PAS matrix-free corrections now avoid the extra candidate matvec while preserving residual history and reject reason.",
@@ -167,8 +167,8 @@
           "path": "tests/test_rhs1_pas_matrixfree.py"
         },
         {
-          "claim": "Production-floor PAS-TZ tzfft GPU artifact converges at the collaborator floor with residual matching the CPU floor artifact.",
-          "path": "examples/performance/output/pas_tz_prod_floor_gpu_tzfft_25x51x100x4.json"
+          "claim": "Performance documentation preserves the production-floor PAS-TZ GPU evidence scope while generated run outputs remain untracked.",
+          "path": "docs/performance_techniques.rst"
         },
         {
           "claim": "Matrix-free PAS correction now has a fail-fast live-byte preflight that rejects oversized candidates before update allocation or candidate residual matvecs.",
@@ -384,7 +384,7 @@
         },
         {
           "claim": "Release-gate checker validates status, kind, non-empty literature/claim/source/test/gate lists, and source/test/script/artifact path existence for release-ready and closed-deferred lanes.",
-          "path": "scripts/check_release_gates.py"
+          "path": "sfincs_jax/validation/release.py"
         },
         {
           "claim": "Deferred-lane gate tests prove closed-deferred validation lanes can remain nonblocking while still requiring valid source, test, script, and artifact paths.",
@@ -551,7 +551,7 @@
       "evidence": [
         {
           "claim": "New CI-fast research-lane checker prevents subjective or unsupported completion claims.",
-          "path": "scripts/check_research_lanes.py"
+          "path": "sfincs_jax/validation/release.py"
         },
         {
           "claim": "New tests enforce evidence paths, non-regressing completion percentages, and substantial per-lane deltas.",

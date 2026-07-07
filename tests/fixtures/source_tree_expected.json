@@ -158,7 +158,8 @@
       "artifacts.py",
       "data_fetch.py",
       "figures.py",
-      "fortran.py"
+      "fortran.py",
+      "release.py"
     ],
     "workflows": [
       "mapped_xgrid.py",

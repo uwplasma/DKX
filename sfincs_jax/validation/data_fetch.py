@@ -9,6 +9,8 @@ from pathlib import Path
 import tarfile
 import tempfile
 from urllib.request import urlopen
+import argparse
+import sys
 
 
 _MANIFEST_PATH = Path(__file__).with_name("equilibria_manifest.json")
@@ -169,3 +171,23 @@ def resolve_external_equilibrium(path: str | Path, *, fetch: bool = True) -> Pat
         if candidate.exists():
             return candidate
     return None
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Command-line entry point for fetching release-hosted equilibrium data."""
+
+    parser = argparse.ArgumentParser(description="Fetch release-hosted SFINCS_JAX equilibrium fixtures.")
+    parser.add_argument("--quiet", action="store_true", help="Suppress download progress output.")
+    args = parser.parse_args(argv)
+
+    target = ensure_external_equilibrium_data(quiet=args.quiet)
+    manifest = external_data_manifest()
+    if not args.quiet:
+        print(f"SFINCS-JAX external data {manifest['version']} ready in {target}")
+        for item in manifest["files"]:
+            print(f"  {item['path']} ({int(item['size']) / 1024 / 1024:.2f} MiB)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

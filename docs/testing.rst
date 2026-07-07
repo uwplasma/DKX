@@ -164,7 +164,7 @@ Large public equilibrium fixtures are intentionally not tracked in git and are
 not included in wheels. The CI contract for those files is:
 
 - fetch the checksum-pinned ``sfincs-jax-data-v1`` release archive with
-  ``python scripts/fetch_equilibria.py --quiet``;
+  ``python -m sfincs_jax.validation.data_fetch --quiet``;
 - verify every manifest entry exists in the configured cache;
 - rerun the public VMEC output path in offline mode;
 - keep ``tests/test_data_fetch.py`` as the unit gate for manifest structure,
@@ -329,7 +329,7 @@ unit/regression suite:
 - :doc:`validation_matrix` is the corresponding human-facing documentation page.
 - ``tests/test_validation_manifest_schema.py`` enforces that every lane has explicit
   source-code anchors, protecting tests, and acceptance gates.
-- ``scripts/check_release_gates.py`` and ``tests/test_release_gate_metadata.py`` add a
+- ``python -m sfincs_jax.validation.release check-gates`` and ``tests/test_release_gate_metadata.py`` add a
   CI-fast release gate over the manifest's ``release_gate`` metadata. Each lane must be
   ``release_ready``, ``regression_scaffold``, ``bounded_proxy``, or
   ``closed_deferred``; no lane may remain ambiguous in the release manifest. The
@@ -340,7 +340,7 @@ unit/regression suite:
   tagged release claim, but it is not allowed to rot silently.
 - ``docs/_static/research_lane_completion_2026_05_12.json`` records the active
   research/performance lanes, evidence artifacts, completion estimates, gates,
-  and next actions for the checked research-lane cycle. ``scripts/check_research_lanes.py``
+  and next actions for the checked research-lane cycle. ``python -m sfincs_jax.validation.release check-research-lanes``
   and ``tests/test_research_lane_policy.py`` enforce that those percentages are
   evidence-backed and that active lanes record substantial measured progress
   before their completion estimate is increased. The policy is target-capped:

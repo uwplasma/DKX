@@ -47,8 +47,8 @@ From the repository root:
 .. code-block:: bash
 
    pytest -q
-   python scripts/check_release_gates.py
-   python scripts/check_research_lanes.py
+   python -m sfincs_jax.validation.release check-gates
+   python -m sfincs_jax.validation.release check-research-lanes
    python scripts/check_qi_device_artifacts.py docs/_static/figures/optimization --min-relevant 1
    sphinx-build -W -b html docs docs/_build/html
    python -m build
@@ -66,8 +66,8 @@ For a fast claim-scope check without running the whole suite, use:
 
    pytest -q tests/test_validation_manifest_schema.py tests/test_release_gate_metadata.py
    pytest -q tests/test_benchmark_doc_claims.py tests/test_generate_fortran_suite_benchmark_summary.py
-   python scripts/check_release_gates.py
-   python scripts/check_research_lanes.py
+   python -m sfincs_jax.validation.release check-gates
+   python -m sfincs_jax.validation.release check-research-lanes
    python scripts/check_qi_device_artifacts.py docs/_static/figures/optimization --min-relevant 1
 
 This validates that publication-facing lanes are either implemented for the
@@ -157,15 +157,15 @@ Manual audit commands:
 
 .. code-block:: bash
 
-   python scripts/fetch_equilibria.py --quiet
+   python -m sfincs_jax.validation.data_fetch --quiet
    SFINCS_JAX_OFFLINE=1 python examples/getting_started/write_sfincs_output_vmec.py \
      --out /tmp/sfincs_jax_vmec_release_data_smoke.h5
 
-   python scripts/audit_suite_output_keys.py \
+   python -m sfincs_jax.validation.release audit-output-keys \
      --suite-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
      --fail-on-missing
 
-   python scripts/audit_suite_runtime_drift.py \
+   python -m sfincs_jax.validation.release audit-runtime-drift \
      --baseline-report /path/to/frozen_cpu_baseline/suite_report.json \
      --candidate-report tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak/suite_report.json \
      --threshold-ratio 1.25 \

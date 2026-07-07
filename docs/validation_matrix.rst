@@ -36,7 +36,7 @@ The schema is enforced by ``tests/test_validation_manifest_schema.py``. Implemen
 release lanes must point to existing scripts, artifacts, source files, and tests.
 Deferred post-release lanes are closed for the tagged release but retain literature
 anchors, implementation targets, tests, and acceptance criteria so follow-up research
-work is not lost. ``scripts/check_release_gates.py`` applies the same path
+work is not lost. ``python -m sfincs_jax.validation.release check-gates`` applies the same path
 hygiene to deferred lanes: listed source files, tests, scripts, and artifacts must
 exist even when the claim status is ``closed_deferred``.
 
@@ -44,7 +44,7 @@ Release claim gate metadata
 ---------------------------
 
 Every manifest record has a ``release_gate`` block checked by
-``scripts/check_release_gates.py`` and ``tests/test_release_gate_metadata.py``.
+``python -m sfincs_jax.validation.release check-gates`` and ``tests/test_release_gate_metadata.py``.
 The allowed ``claim_status`` values are:
 
 - ``release_ready``: checked-in artifacts support the documented release-scope

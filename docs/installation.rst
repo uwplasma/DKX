@@ -21,7 +21,7 @@ data explicitly, run:
 
 .. code-block:: bash
 
-   python scripts/fetch_equilibria.py
+   python -m sfincs_jax.validation.data_fetch
 
 Use ``SFINCS_JAX_DATA_DIR=/path/to/cache`` to choose a different cache root. Use
 ``SFINCS_JAX_OFFLINE=1`` in CI or cluster jobs when a run must fail instead of

@@ -181,7 +181,7 @@ After a suite refresh, verify the structural output coverage explicitly:
 
 .. code-block:: bash
 
-   python scripts/audit_suite_output_keys.py \
+   python -m sfincs_jax.validation.release audit-output-keys \
      --suite-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
      --fail-on-missing
 
@@ -190,7 +190,7 @@ runtime against that promoted reference lane:
 
 .. code-block:: bash
 
-   python scripts/audit_suite_runtime_drift.py \
+   python -m sfincs_jax.validation.release audit-runtime-drift \
      --baseline-report /path/to/frozen_cpu_baseline/suite_report.json \
      --candidate-report tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak/suite_report.json \
      --threshold-ratio 1.25 \

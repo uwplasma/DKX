@@ -105,7 +105,7 @@ Practical notes for users
   - and release-hosted public W7-X/HSX/QI fixtures by basename.
 
 - The release-hosted fixture cache keeps regular clones and wheels small. Prefetch
-  it with ``python scripts/fetch_equilibria.py`` or set
+  it with ``python -m sfincs_jax.validation.data_fetch`` or set
   ``SFINCS_JAX_OFFLINE=1`` to require a pre-populated cache.
 
 - If you need to point a run at a different equilibrium without editing ``input.namelist``,

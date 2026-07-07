@@ -49,7 +49,7 @@ under `~/.cache/sfincs_jax/data/2026-05-26-v1` by default. To prefetch them for
 CI, offline work, or reproducible examples, run:
 
 ```bash
-python scripts/fetch_equilibria.py
+python -m sfincs_jax.validation.data_fetch
 ```
 
 Set `SFINCS_JAX_DATA_DIR=/path/to/cache` to choose a different cache root, or set

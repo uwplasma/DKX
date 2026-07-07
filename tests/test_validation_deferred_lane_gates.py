@@ -4,7 +4,7 @@ import copy
 import json
 from pathlib import Path
 
-from scripts.check_release_gates import release_gate_errors
+from sfincs_jax.validation.release import release_gate_errors
 
 
 _DEFERRED_LANE_IDS = {
