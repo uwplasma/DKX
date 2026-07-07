@@ -55,6 +55,12 @@
         "scripts/check_qi_device_artifacts.py",
         "scripts/run_qi_seed_robustness.py"
       ],
+      "core_coupling_paths": [
+        "sfincs_jax/problems/profile_solve.py",
+        "sfincs_jax/problems/profile_sparse_fortran_reduced.py",
+        "sfincs_jax/problems/profile_diagnostics.py",
+        "sfincs_jax/workflows/optimization.py"
+      ],
       "doc_paths": [
         "docs/research_lanes.rst",
         "docs/optimization.rst"
