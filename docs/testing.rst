@@ -742,16 +742,12 @@ production claim: this hard seed is below ``3e-5`` on CPU and GPU, while
 additional algorithmic work is still required to reach the production write
 tolerance.
 
-The QI device-preconditioner unit gate checks one more non-smoother
+The QI device-preconditioner research branch checks one more non-smoother
 piece of infrastructure: coupled residual-equation setup batches the ``A Q``
 operator-action construction with ``jax.vmap`` when the operator has a batching
 rule, and the installed device preconditioner reuses that cached action instead
-of recomputing it.  The same state records ``jax_default_backend``,
-``jax_available_platforms``, operator array devices/platforms, and reuse versus
-recompute stage counts.  ``tests/test_rhs1_qi_coupled_residual.py`` and
-``tests/test_rhs1_qi_device_preconditioner.py`` lock these metadata fields on
-small systems so the large GPU lane can be audited without launching a long
-solve.
+of recomputing it.  The stable core keeps this as deferred research evidence;
+the detailed unit tests live with the extracted QI-device implementation.
 
 QI device artifacts also have a CI-fast overclaiming gate:
 

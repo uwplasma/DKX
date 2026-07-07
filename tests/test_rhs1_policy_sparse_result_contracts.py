@@ -16,8 +16,6 @@ from sfincs_jax.problems.profile_policies import (
     RHS1Constraint0PETScCompatConfig,
     RHS1FullSparseRescueSetupResult,
     RHS1PostMinresPolicy,
-    RHS1QIDeviceRankBudget,
-    RHS1QIDeviceSetupSummary,
     RHS1SparseJAXConfig,
     RHS1SparseOperatorAdmission,
     RHS1SparsePreconditionerConfig,
@@ -70,13 +68,6 @@ def test_rhs1_policy_dataclasses_capture_solver_routing_contracts() -> None:
         large_fallback_size=1024,
         large_default_used=True,
         log_progress=False,
-    )
-    rank_budget = RHS1QIDeviceRankBudget(rank_budget=12, max_rank=24)
-    setup_summary = RHS1QIDeviceSetupSummary(
-        rank_budget=12,
-        max_rank=24,
-        progress_messages=("device QI coarse rank budget=12",),
-        residual_seed_required=True,
     )
     petsc_compat = RHS1Constraint0PETScCompatConfig(
         drop_tol=1.0e-3,
@@ -141,8 +132,6 @@ def test_rhs1_policy_dataclasses_capture_solver_routing_contracts() -> None:
     assert subspace.include_post_coarse is True
     assert subspace.include_qi_basis is True
     assert active_auto.skipped_large_fallbacks == ("active_diag_schur",)
-    assert rank_budget.max_rank == setup_summary.max_rank
-    assert setup_summary.residual_seed_required is True
     assert petsc_compat.restart == 80
     assert policy_setup.ordering is ordering
     assert full_rescue.policy is policy_setup
