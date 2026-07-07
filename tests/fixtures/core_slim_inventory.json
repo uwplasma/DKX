@@ -290,6 +290,275 @@
       "core_removal_gate": "README/docs can keep small checked figures and summaries, but long-run campaign drivers leave the core tree."
     }
   ],
+  "whole_repo_review": {
+    "schema_version": 1,
+    "coverage_model": "exactly_one_rule_per_git_tracked_path",
+    "review_status": "first_pass_file_complete",
+    "decisions": [
+      "keep",
+      "merge",
+      "delete",
+      "extract-pr"
+    ],
+    "rules": [
+      {
+        "name": "repo_metadata_and_top_level_docs",
+        "exact_paths": [
+          ".gitignore",
+          ".readthedocs.yaml",
+          "LICENSE",
+          "README.md",
+          "plan.md",
+          "plan_final.md",
+          "pyproject.toml"
+        ],
+        "decision": "keep",
+        "owner_tags": [
+          "API",
+          "EVIDENCE"
+        ],
+        "proof_owner": "tests/test_source_tree_consolidation.py",
+        "line_target": "keep concise; plan_final.md <= 420 lines",
+        "next_action": "Scrub public prose after source and evidence decisions settle."
+      },
+      {
+        "name": "github_ci_workflows",
+        "prefix": ".github/",
+        "decision": "keep",
+        "owner_tags": [
+          "API",
+          "EVIDENCE"
+        ],
+        "proof_owner": "CI plus workflow syntax checks",
+        "line_target": "keep only package, docs, coverage, and publish workflows",
+        "next_action": "Keep CI under 10 minutes while preserving coverage and docs gates."
+      },
+      {
+        "name": "package_source",
+        "prefix": "sfincs_jax/",
+        "decision": "merge",
+        "owner_tags": [
+          "PHYSICS",
+          "NUMERICS",
+          "API",
+          "AUTODIFF",
+          "PERF",
+          "COMPAT"
+        ],
+        "proof_owner": "domain tests plus source-tree contracts",
+        "line_target": "<=50 Python files and <=50k package lines unless ledger exception",
+        "next_action": "Move root implementation files into domains, collapse RHSMode-1, transport, solver, and output families."
+      },
+      {
+        "name": "compact_test_fixtures",
+        "prefix": "tests/fixtures/",
+        "decision": "keep",
+        "owner_tags": [
+          "EVIDENCE",
+          "COMPAT"
+        ],
+        "proof_owner": "fixture schema and parity tests",
+        "line_target": "compact JSON only; large data belongs in release assets",
+        "next_action": "Retain fixtures only when a physics/API/docs claim test consumes them."
+      },
+      {
+        "name": "reference_fixture_data",
+        "prefix": "tests/ref/",
+        "decision": "merge",
+        "owner_tags": [
+          "EVIDENCE",
+          "COMPAT"
+        ],
+        "proof_owner": "parity and regression tests",
+        "line_target": "deduplicate into compact fixtures or release-hosted assets",
+        "next_action": "Delete unused reference blobs and keep only data needed for stable claims."
+      },
+      {
+        "name": "generated_suite_reports",
+        "prefix_any": [
+          "tests/gpu_solver_path_cases_",
+          "tests/reference_solver_path_artifacts/",
+          "tests/scaled_example_suite_",
+          "tests/solver_policy_trace_gate_"
+        ],
+        "decision": "extract-pr",
+        "owner_tags": [
+          "EVIDENCE",
+          "PERF"
+        ],
+        "proof_owner": "docs/research_lanes.rst",
+        "line_target": "move long-run reports to release assets or research PRs",
+        "next_action": "Keep only compact claim fixtures required by current docs/readme."
+      },
+      {
+        "name": "reduced_test_inputs",
+        "prefix_any": [
+          "tests/reduced_inputs/",
+          "tests/reduced_upstream_examples/"
+        ],
+        "decision": "merge",
+        "owner_tags": [
+          "COMPAT",
+          "EVIDENCE"
+        ],
+        "proof_owner": "example-suite and input-compat tests",
+        "line_target": "minimal representative inputs; no historical duplicates",
+        "next_action": "Parametrize tests over fewer canonical input fixtures."
+      },
+      {
+        "name": "python_tests",
+        "prefix": "tests/",
+        "exclude_prefix_any": [
+          "tests/fixtures/",
+          "tests/ref/",
+          "tests/gpu_solver_path_cases_",
+          "tests/reference_solver_path_artifacts/",
+          "tests/scaled_example_suite_",
+          "tests/solver_policy_trace_gate_",
+          "tests/reduced_inputs/",
+          "tests/reduced_upstream_examples/"
+        ],
+        "decision": "merge",
+        "owner_tags": [
+          "PHYSICS",
+          "NUMERICS",
+          "API",
+          "AUTODIFF",
+          "EVIDENCE"
+        ],
+        "proof_owner": "pytest coverage and domain regression suites",
+        "line_target": "<=180 test files first, <=120 final, coverage >=95%",
+        "next_action": "Collapse large one-off tests into parametrized physics/numerics/API suites."
+      },
+      {
+        "name": "docs_static_evidence",
+        "prefix": "docs/_static/",
+        "decision": "merge",
+        "owner_tags": [
+          "EVIDENCE"
+        ],
+        "proof_owner": "docs-claim tests and validation figure schema tests",
+        "line_target": "compressed checked figures and compact JSON only",
+        "next_action": "Delete stale campaign artifacts and regenerate retained figures from stable workflows."
+      },
+      {
+        "name": "upstream_docs_sources",
+        "prefix": "docs/upstream",
+        "decision": "merge",
+        "owner_tags": [
+          "PHYSICS",
+          "COMPAT"
+        ],
+        "proof_owner": "docs physics/reference pages",
+        "line_target": "retain only cited source material needed for stable docs",
+        "next_action": "Move bulky or uncited upstream material to external references."
+      },
+      {
+        "name": "public_docs",
+        "prefix": "docs/",
+        "exclude_prefix_any": [
+          "docs/_static/",
+          "docs/upstream"
+        ],
+        "decision": "keep",
+        "owner_tags": [
+          "API",
+          "PHYSICS",
+          "NUMERICS",
+          "EVIDENCE"
+        ],
+        "proof_owner": "Sphinx -W and docs-claim tests",
+        "line_target": "standalone user docs with no branch-history prose",
+        "next_action": "Scrub unsupported research claims after code extraction."
+      },
+      {
+        "name": "original_sfincs_examples",
+        "prefix_any": [
+          "examples/sfincs_examples/",
+          "examples/upstream/"
+        ],
+        "decision": "keep",
+        "owner_tags": [
+          "COMPAT",
+          "EVIDENCE"
+        ],
+        "proof_owner": "example-suite compatibility tests",
+        "line_target": "retain original v3 references needed for parity examples",
+        "next_action": "Keep as reference inputs; do not add generated outputs."
+      },
+      {
+        "name": "publication_and_performance_examples",
+        "prefix_any": [
+          "examples/publication_figures/",
+          "examples/performance/"
+        ],
+        "decision": "extract-pr",
+        "owner_tags": [
+          "PERF",
+          "EVIDENCE"
+        ],
+        "proof_owner": "research/publication-audits and research/parallel-performance",
+        "line_target": "move long generators/campaigns out of stable examples",
+        "next_action": "Retain only compact checked figures referenced by README/docs."
+      },
+      {
+        "name": "optimization_examples",
+        "prefix": "examples/optimization/",
+        "decision": "merge",
+        "owner_tags": [
+          "AUTODIFF",
+          "API"
+        ],
+        "proof_owner": "optimization workflow tests",
+        "line_target": "at most one curated optimization workflow in stable examples",
+        "next_action": "Extract unpromoted campaigns; keep one pedagogical optimization example."
+      },
+      {
+        "name": "curated_examples",
+        "prefix": "examples/",
+        "exclude_prefix_any": [
+          "examples/sfincs_examples/",
+          "examples/upstream/",
+          "examples/publication_figures/",
+          "examples/performance/",
+          "examples/optimization/"
+        ],
+        "decision": "merge",
+        "owner_tags": [
+          "API",
+          "PHYSICS",
+          "AUTODIFF",
+          "EVIDENCE"
+        ],
+        "proof_owner": "examples tree contract and smoke-free API tests",
+        "line_target": "<=10 curated workflows outside original v3 references",
+        "next_action": "Consolidate single-file folders into a navigable teaching set."
+      },
+      {
+        "name": "temporary_scripts",
+        "prefix": "scripts/",
+        "decision": "merge",
+        "owner_tags": [
+          "API",
+          "EVIDENCE"
+        ],
+        "proof_owner": "script import and release/data CLI tests",
+        "line_target": "empty or documented release/data tooling only",
+        "next_action": "Convert useful scripts into package CLIs/tests/examples; delete the rest."
+      },
+      {
+        "name": "legacy_utils",
+        "prefix": "utils/",
+        "decision": "delete",
+        "owner_tags": [
+          "OBSOLETE"
+        ],
+        "proof_owner": "absence tests plus docs/examples replacements",
+        "line_target": "remove from stable tree",
+        "next_action": "Delete obsolete upstream utilities or move any documented user workflow into examples."
+      }
+    ]
+  },
   "entries": [
     {
       "path": "sfincs_jax/problems/profile_policies.py",
