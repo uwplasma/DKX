@@ -164,8 +164,7 @@
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
     ],
     "scripts": [
-      "examples/publication_figures/generate_sfincs_paper_figs.py --plot-only",
-      "examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py"
+      "examples/publication_figures/generate_sfincs_paper_figs.py --plot-only"
     ],
     "artifacts": [
       "docs/_static/figures/paper/sfincs_jax_fig3_simakov_helander.png",
@@ -179,12 +178,10 @@
     ],
     "source_code": [
       "examples/publication_figures/generate_sfincs_paper_figs.py",
-      "examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py",
       "sfincs_jax/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_sfincs_paper_figs.py",
-      "tests/test_generate_simakov_helander_high_nu_run_plan.py",
       "tests/test_validation_artifacts.py"
     ],
     "acceptance_gates": [
@@ -207,9 +204,7 @@
       "https://doi.org/10.1063/1.4870077",
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
     ],
-    "scripts": [
-      "examples/publication_figures/generate_high_collisionality_trend_proxy.py"
-    ],
+    "scripts": [],
     "artifacts": [
       "examples/publication_figures/artifacts/sfincs_jax_high_collisionality_trend_proxy_summary.json",
       "docs/_static/figures/paper/sfincs_jax_high_collisionality_trend_proxy.png",
@@ -221,11 +216,9 @@
       "LHD Fokker-Planck L11/L12 tails do not yet reach the asymptotic inverse-nu gate on the checked-in scan, so this implemented artifact is a bounded trend proxy rather than the full analytic-limit reproduction"
     ],
     "source_code": [
-      "examples/publication_figures/generate_high_collisionality_trend_proxy.py",
       "sfincs_jax/validation/artifacts.py"
     ],
     "tests": [
-      "tests/test_generate_high_collisionality_trend_proxy.py",
       "tests/test_validation_artifacts.py"
     ],
     "acceptance_gates": [
@@ -249,9 +242,7 @@
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf",
       "https://doi.org/10.1063/1.3104715"
     ],
-    "scripts": [
-      "examples/publication_figures/generate_simakov_helander_limit_audit.py"
-    ],
+    "scripts": [],
     "artifacts": [
       "examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json",
       "docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png",
@@ -263,11 +254,9 @@
       "W7-X FP L11/L12 tails satisfy the inverse-nu slope proxy on the current range, while LHD still fails that gate"
     ],
     "source_code": [
-      "examples/publication_figures/generate_simakov_helander_limit_audit.py",
       "sfincs_jax/validation/artifacts.py"
     ],
     "tests": [
-      "tests/test_generate_simakov_helander_limit_audit.py",
       "tests/test_validation_artifacts.py"
     ],
     "acceptance_gates": [

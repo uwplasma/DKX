@@ -99,10 +99,9 @@ physics invariants that come directly from the SFINCS validation literature:
   archived rows still need production-resolution reruns.
 
 The corresponding tests are ``tests/test_validation_artifacts.py`` and
-``tests/test_generate_validation_dashboard.py``. The high-collisionality plot smoke
-tests are ``tests/test_generate_high_collisionality_trend_proxy.py`` and
-``tests/test_generate_simakov_helander_limit_audit.py``. The frozen Fortran-suite
-benchmark figure is protected by
+``tests/test_generate_validation_dashboard.py``. The high-collisionality proxy
+and Simakov-Helander readiness audit are package-level artifact tests, not
+stable example-generator tests. The frozen Fortran-suite benchmark figure is protected by
 ``tests/test_generate_fortran_suite_benchmark_summary.py``.
 
 Output-normalization gates
@@ -783,10 +782,9 @@ Krylov closure.
 
 The high-collisionality Simakov-Helander lane has a bounded normalization audit:
 
-- script: ``examples/publication_figures/generate_simakov_helander_limit_audit.py``
 - artifact:
   ``examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json``
-- focused test: ``tests/test_generate_simakov_helander_limit_audit.py``
+- focused test: ``tests/test_validation_artifacts.py``
 
 This audit checks that the checked-in geometry output fields are sufficient for the
 Appendix-B comparison and that ``FSABHat2`` is reproduced from ``BHat`` and ``DHat``.
@@ -813,11 +811,12 @@ The panel metadata also carries a ``publication_figure`` block so downstream
 plotting code can distinguish a checked-in converged artifact from a proxy or
 deferred scaffold without inferring that status from the title text.
 
-The executable high-``nu`` run plan is also gated as a run plan, not as evidence:
-its summary records ``run_plan_only_not_completed_validation``,
+The executable high-``nu`` run-plan artifact is also gated as a run plan, not as
+evidence: its summary records ``run_plan_only_not_completed_validation``,
 ``commands_require_residual_gates``, and ``ready_for_literature_claim=false``.
-This keeps the Simakov-Helander lane closed until the generated commands produce
-checked-in converged scan artifacts and the audit gate flips.
+The generator is preserved outside the stable core; the stable branch keeps the
+checked artifact and the validation gates that keep the lane closed until
+converged scan artifacts exist.
 
 The W7-X high-``nu`` preconditioner performance figure is intentionally narrower
 than a physics-validation lane. Its summary supports a single-point performance
