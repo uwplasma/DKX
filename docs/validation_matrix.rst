@@ -826,19 +826,17 @@ Validation goal:
 - make any profile reconstruction assumptions explicit,
 - use this lane only if the reconstructed input set is scientifically defensible.
 
-Executable workflow:
+Stable artifact gate:
 
-- ``examples/publication_figures/generate_w7x_ambipolar_validation.py``
+- ``sfincs_jax.validation.figures.build_w7x_ambipolar_root_provenance_panel``
+- ``examples/publication_figures/provenance/w7x_ambipolar_provenance_template.json``
 
-This script is the executable validation workflow. It defaults to the
-``filteredW7XNetCDF_2species_magneticDrifts_withEr`` example input, runs an
-``E_r`` scan, postprocesses the scan with ``sfincs_jax.ambipolar.solve_ambipolar_from_scan_dir``,
-and writes both a metadata-rich JSON summary and a publication-style figure.
-It also supports ``--skip-existing`` plus ``--index/--stride`` split execution, so
-the heavy reference scan can be resumed or distributed across devices before the final
-ambipolar postprocess/figure pass.
+The stable branch keeps the ambipolar solver API, scan/readback tests, and a
+fail-closed provenance panel builder. Long W7-X scan and figure generation is a
+publication-audits research workflow until a defensible equilibrium/profile
+reconstruction is supplied and the resulting source artifact is checked in.
 
-The summary JSON includes explicit ``acceptance_gates``:
+The deferred panel includes explicit ``acceptance_gates``:
 
 - finite distinct ``E_r``/current scan points,
 - finite ambipolar roots,
@@ -865,8 +863,8 @@ equilibrium/profile reconstruction before any literature-facing W7-X claim.
 
 Closure note:
 
-- the script and focused tests are in place,
-- the checked-in literature artifact is still intentionally absent,
+- the stable core keeps the ambipolar solver and provenance/artifact gate tests,
+- the checked-in literature artifact and long generator are intentionally absent,
 - this lane is classified as ``deferred_post_release`` until a
   defensible W7-X input reconstruction is run and its summary/figure are pinned in
   the repository.
