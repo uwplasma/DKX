@@ -17,7 +17,8 @@ bootstrap current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Latest audited code-change head: `79e0981f+direct-tail-support-mode-removal`;
+- Latest audited code-change head: `185b819a7098`
+  (`Remove direct-tail support-mode experiment`);
   last green CI evidence: `96fb2677`. Exact aggregate coverage from that CI was
   91.753% (`92%`); this tranche has focused local evidence listed below.
 - Current tracked Python volume is the problem to solve before review:
@@ -45,55 +46,92 @@ bootstrap current, transport coefficients, plotting, and optimization.
 
 - Focused local evidence for this tranche:
   `tests/test_v3_sparse_pattern.py` passed `93` tests in 93 s; the touched
-  sparse-policy/output subset passed `554` tests in 136 s; Ruff and compileall
-  passed on touched Python files.
+  sparse-policy/output subset passed `554` tests in 136 s; the
+  refactor/tree/doc-claim contract subset passed `76` tests in 4 s after
+  deleting generated performance outputs; Ruff/compileall/json/diff/size
+  hygiene passed on touched files and contracts.
 
 Overall readiness under this stricter core-slim goal is about 87-89%.
 
 ## Concrete Code-Audit Rules
 
-Default action for every line is removal. Retain only lines tagged `PHYSICS`,
-`NUMERICS`, `API`, `EVIDENCE`, `PERF`, or `AUTODIFF`; classify the rest as
-`COMPAT`, `RESEARCH`, or `OBSOLETE` and remove or extract them with matching
-imports, env vars, tests, docs, fixtures, examples, diagnostics, and artifacts.
+The default action for every line is deletion. A line may remain only when it
+has one of these owners and a matching proof:
 
-Per touched file, complete this loop before commit: list public symbols and
-callers with `rg`; record domain, public surface, default runtime surface,
-physics/numerics reason, autodiff role, evidence owner, simplification action,
-and rejected objects in `tests/fixtures/core_slim_inventory.json` or the commit
-message; delete unreachable, one-call, historical, duplicated, env-only, and
-campaign-only objects; merge wrappers that do not name a real equation/API
-boundary; run the smallest proof tests; record net line/file deltas. A pure
-move is rejected unless it deletes public knobs, duplicated logic, generated
-clutter, or test/doc burden.
+| Owner | Retain only if the line... | Proof required |
+| --- | --- | --- |
+| `PHYSICS` | states or evaluates a DKE, collision, drift, geometry, flux, current, Redl, ambipolar, or normalization equation | equation test, parity fixture, or documented derivation |
+| `NUMERICS` | builds a grid, stencil, operator, residual, preconditioner, Krylov solve, interpolation, quadrature, or convergence diagnostic | residual/identity test and runtime/RSS gate |
+| `API` | is part of the stable Python API, CLI, namelist compatibility, plotting, or output schema | public test and docs reference |
+| `AUTODIFF` | keeps a differentiable path, JVP/VJP/implicit derivative, or branch-safe differentiable wrapper | gradient test against finite difference or analytic identity |
+| `PERF` | measurably reduces runtime, memory, JIT overhead, or output cost on supported examples | benchmark fixture or policy test |
+| `EVIDENCE` | is a compact validation fixture, claim checker, or release evidence reader | schema test and docs claim |
+
+Everything else is `RESEARCH`, `COMPAT`, `DUPLICATE`, `GENERATED`, or
+`OBSOLETE`. `RESEARCH` moves to an existing preservation branch/PR or a new
+research branch before deletion from this PR. `COMPAT` stays only if it is a
+documented SFINCS Fortran v3 input/output compatibility surface. `DUPLICATE`,
+`GENERATED`, and `OBSOLETE` are deleted with their imports, tests, docs, output
+keys, env vars, fixtures, and examples.
+
+Per file, complete this exact loop before any code movement:
+
+1. Record file path, line count, public symbols, imports, callers, env vars,
+   output keys, tests, docs, and examples in `tests/fixtures/core_slim_inventory.json`.
+2. Mark the file as `keep`, `merge`, `delete`, or `extract-pr`.
+3. For every retained public symbol, write the owner tag, stable caller, proof
+   test, and docs owner. Symbols missing any item are removed or extracted.
+4. Remove one-call wrappers unless the wrapper names a real physics/numerics/API
+   boundary that makes the code easier to read.
+5. Collapse duplicate diagnostics dictionaries, policy branches, shape helpers,
+   namelist aliases, and solver option parsing into shared typed builders.
+6. Delete path-specific tests when the path is extracted; keep compact absence
+   tests so the stable core cannot accidentally re-import the research path.
+7. Run the smallest proof tests plus `ruff`, `compileall`, `git diff --check`,
+   and the size guard.
+8. Commit only if retained file count, line count, public knobs, generated
+   files, or test burden decreases. A pure move is not progress.
+
+Budgets are hard unless the ledger explains the exception: 114 package Python
+files and 137.0k source lines now; <=68 files and <=80k lines before review;
+<=50 files and <=50k lines final. Tests move from 313 files and 125.3k Python
+lines to <=180 files before review, then <=120 files with >=95% coverage.
+Examples move from 122 Python scripts to original SFINCS Fortran v3 references
+plus <=10 curated workflows. `scripts/` becomes empty by default; exceptions
+must be documented release tooling. The largest five source files must fall
+below 18k combined lines before review.
 
 Stable owners are limited to public API/CLI/I/O/namelist/plotting/path facades,
 geometry adapters, grid/stencil modules, physics formulas, operator assembly,
 profile/transport/ambipolar problem modules, admitted solver/preconditioner
 modules, output schemas, compact validation helpers, and curated workflows.
-New stable files must name a domain boundary, not history, campaigns, probes,
-candidates, rescues, hard seeds, or temporary experiments.
+Stable file names must describe the domain boundary. New or retained stable
+names based on `v3_`, broad `rhs1_`, `probe`, `campaign`, `rescue`,
+`candidate`, `legacy`, `hard_seed`, `native`, `symbolic`, or `qi_*` need an
+explicit ledger exception or are extracted.
 
-Audit order is fixed: `profile_sparse_solve.py`,
-`profile_sparse_direct.py`, `profile_policies.py`,
-`profile_sparse_xblock.py`, native/symbolic preconditioners,
-`profile_full_system.py` and term modules, `transport_*`, outputs,
-validation, examples, scripts, then test consolidation.
+Extraction is complete only when `rg` finds no stable import, public knob,
+environment variable, output key, documentation claim, or example path for the
+extracted family. README/docs may mention extracted work only in
+`docs/research_lanes.rst` as unsupported research history.
 
-Extraction is complete only when `rg` finds no stable import or public knob for
-the extracted family; output schemas stop writing path-specific diagnostics;
-tests are deleted or reduced to absence contracts; README/docs do not describe
-the path as supported; and any retained primitive has an admitted caller plus a
-focused test.
+## File Disposition Map
 
-Budgets: 114 package files and 136.9k source lines now, <=68 files and <=80k
-lines before review request, <=50 files and <=50k lines final unless justified;
-313 test files now, <=180 before review, <=120 final with >=95% coverage;
-examples keep original Fortran-v3 references plus <=10 curated workflows;
-scripts are zero by default; benchmark claims use compact fixtures/docs/release
-assets, not a tracked `benchmarks/` package. Review-ready also requires the
-largest five source files below 18k combined lines and no extracted research
-path reachable from stable defaults.
+The next commits must follow this order. Each row is a deletion target, not a
+move target, unless the destination is explicitly listed.
+
+| Area | Current files/lines | Stable destination | Delete/extract | Proof before commit |
+| --- | ---: | --- | --- | --- |
+| Package root | 16 files | `api.py`, `cli.py`, `io.py`, `namelist.py`, `plotting.py`, `solver.py`, `paths.py`, `README.md` | merge `compare.py`, `diagnostics.py`, broad facades, and duplicate path helpers into root API or validation/output modules | API, CLI, plotting, namelist tests |
+| `problems/` profile path | 24 files, largest 6.9k/6.4k/4.2k/2.9k lines | `profile.py`, `profile_policy.py`, `profile_preconditioners.py`, `profile_diagnostics.py` or existing equivalent names if fewer files | extract sparse-direct/native/symbolic rescue branches; delete duplicated branch setup, direct-tail naming, probe/candidate code | RHSMode-1 parity/residual/policy/output tests |
+| `problems/` transport path | 7 transport files, 16k+ lines | `transport.py`, `transport_policy.py`, `transport_diagnostics.py` | extract multi-worker campaign runtime and duplicate policy/preconditioner probes | RHSMode-2/3 geometryScheme 2/11 gates |
+| `operators/` | 15 files, largest 6.1k lines | equation-oriented blocks: layout, collisions, drifts, electric field, full system | merge duplicate reduced-tail/fblock/device-sparse helpers if they do not name equations | operator identity, conservation, residual/JVP tests |
+| `solvers/` | 31 files, largest 5.2k lines | `krylov.py`, `preconditioners.py`, `sparse.py`, `memory.py`, `diagnostics.py` or equivalent compact modules | extract native/symbolic/ND/BLR/HSS/multifrontal research; delete unpromoted smoother/probe variants | solver residual, memory model, policy tests |
+| `outputs/` | 5 files, 7.6k lines | one schema builder plus one writer/format module | delete experiment-only keys and duplicate HDF5/NPZ/NetCDF plumbing | output schema, HDF5/NPZ/NetCDF, plot tests |
+| `validation/` | 5 files, 2.4k artifact reader | compact fixtures plus claim validators | move publication campaign readers to release assets unless used by docs/tests | artifact schema and docs claim tests |
+| `examples/` | 122 Python scripts | <=10 curated user workflows plus original Fortran-v3 examples | move performance/publication/long-run optimization campaigns to research branches or release assets | examples tree contract and smoke CLI/Python examples |
+| `scripts/` | 12 Python files, 6.7k lines | zero by default, or `scripts/release_*` only | convert to tests/examples/release tooling or delete | script contract test |
+| `tests/` | 313 Python files, 125.3k lines | unit, physics, regression, cli_io, integration, fixtures | consolidate one-off extracted-path tests and generated historical tests | coverage >=95%, CI <10 min |
 
 ## Stable-Core Admission Gates
 
