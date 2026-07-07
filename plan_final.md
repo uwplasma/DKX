@@ -18,10 +18,10 @@ current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Latest audited code-change head: `8fd06b85`; last green CI evidence: `96fb2677`.
+- Latest audited code-change head: `da8ca45d`; last green CI evidence: `96fb2677`.
   Exact aggregate coverage from that CI was 91.753% (`92%`).
 - Package layout is shallow, but the branch is too large: 114 Python source
-  files and about 142.4k source lines. Largest complexity owners remain
+  files and about 142.2k source lines. Largest complexity owners remain
   `problems/`, `solvers/`, RHSMode-1/QI/preconditioner infrastructure, and
   compatibility layers around those paths.
 - Non-package Python volume is still too high: `tests/` has 313 Python files
@@ -37,9 +37,9 @@ current, transport coefficients, plotting, and optimization.
 
 | Lane | Status | Completion | Definition of done |
 | --- | --- | ---: | --- |
-| Line-by-line audit | Active | 28% | Every retained file/function/line has a core reason, a caller, and a test/doc owner; everything else is extracted or deleted. |
-| Core-main slimming | Active | 44% | Main keeps only stable, parity-clean, runtime-acceptable solvers and public APIs; research code is outside core. |
-| Source simplification | Active | 48% | Package moves toward <=50 source files and <=50k lines, with a 10x reduction as stretch if functionality permits. |
+| Line-by-line audit | Active | 31% | Every retained file/function/line has a core reason, a caller, and a test/doc owner; everything else is extracted or deleted. |
+| Core-main slimming | Active | 47% | Main keeps only stable, parity-clean, runtime-acceptable solvers and public APIs; research code is outside core. |
+| Source simplification | Active | 49% | Package moves toward <=50 source files and <=50k lines, with a 10x reduction as stretch if functionality permits. |
 | Examples/tests/scripts cleanup | Active | 77% | Examples are <=10 curated workflows plus Fortran-v3 references; tests are smaller, organized, and >=95% coverage; scripts are removed or promoted; benchmarks are gone. |
 | Parity/performance evidence | Active | 70% | Supported examples rerun against SFINCS Fortran v3 with runtime/RSS/bootstrap evidence; unsupported research lanes are not marketed. |
 | Docs/readme regeneration | Active | 80% | README/docs describe only the stable core plus explicit external research PR lanes. |
