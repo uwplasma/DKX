@@ -57,7 +57,7 @@ trace unless kernel-level profiling is specifically needed:
 
 .. code-block:: bash
 
-   JAX_ENABLE_X64=True python -m sfincs_jax.validation.write_output_trace \
+   JAX_ENABLE_X64=True python -m sfincs_jax.validation.release write-output-trace \
      --input input.namelist \
      --out sfincsOutput.h5 \
      --compute-solution \

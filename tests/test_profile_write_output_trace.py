@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sfincs_jax.validation import write_output_trace
+from sfincs_jax.validation import release as write_output_trace
 
 
 def _load_module():
@@ -61,7 +61,7 @@ def test_profile_write_output_trace_main_runs_warmup_trace_and_memory_dump(
     out_path = tmp_path / "out" / "sfincsOutput.h5"
     mem_path = tmp_path / "trace" / "device_memory.pb"
     solver_trace_path = tmp_path / "out" / "solver_trace.json"
-    rc = mod.main(
+    rc = mod.write_output_trace_main(
         [
             "--input",
             str(input_path),
@@ -144,7 +144,7 @@ def test_profile_write_output_trace_keeps_solve_success_when_profiler_finalizati
     trace_dir = tmp_path / "trace"
     out_path = tmp_path / "out" / "sfincsOutput.h5"
     phase_log = tmp_path / "phases.json"
-    rc = mod.main(
+    rc = mod.write_output_trace_main(
         [
             "--input",
             str(input_path),
@@ -197,7 +197,7 @@ def test_profile_write_output_trace_strict_profiler_fails_on_finalization_error(
     trace_dir = tmp_path / "trace"
     out_path = tmp_path / "out" / "sfincsOutput.h5"
     phase_log = tmp_path / "phases.json"
-    rc = mod.main(
+    rc = mod.write_output_trace_main(
         [
             "--input",
             str(input_path),
@@ -251,7 +251,7 @@ def test_profile_write_output_trace_keeps_solve_success_when_device_memory_snaps
     trace_dir = tmp_path / "trace"
     out_path = tmp_path / "out" / "sfincsOutput.h5"
     phase_log = tmp_path / "phases.json"
-    rc = mod.main(
+    rc = mod.write_output_trace_main(
         [
             "--input",
             str(input_path),
@@ -297,7 +297,7 @@ def test_profile_write_output_trace_no_jax_trace_skips_profiler_context(
     trace_dir = tmp_path / "trace"
     out_path = tmp_path / "out" / "sfincsOutput.h5"
     phase_log = tmp_path / "phases.json"
-    rc = mod.main(
+    rc = mod.write_output_trace_main(
         [
             "--input",
             str(input_path),

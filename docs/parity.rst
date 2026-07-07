@@ -167,7 +167,7 @@ Regenerate the release-facing README table from the tracked CPU/GPU reports:
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.readme_audit \
+   python -m sfincs_jax.validation.release readme-audit \
      --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
      --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas \
      --min-fortran-runtime-s 10

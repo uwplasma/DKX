@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.validation import readme_audit
+from sfincs_jax.validation import release as readme_audit
 
 
 def _load_module():
