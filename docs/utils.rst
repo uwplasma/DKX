@@ -265,17 +265,6 @@ Bootstrap current vs collisionality
    :align: center
    :width: 80%
 
-Model test (impurity density)
------------------------------
-
-``ModelTest_AI/testModel.py``
-  Compare ``sfincsOutput.h5`` results with an analytic impurity‑density model.
-
-.. figure:: _static/figures/utils/ModelTest_AI.png
-   :alt: ModelTest_AI comparison figure.
-   :align: center
-   :width: 70%
-
 Generating the gallery
 ----------------------
 
