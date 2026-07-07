@@ -165,7 +165,10 @@
         "scripts/generate_fortran_fixture.py",
         "scripts/create_production_stress_campaign.py",
         "scripts/materialize_production_stress_manifest.py",
-        "scripts/summarize_production_stress_campaign.py"
+        "scripts/summarize_production_stress_campaign.py",
+        "scripts/build_zenodo_vmec_manifest.py",
+        "scripts/select_zenodo_vmec_benchmark_cases.py",
+        "scripts/run_zenodo_vmec_parity_campaign.py"
       ],
       "source_paths": [
         "sfincs_jax/validation/artifacts.py"
@@ -184,6 +187,8 @@
         "scripts/generate_fortran_fixture.py",
         "scripts/create_production_stress_campaign.py",
         "scripts/materialize_production_stress_manifest.py",
+        "scripts/build_zenodo_vmec_manifest.py",
+        "scripts/select_zenodo_vmec_benchmark_cases.py",
         "scripts/run_zenodo_vmec_parity_campaign.py",
         "scripts/generate_fortran_example_audit.py",
         "scripts/summarize_production_stress_campaign.py"
