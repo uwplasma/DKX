@@ -656,7 +656,7 @@ owners are:
   explicit-sparse host-factor environment parsing, canonical factor-kind alias
   resolution, monolithic LU/ILU guard sizing, and the typed
   ``ExplicitSparseFactorSettings`` bundle, dense/CSR storage decisions,
-  pattern-color probing, symbolic Schur/frontal/ND/BLR settings, SuperLU
+  pattern-color probing, symbolic Schur/frontal/ND settings, SuperLU
   pivot/permutation options, ILU options, host explicit-sparse operator
   assembly, padded and compact-CSR JAX triangular-factor apply kernels,
   permutation inversion, logging, monolithic preflight guard, and factorization

@@ -626,12 +626,12 @@ gate and falls back to the high-memory active LU reference route when that gate
 fails. The checked QA auto audit converged to `9.00e-13` residual in `343.5 s`
 wall after rejecting the native stack; checked QA/QH active-LU reference
 audits converge to `9.95e-13` and `8.71e-14` residual with a `13.3 GB` active LU
-factor. A stricter guarded rerun with `tol=1e-10` converged to `7.27e-16` in
-`354.6 s`. Native true-coupled, BLR/HSS, and nested-dissection rescue paths
-are opt-in advanced routes: the default path uses them only when they satisfy
-the same true-residual gate, otherwise it falls back to the residual-clean
-active-LU reference route. Detailed lower-memory optimization evidence lives in
-the performance documentation.
+    factor. A stricter guarded rerun with `tol=1e-10` converged to `7.27e-16` in
+`354.6 s`. Native true-coupled and nested-dissection rescue paths are opt-in
+advanced routes: the default path uses them only when they satisfy the same
+true-residual gate, otherwise it falls back to the residual-clean active-LU
+reference route. Detailed lower-memory optimization evidence lives in the
+performance documentation.
 
 ```bash
 SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=direct \
