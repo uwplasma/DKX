@@ -19,7 +19,7 @@
       "research/publication-audits"
     ],
     "next_step": "Follow plan_final.md Phase 1-3: update line-owner decisions for every large family, extract research solver/campaign code from stable core, then collapse the RHSMode-1 policy/solve path around one default policy table and one diagnostics/output builder.",
-    "latest_tranche_evidence": "Removed direct-tail support-mode preflight and stable-output plumbing; deleted 13 tracked generated performance-output JSON files; consolidated seven release/data/audit/hygiene scripts into sfincs_jax.validation.release and sfincs_jax.validation.data_fetch CLIs; rewrote plan_final.md as the single specific core-slim execution plan with file-family targets, extraction PR groups, and per-file line-audit rules. Focused local checks: 554 touched tests, 93 sparse-pattern tests, 76 tree/doc-claim contract tests, 59 release/data/audit tests, 65 hygiene/source-tree tests, 59 source-tree/domain contract tests, package CLI checks, Ruff, compileall, JSON validation, diff hygiene, and size guard."
+    "latest_tranche_evidence": "Removed direct-tail support-mode preflight and stable-output plumbing; deleted 13 tracked generated performance-output JSON files; consolidated seven release/data/audit/hygiene scripts into sfincs_jax.validation.release and sfincs_jax.validation.data_fetch CLIs; rewrote plan_final.md as the single specific core-slim execution plan with file-family targets, extraction PR groups, and per-file line-audit rules; fixed the scaled-suite runner to import consolidated release validators and added a source-tree guard against stale script-to-script imports. Focused local checks: 554 touched tests, 93 sparse-pattern tests, 76 tree/doc-claim contract tests, 59 release/data/audit tests, 65 hygiene/source-tree tests, 59 source-tree/domain contract tests, 46 scaled-suite/source-tree checks, package CLI checks, Ruff, compileall, JSON validation, diff hygiene, and size guard."
   },
   "categories": [
     "core",
@@ -676,7 +676,7 @@
     },
     {
       "path": "scripts",
-      "lines_at_audit": 23089,
+      "lines_at_audit": 5915,
       "category": "extract-pr",
       "action": "split",
       "extract_branch": "research/publication-audits",
@@ -685,13 +685,17 @@
       "internal_callers": [],
       "tests": [
         "tests/test_fortran_mpi_wrapper.py",
-        "tests/test_benchmark_doc_claims.py"
+        "tests/test_create_production_benchmark_inputs.py",
+        "tests/test_generate_readme_fast_branch_audit.py",
+        "tests/test_profile_write_output_trace.py",
+        "tests/test_scaled_example_suite_reference.py",
+        "tests/test_source_tree_consolidation.py"
       ],
       "docs_examples": [
         "docs/contributing.rst"
       ],
       "retention_reason": "Most scripts are one-off audit, profiling, or benchmark drivers; only documented release-maintenance commands should remain.",
-      "next_step": "Promote user scripts to examples, validation scripts to tests/docs helpers, and extract campaign scripts."
+      "next_step": "Promote or delete the five remaining Python scripts: production-input generation and suite runners belong in validation/release tooling, profile tracing belongs in a package CLI or docs-only optional tool, and README audit generation should disappear once docs figures are fixture-driven."
     },
     {
       "path": "examples/performance",

@@ -9,6 +9,7 @@ import subprocess
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = REPO_ROOT / "sfincs_jax"
+SCRIPT_ROOT = REPO_ROOT / "scripts"
 EXPECTED_TREE = REPO_ROOT / "tests" / "fixtures" / "source_tree_expected.json"
 CORE_SLIM_INVENTORY = REPO_ROOT / "tests" / "fixtures" / "core_slim_inventory.json"
 PACKAGE_README = PACKAGE_ROOT / "README.md"
@@ -444,6 +445,37 @@ def test_package_sources_do_not_import_deleted_v3_driver() -> None:
                 module = node.module or ""
                 if module in {"sfincs_jax.v3_driver", "v3_driver"}:
                     offenders.append(path.relative_to(REPO_ROOT).as_posix())
+
+    assert offenders == []
+
+
+def test_scripts_do_not_import_missing_sibling_modules() -> None:
+    """Keep temporary scripts executable while they are promoted or deleted."""
+
+    if not SCRIPT_ROOT.exists():
+        return
+
+    available_modules = {path.stem for path in SCRIPT_ROOT.glob("*.py")}
+    offenders: list[tuple[str, str]] = []
+    for path in sorted(SCRIPT_ROOT.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    root_name = alias.name.split(".", 1)[0]
+                    if root_name in available_modules or root_name.startswith("sfincs_"):
+                        continue
+                    candidate = SCRIPT_ROOT / f"{root_name}.py"
+                    if candidate.parent == SCRIPT_ROOT and root_name.startswith(("audit_", "run_", "generate_")):
+                        offenders.append((path.relative_to(REPO_ROOT).as_posix(), root_name))
+            elif isinstance(node, ast.ImportFrom):
+                if node.level != 0 or node.module is None:
+                    continue
+                root_name = node.module.split(".", 1)[0]
+                if root_name in available_modules or root_name.startswith("sfincs_"):
+                    continue
+                if root_name.startswith(("audit_", "run_", "generate_")):
+                    offenders.append((path.relative_to(REPO_ROOT).as_posix(), root_name))
 
     assert offenders == []
 
