@@ -17,7 +17,6 @@ Examples:
 - `er_terms_publication_figures.py`
 - `generate_sfincs_paper_figs.py`
 - `generate_er_trajectory_sweep.py`
-- `generate_w7x_ambipolar_validation.py`
 - `generate_autodiff_sensitivity_validation.py`
 - `generate_w7x_high_nu_performance.py`
 
@@ -198,34 +197,15 @@ Pinned outputs:
 - `docs/_static/figures/paper/sfincs_jax_autodiff_gradient_check.png`
 - `docs/_static/figures/paper/sfincs_jax_autodiff_sensitivity_map.png`
 
-W7-X ambipolar validation workflow:
+W7-X ambipolar validation lane:
 
-```bash
-python examples/publication_figures/generate_w7x_ambipolar_validation.py \
-  --fast \
-  --n-points 7 \
-  --work-dir examples/publication_figures/output/w7x_ambipolar_validation_fast \
-  --summary-json examples/publication_figures/output/w7x_ambipolar_validation_fast/summary.json \
-  --out-dir docs/_static/figures/paper
-```
+This lane is deferred until a defensible W7-X equilibrium/profile
+reconstruction and matching checked-in source artifact are available. The stable
+tree keeps the provenance template and package-level artifact gates:
 
-This lane is an executable workflow with a metadata-rich JSON summary and
-figure writer. A W7-X literature-validation claim requires a documented
-equilibrium/profile provenance file and audited reference-input run.
+- `examples/publication_figures/provenance/w7x_ambipolar_provenance_template.json`
+- `sfincs_jax.validation.figures.build_w7x_ambipolar_root_provenance_panel`
 
-The ambipolar workflow supports restart and split execution as well:
-
-```bash
-python examples/publication_figures/generate_w7x_ambipolar_validation.py \
-  --work-dir examples/publication_figures/output/w7x_ambipolar_validation_reference \
-  --summary-json examples/publication_figures/output/w7x_ambipolar_validation_reference/summary.json \
-  --out-dir docs/_static/figures/paper \
-  --skip-existing \
-  --scan-only \
-  --index 0 \
-  --stride 2
-```
-
-Launch a second process with ``--index 1 --stride 2`` to fill the other half of the
-``E_r`` ladder. Then rerun once without ``--scan-only`` and with ``--skip-existing``
-to reuse the finished scan points, write the ambipolar summary, and generate the figure.
+Long W7-X ambipolar scan/figure generation belongs on the publication-audits
+research branch. Stable tests keep the deferred panel fail-closed behavior,
+provenance completeness checks, and checked-artifact admission gates.

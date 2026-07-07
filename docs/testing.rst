@@ -826,36 +826,15 @@ failed bounded Krylov route is explicitly rejected. The same metadata marks
 ``ready_for_physics_validation_claim=false`` so this performance artifact cannot be
 mistaken for a closed W7-X or Simakov-Helander physics validation.
 
-The W7-X ambipolar literature lane has an executable scaffold as well:
-
-- script: ``examples/publication_figures/generate_w7x_ambipolar_validation.py``
-- focused test: ``tests/test_generate_w7x_ambipolar_validation.py``
-
-This keeps the W7-X ambipolar validation work out of the "purely aspirational" bucket:
-the scan, ambipolar postprocessing, summary JSON, and figure generation paths are
-covered by a bounded end-to-end test on a tiny fixture. The heavy W7-X reference
-artifact is closed in the manifest as ``deferred_post_release`` until a defensible
-profile/equilibrium reconstruction is pinned.
-
-The deferred panel data also records explicit ``deferred_reasons`` and provenance
-completeness scores. This keeps manuscript-facing labels conservative: a W7-X
-ambipolar figure remains a scaffold until the numerical root gates pass and the
-matching W7-X provenance artifact is complete and checked in.
-The summary generator mirrors those gates directly: it requires finite distinct
-``E_r`` scan points, a radial-current sign-change bracket, reported roots inside
-the scanned range, root consistency with that bracket, a resolved local current
-slope, an ion-root candidate, complete provenance, and checked-in source-artifact
-status before ``ready_for_literature_claim`` can become true.
-
-The same scaffold is resumable for heavy runs: ``run_er_scan`` accepts
-``skip_existing=True``, the ``sfincs_jax scan-er`` CLI exposes ``--skip-existing``,
-and the publication script adds ``--skip-existing``, ``--scan-only``, and
-``--index/--stride`` so the heavy W7-X reference ladder can be filled across multiple
-devices before a final aggregation pass. Each non-skipped scan point also
-writes ``sfincsOutput.solver_trace.json`` beside ``sfincsOutput.h5``. Tests assert
-that the sidecar path is forwarded in serial, recycled, and end-to-end scan
-paths, so future promotion artifacts cannot silently lose solver-path timing and
-residual provenance.
+The W7-X ambipolar literature lane is kept as a deferred artifact gate, not as a
+stable long-run figure generator. The retained package-level validation is
+``sfincs_jax.validation.figures.build_w7x_ambipolar_root_provenance_panel`` with
+focused coverage in ``tests/test_validation_figures.py`` and the core ambipolar
+scan/solve tests. The gate records explicit ``deferred_reasons``, provenance
+completeness scores, finite-root checks, current-bracket checks, and matching
+checked-artifact status. A W7-X ambipolar figure remains deferred until the
+numerical root gates pass and the W7-X provenance/source artifact is complete
+and checked in.
 
 Further reading
 ---------------
