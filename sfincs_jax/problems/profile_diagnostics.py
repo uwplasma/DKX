@@ -220,144 +220,11 @@ def sparse_rescue_tail_metadata(scope: Mapping[str, object]) -> dict[str, object
     }
 
 
-_DIRECT_TAIL_BOOL_SUFFIXES = (
-    "residual_coarse_requested",
-    "residual_coarse_selected",
-    "true_coupled_coarse_requested",
-    "true_coupled_coarse_explicit_requested",
-    "true_coupled_coarse_auto_enabled",
-    "true_coupled_coarse_auto_native_enabled",
-    "true_coupled_coarse_auto_selected",
-    "true_coupled_coarse_selected",
-    "true_coupled_coarse_include_tail",
-    "true_coupled_coarse_include_constraint_sources",
-    "true_coupled_coarse_include_fsavg",
-    "true_coupled_coarse_include_window_residual",
-    "true_coupled_coarse_include_profile_moments",
-    "true_coupled_coarse_include_angular_residual",
-    "true_coupled_coarse_include_angular_basis",
-    "true_coupled_coarse_include_preconditioned_loads",
-    "true_coupled_coarse_damping",
-    "true_coupled_coarse_accept_base_improvement",
-    "true_coupled_coarse_base_improvement_override_used",
-    "true_active_submatrix_requested",
-    "true_active_submatrix_selected",
-    "true_active_submatrix_damping",
-    "true_active_column_cache_requested",
-    "true_active_block_requested",
-    "true_active_block_selected",
-    "true_active_block_include_tail",
-    "true_active_block_damping",
-    "true_active_residual_block_requested",
-    "true_active_residual_block_selected",
-    "true_active_residual_block_include_tail",
-    "true_active_residual_block_kinetic_only",
-    "true_active_residual_block_damping",
-    "true_active_residual_block_accept_base_improvement",
-    "true_active_residual_block_base_improvement_override_used",
-    "true_window_requested",
-    "true_window_selected",
-    "true_window_include_tail",
-    "true_window_damping",
-    "residual_window_requested",
-    "residual_window_selected",
-)
-
-_DIRECT_TAIL_INT_SUFFIXES = (
-    "residual_coarse_rank",
-    "true_coupled_coarse_auto_min_size",
-    "true_coupled_coarse_max_windows",
-    "true_coupled_coarse_x_radius",
-    "true_coupled_coarse_ell_radius",
-    "true_coupled_coarse_max_size",
-    "true_coupled_coarse_column_batch",
-    "true_coupled_coarse_low_lmax",
-    "true_coupled_coarse_profile_moment_count",
-    "true_coupled_coarse_angular_lmax",
-    "true_coupled_coarse_angular_mode_max",
-    "true_coupled_coarse_max_tail_units",
-    "true_coupled_coarse_preconditioned_load_max_columns",
-    "true_coupled_coarse_preconditioned_load_max_nnz",
-    "true_active_block_x_count",
-    "true_active_block_ell_count",
-    "true_active_block_theta_stride",
-    "true_active_block_zeta_stride",
-    "true_active_block_max_size",
-    "true_active_block_column_batch",
-    "true_active_block_max_tail",
-    "true_active_residual_block_max_size",
-    "true_active_residual_block_column_batch",
-    "true_active_residual_block_max_tail",
-    "true_window_max_windows",
-    "true_window_x_radius",
-    "true_window_ell_radius",
-    "true_window_max_size",
-    "true_window_column_batch",
-    "residual_window_max_windows",
-    "residual_window_x_radius",
-    "residual_window_ell_radius",
-    "residual_window_interface_depth",
-    "residual_window_max_size",
-)
-
-_DIRECT_TAIL_FLOAT_SUFFIXES = (
-    "residual_coarse_max_mb",
-    "residual_coarse_regularization",
-    "true_coupled_coarse_auto_target_ratio",
-    "true_coupled_coarse_max_mb",
-    "true_coupled_coarse_regularization",
-    "true_coupled_coarse_drop_tol",
-    "true_coupled_coarse_preconditioned_load_drop_tol",
-    "true_coupled_coarse_beta_max",
-    "true_active_submatrix_alpha_clip",
-    "true_active_submatrix_min_improvement",
-    "true_active_column_cache_max_mb",
-    "true_active_block_max_mb",
-    "true_active_block_regularization",
-    "true_active_block_drop_tol",
-    "true_active_block_beta_max",
-    "true_active_residual_block_max_mb",
-    "true_active_residual_block_regularization",
-    "true_active_residual_block_drop_tol",
-    "true_active_residual_block_beta_max",
-    "true_active_residual_block_min_improvement",
-    "true_window_max_mb",
-    "true_window_regularization",
-    "true_window_drop_tol",
-    "true_window_beta_max",
-    "residual_window_max_mb",
-    "residual_window_regularization",
-)
-
-_DIRECT_TAIL_STR_SUFFIXES = (
-    "residual_window_coefficient_mode",
-    "residual_window_combine_mode",
-)
-
-_DIRECT_TAIL_OBJECT_SUFFIXES = (
-    "residual_coarse_residual_after",
-    "residual_coarse_error",
-    "residual_coarse_metadata",
-    "true_coupled_coarse_residual_after",
-    "true_coupled_coarse_error",
-    "true_coupled_coarse_metadata",
-    "true_active_submatrix_residual_after",
-    "true_active_submatrix_error",
-    "true_active_submatrix_metadata",
-    "true_active_column_cache_metadata",
-    "true_active_block_residual_after",
-    "true_active_block_error",
-    "true_active_block_metadata",
-    "true_active_residual_block_residual_after",
-    "true_active_residual_block_error",
-    "true_active_residual_block_metadata",
-    "true_window_residual_after",
-    "true_window_error",
-    "true_window_metadata",
-    "residual_window_residual_after",
-    "residual_window_error",
-    "residual_window_metadata",
-)
+_DIRECT_TAIL_BOOL_SUFFIXES: tuple[str, ...] = ()
+_DIRECT_TAIL_INT_SUFFIXES: tuple[str, ...] = ()
+_DIRECT_TAIL_FLOAT_SUFFIXES: tuple[str, ...] = ()
+_DIRECT_TAIL_STR_SUFFIXES: tuple[str, ...] = ()
+_DIRECT_TAIL_OBJECT_SUFFIXES: tuple[str, ...] = ()
 
 _DIRECT_TAIL_SUFFIXES = (
     *_DIRECT_TAIL_BOOL_SUFFIXES,
@@ -375,8 +242,6 @@ class SparsePCDirectTailMetadataContext:
     structured_pc_preflight_required: object
     structured_pc_preflight_required_min_size: object
     suffix_values: Mapping[str, object]
-    true_active_block_species_count: object
-    true_window_specs: object
     operator_bundle: object
     structured_max_nbytes: object
     enabled: object
@@ -399,7 +264,11 @@ class SparsePCDirectTailMetadataContext:
 def _direct_tail_suffix_values_from_state(
     state: Mapping[str, object],
 ) -> dict[str, object]:
-    return {suffix: state[f"direct_tail_{suffix}"] for suffix in _DIRECT_TAIL_SUFFIXES}
+    return {
+        suffix: state[f"direct_tail_{suffix}"]
+        for suffix in _DIRECT_TAIL_SUFFIXES
+        if f"direct_tail_{suffix}" in state
+    }
 
 
 def _copy_direct_tail_suffix_values(
@@ -468,14 +337,6 @@ def sparse_pc_direct_tail_result_metadata_from_context(
         context.suffix_values,
         _DIRECT_TAIL_OBJECT_SUFFIXES,
         lambda value: value,
-    )
-
-    species_count = context.true_active_block_species_count
-    metadata["sparse_pc_direct_tail_true_active_block_species_count"] = (
-        None if species_count is None else int(species_count)
-    )
-    metadata["sparse_pc_direct_tail_true_window_specs"] = tuple(
-        tuple(int(v) for v in spec) for spec in context.true_window_specs
     )
 
     metadata.update(
@@ -556,10 +417,6 @@ def sparse_pc_direct_tail_result_metadata(
                 "structured_pc_preflight_required_min_size"
             ],
             suffix_values=_direct_tail_suffix_values_from_state(state),
-            true_active_block_species_count=state[
-                "direct_tail_true_active_block_species_count"
-            ],
-            true_window_specs=state["direct_tail_true_window_specs"],
             operator_bundle=state["direct_tail_operator_bundle"],
             structured_max_nbytes=state["direct_tail_structured_max_nbytes"],
             enabled=state["direct_tail_enabled"],

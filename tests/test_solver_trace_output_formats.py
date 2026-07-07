@@ -231,20 +231,6 @@ def test_rhsmode1_solver_metadata_helpers_and_output_fields() -> None:
         },
         "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb": 32.0,
         "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb_auto": True,
-        "sparse_pc_direct_tail_true_coupled_coarse_requested": True,
-        "sparse_pc_direct_tail_true_coupled_coarse_explicit_requested": True,
-        "sparse_pc_direct_tail_true_coupled_coarse_auto_enabled": True,
-        "sparse_pc_direct_tail_true_coupled_coarse_auto_selected": True,
-        "sparse_pc_direct_tail_true_coupled_coarse_selected": True,
-        "sparse_pc_direct_tail_true_coupled_coarse_auto_target_ratio": 0.5,
-        "sparse_pc_direct_tail_true_coupled_coarse_auto_min_size": 128,
-        "sparse_pc_direct_tail_true_coupled_coarse_residual_after": 0.1,
-        "sparse_pc_direct_tail_true_coupled_coarse_metadata": {
-            "base_residual_after": 2.0,
-            "coarse_size": 3,
-            "factor_nbytes_estimate": 456,
-            "basis_names": ("constant", "current"),
-        },
     }
     data: dict[str, object] = {}
 
@@ -275,7 +261,6 @@ def test_rhsmode1_solver_metadata_helpers_and_output_fields() -> None:
     assert int(np.asarray(data["linearSolverMatvecs"])) == 11
     assert data["linearSolverSparsePCSelectedKind"] == "native"
     assert data["linearSolverDirectTailSupportModeSelectedCandidate"] == "support"
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseSize"])) == 3
     assert float(np.asarray(data["linearSolverResidualTargetRatio"])) == pytest.approx(2.0)
 
 

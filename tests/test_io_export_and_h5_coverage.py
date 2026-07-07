@@ -314,20 +314,6 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
                     },
                 ),
             },
-            "sparse_pc_direct_tail_true_coupled_coarse_requested": True,
-            "sparse_pc_direct_tail_true_coupled_coarse_explicit_requested": False,
-            "sparse_pc_direct_tail_true_coupled_coarse_auto_enabled": True,
-            "sparse_pc_direct_tail_true_coupled_coarse_auto_selected": True,
-            "sparse_pc_direct_tail_true_coupled_coarse_auto_target_ratio": 10.0,
-            "sparse_pc_direct_tail_true_coupled_coarse_auto_min_size": 300_000,
-            "sparse_pc_direct_tail_true_coupled_coarse_selected": True,
-            "sparse_pc_direct_tail_true_coupled_coarse_residual_after": 7.5e-9,
-            "sparse_pc_direct_tail_true_coupled_coarse_metadata": {
-                "base_residual_after": 4.0e-7,
-                "coarse_size": 12,
-                "factor_nbytes_estimate": 4096,
-                "basis_names": ("tail_residual", "dominant_kinetic_residual_window"),
-            },
         },
     )
 
@@ -393,20 +379,7 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
     assert '"label": "x0"' in data["linearSolverDirectTailSupportModeCandidatesJson"]
     assert float(np.asarray(data["linearSolverDirectTailStructuredPCMaxMB"])) == pytest.approx(1024.0)
     assert int(np.asarray(data["linearSolverDirectTailStructuredPCMaxMBAuto"])) == 1
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseRequested"])) == 1
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseExplicitRequested"])) == -1
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseAutoEnabled"])) == 1
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseAutoSelected"])) == 1
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseSelected"])) == 1
-    assert float(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseAutoTargetRatio"])) == pytest.approx(10.0)
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseAutoMinSize"])) == 300_000
-    assert float(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseResidualAfter"])) == pytest.approx(7.5e-9)
-    assert float(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseBaseResidualAfter"])) == pytest.approx(
-        4.0e-7
-    )
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseSize"])) == 12
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseNbytesEstimate"])) == 4096
-    assert "dominant_kinetic_residual_window" in data["linearSolverDirectTailTrueCoupledCoarseBasisJson"]
+    assert not any("TrueCoupledCoarse" in key for key in data)
     assert float(np.asarray(data["linearSolverResidualTargetRatio"])) == pytest.approx(0.2)
 
 

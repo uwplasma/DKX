@@ -612,7 +612,6 @@ class _DefaultDirectTailSuffixes(dict):
 def test_sparse_pc_direct_tail_result_metadata_preserves_driver_conversions() -> None:
     structured_metadata = {"kind": "native"}
     support_metadata = {"accepted": True}
-    coupled_metadata = {"rank": 5}
     state = _DefaultDirectTailState(
         {
             "direct_tail_operator_bundle": SimpleNamespace(
@@ -623,13 +622,8 @@ def test_sparse_pc_direct_tail_result_metadata_preserves_driver_conversions() ->
                 )
             ),
             "direct_tail_structured_max_nbytes": 2 * 1024 * 1024,
-            "direct_tail_true_window_specs": ((np.int64(1), np.int64(2)),),
-            "direct_tail_true_active_block_species_count": None,
             "direct_tail_structured_pc_metadata": structured_metadata,
             "direct_tail_support_mode_preflight_metadata": support_metadata,
-            "direct_tail_true_coupled_coarse_metadata": coupled_metadata,
-            "direct_tail_residual_window_coefficient_mode": "normal",
-            "direct_tail_residual_window_combine_mode": "additive",
             "direct_tail_error": "not_selected",
             "direct_tail_structured_pc_requested": "auto",
             "direct_tail_structured_pc_reason": "admitted",
@@ -655,10 +649,6 @@ def test_sparse_pc_direct_tail_result_metadata_preserves_driver_conversions() ->
                 "structured_pc_preflight_required_min_size"
             ],
             suffix_values=suffix_values,
-            true_active_block_species_count=state[
-                "direct_tail_true_active_block_species_count"
-            ],
-            true_window_specs=state["direct_tail_true_window_specs"],
             operator_bundle=state["direct_tail_operator_bundle"],
             structured_max_nbytes=state["direct_tail_structured_max_nbytes"],
             enabled=state["direct_tail_enabled"],
@@ -691,8 +681,6 @@ def test_sparse_pc_direct_tail_result_metadata_preserves_driver_conversions() ->
         )
     )
 
-    assert metadata["sparse_pc_direct_tail_true_window_specs"] == ((1, 2),)
-    assert metadata["sparse_pc_direct_tail_true_active_block_species_count"] is None
     assert (
         metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb"]
         == 2.0
@@ -716,12 +704,9 @@ def test_sparse_pc_direct_tail_result_metadata_preserves_driver_conversions() ->
         ]
         is support_metadata
     )
-    assert (
-        metadata["sparse_pc_direct_tail_true_coupled_coarse_metadata"]
-        is coupled_metadata
-    )
-    assert metadata["sparse_pc_direct_tail_residual_window_coefficient_mode"] == "normal"
-    assert metadata["sparse_pc_direct_tail_residual_window_combine_mode"] == "additive"
+    assert not any("true_coupled" in key for key in metadata)
+    assert not any("true_active" in key for key in metadata)
+    assert not any("residual_window" in key for key in metadata)
     assert context_metadata == metadata
 
 
@@ -801,12 +786,8 @@ def test_sparse_pc_gmres_result_metadata_preserves_driver_schema() -> None:
             "sparse_pc_factor_quality_rejected": True,
             "direct_tail_operator_bundle": None,
             "direct_tail_structured_max_nbytes": None,
-            "direct_tail_true_window_specs": (),
-            "direct_tail_true_active_block_species_count": 2,
             "direct_tail_structured_pc_metadata": {"kind": "active"},
             "direct_tail_support_mode_preflight_metadata": {"selected": False},
-            "direct_tail_residual_window_coefficient_mode": "normal",
-            "direct_tail_residual_window_combine_mode": "additive",
             "direct_tail_error": None,
             "direct_tail_structured_pc_requested": "auto",
             "direct_tail_structured_pc_reason": "selected",
@@ -838,7 +819,6 @@ def test_sparse_pc_gmres_result_metadata_preserves_driver_schema() -> None:
     assert metadata["sparse_pc_residual_ratio_to_target"] == 2.0
     assert metadata["sparse_pc_factor_quality_rejected"] is True
     assert metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata"] == {"kind": "active"}
-    assert metadata["sparse_pc_direct_tail_true_active_block_species_count"] == 2
 
     precomputed_tail_metadata = dict(sparse_pc_direct_tail_result_metadata(state))
     precomputed_tail_metadata[
@@ -859,7 +839,6 @@ def test_sparse_pc_gmres_result_metadata_preserves_driver_schema() -> None:
         ]
         == {"kind": "precomputed"}
     )
-    assert precomputed_metadata["sparse_pc_direct_tail_true_active_block_species_count"] == 2
 
 
 def test_sparse_pc_gmres_static_metadata_covers_global_branch() -> None:

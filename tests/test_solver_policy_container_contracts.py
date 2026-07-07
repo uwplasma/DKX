@@ -83,7 +83,6 @@ from sfincs_jax.solvers.preconditioner_xblock_policy import (
     RHS1XBlockLocalSolveCandidate,
     RHS1XBlockLocalSolveTuning,
     RHS1XBlockLowerFillAcceptance,
-    RHS1XBlockQIDeviceOperatorReuseDecision,
     RHS1XBlockSideProbeControls,
     RHS1XBlockSparsePCPolicy,
 )
@@ -106,7 +105,7 @@ def _value_for_field(name: str):
         return jnp.asarray([0.0, 1.0], dtype=jnp.float64)
     if name in {"x0_by_rhs", "state_x_by_rhs", "metadata"}:
         return {}
-    if name in {"basis", "context", "result", "factor_preflight_policy", "direct_tail_residual_rescue_policy", "direct_tail_true_active_rescue_policy", "direct_tail_true_coupled_coarse_policy"}:
+    if name in {"basis", "context", "result", "factor_preflight_policy"}:
         return object()
     if name in {"state_in_path", "state_out_path", "error", "direct_tail_structured_pc_reason", "direct_tail_support_mode_preflight_error", "factor_preflight_error"}:
         return None
@@ -314,7 +313,6 @@ def test_xblock_symbolic_and_native_policy_contracts_are_json_ready() -> None:
         lower_fill_block_size_capped=False,
     )
     host = RHS1XBlockDeviceHostFallbackDecision("auto", True, "large_qi", True, "gmres", "lgmres", 100, True, False)
-    reuse = RHS1XBlockQIDeviceOperatorReuseDecision(True, "requested", True, True, True, True, False, "right", True)
     side_probe = RHS1XBlockSideProbeControls(True, 20, 40, 10.0, True, True, 80, False, 5, 0.25)
     lower_fill = RHS1XBlockLowerFillAcceptance(True, "accepted", "lower", "base", 0.5, 2.0, 1.0, 10.0, 1.0, 1.0e8)
 
@@ -322,7 +320,6 @@ def test_xblock_symbolic_and_native_policy_contracts_are_json_ready() -> None:
     assert side_probe.should_switch(11.0) is True
     assert side_probe.should_switch(1.0) is False
     assert host.to_metadata()["non_autodiff"] is True
-    assert reuse.to_metadata()["matrix_free"] is True
     assert candidate.to_metadata()["metadata_label"] == "xblock_ilu"
     assert lower_fill.to_metadata()["accepted"] is True
     assert ActiveSymbolicSuperblockPolicy(1, "rcm", 2, 3, 4, 5, 1, 0.1, 1e-8, 1.5, 2, 1e-6, 1.0).ordering_kind == "rcm"

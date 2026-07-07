@@ -466,16 +466,6 @@ def sparse_pc_gmres_finalization_bundle_from_solve_scope(
             ),
             materialization=scope["direct_tail_materialization"],
             structured_admission=scope["direct_tail_structured_admission"],
-            residual_policy=scope["direct_tail_residual_rescue_policy"],
-            true_active_policy=scope["direct_tail_true_active_rescue_policy"],
-            coupled_coarse_policy=scope["direct_tail_true_coupled_coarse_policy"],
-            true_window_specs=tuple(
-                tuple(int(value) for value in spec)
-                for spec in scope["direct_tail_true_window_specs"]
-            ),
-            true_active_block_species_count=scope[
-                "direct_tail_true_active_block_species_count"
-            ],
             structured_max_nbytes=scope["direct_tail_structured_max_nbytes"],
             structured_pc_selected=bool(scope["direct_tail_structured_pc_selected"]),
             structured_pc_reason=scope["direct_tail_structured_pc_reason"],
@@ -493,53 +483,6 @@ def sparse_pc_gmres_finalization_bundle_from_solve_scope(
             support_mode_preflight_metadata=scope[
                 "direct_tail_support_mode_preflight_metadata"
             ],
-            true_active_column_cache_metadata=scope["direct_tail_true_active_column_cache_metadata"],
-            residual_coarse_selected=bool(scope["direct_tail_residual_coarse_selected"]),
-            residual_coarse_residual_after=scope["direct_tail_residual_coarse_residual_after"],
-            residual_coarse_error=scope["direct_tail_residual_coarse_error"],
-            residual_coarse_metadata=scope["direct_tail_residual_coarse_metadata"],
-            true_coupled_coarse_requested=bool(scope["direct_tail_true_coupled_coarse_requested"]),
-            true_coupled_coarse_auto_selected=bool(scope["direct_tail_true_coupled_coarse_auto_selected"]),
-            true_coupled_coarse_selected=bool(scope["direct_tail_true_coupled_coarse_selected"]),
-            true_coupled_coarse_residual_after=scope[
-                "direct_tail_true_coupled_coarse_residual_after"
-            ],
-            true_coupled_coarse_error=scope["direct_tail_true_coupled_coarse_error"],
-            true_coupled_coarse_metadata=scope["direct_tail_true_coupled_coarse_metadata"],
-            true_coupled_coarse_base_improvement_override_used=bool(
-                scope["direct_tail_true_coupled_coarse_base_improvement_override_used"]
-            ),
-            true_active_submatrix_selected=bool(scope["direct_tail_true_active_submatrix_selected"]),
-            true_active_submatrix_residual_after=scope[
-                "direct_tail_true_active_submatrix_residual_after"
-            ],
-            true_active_submatrix_error=scope["direct_tail_true_active_submatrix_error"],
-            true_active_submatrix_metadata=scope["direct_tail_true_active_submatrix_metadata"],
-            true_active_block_selected=bool(scope["direct_tail_true_active_block_selected"]),
-            true_active_block_residual_after=scope["direct_tail_true_active_block_residual_after"],
-            true_active_block_error=scope["direct_tail_true_active_block_error"],
-            true_active_block_metadata=scope["direct_tail_true_active_block_metadata"],
-            true_active_residual_block_selected=bool(
-                scope["direct_tail_true_active_residual_block_selected"]
-            ),
-            true_active_residual_block_residual_after=scope[
-                "direct_tail_true_active_residual_block_residual_after"
-            ],
-            true_active_residual_block_error=scope["direct_tail_true_active_residual_block_error"],
-            true_active_residual_block_metadata=scope[
-                "direct_tail_true_active_residual_block_metadata"
-            ],
-            true_active_residual_block_base_improvement_override_used=bool(
-                scope["direct_tail_true_active_residual_block_base_improvement_override_used"]
-            ),
-            true_window_selected=bool(scope["direct_tail_true_window_selected"]),
-            true_window_residual_after=scope["direct_tail_true_window_residual_after"],
-            true_window_error=scope["direct_tail_true_window_error"],
-            true_window_metadata=scope["direct_tail_true_window_metadata"],
-            residual_window_selected=bool(scope["direct_tail_residual_window_selected"]),
-            residual_window_residual_after=scope["direct_tail_residual_window_residual_after"],
-            residual_window_error=scope["direct_tail_residual_window_error"],
-            residual_window_metadata=scope["direct_tail_residual_window_metadata"],
         ),
         factor_preflight=SparsePCFactorPreflightMetadataContext(
             enabled=bool(scope["factor_preflight_enabled"]),

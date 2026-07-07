@@ -275,10 +275,6 @@ def test_sparse_pc_setup_results_preserve_sparse_policy_outputs() -> None:
         factor_preflight_seed_used=True,
         factor_preflight_passed=True,
         factor_preflight_error=None,
-        direct_tail_residual_rescue_policy=SimpleNamespace(enabled=True),
-        direct_tail_true_active_rescue_policy=SimpleNamespace(enabled=True),
-        direct_tail_true_coupled_coarse_policy=SimpleNamespace(enabled=False),
-        rescue_values={"max_windows": 2},
     )
 
     assert full_retry.host_sparse_direct_used is True
@@ -286,7 +282,6 @@ def test_sparse_pc_setup_results_preserve_sparse_policy_outputs() -> None:
     assert direct_tail.structured_admission is structured_admission
     assert direct_tail.factor_bundle_pc is factor_bundle
     assert rescue.factor_preflight_policy is factor_policy
-    assert rescue.rescue_values == {"max_windows": 2}
     np.testing.assert_allclose(generic.reduce_full(jnp.asarray([2.0, 3.0])), [2.0, 3.0])
 
 

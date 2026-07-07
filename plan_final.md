@@ -17,49 +17,35 @@ bootstrap current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Latest audited code-change head: `69de75cb+true-operator-stage-removal`; last green CI evidence:
-  `96fb2677`. Exact aggregate coverage from that CI was 91.753% (`92%`).
+- Latest audited code-change head: `2e162bb3+direct-tail-rescue-policy-removal`; last green CI evidence: `96fb2677`. Exact aggregate coverage from that CI was 91.753% (`92%`).
 - Current tracked Python volume is the problem to solve before review:
-  114 package files / 139.3k source lines, 313 test files / 126.0k test lines,
+  114 package files / 137.6k source lines, 313 test files / 126.0k test lines,
   122 example Python files, and 12 tracked scripts.
-- Largest source owners are the first audit targets:
-  `problems/profile_sparse_xblock.py`, `problems/profile_policies.py`,
-  `operators/profile_full_system.py`, `solvers/explicit_sparse.py`,
-  `problems/profile_sparse_solve.py`, `problems/profile_solve.py`,
-  `problems/transport_linear_system.py`, `problems/profile_sparse_direct.py`,
-  `problems/transport_parallel_runtime.py`, `problems/profile_dense.py`,
-  `solver.py`, `outputs/rhsmode1.py`, and
-  `solvers/preconditioner_transport_matrix.py`.
-- Largest test owners are the second audit targets:
-  `tests/test_profile_response_sparse_pc.py`, `tests/test_rhs1_full_assembly.py`,
-  `tests/test_io_output_policy_coverage.py`, `tests/test_v3_sparse_pattern.py`,
-  `tests/test_explicit_sparse.py`, `tests/test_rhs1_solver_replay.py`, dense
-  profile tests, transport policy tests, and all extracted-path tests.
+- Largest source owners are the first audit targets: `profile_sparse_xblock.py`, `profile_policies.py`, `profile_full_system.py`, `explicit_sparse.py`, `profile_sparse_solve.py`, `profile_solve.py`, `transport_linear_system.py`, `profile_sparse_direct.py`, `transport_parallel_runtime.py`, `profile_dense.py`, `solver.py`, `outputs/rhsmode1.py`, and `preconditioner_transport_matrix.py`.
+- Largest test owners are the second audit targets: `test_profile_response_sparse_pc.py`, `test_rhs1_full_assembly.py`, `test_io_output_policy_coverage.py`, `test_v3_sparse_pattern.py`, `test_explicit_sparse.py`, `test_rhs1_solver_replay.py`, dense profile tests, transport policy tests, and all extracted-path tests.
 - The stable branch must stop carrying the history of solver experiments.
   Experimental QI/device-QI, native sparse-direct, nested-dissection,
   multifrontal, HSS/BLR, long profiling campaigns, and publication generators
   are preserved only in research PRs unless they satisfy the stable admission
   gates below.
-- No tracked file larger than 2 MB was found. Ignored local outputs,
-  `__pycache__`, and generated traces must not be committed.
+- No tracked file larger than 2 MB was found. Ignored outputs, `__pycache__`, and generated traces must not be committed.
 
 ## Open Lanes
 
 | Lane | Status | Completion | Definition of done |
 | --- | --- | ---: | --- |
-| Line-by-line audit | Active | 43% | Every retained file/function/line has a caller, a physics/numerics/API reason, and a test/doc/perf owner. |
-| Core-main slimming | Active | 57% | Main keeps only stable, parity-clean, runtime-acceptable solvers/APIs; research code is outside core. |
-| Source simplification | Active | 57% | Package moves first to <=68 files, then <=50 files and <=50k lines unless exceptions are justified. |
+| Line-by-line audit | Active | 45% | Every retained file/function/line has a caller, a physics/numerics/API reason, and a test/doc/perf owner. |
+| Core-main slimming | Active | 59% | Main keeps only stable, parity-clean, runtime-acceptable solvers/APIs; research code is outside core. |
+| Source simplification | Active | 59% | Package moves first to <=68 files, then <=50 files and <=50k lines unless exceptions are justified. |
 | Tests/examples/scripts cleanup | Active | 77% | Examples are curated, tests are smaller but reach >=95% coverage, scripts are removed or documented release tooling. |
 | Parity/performance evidence | Active | 70% | Supported examples have checked SFINCS Fortran v3 parity/runtime/RSS/bootstrap evidence. |
 | Docs/readme | Active | 80% | Public docs describe stable software, not branch history or unpromoted campaigns. |
 
-Overall readiness under this stricter core-slim goal is about 84-87%.
+Overall readiness under this stricter core-slim goal is about 86-88%.
 
 ## Concrete Code-Audit Rules
 
-Default action for every line is removal. A retained line needs one of these
-proofs:
+Default action for every line is removal. A retained line needs one of these proofs:
 
 - `PHYSICS`: it implements a documented drift-kinetic, collision, geometry,
   normalization, flux, bootstrap, ambipolar, or transport equation.
@@ -97,6 +83,47 @@ For each file, use this exact loop:
 No touched function may remain without an obvious caller and a testable reason.
 No public docs sentence may describe a non-default research path as supported.
 No solver branch may be stable only because an environment variable can reach it.
+
+## Repository-Wide Complexity Reduction Method
+
+This is a line audit, not a file shuffle. For every touched file: inventory
+imports/classes/functions/exports/CLI keys; find callers with `rg` and focused
+tests; classify each object with the code-audit tags above; delete or extract
+unreachable, duplicated, env-only, campaign-only, disabled, historical, and
+one-call wrappers; merge formulas into physics/operators/discretization owners;
+run the smallest proof tests; and record deltas in
+`tests/fixtures/core_slim_inventory.json`.
+
+Stable owners are limited to public API/CLI/I/O/namelist/plotting/path facades,
+geometry adapters, grid/stencil modules, physics formulas, operator assembly,
+profile/transport/ambipolar problem modules, admitted solver/preconditioner
+modules, output schemas, compact validation helpers, and curated workflows.
+Everything else merges into those owners, becomes private, moves to a research
+PR, or is deleted. New stable files must name a domain boundary, not history,
+campaigns, probes, candidates, rescues, hard seeds, or temporary experiments.
+
+Audit order is fixed: `profile_sparse_solve.py`,
+`profile_sparse_direct.py`, `profile_policies.py`,
+`profile_sparse_xblock.py`, native/symbolic preconditioners,
+`profile_full_system.py` and term modules, `transport_*` plus transport
+preconditioners, `outputs/*`, `validation/*`, `examples/`, `scripts/`, then
+test consolidation. Each tranche must reduce retained lines, files, public
+knobs, scripts, examples, or duplicated concepts; pure moves are rejected.
+
+Research extraction rule: if a family fails a stable gate or lacks a stable caller, remove its imports/env vars/API knobs/docs/examples/tests/fixtures/diagnostics/benchmark rows from this branch, leave at most one
+`docs/research_lanes.rst` pointer with the return gate, and keep only generic
+primitives used by admitted defaults. Deferred families are QI/device-QI hard
+seeds, native sparse-direct/reduced-Pmat, ND/multifrontal/HSS/BLR, true-operator
+rescues, long GPU/multi-worker campaigns, publication generators, and profilers.
+
+Budgets: 114 package files and 137.6k source lines now, <=68 files and <=80k
+lines before review request, <=50 files and <=50k lines final unless justified;
+313 test files now, <=180 before review, <=120 final with >=95% coverage;
+examples keep original Fortran-v3 references plus <=10 curated workflows;
+scripts are zero by default; benchmark claims use compact fixtures/docs/release
+assets, not a tracked `benchmarks/` package. Review-ready also requires the
+largest five source files below 18k combined lines and no extracted research
+path reachable from stable defaults.
 
 ## Stable-Core Admission Gates
 
@@ -142,32 +169,14 @@ regression, cli_io, optional integration, and fixtures with >=95% coverage;
 `scripts/` is zero by default except documented release tooling; `benchmarks/`
 is absent and benchmark claims use compact fixtures, docs, or release assets.
 
-## Target Stable Source Shape
-
-| Domain | Budget | Retain | Delete/extract |
-| --- | ---: | --- | --- |
-| Package root | <=14 files | public facades, CLI, I/O, namelist, plotting, paths, sensitivity, ambipolar | duplicate compare/profiling helpers, hidden release scripts |
-| `geometry/` | <=5 files | VMEC/wout/Boozer/JAX adapters with tests | generated campaigns, one-off loaders |
-| `discretization/` | <=5 files | grids, velocity maps, periodic stencils | historical wrappers with no direct caller |
-| `physics/` | <=4 files | collisions, classical transport, Redl/bootstrap normalizations | formula copies in problem modules |
-| `operators/` | <=8 files | collision/drift/electric/field/system assembly | true-operator rescue/probe experiments |
-| `problems/` | <=10 files | profile solve, transport solve, ambipolar solve, setup, diagnostics, policies | QI/device-QI, native sparse-direct, duplicated route orchestration |
-| `solvers/` | <=10 files | Krylov dispatch, sparse primitives, path policy, stable preconditioners, implicit diff | ND/HSS/multifrontal/hard-seed experiments |
-| `outputs/` | <=4 files | writer, formats, profile and transport schemas | experiment-only diagnostics |
-| `validation/` | <=4 files | release-data fetch, compact artifacts, Fortran fixture helpers | publication campaign generators |
-| `workflows/` | <=4 files | curated high-level workflows | campaign wrappers and research optimization experiments |
-
-First review budget: <=68 package Python files. Final budget: <=50 package
-Python files and <=50k package lines unless each exception is justified in the
-ledger.
-
 ## Exact Source Backlog
 
 ### Delete or Extract First
 
 - `profile_sparse_solve.py`: disconnected true-operator residual rescue stage
-  APIs/tests are removed; next collapse generic branch setup and direct-tail
-  policy wiring that still belongs to extracted native sparse-direct research.
+  APIs/tests and direct-tail residual/true-active/coupled-coarse rescue policy
+  wiring are removed; next collapse generic branch setup/direct-tail naming
+  that still belongs to extracted native sparse-direct research.
 - `profile_sparse_direct.py`: keep only stable sparse direct policy that passes
   admission gates; move native direct-factor research to
   `research/native-sparse-direct`.
@@ -206,18 +215,6 @@ ledger.
 - `transport_linear_system.py`, `transport_solve.py`, `transport_policies.py`,
   `preconditioner_transport_matrix.py`: one linear-system builder, one policy
   table, stable preconditioners only, shared diagnostics/output builders.
-
-## Extraction Map
-
-| Family | Stable action | Destination / return gate |
-| --- | --- | --- |
-| QI/device-QI hard-seed machinery | Remove policy helpers, env tokens, examples, tests, docs; leave research pointer only. | `research/qi-device-hard-seed`; returns after CPU/GPU production residual/runtime/RSS/autodiff gates. |
-| Native sparse-direct, reduced-Pmat, ND, multifrontal, HSS | Extract source/tests/docs/default hooks; keep stable sparse primitives only. | `research/native-sparse-direct`; returns after true-residual admission and production-floor runtime/RSS gates. |
-| Parallel/GPU/multi-device campaigns | Keep only documented public helpers with tests; move runners/traces/regenerators out. | `research/parallel-performance` or release assets. |
-| Publication/audit generators | Keep final compressed figures only when referenced; move generators/raw outputs out. | `research/publication-audits`. |
-| Legacy wrappers | Thin delegates only if public; otherwise delete. | Stable only with migration/import tests. |
-| Env-only solver branches | Promote to documented advanced API or extract/delete. | Stable only if automatic defaults remain simple. |
-| Duplicated test scaffolds | Merge into focused physics/numerics/regression tests. | Stable CI under 10 minutes. |
 
 ## Ordered Finish Plan
 

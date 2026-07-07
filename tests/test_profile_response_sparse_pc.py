@@ -32,9 +32,6 @@ from sfincs_jax.problems.profile_sparse_direct import (
     DirectTailStructuredAdmissionResult,
     DirectTailStructuredBuildContext,
     DirectTailSupportModePreflightContext,
-    DirectTailResidualRescuePolicy,
-    DirectTailTrueActiveRescuePolicy,
-    DirectTailCoupledCoarseRescuePolicy,
     SparseHostDirectPayload,
     SparseHostDirectFactorSolvePayload,
     SparseHostDirectPolishPayload,
@@ -63,9 +60,6 @@ from sfincs_jax.problems.profile_sparse_direct import (
     resolve_sparse_minimum_norm_policy,
     resolve_sparse_host_or_ilu_factor_controls,
     resolve_direct_tail_structured_admission,
-    resolve_direct_tail_residual_rescue_policy,
-    resolve_direct_tail_true_active_rescue_policy,
-    resolve_direct_tail_coupled_coarse_rescue_policy,
     run_direct_tail_support_mode_preflight,
     sparse_pc_direct_tail_final_metadata,
     sparse_host_direct_solve_payload,
@@ -1220,7 +1214,6 @@ def test_sparse_pc_direct_tail_rescue_policy_setup_defaults_without_support_pref
     assert not result.direct_tail_support_mode_preflight_requested
     assert not result.direct_tail_support_mode_preflight_selected
     assert result.factor_preflight_passed is None
-    assert "direct_tail_residual_coarse_requested" in result.rescue_values
 
 
 def test_sparse_pc_direct_tail_rescue_policy_setup_promotes_support_mode(monkeypatch) -> None:
@@ -1598,17 +1591,14 @@ def test_sparse_direct_module_exposes_canonical_public_contract() -> None:
     """The split sparse direct module owns its public sparse-PC helpers."""
 
     moved_names = (
-        "DirectTailCoupledCoarseRescuePolicy",
         "DirectTailMaterializationContext",
         "DirectTailMaterializationResult",
-        "DirectTailResidualRescuePolicy",
         "DirectTailStructuredAdmissionContext",
         "DirectTailStructuredAdmissionResult",
         "DirectTailStructuredBuildContext",
         "DirectTailStructuredBuildResult",
         "DirectTailSupportModePreflightContext",
         "DirectTailSupportModePreflightResult",
-        "DirectTailTrueActiveRescuePolicy",
         "ExplicitSparseHostDirectBranchContext",
         "ExplicitSparseMinimumNormBranchContext",
         "ExplicitSparseOperatorBuildPolicy",
@@ -1640,10 +1630,7 @@ def test_sparse_direct_module_exposes_canonical_public_contract() -> None:
         "build_sparse_ilu_preconditioner_from_cache",
         "build_sparse_jax_retry_preconditioner",
         "explicit_sparse_pattern_progress_messages",
-        "resolve_direct_tail_coupled_coarse_rescue_policy",
-        "resolve_direct_tail_residual_rescue_policy",
         "resolve_direct_tail_structured_admission",
-        "resolve_direct_tail_true_active_rescue_policy",
         "resolve_explicit_sparse_operator_build_policy",
         "resolve_sparse_host_or_ilu_factor_controls",
         "resolve_sparse_minimum_norm_policy",
@@ -4644,307 +4631,6 @@ def test_sparse_pc_auto_preflight_retry_evaluation_lu_can_pass_policy_without_re
     assert result.required is False
     assert result.preflight_passed is False
     assert result.policy_passed is True
-
-
-def test_direct_tail_residual_rescue_policy_defaults() -> None:
-    policy = resolve_direct_tail_residual_rescue_policy({})
-
-    assert isinstance(policy, DirectTailResidualRescuePolicy)
-    assert policy.residual_coarse_requested is False
-    assert policy.residual_coarse_rank == 4
-    assert policy.residual_coarse_max_mb == 512.0
-    assert policy.residual_window_requested is False
-    assert policy.residual_window_max_windows == 2
-    assert policy.residual_window_coefficient_mode == "additive"
-    assert policy.residual_window_combine_mode == "independent"
-    assert policy.true_window_requested is False
-    assert policy.true_window_max_windows == 1
-    assert policy.true_window_column_batch == 4
-    assert policy.true_window_include_tail is True
-    assert policy.true_coupled_coarse_explicit_requested is False
-    assert policy.true_coupled_coarse_auto_enabled is True
-    assert policy.true_coupled_coarse_auto_native_enabled is False
-    assert policy.true_coupled_coarse_auto_target_ratio == 10.0
-    assert policy.true_coupled_coarse_auto_min_size == 300000
-
-
-def test_direct_tail_residual_rescue_policy_normalizes_modes_and_clamps() -> None:
-    policy = resolve_direct_tail_residual_rescue_policy(
-        {
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE": "1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_RANK": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_MAX_MB": "-5",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW": "1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_MAX_WINDOWS": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_X_RADIUS": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_ELL_RADIUS": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COEFFICIENTS": "NORMAL-EQUATIONS",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COMBINE": "graph-interface",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW": "1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_DROP_TOL": "-1e-4",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_INCLUDE_TAIL": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_DAMPING": "1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_BETA_MAX": "-2",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COARSE": "1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COARSE_AUTO": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_NATIVE": "1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_TARGET_RATIO": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_MIN_SIZE": "0",
-        }
-    )
-
-    assert policy.residual_coarse_requested is True
-    assert policy.residual_coarse_rank == 1
-    assert policy.residual_coarse_max_mb == 0.0
-    assert policy.residual_window_requested is True
-    assert policy.residual_window_max_windows == 1
-    assert policy.residual_window_x_radius == 0
-    assert policy.residual_window_ell_radius == 0
-    assert policy.residual_window_coefficient_mode == "normal_equations"
-    assert policy.residual_window_combine_mode == "graph_interface"
-    assert policy.true_window_requested is True
-    assert policy.true_window_drop_tol == 0.0
-    assert policy.true_window_include_tail is False
-    assert policy.true_window_damping is True
-    assert policy.true_window_beta_max == 0.0
-    assert policy.true_coupled_coarse_explicit_requested is True
-    assert policy.true_coupled_coarse_auto_enabled is False
-    assert policy.true_coupled_coarse_auto_native_enabled is True
-    assert policy.true_coupled_coarse_auto_target_ratio == 1.0
-    assert policy.true_coupled_coarse_auto_min_size == 1
-
-
-def test_direct_tail_residual_rescue_policy_falls_back_for_bad_modes() -> None:
-    policy = resolve_direct_tail_residual_rescue_policy(
-        {
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COEFFICIENTS": "bad",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COMBINE": "bad",
-        }
-    )
-
-    assert policy.residual_window_coefficient_mode == "additive"
-    assert policy.residual_window_combine_mode == "independent"
-
-
-def test_direct_tail_true_active_rescue_policy_defaults_and_inheritance() -> None:
-    policy = resolve_direct_tail_true_active_rescue_policy({})
-
-    assert isinstance(policy, DirectTailTrueActiveRescuePolicy)
-    assert policy.active_block_requested is False
-    assert policy.active_residual_block_requested is False
-    assert policy.active_submatrix_requested is False
-    assert policy.active_column_cache_requested is True
-    assert policy.active_column_cache_max_mb == 512.0
-    assert policy.active_block_x_count == 1
-    assert policy.active_block_ell_count == 8
-    assert policy.active_block_species_count is None
-    assert policy.active_block_theta_stride == 1
-    assert policy.active_block_zeta_stride == 1
-    assert policy.active_block_max_mb == 1024.0
-    assert policy.active_block_regularization == 1.0e-12
-    assert policy.active_block_max_size == 4096
-    assert policy.active_block_column_batch == 8
-    assert policy.active_block_drop_tol == 1.0e-14
-    assert policy.active_block_include_tail is True
-    assert policy.active_block_max_tail == 512
-    assert policy.active_block_damping is False
-    assert policy.active_block_beta_max == 10.0
-    assert policy.active_residual_block_max_mb == policy.active_block_max_mb
-    assert policy.active_residual_block_regularization == policy.active_block_regularization
-    assert policy.active_residual_block_max_size == policy.active_block_max_size
-    assert policy.active_residual_block_column_batch == policy.active_block_column_batch
-    assert policy.active_residual_block_drop_tol == policy.active_block_drop_tol
-    assert policy.active_residual_block_include_tail == policy.active_block_include_tail
-    assert policy.active_residual_block_max_tail == policy.active_block_max_tail
-    assert policy.active_residual_block_damping == policy.active_block_damping
-    assert policy.active_residual_block_beta_max == policy.active_block_beta_max
-    assert policy.active_residual_block_kinetic_only is True
-    assert policy.active_residual_block_min_improvement == 1.0e-6
-    assert policy.active_residual_block_accept_base_improvement is False
-    assert policy.active_submatrix_damping is True
-    assert policy.active_submatrix_alpha_clip == 10.0
-    assert policy.active_submatrix_min_improvement == 1.0e-6
-
-
-def test_direct_tail_true_active_rescue_policy_clamps_and_overrides() -> None:
-    policy = resolve_direct_tail_true_active_rescue_policy(
-        {
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK": "1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK": "1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX": "1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_COLUMN_CACHE": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_COLUMN_CACHE_MAX_MB": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_X_COUNT": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_ELL_COUNT": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_SPECIES_COUNT": "3",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_THETA_STRIDE": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_ZETA_STRIDE": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_MAX_MB": "-5",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_REGULARIZATION": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_MAX_SIZE": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_COLUMN_BATCH": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_DROP_TOL": "-1e-5",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_INCLUDE_TAIL": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_MAX_TAIL": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_DAMPING": "1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_BETA_MAX": "-10",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MAX_MB": "9",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_REGULARIZATION": "2e-8",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MAX_SIZE": "11",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_COLUMN_BATCH": "12",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_DROP_TOL": "3e-4",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_INCLUDE_TAIL": "1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MAX_TAIL": "13",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_KINETIC_ONLY": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_DAMPING": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_BETA_MAX": "14",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MIN_IMPROVEMENT": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_ACCEPT_BASE_IMPROVEMENT": "1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX_DAMPING": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX_ALPHA_CLIP": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX_MIN_IMPROVEMENT": "-1",
-        }
-    )
-
-    assert policy.active_block_requested is True
-    assert policy.active_residual_block_requested is True
-    assert policy.active_submatrix_requested is True
-    assert policy.active_column_cache_requested is False
-    assert policy.active_column_cache_max_mb == 0.0
-    assert policy.active_block_x_count == 0
-    assert policy.active_block_ell_count == 0
-    assert policy.active_block_species_count == 3
-    assert policy.active_block_theta_stride == 1
-    assert policy.active_block_zeta_stride == 1
-    assert policy.active_block_max_mb == 0.0
-    assert policy.active_block_regularization == 0.0
-    assert policy.active_block_max_size == 1
-    assert policy.active_block_column_batch == 1
-    assert policy.active_block_drop_tol == 0.0
-    assert policy.active_block_include_tail is False
-    assert policy.active_block_max_tail == 0
-    assert policy.active_block_damping is True
-    assert policy.active_block_beta_max == 0.0
-    assert policy.active_residual_block_max_mb == 9.0
-    assert policy.active_residual_block_regularization == 2.0e-8
-    assert policy.active_residual_block_max_size == 11
-    assert policy.active_residual_block_column_batch == 12
-    assert policy.active_residual_block_drop_tol == 3.0e-4
-    assert policy.active_residual_block_include_tail is True
-    assert policy.active_residual_block_max_tail == 13
-    assert policy.active_residual_block_kinetic_only is False
-    assert policy.active_residual_block_damping is False
-    assert policy.active_residual_block_beta_max == 14.0
-    assert policy.active_residual_block_min_improvement == 0.0
-    assert policy.active_residual_block_accept_base_improvement is True
-    assert policy.active_submatrix_damping is False
-    assert policy.active_submatrix_alpha_clip == 0.0
-    assert policy.active_submatrix_min_improvement == 0.0
-
-
-def test_direct_tail_true_active_rescue_policy_bad_species_count_is_none() -> None:
-    policy = resolve_direct_tail_true_active_rescue_policy(
-        {
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_SPECIES_COUNT": "bad",
-        }
-    )
-
-    assert policy.active_block_species_count is None
-
-
-def test_direct_tail_coupled_coarse_rescue_policy_defaults() -> None:
-    policy = resolve_direct_tail_coupled_coarse_rescue_policy({})
-
-    assert isinstance(policy, DirectTailCoupledCoarseRescuePolicy)
-    assert policy.max_windows == 2
-    assert policy.x_radius == 0
-    assert policy.ell_radius == 1
-    assert policy.max_mb == 512.0
-    assert policy.regularization == 1.0e-12
-    assert policy.max_size == 64
-    assert policy.column_batch == 4
-    assert policy.drop_tol == 1.0e-14
-    assert policy.low_lmax == 3
-    assert policy.profile_moment_count == 4
-    assert policy.angular_lmax == 2
-    assert policy.angular_mode_max == 1
-    assert policy.max_tail_units == 16
-    assert policy.include_tail is True
-    assert policy.include_constraint_sources is True
-    assert policy.include_fsavg is True
-    assert policy.include_window_residual is True
-    assert policy.include_profile_moments is True
-    assert policy.include_angular_residual is True
-    assert policy.include_angular_basis is False
-    assert policy.include_preconditioned_loads is False
-    assert policy.preconditioned_load_max_columns == 16
-    assert policy.preconditioned_load_max_nnz == 50000
-    assert policy.preconditioned_load_drop_tol == 1.0e-12
-    assert policy.damping is False
-    assert policy.beta_max == 10.0
-    assert policy.accept_base_improvement is False
-
-
-def test_direct_tail_coupled_coarse_rescue_policy_clamps_and_overrides() -> None:
-    policy = resolve_direct_tail_coupled_coarse_rescue_policy(
-        {
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_WINDOWS": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_X_RADIUS": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ELL_RADIUS": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_MB": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_REGULARIZATION": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_SIZE": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COLUMN_BATCH": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_DROP_TOL": "-1e-3",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_LOW_LMAX": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PROFILE_MOMENT_COUNT": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ANGULAR_LMAX": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ANGULAR_MODE_MAX": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_TAIL_UNITS": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_TAIL": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_CONSTRAINT_SOURCES": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_FSAVG": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_WINDOW_RESIDUAL": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_PROFILE_MOMENTS": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_ANGULAR_RESIDUAL": "0",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_ANGULAR_BASIS": "1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_PRECONDITIONED_LOADS": "1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PRECONDITIONED_LOAD_MAX_COLUMNS": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PRECONDITIONED_LOAD_MAX_NNZ": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PRECONDITIONED_LOAD_DROP_TOL": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_DAMPING": "1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_BETA_MAX": "-1",
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ACCEPT_BASE_IMPROVEMENT": "1",
-        }
-    )
-
-    assert policy.max_windows == 1
-    assert policy.x_radius == 0
-    assert policy.ell_radius == 0
-    assert policy.max_mb == 0.0
-    assert policy.regularization == 0.0
-    assert policy.max_size == 1
-    assert policy.column_batch == 1
-    assert policy.drop_tol == 0.0
-    assert policy.low_lmax == 0
-    assert policy.profile_moment_count == 0
-    assert policy.angular_lmax == 0
-    assert policy.angular_mode_max == 0
-    assert policy.max_tail_units == 0
-    assert policy.include_tail is False
-    assert policy.include_constraint_sources is False
-    assert policy.include_fsavg is False
-    assert policy.include_window_residual is False
-    assert policy.include_profile_moments is False
-    assert policy.include_angular_residual is False
-    assert policy.include_angular_basis is True
-    assert policy.include_preconditioned_loads is True
-    assert policy.preconditioned_load_max_columns == 0
-    assert policy.preconditioned_load_max_nnz == 0
-    assert policy.preconditioned_load_drop_tol == 0.0
-    assert policy.damping is True
-    assert policy.beta_max == 0.0
-    assert policy.accept_base_improvement is True
 
 
 def test_fortran_reduced_xblock_factor_policy_uses_specific_env_before_generic() -> None:
@@ -8639,13 +8325,8 @@ def test_sparse_pc_gmres_final_payload_from_solve_state_expands_result_and_metad
             "rhs_norm": 1.0,
             "direct_tail_operator_bundle": None,
             "direct_tail_structured_max_nbytes": None,
-            "direct_tail_true_window_specs": (),
-            "direct_tail_true_active_block_species_count": None,
             "direct_tail_structured_pc_metadata": {},
             "direct_tail_support_mode_preflight_metadata": {},
-            "direct_tail_true_coupled_coarse_metadata": {},
-            "direct_tail_residual_window_coefficient_mode": "normal",
-            "direct_tail_residual_window_combine_mode": "additive",
             "direct_tail_error": None,
             "direct_tail_structured_pc_requested": "auto",
             "direct_tail_structured_pc_reason": "none",
@@ -10266,8 +9947,6 @@ def test_finalize_sparse_pc_gmres_from_solve_state_applies_polish_and_payload() 
             "_operator_bundle_pc": None,
             "direct_tail_operator_bundle": None,
             "direct_tail_structured_max_nbytes": None,
-            "direct_tail_true_active_block_species_count": None,
-            "direct_tail_true_window_specs": (),
         }
     )
 
@@ -10354,20 +10033,6 @@ def test_sparse_pc_gmres_finalization_state_from_solve_scope_filters_scope() -> 
 
 
 def test_sparse_pc_direct_tail_final_metadata_uses_grouped_policy_state() -> None:
-    env = {
-        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE": "1",
-        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_RANK": "7",
-        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW": "1",
-        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COEFFICIENTS": "normal",
-        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COMBINE": "union",
-        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW": "1",
-        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COARSE": "1",
-        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_TARGET_RATIO": "12",
-        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK": "1",
-        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_SPECIES_COUNT": "3",
-        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_WINDOWS": "4",
-        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_ANGULAR_BASIS": "1",
-    }
     operator_bundle = SimpleNamespace(
         metadata=SimpleNamespace(
             reason="direct_pmat",
@@ -10401,11 +10066,6 @@ def test_sparse_pc_direct_tail_final_metadata_uses_grouped_policy_state() -> Non
                 max_mb=64.0,
                 regularization=1.0e-9,
             ),
-            residual_policy=resolve_direct_tail_residual_rescue_policy(env),
-            true_active_policy=resolve_direct_tail_true_active_rescue_policy(env),
-            coupled_coarse_policy=resolve_direct_tail_coupled_coarse_rescue_policy(env),
-            true_window_specs=((1, 2, 3),),
-            true_active_block_species_count=3,
             structured_max_nbytes=4 * 1024 * 1024,
             structured_pc_selected=True,
             structured_pc_reason="selected",
@@ -10415,53 +10075,9 @@ def test_sparse_pc_direct_tail_final_metadata_uses_grouped_policy_state() -> Non
             support_mode_preflight_selected=False,
             support_mode_preflight_error="not_requested",
             support_mode_preflight_metadata={"baseline": True},
-            residual_coarse_selected=True,
-            residual_coarse_residual_after=0.25,
-            residual_coarse_error=None,
-            residual_coarse_metadata={"rank": 7},
-            true_coupled_coarse_requested=True,
-            true_coupled_coarse_auto_selected=True,
-            true_coupled_coarse_selected=True,
-            true_coupled_coarse_residual_after=0.125,
-            true_coupled_coarse_error=None,
-            true_coupled_coarse_metadata={"windows": 4},
-            true_coupled_coarse_base_improvement_override_used=True,
-            true_active_submatrix_selected=True,
-            true_active_submatrix_residual_after=0.5,
-            true_active_submatrix_error=None,
-            true_active_submatrix_metadata={"active": "submatrix"},
-            true_active_column_cache_metadata={"hits": 2},
-            true_active_block_selected=True,
-            true_active_block_residual_after=0.375,
-            true_active_block_error=None,
-            true_active_block_metadata={"active": "block"},
-            true_active_residual_block_selected=True,
-            true_active_residual_block_residual_after=0.3125,
-            true_active_residual_block_error=None,
-            true_active_residual_block_metadata={"active": "residual_block"},
-            true_active_residual_block_base_improvement_override_used=True,
-            true_window_selected=True,
-            true_window_residual_after=0.2,
-            true_window_error=None,
-            true_window_metadata={"window": "true"},
-            residual_window_selected=True,
-            residual_window_residual_after=0.3,
-            residual_window_error=None,
-            residual_window_metadata={"window": "residual"},
         )
     )
 
-    assert metadata["sparse_pc_direct_tail_residual_coarse_requested"] is True
-    assert metadata["sparse_pc_direct_tail_residual_coarse_selected"] is True
-    assert metadata["sparse_pc_direct_tail_residual_coarse_rank"] == 7
-    assert metadata["sparse_pc_direct_tail_residual_window_combine_mode"] == "union"
-    assert metadata["sparse_pc_direct_tail_true_window_specs"] == ((1, 2, 3),)
-    assert metadata["sparse_pc_direct_tail_true_active_block_species_count"] == 3
-    assert metadata["sparse_pc_direct_tail_true_coupled_coarse_max_windows"] == 4
-    assert metadata["sparse_pc_direct_tail_true_coupled_coarse_auto_target_ratio"] == pytest.approx(12.0)
-    assert metadata["sparse_pc_direct_tail_true_coupled_coarse_include_angular_basis"] is True
-    assert metadata["sparse_pc_direct_tail_true_active_column_cache_metadata"] == {"hits": 2}
-    assert metadata["sparse_pc_direct_tail_true_active_residual_block_base_improvement_override_used"] is True
     assert metadata["sparse_pc_fortran_reduced_direct_tail_operator_reason"] == "direct_pmat"
     assert metadata["sparse_pc_fortran_reduced_direct_tail_nnz"] == 123
     assert metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_selected"] is True
@@ -10473,6 +10089,9 @@ def test_sparse_pc_direct_tail_final_metadata_uses_grouped_policy_state() -> Non
     assert metadata["sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_metadata"] == {
         "baseline": True
     }
+    assert not any("true_coupled" in key for key in metadata)
+    assert not any("true_active" in key for key in metadata)
+    assert not any("residual_window" in key for key in metadata)
 
 
 def test_sparse_pc_gmres_finalization_bundle_from_solve_scope_groups_locals() -> None:
@@ -10550,11 +10169,6 @@ def test_sparse_pc_gmres_finalization_bundle_from_solve_scope_groups_locals() ->
         "structured_pc_preflight_required_min_size": np.int64(64),
         "direct_tail_materialization": materialization,
         "direct_tail_structured_admission": structured_admission,
-        "direct_tail_residual_rescue_policy": resolve_direct_tail_residual_rescue_policy({}),
-        "direct_tail_true_active_rescue_policy": resolve_direct_tail_true_active_rescue_policy({}),
-        "direct_tail_true_coupled_coarse_policy": resolve_direct_tail_coupled_coarse_rescue_policy({}),
-        "direct_tail_true_window_specs": ((1, 2),),
-        "direct_tail_true_active_block_species_count": np.int64(2),
         "direct_tail_structured_max_nbytes": np.int64(8 * 1024 * 1024),
         "direct_tail_structured_pc_selected": True,
         "direct_tail_structured_pc_reason": "selected",
@@ -10564,39 +10178,6 @@ def test_sparse_pc_gmres_finalization_bundle_from_solve_scope_groups_locals() ->
         "direct_tail_support_mode_preflight_selected": False,
         "direct_tail_support_mode_preflight_error": None,
         "direct_tail_support_mode_preflight_metadata": None,
-        "direct_tail_residual_coarse_selected": False,
-        "direct_tail_residual_coarse_residual_after": None,
-        "direct_tail_residual_coarse_error": None,
-        "direct_tail_residual_coarse_metadata": None,
-        "direct_tail_true_coupled_coarse_requested": False,
-        "direct_tail_true_coupled_coarse_auto_selected": False,
-        "direct_tail_true_coupled_coarse_selected": False,
-        "direct_tail_true_coupled_coarse_residual_after": None,
-        "direct_tail_true_coupled_coarse_error": None,
-        "direct_tail_true_coupled_coarse_metadata": None,
-        "direct_tail_true_coupled_coarse_base_improvement_override_used": False,
-        "direct_tail_true_active_submatrix_selected": False,
-        "direct_tail_true_active_submatrix_residual_after": None,
-        "direct_tail_true_active_submatrix_error": None,
-        "direct_tail_true_active_submatrix_metadata": None,
-        "direct_tail_true_active_column_cache_metadata": None,
-        "direct_tail_true_active_block_selected": False,
-        "direct_tail_true_active_block_residual_after": None,
-        "direct_tail_true_active_block_error": None,
-        "direct_tail_true_active_block_metadata": None,
-        "direct_tail_true_active_residual_block_selected": False,
-        "direct_tail_true_active_residual_block_residual_after": None,
-        "direct_tail_true_active_residual_block_error": None,
-        "direct_tail_true_active_residual_block_metadata": None,
-        "direct_tail_true_active_residual_block_base_improvement_override_used": False,
-        "direct_tail_true_window_selected": False,
-        "direct_tail_true_window_residual_after": None,
-        "direct_tail_true_window_error": None,
-        "direct_tail_true_window_metadata": None,
-        "direct_tail_residual_window_selected": False,
-        "direct_tail_residual_window_residual_after": None,
-        "direct_tail_residual_window_error": None,
-        "direct_tail_residual_window_metadata": None,
         "factor_preflight_enabled": True,
         "factor_preflight_required": True,
         "factor_preflight_seed_enabled": False,
@@ -10670,7 +10251,6 @@ def test_sparse_pc_gmres_finalization_bundle_from_solve_scope_groups_locals() ->
     assert bundle.atol == pytest.approx(1.0e-10)
     assert bundle.direct_tail.materialization is materialization
     assert bundle.direct_tail.structured_admission is structured_admission
-    assert bundle.direct_tail.true_window_specs == ((1, 2),)
     assert bundle.factor_preflight.residual_after == pytest.approx(0.25)
     assert bundle.pattern.scope == "active_dof"
     assert bundle.static.sparse_pc_linear_size == 2
@@ -10788,11 +10368,6 @@ def test_finalize_sparse_pc_gmres_bundle_builds_typed_state(
                     max_mb=8.0,
                     regularization=1.0e-8,
                 ),
-                residual_policy=resolve_direct_tail_residual_rescue_policy({}),
-                true_active_policy=resolve_direct_tail_true_active_rescue_policy({}),
-                coupled_coarse_policy=resolve_direct_tail_coupled_coarse_rescue_policy({}),
-                true_window_specs=((1, 2),),
-                true_active_block_species_count=2,
                 structured_max_nbytes=8 * 1024 * 1024,
                 structured_pc_selected=True,
                 structured_pc_reason="selected",
@@ -10802,39 +10377,6 @@ def test_finalize_sparse_pc_gmres_bundle_builds_typed_state(
                 support_mode_preflight_selected=False,
                 support_mode_preflight_error=None,
                 support_mode_preflight_metadata=None,
-                residual_coarse_selected=False,
-                residual_coarse_residual_after=None,
-                residual_coarse_error=None,
-                residual_coarse_metadata=None,
-                true_coupled_coarse_requested=False,
-                true_coupled_coarse_auto_selected=False,
-                true_coupled_coarse_selected=False,
-                true_coupled_coarse_residual_after=None,
-                true_coupled_coarse_error=None,
-                true_coupled_coarse_metadata=None,
-                true_coupled_coarse_base_improvement_override_used=False,
-                true_active_submatrix_selected=False,
-                true_active_submatrix_residual_after=None,
-                true_active_submatrix_error=None,
-                true_active_submatrix_metadata=None,
-                true_active_column_cache_metadata=None,
-                true_active_block_selected=False,
-                true_active_block_residual_after=None,
-                true_active_block_error=None,
-                true_active_block_metadata=None,
-                true_active_residual_block_selected=False,
-                true_active_residual_block_residual_after=None,
-                true_active_residual_block_error=None,
-                true_active_residual_block_metadata=None,
-                true_active_residual_block_base_improvement_override_used=False,
-                true_window_selected=False,
-                true_window_residual_after=None,
-                true_window_error=None,
-                true_window_metadata=None,
-                residual_window_selected=False,
-                residual_window_residual_after=None,
-                residual_window_error=None,
-                residual_window_metadata=None,
             ),
             factor_preflight=SparsePCFactorPreflightMetadataContext(
                 enabled=True,
