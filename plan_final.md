@@ -17,9 +17,11 @@ bootstrap current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Latest audited code-change head: `2e162bb3+direct-tail-rescue-policy-removal`; last green CI evidence: `96fb2677`. Exact aggregate coverage from that CI was 91.753% (`92%`).
+- Latest audited code-change head: `79e0981f+direct-tail-support-mode-removal`;
+  last green CI evidence: `96fb2677`. Exact aggregate coverage from that CI was
+  91.753% (`92%`); this tranche has focused local evidence listed below.
 - Current tracked Python volume is the problem to solve before review:
-  114 package files / 137.6k source lines, 313 test files / 126.0k test lines,
+  114 package files / 136.9k source lines, 313 test files / 126.0k test lines,
   122 example Python files, and 12 tracked scripts.
 - Largest source owners are the first audit targets: `profile_sparse_xblock.py`, `profile_policies.py`, `profile_full_system.py`, `explicit_sparse.py`, `profile_sparse_solve.py`, `profile_solve.py`, `transport_linear_system.py`, `profile_sparse_direct.py`, `transport_parallel_runtime.py`, `profile_dense.py`, `solver.py`, `outputs/rhsmode1.py`, and `preconditioner_transport_matrix.py`.
 - Largest test owners are the second audit targets: `test_profile_response_sparse_pc.py`, `test_rhs1_full_assembly.py`, `test_io_output_policy_coverage.py`, `test_v3_sparse_pattern.py`, `test_explicit_sparse.py`, `test_rhs1_solver_replay.py`, dense profile tests, transport policy tests, and all extracted-path tests.
@@ -41,82 +43,50 @@ bootstrap current, transport coefficients, plotting, and optimization.
 | Parity/performance evidence | Active | 70% | Supported examples have checked SFINCS Fortran v3 parity/runtime/RSS/bootstrap evidence. |
 | Docs/readme | Active | 80% | Public docs describe stable software, not branch history or unpromoted campaigns. |
 
-Overall readiness under this stricter core-slim goal is about 86-88%.
+- Focused local evidence for this tranche:
+  `tests/test_v3_sparse_pattern.py` passed `93` tests in 93 s; the touched
+  sparse-policy/output subset passed `554` tests in 136 s; Ruff and compileall
+  passed on touched Python files.
+
+Overall readiness under this stricter core-slim goal is about 87-89%.
 
 ## Concrete Code-Audit Rules
 
-Default action for every line is removal. A retained line needs one of these proofs:
+Default action for every line is removal. Retain only lines tagged `PHYSICS`,
+`NUMERICS`, `API`, `EVIDENCE`, `PERF`, or `AUTODIFF`; classify the rest as
+`COMPAT`, `RESEARCH`, or `OBSOLETE` and remove or extract them with matching
+imports, env vars, tests, docs, fixtures, examples, diagnostics, and artifacts.
 
-- `PHYSICS`: it implements a documented drift-kinetic, collision, geometry,
-  normalization, flux, bootstrap, ambipolar, or transport equation.
-- `NUMERICS`: it implements a retained discretization, residual, linear solve,
-  preconditioner, error estimate, output schema, or differentiability method.
-- `API`: it is part of a documented public Python/CLI/namelist/output contract.
-- `EVIDENCE`: it is required by a compact parity, physics, regression,
-  coverage, benchmark, or documentation gate.
-- `PERF`: it measurably reduces runtime or memory for a supported default path.
-- `AUTODIFF`: it is needed for differentiable solves, sensitivities, or
-  optimization through a supported stable workflow.
-
-Everything else is one of:
-
-- `COMPAT`: keep only as a thin import/argument shim with a migration test and
-  deletion date.
-- `RESEARCH`: move to a research PR, remove stable imports/env vars/tests/docs,
-  and leave at most one docs pointer.
-- `OBSOLETE`: delete together with imports, tests, docs, fixtures, examples,
-  env vars, diagnostics, and generated artifacts.
-
-For each file, use this exact loop:
-
-1. List public symbols and callers with `rg`.
-2. Mark each top-level object `PHYSICS`, `NUMERICS`, `API`, `EVIDENCE`, `PERF`,
-   `AUTODIFF`, `COMPAT`, `RESEARCH`, or `OBSOLETE`.
-3. Delete unreachable, one-call, historical, duplicated, and env-only objects.
-4. Merge wrappers that do not name a real equation/API boundary.
-5. Move formulas toward `physics/`, `operators/`, or `discretization/`; move
-   route orchestration toward one policy table per problem family.
-6. Remove matching tests/docs/examples/fixtures for deleted or extracted paths.
-7. Run the smallest tests that would fail if the retained line mattered.
-8. Record line/file deltas in `tests/fixtures/core_slim_inventory.json`.
-
-No touched function may remain without an obvious caller and a testable reason.
-No public docs sentence may describe a non-default research path as supported.
-No solver branch may be stable only because an environment variable can reach it.
-
-## Repository-Wide Complexity Reduction Method
-
-This is a line audit, not a file shuffle. For every touched file: inventory
-imports/classes/functions/exports/CLI keys; find callers with `rg` and focused
-tests; classify each object with the code-audit tags above; delete or extract
-unreachable, duplicated, env-only, campaign-only, disabled, historical, and
-one-call wrappers; merge formulas into physics/operators/discretization owners;
-run the smallest proof tests; and record deltas in
-`tests/fixtures/core_slim_inventory.json`.
+Per touched file, complete this loop before commit: list public symbols and
+callers with `rg`; record domain, public surface, default runtime surface,
+physics/numerics reason, autodiff role, evidence owner, simplification action,
+and rejected objects in `tests/fixtures/core_slim_inventory.json` or the commit
+message; delete unreachable, one-call, historical, duplicated, env-only, and
+campaign-only objects; merge wrappers that do not name a real equation/API
+boundary; run the smallest proof tests; record net line/file deltas. A pure
+move is rejected unless it deletes public knobs, duplicated logic, generated
+clutter, or test/doc burden.
 
 Stable owners are limited to public API/CLI/I/O/namelist/plotting/path facades,
 geometry adapters, grid/stencil modules, physics formulas, operator assembly,
 profile/transport/ambipolar problem modules, admitted solver/preconditioner
 modules, output schemas, compact validation helpers, and curated workflows.
-Everything else merges into those owners, becomes private, moves to a research
-PR, or is deleted. New stable files must name a domain boundary, not history,
-campaigns, probes, candidates, rescues, hard seeds, or temporary experiments.
+New stable files must name a domain boundary, not history, campaigns, probes,
+candidates, rescues, hard seeds, or temporary experiments.
 
 Audit order is fixed: `profile_sparse_solve.py`,
 `profile_sparse_direct.py`, `profile_policies.py`,
 `profile_sparse_xblock.py`, native/symbolic preconditioners,
-`profile_full_system.py` and term modules, `transport_*` plus transport
-preconditioners, `outputs/*`, `validation/*`, `examples/`, `scripts/`, then
-test consolidation. Each tranche must reduce retained lines, files, public
-knobs, scripts, examples, or duplicated concepts; pure moves are rejected.
+`profile_full_system.py` and term modules, `transport_*`, outputs,
+validation, examples, scripts, then test consolidation.
 
-Research extraction rule: if a family fails a stable gate or lacks a stable caller, remove its imports/env vars/API knobs/docs/examples/tests/fixtures/diagnostics/benchmark rows from this branch, leave at most one
-`docs/research_lanes.rst` pointer with the return gate, and keep only generic
-primitives used by admitted defaults. Deferred families are QI/device-QI hard
-seeds, native sparse-direct/reduced-Pmat, ND/multifrontal/HSS/BLR, true-operator
-rescues, long GPU/multi-worker campaigns, publication generators, and profilers.
+Extraction is complete only when `rg` finds no stable import or public knob for
+the extracted family; output schemas stop writing path-specific diagnostics;
+tests are deleted or reduced to absence contracts; README/docs do not describe
+the path as supported; and any retained primitive has an admitted caller plus a
+focused test.
 
-Budgets: 114 package files and 137.6k source lines now, <=68 files and <=80k
+Budgets: 114 package files and 136.9k source lines now, <=68 files and <=80k
 lines before review request, <=50 files and <=50k lines final unless justified;
 313 test files now, <=180 before review, <=120 final with >=95% coverage;
 examples keep original Fortran-v3 references plus <=10 curated workflows;
@@ -226,6 +196,8 @@ research residue, long profiler/campaign scripts, and publication generators.
 Actions:
 
 - Keep deleted true-operator rescue stage APIs/tests out of stable core.
+- Keep deleted direct-tail residual/true-active/coupled-coarse rescue policy
+  wiring and direct-tail support-mode preflight out of stable core.
 - Remove stable imports/env vars/docs for QI/device-QI and native direct-factor
   research.
 - Move or delete long-run profiler/campaign scripts and generated example

@@ -217,18 +217,6 @@ def test_rhsmode1_solver_metadata_helpers_and_output_fields() -> None:
                 "permc_failures": (),
             },
         },
-        "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_requested": True,
-        "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_selected": True,
-        "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_metadata": {
-            "accepted_nonbaseline": True,
-            "selected_candidate": "support",
-            "candidate_specs": [1, 2],
-            "candidates": [{"name": "support", "residual": 0.2}],
-            "baseline_residual_after": 2.0,
-            "best_residual_after": 0.2,
-            "rhs_norm": 10.0,
-            "setup_s": 0.25,
-        },
         "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb": 32.0,
         "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb_auto": True,
     }
@@ -260,7 +248,7 @@ def test_rhsmode1_solver_metadata_helpers_and_output_fields() -> None:
     assert int(np.asarray(data["linearSolverIterations"])) == 7
     assert int(np.asarray(data["linearSolverMatvecs"])) == 11
     assert data["linearSolverSparsePCSelectedKind"] == "native"
-    assert data["linearSolverDirectTailSupportModeSelectedCandidate"] == "support"
+    assert not any("DirectTailSupportMode" in key for key in data)
     assert float(np.asarray(data["linearSolverResidualTargetRatio"])) == pytest.approx(2.0)
 
 

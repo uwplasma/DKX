@@ -471,18 +471,6 @@ def sparse_pc_gmres_finalization_bundle_from_solve_scope(
             structured_pc_reason=scope["direct_tail_structured_pc_reason"],
             structured_pc_error=scope["direct_tail_structured_pc_error"],
             structured_pc_metadata=scope["direct_tail_structured_pc_metadata"],
-            support_mode_preflight_requested=bool(
-                scope["direct_tail_support_mode_preflight_requested"]
-            ),
-            support_mode_preflight_selected=bool(
-                scope["direct_tail_support_mode_preflight_selected"]
-            ),
-            support_mode_preflight_error=scope[
-                "direct_tail_support_mode_preflight_error"
-            ],
-            support_mode_preflight_metadata=scope[
-                "direct_tail_support_mode_preflight_metadata"
-            ],
         ),
         factor_preflight=SparsePCFactorPreflightMetadataContext(
             enabled=bool(scope["factor_preflight_enabled"]),

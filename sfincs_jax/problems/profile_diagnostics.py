@@ -255,10 +255,6 @@ class SparsePCDirectTailMetadataContext:
     structured_pc_error: object
     structured_pc_max_mb_auto: object
     structured_pc_metadata: object
-    support_mode_preflight_requested: object
-    support_mode_preflight_selected: object
-    support_mode_preflight_error: object
-    support_mode_preflight_metadata: object
 
 
 def _direct_tail_suffix_values_from_state(
@@ -386,18 +382,6 @@ def sparse_pc_direct_tail_result_metadata_from_context(
             "sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata": (
                 context.structured_pc_metadata
             ),
-            "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_requested": bool(
-                context.support_mode_preflight_requested
-            ),
-            "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_selected": bool(
-                context.support_mode_preflight_selected
-            ),
-            "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_error": (
-                context.support_mode_preflight_error
-            ),
-            "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_metadata": (
-                context.support_mode_preflight_metadata
-            ),
         }
     )
     return metadata
@@ -434,18 +418,6 @@ def sparse_pc_direct_tail_result_metadata(
                 "direct_tail_structured_pc_max_mb_auto"
             ],
             structured_pc_metadata=state["direct_tail_structured_pc_metadata"],
-            support_mode_preflight_requested=state[
-                "direct_tail_support_mode_preflight_requested"
-            ],
-            support_mode_preflight_selected=state[
-                "direct_tail_support_mode_preflight_selected"
-            ],
-            support_mode_preflight_error=state[
-                "direct_tail_support_mode_preflight_error"
-            ],
-            support_mode_preflight_metadata=state[
-                "direct_tail_support_mode_preflight_metadata"
-            ],
         )
     )
 
@@ -1663,6 +1635,27 @@ def xblock_sparse_pc_result_diagnostics_from_solve_state(
         "xblock_active_dof": bool(state["xblock_use_active_dof"]),
         "xblock_linear_size": int(state["xblock_linear_size"]),
         "xblock_full_size": int(full_size),
+        "xblock_initial_seed_used": bool(
+            state.get("xblock_initial_seed_used", False)
+        ),
+        "xblock_initial_seed_residual_norm": state.get(
+            "xblock_initial_seed_residual_norm"
+        ),
+        "xblock_initial_seed_residual_ratio": state.get(
+            "xblock_initial_seed_residual_ratio"
+        ),
+        "xblock_moment_schur_seed_enabled": bool(
+            state.get("moment_schur_seed_enabled", False)
+        ),
+        "xblock_moment_schur_seed_used": bool(
+            state.get("moment_schur_seed_used", False)
+        ),
+        "xblock_moment_schur_seed_residual_norm": state.get(
+            "moment_schur_seed_residual_norm"
+        ),
+        "xblock_moment_schur_seed_residual_ratio": state.get(
+            "moment_schur_seed_residual_ratio"
+        ),
         **assembled_operator_metadata,
         **coarse_correction_metadata,
         **side_probe_metadata,

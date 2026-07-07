@@ -31,7 +31,6 @@ from sfincs_jax.operators.profile_full_system import (
     build_active_projected_rhs1_full_csr_preconditioner,
     build_structured_rhs1_full_csr_preconditioner,
     clear_structured_rhs1_full_csr_cache,
-    select_active_fortran_v3_reduced_support_mode_preconditioner,
     select_structured_rhs1_full_csr_operator,
     solve_structured_rhs1_full_csr,
 )
@@ -242,30 +241,7 @@ def test_fortran_reduced_permc_candidates_match_superlu_and_rcm_contract() -> No
     assert active_fortran_v3_reduced_permc_candidates(requested="", factor_kind="ilu") == ("COLAMD",)
 
 
-def test_symbolic_profile_support_mode_and_sparse_memory_helpers() -> None:
-    modes = {
-        "preconditioner_x": 1,
-        "preconditioner_xi": 1,
-        "preconditioner_species": 0,
-        "preconditioner_x_min_l": 0,
-    }
-
-    rfr.apply_active_fortran_v3_support_mode_token(modes, "x=0")
-    rfr.apply_active_fortran_v3_support_mode_token(modes, "xi2")
-    rfr.apply_active_fortran_v3_support_mode_token(modes, "species=1")
-    rfr.apply_active_fortran_v3_support_mode_token(modes, "x_min_l=3")
-
-    assert modes == {
-        "preconditioner_x": 0,
-        "preconditioner_xi": 2,
-        "preconditioner_species": 1,
-        "preconditioner_x_min_l": 3,
-    }
-    assert rfr.active_fortran_v3_support_mode_dropped_no_entries(
-        {"dropped_entries": {"x": 0, "xi": "0"}}
-    )
-    assert not rfr.active_fortran_v3_support_mode_dropped_no_entries({"dropped_entries": {"x": 1}})
-
+def test_symbolic_profile_sparse_memory_helpers() -> None:
     matrix = sp.csr_matrix(
         np.asarray(
             [
@@ -1505,118 +1481,6 @@ def test_active_fortran_v3_reduced_lu_large_default_prefill_rejects_observed_pro
     assert rejected.metadata["factor_nbytes_estimate"] == observed_symbolic_estimate + 2 * layout.total_size * 8
     assert rejected.metadata["lu_prefill_safety_factor"] == 32.0
     assert rejected.metadata["factor_nbytes_prefill_estimate"] > int(45.0 * 1024.0 * 1024.0 * 1024.0)
-
-
-def test_active_fortran_v3_support_mode_preflight_selects_lower_true_residual(monkeypatch) -> None:
-    layout = RHS1BlockLayout(
-        n_species=1,
-        n_x=3,
-        n_xi=2,
-        n_theta=1,
-        n_zeta=1,
-        f_size=6,
-        phi1_size=0,
-        extra_size=0,
-        total_size=6,
-        constraint_scheme=1,
-        include_phi1=False,
-        include_phi1_in_kinetic=False,
-        rhs_mode=1,
-    )
-    dense = np.asarray(
-        [
-            [5.0, 0.3, 1.2, -0.4, 0.7, 0.2],
-            [0.2, 4.5, -0.5, 1.0, -0.3, 0.9],
-            [1.1, -0.2, 5.3, 0.4, 1.4, -0.6],
-            [-0.3, 0.8, 0.5, 4.8, -0.7, 1.2],
-            [0.6, -0.4, 1.3, -0.5, 5.5, 0.1],
-            [0.1, 0.7, -0.4, 1.1, 0.2, 4.9],
-        ],
-        dtype=np.float64,
-    )
-    matrix = sp.csr_matrix(dense)
-    active = np.arange(layout.total_size, dtype=np.int64)
-    x_true = np.asarray([0.2, -0.5, 0.7, -0.3, 0.4, 0.9], dtype=np.float64)
-    rhs = np.asarray(matrix @ x_true, dtype=np.float64)
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_FACTOR_KIND", "lu")
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_DIAGONAL_SHIFT", "0")
-
-    pc, metadata = select_active_fortran_v3_reduced_support_mode_preconditioner(
-        matrix=matrix,
-        layout=layout,
-        active_indices=active,
-        requested_kind="active_fortran_v3_reduced_lu",
-        regularization=0.0,
-        max_factor_nbytes=2_000_000,
-        rhs=rhs,
-        true_matvec=lambda vector: np.asarray(matrix @ np.asarray(vector, dtype=np.float64)),
-        candidates="current,x0",
-        max_candidates=2,
-        min_improvement_ratio=1.01,
-        preconditioner_x=1,
-        preconditioner_xi=1,
-        preconditioner_species=1,
-        preconditioner_x_min_l=0,
-    )
-
-    assert pc.selected, pc.to_dict()
-    assert metadata["selected_candidate"] == "x0"
-    assert metadata["accepted_nonbaseline"] is True
-    assert pc.metadata["preconditioner_x"] == 0
-    assert metadata["baseline_residual_after"] > 1.0e-3
-    assert metadata["best_residual_after"] < 1.0e-10
-    recovered = np.asarray(pc.operator.matvec(rhs), dtype=np.float64)
-    np.testing.assert_allclose(recovered, x_true, rtol=1.0e-10, atol=1.0e-10)
-
-
-def test_active_fortran_v3_support_mode_preflight_skips_relaxed_candidates_when_current_is_complete(
-    monkeypatch,
-) -> None:
-    layout = RHS1BlockLayout(
-        n_species=1,
-        n_x=3,
-        n_xi=2,
-        n_theta=1,
-        n_zeta=1,
-        f_size=6,
-        phi1_size=0,
-        extra_size=0,
-        total_size=6,
-        constraint_scheme=1,
-        include_phi1=False,
-        include_phi1_in_kinetic=False,
-        rhs_mode=1,
-    )
-    local_block = sp.csr_matrix(np.asarray([[3.0, 0.2], [-0.1, 3.2]], dtype=np.float64))
-    matrix = sp.block_diag((local_block, local_block, local_block), format="csr")
-    active = np.arange(layout.total_size, dtype=np.int64)
-    rhs = np.asarray([1.0, -0.2, 0.4, 0.7, -0.5, 0.3], dtype=np.float64)
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_FACTOR_KIND", "lu")
-    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_DIAGONAL_SHIFT", "0")
-
-    pc, metadata = select_active_fortran_v3_reduced_support_mode_preconditioner(
-        matrix=matrix,
-        layout=layout,
-        active_indices=active,
-        requested_kind="active_fortran_v3_reduced_lu",
-        regularization=0.0,
-        max_factor_nbytes=2_000_000,
-        rhs=rhs,
-        true_matvec=lambda vector: np.asarray(matrix @ np.asarray(vector, dtype=np.float64)),
-        candidates="current,x0,xmin_l2,species0",
-        max_candidates=4,
-        min_improvement_ratio=1.01,
-        preconditioner_x=1,
-        preconditioner_xi=1,
-        preconditioner_species=1,
-        preconditioner_x_min_l=0,
-    )
-
-    assert pc.selected, pc.to_dict()
-    assert metadata["selected_candidate"] == "current"
-    assert metadata["accepted_nonbaseline"] is False
-    assert metadata["early_stop_reason"] == "current_support_dropped_no_entries"
-    assert len(metadata["candidates"]) == 1
 
 
 def test_direct_tail_cache_key_includes_fortran_support_modes() -> None:

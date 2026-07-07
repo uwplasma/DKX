@@ -31,7 +31,6 @@ from sfincs_jax.problems.profile_sparse_direct import (
     DirectTailStructuredAdmissionContext,
     DirectTailStructuredAdmissionResult,
     DirectTailStructuredBuildContext,
-    DirectTailSupportModePreflightContext,
     SparseHostDirectPayload,
     SparseHostDirectFactorSolvePayload,
     SparseHostDirectPolishPayload,
@@ -60,7 +59,6 @@ from sfincs_jax.problems.profile_sparse_direct import (
     resolve_sparse_minimum_norm_policy,
     resolve_sparse_host_or_ilu_factor_controls,
     resolve_direct_tail_structured_admission,
-    run_direct_tail_support_mode_preflight,
     sparse_pc_direct_tail_final_metadata,
     sparse_host_direct_solve_payload,
     sparse_host_direct_solve_from_pattern,
@@ -1191,156 +1189,16 @@ def test_sparse_pc_direct_tail_rescue_policy_setup_defaults_without_support_pref
             fortran_reduced_sparse_pc=False,
             factor_bundle_pc=factor,
             structured_pc_ready=False,
-            direct_tail_operator_bundle=None,
-            direct_tail_structured_layout=None,
-            direct_tail_structured_active_indices=None,
-            direct_tail_structured_max_nbytes=None,
             direct_tail_structured_pc_selected=False,
             direct_tail_structured_pc_reason=None,
             direct_tail_structured_pc_metadata=None,
             pc_reg=0.0,
-            preconditioner_x=0,
-            preconditioner_xi=0,
-            preconditioner_species=0,
-            preconditioner_x_min_l=0,
             emit=None,
-            true_matvec=lambda vec: vec,
-            support_mode_selector=lambda **_kwargs: None,
-            structured_factor_bundle_factory=lambda **_kwargs: None,
         )
     )
 
     assert result.factor_bundle_pc is factor
-    assert not result.direct_tail_support_mode_preflight_requested
-    assert not result.direct_tail_support_mode_preflight_selected
     assert result.factor_preflight_passed is None
-
-
-def test_sparse_pc_direct_tail_rescue_policy_setup_promotes_support_mode(monkeypatch) -> None:
-    class SupportPreconditioner:
-        kind = "active_dense"
-        reason = "support_mode_selected"
-        metadata = {"factor_nbytes_actual": 8}
-
-        def to_dict(self) -> dict[str, object]:
-            return {
-                "kind": self.kind,
-                "reason": self.reason,
-                "metadata": dict(self.metadata),
-            }
-
-    factor = SimpleNamespace(kind="active_fortran_v3_reduced_lu")
-    support_factor = SimpleNamespace(kind="active_dense")
-    emits: list[str] = []
-    monkeypatch.setattr(
-        sparse_pc_module,
-        "run_direct_tail_support_mode_preflight",
-        lambda _context: SimpleNamespace(
-            metadata={
-                "selected_candidate": "active_dense",
-                "baseline_residual_after": 2.0,
-                "best_residual_after": 0.5,
-                "accepted_nonbaseline": True,
-            },
-            error=None,
-            selected=True,
-            preconditioner=SupportPreconditioner(),
-            factor_bundle=support_factor,
-        ),
-    )
-
-    result = sparse_pc_module.build_sparse_pc_direct_tail_rescue_policy_setup(
-        sparse_pc_module.SparsePCDirectTailRescuePolicySetupContext(
-            env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_PREFLIGHT": "1"},
-            op=SimpleNamespace(),
-            rhs_dtype=jnp.float64,
-            sparse_pc_rhs=jnp.asarray([1.0], dtype=jnp.float64),
-            sparse_pc_linear_size=1,
-            fortran_reduced_sparse_pc=True,
-            factor_bundle_pc=factor,
-            structured_pc_ready=True,
-            direct_tail_operator_bundle=SimpleNamespace(matrix=scipy_sparse.eye(1)),
-            direct_tail_structured_layout=object(),
-            direct_tail_structured_active_indices=np.asarray([0], dtype=np.int64),
-            direct_tail_structured_max_nbytes=1024,
-            direct_tail_structured_pc_selected=False,
-            direct_tail_structured_pc_reason=None,
-            direct_tail_structured_pc_metadata=None,
-            pc_reg=1.0e-12,
-            preconditioner_x=0,
-            preconditioner_xi=0,
-            preconditioner_species=0,
-            preconditioner_x_min_l=0,
-            emit=lambda level, message: emits.append(f"{level}:{message}"),
-            true_matvec=lambda vec: vec,
-            support_mode_selector=lambda **_kwargs: None,
-            structured_factor_bundle_factory=lambda **_kwargs: None,
-        )
-    )
-
-    assert result.factor_bundle_pc is support_factor
-    assert result.direct_tail_structured_pc_selected
-    assert result.direct_tail_support_mode_preflight_selected
-    assert result.direct_tail_structured_pc_metadata["kind"] == "active_dense"
-    assert any("support-mode preflight selected" in message for message in emits)
-
-
-def test_sparse_pc_direct_tail_rescue_policy_setup_reports_support_failure(
-    monkeypatch,
-) -> None:
-    factor = SimpleNamespace(kind="active_fortran_v3_reduced_lu")
-    emits: list[str] = []
-    monkeypatch.setattr(
-        sparse_pc_module,
-        "run_direct_tail_support_mode_preflight",
-        lambda _context: SimpleNamespace(
-            metadata={"attempted": True},
-            error="support candidates exhausted",
-            selected=False,
-            preconditioner=None,
-            factor_bundle=None,
-        ),
-    )
-
-    result = sparse_pc_module.build_sparse_pc_direct_tail_rescue_policy_setup(
-        sparse_pc_module.SparsePCDirectTailRescuePolicySetupContext(
-            env={
-                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_PREFLIGHT": "1",
-            },
-            op=SimpleNamespace(),
-            rhs_dtype=jnp.float64,
-            sparse_pc_rhs=jnp.asarray([1.0], dtype=jnp.float64),
-            sparse_pc_linear_size=1,
-            fortran_reduced_sparse_pc=True,
-            factor_bundle_pc=factor,
-            structured_pc_ready=True,
-            direct_tail_operator_bundle=SimpleNamespace(matrix=scipy_sparse.eye(1)),
-            direct_tail_structured_layout=object(),
-            direct_tail_structured_active_indices=np.asarray([0], dtype=np.int64),
-            direct_tail_structured_max_nbytes=1024,
-            direct_tail_structured_pc_selected=True,
-            direct_tail_structured_pc_reason="initial",
-            direct_tail_structured_pc_metadata={"kind": "active_dense"},
-            pc_reg=1.0e-12,
-            preconditioner_x=0,
-            preconditioner_xi=0,
-            preconditioner_species=0,
-            preconditioner_x_min_l=0,
-            emit=lambda level, message: emits.append(f"{level}:{message}"),
-            true_matvec=lambda vec: vec,
-            support_mode_selector=lambda **_kwargs: None,
-            structured_factor_bundle_factory=lambda **_kwargs: None,
-        )
-    )
-
-    assert result.factor_bundle_pc is factor
-    assert result.direct_tail_support_mode_preflight_requested
-    assert not result.direct_tail_support_mode_preflight_selected
-    assert result.direct_tail_support_mode_preflight_error == "support candidates exhausted"
-    assert result.direct_tail_structured_pc_selected
-    assert result.direct_tail_structured_pc_reason == "initial"
-    assert result.direct_tail_structured_pc_metadata == {"kind": "active_dense"}
-    assert any("support-mode preflight failed" in message for message in emits)
 
 
 def test_sparse_minimum_norm_lsqr_and_host_direct_residual_fallback() -> None:
@@ -1597,8 +1455,6 @@ def test_sparse_direct_module_exposes_canonical_public_contract() -> None:
         "DirectTailStructuredAdmissionResult",
         "DirectTailStructuredBuildContext",
         "DirectTailStructuredBuildResult",
-        "DirectTailSupportModePreflightContext",
-        "DirectTailSupportModePreflightResult",
         "ExplicitSparseHostDirectBranchContext",
         "ExplicitSparseMinimumNormBranchContext",
         "ExplicitSparseOperatorBuildPolicy",
@@ -1634,7 +1490,6 @@ def test_sparse_direct_module_exposes_canonical_public_contract() -> None:
         "resolve_explicit_sparse_operator_build_policy",
         "resolve_sparse_host_or_ilu_factor_controls",
         "resolve_sparse_minimum_norm_policy",
-        "run_direct_tail_support_mode_preflight",
         "run_sparse_host_retry_candidate",
         "run_sparse_host_scipy_gmres",
         "solve_explicit_sparse_host_direct_branch",
@@ -4207,127 +4062,6 @@ def test_direct_tail_structured_build_reports_missing_matrix_exception() -> None
     assert result.selected is False
     assert result.reason == "structured_pc_exception"
     assert result.error == "RuntimeError: direct-tail structured cache requested without a direct-tail matrix"
-
-
-def test_direct_tail_support_mode_preflight_reports_not_applicable() -> None:
-    result = run_direct_tail_support_mode_preflight(
-        DirectTailSupportModePreflightContext(
-            env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_PREFLIGHT": "1"},
-            factor_kind="other",
-            structured_pc_ready=True,
-            operator_bundle=SimpleNamespace(matrix=scipy_sparse.eye(2, format="csr")),
-            layout=_FakeLayout(),
-            active_indices=None,
-            max_nbytes=1024,
-            regularization=1.0e-12,
-            rhs=np.ones(2),
-            true_matvec=lambda v: np.asarray(v),
-            preconditioner_x=0,
-            preconditioner_xi=0,
-            preconditioner_species=0,
-            preconditioner_x_min_l=0,
-            selector=lambda **_kwargs: pytest.fail("unexpected selector"),
-            factor_bundle=_fake_factor_bundle,
-        )
-    )
-
-    assert result.requested is True
-    assert result.applicable is False
-    assert result.selected is False
-    assert result.metadata == {
-        "selected": False,
-        "reason": "support_mode_preflight_not_applicable",
-        "structured_pc_ready": True,
-        "factor_kind": "other",
-    }
-
-
-def test_direct_tail_support_mode_preflight_selects_factor_bundle() -> None:
-    calls: dict[str, object] = {}
-    bundle = SimpleNamespace(matrix=scipy_sparse.eye(2, format="csr"))
-
-    def selector(**kwargs):
-        calls.update(kwargs)
-        return (
-            _FakeStructuredPreconditioner(
-                kind="active_fortran_v3_reduced_lu",
-                reason="support_mode",
-                setup_s=0.75,
-                metadata={"factor_nbytes_actual": 55},
-            ),
-            {
-                "selected_candidate": "xmin_l2",
-                "baseline_residual_after": 2.0,
-                "best_residual_after": 1.0,
-            },
-        )
-
-    result = run_direct_tail_support_mode_preflight(
-        DirectTailSupportModePreflightContext(
-            env={
-                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_PREFLIGHT": "1",
-                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_CANDIDATES": "current,xmin_l2",
-                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_MAX_CANDIDATES": "2",
-                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_MIN_IMPROVEMENT": "1.25",
-            },
-            factor_kind="active-fortran-v3-reduced-lu",
-            structured_pc_ready=True,
-            operator_bundle=bundle,
-            layout=_FakeLayout(),
-            active_indices=np.array([0, 1], dtype=np.int64),
-            max_nbytes=2048,
-            regularization=1.0e-9,
-            rhs=np.ones(2),
-            true_matvec=lambda v: np.asarray(v),
-            preconditioner_x=1,
-            preconditioner_xi=2,
-            preconditioner_species=3,
-            preconditioner_x_min_l=4,
-            selector=selector,
-            factor_bundle=_fake_factor_bundle,
-        )
-    )
-
-    assert result.applicable is True
-    assert result.selected is True
-    assert result.factor_bundle.operator is bundle
-    assert result.factor_bundle.factor_nbytes_estimate == 55
-    assert result.metadata["selected_candidate"] == "xmin_l2"
-    assert calls["requested_kind"] == "active_fortran_v3_reduced_lu"
-    assert calls["candidates"] == "current,xmin_l2"
-    assert calls["max_candidates"] == 2
-    assert calls["min_improvement_ratio"] == 1.25
-
-
-def test_direct_tail_support_mode_preflight_reports_selector_exception() -> None:
-    def selector(**_kwargs):
-        raise RuntimeError("selector failed")
-
-    result = run_direct_tail_support_mode_preflight(
-        DirectTailSupportModePreflightContext(
-            env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_PREFLIGHT": "1"},
-            factor_kind="active_fortran_v3_reduced_ilu",
-            structured_pc_ready=True,
-            operator_bundle=SimpleNamespace(matrix=scipy_sparse.eye(2, format="csr")),
-            layout=_FakeLayout(),
-            active_indices=None,
-            max_nbytes=1024,
-            regularization=1.0e-12,
-            rhs=np.ones(2),
-            true_matvec=lambda v: np.asarray(v),
-            preconditioner_x=0,
-            preconditioner_xi=0,
-            preconditioner_species=0,
-            preconditioner_x_min_l=0,
-            selector=selector,
-            factor_bundle=_fake_factor_bundle,
-        )
-    )
-
-    assert result.applicable is True
-    assert result.selected is False
-    assert result.metadata is None
-    assert result.error == "RuntimeError: selector failed"
 
 
 def test_sparse_pc_factor_preflight_policy_uses_metadata_trigger() -> None:
@@ -8326,12 +8060,10 @@ def test_sparse_pc_gmres_final_payload_from_solve_state_expands_result_and_metad
             "direct_tail_operator_bundle": None,
             "direct_tail_structured_max_nbytes": None,
             "direct_tail_structured_pc_metadata": {},
-            "direct_tail_support_mode_preflight_metadata": {},
             "direct_tail_error": None,
             "direct_tail_structured_pc_requested": "auto",
             "direct_tail_structured_pc_reason": "none",
             "direct_tail_structured_pc_error": None,
-            "direct_tail_support_mode_preflight_error": None,
         }
     )
 
@@ -10071,10 +9803,6 @@ def test_sparse_pc_direct_tail_final_metadata_uses_grouped_policy_state() -> Non
             structured_pc_reason="selected",
             structured_pc_error=None,
             structured_pc_metadata={"kind": "active_native_stack"},
-            support_mode_preflight_requested=True,
-            support_mode_preflight_selected=False,
-            support_mode_preflight_error="not_requested",
-            support_mode_preflight_metadata={"baseline": True},
         )
     )
 
@@ -10085,9 +9813,6 @@ def test_sparse_pc_direct_tail_final_metadata_uses_grouped_policy_state() -> Non
     assert metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb"] == pytest.approx(4.0)
     assert metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata"] == {
         "kind": "active_native_stack"
-    }
-    assert metadata["sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_metadata"] == {
-        "baseline": True
     }
     assert not any("true_coupled" in key for key in metadata)
     assert not any("true_active" in key for key in metadata)
@@ -10174,10 +9899,6 @@ def test_sparse_pc_gmres_finalization_bundle_from_solve_scope_groups_locals() ->
         "direct_tail_structured_pc_reason": "selected",
         "direct_tail_structured_pc_error": None,
         "direct_tail_structured_pc_metadata": {"kind": "active_native_stack"},
-        "direct_tail_support_mode_preflight_requested": False,
-        "direct_tail_support_mode_preflight_selected": False,
-        "direct_tail_support_mode_preflight_error": None,
-        "direct_tail_support_mode_preflight_metadata": None,
         "factor_preflight_enabled": True,
         "factor_preflight_required": True,
         "factor_preflight_seed_enabled": False,
@@ -10373,10 +10094,6 @@ def test_finalize_sparse_pc_gmres_bundle_builds_typed_state(
                 structured_pc_reason="selected",
                 structured_pc_error=None,
                 structured_pc_metadata={"kind": "active_native_stack"},
-                support_mode_preflight_requested=False,
-                support_mode_preflight_selected=False,
-                support_mode_preflight_error=None,
-                support_mode_preflight_metadata=None,
             ),
             factor_preflight=SparsePCFactorPreflightMetadataContext(
                 enabled=True,

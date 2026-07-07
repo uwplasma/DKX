@@ -112,20 +112,10 @@ _active_fortran_v3_reduced_permc_candidates = active_fortran_v3_reduced_permc_ca
 _active_fortran_v3_reduced_preconditioner_matrix = (
     _symbolic_profile_response_pc.active_fortran_v3_reduced_preconditioner_matrix
 )
-_active_fortran_v3_support_mode_dropped_no_entries = (
-    _symbolic_profile_response_pc.active_fortran_v3_support_mode_dropped_no_entries
-)
-_apply_active_fortran_v3_support_mode_token = _symbolic_profile_response_pc.apply_active_fortran_v3_support_mode_token
 _build_active_fortran_v3_reduced_sparse_factor_preconditioner = (
     _symbolic_profile_response_pc.build_active_fortran_v3_reduced_sparse_factor_preconditioner
 )
 _estimate_spilu_factor_nbytes = _symbolic_profile_response_pc.estimate_spilu_factor_nbytes
-_parse_active_fortran_v3_support_mode_candidates = (
-    _symbolic_profile_response_pc.parse_active_fortran_v3_support_mode_candidates
-)
-select_active_fortran_v3_reduced_support_mode_preconditioner = (
-    _symbolic_profile_response_pc.select_active_fortran_v3_reduced_support_mode_preconditioner
-)
 _sparse_equilibration_scale = _symbolic_profile_response_pc.sparse_equilibration_scale
 _sparse_lu_factor_nbytes = _symbolic_profile_response_pc.sparse_lu_factor_nbytes
 
@@ -6127,7 +6117,6 @@ __all__ = [
     "build_direct_active_fortran_v3_reduced_pmat_preconditioner",
     "build_structured_rhs1_full_csr_preconditioner",
     "clear_structured_rhs1_full_csr_cache",
-    "select_active_fortran_v3_reduced_support_mode_preconditioner",
     "select_structured_rhs1_full_csr_operator",
     "solve_structured_rhs1_full_csr",
 ]

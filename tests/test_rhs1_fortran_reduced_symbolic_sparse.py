@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 import scipy.sparse as sp
 
 import sfincs_jax.operators.profile_full_system as rfa
@@ -39,10 +38,6 @@ def test_symbolic_sparse_facade_exports_fortran_reduced_family() -> None:
         symbolic_sparse.active_fortran_v3_reduced_preconditioner_matrix
         is rfr.active_fortran_v3_reduced_preconditioner_matrix
     )
-    assert (
-        symbolic_sparse.select_active_fortran_v3_reduced_support_mode_preconditioner
-        is rfr.select_active_fortran_v3_reduced_support_mode_preconditioner
-    )
 
 
 def test_rhs1_full_assembly_keeps_legacy_aliases_pointing_to_new_owner() -> None:
@@ -56,37 +51,6 @@ def test_rhs1_full_assembly_keeps_legacy_aliases_pointing_to_new_owner() -> None
         rfa._active_fortran_v3_reduced_preconditioner_matrix
         is rfr.active_fortran_v3_reduced_preconditioner_matrix
     )
-    assert (
-        rfa.select_active_fortran_v3_reduced_support_mode_preconditioner
-        is rfr.select_active_fortran_v3_reduced_support_mode_preconditioner
-    )
-
-
-def test_parse_support_mode_candidates_normalizes_tokens_and_rejects_unknown() -> None:
-    parsed = rfr.parse_active_fortran_v3_support_mode_candidates(
-        candidates="x0,xi0:species0:xmin_l2",
-        max_candidates=3,
-        preconditioner_x=1,
-        preconditioner_xi=1,
-        preconditioner_species=1,
-        preconditioner_x_min_l=0,
-    )
-
-    assert parsed[0]["label"] == "current"
-    assert parsed[1]["preconditioner_x"] == 0
-    assert parsed[2]["preconditioner_xi"] == 0
-    assert parsed[2]["preconditioner_species"] == 0
-    assert parsed[2]["preconditioner_x_min_l"] == 2
-
-    with pytest.raises(ValueError, match="unsupported Fortran-v3 support-mode"):
-        rfr.parse_active_fortran_v3_support_mode_candidates(
-            candidates="unsupported-token",
-            max_candidates=2,
-            preconditioner_x=1,
-            preconditioner_xi=1,
-            preconditioner_species=1,
-            preconditioner_x_min_l=0,
-        )
 
 
 def test_reduced_preconditioner_matrix_drops_default_nonlocal_support(monkeypatch) -> None:

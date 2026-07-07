@@ -611,7 +611,6 @@ class _DefaultDirectTailSuffixes(dict):
 
 def test_sparse_pc_direct_tail_result_metadata_preserves_driver_conversions() -> None:
     structured_metadata = {"kind": "native"}
-    support_metadata = {"accepted": True}
     state = _DefaultDirectTailState(
         {
             "direct_tail_operator_bundle": SimpleNamespace(
@@ -623,12 +622,10 @@ def test_sparse_pc_direct_tail_result_metadata_preserves_driver_conversions() ->
             ),
             "direct_tail_structured_max_nbytes": 2 * 1024 * 1024,
             "direct_tail_structured_pc_metadata": structured_metadata,
-            "direct_tail_support_mode_preflight_metadata": support_metadata,
             "direct_tail_error": "not_selected",
             "direct_tail_structured_pc_requested": "auto",
             "direct_tail_structured_pc_reason": "admitted",
             "direct_tail_structured_pc_error": None,
-            "direct_tail_support_mode_preflight_error": None,
         }
     )
 
@@ -666,18 +663,6 @@ def test_sparse_pc_direct_tail_result_metadata_preserves_driver_conversions() ->
                 "direct_tail_structured_pc_max_mb_auto"
             ],
             structured_pc_metadata=state["direct_tail_structured_pc_metadata"],
-            support_mode_preflight_requested=state[
-                "direct_tail_support_mode_preflight_requested"
-            ],
-            support_mode_preflight_selected=state[
-                "direct_tail_support_mode_preflight_selected"
-            ],
-            support_mode_preflight_error=state[
-                "direct_tail_support_mode_preflight_error"
-            ],
-            support_mode_preflight_metadata=state[
-                "direct_tail_support_mode_preflight_metadata"
-            ],
         )
     )
 
@@ -697,12 +682,6 @@ def test_sparse_pc_direct_tail_result_metadata_preserves_driver_conversions() ->
     assert (
         metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata"]
         is structured_metadata
-    )
-    assert (
-        metadata[
-            "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_metadata"
-        ]
-        is support_metadata
     )
     assert not any("true_coupled" in key for key in metadata)
     assert not any("true_active" in key for key in metadata)
@@ -787,12 +766,10 @@ def test_sparse_pc_gmres_result_metadata_preserves_driver_schema() -> None:
             "direct_tail_operator_bundle": None,
             "direct_tail_structured_max_nbytes": None,
             "direct_tail_structured_pc_metadata": {"kind": "active"},
-            "direct_tail_support_mode_preflight_metadata": {"selected": False},
             "direct_tail_error": None,
             "direct_tail_structured_pc_requested": "auto",
             "direct_tail_structured_pc_reason": "selected",
             "direct_tail_structured_pc_error": None,
-            "direct_tail_support_mode_preflight_error": None,
         }
     )
 

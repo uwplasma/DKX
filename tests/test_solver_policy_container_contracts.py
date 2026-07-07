@@ -107,7 +107,7 @@ def _value_for_field(name: str):
         return {}
     if name in {"basis", "context", "result", "factor_preflight_policy"}:
         return object()
-    if name in {"state_in_path", "state_out_path", "error", "direct_tail_structured_pc_reason", "direct_tail_support_mode_preflight_error", "factor_preflight_error"}:
+    if name in {"state_in_path", "state_out_path", "error", "direct_tail_structured_pc_reason", "factor_preflight_error"}:
         return None
     if name.endswith("_path"):
         return None

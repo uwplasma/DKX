@@ -1431,9 +1431,6 @@ def test_fortran_reduced_pc_gmres_direct_tail_active_fortran_v3_reduced_ilu_fail
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_FACTOR_KIND", "ilu")
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_FILL_FACTOR", "8")
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_DROP_TOL", "0")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_PREFLIGHT", "1")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_CANDIDATES", "current,x0")
-
     with pytest.raises(RuntimeError, match="direct-tail structured preconditioner preflight failed") as excinfo:
         solve_v3_full_system_linear_gmres(
             nml=nml,

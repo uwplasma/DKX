@@ -4308,8 +4308,15 @@ _XBLOCK_SPARSE_PC_FINAL_METADATA_COMPACT_CORE_STATE_KEYS = (
     "xblock_linear_size",
     "xblock_lower_fill_ignored_env",
     "xblock_lower_fill_mode",
+    "moment_schur_seed_enabled",
+    "moment_schur_seed_residual_norm",
+    "moment_schur_seed_residual_ratio",
+    "moment_schur_seed_used",
     "xblock_preconditioner_built",
     "xblock_preconditioner_xi",
+    "xblock_initial_seed_residual_norm",
+    "xblock_initial_seed_residual_ratio",
+    "xblock_initial_seed_used",
     "xblock_use_active_dof",
 )
 
@@ -4379,8 +4386,15 @@ class XBlockSparsePCFinalCoreState:
     xblock_linear_size: object
     xblock_lower_fill_ignored_env: object
     xblock_lower_fill_mode: object
+    moment_schur_seed_enabled: object
+    moment_schur_seed_residual_norm: object
+    moment_schur_seed_residual_ratio: object
+    moment_schur_seed_used: object
     xblock_preconditioner_built: object
     xblock_preconditioner_xi: object
+    xblock_initial_seed_residual_norm: object
+    xblock_initial_seed_residual_ratio: object
+    xblock_initial_seed_used: object
     xblock_use_active_dof: object
 
 @dataclass(frozen=True)

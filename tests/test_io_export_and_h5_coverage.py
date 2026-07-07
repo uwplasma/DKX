@@ -268,8 +268,6 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
             "xblock_post_residual_equation_direction_count": 9,
             "xblock_post_residual_equation_residual_before": 1.5e-8,
             "xblock_post_residual_equation_residual_after": 9.0e-9,
-            "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_requested": True,
-            "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_selected": True,
             "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb": 1024.0,
             "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb_auto": True,
             "sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata": {
@@ -290,29 +288,6 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
                         },
                     ),
                 },
-            },
-            "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_metadata": {
-                "accepted_nonbaseline": True,
-                "selected_candidate": "x0",
-                "candidate_specs": ("current", "x0"),
-                "baseline_residual_after": 4.0e-4,
-                "best_residual_after": 2.0e-5,
-                "rhs_norm": 1.0,
-                "setup_s": 0.125,
-                "candidates": (
-                    {
-                        "label": "current",
-                        "selected": True,
-                        "residual_after": 4.0e-4,
-                        "factor_nbytes_actual": 2_000_000,
-                    },
-                    {
-                        "label": "x0",
-                        "selected": True,
-                        "residual_after": 2.0e-5,
-                        "factor_nbytes_actual": 8_000_000,
-                    },
-                ),
             },
         },
     )
@@ -366,19 +341,9 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
     assert int(np.asarray(data["linearSolverXBlockPostResidualEquationDirectionCount"])) == 9
     assert float(np.asarray(data["linearSolverXBlockPostResidualEquationResidualBefore"])) == pytest.approx(1.5e-8)
     assert float(np.asarray(data["linearSolverXBlockPostResidualEquationResidualAfter"])) == pytest.approx(9.0e-9)
-    assert int(np.asarray(data["linearSolverDirectTailSupportModePreflightRequested"])) == 1
-    assert int(np.asarray(data["linearSolverDirectTailSupportModePreflightSelected"])) == 1
-    assert int(np.asarray(data["linearSolverDirectTailSupportModeAcceptedNonbaseline"])) == 1
-    assert data["linearSolverDirectTailSupportModeSelectedCandidate"] == "x0"
-    assert int(np.asarray(data["linearSolverDirectTailSupportModeRequestedCandidateCount"])) == 2
-    assert int(np.asarray(data["linearSolverDirectTailSupportModeCandidateCount"])) == 2
-    assert float(np.asarray(data["linearSolverDirectTailSupportModeBaselineResidualAfter"])) == pytest.approx(4.0e-4)
-    assert float(np.asarray(data["linearSolverDirectTailSupportModeBestResidualAfter"])) == pytest.approx(2.0e-5)
-    assert float(np.asarray(data["linearSolverDirectTailSupportModeRhsNorm"])) == pytest.approx(1.0)
-    assert float(np.asarray(data["linearSolverDirectTailSupportModeSetupTime"])) == pytest.approx(0.125)
-    assert '"label": "x0"' in data["linearSolverDirectTailSupportModeCandidatesJson"]
     assert float(np.asarray(data["linearSolverDirectTailStructuredPCMaxMB"])) == pytest.approx(1024.0)
     assert int(np.asarray(data["linearSolverDirectTailStructuredPCMaxMBAuto"])) == 1
+    assert not any("DirectTailSupportMode" in key for key in data)
     assert not any("TrueCoupledCoarse" in key for key in data)
     assert float(np.asarray(data["linearSolverResidualTargetRatio"])) == pytest.approx(0.2)
 

@@ -71,8 +71,7 @@ from sfincs_jax.operators.profile_kinetic import (
 )
 from sfincs_jax.operators.profile_full_system import (
     build_active_projected_rhs1_full_csr_preconditioner, build_direct_active_fortran_v3_reduced_pmat_preconditioner,
-    _try_build_structured_rhs1_full_csr_operator_bundle,
-    select_active_fortran_v3_reduced_support_mode_preconditioner, solve_structured_rhs1_full_csr,
+    _try_build_structured_rhs1_full_csr_operator_bundle, solve_structured_rhs1_full_csr,
 )
 from sfincs_jax.problems.profile_policies import (
     RHS1PreconditionerRouteSetupContext,
