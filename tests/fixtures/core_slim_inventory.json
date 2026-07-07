@@ -27,6 +27,125 @@
     "delete",
     "promote"
   ],
+  "extraction_groups": [
+    {
+      "branch": "research/qi-device-hard-seed",
+      "purpose": "Preserve QI and true device-QI solver research outside the stable core.",
+      "source_paths": [
+        "sfincs_jax/problems/profile_sparse_qi.py",
+        "sfincs_jax/solvers/preconditioner_qi_basis.py",
+        "sfincs_jax/solvers/preconditioner_qi_corrections.py",
+        "sfincs_jax/solvers/preconditioner_qi_device.py",
+        "sfincs_jax/validation/qi_device.py"
+      ],
+      "test_paths": [
+        "tests/test_profile_response_qi_device_seed.py",
+        "tests/test_qi_device_artifact_policy.py",
+        "tests/test_qi_res15_gpu_campaign.py",
+        "tests/test_rhs1_qi_device_preconditioner.py",
+        "tests/test_rhs1_qi_device_smoother.py",
+        "tests/test_run_qi_seed_robustness.py"
+      ],
+      "example_paths": [
+        "examples/data/qi_nfp2_reference.input.namelist",
+        "examples/optimization/materialize_qi_nfp2_promotion_input.py",
+        "examples/optimization/screen_qi_electron_root_nfp.py"
+      ],
+      "script_paths": [
+        "scripts/check_qi_device_artifacts.py",
+        "scripts/run_qi_seed_robustness.py"
+      ],
+      "doc_paths": [
+        "docs/research_lanes.rst",
+        "docs/optimization.rst"
+      ],
+      "core_removal_gate": "No retained core import may reference preconditioner_qi, profile_sparse_qi, or validation.qi_device."
+    },
+    {
+      "branch": "research/native-sparse-direct",
+      "purpose": "Preserve native sparse-direct, symbolic factor, true-operator rescue, and active-factor research outside the stable core.",
+      "source_paths": [
+        "sfincs_jax/operators/profile_true_operator_rescue.py",
+        "sfincs_jax/problems/profile_sparse_direct.py",
+        "sfincs_jax/solvers/native_block_factor.py",
+        "sfincs_jax/solvers/preconditioner_symbolic_active.py",
+        "sfincs_jax/solvers/preconditioner_symbolic_host.py",
+        "sfincs_jax/solvers/preconditioner_symbolic_policy.py",
+        "sfincs_jax/solvers/preconditioner_symbolic_profile.py",
+        "sfincs_jax/solvers/preconditioner_xblock_active.py"
+      ],
+      "test_paths": [
+        "tests/test_explicit_sparse_symbolic_native.py",
+        "tests/test_rhs1_active_sparse_factors.py",
+        "tests/test_rhs1_reduced_pmat_plan.py",
+        "tests/test_rhs1_true_operator_rescue.py",
+        "tests/test_transport_active_factor.py",
+        "tests/test_transport_sparse_direct.py"
+      ],
+      "example_paths": [],
+      "script_paths": [
+        "scripts/audit_rhs1_solver_stack.py",
+        "scripts/compare_fortran_matrix_to_jax_operator.py"
+      ],
+      "doc_paths": [
+        "docs/research_lanes.rst",
+        "docs/numerics.rst"
+      ],
+      "core_removal_gate": "Core sparse paths must still pass strict residual gates without symbolic/native rescue imports."
+    },
+    {
+      "branch": "research/parallel-performance",
+      "purpose": "Preserve sharded, multi-worker, multi-GPU, and long profiling campaigns outside the stable core.",
+      "source_paths": [
+        "sfincs_jax/problems/transport_parallel_runtime.py"
+      ],
+      "test_paths": [
+        "tests/test_benchmark_sharded_solve_scaling.py",
+        "tests/test_benchmark_transport_parallel_scaling.py",
+        "tests/test_transport_parallel_runtime.py",
+        "tests/test_transport_parallel_worker_cli.py"
+      ],
+      "example_paths": [
+        "examples/performance/benchmark_sharded_matvec_scaling.py",
+        "examples/performance/benchmark_sharded_solve_scaling.py",
+        "examples/performance/benchmark_transport_parallel_scaling.py"
+      ],
+      "script_paths": [
+        "scripts/generate_parallel_scaling_snapshot.py",
+        "scripts/profile_transport_traces.py"
+      ],
+      "doc_paths": [
+        "docs/parallelism.rst",
+        "docs/performance.rst"
+      ],
+      "core_removal_gate": "Serial/default CPU and GPU solves must remain available; scaling claims move out unless fresh evidence is retained."
+    },
+    {
+      "branch": "research/publication-audits",
+      "purpose": "Preserve historical benchmark campaigns, publication figures, Zenodo audits, and long-run validation scripts outside the stable core.",
+      "source_paths": [
+        "sfincs_jax/validation/artifacts.py"
+      ],
+      "test_paths": [
+        "tests/test_benchmark_artifact_policy.py",
+        "tests/test_generate_fortran_suite_benchmark_summary.py",
+        "tests/test_validation_figures.py"
+      ],
+      "example_paths": [
+        "examples/publication_figures"
+      ],
+      "script_paths": [
+        "scripts/run_zenodo_vmec_parity_campaign.py",
+        "scripts/generate_fortran_example_audit.py",
+        "scripts/summarize_production_stress_campaign.py"
+      ],
+      "doc_paths": [
+        "docs/paper_figures.rst",
+        "docs/validation_matrix.rst"
+      ],
+      "core_removal_gate": "README/docs can keep small checked figures and summaries, but long-run campaign drivers leave the core tree."
+    }
+  ],
   "entries": [
     {
       "path": "sfincs_jax/problems/profile_policies.py",

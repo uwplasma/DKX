@@ -219,6 +219,22 @@ def test_core_slim_inventory_covers_large_phase_a_owners() -> None:
     assert set(payload["categories"]) == INVENTORY_CATEGORIES
     assert set(payload["actions"]) == INVENTORY_ACTIONS
 
+    groups = payload["extraction_groups"]
+    assert isinstance(groups, list)
+    group_branches: set[str] = set()
+    for group in groups:
+        branch = str(group["branch"])
+        assert branch in REQUIRED_RESEARCH_BRANCHES
+        group_branches.add(branch)
+        assert len(str(group["purpose"])) >= 40
+        assert len(str(group["core_removal_gate"])) >= 40
+        for key in ("source_paths", "test_paths", "example_paths", "script_paths", "doc_paths"):
+            assert isinstance(group[key], list)
+            for referenced in group[key]:
+                referenced_path = REPO_ROOT / str(referenced)
+                assert referenced_path.exists(), f"{branch} references missing {referenced}"
+    assert REQUIRED_RESEARCH_BRANCHES <= group_branches
+
     entries = payload["entries"]
     assert isinstance(entries, list)
     assert entries
