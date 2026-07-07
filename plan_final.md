@@ -204,6 +204,36 @@ Each commit-level tranche must report:
 - Any parity/performance claim changed by the tranche.
 - Remaining open lanes and completion estimate.
 
+### Repository-Wide Audit Tranches
+
+Finish the simplification by auditing in this fixed order. Each tranche must
+edit the inventory first, then remove or merge code, then run focused guards.
+
+1. Public surface: `api.py`, `cli.py`, `namelist.py`, `io.py`, plotting,
+   output formats, examples used in README, and documented imports. Delete
+   undocumented aliases unless migration tests require a thin facade.
+2. Physics models: collisions, drifts, classical transport, bootstrap/Redl,
+   ambipolarity, and geometry loaders. Keep equations with tests and citations;
+   merge duplicate normalization helpers.
+3. Discretization/operators: velocity grids, periodic stencils, RHSMode-1
+   full-system operators, transport operators, and sparse patterns. Keep only
+   operators used by supported automatic defaults or frozen parity tests.
+4. Solver defaults: dense, structured, sparse, PAS, FP, x-block, and
+   transport-matrix paths. Delete env-only experiments and retain only routes
+   with residual, parity, runtime, and RSS gates.
+5. Differentiability: primal/JVP/VJP/implicit sensitivity paths used by
+   examples and tests. Remove branches that break JAX transforms or lack a
+   documented non-differentiable CLI-only boundary.
+6. Validation and tests: collapse duplicated smoke tests into physics,
+   regression, unit, CLI/I/O, and optional-integration groups; keep only small
+   fixtures or release-fetched artifacts.
+7. Examples, scripts, and benchmarks: keep <=10 curated workflows plus
+   Fortran-v3 reference inputs; move campaigns/profilers/publication one-offs
+   to research branches or delete generated outputs.
+8. Documentation: rewrite docs after code cuts, not before. Docs must describe
+   the stable core as standalone software and list extracted research lanes
+   only in the research-lanes page.
+
 ## Ordered Finish Plan
 
 ### Phase A - Build The Auditable Inventory

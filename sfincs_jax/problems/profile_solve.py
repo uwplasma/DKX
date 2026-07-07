@@ -321,19 +321,6 @@ from sfincs_jax.problems.profile_policies import (
 from sfincs_jax.operators.profile_reduced_tail import (
     _try_build_fortran_reduced_constraint1_direct_tail_bundle,
 )
-from sfincs_jax.operators.profile_true_operator_rescue import (
-    _ResidualCoarseHostSparsePreconditionerBundle, _ResidualWindowHostSparsePreconditionerBundle,
-    _ReusableTrueActionColumnCache, _TrueOperatorActiveSubmatrixPreconditionerBundle,
-    _TrueOperatorCoupledCoarseLSQPreconditionerBundle, _TrueOperatorWindowLSQPreconditionerBundle,
-    _expand_sparse_graph_positions, _parse_true_operator_window_specs, _rhs1_additive_rescue_nbytes,
-    _rhs1_active_reduced_residual_diagnostics, _sparse_factor_nbytes_estimate,
-    _true_operator_window_positions_from_residual, _try_build_true_operator_active_block_lsq_preconditioner,
-    _try_build_true_operator_active_residual_block_lsq_preconditioner,
-    _try_build_true_operator_active_submatrix_preconditioner,
-    _try_build_true_operator_coupled_coarse_lsq_preconditioner,
-    _try_build_true_operator_residual_window_lsq_preconditioner,
-    _try_build_residual_coarse_host_sparse_preconditioner, _try_build_residual_window_host_sparse_preconditioner,
-)
 from sfincs_jax.problems.profile_solver_diagnostics import (
     rhs1_fortran_stdout_from_env, rhs1_ksp_diagnostics_controls_from_env, rhs1_ksp_history_limits_from_env,
 )
@@ -581,6 +568,62 @@ from sfincs_jax.operators.profile_sparse_pattern import (
     v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices,
 )
 from sfincs_jax.profiling import _rss_mb, maybe_profiler
+
+
+class _ReusableTrueActionColumnCache:
+    def __init__(self, *, true_matvec, true_matmat, **_kwargs) -> None:
+        self._true_matvec = true_matvec
+        self._true_matmat = true_matmat
+
+    def matvec(self, vector):
+        return self._true_matvec(vector)
+
+    def matmat(self, matrix):
+        return self._true_matmat(matrix)
+
+    def metadata(self) -> dict[str, object]:
+        return {"enabled": False, "stored_columns": 0, "extracted_research_path": True}
+
+
+def _rhs1_additive_rescue_nbytes(_factor_bundle: object, max_additional_mb: float) -> int:
+    return int(max(0.0, float(max_additional_mb)) * 1024.0 * 1024.0)
+
+
+def _parse_true_operator_window_specs(_spec: str, *, layout: RHS1BlockLayout) -> tuple[tuple[int, int, int], ...]:
+    del _spec, layout
+    return ()
+
+
+def _rhs1_active_reduced_residual_diagnostics(
+    *,
+    residual: object,
+    layout: RHS1BlockLayout,
+    active_indices: np.ndarray | None,
+    top_k: int = 6,
+) -> dict[str, object]:
+    del layout, active_indices, top_k
+    residual_np = np.asarray(jax.device_get(residual), dtype=np.float64).reshape((-1,))
+    return {
+        "selected": True,
+        "total_norm": float(np.linalg.norm(residual_np)),
+        "max_abs": float(np.max(np.abs(residual_np))) if residual_np.size else 0.0,
+        "extracted_research_path": True,
+    }
+
+
+def _true_operator_rescue_extracted_stub(*_args, **_kwargs) -> None:
+    return None
+
+
+(
+    _try_build_residual_coarse_host_sparse_preconditioner,
+    _try_build_residual_window_host_sparse_preconditioner,
+    _try_build_true_operator_active_block_lsq_preconditioner,
+    _try_build_true_operator_active_residual_block_lsq_preconditioner,
+    _try_build_true_operator_active_submatrix_preconditioner,
+    _try_build_true_operator_coupled_coarse_lsq_preconditioner,
+    _try_build_true_operator_residual_window_lsq_preconditioner,
+) = (_true_operator_rescue_extracted_stub,) * 7
 
 
 _rhs1_xblock_precondition_side = _rhs1_xblock_policy.rhs1_xblock_precondition_side
