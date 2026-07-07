@@ -225,87 +225,12 @@ coverage before construction and performs only JAX CSR matvecs during
 application, so it can probe whether a weaker but genuinely device-resident
 smoother is preferable to host x-block LU/ILU for the hard GPU seed.
 
-The standalone device-QI preconditioner state is available on top of that
-smoother. It implements the same local-plus-coarse equation above with ``A_c``
-assembled by device matvec probes. When full device CSR is rejected by the memory
-preflight, a second explicit fallback can build only the coarse ``A Q`` matrix
-from the matrix-free JAX operator and use the result as a seed-only correction.
-Focused tests cover JIT, gradient propagation with respect to the residual,
-metadata hygiene, local-only fallback, matrix-free coarse-only setup, and
-fail-closed true-residual probing on synthetic global-coupling systems. It is
-wired through the driver behind the explicit opt-in::
-
-     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1
-
-The full device-CSR path requires an assembled device CSR operator. The
-matrix-free seed-only fallback is separately enabled with::
-
-     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1
-
-The matrix-free path has an optional residual enrichment that adds bounded
-correction-space Krylov vectors without materializing CSR::
-
-     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT=1
-     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT_DEPTH=2
-
-This builds ``orth([Q, r, A r, A^2 r, ...])`` and still accepts the candidate
-only if a true-residual probe improves by the configured margin. Seed-only
-hard-seed experiments may also move the probe ahead of the expensive strong
-preconditioner stage with::
-
-     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_EARLY=1
-     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1
-
-The seed-only probe can also run a short bounded sequence of residual-checked
-corrections::
-
-     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=4
-     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=residual_minimizing
-
-The default remains one fixed cycle. With ``STEP_POLICY=residual_minimizing``,
-each correction direction ``d`` is scaled by the scalar ``alpha`` that minimizes
-``||r - alpha A d||_2`` before the true-residual gate is evaluated. Each
-additional cycle recomputes the true residual and stops immediately if the
-candidate is non-finite or fails to reduce ``||r||_2`` by the configured
-material margin, so the knob is safe for GPU hard-seed experiments without
-turning the QI action into an unbounded Krylov preconditioner.
-
-The matrix-free path also has an opt-in recycle enrichment::
-
-     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_ENRICHMENT=1
-     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_CYCLES=2
-
-This appends the residual left after the current coarse correction,
-``r - A Q (A Q)^+ r``, as a new rank-gated candidate direction. It is a
-bounded GCRO-style seed construction, not a production Krylov replacement.
-
-The same matrix-free path has an opt-in residual-polynomial local smoother::
-
-     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_minres
-     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=2
-
-This applies a fixed number of pure-JAX sweeps using the residual as the
-local direction and the scalar that minimizes ``||r - alpha A r||_2``. The
-operation is bounded, device-compatible, and still guarded by the same
-true-residual acceptance gate.
-
-The stronger block-projected variant is selected with::
-
-     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres
-     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=16
-
-It uses the QI x/species block layout to form residual pieces ``D`` and solves
-``min_c ||r - A D c||_2`` as a bounded local action. This is still matrix-free
-and device-compatible, but it is a stronger block/angular/radial correction than
-the scalar residual-polynomial smoother.
-The default grouping keeps contiguous x/species blocks. A stronger experimental
-hybrid grouping is available with::
-
-     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_GROUPING=block_x_species
-
-This augments the local projected space with radial-x and species aggregate
-residual directions, giving the least-squares correction a small global-coupling
-handle while keeping the matvec count bounded by ``MAX_GROUPS``.
+The standalone device-QI preconditioner, residual-enrichment, recycle,
+residual-polynomial smoother, and block-projected variants were removed from the
+stable core and preserved as extracted research evidence.  They remain useful
+algorithmic prototypes, but the checked hard-seed artifacts did not pass the
+production true-residual gate.  Stable user documentation therefore avoids
+listing their old environment variables as runnable controls.
 
 The CPU hard-seed evidence uses this early hook plus the guarded
 ``SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK=1`` path. It writes output
@@ -384,20 +309,11 @@ install this coarse-reuse state into the actual Krylov solve or add a
 mathematically stronger multilevel/coarse-grid correction; further
 projected-smoother parameter sweeps were not expected to close the lane.
 
-That installed path is a named opt-in:
-
-.. code-block:: text
-
-   SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax
-   SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1
-   SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1
-   SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64
-
-The runner preset ``operator-krylov-device-qi`` records the same controls. The
-separate ``current-constraint-device-qi`` and ``adjoint-krylov-device-qi``
-presets record negative-evidence variants without changing the recommended
-operator-Krylov baseline. The operator-Krylov preset remains the correct route
-for the next real-push experiment because it keeps the
+That installed path is preserved as extracted research evidence rather than a
+stable named opt-in.  The archived runner presets record operator-Krylov,
+current/constraint, and adjoint variants without changing the stable automatic
+solver.  The operator-Krylov idea remains the relevant research direction
+because it keeps the
 operator-Krylov coarse state inside the JAX Krylov/preconditioner loop instead
 of using it only as a seed-only correction. Promotion still requires the gate
 below; merely reaching this path, improving the seed residual, or avoiding CUDA

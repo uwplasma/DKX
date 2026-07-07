@@ -7678,11 +7678,6 @@ def test_xblock_sparse_pc_branch_setup_composes_fallback_side_and_reuse() -> Non
             ignored_krylov_env=True,
         )
 
-    def reuse_decision(**kwargs):
-        assert kwargs["requested_krylov_method"] == "fgmres_jax"
-        assert kwargs["precondition_side"] == "right"
-        return SimpleNamespace(skip_xblock_factors=True)
-
     setup = resolve_xblock_sparse_pc_branch_setup(
         op=_op(fp=True, constraint_scheme=1, n_zeta=7, n_species=1),
         preconditioner_species=1,
@@ -7703,12 +7698,8 @@ def test_xblock_sparse_pc_branch_setup_composes_fallback_side_and_reuse() -> Non
         ),
         device_host_fallback_decision=fallback_decision,
         resolve_xblock_policy=side_policy,
-        reuse_decision=reuse_decision,
         env={
             "SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV": "fgmres_jax",
-            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER": "1",
-            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE": "1",
-            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV": "1",
         },
     )
 
@@ -7718,11 +7709,10 @@ def test_xblock_sparse_pc_branch_setup_composes_fallback_side_and_reuse() -> Non
     assert setup.xblock_device_fgmres_forced_right_pc
     assert setup.pc_restart == 41
     assert setup.xblock_default_restart_capped
-    assert not setup.xblock_qi_device_operator_reuse_skip_factors
     assert setup.xblock_jax_factors
     assert any("ignoring unknown" in message for _, message in setup.messages)
     assert any(
-        "ignoring extracted QI-device operator-reuse request" in message
+        "building jax x-block preconditioner" in message
         for _, message in setup.messages
     )
 

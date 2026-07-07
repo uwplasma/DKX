@@ -980,13 +980,6 @@ def test_xblock_device_krylov_diagnostics_preserve_transfer_free_logic() -> None
         ignored_env=False,
         non_autodiff=False,
     )
-    operator_reuse = SimpleNamespace(
-        enabled=True,
-        reason="shape_reusable",
-        skip_xblock_factors=True,
-        to_metadata=lambda: {"enabled": True, "reason": "shape_reusable"},
-    )
-
     metadata = xblock_device_krylov_diagnostics(
         {
             "xblock_krylov_method": "fgmres_jax",
@@ -999,8 +992,6 @@ def test_xblock_device_krylov_diagnostics_preserve_transfer_free_logic() -> None
             "global_coupling_metadata": {"device_resident": True},
             "xblock_device_host_fallback_decision": fallback,
             "xblock_krylov_env_requested": "auto",
-            "xblock_device_host_fallback_auto_disabled_by_qi_device": True,
-            "xblock_qi_device_operator_reuse_decision": operator_reuse,
             "xblock_device_fgmres_jit": True,
             "xblock_device_fgmres_jit_mode": "cycle",
             "xblock_device_fgmres_jit_outer_k": 7,
@@ -1030,12 +1021,6 @@ def test_xblock_device_krylov_diagnostics_preserve_transfer_free_logic() -> None
     assert metadata["xblock_device_krylov_method"] == "fgmres_jax"
     assert metadata["xblock_device_host_fallback_mode"] == "auto"
     assert metadata["xblock_device_host_fallback_used"] is False
-    assert metadata["xblock_device_host_fallback_auto_disabled_by_qi_device"] is True
-    assert metadata["xblock_qi_device_operator_reuse"] == {
-        "enabled": True,
-        "reason": "shape_reusable",
-    }
-    assert metadata["xblock_qi_device_operator_reuse_skip_xblock_factors"] is True
     assert metadata["xblock_device_fgmres_enabled"] is True
     assert metadata["xblock_device_fgmres_jit_enabled"] is True
     assert metadata["xblock_device_fgmres_jit_mode"] == "cycle"

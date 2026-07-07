@@ -1303,10 +1303,6 @@ class XBlockSparsePCSetup:
     xblock_device_tfqmr_requested: bool
     xblock_device_krylov_requested: bool
     xblock_device_host_fallback_decision: object
-    xblock_device_host_fallback_auto_disabled_by_qi_device: bool
-    qi_device_preconditioner_requested_for_fallback: bool
-    qi_device_matrix_free_requested_for_fallback: bool
-    qi_device_use_in_krylov_requested_for_fallback: bool
     messages: tuple[tuple[int, str], ...]
 
 @dataclass(frozen=True)
@@ -1351,10 +1347,6 @@ class XBlockSparsePCBranchSetup:
     xblock_device_tfqmr_requested: bool
     xblock_device_krylov_requested: bool
     xblock_device_host_fallback_decision: object
-    xblock_device_host_fallback_auto_disabled_by_qi_device: bool
-    qi_device_preconditioner_requested_for_fallback: bool
-    qi_device_matrix_free_requested_for_fallback: bool
-    qi_device_use_in_krylov_requested_for_fallback: bool
     xblock_jax_factors: bool
     xblock_jax_factor_format: str
     xblock_jax_factor_apply: str
@@ -1367,18 +1359,6 @@ class XBlockSparsePCBranchSetup:
     xblock_device_fgmres_forced_right_pc: bool
     pc_restart: int
     xblock_default_restart_capped: bool
-    xblock_qi_device_operator_reuse_decision: object
-    xblock_qi_device_operator_reuse_skip_factors: bool
-    messages: tuple[tuple[int, str], ...]
-
-@dataclass(frozen=True)
-class XBlockOperatorReuseSetup:
-    """Operator-reuse decision used before local x-block factor construction."""
-
-    decision: object
-    skip_xblock_factors: bool
-    xblock_jax_factors: bool
-    xblock_device_krylov_forced_jax_factors: bool
     messages: tuple[tuple[int, str], ...]
 
 @dataclass(frozen=True)
@@ -1725,7 +1705,6 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
             krylov_method=_rhs1_xblock_policy.rhs1_xblock_krylov_method,
             device_host_fallback_decision=_rhs1_xblock_policy.rhs1_xblock_device_host_fallback_decision,
             resolve_xblock_policy=resolve_rhs1_xblock_sparse_pc_policy,
-            reuse_decision=_rhs1_xblock_policy.rhs1_xblock_qi_device_operator_reuse_decision,
             env=os.environ,
         )
         xblock_drop_tol = float(xblock_branch_setup.xblock_drop_tol)
@@ -1746,18 +1725,6 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
         xblock_device_tfqmr_requested = bool(xblock_branch_setup.xblock_device_tfqmr_requested)
         xblock_device_krylov_requested = bool(xblock_branch_setup.xblock_device_krylov_requested)
         xblock_device_host_fallback_decision = xblock_branch_setup.xblock_device_host_fallback_decision
-        xblock_device_host_fallback_auto_disabled_by_qi_device = bool(
-            xblock_branch_setup.xblock_device_host_fallback_auto_disabled_by_qi_device
-        )
-        qi_device_preconditioner_requested_for_fallback = bool(
-            xblock_branch_setup.qi_device_preconditioner_requested_for_fallback
-        )
-        qi_device_matrix_free_requested_for_fallback = bool(
-            xblock_branch_setup.qi_device_matrix_free_requested_for_fallback
-        )
-        qi_device_use_in_krylov_requested_for_fallback = bool(
-            xblock_branch_setup.qi_device_use_in_krylov_requested_for_fallback
-        )
         xblock_jax_factors = bool(xblock_branch_setup.xblock_jax_factors)
         xblock_jax_factor_format = str(xblock_branch_setup.xblock_jax_factor_format)
         xblock_jax_factor_apply = str(xblock_branch_setup.xblock_jax_factor_apply)
@@ -1774,15 +1741,11 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
         )
         pc_restart = int(xblock_branch_setup.pc_restart)
         xblock_default_restart_capped = bool(xblock_branch_setup.xblock_default_restart_capped)
-        xblock_qi_device_operator_reuse_decision = xblock_branch_setup.xblock_qi_device_operator_reuse_decision
-        xblock_qi_device_operator_reuse_skip_factors = bool(
-            xblock_branch_setup.xblock_qi_device_operator_reuse_skip_factors
-        )
         if emit is not None:
             for level, message in xblock_branch_setup.messages:
                 emit(int(level), str(message))
         xblock_local_preconditioner = build_xblock_local_preconditioner(
-            skip_factors=bool(xblock_qi_device_operator_reuse_skip_factors),
+            skip_factors=False,
             elapsed_s=sparse_timer.elapsed_s,
             build_preconditioner=_build_rhsmode1_xblock_tz_sparse_preconditioner,
             op=op,
@@ -2544,30 +2507,6 @@ def resolve_xblock_sparse_pc_setup(
     ) = _xblock_device_flags(str(krylov_requested))
 
     fallback_env = _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK")
-    fallback_auto_disabled_by_qi_device = False
-    qi_device_preconditioner = _env_bool(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER", default=False)
-    qi_device_matrix_free = _env_bool(
-        env,
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE",
-        default=False,
-    )
-    qi_device_use_in_krylov = _env_bool(
-        env,
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV",
-        default=False,
-    )
-    precondition_side_env = _env_value(env, "SFINCS_JAX_GMRES_PRECONDITION_SIDE").lower()
-    fallback_env_token = fallback_env.strip().lower().replace("-", "_")
-    if (
-        bool(device_krylov)
-        and bool(qi_device_preconditioner)
-        and bool(qi_device_matrix_free)
-        and bool(qi_device_use_in_krylov)
-        and precondition_side_env != "none"
-        and fallback_env_token in {"", "auto", "default"}
-    ):
-        fallback_env = "off"
-        fallback_auto_disabled_by_qi_device = True
 
     fallback_decision = device_host_fallback_decision(
         env_value=fallback_env,
@@ -2612,16 +2551,6 @@ def resolve_xblock_sparse_pc_setup(
                 f"using auto policy reason={fallback_decision.reason}",
             )
         )
-    elif bool(fallback_auto_disabled_by_qi_device):
-        messages.append(
-            (
-                1,
-                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                "automatic non-autodiff host fallback disabled by explicit matrix-free "
-                "QI-device Krylov preconditioner request",
-            )
-        )
-
     return XBlockSparsePCSetup(
         xblock_drop_tol=float(drop_tol),
         xblock_drop_rel=float(drop_rel),
@@ -2641,10 +2570,6 @@ def resolve_xblock_sparse_pc_setup(
         xblock_device_tfqmr_requested=bool(device_tfqmr),
         xblock_device_krylov_requested=bool(device_krylov),
         xblock_device_host_fallback_decision=fallback_decision,
-        xblock_device_host_fallback_auto_disabled_by_qi_device=bool(fallback_auto_disabled_by_qi_device),
-        qi_device_preconditioner_requested_for_fallback=bool(qi_device_preconditioner),
-        qi_device_matrix_free_requested_for_fallback=bool(qi_device_matrix_free),
-        qi_device_use_in_krylov_requested_for_fallback=bool(qi_device_use_in_krylov),
         messages=tuple(messages),
     )
 
@@ -2769,78 +2694,6 @@ def resolve_xblock_sparse_pc_side_policy_setup(
         messages=tuple(messages),
     )
 
-def resolve_xblock_operator_reuse_setup(
-    *,
-    op: object,
-    xblock_krylov_method: str,
-    xblock_device_host_fallback_decision: object,
-    qi_device_preconditioner_requested: bool,
-    qi_device_matrix_free_requested: bool,
-    qi_device_use_in_krylov_requested: bool,
-    precondition_side: str,
-    xblock_jax_factors: bool,
-    xblock_device_krylov_forced_jax_factors: bool,
-    xblock_preconditioner_xi: int,
-    reuse_decision: Callable[..., object],
-    env: Mapping[str, str] | None = None,
-) -> XBlockOperatorReuseSetup:
-    """Resolve factor reuse without importing experimental QI solver modules."""
-
-    decision = reuse_decision(
-        env_value=_env_value(
-            env,
-            "SFINCS_JAX_RHSMODE1_XBLOCK_QI_DEVICE_OPERATOR_REUSE",
-        ),
-        requested_krylov_method=str(xblock_krylov_method),
-        host_fallback_used=bool(
-            getattr(xblock_device_host_fallback_decision, "used", False)
-        ),
-        rhs_mode=int(op.rhs_mode),
-        constraint_scheme=int(op.constraint_scheme),
-        include_phi1=bool(op.include_phi1),
-        has_fp=op.fblock.fp is not None,
-        has_pas=op.fblock.pas is not None,
-        n_zeta=int(getattr(op, "n_zeta", 1)),
-        qi_device_preconditioner_requested=bool(
-            qi_device_preconditioner_requested
-        ),
-        qi_device_matrix_free_requested=bool(qi_device_matrix_free_requested),
-        qi_device_use_in_krylov_requested=bool(qi_device_use_in_krylov_requested),
-        precondition_side=str(precondition_side),
-    )
-    requested_skip_factors = bool(getattr(decision, "skip_xblock_factors", False))
-    skip_factors = False
-    jax_factors = bool(xblock_jax_factors)
-    forced_jax_factors = bool(xblock_device_krylov_forced_jax_factors)
-    messages: list[tuple[int, str]] = []
-    if requested_skip_factors:
-        messages.append(
-            (
-                1,
-                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                "ignoring extracted QI-device operator-reuse request in stable core",
-            )
-        )
-    factor_backend = "jax" if bool(jax_factors) else "host"
-    factor_reason = " device-krylov" if bool(forced_jax_factors) else ""
-    messages.append(
-        (
-            1,
-            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-            f"building {factor_backend} x-block preconditioner "
-            f"preconditioner_xi={int(xblock_preconditioner_xi)}"
-            f"{factor_reason}",
-        )
-    )
-
-    return XBlockOperatorReuseSetup(
-        decision=decision,
-        skip_xblock_factors=bool(skip_factors),
-        xblock_jax_factors=bool(jax_factors),
-        xblock_device_krylov_forced_jax_factors=bool(forced_jax_factors),
-        messages=tuple(messages),
-    )
-
 def resolve_xblock_sparse_pc_branch_setup(
     *,
     op: object,
@@ -2859,7 +2712,6 @@ def resolve_xblock_sparse_pc_branch_setup(
     krylov_method: Callable[[str], tuple[str, bool]],
     device_host_fallback_decision: Callable[..., object],
     resolve_xblock_policy: Callable[..., object],
-    reuse_decision: Callable[..., object],
     env: Mapping[str, str] | None = None,
 ) -> XBlockSparsePCBranchSetup:
     """Resolve x-block sparse-PC branch policy as one typed setup contract."""
@@ -2891,19 +2743,14 @@ def resolve_xblock_sparse_pc_branch_setup(
         resolve_xblock_policy=resolve_xblock_policy,
         env=env,
     )
-    reuse = resolve_xblock_operator_reuse_setup(
-        op=op,
-        xblock_krylov_method=str(side.xblock_krylov_method),
-        xblock_device_host_fallback_decision=setup.xblock_device_host_fallback_decision,
-        qi_device_preconditioner_requested=bool(setup.qi_device_preconditioner_requested_for_fallback),
-        qi_device_matrix_free_requested=bool(setup.qi_device_matrix_free_requested_for_fallback),
-        qi_device_use_in_krylov_requested=bool(setup.qi_device_use_in_krylov_requested_for_fallback),
-        precondition_side=str(side.precondition_side),
-        xblock_jax_factors=bool(side.xblock_jax_factors),
-        xblock_device_krylov_forced_jax_factors=bool(side.xblock_device_krylov_forced_jax_factors),
-        xblock_preconditioner_xi=int(setup.xblock_preconditioner_xi),
-        reuse_decision=reuse_decision,
-        env=env,
+    factor_backend = "jax" if bool(side.xblock_jax_factors) else "host"
+    factor_reason = " device-krylov" if bool(side.xblock_device_krylov_forced_jax_factors) else ""
+    factor_message = (
+        1,
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+        f"building {factor_backend} x-block preconditioner "
+        f"preconditioner_xi={int(setup.xblock_preconditioner_xi)}"
+        f"{factor_reason}",
     )
     return XBlockSparsePCBranchSetup(
         xblock_drop_tol=float(setup.xblock_drop_tol),
@@ -2924,23 +2771,11 @@ def resolve_xblock_sparse_pc_branch_setup(
         xblock_device_tfqmr_requested=bool(setup.xblock_device_tfqmr_requested),
         xblock_device_krylov_requested=bool(setup.xblock_device_krylov_requested),
         xblock_device_host_fallback_decision=setup.xblock_device_host_fallback_decision,
-        xblock_device_host_fallback_auto_disabled_by_qi_device=bool(
-            setup.xblock_device_host_fallback_auto_disabled_by_qi_device
-        ),
-        qi_device_preconditioner_requested_for_fallback=bool(
-            setup.qi_device_preconditioner_requested_for_fallback
-        ),
-        qi_device_matrix_free_requested_for_fallback=bool(
-            setup.qi_device_matrix_free_requested_for_fallback
-        ),
-        qi_device_use_in_krylov_requested_for_fallback=bool(
-            setup.qi_device_use_in_krylov_requested_for_fallback
-        ),
-        xblock_jax_factors=bool(reuse.xblock_jax_factors),
+        xblock_jax_factors=bool(side.xblock_jax_factors),
         xblock_jax_factor_format=str(side.xblock_jax_factor_format),
         xblock_jax_factor_apply=str(side.xblock_jax_factor_apply),
         xblock_device_krylov_forced_jax_factors=bool(
-            reuse.xblock_device_krylov_forced_jax_factors
+            side.xblock_device_krylov_forced_jax_factors
         ),
         full_fp_3d_pc=bool(side.full_fp_3d_pc),
         side_env=str(side.side_env),
@@ -2950,9 +2785,7 @@ def resolve_xblock_sparse_pc_branch_setup(
         xblock_device_fgmres_forced_right_pc=bool(side.xblock_device_fgmres_forced_right_pc),
         pc_restart=int(side.pc_restart),
         xblock_default_restart_capped=bool(side.xblock_default_restart_capped),
-        xblock_qi_device_operator_reuse_decision=reuse.decision,
-        xblock_qi_device_operator_reuse_skip_factors=bool(reuse.skip_xblock_factors),
-        messages=tuple((*setup.messages, *side.messages, *reuse.messages)),
+        messages=tuple((*setup.messages, *side.messages, factor_message)),
     )
 
 def build_xblock_local_preconditioner(
@@ -4474,11 +4307,9 @@ _XBLOCK_SPARSE_PC_FINAL_METADATA_NESTED_STATE_KEYS = (
     "xblock_device_fgmres_jit",
     "xblock_device_fgmres_jit_mode",
     "xblock_device_fgmres_jit_outer_k",
-    "xblock_device_host_fallback_auto_disabled_by_qi_device",
     "xblock_device_host_fallback_decision",
     "xblock_device_krylov_forced_jax_factors",
     "xblock_krylov_env_requested",
-    "xblock_qi_device_operator_reuse_decision",
 )
 
 _XBLOCK_SPARSE_PC_FINAL_METADATA_PREFLIGHT_STATE_KEYS = (
@@ -4558,11 +4389,9 @@ _XBLOCK_SPARSE_PC_FINAL_METADATA_DEVICE_STATE_KEYS = (
     "xblock_device_fgmres_jit",
     "xblock_device_fgmres_jit_mode",
     "xblock_device_fgmres_jit_outer_k",
-    "xblock_device_host_fallback_auto_disabled_by_qi_device",
     "xblock_device_host_fallback_decision",
     "xblock_device_krylov_forced_jax_factors",
     "xblock_krylov_env_requested",
-    "xblock_qi_device_operator_reuse_decision",
 )
 
 _XBLOCK_SPARSE_PC_FINAL_METADATA_PRECOMPUTED_KEYS = (
@@ -4698,11 +4527,9 @@ class XBlockSparsePCFinalDeviceState:
     xblock_device_fgmres_jit: object
     xblock_device_fgmres_jit_mode: object
     xblock_device_fgmres_jit_outer_k: object
-    xblock_device_host_fallback_auto_disabled_by_qi_device: object
     xblock_device_host_fallback_decision: object
     xblock_device_krylov_forced_jax_factors: object
     xblock_krylov_env_requested: object
-    xblock_qi_device_operator_reuse_decision: object
 
 @dataclass(frozen=True)
 class XBlockSparsePCFinalPreflightState:

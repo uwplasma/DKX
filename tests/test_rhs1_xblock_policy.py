@@ -23,7 +23,6 @@ from sfincs_jax.solvers.preconditioner_xblock_policy import (
     resolve_rhs1_xblock_sparse_pc_policy,
     rhs1_xblock_device_host_fallback_decision,
     rhs1_xblock_fallback_to_gmres_enabled,
-    rhs1_xblock_qi_device_operator_reuse_decision,
     rhs1_xblock_gmres_restart,
     rhs1_xblock_krylov_method,
     rhs1_xblock_local_solve_candidate,
@@ -476,60 +475,6 @@ def test_device_host_fallback_respects_force_disable_and_invalid_env() -> None:
     assert ignored.used
     assert ignored.mode == "auto"
     assert ignored.ignored_env
-
-
-def test_qi_device_operator_reuse_requires_matrix_free_device_krylov() -> None:
-    base = {
-        "env_value": "",
-        "requested_krylov_method": "fgmres_jax",
-        "host_fallback_used": False,
-        "rhs_mode": 1,
-        "constraint_scheme": 1,
-        "include_phi1": False,
-        "has_fp": True,
-        "has_pas": False,
-        "n_zeta": 7,
-        "qi_device_preconditioner_requested": True,
-        "qi_device_matrix_free_requested": True,
-        "qi_device_use_in_krylov_requested": True,
-        "precondition_side": "right",
-    }
-
-    decision = rhs1_xblock_qi_device_operator_reuse_decision(**base)
-    assert decision.enabled
-    assert decision.skip_xblock_factors
-    assert decision.reason == "matrix-free-qi-device-krylov"
-    assert decision.to_metadata()["skip_xblock_factors"] is True
-
-    host_fallback = rhs1_xblock_qi_device_operator_reuse_decision(
-        **{**base, "host_fallback_used": True},
-    )
-    assert not host_fallback.enabled
-    assert host_fallback.reason == "host-fallback-active"
-
-    no_matrix_free = rhs1_xblock_qi_device_operator_reuse_decision(
-        **{**base, "qi_device_matrix_free_requested": False},
-    )
-    assert not no_matrix_free.enabled
-    assert no_matrix_free.reason == "matrix-free-not-requested"
-
-    no_krylov_install = rhs1_xblock_qi_device_operator_reuse_decision(
-        **{**base, "qi_device_use_in_krylov_requested": False},
-    )
-    assert not no_krylov_install.enabled
-    assert no_krylov_install.reason == "use-in-krylov-not-requested"
-
-    no_side = rhs1_xblock_qi_device_operator_reuse_decision(
-        **{**base, "precondition_side": "none"},
-    )
-    assert not no_side.enabled
-    assert no_side.reason == "precondition-side-none"
-
-    forced_tokamak = rhs1_xblock_qi_device_operator_reuse_decision(
-        **{**base, "env_value": "force", "n_zeta": 1},
-    )
-    assert forced_tokamak.enabled
-    assert forced_tokamak.reason == "forced"
 
 
 @pytest.mark.parametrize(

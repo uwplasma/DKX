@@ -120,7 +120,6 @@ def test_nonconverged_rhsmode1_solver_trace_sidecar_is_written(tmp_path: Path) -
             "solve_s": 193.8,
             "matvecs": 803,
             "solver_kind": "xblock_sparse_pc_gmres",
-            "xblock_qi_device_operator_reuse_enabled": True,
             "sparse_pc_xblock_preconditioner_built": False,
         },
     )
@@ -159,7 +158,6 @@ def test_nonconverged_rhsmode1_solver_trace_sidecar_is_written(tmp_path: Path) -
     assert trace.metadata["output_refused"] is True
     assert trace.metadata["failure_reason"] == "nonconverged_rhsmode1_output"
     solver_metadata = trace.metadata["solver_metadata"]
-    assert solver_metadata["xblock_qi_device_operator_reuse_enabled"] is True
     assert solver_metadata["sparse_pc_xblock_preconditioner_built"] is False
 
 

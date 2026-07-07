@@ -2387,7 +2387,6 @@ def xblock_device_krylov_diagnostics(scope: Mapping[str, object]) -> dict[str, o
         )
     )
     fallback_decision = scope["xblock_device_host_fallback_decision"]
-    operator_reuse_decision = scope["xblock_qi_device_operator_reuse_decision"]
     fgmres_jit_active = bool(
         method in {"fgmres_jax", "gmres_jax"}
         and bool(scope["xblock_device_fgmres_jit"])
@@ -2414,19 +2413,8 @@ def xblock_device_krylov_diagnostics(scope: Mapping[str, object]) -> dict[str, o
             fallback_decision.qi_like_full_fp_3d
         ),
         "xblock_device_host_fallback_ignored_env": bool(fallback_decision.ignored_env),
-        "xblock_device_host_fallback_auto_disabled_by_qi_device": bool(
-            scope["xblock_device_host_fallback_auto_disabled_by_qi_device"]
-        ),
         "xblock_device_host_fallback_non_autodiff": bool(
             fallback_decision.non_autodiff
-        ),
-        "xblock_qi_device_operator_reuse": operator_reuse_decision.to_metadata(),
-        "xblock_qi_device_operator_reuse_enabled": bool(
-            operator_reuse_decision.enabled
-        ),
-        "xblock_qi_device_operator_reuse_reason": str(operator_reuse_decision.reason),
-        "xblock_qi_device_operator_reuse_skip_xblock_factors": bool(
-            operator_reuse_decision.skip_xblock_factors
         ),
         "xblock_device_gmres_enabled": bool(method == "gmres_jax"),
         "xblock_device_fgmres_enabled": bool(method == "fgmres_jax"),
