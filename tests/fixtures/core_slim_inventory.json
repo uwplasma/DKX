@@ -182,6 +182,9 @@
         "scripts/summarize_solver_paths.py",
         "scripts/compare_fortran_jax_solver_profiles.py",
         "scripts/summarize_fortran_v3_profile.py",
+        "scripts/generate_fortran_example_audit.py",
+        "scripts/generate_fortran_example_output_status.py",
+        "scripts/generate_readme_reduced_suite_table.py",
         "tests/test_benchmark_case_variants.py",
         "tests/test_summarize_solver_paths.py",
         "tests/test_solver_profile_compare.py",
@@ -219,6 +222,8 @@
         "scripts/compare_fortran_jax_solver_profiles.py",
         "scripts/summarize_fortran_v3_profile.py",
         "scripts/generate_fortran_example_audit.py",
+        "scripts/generate_fortran_example_output_status.py",
+        "scripts/generate_readme_reduced_suite_table.py",
         "scripts/summarize_production_stress_campaign.py"
       ],
       "doc_paths": [

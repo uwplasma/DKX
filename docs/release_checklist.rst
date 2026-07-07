@@ -124,12 +124,6 @@ Smoke-run the examples that do not require optional dependencies:
    python examples/getting_started/write_sfincs_output_cli.py
    python examples/autodiff/matrix_free_residual_and_jvp.py
 
-Regenerate the exact-input upstream fixture audit if upstream inputs or support levels change:
-
-.. code-block:: bash
-
-   python scripts/generate_fortran_example_audit.py
-
 Release-facing full suite run (vendored upstream inputs). A slim checkout does
 not include the frozen Fortran HDF5 reference root, so use either a local
 Fortran executable or a locally restored reference root:
