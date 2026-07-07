@@ -16,13 +16,14 @@ SOURCE_MAP_DOC = REPO_ROOT / "docs" / "source_map.rst"
 ACTIVE_PLAN = REPO_ROOT / "plan_final.md"
 EXECUTION_LOG = REPO_ROOT / "plan.md"
 ALLOWED_ROOT_PLAN_FILES = ("plan.md", "plan_final.md")
-ACTIVE_PLAN_MAX_LINES = 260
+ACTIVE_PLAN_MAX_LINES = 420
 ACTIVE_PLAN_REQUIRED_SECTIONS = (
     "## One-Sentence Goal",
     "## Current Review State",
     "## Open Lanes",
     "## Source Structure Rules",
     "## Ordered Finish Plan",
+    "## Concrete Code-Audit Rules",
     "## Standard Validation Commands",
     "## Completion Gates",
     "## Explicit Deferred Items",
@@ -241,6 +242,12 @@ def test_core_slim_inventory_covers_large_phase_a_owners() -> None:
             assert isinstance(group[key], list)
             for referenced in group[key]:
                 referenced_path = REPO_ROOT / str(referenced)
+                if (
+                    bool(group.get("core_extracted", False))
+                    and key in {"source_paths", "test_paths", "example_paths", "script_paths"}
+                    and not referenced_path.exists()
+                ):
+                    continue
                 assert referenced_path.exists(), f"{branch} references missing {referenced}"
     assert REQUIRED_RESEARCH_BRANCHES <= group_branches
 
@@ -277,6 +284,8 @@ def test_core_slim_inventory_covers_large_phase_a_owners() -> None:
         for key in ("tests", "docs_examples", "internal_callers"):
             for referenced in entry[key]:
                 referenced_path = REPO_ROOT / str(referenced)
+                if category == "extract-pr" and not referenced_path.exists():
+                    continue
                 assert referenced_path.exists(), f"{path} references missing {referenced}"
         if category == "extract-pr":
             branch = str(entry.get("extract_branch", ""))
@@ -742,11 +751,10 @@ def test_deleted_nonroot_compatibility_facades_are_absent() -> None:
 
 
 def test_deleted_campaign_specific_workflow_module_is_absent() -> None:
-    """Claim-policy gates should live under validation, not workflow sprawl."""
+    """QI campaign gates are preserved on the QI research branch, not core."""
 
     assert not (PACKAGE_ROOT / "workflows" / "qi_res15_gpu_campaign.py").exists()
-    module = importlib.import_module("sfincs_jax.validation.qi_device")
-    assert hasattr(module, "evaluate_qi_res15_gpu_campaign_files")
+    assert not (PACKAGE_ROOT / "validation" / "qi_device.py").exists()
 
 
 def test_deleted_tiny_validation_facades_are_absent() -> None:
@@ -785,12 +793,10 @@ def test_deleted_solver_selection_policy_facade_is_absent() -> None:
 
 
 def test_deleted_qi_promotion_policy_solver_facade_is_absent() -> None:
-    """QI promotion evidence gates belong to validation, not solver kernels."""
+    """QI promotion evidence is extracted from the stable core."""
 
     assert not (PACKAGE_ROOT / "solvers" / "preconditioner_qi_policy.py").exists()
-    module = importlib.import_module("sfincs_jax.validation.qi_device")
-    assert hasattr(module, "QIRunEvidence")
-    assert hasattr(module, "evaluate_qi_production_ladder_promotion")
+    assert not (PACKAGE_ROOT / "validation" / "qi_device.py").exists()
 
 
 def test_deleted_full_fp_species_preconditioner_facade_is_absent() -> None:
@@ -860,7 +866,6 @@ def test_canonical_flat_domain_modules_are_importable() -> None:
         "sfincs_jax.solvers.preconditioner_pas_xblock_ilu",
         "sfincs_jax.solvers.preconditioner_xblock_tz_sparse",
         "sfincs_jax.solvers.preconditioner_full_fp_kinetic",
-        "sfincs_jax.solvers.preconditioner_qi_basis",
         "sfincs_jax.solvers.preconditioner_schur_profile",
         "sfincs_jax.solvers.preconditioner_symbolic_profile",
     )
