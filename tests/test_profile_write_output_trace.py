@@ -1,20 +1,13 @@
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
 from pathlib import Path
+
+from sfincs_jax.validation import write_output_trace
 
 
 def _load_module():
-    repo = Path(__file__).resolve().parents[1]
-    path = repo / "scripts" / "profile_write_output_trace.py"
-    spec = importlib.util.spec_from_file_location("profile_write_output_trace", path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return write_output_trace
 
 
 def test_profile_write_output_trace_main_runs_warmup_trace_and_memory_dump(
