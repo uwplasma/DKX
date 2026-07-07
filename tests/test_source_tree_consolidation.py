@@ -69,6 +69,12 @@ INVENTORY_ACTIONS = {
     "delete",
     "promote",
 }
+INVENTORY_DECISIONS = {
+    "keep",
+    "merge",
+    "delete",
+    "extract-pr",
+}
 REQUIRED_CORE_SLIM_SOURCE_OWNERS = {
     "sfincs_jax/problems/profile_policies.py",
     "sfincs_jax/problems/profile_sparse_xblock.py",
@@ -122,6 +128,35 @@ def _package_dirs() -> list[Path]:
 
 def _relative_dir(path: Path) -> str:
     return path.relative_to(PACKAGE_ROOT).as_posix()
+
+
+def _tracked_paths() -> list[str]:
+    result = subprocess.run(
+        ["git", "ls-files"],
+        cwd=REPO_ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    return sorted(line for line in result.stdout.splitlines() if line)
+
+
+def _inventory_rule_matches(path: str, rule: dict[str, object]) -> bool:
+    for excluded in rule.get("exclude_prefix_any", []):
+        if path.startswith(str(excluded)):
+            return False
+
+    exact_paths = {str(candidate) for candidate in rule.get("exact_paths", [])}
+    if exact_paths:
+        return path in exact_paths
+
+    if "prefix_any" in rule:
+        return any(path.startswith(str(prefix)) for prefix in rule["prefix_any"])
+
+    if "prefix" in rule:
+        return path.startswith(str(rule["prefix"]))
+
+    return False
 
 
 def test_source_tree_does_not_gain_new_root_modules_or_packages() -> None:
@@ -303,6 +338,42 @@ def test_core_slim_inventory_covers_large_phase_a_owners() -> None:
     assert REQUIRED_CORE_SLIM_SOURCE_OWNERS <= set(by_path)
     assert REQUIRED_CORE_SLIM_NONPACKAGE_OWNERS <= set(by_path)
     assert REQUIRED_RESEARCH_BRANCHES <= extract_branches
+
+
+def test_core_slim_inventory_classifies_every_tracked_file() -> None:
+    """Tranche A must cover the whole repo without a huge per-file JSON dump."""
+
+    payload = _core_slim_inventory()
+    review = payload["whole_repo_review"]
+    assert review["coverage_model"] == "exactly_one_rule_per_git_tracked_path"
+    assert review["review_status"] == "first_pass_file_complete"
+    assert set(review["decisions"]) == INVENTORY_DECISIONS
+
+    rules = review["rules"]
+    assert isinstance(rules, list)
+    assert len(rules) >= 12
+    seen_rule_names: set[str] = set()
+    for rule in rules:
+        name = str(rule["name"])
+        assert name not in seen_rule_names
+        seen_rule_names.add(name)
+        assert str(rule["decision"]) in INVENTORY_DECISIONS
+        assert isinstance(rule["owner_tags"], list) and rule["owner_tags"]
+        assert len(str(rule["proof_owner"])) >= 20
+        assert len(str(rule["line_target"])) >= 20
+        assert len(str(rule["next_action"])) >= 30
+
+    unmatched: list[str] = []
+    ambiguous: dict[str, list[str]] = {}
+    for path in _tracked_paths():
+        matches = [str(rule["name"]) for rule in rules if _inventory_rule_matches(path, rule)]
+        if not matches:
+            unmatched.append(path)
+        elif len(matches) > 1:
+            ambiguous[path] = matches
+
+    assert unmatched == []
+    assert ambiguous == {}
 
 
 def test_package_readme_describes_current_source_layout() -> None:
