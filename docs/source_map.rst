@@ -1077,7 +1077,7 @@ owners are:
   and unit-testable without assembling a kinetic operator.
 
 ``sfincs_jax/solvers/krylov.py`` and ``sfincs_jax/solvers/implicit.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Linear-algebra infrastructure:
 
