@@ -1061,69 +1061,15 @@ The checked machine-readable artifact for this rung is:
 
 - ``docs/_static/figures/optimization/qi_nfp2_electron_root_res15_cpu_fortran_sparse_skip.json``
 
-Device-QI operator-reuse route
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+True-device QI research evidence
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The first guarded route for the next GPU timing gate is available for
-explicit advanced use.  It targets RHSMode=1, full-FP, three-dimensional QI-like
-runs with no ``Phi1`` solve, an explicit x-block Krylov method, and the
-matrix-free QI-device preconditioner installed inside Krylov.  Under those
-conditions the driver skips local sparse x-block factor construction and uses
-the device/operator-reuse path instead.  The route is intentionally opt-in at
-the method level; ordinary automatic solves still fall back to the proven
-host-sparse path when that is safer.
-
-The minimal environment for this lane is:
-
-.. code-block:: bash
-
-   export SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=gmres-jax
-   export SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1
-   export SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1
-   export SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1
-
-and the solve should request the x-block Krylov lane, for example
-``--solve-method xblock_sparse_pc_gmres``.  The default
-``SFINCS_JAX_RHSMODE1_XBLOCK_QI_DEVICE_OPERATOR_REUSE=auto`` enables the skip
-only when the guarded route is actually viable; setting it to ``0`` disables the
-skip, and setting it to ``force`` allows controlled debugging outside the
-QI-like geometry gate.
-
-Successful activation is visible in solver metadata through
-``xblock_qi_device_operator_reuse_enabled=True``,
-``xblock_qi_device_operator_reuse_reason="matrix-free-qi-device-krylov"``, and
-``sparse_pc_xblock_preconditioner_built=False``.  This closes the missing
-route-level infrastructure.  It does not close the public true-device-QI
-performance claim until a bounded office-GPU run writes residual-clean output
-and beats the host-sparse GPU route under the documented timing gate.
-
-The first bounded office-GPU check on the ``13 x 13 x 15 x 4``,
-``E_r=0.3`` point activated this route and skipped local x-block factors, but it
-did not pass the residual gate.  The QI-device preconditioner probe was rejected
-because the residual decreased only from ``1.466e-5`` to ``1.456e-5``.  The
-remaining device Krylov solve ran for about ``3.3 min`` and ``803`` matvecs with
-peak host RSS about ``5.8 GB``, ending at residual ``1.33e-5`` against target
-``1.47e-11``.  The production output gate correctly refused to write
-nonconverged HDF5 diagnostics.  Therefore the route remains documented as
-infrastructure, while the release-ready path for this QI rung remains the
-non-autodiff host sparse solve.
-
-A stronger coupled-residual device-QI preset was also tested on the same point.
-It built residual snapshots, block-Schur residual equations, multilevel residual
-equations, and a coupled residual equation.  The coupled residual equation
-itself was accepted, reducing the setup residual from ``1.466e-5`` to
-``1.312e-5``, and the Krylov-installed preconditioner reduced the final residual
-to ``9.71e-6`` in about ``2.1 min`` with peak host RSS about ``1.6 GB``.  This is
-lower memory and a slightly smaller residual than the minimal route, but still
-about ``6.6e5`` times above the requested target.  It is therefore recorded as
-fail-closed evidence, not a promoted production GPU path.
-
-The checked artifact for that bounded office-GPU rerun is
-``docs/_static/figures/optimization/qi_nfp2_electron_root_res13_gpu_operator_reuse_coupled_failclosed.json``.
-It records the route activation, skipped local x-block factors,
-failure-safe trace writing, coupled-residual setup, and device-cycle
-iteration/matvec accounting.  The same artifact marks residual convergence as
-``fail`` and leaves production GPU QI performance ``deferred``.
+Early QI-device operator-reuse and coupled-residual experiments are archived as
+research evidence, not as stable user controls.  They did not satisfy the
+production residual gate on the bounded hard-seed cases, so the stable core does
+not expose their environment variables or skip local x-block factor
+construction.  The supported automatic path for these examples remains the
+retained host-sparse x-block solve with fail-closed residual checks.
 
 The ladder rollup is machine-readable as
 ``docs/_static/figures/optimization/qi_nfp2_electron_root_convergence_ladder.json``
