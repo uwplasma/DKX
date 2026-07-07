@@ -23,7 +23,7 @@ bootstrap current, transport coefficients, plotting, and optimization.
   generated-output removal, and direct-tail experiment removal.
 - Current tracked Python volume is still too large for review:
   115 package Python files / 137.6k source lines, 311 test files / 124.3k test
-  lines, 119 example Python files, 5 tracked Python scripts, and one shell
+  lines, 118 example Python files, 5 tracked Python scripts, and one shell
   wrapper.
 - Largest source owners to audit first:
   `profile_sparse_xblock.py`, `profile_policies.py`,
@@ -49,7 +49,7 @@ bootstrap current, transport coefficients, plotting, and optimization.
 | Line-by-line audit | Active | 50% | Every retained file, function, public knob, and nontrivial branch has an owner, caller, proof test, and docs/perf reason. |
 | Core-main slimming | Active | 65% | Stable branch keeps only parity-clean, runtime-acceptable, documented defaults; research code is deleted or moved to research PRs. |
 | Source simplification | Active | 61% | Package falls first to <=68 Python files / <=80k lines, then <=50 files / <=50k lines unless ledger exceptions are justified. |
-| Tests/examples/scripts cleanup | Active | 84% | Examples are curated, scripts are gone or package CLIs, tests are smaller but reach >=95% meaningful coverage. |
+| Tests/examples/scripts cleanup | Active | 85% | Examples are curated, scripts are gone or package CLIs, tests are smaller but reach >=95% meaningful coverage. |
 | Parity/performance evidence | Active | 70% | Supported cases have checked Fortran-v3 parity/runtime/RSS/bootstrap evidence at documented grids. |
 | Docs/readme | Active | 82% | Public docs describe stable standalone software, not branch history, unpromoted campaigns, or old benchmark caveats. |
 

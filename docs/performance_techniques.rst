@@ -1885,7 +1885,7 @@ cross-device halo overhead regressions in current JAX CPU sharding.
   ``tests/test_periodic_stencil.py``,
   ``tests/test_collisionless_operator_parity.py``,
   ``tests/test_fblock_pas_matvec_parity.py``.
-- Benchmark (cache-warm, `transport_parallel_xxlarge`, 1 CPU device):
+- Benchmark (cache-warm, extracted large transport operator, 1 CPU device):
   mean matvec time improved from ``7.49e-4 s`` (stencil off) to
   ``5.87e-4 s`` (stencil on), about **1.28× faster**.
 

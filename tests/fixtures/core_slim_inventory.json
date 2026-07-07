@@ -8,7 +8,7 @@
     "source_file_count_at_audit": 115,
     "source_line_count_at_audit": 137620,
     "test_file_count_at_audit": 311,
-    "example_file_count_at_audit": 119,
+    "example_file_count_at_audit": 118,
     "benchmark_file_count_at_audit": 0,
     "script_file_count_at_audit": 5,
     "preservation_branches_created_from_commit": "6e1c3d33",
@@ -139,11 +139,17 @@
       "core_extracted_paths": [
         "scripts/generate_parallel_scaling_snapshot.py",
         "scripts/profile_transport_traces.py",
+        "examples/performance/benchmark_shard_map_halo.py",
         "examples/performance/benchmark_multi_gpu_case_throughput.py",
         "examples/performance/benchmark_sharded_matvec_scaling.py",
         "examples/performance/benchmark_sharded_solve_scaling.py",
         "examples/performance/rhsmode1_sharded.input.namelist",
         "examples/performance/rhsmode1_sharded_scaling.input.namelist",
+        "examples/performance/transport_parallel_large.input.namelist",
+        "examples/performance/transport_parallel_medium.input.namelist",
+        "examples/performance/transport_parallel_sharded.input.namelist",
+        "examples/performance/transport_parallel_xlarge.input.namelist",
+        "examples/performance/transport_parallel_xxlarge.input.namelist",
         "tests/test_benchmark_multi_gpu_case_throughput.py",
         "tests/test_benchmark_sharded_solve_scaling.py"
       ],
@@ -158,11 +164,17 @@
         "tests/test_transport_parallel_worker_cli.py"
       ],
       "example_paths": [
+        "examples/performance/benchmark_shard_map_halo.py",
         "examples/performance/benchmark_multi_gpu_case_throughput.py",
         "examples/performance/benchmark_sharded_matvec_scaling.py",
         "examples/performance/benchmark_sharded_solve_scaling.py",
         "examples/performance/rhsmode1_sharded.input.namelist",
         "examples/performance/rhsmode1_sharded_scaling.input.namelist",
+        "examples/performance/transport_parallel_large.input.namelist",
+        "examples/performance/transport_parallel_medium.input.namelist",
+        "examples/performance/transport_parallel_sharded.input.namelist",
+        "examples/performance/transport_parallel_xlarge.input.namelist",
+        "examples/performance/transport_parallel_xxlarge.input.namelist",
         "examples/performance/benchmark_transport_parallel_scaling.py"
       ],
       "script_paths": [
@@ -710,7 +722,7 @@
     },
     {
       "path": "examples/performance",
-      "lines_at_audit": 3712,
+      "lines_at_audit": 3360,
       "category": "extract-pr",
       "action": "extract",
       "extract_branch": "research/parallel-performance",
