@@ -132,6 +132,10 @@ performance, evidence, or compatibility requirement:
 10. Commit only when files, lines, public knobs, solver routes, duplicated
    schemas, examples, scripts, generated artifacts, or test burden decrease.
 
+Each review note must state the line's physics/numerics/API owner, why no
+shorter existing implementation can own it, and either the focused test that
+protects removal or the research branch/gate that owns extraction.
+
 Line-level dispositions must be explicit in review notes or inventory:
 
 | Disposition | Meaning | Required result |
@@ -213,14 +217,11 @@ whole sections before moving retained lines.
 | Examples/tests | `examples/`, `tests/`, `benchmarks/`, `scripts/` | original v3 examples plus <=10 workflows; tests grouped by behavior, not history | default CI under 10 minutes with >=95% meaningful coverage target |
 | Root/API | root modules and `sfincs_jax/README.md` | root stays public API/CLI/I/O/plot/namelist/paths/compare plus tiny facades | root has <=9 implementation-light modules or ledger exceptions |
 
-Exact removals are tracked in order. Done: BLR/HSS compressed separator solver
-route and nested-dissection frontal solver route with their stable tests/docs/
-policy aliases. Next: unsupported QI/device-QI imports and artifacts
-(`docs/_static/qi_seed_robustness_*`, `docs/_static/figures/optimization/qi_*`,
-`tests/test_qi_nfp2_electron_root_ladder_artifacts.py`, QI-only reference inputs,
-and README/docs QI promotion prose), unadmitted multifrontal/native factors,
-historical campaign/profiling generators, benchmark-only examples, tests that
-only pin extracted research behavior, and README/docs deferred-path marketing.
+Exact removals: done BLR/HSS and nested-dissection frontal stable routes;
+in-progress QI/device-QI generated artifacts, promotion tests, reference inputs,
+and README/docs promotion prose; next QI source coupling, unadmitted
+multifrontal/native factors, historical generators, benchmark-only examples,
+tests for extracted research, and README/docs deferred-path marketing.
 
 ## File Disposition Targets
 
@@ -259,7 +260,6 @@ explain why a smaller change unlocks the next deletion.
 | J. Docs/evidence | README, docs, figures, tables | regenerate claims from retained evidence and scrub branch-history text | docs build and docs-claim tests |
 
 ## Review Granularity For This PR
-
 Use these unit sizes so the refactor finishes in a few large passes:
 - File over 1500 lines: classify sections and delete/extract at least one section; reject helper-only renames or attempt-named files.
 - Policy/solver route: keep exactly one route name, parser, metadata schema, docs row, and test owner; reject dense/sparse/native/rescue aliases for the same route.

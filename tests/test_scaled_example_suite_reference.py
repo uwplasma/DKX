@@ -73,7 +73,7 @@ def test_reduced_suite_can_disable_reduced_seed_for_production_inputs(
 def test_scaled_suite_suppresses_default_extra_input_for_production_manifest() -> None:
     assert _default_extra_inputs_for_run(Path("outputs/benchmarks/production_inputs/manifest.json")) == []
     assert _default_extra_inputs_for_run(None) == [
-        Path("examples") / "data" / "qi_nfp2_reference.input.namelist"
+        Path("examples") / "data" / "geometryScheme4_quick_2species.input.namelist"
     ]
 
 
@@ -637,7 +637,7 @@ def test_classify_blocker_treats_cuda_dense_custom_calls_as_solver_branch(tmp_pa
 def test_classify_blocker_treats_jax_signal_and_oom_as_resource_failure(tmp_path: Path) -> None:
     log_path = tmp_path / "sfincs_jax.log"
     log_path.write_text(
-        "input=wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc\n"
+        "input=wout_large_stellarator_reference.nc\n"
         "active_projected_rhs1_full_csr_preconditioner: auto candidate start\n"
         "Command terminated by signal 9\n"
         "[sfincs_jax subprocess failed rc=137]\n",
@@ -669,7 +669,7 @@ def test_classify_blocker_treats_fail_closed_solver_policy_before_geometry(tmp_p
     log_path = tmp_path / "sfincs_jax.log"
     log_path.write_text(
         "solve_v3_full_system_linear_gmres: VMEC operator build start "
-        "(wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc)\n"
+        "(wout_large_stellarator_reference.nc)\n"
         "active_projected_rhs1_full_csr_preconditioner: auto candidate done "
         "kind=active_fortran_v3_reduced_lu selected=False "
         "reason=active_fortran_v3_pc_matrix_lu_prefill_budget_exceeded:56607878656>17179869184\n"
@@ -695,7 +695,7 @@ def test_classify_blocker_treats_solver_preflight_failure_before_geometry(tmp_pa
     log_path = tmp_path / "sfincs_jax.log"
     log_path.write_text(
         "solve_v3_full_system_linear_gmres: VMEC operator build start "
-        "(wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc)\n"
+        "(wout_large_stellarator_reference.nc)\n"
         "solve_v3_full_system_linear_gmres: sparse_pc_gmres factor preflight "
         "residual=5.889121e-05->3.268501e-03 improvement=1.801781e-02\n"
         "sfincs_jax write-output failed: direct-tail structured preconditioner "

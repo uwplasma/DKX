@@ -646,7 +646,7 @@ def compress_images_main(argv: list[str] | None = None) -> int:
 # Production benchmark input generation.
 DEFAULT_OUT_ROOT = REPO_ROOT / "outputs" / "benchmarks" / "production_resolution_inputs_2026-05-04"
 DEFAULT_EXAMPLES_ROOT = REPO_ROOT / "examples" / "sfincs_examples"
-DEFAULT_ADDITIONAL_INPUT = REPO_ROOT / "examples" / "data" / "qi_nfp2_reference.input.namelist"
+DEFAULT_ADDITIONAL_INPUT = REPO_ROOT / "examples" / "data" / "geometryScheme4_quick_2species.input.namelist"
 # Archived downstream NTX decks can still be imported explicitly for local
 # reproduction, but the production benchmark tier is SFINCS_JAX-owned by
 # default and should not depend on another repository.
@@ -1297,8 +1297,8 @@ README_AUDIT_BASELINE_REPORT = (
     REPO_ROOT / "tests" / "scaled_example_suite_release_cpu_2026-05-08_production_tokamak" / "suite_report.json"
 )
 README_AUDIT_EXAMPLES_ROOT = REPO_ROOT / "examples" / "sfincs_examples"
-README_AUDIT_EXTRA_INPUT = REPO_ROOT / "examples" / "data" / "qi_nfp2_reference.input.namelist"
-README_AUDIT_EXTRA_CASE_NAME = "additional_examples"
+README_AUDIT_EXTRA_INPUT = REPO_ROOT / "examples" / "data" / "geometryScheme4_quick_2species.input.namelist"
+README_AUDIT_EXTRA_CASE_NAME = "geometryScheme4_quick_2species"
 DEFAULT_PUBLIC_MIN_FORTRAN_RUNTIME_S = 10.0
 
 BEGIN = "<!-- BEGIN EXAMPLE_SUITE_AUDIT -->"

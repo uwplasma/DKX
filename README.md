@@ -145,8 +145,9 @@ python examples/optimization/qa_nfp2_sfincs_jax_objectives.py --objective balanc
 ![QA nfp=2 sfincs_jax optimization proxy dashboard](docs/_static/figures/optimization/qa_nfp2_sfincs_jax_optimization_lane.png)
 
 The QA example supports `bootstrap`, `electron-root`, `flux-selective`, and
-`balanced` presets. If the QA proxy does not provide a strong electron-root
-candidate, use the QI/QA NFP screen to pick the next kinetic promotion target:
+`balanced` presets. QI/device-QI optimization campaigns are preserved on the
+`research/qi-device-hard-seed` branch until they satisfy the same production
+residual, runtime, memory, and CPU/GPU parity gates as the stable QA workflows.
 
 For a VMEC-backed optimization diagnostic, use the checked
 `vmec_jax/examples/optimization/QA_optimization.py` result and inspect the
@@ -166,23 +167,6 @@ QA run with a `JDotB` or `RedlBootstrapMismatch` objective. The plotted current
 is an equilibrium diagnostic, not a kinetic bootstrap-current claim; accepted
 equilibria still need completed `sfincs_jax scan-er` outputs before using
 `FSABjHatOverRootFSAB2` in a paper or design decision.
-
-```bash
-python examples/optimization/screen_qi_electron_root_nfp.py --steps 70
-```
-
-![QI electron-root NFP screening proxy](docs/_static/figures/optimization/qi_electron_root_nfp_screen.png)
-
-The checked screen recommends QI `nfp=2` as the first fallback target, because
-QA positive-root evidence is limited to low/mid-resolution scans while QI
-electron-root promotion includes a bounded kinetic artifact. Both scripts write JSON
-provenance plus PNG/PDF plots. The proxy layer is differentiable and
-finite-difference checked; this does not make the promoted kinetic scan
-differentiable. Accepted designs still need completed `sfincs_jax scan-er`
-outputs before high-fidelity SFINCS kinetic gates can be used for bootstrap
-current, ambipolar roots, particle/heat/impurity fluxes, residual convergence,
-CPU/GPU agreement, and Fortran v3 comparison when applicable. See
-`docs/optimization.rst`.
 
 Concise real-promotion sequence:
 
@@ -241,52 +225,6 @@ low-resolution finite-beta QA positive-electron-root comparison. The finite-beta
 artifact demonstrates the full promotion workflow on a VMEC finite-beta QA
 geometry; production-resolution radial/profile convergence remains a separate
 claim-specific validation step.
-It also includes a bounded QI `nfp=2` kinetic electron-root promotion
-artifact from a two-species VMEC scan at `7 x 7 x 7 x 4`. CPU and GPU pass
-strict agreement for the positive ambipolar root at `E_r = 2.4386009865`; the
-SFINCS Fortran v3 reference agrees within the documented low-resolution
-reference tolerances. This closes the first QI kinetic artifact, not the
-production-resolution QI ladder.
-
-![QI nfp=2 low-resolution kinetic electron-root comparison](docs/_static/figures/optimization/qi_nfp2_electron_root_lowres_reference_tolerance_comparison.png)
-
-The first refined QI `nfp=2` rung at `9 x 9 x 11 x 4` also passes
-fixed-resolution CPU/GPU/Fortran gates: CPU selected `E_r = 2.2834299271`, GPU
-selected the same root within `4.3e-14`, and the Fortran-v3 reference selected
-`E_r = 2.2834273232` within the documented refined-grid tolerance. The root
-drift from the `7 x 7 x 7 x 4` artifact is about `0.155`, so this is
-persistence evidence, not a convergence claim.
-
-![QI nfp=2 first refined CPU/GPU/Fortran electron-root comparison](docs/_static/figures/optimization/qi_nfp2_electron_root_res9_reference_tolerance_comparison.png)
-
-A second bounded rung at `11 x 11 x 13 x 4` checks the same CPU/GPU/Fortran
-contract after fixing a mid-size RHSMode=1 solver-policy cliff. The default
-dense full-FP lane covers active sizes up to `8000`; this reduced the checked
-`11 x 11 x 13 x 4` CPU scan from about `326 s` to about `23 s`, and the office
-GPU0 scan also completes in about `23 s`. CPU and GPU selected
-`E_r = 2.2224054815` within `2.5e-13`; Fortran-v3 selected
-`E_r = 2.2224043880`, within the documented `2e-6` reference tolerance. The
-root drift from the `9 x 9 x 11 x 4` rung is reported in the JSON artifact so
-publication claims can require the higher-resolution gates documented in the
-validation pages.
-
-![QI nfp=2 second refined CPU/GPU/Fortran electron-root comparison](docs/_static/figures/optimization/qi_nfp2_electron_root_res11_reference_tolerance_comparison_dense8000_default.png)
-
-The QI ladder also has a `13 x 13 x 15 x 4` fixed-resolution CPU/GPU/Fortran
-artifact and a `15 x 15 x 17 x 4` CPU/Fortran rung. The `15x` rung selects
-`E_r = 2.2132389239` on CPU and agrees with SFINCS Fortran v3 to `9.2e-7`
-relative on the selected root, with all residual gates passing. GPU promotion at
-this resolution is intentionally not claimed: the candidate route is the
-matrix-free QI-device operator-reuse path, available behind explicit
-advanced controls. A bounded one-GPU rerun verifies route activation and local
-x-block factor skipping, but it remains fail-closed because the residual misses
-the requested target; it is infrastructure evidence, not a public performance
-claim.
-
-A checked no-solve rollup records the QI `nfp=2` electron-root ladder from
-`7x` through `15x`, with a recorded root drift of `0.00210`. Treat this as a
-bounded validation example; use the documented full-resolution gates before
-making production-resolution QI claims.
 
 The separate finite-beta QA convergence ladder extends the finite-beta QA
 artifact to `9 x 9 x 7 x 4` at the central surface and is presented as a bounded

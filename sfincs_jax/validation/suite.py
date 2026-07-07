@@ -3016,8 +3016,8 @@ _RUN_RECOMMENDATION_ORDER = {
     "bounded_remote": 1,
     "remote_or_cluster_only": 2,
 }
-DEFAULT_EXTRA_INPUT = Path("examples") / "data" / "qi_nfp2_reference.input.namelist"
-DEFAULT_EXTRA_CASE_NAME = "additional_examples"
+DEFAULT_EXTRA_INPUT = Path("examples") / "data" / "geometryScheme4_quick_2species.input.namelist"
+DEFAULT_EXTRA_CASE_NAME = "geometryScheme4_quick_2species"
 
 
 def _gather_jax_env() -> dict[str, object]:
@@ -3070,11 +3070,10 @@ def _load_production_manifest_cases(
 def _default_extra_inputs_for_run(production_manifest_path: Path | None) -> list[Path]:
     """Return implicit extra inputs for a suite run.
 
-    The normal upstream-suite run includes the QI/VMEC reference input as a
-    convenience and keeps the historical ``additional_examples`` case label for
-    report comparability. Generated production input trees already contain that
-    case, so adding it again creates duplicate work and can accidentally launch
-    the wrong row when filtering by a broad pattern.
+    The normal upstream-suite run includes a compact stable public input as a
+    convenience. Generated production input trees already own their complete
+    manifest, so adding an implicit extra row would create duplicate work and
+    can accidentally launch the wrong row when filtering by a broad pattern.
     """
 
     if production_manifest_path is not None:
@@ -3662,7 +3661,7 @@ def scaled_suite_main(argv: list[str] | None = None) -> int:
         default=None,
         help=(
             "Extra input.namelist to include outside --examples-root. Repeatable. "
-            "If omitted, examples/data/qi_nfp2_reference.input.namelist is included for normal example runs "
+            "If omitted, examples/data/geometryScheme4_quick_2species.input.namelist is included for normal example runs "
             "and suppressed for generated production input trees."
         ),
     )

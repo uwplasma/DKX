@@ -14,11 +14,12 @@ Release scope
 - the Python API can switch to differentiable solve paths when end-to-end sensitivities are needed,
 - and performance or memory limitations on the heaviest optional cases are documented with explicit claim boundaries.
 
-The repository also contains bounded evidence for mapped speed grids, QI seed
-robustness, solver-policy extraction, optimization promotion, and single-case
-sharding. These artifacts are documented with explicit claim boundaries so
-quick examples, regression scaffolds, production workflows, and publication
-claims are not conflated.
+The repository also contains bounded evidence for mapped speed grids,
+solver-policy extraction, optimization promotion, and single-case sharding.
+These artifacts are documented with explicit claim boundaries so quick
+examples, regression scaffolds, production workflows, and publication claims
+are not conflated. QI/device-QI campaigns are preserved on a research branch
+until they meet the same release gates.
 
 What this documentation covers
 ------------------------------

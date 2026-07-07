@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import jax
@@ -148,35 +147,3 @@ def test_xblock_side_probe_switch_keeps_physical_left_probe_seed_for_right_pc(mo
     assert result.metadata["xblock_side_probe_selected_side"] == "right"
     assert result.metadata["xblock_side_probe_switched"] is True
     assert result.metadata["xblock_side_probe_physical_seed_preserved_after_switch"] is True
-
-
-def test_qi_device_krylov_nonconverged_rejection_evidence_is_documented() -> None:
-    payload = json.loads(
-        Path("docs/_static/qi_seed_robustness_scale060_device_krylov_rejected_2026_05_13.json").read_text(
-            encoding="utf-8"
-        )
-    )
-
-    assert payload["artifact_kind"] == "qi_seed_rejected_solver_probe_summary"
-    assert payload["lane"] == "qi_seed_robustness"
-    assert payload["active_size"] == 81377
-    assert payload["conclusion"]["defaults_changed"] is False
-    assert payload["conclusion"]["hard_seed_closed"] is False
-
-    probes = payload["probes"]
-    assert {probe["name"] for probe in probes} == {
-        "gpu_device_fgmres_right_gc24",
-        "gpu_device_gmresjax_left_gc24",
-    }
-    for probe in probes:
-        assert probe["backend"] == "gpu"
-        assert probe["process_returncode"] == 2
-        assert probe["timed_out"] is False
-        assert probe["accepted_converged"] is False
-        assert probe["output_written"] is False
-        assert probe["solver_trace_written"] is False
-        assert probe["promotion_decision"] == "rejected_nonconverged_true_residual"
-        assert any(
-            "Refusing to write nonconverged RHSMode=1 diagnostics" in event
-            for event in probe["observed_progress"]
-        )

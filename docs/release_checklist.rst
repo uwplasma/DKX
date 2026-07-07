@@ -10,12 +10,10 @@ For a tagged release, `sfincs_jax` can claim the following only when the
 corresponding release artifacts are regenerated from the tagged commit:
 
 - full CPU and GPU parity for the vendored 39-case example suite, including
-  the QI reference input ``examples/data/qi_nfp2_reference.input.namelist``,
+  the compact release-audit extra input documented in the validation suite,
 - no ``jax_error`` or ``max_attempts`` in the release-facing suite artifacts,
 - matching ``sfincsOutput.h5`` common numeric datasets, zero missing Fortran top-level
   output keys in JAX, and the required terminal-output signals for the supported examples.
-- a bounded, metadata-visible non-autodiff host fallback for explicit large-QI
-  device-Krylov requests, backed by the checked scale-0.60 CPU hard-seed artifact.
 - transport-worker GPU parallelism for independent RHS/case throughput on the
   checked two-GPU benchmark lane.
 
@@ -49,7 +47,6 @@ From the repository root:
    pytest -q
    python -m sfincs_jax.validation.release check-gates
    python -m sfincs_jax.validation.release check-research-lanes
-   python scripts/check_qi_device_artifacts.py docs/_static/figures/optimization --min-relevant 1
    sphinx-build -W -b html docs docs/_build/html
    python -m build
    python -m twine check dist/*
@@ -68,7 +65,6 @@ For a fast claim-scope check without running the whole suite, use:
    pytest -q tests/test_benchmark_doc_claims.py tests/test_generate_fortran_suite_benchmark_summary.py
    python -m sfincs_jax.validation.release check-gates
    python -m sfincs_jax.validation.release check-research-lanes
-   python scripts/check_qi_device_artifacts.py docs/_static/figures/optimization --min-relevant 1
 
 This validates that publication-facing lanes are either implemented for the
 documented release-scope claim, kept as bounded scaffolds/proxies, or explicitly
@@ -103,11 +99,11 @@ Those tests are not a substitute for full-suite parity or production-resolution
 benchmark evidence. They only prove that the opt-in mapped grid and
 solver-path policy seams are wired and reproducible on bounded inputs.
 
-The checked summaries in ``docs/_static/qi_seed_robustness_smoke.json`` and
-``docs/_static/qi_seed_robustness_multiseed.json`` record bounded passing
-default-CLI seeds. Only claim production QI robustness after production-resolution
-CPU/GPU ladders record passing executions and the solver-trace/output checks
-needed for the claim.
+QI/device-QI seed-robustness artifacts are not part of the stable checkout.
+Only claim production QI robustness after promotion artifacts are restored from
+the research branch, regenerated from the tagged commit, and admitted by the
+same residual, output, runtime, memory, CPU/GPU parity, and documentation gates
+used for the release-facing suite.
 
 Mapped x-grid transport artifacts in ``docs/_static`` are bounded historical
 evidence. Regeneration campaigns live on research-audit branches; keep any
