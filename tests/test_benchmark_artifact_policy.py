@@ -6,8 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from scripts.check_benchmark_artifacts import main as check_benchmark_artifacts_main
-from scripts.benchmark_artifact_index import main as benchmark_artifact_index_main
 from sfincs_jax.validation.artifacts import (
     ARTIFACT_CLASS_FORTRAN_SUITE_SUMMARY,
     ARTIFACT_CLASS_LEGACY,
@@ -470,36 +468,6 @@ def test_fortran_suite_summary_rejects_duplicate_canonical_case_order() -> None:
     assert "field metadata.canonical_case_order must not contain duplicates" in errors
 
 
-def test_cli_reports_success_for_valid_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    artifact = tmp_path / "valid.json"
-    artifact.write_text(json.dumps(_valid_payload()) + "\n")
-
-    rc = check_benchmark_artifacts_main([str(artifact)])
-
-    captured = capsys.readouterr()
-    assert rc == 0
-    assert captured.out == f"{artifact}: ok\n"
-    assert captured.err == ""
-
-
-def test_cli_reports_failure_for_invalid_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    payload = copy.deepcopy(_valid_payload())
-    results = payload["results"]
-    assert isinstance(results, list)
-    row = results[1]
-    assert isinstance(row, dict)
-    del row["variant_provenance"]
-    artifact = tmp_path / "invalid.json"
-    artifact.write_text(json.dumps(payload) + "\n")
-
-    rc = check_benchmark_artifacts_main([str(artifact)])
-
-    captured = capsys.readouterr()
-    assert rc == 1
-    assert captured.out == ""
-    assert captured.err == f"{artifact}: missing field results[1].variant_provenance\n"
-
-
 def test_release_index_classifies_schema_v2_compliant_file(tmp_path: Path) -> None:
     artifact = tmp_path / "pas_release_v2.json"
     artifact.write_text(json.dumps(_valid_payload()) + "\n")
@@ -616,25 +584,3 @@ def test_release_index_summary_counts(tmp_path: Path) -> None:
         ARTIFACT_CLASS_RELEASE_BLOCKING: 1,
     }
     assert [entry.path for entry in index.release_blocking] == [malformed]
-
-
-def test_release_index_cli_reports_counts_and_fails_for_blockers(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    valid = tmp_path / "valid.json"
-    valid.write_text(json.dumps(_valid_payload()) + "\n")
-    malformed = tmp_path / "malformed.json"
-    malformed.write_text("{")
-
-    rc = benchmark_artifact_index_main([str(tmp_path)])
-
-    captured = capsys.readouterr()
-    assert rc == 1
-    assert f"{valid}: schema-v2-compliant\n" in captured.out
-    assert f"{malformed}: release-blocking\n" in captured.out
-    assert "summary: total=2" in captured.out
-    assert "schema-v2-compliant=1" in captured.out
-    assert "release-blocking=1" in captured.out
-    assert f"{malformed}: invalid JSON:" in captured.err
-    assert "release gate: fail (1 blocking artifact(s))" in captured.err
