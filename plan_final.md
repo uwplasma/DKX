@@ -17,35 +17,31 @@ bootstrap current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Branch head has release/data/hygiene script consolidation, generated-output
-  removal, direct-tail experiment removal, unsupported sharding-campaign
-  extraction, high-nu publication-audit extraction, Krylov implementation moved
-  from the package root to `sfincs_jax.solvers.krylov`, and the retained Python
-  release/profiling scripts promoted to `sfincs_jax.validation`.
-- Tracked code is still too large for review: current audit shows 116 package Python files / 141.5k source lines, 303 test Python files, 461 tracked example files, and 993 tracked source/test/example/docs text candidates outside `docs/upstream`. These counts must drop by deletion or extraction, not merely move between folders.
-- The package root is still too broad: `ambipolar.py`, `diagnostics.py`,
-  `grids.py`, `input_compat.py`, `profiling.py`, and `sensitivity.py` are
-  implementation owners or mixed facades that must move behind domain modules
-  or be deleted.
-- Largest source audit owners are, in order:
-  `profile_sparse_xblock.py`, `profile_policies.py`,
-  `profile_full_system.py`, `explicit_sparse.py`, `profile_solve.py`,
-  `transport_linear_system.py`, `transport_parallel_runtime.py`,
-  `profile_dense.py`, `krylov.py`, `profile_sparse_solve.py`,
-  `outputs/rhsmode1.py`, and `preconditioner_transport_matrix.py`.
-- Largest test/example clutter owners are:
-  `test_profile_response_sparse_pc.py`, `test_rhs1_full_assembly.py`,
-  `test_io_output_policy_coverage.py`, `test_v3_sparse_pattern.py`,
-  `test_explicit_sparse.py`, `test_rhs1_solver_replay.py`, generated
-  suite-report directories, `examples/publication_figures`,
-  `examples/performance`, `examples/optimization`, and `benchmarks/`.
-- Solver-research extraction has removed unsupported BLR/HSS compressed
-  separator and nested-dissection frontal routes from stable code, tests, policy
-  aliases, env knobs, metadata, and public docs. The remaining solver-research
-  work is multifrontal opt-in paths, true-operator rescue branches,
-  QI/device-QI hard-seed helpers, and manual native-factor routes that are not
-  automatic residual-clean defaults.
-- Overall PR readiness under the strict small-core goal is about 88-90%.
+- Branch head is PR #8 on `refactor/v3-driver-architecture`. Completed work
+  includes script promotion, generated-output removal, direct-tail experiment
+  removal, sharding/high-nu audit extraction, root Krylov cleanup, BLR/HSS and
+  nested-dissection frontal route removal, and first examples cleanup.
+- Current burden after the last cleanup is 116 package Python files / 141,442
+  package lines, 301 test Python files / 121,507 test lines, and 459 tracked
+  example files. These numbers must decrease by deletion, merging, or research
+  extraction; moving lines into more files is a failed tranche.
+- Root files still hiding implementation are `ambipolar.py`, `diagnostics.py`,
+  `grids.py`, `input_compat.py`, `profiling.py`, and `sensitivity.py`. Each
+  must become a tiny documented facade, move into a domain owner, or disappear.
+- Largest package owners, in order: `profile_sparse_xblock.py`,
+  `profile_policies.py`, `profile_full_system.py`, `validation/suite.py`,
+  `profile_solve.py`, `explicit_sparse.py`, `transport_parallel_runtime.py`,
+  `transport_linear_system.py`, `profile_dense.py`, `validation/artifacts.py`,
+  `krylov.py`, `profile_sparse_solve.py`, `outputs/rhsmode1.py`, and
+  `preconditioner_transport_matrix.py`.
+- Largest test/example clutter owners are `test_profile_response_sparse_pc.py`,
+  `test_rhs1_full_assembly.py`, `test_io_output_policy_coverage.py`,
+  `test_v3_sparse_pattern.py`, `test_rhs1_solver_replay.py`,
+  `test_profile_response_dense.py`, `test_explicit_sparse.py`,
+  `examples/publication_figures`, `examples/performance`,
+  `examples/optimization`, and `benchmarks/`.
+- Overall PR readiness is about 88-90%. The blocker is reviewability and stable
+  surface discipline, not adding more experimental solver code.
 
 ## Open Lanes
 
@@ -83,8 +79,13 @@ No nested package directories are allowed under `sfincs_jax/`.
 
 ## Concrete Code-Audit Rules
 
-The default action for every line is deletion. A line remains only if it has one
-stable owner and proof:
+The audit is file-card driven, not exploratory. For every tracked file, create
+or update one inventory card before editing: path, line count, imports, callers,
+public symbols, env vars, CLI flags, namelist aliases, output keys, diagnostics
+keys, examples, tests, docs, owner tags, line target, decision, and extraction
+branch if applicable. A file with no card is not refactored.
+
+Allowed owner tags and proof are:
 
 | Owner | Retain only if it supports | Required proof |
 | --- | --- | --- |
@@ -96,60 +97,38 @@ stable owner and proof:
 | `EVIDENCE` | compact validation fixture, release evidence, docs claim data | schema/docs-claim test |
 | `COMPAT` | documented SFINCS Fortran v3 input/output compatibility | compatibility fixture or parser/output test |
 
-Everything else is `RESEARCH`, `DUPLICATE`, `GENERATED`, or `OBSOLETE`.
-`RESEARCH` moves to a preservation branch/PR before deletion from this PR.
-`DUPLICATE`, `GENERATED`, and `OBSOLETE` are deleted with their imports, tests,
-docs, env vars, fixtures, and examples.
+Every line gets one disposition during the section review:
 
-For each file, perform this loop. This is the required "every line" review
-mechanism; no file is exempt because it is old, covered, or difficult. A line
-is not kept because it is already written; it is kept only because it is the
-simplest tested expression of a stable physics, numerics, API, autodiff,
-performance, evidence, or compatibility requirement:
-
-1. Record path, line count, public symbols, imports, callers, env vars, output
-   keys, tests, docs, examples, and current line target in
-   `tests/fixtures/core_slim_inventory.json`.
-2. Decide exactly one action: `keep`, `merge`, `delete`, or `extract-pr`.
-3. For every public symbol, env var, CLI flag, namelist alias, output key, and
-   diagnostics field, record owner tag, stable caller, proof test, docs owner,
-   autodiff scope, and runtime/memory scope.
-4. For every top-level constant and env var, keep it only if it is part of the
-   public API, namelist compatibility, an output schema, or a tested automatic
-   policy. Hidden tuning knobs and one-off campaign flags are research debt.
-5. For every private helper over 20 lines, inline it, move it beside the
-   equation/numerical method it supports, or record why the abstraction reduces
-   cognitive load.
-6. Delete one-call wrappers unless they are the public API or name a real
-   physics/numerics boundary.
-7. Collapse duplicate diagnostics dictionaries, policy branches, shape helpers,
-   namelist aliases, solver option parsing, preconditioner metadata builders,
-   profiler wrappers, and output-key builders.
-8. Delete tests for extracted code; keep compact absence tests that prevent
-   stable imports from silently returning.
-9. Run focused tests, Ruff, compileall, JSON validation, diff hygiene, package
-   import checks, and size guard.
-10. Commit only when files, lines, public knobs, solver routes, duplicated
-   schemas, examples, scripts, generated artifacts, or test burden decrease.
-
-Each review note must state the line's physics/numerics/API owner, why no
-shorter existing implementation can own it, and either the focused test that
-protects removal or the research branch/gate that owns extraction.
-
-Line-level dispositions must be explicit in review notes or inventory:
-
-| Disposition | Meaning | Required result |
+| Disposition | Keep/move rule | Required result |
 | --- | --- | --- |
-| `keep-core` | Stable physics, numerics, API, output, or validation evidence. | Has caller, proof test, docs/API owner, and no simpler local expression. |
-| `merge-core` | Correct code in the wrong place or duplicated under another name. | Moved into the canonical domain owner and old import deleted. |
-| `delete-core` | Dead, duplicate, generated, obsolete, coverage-only, or historical code. | Removed with imports, docs, tests, env vars, fixtures, and examples. |
-| `extract-research` | Useful but not stable: QI/device-QI, native direct factors, long campaigns, special GPU work, publication experiments, or unsupported optimization studies. | Preserved on a research branch/PR, then deleted from stable imports and README claims. |
+| `keep-core` | shortest tested expression of a stable owner tag | caller, proof test, docs/API owner, and no simpler local implementation |
+| `merge-core` | correct code in the wrong owner or duplicated elsewhere | moved to canonical domain file; old import, alias, and test history deleted |
+| `delete-core` | dead, duplicate, generated, obsolete, coverage-only, historical, or branch-prose code | removed with imports, tests, docs, env vars, fixtures, and examples |
+| `extract-research` | useful but not stable: QI/device-QI, native direct factors, long campaigns, special GPU work, publication experiments, unsupported optimization studies | preserved on a research branch/PR, then removed from stable imports and README claims |
 
-Large files are reviewed by section, not by helper churn. For each file over
-1500 lines, first split an outline into stable sections, duplicate sections,
-research sections, and delete sections. Only then move or delete code. A commit
-that moves code from one large file into many small attempt-named files without
-reducing total stable lines fails this plan.
+The per-file procedure is fixed:
+
+1. Build the file card from `git ls-files`, AST public symbols, `rg` callers,
+   tests, docs, examples, env vars, and output keys.
+2. Divide files over 1500 lines into named sections before editing; classify
+   each section as stable, duplicate, research, generated, or obsolete.
+3. Classify every public symbol, env var, CLI flag, namelist alias, output key,
+   diagnostics key, and private helper over 20 lines.
+4. Delete one-call wrappers unless they are the public API or the clearest name
+   for a physics/numerics boundary.
+5. Collapse duplicate diagnostics dictionaries, policy predicates, shape
+   helpers, parser aliases, metadata builders, profiler wrappers, and output-key
+   builders into one owner per problem family.
+6. Delete tests for extracted code; keep only compact absence tests and stable
+   behavior tests.
+7. Run focused tests, Ruff, compileall, JSON validation, diff hygiene, import
+   checks, and size guards.
+8. Commit only when stable files, lines, public knobs, solver routes, schemas,
+   examples, scripts, generated artifacts, or test burden decrease.
+
+A commit that only moves code from one large file into many attempt-named files
+without decreasing stable lines, file count, or duplicated branches fails this
+plan.
 
 ## Repository-Wide Line Sweep
 
@@ -175,9 +154,9 @@ exception has a ledger entry with proof:
 | Area | Current pressure point | Hard target for this PR |
 | --- | --- | --- |
 | package files | 116 Python files in the working tree | <=68 first, <=50 final or justified exceptions |
-| package lines | 143.6k source lines in the working tree | <=80k first, <=50k final or justified exceptions |
-| tests | 303 Python files / 123.4k lines | <=120 files / <=70k lines while keeping >=95% coverage |
-| examples | 110 Python files / 18.3k lines | original v3 examples plus <=10 curated workflows |
+| package lines | 141,442 source lines in the working tree | <=80k first, <=50k final or justified exceptions |
+| tests | 301 Python files / 121,507 lines | <=120 files / <=70k lines while keeping >=95% coverage |
+| examples | 108 Python files / 17,830 lines and 459 tracked files | original v3 examples plus <=10 curated workflows |
 | scripts | no Python scripts after promotion | only documented shell/release tooling, otherwise empty |
 | validation package | 5 implementation modules plus `__init__.py` after command consolidation | target met; next reduce lines |
 
@@ -270,14 +249,16 @@ Use these unit sizes so the refactor finishes in a few large passes:
 ## Extraction Protocol
 
 Research code is preserved before it is removed from this PR. Use only these
-branches unless the plan is edited: `research/qi-device-hard-seed`,
-`research/native-sparse-direct`, `research/parallel-performance`, and
-`research/publication-audits`. For each extracted family, verify the branch
-contains the source/tests/examples/docs artifact, delete the stable import
-surface, delete hidden env vars and README claims, add an absence test, and
-record the removed paths in `core_slim_inventory.json`. Do not leave a
-compatibility alias for extracted research code unless a documented stable API
-uses it.
+branches unless the plan is edited: QI/device-QI to
+`research/qi-device-hard-seed`; native sparse, multifrontal, true-operator
+rescue, and manual direct factors to `research/native-sparse-direct`; scaling,
+sharding, GPU campaigns, and profiling tools to `research/parallel-performance`;
+publication audits, long optimization campaigns, and figure-generation studies
+to `research/publication-audits`. For each extracted family, verify the branch
+contains the source/tests/examples/docs artifact, delete stable imports, hidden
+env vars, settings fields, metadata keys, docs prose, examples, and tests, add
+an absence test, and record removed paths in `core_slim_inventory.json`. Do not
+leave a compatibility alias unless a documented stable API uses it.
 
 ## Immediate Execution Sequence
 
