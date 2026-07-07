@@ -40,7 +40,7 @@ jobs:
           pip install -e ".[dev]"
       - name: Fetch external equilibrium data
         run: |
-          python scripts/fetch_equilibria.py --quiet
+          python -m sfincs_jax.validation.data_fetch --quiet
       - name: Coverage shard
         run: |
           python -m pytest -q -n auto --dist=loadscope --splits 4 --group ${{ matrix.group }} --splitting-algorithm least_duration --cov=sfincs_jax --cov-report=
@@ -110,7 +110,7 @@ jobs:
           pip install -e "."
       - name: Fetch external equilibrium data
         run: |
-          python scripts/fetch_equilibria.py --quiet
+          python -m sfincs_jax.validation.data_fetch --quiet
       - name: Smoke-run examples (no optional deps)
         env:
           SFINCS_JAX_OFFLINE: "1"
@@ -160,7 +160,7 @@ jobs:
         env:
           SFINCS_JAX_DATA_DIR: "${{ runner.temp }}/sfincs_jax_release_data"
         run: |
-          python scripts/fetch_equilibria.py --quiet
+          python -m sfincs_jax.validation.data_fetch --quiet
       - name: Verify release data in offline mode
         env:
           SFINCS_JAX_DATA_DIR: "${{ runner.temp }}/sfincs_jax_release_data"
