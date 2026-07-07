@@ -43,9 +43,10 @@ production-floor scripts when you need release evidence.
 - `profile_transport_compile_runtime_cache.py`: profile transport-solve
   compile/runtime split with the persistent JAX cache.
 
-## Checked Summary Data
+## Generated Output Data
 
-The `output/` directory contains small JSON summaries used by regression tests,
-documentation, and performance figures. Generated traces, HDF5/NetCDF outputs,
-JAX caches, and large benchmark artifacts should remain untracked. Put large
-release evidence in the release-data workflow rather than this examples tree.
+Benchmark commands default to `output/` paths so repeated local runs do not
+clutter the repository. The directory is generated, ignored, and not a source
+of public validation evidence. Checked performance evidence belongs in compact
+fixtures, `docs/_static/`, or release assets that are referenced by docs and
+tests.
