@@ -17,7 +17,6 @@ from .profile_diagnostics import (
     xblock_assembled_operator_diagnostics,
     xblock_coarse_correction_diagnostics,
     xblock_qi_deflated_preconditioner_diagnostics,
-    xblock_qi_device_preconditioner_diagnostics,
     xblock_qi_seed_preconditioner_diagnostics,
     xblock_sparse_pc_result_diagnostics_from_solve_state,
     xblock_side_probe_diagnostics,
@@ -2042,9 +2041,6 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
                         f"constraint1 moment-Schur seed failed ({type(exc).__name__}: {exc})",
                     )
         qi_disabled_scope = xblock_disabled_qi_diagnostic_scope()
-        qi_device_preconditioner_metadata = dict(
-            qi_disabled_scope["qi_device_preconditioner_metadata"]
-        )
         qi_device_augmented_krylov_requested = False
         qi_device_augmented_krylov_mode = "disabled"
         qi_device_augmented_krylov_used = False
@@ -4268,25 +4264,6 @@ _XBLOCK_SPARSE_PC_FINAL_METADATA_NESTED_STATE_KEYS = (
     "qi_device_augmented_seed_reason",
     "qi_device_augmented_seed_requested",
     "qi_device_augmented_seed_used",
-    "qi_device_preconditioner_built",
-    "qi_device_preconditioner_candidate_count",
-    "qi_device_preconditioner_coarse_norm",
-    "qi_device_preconditioner_coarse_shape",
-    "qi_device_preconditioner_enabled",
-    "qi_device_preconditioner_improvement_ratio",
-    "qi_device_preconditioner_metadata",
-    "qi_device_preconditioner_min_improvement",
-    "qi_device_preconditioner_operator_on_basis_norm",
-    "qi_device_preconditioner_operator_on_basis_shape",
-    "qi_device_preconditioner_rank",
-    "qi_device_preconditioner_reason",
-    "qi_device_preconditioner_residual_after",
-    "qi_device_preconditioner_residual_before",
-    "qi_device_preconditioner_setup_s",
-    "qi_device_preconditioner_use_in_krylov",
-    "qi_device_preconditioner_used",
-    "qi_device_preconditioner_used_in_krylov",
-    "qi_device_stats",
     "qi_deflated_preconditioner_built",
     "qi_deflated_preconditioner_candidate_count",
     "qi_deflated_preconditioner_enabled",
@@ -4398,7 +4375,6 @@ _XBLOCK_SPARSE_PC_FINAL_METADATA_PRECOMPUTED_KEYS = (
     "xblock_assembled_operator_result_metadata",
     "xblock_coarse_correction_metadata",
     "xblock_qi_seed_preconditioner_metadata",
-    "xblock_qi_device_preconditioner_metadata",
     "xblock_qi_deflated_preconditioner_metadata",
     "xblock_side_probe_metadata",
 )
@@ -4559,7 +4535,6 @@ class XBlockSparsePCFinalNestedMetadata:
     xblock_assembled_operator_result_metadata: object
     xblock_coarse_correction_metadata: object
     xblock_qi_seed_preconditioner_metadata: object
-    xblock_qi_device_preconditioner_metadata: object
     xblock_qi_deflated_preconditioner_metadata: object
     xblock_side_probe_metadata: object
 
@@ -4664,11 +4639,6 @@ def xblock_sparse_pc_final_metadata_state_from_solve_scope(
             scope,
             "xblock_qi_seed_preconditioner_metadata",
             xblock_qi_seed_preconditioner_diagnostics,
-        ),
-        xblock_qi_device_preconditioner_metadata=_xblock_metadata_or_compute(
-            scope,
-            "xblock_qi_device_preconditioner_metadata",
-            xblock_qi_device_preconditioner_diagnostics,
         ),
         xblock_qi_deflated_preconditioner_metadata=_xblock_metadata_or_compute(
             scope,

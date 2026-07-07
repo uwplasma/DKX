@@ -11892,14 +11892,13 @@ def test_xblock_sparse_pc_final_metadata_state_from_solve_scope_filters_scope() 
         "xblock_assembled_operator_result_metadata": {"assembled": True},
         "xblock_coarse_correction_metadata": {"coarse": True},
         "xblock_qi_seed_preconditioner_metadata": {"seed": True},
-        "xblock_qi_device_preconditioner_metadata": {"device": True},
         "xblock_qi_deflated_preconditioner_metadata": {"deflated": True},
         "xblock_side_probe_metadata": {"side": True},
     }
     scope = {key: object() for key in keys}
     scope.update(precomputed_metadata)
     scope["unrelated_xblock_scratch"] = object()
-    scope["qi_device_preconditioner_metadata"] = {"raw": True}
+    scope["unrelated_nested_metadata"] = {"raw": True}
 
     state = xblock_sparse_pc_final_metadata_state_from_solve_scope(scope)
 
@@ -11909,7 +11908,7 @@ def test_xblock_sparse_pc_final_metadata_state_from_solve_scope_filters_scope() 
         assert state[key] is scope[key]
     for key, value in precomputed_metadata.items():
         assert state[key] is value
-    assert "qi_device_preconditioner_metadata" not in state
+    assert "unrelated_nested_metadata" not in state
     assert len(keys) < len(scope_keys)
 
     incomplete_scope = dict(scope)
@@ -11925,7 +11924,6 @@ def test_xblock_sparse_pc_final_metadata_state_context_matches_solve_scope() -> 
         "xblock_assembled_operator_result_metadata": {"assembled": True},
         "xblock_coarse_correction_metadata": {"coarse": True},
         "xblock_qi_seed_preconditioner_metadata": {"seed": True},
-        "xblock_qi_device_preconditioner_metadata": {"device": True},
         "xblock_qi_deflated_preconditioner_metadata": {"deflated": True},
         "xblock_side_probe_metadata": {"side": True},
     }

@@ -16,7 +16,6 @@ from sfincs_jax.problems.profile_diagnostics import (
     SparseRescueTailMetadataContext,
     XBlockAssembledOperatorDiagnosticsContext,
     XBlockCoarseCorrectionDiagnosticsContext,
-    XBlockQIDevicePreconditionerDiagnosticsContext,
     XBlockQIDeflatedPreconditionerDiagnosticsContext,
     XBlockQISeedPreconditionerDiagnosticsContext,
     XBlockSparsePCCoreDiagnosticsContext,
@@ -43,8 +42,6 @@ from sfincs_jax.problems.profile_diagnostics import (
     xblock_device_krylov_diagnostics,
     xblock_qi_deflated_preconditioner_diagnostics,
     xblock_qi_deflated_preconditioner_diagnostics_from_context,
-    xblock_qi_device_preconditioner_diagnostics,
-    xblock_qi_device_preconditioner_diagnostics_from_context,
     xblock_qi_seed_preconditioner_diagnostics,
     xblock_qi_seed_preconditioner_diagnostics_from_context,
     xblock_sparse_pc_core_diagnostics,
@@ -360,143 +357,6 @@ def test_sparse_rescue_metadata_helpers_preserve_driver_keys_and_types() -> None
     )
     assert combined == {**sparse_meta, **global_meta, **highx_meta}
     assert combined_context == combined
-
-
-def _qi_device_preconditioner_scope() -> dict[str, object]:
-    return {
-        "qi_device_preconditioner_enabled": 1,
-        "qi_device_preconditioner_built": True,
-        "qi_device_preconditioner_used": False,
-        "qi_device_preconditioner_used_in_krylov": True,
-        "qi_device_preconditioner_reason": "probe_reject",
-        "qi_device_preconditioner_rank": 7,
-        "qi_device_preconditioner_candidate_count": 11,
-        "qi_device_preconditioner_coarse_shape": (7, 7),
-        "qi_device_preconditioner_operator_on_basis_shape": (13, 7),
-        "qi_device_preconditioner_coarse_norm": 2.5,
-        "qi_device_preconditioner_operator_on_basis_norm": 3.5,
-        "qi_device_preconditioner_residual_before": 4.0,
-        "qi_device_preconditioner_residual_after": 1.0,
-        "qi_device_preconditioner_improvement_ratio": 4.0,
-        "qi_device_preconditioner_setup_s": 0.25,
-        "qi_device_preconditioner_min_improvement": 0.05,
-        "qi_device_preconditioner_use_in_krylov": True,
-        "qi_device_augmented_krylov_requested": True,
-        "qi_device_augmented_krylov_used": False,
-        "qi_device_augmented_krylov_rank": 3,
-        "qi_device_augmented_krylov_reason": "seed_only",
-        "qi_device_augmented_krylov_mode": "right",
-        "qi_device_augmented_seed_requested": True,
-        "qi_device_augmented_seed_available": True,
-        "qi_device_augmented_seed_used": False,
-        "qi_device_augmented_seed_rank": 2,
-        "qi_device_augmented_seed_max_rank": 5,
-        "qi_device_augmented_seed_reason": "accepted",
-        "qi_device_augmented_seed_projection_residual": 1.0e-3,
-        "qi_device_augmented_seed_labels": ("constant", "current"),
-        "qi_device_stats": {"applies": 9},
-        "qi_device_preconditioner_metadata": {
-            "operator_krylov_enrichment_enabled": True,
-            "multilevel_coarse_enabled": True,
-            "global_moment_residual_equation_enabled": True,
-            "global_moment_residual_equation_solver": "galerkin",
-            "global_moment_residual_equation_rank": 4,
-            "global_moment_residual_equation_candidate_count": 6,
-            "global_moment_residual_equation_condition_estimate": 12.0,
-            "phase_space_residual_equation_enabled": True,
-            "phase_space_residual_equation_max_rank_requested": 8,
-            "phase_space_residual_equation_solver": "action_lstsq",
-            "phase_space_residual_equation_rank": 5,
-            "phase_space_residual_equation_candidate_count": 10,
-            "phase_space_residual_equation_stage_count": 1,
-            "phase_space_residual_equation_condition_estimate": 6.0,
-            "phase_space_residual_equation_include_global": True,
-            "phase_space_residual_equation_trapped_boundary_fraction": 0.25,
-            "residual_region_bounce_coarse_enabled": True,
-            "residual_region_bounce_coarse_max_rank": 9,
-            "residual_region_bounce_coarse_rank": 3,
-            "residual_region_bounce_coarse_candidate_count": 4,
-            "residual_region_bounce_coarse_bounce_boundary": 0.75,
-            "residual_region_bounce_coarse_min_region_energy_fraction": 0.2,
-            "active_pattern_coarse_enabled": True,
-            "active_pattern_coarse_max_rank_requested": 12,
-            "active_pattern_coarse_candidate_count": 7,
-            "active_pattern_coarse_min_chunk_energy_fraction": 0.15,
-            "coupled_residual_equation_enabled": True,
-            "coupled_residual_equation_max_rank_requested": 14,
-            "coupled_residual_equation_rank": 6,
-            "coupled_residual_equation_candidate_count": 16,
-            "coupled_residual_equation_source_stage_ranks": (1, 2, 3),
-            "coupled_residual_equation_solver": "action_lstsq",
-            "coupled_residual_equation_include_flat": True,
-            "coupled_residual_equation_min_relative_improvement_requested": 0.1,
-            "coupled_residual_equation_install_in_krylov_on_reject_requested": True,
-            "seed_probe_accepted": False,
-            "installed_in_krylov_after_seed_reject": True,
-            "coupled_residual_equation_accepted": False,
-            "coupled_residual_equation_reason": "insufficient_improvement",
-            "block_schur_residual_enrichment_enabled": True,
-        },
-    }
-
-
-def test_xblock_qi_device_preconditioner_diagnostics_preserve_payload() -> None:
-    scope = _qi_device_preconditioner_scope()
-    metadata = xblock_qi_device_preconditioner_diagnostics(scope)
-    context_metadata = xblock_qi_device_preconditioner_diagnostics_from_context(
-        XBlockQIDevicePreconditionerDiagnosticsContext(
-            **{
-                key: scope[key]
-                for key in XBlockQIDevicePreconditionerDiagnosticsContext.__dataclass_fields__
-            }
-        )
-    )
-
-    assert context_metadata == metadata
-    assert metadata["xblock_qi_device_preconditioner_enabled"] is True
-    assert metadata["xblock_qi_device_preconditioner_used"] is False
-    assert metadata["xblock_qi_device_preconditioner_rank"] == 7
-    assert metadata["xblock_qi_device_preconditioner_applies"] == 9
-    assert metadata["xblock_qi_device_preconditioner_augmented_seed_labels"] == (
-        "constant",
-        "current",
-    )
-    assert (
-        metadata["xblock_qi_device_preconditioner_global_moment_residual_equation"]
-        is True
-    )
-    assert (
-        metadata["xblock_qi_device_preconditioner_global_moment_residual_equation_rank"]
-        == 4
-    )
-    assert (
-        metadata[
-            "xblock_qi_device_preconditioner_phase_space_residual_equation_max_rank"
-        ]
-        == 8
-    )
-    assert (
-        metadata[
-            "xblock_qi_device_preconditioner_residual_region_bounce_coarse_max_rank"
-        ]
-        == 9
-    )
-    assert (
-        metadata["xblock_qi_device_preconditioner_active_pattern_coarse_max_rank"] == 12
-    )
-    assert (
-        metadata["xblock_qi_device_preconditioner_coupled_residual_equation_rank"] == 6
-    )
-    assert (
-        metadata[
-            "xblock_qi_device_preconditioner_coupled_residual_equation_install_in_krylov_on_reject"
-        ]
-        is True
-    )
-    assert (
-        metadata["xblock_qi_device_preconditioner_block_schur_residual_enrichment"]
-        is True
-    )
 
 
 def _qi_deflated_preconditioner_scope() -> dict[str, object]:
@@ -1389,7 +1249,6 @@ def test_xblock_sparse_pc_result_diagnostics_solve_state_wrapper(monkeypatch) ->
         "xblock_assembled_operator_result_metadata": {"xblock_assembled_operator_built": False},
         "xblock_coarse_correction_metadata": {"xblock_coarse_correction_selected": False},
         "xblock_qi_seed_preconditioner_metadata": {"xblock_qi_seed_enabled": False},
-        "xblock_qi_device_preconditioner_metadata": {"xblock_qi_device_enabled": False},
         "xblock_qi_deflated_preconditioner_metadata": {"xblock_qi_deflated_enabled": False},
         "xblock_side_probe_metadata": {"xblock_side_probe_enabled": False},
         "xblock_solver_kind": "xblock_sparse_pc",
