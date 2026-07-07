@@ -457,7 +457,7 @@
       "extract_branch": "research/publication-audits",
       "reduction_target_lines": 900,
       "public_imports": [],
-      "internal_callers": ["scripts/check_benchmark_artifacts.py", "examples/publication_figures/generate_fortran_suite_benchmark_summary.py"],
+      "internal_callers": ["tests/test_benchmark_artifact_policy.py", "examples/publication_figures/generate_fortran_suite_benchmark_summary.py"],
       "tests": ["tests/test_validation_artifacts.py", "tests/test_benchmark_artifact_policy.py"],
       "docs_examples": ["docs/validation_matrix.rst"],
       "retention_reason": "Small validation fixture checks are core; research-lane, benchmark, and publication artifact validators should move out.",
