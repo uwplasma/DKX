@@ -18,14 +18,14 @@ current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Latest audited code-change head: `daf60619`; last green CI evidence: `96fb2677`.
+- Latest audited code-change head: `30b291a5`; last green CI evidence: `96fb2677`.
   Exact aggregate coverage from that CI was 91.753% (`92%`).
 - Package layout is shallow, but the branch is too large: 114 Python source
   files and about 144k source lines. Largest complexity owners remain
   `problems/`, `solvers/`, RHSMode-1/QI/preconditioner infrastructure, and
   compatibility layers around those paths.
-- Non-package Python volume is still too high: `tests/` has 322 Python files,
-  `examples/` has 122 Python files, and `scripts/` has 28 Python files.
+- Non-package Python volume is still too high: `tests/` has 319 Python files,
+  `examples/` has 122 Python files, and `scripts/` has 25 Python files.
   Top-level `benchmarks/` is removed from the active tracked tree; compact
   Fortran-v3 references live in `tests/fixtures/fortran_v3_reference_fixture.json`.
 - No tracked file larger than 2 MB was found. There is no tracked
@@ -37,22 +37,24 @@ current, transport coefficients, plotting, and optimization.
 
 | Lane | Status | Completion | Definition of done |
 | --- | --- | ---: | --- |
-| Line-by-line audit | Active | 20% | Every retained file/function/line has a core reason, a caller, and a test/doc owner; everything else is extracted or deleted. |
-| Core-main slimming | Active | 40% | Main keeps only stable, parity-clean, runtime-acceptable solvers and public APIs; research code is outside core. |
-| Source simplification | Active | 45% | Package moves toward <=50 source files and <=50k lines, with a 10x reduction as stretch if functionality permits. |
-| Examples/tests/scripts cleanup | Active | 63% | Examples are <=10 curated workflows plus Fortran-v3 references; tests are smaller, organized, and >=95% coverage; scripts are removed or promoted; benchmarks are gone. |
+| Line-by-line audit | Active | 25% | Every retained file/function/line has a core reason, a caller, and a test/doc owner; everything else is extracted or deleted. |
+| Core-main slimming | Active | 42% | Main keeps only stable, parity-clean, runtime-acceptable solvers and public APIs; research code is outside core. |
+| Source simplification | Active | 46% | Package moves toward <=50 source files and <=50k lines, with a 10x reduction as stretch if functionality permits. |
+| Examples/tests/scripts cleanup | Active | 67% | Examples are <=10 curated workflows plus Fortran-v3 references; tests are smaller, organized, and >=95% coverage; scripts are removed or promoted; benchmarks are gone. |
 | Parity/performance evidence | Active | 70% | Supported examples rerun against SFINCS Fortran v3 with runtime/RSS/bootstrap evidence; unsupported research lanes are not marketed. |
 | Docs/readme regeneration | Active | 80% | README/docs describe only the stable core plus explicit external research PR lanes. |
 
-Overall readiness under this stricter core-slim goal is about 70-74%.
+Overall readiness under this stricter core-slim goal is about 73-77%.
 
 ## Source Structure Rules
 
-- A retained line must satisfy at least one reason: public API, physics equation,
-  numerical method, validated default solver path, I/O schema, plotting path,
-  differentiability path, compatibility facade, or test/validation support.
+- A retained line must satisfy at least one audited reason: public API, physics
+  equation, numerical method, validated default solver path, I/O schema,
+  plotting path, differentiability path, compatibility facade, or
+  test/validation support. "May be useful later" is not a core reason.
 - A retained function must have a caller or documented public import, a bounded
   test, and a clear physics/numerics/output role. Otherwise extract or delete.
+  Helpers used once are inlined unless their name teaches a domain concept.
 - Core defaults must be automatic: users should not need environment variables
   or solver-path knowledge for supported examples.
 - Experimental QI, unfinished device-QI, native sparse-direct replacements,
@@ -65,10 +67,13 @@ Overall readiness under this stricter core-slim goal is about 70-74%.
   `outputs/`, `physics/`, `problems/`, `solvers/`, `validation/`, `workflows/`.
 - Each tranche must reduce net files or net lines unless it adds a required
   public feature, accuracy gate, or performance gate.
+- Experimental lines/functions are preserved only by moving them to named
+  research PR branches before deletion. Obsolete duplicated code is deleted.
 
 ## Line Audit Protocol
 
-For every touched file, classify code in this order before editing:
+For every touched file, classify code in this order before editing. The
+inventory row is the decision record; code without a row is not review-ready.
 
 1. Public surface: keep only imports/classes/functions documented in README,
    API docs, examples, or compatibility tests.
@@ -82,8 +87,8 @@ For every touched file, classify code in this order before editing:
 5. Compatibility: keep thin aliases only if migration tests require them; no
    compatibility file may own new logic.
 6. Experimental/research/profiling/history: extract to a preservation branch or
-   delete from core; do not leave dormant imports, env-only routes, or unused
-   policy branches in stable modules.
+   delete from core; do not leave dormant imports, env-only routes, unused
+   policy branches, or "temporary" fallbacks in stable modules.
 
 ## Concrete Code-Audit Rules
 
@@ -135,6 +140,10 @@ environment variable, diagnostic key, and compatibility alias must answer:
 
 If the answer to questions 1, 2, and 7 is weak, remove the line, merge it into a
 clearer retained helper, or extract it to a research PR.
+
+Lines supporting an extracted feature must move with that feature: imports,
+constants, env vars, tests, docs, fixture references, and examples are removed
+from the stable branch in the same tranche.
 
 ### Function-Level Rules
 
