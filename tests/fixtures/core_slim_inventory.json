@@ -10,7 +10,14 @@
     "test_file_count_at_audit": 726,
     "example_file_count_at_audit": 497,
     "benchmark_file_count_at_audit": 268,
-    "script_file_count_at_audit": 47
+    "script_file_count_at_audit": 47,
+    "preservation_branches_created_from_commit": "6e1c3d33",
+    "preservation_branches": [
+      "research/qi-device-hard-seed",
+      "research/native-sparse-direct",
+      "research/parallel-performance",
+      "research/publication-audits"
+    ]
   },
   "categories": [
     "core",
