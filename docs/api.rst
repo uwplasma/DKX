@@ -147,9 +147,6 @@ research workflows.
 .. automodule:: sfincs_jax.operators.profile_sparse_pattern
    :members:
 
-.. automodule:: sfincs_jax.operators.profile_true_operator_rescue
-   :members:
-
 .. automodule:: sfincs_jax.solvers.preconditioner_pas_matrix_free
    :members:
 
