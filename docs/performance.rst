@@ -899,11 +899,11 @@ executable is provided.
 Persistent-cache compile/runtime split
 --------------------------------------
 
-To separate compile cost from steady solve time with the JAX persistent cache:
-
-.. code-block:: bash
-
-   python examples/performance/profile_transport_compile_runtime_cache.py --repeats 3
+The checked figure below separates compile cost from steady solve time with the
+JAX persistent cache. The reusable user-facing performance workflows are the
+output-format benchmark, the structured-solve benchmark, and the transport L11
+comparison; ad hoc cache-profiling drivers are kept out of the stable examples
+tree.
 
 .. figure:: _static/figures/transport_compile_runtime_cache_2x2.png
    :alt: Compile/runtime split with persistent JAX cache across four reference cases.

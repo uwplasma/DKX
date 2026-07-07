@@ -63,7 +63,9 @@ This manual is organized around the actual user and developer workflows:
    :width: 90%
 
    Compile-time versus warm steady-state runtime for representative transport cases.
-   Reproduce with ``examples/performance/profile_transport_compile_runtime_cache.py``.
+   The stable examples keep reusable output-format, structured-solve, and
+   transport-worker benchmarks; one-off cache profiling stays outside the slim
+   core.
 
 .. toctree::
    :maxdepth: 2

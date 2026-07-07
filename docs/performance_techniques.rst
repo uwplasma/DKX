@@ -2492,7 +2492,6 @@ For quick reproduction:
 .. code-block:: bash
 
    python examples/performance/benchmark_transport_l11_vs_fortran.py --repeats 4
-   python examples/performance/profile_transport_compile_runtime_cache.py --repeats 3
 
 Implementation map (source code)
 --------------------------------

@@ -22,9 +22,11 @@ bootstrap current, transport coefficients, plotting, and optimization.
   removal, sharding/high-nu audit extraction, root Krylov cleanup, BLR/HSS and
   nested-dissection frontal route removal, and first examples cleanup.
 - Current burden after the last cleanup is 116 package Python files / 141,442
-  package lines, 301 test Python files / 121,507 test lines, and 459 tracked
-  example files. These numbers must decrease by deletion, merging, or research
-  extraction; moving lines into more files is a failed tranche.
+  package lines, 301 test Python files / 121,507 test lines, 104 example Python
+  files / 17,181 example Python lines, and 455 tracked example files after the
+  staged performance-profiling cleanup. These numbers must decrease by
+  deletion, merging, or research extraction; moving lines into more files is a
+  failed tranche.
 - Root files still hiding implementation are `ambipolar.py`, `diagnostics.py`,
   `grids.py`, `input_compat.py`, `profiling.py`, and `sensitivity.py`. Each
   must become a tiny documented facade, move into a domain owner, or disappear.
@@ -156,7 +158,7 @@ exception has a ledger entry with proof:
 | package files | 116 Python files in the working tree | <=68 first, <=50 final or justified exceptions |
 | package lines | 141,442 source lines in the working tree | <=80k first, <=50k final or justified exceptions |
 | tests | 301 Python files / 121,507 lines | <=120 files / <=70k lines while keeping >=95% coverage |
-| examples | 108 Python files / 17,830 lines and 459 tracked files | original v3 examples plus <=10 curated workflows |
+| examples | 104 Python files / 17,181 lines and 455 tracked files | original v3 examples plus <=10 curated workflows |
 | scripts | no Python scripts after promotion | only documented shell/release tooling, otherwise empty |
 | validation package | 5 implementation modules plus `__init__.py` after command consolidation | target met; next reduce lines |
 
