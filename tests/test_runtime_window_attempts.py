@@ -10,7 +10,7 @@ import time
 
 import pytest
 
-from sfincs_jax.validation import reduced_suite as suite
+from sfincs_jax.validation import suite
 
 
 def test_executable_metadata_records_hash(tmp_path: Path) -> None:

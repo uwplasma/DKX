@@ -68,7 +68,7 @@ For rapid parity iteration, we also keep a reduced-resolution sweep generated wi
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.reduced_suite --timeout-s 30 --max-attempts 6
+   python -m sfincs_jax.validation.suite reduced --timeout-s 30 --max-attempts 6
 
 This workflow is still useful for fast local debugging and solver triage:
 

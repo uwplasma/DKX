@@ -8,9 +8,9 @@ import sys
 import h5py
 import pytest
 
-from sfincs_jax.validation import reduced_suite
-from sfincs_jax.validation import scaled_suite
-from sfincs_jax.validation.reduced_suite import (
+from sfincs_jax.validation import suite as reduced_suite
+from sfincs_jax.validation import suite as scaled_suite
+from sfincs_jax.validation.suite import (
     CaseResult,
     _classify_blocker,
     _jax_attempt_metrics_from_log,

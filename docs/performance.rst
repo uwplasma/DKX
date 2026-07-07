@@ -115,7 +115,7 @@ The scaled-suite runner also understands these manifest recommendations. When
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.scaled_suite \
+   python -m sfincs_jax.validation.suite scaled \
      --examples-root outputs/benchmarks/production_resolution_inputs_2026-05-04/inputs \
      --fortran-exe /path/to/sfincs/fortran/version3/sfincs \
      --fortran-min-runtime-s 10.0 \
@@ -439,7 +439,7 @@ JAX-native performance patterns used in `sfincs_jax`
 - **Auto active-DOF reduction for RHSMode=1 (no Phi1)**: when ``Nxi_for_x`` truncates
   the pitch basis, the linear solve reduces to active unknowns by default, cutting
   both matrix-free solve cost and JIT work on upstream-style reduced cases.
-- **Persistent cache in automated suite runs**: ``python -m sfincs_jax.validation.reduced_suite`` and
+- **Persistent cache in automated suite runs**: ``python -m sfincs_jax.validation.suite reduced`` and
   the full example-suite runners can reuse a persistent JAX compilation cache when
   ``--jax-cache-dir`` is set explicitly.
 - **Opt-in eager precompile**: ``SFINCS_JAX_PRECOMPILE`` is explicit opt-in. A persistent

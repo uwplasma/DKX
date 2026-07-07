@@ -897,7 +897,7 @@ of the same artifact set as the standard suite.
 
 Production-resolution inputs are generated separately with
 ``python -m sfincs_jax.validation.production_inputs``. When
-``python -m sfincs_jax.validation.scaled_suite`` is pointed at one of those generated
+``python -m sfincs_jax.validation.suite scaled`` is pointed at one of those generated
 `inputs/` trees, it detects the sibling `manifest.json` and launches only
 `bounded_local_ok` rows by default. Use `--max-run-recommendation bounded_remote`,
 `--max-run-recommendation remote_or_cluster_only`, or
@@ -905,7 +905,7 @@ Production-resolution inputs are generated separately with
 lanes. The Fortran wrapper used for reference generation defaults to one MPI
 rank so local parity runs avoid concurrent HDF5 output writes; set
 `SFINCS_FORTRAN_MPI_NP` explicitly only for a Fortran scaling study.
-If ``python -m sfincs_jax.validation.reduced_suite`` is used against a generated
+If ``python -m sfincs_jax.validation.suite reduced`` is used against a generated
 production input tree, pass `--production-inputs` so the runner uses the
 manifest decks exactly and does not substitute or promote reduced CI fixtures.
 

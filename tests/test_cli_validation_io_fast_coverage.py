@@ -16,7 +16,7 @@ from sfincs_jax.validation.artifacts import (
     check_benchmark_artifact_files,
     fortran_suite_benchmark_summary_errors,
 )
-from sfincs_jax.validation.figures import (
+from sfincs_jax.validation.artifacts import (
     build_simakov_helander_high_nu_panel,
     build_w7x_ambipolar_root_provenance_panel,
 )

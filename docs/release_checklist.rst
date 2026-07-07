@@ -130,7 +130,7 @@ Fortran executable or a locally restored reference root:
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.scaled_suite \
+   python -m sfincs_jax.validation.suite scaled \
      --examples-root examples/sfincs_examples \
      --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
      --fortran-exe /path/to/sfincs \

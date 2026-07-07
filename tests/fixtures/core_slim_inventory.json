@@ -5,8 +5,8 @@
     "audited_commit": "75ce6f0a",
     "audit_date": "2026-07-07",
     "purpose": "Core-slim line-review ledger: every retained file, function, and public knob must be classified as keep, merge, delete, or extract-pr before the refactor PR is review-ready.",
-    "source_file_count_at_audit": 121,
-    "source_line_count_at_audit": 143598,
+    "source_file_count_at_audit": 119,
+    "source_line_count_at_audit": 143588,
     "test_file_count_at_audit": 303,
     "example_file_count_at_audit": 110,
     "benchmark_file_count_at_audit": 0,
@@ -19,7 +19,7 @@
       "research/publication-audits"
     ],
     "next_step": "Follow plan_final.md tranches A-J: first expand this inventory from the largest-owner sample to a whole-repo keep/merge/delete/extract ledger, then execute research extraction, root cleanup, RHSMode-1 collapse, operator/transport/solver/output consolidation, tests/examples cleanup, and public evidence regeneration.",
-    "latest_tranche_evidence": "Removed direct-tail support-mode preflight and stable-output plumbing; deleted 13 tracked generated performance-output JSON files; consolidated seven release/data/audit/hygiene scripts into validation CLIs; extracted unsupported single-case sharded and multi-GPU performance campaign examples/tests; extracted high-nu and W7-X publication-audit generators while retaining compact checked artifacts; extracted optional Lineax and Equinox/JAXopt adoption benchmark drivers; moved Krylov implementation from the package root to sfincs_jax.solvers.krylov while keeping sfincs_jax.solver as a compatibility alias; rewrote plan_final.md into a stricter finite work order and added rule-expanded whole-repo inventory coverage; deleted the duplicate root utils/ tree and promoted the enhanced noninteractive upstream utility behavior into examples/sfincs_examples/utils, leaving one canonical vendored utility location; promoted the remaining Python release/profiling scripts into sfincs_jax.validation modules so scripts/ is no longer a Python implementation area. Focused local checks across those tranches covered source-tree/domain contracts, release/data/audit tests, scaled-suite source-tree checks, publication-audit extraction checks, package CLI checks, upstream utility smoke tests, Ruff, compileall, JSON validation, diff hygiene, and size guard."
+    "latest_tranche_evidence": "Removed direct-tail support-mode preflight and stable-output plumbing; deleted 13 tracked generated performance-output JSON files; consolidated seven release/data/audit/hygiene scripts into validation CLIs; extracted unsupported single-case sharded and multi-GPU performance campaign examples/tests; extracted high-nu and W7-X publication-audit generators while retaining compact checked artifacts; extracted optional Lineax and Equinox/JAXopt adoption benchmark drivers; moved Krylov implementation from the package root to sfincs_jax.solvers.krylov while keeping sfincs_jax.solver as a compatibility alias; rewrote plan_final.md into a stricter finite work order and added rule-expanded whole-repo inventory coverage; deleted the duplicate root utils/ tree and promoted the enhanced noninteractive upstream utility behavior into examples/sfincs_examples/utils, leaving one canonical vendored utility location; promoted the remaining Python release/profiling scripts into sfincs_jax.validation modules so scripts/ is no longer a Python implementation area; merged validation figure-panel helpers into validation artifacts so evidence schemas and docs-panel gates have one owner; merged reduced and scaled suite runners into sfincs_jax.validation.suite with explicit reduced/scaled subcommands and legacy script-name dispatch for archived tests. Focused local checks across those tranches covered source-tree/domain contracts, release/data/audit tests, scaled-suite source-tree checks, publication-audit extraction checks, package CLI checks, upstream utility smoke tests, Ruff, compileall, JSON validation, diff hygiene, and size guard."
   },
   "categories": [
     "core",
@@ -905,7 +905,7 @@
     },
     {
       "path": "sfincs_jax/validation/artifacts.py",
-      "lines_at_audit": 2426,
+      "lines_at_audit": 3346,
       "category": "core",
       "action": "split",
       "extract_branch": "research/publication-audits",
@@ -913,17 +913,19 @@
       "public_imports": [],
       "internal_callers": [
         "tests/test_benchmark_artifact_policy.py",
+        "tests/test_validation_figures.py",
         "examples/publication_figures/generate_fortran_suite_benchmark_summary.py"
       ],
       "tests": [
         "tests/test_validation_artifacts.py",
-        "tests/test_benchmark_artifact_policy.py"
+        "tests/test_benchmark_artifact_policy.py",
+        "tests/test_validation_figures.py"
       ],
       "docs_examples": [
         "docs/validation_matrix.rst"
       ],
-      "retention_reason": "Small validation fixture checks are core; research-lane, benchmark, and publication artifact validators should move out.",
-      "next_step": "Keep schema checks used by retained docs/tests and extract publication/benchmark campaign validators."
+      "retention_reason": "Small validation fixture checks and docs-panel evidence builders are core; research-lane, benchmark, and publication campaign validators should move out.",
+      "next_step": "Keep schema checks and compact figure-panel evidence used by retained docs/tests; extract publication/benchmark campaign validators and reduce this owner below 900 lines."
     },
     {
       "path": "sfincs_jax/operators/profile_true_operator_rescue.py",

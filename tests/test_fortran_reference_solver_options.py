@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sfincs_jax.validation import reduced_suite as _MODULE
+from sfincs_jax.validation import suite as _MODULE
 
 
 _clamp_resolution_to_reference_max_in_place = _MODULE._clamp_resolution_to_reference_max_in_place

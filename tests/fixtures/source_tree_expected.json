@@ -158,13 +158,11 @@
     "validation": [
       "artifacts.py",
       "data_fetch.py",
-      "figures.py",
       "fortran.py",
       "production_inputs.py",
       "readme_audit.py",
-      "reduced_suite.py",
       "release.py",
-      "scaled_suite.py",
+      "suite.py",
       "write_output_trace.py"
     ],
     "workflows": [
