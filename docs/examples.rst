@@ -725,15 +725,9 @@ is available):
    python examples/optimization/optimize_scheme4_harmonics_publication_figures.py
    python examples/optimization/calibrate_nu_n_to_fortran_residual_fixture.py
 
-For bounded optional ecosystem checks around differentiable objective wrappers:
-
-.. code-block:: bash
-
-   pip install equinox
-   python examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py --backend all
-
-The ``jaxopt`` row in that command is intentionally skip-safe unless you install
-``jaxopt`` yourself for a local historical comparison.
+Optional ecosystem solver-library comparisons are research-lane material rather
+than stable user examples. The retained examples use the in-tree JAX
+differentiable geometry and optimization helpers.
 
 Implicit differentiation through solves
 ---------------------------------------

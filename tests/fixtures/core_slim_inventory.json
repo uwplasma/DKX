@@ -7,8 +7,8 @@
     "purpose": "Core-slim line-review ledger: every retained file, function, and public knob must be classified as keep, merge, delete, or extract-pr before the refactor PR is review-ready.",
     "source_file_count_at_audit": 115,
     "source_line_count_at_audit": 137620,
-    "test_file_count_at_audit": 307,
-    "example_file_count_at_audit": 114,
+    "test_file_count_at_audit": 304,
+    "example_file_count_at_audit": 112,
     "benchmark_file_count_at_audit": 0,
     "script_file_count_at_audit": 5,
     "preservation_branches_created_from_commit": "6e1c3d33",
@@ -19,7 +19,7 @@
       "research/publication-audits"
     ],
     "next_step": "Follow plan_final.md tranches A-I: finish research extraction, then collapse root facades, RHSMode-1 orchestration, solvers, operators, transport, outputs, tests, and public evidence/docs around admitted stable defaults.",
-    "latest_tranche_evidence": "Removed direct-tail support-mode preflight and stable-output plumbing; deleted 13 tracked generated performance-output JSON files; consolidated seven release/data/audit/hygiene scripts into sfincs_jax.validation.release and sfincs_jax.validation.data_fetch CLIs; rewrote plan_final.md as the single specific core-slim execution plan with file-family targets, extraction PR groups, and per-file line-audit rules; fixed the scaled-suite runner to import consolidated release validators and added a source-tree guard against stale script-to-script imports; extracted unsupported single-case sharded and multi-GPU performance campaign examples/tests from the stable example tree while keeping transport-worker and output-format benchmarks; extracted high-nu publication-audit generators from the stable examples and tests while retaining compact checked artifacts and validation gates; tightened plan_final.md with a no-complexity-redistribution rule, a per-file review worksheet, explicit consolidation tranches, and stable-vs-research decision gates; extracted the deferred W7-X ambipolar publication scaffold generator while retaining core ambipolar tests, provenance template, and package-level fail-closed artifact gates. Focused local checks: 554 touched tests, 93 sparse-pattern tests, 76 tree/doc-claim contract tests, 59 release/data/audit tests, 65 hygiene/source-tree tests, 59 source-tree/domain contract tests, 46 scaled-suite/source-tree checks, 142 publication-audit extraction checks, package CLI checks, Ruff, compileall, JSON validation, diff hygiene, and size guard."
+    "latest_tranche_evidence": "Removed direct-tail support-mode preflight and stable-output plumbing; deleted 13 tracked generated performance-output JSON files; consolidated seven release/data/audit/hygiene scripts into sfincs_jax.validation.release and sfincs_jax.validation.data_fetch CLIs; rewrote plan_final.md as the single specific core-slim execution plan with file-family targets, extraction PR groups, and per-file line-audit rules; fixed the scaled-suite runner to import consolidated release validators and added a source-tree guard against stale script-to-script imports; extracted unsupported single-case sharded and multi-GPU performance campaign examples/tests from the stable example tree while keeping transport-worker and output-format benchmarks; extracted high-nu publication-audit generators from the stable examples and tests while retaining compact checked artifacts and validation gates; tightened plan_final.md with a no-complexity-redistribution rule, a per-file review worksheet, explicit consolidation tranches, and stable-vs-research decision gates; extracted the deferred W7-X ambipolar publication scaffold generator while retaining core ambipolar tests, provenance template, and package-level fail-closed artifact gates; extracted optional Lineax and Equinox/JAXopt adoption benchmark drivers from stable examples while keeping retained in-tree implicit-gradient, sensitivity, and VMEC/Boozer proxy-gradient tests. Focused local checks: 554 touched tests, 93 sparse-pattern tests, 76 tree/doc-claim contract tests, 59 release/data/audit tests, 65 hygiene/source-tree tests, 59 source-tree/domain contract tests, 46 scaled-suite/source-tree checks, 142 publication-audit extraction checks, package CLI checks, Ruff, compileall, JSON validation, diff hygiene, and size guard."
   },
   "categories": [
     "core",
@@ -140,9 +140,11 @@
         "scripts/generate_parallel_scaling_snapshot.py",
         "scripts/profile_transport_traces.py",
         "examples/performance/benchmark_shard_map_halo.py",
+        "examples/performance/benchmark_optional_lineax_implicit_solve.py",
         "examples/performance/benchmark_multi_gpu_case_throughput.py",
         "examples/performance/benchmark_sharded_matvec_scaling.py",
         "examples/performance/benchmark_sharded_solve_scaling.py",
+        "examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py",
         "examples/performance/rhsmode1_sharded.input.namelist",
         "examples/performance/rhsmode1_sharded_scaling.input.namelist",
         "examples/performance/transport_parallel_large.input.namelist",
@@ -151,7 +153,10 @@
         "examples/performance/transport_parallel_xlarge.input.namelist",
         "examples/performance/transport_parallel_xxlarge.input.namelist",
         "tests/test_benchmark_multi_gpu_case_throughput.py",
-        "tests/test_benchmark_sharded_solve_scaling.py"
+        "tests/test_benchmark_sharded_solve_scaling.py",
+        "tests/test_optional_ecosystem_gates.py",
+        "tests/test_optional_eqx_jaxopt_scheme4_gate.py",
+        "tests/test_optional_lineax_implicit_gate.py"
       ],
       "source_paths": [
         "sfincs_jax/problems/transport_parallel_runtime.py"
@@ -160,14 +165,19 @@
         "tests/test_benchmark_multi_gpu_case_throughput.py",
         "tests/test_benchmark_sharded_solve_scaling.py",
         "tests/test_benchmark_transport_parallel_scaling.py",
+        "tests/test_optional_ecosystem_gates.py",
+        "tests/test_optional_eqx_jaxopt_scheme4_gate.py",
+        "tests/test_optional_lineax_implicit_gate.py",
         "tests/test_transport_parallel_runtime.py",
         "tests/test_transport_parallel_worker_cli.py"
       ],
       "example_paths": [
         "examples/performance/benchmark_shard_map_halo.py",
+        "examples/performance/benchmark_optional_lineax_implicit_solve.py",
         "examples/performance/benchmark_multi_gpu_case_throughput.py",
         "examples/performance/benchmark_sharded_matvec_scaling.py",
         "examples/performance/benchmark_sharded_solve_scaling.py",
+        "examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py",
         "examples/performance/rhsmode1_sharded.input.namelist",
         "examples/performance/rhsmode1_sharded_scaling.input.namelist",
         "examples/performance/transport_parallel_large.input.namelist",
@@ -738,7 +748,7 @@
     },
     {
       "path": "examples/performance",
-      "lines_at_audit": 3360,
+      "lines_at_audit": 2369,
       "category": "extract-pr",
       "action": "extract",
       "extract_branch": "research/parallel-performance",
@@ -751,8 +761,8 @@
       "docs_examples": [
         "docs/parallelism.rst"
       ],
-      "retention_reason": "Stable performance examples keep output-format, JIT, transport-worker, and bounded optional-backend evidence; unsupported single-case sharded and multi-GPU campaign drivers have been extracted.",
-      "next_step": "Continue shrinking performance examples toward one output-format workflow plus one documented transport-worker benchmark, then move optional ecosystem and long profiling drivers to research/docs tooling if they remain non-core."
+      "retention_reason": "Stable performance examples keep output-format, JIT, transport-worker, structured-solve, and bounded parity/runtime evidence; unsupported sharded, multi-GPU, and optional ecosystem adoption drivers have been extracted.",
+      "next_step": "Continue shrinking performance examples toward one output-format workflow plus one documented transport-worker benchmark; remaining long profiling drivers should become package validation tooling or research-lane material."
     },
     {
       "path": "examples/publication_figures",

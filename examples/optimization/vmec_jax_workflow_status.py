@@ -115,7 +115,6 @@ def build_status(
         },
         "pytest_gates": [
             "python -m pytest tests/test_vmec_jax_workflow.py tests/test_jax_geometry_adapters.py -q",
-            "python -m pytest tests/test_optional_ecosystem_gates.py -q",
         ],
     }
 

@@ -4,14 +4,12 @@ Optimization examples that leverage differentiability:
 - fitting geometry harmonics
 - calibrating parameters against frozen Fortran fixtures
 - end-to-end objective optimization (with publication-style plots in some scripts)
-- bounded optional ecosystem gates for differentiable objective wrappers
 - QA nfp=2 neoclassical optimization proxies with explicit `sfincs_jax`
   high-fidelity promotion gates from completed `scan-er` outputs
 
 Examples:
 - `fit_geometry_harmonics_with_optax.py`
 - `calibrate_nu_n_to_fortran_residual_fixture.py`
-- `benchmark_optional_eqx_jaxopt_scheme4_gate.py` — optional Equinox/JAXopt gate on a real `geometryScheme=4` harmonic-fit objective; it verifies gradient agreement for an `equinox.Module` wrapper and, when JAXopt is installed explicitly, bounded loss reduction for `jaxopt.GradientDescent`. The JAXopt row skips cleanly in default CI.
 - `qa_nfp2_sfincs_jax_objectives.py` — fast JAX proxy lane for adding
   neoclassical objectives to QA optimization. It supports bootstrap-current,
   electron-root, flux-selective, and balanced presets, writes JSON provenance,

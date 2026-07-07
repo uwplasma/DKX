@@ -250,8 +250,8 @@ for runtime, memory, parity, or solver-policy changes.
 
 - `examples/parity/`: frozen-reference output checks that do not require a
   local SFINCS Fortran v3 executable.
-- `examples/performance/`: CPU/GPU timing, output-format, transport-worker,
-  and optional ecosystem benchmark drivers.
+- `examples/performance/`: CPU/GPU timing, output-format, and transport-worker
+  benchmark drivers.
 - `examples/publication_figures/`: scripts that rebuild documentation and paper
   figures from checked summaries or explicit benchmark runs.
 - `examples/sfincs_examples/`: vendored upstream SFINCS v3 inputs used by the

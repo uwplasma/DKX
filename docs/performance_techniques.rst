@@ -2949,66 +2949,20 @@ The remaining high-impact memory lanes are algorithmic:
   value here is a cleaner matrix-free operator abstraction and differentiable
   solver state, not automatic memory reduction.
 
-JAX ecosystem gates
--------------------
+JAX ecosystem research lanes
+----------------------------
 
-External JAX libraries stay behind measured gates until they show a real
-reliability or performance advantage on SFINCS-owned workloads. These gates are
-optional and must degrade to skipped rows when their packages are unavailable.
+External JAX libraries stay outside the stable CLI and examples until they show
+a reviewed reliability or performance advantage on SFINCS-owned workloads. The
+stable code therefore uses the in-tree JAX Krylov, implicit-differentiation, and
+optimization-helper paths. Lineax, Equinox-wrapper, and JAXopt benchmark drivers
+are preserved as research-lane material rather than stable examples.
 
-Lineax is a candidate for differentiable linear-solve experiments, not
-a production CLI backend. The lightweight synthetic gate is:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_optional_lineax_implicit_solve.py \
-     --backend all \
-     --suite synthetic \
-     --size 4 \
-     --restart 4 \
-     --maxiter 60 \
-     --out-json /tmp/sfincs_lineax_synthetic_gate.json
-
-On the local 2026-05-12 smoke, the in-tree solve row was residual-clean
-(``relative_residual ~= 1.6e-16``) with gradient error about ``7.8e-12`` and
-elapsed time about ``0.89 s``. The Lineax row was also residual-clean
-(``relative_residual = 0``) with gradient error about ``2.3e-12`` and elapsed
-time about ``0.36 s``. This supports keeping Lineax under evaluation, but it
-does not promote it to production because the real tiny SFINCS gate still has to
-stay status-clean, parity-clean, and faster or lower-memory.
-
-Equinox and the historical opt-in JAXopt backend are checked as
-objective-wrapper tooling around a real ``geometryScheme=4`` differentiable
-objective:
-
-.. code-block:: bash
-
-   python examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py \
-     --backend all \
-     --n-theta 17 \
-     --n-zeta 17 \
-     --maxiter 5 \
-     --stepsize 0.1 \
-     --out-json /tmp/sfincs_eqx_jaxopt_gate.json
-
-On the local 2026-05-12 opt-in smoke, the Equinox wrapper matched a centered
-finite-difference directional derivative with about ``1.1e-11`` absolute error
-and elapsed time about ``0.038 s``. The JAXopt gradient-descent row reduced the
-loss to a ratio of about ``4.1e-14`` and recovered the target harmonic
-amplitudes to about ``1.6e-08`` in Euclidean norm with elapsed time about
-``0.15 s``. Default CI does not install JAXopt; it verifies that this row skips
-cleanly while keeping the Equinox wrapper gate active.
-
-The focused regression test for the measured summaries is:
-
-.. code-block:: bash
-
-   python -m pytest tests/test_optional_ecosystem_gates.py -q
-
-Promotion rule: optional ecosystem libraries may only move closer to production
-when the JSON gate contains measured ``ok`` rows for the relevant real SFINCS
-case, clean residual or gradient metrics, and no hard dependency on the optional
-package in default installs.
+Promotion rule: optional ecosystem libraries may only move into production when
+a reviewed gate contains measured ``ok`` rows for a real SFINCS case, clean
+residual or gradient metrics, no hard dependency on the optional package in
+default installs, and a runtime or memory win that survives the documented
+parity tests.
 
 Geometry parsing cache
 ----------------------

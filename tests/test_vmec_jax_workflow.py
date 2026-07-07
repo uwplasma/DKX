@@ -85,7 +85,7 @@ def test_vmec_jax_workflow_docs_are_indexed_and_command_complete() -> None:
     assert "kinetic_transport_scalar_contract" in page
     assert "required_kinetic_transport_scalar_stages" in page
     assert "no full VMEC-boundary-to-SFINCS kinetic transport gradients" in page
-    assert "tests/test_optional_ecosystem_gates.py" in page
+    assert "external solver-library adoption studies are handled on research branches" in page
 
 
 def _optional_wout_fixture() -> Path | None:

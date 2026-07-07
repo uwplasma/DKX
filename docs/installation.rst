@@ -55,14 +55,6 @@ you want those examples:
 
    pip install optax
 
-The optional ecosystem benchmark gates also use extra packages when you want to run
-the actively evaluated branches locally:
-
-.. code-block:: bash
-
-   pip install lineax equinox
-
-The historical JAXopt backend in
-``examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py`` remains
-skip-safe and can be installed explicitly for local comparison, but it is not part
-of the default CI optional-dependency install.
+Optional solver-library adoption studies, including Lineax, Equinox-wrapper, and
+JAXopt comparisons, are research-lane material. They are not required for the
+stable install, stable examples, or default CI.
