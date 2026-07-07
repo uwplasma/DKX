@@ -137,14 +137,14 @@ lower-resolution mapped candidates against that reference. Comparing only
 same-resolution grids is a useful smoke test but is not enough to support a
 resolution-reduction claim.
 
-QI seed-robustness smoke
-------------------------
+QI/device-QI research boundary
+------------------------------
 
 QI seed-robustness runner code, data, and production-promotion commands are
-preserved on the ``research/qi-device-hard-seed`` branch. The stable core keeps
-historical JSON artifacts under ``docs/_static`` as research evidence only; they
-are not default CI commands and should not be cited as stable-core mapped-grid
-acceptance gates.
+preserved on the ``research/qi-device-hard-seed`` branch. They are not default
+CI commands and should not be cited as stable-core mapped-grid acceptance
+gates until regenerated artifacts pass the same release gates as the supported
+suite.
 
 Limitations
 -----------
