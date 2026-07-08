@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
-from types import SimpleNamespace
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -772,21 +771,21 @@ def test_pas_tokamak_cpu_xblock_allowed_only_for_bounded_cases() -> None:
 
 def test_gpu_sparse_fallback_skip_allowed_for_bounded_pas_schur_accept(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_GPU_SPARSE_SKIP_RATIO", raising=False)
-    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
-    op = SimpleNamespace(
+    assert profile_policies.rhs1_gpu_sparse_fallback_skip_allowed(
+        backend="gpu",
         rhs_mode=1,
         include_phi1=False,
-        fblock=SimpleNamespace(pas=object()),
-    )
-    assert profile_policies.rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
-        op=op,
+        has_pas=True,
         rhs1_precond_kind="schur",
         use_active_dof_mode=True,
         residual_norm=4.0e-10,
         target=1.0e-10,
     )
-    assert not profile_policies.rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
-        op=op,
+    assert not profile_policies.rhs1_gpu_sparse_fallback_skip_allowed(
+        backend="gpu",
+        rhs_mode=1,
+        include_phi1=False,
+        has_pas=True,
         rhs1_precond_kind="xblock_tz",
         use_active_dof_mode=True,
         residual_norm=4.0e-10,
@@ -796,29 +795,31 @@ def test_gpu_sparse_fallback_skip_allowed_for_bounded_pas_schur_accept(monkeypat
 
 def test_gpu_sparse_fallback_skip_rejects_cpu_or_large_residual(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_GPU_SPARSE_SKIP_RATIO", raising=False)
-    op = SimpleNamespace(
+    assert not profile_policies.rhs1_gpu_sparse_fallback_skip_allowed(
+        backend="cpu",
         rhs_mode=1,
         include_phi1=False,
-        fblock=SimpleNamespace(pas=object()),
-    )
-    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
-    assert not profile_policies.rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
-        op=op,
+        has_pas=True,
         rhs1_precond_kind="schur",
         use_active_dof_mode=True,
         residual_norm=4.0e-10,
         target=1.0e-10,
     )
-    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
-    assert not profile_policies.rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
-        op=op,
+    assert not profile_policies.rhs1_gpu_sparse_fallback_skip_allowed(
+        backend="gpu",
+        rhs_mode=1,
+        include_phi1=False,
+        has_pas=True,
         rhs1_precond_kind="schur",
         use_active_dof_mode=False,
         residual_norm=4.0e-10,
         target=1.0e-10,
     )
-    assert not profile_policies.rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
-        op=op,
+    assert not profile_policies.rhs1_gpu_sparse_fallback_skip_allowed(
+        backend="gpu",
+        rhs_mode=1,
+        include_phi1=False,
+        has_pas=True,
         rhs1_precond_kind="schur",
         use_active_dof_mode=True,
         residual_norm=2.0e-9,

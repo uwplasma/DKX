@@ -98,7 +98,7 @@ from sfincs_jax.problems.profile_policies import (
     resolve_rhs1_preconditioner_route_setup,
 )
 from sfincs_jax.problems.profile_policies import (
-    rhs1_gpu_sparse_fallback_skip_allowed_current_backend as _rhs1_gpu_sparse_fallback_skip_allowed,
+    rhs1_gpu_sparse_fallback_skip_allowed as _rhs1_gpu_sparse_fallback_skip_allowed,
 )
 from sfincs_jax.problems.profile_solver_diagnostics import (
     RHS1KSPReplayState, RHS1SkipPrimaryKrylovSeedContext, rhs1_accept_candidate_and_update_replay,
@@ -2517,7 +2517,10 @@ def solve_v3_full_system_linear_gmres(
             pas_fast_accept=bool(pas_fast_accept),
             gpu_sparse_skip=bool(
                 _rhs1_gpu_sparse_fallback_skip_allowed(
-                    op=op,
+                    backend=jax.default_backend(),
+                    rhs_mode=int(op.rhs_mode),
+                    include_phi1=bool(op.include_phi1),
+                    has_pas=op.fblock.pas is not None,
                     rhs1_precond_kind=rhs1_precond_kind,
                     use_active_dof_mode=True,
                     residual_norm=float(res_reduced.residual_norm),
@@ -3618,7 +3621,10 @@ def solve_v3_full_system_linear_gmres(
                 pas_fast_accept=bool(pas_fast_accept),
                 gpu_sparse_skip=bool(
                     _rhs1_gpu_sparse_fallback_skip_allowed(
-                        op=op,
+                        backend=jax.default_backend(),
+                        rhs_mode=int(op.rhs_mode),
+                        include_phi1=bool(op.include_phi1),
+                        has_pas=op.fblock.pas is not None,
                         rhs1_precond_kind=rhs1_precond_kind,
                         use_active_dof_mode=False,
                         residual_norm=float(result.residual_norm),

@@ -196,16 +196,12 @@ def test_pas_tokamak_gpu_policy_handles_invalid_env_bounds(monkeypatch) -> None:
 
 
 def test_rhs1_gpu_sparse_fallback_skip_invalid_ratio_and_nonpositive_ratio(monkeypatch) -> None:
-    op = SimpleNamespace(
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_GPU_SPARSE_SKIP_RATIO", "bad")
+    assert profile_policies.rhs1_gpu_sparse_fallback_skip_allowed(
+        backend="gpu",
         rhs_mode=1,
         include_phi1=False,
-        fblock=SimpleNamespace(pas=object()),
-    )
-    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
-
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_GPU_SPARSE_SKIP_RATIO", "bad")
-    assert profile_policies.rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
-        op=op,
+        has_pas=True,
         rhs1_precond_kind="schur",
         use_active_dof_mode=True,
         residual_norm=5.0,
@@ -213,8 +209,11 @@ def test_rhs1_gpu_sparse_fallback_skip_invalid_ratio_and_nonpositive_ratio(monke
     )
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_GPU_SPARSE_SKIP_RATIO", "0")
-    assert not profile_policies.rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
-        op=op,
+    assert not profile_policies.rhs1_gpu_sparse_fallback_skip_allowed(
+        backend="gpu",
+        rhs_mode=1,
+        include_phi1=False,
+        has_pas=True,
         rhs1_precond_kind="schur",
         use_active_dof_mode=True,
         residual_norm=5.0,

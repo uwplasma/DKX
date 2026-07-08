@@ -4,14 +4,12 @@ from types import SimpleNamespace
 
 import numpy as np
 
-import sfincs_jax.problems.profile_policies as profile_policies
 from sfincs_jax.problems.profile_policies import (
     RHS1DefaultPreconditionerSelectionContext,
     RHS1PreconditionerRouteSetupContext,
     canonical_rhs1_preconditioner_kind,
     pas_auto_skip_strong_retry,
     rhs1_gpu_sparse_fallback_skip_allowed,
-    rhs1_gpu_sparse_fallback_skip_allowed_current_backend,
     rhs1_fp_dkes_default_kind,
     rhs1_fp_dkes_env_preconditioner_kind,
     rhs1_geometry4_pas_memory_pas_tz_preferred,
@@ -843,47 +841,6 @@ def test_gpu_sparse_fallback_skip_policy(monkeypatch) -> None:
         rhs1_precond_kind="schur",
         use_active_dof_mode=True,
         residual_norm=5.0,
-        target=1.0,
-    )
-
-
-def test_gpu_sparse_fallback_skip_current_backend_policy(monkeypatch) -> None:
-    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_GPU_SPARSE_SKIP_RATIO", raising=False)
-    monkeypatch.setattr(profile_policies.jax, "default_backend", lambda: "gpu")
-    op = SimpleNamespace(
-        rhs_mode=1,
-        include_phi1=False,
-        fblock=SimpleNamespace(pas=object()),
-    )
-
-    assert rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
-        op=op,
-        rhs1_precond_kind="pas_schur",
-        use_active_dof_mode=True,
-        residual_norm=9.0,
-        target=1.0,
-    )
-    assert not rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
-        op=SimpleNamespace(rhs_mode=1, include_phi1=True, fblock=SimpleNamespace(pas=object())),
-        rhs1_precond_kind="pas_schur",
-        use_active_dof_mode=True,
-        residual_norm=9.0,
-        target=1.0,
-    )
-    assert not rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
-        op=SimpleNamespace(rhs_mode=1, include_phi1=False, fblock=SimpleNamespace(pas=None)),
-        rhs1_precond_kind="pas_schur",
-        use_active_dof_mode=True,
-        residual_norm=9.0,
-        target=1.0,
-    )
-
-    monkeypatch.setattr(profile_policies.jax, "default_backend", lambda: "cpu")
-    assert not rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
-        op=op,
-        rhs1_precond_kind="pas_schur",
-        use_active_dof_mode=True,
-        residual_norm=9.0,
         target=1.0,
     )
 

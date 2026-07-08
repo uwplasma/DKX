@@ -5276,27 +5276,6 @@ def rhs1_gpu_sparse_fallback_skip_allowed(
         return False
     return float(residual_norm) <= float(skip_ratio) * max(float(target), 1.0e-300)
 
-def rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
-    *,
-    op: object,
-    rhs1_precond_kind: str | None,
-    use_active_dof_mode: bool,
-    residual_norm: float,
-    target: float,
-) -> bool:
-    """Evaluate the GPU sparse-fallback skip policy on the active JAX backend."""
-
-    return rhs1_gpu_sparse_fallback_skip_allowed(
-        backend=jax.default_backend(),
-        rhs_mode=int(getattr(op, "rhs_mode", 0) or 0),
-        include_phi1=bool(getattr(op, "include_phi1", False)),
-        has_pas=getattr(getattr(op, "fblock", None), "pas", None) is not None,
-        rhs1_precond_kind=rhs1_precond_kind,
-        use_active_dof_mode=bool(use_active_dof_mode),
-        residual_norm=float(residual_norm),
-        target=float(target),
-    )
-
 def rhsmode1_host_dense_shortcut_allowed_current_backend(
     *,
     op: object,
@@ -5810,7 +5789,6 @@ __all__ = (
     "rhs1_fp_residual_polish_controls_from_env",
     "rhs1_fp_targeted_polish_allowed",
     "rhs1_distributed_auto_solver_from_env",
-    "rhs1_gpu_sparse_fallback_skip_allowed_current_backend",
     "rhs1_gmres_precondition_side_from_env",
     "rhs1_host_factor_probe_ok",
     "rhs1_krylov_routing_controls_from_env",
