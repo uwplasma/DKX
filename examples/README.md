@@ -110,7 +110,7 @@ script or notebook that adds the technical detail needed for research workflows.
 | VMEC/Boozer/JAX workflow | `autodiff/vmec_jax_to_boozer_sfincs_pipeline.py` | `tutorials/04_geometry_validation_and_performance.ipynb` |
 | QA/QI optimization objective | `optimization/qa_nfp2_sfincs_jax_objectives.py` | `optimization/QA_optimization_bootstrap_current.py` |
 | CPU/GPU timing and output I/O | `performance/benchmark_output_formats.py` | `performance/benchmark_transport_parallel_scaling.py` |
-| Frozen Fortran-v3 parity check | `parity/output_parity_vs_fortran_fixture.py` | `publication_figures/generate_fortran_suite_benchmark_summary.py` |
+| Frozen Fortran-v3 parity check | `parity/output_parity_vs_fortran_fixture.py` | `sfincs_examples/` for the retained upstream-style decks |
 
 ### Canonical Workflow Catalog
 
@@ -128,7 +128,7 @@ heavier workflow when you need release-quality evidence.
 | Autodiff | `tutorials/02_transport_and_autodiff.ipynb` | Differentiate residual/transport quantities with JAX. | `autodiff/implicit_diff_through_gmres_solve_scheme5.py` |
 | Bootstrap current and Redl | `tutorials/03_bootstrap_redl_and_optimization.ipynb` | Compare kinetic bootstrap current with a Redl-formula workflow. | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` |
 | Optimization objectives | `optimization/qa_nfp2_sfincs_jax_objectives.py` | Add neoclassical objectives to a QA optimization workflow. | `optimization/QA_optimization_bootstrap_current.py` |
-| Frozen Fortran-v3 parity | `parity/output_parity_vs_fortran_fixture.py` | Compare output fields against checked frozen references. | `publication_figures/generate_fortran_suite_benchmark_summary.py` |
+| Frozen Fortran-v3 parity | `parity/output_parity_vs_fortran_fixture.py` | Compare output fields against checked frozen references. | `sfincs_examples/` for retained upstream-style decks |
 | CPU/GPU performance | `performance/benchmark_output_formats.py` | Time output formats and inspect memory behavior. | `performance/benchmark_transport_parallel_scaling.py` |
 
 ### Top-Level Folder Categories
