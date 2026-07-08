@@ -5297,16 +5297,6 @@ def rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
         target=float(target),
     )
 
-def rhsmode1_dense_backend_allowed_current_backend() -> bool:
-    """Return whether dense RHSMode-1 fallback is allowed on the current backend."""
-
-    return rhs1_dense_backend_allowed(backend=jax.default_backend())
-
-def rhsmode1_host_dense_fallback_allowed_current_backend() -> bool:
-    """Return whether host dense fallback is allowed on the current backend."""
-
-    return rhs1_host_dense_fallback_allowed(backend=jax.default_backend())
-
 def rhsmode1_host_dense_shortcut_allowed_current_backend(
     *,
     op: object,
@@ -5694,10 +5684,8 @@ __all__ = (
     "host_sparse_direct_refine_steps",
     "host_sparse_factor_dtype",
     "rhsmode1_constraint0_sparse_first_current_backend",
-    "rhsmode1_dense_backend_allowed_current_backend",
     "rhsmode1_fast_post_xblock_polish_allowed_current_backend",
     "rhsmode1_fp_targeted_polish_allowed_current_backend",
-    "rhsmode1_host_dense_fallback_allowed_current_backend",
     "rhsmode1_host_dense_shortcut_allowed_current_backend",
     "rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed_current_backend",
     "rhsmode1_large_cpu_sparse_rescue_allowed_current_backend",

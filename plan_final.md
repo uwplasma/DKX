@@ -18,7 +18,7 @@ bootstrap current, transport coefficients, plotting, and optimization.
 ## Current Review State
 
 - Branch head is PR #8 on `refactor/v3-driver-architecture`. Completed work includes script promotion, generated-output removal, direct-tail extraction, sharding/high-nu audit extraction, root Krylov cleanup, BLR/HSS and nested-dissection frontal removal, and examples cleanup.
-- Current burden is 115 package Python files / 137,066 package lines, 301 test files / 118,146 test lines, 90 example Python files / 14,898 example Python lines, and 374 tracked example files. These numbers must decrease; moving lines into more files is a failed tranche.
+- Current burden is 115 package Python files / 137,054 package lines, 301 test files / 118,142 test lines, 90 example Python files / 14,898 example Python lines, and 374 tracked example files. These numbers must decrease; moving lines into more files is a failed tranche.
 - `core_slim_inventory.json` is file-complete only at broad path-rule granularity; before edits, add section/symbol cards for every source/test file over 500 lines and every example folder.
 - Root files still hiding implementation are `ambipolar.py`, `diagnostics.py`, `grids.py`, `input_compat.py`, `profiling.py`, and `sensitivity.py`. Each must become a tiny documented facade, move into a domain owner, or disappear.
 - Latest cleanup tranches removed RHSMode-1 active-symbolic wrappers, renamed

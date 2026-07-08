@@ -390,14 +390,14 @@ from sfincs_jax.solvers import path_policy as _solver_path_policy
 from sfincs_jax.problems.profile_policies import (
     host_sparse_factor_dtype_current_backend as _host_sparse_factor_dtype,
     host_sparse_direct_refine_steps as _host_sparse_direct_refine_steps_impl,
+    rhs1_dense_backend_allowed as _rhs1_dense_backend_allowed_impl,
     rhs1_dense_fallback_max as _rhs1_dense_fallback_max_impl,
     rhs1_dense_krylov_allowed as _rhs1_dense_krylov_allowed_impl,
     rhs1_explicit_sparse_host_direct_allowed as _rhs1_explicit_sparse_host_direct_allowed_impl,
+    rhs1_host_dense_fallback_allowed as _rhs1_host_dense_fallback_allowed_impl,
     rhs1_host_sparse_direct_allowed as _rhs1_host_sparse_direct_allowed_impl,
     rhs1_host_sparse_skip_dense_ratio as _rhs1_host_sparse_skip_dense_ratio_impl,
     rhs1_structured_full_csr_auto_allowed as _rhs1_structured_full_csr_auto_allowed_impl,
-    rhsmode1_dense_backend_allowed_current_backend as _rhsmode1_dense_backend_allowed,
-    rhsmode1_host_dense_fallback_allowed_current_backend as _rhsmode1_host_dense_fallback_allowed,
     rhsmode1_host_dense_shortcut_allowed_current_backend as _rhsmode1_host_dense_shortcut_allowed,
     rhsmode1_sparse_operator_preconditioned_rescue_allowed_current_backend as _rhsmode1_sparse_operator_preconditioned_rescue_allowed,
 )
@@ -959,7 +959,7 @@ def solve_v3_full_system_linear_gmres(
         use_active_dof_mode=bool(use_active_dof_mode),
         full_precond_requested=bool(full_precond_requested),
         geom_scheme=int(geom_scheme),
-        dense_backend_allowed=bool(_rhsmode1_dense_backend_allowed()),
+        dense_backend_allowed=bool(_rhs1_dense_backend_allowed_impl(backend=jax.default_backend())),
         backend=str(jax.default_backend()),
         sharded_axis_hint=_matvec_shard_axis(op),
         device_count=int(jax.device_count()),
@@ -1298,8 +1298,8 @@ def solve_v3_full_system_linear_gmres(
         target_stage2 = float(reduced_system_setup.target_stage2)
         res_reduced: GMRESSolveResult | None = None
         dense_fallback_max = _rhsmode1_dense_fallback_max(op)
-        dense_backend_allowed = _rhsmode1_dense_backend_allowed()
-        host_dense_fallback_allowed = _rhsmode1_host_dense_fallback_allowed()
+        dense_backend_allowed = _rhs1_dense_backend_allowed_impl(backend=jax.default_backend())
+        host_dense_fallback_allowed = _rhs1_host_dense_fallback_allowed_impl(backend=jax.default_backend())
         dense_krylov_allowed = _rhsmode1_dense_krylov_allowed()
         dense_shortcut_setup = rhs1_dense_shortcut_setup_from_env(
             has_pas=op.fblock.pas is not None,
@@ -3731,8 +3731,8 @@ def solve_v3_full_system_linear_gmres(
             )
         )
         dense_fallback_max = _rhsmode1_dense_fallback_max(op)
-        dense_backend_allowed = _rhsmode1_dense_backend_allowed()
-        host_dense_fallback_allowed = _rhsmode1_host_dense_fallback_allowed()
+        dense_backend_allowed = _rhs1_dense_backend_allowed_impl(backend=jax.default_backend())
+        host_dense_fallback_allowed = _rhs1_host_dense_fallback_allowed_impl(backend=jax.default_backend())
         dense_krylov_allowed = _rhsmode1_dense_krylov_allowed()
         result, residual_vec, _accepted = run_rhs1_full_dense_fallback_stage(
             context=RHS1FullDenseFallbackStageContext(

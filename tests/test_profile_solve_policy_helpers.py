@@ -92,17 +92,15 @@ def test_precond_dtype_respects_explicit_env(monkeypatch) -> None:
 
 def test_dense_backend_allowed_defaults_and_env(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR", raising=False)
-    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
-    assert profile_policies.rhsmode1_dense_backend_allowed_current_backend()
+    assert profile_policies.rhs1_dense_backend_allowed(backend="cpu")
 
-    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
-    assert not profile_policies.rhsmode1_dense_backend_allowed_current_backend()
+    assert not profile_policies.rhs1_dense_backend_allowed(backend="gpu")
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR", "on")
-    assert profile_policies.rhsmode1_dense_backend_allowed_current_backend()
+    assert profile_policies.rhs1_dense_backend_allowed(backend="gpu")
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR", "0")
-    assert not profile_policies.rhsmode1_dense_backend_allowed_current_backend()
+    assert not profile_policies.rhs1_dense_backend_allowed(backend="cpu")
 
 
 def test_resource_exhausted_error_detection_includes_causes() -> None:
@@ -464,10 +462,8 @@ def test_initial_sparse_shortcut_route_selects_cs0_petsc_compat(monkeypatch) -> 
 
 
 def test_rhsmode1_host_dense_fallback_policy_envs(monkeypatch) -> None:
-    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
-    assert profile_policies.rhsmode1_host_dense_fallback_allowed_current_backend()
-    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "gpu")
+    assert profile_policies.rhs1_host_dense_fallback_allowed(backend="cpu")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "on")
-    assert profile_policies.rhsmode1_host_dense_fallback_allowed_current_backend()
+    assert profile_policies.rhs1_host_dense_fallback_allowed(backend="gpu")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "off")
-    assert not profile_policies.rhsmode1_host_dense_fallback_allowed_current_backend()
+    assert not profile_policies.rhs1_host_dense_fallback_allowed(backend="gpu")
