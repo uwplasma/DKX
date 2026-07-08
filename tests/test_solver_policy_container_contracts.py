@@ -72,7 +72,7 @@ from sfincs_jax.solvers.native_block_factor import (
     NativeTwoFieldSchurFactor,
     NativeXEllKineticFactor,
 )
-from sfincs_jax.solvers.preconditioner_fortran_reduced_policy import ActiveFortranV3ReducedFactorPolicy
+from sfincs_jax.solvers.preconditioner_reduced_pmat import ActiveFortranV3ReducedFactorPolicy
 from sfincs_jax.solvers.preconditioner_xblock_policy import (
     RHS1XBlockDeviceHostFallbackDecision,
     RHS1XBlockLocalSolveCandidate,

@@ -48,7 +48,7 @@ from sfincs_jax.solvers.explicit_sparse import (
     estimate_csr_nbytes,
     estimate_dense_nbytes,
 )
-from sfincs_jax.solvers.preconditioner_fortran_reduced_policy import (
+from sfincs_jax.solvers.preconditioner_reduced_pmat import (
     active_fortran_v3_reduced_permc_candidates,
 )
 from sfincs_jax.solvers.preconditioner_schur_profile import (

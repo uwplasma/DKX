@@ -674,12 +674,14 @@ owners are:
   still needs them for orchestration.
 - ``sfincs_jax/solvers/preconditioner_reduced_pmat.py``:
   Fortran-v3-style reduced active sparse factors for RHSMode=1. The module owns
-  reduced active matrix construction, support-mode parsing and preflight,
-  symbolic-plan permutation, sparse equilibration, LU/ILU memory admission, and
-  SuperLU/RCM factor setup for the non-differentiable host CSR lane. Historical
-  private names are exposed through the profile-response solve owner; direct
-  ``Pmat`` emission and active-preconditioner dispatch live in profile-response
-  sparse/operator owners.
+  factor-kind policy, large-matrix ILU guards, LU prefill safety defaults,
+  SuperLU/RCM ordering candidates, reduced active matrix construction,
+  support-mode parsing and preflight, symbolic-plan permutation, sparse
+  equilibration, LU/ILU memory admission, and SuperLU factor setup for the
+  non-differentiable host CSR lane. Historical private names are exposed through
+  the profile-response solve owner; direct ``Pmat`` emission and
+  active-preconditioner dispatch live in profile-response sparse/operator
+  owners.
 - ``sfincs_jax/solvers/preconditioner_active_sparse.py``:
   active-projected RHSMode=1 sparse-factor preconditioners. The module owns the
   global active sparse factor, row/column-equilibrated active factor, and
@@ -702,12 +704,6 @@ owners are:
   owns environment parsing for the candidate ladder, large-system fallback
   guard, skipped-fallback metadata, and progress logging default. Candidate
   dispatch and setup timing live in the profile-response sparse/solve owners.
-- ``sfincs_jax/solvers/preconditioner_fortran_reduced_policy.py``:
-  Fortran-v3-reduced RHSMode=1 active-Pmat factorization policy. The module
-  owns factor-kind normalization, large-matrix ILU guards, LU prefill safety
-  defaults, SuperLU/RCM ordering candidates, equilibration norm selection, and
-  progress logging defaults; the symbolic-sparse RHSMode=1 Fortran-reduced
-  module consumes this policy and performs the numerical sparse factor setup.
 - ``sfincs_jax/operators/profile_full_system.py``:
   analytic RHSMode=1 full-CSR assembly plus the runtime/non-autodiff
   ``SparseOperatorBundle`` adapter used by sparse-PC solver paths. Unsupported

@@ -17,7 +17,7 @@ from sfincs_jax.problems.profile_policies import (
     resolve_active_projected_preconditioner_auto_policy,
 )
 from sfincs_jax.problems.transport_linear_system import transport_active_dof_indices
-from sfincs_jax.solvers.preconditioner_fortran_reduced_policy import (
+from sfincs_jax.solvers.preconditioner_reduced_pmat import (
     active_fortran_v3_reduced_permc_candidates,
     resolve_active_fortran_v3_reduced_factor_policy,
 )
