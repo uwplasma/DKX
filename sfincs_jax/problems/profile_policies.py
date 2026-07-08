@@ -307,10 +307,6 @@ def read_post_solve_correction_policy(
 
 _DEFAULT_ACTIVE_AUTO_CANDIDATES = (
     "active_fortran_v3_reduced_lu",
-    "active_fortran_v3_reduced_native_stack",
-    "active_symbolic_frontal_schur_lu",
-    "active_symbolic_superblock_lu",
-    "active_symbolic_block_schur_lu",
     "active_schwarz_sparse_coarse",
     "active_global_field_split_schur",
     "active_xblock_ell_band_schur",
@@ -323,12 +319,10 @@ _DEFAULT_ACTIVE_AUTO_CANDIDATES = (
 )
 
 _DEFAULT_ACTIVE_LARGE_AUTO_CANDIDATES = (
-    "active_fortran_v3_reduced_native_stack",
-    "active_symbolic_frontal_schur_lu",
-    "active_symbolic_superblock_lu",
-    "active_coupled_kinetic_field_split_sparse_coarse",
-    "active_symbolic_block_schur_lu",
     "active_fortran_v3_reduced_lu",
+    "active_coupled_kinetic_field_split_sparse_coarse",
+    "active_schwarz_sparse_coarse",
+    "active_spilu",
 )
 
 _ACTIVE_LARGE_FALLBACK_CANDIDATES = frozenset(

@@ -329,11 +329,11 @@ performance without changing the input file:
   - ``fortran_reduced_pc_gmres``: force the simplified-global-preconditioner
     sparse-PC GMRES route used by the large RHSMode=1 full-FP host policy. This
     path is non-differentiable but keeps full-operator true-residual acceptance.
-    For large direct-tail active systems, the default structured-PC order is
-    ``active_fortran_v3_reduced_native_stack`` first and
-    ``active_fortran_v3_reduced_lu`` second. The native-stack candidate must
-    pass a true-residual preflight; if it fails, active LU remains the robust
-    high-memory fallback. Advanced users can override this with
+    For large direct-tail active systems, the default structured-PC order starts
+    with the residual-clean ``active_fortran_v3_reduced_lu`` path. Lower-memory
+    native-stack candidates are advanced opt-in paths and must pass a
+    true-residual preflight before their results are trusted. Advanced users can
+    override this with
     ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER=auto``,
     ``active_fortran_v3_reduced_native_stack``, or
     ``active_fortran_v3_reduced_lu``.

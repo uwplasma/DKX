@@ -2115,20 +2115,15 @@ Controls:
 - For full-grid finite-beta QA/QH ``25 x 39 x 60 x 7`` RHSMode=1 diagnostics,
   the robust non-autodiff reference route is the Fortran-reduced direct-tail
   active LU preconditioner. This Fortran-reduced direct-tail active LU
-  preconditioner remains the high-memory fallback. The default ``auto`` route reaches this
-  direct-tail ladder with no manual ``PC_BACKEND=global`` or
-  ``DIRECT_TAIL_PC_MAX_MB`` overrides. The checked QA/QH active size remains
-  ``507004`` unknowns, and ``auto`` assigns the same adaptive
-  ``14708.1 MiB`` cap used by the active-LU reference route: it first tries
-  ``active_fortran_v3_reduced_native_stack`` as the lower-memory production
-  candidate, requires a true-residual preflight for that candidate, and falls
-  back to ``active_fortran_v3_reduced_lu`` when the preflight fails. The checked
-  QA full-grid auto audit selected native stack in ``9.17 s`` with
-  ``5,090,357,984`` estimated factor bytes, rejected it because the one-apply
-  residual worsened, accepted active LU as the no-required-preflight fallback,
-  and converged to residual ``9.002525e-13`` in ``343.5 s`` wall with ``46``
-  GMRES iterations. Earlier checked QA/QH active-LU reference audits converged
-  to ``9.950981e-13`` and ``8.712742e-14`` residual with a
+  preconditioner remains the production default for these cases. The default
+  ``auto`` route reaches this direct-tail ladder with no manual
+  ``PC_BACKEND=global`` or ``DIRECT_TAIL_PC_MAX_MB`` overrides. The checked
+  QA/QH active size remains ``507004`` unknowns, and ``auto`` assigns the same
+  adaptive ``14708.1 MiB`` cap used by the active-LU reference route. Lower
+  memory native/coarse variants are explicit advanced candidates and must pass
+  the same true-residual gate before they are used in a published run. Checked
+  QA/QH active-LU reference audits converged to ``9.950981e-13`` and
+  ``8.712742e-14`` residual with a
   ``13,303,259,384`` byte active matrix. A stricter guarded rerun with
   ``tol=1e-10`` converged to residual ``7.269598e-16`` in ``354.6 s`` wall
   with ``67`` GMRES iterations and ``74`` matvecs. Native true-coupled rescue is

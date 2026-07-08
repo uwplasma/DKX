@@ -86,6 +86,10 @@ def test_active_preconditioner_auto_policy_keeps_small_default_ladder() -> None:
     policy = resolve_active_projected_preconditioner_auto_policy(matrix_size=128, env={})
 
     assert policy.candidates[0] == "active_fortran_v3_reduced_lu"
+    assert "active_fortran_v3_reduced_native_stack" not in policy.candidates
+    assert "active_symbolic_frontal_schur_lu" not in policy.candidates
+    assert "active_symbolic_superblock_lu" not in policy.candidates
+    assert "active_symbolic_block_schur_lu" not in policy.candidates
     assert "active_global_field_split_schur" in policy.candidates
     assert policy.candidates[-1] == "jacobi"
     assert policy.candidates_requested == policy.candidates
@@ -104,12 +108,10 @@ def test_active_preconditioner_auto_policy_uses_large_safe_ladder() -> None:
     assert policy.large_default_used is True
     assert policy.log_progress is True
     assert policy.candidates == (
-        "active_fortran_v3_reduced_native_stack",
-        "active_symbolic_frontal_schur_lu",
-        "active_symbolic_superblock_lu",
-        "active_coupled_kinetic_field_split_sparse_coarse",
-        "active_symbolic_block_schur_lu",
         "active_fortran_v3_reduced_lu",
+        "active_coupled_kinetic_field_split_sparse_coarse",
+        "active_schwarz_sparse_coarse",
+        "active_spilu",
     )
     assert "jacobi" not in policy.candidates
     assert policy.skipped_large_fallbacks == ()
@@ -1696,35 +1698,27 @@ def test_active_projected_auto_ladder_uses_large_default_candidates(monkeypatch,
     )
     out = capsys.readouterr().out
 
-    assert not pc.selected
-    assert pc.reason == "active_auto_no_safe_large_candidate_selected"
+    assert pc.selected
+    assert pc.kind == "active_spilu"
+    assert pc.reason == "auto_selected:complete"
     assert pc.metadata["auto_candidates"] == [
-        "active_fortran_v3_reduced_native_stack",
-        "active_symbolic_frontal_schur_lu",
-        "active_symbolic_superblock_lu",
-        "active_coupled_kinetic_field_split_sparse_coarse",
-        "active_symbolic_block_schur_lu",
         "active_fortran_v3_reduced_lu",
+        "active_coupled_kinetic_field_split_sparse_coarse",
+        "active_schwarz_sparse_coarse",
+        "active_spilu",
     ]
     assert pc.metadata["auto_large_default_used"] is True
-    assert pc.metadata["auto_rejected_candidates"][0]["kind"] == "active_fortran_v3_reduced_native_stack"
-    assert pc.metadata["auto_rejected_candidates"][1]["kind"] == "active_symbolic_frontal_schur_lu"
-    assert pc.metadata["auto_rejected_candidates"][2]["kind"] == "active_symbolic_superblock_lu"
-    assert pc.metadata["auto_rejected_candidates"][3]["kind"] == "active_coupled_kinetic_field_split_sparse_coarse"
-    assert pc.metadata["auto_rejected_candidates"][4]["kind"] == "active_symbolic_block_schur_lu"
-    assert pc.metadata["auto_rejected_candidates"][5]["kind"] == "active_fortran_v3_reduced_lu"
-    assert "auto candidate start kind=active_fortran_v3_reduced_native_stack" in out
-    assert "auto candidate done kind=active_fortran_v3_reduced_native_stack" in out
-    assert "auto candidate start kind=active_symbolic_frontal_schur_lu" in out
-    assert "auto candidate done kind=active_symbolic_frontal_schur_lu" in out
-    assert "auto candidate start kind=active_symbolic_superblock_lu" in out
-    assert "auto candidate done kind=active_symbolic_superblock_lu" in out
-    assert "auto candidate start kind=active_coupled_kinetic_field_split_sparse_coarse" in out
-    assert "auto candidate done kind=active_coupled_kinetic_field_split_sparse_coarse" in out
-    assert "auto candidate start kind=active_symbolic_block_schur_lu" in out
-    assert "auto candidate done kind=active_symbolic_block_schur_lu" in out
+    assert pc.metadata["auto_rejected_candidates"][0]["kind"] == "active_fortran_v3_reduced_lu"
+    assert pc.metadata["auto_rejected_candidates"][1]["kind"] == "active_coupled_kinetic_field_split_sparse_coarse"
+    assert pc.metadata["auto_rejected_candidates"][2]["kind"] == "active_schwarz_sparse_coarse"
     assert "auto candidate start kind=active_fortran_v3_reduced_lu" in out
     assert "auto candidate done kind=active_fortran_v3_reduced_lu" in out
+    assert "auto candidate start kind=active_spilu" in out
+    assert "auto candidate done kind=active_spilu selected=True" in out
+    assert "active_fortran_v3_reduced_native_stack" not in out
+    assert "active_symbolic_frontal_schur_lu" not in out
+    assert "active_symbolic_superblock_lu" not in out
+    assert "active_symbolic_block_schur_lu" not in out
 
 
 def test_active_schwarz_sparse_coarse_preconditioner_builds_two_level_candidate(monkeypatch) -> None:

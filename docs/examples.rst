@@ -458,13 +458,12 @@ non-autodiff structured solve explicitly with ``--solve-method structured_csr``
 or ``--solve-method host_structured_csr`` for reproducibility/debugging.  The
 residual-clean finite-beta QA/QH diagnostic route uses
 ``fortran_reduced_pc_gmres`` with direct-tail active-auto preconditioning. The
-auto ladder first tries the lower-memory
-``active_fortran_v3_reduced_native_stack`` candidate, requires it to pass a
-true-residual preflight, and falls back to the robust
-``active_fortran_v3_reduced_lu`` reference route when that preflight fails. On
-the full archived ``25 x 39 x 60 x 7`` QA surface, this hands-off route rejected
-native stack and then converged with active LU to residual ``7.27e-16`` in
-``354.6 s`` wall in the guarded audit. Other combined multiline, scaled-ILU, and sparse-coarse
+auto ladder starts from the robust ``active_fortran_v3_reduced_lu`` reference
+route. Lower-memory native-stack candidates remain explicit advanced options and
+must pass the same true-residual preflight before their results are trusted. On
+the full archived ``25 x 39 x 60 x 7`` QA surface, this hands-off active-LU
+route converged to residual ``7.27e-16`` in ``354.6 s`` wall in the guarded
+audit. Other combined multiline, scaled-ILU, and sparse-coarse
 preconditioners remain implemented and tested research candidates, but they are
 not public defaults until they pass the same true-residual gate. Physical RHSMode=1
 ``host_structured_csr`` output remains available for explicit structured-CSR
