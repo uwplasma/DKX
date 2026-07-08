@@ -133,7 +133,6 @@
       "path_policy.py",
       "preconditioner_active_sparse.py",
       "preconditioner_domain_decomposition.py",
-      "preconditioner_fortran_reduced_policy.py",
       "preconditioner_full_fp_csr.py",
       "preconditioner_full_fp_kinetic.py",
       "preconditioner_full_fp_structured.py",
