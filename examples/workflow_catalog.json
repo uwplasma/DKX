@@ -52,11 +52,6 @@
       "role": "Notebook-led learning path and fast tutorial output writer.",
       "start_here": "tutorials/00_start_here.ipynb"
     },
-    "upstream": {
-      "category": "reference",
-      "role": "Curated upstream SFINCS input decks used by tests and validation lanes.",
-      "start_here": "upstream/fortran_v3/quick_2species_FPCollisions_noEr/input.namelist"
-    },
     "vmec_jax_finite_beta": {
       "category": "capability",
       "role": "Finite-beta VMEC, ambipolar electric field, Redl, and bootstrap-current workflows.",
