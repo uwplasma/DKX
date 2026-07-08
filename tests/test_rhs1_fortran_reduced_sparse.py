@@ -4,8 +4,8 @@ import numpy as np
 import scipy.sparse as sp
 
 import sfincs_jax.operators.profile_full_system as rfa
-import sfincs_jax.solvers.preconditioner_symbolic_profile as rfr
-import sfincs_jax.solvers.preconditioner_symbolic_profile as symbolic_sparse
+import sfincs_jax.solvers.preconditioner_reduced_pmat as rfr
+import sfincs_jax.solvers.preconditioner_reduced_pmat as reduced_pmat
 from sfincs_jax.operators.profile_layout import RHS1BlockLayout
 
 
@@ -27,15 +27,15 @@ def _small_layout() -> RHS1BlockLayout:
     )
 
 
-def test_symbolic_sparse_facade_exports_fortran_reduced_family() -> None:
+def test_reduced_pmat_facade_exports_fortran_reduced_family() -> None:
     """Keep the package-level owner importable by future refactor modules."""
 
     assert (
-        symbolic_sparse.build_active_fortran_v3_reduced_sparse_factor_preconditioner
+        reduced_pmat.build_active_fortran_v3_reduced_sparse_factor_preconditioner
         is rfr.build_active_fortran_v3_reduced_sparse_factor_preconditioner
     )
     assert (
-        symbolic_sparse.active_fortran_v3_reduced_preconditioner_matrix
+        reduced_pmat.active_fortran_v3_reduced_preconditioner_matrix
         is rfr.active_fortran_v3_reduced_preconditioner_matrix
     )
 

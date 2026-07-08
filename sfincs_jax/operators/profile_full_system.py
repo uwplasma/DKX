@@ -75,8 +75,8 @@ from sfincs_jax.solvers.preconditioner_schur_profile import (
     estimate_xi_block_inverse_nbytes as _estimate_xi_block_inverse_nbytes,
     estimate_zeta_block_inverse_nbytes as _estimate_zeta_block_inverse_nbytes,
 )
-from sfincs_jax.solvers import preconditioner_symbolic_profile as _symbolic_profile_response_pc
-from sfincs_jax.solvers.preconditioner_symbolic_active import (
+from sfincs_jax.solvers import preconditioner_reduced_pmat as _reduced_pmat_pc
+from sfincs_jax.solvers.preconditioner_active_sparse import (
     build_active_filtered_sparse_factor_preconditioner as _build_active_projected_filtered_sparse_factor_preconditioner,
     build_active_global_sparse_factor_preconditioner as _build_active_global_sparse_factor_preconditioner,
     build_active_scaled_sparse_factor_preconditioner as _build_active_scaled_sparse_factor_preconditioner,
@@ -105,14 +105,14 @@ from sfincs_jax.operators.profile_sparse_pattern import estimate_v3_full_system_
 _STRUCTURED_FULL_CSR_OBJECT_CACHE: dict[tuple[object, ...], tuple[Any, dict[str, object]]] = {}
 _active_fortran_v3_reduced_permc_candidates = active_fortran_v3_reduced_permc_candidates
 _active_fortran_v3_reduced_preconditioner_matrix = (
-    _symbolic_profile_response_pc.active_fortran_v3_reduced_preconditioner_matrix
+    _reduced_pmat_pc.active_fortran_v3_reduced_preconditioner_matrix
 )
 _build_active_fortran_v3_reduced_sparse_factor_preconditioner = (
-    _symbolic_profile_response_pc.build_active_fortran_v3_reduced_sparse_factor_preconditioner
+    _reduced_pmat_pc.build_active_fortran_v3_reduced_sparse_factor_preconditioner
 )
-_estimate_spilu_factor_nbytes = _symbolic_profile_response_pc.estimate_spilu_factor_nbytes
-_sparse_equilibration_scale = _symbolic_profile_response_pc.sparse_equilibration_scale
-_sparse_lu_factor_nbytes = _symbolic_profile_response_pc.sparse_lu_factor_nbytes
+_estimate_spilu_factor_nbytes = _reduced_pmat_pc.estimate_spilu_factor_nbytes
+_sparse_equilibration_scale = _reduced_pmat_pc.sparse_equilibration_scale
+_sparse_lu_factor_nbytes = _reduced_pmat_pc.sparse_lu_factor_nbytes
 
 
 def _estimate_csr_nbytes_from_nnz(*, shape: tuple[int, int], nnz: int, dtype: Any = np.float64) -> int:

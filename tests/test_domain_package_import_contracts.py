@@ -520,8 +520,8 @@ PRECONDITIONER_COMPATIBILITY_IMPORTS = (
         "build_rhs1_schur_preconditioner",
     ),
     (
-        "sfincs_jax.solvers.preconditioner_symbolic_profile",
-        "sfincs_jax.solvers.preconditioner_symbolic_profile",
+        "sfincs_jax.solvers.preconditioner_reduced_pmat",
+        "sfincs_jax.solvers.preconditioner_reduced_pmat",
         "build_active_fortran_v3_reduced_sparse_factor_preconditioner",
     ),
 )

@@ -7,7 +7,7 @@ import numpy as np
 import scipy.sparse as sp
 
 import sfincs_jax.solvers.preconditioner_pas_xblock_ilu as pas_xblock_ilu
-import sfincs_jax.solvers.preconditioner_symbolic_host as symbolic_host
+import sfincs_jax.solvers.preconditioner_host_sparse as host_sparse
 import sfincs_jax.solvers.preconditioner_xblock_tz_sparse as tz_sparse
 
 
@@ -196,22 +196,22 @@ def test_rhsmode1_sparse_cache_key_wrappers_use_kind_and_dtype() -> None:
     assert pas_key != tz_key
 
 
-def test_symbolic_host_factorize_sparse_matrix_csr_host_reuses_cache() -> None:
-    symbolic_host._RHSMODE1_SPARSE_ILU_CACHE.clear()
+def test_host_sparse_factorize_sparse_matrix_csr_host_reuses_cache() -> None:
+    host_sparse._RHSMODE1_SPARSE_ILU_CACHE.clear()
     matrix = sp.csr_matrix(np.asarray([[4.0, 1.0], [0.5, 3.0]], dtype=np.float64))
 
-    first_full, first_drop, first_factor = symbolic_host.factorize_sparse_matrix_csr_host(
+    first_full, first_drop, first_factor = host_sparse.factorize_sparse_matrix_csr_host(
         a_csr_full=matrix,
-        cache_key=("unit-symbolic-host-factor",),
+        cache_key=("unit-host-sparse-factor",),
         drop_tol=0.0,
         drop_rel=0.0,
         ilu_drop_tol=0.0,
         fill_factor=10.0,
         factorization="lu",
     )
-    second_full, second_drop, second_factor = symbolic_host.factorize_sparse_matrix_csr_host(
+    second_full, second_drop, second_factor = host_sparse.factorize_sparse_matrix_csr_host(
         a_csr_full=matrix,
-        cache_key=("unit-symbolic-host-factor",),
+        cache_key=("unit-host-sparse-factor",),
         drop_tol=0.0,
         drop_rel=0.0,
         ilu_drop_tol=0.0,

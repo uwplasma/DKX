@@ -664,7 +664,7 @@ owners are:
   operator/factor callbacks. The old explicit-sparse policy, builder support,
   and triangular solve helper files were absorbed here so the explicit sparse
   host-factor lane has one review surface.
-- ``sfincs_jax/solvers/preconditioner_symbolic_host.py``:
+- ``sfincs_jax/solvers/preconditioner_host_sparse.py``:
   RHSMode=1 host sparse ILU/LU factor setup used by non-differentiable
   CLI-oriented rescue paths. The module owns matrix-free column assembly,
   structural-threshold application, SuperLU retry/regularization policy, cached
@@ -672,7 +672,7 @@ owners are:
   adapter used by coarse/Galerkin corrections. Historical private helper names
   are exposed through the profile-response solve owner only when that owner
   still needs them for orchestration.
-- ``sfincs_jax/solvers/preconditioner_symbolic_profile.py``:
+- ``sfincs_jax/solvers/preconditioner_reduced_pmat.py``:
   Fortran-v3-style reduced active sparse factors for RHSMode=1. The module owns
   reduced active matrix construction, support-mode parsing and preflight,
   symbolic-plan permutation, sparse equilibration, LU/ILU memory admission, and
@@ -680,7 +680,7 @@ owners are:
   private names are exposed through the profile-response solve owner; direct
   ``Pmat`` emission and active-preconditioner dispatch live in profile-response
   sparse/operator owners.
-- ``sfincs_jax/solvers/preconditioner_symbolic_active.py``:
+- ``sfincs_jax/solvers/preconditioner_active_sparse.py``:
   active-projected RHSMode=1 sparse-factor preconditioners. The module owns the
   global active sparse factor, row/column-equilibrated active factor, and
   physics-filtered active sparse factor that retains selected off-diagonal

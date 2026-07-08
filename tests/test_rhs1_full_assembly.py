@@ -9,7 +9,7 @@ import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 
 import sfincs_jax.operators.profile_full_system as rfa
-import sfincs_jax.solvers.preconditioner_symbolic_profile as rfr
+import sfincs_jax.solvers.preconditioner_reduced_pmat as rfr
 import sfincs_jax.problems.profile_solve as vd
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.problems.profile_policies import (

@@ -23,7 +23,7 @@ from sfincs_jax.solvers.preconditioner_xblock_coarse import (
 )
 from sfincs_jax.problems.profile_policies import read_float_env as _rhs1_float_env
 from sfincs_jax.problems.profile_policies import read_int_env as _rhs1_int_env
-from sfincs_jax.solvers.preconditioner_symbolic_host import RHS1FullSystemMatrixFreeOperatorAdapter
+from sfincs_jax.solvers.preconditioner_host_sparse import RHS1FullSystemMatrixFreeOperatorAdapter
 from sfincs_jax.operators.profile_system import V3FullSystemOperator, apply_v3_full_system_operator_cached
 
 Preconditioner = Callable[[jnp.ndarray], jnp.ndarray]

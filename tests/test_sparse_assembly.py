@@ -8,8 +8,8 @@ import pytest
 import scipy.sparse as sp
 
 import sfincs_jax.solvers.preconditioner_xblock_tz_sparse as tz_sparse
-import sfincs_jax.solvers.preconditioner_symbolic_host as symbolic_host
-from sfincs_jax.solvers.preconditioner_symbolic_host import build_sparse_ilu_from_matvec
+import sfincs_jax.solvers.preconditioner_host_sparse as host_sparse
+from sfincs_jax.solvers.preconditioner_host_sparse import build_sparse_ilu_from_matvec
 from sfincs_jax.solvers.preconditioner_xblock_tz_sparse import (
     assemble_selected_theta_tz_operator,
     assemble_rhsmode1_fp_xblock_tz_sparse_matrix,
@@ -123,21 +123,21 @@ def test_chunked_sparse_assembly_applies_fortran_structural_threshold(monkeypatc
     assert l_unit_diag is True
 
 
-def test_symbolic_host_row_cap_and_regularization_settings_fail_closed(monkeypatch) -> None:
+def test_host_sparse_row_cap_and_regularization_settings_fail_closed(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ROW_NNZ_MAX", raising=False)
-    assert symbolic_host._row_nnz_cap(None) == 256
-    assert symbolic_host._row_nnz_cap(3) == 3
-    assert symbolic_host._row_nnz_cap(-5) == 0
+    assert host_sparse._row_nnz_cap(None) == 256
+    assert host_sparse._row_nnz_cap(3) == 3
+    assert host_sparse._row_nnz_cap(-5) == 0
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ROW_NNZ_MAX", "bad")
-    assert symbolic_host._row_nnz_cap(None) == 256
+    assert host_sparse._row_nnz_cap(None) == 256
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ROW_NNZ_MAX", "-9")
-    assert symbolic_host._row_nnz_cap(None) == 0
+    assert host_sparse._row_nnz_cap(None) == 0
 
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_REG", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_SINGULAR_REG_REL", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ATTEMPTS", raising=False)
-    reg, singular_reg_rel, attempts = symbolic_host._regularization_settings(2.0)
+    reg, singular_reg_rel, attempts = host_sparse._regularization_settings(2.0)
     assert reg == pytest.approx(2.0e-12)
     assert singular_reg_rel == pytest.approx(1.0e-10)
     assert attempts == 3
@@ -145,7 +145,7 @@ def test_symbolic_host_row_cap_and_regularization_settings_fail_closed(monkeypat
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_REG", "bad")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_SINGULAR_REG_REL", "bad")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ATTEMPTS", "bad")
-    reg, singular_reg_rel, attempts = symbolic_host._regularization_settings(4.0)
+    reg, singular_reg_rel, attempts = host_sparse._regularization_settings(4.0)
     assert reg == pytest.approx(4.0e-12)
     assert singular_reg_rel == pytest.approx(1.0e-10)
     assert attempts == 3
@@ -153,24 +153,24 @@ def test_symbolic_host_row_cap_and_regularization_settings_fail_closed(monkeypat
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_REG", "-1")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_SINGULAR_REG_REL", "-2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ATTEMPTS", "0")
-    reg, singular_reg_rel, attempts = symbolic_host._regularization_settings(4.0)
+    reg, singular_reg_rel, attempts = host_sparse._regularization_settings(4.0)
     assert reg == 0.0
     assert singular_reg_rel == 0.0
     assert attempts == 1
 
 
-def test_symbolic_host_drop_and_regularize_matches_dense_and_csr_paths() -> None:
+def test_host_sparse_drop_and_regularize_matches_dense_and_csr_paths() -> None:
     matrix_np = np.asarray([[1.0, 0.1], [0.2, 2.0]], dtype=np.float64)
     matrix_csr = sp.csr_matrix(matrix_np)
 
-    dense_path = symbolic_host._drop_and_regularize_csr(
+    dense_path = host_sparse._drop_and_regularize_csr(
         a_csr_full=matrix_csr,
         a_np_full=matrix_np,
         factor_dtype=np.dtype(np.float64),
         thresh=0.15,
         reg=0.5,
     )
-    csr_path = symbolic_host._drop_and_regularize_csr(
+    csr_path = host_sparse._drop_and_regularize_csr(
         a_csr_full=matrix_csr,
         a_np_full=None,
         factor_dtype=np.dtype(np.float64),
@@ -183,10 +183,10 @@ def test_symbolic_host_drop_and_regularize_matches_dense_and_csr_paths() -> None
     np.testing.assert_allclose(np.asarray(csr_path.toarray()), expected)
 
 
-def test_symbolic_host_cache_can_add_dense_and_jax_factors_lazily() -> None:
+def test_host_sparse_cache_can_add_dense_and_jax_factors_lazily() -> None:
     """Pin the bounded setup path that avoids building all factors on first use."""
 
-    symbolic_host._RHSMODE1_SPARSE_ILU_CACHE.clear()
+    host_sparse._RHSMODE1_SPARSE_ILU_CACHE.clear()
     messages: list[str] = []
     matrix = jnp.asarray(
         [
@@ -196,7 +196,7 @@ def test_symbolic_host_cache_can_add_dense_and_jax_factors_lazily() -> None:
         ],
         dtype=jnp.float64,
     )
-    key = ("symbolic-host-lazy-factor-test",)
+    key = ("host-sparse-lazy-factor-test",)
 
     first = build_sparse_ilu_from_matvec(
         matvec=lambda x: matrix @ x,
@@ -214,7 +214,7 @@ def test_symbolic_host_cache_can_add_dense_and_jax_factors_lazily() -> None:
         factorization="lu",
         emit=lambda _level, message: messages.append(message),
     )
-    cached_first = symbolic_host._RHSMODE1_SPARSE_ILU_CACHE[key]
+    cached_first = host_sparse._RHSMODE1_SPARSE_ILU_CACHE[key]
     assert first[2] is cached_first.ilu
     assert cached_first.l_dense is None
     assert cached_first.perm_r is None
@@ -236,7 +236,7 @@ def test_symbolic_host_cache_can_add_dense_and_jax_factors_lazily() -> None:
         row_nnz_cap=1,
         emit=lambda _level, message: messages.append(message),
     )
-    cached_second = symbolic_host._RHSMODE1_SPARSE_ILU_CACHE[key]
+    cached_second = host_sparse._RHSMODE1_SPARSE_ILU_CACHE[key]
 
     assert second[2] is first[2]
     assert second[4] is not None
@@ -253,10 +253,10 @@ def test_symbolic_host_cache_can_add_dense_and_jax_factors_lazily() -> None:
     assert any("factorization cache hit" in message for message in messages)
 
 
-def test_symbolic_host_dense_assembly_stores_thresholded_operator(monkeypatch) -> None:
+def test_host_sparse_dense_assembly_stores_thresholded_operator(monkeypatch) -> None:
     """Dense assembly should keep the optional stored matrix small and deterministic."""
 
-    symbolic_host._RHSMODE1_SPARSE_ILU_CACHE.clear()
+    host_sparse._RHSMODE1_SPARSE_ILU_CACHE.clear()
     matrix = jnp.asarray(
         [
             [3.0, 5.0e-10, 0.0],
@@ -274,7 +274,7 @@ def test_symbolic_host_dense_assembly_stores_thresholded_operator(monkeypatch) -
         matvec=lambda x: matrix @ x,
         n=3,
         dtype=jnp.float64,
-        cache_key=("symbolic-host-dense-store-test",),
+        cache_key=("host-sparse-dense-store-test",),
         factor_dtype=np.dtype(np.float32),
         drop_tol=0.0,
         drop_rel=0.0,
@@ -306,10 +306,10 @@ def test_symbolic_host_dense_assembly_stores_thresholded_operator(monkeypatch) -
     assert any("mode=dense" in message for message in messages)
 
 
-def test_symbolic_host_chunked_empty_operator_can_store_dense_zero_matrix(monkeypatch) -> None:
+def test_host_sparse_chunked_empty_operator_can_store_dense_zero_matrix(monkeypatch) -> None:
     """Chunked assembly must handle all-zero operators without materializing bogus rows."""
 
-    symbolic_host._RHSMODE1_SPARSE_ILU_CACHE.clear()
+    host_sparse._RHSMODE1_SPARSE_ILU_CACHE.clear()
     messages: list[str] = []
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ASSEMBLE_BLOCK", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ASSEMBLE_BLOCK_MIN", "1")
@@ -319,7 +319,7 @@ def test_symbolic_host_chunked_empty_operator_can_store_dense_zero_matrix(monkey
         matvec=lambda x: jnp.zeros_like(x),
         n=4,
         dtype=jnp.float64,
-        cache_key=("symbolic-host-zero-chunked-test",),
+        cache_key=("host-sparse-zero-chunked-test",),
         drop_tol=0.0,
         drop_rel=0.0,
         ilu_drop_tol=0.0,

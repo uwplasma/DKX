@@ -17,7 +17,7 @@ import scipy.sparse as sp
 
 from sfincs_jax.operators.profile_layout import RHS1BlockLayout
 from .preconditioner_schur_profile import RHS1StructuredFullCSRPreconditioner
-from .preconditioner_symbolic_profile import (
+from .preconditioner_reduced_pmat import (
     estimate_spilu_factor_nbytes,
     sparse_equilibration_scale,
     sparse_lu_factor_nbytes,

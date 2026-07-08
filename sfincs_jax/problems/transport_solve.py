@@ -74,7 +74,7 @@ from sfincs_jax.solvers.explicit_sparse import (
 from sfincs_jax.solvers.krylov_dispatch import (
     resolve_distributed_gmres_axis as _resolve_distributed_gmres_axis_impl,
 )
-from sfincs_jax.solvers.preconditioner_symbolic_host import (
+from sfincs_jax.solvers.preconditioner_host_sparse import (
     build_sparse_ilu_from_matvec as _build_sparse_ilu_from_matvec,
 )
 from sfincs_jax.solvers.preconditioner_transport_matrix import (

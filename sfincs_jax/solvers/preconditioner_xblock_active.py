@@ -29,7 +29,7 @@ from .preconditioner_schur_profile import (
     coarse_residual_config,
 )
 from .preconditioner_schur_profile import resolve_active_native_stack_policy
-from .preconditioner_symbolic_profile import (
+from .preconditioner_reduced_pmat import (
     estimate_spilu_factor_nbytes,
     sparse_equilibration_scale,
     sparse_lu_factor_nbytes,

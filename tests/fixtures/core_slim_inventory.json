@@ -99,10 +99,10 @@
         "sfincs_jax/operators/profile_true_operator_rescue.py",
         "sfincs_jax/problems/profile_sparse_direct.py",
         "sfincs_jax/solvers/native_block_factor.py",
-        "sfincs_jax/solvers/preconditioner_symbolic_active.py",
-        "sfincs_jax/solvers/preconditioner_symbolic_host.py",
+        "sfincs_jax/solvers/preconditioner_active_sparse.py",
+        "sfincs_jax/solvers/preconditioner_host_sparse.py",
         "sfincs_jax/solvers/preconditioner_fortran_reduced_policy.py",
-        "sfincs_jax/solvers/preconditioner_symbolic_profile.py",
+        "sfincs_jax/solvers/preconditioner_reduced_pmat.py",
         "sfincs_jax/solvers/preconditioner_xblock_active.py"
       ],
       "test_paths": [

@@ -527,7 +527,7 @@ from sfincs_jax.solvers.preconditioning import (
     set_precond_size_hint as _set_precond_size_hint, sparse_structural_tol as _sparse_structural_tol,
     use_solver_jit as _use_solver_jit,
 )
-from sfincs_jax.solvers.preconditioner_symbolic_host import (
+from sfincs_jax.solvers.preconditioner_host_sparse import (
     RHS1FullSystemMatrixFreeOperatorAdapter as _RHS1FullSystemMatrixFreeOperatorAdapter,
     build_sparse_ilu_from_matvec as _build_sparse_ilu_from_matvec,
     factorize_sparse_matrix_csr_host as _factorize_sparse_matrix_csr_host,

@@ -45,7 +45,7 @@ from sfincs_jax.solvers.explicit_sparse import (
     triangular_solve_upper_csr_rows as _triangular_solve_upper_csr_rows,
     triangular_solve_upper_padded as _triangular_solve_upper_padded,
 )
-from .preconditioner_symbolic_host import build_sparse_ilu_from_matvec, factorize_sparse_matrix_csr_host
+from .preconditioner_host_sparse import build_sparse_ilu_from_matvec, factorize_sparse_matrix_csr_host
 from sfincs_jax.operators.profile_system import V3FullSystemOperator, apply_v3_full_system_operator_cached
 
 __all__ = [

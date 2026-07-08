@@ -13,7 +13,7 @@ import sfincs_jax.io as io_module
 import sfincs_jax.operators.profile_full_system as profile_full_system_module
 import sfincs_jax.operators.profile_sparse_pattern as sparse_pattern_module
 import sfincs_jax.problems.profile_policies as profile_policies_module
-import sfincs_jax.solvers.preconditioner_symbolic_host as symbolic_host_module
+import sfincs_jax.solvers.preconditioner_host_sparse as host_sparse_module
 import sfincs_jax.solvers.preconditioning as preconditioning_module
 from sfincs_jax.solvers import preconditioner_xblock_policy as rhs1_xblock_policy_module
 import sfincs_jax.problems.profile_solve as profile_solve_module
@@ -157,7 +157,7 @@ def test_sparse_host_ilu_escalates_regularization_after_singular_factor(monkeypa
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ATTEMPTS", "2")
     messages: list[str] = []
 
-    _a_full, _a_drop, ilu = symbolic_host_module.factorize_sparse_matrix_csr_host(
+    _a_full, _a_drop, ilu = host_sparse_module.factorize_sparse_matrix_csr_host(
         a_csr_full=sp.csr_matrix([[0.0, 0.0], [0.0, 1.0]]),
         cache_key=("singular-regularization-test",),
         drop_tol=0.0,

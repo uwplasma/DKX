@@ -61,8 +61,8 @@ from sfincs_jax.solvers.preconditioner_schur_profile import (
     ActiveNativeStackPolicy,
     ActiveSparseCoarseResidualPolicy,
 )
-from sfincs_jax.solvers.preconditioner_symbolic_host import RHS1FullSystemMatrixFreeOperatorAdapter
-from sfincs_jax.solvers.preconditioner_symbolic_profile import (
+from sfincs_jax.solvers.preconditioner_host_sparse import RHS1FullSystemMatrixFreeOperatorAdapter
+from sfincs_jax.solvers.preconditioner_reduced_pmat import (
     RHS1ReducedPmatEliminationPlan,
     RHS1ReducedPmatGroup,
 )
