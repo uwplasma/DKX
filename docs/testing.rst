@@ -345,12 +345,12 @@ unit/regression suite:
   before their completion estimate is increased. The policy is target-capped:
   if a lane has fewer percentage points remaining than the current push target,
   it must reach its checked target rather than overclaiming beyond it.
-- ``scripts/check_qi_device_artifacts.py`` and
-  ``tests/test_qi_device_artifact_policy.py`` add the QI-specific offline gate
-  for device/operator-reuse artifacts. The gate checks provenance and
-  fail-closed metadata only; it is not a convergence certificate. The release
-  metadata checker runs the same policy over ``docs/_static`` so historical or
-  checked-in QI-device artifacts cannot silently overclaim GPU/device status.
+- ``python -m sfincs_jax.validation.release check-research-lanes`` and
+  ``tests/test_research_lane_policy.py`` provide the offline gate for deferred
+  QI/device-QI evidence. The gate checks provenance, fail-closed metadata, and
+  evidence-backed completion percentages only; it is not a convergence
+  certificate. Historical or checked-in research artifacts therefore cannot
+  silently overclaim GPU/device status.
 
 The ``E_r`` trajectory-model sweep family is a release-facing validation lane:
 

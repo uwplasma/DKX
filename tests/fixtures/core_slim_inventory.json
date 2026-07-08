@@ -50,7 +50,7 @@
       ],
       "test_paths": [
         "tests/test_profile_response_qi_device_seed.py",
-        "tests/test_qi_device_artifact_policy.py",
+        "tests/test_research_lane_policy.py",
         "tests/test_qi_res15_gpu_campaign.py",
         "tests/test_rhs1_qi_device_preconditioner.py",
         "tests/test_rhs1_qi_device_smoother.py",
@@ -62,7 +62,7 @@
         "examples/optimization/screen_qi_electron_root_nfp.py"
       ],
       "script_paths": [
-        "scripts/check_qi_device_artifacts.py",
+        "python -m sfincs_jax.validation.release check-research-lanes",
         "scripts/run_qi_seed_robustness.py"
       ],
       "core_coupling_paths": [
@@ -1307,11 +1307,9 @@
       "extract_branch": "research/qi-device-hard-seed",
       "reduction_target_lines": 0,
       "public_imports": [],
-      "internal_callers": [
-        "scripts/check_qi_device_artifacts.py"
-      ],
+      "internal_callers": [],
       "tests": [
-        "tests/test_qi_device_artifact_policy.py",
+        "tests/test_research_lane_policy.py",
         "tests/test_qi_res15_gpu_campaign.py"
       ],
       "docs_examples": [
