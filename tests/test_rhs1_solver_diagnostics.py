@@ -20,19 +20,6 @@ from sfincs_jax.problems.profile_solver_diagnostics import (
 
 def test_rhs1_xblock_correction_metadata_preserves_historical_keys() -> None:
     metadata = build_rhs1_xblock_correction_metadata(
-        probe_coarse=RHS1SubspaceCorrectionDiagnostics(
-            steps_requested=2,
-            direction_counts=(3, 4),
-            direction_names=("fsavg", "angular"),
-            residual_before=5.0,
-            residual_after=2.0,
-            history=(4.0, 2.0),
-            fsavg_lmax=3,
-            angular_lmax=2,
-            angular_residual=True,
-            seed_initialized=True,
-            setup_s=0.125,
-        ),
         preflight=RHS1PreflightDiagnostics(
             min_improvement=1.0e-3,
             required=True,
@@ -70,20 +57,6 @@ def test_rhs1_xblock_correction_metadata_preserves_historical_keys() -> None:
             angular_residual=True,
         ),
     )
-
-    assert metadata["xblock_probe_coarse_steps_requested"] == 2
-    assert metadata["xblock_probe_coarse_steps_accepted"] == 2
-    assert metadata["xblock_probe_coarse_direction_count"] == 7
-    assert metadata["xblock_probe_coarse_residual_before"] == 5.0
-    assert metadata["xblock_probe_coarse_residual_after"] == 2.0
-    assert metadata["xblock_probe_coarse_seed_initialized"] is True
-    assert metadata["xblock_probe_coarse_s"] == 0.125
-    assert metadata["xblock_probe_coarse_history"] == (4.0, 2.0)
-    assert metadata["xblock_probe_coarse_direction_counts"] == (3, 4)
-    assert metadata["xblock_probe_coarse_direction_names"] == ("fsavg", "angular")
-    assert metadata["xblock_probe_coarse_fsavg_lmax"] == 3
-    assert metadata["xblock_probe_coarse_angular_lmax"] == 2
-    assert metadata["xblock_probe_coarse_angular_residual"] is True
 
     assert metadata["xblock_preflight_min_improvement"] == 1.0e-3
     assert metadata["xblock_preflight_required"] is True
@@ -128,18 +101,12 @@ def test_rhs1_xblock_correction_metadata_preserves_historical_keys() -> None:
 
 def test_rhs1_xblock_correction_metadata_defaults_are_output_safe() -> None:
     metadata = build_rhs1_xblock_correction_metadata(
-        probe_coarse=RHS1SubspaceCorrectionDiagnostics(steps_requested=0),
         preflight=RHS1PreflightDiagnostics(min_improvement=0.0, required=False),
         post_minres=RHS1PostMinresDiagnostics(steps_requested=0),
         post_coarse=RHS1SubspaceCorrectionDiagnostics(steps_requested=0),
         post_residual_equation=RHS1SubspaceCorrectionDiagnostics(steps_requested=0),
     )
 
-    assert metadata["xblock_probe_coarse_steps_accepted"] == 0
-    assert metadata["xblock_probe_coarse_direction_count"] == 0
-    assert metadata["xblock_probe_coarse_seed_initialized"] is False
-    assert metadata["xblock_probe_coarse_s"] == 0.0
-    assert metadata["xblock_probe_coarse_history"] == ()
     assert metadata["xblock_preflight_required"] is False
     assert metadata["xblock_preflight_passed"] is None
     assert metadata["xblock_post_minres_steps_accepted"] == 0
@@ -187,17 +154,6 @@ def test_profile_response_linear_metadata_marks_post_xblock_acceptance() -> None
 
 def test_rhs1_xblock_correction_metadata_from_solve_state_matches_typed_builder() -> None:
     state = {
-        "probe_coarse_steps_requested": 2,
-        "probe_coarse_direction_counts": (3, 4),
-        "probe_coarse_direction_names": ("fsavg", "angular"),
-        "probe_coarse_residual_before": 5.0,
-        "probe_coarse_residual_after": 2.0,
-        "probe_coarse_history": (4.0, 2.0),
-        "probe_coarse_fsavg_lmax": 3,
-        "probe_coarse_angular_lmax": 2,
-        "probe_coarse_include_angular_residual": True,
-        "probe_coarse_seed_initialized": True,
-        "probe_coarse_s": 0.125,
         "preflight_min_improvement": 1.0e-3,
         "preflight_required": True,
         "preflight_residual_norm": 3.0,
@@ -228,19 +184,6 @@ def test_rhs1_xblock_correction_metadata_from_solve_state_matches_typed_builder(
         "post_residual_equation_include_angular_residual": True,
     }
     expected = build_rhs1_xblock_correction_metadata(
-        probe_coarse=RHS1SubspaceCorrectionDiagnostics(
-            steps_requested=2,
-            direction_counts=(3, 4),
-            direction_names=("fsavg", "angular"),
-            residual_before=5.0,
-            residual_after=2.0,
-            history=(4.0, 2.0),
-            fsavg_lmax=3,
-            angular_lmax=2,
-            angular_residual=True,
-            seed_initialized=True,
-            setup_s=0.125,
-        ),
         preflight=RHS1PreflightDiagnostics(
             min_improvement=1.0e-3,
             required=True,

@@ -147,7 +147,6 @@ def try_run_requested_sparse_pc_gmres_branch(
     _host_sparse_factor_dtype = context.values['_host_sparse_factor_dtype']
     _is_direct_reduced_pmat_pc_kind = context.values['_is_direct_reduced_pmat_pc_kind']
     _read_rhs1_post_solve_correction_policy = context.values['_read_rhs1_post_solve_correction_policy']
-    _read_rhs1_probe_coarse_policy = context.values['_read_rhs1_probe_coarse_policy']
     _rhs1_active_reduced_residual_diagnostics = context.values['_rhs1_active_reduced_residual_diagnostics']
     _rhs1_bool_env = context.values['_rhs1_bool_env']
     _rhs1_float_env = context.values['_rhs1_float_env']
@@ -303,7 +302,6 @@ def try_run_requested_sparse_pc_gmres_branch(
                     _read_rhs1_post_solve_correction_policy=(
                         _read_rhs1_post_solve_correction_policy
                     ),
-                    _read_rhs1_probe_coarse_policy=_read_rhs1_probe_coarse_policy,
                     _rhs1_bool_env=_rhs1_bool_env,
                     _rhs1_float_env=_rhs1_float_env,
                     _rhs1_xblock_fallback_initial_guess=(

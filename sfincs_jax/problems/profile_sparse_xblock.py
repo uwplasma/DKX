@@ -1566,7 +1566,6 @@ class XBlockSparsePCBranchContext:
     _build_rhs1_xblock_constraint1_moment_schur_preconditioner: object
     _build_rhsmode1_xblock_tz_sparse_preconditioner: object
     _read_rhs1_post_solve_correction_policy: object
-    _read_rhs1_probe_coarse_policy: object
     _rhs1_bool_env: object
     _rhs1_float_env: object
     _rhs1_xblock_fallback_initial_guess: object
@@ -1630,7 +1629,6 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
     _build_rhs1_xblock_constraint1_moment_schur_preconditioner = context._build_rhs1_xblock_constraint1_moment_schur_preconditioner
     _build_rhsmode1_xblock_tz_sparse_preconditioner = context._build_rhsmode1_xblock_tz_sparse_preconditioner
     _read_rhs1_post_solve_correction_policy = context._read_rhs1_post_solve_correction_policy
-    _read_rhs1_probe_coarse_policy = context._read_rhs1_probe_coarse_policy
     _rhs1_bool_env = context._rhs1_bool_env
     _rhs1_float_env = context._rhs1_float_env
     _rhs1_xblock_fallback_initial_guess = context._rhs1_xblock_fallback_initial_guess
@@ -2151,41 +2149,6 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
                 include_angular_residual=bool(include_angular_residual),
             )
 
-        probe_coarse_policy = _read_rhs1_probe_coarse_policy()
-        probe_coarse_stage = apply_xblock_probe_coarse_stage(
-            XBlockProbeCoarseStageContext(
-                policy=probe_coarse_policy,
-                rhs=xblock_rhs,
-                x0=x0_full,
-                matvec=_mv_true,
-                target=float(target_xblock),
-                direction_builder=_xblock_coarse_direction_builder,
-                correction=_apply_subspace_minres_correction,
-                elapsed_s=sparse_timer.elapsed_s,
-                emit=emit,
-            )
-        )
-        x0_full = probe_coarse_stage.x0
-        probe_coarse_steps_requested = int(probe_coarse_stage.steps_requested)
-        probe_coarse_max_directions = int(probe_coarse_stage.max_directions)
-        probe_coarse_max_extra_units = int(probe_coarse_stage.max_extra_units)
-        probe_coarse_fsavg_lmax = int(probe_coarse_stage.fsavg_lmax)
-        probe_coarse_angular_lmax = int(probe_coarse_stage.angular_lmax)
-        probe_coarse_include_angular_residual = bool(
-            probe_coarse_stage.include_angular_residual
-        )
-        probe_coarse_include_raw = bool(probe_coarse_stage.include_raw)
-        probe_coarse_alpha_clip = float(probe_coarse_stage.alpha_clip)
-        probe_coarse_rcond = float(probe_coarse_stage.rcond)
-        probe_coarse_min_improvement = float(probe_coarse_stage.min_improvement)
-        probe_coarse_s = float(probe_coarse_stage.elapsed_s)
-        probe_coarse_history = probe_coarse_stage.history
-        probe_coarse_direction_counts = probe_coarse_stage.direction_counts
-        probe_coarse_direction_names = probe_coarse_stage.direction_names
-        probe_coarse_residual_before = probe_coarse_stage.residual_before
-        probe_coarse_residual_after = probe_coarse_stage.residual_after
-        probe_coarse_seed_initialized = bool(probe_coarse_stage.seed_initialized)
-
         preflight_min_improvement = _rhs1_float_env(
             "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PREFLIGHT_MIN_IMPROVEMENT",
             default=0.0,
@@ -2321,7 +2284,6 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
                 ),
                 solve_start_s=float(solve_start_s),
                 side_probe_s=float(xblock_side_probe_s),
-                probe_coarse_s=float(probe_coarse_s),
                 elapsed_s=sparse_timer.elapsed_s,
                 solution_to_physical=solve_solution_to_physical,
                 physical_rhs=xblock_rhs,
@@ -4188,17 +4150,6 @@ _XBLOCK_SPARSE_PC_FINAL_METADATA_PREFLIGHT_STATE_KEYS = (
     "preflight_passed",
     "preflight_required",
     "preflight_residual_norm",
-    "probe_coarse_angular_lmax",
-    "probe_coarse_direction_counts",
-    "probe_coarse_direction_names",
-    "probe_coarse_fsavg_lmax",
-    "probe_coarse_history",
-    "probe_coarse_include_angular_residual",
-    "probe_coarse_residual_after",
-    "probe_coarse_residual_before",
-    "probe_coarse_s",
-    "probe_coarse_seed_initialized",
-    "probe_coarse_steps_requested",
 )
 
 _XBLOCK_SPARSE_PC_FINAL_METADATA_COMPACT_CORE_STATE_KEYS = (
@@ -4339,24 +4290,13 @@ class XBlockSparsePCFinalDeviceState:
 
 @dataclass(frozen=True)
 class XBlockSparsePCFinalPreflightState:
-    """Pre-Krylov probe and residual-gate state for x-block diagnostics."""
+    """Pre-Krylov residual-gate state for x-block diagnostics."""
 
     preflight_improvement: object
     preflight_min_improvement: object
     preflight_passed: object
     preflight_required: object
     preflight_residual_norm: object
-    probe_coarse_angular_lmax: object
-    probe_coarse_direction_counts: object
-    probe_coarse_direction_names: object
-    probe_coarse_fsavg_lmax: object
-    probe_coarse_history: object
-    probe_coarse_include_angular_residual: object
-    probe_coarse_residual_after: object
-    probe_coarse_residual_before: object
-    probe_coarse_s: object
-    probe_coarse_seed_initialized: object
-    probe_coarse_steps_requested: object
 
 @dataclass(frozen=True)
 class XBlockSparsePCFinalNestedMetadata:
@@ -4829,46 +4769,6 @@ class XBlockSideProbeStageResult:
     failure_reason: str | None
 
 @dataclass(frozen=True)
-class XBlockProbeCoarseStageContext:
-    """Inputs for the optional pre-Krylov projected coarse seed correction."""
-
-    policy: object
-    rhs: jnp.ndarray
-    x0: jnp.ndarray | None
-    matvec: ArrayFn
-    target: float
-    direction_builder: Callable[..., tuple[tuple[str, jnp.ndarray], ...]]
-    correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[int], Sequence[str]]]
-    elapsed_s: Callable[[], float]
-    emit: EmitFn | None
-
-@dataclass(frozen=True)
-class XBlockProbeCoarseStageResult:
-    """Updated seed and diagnostics from the optional probe-coarse stage."""
-
-    x0: jnp.ndarray | None
-    steps_requested: int
-    max_directions: int
-    max_extra_units: int
-    fsavg_lmax: int
-    angular_lmax: int
-    include_angular_residual: bool
-    include_raw: bool
-    alpha_clip: float
-    rcond: float
-    min_improvement: float
-    elapsed_s: float
-    history: tuple[float, ...]
-    direction_counts: tuple[int, ...]
-    direction_names: tuple[str, ...]
-    residual_before: float | None
-    residual_after: float | None
-    seed_initialized: bool
-    improved: bool
-    failed: bool
-    failure_reason: str | None
-
-@dataclass(frozen=True)
 class XBlockPreflightGateContext:
     """Inputs for the optional x-block seed residual preflight gate."""
 
@@ -4964,7 +4864,6 @@ class XBlockKrylovSolveStageContext:
     first_attempt: XBlockFirstKrylovAttemptContext
     solve_start_s: float
     side_probe_s: float
-    probe_coarse_s: float
     elapsed_s: Callable[[], float]
     solution_to_physical: ArrayFn
     physical_rhs: jnp.ndarray
@@ -5265,149 +5164,6 @@ def apply_xblock_side_probe_stage(
         failure_reason=failure_reason,
     )
 
-def apply_xblock_probe_coarse_stage(
-    context: XBlockProbeCoarseStageContext,
-) -> XBlockProbeCoarseStageResult:
-    """Apply the optional projected coarse correction before x-block Krylov."""
-
-    policy = context.policy
-    steps_requested = int(getattr(policy, "steps_requested"))
-    max_directions = int(getattr(policy, "max_directions"))
-    max_extra_units = int(getattr(policy, "max_extra_units"))
-    fsavg_lmax = int(getattr(policy, "fsavg_lmax"))
-    angular_lmax = int(getattr(policy, "angular_lmax"))
-    include_angular_residual = bool(getattr(policy, "include_angular_residual"))
-    include_raw = bool(getattr(policy, "include_raw"))
-    alpha_clip = float(getattr(policy, "alpha_clip"))
-    rcond = float(getattr(policy, "rcond"))
-    min_improvement = float(getattr(policy, "min_improvement"))
-    x0 = context.x0
-    elapsed_s = 0.0
-    history: tuple[float, ...] = ()
-    direction_counts: tuple[int, ...] = ()
-    direction_names: tuple[str, ...] = ()
-    residual_before: float | None = None
-    residual_after: float | None = None
-    seed_initialized = False
-    improved = False
-    failed = False
-    failure_reason: str | None = None
-
-    if steps_requested > 0 and x0 is None:
-        # Let this opt-in stage act as a true pre-Krylov projected solve even
-        # without an unrelated seed from an earlier stage.
-        x0 = jnp.zeros_like(context.rhs)
-        seed_initialized = True
-
-    if steps_requested > 0 and x0 is not None:
-        start_s = float(context.elapsed_s())
-
-        def coarse_direction_builder(
-            residual_vec: jnp.ndarray,
-        ) -> tuple[tuple[str, jnp.ndarray], ...]:
-            return context.direction_builder(
-                residual_vec,
-                include_raw=bool(include_raw),
-                fsavg_lmax=int(fsavg_lmax),
-                angular_lmax=int(angular_lmax),
-                max_extra_units=int(max_extra_units),
-                max_directions=int(max_directions),
-                include_angular_residual=bool(include_angular_residual),
-            )
-
-        try:
-            seed_residual = context.rhs - jnp.asarray(
-                context.matvec(jnp.asarray(x0, dtype=jnp.float64)),
-                dtype=jnp.float64,
-            )
-            residual_before = profile_l2_norm_float(seed_residual)
-            if (
-                np.isfinite(float(residual_before))
-                and float(residual_before) > float(context.target)
-            ):
-                (
-                    x_probe,
-                    residual_probe,
-                    history_raw,
-                    direction_counts_raw,
-                    direction_names_raw,
-                ) = context.correction(
-                    matvec=context.matvec,
-                    rhs=context.rhs,
-                    x0=jnp.asarray(x0, dtype=jnp.float64),
-                    direction_builder=coarse_direction_builder,
-                    steps=int(steps_requested),
-                    max_directions=int(max_directions),
-                    alpha_clip=float(alpha_clip),
-                    rcond=float(rcond),
-                    min_improvement=float(min_improvement),
-                )
-                history = tuple(float(v) for v in history_raw)
-                direction_counts = tuple(int(v) for v in direction_counts_raw)
-                direction_names = tuple(str(v) for v in direction_names_raw)
-                residual_after = profile_l2_norm_float(residual_probe)
-                if (
-                    np.isfinite(float(residual_after))
-                    and float(residual_after) < float(residual_before)
-                ):
-                    x0 = jnp.asarray(x_probe, dtype=jnp.float64)
-                    improved = True
-                    if context.emit is not None:
-                        context.emit(
-                            0,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"probe-coarse improved seed residual {residual_before:.6e} "
-                            f"-> {residual_after:.6e} "
-                            f"(steps={len(direction_counts)} "
-                            f"directions={sum(direction_counts)})",
-                        )
-                elif context.emit is not None:
-                    after = (
-                        float(residual_after)
-                        if residual_after is not None
-                        else float("nan")
-                    )
-                    context.emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                        f"probe-coarse rejected seed residual {residual_before:.6e} "
-                        f"-> {after:.6e}",
-                    )
-        except Exception as exc:  # noqa: BLE001
-            failed = True
-            failure_reason = f"{type(exc).__name__}: {exc}"
-            if context.emit is not None:
-                context.emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                    f"probe-coarse failed ({type(exc).__name__}: {exc})",
-                )
-        elapsed_s = float(context.elapsed_s()) - start_s
-
-    return XBlockProbeCoarseStageResult(
-        x0=x0,
-        steps_requested=int(steps_requested),
-        max_directions=int(max_directions),
-        max_extra_units=int(max_extra_units),
-        fsavg_lmax=int(fsavg_lmax),
-        angular_lmax=int(angular_lmax),
-        include_angular_residual=bool(include_angular_residual),
-        include_raw=bool(include_raw),
-        alpha_clip=float(alpha_clip),
-        rcond=float(rcond),
-        min_improvement=float(min_improvement),
-        elapsed_s=float(elapsed_s),
-        history=history,
-        direction_counts=direction_counts,
-        direction_names=direction_names,
-        residual_before=residual_before,
-        residual_after=residual_after,
-        seed_initialized=bool(seed_initialized),
-        improved=bool(improved),
-        failed=bool(failed),
-        failure_reason=failure_reason,
-    )
-
 def evaluate_xblock_preflight_gate(
     context: XBlockPreflightGateContext,
 ) -> XBlockPreflightGateResult:
@@ -5641,7 +5397,6 @@ def run_xblock_krylov_solve_stage(
         float(context.elapsed_s())
         - float(context.solve_start_s)
         + float(context.side_probe_s)
-        + float(context.probe_coarse_s)
     )
     candidate_state = xblock_krylov_state_from_first_attempt(
         XBlockFirstKrylovSolveStateContext(
@@ -6760,8 +6515,6 @@ __all__ = (
     "XBlockFirstKrylovAttemptResult",
     "XBlockSideProbeStageContext",
     "XBlockSideProbeStageResult",
-    "XBlockProbeCoarseStageContext",
-    "XBlockProbeCoarseStageResult",
     "XBlockPreflightGateContext",
     "XBlockPreflightGateResult",
     "XBlockKrylovControlSetupContext",
@@ -6778,7 +6531,6 @@ __all__ = (
     "XBlockPhysicalResidual",
     "xblock_krylov_report",
     "apply_xblock_side_probe_stage",
-    "apply_xblock_probe_coarse_stage",
     "evaluate_xblock_preflight_gate",
     "resolve_xblock_krylov_control_setup",
     "xblock_krylov_state_from_first_attempt",

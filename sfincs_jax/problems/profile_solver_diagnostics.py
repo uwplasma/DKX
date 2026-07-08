@@ -1546,7 +1546,6 @@ def build_profile_response_linear_metadata(
 
 def build_rhs1_xblock_correction_metadata(
     *,
-    probe_coarse: RHS1SubspaceCorrectionDiagnostics,
     preflight: RHS1PreflightDiagnostics,
     post_minres: RHS1PostMinresDiagnostics,
     post_coarse: RHS1SubspaceCorrectionDiagnostics,
@@ -1560,19 +1559,6 @@ def build_rhs1_xblock_correction_metadata(
     """
 
     metadata: dict[str, object] = {
-        "xblock_probe_coarse_steps_requested": int(probe_coarse.steps_requested),
-        "xblock_probe_coarse_steps_accepted": int(len(probe_coarse.direction_counts)),
-        "xblock_probe_coarse_direction_count": _subspace_count(probe_coarse.direction_counts),
-        "xblock_probe_coarse_residual_before": probe_coarse.residual_before,
-        "xblock_probe_coarse_residual_after": probe_coarse.residual_after,
-        "xblock_probe_coarse_seed_initialized": bool(probe_coarse.seed_initialized),
-        "xblock_probe_coarse_s": float(probe_coarse.setup_s or 0.0),
-        "xblock_probe_coarse_history": tuple(probe_coarse.history),
-        "xblock_probe_coarse_direction_counts": tuple(probe_coarse.direction_counts),
-        "xblock_probe_coarse_direction_names": tuple(probe_coarse.direction_names),
-        "xblock_probe_coarse_fsavg_lmax": int(probe_coarse.fsavg_lmax),
-        "xblock_probe_coarse_angular_lmax": int(probe_coarse.angular_lmax),
-        "xblock_probe_coarse_angular_residual": bool(probe_coarse.angular_residual),
         "xblock_preflight_min_improvement": float(preflight.min_improvement),
         "xblock_preflight_required": bool(preflight.required),
         "xblock_preflight_residual_norm": preflight.residual_norm,
@@ -1640,19 +1626,6 @@ def build_rhs1_xblock_correction_metadata_from_solve_state(
     """
 
     return build_rhs1_xblock_correction_metadata(
-        probe_coarse=RHS1SubspaceCorrectionDiagnostics(
-            steps_requested=int(state["probe_coarse_steps_requested"]),
-            direction_counts=state["probe_coarse_direction_counts"],
-            direction_names=state["probe_coarse_direction_names"],
-            residual_before=state["probe_coarse_residual_before"],
-            residual_after=state["probe_coarse_residual_after"],
-            history=state["probe_coarse_history"],
-            fsavg_lmax=int(state["probe_coarse_fsavg_lmax"]),
-            angular_lmax=int(state["probe_coarse_angular_lmax"]),
-            angular_residual=bool(state["probe_coarse_include_angular_residual"]),
-            seed_initialized=bool(state["probe_coarse_seed_initialized"]),
-            setup_s=float(state["probe_coarse_s"]),
-        ),
         preflight=RHS1PreflightDiagnostics(
             min_improvement=float(state["preflight_min_improvement"]),
             required=bool(state["preflight_required"]),

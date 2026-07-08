@@ -188,8 +188,6 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     XBlockPostSolveCorrectionResult,
     XBlockPhysicalResidual,
     XBlockPreflightGateContext,
-    XBlockProbeCoarseStageContext,
-    XBlockProbeCoarseStageResult,
     XBlockSparsePCCompletionContext,
     XBlockSparsePCFinalCoreState,
     XBlockSparsePCFinalDeviceState,
@@ -202,7 +200,6 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     XBlockAssembledPreflightError,
     apply_xblock_global_coupling_stage,
     apply_xblock_moment_schur_stage,
-    apply_xblock_probe_coarse_stage,
     apply_xblock_side_probe_stage,
     apply_xblock_two_level_stage,
     apply_sparse_xblock_explicit_seed,
@@ -310,8 +307,6 @@ def test_sparse_xblock_module_exposes_canonical_public_contract() -> None:
         "XBlockFirstKrylovAttemptResult",
         "XBlockSideProbeStageContext",
         "XBlockSideProbeStageResult",
-        "XBlockProbeCoarseStageContext",
-        "XBlockProbeCoarseStageResult",
         "XBlockPreflightGateContext",
         "XBlockPreflightGateResult",
         "XBlockKrylovControlSetupContext",
@@ -337,7 +332,6 @@ def test_sparse_xblock_module_exposes_canonical_public_contract() -> None:
         "run_fp_xblock_highx_residual_correction_stage",
         "xblock_krylov_report",
         "apply_xblock_side_probe_stage",
-        "apply_xblock_probe_coarse_stage",
         "evaluate_xblock_preflight_gate",
         "resolve_xblock_krylov_control_setup",
         "xblock_krylov_state_from_first_attempt",
@@ -2049,155 +2043,6 @@ def test_apply_xblock_side_probe_stage_reports_solver_failure() -> None:
     assert result.selected_method == "gmres"
     assert result.elapsed_s == pytest.approx(0.5)
     assert "side probe failed (RuntimeError: probe failed)" in emitted[-1][1]
-
-
-def _probe_coarse_policy(**overrides: object) -> SimpleNamespace:
-    values = {
-        "steps_requested": 2,
-        "max_directions": 3,
-        "max_extra_units": 4,
-        "fsavg_lmax": 1,
-        "angular_lmax": 2,
-        "include_angular_residual": True,
-        "include_raw": False,
-        "alpha_clip": 10.0,
-        "rcond": 1.0e-10,
-        "min_improvement": 0.0,
-    }
-    values.update(overrides)
-    return SimpleNamespace(**values)
-
-
-def _probe_coarse_context(
-    *,
-    policy: object | None = None,
-    x0: jnp.ndarray | None = None,
-    correction=None,
-    emitted: list[tuple[int, str]] | None = None,
-) -> XBlockProbeCoarseStageContext:
-    time_values = iter((1.0, 1.75))
-    emit_log = emitted if emitted is not None else []
-
-    def direction_builder(
-        residual_vec: jnp.ndarray,
-        **kwargs: object,
-    ) -> tuple[tuple[str, jnp.ndarray], ...]:
-        assert "max_directions" in kwargs
-        assert residual_vec.shape == (2,)
-        return (("raw", jnp.asarray([1.0, 0.0])),)
-
-    if correction is None:
-        def correction_default(**kwargs: object):
-            directions = kwargs["direction_builder"](jnp.asarray([1.0, 0.0]))
-            assert directions[0][0] == "raw"
-            return (
-                jnp.asarray([0.9, 0.0]),
-                jnp.asarray([0.1, 0.0]),
-                (1.0, 0.1),
-                (len(directions),),
-                tuple(name for name, _ in directions),
-            )
-
-        correction = correction_default
-
-    return XBlockProbeCoarseStageContext(
-        policy=_probe_coarse_policy() if policy is None else policy,
-        rhs=jnp.asarray([1.0, 0.0]),
-        x0=x0,
-        matvec=lambda values: values,
-        target=1.0e-3,
-        direction_builder=direction_builder,
-        correction=correction,
-        elapsed_s=lambda: next(time_values),
-        emit=lambda level, message: emit_log.append((level, message)),
-    )
-
-
-def test_apply_xblock_probe_coarse_stage_disabled_keeps_seed() -> None:
-    result = apply_xblock_probe_coarse_stage(
-        _probe_coarse_context(
-            policy=_probe_coarse_policy(steps_requested=0),
-            x0=jnp.asarray([0.25, 0.5]),
-        )
-    )
-
-    assert isinstance(result, XBlockProbeCoarseStageResult)
-    assert result.steps_requested == 0
-    assert result.elapsed_s == pytest.approx(0.0)
-    assert result.seed_initialized is False
-    assert result.improved is False
-    assert jnp.allclose(result.x0, jnp.asarray([0.25, 0.5]))
-
-
-def test_apply_xblock_probe_coarse_stage_initializes_and_accepts_seed() -> None:
-    emitted: list[tuple[int, str]] = []
-    result = apply_xblock_probe_coarse_stage(
-        _probe_coarse_context(emitted=emitted)
-    )
-
-    assert result.seed_initialized is True
-    assert result.improved is True
-    assert result.failed is False
-    assert result.residual_before == pytest.approx(1.0)
-    assert result.residual_after == pytest.approx(0.1)
-    assert result.history == (1.0, 0.1)
-    assert result.direction_counts == (1,)
-    assert result.direction_names == ("raw",)
-    assert result.elapsed_s == pytest.approx(0.75)
-    assert result.include_angular_residual is True
-    assert result.include_raw is False
-    assert jnp.allclose(result.x0, jnp.asarray([0.9, 0.0]))
-    assert "probe-coarse improved seed residual" in emitted[-1][1]
-
-
-def test_apply_xblock_probe_coarse_stage_rejects_non_improving_seed() -> None:
-    emitted: list[tuple[int, str]] = []
-
-    def correction_reject(**_kwargs: object):
-        return (
-            jnp.asarray([9.0, 9.0]),
-            jnp.asarray([2.0, 0.0]),
-            (1.0, 2.0),
-            (1,),
-            ("raw",),
-        )
-
-    result = apply_xblock_probe_coarse_stage(
-        _probe_coarse_context(
-            x0=jnp.asarray([0.0, 0.0]),
-            correction=correction_reject,
-            emitted=emitted,
-        )
-    )
-
-    assert result.seed_initialized is False
-    assert result.improved is False
-    assert result.residual_before == pytest.approx(1.0)
-    assert result.residual_after == pytest.approx(2.0)
-    assert jnp.allclose(result.x0, jnp.asarray([0.0, 0.0]))
-    assert "probe-coarse rejected seed residual" in emitted[-1][1]
-
-
-def test_apply_xblock_probe_coarse_stage_reports_failure() -> None:
-    emitted: list[tuple[int, str]] = []
-
-    def correction_failure(**_kwargs: object):
-        raise RuntimeError("coarse failed")
-
-    result = apply_xblock_probe_coarse_stage(
-        _probe_coarse_context(
-            x0=jnp.asarray([0.0, 0.0]),
-            correction=correction_failure,
-            emitted=emitted,
-        )
-    )
-
-    assert result.failed is True
-    assert result.failure_reason == "RuntimeError: coarse failed"
-    assert result.improved is False
-    assert result.residual_before == pytest.approx(1.0)
-    assert result.residual_after is None
-    assert "probe-coarse failed (RuntimeError: coarse failed)" in emitted[-1][1]
 
 
 def _preflight_context(

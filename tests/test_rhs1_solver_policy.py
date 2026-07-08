@@ -8,7 +8,6 @@ from sfincs_jax.problems.profile_policies import (
     read_post_minres_policy,
     read_post_residual_equation_policy,
     read_post_solve_correction_policy,
-    read_probe_coarse_policy,
 )
 
 
@@ -34,21 +33,6 @@ def test_rhs1_solver_policy_env_parsers_match_driver_semantics() -> None:
     assert read_float_env("FLOAT_OK", default=1.0, minimum=0.0, env=env) == 2.5e-2
     assert read_float_env("FLOAT_BAD", default=1.5, minimum=0.0, env=env) == 1.5
     assert read_float_env("FLOAT_LOW", default=1.5, minimum=0.25, env=env) == 0.25
-
-
-def test_probe_coarse_policy_is_disabled_by_default() -> None:
-    policy = read_probe_coarse_policy(env={})
-
-    assert policy.steps_requested == 0
-    assert policy.max_directions == 16
-    assert policy.max_extra_units == 8
-    assert policy.fsavg_lmax == 2
-    assert policy.angular_lmax == -1
-    assert policy.include_angular_residual is False
-    assert policy.include_raw is True
-    assert policy.alpha_clip == 0.0
-    assert policy.rcond == 1.0e-12
-    assert policy.min_improvement == 0.0
 
 
 def test_post_residual_equation_policy_reads_opt_in_controls() -> None:

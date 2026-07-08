@@ -2296,16 +2296,14 @@ def test_xblock_sparse_pc_constraint1_moment_schur_probe_fails_closed(monkeypatc
     assert any("constraint1 moment-Schur rejected" in msg for msg in messages)
 
 
-def test_xblock_sparse_pc_preflight_required_rejects_weak_seed(monkeypatch) -> None:
+def test_xblock_sparse_pc_preflight_required_rejects_missing_seed(monkeypatch) -> None:
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE", "1")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PREFLIGHT_MIN_IMPROVEMENT", "0.9")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PREFLIGHT_REQUIRED", "1")
 
-    with pytest.raises(RuntimeError, match="preflight gate failed"):
+    with pytest.raises(RuntimeError, match="required an initial seed"):
         solve_v3_full_system_linear_gmres(
             nml=nml,
             solve_method="xblock_sparse_pc_gmres",
@@ -2479,35 +2477,6 @@ def test_xblock_sparse_pc_active_dof_opt_in_records_reduced_size(monkeypatch) ->
     assert result.gmres.x.shape == result.rhs.shape
 
 
-def test_xblock_sparse_pc_probe_coarse_uses_active_projected_directions(monkeypatch) -> None:
-    here = Path(__file__).parent
-    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
-    nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", "1")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE", "1")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS", "8")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_FSAVG_LMAX", "2")
-    messages: list[str] = []
-
-    result = solve_v3_full_system_linear_gmres(
-        nml=nml,
-        solve_method="xblock_sparse_pc_gmres",
-        tol=1.0e-8,
-        maxiter=80,
-        emit=lambda _level, msg: messages.append(msg),
-    )
-
-    assert float(result.residual_norm) < 1.0e-8
-    assert result.metadata["xblock_active_dof"] is True
-    assert result.metadata["xblock_probe_coarse_steps_requested"] == 1
-    assert result.metadata["xblock_probe_coarse_steps_accepted"] == 1
-    assert result.metadata["xblock_probe_coarse_direction_count"] == 8
-    assert result.metadata["xblock_probe_coarse_angular_lmax"] == -1
-    assert result.metadata["xblock_probe_coarse_seed_initialized"] is True
-    assert result.metadata["xblock_probe_coarse_residual_after"] < result.metadata["xblock_probe_coarse_residual_before"]
-    assert any("probe-coarse improved seed residual" in msg for msg in messages)
-
-
 def test_xblock_post_coarse_directions_can_include_angular_modes() -> None:
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
@@ -2620,33 +2589,6 @@ def test_device_subspace_residual_equation_fails_closed_without_improvement() ->
     assert history[0] == pytest.approx(float(jnp.linalg.norm(rhs)))
     assert counts == ()
     assert names == ()
-
-
-def test_xblock_sparse_pc_probe_coarse_records_angular_mode_usage(monkeypatch) -> None:
-    here = Path(__file__).parent
-    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
-    nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", "1")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE", "1")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS", "12")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_FSAVG_LMAX", "0")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ANGULAR_LMAX", "1")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ANGULAR_RESIDUAL", "1")
-
-    result = solve_v3_full_system_linear_gmres(
-        nml=nml,
-        solve_method="xblock_sparse_pc_gmres",
-        tol=1.0e-8,
-        maxiter=80,
-    )
-
-    assert float(result.residual_norm) < 1.0e-8
-    assert result.metadata["xblock_probe_coarse_angular_lmax"] == 1
-    assert result.metadata["xblock_probe_coarse_angular_residual"] is True
-    assert any(
-        str(name).startswith("angular_")
-        for name in result.metadata["xblock_probe_coarse_direction_names"]
-    )
 
 
 def test_xblock_sparse_pc_lower_fill_local_policy_is_wired(monkeypatch) -> None:

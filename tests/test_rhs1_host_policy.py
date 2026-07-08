@@ -15,7 +15,6 @@ from sfincs_jax.problems.profile_policies import (
     read_post_minres_policy,
     read_post_residual_equation_policy,
     read_post_solve_correction_policy,
-    read_probe_coarse_policy,
     read_subspace_correction_policy,
     rhsmode1_constraint0_sparse_first_current_backend,
     rhsmode1_dense_backend_allowed_current_backend,
@@ -88,38 +87,12 @@ def test_post_solve_correction_policy_readers_are_bounded_and_namespaced() -> No
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS": "3",
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_ALPHA_CLIP": "0.5",
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_MIN_IMPROVEMENT": "0.01",
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE": "1",
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_STEPS": "2",
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS": "6",
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_EXTRA_UNITS": "4",
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_FSAVG_LMAX": "3",
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ANGULAR_LMAX": "2",
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ANGULAR_RESIDUAL": "on",
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_INCLUDE_RAW": "off",
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ALPHA_CLIP": "1.25",
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_RCOND": "1e-9",
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MIN_IMPROVEMENT": "0.02",
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_INCLUDE_POST_COARSE": "0",
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_INCLUDE_QI_BASIS": ".false.",
     }
 
     minres = read_post_minres_policy(env=env)
     assert minres.steps_requested == 3
     assert minres.alpha_clip == 0.5
     assert minres.min_improvement == 0.01
-
-    probe = read_probe_coarse_policy(env=env)
-    assert probe.steps_requested == 2
-    assert probe.max_directions == 6
-    assert probe.max_extra_units == 4
-    assert probe.fsavg_lmax == 3
-    assert probe.angular_lmax == 2
-    assert probe.include_angular_residual
-    assert not probe.include_raw
-    assert probe.alpha_clip == 1.25
-    assert probe.rcond == 1.0e-9
-    assert probe.min_improvement == 0.02
-    assert not probe.include_post_coarse
 
 
 def test_post_solve_correction_policy_defaults_and_disabled_steps() -> None:

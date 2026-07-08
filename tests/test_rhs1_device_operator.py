@@ -98,7 +98,6 @@ def test_xblock_side_probe_switch_keeps_physical_left_probe_seed_for_right_pc(mo
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE", "0")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE", "0")
     monkeypatch.delenv("SFINCS_JAX_GMRES_PRECONDITION_SIDE", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", raising=False)
 

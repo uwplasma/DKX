@@ -188,10 +188,10 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     XBlockFirstKrylovAttemptContext, XBlockGlobalCouplingStageContext,
     XBlockKrylovControlSetupContext, XBlockKrylovProgressCallbacksContext, XBlockKrylovSolveStageContext,
     XBlockKrylovSolveSpaceContext, XBlockMomentSchurStageContext, XBlockPostKrylovCompletionContext,
-    XBlockPostSolveCorrectionContext, XBlockPreflightGateContext, XBlockProbeCoarseStageContext,
+    XBlockPostSolveCorrectionContext, XBlockPreflightGateContext,
     XBlockSideProbeStageContext, XBlockSparsePCBranchContext, XBlockTwoLevelStageContext,
     apply_xblock_global_coupling_stage, apply_xblock_moment_schur_stage,
-    apply_xblock_probe_coarse_stage, apply_xblock_side_probe_stage,
+    apply_xblock_side_probe_stage,
     apply_xblock_two_level_stage, build_xblock_local_preconditioner, build_xblock_krylov_matvec_setup,
     build_xblock_assembled_operator_if_requested, build_xblock_krylov_progress_callbacks, evaluate_xblock_preflight_gate,
     complete_xblock_post_krylov_stage, prepare_xblock_initial_guess,
@@ -308,7 +308,6 @@ from sfincs_jax.problems.profile_policies import (
 from sfincs_jax.problems.profile_policies import (
     read_bool_env as _rhs1_bool_env, read_float_env as _rhs1_float_env, read_int_env as _rhs1_int_env,
     read_post_solve_correction_policy as _read_rhs1_post_solve_correction_policy,
-    read_probe_coarse_policy as _read_rhs1_probe_coarse_policy,
 )
 from sfincs_jax.problems.profile_policies import (
     _DIRECT_TAIL_STRUCTURED_PC_CACHE, _StructuredHostSparsePreconditionerBundle, _direct_tail_structured_pc_cache_key,

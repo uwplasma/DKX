@@ -249,19 +249,6 @@ def read_subspace_correction_policy(
         ),
     )
 
-def read_probe_coarse_policy(*, env: Mapping[str, str] | None = None) -> RHS1SubspaceCorrectionPolicy:
-    """Read the pre-Krylov probe-coarse policy."""
-
-    return read_subspace_correction_policy(
-        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE",
-        max_directions_default=16,
-        max_extra_units_default=8,
-        fsavg_lmax_default=2,
-        angular_lmax_default=-1,
-        include_angular_residual_default=False,
-        env=env,
-    )
-
 def read_post_coarse_policy(*, env: Mapping[str, str] | None = None) -> RHS1SubspaceCorrectionPolicy:
     """Read the post-Krylov coarse correction policy."""
 
@@ -6312,7 +6299,6 @@ __all__ = (
     "read_post_minres_policy",
     "read_post_residual_equation_policy",
     "read_post_solve_correction_policy",
-    "read_probe_coarse_policy",
     "read_subspace_correction_policy",
     "resolve_active_projected_preconditioner_auto_policy",
     "rhs1_bicgstab_fallback_controls_from_env",
