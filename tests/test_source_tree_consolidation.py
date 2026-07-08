@@ -977,7 +977,7 @@ def test_canonical_flat_domain_modules_are_importable() -> None:
         "sfincs_jax.solvers.preconditioner_xblock_tz_sparse",
         "sfincs_jax.solvers.preconditioner_full_fp_kinetic",
         "sfincs_jax.solvers.preconditioner_schur_profile",
-        "sfincs_jax.solvers.preconditioner_symbolic_profile",
+        "sfincs_jax.solvers.preconditioner_reduced_pmat",
     )
     for module_name in canonical_modules:
         module = importlib.import_module(module_name)

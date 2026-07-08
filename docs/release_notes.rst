@@ -161,7 +161,7 @@ Unreleased
 - Moved RHSMode=1 host sparse ILU/LU matvec assembly, CSR factorization, cached
   dense/JAX triangular-factor materialization, and the full-system
   matrix-free adapter into
-  ``sfincs_jax.solvers.preconditioner_symbolic_host``. The
+  ``sfincs_jax.solvers.preconditioner_host_sparse``. The
   historical ``v3_driver`` private helper names remain compatibility aliases,
   while the non-differentiable host-factor path now lives in the solver-domain
   package.
