@@ -67,7 +67,6 @@ CANONICAL_WORKFLOW_ENTRYPOINTS = {
     "vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py",
     "optimization/QA_optimization_bootstrap_current.py",
     "parity/collisionless_operator_matvec_parity.py",
-    "publication_figures/generate_fortran_suite_benchmark_summary.py",
     "performance/benchmark_output_formats.py",
 }
 
@@ -91,7 +90,6 @@ APPLICATION_RECIPE_ENTRYPOINTS = {
     "optimization/QA_optimization_bootstrap_current.py",
     "performance/benchmark_output_formats.py",
     "parity/output_parity_vs_fortran_fixture.py",
-    "publication_figures/generate_fortran_suite_benchmark_summary.py",
 }
 
 ONE_COMMAND_ENTRYPOINTS = {
@@ -107,7 +105,6 @@ ONE_COMMAND_ENTRYPOINTS = {
 CATALOG_ENTRYPOINTS = ONE_COMMAND_ENTRYPOINTS | {
     "optimization/qa_nfp2_sfincs_jax_objectives.py",
     "autodiff/vmec_jax_to_boozer_sfincs_pipeline.py",
-    "publication_figures/generate_fortran_suite_benchmark_summary.py",
 }
 
 CATALOG_REQUIRED_KEYWORDS = {
