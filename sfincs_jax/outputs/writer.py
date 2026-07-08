@@ -1016,12 +1016,29 @@ def write_sfincs_jax_output_h5(
             v3_rhsmode1_output_fields_vm_only_phi1_batch_jit,
             v3_rhsmode1_output_fields_vm_only_jit,
         )
+        from ..problems.profile_policies import (
+            rhs1_dense_fallback_max,
+            rhs1_host_dense_shortcut_allowed,
+        )
         from ..problems.profile_solve import (
             _resolve_use_implicit,
-            _rhsmode1_host_dense_shortcut_allowed,
             solve_v3_full_system_linear_gmres,
             solve_v3_full_system_newton_krylov_history,
         )
+
+        def _rhsmode1_host_dense_shortcut_allowed(
+            *, op, active_size, use_implicit, solve_method_kind
+        ) -> bool:
+            import jax
+
+            return rhs1_host_dense_shortcut_allowed(
+                op=op,
+                active_size=active_size,
+                use_implicit=use_implicit,
+                solve_method_kind=solve_method_kind,
+                backend=jax.default_backend(),
+                dense_fallback_max=rhs1_dense_fallback_max(op),
+            )
         from sfincs_jax.operators.profile_system import full_system_operator_from_namelist, precompile_v3_full_system
 
         if emit is not None:
