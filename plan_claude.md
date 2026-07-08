@@ -5,7 +5,7 @@ repositories and a verified literature survey. It is written to be executed end-
 autonomous agent (Cowork) with full local access to `/Users/rogerio/local/`. Read this file
 completely before doing anything. Where this plan conflicts with older plan files
 (`plan_final.md`, `plan.md`), **this file wins**; the older ones are historical context and are
-deleted from the tree (and from git history) in Phase 7.
+deleted from the tree (and from git history) in Phase 8.
 
 **Branch policy:** all work starts from `refactor/v3-driver-architecture` and only that branch.
 Create working branches off it; merge back via PRs authored by `rogeriojorge`. `main` is the
@@ -17,7 +17,7 @@ committed as Rogerio Jorge / `rogeriojorge` (set `git config user.name "Rogerio 
 add `Co-Authored-By:` or `Generated with` trailers). The current history is already clean —
 verified 2026-07-08: the only identities across all refs are `Rogerio Jorge
 <rogerio.jorge@ist.utl.pt>`, `Rogerio Jorge <rogerio.jorge@wisc.edu>`, and GitHub's noreply
-merge committer; zero AI-assistant identities or co-author trailers exist. Phase 7 still
+merge committer; zero AI-assistant identities or co-author trailers exist. Phase 8 still
 verifies the live GitHub contributors API and unifies the two Rogerio emails via mailmap.
 
 **Reference-code policy (hard rule):** besides SFINCS (Fortran v3), several other
@@ -134,7 +134,7 @@ problems now:
 6. **Repo bloat.** Working tree 108 MB (docs/_static 14 MB of figures, docs/upstream 5.7 MB
    of third-party PDFs, tests/ref 12 MB of .h5/.petscbin, examples 2.5 MB). `.git` is 62 MB,
    and the top-30 largest historical blobs are ALL revisions of the deleted `v3_driver.py`
-   (786 copies at ~2.5 MB). History rewrite (Phase 7) collapses this.
+   (786 copies at ~2.5 MB). History rewrite (Phase 8) collapses this.
 7. **Packaging is already close.** Deps unpinned (`jax, numpy, scipy, h5py, netCDF4,
    matplotlib`), PyPI publishing workflow exists, CI has 4-way sharded coverage but gates at
    80% (target: 95%), docs are sphinx-rtd with ~38 .rst pages but not pedagogic.
@@ -165,6 +165,11 @@ problems now:
 - **G6.** Repo ≤ 10 MB after history rewrite; contributors page = rogeriojorge only
   (verified, expected already true); CI (tests, docs, coverage ≥95%, PyPI trusted
   publishing) green.
+- **G7.** Strong scaling on shared-memory CPUs (§2.6, Phase 5): on the local development
+  machine, sfincs_jax at N cores is competitive with `mpiexec -n N` Fortran SFINCS for
+  large production runs — ≥ parity on monoenergetic/PAS cases and ≤ 1.5× on FP
+  multi-species cases at 8 cores, with published speedup-vs-cores curves and a scaling
+  regression harness. GPUs reuse the same sharding declarations.
 
 ---
 
@@ -394,6 +399,48 @@ Physics-meaningful, PEP8: `n_theta, n_zeta, n_xi, n_x, n_species`, `nu_prime`,
 `collisionality`. Fortran namelist/HDF5 names survive only in the compatibility layer
 (`io/`), backed by a `docs/reference/sfincs_name_map.md` table mapping every Fortran name →
 Python name (also used by the writer to emit Fortran-compatible variable names).
+
+### 2.6 Parallelization strategy (strong scaling on shared-memory CPUs and GPUs)
+
+Fortran SFINCS earns its production-run wall times from MPI: PETSc partitions the DKE rows
+across ranks (θ/ζ-distributed, per `createGrids.F90`) and MUMPS/SuperLU_DIST factor the
+preconditioner in parallel. sfincs_jax must match that on a *single* multi-core node
+(including this development MacBook: Apple silicon, ~10 performance+efficiency cores,
+24 GB) without MPI. Three composable levels, all local-first:
+
+1. **Intra-op threading (free level).** Every hot kernel in §2.3 is a batched dense GEMM /
+   LU (`lax.scan` over l of `(NθNζ)²` blocks; batched line solves; FFT/stencil applies).
+   XLA:CPU parallelizes these across its thread pool, and Accelerate/OpenBLAS threads the
+   per-block factorizations. Rule: one process, XLA threads × BLAS threads ≤ physical
+   cores; expose the knobs (`--cores`, env `XLA_FLAGS`, BLAS thread caps) in one place
+   (`solve.py`) instead of scattered env vars, and *measure* rather than assume — batched
+   LU on Apple silicon has known thread-scaling cliffs.
+2. **Single-process device sharding (the workhorse).** `XLA_FLAGS=--xla_force_host_platform_device_count=N`
+   splits the host into N virtual CPU devices; `shard_map`/`jax.sharding` then distribute:
+   - the **batch axes** of tier-1 — (species, x, ν, Er, surface) — which are embarrassingly
+     parallel dense block-eliminations;
+   - the **line-smoother batches** and Kronecker/x-block applies of the tier-2
+     preconditioner (lines along one axis are independent);
+   - the **operator apply** itself for large grids: θζ-block rows of f, matching the
+     Fortran domain decomposition, with halo exchange only in the FD stencil direction —
+     the l→l±1 and collision couplings are local to a (θ,ζ) point, so the only
+     communication is the θ/ζ derivative stencils (cheap `lax.ppermute` halos, exactly the
+     locality the Fortran layout exploits).
+   On GPU the same `shard_map` code paths shard across real devices — one code, two
+   backends.
+3. **Multi-process (kept, demoted to opt-in).** The existing `jax.distributed`
+   bootstrapping stays for multi-host GPU clusters, and a lightweight
+   process-pool path (workers = separate jitted processes) remains for
+   embarrassingly-parallel outer loops (surface scans, Er scans, transport-matrix RHS
+   columns) where separate JAX processes avoid GIL/compile contention — but it must
+   become one documented code path, not the current experimental flag zoo.
+
+Design rules: sharding is declared once at the operator/grid layer (a `mesh` +
+`PartitionSpec` per axis), never inside physics code; every solver in SOLVAX accepts
+sharded operands transparently (they are `vmap`/`shard_map`-transparent already); padding
+policies round the sharded axes to multiples of the device count; the CLI picks a sensible
+default (devices = min(physical cores // 2, batch width)) and prints it in the
+Fortran-style solver banner ("Parallel job (N processes) detected" parity line).
 
 ---
 
@@ -665,10 +712,43 @@ development, PyPI after).
   library, CPU/GPU, wall time + peak RSS); compressed plots (< 150 kB, optipng/pngquant).
   Gate: no case slower than 1.5× Fortran; monoenergetic cases win outright.
 
-### Phase 5 — Examples (§7).
-### Phase 6 — Documentation overhaul (§8).
-### Phase 7 — Repo hygiene, history rewrite, size gate (§9). Do LAST, after merge.
-### Phase 8 — Release: sfincs_jax v2.0.0 + solvax v0.1.x to PyPI (trusted publishing), RTD
+### Phase 5 — Strong-scaling parallelization (§2.6)
+
+Goal: for large production runs, sfincs_jax wall time on N local CPU cores is competitive
+with `mpiexec -n N` Fortran SFINCS on the same machine — the parallel story must work on
+this development MacBook first, GPUs second.
+
+- 5.1 **Baseline scaling curves (measure before building).** For 3 production-resolution
+  cases (HSX PAS 25×115×149, W7-X FP 2-species, transport-matrix scheme 2) record wall
+  time + peak RSS for Fortran at `mpiexec -n {1,2,4,8}` and for sfincs_jax today at
+  matching core budgets (`XLA_FLAGS=--xla_force_host_platform_device_count={1,2,4,8}` /
+  `--cores`). This quantifies the gap and catches BLAS/XLA oversubscription pathologies
+  (thread caps must be set jointly, §2.6 rule 1).
+- 5.2 **Shard the batch axes** (tier-1 (species, x, ν, Er, surface) batches; preconditioner
+  line batches; transport-matrix RHS columns) via one `mesh`/`PartitionSpec` declaration at
+  the grid layer. Acceptance: embarrassingly-parallel workloads (Er scans, monoenergetic
+  databases, bootstrap profiles across surfaces) reach ≥ 80% parallel efficiency at 4
+  virtual devices, ≥ 60% at 8, on this MacBook.
+- 5.3 **Shard the operator apply** for single large solves: θζ-row decomposition of f with
+  `shard_map` + `lax.ppermute` halo exchange for the θ/ζ stencils (all other couplings are
+  point-local). Acceptance: a single production-resolution GMRES solve reaches ≥ 60%
+  efficiency at 4 devices; document where collective costs bite.
+- 5.4 **Consolidate the flag zoo**: `--cores N` (CLI) / `Simulation(devices=N)` (API) set
+  everything (XLA device count, BLAS threads, donation, padding-to-multiples); delete the
+  per-experiment `SFINCS_JAX_*` parallel env vars; keep `jax.distributed` multi-host as one
+  documented opt-in path. Print the Fortran-parity "Parallel job (N processes) detected"
+  banner line.
+- 5.5 **Scaling regression harness**: `tools/benchmarks/strong_scaling.py` producing the
+  speedup-vs-cores table/plot (compressed) for README + docs/numerics/performance.md; CI
+  smoke-checks the harness at toy size (2 devices) so the path never rots.
+- Gate: on the §4.3-style benchmark table, sfincs_jax at 8 local cores ≥ matches Fortran at
+  8 MPI ranks on at least the monoenergetic and PAS production cases, and is within 1.5×
+  on FP multi-species cases; scaling plots published in docs.
+
+### Phase 6 — Examples (§7).
+### Phase 7 — Documentation overhaul (§8).
+### Phase 8 — Repo hygiene, history rewrite, size gate (§9). Do LAST, after merge.
+### Phase 9 — Release: sfincs_jax v2.0.0 + solvax v0.1.x to PyPI (trusted publishing), RTD
 builds, GitHub release notes summarizing the refactor and the benchmark table.
 
 ---
@@ -757,7 +837,7 @@ code" box linking to source. All images compressed; total docs assets < 2 MB (to
 `_static` + 5.7 MB third-party PDFs in `docs/upstream` — delete the PDFs, link to
 publishers/arXiv instead).
 
-## 9. Repo hygiene, history rewrite, contributor verification (Phase 7 — LAST; coordinate
+## 9. Repo hygiene, history rewrite, contributor verification (Phase 8 — LAST; coordinate
 the force-push; keep an untouched backup clone until the release is verified)
 
 - 9.1 Working-tree deletions: all `plan*.md` (including this file — its job is done),
@@ -819,11 +899,15 @@ the force-push; keep an untouched backup clone until the release is verified)
 - [ ] Phase 4: solver tiers + continuation; QA and QH production-resolution profiles
       converge CPU+GPU; ≤1.5× runtime and ≤2× RSS vs Fortran everywhere; new README
       benchmark table + compressed plots.
-- [ ] Phase 5: nine examples, CI at toy resolution.
-- [ ] Phase 6: docs rebuilt (furo, equations, bibtex); RTD green; namelist/outputs
+- [ ] Phase 5: strong-scaling parallelization (§2.6): baseline curves vs Fortran MPI on
+      this MacBook, batch-axis + operator sharding via shard_map, flag-zoo consolidation,
+      scaling harness; gate: ≥ parity with 8-rank Fortran on monoenergetic/PAS production
+      cases, ≤1.5× on FP multi-species.
+- [ ] Phase 6: nine examples, CI at toy resolution.
+- [ ] Phase 7: docs rebuilt (furo, equations, bibtex); RTD green; namelist/outputs
       reference complete (gap table = zero).
-- [ ] Phase 7: hygiene + filter-repo (strip v3_driver.py history, >200 kB blobs, mailmap
+- [ ] Phase 8: hygiene + filter-repo (strip v3_driver.py history, >200 kB blobs, mailmap
       email unification) + force-push; repo < 10 MB; contributors = rogeriojorge only.
-- [ ] Phase 8: tag and publish sfincs_jax v2.0.0 + solvax; release notes; delete this file.
+- [ ] Phase 9: tag and publish sfincs_jax v2.0.0 + solvax; release notes; delete this file.
 
 *End of plan.*
