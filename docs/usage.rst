@@ -414,30 +414,6 @@ performance without changing the input file:
   at scale ``0.55``. Explicit ``SFINCS_JAX_GMRES_PRECONDITION_SIDE=left`` or
   ``right`` still takes precedence.
 
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS``: opt-in matrix-free
-  post-Krylov correction for explicit ``xblock_sparse_pc_gmres``. Set to a small
-  integer, for example ``2`` or ``4``, to test residual-polishing steps that do
-  not materialize the full sparse matrix. Leave it off for production unless the
-  resulting solver trace shows a lower true residual without runtime regression.
-
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE``: opt-in multidirectional
-  post-Krylov coarse correction for explicit ``xblock_sparse_pc_gmres``. Set to
-  ``1`` to test a small matrix-free least-squares correction over residual,
-  flux-surface-average, and source/constraint directions. Related diagnostic
-  controls include ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_STEPS`` and
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_MAX_DIRECTIONS``.
-
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION``: opt-in
-  post-Krylov residual-equation correction for explicit
-  ``xblock_sparse_pc_gmres``. This is the device-oriented replacement for
-  whole-vector host post-processing: it solves a bounded JAX least-squares
-  problem over the final true residual, optional cached QI ``(U, A U)`` coarse
-  columns, and fresh residual-derived physics directions. Related diagnostic
-  controls include
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_MAX_DIRECTIONS``,
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_QI_BASIS``,
-  and ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_RCOND``.
-
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK``: non-autodiff production
   fallback for large RHSMode=1 3D full-FP systems when an explicit JAX-native
   x-block Krylov method is requested. The default ``auto`` mode rewrites
