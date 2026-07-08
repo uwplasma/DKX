@@ -120,8 +120,8 @@ folder name.
      - ``examples/performance/``
      - Benchmarks output formats, JIT, sharding, transport workers, and optional backends.
    * - I recognize an upstream SFINCS input name.
-     - ``examples/sfincs_examples/`` or ``examples/upstream/``
-     - Preserves upstream decks for parity and benchmark audits, not first-pass learning.
+     - ``examples/sfincs_examples/``
+     - Preserves upstream-style decks for parity and benchmark audits, not first-pass learning.
 
 Application recipe map
 ----------------------
@@ -198,7 +198,7 @@ the recommended first stop for new workflows.
      - ``examples/parity/``, ``examples/performance/``, ``examples/publication_figures/``
      - You need parity checks, runtime/memory evidence, CPU/GPU benchmark drivers, or regenerated documentation figures.
    * - ``reference``
-     - ``examples/data/``, ``examples/sfincs_examples/``, ``examples/upstream/``
+     - ``examples/data/``, ``examples/sfincs_examples/``
      - You need small shared inputs or recognizable SFINCS Fortran v3 decks for audits and compatibility checks.
 
 Some geometry examples reference public W7-X/HSX/QI equilibrium fixtures by
@@ -825,12 +825,10 @@ pattern for gradients without backpropagating through every Krylov iteration.
 Upstream SFINCS example inputs
 --------------------------------
 
-For convenience, `sfincs_jax` also vendors the original example-input families (multi-species,
-and MATLAB v3) in `examples/upstream/`. These files are intended as recognizable reference points for
-SFINCS users; not all of them are runnable end-to-end in `sfincs_jax` yet.
-
-The full upstream-style example suite (plus the upstream postprocessing scripts) is also vendored in
-`examples/sfincs_examples/`. A best-effort runner is provided:
+For convenience, `sfincs_jax` vendors the upstream-style SFINCS-v3 example suite
+in `examples/sfincs_examples/`. These files are recognizable reference points
+for SFINCS users and support compatibility audits. A best-effort runner is
+provided:
 
 .. code-block:: bash
 

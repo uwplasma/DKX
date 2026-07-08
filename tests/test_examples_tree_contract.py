@@ -22,7 +22,6 @@ ALLOWED_EXAMPLE_FOLDERS = {
     "sfincs_examples",
     "transport",
     "tutorials",
-    "upstream",
     "vmec_jax_finite_beta",
 }
 
@@ -39,7 +38,6 @@ FOLDER_CATEGORIES = {
     "sfincs_examples": "reference",
     "transport": "capability",
     "tutorials": "learning",
-    "upstream": "reference",
     "vmec_jax_finite_beta": "capability",
 }
 
@@ -175,7 +173,6 @@ DECISION_MAP_TARGETS = {
     "publication_figures/",
     "performance/",
     "sfincs_examples/",
-    "upstream/",
 }
 
 DISALLOWED_TRACKED_PARTS = {
