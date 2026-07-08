@@ -10,7 +10,6 @@ from sfincs_jax.problems.profile_policies import (
     rhs1_large_cpu_sparse_rescue_first,
     rhs1_large_cpu_sparse_skip_primary_allowed,
     rhs1_large_cpu_xblock_skip_primary_allowed,
-    rhs1_sparse_sxblock_rescue_allowed,
     rhs1_sparse_xblock_rescue_allowed,
 )
 
@@ -417,25 +416,3 @@ def test_fp_xblock_host_assembly_and_primary_skip(monkeypatch) -> None:
         rhs1_precond_env="schur",
         backend="cpu",
     )
-
-
-def test_sparse_sxblock_rescue_requires_explicit_multispecies_opt_in(monkeypatch) -> None:
-    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_SXBLOCK_RESCUE", raising=False)
-    kwargs = dict(
-        op=_op(n_species=2),
-        solve_method_kind="incremental",
-        active_size=20000,
-        sparse_max_size=6000,
-        preconditioner_x=1,
-        pre_theta=0,
-        pre_zeta=0,
-        use_implicit=False,
-        backend="cpu",
-    )
-    assert not rhs1_sparse_sxblock_rescue_allowed(**kwargs)
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_SXBLOCK_RESCUE", "1")
-    assert rhs1_sparse_sxblock_rescue_allowed(**kwargs)
-    assert not rhs1_sparse_sxblock_rescue_allowed(**{**kwargs, "op": _op(n_species=1)})
-    assert not rhs1_sparse_sxblock_rescue_allowed(**{**kwargs, "solve_method_kind": "dense"})
-    assert not rhs1_sparse_sxblock_rescue_allowed(**{**kwargs, "preconditioner_x": 0})
-    assert not rhs1_sparse_sxblock_rescue_allowed(**{**kwargs, "active_size": 5000})

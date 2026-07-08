@@ -1307,7 +1307,6 @@ class RHS1SparseRescueOrdering:
     enabled: bool
     kind_use: str
     xblock_rescue_active: bool = False
-    sxblock_rescue_active: bool = False
     prefer_sparse_exact_over_dense_shortcut: bool = False
     reason_dense_shortcut_skip: bool = False
     reason_size_disabled: bool = False
@@ -1574,7 +1573,6 @@ def rhs1_resolved_sparse_rescue_ordering(
     sparse_max_size: int,
     large_cpu_sparse_rescue: bool = False,
     sparse_xblock_rescue_active: bool = False,
-    sparse_sxblock_rescue_active: bool = False,
     sparse_jax_est_mb: float | None = None,
     sparse_jax_max_mb: float = 0.0,
     pas_fast_accept: bool = False,
@@ -1584,7 +1582,6 @@ def rhs1_resolved_sparse_rescue_ordering(
     enabled = bool(sparse_enabled)
     kind_use = rhs1_sparse_kind_use(sparse_precond_kind=str(sparse_kind_use))
     xblock_active = bool(sparse_xblock_rescue_active)
-    sxblock_active = bool(sparse_sxblock_rescue_active)
     prefer_sparse_exact_over_dense_shortcut = False
     reason_dense_shortcut_skip = False
     reason_size_disabled = False
@@ -1606,7 +1603,7 @@ def rhs1_resolved_sparse_rescue_ordering(
             reason_size_large_cpu = True
         elif bool(sparse_exact_direct):
             reason_size_exact_direct = True
-        elif xblock_active or sxblock_active:
+        elif xblock_active:
             reason_size_targeted = True
         else:
             enabled = False
@@ -1619,7 +1616,6 @@ def rhs1_resolved_sparse_rescue_ordering(
             reason_sparse_jax_mem_disabled = True
     if bool(large_cpu_sparse_rescue) and bool(sparse_exact_direct):
         xblock_active = False
-        sxblock_active = False
         reason_large_cpu_exact_skips_targeted = True
     if bool(pas_fast_accept):
         enabled = False
@@ -1631,7 +1627,6 @@ def rhs1_resolved_sparse_rescue_ordering(
         enabled=bool(enabled),
         kind_use=str(kind_use),
         xblock_rescue_active=bool(xblock_active),
-        sxblock_rescue_active=bool(sxblock_active),
         prefer_sparse_exact_over_dense_shortcut=bool(
             prefer_sparse_exact_over_dense_shortcut
         ),
@@ -1665,7 +1660,6 @@ def rhs1_sparse_rescue_policy_setup(
     sparse_exact_direct: bool = False,
     large_cpu_sparse_rescue: bool = False,
     sparse_xblock_rescue_active: bool = False,
-    sparse_sxblock_rescue_active: bool = False,
     sparse_jax_max_mb: float = 0.0,
     pas_fast_accept: bool = False,
     gpu_sparse_skip: bool = False,
@@ -1696,7 +1690,6 @@ def rhs1_sparse_rescue_policy_setup(
         sparse_max_size=int(sparse_max_size),
         large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue),
         sparse_xblock_rescue_active=bool(sparse_xblock_rescue_active),
-        sparse_sxblock_rescue_active=bool(sparse_sxblock_rescue_active),
         sparse_jax_est_mb=sparse_jax_est_mb,
         sparse_jax_max_mb=float(sparse_jax_max_mb),
         pas_fast_accept=bool(pas_fast_accept),
@@ -3488,42 +3481,6 @@ def rhs1_large_cpu_xblock_skip_primary_allowed(
         backend=backend,
         active_size=int(active_size),
     )
-
-def rhs1_sparse_sxblock_rescue_allowed(
-    *,
-    op: Any,
-    solve_method_kind: str,
-    active_size: int,
-    sparse_max_size: int,
-    preconditioner_x: int,
-    pre_theta: int,
-    pre_zeta: int,
-    use_implicit: bool,
-    backend: str,
-) -> bool:
-    """Return whether species-x-block sparse rescue is eligible."""
-    env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_SXBLOCK_RESCUE")
-    if env not in _TRUE_VALUES:
-        return False
-    if str(backend).strip().lower() != "cpu":
-        return False
-    if bool(use_implicit):
-        return False
-    if str(solve_method_kind).strip().lower() in {"dense", "dense_ksp"}:
-        return False
-    if int(active_size) <= int(sparse_max_size):
-        return False
-    if int(preconditioner_x) == 0 or int(pre_theta) != 0 or int(pre_zeta) != 0:
-        return False
-    if int(getattr(op, "n_species", 1)) <= 1:
-        return False
-    if not _is_explicit_rhs1_fp_only(op):
-        return False
-
-    rescue_min_default = max(int(sparse_max_size) + 1, 12000)
-    rescue_min = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_SXBLOCK_RESCUE_MIN", rescue_min_default)
-    rescue_max = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_SXBLOCK_RESCUE_MAX", 120000)
-    return max(1, int(rescue_min)) <= int(active_size) <= max(1, int(rescue_max))
 
 # Consolidated automatic preconditioner-routing policy section
 
@@ -5875,31 +5832,6 @@ def rhsmode1_scipy_rescue_active_size_allowed_current_backend(
         backend=jax.default_backend(),
     )
 
-def rhsmode1_sparse_sxblock_rescue_allowed_current_backend(
-    *,
-    op: object,
-    solve_method_kind: str,
-    active_size: int,
-    sparse_max_size: int,
-    preconditioner_x: int,
-    pre_theta: int,
-    pre_zeta: int,
-    use_implicit: bool,
-) -> bool:
-    """Evaluate sparse sxblock rescue admission on the current backend."""
-
-    return rhs1_sparse_sxblock_rescue_allowed(
-        op=op,
-        solve_method_kind=solve_method_kind,
-        active_size=int(active_size),
-        sparse_max_size=int(sparse_max_size),
-        preconditioner_x=int(preconditioner_x),
-        pre_theta=int(pre_theta),
-        pre_zeta=int(pre_zeta),
-        use_implicit=bool(use_implicit),
-        backend=jax.default_backend(),
-    )
-
 def rhs1_sharded_line_override_allowed(rhs1_precond_kind: str | None) -> bool:
     """Return whether sharded auto-selection may demote the current preconditioner to line DD."""
     return rhs1_precond_kind in {
@@ -5937,7 +5869,6 @@ __all__ = (
     "rhsmode1_sparse_operator_preconditioned_rescue_allowed_current_backend",
     "rhsmode1_sparse_pc_default_permc_spec",
     "rhsmode1_sparse_pc_default_restart",
-    "rhsmode1_sparse_sxblock_rescue_allowed_current_backend",
     "rhsmode1_sparse_xblock_rescue_allowed_current_backend",
     "rhs1_dense_backend_allowed",
     "rhs1_dense_auto_fp_cutoff",
@@ -5972,7 +5903,6 @@ __all__ = (
     "rhs1_large_cpu_sparse_rescue_first",
     "rhs1_large_cpu_sparse_skip_primary_allowed",
     "rhs1_large_cpu_xblock_skip_primary_allowed",
-    "rhs1_sparse_sxblock_rescue_allowed",
     "rhs1_sparse_xblock_rescue_allowed",
     "RHS1DefaultPreconditionerSelectionContext",
     "RHS1PreconditionerRouteSetupContext",

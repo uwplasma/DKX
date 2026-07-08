@@ -373,13 +373,11 @@ def test_rhs1_sparse_rescue_ordering_handles_size_routing_and_targeted_disable()
         large_cpu_sparse_rescue=True,
         sparse_exact_direct=True,
         sparse_xblock_rescue_active=True,
-        sparse_sxblock_rescue_active=True,
     )
     assert decision.enabled
     assert decision.reason_size_large_cpu
     assert decision.reason_large_cpu_exact_skips_targeted
     assert not decision.xblock_rescue_active
-    assert not decision.sxblock_rescue_active
 
     decision = rhs1_resolved_sparse_rescue_ordering(
         sparse_enabled=True,
@@ -389,7 +387,6 @@ def test_rhs1_sparse_rescue_ordering_handles_size_routing_and_targeted_disable()
         large_cpu_sparse_rescue=False,
         sparse_exact_direct=False,
         sparse_xblock_rescue_active=False,
-        sparse_sxblock_rescue_active=False,
     )
     assert not decision.enabled
     assert decision.reason_size_disabled

@@ -27,7 +27,6 @@ from sfincs_jax.problems.profile_policies import (
     rhsmode1_skip_global_sparse_after_xblock_allowed_current_backend,
     rhsmode1_sparse_exact_lu_requested_current_backend,
     rhsmode1_sparse_operator_preconditioned_rescue_allowed_current_backend,
-    rhsmode1_sparse_sxblock_rescue_allowed_current_backend,
     rhsmode1_sparse_xblock_rescue_allowed_current_backend,
     rhs1_dense_auto_fp_allowed,
     rhs1_constrained_pas_sparse_pc_auto_allowed,
@@ -1201,15 +1200,5 @@ def test_current_backend_rhs1_policy_wrappers_delegate_cpu_defaults(monkeypatch)
         active_size=15_000,
         used_large_cpu_xblock_shortcut=True,
         used_explicit_fp_xblock_seed=True,
-        use_implicit=False,
-    )
-    assert not rhsmode1_sparse_sxblock_rescue_allowed_current_backend(
-        op=op_fp,
-        solve_method_kind="auto",
-        active_size=15_000,
-        sparse_max_size=20_000,
-        preconditioner_x=1,
-        pre_theta=0,
-        pre_zeta=0,
         use_implicit=False,
     )

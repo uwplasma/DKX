@@ -144,7 +144,7 @@ from sfincs_jax.problems.profile_preconditioner_build import (
     _build_rhsmode1_xblock_tz_lmax_preconditioner, _build_rhsmode1_xblock_tz_sparse_preconditioner,
     _build_rhsmode1_xmg_preconditioner, _build_rhsmode1_zeta_dd_preconditioner,
     _build_rhsmode1_zeta_line_preconditioner, _build_rhsmode23_tzfft_preconditioner,
-    _compute_rhsmode1_sxblock_tz_sparse_host_seed, build_rhs1_full_preconditioner,
+    build_rhs1_full_preconditioner,
     build_rhs1_reduced_preconditioner_with_fallback, run_rhs1_full_strong_retry_stage,
     run_rhs1_reduced_strong_retry_stage, setup_rhs1_full_base_preconditioner,
 )
@@ -198,10 +198,10 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     prepare_xblock_krylov_solve_space, resolve_xblock_krylov_control_setup,
     resolve_xblock_global_coupling_policy_setup, resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_seed_policy_setup, resolve_xblock_sparse_pc_branch_setup, resolve_xblock_two_level_policy_setup,
-    SparseSXBlockRescueContext, SparseXBlockRescueAcceptanceContext,
+    SparseXBlockRescueAcceptanceContext,
     SparseXBlockRescueBuildContext, SparseXBlockRescueSolveContext, accept_sparse_xblock_rescue_candidate,
-    build_sparse_xblock_rescue_preconditioner, run_sparse_sxblock_rescue_stage,
-    run_sparse_xblock_rescue_solve_stage, run_xblock_sparse_pc_branch, run_xblock_krylov_solve_stage,
+    build_sparse_xblock_rescue_preconditioner, run_sparse_xblock_rescue_solve_stage,
+    run_xblock_sparse_pc_branch, run_xblock_krylov_solve_stage,
     finalize_xblock_assembled_operator_metadata,
 )
 from sfincs_jax.problems.profile_sparse_xblock import (
@@ -278,7 +278,7 @@ from sfincs_jax.solvers.preconditioner_xblock_tz_sparse import (
     assemble_selected_theta_tz_operator as _assemble_selected_theta_tz_operator,
     assemble_selected_zeta_tz_operator as _assemble_selected_zeta_tz_operator,
     build_rhs1_sxblock_tz_sparse_host_preconditioner,
-    build_rhs1_xblock_tz_sparse_preconditioner, compute_rhs1_sxblock_tz_sparse_host_seed,
+    build_rhs1_xblock_tz_sparse_preconditioner,
     get_rhsmode1_fp_xblock_assembled_host_cache as _get_rhsmode1_fp_xblock_assembled_host_cache,
     rhsmode1_fp_xblock_assembled_host_allowed as _rhsmode1_fp_xblock_assembled_host_allowed,
     rhsmode1_fp_xblock_species_decoupled_for_host_assembly as _rhsmode1_fp_xblock_species_decoupled_for_host_assembly,
@@ -366,7 +366,6 @@ from sfincs_jax.problems.profile_policies import (
     rhsmode1_large_cpu_sparse_rescue_allowed_current_backend as _rhsmode1_large_cpu_sparse_rescue_allowed,
     rhsmode1_large_cpu_sparse_skip_primary_allowed_current_backend as _rhsmode1_large_cpu_sparse_skip_primary_allowed,
     rhsmode1_large_cpu_xblock_skip_primary_allowed_current_backend as _rhsmode1_large_cpu_xblock_skip_primary_allowed,
-    rhsmode1_sparse_sxblock_rescue_allowed_current_backend as _rhsmode1_sparse_sxblock_rescue_allowed,
     rhsmode1_sparse_xblock_rescue_allowed_current_backend as _rhsmode1_sparse_xblock_rescue_allowed,
 )
 from sfincs_jax.problems.profile_policies import (
@@ -2334,16 +2333,6 @@ def solve_v3_full_system_linear_gmres(
             residual_norm=float(res_reduced.residual_norm),
             target=float(target_reduced),
         )
-        sparse_sxblock_rescue_active = _rhsmode1_sparse_sxblock_rescue_allowed(
-            op=op,
-            solve_method_kind=solve_method_kind,
-            active_size=int(active_size),
-            sparse_max_size=int(sparse_max_size),
-            preconditioner_x=int(preconditioner_x),
-            pre_theta=int(pre_theta),
-            pre_zeta=int(pre_zeta),
-            use_implicit=bool(use_implicit),
-        )
         strong_precond_env = rhs1_strong_preconditioner_env_from_env()
         large_cpu_sparse_rescue_first = _rhsmode1_large_cpu_sparse_rescue_first(
             large_cpu_sparse_rescue=large_cpu_sparse_rescue_active,
@@ -2524,7 +2513,6 @@ def solve_v3_full_system_linear_gmres(
             sparse_exact_direct=bool(sparse_exact_direct),
             large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue_active),
             sparse_xblock_rescue_active=bool(sparse_xblock_rescue_active),
-            sparse_sxblock_rescue_active=bool(sparse_sxblock_rescue_active),
             sparse_jax_max_mb=float(sparse_jax_config.max_mb),
             pas_fast_accept=bool(pas_fast_accept),
             gpu_sparse_skip=bool(
@@ -2541,7 +2529,6 @@ def solve_v3_full_system_linear_gmres(
         sparse_enabled = bool(sparse_policy.enabled)
         sparse_kind_use = str(sparse_policy.kind_use)
         sparse_xblock_rescue_active = bool(sparse_order.xblock_rescue_active)
-        sparse_sxblock_rescue_active = bool(sparse_order.sxblock_rescue_active)
         large_cpu_sparse_label = "large CPU sparse"
         if sparse_order.reason_size_large_cpu:
             sparse_exact_lu = _rhsmode1_large_cpu_sparse_exact_lu_allowed(
@@ -2765,43 +2752,6 @@ def solve_v3_full_system_linear_gmres(
                     "solve_v3_full_system_linear_gmres: skipping global sparse rescue after x-block seed "
                     f"(residual={float(res_reduced.residual_norm):.3e})",
                 )
-            if (
-                float(res_reduced.residual_norm) > target_reduced
-                and sparse_sxblock_rescue_active
-                and (not skip_global_sparse_after_xblock)
-            ):
-                sxblock_rescue = run_sparse_sxblock_rescue_stage(
-                    context=SparseSXBlockRescueContext(
-                        op=op,
-                        current_result=res_reduced,
-                        matvec=mv_reduced,
-                        rhs=rhs_reduced,
-                        reduce_full=reduce_full,
-                        expand_reduced=expand_reduced,
-                        drop_tol=float(sparse_drop_tol),
-                        drop_rel=float(sparse_drop_rel),
-                        ilu_drop_tol=float(sparse_ilu_drop_tol),
-                        fill_factor=float(sparse_ilu_fill),
-                        preconditioner=(
-                            precond_sparse_xblock_current or preconditioner_reduced
-                        ),
-                        replay_state=ksp_replay,
-                        tol=float(tol),
-                        atol=float(atol),
-                        restart=int(restart),
-                        maxiter=maxiter,
-                        target=float(target_reduced),
-                        precondition_side=gmres_precond_side,
-                        solver_kind=_solver_kind("incremental")[0],
-                        emit=emit,
-                        mark=_mark,
-                        seed_builder=_compute_rhsmode1_sxblock_tz_sparse_host_seed,
-                        gmres_solver=gmres_solve_with_history_scipy,
-                        parse_polish_gmres_config=rhs1_parse_polish_gmres_config,
-                        record_replay_problem=rhs1_record_ksp_replay_problem,
-                    )
-                )
-                res_reduced = sxblock_rescue.result
             if float(res_reduced.residual_norm) > target_reduced and (
                 not skip_global_sparse_after_xblock
             ):

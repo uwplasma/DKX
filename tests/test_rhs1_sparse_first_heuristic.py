@@ -30,7 +30,6 @@ from sfincs_jax.problems.profile_policies import (
     rhsmode1_sparse_exact_lu_requested_current_backend as _rhsmode1_sparse_exact_lu_requested,
     rhsmode1_sparse_operator_preconditioned_rescue_allowed_current_backend
     as _rhsmode1_sparse_operator_preconditioned_rescue_allowed,
-    rhsmode1_sparse_sxblock_rescue_allowed_current_backend as _rhsmode1_sparse_sxblock_rescue_allowed,
     rhsmode1_sparse_xblock_rescue_allowed_current_backend as _rhsmode1_sparse_xblock_rescue_allowed,
 )
 from sfincs_jax.solvers.preconditioner_pas_policy import (
@@ -1024,93 +1023,6 @@ def test_large_cpu_sparse_exact_lu_xblock_respects_guards(monkeypatch) -> None:
         xblock_seed_residual=4.052229e-4,
         xblock_seed_improvement_ratio=212.1,
         use_implicit=True,
-    )
-
-
-def test_sparse_sxblock_rescue_enabled_for_large_cpu_fp_multispecies(monkeypatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_SXBLOCK_RESCUE", "1")
-    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
-    op = _op(constraint_scheme=1)
-    op.n_species = 2
-    assert _rhsmode1_sparse_sxblock_rescue_allowed(
-        op=op,
-        solve_method_kind="incremental",
-        active_size=20000,
-        sparse_max_size=6000,
-        preconditioner_x=1,
-        pre_theta=0,
-        pre_zeta=0,
-        use_implicit=False,
-    )
-
-
-def test_sparse_sxblock_rescue_respects_guards(monkeypatch) -> None:
-    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_SXBLOCK_RESCUE", raising=False)
-    monkeypatch.setattr("sfincs_jax.problems.profile_policies.jax.default_backend", lambda: "cpu")
-    op = _op(constraint_scheme=1)
-    op.n_species = 2
-    assert not _rhsmode1_sparse_sxblock_rescue_allowed(
-        op=op,
-        solve_method_kind="incremental",
-        active_size=20000,
-        sparse_max_size=6000,
-        preconditioner_x=1,
-        pre_theta=0,
-        pre_zeta=0,
-        use_implicit=False,
-    )
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_SXBLOCK_RESCUE", "1")
-    op.n_species = 1
-    assert not _rhsmode1_sparse_sxblock_rescue_allowed(
-        op=op,
-        solve_method_kind="incremental",
-        active_size=20000,
-        sparse_max_size=6000,
-        preconditioner_x=1,
-        pre_theta=0,
-        pre_zeta=0,
-        use_implicit=False,
-    )
-    op.n_species = 2
-    assert not _rhsmode1_sparse_sxblock_rescue_allowed(
-        op=op,
-        solve_method_kind="dense",
-        active_size=20000,
-        sparse_max_size=6000,
-        preconditioner_x=1,
-        pre_theta=0,
-        pre_zeta=0,
-        use_implicit=False,
-    )
-    assert not _rhsmode1_sparse_sxblock_rescue_allowed(
-        op=op,
-        solve_method_kind="incremental",
-        active_size=20000,
-        sparse_max_size=6000,
-        preconditioner_x=0,
-        pre_theta=0,
-        pre_zeta=0,
-        use_implicit=False,
-    )
-    assert not _rhsmode1_sparse_sxblock_rescue_allowed(
-        op=op,
-        solve_method_kind="incremental",
-        active_size=20000,
-        sparse_max_size=6000,
-        preconditioner_x=1,
-        pre_theta=1,
-        pre_zeta=0,
-        use_implicit=False,
-    )
-    assert not _rhsmode1_sparse_sxblock_rescue_allowed(
-        op=op,
-        solve_method_kind="incremental",
-        active_size=5000,
-        sparse_max_size=6000,
-        preconditioner_x=1,
-        pre_theta=0,
-        pre_zeta=0,
-        use_implicit=False,
     )
 
 

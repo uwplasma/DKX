@@ -25,10 +25,10 @@ bootstrap current, transport coefficients, plotting, and optimization.
   remaining sparse-preconditioner owners to domain names, folded
   Fortran-reduced policy into `solvers/preconditioner_reduced_pmat.py`, pruned
   redundant examples/support scripts, compacted superseded solver-trace
-  evidence, and deleted disabled x-block probe-coarse, post-solve, and manual
-  FP global/high-x tails with their env knobs, metadata/output fields, docs,
-  and stale tests. The live sparse-PC post-minres polish and sparse x-block
-  rescue paths remain.
+  evidence, and deleted disabled x-block probe-coarse, post-solve, manual FP
+  global/high-x, and opt-in sparse sxblock rescue tails with their env knobs,
+  metadata/output fields, docs, and stale tests. The live sparse-PC
+  post-minres polish and sparse x-block rescue paths remain.
   The next cleanup order is RHSMode-1 orchestration and policy-table collapse,
   then validation/test consolidation.
 - Largest package owners, in order: `profile_sparse_xblock.py`,
