@@ -5276,24 +5276,6 @@ def rhs1_gpu_sparse_fallback_skip_allowed(
         return False
     return float(residual_norm) <= float(skip_ratio) * max(float(target), 1.0e-300)
 
-def rhsmode1_host_dense_shortcut_allowed_current_backend(
-    *,
-    op: object,
-    active_size: int,
-    use_implicit: bool,
-    solve_method_kind: str,
-) -> bool:
-    """Evaluate the host-dense shortcut policy using current backend defaults."""
-
-    return rhs1_host_dense_shortcut_allowed(
-        op=op,
-        active_size=active_size,
-        use_implicit=use_implicit,
-        solve_method_kind=solve_method_kind,
-        backend=jax.default_backend(),
-        dense_fallback_max=rhs1_dense_fallback_max(op),
-    )
-
 def rhsmode1_sparse_operator_preconditioned_rescue_allowed_current_backend(
     *,
     op: object,
@@ -5665,7 +5647,6 @@ __all__ = (
     "rhsmode1_constraint0_sparse_first_current_backend",
     "rhsmode1_fast_post_xblock_polish_allowed_current_backend",
     "rhsmode1_fp_targeted_polish_allowed_current_backend",
-    "rhsmode1_host_dense_shortcut_allowed_current_backend",
     "rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed_current_backend",
     "rhsmode1_large_cpu_sparse_rescue_allowed_current_backend",
     "rhsmode1_large_cpu_sparse_skip_primary_allowed_current_backend",

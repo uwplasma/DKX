@@ -395,10 +395,10 @@ from sfincs_jax.problems.profile_policies import (
     rhs1_dense_krylov_allowed as _rhs1_dense_krylov_allowed_impl,
     rhs1_explicit_sparse_host_direct_allowed as _rhs1_explicit_sparse_host_direct_allowed_impl,
     rhs1_host_dense_fallback_allowed as _rhs1_host_dense_fallback_allowed_impl,
+    rhs1_host_dense_shortcut_allowed as _rhs1_host_dense_shortcut_allowed_impl,
     rhs1_host_sparse_direct_allowed as _rhs1_host_sparse_direct_allowed_impl,
     rhs1_host_sparse_skip_dense_ratio as _rhs1_host_sparse_skip_dense_ratio_impl,
     rhs1_structured_full_csr_auto_allowed as _rhs1_structured_full_csr_auto_allowed_impl,
-    rhsmode1_host_dense_shortcut_allowed_current_backend as _rhsmode1_host_dense_shortcut_allowed,
     rhsmode1_sparse_operator_preconditioned_rescue_allowed_current_backend as _rhsmode1_sparse_operator_preconditioned_rescue_allowed,
 )
 from sfincs_jax.solvers.explicit_sparse import (
@@ -1343,11 +1343,13 @@ def solve_v3_full_system_linear_gmres(
             default=False,
         )
         dense_matrix_cache: np.ndarray | None = None
-        host_dense_shortcut = _rhsmode1_host_dense_shortcut_allowed(
+        host_dense_shortcut = _rhs1_host_dense_shortcut_allowed_impl(
             op=op,
             active_size=int(active_size),
             use_implicit=bool(use_implicit),
             solve_method_kind=str(solve_method_kind),
+            backend=jax.default_backend(),
+            dense_fallback_max=int(dense_fallback_max),
         )
         cpu_large_sparse_shortcut = _rhsmode1_large_cpu_sparse_skip_primary_allowed(
             op=op,
@@ -3116,11 +3118,13 @@ def solve_v3_full_system_linear_gmres(
         else:
             preconditioner_full = None
             bicgstab_preconditioner_full = None
-            host_dense_shortcut_full = _rhsmode1_host_dense_shortcut_allowed(
+            host_dense_shortcut_full = _rhs1_host_dense_shortcut_allowed_impl(
                 op=op,
                 active_size=int(op.total_size),
                 use_implicit=bool(use_implicit),
                 solve_method_kind=str(solve_method_kind),
+                backend=jax.default_backend(),
+                dense_fallback_max=_rhsmode1_dense_fallback_max(op),
             )
 
             def _build_rhs1_preconditioner_full():
