@@ -23,7 +23,6 @@ ALLOWED_EXAMPLE_FOLDERS = {
     "transport",
     "tutorials",
     "upstream",
-    "utils",
     "vmec_jax_finite_beta",
 }
 
@@ -41,7 +40,6 @@ FOLDER_CATEGORIES = {
     "transport": "capability",
     "tutorials": "learning",
     "upstream": "reference",
-    "utils": "support",
     "vmec_jax_finite_beta": "capability",
 }
 
@@ -263,7 +261,7 @@ def test_workflow_catalog_is_complete_and_first_run_safe() -> None:
         assert start_path.exists(), f"{folder}: {metadata['start_here']}"
         assert metadata["start_here"].split("/", 1)[0] == folder
 
-    assert set(FOLDER_CATEGORIES.values()) == {"capability", "learning", "reference", "support", "validation"}
+    assert set(FOLDER_CATEGORIES.values()) == {"capability", "learning", "reference", "validation"}
 
     workflows = catalog["workflows"]
     assert {workflow["entrypoint"] for workflow in workflows} == CATALOG_ENTRYPOINTS
