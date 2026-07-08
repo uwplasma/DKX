@@ -438,15 +438,6 @@ performance without changing the input file:
   ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_QI_BASIS``,
   and ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_RCOND``.
 
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE``: opt-in pre-Krylov seed
-  correction for explicit ``xblock_sparse_pc_gmres``. Set to ``1`` to apply the
-  same bounded coarse correction basis to a side-probe or supplied initial state
-  before the full Krylov solve. Related diagnostic controls include
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS`` and
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_FSAVG_LMAX``. This remains off by
-  default for the differentiable/device-QI lane until the GPU hard-seed gate
-  passes.
-
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK``: non-autodiff production
   fallback for large RHSMode=1 3D full-FP systems when an explicit JAX-native
   x-block Krylov method is requested. The default ``auto`` mode rewrites
