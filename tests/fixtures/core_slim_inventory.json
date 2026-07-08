@@ -19,7 +19,7 @@
       "research/publication-audits"
     ],
     "next_step": "Execute plan_final.md file-level queues in order, starting with QI/device-QI artifacts and experimental solver route extraction, then RHSMode-1 orchestration collapse, operator cleanup, transport collapse, validation/evidence shrink, examples/tests curation, and root/API cleanup.",
-    "latest_tranche_evidence": "Removed direct-tail support-mode preflight and stable-output plumbing; deleted 13 tracked generated performance-output JSON files; consolidated seven release/data/audit/hygiene scripts into validation CLIs; extracted unsupported single-case sharded and multi-GPU performance campaign examples/tests; extracted high-nu and W7-X publication-audit generators while retaining compact checked artifacts; extracted optional Lineax and Equinox/JAXopt adoption benchmark drivers; moved Krylov implementation from the package root to sfincs_jax.solvers.krylov while keeping sfincs_jax.solver as a compatibility alias; rewrote plan_final.md into a stricter finite work order and added rule-expanded whole-repo inventory coverage; deleted the duplicate root utils/ tree and promoted the enhanced noninteractive upstream utility behavior into examples/sfincs_examples/utils, leaving one canonical vendored utility location; promoted the remaining Python release/profiling scripts into sfincs_jax.validation modules so scripts/ is no longer a Python implementation area; merged validation figure-panel helpers into validation artifacts so evidence schemas and docs-panel gates have one owner; merged reduced and scaled suite runners into sfincs_jax.validation.suite with explicit reduced/scaled subcommands and legacy script-name dispatch for archived tests; consolidated production-input generation, README audit regeneration, and write-output tracing into sfincs_jax.validation.release subcommands so validation reaches five implementation modules plus __init__; removed unsupported BLR/HSS and nested-dissection frontal stable solver routes with their aliases, env knobs, metadata, tests, and docs; made plan_final.md line/file review criteria explicit for public symbols, env vars, CLI flags, namelist aliases, output keys, diagnostics fields, QI/device-QI artifacts, example folders, and test files. Focused local checks across those tranches covered source-tree/domain contracts, release/data/audit tests, scaled-suite source-tree checks, publication-audit extraction checks, package CLI checks, upstream utility smoke tests, Ruff, compileall, JSON validation, diff hygiene, and size guard.; extracted stable QI/device-QI generated artifacts, promotion tests, default validation references, and README/docs artifact claims from the stable core; compacted the research-lane manifest to existing small evidence and branch-scoped QI/device-QI as deferred research; removed four untested performance profiling/campaign scripts from stable examples and rewrote docs to point to retained output-format, structured-solve, transport-worker, and checked compile/runtime evidence instead; removed optional Optax calibration/geometry-fitting/publication-figure optimization scripts from stable examples and kept the documented optimization lane on tested QA objective, bootstrap-current comparison, and scan-promotion workflows; removed the W7-X high-nu candidate preconditioner harness and its direct test from stable examples while retaining the checked performance figure and full scan command; removed the long optimization promotion campaign wrapper from stable examples and documentation while retaining the explicit scan, audit, and comparison workflow; demoted unpromoted active native/symbolic RHSMode-1 preconditioners from automatic default ladders and updated docs/tests so stable auto starts from residual-clean Fortran-reduced active LU with guarded sparse/coarse fallbacks."
+    "latest_tranche_evidence": "Removed direct-tail support-mode preflight and stable-output plumbing; deleted 13 tracked generated performance-output JSON files; consolidated seven release/data/audit/hygiene scripts into validation CLIs; extracted unsupported single-case sharded and multi-GPU performance campaign examples/tests; extracted high-nu and W7-X publication-audit generators while retaining compact checked artifacts; extracted optional Lineax and Equinox/JAXopt adoption benchmark drivers; moved Krylov implementation from the package root to sfincs_jax.solvers.krylov while keeping sfincs_jax.solver as a compatibility alias; rewrote plan_final.md into a stricter finite work order and added rule-expanded whole-repo inventory coverage; deleted the duplicate root utils/ tree and promoted the enhanced noninteractive upstream utility behavior into examples/sfincs_examples/utils, leaving one canonical vendored utility location; promoted the remaining Python release/profiling scripts into sfincs_jax.validation modules so scripts/ is no longer a Python implementation area; merged validation figure-panel helpers into validation artifacts so evidence schemas and docs-panel gates have one owner; merged reduced and scaled suite runners into sfincs_jax.validation.suite with explicit reduced/scaled subcommands and legacy script-name dispatch for archived tests; consolidated production-input generation, README audit regeneration, and write-output tracing into sfincs_jax.validation.release subcommands so validation reaches five implementation modules plus __init__; removed unsupported BLR/HSS and nested-dissection frontal stable solver routes with their aliases, env knobs, metadata, tests, and docs; made plan_final.md line/file review criteria explicit for public symbols, env vars, CLI flags, namelist aliases, output keys, diagnostics fields, QI/device-QI artifacts, example folders, and test files. Focused local checks across those tranches covered source-tree/domain contracts, release/data/audit tests, scaled-suite source-tree checks, publication-audit extraction checks, package CLI checks, upstream utility smoke tests, Ruff, compileall, JSON validation, diff hygiene, and size guard.; extracted stable QI/device-QI generated artifacts, promotion tests, default validation references, and README/docs artifact claims from the stable core; compacted the research-lane manifest to existing small evidence and branch-scoped QI/device-QI as deferred research; removed four untested performance profiling/campaign scripts from stable examples and rewrote docs to point to retained output-format, structured-solve, transport-worker, and checked compile/runtime evidence instead; removed optional Optax calibration/geometry-fitting/publication-figure optimization scripts from stable examples and kept the documented optimization lane on tested QA objective, bootstrap-current comparison, and scan-promotion workflows; removed the W7-X high-nu candidate preconditioner harness and its direct test from stable examples while retaining the checked performance figure and full scan command; removed the long optimization promotion campaign wrapper from stable examples and documentation while retaining the explicit scan, audit, and comparison workflow; demoted unpromoted active native/symbolic RHSMode-1 preconditioners from automatic default ladders and updated docs/tests so stable auto starts from residual-clean Fortran-reduced active LU with guarded sparse/coarse fallbacks.; removed RHSMode-1 active-symbolic frontal/superblock/block-Schur/coupled-Schur wrapper routes, policy dataclasses, tests, and source-map entries while preserving the generic symbolic sparse backend for transport diagnostics."
   },
   "categories": [
     "core",
@@ -587,25 +587,36 @@
         {
           "lines": "1-347",
           "disposition": "keep-core",
-          "owner_tags": ["API", "NUMERICS"],
+          "owner_tags": [
+            "API",
+            "NUMERICS"
+          ],
           "reason": "public/default policy readers and stable automatic selection helpers"
         },
         {
           "lines": "348-2123",
           "disposition": "merge-core",
-          "owner_tags": ["NUMERICS", "PERF"],
+          "owner_tags": [
+            "NUMERICS",
+            "PERF"
+          ],
           "reason": "duplicate sparse/direct/rescue policy predicates must collapse into one RHSMode-1 policy table"
         },
         {
           "lines": "2124-3773",
           "disposition": "extract-research",
-          "owner_tags": ["PERF"],
+          "owner_tags": [
+            "PERF"
+          ],
           "reason": "stage-2, scipy rescue, sparse rescue, and hidden-env route probes are not stable user API"
         },
         {
           "lines": "3774-6177",
           "disposition": "merge-core",
-          "owner_tags": ["API", "PERF"],
+          "owner_tags": [
+            "API",
+            "PERF"
+          ],
           "reason": "backend-specific wrappers should reduce to one automatic default policy surface"
         }
       ]
@@ -636,25 +647,36 @@
         {
           "lines": "1-1087",
           "disposition": "extract-research",
-          "owner_tags": ["PERF"],
+          "owner_tags": [
+            "PERF"
+          ],
           "reason": "rescue/seed/global/high-x correction experiments are not a single stable default route"
         },
         {
           "lines": "1088-3248",
           "disposition": "keep-core",
-          "owner_tags": ["NUMERICS", "PERF"],
+          "owner_tags": [
+            "NUMERICS",
+            "PERF"
+          ],
           "reason": "x-block matvec, initial guess, assembled preflight, and stable sparse-PC setup"
         },
         {
           "lines": "3249-4527",
           "disposition": "merge-core",
-          "owner_tags": ["API", "PERF"],
+          "owner_tags": [
+            "API",
+            "PERF"
+          ],
           "reason": "metadata builders and route-state dictionaries duplicate output and policy owners"
         },
         {
           "lines": "4528-6874",
           "disposition": "keep-core",
-          "owner_tags": ["NUMERICS", "PERF"],
+          "owner_tags": [
+            "NUMERICS",
+            "PERF"
+          ],
           "reason": "Krylov execution and final residual gate remain until RHSMode-1 pipeline collapse"
         }
       ]
@@ -686,25 +708,36 @@
         {
           "lines": "1-2088",
           "disposition": "keep-core",
-          "owner_tags": ["PHYSICS", "NUMERICS"],
+          "owner_tags": [
+            "PHYSICS",
+            "NUMERICS"
+          ],
           "reason": "structured RHSMode-1 CSR assembly and active projected full-system preconditioner"
         },
         {
           "lines": "2089-3888",
           "disposition": "extract-research",
-          "owner_tags": ["NUMERICS", "PERF"],
-          "reason": "coupled kinetic, symbolic frontal/superblock/block-schur, and coupled-schur experiments"
+          "owner_tags": [
+            "NUMERICS",
+            "PERF"
+          ],
+          "reason": "coupled kinetic experiments remain; active symbolic frontal/superblock/block-schur wrappers were removed from stable"
         },
         {
           "lines": "3889-5583",
           "disposition": "merge-core",
-          "owner_tags": ["NUMERICS"],
+          "owner_tags": [
+            "NUMERICS"
+          ],
           "reason": "native x-ell and low-l/ell-band/window coarse variants must reduce to admitted defaults"
         },
         {
           "lines": "5584-6078",
           "disposition": "keep-core",
-          "owner_tags": ["PHYSICS", "NUMERICS"],
+          "owner_tags": [
+            "PHYSICS",
+            "NUMERICS"
+          ],
           "reason": "tail assembly and source/constraint/Phi1 helpers used by structured full CSR"
         }
       ]
@@ -757,19 +790,27 @@
         {
           "lines": "1-720",
           "disposition": "keep-core",
-          "owner_tags": ["NUMERICS"],
+          "owner_tags": [
+            "NUMERICS"
+          ],
           "reason": "CSR matvec, triangular solves, storage estimates, and factor admission contracts"
         },
         {
           "lines": "721-2175",
           "disposition": "extract-research",
-          "owner_tags": ["NUMERICS", "PERF"],
+          "owner_tags": [
+            "NUMERICS",
+            "PERF"
+          ],
           "reason": "symbolic block/coarse/schur/frontal/superblock factors are native sparse-direct research"
         },
         {
           "lines": "2176-3713",
           "disposition": "merge-core",
-          "owner_tags": ["NUMERICS", "API"],
+          "owner_tags": [
+            "NUMERICS",
+            "API"
+          ],
           "reason": "operator construction, pattern coloring, host direct solve, and refinement should keep only stable default paths"
         }
       ]
@@ -884,19 +925,28 @@
         {
           "lines": "1-964",
           "disposition": "keep-core",
-          "owner_tags": ["NUMERICS", "API"],
+          "owner_tags": [
+            "NUMERICS",
+            "API"
+          ],
           "reason": "transport linear solve, dense batch solve, and active dense setup"
         },
         {
           "lines": "965-2031",
           "disposition": "keep-core",
-          "owner_tags": ["NUMERICS", "PERF"],
+          "owner_tags": [
+            "NUMERICS",
+            "PERF"
+          ],
           "reason": "active block-Schur factor and residual coarse correction are admitted transport defaults"
         },
         {
           "lines": "2032-3513",
           "disposition": "extract-research",
-          "owner_tags": ["NUMERICS", "PERF"],
+          "owner_tags": [
+            "NUMERICS",
+            "PERF"
+          ],
           "reason": "direct reduced-Pmat symbolic/native sparse controls and hidden-env variants need research extraction or collapse"
         }
       ]
@@ -1059,25 +1109,37 @@
         {
           "lines": "1-1103",
           "disposition": "keep-core",
-          "owner_tags": ["EVIDENCE", "COMPAT"],
+          "owner_tags": [
+            "EVIDENCE",
+            "COMPAT"
+          ],
           "reason": "case result schema, parsers, resolution helpers, and compact log/metric readers"
         },
         {
           "lines": "1104-2693",
           "disposition": "merge-core",
-          "owner_tags": ["EVIDENCE", "COMPAT"],
+          "owner_tags": [
+            "EVIDENCE",
+            "COMPAT"
+          ],
           "reason": "single-case runner and Fortran/JAX comparison helpers should be shared by reduced and scaled commands"
         },
         {
           "lines": "2694-3650",
           "disposition": "extract-research",
-          "owner_tags": ["EVIDENCE", "PERF"],
+          "owner_tags": [
+            "EVIDENCE",
+            "PERF"
+          ],
           "reason": "reduced/scaled campaign drivers are release tooling, not importable solver architecture"
         },
         {
           "lines": "3651-4199",
           "disposition": "merge-core",
-          "owner_tags": ["API", "EVIDENCE"],
+          "owner_tags": [
+            "API",
+            "EVIDENCE"
+          ],
           "reason": "scaled-suite command and dispatcher should reduce to small public CLI wrappers"
         }
       ]

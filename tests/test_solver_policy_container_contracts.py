@@ -72,12 +72,7 @@ from sfincs_jax.solvers.native_block_factor import (
     NativeTwoFieldSchurFactor,
     NativeXEllKineticFactor,
 )
-from sfincs_jax.solvers.preconditioner_symbolic_policy import (
-    ActiveFortranV3ReducedFactorPolicy,
-    ActiveSymbolicBlockSchurPolicy,
-    ActiveSymbolicFrontalPolicy,
-    ActiveSymbolicSuperblockPolicy,
-)
+from sfincs_jax.solvers.preconditioner_symbolic_policy import ActiveFortranV3ReducedFactorPolicy
 from sfincs_jax.solvers.preconditioner_xblock_policy import (
     RHS1XBlockDeviceHostFallbackDecision,
     RHS1XBlockLocalSolveCandidate,
@@ -115,7 +110,7 @@ def _value_for_field(name: str):
         return True
     if "ratio" in name or "tol" in name or "mb" in name or name.endswith("_s") or "speedup" in name or "efficiency" in name or "fraction" in name or "units" in name or "latency" in name or "bytes" in name or "threshold" in name or "regularization" in name or "drop" in name or "fill" in name or "pivot" in name or "omega" in name or "alpha" in name or "clip" in name or "rcond" in name or "iota" in name:
         return 1.0
-    if "kind" in name or "backend" in name or "method" in name or "scope" in name or "strategy" in name or "axis" in name or "solver" in name or "mode" in name or "reason" in name or "status" in name or "algorithm" in name or "digest" in name or "source" in name or "label" in name or name in {"precondition_side", "operator_build_scope", "operator_action_scope", "preconditioner_scope", "coarse_operator_scope", "coarse_solve_scope", "cache_required", "compile_cache_dir", "timing_semantics", "benchmark_kind", "schema_version", "artifact_kind", "claim_scope", "requested_kind", "active_symbolic_kind", "active_architecture", "ordering_kind", "factor_kind", "permc_requested", "permc_spec", "scale_norm", "solve_method", "solve_method_use"}:
+    if "kind" in name or "backend" in name or "method" in name or "scope" in name or "strategy" in name or "axis" in name or "solver" in name or "mode" in name or "reason" in name or "status" in name or "algorithm" in name or "digest" in name or "source" in name or "label" in name or name in {"precondition_side", "operator_build_scope", "operator_action_scope", "preconditioner_scope", "coarse_operator_scope", "coarse_solve_scope", "cache_required", "compile_cache_dir", "timing_semantics", "benchmark_kind", "schema_version", "artifact_kind", "claim_scope", "requested_kind", "ordering_kind", "factor_kind", "permc_requested", "permc_spec", "scale_norm", "solve_method", "solve_method_use"}:
         return "unit"
     return 1
 
@@ -322,31 +317,6 @@ def test_xblock_symbolic_and_native_policy_contracts_are_json_ready() -> None:
     assert host.to_metadata()["non_autodiff"] is True
     assert candidate.to_metadata()["metadata_label"] == "xblock_ilu"
     assert lower_fill.to_metadata()["accepted"] is True
-    assert ActiveSymbolicSuperblockPolicy(1, "rcm", 2, 3, 4, 5, 1, 0.1, 1e-8, 1.5, 2, 1e-6, 1.0).ordering_kind == "rcm"
-    assert ActiveSymbolicBlockSchurPolicy(1, "rcm", 2, 3, 4, 1, 2, 1e-8, 1.5, 2, 1e-6, 1.0).separator_cols == 4
-    assert ActiveSymbolicFrontalPolicy(
-        requested_kind="auto",
-        active_symbolic_kind="frontal",
-        active_architecture="frontal",
-        max_active_size=1,
-        ordering_kind="rcm",
-        block_size=2,
-        max_permutation_size=3,
-        separator_cols=4,
-        max_superblock_size=5,
-        max_superblock_blocks=6,
-        boundary_width=1,
-        high_degree_cols=2,
-        min_cross_nnz=1,
-        max_dense_rhs_entries=10,
-        max_dense_rhs_cols_per_block=4,
-        min_cross_separator_fraction=0.2,
-        regularization_rel=1e-8,
-        prefill_safety_factor=1.5,
-        admission_probes=2,
-        admission_max_relative_residual=1e-6,
-        admission_min_improvement=1.0,
-    ).active_architecture == "frontal"
     assert ActiveFortranV3ReducedFactorPolicy("auto", "ilu", True, 1000, False, 5.0, 1e-4, 0.01, "COLAMD", ("COLAMD",), "COLAMD", "row", 1e6, False, 2000, 1.5).factor_kind == "ilu"
 
     dense = NativeDenseBlockJacobi(
