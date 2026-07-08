@@ -1217,49 +1217,6 @@ def rhs1_krylov_routing_controls_from_env() -> RHS1KrylovRoutingControls:
         distributed_auto_solver=rhs1_distributed_auto_solver_from_env(),
     )
 
-def rhs1_fp_xblock_global_correction_allowed(
-    *,
-    op: Any,
-    active_size: int,
-    residual_norm: float,
-    target: float,
-    used_large_cpu_xblock_shortcut: bool,
-    used_explicit_fp_xblock_seed: bool,
-    sparse_xblock_candidate_accepted: bool,
-    use_implicit: bool,
-    backend: str,
-) -> bool:
-    """Return whether a bounded residual-equation correction may follow x-block.
-
-    This is an opt-in diagnostic path for production-resolution explicit FP
-    cases. It reuses the accepted x-block seed and an existing matrix-free
-    preconditioner, so it avoids the unbounded host SciPy rescue and avoids
-    factorizing the high-x local blocks that were unstable in VMEC finite-beta
-    production probes.
-    """
-    env = _env_token("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION")
-    if env not in _TRUE_VALUES:
-        return False
-    if not bool(used_large_cpu_xblock_shortcut):
-        return False
-    if not bool(used_explicit_fp_xblock_seed) or not bool(
-        sparse_xblock_candidate_accepted
-    ):
-        return False
-    if not _is_explicit_cpu_rhs1_fp_only(
-        op=op, use_implicit=use_implicit, backend=backend
-    ):
-        return False
-    if float(residual_norm) <= float(target):
-        return False
-    active_min = _env_int("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_MIN", 12000)
-    if int(active_size) < max(1, int(active_min)):
-        return False
-    active_max = _env_int("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_MAX", 600000)
-    if int(active_max) > 0 and int(active_size) > int(active_max):
-        return False
-    return True
-
 # From sfincs_jax.problems.profile_policies
 def rhs1_sparse_exact_lu_requested(
     *,
@@ -5880,31 +5837,6 @@ def rhsmode1_skip_global_sparse_after_xblock_allowed_current_backend(
         backend=jax.default_backend(),
     )
 
-def rhsmode1_fp_xblock_global_correction_allowed_current_backend(
-    *,
-    op: object,
-    active_size: int,
-    residual_norm: float,
-    target: float,
-    used_large_cpu_xblock_shortcut: bool,
-    used_explicit_fp_xblock_seed: bool,
-    sparse_xblock_candidate_accepted: bool,
-    use_implicit: bool,
-) -> bool:
-    """Evaluate the FP x-block global-correction admission policy."""
-
-    return rhs1_fp_xblock_global_correction_allowed(
-        op=op,
-        active_size=int(active_size),
-        residual_norm=float(residual_norm),
-        target=float(target),
-        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
-        used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
-        sparse_xblock_candidate_accepted=bool(sparse_xblock_candidate_accepted),
-        use_implicit=bool(use_implicit),
-        backend=jax.default_backend(),
-    )
-
 def rhsmode1_scipy_rescue_abs_floor_after_xblock_current_backend(
     *,
     op: object,
@@ -5991,7 +5923,6 @@ __all__ = (
     "rhsmode1_dense_backend_allowed_current_backend",
     "rhsmode1_fast_post_xblock_polish_allowed_current_backend",
     "rhsmode1_fp_targeted_polish_allowed_current_backend",
-    "rhsmode1_fp_xblock_global_correction_allowed_current_backend",
     "rhsmode1_host_dense_fallback_allowed_current_backend",
     "rhsmode1_host_dense_shortcut_allowed_current_backend",
     "rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed_current_backend",
@@ -6126,7 +6057,6 @@ __all__ = (
     "rhs1_fp_low_l_polish_controls_from_env",
     "rhs1_fp_residual_polish_controls_from_env",
     "rhs1_fp_targeted_polish_allowed",
-    "rhs1_fp_xblock_global_correction_allowed",
     "rhs1_distributed_auto_solver_from_env",
     "rhs1_gpu_sparse_fallback_skip_allowed_current_backend",
     "rhs1_gmres_precondition_side_from_env",

@@ -17,8 +17,6 @@ from sfincs_jax.problems.profile_diagnostics import (
     XBlockCoarseCorrectionDiagnosticsContext,
     XBlockSparsePCCoreDiagnosticsContext,
     XBlockSideProbeDiagnosticsContext,
-    fp_xblock_global_correction_metadata,
-    fp_xblock_highx_residual_correction_metadata,
     fortran_reduced_xblock_result_metadata,
     record_structured_fblock_preconditioner_metadata,
     sparse_pc_direct_tail_result_metadata,
@@ -119,29 +117,6 @@ def _sparse_rescue_scope() -> dict[str, object]:
         "sparse_xblock_rescue_seed_refines_performed": 2,
         "sparse_xblock_rescue_candidate_residual": 0.5,
         "sparse_xblock_rescue_candidate_accepted": 1,
-        "fp_xblock_global_correction_allowed": True,
-        "fp_xblock_global_correction_attempted": True,
-        "fp_xblock_global_correction_accepted": False,
-        "fp_xblock_global_correction_reason": "no_improvement",
-        "fp_xblock_global_correction_error": "none",
-        "fp_xblock_global_correction_preconditioner": "xblock",
-        "fp_xblock_global_correction_steps": 4,
-        "fp_xblock_global_correction_accepted_steps": 1,
-        "fp_xblock_global_correction_residual_before": 2.0,
-        "fp_xblock_global_correction_residual_after": 1.5,
-        "fp_xblock_global_correction_improvement_ratio": 1.25,
-        "fp_xblock_global_correction_elapsed_s": 0.125,
-        "fp_xblock_highx_residual_correction_allowed": True,
-        "fp_xblock_highx_residual_correction_attempted": False,
-        "fp_xblock_highx_residual_correction_accepted": False,
-        "fp_xblock_highx_residual_correction_reason": "policy_guard",
-        "fp_xblock_highx_residual_correction_error": None,
-        "fp_xblock_highx_residual_correction_residual_before": None,
-        "fp_xblock_highx_residual_correction_residual_after": None,
-        "fp_xblock_highx_residual_correction_improvement_ratio": None,
-        "fp_xblock_highx_residual_correction_elapsed_s": None,
-        "fp_xblock_highx_residual_correction_direction_count": 0,
-        "fp_xblock_highx_residual_correction_direction_names": ["a", "b"],
     }
 
 
@@ -180,75 +155,6 @@ def _sparse_rescue_context() -> SparseRescueTailMetadataContext:
         sparse_xblock_rescue_candidate_accepted=scope[
             "sparse_xblock_rescue_candidate_accepted"
         ],
-        fp_xblock_global_correction_allowed=scope[
-            "fp_xblock_global_correction_allowed"
-        ],
-        fp_xblock_global_correction_attempted=scope[
-            "fp_xblock_global_correction_attempted"
-        ],
-        fp_xblock_global_correction_accepted=scope[
-            "fp_xblock_global_correction_accepted"
-        ],
-        fp_xblock_global_correction_reason=scope[
-            "fp_xblock_global_correction_reason"
-        ],
-        fp_xblock_global_correction_error=scope[
-            "fp_xblock_global_correction_error"
-        ],
-        fp_xblock_global_correction_preconditioner=scope[
-            "fp_xblock_global_correction_preconditioner"
-        ],
-        fp_xblock_global_correction_steps=scope[
-            "fp_xblock_global_correction_steps"
-        ],
-        fp_xblock_global_correction_accepted_steps=scope[
-            "fp_xblock_global_correction_accepted_steps"
-        ],
-        fp_xblock_global_correction_residual_before=scope[
-            "fp_xblock_global_correction_residual_before"
-        ],
-        fp_xblock_global_correction_residual_after=scope[
-            "fp_xblock_global_correction_residual_after"
-        ],
-        fp_xblock_global_correction_improvement_ratio=scope[
-            "fp_xblock_global_correction_improvement_ratio"
-        ],
-        fp_xblock_global_correction_elapsed_s=scope[
-            "fp_xblock_global_correction_elapsed_s"
-        ],
-        fp_xblock_highx_residual_correction_allowed=scope[
-            "fp_xblock_highx_residual_correction_allowed"
-        ],
-        fp_xblock_highx_residual_correction_attempted=scope[
-            "fp_xblock_highx_residual_correction_attempted"
-        ],
-        fp_xblock_highx_residual_correction_accepted=scope[
-            "fp_xblock_highx_residual_correction_accepted"
-        ],
-        fp_xblock_highx_residual_correction_reason=scope[
-            "fp_xblock_highx_residual_correction_reason"
-        ],
-        fp_xblock_highx_residual_correction_error=scope[
-            "fp_xblock_highx_residual_correction_error"
-        ],
-        fp_xblock_highx_residual_correction_residual_before=scope[
-            "fp_xblock_highx_residual_correction_residual_before"
-        ],
-        fp_xblock_highx_residual_correction_residual_after=scope[
-            "fp_xblock_highx_residual_correction_residual_after"
-        ],
-        fp_xblock_highx_residual_correction_improvement_ratio=scope[
-            "fp_xblock_highx_residual_correction_improvement_ratio"
-        ],
-        fp_xblock_highx_residual_correction_elapsed_s=scope[
-            "fp_xblock_highx_residual_correction_elapsed_s"
-        ],
-        fp_xblock_highx_residual_correction_direction_count=scope[
-            "fp_xblock_highx_residual_correction_direction_count"
-        ],
-        fp_xblock_highx_residual_correction_direction_names=scope[
-            "fp_xblock_highx_residual_correction_direction_names"
-        ],
     )
 
 
@@ -257,22 +163,13 @@ def test_sparse_rescue_metadata_helpers_preserve_driver_keys_and_types() -> None
     context = _sparse_rescue_context()
 
     sparse_meta = sparse_xblock_rescue_metadata(scope)
-    global_meta = fp_xblock_global_correction_metadata(scope)
-    highx_meta = fp_xblock_highx_residual_correction_metadata(scope)
     combined = sparse_rescue_tail_metadata(scope)
     combined_context = sparse_rescue_tail_metadata_from_context(context)
 
     assert sparse_meta["sparse_xblock_rescue_active"] is True
     assert sparse_meta["sparse_xblock_rescue_reason"] == "seed_rejected"
     assert sparse_meta["sparse_xblock_rescue_candidate_accepted"] is True
-    assert global_meta["fp_xblock_global_correction_reason"] == "no_improvement"
-    assert global_meta["fp_xblock_global_correction_accepted"] is False
-    assert highx_meta["fp_xblock_highx_residual_correction_allowed"] is True
-    assert highx_meta["fp_xblock_highx_residual_correction_direction_names"] == (
-        "a",
-        "b",
-    )
-    assert combined == {**sparse_meta, **global_meta, **highx_meta}
+    assert combined == sparse_meta
     assert combined_context == combined
 
 

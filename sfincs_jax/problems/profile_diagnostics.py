@@ -55,29 +55,6 @@ class SparseRescueTailMetadataContext:
     sparse_xblock_rescue_seed_refines_performed: object
     sparse_xblock_rescue_candidate_residual: object
     sparse_xblock_rescue_candidate_accepted: object
-    fp_xblock_global_correction_allowed: object
-    fp_xblock_global_correction_attempted: object
-    fp_xblock_global_correction_accepted: object
-    fp_xblock_global_correction_reason: object
-    fp_xblock_global_correction_error: object
-    fp_xblock_global_correction_preconditioner: object
-    fp_xblock_global_correction_steps: object
-    fp_xblock_global_correction_accepted_steps: object
-    fp_xblock_global_correction_residual_before: object
-    fp_xblock_global_correction_residual_after: object
-    fp_xblock_global_correction_improvement_ratio: object
-    fp_xblock_global_correction_elapsed_s: object
-    fp_xblock_highx_residual_correction_allowed: object
-    fp_xblock_highx_residual_correction_attempted: object
-    fp_xblock_highx_residual_correction_accepted: object
-    fp_xblock_highx_residual_correction_reason: object
-    fp_xblock_highx_residual_correction_error: object
-    fp_xblock_highx_residual_correction_residual_before: object
-    fp_xblock_highx_residual_correction_residual_after: object
-    fp_xblock_highx_residual_correction_improvement_ratio: object
-    fp_xblock_highx_residual_correction_elapsed_s: object
-    fp_xblock_highx_residual_correction_direction_count: object
-    fp_xblock_highx_residual_correction_direction_names: object
 
 
 def sparse_xblock_rescue_metadata(scope: Mapping[str, object]) -> dict[str, object]:
@@ -119,89 +96,6 @@ def sparse_xblock_rescue_metadata(scope: Mapping[str, object]) -> dict[str, obje
     }
 
 
-def fp_xblock_global_correction_metadata(
-    scope: Mapping[str, object],
-) -> dict[str, object]:
-    """Return stable diagnostics for FP x-block global correction."""
-
-    return {
-        "fp_xblock_global_correction_allowed": bool(
-            scope["fp_xblock_global_correction_allowed"]
-        ),
-        "fp_xblock_global_correction_attempted": bool(
-            scope["fp_xblock_global_correction_attempted"]
-        ),
-        "fp_xblock_global_correction_accepted": bool(
-            scope["fp_xblock_global_correction_accepted"]
-        ),
-        "fp_xblock_global_correction_reason": str(
-            scope["fp_xblock_global_correction_reason"]
-        ),
-        "fp_xblock_global_correction_error": scope["fp_xblock_global_correction_error"],
-        "fp_xblock_global_correction_preconditioner": scope[
-            "fp_xblock_global_correction_preconditioner"
-        ],
-        "fp_xblock_global_correction_steps": scope["fp_xblock_global_correction_steps"],
-        "fp_xblock_global_correction_accepted_steps": scope[
-            "fp_xblock_global_correction_accepted_steps"
-        ],
-        "fp_xblock_global_correction_residual_before": scope[
-            "fp_xblock_global_correction_residual_before"
-        ],
-        "fp_xblock_global_correction_residual_after": scope[
-            "fp_xblock_global_correction_residual_after"
-        ],
-        "fp_xblock_global_correction_improvement_ratio": scope[
-            "fp_xblock_global_correction_improvement_ratio"
-        ],
-        "fp_xblock_global_correction_elapsed_s": scope[
-            "fp_xblock_global_correction_elapsed_s"
-        ],
-    }
-
-
-def fp_xblock_highx_residual_correction_metadata(
-    scope: Mapping[str, object],
-) -> dict[str, object]:
-    """Return stable diagnostics for FP high-x residual correction."""
-
-    return {
-        "fp_xblock_highx_residual_correction_allowed": bool(
-            scope["fp_xblock_highx_residual_correction_allowed"]
-        ),
-        "fp_xblock_highx_residual_correction_attempted": bool(
-            scope["fp_xblock_highx_residual_correction_attempted"]
-        ),
-        "fp_xblock_highx_residual_correction_accepted": bool(
-            scope["fp_xblock_highx_residual_correction_accepted"]
-        ),
-        "fp_xblock_highx_residual_correction_reason": str(
-            scope["fp_xblock_highx_residual_correction_reason"]
-        ),
-        "fp_xblock_highx_residual_correction_error": scope[
-            "fp_xblock_highx_residual_correction_error"
-        ],
-        "fp_xblock_highx_residual_correction_residual_before": scope[
-            "fp_xblock_highx_residual_correction_residual_before"
-        ],
-        "fp_xblock_highx_residual_correction_residual_after": scope[
-            "fp_xblock_highx_residual_correction_residual_after"
-        ],
-        "fp_xblock_highx_residual_correction_improvement_ratio": scope[
-            "fp_xblock_highx_residual_correction_improvement_ratio"
-        ],
-        "fp_xblock_highx_residual_correction_elapsed_s": scope[
-            "fp_xblock_highx_residual_correction_elapsed_s"
-        ],
-        "fp_xblock_highx_residual_correction_direction_count": scope[
-            "fp_xblock_highx_residual_correction_direction_count"
-        ],
-        "fp_xblock_highx_residual_correction_direction_names": tuple(
-            scope["fp_xblock_highx_residual_correction_direction_names"]
-        ),
-    }
-
-
 def sparse_rescue_tail_metadata_from_context(
     context: SparseRescueTailMetadataContext,
 ) -> dict[str, object]:
@@ -215,8 +109,6 @@ def sparse_rescue_tail_metadata(scope: Mapping[str, object]) -> dict[str, object
 
     return {
         **sparse_xblock_rescue_metadata(scope),
-        **fp_xblock_global_correction_metadata(scope),
-        **fp_xblock_highx_residual_correction_metadata(scope),
     }
 
 

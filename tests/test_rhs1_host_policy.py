@@ -15,7 +15,6 @@ from sfincs_jax.problems.profile_policies import (
     rhsmode1_dense_backend_allowed_current_backend,
     rhsmode1_fast_post_xblock_polish_allowed_current_backend,
     rhsmode1_fp_targeted_polish_allowed_current_backend,
-    rhsmode1_fp_xblock_global_correction_allowed_current_backend,
     rhsmode1_host_dense_fallback_allowed_current_backend,
     rhsmode1_host_dense_shortcut_allowed_current_backend,
     rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed_current_backend,
@@ -1188,16 +1187,6 @@ def test_current_backend_rhs1_policy_wrappers_delegate_cpu_defaults(monkeypatch)
         target=1.0e-9,
         used_large_cpu_xblock_shortcut=True,
         used_explicit_fp_xblock_seed=True,
-        use_implicit=False,
-    )
-    assert not rhsmode1_fp_xblock_global_correction_allowed_current_backend(
-        op=op_fp,
-        active_size=15_000,
-        residual_norm=1.0e-7,
-        target=1.0e-9,
-        used_large_cpu_xblock_shortcut=True,
-        used_explicit_fp_xblock_seed=True,
-        sparse_xblock_candidate_accepted=True,
         use_implicit=False,
     )
     assert rhsmode1_scipy_rescue_abs_floor_after_xblock_current_backend(

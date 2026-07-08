@@ -21,17 +21,16 @@ bootstrap current, transport coefficients, plotting, and optimization.
 - Current burden is 115 package Python files / 138,252 package lines, 301 test files / 119,279 test lines, 90 example Python files / 14,900 example Python lines, and 440 tracked example files. These numbers must decrease; moving lines into more files is a failed tranche.
 - `core_slim_inventory.json` is file-complete only at broad path-rule granularity; before edits, add section/symbol cards for every source/test file over 500 lines and every example folder.
 - Root files still hiding implementation are `ambipolar.py`, `diagnostics.py`, `grids.py`, `input_compat.py`, `profiling.py`, and `sensitivity.py`. Each must become a tiny documented facade, move into a domain owner, or disappear.
-- Latest cleanup tranches removed RHSMode-1 active-symbolic wrapper
-  routes, renamed the remaining sparse-preconditioner owner modules to domain
-  names, and folded the Fortran-reduced factor policy into
-  `solvers/preconditioner_reduced_pmat.py`, pruned redundant examples/support
-  scripts, compacted superseded solver-trace evidence, and removed the
-  disabled pre-Krylov x-block probe-coarse seed route with its hidden env
-  knobs, metadata, docs, and tests. The current tranche also removed the
-  disabled x-block post-solve correction stack, hidden env knobs,
-  metadata/output fields, docs, and stale tests while preserving the live
-  sparse-PC post-minres polish path. The next cleanup order is RHSMode-1
-  orchestration and policy-table collapse, then validation/test consolidation.
+- Latest cleanup tranches removed RHSMode-1 active-symbolic wrappers, renamed
+  remaining sparse-preconditioner owners to domain names, folded
+  Fortran-reduced policy into `solvers/preconditioner_reduced_pmat.py`, pruned
+  redundant examples/support scripts, compacted superseded solver-trace
+  evidence, and deleted disabled x-block probe-coarse, post-solve, and manual
+  FP global/high-x tails with their env knobs, metadata/output fields, docs,
+  and stale tests. The live sparse-PC post-minres polish and sparse x-block
+  rescue paths remain.
+  The next cleanup order is RHSMode-1 orchestration and policy-table collapse,
+  then validation/test consolidation.
 - Largest package owners, in order: `profile_sparse_xblock.py`,
   `profile_policies.py`, `profile_full_system.py`, `validation/suite.py`,
   `profile_solve.py`, `explicit_sparse.py`, `transport_parallel_runtime.py`,

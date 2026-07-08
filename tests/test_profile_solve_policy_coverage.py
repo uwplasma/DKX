@@ -488,57 +488,6 @@ def test_scipy_rescue_abs_floor_invalid_override_and_large_cpu_floor(monkeypatch
     assert floor == 1.0e-9
 
 
-def test_fp_xblock_global_correction_admission_guards(monkeypatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION", "1")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_MIN", "1000")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_MAX", "20000")
-
-    assert profile_policies.rhs1_fp_xblock_global_correction_allowed(
-        op=_rhs1_fp_op(),
-        active_size=10_000,
-        residual_norm=1.0e-5,
-        target=1.0e-8,
-        used_large_cpu_xblock_shortcut=True,
-        used_explicit_fp_xblock_seed=True,
-        sparse_xblock_candidate_accepted=True,
-        use_implicit=False,
-        backend="cpu",
-    )
-    assert not profile_policies.rhs1_fp_xblock_global_correction_allowed(
-        op=_rhs1_fp_op(),
-        active_size=10_000,
-        residual_norm=1.0e-5,
-        target=1.0e-8,
-        used_large_cpu_xblock_shortcut=False,
-        used_explicit_fp_xblock_seed=True,
-        sparse_xblock_candidate_accepted=True,
-        use_implicit=False,
-        backend="cpu",
-    )
-    assert not profile_policies.rhs1_fp_xblock_global_correction_allowed(
-        op=_rhs1_fp_op(),
-        active_size=10_000,
-        residual_norm=1.0e-5,
-        target=1.0e-8,
-        used_large_cpu_xblock_shortcut=True,
-        used_explicit_fp_xblock_seed=False,
-        sparse_xblock_candidate_accepted=True,
-        use_implicit=False,
-        backend="cpu",
-    )
-    assert not profile_policies.rhs1_fp_xblock_global_correction_allowed(
-        op=_rhs1_fp_op(),
-        active_size=10_000,
-        residual_norm=1.0e-9,
-        target=1.0e-8,
-        used_large_cpu_xblock_shortcut=True,
-        used_explicit_fp_xblock_seed=True,
-        sparse_xblock_candidate_accepted=True,
-        use_implicit=False,
-        backend="cpu",
-    )
-
-
 def test_host_dense_shortcut_and_dense_auto_policy_guards(monkeypatch) -> None:
     fp_op = _rhs1_fp_op()
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT", raising=False)

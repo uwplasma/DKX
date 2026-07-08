@@ -198,10 +198,9 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     prepare_xblock_krylov_solve_space, resolve_xblock_krylov_control_setup,
     resolve_xblock_global_coupling_policy_setup, resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_seed_policy_setup, resolve_xblock_sparse_pc_branch_setup, resolve_xblock_two_level_policy_setup,
-    FPXBlockGlobalCorrectionContext, FPXBlockHighXCorrectionContext, SparseSXBlockRescueContext, SparseXBlockRescueAcceptanceContext,
+    SparseSXBlockRescueContext, SparseXBlockRescueAcceptanceContext,
     SparseXBlockRescueBuildContext, SparseXBlockRescueSolveContext, accept_sparse_xblock_rescue_candidate,
-    build_sparse_xblock_rescue_preconditioner, run_fp_xblock_global_correction_stage,
-    run_fp_xblock_highx_residual_correction_stage, run_sparse_sxblock_rescue_stage,
+    build_sparse_xblock_rescue_preconditioner, run_sparse_sxblock_rescue_stage,
     run_sparse_xblock_rescue_solve_stage, run_xblock_sparse_pc_branch, run_xblock_krylov_solve_stage,
     finalize_xblock_assembled_operator_metadata,
 )
@@ -334,7 +333,6 @@ from sfincs_jax.solvers.preconditioner_xblock_coarse import (
 )
 from sfincs_jax.problems.profile_residual import (
     apply_preconditioned_minres_correction as _apply_preconditioned_minres_correction,
-    apply_subspace_minres_correction as _apply_subspace_minres_correction,
     compose_multilevel_minres_correction_preconditioner as _compose_multilevel_minres_correction_preconditioner,
     compose_multilevel_residual_correction_preconditioner as _compose_multilevel_residual_correction_preconditioner,
     compose_residual_correction_preconditioner as _compose_residual_correction_preconditioner,
@@ -380,7 +378,6 @@ from sfincs_jax.problems.profile_policies import (
     rhs1_pas_source_zero_tolerance_from_env,
     rhsmode1_fast_post_xblock_polish_allowed_current_backend as _rhsmode1_fast_post_xblock_polish_allowed,
     rhsmode1_fp_targeted_polish_allowed_current_backend as _rhsmode1_fp_targeted_polish_allowed,
-    rhsmode1_fp_xblock_global_correction_allowed_current_backend as _rhsmode1_fp_xblock_global_correction_allowed,
     rhsmode1_skip_global_sparse_after_xblock_allowed_current_backend as _rhsmode1_skip_global_sparse_after_xblock_allowed,
 )
 from sfincs_jax.problems.profile_policies import (
@@ -2591,29 +2588,6 @@ def solve_v3_full_system_linear_gmres(
             if float(res_reduced.residual_norm) <= target_reduced
             else "inactive"
         )
-        fp_xblock_global_correction_allowed = False
-        fp_xblock_global_correction_attempted = False
-        fp_xblock_global_correction_accepted = False
-        fp_xblock_global_correction_reason = "not_evaluated"
-        fp_xblock_global_correction_error: str | None = None
-        fp_xblock_global_correction_preconditioner: str | None = None
-        fp_xblock_global_correction_steps: int | None = None
-        fp_xblock_global_correction_accepted_steps: int | None = None
-        fp_xblock_global_correction_residual_before: float | None = None
-        fp_xblock_global_correction_residual_after: float | None = None
-        fp_xblock_global_correction_improvement_ratio: float | None = None
-        fp_xblock_global_correction_elapsed_s: float | None = None
-        fp_xblock_highx_residual_correction_allowed = False
-        fp_xblock_highx_residual_correction_attempted = False
-        fp_xblock_highx_residual_correction_accepted = False
-        fp_xblock_highx_residual_correction_reason = "not_evaluated"
-        fp_xblock_highx_residual_correction_error: str | None = None
-        fp_xblock_highx_residual_correction_residual_before: float | None = None
-        fp_xblock_highx_residual_correction_residual_after: float | None = None
-        fp_xblock_highx_residual_correction_improvement_ratio: float | None = None
-        fp_xblock_highx_residual_correction_elapsed_s: float | None = None
-        fp_xblock_highx_residual_correction_direction_count: int | None = None
-        fp_xblock_highx_residual_correction_direction_names: tuple[str, ...] = ()
         if emit is not None:
             for _level, _message in rhs1_sparse_rescue_tail_skip_messages(
                 ordering=sparse_order,
@@ -2750,252 +2724,6 @@ def solve_v3_full_system_linear_gmres(
                         emit(1, f"xblock_sparse: failed ({type(exc).__name__}: {exc})")
             else:
                 sparse_xblock_rescue_reason = "inactive_by_policy"
-            fp_xblock_global_correction_allowed = (
-                _rhsmode1_fp_xblock_global_correction_allowed(
-                    op=op,
-                    active_size=int(active_size),
-                    residual_norm=float(res_reduced.residual_norm),
-                    target=float(target_reduced),
-                    used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
-                    used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
-                    sparse_xblock_candidate_accepted=bool(
-                        sparse_xblock_rescue_candidate_accepted
-                    ),
-                    use_implicit=bool(use_implicit),
-                )
-            )
-            if fp_xblock_global_correction_allowed:
-                fp_xblock_global_correction_attempted = True
-                fp_xblock_global_correction_reason = "started"
-                correction_precond = (
-                    precond_sparse_xblock_current or preconditioner_reduced
-                )
-                fp_xblock_global_correction_preconditioner = (
-                    "sparse_xblock"
-                    if precond_sparse_xblock_current is not None
-                    else "base"
-                )
-                correction_steps = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_STEPS",
-                    default=3,
-                    minimum=1,
-                )
-                correction_alpha_clip = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_ALPHA_CLIP",
-                    default=10.0,
-                    minimum=0.0,
-                )
-                correction_min_improvement = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_MIN_IMPROVEMENT",
-                    default=0.0,
-                    minimum=0.0,
-                )
-                correction_precond_clip = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_PRECONDITIONER_CLIP",
-                    default=1.0e100,
-                    minimum=0.0,
-                )
-                fp_xblock_global_correction = run_fp_xblock_global_correction_stage(
-                    context=FPXBlockGlobalCorrectionContext(
-                        current_result=res_reduced,
-                        matvec=mv_reduced,
-                        rhs=rhs_reduced,
-                        preconditioner=correction_precond,
-                        preconditioner_label=fp_xblock_global_correction_preconditioner,
-                        steps=int(correction_steps),
-                        alpha_clip=float(correction_alpha_clip),
-                        min_improvement=float(correction_min_improvement),
-                        preconditioner_clip=float(correction_precond_clip),
-                        replay_state=ksp_replay,
-                        emit=emit,
-                        elapsed_s=t.elapsed_s,
-                        mark=_mark,
-                        safe_preconditioner=_safe_preconditioner,
-                        correction=_apply_preconditioned_minres_correction,
-                    )
-                )
-                res_reduced = fp_xblock_global_correction.result
-                if fp_xblock_global_correction.residual_vec is not None:
-                    residual_vec = fp_xblock_global_correction.residual_vec
-                fp_xblock_global_correction_accepted = bool(
-                    fp_xblock_global_correction.accepted
-                )
-                fp_xblock_global_correction_reason = str(
-                    fp_xblock_global_correction.reason
-                )
-                fp_xblock_global_correction_error = fp_xblock_global_correction.error
-                fp_xblock_global_correction_steps = fp_xblock_global_correction.steps
-                fp_xblock_global_correction_accepted_steps = (
-                    fp_xblock_global_correction.accepted_steps
-                )
-                fp_xblock_global_correction_residual_before = (
-                    fp_xblock_global_correction.residual_before
-                )
-                fp_xblock_global_correction_residual_after = (
-                    fp_xblock_global_correction.residual_after
-                )
-                fp_xblock_global_correction_improvement_ratio = (
-                    fp_xblock_global_correction.improvement_ratio
-                )
-                fp_xblock_global_correction_elapsed_s = (
-                    fp_xblock_global_correction.elapsed_s
-                )
-            else:
-                correction_env = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION", ""
-                    )
-                    .strip()
-                    .lower()
-                )
-                fp_xblock_global_correction_reason = (
-                    "disabled"
-                    if correction_env not in {"1", "true", "yes", "on"}
-                    else "policy_guard"
-                )
-            highx_env = (
-                os.environ.get(
-                    "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION", ""
-                )
-                .strip()
-                .lower()
-            )
-            highx_enabled = highx_env in {"1", "true", "yes", "on"}
-            highx_active_max = _rhs1_int_env(
-                "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_MAX",
-                default=600000,
-                minimum=0,
-            )
-            fp_xblock_highx_residual_correction_allowed = bool(
-                highx_enabled
-                and (not bool(use_implicit))
-                and jax.default_backend() == "cpu"
-                and int(op.rhs_mode) == 1
-                and (not bool(op.include_phi1))
-                and op.fblock.fp is not None
-                and op.fblock.pas is None
-                and bool(cpu_large_xblock_shortcut)
-                and bool(explicit_fp_xblock_seed_used)
-                and bool(sparse_xblock_rescue_candidate_accepted)
-                and float(res_reduced.residual_norm) > float(target_reduced)
-                and (
-                    int(highx_active_max) <= 0
-                    or int(active_size) <= int(highx_active_max)
-                )
-                and reduce_full is not None
-                and expand_reduced is not None
-            )
-            if fp_xblock_highx_residual_correction_allowed:
-                fp_xblock_highx_residual_correction_attempted = True
-                fp_xblock_highx_residual_correction_reason = "started"
-                highx_correction = run_fp_xblock_highx_residual_correction_stage(
-                    context=FPXBlockHighXCorrectionContext(
-                        current_result=res_reduced,
-                        matvec=mv_reduced,
-                        rhs=rhs_reduced,
-                        reduce_full=reduce_full,
-                        expand_reduced=expand_reduced,
-                        total_size=int(op.total_size),
-                        n_species=int(op.n_species),
-                        n_x=int(op.n_x),
-                        n_xi=int(op.n_xi),
-                        n_theta=int(op.n_theta),
-                        n_zeta=int(op.n_zeta),
-                        n_xi_for_x=tuple(
-                            int(v)
-                            for v in np.asarray(
-                                op.fblock.collisionless.n_xi_for_x,
-                                dtype=np.int32,
-                            )
-                        ),
-                        host_block_max_env_value=os.environ.get(
-                            "SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_HOST_BLOCK_MAX",
-                            "",
-                        ).strip(),
-                        include_factored_blocks=_rhs1_bool_env(
-                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_INCLUDE_FACTORED",
-                            default=False,
-                        ),
-                        max_blocks=_rhs1_int_env(
-                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_MAX_BLOCKS",
-                            default=16,
-                            minimum=1,
-                        ),
-                        steps=_rhs1_int_env(
-                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_STEPS",
-                            default=1,
-                            minimum=1,
-                        ),
-                        max_directions=_rhs1_int_env(
-                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_MAX_DIRECTIONS",
-                            default=12,
-                            minimum=1,
-                        ),
-                        alpha_clip=_rhs1_float_env(
-                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_ALPHA_CLIP",
-                            default=0.0,
-                            minimum=0.0,
-                        ),
-                        rcond=_rhs1_float_env(
-                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_RCOND",
-                            default=1.0e-12,
-                            minimum=0.0,
-                        ),
-                        min_improvement=_rhs1_float_env(
-                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_MIN_IMPROVEMENT",
-                            default=0.0,
-                            minimum=0.0,
-                        ),
-                        include_all=_rhs1_bool_env(
-                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_INCLUDE_ALL",
-                            default=True,
-                        ),
-                        include_raw=_rhs1_bool_env(
-                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_INCLUDE_RAW",
-                            default=False,
-                        ),
-                        replay_state=ksp_replay,
-                        emit=emit,
-                        elapsed_s=t.elapsed_s,
-                        mark=_mark,
-                        block_factor_allowed=(
-                            _rhs1_xblock_sparse_host_policy.rhs1_xblock_sparse_host_block_factor_allowed
-                        ),
-                        correction=_apply_subspace_minres_correction,
-                    )
-                )
-                res_reduced = highx_correction.result
-                if highx_correction.residual_vec is not None:
-                    residual_vec = highx_correction.residual_vec
-                fp_xblock_highx_residual_correction_accepted = bool(
-                    highx_correction.accepted
-                )
-                fp_xblock_highx_residual_correction_reason = str(
-                    highx_correction.reason
-                )
-                fp_xblock_highx_residual_correction_error = highx_correction.error
-                fp_xblock_highx_residual_correction_residual_before = (
-                    highx_correction.residual_before
-                )
-                fp_xblock_highx_residual_correction_residual_after = (
-                    highx_correction.residual_after
-                )
-                fp_xblock_highx_residual_correction_improvement_ratio = (
-                    highx_correction.improvement_ratio
-                )
-                fp_xblock_highx_residual_correction_elapsed_s = (
-                    highx_correction.elapsed_s
-                )
-                fp_xblock_highx_residual_correction_direction_count = (
-                    highx_correction.direction_count
-                )
-                fp_xblock_highx_residual_correction_direction_names = (
-                    highx_correction.direction_names
-                )
-            else:
-                fp_xblock_highx_residual_correction_reason = (
-                    "disabled" if not highx_enabled else "policy_guard"
-                )
             skip_global_sparse_after_xblock = (
                 _rhsmode1_skip_global_sparse_after_xblock_allowed(
                     op=op,
@@ -3325,29 +3053,6 @@ def solve_v3_full_system_linear_gmres(
                     sparse_xblock_rescue_seed_refines_performed=sparse_xblock_rescue_seed_refines_performed,
                     sparse_xblock_rescue_candidate_residual=sparse_xblock_rescue_candidate_residual,
                     sparse_xblock_rescue_candidate_accepted=sparse_xblock_rescue_candidate_accepted,
-                    fp_xblock_global_correction_allowed=fp_xblock_global_correction_allowed,
-                    fp_xblock_global_correction_attempted=fp_xblock_global_correction_attempted,
-                    fp_xblock_global_correction_accepted=fp_xblock_global_correction_accepted,
-                    fp_xblock_global_correction_reason=fp_xblock_global_correction_reason,
-                    fp_xblock_global_correction_error=fp_xblock_global_correction_error,
-                    fp_xblock_global_correction_preconditioner=fp_xblock_global_correction_preconditioner,
-                    fp_xblock_global_correction_steps=fp_xblock_global_correction_steps,
-                    fp_xblock_global_correction_accepted_steps=fp_xblock_global_correction_accepted_steps,
-                    fp_xblock_global_correction_residual_before=fp_xblock_global_correction_residual_before,
-                    fp_xblock_global_correction_residual_after=fp_xblock_global_correction_residual_after,
-                    fp_xblock_global_correction_improvement_ratio=fp_xblock_global_correction_improvement_ratio,
-                    fp_xblock_global_correction_elapsed_s=fp_xblock_global_correction_elapsed_s,
-                    fp_xblock_highx_residual_correction_allowed=fp_xblock_highx_residual_correction_allowed,
-                    fp_xblock_highx_residual_correction_attempted=fp_xblock_highx_residual_correction_attempted,
-                    fp_xblock_highx_residual_correction_accepted=fp_xblock_highx_residual_correction_accepted,
-                    fp_xblock_highx_residual_correction_reason=fp_xblock_highx_residual_correction_reason,
-                    fp_xblock_highx_residual_correction_error=fp_xblock_highx_residual_correction_error,
-                    fp_xblock_highx_residual_correction_residual_before=fp_xblock_highx_residual_correction_residual_before,
-                    fp_xblock_highx_residual_correction_residual_after=fp_xblock_highx_residual_correction_residual_after,
-                    fp_xblock_highx_residual_correction_improvement_ratio=fp_xblock_highx_residual_correction_improvement_ratio,
-                    fp_xblock_highx_residual_correction_elapsed_s=fp_xblock_highx_residual_correction_elapsed_s,
-                    fp_xblock_highx_residual_correction_direction_count=fp_xblock_highx_residual_correction_direction_count,
-                    fp_xblock_highx_residual_correction_direction_names=fp_xblock_highx_residual_correction_direction_names,
                 )
             )
         )
