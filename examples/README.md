@@ -63,7 +63,7 @@ For an interactive terminal version of this map, run
 | I need bootstrap current or Redl comparisons. | `vmec_jax_finite_beta/` | This folder owns the VMEC, Redl, ambipolar-root, and bootstrap-current profile scripts. |
 | I need to validate against SFINCS Fortran v3 behavior. | `parity/` then `publication_figures/` | The first folder has frozen fixtures; the second regenerates release-facing comparison plots. |
 | I need CPU/GPU runtime or memory evidence. | `performance/` | These scripts benchmark output formats, JIT behavior, transport workers, and optional backends. |
-| I recognize an upstream SFINCS input name. | `sfincs_examples/` or `upstream/` | These folders preserve upstream decks for parity and benchmark audits, not first-pass learning. |
+| I recognize an upstream SFINCS input name. | `sfincs_examples/` | This folder preserves upstream-style decks for parity and benchmark audits, not first-pass learning. |
 
 ### Learning Path
 
@@ -142,7 +142,7 @@ validation or benchmark workflow, or reference data.
 | `learning` | `tutorials/`, `getting_started/` | You want to learn the CLI, Python API, plots, output formats, and first operator/geometry concepts. |
 | `capability` | `transport/`, `autodiff/`, `optimization/`, `vmec_jax_finite_beta/` | You need a specific physics or differentiability workflow. |
 | `validation` | `parity/`, `performance/`, `publication_figures/` | You need parity checks, runtime/memory evidence, or regenerated documentation figures. |
-| `reference` | `data/`, `sfincs_examples/`, `upstream/` | You need small shared inputs or recognizable SFINCS Fortran v3 decks for audits. |
+| `reference` | `data/`, `sfincs_examples/` | You need small shared inputs or recognizable SFINCS Fortran v3 decks for audits. |
 
 ### Folder Map
 
@@ -170,8 +170,6 @@ validation or benchmark workflow, or reference data.
 - `sfincs_examples/`: vendored upstream SFINCS v3 example inputs plus helpers
   used for parity and benchmark-suite audits, not the recommended starting
   point for first-time users.
-- `upstream/`: curated upstream SFINCS v3 inputs used by tests, docs, and
-  validation lanes.
 - `data/`: small input data needed by public VMEC and teaching examples.
 
 ### Notebook Guides
