@@ -473,8 +473,7 @@
       {
         "name": "original_sfincs_examples",
         "prefix_any": [
-          "examples/sfincs_examples/",
-          "examples/upstream/"
+          "examples/sfincs_examples/"
         ],
         "decision": "keep",
         "owner_tags": [
@@ -482,8 +481,8 @@
           "EVIDENCE"
         ],
         "proof_owner": "example-suite compatibility tests",
-        "line_target": "retain original v3 references needed for parity examples",
-        "next_action": "Keep as reference inputs; do not add generated outputs."
+        "line_target": "retain the single upstream-style v3 reference tree needed for parity examples",
+        "next_action": "Keep as reference inputs; do not add generated outputs. The duplicate examples/upstream tree was deleted from stable examples."
       },
       {
         "name": "publication_and_performance_examples",
@@ -517,7 +516,6 @@
         "prefix": "examples/",
         "exclude_prefix_any": [
           "examples/sfincs_examples/",
-          "examples/upstream/",
           "examples/publication_figures/",
           "examples/performance/",
           "examples/optimization/"

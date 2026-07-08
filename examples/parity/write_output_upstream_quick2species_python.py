@@ -1,7 +1,7 @@
-"""Write `sfincsOutput.h5` using an upstream Fortran v3 example input (Python API).
+"""Write `sfincsOutput.h5` using a vendored SFINCS-v3 example input (Python API).
 
-This example uses the vendored upstream input:
-  examples/upstream/fortran_v3/quick_2species_FPCollisions_noEr/input.namelist
+This example uses the retained upstream SFINCS-v3 deck:
+  examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist
 
 Run:
   python examples/parity/write_output_upstream_quick2species_python.py
@@ -19,7 +19,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
+from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5  # noqa: E402
 
 
 def _select_input_path() -> Path:
@@ -28,8 +28,7 @@ def _select_input_path() -> Path:
     return (
         _REPO_ROOT
         / "examples"
-        / "upstream"
-        / "fortran_v3"
+        / "sfincs_examples"
         / "quick_2species_FPCollisions_noEr"
         / "input.namelist"
     )

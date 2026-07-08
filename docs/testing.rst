@@ -309,7 +309,7 @@ Research reproducibility
 The repository includes:
 
 - frozen fixtures in ``tests/ref``,
-- example inputs in ``examples/sfincs_examples`` and ``examples/upstream``,
+- example inputs in ``examples/sfincs_examples``,
 - benchmark scripts in ``examples/performance``,
 - and generated figures in ``docs/_static/figures``.
 
