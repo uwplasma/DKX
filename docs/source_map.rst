@@ -708,19 +708,6 @@ owners are:
   defaults, SuperLU/RCM ordering candidates, equilibration norm selection, and
   progress logging defaults; the symbolic-sparse RHSMode=1 Fortran-reduced
   module consumes this policy and performs the numerical sparse factor setup.
-- ``sfincs_jax/solvers/preconditioner_symbolic_policy.py``:
-  symbolic frontal/Schur RHSMode=1 active-preconditioner policy. The module
-  owns frontal versus nested-dissection routing, separator/block limits, dense
-  Schur update budgets, admission probe thresholds, and ND residual-polish
-  controls; sparse symbolic analysis, factorization, and true-residual
-  admission live in the symbolic-sparse and profile-response sparse owners.
-- ``sfincs_jax/solvers/preconditioner_symbolic_policy.py``:
-  symbolic superblock and separator-Schur RHSMode=1 active-preconditioner
-  policy. The module owns grouped-block and block-Schur size gates, ordering
-  defaults, separator/coarse limits, retained-cross-fraction gates, prefill
-  safety factors, and admission probe thresholds; symbolic sparse analysis,
-  host factorization, and true-residual admission live in the symbolic-sparse
-  and profile-response sparse owners.
 - ``sfincs_jax/operators/profile_full_system.py``:
   analytic RHSMode=1 full-CSR assembly plus the runtime/non-autodiff
   ``SparseOperatorBundle`` adapter used by sparse-PC solver paths. Unsupported
