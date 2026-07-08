@@ -35,7 +35,7 @@
     "publication_figures": {
       "category": "validation",
       "role": "Documentation and paper-figure regeneration from checked summaries or explicit runs.",
-      "start_here": "publication_figures/generate_fortran_suite_benchmark_summary.py"
+      "start_here": "publication_figures/README.md"
     },
     "sfincs_examples": {
       "category": "reference",
@@ -157,16 +157,6 @@
       "topic": "autodiff_geometry",
       "keywords": ["vmec_jax", "booz_xform_jax", "boozer", "autodiff", "geometry"],
       "runtime_budget": "optional dependency workflow",
-      "requires_fortran_v3": false
-    },
-    {
-      "id": "fortran_suite_summary",
-      "goal": "Regenerate the public runtime/memory comparison from checked suite reports.",
-      "entrypoint": "publication_figures/generate_fortran_suite_benchmark_summary.py",
-      "command": "python examples/publication_figures/generate_fortran_suite_benchmark_summary.py --min-fortran-runtime-s 10",
-      "topic": "publication_figures",
-      "keywords": ["runtime", "memory", "fortran", "benchmark", "figure", "parity"],
-      "runtime_budget": "seconds from checked reports",
       "requires_fortran_v3": false
     }
   ]
