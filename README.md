@@ -348,19 +348,14 @@ non-autodiff finite-beta/full-FP cases select the residual-clean
 preconditioner research paths remain forceable for debugging, but they are not
 the recommended user-facing path unless the JSON/HDF5 diagnostics show that
 their true-residual and convergence gates pass for the case being run.
-The combined `active_multiline_field_split_sparse_coarse` residual preconditioner
-is implemented and test-covered as an opt-in research path, but real QA/QH
-surface probes did not pass the strict true-residual gate, so it is not the
-default for these public figures. The direct-tail active-auto ladder tries
-the lower-memory `active_fortran_v3_reduced_native_stack` candidate first, then
-falls back to the robust `active_fortran_v3_reduced_lu` reference route when the
-native stack fails its true-residual preflight. On the full archived
-`25 x 39 x 60 x 7` QA surface, the native stack built in `9.17 s` with a
-`5.09 GB` bounded factor estimate but worsened the one-apply residual, so
-`auto` accepted active LU without trying experimental native/coarse rescue by
-default. The guarded audit converged the true residual to `7.27e-16`
-in `354.6 s` wall at `tol=1e-10` without requiring any solver environment
-variables.
+The combined `active_multiline_field_split_sparse_coarse` and native-stack
+residual preconditioners are implemented as advanced opt-in research paths, but
+they are not part of the user-facing automatic ladder. For large RHSMode=1
+finite-beta/full-FP cases, `auto` uses the robust
+`active_fortran_v3_reduced_lu` direct-tail reference route first and may then
+try guarded sparse/coarse fallbacks. The checked full-grid QA audit converged
+the true residual below the requested tolerance without requiring any solver
+environment variables.
 
 The plotted quantity is the flux-surface-averaged bootstrap current projected
 along the magnetic field,
@@ -550,14 +545,14 @@ strategy used by SFINCS Fortran v3 while preserving SFINCS-JAX's true-residual
 acceptance check.
 For full-grid finite-beta QA/QH bootstrap-current diagnostics at
 `25 x 39 x 60 x 7`, `auto` reaches the Fortran-reduced direct-tail path
-without user environment variables. It tests the lower-memory
-`active_fortran_v3_reduced_native_stack` candidate under the same true-residual
-gate and falls back to the high-memory active LU reference route when that gate
-fails. The checked QA auto audit converged to `9.00e-13` residual in `343.5 s`
-wall after rejecting the native stack; checked QA/QH active-LU reference
-audits converge to `9.95e-13` and `8.71e-14` residual with a `13.3 GB` active LU
-    factor. A stricter guarded rerun with `tol=1e-10` converged to `7.27e-16` in
-`354.6 s`. Native true-coupled and nested-dissection rescue paths are opt-in
+without user environment variables. It starts from the high-memory active LU
+reference route because that path is the residual-clean production default for
+these cases; lower-memory native/coarse variants remain explicit advanced
+options until they pass the same strict residual gate on production grids. The
+checked QA/QH active-LU reference audits converge to `9.95e-13` and
+`8.71e-14` residual with a `13.3 GB` active LU factor. A stricter guarded rerun
+with `tol=1e-10` converged to `7.27e-16` in `354.6 s`. Native true-coupled and
+nested-dissection rescue paths are opt-in
 advanced routes: the default path uses them only when they satisfy the same
 true-residual gate, otherwise it falls back to the residual-clean active-LU
 reference route. Detailed lower-memory optimization evidence lives in the
