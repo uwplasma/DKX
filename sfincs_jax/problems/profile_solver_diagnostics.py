@@ -1547,15 +1547,11 @@ def build_profile_response_linear_metadata(
 def build_rhs1_xblock_correction_metadata(
     *,
     preflight: RHS1PreflightDiagnostics,
-    post_minres: RHS1PostMinresDiagnostics,
-    post_coarse: RHS1SubspaceCorrectionDiagnostics,
-    post_residual_equation: RHS1SubspaceCorrectionDiagnostics,
 ) -> dict[str, object]:
-    """Build solver-trace metadata for x-block correction hooks.
+    """Build solver-trace metadata for the x-block preflight gate.
 
     Keeping this field assembly outside the main solve loop makes output/trace
-    compatibility independently testable. The returned keys intentionally match
-    the historical solver metadata names.
+    compatibility independently testable.
     """
 
     metadata: dict[str, object] = {
@@ -1564,54 +1560,6 @@ def build_rhs1_xblock_correction_metadata(
         "xblock_preflight_residual_norm": preflight.residual_norm,
         "xblock_preflight_improvement": preflight.improvement,
         "xblock_preflight_passed": preflight.passed,
-        "xblock_post_minres_steps_requested": int(post_minres.steps_requested),
-        "xblock_post_minres_steps_accepted": int(len(post_minres.alphas)),
-        "xblock_post_minres_residual_before": post_minres.residual_before,
-        "xblock_post_minres_residual_after": post_minres.residual_after,
-        "xblock_post_minres_alphas": tuple(post_minres.alphas),
-        "xblock_post_minres_history": tuple(post_minres.history),
-        "xblock_post_coarse_steps_requested": int(post_coarse.steps_requested),
-        "xblock_post_coarse_steps_accepted": int(len(post_coarse.direction_counts)),
-        "xblock_post_coarse_direction_count": _subspace_count(post_coarse.direction_counts),
-        "xblock_post_coarse_residual_before": post_coarse.residual_before,
-        "xblock_post_coarse_residual_after": post_coarse.residual_after,
-        "xblock_post_coarse_history": tuple(post_coarse.history),
-        "xblock_post_coarse_direction_counts": tuple(post_coarse.direction_counts),
-        "xblock_post_coarse_direction_names": tuple(post_coarse.direction_names),
-        "xblock_post_coarse_fsavg_lmax": int(post_coarse.fsavg_lmax),
-        "xblock_post_coarse_angular_lmax": int(post_coarse.angular_lmax),
-        "xblock_post_coarse_angular_residual": bool(post_coarse.angular_residual),
-        "xblock_post_residual_equation_steps_requested": int(
-            post_residual_equation.steps_requested
-        ),
-        "xblock_post_residual_equation_steps_accepted": int(
-            len(post_residual_equation.direction_counts)
-        ),
-        "xblock_post_residual_equation_direction_count": _subspace_count(
-            post_residual_equation.direction_counts
-        ),
-        "xblock_post_residual_equation_residual_before": (
-            post_residual_equation.residual_before
-        ),
-        "xblock_post_residual_equation_residual_after": (
-            post_residual_equation.residual_after
-        ),
-        "xblock_post_residual_equation_history": tuple(post_residual_equation.history),
-        "xblock_post_residual_equation_direction_counts": tuple(
-            post_residual_equation.direction_counts
-        ),
-        "xblock_post_residual_equation_direction_names": tuple(
-            post_residual_equation.direction_names
-        ),
-        "xblock_post_residual_equation_fsavg_lmax": int(
-            post_residual_equation.fsavg_lmax
-        ),
-        "xblock_post_residual_equation_angular_lmax": int(
-            post_residual_equation.angular_lmax
-        ),
-        "xblock_post_residual_equation_angular_residual": bool(
-            post_residual_equation.angular_residual
-        ),
     }
     return metadata
 
@@ -1632,37 +1580,6 @@ def build_rhs1_xblock_correction_metadata_from_solve_state(
             residual_norm=state["preflight_residual_norm"],
             improvement=state["preflight_improvement"],
             passed=state["preflight_passed"],
-        ),
-        post_minres=RHS1PostMinresDiagnostics(
-            steps_requested=int(state["post_minres_steps_requested"]),
-            alphas=state["post_minres_alphas"],
-            history=state["post_minres_history"],
-            residual_before=state["post_minres_residual_before"],
-            residual_after=state["post_minres_residual_after"],
-        ),
-        post_coarse=RHS1SubspaceCorrectionDiagnostics(
-            steps_requested=int(state["post_coarse_steps_requested"]),
-            direction_counts=state["post_coarse_direction_counts"],
-            direction_names=state["post_coarse_direction_names"],
-            residual_before=state["post_coarse_residual_before"],
-            residual_after=state["post_coarse_residual_after"],
-            history=state["post_coarse_history"],
-            fsavg_lmax=int(state["post_coarse_fsavg_lmax"]),
-            angular_lmax=int(state["post_coarse_angular_lmax"]),
-            angular_residual=bool(state["post_coarse_include_angular_residual"]),
-        ),
-        post_residual_equation=RHS1SubspaceCorrectionDiagnostics(
-            steps_requested=int(state["post_residual_equation_steps_requested"]),
-            direction_counts=state["post_residual_equation_direction_counts"],
-            direction_names=state["post_residual_equation_direction_names"],
-            residual_before=state["post_residual_equation_residual_before"],
-            residual_after=state["post_residual_equation_residual_after"],
-            history=state["post_residual_equation_history"],
-            fsavg_lmax=int(state["post_residual_equation_fsavg_lmax"]),
-            angular_lmax=int(state["post_residual_equation_angular_lmax"]),
-            angular_residual=bool(
-                state["post_residual_equation_include_angular_residual"]
-            ),
         ),
     )
 

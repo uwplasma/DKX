@@ -15,7 +15,6 @@ from sfincs_jax.problems.profile_policies import (
     ActiveProjectedPreconditionerAutoPolicy,
     RHS1Constraint0PETScCompatConfig,
     RHS1FullSparseRescueSetupResult,
-    RHS1PostMinresPolicy,
     RHS1SparseJAXConfig,
     RHS1SparseOperatorAdmission,
     RHS1SparsePreconditionerConfig,
@@ -23,7 +22,6 @@ from sfincs_jax.problems.profile_policies import (
     RHS1SparseRescuePolicySetup,
     RHS1Stage2RetryAdmissionDecision,
     RHS1Stage2TriggerDecision,
-    RHS1SubspaceCorrectionPolicy,
 )
 from sfincs_jax.problems.profile_sparse_solve import (
     RHS1FullSparseRetryStageResult,
@@ -41,23 +39,6 @@ class _FakeFBlockSelection:
 
 
 def test_rhs1_policy_dataclasses_capture_solver_routing_contracts() -> None:
-    post_minres = RHS1PostMinresPolicy(
-        steps_requested=2,
-        alpha_clip=0.5,
-        min_improvement=0.1,
-    )
-    subspace = RHS1SubspaceCorrectionPolicy(
-        steps_requested=1,
-        max_directions=3,
-        max_extra_units=2,
-        fsavg_lmax=1,
-        angular_lmax=2,
-        include_angular_residual=True,
-        include_raw=False,
-        alpha_clip=0.25,
-        rcond=1.0e-12,
-        min_improvement=0.05,
-    )
     active_auto = ActiveProjectedPreconditionerAutoPolicy(
         candidates=("active_xell", "active_diag_schur"),
         candidates_requested=("auto",),
@@ -125,8 +106,6 @@ def test_rhs1_policy_dataclasses_capture_solver_routing_contracts() -> None:
         messages=((1, "stage-2 retry admitted"),),
     )
 
-    assert post_minres.steps_requested == 2
-    assert subspace.include_post_coarse is True
     assert active_auto.skipped_large_fallbacks == ("active_diag_schur",)
     assert petsc_compat.restart == 80
     assert policy_setup.ordering is ordering

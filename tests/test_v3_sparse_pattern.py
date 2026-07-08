@@ -21,10 +21,6 @@ from sfincs_jax.solvers.explicit_sparse import build_operator_from_pattern
 from sfincs_jax.io import write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.fortran import read_petsc_mat_aij
-from sfincs_jax.problems.profile_residual import (
-    apply_device_subspace_residual_equation_correction,
-    build_rhs1_xblock_post_coarse_directions,
-)
 from sfincs_jax.problems.transport_linear_system import transport_active_dof_indices
 from sfincs_jax.solvers.preconditioner_xblock_policy import resolve_rhs1_xblock_sparse_pc_policy
 from sfincs_jax.solver import FlexibleGMRESSolveResult
@@ -2181,8 +2177,6 @@ def test_xblock_sparse_pc_gmres_initial_seed_can_be_disabled(monkeypatch) -> Non
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_INITIAL_SEED", "0")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS", "2")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE", "1")
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -2195,46 +2189,6 @@ def test_xblock_sparse_pc_gmres_initial_seed_can_be_disabled(monkeypatch) -> Non
     assert result.metadata["xblock_initial_seed_used"] is False
     assert result.metadata["xblock_initial_seed_residual_norm"] is None
     assert result.metadata["xblock_initial_seed_residual_ratio"] is None
-    assert result.metadata["xblock_post_minres_steps_requested"] == 2
-    assert result.metadata["xblock_post_minres_steps_accepted"] == 0
-    assert result.metadata["xblock_post_coarse_steps_requested"] == 1
-    assert result.metadata["xblock_post_coarse_steps_accepted"] == 0
-    assert result.metadata["xblock_post_coarse_direction_count"] == 0
-
-
-def test_xblock_sparse_pc_post_residual_equation_records_metadata(monkeypatch) -> None:
-    here = Path(__file__).parent
-    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
-    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "fgmres_jax")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION", "1")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_MAX_DIRECTIONS", "4")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_FSAVG_LMAX", "0")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_ANGULAR_LMAX", "-1")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
-    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
-    monkeypatch.setattr(profile_solve_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
-
-    messages: list[str] = []
-
-    result = solve_v3_full_system_linear_gmres(
-        nml=nml,
-        solve_method="xblock_sparse_pc_gmres",
-        tol=1.0e-12,
-        maxiter=2,
-        emit=lambda _level, msg: messages.append(msg),
-    )
-
-    assert result.metadata["xblock_post_residual_equation_steps_requested"] == 1
-    assert result.metadata["xblock_post_residual_equation_residual_before"] is not None
-    assert result.metadata["xblock_post_residual_equation_residual_after"] is not None
-    assert (
-        result.metadata["xblock_post_residual_equation_residual_after"]
-        < result.metadata["xblock_post_residual_equation_residual_before"]
-    )
-    assert result.metadata["xblock_post_residual_equation_direction_count"] > 0
-    assert any("post-residual-equation improved residual" in msg for msg in messages)
 
 
 def test_xblock_sparse_pc_constraint1_moment_schur_records_metadata(monkeypatch) -> None:
@@ -2475,120 +2429,6 @@ def test_xblock_sparse_pc_active_dof_opt_in_records_reduced_size(monkeypatch) ->
     assert result.metadata["xblock_active_dof"] is True
     assert result.metadata["xblock_linear_size"] < result.metadata["xblock_full_size"]
     assert result.gmres.x.shape == result.rhs.shape
-
-
-def test_xblock_post_coarse_directions_can_include_angular_modes() -> None:
-    here = Path(__file__).parent
-    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
-    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    residual = jnp.ones((op.total_size,), dtype=jnp.float64)
-
-    directions = build_rhs1_xblock_post_coarse_directions(
-        op=op,
-        residual=residual,
-        preconditioner=lambda v: jnp.asarray(v, dtype=jnp.float64),
-        include_raw=False,
-        fsavg_lmax=0,
-        angular_lmax=1,
-        max_extra_units=0,
-        max_directions=16,
-    )
-
-    names = tuple(name for name, _direction in directions)
-    assert any(name.startswith("fsavg_l") for name in names)
-    assert any(name.startswith("angular_") for name in names)
-    assert len(directions) <= 16
-
-
-def test_xblock_post_coarse_directions_can_include_residual_weighted_angular_modes() -> None:
-    here = Path(__file__).parent
-    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
-    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    theta = jnp.arange(int(op.n_theta), dtype=jnp.float64)
-    zeta = jnp.arange(int(op.n_zeta), dtype=jnp.float64)
-    pattern = jnp.cos(2.0 * jnp.pi * theta[:, None] / float(op.n_theta)) + 0.25 * jnp.sin(
-        2.0 * jnp.pi * zeta[None, :] / float(op.n_zeta)
-    )
-    f_res = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
-    f_res = f_res.at[0, :, 0, :, :].set(pattern[None, :, :])
-    residual = jnp.concatenate(
-        [f_res.reshape((-1,)), jnp.zeros((int(op.total_size) - int(op.f_size),), dtype=jnp.float64)]
-    )
-
-    directions = build_rhs1_xblock_post_coarse_directions(
-        op=op,
-        residual=residual,
-        preconditioner=lambda v: jnp.asarray(v, dtype=jnp.float64),
-        include_raw=False,
-        fsavg_lmax=0,
-        angular_lmax=0,
-        include_angular_residual=True,
-        max_extra_units=0,
-        max_directions=16,
-    )
-
-    names = tuple(name for name, _direction in directions)
-    assert any(name.startswith("angular_residual_") for name in names)
-    assert len(directions) <= 16
-
-
-def test_device_subspace_residual_equation_reuses_cached_operator_basis() -> None:
-    operator_matrix = jnp.asarray([[1.0, 1.0], [0.0, 1.0]], dtype=jnp.float64)
-    rhs = jnp.asarray([0.0, 1.0], dtype=jnp.float64)
-    cached_basis = jnp.asarray([[1.0], [0.0]], dtype=jnp.float64)
-    cached_action = operator_matrix @ cached_basis
-
-    def matvec(x):
-        return operator_matrix @ jnp.asarray(x, dtype=jnp.float64)
-
-    def direction_builder(_residual):
-        return (("missing_mode", jnp.asarray([0.0, 1.0], dtype=jnp.float64)),)
-
-    x, residual, history, counts, names = apply_device_subspace_residual_equation_correction(
-        matvec=matvec,
-        rhs=rhs,
-        x0=jnp.zeros_like(rhs),
-        direction_builder=direction_builder,
-        steps=1,
-        max_directions=2,
-        cached_basis=cached_basis,
-        cached_operator_on_basis=cached_action,
-        cached_labels=("flat_x0",),
-        rcond=0.0,
-    )
-
-    np.testing.assert_allclose(matvec(x), rhs, rtol=1.0e-12, atol=1.0e-12)
-    assert float(jnp.linalg.norm(residual)) < 1.0e-12
-    assert history[-1] < 1.0e-12
-    assert counts == (2,)
-    assert names == ("cached_qi:flat_x0", "missing_mode")
-
-
-def test_device_subspace_residual_equation_fails_closed_without_improvement() -> None:
-    operator_matrix = jnp.asarray([[2.0, 0.0], [0.0, 3.0]], dtype=jnp.float64)
-    rhs = jnp.asarray([1.0, -1.0], dtype=jnp.float64)
-
-    def matvec(x):
-        return operator_matrix @ jnp.asarray(x, dtype=jnp.float64)
-
-    def direction_builder(_residual):
-        return (("zero_mode", jnp.zeros_like(rhs)),)
-
-    x, residual, history, counts, names = apply_device_subspace_residual_equation_correction(
-        matvec=matvec,
-        rhs=rhs,
-        x0=jnp.zeros_like(rhs),
-        direction_builder=direction_builder,
-        steps=1,
-        max_directions=4,
-    )
-
-    np.testing.assert_allclose(x, jnp.zeros_like(rhs), rtol=0.0, atol=0.0)
-    np.testing.assert_allclose(residual, rhs, rtol=1.0e-12, atol=1.0e-12)
-    assert len(history) == 1
-    assert history[0] == pytest.approx(float(jnp.linalg.norm(rhs)))
-    assert counts == ()
-    assert names == ()
 
 
 def test_xblock_sparse_pc_lower_fill_local_policy_is_wired(monkeypatch) -> None:

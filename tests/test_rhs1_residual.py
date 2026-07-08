@@ -9,11 +9,9 @@ import pytest
 
 from sfincs_jax.problems.profile_residual import (
     apply_damped_preconditioned_residual_polish,
-    apply_device_subspace_residual_equation_correction,
     apply_preconditioned_minres_correction,
     apply_projected_residual_polish,
     apply_subspace_minres_correction,
-    build_rhs1_xblock_post_coarse_directions,
     compose_multilevel_minres_correction_preconditioner,
     l2_norm_float,
     recompute_true_residual_result,
@@ -191,143 +189,6 @@ def test_subspace_minres_filters_bad_columns_and_uses_pinv_fallback(
     assert history == (2.0, 1.5)
     assert counts == (1,)
     assert names == ("good",)
-
-
-def test_device_subspace_residual_equation_filters_invalid_basis_and_clips() -> None:
-    rhs = jnp.asarray([2.0, 0.0], dtype=jnp.float64)
-
-    def matvec(v):
-        arr = jnp.asarray(v, dtype=jnp.float64).reshape((-1,))
-        if int(arr.size) == 2 and float(arr[1]) > 0.5:
-            return jnp.asarray([1.0], dtype=jnp.float64)
-        return arr
-
-    def directions(_residual):
-        return (
-            ("bad_shape", jnp.asarray([1.0], dtype=jnp.float64)),
-            ("bad_action", jnp.asarray([0.0, 7.0], dtype=jnp.float64)),
-            ("good", jnp.asarray([1.0, 0.0], dtype=jnp.float64)),
-            ("not_reached", jnp.asarray([0.0, 1.0], dtype=jnp.float64)),
-        )
-
-    x, residual, history, counts, names = apply_device_subspace_residual_equation_correction(
-        matvec=matvec,
-        rhs=rhs,
-        x0=jnp.zeros((2,), dtype=jnp.float64),
-        direction_builder=directions,
-        steps=1,
-        max_directions=1,
-        cached_basis=jnp.ones((1, 1), dtype=jnp.float64),
-        cached_operator_on_basis=jnp.ones((1, 1), dtype=jnp.float64),
-        alpha_clip=0.25,
-    )
-
-    np.testing.assert_allclose(np.asarray(x), np.asarray([0.25, 0.0]))
-    np.testing.assert_allclose(np.asarray(residual), np.asarray([1.75, 0.0]))
-    assert history == (2.0, 1.75)
-    assert counts == (1,)
-    assert names == ("good",)
-
-
-def test_device_subspace_residual_equation_noops_without_basis() -> None:
-    rhs = jnp.asarray([1.0, -1.0], dtype=jnp.float64)
-
-    x, residual, history, counts, names = apply_device_subspace_residual_equation_correction(
-        matvec=lambda v: jnp.asarray(v, dtype=jnp.float64),
-        rhs=rhs,
-        x0=jnp.zeros((2,), dtype=jnp.float64),
-        direction_builder=None,
-        steps=2,
-        max_directions=3,
-    )
-
-    np.testing.assert_allclose(np.asarray(x), np.zeros((2,)))
-    np.testing.assert_allclose(np.asarray(residual), np.asarray(rhs))
-    assert history == (pytest.approx(float(jnp.linalg.norm(rhs))),)
-    assert counts == ()
-    assert names == ()
-
-
-def _post_coarse_direction_op() -> SimpleNamespace:
-    n_species = 1
-    n_x = 3
-    n_xi = 2
-    n_theta = 3
-    n_zeta = 2
-    f_shape = (n_species, n_x, n_xi, n_theta, n_zeta)
-    f_size = int(np.prod(f_shape))
-    phi1_size = 2
-    extra_size = 3
-    return SimpleNamespace(
-        total_size=f_size + phi1_size + extra_size,
-        f_size=f_size,
-        phi1_size=phi1_size,
-        extra_size=extra_size,
-        fblock=SimpleNamespace(f_shape=f_shape),
-        theta_weights=jnp.ones((n_theta,), dtype=jnp.float64),
-        zeta_weights=jnp.ones((n_zeta,), dtype=jnp.float64),
-        d_hat=jnp.asarray(float(n_theta * n_zeta), dtype=jnp.float64),
-        n_xi=n_xi,
-        n_theta=n_theta,
-        n_zeta=n_zeta,
-        n_species=n_species,
-        constraint_scheme=1,
-        point_at_x0=True,
-        x=jnp.linspace(0.0, 1.0, n_x, dtype=jnp.float64),
-    )
-
-
-def test_xblock_post_coarse_directions_filter_projected_wrong_size() -> None:
-    op = _post_coarse_direction_op()
-    residual = jnp.arange(int(op.total_size), dtype=jnp.float64) + 1.0
-
-    directions = build_rhs1_xblock_post_coarse_directions(
-        op=op,
-        residual=residual,
-        preconditioner=lambda _r: (_ for _ in ()).throw(RuntimeError("probe failed")),
-        direction_projector=lambda v: jnp.concatenate(
-            [jnp.asarray(v, dtype=jnp.float64), jnp.asarray([0.0], dtype=jnp.float64)]
-        ),
-        expected_size=int(op.total_size),
-        include_raw=True,
-        fsavg_lmax=0,
-        max_extra_units=2,
-        max_directions=8,
-    )
-
-    assert directions == ()
-
-
-def test_xblock_post_coarse_directions_include_constraint_and_extra_modes() -> None:
-    op = _post_coarse_direction_op()
-    residual = jnp.arange(int(op.total_size), dtype=jnp.float64) + 1.0
-
-    directions = build_rhs1_xblock_post_coarse_directions(
-        op=op,
-        residual=residual,
-        preconditioner=lambda r: r,
-        include_raw=True,
-        fsavg_lmax=0,
-        max_extra_units=4,
-        max_directions=12,
-    )
-
-    names = tuple(name for name, _direction in directions)
-    assert names[:2] == ("preconditioned_residual", "raw_residual")
-    assert "extra_residual" in names
-    assert "extra_unit_0" in names
-    assert any(name.startswith("constraint1_source_s0_") for name in names)
-
-    capped = build_rhs1_xblock_post_coarse_directions(
-        op=op,
-        residual=residual,
-        preconditioner=lambda r: r,
-        include_raw=True,
-        fsavg_lmax=0,
-        max_extra_units=4,
-        max_directions=1,
-    )
-    assert tuple(name for name, _direction in capped) == ("preconditioned_residual",)
 
 
 def test_apply_damped_preconditioned_residual_polish_backtracks_to_improvement() -> None:

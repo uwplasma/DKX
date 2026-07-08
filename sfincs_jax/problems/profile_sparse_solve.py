@@ -134,9 +134,6 @@ def try_run_requested_sparse_pc_gmres_branch(
     _SPARSE_HOST_PC_GMRES_SOLVE_METHODS = context.values['_SPARSE_HOST_PC_GMRES_SOLVE_METHODS']
     _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS = context.values['_SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS']
     _StructuredHostSparsePreconditionerBundle = context.values['_StructuredHostSparsePreconditionerBundle']
-    _apply_device_subspace_residual_equation_correction = context.values['_apply_device_subspace_residual_equation_correction']
-    _apply_preconditioned_minres_correction = context.values['_apply_preconditioned_minres_correction']
-    _apply_subspace_minres_correction = context.values['_apply_subspace_minres_correction']
     _build_host_sparse_direct_factor_from_matvec = context.values['_build_host_sparse_direct_factor_from_matvec']
     _build_rhs1_xblock_constraint1_moment_schur_preconditioner = context.values['_build_rhs1_xblock_constraint1_moment_schur_preconditioner']
     _build_rhsmode1_preconditioner_operator_fortran_reduced = context.values['_build_rhsmode1_preconditioner_operator_fortran_reduced']
@@ -146,13 +143,12 @@ def try_run_requested_sparse_pc_gmres_branch(
     _direct_tail_structured_pc_with_cache_metadata = context.values['_direct_tail_structured_pc_with_cache_metadata']
     _host_sparse_factor_dtype = context.values['_host_sparse_factor_dtype']
     _is_direct_reduced_pmat_pc_kind = context.values['_is_direct_reduced_pmat_pc_kind']
-    _read_rhs1_post_solve_correction_policy = context.values['_read_rhs1_post_solve_correction_policy']
+    _apply_preconditioned_minres_correction = context.values['_apply_preconditioned_minres_correction']
     _rhs1_active_reduced_residual_diagnostics = context.values['_rhs1_active_reduced_residual_diagnostics']
     _rhs1_bool_env = context.values['_rhs1_bool_env']
     _rhs1_float_env = context.values['_rhs1_float_env']
     _rhs1_xblock_fallback_initial_guess = context.values['_rhs1_xblock_fallback_initial_guess']
     _rhs1_xblock_policy = context.values['_rhs1_xblock_policy']
-    _rhs1_xblock_post_coarse_directions = context.values['_rhs1_xblock_post_coarse_directions']
     _rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb = context.values['_rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb']
     _rhsmode1_fp_xblock_assembled_host_allowed = context.values['_rhsmode1_fp_xblock_assembled_host_allowed']
     _rhsmode1_fp_xblock_species_decoupled_for_host_assembly = context.values['_rhsmode1_fp_xblock_species_decoupled_for_host_assembly']
@@ -283,24 +279,11 @@ def try_run_requested_sparse_pc_gmres_branch(
         if xblock_sparse_pc:
             return run_xblock_sparse_pc_branch(
                 XBlockSparsePCBranchContext(
-                    _apply_device_subspace_residual_equation_correction=(
-                        _apply_device_subspace_residual_equation_correction
-                    ),
-                    _apply_preconditioned_minres_correction=(
-                        _apply_preconditioned_minres_correction
-                    ),
-                    _apply_subspace_minres_correction=_apply_subspace_minres_correction,
-                    _rhs1_xblock_post_coarse_directions=(
-                        _rhs1_xblock_post_coarse_directions
-                    ),
                     _build_rhs1_xblock_constraint1_moment_schur_preconditioner=(
                         _build_rhs1_xblock_constraint1_moment_schur_preconditioner
                     ),
                     _build_rhsmode1_xblock_tz_sparse_preconditioner=(
                         _build_rhsmode1_xblock_tz_sparse_preconditioner
-                    ),
-                    _read_rhs1_post_solve_correction_policy=(
-                        _read_rhs1_post_solve_correction_policy
                     ),
                     _rhs1_bool_env=_rhs1_bool_env,
                     _rhs1_float_env=_rhs1_float_env,

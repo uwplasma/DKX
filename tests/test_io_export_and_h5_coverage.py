@@ -254,20 +254,6 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
             "xblock_initial_seed_used": True,
             "xblock_initial_seed_residual_norm": 3.0e-8,
             "xblock_initial_seed_residual_ratio": 0.3,
-            "xblock_post_minres_steps_requested": 3,
-            "xblock_post_minres_steps_accepted": 2,
-            "xblock_post_minres_residual_before": 4.0e-8,
-            "xblock_post_minres_residual_after": 2.5e-8,
-            "xblock_post_coarse_steps_requested": 1,
-            "xblock_post_coarse_steps_accepted": 1,
-            "xblock_post_coarse_direction_count": 6,
-            "xblock_post_coarse_residual_before": 2.5e-8,
-            "xblock_post_coarse_residual_after": 1.5e-8,
-            "xblock_post_residual_equation_steps_requested": 1,
-            "xblock_post_residual_equation_steps_accepted": 1,
-            "xblock_post_residual_equation_direction_count": 9,
-            "xblock_post_residual_equation_residual_before": 1.5e-8,
-            "xblock_post_residual_equation_residual_after": 9.0e-9,
             "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb": 1024.0,
             "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb_auto": True,
             "sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata": {
@@ -327,20 +313,6 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
     assert int(np.asarray(data["linearSolverXBlockInitialSeedUsed"])) == 1
     assert float(np.asarray(data["linearSolverXBlockInitialSeedResidualNorm"])) == pytest.approx(3.0e-8)
     assert float(np.asarray(data["linearSolverXBlockInitialSeedResidualRatio"])) == pytest.approx(0.3)
-    assert int(np.asarray(data["linearSolverXBlockPostMinresStepsRequested"])) == 3
-    assert int(np.asarray(data["linearSolverXBlockPostMinresStepsAccepted"])) == 2
-    assert float(np.asarray(data["linearSolverXBlockPostMinresResidualBefore"])) == pytest.approx(4.0e-8)
-    assert float(np.asarray(data["linearSolverXBlockPostMinresResidualAfter"])) == pytest.approx(2.5e-8)
-    assert int(np.asarray(data["linearSolverXBlockPostCoarseStepsRequested"])) == 1
-    assert int(np.asarray(data["linearSolverXBlockPostCoarseStepsAccepted"])) == 1
-    assert int(np.asarray(data["linearSolverXBlockPostCoarseDirectionCount"])) == 6
-    assert float(np.asarray(data["linearSolverXBlockPostCoarseResidualBefore"])) == pytest.approx(2.5e-8)
-    assert float(np.asarray(data["linearSolverXBlockPostCoarseResidualAfter"])) == pytest.approx(1.5e-8)
-    assert int(np.asarray(data["linearSolverXBlockPostResidualEquationStepsRequested"])) == 1
-    assert int(np.asarray(data["linearSolverXBlockPostResidualEquationStepsAccepted"])) == 1
-    assert int(np.asarray(data["linearSolverXBlockPostResidualEquationDirectionCount"])) == 9
-    assert float(np.asarray(data["linearSolverXBlockPostResidualEquationResidualBefore"])) == pytest.approx(1.5e-8)
-    assert float(np.asarray(data["linearSolverXBlockPostResidualEquationResidualAfter"])) == pytest.approx(9.0e-9)
     assert float(np.asarray(data["linearSolverDirectTailStructuredPCMaxMB"])) == pytest.approx(1024.0)
     assert int(np.asarray(data["linearSolverDirectTailStructuredPCMaxMBAuto"])) == 1
     assert not any("DirectTailSupportMode" in key for key in data)

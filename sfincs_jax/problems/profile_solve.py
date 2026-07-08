@@ -188,7 +188,7 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     XBlockFirstKrylovAttemptContext, XBlockGlobalCouplingStageContext,
     XBlockKrylovControlSetupContext, XBlockKrylovProgressCallbacksContext, XBlockKrylovSolveStageContext,
     XBlockKrylovSolveSpaceContext, XBlockMomentSchurStageContext, XBlockPostKrylovCompletionContext,
-    XBlockPostSolveCorrectionContext, XBlockPreflightGateContext,
+    XBlockPreflightGateContext,
     XBlockSideProbeStageContext, XBlockSparsePCBranchContext, XBlockTwoLevelStageContext,
     apply_xblock_global_coupling_stage, apply_xblock_moment_schur_stage,
     apply_xblock_side_probe_stage,
@@ -307,7 +307,6 @@ from sfincs_jax.problems.profile_policies import (
 )
 from sfincs_jax.problems.profile_policies import (
     read_bool_env as _rhs1_bool_env, read_float_env as _rhs1_float_env, read_int_env as _rhs1_int_env,
-    read_post_solve_correction_policy as _read_rhs1_post_solve_correction_policy,
 )
 from sfincs_jax.problems.profile_policies import (
     _DIRECT_TAIL_STRUCTURED_PC_CACHE, _StructuredHostSparsePreconditionerBundle, _direct_tail_structured_pc_cache_key,
@@ -334,10 +333,8 @@ from sfincs_jax.solvers.preconditioner_xblock_coarse import (
     _rhs1_polynomial_moment_features,
 )
 from sfincs_jax.problems.profile_residual import (
-    apply_device_subspace_residual_equation_correction as _apply_device_subspace_residual_equation_correction,
     apply_preconditioned_minres_correction as _apply_preconditioned_minres_correction,
     apply_subspace_minres_correction as _apply_subspace_minres_correction,
-    build_rhs1_xblock_post_coarse_directions as _rhs1_xblock_post_coarse_directions,
     compose_multilevel_minres_correction_preconditioner as _compose_multilevel_minres_correction_preconditioner,
     compose_multilevel_residual_correction_preconditioner as _compose_multilevel_residual_correction_preconditioner,
     compose_residual_correction_preconditioner as _compose_residual_correction_preconditioner,

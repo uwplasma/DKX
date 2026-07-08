@@ -6,9 +6,7 @@ import jax.numpy as jnp
 import sfincs_jax.problems.profile_solver_diagnostics as diagnostics
 from sfincs_jax.problems.profile_solver_diagnostics import (
     RHS1KSPDiagnosticsContext,
-    RHS1PostMinresDiagnostics,
     RHS1PreflightDiagnostics,
-    RHS1SubspaceCorrectionDiagnostics,
     build_profile_response_linear_metadata,
     build_rhs1_xblock_correction_metadata,
     build_rhs1_xblock_correction_metadata_from_solve_state,
@@ -27,35 +25,6 @@ def test_rhs1_xblock_correction_metadata_preserves_historical_keys() -> None:
             improvement=0.2,
             passed=True,
         ),
-        post_minres=RHS1PostMinresDiagnostics(
-            steps_requested=3,
-            alphas=(0.5, -0.25),
-            history=(1.7, 1.2),
-            residual_before=2.0,
-            residual_after=1.2,
-        ),
-        post_coarse=RHS1SubspaceCorrectionDiagnostics(
-            steps_requested=4,
-            direction_counts=(2,),
-            direction_names=("post-fsavg",),
-            residual_before=1.2,
-            residual_after=0.8,
-            history=(1.0, 0.8),
-            fsavg_lmax=1,
-            angular_lmax=0,
-            angular_residual=False,
-        ),
-        post_residual_equation=RHS1SubspaceCorrectionDiagnostics(
-            steps_requested=1,
-            direction_counts=(5, 6),
-            direction_names=("fsavg", "residual"),
-            residual_before=0.8,
-            residual_after=0.3,
-            history=(0.6, 0.3),
-            fsavg_lmax=4,
-            angular_lmax=3,
-            angular_residual=True,
-        ),
     )
 
     assert metadata["xblock_preflight_min_improvement"] == 1.0e-3
@@ -64,55 +33,14 @@ def test_rhs1_xblock_correction_metadata_preserves_historical_keys() -> None:
     assert metadata["xblock_preflight_improvement"] == 0.2
     assert metadata["xblock_preflight_passed"] is True
 
-    assert metadata["xblock_post_minres_steps_requested"] == 3
-    assert metadata["xblock_post_minres_steps_accepted"] == 2
-    assert metadata["xblock_post_minres_residual_before"] == 2.0
-    assert metadata["xblock_post_minres_residual_after"] == 1.2
-    assert metadata["xblock_post_minres_alphas"] == (0.5, -0.25)
-    assert metadata["xblock_post_minres_history"] == (1.7, 1.2)
-
-    assert metadata["xblock_post_coarse_steps_requested"] == 4
-    assert metadata["xblock_post_coarse_steps_accepted"] == 1
-    assert metadata["xblock_post_coarse_direction_count"] == 2
-    assert metadata["xblock_post_coarse_residual_before"] == 1.2
-    assert metadata["xblock_post_coarse_residual_after"] == 0.8
-    assert metadata["xblock_post_coarse_history"] == (1.0, 0.8)
-    assert metadata["xblock_post_coarse_direction_counts"] == (2,)
-    assert metadata["xblock_post_coarse_direction_names"] == ("post-fsavg",)
-    assert metadata["xblock_post_coarse_fsavg_lmax"] == 1
-    assert metadata["xblock_post_coarse_angular_lmax"] == 0
-    assert metadata["xblock_post_coarse_angular_residual"] is False
-
-    assert metadata["xblock_post_residual_equation_steps_requested"] == 1
-    assert metadata["xblock_post_residual_equation_steps_accepted"] == 2
-    assert metadata["xblock_post_residual_equation_direction_count"] == 11
-    assert metadata["xblock_post_residual_equation_residual_before"] == 0.8
-    assert metadata["xblock_post_residual_equation_residual_after"] == 0.3
-    assert metadata["xblock_post_residual_equation_history"] == (0.6, 0.3)
-    assert metadata["xblock_post_residual_equation_direction_counts"] == (5, 6)
-    assert metadata["xblock_post_residual_equation_direction_names"] == (
-        "fsavg",
-        "residual",
-    )
-    assert metadata["xblock_post_residual_equation_fsavg_lmax"] == 4
-    assert metadata["xblock_post_residual_equation_angular_lmax"] == 3
-    assert metadata["xblock_post_residual_equation_angular_residual"] is True
-
 
 def test_rhs1_xblock_correction_metadata_defaults_are_output_safe() -> None:
     metadata = build_rhs1_xblock_correction_metadata(
         preflight=RHS1PreflightDiagnostics(min_improvement=0.0, required=False),
-        post_minres=RHS1PostMinresDiagnostics(steps_requested=0),
-        post_coarse=RHS1SubspaceCorrectionDiagnostics(steps_requested=0),
-        post_residual_equation=RHS1SubspaceCorrectionDiagnostics(steps_requested=0),
     )
 
     assert metadata["xblock_preflight_required"] is False
     assert metadata["xblock_preflight_passed"] is None
-    assert metadata["xblock_post_minres_steps_accepted"] == 0
-    assert metadata["xblock_post_minres_alphas"] == ()
-    assert metadata["xblock_post_coarse_direction_names"] == ()
-    assert metadata["xblock_post_residual_equation_direction_count"] == 0
 
 
 def test_profile_response_linear_metadata_merges_parts_without_acceptance() -> None:
@@ -159,29 +87,6 @@ def test_rhs1_xblock_correction_metadata_from_solve_state_matches_typed_builder(
         "preflight_residual_norm": 3.0,
         "preflight_improvement": 0.2,
         "preflight_passed": True,
-        "post_minres_steps_requested": 3,
-        "post_minres_alphas": (0.5, -0.25),
-        "post_minres_history": (1.7, 1.2),
-        "post_minres_residual_before": 2.0,
-        "post_minres_residual_after": 1.2,
-        "post_coarse_steps_requested": 4,
-        "post_coarse_direction_counts": (2,),
-        "post_coarse_direction_names": ("post-fsavg",),
-        "post_coarse_residual_before": 1.2,
-        "post_coarse_residual_after": 0.8,
-        "post_coarse_history": (1.0, 0.8),
-        "post_coarse_fsavg_lmax": 1,
-        "post_coarse_angular_lmax": 0,
-        "post_coarse_include_angular_residual": False,
-        "post_residual_equation_steps_requested": 1,
-        "post_residual_equation_direction_counts": (5, 6),
-        "post_residual_equation_direction_names": ("fsavg", "residual"),
-        "post_residual_equation_residual_before": 0.8,
-        "post_residual_equation_residual_after": 0.3,
-        "post_residual_equation_history": (0.6, 0.3),
-        "post_residual_equation_fsavg_lmax": 4,
-        "post_residual_equation_angular_lmax": 3,
-        "post_residual_equation_include_angular_residual": True,
     }
     expected = build_rhs1_xblock_correction_metadata(
         preflight=RHS1PreflightDiagnostics(
@@ -190,35 +95,6 @@ def test_rhs1_xblock_correction_metadata_from_solve_state_matches_typed_builder(
             residual_norm=3.0,
             improvement=0.2,
             passed=True,
-        ),
-        post_minres=RHS1PostMinresDiagnostics(
-            steps_requested=3,
-            alphas=(0.5, -0.25),
-            history=(1.7, 1.2),
-            residual_before=2.0,
-            residual_after=1.2,
-        ),
-        post_coarse=RHS1SubspaceCorrectionDiagnostics(
-            steps_requested=4,
-            direction_counts=(2,),
-            direction_names=("post-fsavg",),
-            residual_before=1.2,
-            residual_after=0.8,
-            history=(1.0, 0.8),
-            fsavg_lmax=1,
-            angular_lmax=0,
-            angular_residual=False,
-        ),
-        post_residual_equation=RHS1SubspaceCorrectionDiagnostics(
-            steps_requested=1,
-            direction_counts=(5, 6),
-            direction_names=("fsavg", "residual"),
-            residual_before=0.8,
-            residual_after=0.3,
-            history=(0.6, 0.3),
-            fsavg_lmax=4,
-            angular_lmax=3,
-            angular_residual=True,
         ),
     )
 

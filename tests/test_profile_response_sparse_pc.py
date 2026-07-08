@@ -165,7 +165,6 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     FPXBlockGlobalCorrectionContext,
     FPXBlockHighXCorrectionContext,
     MatvecCounter,
-    XBlockSubspaceCorrectionContext,
     SparseSXBlockRescueContext,
     SparseXBlockExplicitSeedContext,
     SparseXBlockRescueAcceptanceContext,
@@ -184,8 +183,6 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     XBlockMomentSchurStageContext,
     XBlockPostKrylovCompletionContext,
     XBlockPostKrylovCompletionResult,
-    XBlockPostSolveCorrectionContext,
-    XBlockPostSolveCorrectionResult,
     XBlockPhysicalResidual,
     XBlockPreflightGateContext,
     XBlockSparsePCCompletionContext,
@@ -204,7 +201,6 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     apply_xblock_two_level_stage,
     apply_sparse_xblock_explicit_seed,
     accept_sparse_xblock_rescue_candidate,
-    apply_xblock_subspace_correction_if_needed,
     build_sparse_xblock_rescue_preconditioner,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
@@ -239,7 +235,6 @@ from sfincs_jax.problems.profile_sparse_xblock import (
     run_sparse_sxblock_rescue_stage,
     run_sparse_xblock_rescue_solve_stage,
     run_xblock_gmres_fallback_if_needed,
-    run_xblock_post_solve_corrections,
     xblock_sparse_pc_final_metadata_solve_scope_keys,
     xblock_sparse_pc_final_metadata_solve_state_keys,
     xblock_sparse_pc_final_metadata_state_from_context,
@@ -362,14 +357,8 @@ def test_sparse_xblock_module_exposes_canonical_public_contract() -> None:
         "xblock_sparse_pc_final_metadata_from_solve_state",
         "xblock_sparse_pc_final_payload_from_solve_state",
         "xblock_sparse_pc_final_payload",
-        "XBlockSubspaceCorrectionContext",
-        "XBlockSubspaceCorrectionResult",
-        "XBlockPostSolveCorrectionContext",
-        "XBlockPostSolveCorrectionResult",
         "XBlockPostKrylovCompletionContext",
         "XBlockPostKrylovCompletionResult",
-        "apply_xblock_subspace_correction_if_needed",
-        "run_xblock_post_solve_corrections",
         "complete_xblock_post_krylov_stage",
         "run_xblock_sparse_pc_branch",
         "resolve_xblock_sparse_pc_setup",
@@ -2477,212 +2466,15 @@ def test_emit_xblock_sparse_pc_completion_from_solve_state_skips_missing_emit() 
     emit_xblock_sparse_pc_completion_from_solve_state({"emit": None})
 
 
-def _xblock_post_policy(
-    *,
-    post_minres_steps: int,
-    post_coarse_steps: int,
-    post_residual_steps: int,
-    include_post_coarse: bool = True,
-) -> SimpleNamespace:
-    return SimpleNamespace(
-        post_minres=SimpleNamespace(
-            steps_requested=post_minres_steps,
-            alpha_clip=4.0,
-            min_improvement=0.0,
-        ),
-        post_coarse=SimpleNamespace(
-            steps_requested=post_coarse_steps,
-            max_directions=5,
-            max_extra_units=2,
-            fsavg_lmax=1,
-            angular_lmax=3,
-            include_angular_residual=True,
-            include_raw=False,
-            alpha_clip=6.0,
-            rcond=1.0e-10,
-            min_improvement=0.0,
-        ),
-        post_residual_equation=SimpleNamespace(
-            steps_requested=post_residual_steps,
-            max_directions=7,
-            max_extra_units=4,
-            fsavg_lmax=2,
-            angular_lmax=5,
-            include_angular_residual=False,
-            include_raw=True,
-            include_post_coarse=include_post_coarse,
-            alpha_clip=8.0,
-            rcond=1.0e-9,
-            min_improvement=0.0,
-        ),
-    )
-
-
-def test_run_xblock_post_solve_corrections_applies_ordered_stages() -> None:
-    calls: list[str] = []
-    direction_kwargs: list[dict[str, object]] = []
-    messages: list[tuple[int, str]] = []
-    clock = {"t": 0.0}
-
-    def elapsed_s() -> float:
-        clock["t"] += 0.5
-        return clock["t"]
-
-    def coarse_direction_builder(residual_vec: jnp.ndarray, **kwargs):
-        direction_kwargs.append(dict(kwargs))
-        return (("coarse", residual_vec),)
-
-    def residual_equation_correction(**kwargs):
-        calls.append("post_residual_equation")
-        directions = kwargs["direction_builder"](jnp.asarray([1.0, 0.0]))
-        assert directions[0][0] == "coarse"
-        return (
-            jnp.asarray([0.8, 0.0]),
-            jnp.asarray([0.4, 0.0]),
-            (1.0, 0.4),
-            (1,),
-            ("residual-space",),
-        )
-
-    def minres_correction(**_kwargs):
-        calls.append("post_minres")
-        return (
-            jnp.asarray([0.6, 0.0]),
-            jnp.asarray([0.2, 0.0]),
-            (0.4, 0.2),
-            (0.5,),
-        )
-
-    def coarse_correction(**kwargs):
-        calls.append("post_coarse")
-        directions = kwargs["direction_builder"](jnp.asarray([1.0, 0.0]))
-        assert directions[0][0] == "coarse"
-        return (
-            jnp.asarray([0.5, 0.0]),
-            jnp.asarray([0.1, 0.0]),
-            (0.2, 0.1),
-            (2,),
-            ("coarse-space",),
-        )
-
-    result = run_xblock_post_solve_corrections(
-        XBlockPostSolveCorrectionContext(
-            matvec=_identity,
-            rhs=jnp.zeros(2),
-            x=np.asarray([1.0, 0.0]),
-            residual_norm=1.0,
-            target=1.0e-6,
-            solve_s=10.0,
-            preconditioner=_identity,
-            precondition_side="right",
-            post_solve_policy=_xblock_post_policy(
-                post_minres_steps=1,
-                post_coarse_steps=1,
-                post_residual_steps=1,
-            ),
-            coarse_direction_builder=coarse_direction_builder,
-            emit=lambda level, message: messages.append((level, message)),
-            elapsed_s=elapsed_s,
-            minres_correction=minres_correction,
-            residual_equation_correction=residual_equation_correction,
-            coarse_correction=coarse_correction,
-        )
-    )
-
-    assert isinstance(result, XBlockPostSolveCorrectionResult)
-    assert calls == ["post_residual_equation", "post_minres", "post_coarse"]
-    np.testing.assert_allclose(result.x, np.asarray([0.5, 0.0]))
-    assert result.residual_norm == pytest.approx(0.1)
-    assert result.solve_s == pytest.approx(11.5)
-    assert result.post_residual_equation_history == (1.0, 0.4)
-    assert result.post_minres_history == (0.4, 0.2)
-    assert result.post_minres_alphas == (0.5,)
-    assert result.post_coarse_direction_counts == (2,)
-    assert result.post_coarse_direction_names == ("coarse-space",)
-    assert direction_kwargs[0]["include_raw"] is True
-    assert direction_kwargs[0]["max_directions"] == 7
-    assert direction_kwargs[1]["include_raw"] is False
-    assert direction_kwargs[1]["max_directions"] == 5
-    assert any("post-residual-equation improved" in message for _, message in messages)
-    assert any("post-minres improved" in message for _, message in messages)
-    assert any("post-coarse improved" in message for _, message in messages)
-
-    state = result.metadata_state()
-    assert state["post_residual_equation_direction_counts"] == (1,)
-    assert state["post_minres_alphas"] == (0.5,)
-    assert state["post_coarse_direction_names"] == ("coarse-space",)
-
-
-def test_run_xblock_post_solve_corrections_preserves_state_when_inactive() -> None:
-    def fail_correction(**_kwargs):
-        raise AssertionError("correction should not run")
-
-    result = run_xblock_post_solve_corrections(
-        XBlockPostSolveCorrectionContext(
-            matvec=_identity,
-            rhs=jnp.zeros(2),
-            x=np.asarray([1.0, 2.0]),
-            residual_norm=0.25,
-            target=1.0,
-            solve_s=3.0,
-            preconditioner=_identity,
-            precondition_side="none",
-            post_solve_policy=_xblock_post_policy(
-                post_minres_steps=0,
-                post_coarse_steps=0,
-                post_residual_steps=0,
-                include_post_coarse=False,
-            ),
-            coarse_direction_builder=lambda residual_vec, **_kwargs: (("raw", residual_vec),),
-            emit=None,
-            elapsed_s=lambda: 0.0,
-            minres_correction=fail_correction,
-            residual_equation_correction=fail_correction,
-            coarse_correction=fail_correction,
-        )
-    )
-
-    np.testing.assert_allclose(result.x, np.asarray([1.0, 2.0]))
-    assert result.residual_norm == pytest.approx(0.25)
-    assert result.solve_s == pytest.approx(3.0)
-    assert result.post_minres_history == ()
-    assert result.post_coarse_direction_counts == ()
-    assert result.post_residual_equation_direction_counts == ()
-    assert result.post_residual_equation_include_post_coarse is False
-
-
 def test_complete_xblock_post_krylov_stage_emits_completion_and_returns_state() -> None:
     emitted: list[tuple[int, str]] = []
 
-    def fail_correction(**_kwargs):
-        raise AssertionError("correction should not run")
-
     result = complete_xblock_post_krylov_stage(
         XBlockPostKrylovCompletionContext(
-            corrections=XBlockPostSolveCorrectionContext(
-                matvec=_identity,
-                rhs=jnp.zeros(2),
-                x=np.asarray([1.0, 2.0]),
-                residual_norm=0.25,
-                target=1.0,
-                solve_s=3.0,
-                preconditioner=_identity,
-                precondition_side="none",
-                post_solve_policy=_xblock_post_policy(
-                    post_minres_steps=0,
-                    post_coarse_steps=0,
-                    post_residual_steps=0,
-                    include_post_coarse=False,
-                ),
-                coarse_direction_builder=lambda residual_vec, **_kwargs: (
-                    ("raw", residual_vec),
-                ),
-                emit=lambda level, message: emitted.append((level, message)),
-                elapsed_s=lambda: 2.25,
-                minres_correction=fail_correction,
-                residual_equation_correction=fail_correction,
-                coarse_correction=fail_correction,
-            ),
+            x=np.asarray([1.0, 2.0]),
+            residual_norm=0.25,
+            solve_s=3.0,
+            emit=lambda level, message: emitted.append((level, message)),
             krylov_method="gmres",
             elapsed_s=lambda: 9.0,
             iterations=7,
@@ -2696,7 +2488,6 @@ def test_complete_xblock_post_krylov_stage_emits_completion_and_returns_state() 
     np.testing.assert_allclose(result.x, np.asarray([1.0, 2.0]))
     assert result.residual_norm == pytest.approx(0.25)
     assert result.solve_s == pytest.approx(3.0)
-    assert result.corrections.post_minres_history == ()
     assert emitted == [
         (
             0,
@@ -9299,95 +9090,6 @@ def test_sparse_pc_post_minres_if_needed_preserves_state_when_disabled_or_conver
     assert converged.solve_s == 3.0
 
 
-def test_xblock_subspace_correction_accepts_improved_residual() -> None:
-    messages: list[str] = []
-    times = iter((2.0, 2.25))
-
-    def direction_builder(residual_vec):
-        return (("fsavg", residual_vec),)
-
-    def correction(**kwargs):
-        assert kwargs["steps"] == 2
-        assert kwargs["max_directions"] == 4
-        return (
-            jnp.asarray([0.5, 0.5]),
-            jnp.asarray([0.1, 0.2]),
-            (0.5, 0.25),
-            (1, 2),
-            ("fsavg", "angular"),
-        )
-
-    result = apply_xblock_subspace_correction_if_needed(
-        XBlockSubspaceCorrectionContext(
-            matvec=_identity,
-            rhs=jnp.zeros(2),
-            x=np.zeros(2),
-            residual_norm=1.0,
-            target=1.0e-6,
-            direction_builder=direction_builder,
-            steps=2,
-            max_directions=4,
-            alpha_clip=10.0,
-            rcond=1.0e-12,
-            min_improvement=0.0,
-            emit=lambda _level, msg: messages.append(msg),
-            elapsed_s=lambda: next(times),
-            correction=correction,
-            correction_label="post-residual-equation",
-        )
-    )
-
-    assert result.x.tolist() == [0.5, 0.5]
-    assert result.residual_norm == pytest.approx(np.linalg.norm([0.1, 0.2]))
-    assert result.history == (0.5, 0.25)
-    assert result.direction_counts == (1, 2)
-    assert result.direction_names == ("fsavg", "angular")
-    assert result.residual_before == 1.0
-    assert result.solve_s == pytest.approx(0.25)
-    assert any(
-        "xblock_sparse_pc_gmres post-residual-equation improved" in msg
-        for msg in messages
-    )
-
-
-def test_xblock_subspace_correction_rejects_nonimproving_residual() -> None:
-    messages: list[str] = []
-    times = iter((2.0, 2.25))
-
-    def correction(**_kwargs):
-        return (
-            jnp.asarray([2.0, 2.0]),
-            jnp.asarray([2.0, 0.0]),
-            (2.0,),
-            (1,),
-            ("fsavg",),
-        )
-
-    result = apply_xblock_subspace_correction_if_needed(
-        XBlockSubspaceCorrectionContext(
-            matvec=_identity,
-            rhs=jnp.zeros(2),
-            x=np.asarray([1.0, 1.0]),
-            residual_norm=1.0,
-            target=1.0e-6,
-            direction_builder=lambda residual_vec: (("fsavg", residual_vec),),
-            steps=1,
-            max_directions=4,
-            alpha_clip=10.0,
-            rcond=1.0e-12,
-            min_improvement=0.0,
-            emit=lambda _level, msg: messages.append(msg),
-            elapsed_s=lambda: next(times),
-            correction=correction,
-        )
-    )
-
-    assert result.x.tolist() == [1.0, 1.0]
-    assert result.residual_norm == 1.0
-    assert result.residual_after == 2.0
-    assert any("xblock_sparse_pc_gmres post-coarse rejected" in msg for msg in messages)
-
-
 def test_sparse_pc_post_minres_from_solve_state_updates_solve_state() -> None:
     times = iter((4.0, 4.6))
 
@@ -10426,8 +10128,7 @@ def test_xblock_sparse_pc_final_payload_uses_explicit_context(
         calls["diagnostic_token"] = arg_state["diagnostic_token"]
         return {"core": 1}
 
-    def fake_correction_metadata(arg_state):
-        calls["post_minres_alphas"] = arg_state["post_minres_alphas"]
+    def fake_correction_metadata(_arg_state):
         return {"correction": 2}
 
     monkeypatch.setattr(
@@ -10451,9 +10152,6 @@ def test_xblock_sparse_pc_final_payload_uses_explicit_context(
             linear_size=8,
             restart=2,
             diagnostic_state={"diagnostic_token": "kept"},
-            post_corrections=SimpleNamespace(
-                metadata_state=lambda: {"post_minres_alphas": (0.25,)}
-            ),
         ),
         expand_reduced=lambda x: jnp.asarray([x[1], x[0]], dtype=x.dtype),
     )
@@ -10468,7 +10166,6 @@ def test_xblock_sparse_pc_final_payload_uses_explicit_context(
         "solver_kind": "xblock_sparse_pc_gmres",
         "gmres_basis_nbytes": 8 * (2 + 1 + 4) * 8,
         "diagnostic_token": "kept",
-        "post_minres_alphas": (0.25,),
     }
     assert payload.metadata == {"core": 1, "correction": 2}
 
@@ -10486,8 +10183,7 @@ def test_xblock_sparse_pc_final_payload_from_solve_state_sets_gate_and_expands(
         calls["device_methods"] = arg_state["xblock_device_krylov_methods"]
         return {"core": 1}
 
-    def fake_correction_metadata(arg_state):
-        calls["post_minres_alphas"] = arg_state["post_minres_alphas"]
+    def fake_correction_metadata(_arg_state):
         return {"correction": 2}
 
     monkeypatch.setattr(
@@ -10514,9 +10210,6 @@ def test_xblock_sparse_pc_final_payload_from_solve_state_sets_gate_and_expands(
         expand_reduced=lambda x: jnp.concatenate(
             [jnp.asarray([0.0], dtype=x.dtype), x]
         ),
-        post_corrections=SimpleNamespace(
-            metadata_state=lambda: {"post_minres_alphas": (0.5,)}
-        ),
     )
 
     assert isinstance(payload, SparsePCGMRESFinalPayload)
@@ -10528,7 +10221,6 @@ def test_xblock_sparse_pc_final_payload_from_solve_state_sets_gate_and_expands(
         "solver_kind": "xblock_sparse_pc_tfqmr_jax",
         "gmres_basis_nbytes": 10 * (3 + 1 + 4) * 8,
         "device_methods": {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"},
-        "post_minres_alphas": (0.5,),
     }
     assert payload.metadata == {"core": 1, "correction": 2}
 

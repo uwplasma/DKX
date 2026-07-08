@@ -29,8 +29,6 @@ from .profile_solver_diagnostics import (
 )
 from .profile_sparse_finalization import (
     SparsePCGMRESFinalPayload,
-    SparsePCPostMinresUpdateContext,
-    apply_sparse_pc_post_minres_if_needed,
 )
 from .profile_sparse_policy import _env_bool, _env_float, _env_int, _env_value
 from .profile_residual import (
@@ -1559,13 +1557,8 @@ class XBlockSeedPolicySetup:
 class XBlockSparsePCBranchContext:
     """Solve-local state and callbacks for the x-block sparse-PC branch."""
 
-    _apply_device_subspace_residual_equation_correction: object
-    _apply_preconditioned_minres_correction: object
-    _apply_subspace_minres_correction: object
-    _rhs1_xblock_post_coarse_directions: object
     _build_rhs1_xblock_constraint1_moment_schur_preconditioner: object
     _build_rhsmode1_xblock_tz_sparse_preconditioner: object
-    _read_rhs1_post_solve_correction_policy: object
     _rhs1_bool_env: object
     _rhs1_float_env: object
     _rhs1_xblock_fallback_initial_guess: object
@@ -1622,13 +1615,8 @@ class XBlockSparsePCBranchContext:
 def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
     """Run the RHSMode=1 x-block sparse-PC GMRES branch outside solve.py."""
 
-    _apply_device_subspace_residual_equation_correction = context._apply_device_subspace_residual_equation_correction
-    _apply_preconditioned_minres_correction = context._apply_preconditioned_minres_correction
-    _apply_subspace_minres_correction = context._apply_subspace_minres_correction
-    _rhs1_xblock_post_coarse_directions = context._rhs1_xblock_post_coarse_directions
     _build_rhs1_xblock_constraint1_moment_schur_preconditioner = context._build_rhs1_xblock_constraint1_moment_schur_preconditioner
     _build_rhsmode1_xblock_tz_sparse_preconditioner = context._build_rhsmode1_xblock_tz_sparse_preconditioner
-    _read_rhs1_post_solve_correction_policy = context._read_rhs1_post_solve_correction_policy
     _rhs1_bool_env = context._rhs1_bool_env
     _rhs1_float_env = context._rhs1_float_env
     _rhs1_xblock_fallback_initial_guess = context._rhs1_xblock_fallback_initial_guess
@@ -2106,49 +2094,6 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
             xblock_side_probe_stage.seed_residual_norm
         )
 
-        if precondition_side != "none":
-            if xblock_use_active_dof:
-
-                def _coarse_preconditioner_for_basis(v_full: jnp.ndarray) -> jnp.ndarray:
-                    reduced = _xblock_reduce_full(jnp.asarray(v_full, dtype=jnp.float64))
-                    return _xblock_expand_reduced(precond_xblock_krylov(reduced))
-
-            else:
-                _coarse_preconditioner_for_basis = precond_xblock_krylov
-        else:
-
-            def _coarse_preconditioner_for_basis(v_full: jnp.ndarray) -> jnp.ndarray:
-                return jnp.asarray(v_full, dtype=jnp.float64)
-
-        def _xblock_coarse_direction_builder(
-            residual_vec: jnp.ndarray,
-            *,
-            include_raw: bool,
-            fsavg_lmax: int,
-            angular_lmax: int,
-            max_extra_units: int,
-            max_directions: int,
-            include_angular_residual: bool,
-        ) -> tuple[tuple[str, jnp.ndarray], ...]:
-            residual_for_basis = (
-                _xblock_expand_reduced(jnp.asarray(residual_vec, dtype=jnp.float64))
-                if xblock_use_active_dof
-                else jnp.asarray(residual_vec, dtype=jnp.float64)
-            )
-            return _rhs1_xblock_post_coarse_directions(
-                op=op,
-                residual=residual_for_basis,
-                preconditioner=_coarse_preconditioner_for_basis,
-                direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
-                expected_size=int(xblock_linear_size),
-                include_raw=bool(include_raw),
-                fsavg_lmax=int(fsavg_lmax),
-                angular_lmax=int(angular_lmax),
-                max_extra_units=int(max_extra_units),
-                max_directions=int(max_directions),
-                include_angular_residual=bool(include_angular_residual),
-            )
-
         preflight_min_improvement = _rhs1_float_env(
             "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PREFLIGHT_MIN_IMPROVEMENT",
             default=0.0,
@@ -2317,25 +2262,10 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
         x_np = solve_state.x_physical
         post_completion = complete_xblock_post_krylov_stage(
             XBlockPostKrylovCompletionContext(
-                corrections=XBlockPostSolveCorrectionContext(
-                    matvec=_mv_true,
-                    rhs=xblock_rhs,
-                    x=np.asarray(x_np, dtype=np.float64),
-                    residual_norm=float(residual_norm_xblock_pc),
-                    target=float(target_xblock),
-                    solve_s=float(solve_s),
-                    preconditioner=precond_xblock_krylov,
-                    precondition_side=str(precondition_side),
-                    post_solve_policy=_read_rhs1_post_solve_correction_policy(),
-                    coarse_direction_builder=_xblock_coarse_direction_builder,
-                    emit=emit,
-                    elapsed_s=sparse_timer.elapsed_s,
-                    minres_correction=_apply_preconditioned_minres_correction,
-                    residual_equation_correction=(
-                        _apply_device_subspace_residual_equation_correction
-                    ),
-                    coarse_correction=_apply_subspace_minres_correction,
-                ),
+                x=np.asarray(x_np, dtype=np.float64),
+                residual_norm=float(residual_norm_xblock_pc),
+                solve_s=float(solve_s),
+                emit=emit,
                 krylov_method=str(xblock_krylov_method),
                 elapsed_s=sparse_timer.elapsed_s,
                 iterations=int(reported_iterations),
@@ -2344,7 +2274,6 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
                 history=history,
             )
         )
-        post_corrections = post_completion.corrections
         x_np = np.asarray(post_completion.x, dtype=np.float64)
         residual_norm_xblock_pc = float(post_completion.residual_norm)
         solve_s = float(post_completion.solve_s)
@@ -2367,7 +2296,6 @@ def run_xblock_sparse_pc_branch(context: XBlockSparsePCBranchContext):
                     "pc_restart": int(pc_restart),
                 },
                 expand_reduced=_xblock_expand_reduced,
-                post_corrections=post_corrections,
             )
         )
         return v3_linear_solve_result_from_payload(
@@ -4496,7 +4424,6 @@ class XBlockSparsePCFinalPayloadContext:
     linear_size: int | None
     restart: int | None
     diagnostic_state: Mapping[str, object]
-    post_corrections: object | None = None
 
 def xblock_sparse_pc_final_metadata_from_solve_state(
     state: Mapping[str, object],
@@ -4517,7 +4444,6 @@ def xblock_sparse_pc_final_payload_from_solve_state(
     state: Mapping[str, object],
     *,
     expand_reduced: ArrayFn,
-    post_corrections: object | None = None,
 ) -> SparsePCGMRESFinalPayload:
     """Build the final payload for the x-block sparse-PC branch from driver state."""
 
@@ -4535,7 +4461,6 @@ def xblock_sparse_pc_final_payload_from_solve_state(
             ),
             restart=int(state["pc_restart"]) if "pc_restart" in state else None,
             diagnostic_state=state,
-            post_corrections=post_corrections,
         ),
         expand_reduced=expand_reduced,
     )
@@ -4566,8 +4491,6 @@ def xblock_sparse_pc_final_payload(
         metadata_state["xblock_linear_size"] = int(context.linear_size)
     if context.restart is not None:
         metadata_state["pc_restart"] = int(context.restart)
-    if context.post_corrections is not None:
-        metadata_state.update(context.post_corrections.metadata_state())
     if (
         "xblock_solver_kind" not in metadata_state
         and context.linear_size is not None
@@ -6005,128 +5928,13 @@ def xblock_physical_solution_and_residual(
     )
 
 @dataclass(frozen=True)
-class XBlockSubspaceCorrectionContext:
-    """Dependencies for an x-block sparse-PC subspace correction."""
-
-    matvec: ArrayFn
-    rhs: jnp.ndarray
-    x: np.ndarray
-    residual_norm: float
-    target: float
-    direction_builder: Callable[[jnp.ndarray], tuple[tuple[str, jnp.ndarray], ...]]
-    steps: int
-    max_directions: int
-    alpha_clip: float
-    rcond: float
-    min_improvement: float
-    emit: EmitFn | None
-    elapsed_s: Callable[[], float]
-    correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[int], Sequence[str]]]
-    correction_kwargs: Mapping[str, Any] | None = None
-    solver_label: str = "xblock_sparse_pc_gmres"
-    correction_label: str = "post-coarse"
-    diagnostic_suffix: str = ""
-
-@dataclass(frozen=True)
-class XBlockSubspaceCorrectionResult:
-    """Accepted x-block subspace correction state and diagnostics."""
-
-    x: np.ndarray
-    residual_norm: float
-    history: tuple[float, ...]
-    direction_counts: tuple[int, ...]
-    direction_names: tuple[str, ...]
-    residual_before: float | None
-    residual_after: float | None
-    error: str | None
-    solve_s: float
-
-@dataclass(frozen=True)
-class XBlockPostSolveCorrectionContext:
-    """Inputs for x-block sparse-PC post-solve correction orchestration."""
-
-    matvec: ArrayFn
-    rhs: jnp.ndarray
-    x: np.ndarray
-    residual_norm: float
-    target: float
-    solve_s: float
-    preconditioner: ArrayFn
-    precondition_side: str
-    post_solve_policy: object
-    coarse_direction_builder: Callable[..., tuple[tuple[str, jnp.ndarray], ...]]
-    emit: EmitFn | None
-    elapsed_s: Callable[[], float]
-    minres_correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[float]]]
-    residual_equation_correction: Callable[
-        ...,
-        tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[int], Sequence[str]],
-    ]
-    coarse_correction: Callable[
-        ...,
-        tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[int], Sequence[str]],
-    ]
-
-@dataclass(frozen=True)
-class XBlockPostSolveCorrectionResult:
-    """Updated x-block sparse-PC solve state and correction diagnostics."""
-
-    x: np.ndarray
-    residual_norm: float
-    solve_s: float
-    post_minres_steps_requested: int
-    post_minres_alpha_clip: float
-    post_minres_min_improvement: float
-    post_minres_history: tuple[float, ...]
-    post_minres_alphas: tuple[float, ...]
-    post_minres_residual_before: float | None
-    post_minres_residual_after: float | None
-    post_coarse_steps_requested: int
-    post_coarse_max_directions: int
-    post_coarse_max_extra_units: int
-    post_coarse_fsavg_lmax: int
-    post_coarse_angular_lmax: int
-    post_coarse_include_angular_residual: bool
-    post_coarse_include_raw: bool
-    post_coarse_alpha_clip: float
-    post_coarse_rcond: float
-    post_coarse_min_improvement: float
-    post_coarse_history: tuple[float, ...]
-    post_coarse_direction_counts: tuple[int, ...]
-    post_coarse_direction_names: tuple[str, ...]
-    post_coarse_residual_before: float | None
-    post_coarse_residual_after: float | None
-    post_residual_equation_steps_requested: int
-    post_residual_equation_max_directions: int
-    post_residual_equation_max_extra_units: int
-    post_residual_equation_fsavg_lmax: int
-    post_residual_equation_angular_lmax: int
-    post_residual_equation_include_angular_residual: bool
-    post_residual_equation_include_raw: bool
-    post_residual_equation_include_post_coarse: bool
-    post_residual_equation_alpha_clip: float
-    post_residual_equation_rcond: float
-    post_residual_equation_min_improvement: float
-    post_residual_equation_history: tuple[float, ...]
-    post_residual_equation_direction_counts: tuple[int, ...]
-    post_residual_equation_direction_names: tuple[str, ...]
-    post_residual_equation_residual_before: float | None
-    post_residual_equation_residual_after: float | None
-
-    def metadata_state(self) -> dict[str, object]:
-        """Return stored solver metadata keys consumed by final metadata."""
-
-        return {
-            name: getattr(self, name)
-            for name in self.__dataclass_fields__
-            if name not in {"x", "residual_norm", "solve_s"}
-        }
-
-@dataclass(frozen=True)
 class XBlockPostKrylovCompletionContext:
-    """Inputs for post-Krylov correction followed by completion emission."""
+    """Inputs for x-block sparse-PC completion emission."""
 
-    corrections: XBlockPostSolveCorrectionContext
+    x: np.ndarray
+    residual_norm: float
+    solve_s: float
+    emit: EmitFn | None
     krylov_method: str
     elapsed_s: Callable[[], float]
     iterations: int
@@ -6136,350 +5944,33 @@ class XBlockPostKrylovCompletionContext:
 
 @dataclass(frozen=True)
 class XBlockPostKrylovCompletionResult:
-    """Final x-block state after post-solve corrections and completion emission."""
+    """Final x-block state after completion emission."""
 
-    corrections: XBlockPostSolveCorrectionResult
     x: np.ndarray
     residual_norm: float
     solve_s: float
 
-def apply_xblock_subspace_correction_if_needed(
-    context: XBlockSubspaceCorrectionContext,
-) -> XBlockSubspaceCorrectionResult:
-    """Apply one x-block subspace correction and accept only residual improvement."""
-
-    x_out = np.asarray(context.x, dtype=np.float64)
-    residual_current = float(context.residual_norm)
-    if (
-        int(context.steps) <= 0
-        or not np.isfinite(residual_current)
-        or residual_current <= float(context.target)
-    ):
-        return XBlockSubspaceCorrectionResult(
-            x=x_out,
-            residual_norm=residual_current,
-            history=(),
-            direction_counts=(),
-            direction_names=(),
-            residual_before=None,
-            residual_after=None,
-            error=None,
-            solve_s=0.0,
-        )
-
-    residual_before = residual_current
-    start_s = float(context.elapsed_s())
-    history: tuple[float, ...] = ()
-    direction_counts: tuple[int, ...] = ()
-    direction_names: tuple[str, ...] = ()
-    residual_after: float | None = None
-    error: str | None = None
-    try:
-        correction_kwargs = dict(context.correction_kwargs or {})
-        (
-            x_candidate,
-            residual_candidate,
-            correction_history,
-            correction_direction_counts,
-            correction_direction_names,
-        ) = context.correction(
-            matvec=context.matvec,
-            rhs=context.rhs,
-            x0=jnp.asarray(x_out, dtype=jnp.float64),
-            direction_builder=context.direction_builder,
-            steps=int(context.steps),
-            max_directions=int(context.max_directions),
-            alpha_clip=float(context.alpha_clip),
-            rcond=float(context.rcond),
-            min_improvement=float(context.min_improvement),
-            **correction_kwargs,
-        )
-        history = tuple(float(v) for v in correction_history)
-        direction_counts = tuple(int(v) for v in correction_direction_counts)
-        direction_names = tuple(str(v) for v in correction_direction_names)
-        residual_after = float(jnp.linalg.norm(residual_candidate))
-        if np.isfinite(float(residual_after)) and float(residual_after) < residual_current:
-            x_out = np.asarray(x_candidate, dtype=np.float64)
-            residual_current = float(residual_after)
-            if context.emit is not None:
-                context.emit(
-                    0,
-                    f"solve_v3_full_system_linear_gmres: {context.solver_label} "
-                    f"{context.correction_label} improved residual {residual_before:.6e} "
-                    f"-> {residual_after:.6e} "
-                    f"(steps={len(direction_counts)} directions={sum(direction_counts)}"
-                    f"{context.diagnostic_suffix})",
-                )
-        elif context.emit is not None:
-            after = float(residual_after) if residual_after is not None else float("nan")
-            context.emit(
-                1,
-                f"solve_v3_full_system_linear_gmres: {context.solver_label} "
-                f"{context.correction_label} rejected residual {residual_before:.6e} -> {after:.6e}",
-            )
-    except Exception as exc:  # noqa: BLE001
-        error = f"{type(exc).__name__}: {exc}"
-        if context.emit is not None:
-            context.emit(
-                1,
-                f"solve_v3_full_system_linear_gmres: {context.solver_label} "
-                f"{context.correction_label} failed ({error})",
-            )
-
-    return XBlockSubspaceCorrectionResult(
-        x=x_out,
-        residual_norm=float(residual_current),
-        history=history,
-        direction_counts=direction_counts,
-        direction_names=direction_names,
-        residual_before=float(residual_before),
-        residual_after=residual_after,
-        error=error,
-        solve_s=float(context.elapsed_s()) - start_s,
-    )
-
-def run_xblock_post_solve_corrections(
-    context: XBlockPostSolveCorrectionContext,
-) -> XBlockPostSolveCorrectionResult:
-    """Run x-block post-residual, minres, and coarse correction hooks."""
-
-    post_minres_policy = context.post_solve_policy.post_minres
-    post_minres_steps_requested = int(post_minres_policy.steps_requested)
-    post_minres_alpha_clip = float(post_minres_policy.alpha_clip)
-    post_minres_min_improvement = float(post_minres_policy.min_improvement)
-
-    post_coarse_policy = context.post_solve_policy.post_coarse
-    post_coarse_steps_requested = int(post_coarse_policy.steps_requested)
-    post_coarse_max_directions = int(post_coarse_policy.max_directions)
-    post_coarse_max_extra_units = int(post_coarse_policy.max_extra_units)
-    post_coarse_fsavg_lmax = int(post_coarse_policy.fsavg_lmax)
-    post_coarse_angular_lmax = int(post_coarse_policy.angular_lmax)
-    post_coarse_include_angular_residual = bool(
-        post_coarse_policy.include_angular_residual
-    )
-    post_coarse_include_raw = bool(post_coarse_policy.include_raw)
-    post_coarse_alpha_clip = float(post_coarse_policy.alpha_clip)
-    post_coarse_rcond = float(post_coarse_policy.rcond)
-    post_coarse_min_improvement = float(post_coarse_policy.min_improvement)
-
-    post_residual_policy = context.post_solve_policy.post_residual_equation
-    post_residual_equation_steps_requested = int(post_residual_policy.steps_requested)
-    post_residual_equation_max_directions = int(post_residual_policy.max_directions)
-    post_residual_equation_max_extra_units = int(post_residual_policy.max_extra_units)
-    post_residual_equation_fsavg_lmax = int(post_residual_policy.fsavg_lmax)
-    post_residual_equation_angular_lmax = int(post_residual_policy.angular_lmax)
-    post_residual_equation_include_angular_residual = bool(
-        post_residual_policy.include_angular_residual
-    )
-    post_residual_equation_include_raw = bool(post_residual_policy.include_raw)
-    post_residual_equation_include_post_coarse = bool(
-        post_residual_policy.include_post_coarse
-    )
-    post_residual_equation_alpha_clip = float(post_residual_policy.alpha_clip)
-    post_residual_equation_rcond = float(post_residual_policy.rcond)
-    post_residual_equation_min_improvement = float(
-        post_residual_policy.min_improvement
-    )
-
-    x_np = np.asarray(context.x, dtype=np.float64)
-    residual_norm = float(context.residual_norm)
-    solve_s = float(context.solve_s)
-
-    def _post_residual_equation_direction_builder(
-        residual_vec: jnp.ndarray,
-    ) -> tuple[tuple[str, jnp.ndarray], ...]:
-        if not bool(post_residual_equation_include_post_coarse):
-            return ()
-        return context.coarse_direction_builder(
-            residual_vec,
-            include_raw=bool(post_residual_equation_include_raw),
-            fsavg_lmax=int(post_residual_equation_fsavg_lmax),
-            angular_lmax=int(post_residual_equation_angular_lmax),
-            max_extra_units=int(post_residual_equation_max_extra_units),
-            max_directions=int(post_residual_equation_max_directions),
-            include_angular_residual=bool(
-                post_residual_equation_include_angular_residual
-            ),
-        )
-
-    post_residual_equation = apply_xblock_subspace_correction_if_needed(
-        XBlockSubspaceCorrectionContext(
-            matvec=context.matvec,
-            rhs=context.rhs,
-            x=np.asarray(x_np, dtype=np.float64),
-            residual_norm=float(residual_norm),
-            target=float(context.target),
-            direction_builder=_post_residual_equation_direction_builder,
-            steps=int(post_residual_equation_steps_requested),
-            max_directions=int(post_residual_equation_max_directions),
-            alpha_clip=float(post_residual_equation_alpha_clip),
-            rcond=float(post_residual_equation_rcond),
-            min_improvement=float(post_residual_equation_min_improvement),
-            emit=context.emit,
-            elapsed_s=context.elapsed_s,
-            correction=context.residual_equation_correction,
-            solver_label="xblock_sparse_pc_gmres",
-            correction_label="post-residual-equation",
-        )
-    )
-    x_np = np.asarray(post_residual_equation.x, dtype=np.float64)
-    residual_norm = float(post_residual_equation.residual_norm)
-    solve_s += float(post_residual_equation.solve_s)
-
-    post_minres = apply_sparse_pc_post_minres_if_needed(
-        SparsePCPostMinresUpdateContext(
-            matvec=context.matvec,
-            rhs=context.rhs,
-            preconditioner=(
-                context.preconditioner
-                if str(context.precondition_side) != "none"
-                else (lambda v: v)
-            ),
-            emit=context.emit,
-            elapsed_s=context.elapsed_s,
-            pc_form="none",
-            steps=int(post_minres_steps_requested),
-            alpha_clip=float(post_minres_alpha_clip),
-            min_improvement=float(post_minres_min_improvement),
-            minres_correction=context.minres_correction,
-            x=np.asarray(x_np, dtype=np.float64),
-            residual_norm=float(residual_norm),
-            preconditioned_residual_norm=float(residual_norm),
-            solve_s=float(solve_s),
-            target=float(context.target),
-            solver_label="xblock_sparse_pc_gmres",
-        )
-    )
-    x_np = np.asarray(post_minres.x, dtype=np.float64)
-    residual_norm = float(post_minres.residual_norm)
-    solve_s = float(post_minres.solve_s)
-
-    def _post_coarse_direction_builder(
-        residual_vec: jnp.ndarray,
-    ) -> tuple[tuple[str, jnp.ndarray], ...]:
-        return context.coarse_direction_builder(
-            residual_vec,
-            include_raw=bool(post_coarse_include_raw),
-            fsavg_lmax=int(post_coarse_fsavg_lmax),
-            angular_lmax=int(post_coarse_angular_lmax),
-            max_extra_units=int(post_coarse_max_extra_units),
-            max_directions=int(post_coarse_max_directions),
-            include_angular_residual=bool(post_coarse_include_angular_residual),
-        )
-
-    post_coarse = apply_xblock_subspace_correction_if_needed(
-        XBlockSubspaceCorrectionContext(
-            matvec=context.matvec,
-            rhs=context.rhs,
-            x=np.asarray(x_np, dtype=np.float64),
-            residual_norm=float(residual_norm),
-            target=float(context.target),
-            direction_builder=_post_coarse_direction_builder,
-            steps=int(post_coarse_steps_requested),
-            max_directions=int(post_coarse_max_directions),
-            alpha_clip=float(post_coarse_alpha_clip),
-            rcond=float(post_coarse_rcond),
-            min_improvement=float(post_coarse_min_improvement),
-            emit=context.emit,
-            elapsed_s=context.elapsed_s,
-            correction=context.coarse_correction,
-            solver_label="xblock_sparse_pc_gmres",
-            correction_label="post-coarse",
-        )
-    )
-    x_np = np.asarray(post_coarse.x, dtype=np.float64)
-    residual_norm = float(post_coarse.residual_norm)
-    solve_s += float(post_coarse.solve_s)
-
-    return XBlockPostSolveCorrectionResult(
-        x=x_np,
-        residual_norm=float(residual_norm),
-        solve_s=float(solve_s),
-        post_minres_steps_requested=int(post_minres_steps_requested),
-        post_minres_alpha_clip=float(post_minres_alpha_clip),
-        post_minres_min_improvement=float(post_minres_min_improvement),
-        post_minres_history=post_minres.history,
-        post_minres_alphas=post_minres.alphas,
-        post_minres_residual_before=post_minres.residual_before,
-        post_minres_residual_after=post_minres.residual_after,
-        post_coarse_steps_requested=int(post_coarse_steps_requested),
-        post_coarse_max_directions=int(post_coarse_max_directions),
-        post_coarse_max_extra_units=int(post_coarse_max_extra_units),
-        post_coarse_fsavg_lmax=int(post_coarse_fsavg_lmax),
-        post_coarse_angular_lmax=int(post_coarse_angular_lmax),
-        post_coarse_include_angular_residual=bool(
-            post_coarse_include_angular_residual
-        ),
-        post_coarse_include_raw=bool(post_coarse_include_raw),
-        post_coarse_alpha_clip=float(post_coarse_alpha_clip),
-        post_coarse_rcond=float(post_coarse_rcond),
-        post_coarse_min_improvement=float(post_coarse_min_improvement),
-        post_coarse_history=post_coarse.history,
-        post_coarse_direction_counts=post_coarse.direction_counts,
-        post_coarse_direction_names=post_coarse.direction_names,
-        post_coarse_residual_before=post_coarse.residual_before,
-        post_coarse_residual_after=post_coarse.residual_after,
-        post_residual_equation_steps_requested=int(
-            post_residual_equation_steps_requested
-        ),
-        post_residual_equation_max_directions=int(
-            post_residual_equation_max_directions
-        ),
-        post_residual_equation_max_extra_units=int(
-            post_residual_equation_max_extra_units
-        ),
-        post_residual_equation_fsavg_lmax=int(post_residual_equation_fsavg_lmax),
-        post_residual_equation_angular_lmax=int(
-            post_residual_equation_angular_lmax
-        ),
-        post_residual_equation_include_angular_residual=bool(
-            post_residual_equation_include_angular_residual
-        ),
-        post_residual_equation_include_raw=bool(
-            post_residual_equation_include_raw
-        ),
-        post_residual_equation_include_post_coarse=bool(
-            post_residual_equation_include_post_coarse
-        ),
-        post_residual_equation_alpha_clip=float(post_residual_equation_alpha_clip),
-        post_residual_equation_rcond=float(post_residual_equation_rcond),
-        post_residual_equation_min_improvement=float(
-            post_residual_equation_min_improvement
-        ),
-        post_residual_equation_history=post_residual_equation.history,
-        post_residual_equation_direction_counts=(
-            post_residual_equation.direction_counts
-        ),
-        post_residual_equation_direction_names=post_residual_equation.direction_names,
-        post_residual_equation_residual_before=(
-            post_residual_equation.residual_before
-        ),
-        post_residual_equation_residual_after=post_residual_equation.residual_after,
-    )
-
 def complete_xblock_post_krylov_stage(
     context: XBlockPostKrylovCompletionContext,
 ) -> XBlockPostKrylovCompletionResult:
-    """Apply x-block post-solve corrections and emit the completion line."""
+    """Emit the x-block completion line and return the final Krylov state."""
 
-    corrections = run_xblock_post_solve_corrections(context.corrections)
     emit_xblock_sparse_pc_completion(
         XBlockSparsePCCompletionContext(
-            emit=context.corrections.emit,
+            emit=context.emit,
             krylov_method=str(context.krylov_method),
             elapsed_s=float(context.elapsed_s()),
             iterations=int(context.iterations),
             matvecs=int(context.matvecs),
-            residual_norm=float(corrections.residual_norm),
+            residual_norm=float(context.residual_norm),
             target=float(context.target),
             history=context.history,
         )
     )
     return XBlockPostKrylovCompletionResult(
-        corrections=corrections,
-        x=np.asarray(corrections.x, dtype=np.float64),
-        residual_norm=float(corrections.residual_norm),
-        solve_s=float(corrections.solve_s),
+        x=np.asarray(context.x, dtype=np.float64),
+        residual_norm=float(context.residual_norm),
+        solve_s=float(context.solve_s),
     )
 
 __all__ = (
@@ -6492,14 +5983,8 @@ __all__ = (
     "xblock_sparse_pc_final_metadata_solve_scope_keys",
     "xblock_sparse_pc_final_metadata_state_from_context",
     "xblock_sparse_pc_final_metadata_state_from_solve_scope",
-    "XBlockSubspaceCorrectionContext",
-    "XBlockSubspaceCorrectionResult",
-    "XBlockPostSolveCorrectionContext",
-    "XBlockPostSolveCorrectionResult",
     "XBlockPostKrylovCompletionContext",
     "XBlockPostKrylovCompletionResult",
-    "apply_xblock_subspace_correction_if_needed",
-    "run_xblock_post_solve_corrections",
     "complete_xblock_post_krylov_stage",
     "XBlockKrylovReport",
     "XBlockSparsePCCompletionContext",
