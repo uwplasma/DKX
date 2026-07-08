@@ -702,7 +702,7 @@ owners are:
   owns environment parsing for the candidate ladder, large-system fallback
   guard, skipped-fallback metadata, and progress logging default. Candidate
   dispatch and setup timing live in the profile-response sparse/solve owners.
-- ``sfincs_jax/solvers/preconditioner_symbolic_policy.py``:
+- ``sfincs_jax/solvers/preconditioner_fortran_reduced_policy.py``:
   Fortran-v3-reduced RHSMode=1 active-Pmat factorization policy. The module
   owns factor-kind normalization, large-matrix ILU guards, LU prefill safety
   defaults, SuperLU/RCM ordering candidates, equilibration norm selection, and

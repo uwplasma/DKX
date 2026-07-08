@@ -25,7 +25,7 @@ from sfincs_jax.operators.profile_layout import (
     build_rhs1_compressed_pitch_layout,
     infer_rhs1_compressed_pitch_layout_from_active_indices,
 )
-from sfincs_jax.solvers.preconditioner_symbolic_policy import resolve_active_fortran_v3_reduced_factor_policy
+from sfincs_jax.solvers.preconditioner_fortran_reduced_policy import resolve_active_fortran_v3_reduced_factor_policy
 from .preconditioner_schur_profile import RHS1StructuredFullCSRPreconditioner
 
 
