@@ -12,8 +12,8 @@ import scipy.sparse as sp
 import sfincs_jax.io as io_module
 import sfincs_jax.operators.profile_full_system as profile_full_system_module
 import sfincs_jax.operators.profile_sparse_pattern as sparse_pattern_module
-import sfincs_jax.problems.profile_policies as profile_policies_module
 import sfincs_jax.solvers.preconditioner_host_sparse as host_sparse_module
+import sfincs_jax.solvers.preconditioner_reduced_pmat as reduced_pmat_module
 import sfincs_jax.solvers.preconditioning as preconditioning_module
 from sfincs_jax.solvers import preconditioner_xblock_policy as rhs1_xblock_policy_module
 import sfincs_jax.problems.profile_solve as profile_solve_module
@@ -1180,7 +1180,7 @@ def test_fortran_reduced_direct_pmat_preconditioner_skips_active_csr_materializa
 def test_fortran_reduced_direct_tail_auto_retries_active_lu_after_native_preflight_failure(
     monkeypatch,
 ) -> None:
-    profile_policies_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
+    reduced_pmat_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     nml.group("resolutionParameters")["NTHETA"] = 5
@@ -1242,7 +1242,7 @@ def test_fortran_reduced_direct_tail_auto_retries_active_lu_after_native_preflig
 def test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback(
     monkeypatch,
 ) -> None:
-    profile_policies_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
+    reduced_pmat_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     nml.group("resolutionParameters")["NTHETA"] = 5
@@ -1747,7 +1747,7 @@ def test_fortran_reduced_pc_gmres_direct_tail_sparse_coarse_solves_tiny_rhs1_sys
 
 
 def test_fortran_reduced_direct_tail_structured_pc_cache_reuses_candidate(monkeypatch) -> None:
-    profile_policies_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
+    reduced_pmat_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     nml.group("resolutionParameters")["NTHETA"] = 5
@@ -1835,31 +1835,31 @@ def test_fortran_reduced_direct_tail_pc_default_cap_is_adaptive_for_active_lu(mo
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_MAX_MB", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_MB_PER_UNKNOWN", raising=False)
 
-    small = profile_policies_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    small = reduced_pmat_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=604,
     )
-    mid = profile_policies_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    mid = reduced_pmat_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=110_000,
     )
-    production = profile_policies_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    production = reduced_pmat_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=900_000,
     )
-    fullgrid_qa_qh = profile_policies_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    fullgrid_qa_qh = reduced_pmat_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=507_004,
     )
-    upper_midgrid = profile_policies_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    upper_midgrid = reduced_pmat_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=169_264,
     )
-    auto_upper_midgrid = profile_policies_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    auto_upper_midgrid = reduced_pmat_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="auto",
         active_size=169_264,
     )
-    non_exact = profile_policies_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    non_exact = reduced_pmat_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_xblock",
         active_size=900_000,
     )
@@ -1903,7 +1903,7 @@ def test_fortran_reduced_direct_tail_explicit_structured_pc_rejection_is_fast(mo
 
 
 def test_fortran_reduced_direct_tail_required_pc_forces_global_backend(monkeypatch) -> None:
-    profile_policies_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
+    reduced_pmat_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     nml.group("resolutionParameters")["NTHETA"] = 5
@@ -1935,7 +1935,7 @@ def test_fortran_reduced_direct_tail_required_pc_forces_global_backend(monkeypat
     assert result.metadata["sparse_pc_fortran_reduced_direct_tail_built"] is True
     assert result.metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_required"] is True
     assert result.metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb_auto"] is True
-    expected_cap_mb = profile_policies_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    expected_cap_mb = reduced_pmat_module._rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
         requested_kind="active_fortran_v3_reduced_lu",
         active_size=int(result.metadata["sparse_pc_linear_size"]),
     )

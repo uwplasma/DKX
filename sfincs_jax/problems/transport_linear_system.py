@@ -61,7 +61,7 @@ from sfincs_jax.solvers.preconditioning import (
     _TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_PRECOND_CACHE,
     _TransportFpDirectActiveBlockSchurPrecondCache,
 )
-from sfincs_jax.problems.profile_policies import _hash_numpy_array_for_cache
+from sfincs_jax.solvers.preconditioner_reduced_pmat import _hash_numpy_array_for_cache
 from sfincs_jax.solvers.explicit_sparse import (
     admit_sparse_factor_against_operator,
     analyze_sparse_symbolic_structure,

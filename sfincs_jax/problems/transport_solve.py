@@ -42,11 +42,11 @@ from sfincs_jax.solvers.krylov import (
     recycled_initial_guess,
 )
 from sfincs_jax.problems.profile_policies import (
-    _hash_numpy_array_for_cache,
     host_sparse_direct_refine_steps as _host_sparse_direct_refine_steps,
     host_sparse_factor_dtype_current_backend as _host_sparse_factor_dtype,
     resolve_use_implicit as _resolve_use_implicit_impl,
 )
+from sfincs_jax.solvers.preconditioner_reduced_pmat import _hash_numpy_array_for_cache
 from sfincs_jax.problems.profile_sparse_direct import (
     build_host_sparse_direct_factor_from_matvec as _build_host_sparse_direct_factor_from_matvec,
     build_sparse_jax_preconditioner_from_matvec as _build_sparse_jax_preconditioner_from_matvec,

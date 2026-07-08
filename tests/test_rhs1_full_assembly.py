@@ -12,12 +12,10 @@ import sfincs_jax.operators.profile_full_system as rfa
 import sfincs_jax.solvers.preconditioner_reduced_pmat as rfr
 import sfincs_jax.problems.profile_solve as vd
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.problems.profile_policies import (
-    _direct_tail_structured_pc_cache_key,
-    resolve_active_projected_preconditioner_auto_policy,
-)
+from sfincs_jax.problems.profile_policies import resolve_active_projected_preconditioner_auto_policy
 from sfincs_jax.problems.transport_linear_system import transport_active_dof_indices
 from sfincs_jax.solvers.preconditioner_reduced_pmat import (
+    _direct_tail_structured_pc_cache_key,
     active_fortran_v3_reduced_permc_candidates,
     resolve_active_fortran_v3_reduced_factor_policy,
 )

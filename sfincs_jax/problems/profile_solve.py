@@ -307,7 +307,7 @@ from sfincs_jax.problems.profile_policies import (
 from sfincs_jax.problems.profile_policies import (
     read_bool_env as _rhs1_bool_env, read_float_env as _rhs1_float_env, read_int_env as _rhs1_int_env,
 )
-from sfincs_jax.problems.profile_policies import (
+from sfincs_jax.solvers.preconditioner_reduced_pmat import (
     _DIRECT_TAIL_STRUCTURED_PC_CACHE, _StructuredHostSparsePreconditionerBundle, _direct_tail_structured_pc_cache_key,
     _direct_tail_structured_pc_with_cache_metadata, _hash_numpy_array_for_cache, _is_direct_reduced_pmat_pc_kind,
     _rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb,
