@@ -1,8 +1,0 @@
-{
-  "baseline_report": "tests/scaled_example_suite_release_gpu_2026-04-25_v106/suite_report.json",
-  "candidate_report": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/suite_report.json",
-  "threshold_ratio": 1.25,
-  "min_baseline_runtime_s": 1.0,
-  "flagged_cases": 0,
-  "cases": []
-}

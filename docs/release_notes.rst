@@ -870,7 +870,7 @@ Validation artifacts
 The release-facing validation roots are:
 
 - ``tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106``
-- ``tests/scaled_example_suite_gpu_bounded_default_2026-04-28``
+- ``tests/reference_solver_path_artifacts/gpu_bounded_default_summary_2026-04-28.json``
 
 The latest focused GPU performance pass measured:
 

@@ -18,15 +18,15 @@ bootstrap current, transport coefficients, plotting, and optimization.
 ## Current Review State
 
 - Branch head is PR #8 on `refactor/v3-driver-architecture`. Completed work includes script promotion, generated-output removal, direct-tail extraction, sharding/high-nu audit extraction, root Krylov cleanup, BLR/HSS and nested-dissection frontal removal, and examples cleanup.
-- Current burden is 115 package Python files / 139,678 package lines, 301 test files / 120,499 test lines, 90 example Python files / 14,900 example Python lines, and 440 tracked example files. These numbers must decrease; moving lines into more files is a failed tranche.
+- Current burden is 115 package Python files / 139,678 package lines, 301 test files / 120,497 test lines, 90 example Python files / 14,900 example Python lines, and 440 tracked example files. These numbers must decrease; moving lines into more files is a failed tranche.
 - `core_slim_inventory.json` is file-complete only at broad path-rule granularity; before edits, add section/symbol cards for every source/test file over 500 lines and every example folder.
 - Root files still hiding implementation are `ambipolar.py`, `diagnostics.py`, `grids.py`, `input_compat.py`, `profiling.py`, and `sensitivity.py`. Each must become a tiny documented facade, move into a domain owner, or disappear.
 - Latest pushed cleanup tranches removed RHSMode-1 active-symbolic wrapper
   routes, renamed the remaining sparse-preconditioner owner modules to domain
   names, and folded the Fortran-reduced factor policy into
-  `solvers/preconditioner_reduced_pmat.py`, then pruned redundant
-  examples/support scripts from the public example tree. The next cleanup order
-  is large-test consolidation, then RHSMode-1 orchestration collapse.
+  `solvers/preconditioner_reduced_pmat.py`, pruned redundant examples/support
+  scripts, and compacted superseded solver-trace evidence. The next cleanup
+  order is large-test consolidation, then RHSMode-1 orchestration collapse.
 - Largest package owners, in order: `profile_sparse_xblock.py`,
   `profile_policies.py`, `profile_full_system.py`, `validation/suite.py`,
   `profile_solve.py`, `explicit_sparse.py`, `transport_parallel_runtime.py`,
