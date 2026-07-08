@@ -9,6 +9,5 @@ Examples:
 - `matrix_free_residual_and_jvp.py` — matrix-free residual + JVP.
 - `autodiff_sensitivity_nu_n_scheme5.py` — sensitivity of a residual norm w.r.t. collisionality.
 - `implicit_diff_through_gmres_solve_scheme5.py` — implicit differentiation through a GMRES solve.
-- `optimize_nu_n_implicit.py` — optimize a scalar parameter through an implicit solve.
 - `differentiable_geometry_gradients.py` — differentiate geometry-derived quantities.
 - `vmec_jax_to_boozer_sfincs_pipeline.py` — optional `vmec_jax` + `booz_xform_jax` geometry workflow with a JAX/finite-difference gradient check.

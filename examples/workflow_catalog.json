@@ -57,11 +57,6 @@
       "role": "Curated upstream SFINCS input decks used by tests and validation lanes.",
       "start_here": "upstream/fortran_v3/quick_2species_FPCollisions_noEr/input.namelist"
     },
-    "utils": {
-      "category": "support",
-      "role": "Shared helper scripts used by example documentation.",
-      "start_here": "utils/generate_utils_gallery.py"
-    },
     "vmec_jax_finite_beta": {
       "category": "capability",
       "role": "Finite-beta VMEC, ambipolar electric field, Redl, and bootstrap-current workflows.",

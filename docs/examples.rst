@@ -178,8 +178,8 @@ Top-level folder categories
 The top-level folders are grouped by user intent. Start with the ``learning``
 folders when exploring the code, use ``capability`` folders for physics or
 differentiability workflows, and use ``validation`` folders when producing
-parity, performance, or publication evidence. The ``reference`` and ``support``
-folders are not the recommended first stop for new workflows.
+parity, performance, or publication evidence. The ``reference`` folders are not
+the recommended first stop for new workflows.
 
 .. list-table::
    :header-rows: 1
@@ -200,9 +200,6 @@ folders are not the recommended first stop for new workflows.
    * - ``reference``
      - ``examples/data/``, ``examples/sfincs_examples/``, ``examples/upstream/``
      - You need small shared inputs or recognizable SFINCS Fortran v3 decks for audits and compatibility checks.
-   * - ``support``
-     - ``examples/utils/``
-     - You need helper scripts used by the documented examples.
 
 Some geometry examples reference public W7-X/HSX/QI equilibrium fixtures by
 basename. Those multi-megabyte files are fetched from the
@@ -700,11 +697,13 @@ in `examples/sfincs_examples/utils/` and can run them non-interactively:
 
    sfincs_jax postprocess-upstream --case-dir /path/to/case --util sfincsScanPlot_1 -- pdf
 
-There is also a small end-to-end demo that generates PDF figures for a tiny transport-matrix case:
+For a small end-to-end transport-matrix postprocessing workflow, generate a
+matrix and then call the supported upstream utility wrapper:
 
 .. code-block:: bash
 
-   python examples/transport/postprocess_upstream_scanplot_1_transport_matrix.py
+   sfincs_jax transport-matrix-v3 --input input.namelist --out-matrix transportMatrix.npy
+   sfincs_jax postprocess-upstream --case-dir . --util sfincsScanPlot_1 -- --pdf
 
 Some advanced examples require optional dependencies:
 
@@ -772,16 +771,6 @@ labels, the exact geometry-proxy gradient claim, deferred kinetic-gradient work,
 and a no-overclaim gate that forbids presenting this lane as full
 VMEC-boundary-to-SFINCS transport differentiation.
 
-JIT-compiled optimization with implicit gradients
---------------------------------------------------
-
-This example performs a fully JIT-compiled objective evaluation and gradient-based
-optimization loop using implicit differentiation through the linear solve:
-
-.. code-block:: bash
-
-   python examples/autodiff/optimize_nu_n_implicit.py
-
 Parallel and scaling examples
 -----------------------------
 
@@ -828,19 +817,10 @@ For transport-worker throughput on a 2-GPU node:
    separate Miller-parameter geometry mode in the public CLI/API, so tokamak
    examples use the supported analytic Boozer tokamak path instead.
 
-It builds a cached operator once, treats :math:`\\nu_n` as a differentiable parameter,
-and minimizes :math:`0.5\\|x(\\nu_n)\\|^2` where :math:`A(\\nu_n)x=b(\\nu_n)` is solved
-with `custom_linear_solve`. This is the recommended pattern for fast, memory-efficient
-gradients without backpropagating through Krylov iterations.
-
-Transport-matrix recycling warm starts
---------------------------------------
-
-To reuse recent Krylov solutions across ``whichRHS`` solves (RHSMode=2/3), use:
-
-.. code-block:: bash
-
-   python examples/transport/transport_matrix_recycle_demo.py --recycle-k 4
+The autodiff examples build cached operators, treat scalar inputs such as
+:math:`\\nu_n` as differentiable parameters, and use `custom_linear_solve` where
+implicit gradients are the memory-efficient path. This is the recommended
+pattern for gradients without backpropagating through every Krylov iteration.
 
 Upstream SFINCS example inputs
 --------------------------------

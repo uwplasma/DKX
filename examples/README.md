@@ -84,7 +84,7 @@ For an interactive terminal version of this map, run
 | --- | --- | --- |
 | run one small case from the terminal | `tutorials/run_quick_output_and_plot.py` | `getting_started/write_sfincs_output_cli.py` |
 | call SFINCS-JAX from Python | `getting_started/write_sfincs_output_python.py` | `getting_started/write_and_plot_multiple_formats.py` |
-| understand transport matrices | `transport/transport_matrix_rhsmode2_and_rhsmode3.py` | `transport/transport_matrix_recycle_demo.py` |
+| understand transport matrices | `transport/transport_matrix_rhsmode2_and_rhsmode3.py` | `transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py` |
 | differentiate a solve or residual | `tutorials/02_transport_and_autodiff.ipynb` | `autodiff/implicit_diff_through_gmres_solve_scheme5.py` |
 | compute bootstrap current and compare Redl | `tutorials/03_bootstrap_redl_and_optimization.ipynb` | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` |
 | add neoclassical objectives to optimization | `optimization/qa_nfp2_sfincs_jax_objectives.py` | `optimization/QA_optimization_bootstrap_current.py` |
@@ -135,7 +135,7 @@ heavier workflow when you need release-quality evidence.
 
 The example tree has a small number of top-level domains. The category tells
 you whether a folder is a first-pass learning surface, a capability workflow, a
-validation or benchmark workflow, reference data, or shared support code.
+validation or benchmark workflow, or reference data.
 
 | Category | Folders | Use when |
 | --- | --- | --- |
@@ -143,7 +143,6 @@ validation or benchmark workflow, reference data, or shared support code.
 | `capability` | `transport/`, `autodiff/`, `optimization/`, `vmec_jax_finite_beta/` | You need a specific physics or differentiability workflow. |
 | `validation` | `parity/`, `performance/`, `publication_figures/` | You need parity checks, runtime/memory evidence, or regenerated documentation figures. |
 | `reference` | `data/`, `sfincs_examples/`, `upstream/` | You need small shared inputs or recognizable SFINCS Fortran v3 decks for audits. |
-| `support` | `utils/` | You need helper scripts used by the documented examples. |
 
 ### Folder Map
 
@@ -151,8 +150,8 @@ validation or benchmark workflow, reference data, or shared support code.
   output files and a diagnostics panel.
 - `getting_started/`: minimal CLI and Python workflows, plotting, file formats,
   analytic tokamak geometry, and VMEC `wout_path` usage.
-- `transport/`: RHSMode=2/3 transport-matrix workflows, Krylov recycling, and
-  scan-plot utilities.
+- `transport/`: RHSMode=2/3 transport-matrix workflows and scan-postprocessing
+  entry points.
 - `autodiff/`: JAX `grad`, JVP/VJP, implicit differentiation, and
   VMEC/Boozer-to-SFINCS differentiable workflow examples.
 - `optimization/`: JAX-native proxy objectives, kinetic promotion scripts, and
@@ -174,8 +173,6 @@ validation or benchmark workflow, reference data, or shared support code.
 - `upstream/`: curated upstream SFINCS v3 inputs used by tests, docs, and
   validation lanes.
 - `data/`: small input data needed by public VMEC and teaching examples.
-- `utils/`: helper code shared by example scripts; users normally call the
-  topic scripts rather than importing this folder directly.
 
 ### Notebook Guides
 
@@ -234,7 +231,6 @@ Common entry points:
 - Plot `.h5`, `.nc`, or `.npz` output: `examples/getting_started/plot_sfincs_output.py`
 - Output parity vs Fortran fixture: `examples/parity/output_parity_vs_fortran_fixture.py`
 - Transport matrices (RHSMode 2/3): `examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py`
-- Transport matrices with Krylov recycling: `examples/transport/transport_matrix_recycle_demo.py`
 - Differentiate a residual norm w.r.t. `nu_n`: `examples/autodiff/autodiff_gradient_nu_n_residual.py`
 - Implicit differentiation through BiCGStab: `examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py --solver bicgstab`
 - Transport-worker benchmark: `examples/performance/benchmark_transport_parallel_scaling.py --workers 1 2 4`

@@ -17,27 +17,16 @@ bootstrap current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Branch head is PR #8 on `refactor/v3-driver-architecture`. Completed work
-  includes script promotion, generated-output removal, direct-tail experiment
-  removal, sharding/high-nu audit extraction, root Krylov cleanup, BLR/HSS and
-  nested-dissection frontal route removal, and first examples cleanup.
-- Current burden after the latest source cleanup is 115 package Python files /
-  139,678 package lines, 300 test files / 120,448 test lines, 99 example Python
-  files / 16,027 example lines, and 450 tracked example files. These numbers must
-  decrease by deletion, merging, or research extraction; moving lines into more
-  files is a failed tranche.
-- `core_slim_inventory.json` is file-complete only at broad path-rule
-  granularity; before edits, add section/symbol cards for every source/test
-  file over 500 lines and every example folder.
-- Root files still hiding implementation are `ambipolar.py`, `diagnostics.py`,
-  `grids.py`, `input_compat.py`, `profiling.py`, and `sensitivity.py`. Each
-  must become a tiny documented facade, move into a domain owner, or disappear.
+- Branch head is PR #8 on `refactor/v3-driver-architecture`. Completed work includes script promotion, generated-output removal, direct-tail extraction, sharding/high-nu audit extraction, root Krylov cleanup, BLR/HSS and nested-dissection frontal removal, and examples cleanup.
+- Current burden is 115 package Python files / 139,678 package lines, 301 test files / 120,499 test lines, 90 example Python files / 14,900 example Python lines, and 440 tracked example files. These numbers must decrease; moving lines into more files is a failed tranche.
+- `core_slim_inventory.json` is file-complete only at broad path-rule granularity; before edits, add section/symbol cards for every source/test file over 500 lines and every example folder.
+- Root files still hiding implementation are `ambipolar.py`, `diagnostics.py`, `grids.py`, `input_compat.py`, `profiling.py`, and `sensitivity.py`. Each must become a tiny documented facade, move into a domain owner, or disappear.
 - Latest pushed cleanup tranches removed RHSMode-1 active-symbolic wrapper
   routes, renamed the remaining sparse-preconditioner owner modules to domain
   names, and folded the Fortran-reduced factor policy into
-  `solvers/preconditioner_reduced_pmat.py`. The next cleanup order is examples
-  reference pruning, large-test consolidation, then RHSMode-1 orchestration
-  collapse.
+  `solvers/preconditioner_reduced_pmat.py`, then pruned redundant
+  examples/support scripts from the public example tree. The next cleanup order
+  is large-test consolidation, then RHSMode-1 orchestration collapse.
 - Largest package owners, in order: `profile_sparse_xblock.py`,
   `profile_policies.py`, `profile_full_system.py`, `validation/suite.py`,
   `profile_solve.py`, `explicit_sparse.py`, `transport_parallel_runtime.py`,
@@ -184,7 +173,7 @@ exception has a ledger entry with proof:
 | package files | 115 Python files in the working tree | <=68 first, <=50 final or justified exceptions |
 | package lines | 139,678 source lines in the working tree | <=80k first, <=50k final or justified exceptions |
 | tests | 300 Python files / 120,448 lines | <=120 files / <=70k lines while keeping >=95% coverage |
-| examples | 99 Python files / 16,027 lines and 450 tracked files | original v3 examples plus <=10 curated workflows |
+| examples | 90 Python files / 14,900 Python lines and 440 tracked files | original v3 examples plus <=10 curated workflows |
 | scripts | no Python scripts after promotion | only documented shell/release tooling, otherwise empty |
 | validation package | 5 implementation modules plus `__init__.py` after command consolidation | target met; next reduce lines |
 
