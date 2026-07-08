@@ -170,7 +170,7 @@ convergence, or profiling detail.
      - ``examples/performance/benchmark_transport_parallel_scaling.py``
    * - Frozen Fortran-v3 parity check
      - ``examples/parity/output_parity_vs_fortran_fixture.py``
-     - ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``
+     - ``examples/sfincs_examples/`` for retained upstream-style decks
 
 Top-level folder categories
 ---------------------------
