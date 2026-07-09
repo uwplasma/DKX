@@ -8,15 +8,17 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_system import (
+pytest.importorskip("solvax", reason="the block-Thomas path requires solvax")
+
+from sfincs_jax.namelist import read_sfincs_input  # noqa: E402
+from sfincs_jax.operators.profile_system import (  # noqa: E402
     apply_v3_full_system_operator,
     full_system_operator_from_namelist,
     rhs_v3_full_system,
     with_transport_rhs_settings,
 )
-from sfincs_jax.problems.transport_solve import solve_v3_transport_matrix_linear_gmres
-from sfincs_jax.solvers.block_tridiagonal_transport import (
+from sfincs_jax.problems.transport_solve import solve_v3_transport_matrix_linear_gmres  # noqa: E402
+from sfincs_jax.solvers.block_tridiagonal_transport import (  # noqa: E402
     build_rhs3_block_thomas_solver,
     extract_rhs3_legendre_blocks,
     rhs3_block_tridiagonal_requested,

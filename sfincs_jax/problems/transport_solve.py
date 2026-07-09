@@ -67,10 +67,6 @@ from sfincs_jax.operators.profile_sparse_pattern import (
     v3_full_system_conservative_sparsity_pattern,
     v3_full_system_conservative_sparsity_pattern_for_indices,
 )
-from sfincs_jax.solvers.block_tridiagonal_transport import (
-    rhs3_block_tridiagonal_requested,
-    solve_transport_block_tridiagonal_batch,
-)
 from sfincs_jax.solvers.diagnostics import save_krylov_state, transport_progress_message
 from sfincs_jax.solvers.explicit_sparse import (
     host_sparse_direct_solve_with_refinement as _host_sparse_direct_solve_with_refinement,
@@ -434,8 +430,26 @@ def solve_v3_transport_matrix_linear_gmres(
     if parallel_result is not None:
         return parallel_result
     # Opt-in RHSMode=3 direct solve over Legendre blocks (solvax block Thomas).
-    use_rhs3_block_thomas = rhs3_block_tridiagonal_requested(
-        solve_method=str(solve_method), rhs_mode=int(rhs_mode)
+    # solvax is optional: import lazily so every standard path works without it,
+    # but fail loudly if the user explicitly requested the block-Thomas method.
+    try:
+        from sfincs_jax.solvers.block_tridiagonal_transport import (
+            rhs3_block_tridiagonal_requested,
+            solve_transport_block_tridiagonal_batch,
+        )
+    except ImportError as exc:
+        if str(solve_method).strip().lower() in {"block_tridiagonal", "block_thomas"}:
+            raise ImportError(
+                "solve_method='block_tridiagonal' requires the solvax package "
+                "(pip install solvax)"
+            ) from exc
+        rhs3_block_tridiagonal_requested = None
+        solve_transport_block_tridiagonal_batch = None
+    use_rhs3_block_thomas = bool(
+        rhs3_block_tridiagonal_requested is not None
+        and rhs3_block_tridiagonal_requested(
+            solve_method=str(solve_method), rhs_mode=int(rhs_mode)
+        )
     )
     if str(solve_method).strip().lower() in {"block_tridiagonal", "block_thomas"}:
         # Downstream policy resolution only understands the standard method names;
