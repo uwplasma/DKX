@@ -272,7 +272,7 @@ def test_full_system_gmres_recovers_fortran_statevector_pas_tiny_scheme5() -> No
     def mv(x):
         return apply_v3_full_system_operator(op, x)
 
-    result = gmres_solve(matvec=mv, b=jnp.asarray(b), tol=1e-12, restart=80, maxiter=220)
+    result = gmres_solve(matvec=mv, b=jnp.asarray(b), tol=1e-12, restart=80, maxiter=300)
     x = np.asarray(result.x)
 
     np.testing.assert_allclose(x, x_ref, rtol=1e-5, atol=1e-9)

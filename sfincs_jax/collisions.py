@@ -12,7 +12,7 @@ place, mirroring (paths relative to ``sfincs/fortran/version3``):
   the speed grid (the field-term kernel for xGridScheme 5/6).
 * ``polynomialInterpolationMatrix.F90`` — interpolation of the distribution
   between species-specific speed variables (via
-  :func:`sfincs_jax.grids_v2.polynomial_interpolation_matrix`).
+  :func:`sfincs_jax.phase_space.polynomial_interpolation_matrix`).
 
 Methods: the speed discretization and the modal treatment of the linearized
 Fokker-Planck operator follow Landreman & Ernst, *J. Comput. Phys.* **243**,
@@ -20,18 +20,17 @@ Fokker-Planck operator follow Landreman & Ernst, *J. Comput. Phys.* **243**,
 Fokker-Planck operator".  The pitch coordinate is a Legendre modal expansion:
 both operators are diagonal in the Legendre index ``l`` (and in theta/zeta),
 with the Lorentz operator contributing the eigenvalue ``l(l+1)/2`` per mode
-(:func:`sfincs_jax.grids_v2.lorentz_eigenvalues`); the Fokker-Planck operator
+(:func:`sfincs_jax.phase_space.lorentz_eigenvalues`); the Fokker-Planck operator
 is additionally dense in speed ``x`` and couples species pairs.
 
-Normalization: as in ``constants_v2``/``species_v2``, all inputs are the
+Normalization: as in ``constants``/``species``, all inputs are the
 dimensionless "Hat" quantities and the assembled matrices carry the overall
 collisionality ``nu_n = nuBar*RBar/vBar`` so that entries equal the Fortran
 PETSc Jacobian entries (the sign convention is "as added to the row residual",
 i.e. the Fokker-Planck blocks include the factor ``-nu_n``).
 
-During the v2 refactor this file is named ``collisions_v2``; it replaces
-``sfincs_jax/physics/collisions.py`` (PAS + full FP, no-Phi1 branches) at the
-purge.  The ``includePhi1InCollisionOperator`` variant
+This canonical module replaces ``sfincs_jax/physics/collisions.py`` (PAS +
+full FP, no-Phi1 branches) at the purge.  The ``includePhi1InCollisionOperator`` variant
 (``FokkerPlanckV3Phi1Operator``) stays in the old module until the Phi1 track
 (plan section 4, ``phi1.py``) migrates it.
 """
@@ -51,14 +50,14 @@ from jax import tree_util as jtu  # noqa: E402
 from jax.scipy.special import erf  # noqa: E402
 from scipy.integrate import quad  # noqa: E402
 
-from sfincs_jax.constants_v2 import PI_V3, SQRT_PI_V3  # noqa: E402
-from sfincs_jax.grids_v2 import (  # noqa: E402
+from sfincs_jax.constants import PI_V3, SQRT_PI_V3  # noqa: E402
+from sfincs_jax.phase_space import (  # noqa: E402
     SpeedGrid,
     lorentz_eigenvalues,
     make_speed_grid,
     polynomial_interpolation_matrix,
 )
-from sfincs_jax.species_v2 import SpeciesSet  # noqa: E402
+from sfincs_jax.species import SpeciesSet  # noqa: E402
 
 __all__ = [
     "CollisionMatrices",
@@ -86,7 +85,7 @@ def chandrasekhar(x: jnp.ndarray) -> jnp.ndarray:
     Matches the inline definition in ``populateMatrix.F90`` (both collision
     operators), including the series switch for ``|x| < 1e-5`` that avoids the
     cancellation at the origin.  Identical to the private helper used by
-    :meth:`sfincs_jax.species_v2.SpeciesSet.nu_d_hat`.
+    :meth:`sfincs_jax.species.SpeciesSet.nu_d_hat`.
     """
     x = x.astype(jnp.float64)
     sqrt_pi = jnp.asarray(SQRT_PI_V3, dtype=jnp.float64)
@@ -164,8 +163,8 @@ def make_pitch_angle_scattering(
     """Build the ``collisionOperator = 1`` operator (no Phi1).
 
     The deflection frequency comes from
-    :meth:`sfincs_jax.species_v2.SpeciesSet.nu_d_hat` and the Legendre
-    eigenvalue ``l(l+1)`` from :func:`sfincs_jax.grids_v2.lorentz_eigenvalues`,
+    :meth:`sfincs_jax.species.SpeciesSet.nu_d_hat` and the Legendre
+    eigenvalue ``l(l+1)`` from :func:`sfincs_jax.phase_space.lorentz_eigenvalues`,
     reproducing ``physics.collisions.make_pitch_angle_scattering_v3_operator``
     exactly.
 
@@ -236,7 +235,7 @@ def _evaluate_polynomial(x: float, *, j: int, a: np.ndarray, b: np.ndarray) -> f
     """Evaluate the orthogonal polynomial ``p_j(x)`` by the 3-term recurrence.
 
     Mirrors ``xGrid.F90:evaluatePolynomial`` (1-based ``j``); ``a``/``b`` are
-    the :class:`~sfincs_jax.grids_v2.SpeedGrid` recurrence coefficients.
+    the :class:`~sfincs_jax.phase_space.SpeedGrid` recurrence coefficients.
     """
     if j == 1:
         return 1.0
@@ -279,7 +278,7 @@ def rosenbluth_potential_terms(
       x: Speed nodes, shape ``(n_x,)``.
       x_weights: Plain ``dx`` speed quadrature weights, shape ``(n_x,)``.
       x_grid_k: Weight exponent ``k`` (namelist ``xGrid_k``).
-      speed_grid: The :class:`~sfincs_jax.grids_v2.SpeedGrid` carrying the
+      speed_grid: The :class:`~sfincs_jax.phase_space.SpeedGrid` carrying the
         orthogonal-polynomial recurrence for these nodes.
       species: Kinetic species set.
       nl: Number of Legendre modes retained in the potentials (namelist ``NL``).

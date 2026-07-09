@@ -36,7 +36,7 @@ import jax.numpy as jnp  # noqa: E402
 from jax import tree_util as jtu  # noqa: E402
 from jax.scipy.special import erf  # noqa: E402
 
-from sfincs_jax.constants_v2 import (  # noqa: E402
+from sfincs_jax.constants import (  # noqa: E402
     DEFAULT_ADIABATIC_M_HAT,
     DEFAULT_ADIABATIC_N_HAT,
     DEFAULT_ADIABATIC_T_HAT,

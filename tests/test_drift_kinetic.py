@@ -1,4 +1,4 @@
-"""Referee tests: ``sfincs_jax.dke_v2.KineticOperator`` vs the old operator stack.
+"""Referee tests: ``sfincs_jax.drift_kinetic.KineticOperator`` vs the old operator stack.
 
 The consolidated Phase-3.2 operator must reproduce
 ``operators.profile_system.apply_v3_full_system_operator`` /
@@ -16,7 +16,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.dke_v2 import KineticOperator
+from sfincs_jax.drift_kinetic import KineticOperator
 from sfincs_jax.namelist import parse_sfincs_input_text, read_sfincs_input
 from sfincs_jax.operators.profile_system import (
     apply_v3_full_system_operator,

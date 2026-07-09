@@ -22,7 +22,7 @@ Fortran correspondence (paths relative to ``sfincs/fortran/version3``):
 - ``geometry.F90:computeBIntegrals`` — VPrimeHat, FSABHat2, B0OverBBar and
   the NTV kernel ingredients (uHat).
 - ``radialCoordinates.F90`` — the psiHat/psiN/rHat/rN flux variants (via
-  :class:`sfincs_jax.constants_v2.RadialCoordinates`).
+  :class:`sfincs_jax.constants.RadialCoordinates`).
 
 Units and normalizations (plan section 2.5): every quantity is the
 dimensionless v3 "Hat" quantity — fluxes are normalized to
@@ -52,7 +52,7 @@ import jax.numpy as jnp  # noqa: E402
 from jax import lax  # noqa: E402
 from jax import vmap  # noqa: E402
 
-from .constants_v2 import RadialCoordinates  # noqa: E402
+from .constants import RadialCoordinates  # noqa: E402
 
 __all__ = [
     "StateLayout", "VelocityGrid", "FluxSurface", "SpeciesParams",
@@ -1309,7 +1309,7 @@ def flux_coordinate_variants(values_psi_hat: jnp.ndarray, coords: RadialCoordina
     A flux projected onto ``grad y`` scales by ``dy/dpsiHat``, i.e. by the
     v3 factors ``ddpsiN2ddpsiHat``/``ddrHat2ddpsiHat``/``ddrN2ddpsiHat``
     (radialCoordinates.F90 lines 157-159), exposed by
-    :class:`sfincs_jax.constants_v2.RadialCoordinates` as the
+    :class:`sfincs_jax.constants.RadialCoordinates` as the
     ``*_to_d_dpsi_hat`` conversion factors.  These are the reciprocals of the
     gradient factors in ``RadialCoordinates.gradients_from_d_dpsi_hat``.
     """

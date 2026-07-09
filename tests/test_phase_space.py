@@ -1,4 +1,4 @@
-"""Equivalence tests: sfincs_jax.grids_v2 must reproduce the old implementations.
+"""Equivalence tests: sfincs_jax.phase_space must reproduce the old implementations.
 
 The referee for the Phase 3.1a consolidation is exact (1e-15 / bitwise)
 agreement with the modules being replaced:
@@ -20,7 +20,7 @@ import math
 import numpy as np
 import pytest
 
-from sfincs_jax import grids_v2
+from sfincs_jax import phase_space
 from sfincs_jax.discretization.v3 import grids_from_namelist
 from sfincs_jax.discretization.xgrid import make_x_grid, make_x_polynomial_diff_matrices
 from sfincs_jax.grids import uniform_diff_matrices
@@ -39,14 +39,14 @@ def assert_exact(new, old) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("scheme", sorted(grids_v2._PERIODIC_SCHEMES))
+@pytest.mark.parametrize("scheme", sorted(phase_space._PERIODIC_SCHEMES))
 @pytest.mark.parametrize("n", [5, 6, 9, 16])
 @pytest.mark.parametrize("x_max", [2 * math.pi, 2 * math.pi / 5, 1.0])
 def test_uniform_periodic_diff_matrices_match_old(scheme: int, n: int, x_max: float) -> None:
     x_old, w_old, ddx_old, d2_old = uniform_diff_matrices(
         n=n, x_min=0.0, x_max=x_max, scheme=scheme
     )
-    x_new, w_new, ddx_new, d2_new = grids_v2.uniform_periodic_diff_matrices(
+    x_new, w_new, ddx_new, d2_new = phase_space.uniform_periodic_diff_matrices(
         n=n, x_min=0.0, x_max=x_max, scheme=scheme
     )
     assert_exact(x_new, x_old)
@@ -58,13 +58,13 @@ def test_uniform_periodic_diff_matrices_match_old(scheme: int, n: int, x_max: fl
 def test_uniform_periodic_diff_matrices_rejects_dropped_schemes() -> None:
     for scheme in (1, 2, 3, 11, 12, 13, 21, 30, 42, 52, 81, 92, 101, 112, 121, 131):
         with pytest.raises(ValueError):
-            grids_v2.uniform_periodic_diff_matrices(n=8, x_min=0.0, x_max=1.0, scheme=scheme)
+            phase_space.uniform_periodic_diff_matrices(n=8, x_min=0.0, x_max=1.0, scheme=scheme)
 
 
 def test_spectral_theta_derivative_is_exact_on_fourier_modes() -> None:
     """Absolute check: spectral collocation differentiates sin/cos exactly."""
     n = 15
-    theta, w, ddtheta, d2 = grids_v2.uniform_periodic_diff_matrices(
+    theta, w, ddtheta, d2 = phase_space.uniform_periodic_diff_matrices(
         n=n, x_min=0.0, x_max=2 * math.pi, scheme=20
     )
     theta = np.asarray(theta)
@@ -92,14 +92,14 @@ def test_legendre_couplings_match_operator_inline_formulas(n_xi: int) -> None:
     ell = np.arange(n_xi, dtype=np.float64)
     coef_plus = (ell + 1.0) / (2.0 * ell + 3.0)
     coef_minus = np.where(ell > 0, ell / (2.0 * ell - 1.0), 0.0)
-    assert_exact(grids_v2.legendre_coupling_upper(n_xi), coef_plus)
-    assert_exact(grids_v2.legendre_coupling_lower(n_xi), coef_minus)
+    assert_exact(phase_space.legendre_coupling_upper(n_xi), coef_plus)
+    assert_exact(phase_space.legendre_coupling_lower(n_xi), coef_minus)
     # Lorentz eigenvalues l(l+1) as in operators/profile_collisions.py line 201.
-    assert_exact(grids_v2.lorentz_eigenvalues(n_xi), ell * (ell + 1.0))
+    assert_exact(phase_space.lorentz_eigenvalues(n_xi), ell * (ell + 1.0))
 
 
 def test_lorentz_eigenvalues_absolute_values() -> None:
-    assert grids_v2.lorentz_eigenvalues(4).tolist() == [0.0, 2.0, 6.0, 12.0]
+    assert phase_space.lorentz_eigenvalues(4).tolist() == [0.0, 2.0, 6.0, 12.0]
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +112,7 @@ def test_lorentz_eigenvalues_absolute_values() -> None:
 @pytest.mark.parametrize("include_x0", [False, True])
 def test_speed_grid_matches_old_xgrid(n_x: int, k: float, include_x0: bool) -> None:
     old = make_x_grid(n=n_x, k=k, include_point_at_x0=include_x0)
-    new = grids_v2.make_speed_grid(n_x=n_x, k=k, include_point_at_x0=include_x0)
+    new = phase_space.make_speed_grid(n_x=n_x, k=k, include_point_at_x0=include_x0)
     assert_exact(new.x, old.x)
     assert_exact(new.gaussian_weights, old.gaussian_weights)
     assert_exact(new.poly_a, old.poly_a)
@@ -127,7 +127,7 @@ def test_speed_grid_diff_matrices_match_old(n_x: int, k: float) -> None:
     xg = make_x_grid(n=n_x, k=k, include_point_at_x0=False)
     x = np.asarray(xg.x, dtype=np.float64)
     ddx_old, d2_old = make_x_polynomial_diff_matrices(x, k=k)
-    ddx_new, d2_new = grids_v2.speed_grid_diff_matrices(x, k=k)
+    ddx_new, d2_new = phase_space.speed_grid_diff_matrices(x, k=k)
     assert_exact(ddx_new, ddx_old)
     assert_exact(d2_new, d2_old)
 
@@ -152,7 +152,7 @@ def test_speed_grid_nodes_hardcoded_reference() -> None:
             0.00082485334451563,
         ]
     )
-    grid = grids_v2.make_speed_grid(n_x=5, k=0.0)
+    grid = phase_space.make_speed_grid(n_x=5, k=0.0)
     np.testing.assert_allclose(grid.x, ref_x, rtol=0.0, atol=1e-14)
     np.testing.assert_allclose(grid.gaussian_weights, ref_w, rtol=0.0, atol=1e-14)
 
@@ -161,7 +161,7 @@ def test_speed_grid_quadrature_is_exact_for_polynomials() -> None:
     """Absolute check: n-point Gauss rule integrates x^m exp(-x^2) exactly
     for m <= 2n-1 against Gamma((m+1)/2)/2."""
     n_x = 6
-    grid = grids_v2.make_speed_grid(n_x=n_x, k=0.0)
+    grid = phase_space.make_speed_grid(n_x=n_x, k=0.0)
     for m in range(2 * n_x):
         exact = 0.5 * math.gamma(0.5 * (m + 1))
         approx = float(np.sum(grid.gaussian_weights * grid.x**m))
@@ -169,26 +169,26 @@ def test_speed_grid_quadrature_is_exact_for_polynomials() -> None:
 
 
 def test_polynomial_interpolation_matrix_matches_collisions_port() -> None:
-    xg = grids_v2.make_speed_grid(n_x=5, k=0.0)
+    xg = phase_space.make_speed_grid(n_x=5, k=0.0)
     xk = np.asarray(xg.x)
     species_factor = math.sqrt(2.0 / 3.0)
     xb = xk * species_factor
     alpxk = np.exp(-(xk**2))
     alpx = np.exp(-(xb**2))
     old = polynomial_interpolation_matrix_np(xk=xk, x=xb, alpxk=alpxk, alpx=alpx)
-    new = grids_v2.polynomial_interpolation_matrix(xk=xk, x=xb, alpxk=alpxk, alpx=alpx)
+    new = phase_space.polynomial_interpolation_matrix(xk=xk, x=xb, alpxk=alpxk, alpx=alpx)
     assert_exact(new, old)
 
 
 def test_rosenbluth_potential_grid_size_rules() -> None:
-    x = np.asarray(grids_v2.make_speed_grid(n_x=5, k=0.0).x)
+    x = np.asarray(phase_space.make_speed_grid(n_x=5, k=0.0).x)
     # Default rule: ceil(max(x[-1], xMax) * NxPotentialsPerVth), createGrids.F90.
     expected = int(math.ceil(max(float(x[-1]), 5.0) * 40.0))
-    assert grids_v2.rosenbluth_potential_grid_size(x=x, n_x=5) == expected == 200
+    assert phase_space.rosenbluth_potential_grid_size(x=x, n_x=5) == expected == 200
     assert (
-        grids_v2.rosenbluth_potential_grid_size(x=x, n_x=5, x_potentials_grid_scheme=3) == 6
+        phase_space.rosenbluth_potential_grid_size(x=x, n_x=5, x_potentials_grid_scheme=3) == 6
     )
-    assert grids_v2.rosenbluth_potential_grid_size(x=x, n_x=5, monoenergetic=True) == 1
+    assert phase_space.rosenbluth_potential_grid_size(x=x, n_x=5, monoenergetic=True) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +198,7 @@ def test_rosenbluth_potential_grid_size_rules() -> None:
 
 @pytest.mark.parametrize("option", [0, 1, 2, 3])
 def test_n_xi_for_x_ramp_options(option: int) -> None:
-    x = np.asarray(grids_v2.make_speed_grid(n_x=7, k=0.0).x)
+    x = np.asarray(phase_space.make_speed_grid(n_x=7, k=0.0).x)
     n_xi, n_l = 16, 4
     # Reference: the loop in discretization/v3.py grids_from_namelist.
     ref = np.zeros((7,), dtype=int)
@@ -216,7 +216,7 @@ def test_n_xi_for_x_ramp_options(option: int) -> None:
         for j in range(7):
             temp = n_xi * (0.1 + 0.9 * x[j] / 2.0)
             ref[j] = max(3, n_l, int(temp))
-    out = grids_v2.n_xi_for_x_ramp(x=x, n_xi=n_xi, n_l=n_l, option=option)
+    out = phase_space.n_xi_for_x_ramp(x=x, n_xi=n_xi, n_l=n_l, option=option)
     assert out.tolist() == ref.tolist()
 
 
@@ -324,7 +324,7 @@ def test_make_grids_matches_v3_grids_from_namelist(
         n_xi_for_x_option=n_xi_for_x_option,
     )
     old = grids_from_namelist(nml)
-    new = grids_v2.make_grids(
+    new = phase_space.make_grids(
         n_theta=n_theta,
         n_zeta=n_zeta,
         n_xi=n_xi,
@@ -360,7 +360,7 @@ def test_make_grids_monoenergetic_matches_v3_rhsmode3() -> None:
         rhs_mode=3,
     )
     old = grids_from_namelist(nml)
-    new = grids_v2.make_grids(
+    new = phase_space.make_grids(
         n_theta=7,
         n_zeta=9,
         n_xi=8,
@@ -377,9 +377,9 @@ def test_make_grids_monoenergetic_matches_v3_rhsmode3() -> None:
 
 
 def test_grids_container_exposes_legendre_machinery() -> None:
-    grids = grids_v2.make_grids(
+    grids = phase_space.make_grids(
         n_theta=7, n_zeta=7, n_xi=8, n_x=4, n_l=4, n_periods=5
     )
-    assert_exact(grids.xi_coupling_upper, grids_v2.legendre_coupling_upper(8))
-    assert_exact(grids.xi_coupling_lower, grids_v2.legendre_coupling_lower(8))
-    assert_exact(grids.lorentz_eigenvalues, grids_v2.lorentz_eigenvalues(8))
+    assert_exact(grids.xi_coupling_upper, phase_space.legendre_coupling_upper(8))
+    assert_exact(grids.xi_coupling_lower, phase_space.legendre_coupling_lower(8))
+    assert_exact(grids.lorentz_eigenvalues, phase_space.lorentz_eigenvalues(8))

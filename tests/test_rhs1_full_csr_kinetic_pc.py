@@ -236,7 +236,8 @@ def test_x_ell_preconditioner_raises_for_wrong_rhs_shape_and_missing_native_fact
     )
 
     assert preconditioner.selected
-    with pytest.raises(ValueError, match="dimension mismatch"):
+    # scipy < 1.16 says "dimension mismatch"; newer scipy capitalizes it.
+    with pytest.raises(ValueError, match="(?i)dimension mismatch"):
         preconditioner.apply(np.ones((int(layout.total_size) + 1,), dtype=np.float64))
     assert preconditioner.operator is not None
     with pytest.raises(ValueError, match="rhs must have shape"):

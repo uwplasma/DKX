@@ -31,7 +31,6 @@ import argparse
 import json
 import re
 import resource
-import shutil
 import subprocess
 import sys
 import tarfile
@@ -190,7 +189,18 @@ def main() -> int:
             status = "ok" if entry.get("returncode") == 0 and entry["has_h5"] else "FAILED"
             print(f"    {status}  {entry['wall_seconds']}s", flush=True)
 
-    (args.out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    # Merge with any existing manifest so partial re-runs update rather than
+    # clobber: runs are keyed by (case, variant).
+    manifest_path = args.out_dir / "manifest.json"
+    if manifest_path.is_file():
+        old = json.loads(manifest_path.read_text())
+        new_keys = {(r["case"], r["variant"]) for r in manifest["runs"]}
+        manifest["runs"] = [
+            r for r in old.get("runs", [])
+            if (r["case"], r["variant"]) not in new_keys
+        ] + manifest["runs"]
+        manifest["runs"].sort(key=lambda r: (r["case"], r["variant"]))
+    manifest_path.write_text(json.dumps(manifest, indent=2))
 
     n_ok = sum(1 for r in manifest["runs"] if r.get("returncode") == 0 and r["has_h5"])
     print(f"\n{n_ok}/{len(manifest['runs'])} runs succeeded -> {args.out_dir}")

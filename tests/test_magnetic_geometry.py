@@ -1,4 +1,4 @@
-"""Referee tests: ``sfincs_jax.geometry_v2`` reproduces the geometry package.
+"""Referee tests: ``sfincs_jax.magnetic_geometry`` reproduces the geometry package.
 
 New == old (1e-15) for the analytic schemes, the VMEC wout path, and the
 Boozer ``.bc`` path, plus a differentiability gate for the ``from_fourier``
@@ -26,7 +26,7 @@ from sfincs_jax.geometry import (
 from sfincs_jax.geometry.boozer import gpsipsi_from_bc_file
 from sfincs_jax.geometry.vmec import vmec_geometry_from_wout_file
 from sfincs_jax.geometry.vmec_wout import gpsipsi_from_wout_file
-from sfincs_jax.geometry_v2 import FluxSurfaceGeometry
+from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry
 
 _W7X_SC1_BC = Path("/Users/rogerio/local/sfincs/equilibria/w7x-sc1.bc")
 

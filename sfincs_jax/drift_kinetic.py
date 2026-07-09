@@ -38,12 +38,12 @@ State-vector layout (matches v3 ``indices.F90`` with ``BLOCK_F`` first)::
   ``NotImplementedError`` for them (see the "deferred" list below).
 
 Coefficient provenance: everything is built from the committed consolidated
-modules — :mod:`sfincs_jax.grids_v2` (grids, differentiation matrices, Legendre
-couplings), :mod:`sfincs_jax.geometry_v2` (flux-surface geometry for
-geometrySchemes 1/2/4/5/11/12), :mod:`sfincs_jax.species_v2` (charges, profiles,
-psiHat-gradients), and :mod:`sfincs_jax.constants_v2` (normalizations and radial
+modules — :mod:`sfincs_jax.phase_space` (grids, differentiation matrices, Legendre
+couplings), :mod:`sfincs_jax.magnetic_geometry` (flux-surface geometry for
+geometrySchemes 1/2/4/5/11/12), :mod:`sfincs_jax.species` (charges, profiles,
+psiHat-gradients), and :mod:`sfincs_jax.constants` (normalizations and radial
 conversions).  Collision matrices are built by the stable
-:mod:`sfincs_jax.physics.collisions` (they migrate to ``collisions_v2`` when
+:mod:`sfincs_jax.physics.collisions` (they migrate to ``collisions`` when
 that consolidation lands).
 
 Three consumers, one source of truth (plan §2.2):
@@ -54,8 +54,8 @@ Three consumers, one source of truth (plan §2.2):
    analytic (probing-free) block-tridiagonal-in-L representation used by the
    structured direct solver and preconditioners.  The terms know their own
    L-coupling: streaming/mirror couple L±1 with the
-   :func:`sfincs_jax.grids_v2.legendre_coupling_lower` /
-   :func:`~sfincs_jax.grids_v2.legendre_coupling_upper` factors, ExB is diagonal
+   :func:`sfincs_jax.phase_space.legendre_coupling_lower` /
+   :func:`~sfincs_jax.phase_space.legendre_coupling_upper` factors, ExB is diagonal
    in L, and pitch-angle scattering is diagonal in L (eigenvalues
    ``l(l+1)/2``).
 3. :meth:`KineticOperator.rhs` — the v3 drives, including the internal
@@ -93,14 +93,14 @@ import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
 from jax import tree_util as jtu  # noqa: E402
 
-from sfincs_jax.constants_v2 import (  # noqa: E402
+from sfincs_jax.constants import (  # noqa: E402
     DEFAULT_DELTA,
     DEFAULT_NU_N,
     RadialCoordinates,
     d_phi_hat_d_psi_hat_from_e_star,
     nu_n_from_nu_prime,
 )
-from sfincs_jax.geometry_v2 import (  # noqa: E402
+from sfincs_jax.magnetic_geometry import (  # noqa: E402
     FluxSurfaceGeometry,
     psi_a_hat_from_wout,
     read_boozer_bc,
@@ -108,7 +108,7 @@ from sfincs_jax.geometry_v2 import (  # noqa: E402
     selected_r_n_from_bc,
     vmec_radial_interpolation,
 )
-from sfincs_jax.grids_v2 import (  # noqa: E402
+from sfincs_jax.phase_space import (  # noqa: E402
     Grids,
     legendre_coupling_lower,
     legendre_coupling_upper,
@@ -124,7 +124,7 @@ from sfincs_jax.input_compat import (  # noqa: E402
 from sfincs_jax.paths import resolve_existing_path  # noqa: E402
 
 # Collision matrices: the stable, committed implementation.  This import moves
-# to `sfincs_jax.collisions_v2` when that consolidation lands (same public API).
+# to `sfincs_jax.collisions` when that consolidation lands (same public API).
 from sfincs_jax.physics.collisions import (  # noqa: E402
     FokkerPlanckV3Operator,
     PitchAngleScatteringV3Operator,
@@ -133,7 +133,7 @@ from sfincs_jax.physics.collisions import (  # noqa: E402
     make_fokker_planck_v3_operator,
     make_pitch_angle_scattering_v3_operator,
 )
-from sfincs_jax.species_v2 import SpeciesSet, species_set_from_namelist  # noqa: E402
+from sfincs_jax.species import SpeciesSet, species_set_from_namelist  # noqa: E402
 
 __all__ = [
     "KineticOperator",
@@ -238,7 +238,7 @@ class KineticOperator:
     with_er_xidot: bool
     with_er_xdot: bool
 
-    # ---- speed / angle grids (grids_v2) ----
+    # ---- speed / angle grids (phase_space) ----
     x: jnp.ndarray  # (X,)
     x_weights: jnp.ndarray  # (X,)
     ddx: jnp.ndarray  # (X,X)
@@ -250,7 +250,7 @@ class KineticOperator:
     xi_coupling_lower: jnp.ndarray  # (L,) l/(2l-1)
     xi_coupling_upper: jnp.ndarray  # (L,) (l+1)/(2l+3)
 
-    # ---- flux-surface geometry (geometry_v2) ----
+    # ---- flux-surface geometry (magnetic_geometry) ----
     b_hat: jnp.ndarray  # (T,Z)
     db_hat_dtheta: jnp.ndarray  # (T,Z)
     db_hat_dzeta: jnp.ndarray  # (T,Z)
@@ -261,7 +261,7 @@ class KineticOperator:
     b_hat_sub_zeta: jnp.ndarray  # (T,Z)
     fsab_hat2: jnp.ndarray  # scalar <BHat^2>
 
-    # ---- species (species_v2) ----
+    # ---- species (species) ----
     z_s: jnp.ndarray  # (S,)
     m_hat: jnp.ndarray  # (S,)
     t_hat: jnp.ndarray  # (S,)
@@ -269,7 +269,7 @@ class KineticOperator:
     dn_hat_dpsi_hat: jnp.ndarray  # (S,)
     dt_hat_dpsi_hat: jnp.ndarray  # (S,)
 
-    # ---- normalization / drive scalars (constants_v2 conventions) ----
+    # ---- normalization / drive scalars (constants conventions) ----
     alpha: jnp.ndarray  # scalar e*phiBar/TBar
     delta: jnp.ndarray  # scalar rho*_ref
     dphi_hat_dpsi_hat: jnp.ndarray  # scalar; RHS-drive value (phi gradient coordinate)
@@ -277,7 +277,7 @@ class KineticOperator:
     e_parallel_hat: jnp.ndarray  # scalar
     e_parallel_hat_spec: jnp.ndarray  # (S,)
 
-    # ---- collisions (physics.collisions; -> collisions_v2 later) ----
+    # ---- collisions (physics.collisions; -> collisions later) ----
     pas: PitchAngleScatteringV3Operator | None
     fp: FokkerPlanckV3Operator | None
 
@@ -739,7 +739,7 @@ class KineticOperator:
         """Dense (theta*zeta) blocks of Legendre row ``ell`` of the f-block.
 
         Built analytically from the term coefficients — no operator probing:
-        streaming/mirror provide ``lower``/``upper`` (L±1 with the grids_v2
+        streaming/mirror provide ``lower``/``upper`` (L±1 with the phase_space
         coupling factors), ExB and pitch-angle scattering provide ``diag``.
         Supported for the DKES-trajectory PAS family (the tier-1 structured
         solver family of plan §2.3); raises otherwise.
@@ -1018,10 +1018,10 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     """Build a :class:`KineticOperator` from a parsed SFINCS input namelist.
 
     ``nml`` is a :class:`sfincs_jax.namelist.Namelist`.  Grids come from
-    :func:`sfincs_jax.grids_v2.make_grids`, geometry from
-    :class:`sfincs_jax.geometry_v2.FluxSurfaceGeometry`, species from
-    :func:`sfincs_jax.species_v2.species_set_from_namelist`, radial-coordinate
-    and monoenergetic conversions from :mod:`sfincs_jax.constants_v2`, and
+    :func:`sfincs_jax.phase_space.make_grids`, geometry from
+    :class:`sfincs_jax.magnetic_geometry.FluxSurfaceGeometry`, species from
+    :func:`sfincs_jax.species.species_set_from_namelist`, radial-coordinate
+    and monoenergetic conversions from :mod:`sfincs_jax.constants`, and
     collision matrices from :mod:`sfincs_jax.physics.collisions`.
 
     Raises ``NotImplementedError`` for the deferred features listed in the
@@ -1066,7 +1066,7 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
         raise NotImplementedError("Only xDotDerivativeScheme=0 is supported.")
     point_at_x0 = x_grid_scheme in {2, 6}
 
-    # ---- grids (grids_v2) ----
+    # ---- grids (phase_space) ----
     grids = make_grids(
         n_theta=_get_int(res, "Ntheta", 15),
         n_zeta=_get_int(res, "Nzeta", 15),
@@ -1083,11 +1083,11 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
         monoenergetic=(rhs_mode == 3),
     )
 
-    # ---- geometry + radial conversions (geometry_v2 / constants_v2) ----
+    # ---- geometry + radial conversions (magnetic_geometry / constants) ----
     geom, radial = _geometry_and_radial(nml=nml, grids=grids)
     fsab_hat2 = float(geom.fsab_hat2(theta_weights=grids.theta_weights, zeta_weights=grids.zeta_weights))
 
-    # ---- species (species_v2) ----
+    # ---- species (species) ----
     species_grad_coord = infer_species_input_radial_coordinate_for_gradients(
         geom_params=geom_params, species_params=nml.group("speciesParameters"), default=4
     )

@@ -46,6 +46,14 @@ keeps existing scripts working while the implementation lives in a domain folder
 | `compare.py` | HDF5 comparison, frozen-reference parity, and benchmark-table utilities. | Validation workflows |
 | `io.py`, `namelist.py`, `input_compat.py`, `paths.py` | File formats, SFINCS-style namelist parsing, input aliases, and data/cache paths. | Input/output workflows |
 | `diagnostics.py`, `grids.py`, `profiling.py` | Stable diagnostics, v3 grid helpers, timers, and memory probes. | Advanced users and benchmark scripts |
+| `constants.py`, `species.py` | Canonical normalizations, radial-coordinate Jacobians, species pytrees, and collisionality. | Canonical-stack users |
+| `phase_space.py` | Canonical theta/zeta grids and derivative matrices, Legendre pitch machinery, speed grid, Nxi-for-x ramps. | Canonical-stack users |
+| `magnetic_geometry.py` | Canonical flux-surface geometry for all supported geometry schemes, VMEC/Boozer readers, differentiable Fourier path. | Canonical-stack users |
+| `collisions.py` | Canonical pitch-angle scattering and full Fokker-Planck collision operators. | Canonical-stack users |
+| `drift_kinetic.py` | The canonical `KineticOperator`: term assembly, matrix-free apply, analytic Legendre blocks, RHS drives, bordered constraints. | Canonical-stack users |
+| `solve.py` | Three-tier solver policy (structured direct, preconditioned Krylov, host direct) on the optional `solvax` library; implicit differentiation. | Canonical-stack users |
+| `moments.py` | Canonical velocity-space moments, flux families, and transport matrices keyed by sfincsOutput.h5 names. | Canonical-stack users |
+| `inputs.py`, `console.py` | Typed namelist with Fortran-cited defaults and byte-parity Fortran stdout blocks. | Canonical-stack users |
 
 If a new feature is not meant to be imported directly by users, put it in a
 domain folder and expose it through one of the public root modules only when a

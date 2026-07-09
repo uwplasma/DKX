@@ -52,12 +52,33 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from solvax.direct import (
-    BlockTridiagFactors,
-    block_thomas_factor,
-    block_thomas_solve,
-    block_thomas_truncated_fn,
-)
+# solvax is optional until its PyPI release (CI installs it from git): keep
+# this module importable without it and raise a clear error on first use.
+try:
+    from solvax.direct import (
+        BlockTridiagFactors,
+        block_thomas_factor,
+        block_thomas_solve,
+        block_thomas_truncated_fn,
+    )
+
+    _SOLVAX_IMPORT_ERROR: BaseException | None = None
+except ImportError as _solvax_exc:
+    BlockTridiagFactors = None  # type: ignore[assignment, misc]
+    block_thomas_factor = None  # type: ignore[assignment]
+    block_thomas_solve = None  # type: ignore[assignment]
+    block_thomas_truncated_fn = None  # type: ignore[assignment]
+    _SOLVAX_IMPORT_ERROR = _solvax_exc
+
+
+def _require_solvax() -> None:
+    """Raise a clear error when the optional ``solvax`` dependency is missing."""
+    if _SOLVAX_IMPORT_ERROR is not None:
+        raise ImportError(
+            "the RHSMode=3 block-Thomas direct path requires the optional "
+            "'solvax' package (install with `pip install sfincs_jax[structured]` "
+            "or from git: pip install git+https://github.com/uwplasma/SOLVAX)"
+        ) from _SOLVAX_IMPORT_ERROR
 
 
 EmitFn = Callable[[int, str], None]
@@ -335,6 +356,7 @@ def build_rhs3_block_thomas_solver(
             is exact; the default scales the rank-one update to the mean magnitude
             of the diagonal blocks for good conditioning.
     """
+    _require_solvax()
     if gamma is None:
         scale = float(jnp.mean(jnp.abs(jnp.diagonal(blocks.diag, axis1=1, axis2=2))))
         if scale == 0.0:
@@ -559,6 +581,7 @@ def solve_transport_block_tridiagonal_batch(
     the context untouched) when the operator does not fit the monoenergetic
     block-tridiagonal layout, so the caller falls back to the standard path.
     """
+    _require_solvax()
     from sfincs_jax.operators.profile_system import (  # noqa: PLC0415
         _operator_signature_cached,
         apply_v3_full_system_operator_cached,

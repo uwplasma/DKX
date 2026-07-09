@@ -21,8 +21,7 @@ expansion; the mode-coupling coefficients ``l/(2l-1)`` and ``(l+1)/(2l+3)`` and
 the Lorentz pitch-angle-scattering eigenvalues ``l(l+1)`` used throughout
 ``populateMatrix.F90`` are provided here as the single source of truth.
 
-During the v2 refactor this file is named ``grids_v2``; it replaces
-``sfincs_jax/grids.py``, ``sfincs_jax/discretization/xgrid.py``, and the grid
+This canonical module replaces ``sfincs_jax/grids.py``, ``sfincs_jax/discretization/xgrid.py``, and the grid
 construction half of ``sfincs_jax/discretization/v3.py`` at the purge.
 """
 

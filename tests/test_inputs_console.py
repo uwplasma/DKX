@@ -1,6 +1,6 @@
-"""Tests for the consolidated io_v2 namelist reader and Fortran-parity prints.
+"""Tests for the consolidated inputs namelist reader and Fortran-parity prints.
 
-- Equivalence referee: io_v2 parsing of upstream Fortran example decks must
+- Equivalence referee: inputs parsing of upstream Fortran example decks must
   agree with the existing ``sfincs_jax.namelist`` reader.
 - Defaults: an empty deck must yield the readInput.F90/globalVariables.F90
   defaults.
@@ -18,8 +18,8 @@ from pathlib import Path
 import pytest
 
 from sfincs_jax.namelist import read_sfincs_input as legacy_read_sfincs_input
-from sfincs_jax.io_v2 import prints
-from sfincs_jax.io_v2.namelist import (
+from sfincs_jax import console as prints
+from sfincs_jax.inputs import (
     load_sfincs_input,
     parse_sfincs_input_text,
     read_sfincs_input,
@@ -51,12 +51,12 @@ def _require(path: Path) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Equivalence referee: io_v2 vs the existing sfincs_jax.namelist reader.
+# Equivalence referee: inputs vs the existing sfincs_jax.namelist reader.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("deck", _EXAMPLE_DECKS, ids=lambda p: p.parent.name)
-def test_io_v2_parser_matches_legacy_reader(deck: Path) -> None:
+def test_inputs_parser_matches_legacy_reader(deck: Path) -> None:
     _require(deck)
     legacy = legacy_read_sfincs_input(deck)
     new_raw = read_sfincs_input(deck)

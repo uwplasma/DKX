@@ -1,7 +1,7 @@
 """The plan-§2.3 three-tier auto-policy linear solver over a :class:`KineticOperator`.
 
 This module is the Phase-3.3 solve track: given the consolidated v3
-drift-kinetic operator (:mod:`sfincs_jax.dke_v2`) and one or more right-hand
+drift-kinetic operator (:mod:`sfincs_jax.drift_kinetic`) and one or more right-hand
 sides, pick and run the cheapest adequate linear solver:
 
 Tier 1 — structured direct (``solvax.direct`` block Thomas over Legendre modes)
@@ -64,17 +64,41 @@ import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
 
-from solvax.direct import (  # noqa: E402
-    BlockTridiagFactors,
-    block_thomas_factor,
-    block_thomas_solve,
-)
-from solvax.implicit import linear_solve as solvax_linear_solve  # noqa: E402
-from solvax.krylov import gcrot  # noqa: E402
-from solvax.native import SpluFactorization  # noqa: E402
-from solvax.operators import schur_projected_precond  # noqa: E402
+# solvax is optional until its PyPI release (CI installs it from git): keep
+# this module importable without it and raise a clear error on first use.
+try:  # noqa: E402
+    from solvax.direct import (
+        BlockTridiagFactors,
+        block_thomas_factor,
+        block_thomas_solve,
+    )
+    from solvax.implicit import linear_solve as solvax_linear_solve
+    from solvax.krylov import gcrot
+    from solvax.native import SpluFactorization
+    from solvax.operators import schur_projected_precond
 
-from sfincs_jax.dke_v2 import KineticOperator  # noqa: E402
+    _SOLVAX_IMPORT_ERROR: BaseException | None = None
+except ImportError as _solvax_exc:
+    BlockTridiagFactors = None  # type: ignore[assignment, misc]
+    block_thomas_factor = None  # type: ignore[assignment]
+    block_thomas_solve = None  # type: ignore[assignment]
+    solvax_linear_solve = None  # type: ignore[assignment]
+    gcrot = None  # type: ignore[assignment]
+    SpluFactorization = None  # type: ignore[assignment, misc]
+    schur_projected_precond = None  # type: ignore[assignment]
+    _SOLVAX_IMPORT_ERROR = _solvax_exc
+
+from sfincs_jax.drift_kinetic import KineticOperator  # noqa: E402
+
+
+def _require_solvax() -> None:
+    """Raise a clear error when the optional ``solvax`` dependency is missing."""
+    if _SOLVAX_IMPORT_ERROR is not None:
+        raise ImportError(
+            "sfincs_jax.solve requires the optional 'solvax' package for its "
+            "solver tiers (install with `pip install sfincs_jax[structured]` "
+            "or from git: pip install git+https://github.com/uwplasma/SOLVAX)"
+        ) from _SOLVAX_IMPORT_ERROR
 
 __all__ = [
     "SolveResult",
@@ -271,6 +295,7 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
     Raises:
         NotImplementedError: when :func:`tier1_available` says no.
     """
+    _require_solvax()
     ok, reason = tier1_available(op)
     if not ok:
         raise NotImplementedError(f"tier-1 structured direct path unavailable: {reason}")
@@ -360,6 +385,7 @@ def build_coarse_preconditioner(
         ``(precond, precond_t)`` — approximate inverses of ``K`` and ``K^T``
         on flat ``(total_size,)`` vectors, sharing one factorization.
     """
+    _require_solvax()
     n_s, n_x, n_xi, n_t, n_z = op.f_shape
     n_tz = n_t * n_z
     batch = n_s * n_x
@@ -441,6 +467,7 @@ def materialize_dense(op: KineticOperator, *, column_chunk: int = 1024) -> np.nd
 def _solve_tier3(
     op: KineticOperator, rhs2d: jnp.ndarray, *, tol: float, atol: float, max_dense_size: int
 ) -> SolveResult:
+    _require_solvax()
     if _is_traced(rhs2d):
         raise RuntimeError(
             "tier-3 host sparse-direct solve is non-differentiable and cannot run "
@@ -455,7 +482,7 @@ def _solve_tier3(
             "you really want this."
         )
     print(
-        f"[sfincs_jax.solve_v2] tier-3 host sparse-direct solve (SuperLU, n={n}): "
+        f"[sfincs_jax.solve] tier-3 host sparse-direct solve (SuperLU, n={n}): "
         "non-differentiable fallback path."
     )
     import scipy.sparse as sp  # lazy: matches solvax.native's optional-scipy policy
@@ -665,7 +692,7 @@ def solve(
        matrix, non-differentiable, loud.
 
     Args:
-        op: the kinetic operator (:class:`sfincs_jax.dke_v2.KineticOperator`).
+        op: the kinetic operator (:class:`sfincs_jax.drift_kinetic.KineticOperator`).
         rhs: right-hand side(s), ``(total_size,)`` or ``(total_size, n_rhs)``
             — e.g. columns of :meth:`KineticOperator.rhs` for RHSMode 2/3.
         method: ``"auto"`` | ``"block_tridiagonal"`` | ``"gmres"`` |
@@ -689,6 +716,7 @@ def solve(
     Returns:
         A :class:`SolveResult`; ``x`` matches the shape of ``rhs``.
     """
+    _require_solvax()
     method = str(method).strip().lower()
     if method not in {"auto", "block_tridiagonal", "gmres", "direct"}:
         raise ValueError(f"unknown method {method!r}")
@@ -720,7 +748,7 @@ def solve(
         )
         if method == "auto" and not result.converged and not differentiable:
             print(
-                "[sfincs_jax.solve_v2] tier-2 Krylov breached its iteration cap "
+                "[sfincs_jax.solve] tier-2 Krylov breached its iteration cap "
                 f"(iterations={result.iterations}); falling back to the tier-3 "
                 "host direct solve."
             )

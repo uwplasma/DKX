@@ -2091,8 +2091,7 @@ def test_export_f_config_builds_scheme4_mapping_from_real_fixture() -> None:
     input_path = (
         Path(__file__).parent.parent
         / "examples"
-        / "upstream"
-        / "fortran_v3"
+        / "sfincs_examples"
         / "geometryScheme4_2species_PAS_noEr"
         / "input.namelist"
     )
@@ -2118,8 +2117,7 @@ def test_export_f_config_rejects_invalid_options() -> None:
     input_path = (
         Path(__file__).parent.parent
         / "examples"
-        / "upstream"
-        / "fortran_v3"
+        / "sfincs_examples"
         / "geometryScheme4_2species_PAS_noEr"
         / "input.namelist"
     )

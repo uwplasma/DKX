@@ -2116,8 +2116,8 @@ Controls:
   the robust non-autodiff reference route is the Fortran-reduced direct-tail
   active LU preconditioner. This Fortran-reduced direct-tail active LU
   preconditioner remains the production default for these cases. The default
-  ``auto`` route reaches this direct-tail ladder with no manual
-  ``PC_BACKEND=global`` or ``DIRECT_TAIL_PC_MAX_MB`` overrides. The checked
+  ``auto`` route reaches this direct-tail ladder with no manual ``PC_BACKEND=global``
+  or ``DIRECT_TAIL_PC_MAX_MB`` overrides. The checked
   QA/QH active size remains ``507004`` unknowns, and ``auto`` assigns the same
   adaptive ``14708.1 MiB`` cap used by the active-LU reference route. Lower
   memory native/coarse variants are explicit advanced candidates and must pass

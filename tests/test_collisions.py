@@ -1,4 +1,4 @@
-"""Referee tests for Phase 3.2 collisions-track: collisions_v2 == physics/collisions.py.
+"""Referee tests for Phase 3.2 collisions-track: collisions == physics/collisions.py.
 
 Gates:
 1. Exact equivalence (1e-15; observed bitwise) with the old
@@ -25,18 +25,18 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax import collisions_v2 as c2
-from sfincs_jax.constants_v2 import SQRT_PI_V3
-from sfincs_jax.grids_v2 import make_speed_grid, n_xi_for_x_ramp, speed_grid_diff_matrices
+from sfincs_jax import collisions as c2
+from sfincs_jax.constants import SQRT_PI_V3
+from sfincs_jax.phase_space import make_speed_grid, n_xi_for_x_ramp, speed_grid_diff_matrices
 from sfincs_jax.physics.collisions import (
     apply_fokker_planck_v3,
     apply_pitch_angle_scattering_v3,
     make_fokker_planck_v3_operator,
     make_pitch_angle_scattering_v3_operator,
 )
-from sfincs_jax.species_v2 import SpeciesSet
+from sfincs_jax.species import SpeciesSet
 
-# Species parameter sets with 1, 2, and 3 species (as in test_species_constants_v2.py).
+# Species parameter sets with 1, 2, and 3 species (as in test_species_constants.py).
 SPECIES_CASES = {
     "1sp": dict(z=[1.0], m=[1.0], n=[1.0], t=[1.0]),
     "2sp": dict(z=[1.0, 6.0], m=[1.0, 6.0], n=[0.6, 0.009], t=[0.5, 0.8]),

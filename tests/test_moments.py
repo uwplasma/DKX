@@ -1,4 +1,4 @@
-"""Referee tests: ``sfincs_jax.moments_v2`` vs the legacy diagnostics modules.
+"""Referee tests: ``sfincs_jax.moments`` vs the legacy diagnostics modules.
 
 Every output of the consolidated module is asserted equal (1e-14 relative) to
 the OLD implementation evaluated on the same solved state vectors, using the
@@ -24,8 +24,8 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
-import sfincs_jax.moments_v2 as mv
-from sfincs_jax.constants_v2 import RadialCoordinates
+import sfincs_jax.moments as mv
+from sfincs_jax.constants import RadialCoordinates
 from sfincs_jax.diagnostics import u_hat_np
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 from sfincs_jax.namelist import read_sfincs_input

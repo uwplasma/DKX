@@ -1,6 +1,6 @@
-"""Referee tests for ``sfincs_jax.solve_v2`` — the plan-§2.3 three-tier auto-policy.
+"""Referee tests for ``sfincs_jax.solve`` — the plan-§2.3 three-tier auto-policy.
 
-Tiny fixtures only (shared with ``tests/test_dke_v2.py``):
+Tiny fixtures only (shared with ``tests/test_drift_kinetic.py``):
 
 - tier 1 (analytic block-Thomas) must match the tier-3 dense solve to 1e-10
   on the monoenergetic (RHSMode=3) and PAS (RHSMode=1) fixtures, and match the
@@ -26,9 +26,9 @@ import numpy as np
 import pytest
 import scipy.linalg as sla
 
-from sfincs_jax.dke_v2 import KineticOperator
+from sfincs_jax.drift_kinetic import KineticOperator
 from sfincs_jax.namelist import parse_sfincs_input_text, read_sfincs_input
-from sfincs_jax.solve_v2 import materialize_dense, solve, tier1_available
+from sfincs_jax.solve import materialize_dense, solve, tier1_available
 
 REF = Path(__file__).parent / "ref"
 
@@ -235,3 +235,44 @@ def test_gradient_through_tier1_solve_matches_finite_differences() -> None:
     fd = float((loss(jnp.asarray(t0 + eps)) - loss(jnp.asarray(t0 - eps))) / (2.0 * eps))
     assert np.isfinite(g) and np.isfinite(fd) and abs(fd) > 0.0
     np.testing.assert_allclose(g, fd, rtol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# Optional-dependency policy: solvax is optional until its PyPI release.
+# ---------------------------------------------------------------------------
+
+
+def test_solve_importable_without_solvax_and_fails_loudly_on_use() -> None:
+    """``import sfincs_jax.solve`` must work without solvax; use must raise clearly.
+
+    Runs in a subprocess (this session already imported solvax) and hides the
+    package by poisoning ``sys.modules`` before the import.
+    """
+    import subprocess
+    import sys
+
+    code = "\n".join(
+        [
+            "import sys",
+            "for m in ('solvax', 'solvax.direct', 'solvax.implicit', 'solvax.krylov',",
+            "          'solvax.native', 'solvax.operators'):",
+            "    sys.modules[m] = None  # poisoned: import raises ImportError",
+            "import sfincs_jax.solve as solve_mod",
+            "import sfincs_jax.solvers.block_tridiagonal_transport as bt_mod",
+            "assert solve_mod._SOLVAX_IMPORT_ERROR is not None",
+            "assert bt_mod._SOLVAX_IMPORT_ERROR is not None",
+            "for fn in (solve_mod._require_solvax, bt_mod._require_solvax):",
+            "    try:",
+            "        fn()",
+            "    except ImportError as exc:",
+            "        assert 'solvax' in str(exc)",
+            "    else:",
+            "        raise SystemExit('expected ImportError on solvax use')",
+            "print('guarded-import-ok')",
+        ]
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=300
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "guarded-import-ok" in proc.stdout
