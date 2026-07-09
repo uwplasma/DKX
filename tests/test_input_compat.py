@@ -65,12 +65,7 @@ def test_config_lookup_covers_top_level_case_insensitive_and_empty_values() -> N
 
 def test_infer_input_radial_coordinate_for_gradients_legacy_multispecies_psin() -> None:
     input_path = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "upstream"
-        / "fortran_multispecies"
-        / "quick_2species_FPCollisions_noEr"
-        / "input.namelist"
+        Path(__file__).resolve().parent / "ref" / "multispecies_quick_2species_FPCollisions_noEr.input.namelist"
     )
     nml = read_sfincs_input(input_path)
     assert (
@@ -134,12 +129,7 @@ def test_infer_gradient_coordinates_prefers_v3_default_when_mixed_fields_are_pre
 
 def test_effective_equilibrium_file_supports_legacy_jgboozer_alias() -> None:
     input_path = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "upstream"
-        / "fortran_multispecies"
-        / "HSX_FPCollisions_DKESTrajectories"
-        / "input.namelist"
+        Path(__file__).resolve().parent / "ref" / "multispecies_HSX_FPCollisions_DKESTrajectories.input.namelist"
     )
     nml = read_sfincs_input(input_path)
     equilibrium_file = effective_equilibrium_file(geom_params=nml.group("geometryParameters"))
@@ -213,12 +203,7 @@ def test_with_equilibrium_override_returns_original_when_no_override() -> None:
 
 def test_effective_r_n_wish_supports_legacy_normradius_alias() -> None:
     input_path = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "upstream"
-        / "fortran_multispecies"
-        / "HSX_FPCollisions_DKESTrajectories"
-        / "input.namelist"
+        Path(__file__).resolve().parent / "ref" / "multispecies_HSX_FPCollisions_DKESTrajectories.input.namelist"
     )
     nml = read_sfincs_input(input_path)
     assert effective_r_n_wish(geom_params=nml.group("geometryParameters"), default=0.5) == 0.22
@@ -309,12 +294,7 @@ def test_er_conversion_supports_psin_selected_surface(tmp_path: Path) -> None:
 
 def test_effective_use_iterative_linear_solver_supports_legacy_alias() -> None:
     input_path = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "upstream"
-        / "fortran_multispecies"
-        / "inductiveE_noEr"
-        / "input.namelist"
+        Path(__file__).resolve().parent / "ref" / "multispecies_inductiveE_noEr.input.namelist"
     )
     nml = read_sfincs_input(input_path)
     assert effective_use_iterative_linear_solver(other_params=nml.group("otherNumericalParameters"), default=0) == 1
@@ -322,12 +302,7 @@ def test_effective_use_iterative_linear_solver_supports_legacy_alias() -> None:
 
 def test_sfincs_output_dict_uses_legacy_gradient_coordinate_inference() -> None:
     input_path = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "upstream"
-        / "fortran_multispecies"
-        / "inductiveE_noEr"
-        / "input.namelist"
+        Path(__file__).resolve().parent / "ref" / "multispecies_inductiveE_noEr.input.namelist"
     )
     nml = read_sfincs_input(input_path)
     grids = grids_from_namelist(nml)
@@ -337,12 +312,7 @@ def test_sfincs_output_dict_uses_legacy_gradient_coordinate_inference() -> None:
 
 def test_sfincs_output_dict_uses_legacy_normradius_wish_for_bc_geometry() -> None:
     input_path = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "upstream"
-        / "fortran_multispecies"
-        / "HSX_FPCollisions_DKESTrajectories"
-        / "input.namelist"
+        Path(__file__).resolve().parent / "ref" / "multispecies_HSX_FPCollisions_DKESTrajectories.input.namelist"
     )
     nml = read_sfincs_input(input_path)
     grids = grids_from_namelist(nml)
@@ -352,12 +322,7 @@ def test_sfincs_output_dict_uses_legacy_normradius_wish_for_bc_geometry() -> Non
 
 def test_localize_equilibrium_file_in_place_patches_legacy_boozer_key(tmp_path: Path) -> None:
     source_input = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "upstream"
-        / "fortran_multispecies"
-        / "HSX_FPCollisions_DKESTrajectories"
-        / "input.namelist"
+        Path(__file__).resolve().parent / "ref" / "multispecies_HSX_FPCollisions_DKESTrajectories.input.namelist"
     )
     dst_input = tmp_path / "input.namelist"
     dst_input.write_text(source_input.read_text(encoding="utf-8"), encoding="utf-8")

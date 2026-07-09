@@ -553,6 +553,18 @@
         "proof_owner": "absence tests plus docs/examples replacements",
         "line_target": "remove from stable tree",
         "next_action": "Delete obsolete upstream utilities or move any documented user workflow into examples."
+      },
+      {
+        "name": "evidence_tooling",
+        "decision": "keep",
+        "prefix": "tools/",
+        "owner_tags": [
+          "benchmarks",
+          "reference-data"
+        ],
+        "proof_owner": "tests/test_source_tree_consolidation.py structure gates",
+        "line_target": "small single-purpose generator scripts only",
+        "next_action": "Keep tools/ to the reference-data generator and benchmark drivers promoted by plan_final.md step 4; delete anything unused by CI or the README tables."
       }
     ]
   },

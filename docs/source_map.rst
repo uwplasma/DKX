@@ -148,6 +148,36 @@ documented compatibility facade, and passes the corresponding owner tests.
    * - ``__main__.py``
      - package root CLI entry point
      - keep at root
+   * - ``constants.py``
+     - canonical normalization/radial-coordinate owner
+     - keep at root as canonical stack module
+   * - ``species.py``
+     - canonical species-pytree owner
+     - keep at root as canonical stack module
+   * - ``phase_space.py``
+     - canonical grids/discretization owner
+     - keep at root as canonical stack module
+   * - ``magnetic_geometry.py``
+     - canonical flux-surface geometry owner
+     - keep at root as canonical stack module
+   * - ``collisions.py``
+     - canonical collision-operator owner
+     - keep at root as canonical stack module
+   * - ``drift_kinetic.py``
+     - canonical KineticOperator owner
+     - keep at root as canonical stack module
+   * - ``solve.py``
+     - canonical three-tier solver owner
+     - keep at root as canonical stack module
+   * - ``moments.py``
+     - canonical velocity-space moments owner
+     - keep at root as canonical stack module
+   * - ``inputs.py``
+     - canonical typed-namelist owner
+     - keep at root as canonical stack module
+   * - ``console.py``
+     - canonical Fortran-parity stdout owner
+     - keep at root as canonical stack module
    * - ``api.py``
      - package root public API
      - keep at root
