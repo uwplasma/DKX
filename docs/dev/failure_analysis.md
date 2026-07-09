@@ -82,7 +82,7 @@ the transport matrix by 0.0). Existing parity suites 21/21 with the switch ON an
 `HSX_PASCollisions_DKESTrajectories` at the production manifest resolution builds a
 **2,512,760 × 2,512,760** system. Fortran + MUMPS at `mpiexec -n 1` on this 24 GB
 machine never reached the solve: the factorization drove macOS swap to 46.5/47 GB
-(the same pattern that previously crashed the machine) and was killed. Conclusion for
+(the same swap-exhaustion pattern that crashed the machine in an earlier run) and was killed. Conclusion for
 Phase 4/5: at production resolution on a laptop, *neither* code can rely on a global
 sparse factorization; the Legendre block-elimination tier (memory O((NθNζ)²) ≈ 66 MB
 per 2875² block, independent of Nξ) is the only locally-viable direct path, and the

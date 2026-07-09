@@ -211,8 +211,7 @@ jobs:
       - name: Optional ecosystem benchmark gates
         run: |
           python -m pytest -q \
-            tests/test_optional_lineax_implicit_gate.py \
-            tests/test_optional_eqx_jaxopt_scheme4_gate.py
+            tests/test_jax_ecosystem_backend_probes.py
 
   tests:
     runs-on: ubuntu-22.04
