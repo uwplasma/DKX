@@ -77,6 +77,36 @@ the transport matrix by 0.0). Existing parity suites 21/21 with the switch ON an
 (agreement ~8e-13); warm benchmark: shipped scheme11 0.73 s vs 1.83 s auto (**2.5×**),
 25×25×100 block-Thomas 6.6 s at 3.15 GB peak.
 
+## Fortran baseline at production resolution: does not fit either
+
+`HSX_PASCollisions_DKESTrajectories` at the production manifest resolution builds a
+**2,512,760 × 2,512,760** system. Fortran + MUMPS at `mpiexec -n 1` on this 24 GB
+machine never reached the solve: the factorization drove macOS swap to 46.5/47 GB
+(the same pattern that previously crashed the machine) and was killed. Conclusion for
+Phase 4/5: at production resolution on a laptop, *neither* code can rely on a global
+sparse factorization; the Legendre block-elimination tier (memory O((NθNζ)²) ≈ 66 MB
+per 2875² block, independent of Nξ) is the only locally-viable direct path, and the
+Fortran strong-scaling baseline must use a case sized to fit (~≤8 GB MUMPS footprint,
+e.g. Ntheta=25, Nzeta=51, Nxi=100 PAS, ~450 k unknowns).
+
+## Phase 5.1 Fortran strong-scaling baseline (right-sized case)
+
+`HSX_PASCollisions_DKESTrajectories` at Ntheta=25, Nzeta=51, Nxi=100, Nx=5
+(744,610 unknowns), conda PETSc 3.23 + MUMPS, this MacBook (~10 cores, 24 GB):
+
+| MPI ranks | solve time | speedup | parallel efficiency | peak RSS |
+|---|---|---|---|---|
+| 1 | 463.6 s | 1.00 | — | 3.98 GB |
+| 2 | 229.5 s | 2.02 | 101% | 2.86 GB |
+| 4 | 240.9 s | 1.92 | 48% | 2.88 GB |
+| 8 | 270.5 s | 1.71 | 21% | 1.61 GB |
+
+Fortran/MUMPS saturates at 2 ranks on this machine and *degrades* beyond
+(performance/efficiency core asymmetry + MUMPS OpenMP contention). The practical
+Fortran floor for this case is ~230 s. That is the concrete G7 target for the
+sharded JAX solver, and it also means matching "Fortran at N ranks" gets *easier*,
+not harder, as N grows on laptop-class hardware.
+
 ## Next measurements
 
 - [ ] Final HSX JAX outcome (converged? wall? peak RSS?).
