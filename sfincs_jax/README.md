@@ -54,6 +54,8 @@ keeps existing scripts working while the implementation lives in a domain folder
 | `solve.py` | Three-tier solver policy (structured direct, preconditioned Krylov, host direct) on the optional `solvax` library; implicit differentiation. | Canonical-stack users |
 | `moments.py` | Canonical velocity-space moments, flux families, and transport matrices keyed by sfincsOutput.h5 names. | Canonical-stack users |
 | `inputs.py`, `console.py` | Typed namelist with Fortran-cited defaults and byte-parity Fortran stdout blocks. | Canonical-stack users |
+| `run.py` | End-to-end RHSMode 2/3 transport-matrix driver on the canonical stack (`inputs -> drift_kinetic -> solve -> moments -> writer/console`). | Canonical-stack users |
+| `writer.py` | Canonical `sfincsOutput.h5`/`.nc` writer for the RHSMode 2/3 transport-matrix modes. | Canonical-stack users |
 
 If a new feature is not meant to be imported directly by users, put it in a
 domain folder and expose it through one of the public root modules only when a

@@ -35,6 +35,7 @@ __all__ = [
     "main_solve_begin_line",
     "main_solve_done_line",
     "species_results_lines",
+    "transport_matrix_lines",
     "goodbye_line",
     "NAMELIST_GROUP_ORDER",
 ]
@@ -334,6 +335,18 @@ def species_results_lines(
         elif constraint_scheme == 2 and "sources" in result:
             lines.append(list_print("   sources: ", *(float(s) for s in result["sources"])))  # type: ignore[arg-type]
     lines.append(list_print("FSABjHat (bootstrap current): ", float(fsab_j_hat)))
+    return tuple(lines)
+
+
+def transport_matrix_lines(matrix: Sequence[Sequence[float]]) -> Tuple[str, ...]:
+    """The RHSMode=2/3 transport-matrix block (diagnostics.F90:950-953).
+
+    Fortran prints ``print *,"Transport matrix:"`` followed by
+    ``print *,"   ", transportMatrix(i,:)`` for each row.
+    """
+    lines = [list_print("Transport matrix:")]
+    for row in matrix:
+        lines.append(list_print("   ", *(float(v) for v in row)))
     return tuple(lines)
 
 

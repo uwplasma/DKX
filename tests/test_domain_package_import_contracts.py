@@ -313,10 +313,12 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "phase_space.py": "stable discretization kernel",
     "plotting.py": "public plotting API",
     "profiling.py": "stable support utility",
+    "run.py": "public API",
     "sensitivity.py": "public differentiation API",
     "solve.py": "stable solver kernel",
     "solver.py": "compatibility facade",
     "species.py": "stable physics kernel",
+    "writer.py": "stable support utility",
 }
 
 ROOT_MODULE_CLOSURE_MANIFEST = {
@@ -331,6 +333,8 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "phase_space.py": ("canonical grids/discretization owner", "keep at root as canonical stack module"),
     "solve.py": ("canonical three-tier solver owner", "keep at root as canonical stack module"),
     "species.py": ("canonical species-pytree owner", "keep at root as canonical stack module"),
+    "run.py": ("canonical transport-run driver owner", "keep at root as canonical stack module"),
+    "writer.py": ("canonical sfincsOutput writer owner", "keep at root as canonical stack module"),
     "__main__.py": ("package root CLI entry point", "keep at root"),
     "ambipolar.py": ("problems.ambipolar via public API facade", "keep root facade until public docs/examples migrate"),
     "api.py": ("package root public API", "keep at root"),
