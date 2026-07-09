@@ -178,6 +178,12 @@ documented compatibility facade, and passes the corresponding owner tests.
    * - ``console.py``
      - canonical Fortran-parity stdout owner
      - keep at root as canonical stack module
+   * - ``run.py``
+     - canonical transport-run driver owner
+     - keep at root as canonical stack module
+   * - ``writer.py``
+     - canonical sfincsOutput writer owner
+     - keep at root as canonical stack module
    * - ``api.py``
      - package root public API
      - keep at root
