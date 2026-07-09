@@ -67,6 +67,10 @@ from sfincs_jax.operators.profile_sparse_pattern import (
     v3_full_system_conservative_sparsity_pattern,
     v3_full_system_conservative_sparsity_pattern_for_indices,
 )
+from sfincs_jax.solvers.block_tridiagonal_transport import (
+    rhs3_block_tridiagonal_requested,
+    solve_transport_block_tridiagonal_batch,
+)
 from sfincs_jax.solvers.diagnostics import save_krylov_state, transport_progress_message
 from sfincs_jax.solvers.explicit_sparse import (
     host_sparse_direct_solve_with_refinement as _host_sparse_direct_solve_with_refinement,
@@ -429,6 +433,14 @@ def solve_v3_transport_matrix_linear_gmres(
     )
     if parallel_result is not None:
         return parallel_result
+    # Opt-in RHSMode=3 direct solve over Legendre blocks (solvax block Thomas).
+    use_rhs3_block_thomas = rhs3_block_tridiagonal_requested(
+        solve_method=str(solve_method), rhs_mode=int(rhs_mode)
+    )
+    if str(solve_method).strip().lower() in {"block_tridiagonal", "block_thomas"}:
+        # Downstream policy resolution only understands the standard method names;
+        # the block-Thomas request is handled before the per-RHS loop below.
+        solve_method = "auto"
     if emit is not None:
         emit(1, f"solve_v3_transport_matrix_linear_gmres: rhs_mode={rhs_mode} whichRHS_count={n} total_size={int(op0.total_size)}")
         emit(
@@ -802,8 +814,8 @@ def solve_v3_transport_matrix_linear_gmres(
         atol=float(atol), maxiter=maxiter, precond_side=transport_precondition_side,
     )
 
-    def _dense_batch_solve_all(*, op_probe_ref: V3FullSystemOperator, reason: str) -> bool:
-        dense_batch_context = TransportDenseBatchContext(
+    def _make_dense_batch_context() -> TransportDenseBatchContext:
+        return TransportDenseBatchContext(
             dense_backend_allowed=bool(dense_backend_allowed),
             dense_use_mixed=bool(dense_use_mixed),
             use_active_dof_mode=bool(use_active_dof_mode),
@@ -827,13 +839,26 @@ def solve_v3_transport_matrix_linear_gmres(
             expand_reduced=expand_reduced,
             emit=emit,
         )
+
+    def _dense_batch_solve_all(*, op_probe_ref: V3FullSystemOperator, reason: str) -> bool:
         return _solve_transport_dense_batch(
-            context=dense_batch_context,
+            context=_make_dense_batch_context(),
             op_probe_ref=op_probe_ref,
             reason=reason,
         )
 
-    if str(solve_method_use).lower() == "dense":
+    if use_rhs3_block_thomas and not dense_batch_done:
+        if solve_transport_block_tridiagonal_batch(
+            context=_make_dense_batch_context(),
+            op_probe_ref=op_matvec_by_index[0],
+            tol=float(tol),
+            atol=float(atol),
+        ):
+            dense_batch_done = True
+        elif emit is not None:
+            emit(0, "solve_v3_transport_matrix_linear_gmres: block-Thomas path unavailable; using standard path")
+
+    if (not dense_batch_done) and str(solve_method_use).lower() == "dense":
         op_probe_ref = op_matvec_by_index[0]
         if _dense_batch_solve_all(op_probe_ref=op_probe_ref, reason="auto dense"):
             dense_batch_done = True
