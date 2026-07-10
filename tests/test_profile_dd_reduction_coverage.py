@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import jax.numpy as jnp
 
-from sfincs_jax.solver import GMRESSolveResult, gmres_result_is_finite
+from sfincs_jax.solvers.krylov import GMRESSolveResult, gmres_result_is_finite
 from sfincs_jax.problems.profile_residual import (
     compose_multilevel_residual_correction_preconditioner,
     safe_preconditioner,

@@ -34,21 +34,16 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+# Dependency-based skips only: the example needs the optional companion
+# packages vmec_jax (new core API with core.boozer_tables) and booz_xform_jax.
+# The starting VMEC input ships with vmec_jax; the example resolves it from
+# the installed package (override with SFINCS_JAX_QA_VMEC_INPUT).
 pytest.importorskip("vmec_jax")
+pytest.importorskip("vmec_jax.core.boozer_tables")
 pytest.importorskip("booz_xform_jax")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = REPO_ROOT / "examples" / "optimize_QA_bootstrap.py"
-
-_VMEC_INPUT = (
-    REPO_ROOT.parent / "vmec_jax" / "examples" / "data"
-    / "input.LandremanPaul2021_QA_lowres"
-)
-if not _VMEC_INPUT.exists() and "SFINCS_JAX_QA_VMEC_INPUT" not in os.environ:
-    pytest.skip(
-        "vmec_jax examples/data (input.LandremanPaul2021_QA_lowres) not found",
-        allow_module_level=True,
-    )
 
 
 @pytest.fixture(scope="module")

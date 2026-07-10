@@ -11,16 +11,6 @@ import scipy.sparse as sp
 
 from sfincs_jax.compare import CompareResult, H5DatasetParity
 from sfincs_jax.geometry.vmec_wout import VmecInterpolation
-from sfincs_jax.operators.profile_device_sparse import (
-    DeviceCSR,
-    DeviceCSRMetadata,
-    MatvecValidationResult,
-)
-from sfincs_jax.operators.profile_kinetic import (
-    RHS1PartialFBlockAssembly,
-    RHS1StructuredFBlockCSRSelection,
-    RHS1StructuredFBlockSelection,
-)
 from sfincs_jax.operators.profile_layout import (
     RHS1BlockCOOBuilder,
     RHS1BlockLayout,
@@ -29,7 +19,6 @@ from sfincs_jax.operators.profile_layout import (
     RHS1MatrixFreeLeastSquaresResidualCorrection,
     build_rhs1_compressed_pitch_layout,
 )
-from sfincs_jax.operators.profile_sparse_pattern import V3SparsePatternSummary
 from sfincs_jax.paths import ResolveResult
 from sfincs_jax.problems.profile_phi1_newton import Phi1FrozenJacobianPolicy, Phi1LineSearchPolicy
 from sfincs_jax.problems.profile_preconditioner_build import (
@@ -47,9 +36,7 @@ from sfincs_jax.problems.transport_finalize import TransportPostsolveDiagnostics
 from sfincs_jax.solvers.diagnostics import compare_solver_profile_files
 from sfincs_jax.solvers.memory_model import LinearSolveMemoryEstimate
 from sfincs_jax.solvers.path_policy import SolverCandidateGate
-from sfincs_jax.solvers.preconditioner_full_fp_csr import RHS1FullCSRKineticPreconditioner
 from sfincs_jax.solvers.preconditioner_pas_composite import RHS1PasFamilyBuilders
-from sfincs_jax.solvers.preconditioner_pas_matrix_free import PasRuntimeChunkPlan, Rhs1PasMatrixFreeResult
 from sfincs_jax.solvers.preconditioner_pas_policy import (
     AdaptiveStationaryResult,
     ConstrainedPASBranchSummary,
@@ -60,11 +47,6 @@ from sfincs_jax.solvers.preconditioner_schur_profile import (
     ActiveNativeFieldSplitSparseCoarsePolicy,
     ActiveNativeStackPolicy,
     ActiveSparseCoarseResidualPolicy,
-)
-from sfincs_jax.solvers.preconditioner_host_sparse import RHS1FullSystemMatrixFreeOperatorAdapter
-from sfincs_jax.solvers.preconditioner_reduced_pmat import (
-    RHS1ReducedPmatEliminationPlan,
-    RHS1ReducedPmatGroup,
 )
 from sfincs_jax.validation.artifacts import (
     ARTIFACT_CLASS_RELEASE_BLOCKING,
@@ -540,201 +522,6 @@ def test_remaining_solver_policy_container_contracts() -> None:
     assert estimate.csr_per_device_nbytes == 115
 
 
-def test_structured_operator_sparse_and_policy_contracts(tmp_path: Path) -> None:
-    layout = _small_layout()
-    operator = _tiny_block_operator()
-    kinetic = RHS1KineticIndices(species=0, x=1, ell=1, theta=0, zeta=0)
-    probe = RHS1BlockPreconditionerProbe(
-        accepted=True,
-        reason="residual_improved",
-        residual_before_norm=2.0,
-        residual_after_norm=0.5,
-        improvement_ratio=4.0,
-        target_residual_norm=1.0,
-        target_ratio=0.5,
-        x_candidate=jnp.asarray([1.0, 2.0]),
-        factor_metadata={"kind": "block_jacobi"},
-    )
-    assert kinetic.x == 1
-    assert probe.to_dict()["factor_metadata"] == {"kind": "block_jacobi"}
-
-    correction = RHS1MatrixFreeLeastSquaresResidualCorrection.from_callbacks(
-        operator=operator,
-        prolong_fn=lambda coarse: jnp.asarray(coarse, dtype=jnp.float64),
-        n_coarse=2,
-        regularization=1.0e-12,
-    )
-    assert correction.n_coarse == 2
-    assert correction.to_dict()["solver_kind"] == "precomputed_normal_inverse"
-
-    metadata = DeviceCSRMetadata(
-        shape=(2, 2),
-        nnz=2,
-        data_dtype="float64",
-        index_dtype="int32",
-        csr_nbytes=40,
-        max_csr_nbytes=80,
-        source="unit",
-        all_arrays_same_device=True,
-    )
-    device_csr = DeviceCSR(
-        data=jnp.asarray([1.0, 2.0]),
-        indices=jnp.asarray([0, 1], dtype=jnp.int32),
-        indptr=jnp.asarray([0, 1, 2], dtype=jnp.int32),
-        shape=(2, 2),
-        metadata=metadata,
-    )
-    matvec_result = np.asarray(device_csr.matvec(jnp.asarray([3.0, 4.0])))
-    matvec_validation = MatvecValidationResult(
-        samples=2,
-        passed=True,
-        max_abs_error=0.0,
-        max_rel_error=0.0,
-        rel_errors=(0.0, 0.0),
-        rtol=1.0e-10,
-        atol=1.0e-12,
-        seed=1,
-    )
-    assert np.allclose(matvec_result, [3.0, 8.0])
-    assert matvec_validation.to_dict()["samples"] == 2
-
-    assembly = RHS1PartialFBlockAssembly(
-        layout=layout,
-        operator=operator,
-        included_terms=("collisionless",),
-        unsupported_terms=(),
-        term_nnz_blocks={"collisionless": operator.nnz_blocks},
-        term_data_nbytes={"collisionless": operator.data_nbytes},
-    )
-    selection = RHS1StructuredFBlockSelection(
-        assembly=assembly,
-        linear_operator=None,
-        selected=False,
-        reason="not_selected_in_contract_test",
-    )
-    csr_selection = RHS1StructuredFBlockCSRSelection(
-        selection=selection,
-        matrix=sp.eye(2, format="csr"),
-        selected=True,
-        reason="selected",
-        cache_hit=False,
-        build_s=0.01,
-        metadata={"nnz": 2},
-    )
-    assert assembly.is_complete
-    assert selection.to_dict()["selected"] is False
-    assert np.allclose(csr_selection.matvec([2.0, 3.0]), [2.0, 3.0])
-
-    compressed = build_rhs1_compressed_pitch_layout(layout)
-    interior = RHS1ReducedPmatGroup("interior", "kinetic", np.asarray([0, 1]))
-    separator = RHS1ReducedPmatGroup("separator", "kinetic", np.asarray([2]))
-    tail = RHS1ReducedPmatGroup("tail", "tail", np.asarray([3]))
-    root = RHS1ReducedPmatGroup("root", "constraint", np.asarray([4]))
-    permutation = np.arange(compressed.reduced_size)
-    symbolic_plan = RHS1ReducedPmatEliminationPlan(
-        layout=compressed,
-        interior_groups=(interior,),
-        separator_group=separator,
-        tail_group=tail,
-        root_group=root,
-        permutation=permutation,
-        inverse_permutation=permutation,
-        selected_separator_ells=(0,),
-        selected_separator_x_indices=(0,),
-        max_interior_group_size=2,
-        max_separator_size=1,
-    )
-    assert interior.dense_lu_nbytes_estimate == 32
-    assert symbolic_plan.metadata()["root_size"] == 1
-
-    sparse_summary = V3SparsePatternSummary(
-        shape=(5, 5),
-        nnz=9,
-        avg_row_nnz=1.8,
-        max_row_nnz=3,
-        include_phi1=False,
-        constraint_scheme=1,
-        has_fp=True,
-        has_pas=False,
-    )
-    assert sparse_summary.to_dict()["nnz"] == 9
-
-    phi1_policy = Phi1FrozenJacobianPolicy(mode="auto", use_cache=True, every=2)
-    line_search = Phi1LineSearchPolicy(step_scale=1.0, factor=0.5, c1=1.0e-4, mode="armijo", maxiter=5)
-    polish = ProjectedResidualPolishOutcome(
-        result="same",
-        accepted=False,
-        full_residual_before=1.0,
-        projected_residual_before=0.5,
-        full_residual_after=0.9,
-        projected_residual_after=0.4,
-    )
-    diagnostics = TransportPostsolveDiagnostics(
-        transport_matrix=np.eye(2),
-        particle_flux_vm_psi_hat=np.asarray([1.0]),
-        heat_flux_vm_psi_hat=np.asarray([2.0]),
-        fsab_flow=np.asarray([0.1]),
-        transport_output_fields={"field": np.asarray([1.0])},
-    )
-    final = TransportRHSFinalizationResult(
-        x_full=jnp.asarray([1.0]),
-        ax_full=jnp.asarray([0.0]),
-        residual_norm=1.0e-12,
-    )
-    assert phi1_policy.every == 2
-    assert line_search.maxiter == 5
-    assert polish.full_residual_after == 0.9
-    assert diagnostics.transport_matrix.shape == (2, 2)
-    assert final.residual_norm == 1.0e-12
-
-    chunk_plan = PasRuntimeChunkPlan(
-        element_count=100,
-        itemsize=8,
-        array_bytes=800,
-        requested_block_size=32,
-        block_size=16,
-        live_array_count=3,
-        estimated_live_array_bytes=2400,
-        max_live_bytes=4096,
-        live_byte_margin=1696,
-        reduction_work_arrays=2,
-        max_reduction_bytes=2048,
-        estimated_reduction_bytes=1600,
-        safe=True,
-        reason="within_budget",
-    )
-    pas_result = Rhs1PasMatrixFreeResult(
-        x=jnp.asarray([1.0]),
-        residual_norm=0.1,
-        initial_residual_norm=1.0,
-        residual_history=(1.0, 0.1),
-        accepted_steps=1,
-        accepted=True,
-        reason="improved",
-        diagnostics={"chunk": chunk_plan.as_metadata()},
-    )
-    assert chunk_plan.as_metadata()["safe"] is True
-    assert pas_result.accepted
-
-    full_csr = RHS1FullCSRKineticPreconditioner(
-        operator=None,
-        native_factor=None,
-        selected=False,
-        kind="x_ell",
-        reason="not_selected",
-        setup_s=0.0,
-        metadata={"budget": "low"},
-    )
-    with pytest.raises(RuntimeError, match="not selected"):
-        full_csr.apply([1.0])
-    assert full_csr.to_dict()["native_factor_available"] is False
-
-    adapter = RHS1FullSystemMatrixFreeOperatorAdapter(op=SimpleNamespace(total_size=3))
-    assert adapter.shape == (3, 3)
-    assert np.asarray(adapter.blocks).shape == (1,)
-
-    resolve_result = ResolveResult(path=tmp_path / "a.nc", tried=(tmp_path / "a.nc",))
-    assert resolve_result.tried[0].name == "a.nc"
 
 
 def test_mapped_grid_vmec_compare_and_pas_builder_contracts() -> None:

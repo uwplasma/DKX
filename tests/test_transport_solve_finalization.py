@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.solver import GMRESSolveResult
+from sfincs_jax.solvers.krylov import GMRESSolveResult
 from sfincs_jax.problems.transport_finalize import (
     TransportKSPIterationRequest,
     TransportRHSFinalizationContext,

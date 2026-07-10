@@ -33,16 +33,6 @@ from sfincs_jax.solvers.preconditioner_full_fp_kinetic import (
     build_rhs1_species_block_preconditioner,
     build_rhs1_species_xblock_preconditioner,
 )
-from sfincs_jax.solvers.preconditioner_full_fp_structured import (
-    build_rhs1_structured_fblock_angular_jacobi_preconditioner,
-    build_rhs1_structured_fblock_fp_coupled_moment_schur_preconditioner,
-    build_rhs1_structured_fblock_fp_lowmode_schur_preconditioner,
-    build_rhs1_structured_fblock_fp_moment_schur_preconditioner,
-    build_rhs1_structured_fblock_fp_radial_jacobi_preconditioner,
-    build_rhs1_structured_fblock_fp_tail_coupled_schur_preconditioner,
-    build_rhs1_structured_fblock_jacobi_preconditioner,
-    build_rhs1_structured_fblock_xi_angular_jacobi_preconditioner,
-)
 from sfincs_jax.solvers.preconditioner_pas_composite import (
     RHS1PasFamilyBuilders,
     compose_preconditioners as _compose_preconditioners,
@@ -67,11 +57,6 @@ from sfincs_jax.solvers.preconditioner_xblock_block_jacobi import (
 from sfincs_jax.solvers.preconditioner_xblock_radial import (
     build_rhs1_xmg_preconditioner,
     build_rhs1_xupwind_preconditioner,
-)
-from sfincs_jax.solvers.preconditioner_xblock_tz_sparse import (
-    build_rhs1_sxblock_tz_sparse_host_preconditioner,
-    build_rhs1_xblock_tz_sparse_preconditioner,
-    compute_rhs1_sxblock_tz_sparse_host_seed,
 )
 from sfincs_jax.operators.profile_system import V3FullSystemOperator, _matvec_shard_axis
 
@@ -1811,41 +1796,8 @@ _build_rhsmode1_xblock_tz_preconditioner = build_rhs1_xblock_tz_preconditioner
 _build_rhsmode1_xblock_tz_lmax_preconditioner = (
     build_rhs1_xblock_tz_lmax_preconditioner
 )
-_build_rhsmode1_xblock_tz_sparse_preconditioner = (
-    build_rhs1_xblock_tz_sparse_preconditioner
-)
-_build_rhsmode1_sxblock_tz_sparse_host_preconditioner = (
-    build_rhs1_sxblock_tz_sparse_host_preconditioner
-)
-_compute_rhsmode1_sxblock_tz_sparse_host_seed = (
-    compute_rhs1_sxblock_tz_sparse_host_seed
-)
 _build_rhsmode1_sxblock_tz_preconditioner = build_rhs1_sxblock_tz_preconditioner
 _build_rhsmode1_zeta_line_preconditioner = build_rhs1_zeta_line_preconditioner
-_build_rhsmode1_structured_fblock_jacobi_preconditioner = (
-    build_rhs1_structured_fblock_jacobi_preconditioner
-)
-_build_rhsmode1_structured_fblock_angular_jacobi_preconditioner = (
-    build_rhs1_structured_fblock_angular_jacobi_preconditioner
-)
-_build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner = (
-    build_rhs1_structured_fblock_xi_angular_jacobi_preconditioner
-)
-_build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner = (
-    build_rhs1_structured_fblock_fp_radial_jacobi_preconditioner
-)
-_build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner = (
-    build_rhs1_structured_fblock_fp_lowmode_schur_preconditioner
-)
-_build_rhsmode1_structured_fblock_fp_moment_schur_preconditioner = (
-    build_rhs1_structured_fblock_fp_moment_schur_preconditioner
-)
-_build_rhsmode1_structured_fblock_fp_coupled_moment_schur_preconditioner = (
-    build_rhs1_structured_fblock_fp_coupled_moment_schur_preconditioner
-)
-_build_rhsmode1_structured_fblock_fp_tail_coupled_schur_preconditioner = (
-    build_rhs1_structured_fblock_fp_tail_coupled_schur_preconditioner
-)
 
 
 def _rhs1_pas_family_builders() -> RHS1PasFamilyBuilders:
@@ -2004,14 +1956,6 @@ def _build_rhs1_preconditioner_from_kind(
             zeta_schwarz_builder=_build_rhsmode1_zeta_schwarz_preconditioner,
             schur_builder=_build_rhsmode1_schur_preconditioner,
             collision_builder=_build_rhsmode1_collision_preconditioner,
-            structured_fblock_jacobi_builder=_build_rhsmode1_structured_fblock_jacobi_preconditioner,
-            structured_fblock_angular_jacobi_builder=_build_rhsmode1_structured_fblock_angular_jacobi_preconditioner,
-            structured_fblock_xi_angular_jacobi_builder=_build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner,
-            structured_fblock_fp_radial_jacobi_builder=_build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner,
-            structured_fblock_fp_lowmode_schur_builder=_build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner,
-            structured_fblock_fp_moment_schur_builder=_build_rhsmode1_structured_fblock_fp_moment_schur_preconditioner,
-            structured_fblock_fp_coupled_moment_schur_builder=_build_rhsmode1_structured_fblock_fp_coupled_moment_schur_preconditioner,
-            structured_fblock_fp_tail_coupled_schur_builder=_build_rhsmode1_structured_fblock_fp_tail_coupled_schur_preconditioner,
             block_builder=_build_rhsmode1_block_preconditioner,
             compose_preconditioners=_compose_preconditioners,
         ),

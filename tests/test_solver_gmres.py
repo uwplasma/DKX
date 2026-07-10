@@ -8,9 +8,9 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-import sfincs_jax.solver as solver_module
+import sfincs_jax.solvers.krylov as solver_module
 from sfincs_jax.solvers.krylov_dispatch import rhs_krylov_method_for_context as _rhs_krylov_method_for_context
-from sfincs_jax.solver import (
+from sfincs_jax.solvers.krylov import (
     _materialize_distributed_input,
     _distributed_solver_kind,
     assemble_dense_matrix_from_matvec,
@@ -1662,7 +1662,7 @@ def test_distributed_solver_sharded_jit_smoke_two_cpu_devices() -> None:
 import numpy as np
 import jax
 import jax.numpy as jnp
-from sfincs_jax.solver import (
+from sfincs_jax.solvers.krylov import (
     distributed_gmres_enabled,
     gmres_solve_distributed,
     gmres_solve_with_residual_distributed,

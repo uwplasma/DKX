@@ -8,7 +8,8 @@ What this example teaches:
   - the differentiable route between the codes:
         boundary dofs -> vmec_jax.core.implicit.solve_implicit (fixed-boundary
         MHD equilibrium with an implicit-adjoint custom VJP)
-        -> traceable single-surface VMEC spectral tables (built here, validated
+        -> traceable single-surface VMEC spectral tables
+           (vmec_jax.core.boozer_tables.boozer_input_tables; validated
            against the host wout tables in tests/test_example_qa_bootstrap.py)
         -> booz_xform_jax (differentiable Boozer transform, |B| spectrum)
         -> FluxSurfaceGeometry.from_fourier (geometryScheme-13 pure-JAX path)
@@ -75,14 +76,13 @@ try:
     from vmec_jax.core import implicit as vmec_implicit
     from vmec_jax.core import optimize as vmec_optimize
     from vmec_jax.core import solver as vmec_solver
-    from vmec_jax.core.fields import magnetic_fields, metric_elements, surface_currents
-    from vmec_jax.core.geometry import half_mesh_jacobian
+    from vmec_jax.core.boozer_tables import boozer_input_tables
     from vmec_jax.core.input import VmecInput
     from vmec_jax.core.wout import wout_from_state, write_wout
 except ImportError as exc:  # optional companion package
     raise SystemExit(
-        "This example needs vmec_jax (new core API). Install it with "
-        "`pip install -e /path/to/vmec_jax`."
+        "This example needs vmec_jax (new core API, with core.boozer_tables). "
+        "Install it with `pip install -e /path/to/vmec_jax`."
     ) from exc
 try:
     from booz_xform_jax.jax_api import booz_xform_jax as booz_transform
@@ -105,9 +105,13 @@ from sfincs_jax.solve import solve as kinetic_solve
 CI = os.environ.get("SFINCS_JAX_CI") == "1"  # shrink resolution for CI
 
 # Starting equilibrium: Landreman & Paul (2021) precise QA, low resolution.
+# Shipped with vmec_jax (examples/data of an editable checkout); resolved from
+# the installed package so no sibling-directory layout is assumed.
+import vmec_jax as _vmec_jax_pkg
+
 VMEC_INPUT = (
-    Path(__file__).resolve().parents[2]
-    / "vmec_jax" / "examples" / "data" / "input.LandremanPaul2021_QA_lowres"
+    Path(_vmec_jax_pkg.__file__).resolve().parents[1]
+    / "examples" / "data" / "input.LandremanPaul2021_QA_lowres"
 )
 VMEC_INPUT = Path(os.environ.get("SFINCS_JAX_QA_VMEC_INPUT", VMEC_INPUT))
 
@@ -281,116 +285,17 @@ print(f"  kinetic flux surface: half-mesh row {S_KINETIC_ROW} of {NS} (s ~ {S_KI
 # ----------------------------------------------------------------------------
 # 3) The differentiable physics chain, written out in this script
 # ----------------------------------------------------------------------------
-# (a) Traceable single-surface VMEC spectral tables from the solved state.
-# This is the workflow-specific glue between the two codes: it evaluates the
-# vmec_jax core field chain (pure JAX), mirrors the reduced [0, pi] theta grid
-# to the full circle with stellarator symmetry, and projects onto the wout
-# cos(m*theta - n*zeta) / sin(...) mode tables that booz_xform_jax consumes.
+# (a) Traceable single-surface VMEC spectral tables from the solved state:
+# the glue between the two codes.  It evaluates the vmec_jax core field chain
+# (pure JAX), mirrors the reduced [0, pi] theta grid to the full circle with
+# stellarator symmetry, and projects onto the wout cos(m*theta - n*zeta) /
+# sin(...) mode tables that booz_xform_jax consumes.
 # tests/test_example_qa_bootstrap.py validates every table against the host
 # wout engine (bmnc/rmnc/zmns to ~1e-15; bsub*/lmns to ~1e-3, the half-mesh
 # finite-difference level) and the resulting Boozer |B| spectrum against the
 # classic host booz_xform run (~3e-6).
-
-
-def boozer_input_tables(state, rt, j):
-    """Traceable wout-convention spectral tables at half-mesh row ``j``."""
-    setup = rt.setup
-    s = jnp.asarray(setup.s_full)
-    sqrt_s = jnp.sqrt(s)
-    s_half_j = 0.5 * (s[j] + s[j - 1])
-    _, geometry = vmec_solver._geometry(state, rt)
-    jacobian = half_mesh_jacobian(geometry, s=s)
-    metrics = metric_elements(geometry, s=s)
-    fields = magnetic_fields(
-        geometry=geometry, jacobian=jacobian, metrics=metrics, trig=rt.trig,
-        s=s, phips=setup.phips, phipf=setup.phipf, chips=setup.chips,
-        signgs=setup.signgs, gamma=rt.gamma, mass=setup.mass,
-        ncurr=setup.ncurr, enclosed_current=setup.icurv,
-    )
-
-    # mirror the reduced symmetric [0, pi] grid to the full theta circle
-    ntheta2 = int(np.shape(fields.total_pressure)[1])
-    nzeta = int(np.shape(fields.total_pressure)[2])
-    ntheta1 = max(2 * (ntheta2 - 1), 1)
-    i_full = np.arange(ntheta1)
-    kk = np.arange(nzeta)
-    i_src = np.where(i_full < ntheta2, i_full, ntheta1 - i_full)
-    k_src = np.where(i_full[:, None] < ntheta2, kk[None, :], (nzeta - kk[None, :]) % nzeta)
-    i_src2 = np.broadcast_to(i_src[:, None], (ntheta1, nzeta))
-    sign_odd = np.where(i_full < ntheta2, 1.0, -1.0)[:, None]
-
-    def mirror(a2d, parity):
-        out = jnp.asarray(a2d)[i_src2, k_src]
-        return out if parity == "even" else out * jnp.asarray(sign_odd)
-
-    # uniform-grid Fourier projection onto the grid-representable modes
-    theta = 2.0 * np.pi * np.arange(ntheta1) / ntheta1
-    zeta = 2.0 * np.pi * np.arange(nzeta) / (NFP * nzeta)
-    m_max, n_max = ntheta1 // 2 - 1, max(nzeta // 2 - 1, 0)
-    ml, nl = [], []
-    for m in range(0, m_max + 1):
-        for n in range(-n_max, n_max + 1):
-            if m == 0 and n < 0:
-                continue
-            ml.append(m)
-            nl.append(n * NFP)
-    xm, xn = np.asarray(ml), np.asarray(nl)
-    ang = theta[:, None, None] * xm[None, None, :] - zeta[None, :, None] * xn[None, None, :]
-    cos_t, sin_t = jnp.asarray(np.cos(ang)), jnp.asarray(np.sin(ang))
-    w = 2.0 / (ntheta1 * nzeta) * np.ones(xm.shape)
-    w[(xm == 0) & (xn == 0)] = 1.0 / (ntheta1 * nzeta)
-    w = jnp.asarray(w)
-
-    def project(f, parity):
-        return w * jnp.einsum("tz,tzm->m", f, cos_t if parity == "even" else sin_t)
-
-    # |B|, B_theta, B_zeta live on the half mesh natively (bcovar.f)
-    bsq2 = 2.0 * (jnp.asarray(fields.total_pressure)[j] - jnp.asarray(fields.pressure)[j])
-    bmnc = project(mirror(jnp.sqrt(jnp.maximum(bsq2, 1e-300)), "even"), "even")
-    bsubumnc = project(mirror(jnp.asarray(fields.bsubu)[j], "even"), "even")
-    bsubvmnc = project(mirror(jnp.asarray(fields.bsubv)[j], "even"), "even")
-
-    # R, Z: full-mesh rows j-1, j -> spectral -> VMEC parity interpolation
-    def phys_row(even, odd, row):
-        return jnp.asarray(even)[row] + sqrt_s[row] * jnp.asarray(odd)[row]
-
-    def spectral_half(even, odd, parity):
-        a = project(mirror(phys_row(even, odd, j - 1), parity), parity)
-        b = project(mirror(phys_row(even, odd, j), parity), parity)
-        m_even = jnp.asarray(xm % 2 == 0)
-        interp_even = 0.5 * (a + b)
-        interp_odd = 0.5 * (a / jnp.maximum(sqrt_s[j - 1], 1e-30) + b / sqrt_s[j]) * jnp.sqrt(s_half_j)
-        return jnp.where(m_even, interp_even, interp_odd)
-
-    rmnc = spectral_half(geometry.R_even, geometry.R_odd, "even")
-    zmns = spectral_half(geometry.Z_even, geometry.Z_odd, "odd")
-
-    # lambda: reconstruct the wout lmns sine table from the (lamscale-scaled)
-    # angular derivatives; the wout convention carries a 1/phips factor.
-    lamscale = jnp.asarray(fields.lamscale)
-    phips_j = jnp.asarray(setup.phips)[j]
-
-    def half_native(even, odd):
-        return 0.5 * (phys_row(even, odd, j - 1) + phys_row(even, odd, j)) * lamscale
-
-    lth = project(mirror(half_native(geometry.dlambda_dtheta_even,
-                                     geometry.dlambda_dtheta_odd), "even"), "even")
-    lze = project(mirror(half_native(geometry.dlambda_dzeta_even,
-                                     geometry.dlambda_dzeta_odd), "even"), "even")
-    m_safe = jnp.asarray(np.where(xm != 0, xm, 1), dtype=jnp.float64)
-    n_safe = jnp.asarray(np.where(xn != 0, xn, 1), dtype=jnp.float64)
-    lmns = jnp.where(jnp.asarray(xm != 0), lth / m_safe,
-                     jnp.where(jnp.asarray(xn != 0), -lze / n_safe, 0.0)) / phips_j
-
-    # iota (add_fluxes.f, ncurr=1) and the Boozer covariant averages G, I
-    iota = (jnp.asarray(fields.chips)[j] / jnp.asarray(setup.phips)[j]
-            if int(setup.ncurr) == 1 else jnp.asarray(setup.iotas)[j])
-    cur = surface_currents(bsubu=fields.bsubu, bsubv=fields.bsubv, trig=rt.trig,
-                           s=s, signgs=setup.signgs)
-    return dict(xm=xm, xn=xn, rmnc=rmnc, zmns=zmns, lmns=lmns, bmnc=bmnc,
-                bsubumnc=bsubumnc, bsubvmnc=bsubvmnc, iota=iota,
-                G=jnp.asarray(cur.bvco)[j], I=jnp.asarray(cur.buco)[j])
-
+# The helper is a public vmec_jax core function (vmec_jax.core.boozer_tables,
+# added by uwplasma/vmec_jax PR #23; imported at the top of this script).
 
 # (b) Boozer |B| spectrum -> canonical kinetic solve -> per-species moments.
 # FluxSurfaceGeometry.from_fourier is the pure-JAX geometry entry point

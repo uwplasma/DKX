@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.solver import GMRESSolveResult
+from sfincs_jax.solvers.krylov import GMRESSolveResult
 import sfincs_jax.problems.transport_solve as transport_solve
 
 

@@ -38,14 +38,6 @@ from sfincs_jax.solvers.krylov import (
 )
 from sfincs_jax.discretization.structured_velocity import factor_block_tridiagonal
 from sfincs_jax.solvers.preconditioner_pas_policy import adaptive_pas_smoother
-from sfincs_jax.solvers.explicit_sparse import (
-    SparseDecision, SparseOperatorBundle, admit_sparse_factor_against_operator, analyze_sparse_symbolic_structure,
-    build_operator_from_pattern, estimate_csr_nbytes, estimate_dense_nbytes, estimate_multifrontal_direct_lu_nbytes,
-    wrap_sparse_factor_with_coarse_correction,
-)
-from sfincs_jax.operators.profile_device_sparse import (
-    device_csr_from_matrix, validate_device_csr_matvec,
-)
 from sfincs_jax.solvers.memory_model import estimate_sparse_pc_memory
 from sfincs_jax.solvers.preconditioner_pas_policy import (
     build_pas_tz_memory_fallback, estimate_rhs1_pas_tz_build_bytes as _estimate_rhs1_pas_tz_build_bytes,
@@ -65,13 +57,6 @@ from sfincs_jax.solvers.preconditioner_pas_policy import (
 )
 from sfincs_jax.solvers.preconditioning import (
     build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,
-)
-from sfincs_jax.operators.profile_kinetic import (
-    select_structured_rhs1_fblock_csr_operator, select_structured_rhs1_fblock_operator,
-)
-from sfincs_jax.operators.profile_full_system import (
-    build_active_projected_rhs1_full_csr_preconditioner, build_direct_active_fortran_v3_reduced_pmat_preconditioner,
-    _try_build_structured_rhs1_full_csr_operator_bundle, solve_structured_rhs1_full_csr,
 )
 from sfincs_jax.problems.profile_policies import (
     RHS1PreconditionerRouteSetupContext,
@@ -118,11 +103,11 @@ from sfincs_jax.problems.profile_dense import (
     RHS1DenseProbeStageContext, RHS1PostKrylovDenseShortcutEvaluationContext,
     RHS1ReducedDenseFallbackAdmissionStageContext, RHS1ReducedDenseFallbackCandidateContext,
     RHS1ReducedDenseFallbackStageContext, RHS1ReducedHostDenseShortcutContext, RHS1ScipyRescueStageContext,
-    RHS1SparseHostSafeSolveContext, RHS1StructuredCSRSolveContext, build_profile_linear_solve_dispatch,
+    RHS1SparseHostSafeSolveContext, build_profile_linear_solve_dispatch,
     rhs1_dense_shortcut_setup_from_env, rhs1_early_dense_shortcut_decision, rhs1_evaluate_post_krylov_dense_shortcut,
     rhs1_fp_preconditioner_probe_kind_from_env, rhs1_host_dense_shortcut_metadata, rhs1_small_gmres_max_from_env, run_rhs1_scipy_rescue_stage,
-    solve_rhs1_structured_full_csr_explicit, solve_rhs1_constraint0_petsc_compat, solve_rhs1_dense_ksp_full, solve_rhs1_dense_ksp_reduced,
-    solve_v3_full_system_structured_csr, try_rhs1_auto_host_solve, try_rhs1_sparse_host_safe_solve,
+    solve_rhs1_constraint0_petsc_compat, solve_rhs1_dense_ksp_full, solve_rhs1_dense_ksp_reduced,
+    try_rhs1_auto_host_solve, try_rhs1_sparse_host_safe_solve,
     run_rhs1_dense_probe_stage, run_rhs1_full_dense_fallback_stage, run_rhs1_full_host_dense_shortcut_stage,
     run_rhs1_reduced_dense_fallback_admission_stage, run_rhs1_reduced_host_dense_shortcut_stage,
 )
@@ -141,71 +126,16 @@ from sfincs_jax.problems.profile_preconditioner_build import (
     _build_rhsmode1_species_block_preconditioner, _build_rhsmode1_sxblock_tz_preconditioner,
     _build_rhsmode1_theta_dd_preconditioner, _build_rhsmode1_theta_line_preconditioner,
     _build_rhsmode1_theta_zeta_preconditioner, _build_rhsmode1_xblock_tz_preconditioner,
-    _build_rhsmode1_xblock_tz_lmax_preconditioner, _build_rhsmode1_xblock_tz_sparse_preconditioner,
+    _build_rhsmode1_xblock_tz_lmax_preconditioner,
     _build_rhsmode1_xmg_preconditioner, _build_rhsmode1_zeta_dd_preconditioner,
     _build_rhsmode1_zeta_line_preconditioner, _build_rhsmode23_tzfft_preconditioner,
     build_rhs1_full_preconditioner,
     build_rhs1_reduced_preconditioner_with_fallback, run_rhs1_full_strong_retry_stage,
     run_rhs1_reduced_strong_retry_stage, setup_rhs1_full_base_preconditioner,
 )
-from sfincs_jax.problems.profile_sparse_direct import (
-    build_host_sparse_direct_factor_from_matvec as _build_host_sparse_direct_factor_from_matvec,
-    build_sparse_jax_preconditioner_from_matvec as _build_sparse_jax_preconditioner_from_matvec,
-    host_physical_memory_mb as _host_physical_memory_mb, host_sparse_direct_polish as _host_sparse_direct_polish,
-    matvec_submatrix as _matvec_submatrix, maybe_rhsmode1_full_sparse_pattern as _maybe_rhsmode1_full_sparse_pattern,
-    rhsmode1_explicit_sparse_pattern_probe_enabled as _rhsmode1_explicit_sparse_pattern_probe_enabled,
-    rhsmode1_sparse_cache_key as _rhsmode1_sparse_cache_key, sparse_factor_cache_key as _sparse_factor_cache_key,
-)
 from sfincs_jax.problems.profile_diagnostics import (
     SparseRescueTailMetadataContext, record_structured_fblock_preconditioner_metadata,
     sparse_rescue_tail_metadata_from_context,
-)
-from sfincs_jax.problems.profile_sparse_solve import (
-    FortranReducedXBlockBackendContext, RequestedSparsePCGMRESBranchContext, SparsePCDirectTailFactorSetupContext,
-    SparsePCDirectTailRescuePolicySetupContext, SparsePCGenericBranchSetupContext, SparsePCFactorPreflightRunContext,
-    SparsePCAutoPreflightRetryStageContext, RHS1FullSparseRetryStageContext,
-    build_sparse_pc_direct_tail_factor_setup, build_sparse_pc_direct_tail_rescue_policy_setup,
-    build_sparse_pc_generic_branch_setup, run_sparse_pc_auto_preflight_retry_stage, run_sparse_pc_factor_preflight,
-    run_rhs1_full_sparse_retry_stage, solve_fortran_reduced_xblock_backend, try_run_requested_sparse_pc_gmres_branch,
-)
-from sfincs_jax.problems.profile_sparse_direct import (
-    ExplicitSparseMinimumNormBranchContext, ExplicitSparseHostDirectBranchContext, SparseHostOrILUFactorBuildContext,
-    SparseHostRetryCandidateContext, SparseJAXRetryPreconditionerBuildContext, build_sparse_host_or_ilu_factor,
-    run_sparse_host_retry_candidate, build_sparse_jax_retry_preconditioner, resolve_sparse_host_or_ilu_factor_controls,
-    solve_explicit_sparse_minimum_norm_branch, solve_explicit_sparse_host_direct_branch,
-)
-from sfincs_jax.problems.profile_sparse_finalization import (
-    SparsePCGMRESContext, finalize_sparse_pc_gmres_bundle, sparse_pc_gmres_finalization_bundle_from_solve_result,
-    run_sparse_pc_gmres_once, run_sparse_pc_gmres_once_for_retry,
-)
-from sfincs_jax.problems.profile_sparse_fortran_reduced import (
-    resolve_fortran_reduced_xblock_factor_policy,
-)
-from sfincs_jax.problems.profile_sparse_policy import (
-    resolve_sparse_pc_gmres_control_policy, resolve_sparse_pc_entry_policy,
-)
-from sfincs_jax.problems.profile_sparse_xblock import (
-    XBlockFirstKrylovAttemptContext, XBlockGlobalCouplingStageContext,
-    XBlockKrylovControlSetupContext, XBlockKrylovProgressCallbacksContext, XBlockKrylovSolveStageContext,
-    XBlockKrylovSolveSpaceContext, XBlockMomentSchurStageContext, XBlockPostKrylovCompletionContext,
-    XBlockPreflightGateContext,
-    XBlockSideProbeStageContext, XBlockSparsePCBranchContext, XBlockTwoLevelStageContext,
-    apply_xblock_global_coupling_stage, apply_xblock_moment_schur_stage,
-    apply_xblock_side_probe_stage,
-    apply_xblock_two_level_stage, build_xblock_local_preconditioner, build_xblock_krylov_matvec_setup,
-    build_xblock_assembled_operator_if_requested, build_xblock_krylov_progress_callbacks, evaluate_xblock_preflight_gate,
-    complete_xblock_post_krylov_stage, prepare_xblock_initial_guess,
-    prepare_xblock_krylov_solve_space, resolve_xblock_krylov_control_setup,
-    resolve_xblock_global_coupling_policy_setup, resolve_xblock_moment_schur_policy_setup,
-    resolve_xblock_seed_policy_setup, resolve_xblock_sparse_pc_branch_setup, resolve_xblock_two_level_policy_setup,
-    SparseXBlockRescueAcceptanceContext,
-    SparseXBlockRescueBuildContext, SparseXBlockRescueSolveContext, accept_sparse_xblock_rescue_candidate,
-    build_sparse_xblock_rescue_preconditioner, run_sparse_xblock_rescue_solve_stage,
-    run_xblock_sparse_pc_branch, run_xblock_krylov_solve_stage,
-    finalize_xblock_assembled_operator_metadata,
-)
-from sfincs_jax.problems.profile_sparse_xblock import (
-    xblock_sparse_pc_final_metadata_state_from_solve_scope, xblock_sparse_pc_final_payload_from_solve_state,
 )
 from sfincs_jax.problems.profile_preconditioner_build import (
     RHS1PostPrimaryMinresCorrectionContext, rhs1_collision_retry_allowed, rhs1_pas_force_strong_ratio_from_env,
@@ -235,17 +165,12 @@ from sfincs_jax.problems.profile_setup import (
     STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS as _STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS,
     ProfileResponseLinearProblemSetupContext, build_rhs1_active_dof_state as _build_rhs1_active_dof_state_compat,
     RHS1ActiveReducedSystemSetupContext, build_rhs1_active_reduced_system_setup,
-    expand_reduced_with_map, fp_pitch_mode_active_indices,
+    expand_reduced_with_map, fp_pitch_mode_active_indices, project_pas_constraint_f,
     materialize_profile_response_linear_problem, reduce_full_with_indices,
     resolve_rhs1_active_problem_setup,
     resolve_rhs1_domain_decomposition_setup, resolve_rhs1_initial_route_setup,
     resolve_rhs1_post_active_solve_policy_setup, resolve_rhs1_recycle_basis_setup,
     resolve_rhs1_reduced_mode_shape_setup,
-)
-from sfincs_jax.solvers import preconditioner_xblock_policy as _rhs1_xblock_policy
-from sfincs_jax.solvers import preconditioner_xblock_policy as _rhs1_xblock_sparse_host_policy
-from sfincs_jax.solvers.preconditioner_xblock_policy import (
-    resolve_rhs1_xblock_sparse_pc_policy,
 )
 from sfincs_jax.solvers.preconditioner_pas_composite import (
     RHS1PasFamilyBuilders, compose_preconditioners as _compose_preconditioners,
@@ -257,15 +182,6 @@ from sfincs_jax.solvers.preconditioner_full_fp_kinetic import (
     build_rhs1_species_block_preconditioner,
     build_rhs1_species_xblock_preconditioner,
 )
-from sfincs_jax.solvers.preconditioner_full_fp_structured import (
-    build_rhs1_structured_fblock_angular_jacobi_preconditioner,
-    build_rhs1_structured_fblock_fp_coupled_moment_schur_preconditioner,
-    build_rhs1_structured_fblock_fp_lowmode_schur_preconditioner,
-    build_rhs1_structured_fblock_fp_moment_schur_preconditioner,
-    build_rhs1_structured_fblock_fp_radial_jacobi_preconditioner,
-    build_rhs1_structured_fblock_fp_tail_coupled_schur_preconditioner,
-    build_rhs1_structured_fblock_jacobi_preconditioner, build_rhs1_structured_fblock_xi_angular_jacobi_preconditioner,
-)
 from sfincs_jax.solvers.preconditioner_xblock_block_jacobi import (
     build_rhs1_sxblock_tz_preconditioner, build_rhs1_xblock_tz_lmax_preconditioner,
     build_rhs1_xblock_tz_preconditioner,
@@ -273,27 +189,11 @@ from sfincs_jax.solvers.preconditioner_xblock_block_jacobi import (
 from sfincs_jax.solvers.preconditioner_xblock_radial import (
     build_rhs1_xmg_preconditioner, build_rhs1_xupwind_preconditioner,
 )
-from sfincs_jax.solvers.preconditioner_xblock_tz_sparse import (
-    assemble_rhsmode1_fp_xblock_tz_sparse_matrix as _assemble_rhsmode1_fp_xblock_tz_sparse_matrix,
-    assemble_selected_theta_tz_operator as _assemble_selected_theta_tz_operator,
-    assemble_selected_zeta_tz_operator as _assemble_selected_zeta_tz_operator,
-    build_rhs1_sxblock_tz_sparse_host_preconditioner,
-    build_rhs1_xblock_tz_sparse_preconditioner,
-    get_rhsmode1_fp_xblock_assembled_host_cache as _get_rhsmode1_fp_xblock_assembled_host_cache,
-    rhsmode1_fp_xblock_assembled_host_allowed as _rhsmode1_fp_xblock_assembled_host_allowed,
-    rhsmode1_fp_xblock_species_decoupled_for_host_assembly as _rhsmode1_fp_xblock_species_decoupled_for_host_assembly,
-    rhsmode1_fp_xblock_tz_sparse_diagonal as _rhsmode1_fp_xblock_tz_sparse_diagonal,
-    rhsmode1_host_factor_probe_ok as _rhsmode1_host_factor_probe_ok,
-    rhsmode1_precond_cache_key as _rhsmode1_precond_cache_key,
-    rhsmode1_xblock_sparse_lu_default_max as _rhsmode1_xblock_sparse_lu_default_max,
-    safe_inverse_diagonal_np as _safe_inverse_diagonal_np,
-)
 from sfincs_jax.solvers.preconditioner_transport_matrix import (
     build_rhsmode23_block_preconditioner, build_rhsmode23_collision_preconditioner,
-    build_rhsmode23_fp_local_geom_line_preconditioner, build_rhsmode23_fp_structured_fblock_lu_preconditioner,
+    build_rhsmode23_fp_local_geom_line_preconditioner,
     build_rhsmode23_fp_tzfft_line_preconditioner, build_rhsmode23_fp_tzfft_line_schur_preconditioner,
-    build_rhsmode23_fp_tzfft_preconditioner, build_rhsmode23_fp_xblock_tz_lu_preconditioner,
-    build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner, build_rhsmode23_sxblock_preconditioner,
+    build_rhsmode23_fp_tzfft_preconditioner, build_rhsmode23_sxblock_preconditioner,
     build_rhsmode23_tzfft_preconditioner, build_rhsmode23_xmg_preconditioner,
 )
 from sfincs_jax.solvers.preconditioner_domain_decomposition import (
@@ -307,14 +207,6 @@ from sfincs_jax.problems.profile_policies import (
 from sfincs_jax.problems.profile_policies import (
     read_bool_env as _rhs1_bool_env, read_float_env as _rhs1_float_env, read_int_env as _rhs1_int_env,
 )
-from sfincs_jax.solvers.preconditioner_reduced_pmat import (
-    _DIRECT_TAIL_STRUCTURED_PC_CACHE, _StructuredHostSparsePreconditionerBundle, _direct_tail_structured_pc_cache_key,
-    _direct_tail_structured_pc_with_cache_metadata, _hash_numpy_array_for_cache, _is_direct_reduced_pmat_pc_kind,
-    _rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb,
-)
-from sfincs_jax.operators.profile_reduced_tail import (
-    _try_build_fortran_reduced_constraint1_direct_tail_bundle,
-)
 from sfincs_jax.problems.profile_solver_diagnostics import (
     rhs1_fortran_stdout_from_env, rhs1_ksp_diagnostics_controls_from_env, rhs1_ksp_history_limits_from_env,
 )
@@ -326,10 +218,6 @@ from sfincs_jax.problems.profile_solver_diagnostics import (
 )
 from sfincs_jax.operators.profile_layout import (
     RHS1ActiveBlockLayout, RHS1ActiveFieldSplitOrdering, RHS1BlockLayout,
-)
-from sfincs_jax.solvers.preconditioner_xblock_coarse import (
-    _rhs1_cap_lowmode_features, _rhs1_low_legendre_index_features, _rhs1_lowmode_angular_features,
-    _rhs1_polynomial_moment_features,
 )
 from sfincs_jax.problems.profile_residual import (
     apply_preconditioned_minres_correction as _apply_preconditioned_minres_correction,
@@ -400,10 +288,6 @@ from sfincs_jax.problems.profile_policies import (
     rhs1_host_sparse_skip_dense_ratio as _rhs1_host_sparse_skip_dense_ratio_impl,
     rhs1_structured_full_csr_auto_allowed as _rhs1_structured_full_csr_auto_allowed_impl,
     rhsmode1_sparse_operator_preconditioned_rescue_allowed_current_backend as _rhsmode1_sparse_operator_preconditioned_rescue_allowed,
-)
-from sfincs_jax.solvers.explicit_sparse import (
-    host_direct_solve_with_refinement as _host_direct_solve_with_refinement_impl,
-    host_sparse_direct_solve_with_refinement as _host_sparse_direct_solve_with_refinement_impl,
 )
 from sfincs_jax.problems.transport_policies import (
     TransportPreconditionerContext, TransportPreconditionerDispatchBuilders, TransportRuntimePolicy,
@@ -476,12 +360,6 @@ from sfincs_jax.solvers.preconditioning import (
     _build_rhsmode1_preconditioner_operator_zeta_dd, _build_rhsmode1_preconditioner_operator_zeta_line,
     _build_transport_preconditioner_operator_fortran_reduced, _build_transport_preconditioner_operator_point,
 )
-from sfincs_jax.solvers.explicit_sparse import (
-    inverse_permutation as _inverse_permutation, triangular_solve_lower_csr_rows as _triangular_solve_lower_csr_rows,
-    triangular_solve_lower_padded as _triangular_solve_lower_padded,
-    triangular_solve_upper_csr_rows as _triangular_solve_upper_csr_rows,
-    triangular_solve_upper_padded as _triangular_solve_upper_padded,
-)
 from sfincs_jax.solvers.preconditioning import (
     hash_array as _hash_array, precond_chunk_cols as _precond_chunk_cols,
     rhs_mode1_precond_cache_key as _rhs_mode1_precond_cache_key_impl,
@@ -519,22 +397,11 @@ from sfincs_jax.solvers.preconditioning import (
     set_precond_size_hint as _set_precond_size_hint, sparse_structural_tol as _sparse_structural_tol,
     use_solver_jit as _use_solver_jit,
 )
-from sfincs_jax.solvers.preconditioner_host_sparse import (
-    RHS1FullSystemMatrixFreeOperatorAdapter as _RHS1FullSystemMatrixFreeOperatorAdapter,
-    build_sparse_ilu_from_matvec as _build_sparse_ilu_from_matvec,
-    factorize_sparse_matrix_csr_host as _factorize_sparse_matrix_csr_host,
-)
-from sfincs_jax.problems.transport_linear_system import (
-    _build_rhsmode23_direct_pmat_physics_coarse_basis, _try_build_rhsmode23_fp_direct_active_operator_bundle,
-    _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle,
-)
 from sfincs_jax.problems.transport_solve import (
-    _build_rhsmode23_fp_direct_active_block_schur_preconditioner,
-    _build_rhsmode23_fp_fortran_reduced_lu_preconditioner,
     _transport_precond_cache_key,
 )
 from sfincs_jax.operators.profile_system import (
-    _source_basis_constraint_scheme_1, _matvec_shard_axis, sharding_constraints,
+    _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1, _matvec_shard_axis, sharding_constraints,
 )
 from sfincs_jax.profiling import Timer
 from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
@@ -549,12 +416,6 @@ from sfincs_jax.problems.profile_solver_diagnostics import (
 )
 from sfincs_jax.problems.transport_finalize import (
     V3TransportMatrixSolveResult,
-)
-from sfincs_jax.operators.profile_sparse_pattern import (
-    estimate_v3_full_system_conservative_sparsity_summary, summarize_v3_sparse_pattern,
-    v3_full_system_conservative_sparsity_pattern, v3_full_system_conservative_sparsity_pattern_for_indices,
-    v3_full_system_fortran_reduced_preconditioner_sparsity_pattern,
-    v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices,
 )
 from sfincs_jax.profiling import _rss_mb, maybe_profiler
 
@@ -576,8 +437,6 @@ def _rhs1_active_reduced_residual_diagnostics(
     }
 
 
-_rhs1_xblock_precondition_side = _rhs1_xblock_policy.rhs1_xblock_precondition_side
-_rhs1_xblock_gmres_restart = _rhs1_xblock_policy.rhs1_xblock_gmres_restart
 build_rhs1_active_dof_state = _build_rhs1_active_dof_state_compat
 _rhs1_dkes_gmres_budget = _solver_path_policy.rhs1_dkes_gmres_budget
 _rhs1_residual_needs_rescue = _solver_path_policy.rhs1_residual_needs_rescue
@@ -633,12 +492,8 @@ _transport_host_gmres_progress_every = (
 _host_sparse_direct_refine_steps = _host_sparse_direct_refine_steps_impl
 
 
-_host_sparse_direct_solve_with_refinement = (
-    _host_sparse_direct_solve_with_refinement_impl
-)
-
-
-_host_direct_solve_with_refinement = _host_direct_solve_with_refinement_impl
+def _rhsmode1_precond_cache_key(op: V3FullSystemOperator, kind: str) -> tuple[object, ...]:
+    return _rhs_mode1_precond_cache_key_impl(op, kind, precond_dtype=_precond_dtype())
 
 
 _rhsmode1_host_sparse_skip_dense_ratio = _rhs1_host_sparse_skip_dense_ratio_impl
@@ -711,15 +566,6 @@ _build_rhsmode23_fp_tzfft_line_schur_preconditioner = (
 )
 _build_rhsmode23_fp_local_geom_line_preconditioner = (
     build_rhsmode23_fp_local_geom_line_preconditioner
-)
-_build_rhsmode23_fp_xblock_tz_lu_preconditioner = (
-    build_rhsmode23_fp_xblock_tz_lu_preconditioner
-)
-_build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner = (
-    build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner
-)
-_build_rhsmode23_fp_structured_fblock_lu_preconditioner = (
-    build_rhsmode23_fp_structured_fblock_lu_preconditioner
 )
 
 
@@ -1008,65 +854,17 @@ def solve_v3_full_system_linear_gmres(
     )
     if sparse_host_safe_result is not None:
         return sparse_host_safe_result
-    sparse_pc_gmres_result = try_run_requested_sparse_pc_gmres_branch(
-        RequestedSparsePCGMRESBranchContext({**globals(), **locals()})
-    )
-    if sparse_pc_gmres_result is not None:
-        return sparse_pc_gmres_result
-    if solve_method_kind_explicit in _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS:
-        sparse_minimum_norm_payload = solve_explicit_sparse_minimum_norm_branch(
-            ExplicitSparseMinimumNormBranchContext(
-                op=op,
-                rhs=rhs,
-                solve_method_kind=solve_method_kind_explicit,
-                differentiable=differentiable,
-                use_active_dof=bool(use_active_dof_mode),
-                tol=float(tol),
-                atol=float(atol),
-                maxiter=maxiter,
-                rhs_norm=float(rhs_norm),
-                backend=jax.default_backend(),
-                env=os.environ,
-                emit=emit,
-                build_pattern=v3_full_system_conservative_sparsity_pattern,
-                summarize_pattern=summarize_v3_sparse_pattern,
-                apply_cached_operator=apply_v3_full_system_operator_cached,
-                build_operator_from_pattern=build_operator_from_pattern,
-            )
-        )
-        return v3_linear_solve_result_from_payload(
-            op=op,
-            rhs=rhs,
-            payload=sparse_minimum_norm_payload,
-        )
-    if solve_method_kind_explicit in _SPARSE_HOST_DIRECT_SOLVE_METHODS:
-        sparse_host_direct_payload = solve_explicit_sparse_host_direct_branch(
-            ExplicitSparseHostDirectBranchContext(
-                op=op,
-                rhs=rhs,
-                differentiable=differentiable,
-                use_active_dof=bool(use_active_dof_mode),
-                tol=float(tol),
-                atol=float(atol),
-                rhs_norm=float(rhs_norm),
-                refine_steps=_host_sparse_direct_refine_steps(
-                    "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
-                    default=2,
-                ),
-                emit=emit,
-                build_pattern=v3_full_system_conservative_sparsity_pattern,
-                summarize_pattern=summarize_v3_sparse_pattern,
-                apply_operator=apply_v3_full_system_operator,
-                build_host_sparse_direct_factor_from_matvec=(
-                    _build_host_sparse_direct_factor_from_matvec
-                ),
-                direct_solve_with_refinement=_host_direct_solve_with_refinement,
-            )
-        )
-        return v3_linear_solve_result_from_payload(
-            op=op,
-            rhs=rhs,
-            payload=sparse_host_direct_payload,
+    if solve_method_kind_explicit in (
+        _SPARSE_HOST_PC_GMRES_SOLVE_METHODS
+        | _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS
+        | _SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS
+        | _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS
+        | _SPARSE_HOST_DIRECT_SOLVE_METHODS
+        | _STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS
+    ):
+        raise NotImplementedError(
+            f"solve_method={solve_method!r} was removed with the legacy sparse solver "
+            "families; use 'auto'."
         )
     rhs1_route_setup = resolve_rhs1_preconditioner_route_setup(
         RHS1PreconditionerRouteSetupContext({**globals(), **locals()})
@@ -1686,66 +1484,6 @@ def solve_v3_full_system_linear_gmres(
                     backend=str(jax.default_backend()),
                 )
             )
-        sparse_operator_admission = rhs1_sparse_operator_admission(
-            operator_mode=sparse_operator_mode,
-            use_matvec=bool(sparse_use_matvec),
-            has_fp=op.fblock.fp is not None,
-            rhs_mode=int(op.rhs_mode),
-            include_phi1=bool(op.include_phi1),
-            use_implicit=bool(use_implicit),
-            allow_nondiff=bool(sparse_allow_nondiff),
-            active_size=int(active_size),
-            sparse_max_size=int(sparse_max_size),
-        )
-        sparse_operator_use = bool(sparse_operator_admission.use_sparse_operator)
-        if emit is not None:
-            for _level, _message in sparse_operator_admission.messages:
-                emit(_level, _message)
-        if sparse_operator_use:
-            try:
-                cache_key = _rhsmode1_sparse_cache_key(
-                    op,
-                    kind="sparse_operator",
-                    active_size=int(active_size),
-                    use_active_dof_mode=True,
-                    use_pas_projection=use_pas_projection,
-                    drop_tol=sparse_drop_tol,
-                    drop_rel=sparse_drop_rel,
-                    ilu_drop_tol=sparse_ilu_drop_tol,
-                    fill_factor=sparse_ilu_fill,
-                )
-                a_csr_full, _a_csr_drop, _ilu, _a_dense, _l_dense, _u_dense, _l_unit = (
-                    _build_sparse_ilu_from_matvec(
-                        matvec=mv_reduced,
-                        n=int(active_size),
-                        dtype=rhs_reduced.dtype,
-                        cache_key=cache_key,
-                        drop_tol=sparse_drop_tol,
-                        drop_rel=sparse_drop_rel,
-                        ilu_drop_tol=sparse_ilu_drop_tol,
-                        fill_factor=sparse_ilu_fill,
-                        build_dense_factors=False,
-                        build_jax_factors=False,
-                        build_ilu=False,
-                        store_dense=False,
-                        emit=emit,
-                    )
-                )
-
-                def _mv_sparse(v: jnp.ndarray) -> jnp.ndarray:
-                    x_np = np.asarray(v, dtype=np.float64).reshape((-1,))
-                    y_np = a_csr_full @ x_np
-                    return jnp.asarray(y_np, dtype=jnp.float64)
-
-                mv_reduced = _mv_sparse
-                if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: using sparse operator matvec",
-                    )
-            except Exception as exc:  # noqa: BLE001
-                if emit is not None:
-                    emit(1, f"sparse_operator: failed ({type(exc).__name__}: {exc})")
         if cs0_petsc_compat and solve_method_kind not in {"dense", "dense_ksp"}:
             try:
                 compat_config = rhs1_constraint0_petsc_compat_config_from_env(
@@ -2588,275 +2326,6 @@ def solve_v3_full_system_linear_gmres(
             ):
                 emit(_level, _message)
         skip_global_sparse_after_xblock = False
-        if sparse_enabled and float(res_reduced.residual_norm) > target_reduced:
-            if sparse_xblock_rescue_active:
-                sparse_xblock_rescue_attempted = True
-                sparse_xblock_rescue_reason = "started"
-                try:
-                    sparse_xblock_build = build_sparse_xblock_rescue_preconditioner(
-                        context=SparseXBlockRescueBuildContext(
-                            op=op,
-                            reduce_full=reduce_full,
-                            expand_reduced=expand_reduced,
-                            active_size=int(active_size),
-                            preconditioner_species=int(preconditioner_species),
-                            preconditioner_x=int(preconditioner_x),
-                            preconditioner_xi=int(preconditioner_xi),
-                            use_implicit=bool(use_implicit),
-                            drop_tol=float(sparse_drop_tol),
-                            drop_rel=float(sparse_drop_rel),
-                            ilu_drop_tol=float(sparse_ilu_drop_tol),
-                            fill_factor=float(sparse_ilu_fill),
-                            emit=emit,
-                            mark=_mark,
-                            assembled_host_allowed=_rhsmode1_fp_xblock_assembled_host_allowed,
-                            builder=_build_rhsmode1_xblock_tz_sparse_preconditioner,
-                        )
-                    )
-                    precond_sparse_xblock = sparse_xblock_build.preconditioner
-                    sparse_xblock_preconditioner_xi = int(
-                        sparse_xblock_build.preconditioner_xi
-                    )
-                    assembled_host_fp = bool(
-                        sparse_xblock_build.force_assembled_host_fp
-                    )
-                    precond_sparse_xblock_current = precond_sparse_xblock
-                    sparse_xblock_rescue_built = True
-                    sparse_xblock_rescue_assembled_host_fp = bool(assembled_host_fp)
-                    sparse_xblock_rescue_preconditioner_xi = int(
-                        sparse_xblock_preconditioner_xi
-                    )
-                    sparse_xblock_solve = run_sparse_xblock_rescue_solve_stage(
-                        context=SparseXBlockRescueSolveContext(
-                            preconditioner=precond_sparse_xblock,
-                            rhs=rhs_reduced,
-                            matvec=mv_reduced,
-                            current_result=res_reduced,
-                            target=float(target_reduced),
-                            tol=float(tol),
-                            atol=float(atol),
-                            restart=int(restart),
-                            maxiter=maxiter,
-                            precondition_side=gmres_precond_side,
-                            active_size=int(active_size),
-                            use_implicit=bool(use_implicit),
-                            assembled_host_fp=bool(assembled_host_fp),
-                            emit=emit,
-                            mark=_mark,
-                            solve_linear=_solve_linear,
-                            host_gmres_solver=gmres_solve_with_history_scipy,
-                        )
-                    )
-                    res_sparse_xblock = sparse_xblock_solve.result
-                    sparse_xblock_rescue_reason = str(sparse_xblock_solve.reason)
-                    if sparse_xblock_solve.candidate_residual is not None:
-                        sparse_xblock_rescue_candidate_residual = float(
-                            sparse_xblock_solve.candidate_residual
-                        )
-                    if sparse_xblock_solve.seed_residual is not None:
-                        explicit_fp_xblock_seed_residual = float(
-                            sparse_xblock_solve.seed_residual
-                        )
-                        sparse_xblock_rescue_seed_residual = float(
-                            sparse_xblock_solve.seed_residual
-                        )
-                    if sparse_xblock_solve.seed_improvement_ratio is not None:
-                        explicit_fp_xblock_seed_improvement_ratio = float(
-                            sparse_xblock_solve.seed_improvement_ratio
-                        )
-                        sparse_xblock_rescue_seed_improvement_ratio = float(
-                            sparse_xblock_solve.seed_improvement_ratio
-                        )
-                    if sparse_xblock_solve.seed_accept_ratio is not None:
-                        sparse_xblock_rescue_seed_accept_ratio = float(
-                            sparse_xblock_solve.seed_accept_ratio
-                        )
-                    if sparse_xblock_solve.seed_refine_steps is not None:
-                        sparse_xblock_rescue_seed_refine_steps = int(
-                            sparse_xblock_solve.seed_refine_steps
-                        )
-                    if sparse_xblock_solve.seed_refines_performed is not None:
-                        sparse_xblock_rescue_seed_refines_performed = int(
-                            sparse_xblock_solve.seed_refines_performed
-                        )
-                    sparse_xblock_acceptance = accept_sparse_xblock_rescue_candidate(
-                        context=SparseXBlockRescueAcceptanceContext(
-                            current_result=res_reduced,
-                            candidate_result=res_sparse_xblock,
-                            reason=sparse_xblock_rescue_reason,
-                            assembled_host_fp=bool(assembled_host_fp),
-                            use_implicit=bool(use_implicit),
-                            replay_state=ksp_replay,
-                            matvec=mv_reduced,
-                            rhs=rhs_reduced,
-                            preconditioner=precond_sparse_xblock,
-                            precondition_side=gmres_precond_side,
-                            solver_kind=_solver_kind("incremental")[0],
-                            restart=int(restart),
-                            maxiter=maxiter,
-                            record_replay_problem=rhs1_record_ksp_replay_problem,
-                        )
-                    )
-                    res_reduced = sparse_xblock_acceptance.result
-                    sparse_xblock_rescue_candidate_accepted = bool(
-                        sparse_xblock_acceptance.accepted
-                    )
-                    sparse_xblock_rescue_reason = str(sparse_xblock_acceptance.reason)
-                    explicit_fp_xblock_seed_used = bool(
-                        sparse_xblock_acceptance.explicit_seed_used
-                    )
-                    if sparse_xblock_acceptance.candidate_residual is not None:
-                        sparse_xblock_rescue_candidate_residual = float(
-                            sparse_xblock_acceptance.candidate_residual
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    sparse_xblock_rescue_error = f"{type(exc).__name__}: {exc}"
-                    sparse_xblock_rescue_reason = "exception"
-                    if emit is not None:
-                        emit(1, f"xblock_sparse: failed ({type(exc).__name__}: {exc})")
-            else:
-                sparse_xblock_rescue_reason = "inactive_by_policy"
-            skip_global_sparse_after_xblock = (
-                _rhsmode1_skip_global_sparse_after_xblock_allowed(
-                    op=op,
-                    active_size=int(active_size),
-                    residual_norm=float(res_reduced.residual_norm),
-                    target=float(target_reduced),
-                    used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
-                    used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
-                    use_implicit=bool(use_implicit),
-                )
-            )
-            if (
-                large_cpu_sparse_rescue_active
-                and (not sparse_exact_lu)
-                and _rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed(
-                    op=op,
-                    active_size=int(active_size),
-                    preconditioner_x=int(preconditioner_x),
-                    used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
-                    used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
-                    xblock_seed_residual=float(explicit_fp_xblock_seed_residual),
-                    xblock_seed_improvement_ratio=float(
-                        explicit_fp_xblock_seed_improvement_ratio
-                    ),
-                    use_implicit=bool(use_implicit),
-                )
-            ):
-                sparse_exact_lu = True
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: promoting large CPU sparse rescue to exact LU "
-                        f"after x-block seed (residual={float(explicit_fp_xblock_seed_residual):.3e} "
-                        f"improvement={float(explicit_fp_xblock_seed_improvement_ratio):.1f}x)",
-                    )
-            if skip_global_sparse_after_xblock and emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: skipping global sparse rescue after x-block seed "
-                    f"(residual={float(res_reduced.residual_norm):.3e})",
-                )
-            if float(res_reduced.residual_norm) > target_reduced and (
-                not skip_global_sparse_after_xblock
-            ):
-                reduced_sparse_retry = run_rhs1_full_sparse_retry_stage(
-                    RHS1FullSparseRetryStageContext(
-                        op=op,
-                        result=res_reduced,
-                        residual_vec=residual_vec,
-                        rhs=rhs_reduced,
-                        matvec=mv_reduced,
-                        target=float(target_reduced),
-                        tol=float(tol),
-                        atol=float(atol),
-                        restart=int(restart),
-                        maxiter=maxiter,
-                        precondition_side=gmres_precond_side,
-                        sparse_kind_use=sparse_kind_use,
-                        sparse_exact_lu=bool(sparse_exact_lu),
-                        sparse_drop_tol=float(sparse_drop_tol),
-                        sparse_drop_rel=float(sparse_drop_rel),
-                        sparse_ilu_drop_tol=float(sparse_ilu_drop_tol),
-                        sparse_ilu_fill=float(sparse_ilu_fill),
-                        sparse_ilu_dense_max=int(sparse_ilu_dense_max),
-                        sparse_dense_cache_max=int(sparse_dense_cache_max),
-                        sparse_use_matvec=bool(sparse_use_matvec),
-                        sparse_jax_reg=float(sparse_jax_config.reg),
-                        sparse_jax_omega=float(sparse_jax_config.omega),
-                        sparse_jax_sweeps=int(sparse_jax_config.sweeps),
-                        use_implicit=bool(use_implicit),
-                        use_pas_projection=bool(use_pas_projection),
-                        active_size=int(active_size),
-                        large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue_active),
-                        rhs1_polish_enabled=bool(rhs1_polish_enabled),
-                        emit=emit,
-                        mark=_mark,
-                        cache_key_builder=_rhsmode1_sparse_cache_key,
-                        precond_dtype=_precond_dtype,
-                        build_sparse_jax_preconditioner_from_matvec=(
-                            _build_sparse_jax_preconditioner_from_matvec
-                        ),
-                        host_sparse_direct_allowed=_rhsmode1_host_sparse_direct_allowed,
-                        sparse_operator_preconditioned_rescue_allowed=(
-                            _rhsmode1_sparse_operator_preconditioned_rescue_allowed
-                        ),
-                        build_point_preconditioner_operator=(
-                            _build_rhsmode1_preconditioner_operator_point
-                        ),
-                        apply_cached_operator=apply_v3_full_system_operator_cached,
-                        host_sparse_factor_dtype=_host_sparse_factor_dtype,
-                        sparse_factor_cache_key=_sparse_factor_cache_key,
-                        explicit_sparse_host_direct_allowed=(
-                            _rhsmode1_explicit_sparse_host_direct_allowed
-                        ),
-                        maybe_full_sparse_pattern=_maybe_rhsmode1_full_sparse_pattern,
-                        build_host_sparse_direct_factor_from_matvec=(
-                            _build_host_sparse_direct_factor_from_matvec
-                        ),
-                        build_sparse_ilu_from_matvec=_build_sparse_ilu_from_matvec,
-                        host_sparse_direct_refine_steps=_host_sparse_direct_refine_steps,
-                        direct_solve_with_refinement=(
-                            _host_direct_solve_with_refinement
-                        ),
-                        ilu_solve_with_refinement=(
-                            _host_sparse_direct_solve_with_refinement
-                        ),
-                        host_sparse_direct_polish=_host_sparse_direct_polish,
-                        parse_polish_gmres_config=rhs1_parse_polish_gmres_config,
-                        gmres_solver=gmres_solve_with_history_scipy,
-                        solve_linear_with_residual=_solve_linear,
-                        run_measured_linear_candidate=(
-                            rhs1_run_measured_linear_candidate_and_update_replay
-                        ),
-                        accept_sparse_retry_candidate=(
-                            rhs1_accept_sparse_retry_candidate_and_update_replay
-                        ),
-                        replay_state=ksp_replay,
-                        solver_kind=_solver_kind("incremental")[0],
-                        peak_rss_mb=_rss_mb,
-                        sparse_ilu_cache=_RHSMODE1_SPARSE_ILU_CACHE,
-                        problem_size=int(active_size),
-                        cache_active_size=int(active_size),
-                        scope="reduced",
-                        use_active_dof_mode=True,
-                        force_host_sparse_direct=bool(large_cpu_sparse_rescue_active),
-                        enable_operator_preconditioned_rescue=False,
-                        require_lower_diag=False,
-                        measured_returns_residual_vec=False,
-                        implicit_solver_returns_residual_vec=False,
-                        accept_candidate_residual_vec=False,
-                        compute_scipy_residual_vec=False,
-                    )
-                )
-                res_reduced = reduced_sparse_retry.result
-                residual_vec = reduced_sparse_retry.residual_vec
-                if reduced_sparse_retry.dense_matrix_cache is not None:
-                    dense_matrix_cache = reduced_sparse_retry.dense_matrix_cache
-                host_sparse_direct_used = (
-                    host_sparse_direct_used
-                    or reduced_sparse_retry.host_sparse_direct_used
-                )
         residual_vec, residual_norm_true, residual_norm_check = (
             rhs1_replay_left_preconditioned_residual_norms(
                 result=res_reduced,
@@ -3056,7 +2525,26 @@ def solve_v3_full_system_linear_gmres(
             res_reduced = scipy_rescue.result
             rhsmode1_general_metadata.update(scipy_rescue.metadata)
         if use_pas_projection:
-            f_full = _expand_active_f(res_reduced.x)
+            # Rebuild the PAS-projection closures the reduced-system setup uses
+            # (profile_setup.build_rhs1_active_reduced_system_setup); the driver
+            # additionally recomputes the constraint-scheme-2 source column from
+            # the projected residual, which the setup's expand_reduced omits.
+            _fs_factor = _fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat)
+            _fs_sum = jnp.sum(_fs_factor)
+            fs_sum_safe = jnp.where(_fs_sum != 0, _fs_sum, jnp.asarray(1.0, dtype=jnp.float64))
+            ix0 = _ix_min(bool(op.point_at_x0))
+            _mask_x = (jnp.arange(int(op.n_x)) >= ix0).astype(jnp.float64)
+
+            def _project_pas_f(f_flat: jnp.ndarray) -> jnp.ndarray:
+                return project_pas_constraint_f(
+                    f_flat,
+                    f_shape=op.fblock.f_shape,
+                    fs_factor=_fs_factor,
+                    fs_sum_safe=fs_sum_safe,
+                    mask_x=_mask_x,
+                )
+
+            f_full = expand_reduced_with_map(res_reduced.x, full_to_active_jnp)
             f_full = _project_pas_f(f_full)
             if int(op.extra_size) > 0:
                 zeros_extra = jnp.zeros((int(op.extra_size),), dtype=jnp.float64)
@@ -3648,87 +3136,6 @@ def solve_v3_full_system_linear_gmres(
 
         dense_matrix_cache: np.ndarray | None = None
         host_sparse_direct_used = False
-        if sparse_enabled and float(result.residual_norm) > target:
-            full_sparse_retry = run_rhs1_full_sparse_retry_stage(
-                RHS1FullSparseRetryStageContext(
-                    op=op,
-                    result=result,
-                    residual_vec=residual_vec,
-                    rhs=rhs,
-                    matvec=mv,
-                    target=float(target),
-                    tol=float(tol),
-                    atol=float(atol),
-                    restart=int(restart),
-                    maxiter=maxiter,
-                    precondition_side=gmres_precond_side,
-                    sparse_kind_use=sparse_kind_use,
-                    sparse_exact_lu=bool(sparse_exact_lu),
-                    sparse_drop_tol=float(sparse_drop_tol),
-                    sparse_drop_rel=float(sparse_drop_rel),
-                    sparse_ilu_drop_tol=float(sparse_ilu_drop_tol),
-                    sparse_ilu_fill=float(sparse_ilu_fill),
-                    sparse_ilu_dense_max=int(sparse_ilu_dense_max),
-                    sparse_dense_cache_max=int(sparse_dense_cache_max),
-                    sparse_use_matvec=bool(sparse_use_matvec),
-                    sparse_jax_reg=float(sparse_jax_config.reg),
-                    sparse_jax_omega=float(sparse_jax_config.omega),
-                    sparse_jax_sweeps=int(sparse_jax_config.sweeps),
-                    use_implicit=bool(use_implicit),
-                    use_pas_projection=bool(use_pas_projection),
-                    active_size=int(active_size),
-                    large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue_full),
-                    rhs1_polish_enabled=bool(rhs1_polish_enabled),
-                    emit=emit,
-                    mark=_mark,
-                    cache_key_builder=_rhsmode1_sparse_cache_key,
-                    precond_dtype=_precond_dtype,
-                    build_sparse_jax_preconditioner_from_matvec=(
-                        _build_sparse_jax_preconditioner_from_matvec
-                    ),
-                    host_sparse_direct_allowed=_rhsmode1_host_sparse_direct_allowed,
-                    sparse_operator_preconditioned_rescue_allowed=(
-                        _rhsmode1_sparse_operator_preconditioned_rescue_allowed
-                    ),
-                    build_point_preconditioner_operator=(
-                        _build_rhsmode1_preconditioner_operator_point
-                    ),
-                    apply_cached_operator=apply_v3_full_system_operator_cached,
-                    host_sparse_factor_dtype=_host_sparse_factor_dtype,
-                    sparse_factor_cache_key=_sparse_factor_cache_key,
-                    explicit_sparse_host_direct_allowed=(
-                        _rhsmode1_explicit_sparse_host_direct_allowed
-                    ),
-                    maybe_full_sparse_pattern=_maybe_rhsmode1_full_sparse_pattern,
-                    build_host_sparse_direct_factor_from_matvec=(
-                        _build_host_sparse_direct_factor_from_matvec
-                    ),
-                    build_sparse_ilu_from_matvec=_build_sparse_ilu_from_matvec,
-                    host_sparse_direct_refine_steps=_host_sparse_direct_refine_steps,
-                    direct_solve_with_refinement=_host_direct_solve_with_refinement,
-                    ilu_solve_with_refinement=(
-                        _host_sparse_direct_solve_with_refinement
-                    ),
-                    host_sparse_direct_polish=_host_sparse_direct_polish,
-                    parse_polish_gmres_config=rhs1_parse_polish_gmres_config,
-                    gmres_solver=gmres_solve_with_history_scipy,
-                    solve_linear_with_residual=_solve_linear_with_residual,
-                    run_measured_linear_candidate=(
-                        rhs1_run_measured_linear_candidate_and_update_replay
-                    ),
-                    accept_sparse_retry_candidate=(
-                        rhs1_accept_sparse_retry_candidate_and_update_replay
-                    ),
-                    replay_state=ksp_replay,
-                    solver_kind=_solver_kind("incremental")[0],
-                    peak_rss_mb=_rss_mb,
-                    sparse_ilu_cache=_RHSMODE1_SPARSE_ILU_CACHE,
-                )
-            )
-            result = full_sparse_retry.result
-            residual_vec = full_sparse_retry.residual_vec
-            dense_matrix_cache = full_sparse_retry.dense_matrix_cache
-            host_sparse_direct_used = bool(full_sparse_retry.host_sparse_direct_used)
         residual_vec, residual_norm_true, residual_norm_check = (
             rhs1_replay_left_preconditioned_residual_norms(
                 result=result,

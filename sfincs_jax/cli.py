@@ -341,6 +341,50 @@ def _cmd_run_fortran(args: argparse.Namespace) -> int:
     return 0
 
 
+def deck_requires_legacy_pipeline(nml) -> str | None:
+    """Reason an RHSMode=1 deck must run on the retained legacy pipeline, or ``None``.
+
+    The canonical stack (:func:`sfincs_jax.run.run_profile`) owns the supported
+    RHSMode=1 surface: PAS/Fokker-Planck collisions, DKES or full trajectories,
+    constraint schemes 0/1/2, geometry schemes 1-5/11-13.  The legacy
+    ``problems``/``outputs`` pipeline remains the interim owner for the
+    explicitly deferred features (plan_final.md "Explicit Deferred Items");
+    this predicate mirrors the refusal list of
+    :func:`sfincs_jax.drift_kinetic.kinetic_operator_from_namelist` so the CLI
+    can route decks without building the operator twice.
+    """
+    general = nml.group("general")
+    phys = nml.group("physicsParameters")
+    other = nml.group("otherNumericalParameters")
+    export_f = nml.group("export_f")
+
+    rhs_mode = int(general.get("RHSMODE", 1))
+    if rhs_mode not in (1, 2, 3):
+        return f"RHSMode={rhs_mode} is not covered by the canonical stack"
+    if bool(phys.get("INCLUDEPHI1", False)):
+        return "includePhi1 (Phi1/quasineutrality) is deferred to the legacy pipeline"
+    if bool(phys.get("READEXTERNALPHI1", False)):
+        return "readExternalPhi1 is deferred to the legacy pipeline"
+    if int(phys.get("MAGNETICDRIFTSCHEME", 0)) != 0:
+        return "magneticDriftScheme != 0 (tangential magnetic drifts) is deferred to the legacy pipeline"
+    collision_operator = int(phys.get("COLLISIONOPERATOR", 0))
+    if collision_operator not in (0, 1):
+        return f"collisionOperator={collision_operator} is deferred to the legacy pipeline"
+    constraint_scheme = int(phys.get("CONSTRAINTSCHEME", other.get("CONSTRAINTSCHEME", -1)))
+    if constraint_scheme < 0:
+        constraint_scheme = 1 if collision_operator == 0 else 2
+    if constraint_scheme not in (0, 1, 2):
+        return f"constraintScheme={constraint_scheme} is deferred to the legacy pipeline"
+    x_grid_scheme = int(other.get("XGRIDSCHEME", 5))
+    if x_grid_scheme not in (1, 2, 5, 6):
+        return f"xGridScheme={x_grid_scheme} (mapped/other speed grids) is deferred to the legacy pipeline"
+    if int(other.get("XDOTDERIVATIVESCHEME", 0)) != 0:
+        return "xDotDerivativeScheme != 0 is deferred to the legacy pipeline"
+    if bool(export_f.get("EXPORT_FULL_F", False)) or bool(export_f.get("EXPORT_DELTA_F", False)):
+        return "export_f output is deferred to the legacy pipeline"
+    return None
+
+
 def _cmd_write_output(args: argparse.Namespace) -> int:
     t0 = _now()
     from .io import _output_file_format, write_sfincs_jax_output_h5  # noqa: PLC0415
@@ -361,49 +405,75 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
     compute_solution = (not geometry_only) and (bool(getattr(args, "compute_solution", False)) or rhs_mode == 1)
     compute_transport_matrix = (not geometry_only) and (bool(args.compute_transport_matrix) or rhs_mode in (2, 3))
 
-    # RHSMode=2/3 default path: the canonical stack (sfincs_jax.run). The legacy
-    # outputs writer remains the owner only for options the canonical writer does
-    # not cover yet (npz output, export_f, solver traces, non-Fortran layout,
-    # --no-overwrite), and for all RHSMode=1 runs.
-    export_f_group = nml.group("export_f")
-    export_f_requested = bool(export_f_group.get("EXPORT_FULL_F", False)) or bool(
-        export_f_group.get("EXPORT_DELTA_F", False)
+    # Default path: the canonical stack (sfincs_jax.run) for RHSMode=1/2/3. The
+    # legacy outputs writer remains the owner only for the deferred features
+    # (deck_requires_legacy_pipeline) and options the canonical writer does not
+    # cover yet (npz output, solver traces, non-Fortran layout, --no-overwrite,
+    # --geometry-only).
+    legacy_reason: str | None = None
+    if output_format not in {"h5", "netcdf"}:
+        legacy_reason = f"output format {output_format!r} is written by the legacy pipeline"
+    elif not bool(args.fortran_layout):
+        legacy_reason = "--no-fortran-layout output is written by the legacy pipeline"
+    elif not bool(args.overwrite):
+        legacy_reason = "--no-overwrite is handled by the legacy pipeline"
+    elif getattr(args, "solver_trace", None) is not None:
+        legacy_reason = "--solver-trace sidecars are written by the legacy pipeline"
+    elif geometry_only:
+        legacy_reason = "--geometry-only output is written by the legacy pipeline"
+    else:
+        legacy_reason = deck_requires_legacy_pipeline(nml)
+    use_canonical = legacy_reason is None and (
+        (rhs_mode in (2, 3) and compute_transport_matrix) or (rhs_mode == 1 and compute_solution)
     )
-    use_canonical_transport = (
-        rhs_mode in (2, 3)
-        and compute_transport_matrix
-        and output_format in {"h5", "netcdf"}
-        and bool(args.fortran_layout)
-        and bool(args.overwrite)
-        and getattr(args, "solver_trace", None) is None
-        and not export_f_requested
-    )
-    if use_canonical_transport:
-        from .run import run_transport_matrix  # noqa: PLC0415
-
+    if use_canonical:
         res_group = nml.group("resolutionParameters")
         try:
             solver_tol = float(res_group.get("SOLVERTOLERANCE", 1e-10))
         except (TypeError, ValueError):
             solver_tol = 1e-10
         quiet = bool(getattr(args, "quiet", False))
+        emit_line = None if quiet else (lambda line: _emit(line, level=0, args=args))
         try:
             with _canonical_namelist_path(nml=nml, input_path=Path(args.input), args=args) as namelist_path:
-                run = run_transport_matrix(
-                    namelist_path,
-                    solve_method=str(getattr(args, "solve_method", "auto")),
-                    tol=solver_tol,
-                    out_path=Path(args.out),
-                    emit=None if quiet else (lambda line: _emit(line, level=0, args=args)),
-                )
+                if rhs_mode == 1:
+                    from .run import run_profile  # noqa: PLC0415
+
+                    run = run_profile(
+                        namelist_path,
+                        solve_method=str(getattr(args, "solve_method", "auto")),
+                        tol=solver_tol,
+                        out_path=Path(args.out),
+                        emit=emit_line,
+                    )
+                else:
+                    from .run import run_transport_matrix  # noqa: PLC0415
+
+                    run = run_transport_matrix(
+                        namelist_path,
+                        solve_method=str(getattr(args, "solve_method", "auto")),
+                        tol=solver_tol,
+                        out_path=Path(args.out),
+                        emit=emit_line,
+                    )
+        except NotImplementedError as exc:
+            # Defensive fallback: features the canonical stack refuses that the
+            # predicate cannot see from the deck alone (for example a
+            # non-stellarator-symmetric VMEC equilibrium) run on the legacy owner.
+            legacy_reason = str(exc)
+            use_canonical = False
         except RuntimeError as exc:
             if os.environ.get("SFINCS_JAX_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}:
                 raise
             print(f"sfincs_jax write-output failed: {exc}", file=sys.stderr, flush=True)
             return 2
-        _emit(f" wrote output -> {run.output_path}", level=0, args=args)
-        _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
-        return 0
+        if use_canonical:
+            _emit(f" wrote output -> {run.output_path}", level=0, args=args)
+            _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
+            return 0
+
+    if legacy_reason is not None:
+        _emit(f" legacy pipeline: {legacy_reason}", level=0, args=args)
 
     try:
         out_path = write_sfincs_jax_output_h5(

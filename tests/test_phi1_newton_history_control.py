@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 import sfincs_jax.problems.profile_phi1_newton as phi1
-from sfincs_jax.solver import GMRESSolveResult
+from sfincs_jax.solvers.krylov import GMRESSolveResult
 
 
 @dataclass(frozen=True)

@@ -41,7 +41,7 @@ from sfincs_jax.problems.profile_dense import (
     solve_host_dense_full,
     solve_host_dense_reduced,
 )
-from sfincs_jax.solver import GMRESSolveResult
+from sfincs_jax.solvers.krylov import GMRESSolveResult
 
 
 def test_rhs1_dense_shortcut_setup_from_env_uses_default_ratio(monkeypatch) -> None:

@@ -66,21 +66,6 @@ from sfincs_jax.problems.transport_setup import (
     TransportStateSetup,
     TransportWhichRHSSetup,
 )
-from sfincs_jax.solvers.native_block_factor import (
-    NativeDenseBlockJacobi,
-    NativePaddedIndexedBlockFactor,
-    NativeTwoFieldSchurFactor,
-    NativeXEllKineticFactor,
-)
-from sfincs_jax.solvers.preconditioner_reduced_pmat import ActiveFortranV3ReducedFactorPolicy
-from sfincs_jax.solvers.preconditioner_xblock_policy import (
-    RHS1XBlockDeviceHostFallbackDecision,
-    RHS1XBlockLocalSolveCandidate,
-    RHS1XBlockLocalSolveTuning,
-    RHS1XBlockLowerFillAcceptance,
-    RHS1XBlockSideProbeControls,
-    RHS1XBlockSparsePCPolicy,
-)
 
 
 def _value_for_field(name: str):
@@ -283,76 +268,3 @@ def test_transport_policy_and_parallel_containers_preserve_release_gate_contract
     assert format_transport_rhs_list([3, 1, 2]) == "[3, 1, 2]"
 
 
-def test_xblock_symbolic_and_native_policy_contracts_are_json_ready() -> None:
-    tuning = RHS1XBlockLocalSolveTuning(
-        drop_tol=1.0e-8,
-        drop_rel=1.0e-6,
-        ilu_drop_tol=1.0e-4,
-        fill_factor=5.0,
-        row_nnz_cap=64,
-        compact_row_nnz_cap=32,
-    )
-    candidate = RHS1XBlockLocalSolveCandidate(
-        block_size=128,
-        lu_max=256,
-        mode="local",
-        factorization="ilu",
-        tuning=tuning,
-        metadata_label="xblock_ilu",
-        selection_reason="lower_fill",
-        exact_lu=False,
-        lower_fill=True,
-        lower_fill_requested=True,
-        ignored_lower_fill_env=False,
-        lower_fill_max_block_size=1024,
-        lower_fill_block_size_capped=False,
-    )
-    host = RHS1XBlockDeviceHostFallbackDecision("auto", True, "large_qi", True, "gmres", "lgmres", 100, True, False)
-    side_probe = RHS1XBlockSideProbeControls(True, 20, 40, 10.0, True, True, 80, False, 5, 0.25)
-    lower_fill = RHS1XBlockLowerFillAcceptance(True, "accepted", "lower", "base", 0.5, 2.0, 1.0, 10.0, 1.0, 1.0e8)
-
-    assert RHS1XBlockSparsePCPolicy("right", True, "gmres", False, 80, False).precondition_side == "right"
-    assert side_probe.should_switch(11.0) is True
-    assert side_probe.should_switch(1.0) is False
-    assert host.to_metadata()["non_autodiff"] is True
-    assert candidate.to_metadata()["metadata_label"] == "xblock_ilu"
-    assert lower_fill.to_metadata()["accepted"] is True
-    assert ActiveFortranV3ReducedFactorPolicy("auto", "ilu", True, 1000, False, 5.0, 1e-4, 0.01, "COLAMD", ("COLAMD",), "COLAMD", "row", 1e6, False, 2000, 1.5).factor_kind == "ilu"
-
-    dense = NativeDenseBlockJacobi(
-        block_inverses=jnp.eye(2, dtype=jnp.float64).reshape((1, 2, 2)),
-        block_size=2,
-        original_size=2,
-        padded_size=2,
-        regularization=1.0e-8,
-    )
-    schur = NativeTwoFieldSchurFactor(
-        a_ff_inv=jnp.eye(1, dtype=jnp.float64),
-        a_fc=jnp.ones((1, 1), dtype=jnp.float64),
-        a_cf=jnp.ones((1, 1), dtype=jnp.float64),
-        schur_inv=jnp.eye(1, dtype=jnp.float64),
-        f_size=1,
-        c_size=1,
-        regularization=1.0e-8,
-    )
-    xell = NativeXEllKineticFactor(
-        block_inverses=jnp.eye(2, dtype=jnp.float64).reshape((1, 2, 2)),
-        block_indices=jnp.asarray([[0, 1]], dtype=jnp.int32),
-        inv_tail=jnp.ones((0,), dtype=jnp.float64),
-        f_size=2,
-        total_size=2,
-    )
-    padded = NativePaddedIndexedBlockFactor(
-        block_inverses=jnp.eye(2, dtype=jnp.float64).reshape((1, 2, 2)),
-        block_indices=jnp.asarray([[0, 1]], dtype=jnp.int32),
-        block_mask=jnp.asarray([[True, True]]),
-        overlap_weights=jnp.ones((2,), dtype=jnp.float64),
-        total_size=2,
-        normalize_overlap=True,
-        damping=1.0,
-    )
-
-    assert dense.block_size == 2
-    assert schur.f_size == 1
-    assert xell.total_size == 2
-    assert padded.normalize_overlap is True

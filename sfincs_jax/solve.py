@@ -616,6 +616,21 @@ def _solve_tier1(
     t0 = time.perf_counter()
     t1_solver = build_tier1_solver(op)
     t1 = time.perf_counter()
+
+    def _solve_refined(b: jnp.ndarray, *, transpose: bool = False) -> jnp.ndarray:
+        """Factor solve plus one iterative-refinement step.
+
+        The block-Thomas elimination is backward-stable but its rounding can
+        leave the true relative residual a small multiple of eps above the
+        strict production gate; one refinement pass
+        ``x += solve(b - A x)`` (one extra apply and substitution on the
+        existing factors) takes it to O(1e-16).
+        """
+        apply = _transposed_apply(op) if transpose else op.apply
+        apply2d = apply if b.ndim == 1 else jax.vmap(apply, in_axes=1, out_axes=1)
+        x = t1_solver.solve(b, transpose=transpose)
+        return x + t1_solver.solve(b - apply2d(x), transpose=transpose)
+
     if differentiable:
         apply_t = _transposed_apply(op)
         cols = [
@@ -623,14 +638,14 @@ def _solve_tier1(
                 op.apply,
                 apply_t,
                 rhs2d[:, j],
-                lambda b: t1_solver.solve(b),
-                lambda b: t1_solver.solve(b, transpose=True),
+                lambda b: _solve_refined(b),
+                lambda b: _solve_refined(b, transpose=True),
             )
             for j in range(rhs2d.shape[1])
         ]
         x2d = jnp.stack(cols, axis=1)
     else:
-        x2d = t1_solver.solve(rhs2d)
+        x2d = _solve_refined(rhs2d)
     t2 = time.perf_counter()
     res = _residual_norms(op.apply, x2d, rhs2d)
     return SolveResult(

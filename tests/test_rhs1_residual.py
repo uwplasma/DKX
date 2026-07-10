@@ -24,7 +24,7 @@ from sfincs_jax.problems.profile_residual import (
     safe_ratio,
     true_residual_norm_or_inf,
 )
-from sfincs_jax.solver import GMRESSolveResult
+from sfincs_jax.solvers.krylov import GMRESSolveResult
 
 
 def test_rhs1_residual_target_matches_petsc_style_gate() -> None:

@@ -4,9 +4,9 @@ import numpy as np
 import jax.numpy as jnp
 import pytest
 
-import sfincs_jax.solver as solver
+import sfincs_jax.solvers.krylov as solver
 from sfincs_jax.solvers.memory_model import gmres_basis_nbytes
-from sfincs_jax.solver import (
+from sfincs_jax.solvers.krylov import (
     _distributed_krylov_preference,
     _distributed_gmres_axis,
     _materialize_distributed_input,

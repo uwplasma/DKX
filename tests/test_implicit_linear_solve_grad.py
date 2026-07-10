@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.solver import GMRESSolveResult
+from sfincs_jax.solvers.krylov import GMRESSolveResult
 import sfincs_jax.solvers.implicit as implicit_module
 from sfincs_jax.solvers.implicit import (
     ImplicitGMRESSolveResult,

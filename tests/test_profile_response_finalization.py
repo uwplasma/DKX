@@ -11,7 +11,7 @@ from sfincs_jax.problems.profile_solver_diagnostics import (
     profile_response_post_xblock_accept_floor,
 )
 from sfincs_jax.problems.profile_solver_diagnostics import RHS1KSPDiagnosticsContext
-from sfincs_jax.solver import GMRESSolveResult
+from sfincs_jax.solvers.krylov import GMRESSolveResult
 
 
 def _ksp_context(emit=None) -> RHS1KSPDiagnosticsContext:

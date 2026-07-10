@@ -16,7 +16,6 @@ from sfincs_jax.operators.profile_fblock import (
     pas_collision_operator_from_namelist,
     solve_v3_fblock_gmres,
 )
-from sfincs_jax.operators.profile_kinetic import rhs1_fblock_layout_from_operator
 
 
 def test_v3_fblock_matvec_and_gmres_smoke() -> None:
@@ -37,41 +36,3 @@ def test_v3_fblock_matvec_and_gmres_smoke() -> None:
     assert float(result.residual_norm) < 1e-7
 
 
-def test_profile_fblock_from_namelist_builders_and_layout_adapter() -> None:
-    pas_path = Path(__file__).parent / "reduced_inputs" / "tokamak_1species_PASCollisions_noEr.input.namelist"
-    fp_path = Path(__file__).parent / "reduced_inputs" / "tokamak_1species_FPCollisions_noEr.input.namelist"
-    phi1_path = (
-        Path(__file__).parent
-        / "reduced_inputs"
-        / "tokamak_1species_FPCollisions_noEr_withPhi1InDKE.input.namelist"
-    )
-    pas_nml = read_sfincs_input(pas_path)
-    fp_nml = read_sfincs_input(fp_path)
-    phi1_nml = read_sfincs_input(phi1_path)
-
-    pas_grids = grids_from_namelist(pas_nml)
-    pas_geom = geometry_from_namelist(nml=pas_nml, grids=pas_grids)
-    collisionless = collisionless_operator_from_namelist(nml=pas_nml, grids=pas_grids, geom=pas_geom)
-    pas = pas_collision_operator_from_namelist(nml=pas_nml, grids=pas_grids)
-
-    fp_grids = grids_from_namelist(fp_nml)
-    fp = fokker_planck_collision_operator_from_namelist(nml=fp_nml, grids=fp_grids)
-
-    phi1_grids = grids_from_namelist(phi1_nml)
-    fp_phi1 = fokker_planck_collision_operator_with_phi1_from_namelist(
-        nml=phi1_nml,
-        grids=phi1_grids,
-        alpha=1.0,
-    )
-    fblock = fblock_operator_from_namelist(nml=fp_nml, identity_shift=0.0)
-    layout = rhs1_fblock_layout_from_operator(fblock)
-
-    assert collisionless.n_xi_for_x.shape == pas_grids.n_xi_for_x.shape
-    assert pas.n_xi_for_x.shape == pas_grids.n_xi_for_x.shape
-    assert pas.coef.shape[-1] == int(pas_grids.n_xi)
-    assert fp.mat.shape[2] == int(fp_grids.n_xi)
-    assert fp.mask_xi.shape[-1] == int(fp_grids.n_xi)
-    assert fp_phi1.nl == int(phi1_grids.n_l)
-    assert layout.f_size == fblock.flat_size
-    assert layout.total_size == fblock.flat_size
-    assert layout.include_phi1 is False

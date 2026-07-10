@@ -1596,38 +1596,6 @@ def auto_transport_preconditioner_choice(
     precond_kind: str
     strong_precond_kind: str | None = None
     if op.fblock.fp is not None:
-        fp_fortran_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO", "").strip().lower()
-        fp_fortran_disabled = fp_fortran_env in {"0", "false", "no", "off"}
-        fp_fortran_forced = fp_fortran_env in {"1", "true", "yes", "on"}
-        fp_fortran_min_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_MIN", "").strip()
-        try:
-            fp_fortran_min = int(fp_fortran_min_env) if fp_fortran_min_env else 0
-        except ValueError:
-            fp_fortran_min = 0
-        fp_fblock_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_AUTO", "").strip().lower()
-        fp_fblock_disabled = fp_fblock_env in {"", "0", "false", "no", "off"}
-        fp_fblock_forced = fp_fblock_env in {"1", "true", "yes", "on"}
-        fp_fblock_min_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_AUTO_MIN", "").strip()
-        try:
-            fp_fblock_min = int(fp_fblock_min_env) if fp_fblock_min_env else 50000
-        except ValueError:
-            fp_fblock_min = 50000
-        fp_xblock_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_AUTO", "").strip().lower()
-        fp_xblock_disabled = fp_xblock_env in {"", "0", "false", "no", "off"}
-        fp_xblock_forced = fp_xblock_env in {"1", "true", "yes", "on"}
-        fp_xblock_min_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_AUTO_MIN", "").strip()
-        try:
-            fp_xblock_min = int(fp_xblock_min_env) if fp_xblock_min_env else 50000
-        except ValueError:
-            fp_xblock_min = 50000
-        fp_xblock_schur_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_AUTO", "").strip().lower()
-        fp_xblock_schur_disabled = fp_xblock_schur_env in {"", "0", "false", "no", "off"}
-        fp_xblock_schur_forced = fp_xblock_schur_env in {"1", "true", "yes", "on"}
-        fp_xblock_schur_min_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_AUTO_MIN", "").strip()
-        try:
-            fp_xblock_schur_min = int(fp_xblock_schur_min_env) if fp_xblock_schur_min_env else 50000
-        except ValueError:
-            fp_xblock_schur_min = 50000
         fp_geom_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_AUTO", "").strip().lower()
         fp_geom_disabled = fp_geom_env in {"", "0", "false", "no", "off"}
         fp_geom_forced = fp_geom_env in {"1", "true", "yes", "on"}
@@ -1673,64 +1641,7 @@ def auto_transport_preconditioner_choice(
             and int(getattr(op, "n_theta", 0) or 0) * int(getattr(op, "n_zeta", 0) or 0) >= 64
             and (fp_geom_forced or int(getattr(op, "total_size", 0) or 0) >= max(1, int(fp_geom_min)))
         )
-        fp_fblock_candidate = bool(
-            (not fp_fblock_disabled)
-            and int(getattr(op, "rhs_mode", 0) or 0) in {2, 3}
-            and not bool(getattr(op, "include_phi1", False))
-            and (fp_fblock_forced or int(getattr(op, "total_size", 0) or 0) >= max(1, int(fp_fblock_min)))
-        )
-        fp_xblock_candidate = bool(
-            (not fp_xblock_disabled)
-            and int(getattr(op, "rhs_mode", 0) or 0) in {2, 3}
-            and not bool(getattr(op, "include_phi1", False))
-            and int(getattr(op, "n_theta", 0) or 0) * int(getattr(op, "n_zeta", 0) or 0) >= 64
-            and (fp_xblock_forced or int(getattr(op, "total_size", 0) or 0) >= max(1, int(fp_xblock_min)))
-        )
-        fp_xblock_schur_candidate = bool(
-            (not fp_xblock_schur_disabled)
-            and int(getattr(op, "rhs_mode", 0) or 0) in {2, 3}
-            and not bool(getattr(op, "include_phi1", False))
-            and int(getattr(op, "n_theta", 0) or 0) * int(getattr(op, "n_zeta", 0) or 0) >= 64
-            and (
-                fp_xblock_schur_forced
-                or int(getattr(op, "total_size", 0) or 0) >= max(1, int(fp_xblock_schur_min))
-            )
-        )
-        other_fp_forced = any(
-            (
-                fp_line_forced,
-                fp_schur_forced,
-                fp_geom_forced,
-                fp_fblock_forced,
-                fp_xblock_forced,
-                fp_xblock_schur_forced,
-            )
-        )
-        fp_fortran_candidate = bool(
-            (not fp_fortran_disabled)
-            and int(getattr(op, "rhs_mode", 0) or 0) in {2, 3}
-            and not bool(getattr(op, "include_phi1", False))
-            and (
-                fp_fortran_forced
-                or (
-                    (not other_fp_forced)
-                    and int(getattr(op, "total_size", 0) or 0) >= max(1, int(fp_fortran_min))
-                )
-            )
-        )
-        if fp_fortran_candidate:
-            precond_kind = "fp_fortran_reduced_lu"
-            strong_precond_kind = "fp_fortran_reduced_lu"
-        elif fp_xblock_schur_candidate:
-            precond_kind = "fp_xblock_tz_lu_schur"
-            strong_precond_kind = "fp_xblock_tz_lu_schur"
-        elif fp_xblock_candidate:
-            precond_kind = "fp_xblock_tz_lu"
-            strong_precond_kind = "fp_xblock_tz_lu"
-        elif fp_fblock_candidate:
-            precond_kind = "fp_structured_fblock_lu"
-            strong_precond_kind = "fp_structured_fblock_lu"
-        elif fp_geom_candidate:
+        if fp_geom_candidate:
             precond_kind = "fp_local_geom_line"
             strong_precond_kind = "fp_local_geom_line"
         elif fp_schur_candidate:
@@ -1749,10 +1660,6 @@ def auto_transport_preconditioner_choice(
             not fp_line_candidate
             and not fp_schur_candidate
             and not fp_geom_candidate
-            and not fp_fblock_candidate
-            and not fp_xblock_candidate
-            and not fp_xblock_schur_candidate
-            and not fp_fortran_candidate
         ):
             if n_block <= sxblock_max:
                 strong_precond_kind = "sxblock"

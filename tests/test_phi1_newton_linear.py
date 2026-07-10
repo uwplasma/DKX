@@ -7,7 +7,7 @@ from sfincs_jax.problems.profile_phi1_newton import (
     build_phi1_newton_preconditioner,
     solve_phi1_newton_linear_step,
 )
-from sfincs_jax.solver import GMRESSolveResult
+from sfincs_jax.solvers.krylov import GMRESSolveResult
 
 
 def test_build_phi1_newton_preconditioner_collision_and_block_modes() -> None:

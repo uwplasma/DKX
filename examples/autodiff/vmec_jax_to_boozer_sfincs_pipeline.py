@@ -175,10 +175,10 @@ def _load_wout_from_vmec_case(args: argparse.Namespace):
 
 def _load_wout_from_file(path: Path):
     try:
-        from vmec_jax.wout import read_wout as read_vmec_jax_wout
+        from vmec_jax import read_wout as read_vmec_jax_wout
     except ImportError as exc:  # pragma: no cover - optional dependency
-        raise SystemExit("This example requires vmec_jax.wout.read_wout.") from exc
-    return read_vmec_jax_wout(path), f"vmec_jax.wout.read_wout('{path}')"
+        raise SystemExit("This example requires vmec_jax.read_wout.") from exc
+    return read_vmec_jax_wout(path), f"vmec_jax.read_wout('{path}')"
 
 
 def _build_boozer_context(wout_like, *, mboz: int, nboz: int, surface: float):

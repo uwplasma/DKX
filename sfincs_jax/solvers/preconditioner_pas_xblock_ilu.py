@@ -21,12 +21,77 @@ from sfincs_jax.solvers.preconditioning import (
     rhs_mode1_precond_cache_key,
 )
 from sfincs_jax.problems.profile_residual import safe_preconditioner
-from sfincs_jax.solvers.explicit_sparse import (
-    inverse_permutation,
-    triangular_solve_lower_padded,
-    triangular_solve_upper_padded,
-)
 from sfincs_jax.operators.profile_system import V3FullSystemOperator
+
+
+def inverse_permutation(p: np.ndarray) -> np.ndarray:
+    """Return the inverse of a zero-based permutation."""
+
+    p = np.asarray(p, dtype=np.int32).reshape((-1,))
+    inv = np.empty_like(p)
+    inv[p] = np.arange(int(p.size), dtype=np.int32)
+    return inv
+
+
+def triangular_solve_lower_padded(
+    *,
+    lower_idx: jnp.ndarray,
+    lower_val: jnp.ndarray,
+    b: jnp.ndarray,
+) -> jnp.ndarray:
+    """Solve ``L y = b`` for a unit-lower triangular factor in padded rows.
+
+    Padding entries use index ``-1`` and are ignored. This representation is
+    used by JAX-compatible sparse preconditioner apply paths that cannot call
+    host triangular solves inside a compiled Krylov iteration.
+    """
+
+    b = jnp.asarray(b, dtype=jnp.float64)
+    n = int(b.shape[0])
+    y = jnp.zeros_like(b)
+    if lower_idx.size == 0:
+        return b
+
+    def _body(i, y_vec):
+        idx = lower_idx[i]
+        val = lower_val[i]
+        mask = idx >= 0
+        idx_safe = jnp.where(mask, idx, 0)
+        contrib = jnp.sum(jnp.where(mask, val * y_vec[idx_safe], 0.0))
+        yi = b[i] - contrib
+        return y_vec.at[i].set(yi, unique_indices=True)
+
+    return jax.lax.fori_loop(0, n, _body, y)
+
+
+def triangular_solve_upper_padded(
+    *,
+    upper_idx: jnp.ndarray,
+    upper_val: jnp.ndarray,
+    upper_diag: jnp.ndarray,
+    b: jnp.ndarray,
+) -> jnp.ndarray:
+    """Solve ``U x = b`` for an upper triangular factor in padded rows."""
+
+    b = jnp.asarray(b, dtype=jnp.float64)
+    n = int(b.shape[0])
+    x = jnp.zeros_like(b)
+    if upper_idx.size == 0:
+        return b / upper_diag
+
+    def _body(i, x_vec):
+        row = n - 1 - i
+        idx = upper_idx[row]
+        val = upper_val[row]
+        mask = idx >= 0
+        idx_safe = jnp.where(mask, idx, 0)
+        contrib = jnp.sum(jnp.where(mask, val * x_vec[idx_safe], 0.0))
+        xi = (b[row] - contrib) / upper_diag[row]
+        return x_vec.at[row].set(xi, unique_indices=True)
+
+    return jax.lax.fori_loop(0, n, _body, x)
+
+
 
 __all__ = [
     "build_rhs1_pas_xblock_ilu_preconditioner",

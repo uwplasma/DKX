@@ -23,7 +23,7 @@ from sfincs_jax.operators.profile_layout import (
     probe_rhs1_block_jacobi_preconditioner,
     probe_rhs1_block_preconditioner,
 )
-from sfincs_jax.solver import fgmres_solve_with_residual
+from sfincs_jax.solvers.krylov import fgmres_solve_with_residual
 
 
 def _fake_op(

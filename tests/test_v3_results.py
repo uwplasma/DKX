@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from jax import tree_util as jtu
 import numpy as np
 
-from sfincs_jax.solver import GMRESSolveResult
+from sfincs_jax.solvers.krylov import GMRESSolveResult
 from sfincs_jax.problems.profile_solver_diagnostics import (
     V3LinearSolveResult,
     V3NewtonKrylovResult,

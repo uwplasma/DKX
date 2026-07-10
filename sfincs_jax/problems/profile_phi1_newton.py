@@ -16,10 +16,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ..solvers.explicit_sparse import (
-    host_sparse_direct_polish,
-    host_sparse_direct_solve_with_refinement,
-)
 from ..solvers.krylov_dispatch import gmres_solve_dispatch
 from ..namelist import Namelist
 from ..solvers.preconditioning import (
@@ -28,10 +24,6 @@ from ..solvers.preconditioning import (
     use_solver_jit,
 )
 from sfincs_jax.operators.profile_layout import build_rhs1_compressed_pitch_layout
-from sfincs_jax.problems.profile_policies import (
-    host_sparse_direct_refine_steps,
-    host_sparse_factor_dtype,
-)
 from sfincs_jax.problems.profile_solver_diagnostics import (
     V3NewtonKrylovResult,
     emit_newton_krylov_ksp_history,
@@ -50,7 +42,6 @@ from ..solvers.preconditioner_full_fp_kinetic import (
     build_rhs1_block_preconditioner,
     build_rhs1_collision_preconditioner,
 )
-from ..solvers.preconditioner_host_sparse import build_sparse_ilu_from_matvec
 from sfincs_jax.operators.profile_system import (
     V3FullSystemOperator,
     apply_v3_full_system_jacobian_jit,
@@ -199,7 +190,6 @@ def solve_phi1_newton_linear_step(
     gmres_tol: float,
     gmres_restart: int,
     gmres_maxiter: int | None,
-    sparse_direct_solve: Callable[..., GMRESSolveResult],
     gmres_dispatch: Callable[..., GMRESSolveResult],
     gmres_result_is_finite: Callable[[GMRESSolveResult], bool],
     emit_ksp_history: Callable[..., None],
@@ -220,18 +210,7 @@ def solve_phi1_newton_linear_step(
         def matvec_reduced(dx_reduced: jnp.ndarray) -> jnp.ndarray:
             return reduce_full(matvec(expand_reduced(dx_reduced)))
 
-        if solve_method_linear == "sparse_direct":
-            lin = sparse_direct_solve(
-                matvec_fn=matvec_reduced,
-                b_vec=rhs_reduced,
-                n=int(active_size),
-                cache_tag=("reduced", int(newton_iter), int(active_size)),
-                tol_val=float(gmres_tol),
-                atol_val=0.0,
-                restart_val=int(gmres_restart),
-                maxiter_val=gmres_maxiter,
-            )
-        else:
+        if True:
             lin = gmres_dispatch(
                 matvec=matvec_reduced,
                 b=rhs_reduced,
@@ -284,18 +263,7 @@ def solve_phi1_newton_linear_step(
         return lin, step_vec, linear_residual_norm
 
     assert total_size is not None
-    if solve_method_linear == "sparse_direct":
-        lin = sparse_direct_solve(
-            matvec_fn=matvec,
-            b_vec=-residual_vec,
-            n=int(total_size),
-            cache_tag=("full", int(newton_iter), int(total_size)),
-            tol_val=float(gmres_tol),
-            atol_val=0.0,
-            restart_val=int(gmres_restart),
-            maxiter_val=gmres_maxiter,
-        )
-    else:
+    if True:
         lin = gmres_dispatch(
             matvec=matvec,
             b=-residual_vec,
@@ -405,13 +373,6 @@ def build_phi1_newton_preconditioner(
     return block_builder(**kwargs)
 
 
-def _phi1_host_sparse_factor_dtype(*, size: int) -> np.dtype:
-    return host_sparse_factor_dtype(
-        size=int(size),
-        factorization="lu",
-        use_implicit=False,
-        backend=jax.default_backend(),
-    )
 
 
 def advance_phi1_newton_iterate(
@@ -644,6 +605,10 @@ def solve_v3_full_system_newton_krylov_history(
     linear_size = active_size if use_active_dof_mode else int(op.total_size)
     solve_method_in = str(solve_method).strip().lower()
     use_sparse_direct_linear = solve_method_in == "sparse_direct"
+    if use_sparse_direct_linear:
+        raise NotImplementedError(
+            "solve_method='sparse_direct' was removed from the Phi1 Newton path; use 'auto'."
+        )
     use_dense_linear = solve_method_in in {"dense", "dense_row_scaled"} or (
         use_frozen_linearization and int(linear_size) <= int(dense_cutoff)
     )
@@ -702,83 +667,6 @@ def solve_v3_full_system_newton_krylov_history(
             fortran_stdout=bool(fortran_stdout),
             max_size=ksp_history_max_size,
             max_history_iter=ksp_history_max_iter,
-        )
-
-    def _phi1_sparse_direct_solve(
-        *,
-        matvec_fn,
-        b_vec: jnp.ndarray,
-        n: int,
-        cache_tag: tuple[object, ...],
-        tol_val: float,
-        atol_val: float,
-        restart_val: int,
-        maxiter_val: int | None,
-    ) -> GMRESSolveResult:
-        factor_dtype = _phi1_host_sparse_factor_dtype(size=int(n))
-        cache_key_use = ("phi1_nk_sparse_direct", *cache_tag, str(factor_dtype))
-        a_csr_full, _a_csr_drop, ilu, _a_dense, _l_dense, _u_dense, _l_unit = build_sparse_ilu_from_matvec(
-            matvec=matvec_fn,
-            n=int(n),
-            dtype=jnp.float64,
-            cache_key=cache_key_use,
-            factor_dtype=factor_dtype,
-            drop_tol=0.0,
-            drop_rel=0.0,
-            ilu_drop_tol=0.0,
-            fill_factor=1.0,
-            build_dense_factors=False,
-            build_jax_factors=False,
-            build_ilu=True,
-            store_dense=False,
-            factorization="lu",
-            emit=emit,
-        )
-        if ilu is None:
-            raise RuntimeError("phi1 sparse_direct: factors unavailable")
-        x_np, residual_norm = host_sparse_direct_solve_with_refinement(
-            ilu=ilu,
-            a_csr_full=a_csr_full,
-            rhs_vec=b_vec,
-            factor_dtype=factor_dtype,
-            refine_steps=host_sparse_direct_refine_steps("SFINCS_JAX_PHI1_SPARSE_DIRECT_REFINE", default=2),
-        )
-        target_true = max(float(atol_val), float(tol_val) * float(jnp.linalg.norm(b_vec)))
-        if factor_dtype == np.dtype(np.float32) and residual_norm > target_true:
-            polish_env = os.environ.get("SFINCS_JAX_PHI1_SPARSE_DIRECT_POLISH", "").strip().lower()
-            if polish_env not in {"0", "false", "no", "off"}:
-                polish_restart_env = os.environ.get("SFINCS_JAX_PHI1_SPARSE_DIRECT_POLISH_RESTART", "").strip()
-                polish_maxiter_env = os.environ.get("SFINCS_JAX_PHI1_SPARSE_DIRECT_POLISH_MAXITER", "").strip()
-                try:
-                    polish_restart = int(polish_restart_env) if polish_restart_env else min(int(restart_val), 40)
-                except ValueError:
-                    polish_restart = min(int(restart_val), 40)
-                try:
-                    polish_maxiter = (
-                        int(polish_maxiter_env)
-                        if polish_maxiter_env
-                        else min(max(40, int(maxiter_val or 120)), 120)
-                    )
-                except ValueError:
-                    polish_maxiter = min(max(40, int(maxiter_val or 120)), 120)
-                x_polish, residual_norm_polish = host_sparse_direct_polish(
-                    matvec_fn=matvec_fn,
-                    rhs_vec=b_vec,
-                    x0_np=x_np,
-                    ilu=ilu,
-                    factor_dtype=factor_dtype,
-                    tol=tol_val,
-                    atol=atol_val,
-                    restart=max(5, int(polish_restart)),
-                    maxiter=max(5, int(polish_maxiter)),
-                    precondition_side="left",
-                )
-                if np.isfinite(residual_norm_polish) and residual_norm_polish < residual_norm:
-                    x_np = x_polish
-                    residual_norm = residual_norm_polish
-        return GMRESSolveResult(
-            x=jnp.asarray(x_np, dtype=jnp.float64),
-            residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
         )
 
     for k in range(int(max_newton)):
@@ -905,7 +793,6 @@ def solve_v3_full_system_newton_krylov_history(
             gmres_tol=float(gmres_tol),
             gmres_restart=int(gmres_restart_use),
             gmres_maxiter=gmres_maxiter,
-            sparse_direct_solve=_phi1_sparse_direct_solve,
             gmres_dispatch=_dispatch_gmres,
             gmres_result_is_finite=gmres_result_is_finite,
             emit_ksp_history=_emit_ksp_history_nk,

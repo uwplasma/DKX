@@ -9,7 +9,7 @@ from sfincs_jax.problems.profile_setup import (
     finalize_rhs1_linear_solution_cleanup,
     reduce_full_with_indices,
 )
-from sfincs_jax.solver import GMRESSolveResult
+from sfincs_jax.solvers.krylov import GMRESSolveResult
 
 
 def test_reduce_expand_active_projection_round_trip() -> None:

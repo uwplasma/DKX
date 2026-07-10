@@ -22,7 +22,7 @@ from sfincs_jax.problems.profile_dense import (
     solve_profile_linear,
     solve_profile_linear_with_residual,
 )
-from sfincs_jax.solver import GMRESSolveResult, assemble_dense_matrix_from_matvec
+from sfincs_jax.solvers.krylov import GMRESSolveResult, assemble_dense_matrix_from_matvec
 
 
 def _context(
