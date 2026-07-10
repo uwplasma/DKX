@@ -1,5 +1,12 @@
 #!/usr/bin/env python
 
+"""Run-spec radial+Er scan (scanType=22).
+
+Called by ``sfincsScan`` when ``!ss scanType = 22``. Uses ``runspec.dat`` (or
+``!ss runSpecFile``) to define radial points and launches an Er scan in each
+subdirectory.
+"""
+
 # This script will not work if called directly.
 # From the command line, you should call sfincsScan instead.
 #
@@ -26,6 +33,8 @@
  
 
 import os, inspect
+from pathlib import Path
+from sfincs_jax_driver import run_sfincs_jax
 from builtins import input
 
 #print ("This is "+ inspect.getfile(inspect.currentframe()))
@@ -126,22 +135,20 @@ for lind in range(numErscans):
     print (oneline)
 
 
-while True:
-    #proceed=raw_input("Should I go ahead and launch these "+str(numErscans)+" scans? [y/n] ")
-    proceed=input("Should I go ahead and launch these "+str(numErscans)+" scans? [y/n] ")
-    if proceed=="y" or proceed=="n":
-        break
-    print ("You must enter either y or n.")
+if waitBeforeSubmitting:
+    while True:
+        #proceed=raw_input("Should I go ahead and launch these "+str(numErscans)+" scans? [y/n] ")
+        proceed=input("Should I go ahead and launch these "+str(numErscans)+" scans? [y/n] ")
+        if proceed=="y" or proceed=="n":
+            break
+        print ("You must enter either y or n.")
 
-if proceed=="n":
-    exit(0)
+    if proceed=="n":
+        exit(0)
 print ("launching scans...")
 
-
-# Read in the job.sfincsScan file:
-with open(jobFilename, 'r') as f:
-    jobFile = f.readlines()
-
+scan_progress = start_scan_progress(total_runs=numErscans, label=this_filename)
+prev_dir = None
 for runNum in range(numErscans):
    dirNum = runNum-1
    while True:
@@ -153,45 +160,14 @@ for runNum in range(numErscans):
           break
    os.mkdir(dirName)
    os.chdir(dirName)
+   current_dir = Path(os.getcwd())
+   configure_krylov_recycle(prev_dir, current_dir)
 
    jobName="Sfnx."+dirName
-   print ("Beginning to handle Er scan "+str(runNum+1)+" of "+str(numErscans)+": "+dirName)
-
-   # Copy the job.sfincsScan file:
-   thisJobFile = list(jobFile)
-   # This next function is defined separately for each system in sfincsScan
-   nameJobFile(thisJobFile,jobName)
-   if sfincsSystem=="hydra":
-       for parind in range(len(runparamnames)):
-           if runparamnames[parind]=="node":
-               for line in thisJobFile:
-                   if "# @ node =" in line:
-                       thisJobFile[thisJobFile.index(line)]="# @ node = "+str(runparams[runNum][parind])+"\n"
-           if runparamnames[parind]=="tasks_per_node":
-               for line in thisJobFile:
-                   if "# @ tasks_per_node =" in line:
-                       thisJobFile[thisJobFile.index(line)]="# @ tasks_per_node = "+str(runparams[runNum][parind])+"\n"
-           if runparamnames[parind]=="ConsumableCpus":
-               for line in thisJobFile:
-                   if "# @ resources = ConsumableCpus" in line:
-                       thisJobFile[thisJobFile.index(line)]="# @ resources = ConsumableCpus("+str(runparams[runNum][parind])+")\n"
-           if runparamnames[parind]=="wall_clock_limit":
-               hours=runparams[runNum][parind]//60
-               minutes=runparams[runNum][parind]%60
-               if hours<10:
-                  hour_str="0"+str(hours)
-               if minutes<10:
-                  minute_str="0"+str(minutes)
-               for line in thisJobFile:
-                   if "# @ wall_clock_limit =" in line:
-                       thisJobFile[thisJobFile.index(line)]="# @ wall_clock_limit = "+hour_str+":"+minute_str+":00\n"
-
-   f = open(jobFilename,"w")
-   f.writelines(thisJobFile)
-   f.close()
+   run_started_at = note_scan_run_start(progress=scan_progress, run_index=runNum+1, directory=dirName)
 
    # Now copy the input.namelist file:
-   f = open(filename,"w")
+   input_lines = []
    for line in inputFile:
        
        if line[-22:]==" ! Set by sfincsScan.\n":
@@ -212,28 +188,18 @@ for runNum in range(numErscans):
                        str_stack=str_stack+"  "+str(runparams[runNum][parind])
                    if runnumbersatend[parind]==runvectorlength[parind]:
                        line = str_stack+" ! Set by sfincsScan_22.\n"
-       f.write(line)
-   f.close()
+       input_lines.append(line)
+   input_path = Path(filename)
+   input_path.write_text("".join(input_lines))
 
    #################################################
    # Submit the Er scan:
    #submitCommand = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))+"/sfincsScan -f"
-   submitCommand = os.path.dirname(os.path.abspath(__file__))+"/sfincsScan -f" 
-   #############################
-   print ('submitCommand = '+submitCommand)
-   try:
-       # We need to include .split(" ") to separate the command-line arguments into an array of strings.   
-       # I'm not sure why python requires this. 
-       submissionResult = subprocess.call(submitCommand.split(" "))
-       #submissionResult=0
-   except:
-       print ("ERROR! Unable to submit run "+dirName+" for some reason.")
-       raise
-   else:
-       if submissionResult==0:
-           print ("No errors submitting job "+dirName)
-       else:
-           print ("Nonzero exit code returned when trying to submit job "+dirName)
+   run_sfincs_jax(
+       input_namelist=input_path,
+       output_path=Path(outputFilename),
+   )
+   note_scan_run_done(progress=scan_progress, run_index=runNum+1, directory=dirName, run_started_at=run_started_at)
 
    os.chdir("..")
-
+   prev_dir = current_dir

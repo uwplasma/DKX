@@ -11,12 +11,12 @@ import pytest
 
 from sfincs_jax import cli
 from sfincs_jax import plotting
-from sfincs_jax.benchmark_artifact_policy import (
+from sfincs_jax.validation.artifacts import (
     check_benchmark_artifact_file,
     check_benchmark_artifact_files,
     fortran_suite_benchmark_summary_errors,
 )
-from sfincs_jax.validation_figures import (
+from sfincs_jax.validation.artifacts import (
     build_simakov_helander_high_nu_panel,
     build_w7x_ambipolar_root_provenance_panel,
 )
@@ -103,6 +103,98 @@ def test_cmd_dump_h5_keys_only_and_json(tmp_path: Path, capsys: pytest.CaptureFi
     assert payload["BHat"] == [[0.0, 1.0], [2.0, 3.0]]
 
 
+def test_cmd_ambipolar_summary_records_solver_state_reuse(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from sfincs_jax.problems.ambipolar import AmbipolarIteration, AmbipolarResult, SfincsJaxEvaluationRecord
+
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text("&general\n RHSMode = 1\n/\n", encoding="utf-8")
+    out_dir = tmp_path / "ambipolar"
+    state_path = out_dir / ".sfincs_jax_solver_state" / "rhsmode1_state.npz"
+
+    def fake_solve_sfincs_jax_ambipolar_brent(**kwargs):
+        assert kwargs["reuse_output_geometry_cache"] is False
+        assert kwargs["reuse_solver_state"] is True
+        result = AmbipolarResult(
+            converged=True,
+            method="brent",
+            root_er=0.0,
+            root_radial_current=0.0,
+            iterations=(
+                AmbipolarIteration(index=1, er=0.0, radial_current=0.0, stage="initial"),
+            ),
+            status="converged",
+            root_type="ion",
+        )
+        record = SfincsJaxEvaluationRecord(
+            er=0.0,
+            radial_current=0.0,
+            input_path=out_dir / "eval_001" / "input.namelist",
+            output_path=out_dir / "eval_001" / "sfincsOutput.h5",
+            solver_trace_path=out_dir / "eval_001" / "sfincsOutput.solver_trace.json",
+            selected_path="rhsmode1_solution",
+            solve_method="auto",
+            residual_norm=0.0,
+            residual_target=1.0e-10,
+            converged=True,
+            total_size=12,
+            active_size=10,
+            cache_enabled=False,
+            solver_state_reuse_enabled=True,
+            solver_state_path=state_path,
+            solver_state_input_exists=True,
+            solver_state_input_used=True,
+            solver_state_output_exists=True,
+            fixed_shape_input_signature=(1, 12, 1, 2, 3, 4, 5, 1, 0, 0, 1),
+            fixed_shape_signature=(1, 12, 1, 2, 3, 4, 5, 1, 0, 0, 1),
+            fixed_shape_reuse_enabled=True,
+            fixed_shape_reuse_admitted=True,
+            fixed_shape_reuse_reason="fixed_shape_signature_match",
+            fixed_shape_reuse_count=1,
+        )
+        return result, type("FakeEvaluator", (), {"records": [record]})()
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.ambipolar.solve_sfincs_jax_ambipolar_brent",
+        fake_solve_sfincs_jax_ambipolar_brent,
+    )
+
+    summary_path = tmp_path / "summary.json"
+    rc = cli._cmd_ambipolar(
+        Namespace(
+            input=str(input_path),
+            out_dir=str(out_dir),
+            er_min=-1.0,
+            er_max=1.0,
+            er_initial=0.0,
+            max_evaluations=4,
+            current_tolerance=1.0e-10,
+            step_tolerance=1.0e-8,
+            solve_method="auto",
+            summary_json=str(summary_path),
+            no_output_cache=True,
+            no_solver_state=False,
+            verbose=0,
+            quiet=True,
+        )
+    )
+
+    assert rc == 0
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert payload["converged"] is True
+    assert payload["evaluations"][0]["cache_enabled"] is False
+    assert payload["evaluations"][0]["solver_state_reuse_enabled"] is True
+    assert payload["evaluations"][0]["solver_state_input_exists"] is True
+    assert payload["evaluations"][0]["solver_state_input_used"] is True
+    assert payload["evaluations"][0]["solver_state_output_exists"] is True
+    assert payload["evaluations"][0]["solver_state_path"] == str(state_path)
+    assert payload["evaluations"][0]["fixed_shape_input_signature"] == [1, 12, 1, 2, 3, 4, 5, 1, 0, 0, 1]
+    assert payload["evaluations"][0]["fixed_shape_signature"] == [1, 12, 1, 2, 3, 4, 5, 1, 0, 0, 1]
+    assert payload["evaluations"][0]["fixed_shape_reuse_enabled"] is True
+    assert payload["evaluations"][0]["fixed_shape_reuse_admitted"] is True
+    assert payload["evaluations"][0]["fixed_shape_reuse_reason"] == "fixed_shape_signature_match"
+    assert payload["evaluations"][0]["fixed_shape_reuse_count"] == 1
+
+
 def test_cmd_compare_h5_honors_tolerance_json(tmp_path: Path) -> None:
     left = tmp_path / "left.h5"
     right = tmp_path / "right.h5"
@@ -173,6 +265,8 @@ def test_plotting_shape_helpers_and_missing_panel_paths() -> None:
     assert plotting._surface(np.arange(24.0).reshape(2, 3, 4)).shape == (2, 3)
     assert plotting._matrix(np.asarray(5.0)).shape == (1, 1)
     assert plotting._matrix(np.arange(3.0)).shape == (3, 1)
+    cube = np.arange(24.0).reshape(2, 3, 4)
+    np.testing.assert_allclose(plotting._matrix(cube), cube[:, :, 0])
 
     fig, axes = plt.subplots(1, 2)
     try:
@@ -184,6 +278,26 @@ def test_plotting_shape_helpers_and_missing_panel_paths() -> None:
             "flow",
         ) is True
         assert axes[1].get_xlabel() == "index"
+    finally:
+        plt.close(fig)
+
+
+def test_plotting_summary_and_radial_transport_matrix_panel() -> None:
+    data = {
+        "x": np.asarray([0.0, 0.5]),
+        "geometryScheme": np.asarray(5),
+        "Ntheta": np.asarray([3, 4]),
+        "transportMatrix": np.arange(4.0).reshape(2, 2),
+    }
+
+    summary = plotting._summary_text(data, Path("case.sfincsOutput.h5"))
+    assert "geometryScheme = 5" in summary
+    assert "Ntheta" not in summary
+
+    fig = plotting._radial_page(data)
+    try:
+        assert fig.axes[3].get_xlabel() == "drive index"
+        assert fig.axes[3].get_ylabel() == "flux index"
     finally:
         plt.close(fig)
 

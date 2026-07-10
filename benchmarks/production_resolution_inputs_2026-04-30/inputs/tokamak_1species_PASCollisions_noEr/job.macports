@@ -1,2 +1,0 @@
-#!/bin/bash
-mpiexec -n 5 ../../sfincs -ksp_view

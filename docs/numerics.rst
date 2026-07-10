@@ -126,8 +126,9 @@ The advantages are:
 - and large solve branches can stay on device until a rescue path is actually needed.
 
 In the source tree, the core operator assembly and cached application live in
-``sfincs_jax/v3_system.py`` and are driven by the orchestration logic in
-``sfincs_jax/v3_driver.py``.
+``sfincs_jax/operators/profile_system.py``. RHSMode-1 solve orchestration lives in
+``sfincs_jax/problems/profile_solve.py``; RHSMode-2/3 transport orchestration lives in
+``sfincs_jax/problems/transport_solve.py``.
 
 Solve modes
 -----------
@@ -187,14 +188,17 @@ Code locations
 
 The most important numerical modules are:
 
-- ``sfincs_jax/v3_system.py``: system definition, cached operators, block structure.
-- ``sfincs_jax/v3_driver.py``: solve orchestration, solver/preconditioner selection,
-  rescues, parallel transport execution.
-- ``sfincs_jax/residual.py``: residual and right-hand-side evaluation.
-- ``sfincs_jax/solver.py``: linear-solver wrappers and Krylov helpers.
-- ``sfincs_jax/implicit_solve.py``: differentiable linear solve path.
-- ``sfincs_jax/collisions.py``: PAS and full FP operator kernels.
-- ``sfincs_jax/grids.py`` and ``sfincs_jax/xgrid.py``: collocation grids, quadrature,
+- ``sfincs_jax/operators/profile_system.py``: system definition, cached
+  operators, block structure, residual and right-hand-side evaluation.
+- ``sfincs_jax/problems/profile_solve.py``: RHSMode-1 solve orchestration,
+  solver/preconditioner selection, and rescue policy.
+- ``sfincs_jax/problems/transport_solve.py`` and
+  ``sfincs_jax/problems/transport_parallel_runtime.py``: RHSMode-2/3 transport
+  solves and parallel transport execution.
+- ``sfincs_jax/solvers/krylov.py``: linear-solver wrappers and Krylov helpers.
+- ``sfincs_jax/solvers/implicit.py``: differentiable linear solve path.
+- ``sfincs_jax/physics/collisions.py``: PAS and full FP operator kernels.
+- ``sfincs_jax/grids.py`` and ``sfincs_jax/discretization/xgrid.py``: collocation grids, quadrature,
   modal transforms.
 
 Resolution guidance

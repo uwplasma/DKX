@@ -3,7 +3,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.classical_transport import classical_flux_v3
+from sfincs_jax.physics.classical_transport import classical_flux_v3
 
 
 def _two_species_classical_case() -> dict[str, object]:

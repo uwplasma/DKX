@@ -8,11 +8,13 @@ Goals:
 
 - Let SFINCS users run the **same example inputs** with `sfincs_jax`.
 - Provide a convenient place to benchmark against the compiled Fortran v3 executable.
-- Keep the upstream plotting scripts available while `sfincs_jax` grows output parity.
+- Keep the upstream plotting scripts available for supported output-parity workflows.
 
-## What works today
+## Supported Scope
 
-`sfincs_jax` does not yet match every upstream solve mode end-to-end in this folder.
+This folder includes more upstream modes than the first-pass public examples.
+The supported scope is the subset documented by the parity and Fortran-example
+audit pages.
 
 In general, you should expect:
 
@@ -20,7 +22,7 @@ In general, you should expect:
 - `sfincs_jax write-output --compute-transport-matrix` to work for the **RHSMode=2/3** examples used by the
   transport-matrix parity fixtures (small cases).
 
-For the current support matrix, see:
+For the support matrix, see:
 
 - `docs/parity.rst`
 - `docs/fortran_examples.rst` (auto-generated audit table)
@@ -50,18 +52,21 @@ python examples/sfincs_examples/run_sfincs_jax.py \\
 
 ## Upstream utils
 
-The scripts in `utils/` are copied from upstream (e.g. `utils/sfincsScanPlot_1`).
-They expect specific fields inside `sfincsOutput.h5`.
+The scripts in `utils/` are copied from upstream (e.g. `utils/sfincsScanPlot_1`)
+and lightly ported for Python 3, noninteractive plotting, and local
+`sfincs_jax` output generation through the sibling driver helper. They expect
+specific fields inside `sfincsOutput.h5`.
 
 Many of these scripts also read default parameters from `globalVariables.F90`. In the upstream
 layout, this file lives next to `utils/`, so this repo vendors it as:
 
 - `examples/sfincs_examples/globalVariables.F90`
 
-`sfincs_jax` currently writes the fields needed by the transport-matrix plotting scripts for RHSMode=2/3:
+`sfincs_jax` writes the fields needed by the transport-matrix plotting scripts for RHSMode=2/3:
 `transportMatrix`, `FSABFlow`, `particleFlux_vm_psiHat`, and `heatFlux_vm_psiHat`.
 
-Over time, more datasets will be added for broader postprocessing parity.
+Broader postprocessing parity is tracked in the validation and output-key
+coverage tests before additional datasets are documented as supported.
 
 To run an upstream `utils/` script in a non-interactive way:
 

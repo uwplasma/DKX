@@ -23,7 +23,7 @@ except Exception as exc:  # pragma: no cover
 
 import numpy as np
 
-from sfincs_jax.validation_artifacts import (
+from sfincs_jax.validation.artifacts import (
     DEFAULT_PUBLICATION_ARTIFACTS,
     build_publication_validation_summary,
     load_collisionality_records,

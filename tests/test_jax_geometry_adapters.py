@@ -14,8 +14,8 @@ import pytest
 import jax
 import jax.numpy as jnp
 
-import sfincs_jax.jax_geometry_adapters as jga
-from sfincs_jax.jax_geometry_adapters import (
+import sfincs_jax.geometry.jax_adapters as jga
+from sfincs_jax.geometry.jax_adapters import (
     boozer_bhat_from_spectrum,
     boozer_spectrum_geometry_proxy_objective,
     boozer_spectrum_proxy_transport_objective,
@@ -28,8 +28,8 @@ from sfincs_jax.jax_geometry_adapters import (
     vmec_boozer_kinetic_transport_scalar_contract,
     vmec_wout_from_wout_like,
 )
-from sfincs_jax.vmec_geometry import vmec_geometry_from_wout
-from sfincs_jax.vmec_wout import read_vmec_wout
+from sfincs_jax.geometry.vmec import vmec_geometry_from_wout
+from sfincs_jax.geometry.vmec_wout import read_vmec_wout
 
 
 def _wout_like(*, radius_mode_order: bool = True) -> SimpleNamespace:
@@ -650,20 +650,20 @@ def _optional_vmec_jax_wout_fixture(vmec_jax_module) -> Path | None:
     env_text = os.environ.get("SFINCS_JAX_VMEC_JAX_WOUT", "").strip()
     if env_text:
         candidates.append(Path(env_text))
-    candidates.extend(
-        [
-            Path(vmec_jax_module.__file__).resolve().parents[1]
-            / "examples"
-            / "data"
-            / "wout_circular_tokamak.nc",
-            Path("/Users/rogeriojorge/local/vmec_jax/examples/data/wout_circular_tokamak.nc"),
-            Path.cwd() / "sfincs_jax" / "data" / "equilibria" / "wout_w7x_standardConfig.nc",
-        ]
+    candidates.append(
+        Path(vmec_jax_module.__file__).resolve().parents[1]
+        / "examples"
+        / "data"
+        / "wout_circular_tokamak.nc"
     )
     for candidate in candidates:
         if candidate.exists():
             return candidate
-    return None
+    # The package is installed, so the integration gate must run: fall back to
+    # the release-asset equilibrium cache rather than skipping on local paths.
+    from sfincs_jax.validation.data_fetch import resolve_external_equilibrium
+
+    return resolve_external_equilibrium(Path("wout_w7x_standardConfig.nc"))
 
 
 def test_vmec_jax_boozer_spectrum_proxy_gradient_matches_fd_on_optional_backends() -> None:
@@ -671,7 +671,7 @@ def test_vmec_jax_boozer_spectrum_proxy_gradient_matches_fd_on_optional_backends
     pytest.importorskip("booz_xform_jax")
     from booz_xform_jax import Booz_xform
     from booz_xform_jax.jax_api import booz_xform_jax
-    from vmec_jax.wout import read_wout as read_vmec_jax_wout
+    read_vmec_jax_wout = vmec_jax.read_wout
 
     fixture = _optional_vmec_jax_wout_fixture(vmec_jax)
     if fixture is None:
@@ -743,7 +743,7 @@ def test_vmec_jax_boozer_spectrum_proxy_gradient_matches_fd_on_optional_backends
 def test_vmec_jax_woutdata_adapter_matches_file_reader_on_optional_fixture() -> None:
     vmec_jax = pytest.importorskip("vmec_jax")
     pytest.importorskip("netCDF4")
-    from vmec_jax.wout import read_wout as read_vmec_jax_wout
+    read_vmec_jax_wout = vmec_jax.read_wout
 
     fixture = _optional_vmec_jax_wout_fixture(vmec_jax)
     if fixture is None:

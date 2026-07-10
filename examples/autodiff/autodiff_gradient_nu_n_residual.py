@@ -3,11 +3,11 @@ from __future__ import annotations
 """
 Autodiff demo: gradient of a parity objective w.r.t. the collision frequency `nu_n`.
 
-This example is a lightweight version of the optax-based calibration example in
-`examples/optimization/calibrate_nu_n_to_fortran_residual_fixture.py`:
+This example is a lightweight differentiable residual check:
 
 - no optimization loop
 - no optional dependencies
+- no generated benchmark fixtures
 
 It demonstrates a key `sfincs_jax` capability for "design/optimization-style" workflows:
 differentiate a physics objective through the (matrix-free) residual evaluation.
@@ -20,8 +20,8 @@ import jax
 import jax.numpy as jnp
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.petsc_binary import read_petsc_vec
-from sfincs_jax.v3_system import full_system_operator_from_namelist, residual_v3_full_system
+from sfincs_jax.validation.fortran import read_petsc_vec
+from sfincs_jax.operators.profile_system import full_system_operator_from_namelist, residual_v3_full_system
 
 
 def main() -> None:

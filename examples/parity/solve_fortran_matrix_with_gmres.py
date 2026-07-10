@@ -12,6 +12,7 @@ import argparse
 import sys
 from pathlib import Path
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -19,9 +20,31 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.petsc_binary import read_petsc_mat_aij, read_petsc_vec
-from sfincs_jax.solver import gmres_solve
-from sfincs_jax.sparse import csr_matvec
+from sfincs_jax.validation.fortran import read_petsc_mat_aij, read_petsc_vec
+from sfincs_jax.solvers.krylov import gmres_solve
+
+
+def csr_matvec(
+    *,
+    data: jnp.ndarray,
+    indices: jnp.ndarray,
+    indptr: jnp.ndarray,
+    x: jnp.ndarray,
+    n_rows: int,
+) -> jnp.ndarray:
+    """JAX-native sparse CSR matrix-vector product ``A @ x``.
+
+    Keeps ``nnz`` static under JIT via ``total_repeat_length`` on ``jnp.repeat``.
+    """
+
+    counts = indptr[1:] - indptr[:-1]
+    nnz = int(data.shape[0])
+    row_ids = jnp.repeat(
+        jnp.arange(int(n_rows), dtype=indices.dtype),
+        counts,
+        total_repeat_length=nnz,
+    )
+    return jax.ops.segment_sum(data * x[indices], row_ids, int(n_rows))
 
 
 def _default_prefix() -> Path:

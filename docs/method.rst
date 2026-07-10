@@ -55,10 +55,10 @@ with additional Nyquist exclusions for sine components.
 `sfincs_jax` matches this behavior when evaluating `.bc` geometries so that the resulting
 arrays are consistent with the v3 Jacobian assembly at a given resolution.
 
-Selected operator terms (ported so far)
----------------------------------------
+Implemented operator terms
+--------------------------
 
-The full v3 operator is large. `sfincs_jax` currently ports and parity-tests the following
+The drift-kinetic operator is assembled from the following parity-tested
 building blocks.
 
 Collisionless streaming + mirror (ΔL = ±1)
@@ -123,7 +123,7 @@ The v3 implementation includes:
 - Dense **x-matvec** using :math:`x\,\partial/\partial x` (with optional upwinding schemes).
 - Legendre couplings with :math:`L \leftrightarrow L\pm 2` (and a diagonal-in-:math:`L` piece).
 
-In `sfincs_jax` we currently implement the default `xDotDerivativeScheme = 0`, i.e.
+`sfincs_jax` implements the default `xDotDerivativeScheme = 0`, i.e.
 the same polynomial-grid differentiation matrix is used for both upwind directions.
 
 Magnetic drift terms (ΔL = 0 and ΔL = ±2)
@@ -183,7 +183,7 @@ To stabilize the drift advection, v3 supports upwinded angular derivative matric
 
    \mathrm{use\_plus}(\theta,\zeta) = \big(g_1\,\hat D(1,1)/Z\big) > 0.
 
-This upwind selection is implemented in `sfincs_jax.magnetic_drifts` and parity-tested against
+This upwind selection is implemented in `sfincs_jax.operators.profile_magnetic_drifts` and parity-tested against
 frozen PETSc binaries for a `geometryScheme=11` fixture.
 
 Collision operators (PAS and FP)
@@ -206,7 +206,7 @@ For a fixed :math:`L`, the action can be written as a dense x-space matrix-vecto
    \mathsf{C}^{(L)}_{a b, i j}\; f_{b, j, L, \theta, \zeta}.
 
 In the v3 matrix assembly, the overall normalization is applied via ``nu_n`` (see ``populateMatrix.F90``).
-In `sfincs_jax`, this model is implemented in `sfincs_jax.collisions` and parity-tested by comparing a full
+In `sfincs_jax`, this model is implemented in `sfincs_jax.physics.collisions` and parity-tested by comparing a full
 F-block matvec against a frozen PETSc Jacobian for the v3 example ``quick_2species_FPCollisions_noEr``.
 
 Poloidally varying collisions (Phi1 in the collision operator)
@@ -223,7 +223,7 @@ so that the Fokker--Planck operator remains diagonal in :math:`(\theta,\zeta)` b
 flux surface.
 
 In `sfincs_jax`, the corresponding matrix-free operator is implemented as
-`sfincs_jax.collisions.FokkerPlanckV3Phi1Operator` and parity-tested against a frozen v3 PETSc matrix for the
+`sfincs_jax.physics.collisions.FokkerPlanckV3Phi1Operator` and parity-tested against a frozen v3 PETSc matrix for the
 fixture ``fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision``. For derivations and implementation details,
 see the vendored upstream note linked from `docs/upstream_docs.rst`.
 
@@ -264,12 +264,12 @@ function rather than an assembled sparse matrix. For the linear kinetic block th
 
 where :math:`A` is represented by a matrix-free matvec and :math:`b` is a right-hand side.
 
-In `sfincs_jax`, the residual interface lives in `sfincs_jax.residual`:
+In `sfincs_jax`, the residual interface lives in `sfincs_jax.operators.profile_system`:
 
-- :class:`sfincs_jax.residual.V3FBlockLinearSystem` computes ``residual(x)`` and
+- :class:`sfincs_jax.operators.profile_system.V3FBlockLinearSystem` computes ``residual(x)`` and
   provides a matrix-free Jacobian matvec ``jacobian_matvec(v)``.
-- :class:`sfincs_jax.residual.V3FullLinearSystem` provides the same interface for the
-  (currently supported subset of the) full v3 linear system operator.
+- :class:`sfincs_jax.operators.profile_system.V3FullLinearSystem` provides the same interface for the
+  profile-response linear system operator.
 - For linear operators, the Jacobian matvec is identical to the operator matvec; for nonlinear
   residuals later in the port, `jax.jvp` provides an efficient Jacobian-vector product (JVP)
   without ever forming a dense or sparse Jacobian matrix.
@@ -294,15 +294,18 @@ For large non-differentiable RHSMode=1 constrained-PAS profile-current solves,
 ``solve_method=auto`` may route to the host sparse-preconditioned GMRES branch.
 That branch factors an explicit sparse preconditioner but still polishes the
 true matrix-free residual.  Branch-sensitive diagnostics are labeled with
-``sfincs_jax.constrained_pas_branch``: exact true-residual branches,
+``sfincs_jax.solvers.preconditioner_pas_policy``: exact true-residual branches,
 PETSc-compatible minimum-norm diagnostics, and weak preconditioned-residual
 references are kept distinct so current/flow parity is not claimed across
 different nullspace gauges.
 
 The implementations live in:
 
-- `sfincs_jax/solver.py` (Krylov wrappers and history tracking),
-- `sfincs_jax/v3_driver.py` (preconditioners, projections, and fallback logic).
+- `sfincs_jax/solvers/krylov.py` (Krylov wrappers and history tracking),
+- `sfincs_jax/solvers/` (preconditioners, path selection, and sparse/native
+  factors),
+- `sfincs_jax/problems/` (problem setup, projections, residual gates, and
+  fallback orchestration).
 
 Structured block solves for monoenergetic and weakly coupled subproblems
 -------------------------------------------------------------------------
@@ -324,7 +327,7 @@ between neighboring blocks, the matrix can be written schematically as
    & & L_{n-2} & D_{n-1}
    \end{bmatrix}.
 
-The block-Schur recursion used by `sfincs_jax.structured_velocity` is
+The block-Schur recursion used by `sfincs_jax.discretization.structured_velocity` is
 
 .. math::
 
@@ -347,12 +350,11 @@ forward and backward substitutions:
 
 This is the same factor-and-reuse pattern used by memory-efficient block-tridiagonal
 solvers. In `sfincs_jax`, the reusable implementation lives in
-`sfincs_jax/structured_velocity.py`. It is now used in the weakly coupled
+`sfincs_jax/discretization/structured_velocity.py`. It is used in the weakly coupled
 `pas_tokamak_theta` tail solve for the `L>=2` block chain, while the
 special `(L=0,1)` entrance block remains handled explicitly in
-`sfincs_jax/v3_driver.py`. A reverse factorization is available for cases where
+`sfincs_jax/problems/profile_sparse_solve.py`. A reverse factorization is available for cases where
 the leading block is singular or badly conditioned, so the solve can start from
-the opposite end of the block chain. The structured tail is currently an
-explicit opt-in experiment (`SFINCS_JAX_PAS_TOKAMAK_STRUCTURED=1`), since the
-shipped tokamak PAS fixtures on `main` still favor the established tail on runtime
-and RSS.
+the opposite end of the block chain. The structured tail is an expert opt-in
+path (`SFINCS_JAX_PAS_TOKAMAK_STRUCTURED=1`); the automatic policy keeps the
+established tail path when bounded parity, runtime, and RSS gates favor it.
