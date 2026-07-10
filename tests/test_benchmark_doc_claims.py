@@ -76,7 +76,6 @@ REQUIRED_CI_JOB_TIMEOUTS = {
     "coverage-report": 10,
     "examples-smoke": 10,
     "external-data-smoke": 10,
-    "optional-ecosystem-gates": 10,
     "tests": 5,
 }
 

@@ -185,33 +185,12 @@ jobs:
           python examples/getting_started/write_sfincs_output_vmec.py --out "${RUNNER_TEMP}/sfincsOutput_vmec_release_data.h5"
           test -s "${RUNNER_TEMP}/sfincsOutput_vmec_release_data.h5"
 
-  optional-ecosystem-gates:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 10
-    env:
-      JAX_ENABLE_X64: "True"
-      JAX_DISABLE_JIT: "0"
-      SFINCS_JAX_SOLVER_JIT: "1"
-      SFINCS_JAX_PRECOMPILE: "0"
-      SFINCS_JAX_PROFILE: "0"
-      SFINCS_JAX_CI: "1"
-      SFINCS_JAX_FAST_EXAMPLES: "1"
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: "pyproject.toml"
-      - name: Install
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev,structured]"
-          pip install lineax equinox
-      - name: Optional ecosystem benchmark gates
-        run: |
-          python -m pytest -q \
-            tests/test_jax_ecosystem_backend_probes.py
+  # NOTE: the former `optional-ecosystem-gates` job was removed. Its only
+  # sfincs-specific probe depended on the deleted structured-CSR internals
+  # (sfincs_jax.operators.profile_full_system), and the remaining lineax/
+  # equinox/interpax checks were third-party library smoke tests with no
+  # sfincs_jax coverage. The real structured backend (solvax) is exercised by
+  # the coverage shards, which install the `structured` extra.
 
   tests:
     runs-on: ubuntu-22.04
@@ -220,7 +199,6 @@ jobs:
       - coverage-report
       - examples-smoke
       - external-data-smoke
-      - optional-ecosystem-gates
     if: always()
     steps:
       - name: Check required CI jobs

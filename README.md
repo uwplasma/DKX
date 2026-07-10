@@ -21,18 +21,12 @@ tables, and console prints are pinned field-by-field against SFINCS Fortran v3.
 pip install sfincs_jax
 ```
 
+The solver tiers (block-tridiagonal Legendre elimination, recycled GCROT,
+implicit differentiation) live in the external [`solvax`](https://pypi.org/project/solvax/)
+library, which installs automatically as a core dependency.
+
 Optional extras:
 
-- **Structured direct solvers** (`solvax`, the external library that owns the
-  block-tridiagonal Legendre elimination and recycled-Krylov tiers): until the
-  `solvax` PyPI release, install it from git — the `[structured]` extra then
-  resolves locally:
-
-  ```bash
-  pip install git+https://github.com/uwplasma/SOLVAX
-  ```
-
-  Without it, `sfincs_jax` imports lazily and falls back to host/direct paths.
 - **GPU**: install the matching CUDA build of JAX, e.g.
   `pip install -U "jax[cuda12]"`.
 
