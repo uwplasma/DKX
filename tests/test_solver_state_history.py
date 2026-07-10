@@ -6,8 +6,8 @@ import numpy as np
 import jax.numpy as jnp
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3_system import full_system_operator_from_namelist
-from sfincs_jax.solver_state import save_krylov_state, load_krylov_state
+from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
+from sfincs_jax.solvers.diagnostics import save_krylov_state, load_krylov_state
 
 
 def test_solver_state_history_roundtrip(tmp_path: Path) -> None:

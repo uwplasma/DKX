@@ -10,8 +10,8 @@ from examples.performance.benchmark_transport_parallel_scaling import (
     _timing_semantics,
     _write_scaling_figure,
 )
-from sfincs_jax.transport_parallel_policy import audit_transport_parallel_scaling_summary
-from sfincs_jax.transport_parallel_runtime import plan_transport_parallel_gpu_subprocesses
+from sfincs_jax.problems.transport_parallel_runtime import audit_transport_parallel_scaling_summary
+from sfincs_jax.problems.transport_parallel_runtime import plan_transport_parallel_gpu_subprocesses
 
 
 def test_configure_backend_env_cpu() -> None:

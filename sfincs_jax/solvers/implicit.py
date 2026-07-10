@@ -1,0 +1,318 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+import os
+from typing import Callable
+
+import jax
+import jax.numpy as jnp
+from jax import tree_util as jtu
+
+from .krylov import GMRESSolveResult, bicgstab_solve, bicgstab_solve_jit, gmres_solve, gmres_solve_jit
+
+
+MatVec = Callable[[jnp.ndarray], jnp.ndarray]
+
+
+@jtu.register_pytree_node_class
+@dataclass(frozen=True)
+class ImplicitGMRESSolveResult:
+    """Result wrapper for implicit-diff GMRES solves.
+
+    Notes
+    -----
+    The returned `x` is differentiable w.r.t. any JAX parameters used inside `matvec` and/or `b`,
+    using `jax.lax.custom_linear_solve` (implicit differentiation). The `gmres` metadata is
+    returned as a convenience for diagnostics, but is not intended as a stable API.
+    """
+
+    x: jnp.ndarray
+    gmres: GMRESSolveResult
+
+    def tree_flatten(self):
+        children = (self.x, self.gmres)
+        aux = None
+        return children, aux
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        del aux
+        x, gmres = children
+        return cls(x=x, gmres=gmres)
+
+
+@jtu.register_pytree_node_class
+@dataclass(frozen=True)
+class ImplicitLinearSolveResult:
+    """Result wrapper for implicit-diff linear solves (GMRES/BiCGStab/dense)."""
+
+    x: jnp.ndarray
+    residual_norm: jnp.ndarray
+
+    def tree_flatten(self):
+        children = (self.x, self.residual_norm)
+        aux = None
+        return children, aux
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        del aux
+        x, residual_norm = children
+        return cls(x=x, residual_norm=residual_norm)
+
+
+def gmres_custom_linear_solve(
+    *,
+    matvec: MatVec,
+    b: jnp.ndarray,
+    tol: float = 1e-10,
+    atol: float = 0.0,
+    restart: int = 80,
+    maxiter: int | None = 400,
+    solve_method: str = "batched",
+    size_hint: int | None = None,
+    solver_jit: bool | None = None,
+) -> ImplicitGMRESSolveResult:
+    """Solve `A x = b` with GMRES and define gradients via implicit differentiation.
+
+    This is the recommended way to obtain gradients through a **linear** SFINCS solve without
+    backpropagating through GMRES iterations.
+
+    Implementation uses `jax.lax.custom_linear_solve`, which requires:
+      - a forward solve for `A x = b`
+      - a transpose solve for `A^T y = g` during reverse-mode differentiation
+
+    Parameters
+    ----------
+    matvec:
+      Function computing `A @ x` for the current operator.
+    b:
+      RHS vector.
+    """
+    result = linear_custom_solve(
+        matvec=matvec,
+        b=b,
+        tol=tol,
+        atol=atol,
+        restart=restart,
+        maxiter=maxiter,
+        solve_method=solve_method,
+        solver="gmres",
+        size_hint=size_hint,
+        solver_jit=solver_jit,
+    )
+    gmres = gmres_solve(
+        matvec=matvec,
+        b=jnp.asarray(b, dtype=jnp.float64),
+        tol=tol,
+        atol=atol,
+        restart=restart,
+        maxiter=maxiter,
+        solve_method=solve_method,
+    )
+    return ImplicitGMRESSolveResult(x=result.x, gmres=gmres)
+
+
+def _use_solver_jit(size_hint: int | None = None) -> bool:
+    env = os.environ.get("SFINCS_JAX_SOLVER_JIT", "").strip().lower()
+    if env in {"1", "true", "yes", "on"}:
+        return True
+    if env in {"0", "false", "no", "off"}:
+        return False
+    thresh_env = os.environ.get("SFINCS_JAX_SOLVER_JIT_MAX_SIZE", "").strip()
+    # Default is intentionally conservative: JITting the full Krylov loop can yield very
+    # large XLA compilations for medium/large systems. Users can opt in via
+    # `SFINCS_JAX_SOLVER_JIT=1` or raise the cutoff with `SFINCS_JAX_SOLVER_JIT_MAX_SIZE`.
+    #
+    # In practice, we've found that XLA compilation of the *entire* GMRES/BiCGStab loop can
+    # transiently allocate multiple GB of host RAM even for modest n~O(1e3-1e4). Keep the
+    # auto-JIT cutoff small so the default favors lower peak memory and faster startup.
+    thresh_default = 2000
+    try:
+        thresh = int(thresh_env) if thresh_env else thresh_default
+    except ValueError:
+        thresh = thresh_default
+    size = int(size_hint) if size_hint is not None else 0
+    return size <= thresh
+
+
+def implicit_solve_method_for_custom_linear_solve(solve_method: str) -> str:
+    """Return the traced-safe Krylov method used inside implicit differentiation.
+
+    Host-only SciPy methods are valid for CLI/non-autodiff production solves, but
+    `jax.lax.custom_linear_solve` supplies traced arrays to the forward and
+    transpose callbacks. Resolve those requests to the JAX-native incremental
+    GMRES path before tracing.
+    """
+
+    method = str(solve_method).strip().lower().replace("-", "_")
+    if method in {"lgmres", "lgmres_scipy"}:
+        return "incremental"
+    return method
+
+
+def _linear_custom_solve_core(
+    *,
+    matvec: MatVec,
+    b: jnp.ndarray,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    solve_method: str,
+    solver: str,
+    preconditioner: MatVec | None,
+    preconditioner_transpose: MatVec | None,
+    x0: jnp.ndarray | None,
+    precondition_side: str,
+    size_hint: int | None,
+    solver_jit: bool | None,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    b = jnp.asarray(b, dtype=jnp.float64)
+
+    solver_kind = str(solver).lower()
+    if solver_kind in {"auto", "default"}:
+        solver_kind = "bicgstab"
+
+    solve_method_kind = implicit_solve_method_for_custom_linear_solve(solve_method)
+
+    if solver_jit is None:
+        use_solver_jit = _use_solver_jit(size_hint=size_hint)
+    else:
+        use_solver_jit = bool(solver_jit)
+
+    def _solve_direct(mv: MatVec, rhs: jnp.ndarray) -> GMRESSolveResult:
+        if solver_kind in {"bicgstab", "bicgstab_jax"}:
+            solver_fn = bicgstab_solve_jit if use_solver_jit else bicgstab_solve
+            return solver_fn(
+                matvec=mv,
+                b=rhs,
+                preconditioner=preconditioner,
+                x0=x0,
+                tol=tol,
+                atol=atol,
+                maxiter=maxiter,
+                precondition_side=precondition_side,
+            )
+        solver_fn = gmres_solve_jit if use_solver_jit else gmres_solve
+        return solver_fn(
+            matvec=mv,
+            b=rhs,
+            preconditioner=preconditioner,
+            x0=x0,
+            tol=tol,
+            atol=atol,
+            restart=restart,
+            maxiter=maxiter,
+            solve_method=solve_method_kind,
+            precondition_side=precondition_side,
+        )
+
+    def solve(mv: MatVec, rhs: jnp.ndarray) -> jnp.ndarray:
+        return _solve_direct(mv, rhs).x
+
+    def transpose_solve(mv_T: MatVec, rhs: jnp.ndarray) -> jnp.ndarray:
+        precond_T = preconditioner_transpose if preconditioner_transpose is not None else preconditioner
+        if solver_kind in {"bicgstab", "bicgstab_jax"}:
+            solver_fn = bicgstab_solve_jit if use_solver_jit else bicgstab_solve
+            return solver_fn(
+                matvec=mv_T,
+                b=rhs,
+                preconditioner=precond_T,
+                x0=None,
+                tol=tol,
+                atol=atol,
+                maxiter=maxiter,
+                precondition_side=precondition_side,
+            ).x
+        solver_fn = gmres_solve_jit if use_solver_jit else gmres_solve
+        return solver_fn(
+            matvec=mv_T,
+            b=rhs,
+            preconditioner=precond_T,
+            x0=None,
+            tol=tol,
+            atol=atol,
+            restart=restart,
+            maxiter=maxiter,
+            solve_method=solve_method_kind,
+            precondition_side=precondition_side,
+        ).x
+
+    x = jax.lax.custom_linear_solve(matvec, b, solve=solve, transpose_solve=transpose_solve, symmetric=False)
+    r = b - matvec(x)
+    return x, r
+
+
+def linear_custom_solve(
+    *,
+    matvec: MatVec,
+    b: jnp.ndarray,
+    tol: float = 1e-10,
+    atol: float = 0.0,
+    restart: int = 80,
+    maxiter: int | None = 400,
+    solve_method: str = "batched",
+    solver: str = "auto",
+    preconditioner: MatVec | None = None,
+    preconditioner_transpose: MatVec | None = None,
+    x0: jnp.ndarray | None = None,
+    precondition_side: str = "left",
+    size_hint: int | None = None,
+    solver_jit: bool | None = None,
+) -> ImplicitLinearSolveResult:
+    """Implicit-diff linear solve wrapper using `jax.lax.custom_linear_solve`."""
+    x, r = _linear_custom_solve_core(
+        matvec=matvec,
+        b=b,
+        tol=tol,
+        atol=atol,
+        restart=restart,
+        maxiter=maxiter,
+        solve_method=solve_method,
+        solver=solver,
+        preconditioner=preconditioner,
+        preconditioner_transpose=preconditioner_transpose,
+        x0=x0,
+        precondition_side=precondition_side,
+        size_hint=size_hint,
+        solver_jit=solver_jit,
+    )
+    return ImplicitLinearSolveResult(x=x, residual_norm=jnp.linalg.norm(r))
+
+
+def linear_custom_solve_with_residual(
+    *,
+    matvec: MatVec,
+    b: jnp.ndarray,
+    tol: float = 1e-10,
+    atol: float = 0.0,
+    restart: int = 80,
+    maxiter: int | None = 400,
+    solve_method: str = "batched",
+    solver: str = "auto",
+    preconditioner: MatVec | None = None,
+    preconditioner_transpose: MatVec | None = None,
+    x0: jnp.ndarray | None = None,
+    precondition_side: str = "left",
+    size_hint: int | None = None,
+    solver_jit: bool | None = None,
+) -> tuple[ImplicitLinearSolveResult, jnp.ndarray]:
+    """Implicit-diff linear solve that also returns the residual vector."""
+    x, r = _linear_custom_solve_core(
+        matvec=matvec,
+        b=b,
+        tol=tol,
+        atol=atol,
+        restart=restart,
+        maxiter=maxiter,
+        solve_method=solve_method,
+        solver=solver,
+        preconditioner=preconditioner,
+        preconditioner_transpose=preconditioner_transpose,
+        x0=x0,
+        precondition_side=precondition_side,
+        size_hint=size_hint,
+        solver_jit=solver_jit,
+    )
+    return ImplicitLinearSolveResult(x=x, residual_norm=jnp.linalg.norm(r)), r

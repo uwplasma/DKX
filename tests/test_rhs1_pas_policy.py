@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from sfincs_jax.rhs1_pas_policy import (
+from sfincs_jax.solvers.preconditioner_pas_policy import (
+    RHS1PASAdaptiveSmootherControls,
+    RHS1PASForceFullDecision,
+    RHS1PASPreconditionerProbeConfig,
+    RHS1PASSchurRescueControls,
     build_pas_tz_memory_fallback,
     estimate_rhs1_pas_tz_build_bytes,
     estimate_rhs1_pas_tz_build_memory,
@@ -15,6 +19,16 @@ from sfincs_jax.rhs1_pas_policy import (
     resolve_pas_tz_guarded_correction_kind,
     resolve_pas_tz_memory_fallback_axis,
     rhs1_pas_adaptive_smoother_allowed,
+    rhs1_pas_adaptive_smoother_controls_from_env,
+    rhs1_pas_default_preconditioner_kind,
+    rhs1_pas_force_full_decision_from_env,
+    rhs1_pas_preconditioner_probe_admitted,
+    rhs1_pas_preconditioner_probe_config_from_env,
+    rhs1_pas_preconditioner_probe_large_collision_skip,
+    rhs1_pas_preconditioner_probe_uses_collision,
+    rhs1_pas_schur_rescue_controls_from_env,
+    rhs1_pas_small_near_zero_er_kind,
+    rhs1_pas_tz_guarded_strong_retry_from_env,
 )
 
 
@@ -170,6 +184,402 @@ def test_pas_adaptive_smoother_env_controls_and_invalid_min(monkeypatch) -> None
     )
 
 
+def test_pas_adaptive_smoother_controls_from_env(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_SWEEPS", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_OMEGA", raising=False)
+    assert rhs1_pas_adaptive_smoother_controls_from_env() == RHS1PASAdaptiveSmootherControls(
+        max_sweeps=3,
+        omega=1.0,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_SWEEPS", "5")
+    monkeypatch.setenv("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_OMEGA", "0.75")
+    assert rhs1_pas_adaptive_smoother_controls_from_env() == RHS1PASAdaptiveSmootherControls(
+        max_sweeps=5,
+        omega=0.75,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_SWEEPS", "bad")
+    monkeypatch.setenv("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_OMEGA", "bad")
+    assert rhs1_pas_adaptive_smoother_controls_from_env() == RHS1PASAdaptiveSmootherControls(
+        max_sweeps=3,
+        omega=1.0,
+    )
+
+
+def test_pas_schur_rescue_controls_trigger_and_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RATIO", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RESTART", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAXITER", raising=False)
+
+    assert rhs1_pas_schur_rescue_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        has_pas=True,
+        n_species=2,
+        residual_norm=2.0e-2,
+        target=1.0e-8,
+        active_size=4000,
+        restart=80,
+        maxiter=300,
+    ) == RHS1PASSchurRescueControls(
+        run=True,
+        ratio=1.0e4,
+        max_active_size=90000,
+        restart=120,
+        maxiter=1200,
+    )
+
+
+def test_pas_schur_rescue_controls_respect_guards(monkeypatch) -> None:
+    kwargs = dict(
+        rhs_mode=1,
+        include_phi1=False,
+        has_pas=True,
+        n_species=2,
+        residual_norm=2.0e-2,
+        target=1.0e-8,
+        active_size=4000,
+        restart=80,
+        maxiter=300,
+    )
+    assert not rhs1_pas_schur_rescue_controls_from_env(**{**kwargs, "rhs_mode": 2}).run
+    assert not rhs1_pas_schur_rescue_controls_from_env(**{**kwargs, "include_phi1": True}).run
+    assert not rhs1_pas_schur_rescue_controls_from_env(**{**kwargs, "has_pas": False}).run
+    assert not rhs1_pas_schur_rescue_controls_from_env(**{**kwargs, "n_species": 1}).run
+    assert not rhs1_pas_schur_rescue_controls_from_env(**{**kwargs, "residual_norm": float("inf")}).run
+    assert not rhs1_pas_schur_rescue_controls_from_env(**{**kwargs, "active_size": 100000}).run
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RATIO", "0")
+    assert not rhs1_pas_schur_rescue_controls_from_env(**kwargs).run
+
+
+def test_pas_schur_rescue_controls_env_overrides_and_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RATIO", "25")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAX", "5000")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RESTART", "44")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAXITER", "88")
+    assert rhs1_pas_schur_rescue_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        has_pas=True,
+        n_species=2,
+        residual_norm=3.0e-7,
+        target=1.0e-8,
+        active_size=4000,
+        restart=80,
+        maxiter=300,
+    ) == RHS1PASSchurRescueControls(
+        run=True,
+        ratio=25.0,
+        max_active_size=5000,
+        restart=44,
+        maxiter=88,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RATIO", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAX", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RESTART", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAXITER", "bad")
+    assert rhs1_pas_schur_rescue_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        has_pas=True,
+        n_species=2,
+        residual_norm=2.0e-2,
+        target=1.0e-8,
+        active_size=4000,
+        restart=80,
+        maxiter=None,
+    ) == RHS1PASSchurRescueControls(
+        run=True,
+        ratio=1.0e4,
+        max_active_size=90000,
+        restart=120,
+        maxiter=1200,
+    )
+
+
+def test_pas_preconditioner_probe_config_preserves_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_PRECOND_PROBE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PAS_PRECOND_PROBE_REL_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PAS_PRECOND_BUILD_MAX", raising=False)
+
+    assert rhs1_pas_preconditioner_probe_config_from_env() == RHS1PASPreconditionerProbeConfig(
+        enabled=True,
+        rel_max=0.9,
+        build_max=20000,
+    )
+
+
+def test_pas_preconditioner_probe_config_respects_env_and_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_PAS_PRECOND_PROBE", "off")
+    monkeypatch.setenv("SFINCS_JAX_PAS_PRECOND_PROBE_REL_MAX", "bad")
+    monkeypatch.setenv("SFINCS_JAX_PAS_PRECOND_BUILD_MAX", "bad")
+
+    assert rhs1_pas_preconditioner_probe_config_from_env() == RHS1PASPreconditionerProbeConfig(
+        enabled=False,
+        rel_max=0.9,
+        build_max=20000,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_PRECOND_PROBE", "1")
+    monkeypatch.setenv("SFINCS_JAX_PAS_PRECOND_PROBE_REL_MAX", "0.25")
+    monkeypatch.setenv("SFINCS_JAX_PAS_PRECOND_BUILD_MAX", "1234")
+    assert rhs1_pas_preconditioner_probe_config_from_env() == RHS1PASPreconditionerProbeConfig(
+        enabled=True,
+        rel_max=0.25,
+        build_max=1234,
+    )
+
+
+def test_pas_default_preconditioner_kind_prefers_schur_for_tokamak_like_multispecies() -> None:
+    assert (
+        rhs1_pas_default_preconditioner_kind(
+            requested_env="auto",
+            current_kind="theta_line",
+            rhs_mode=1,
+            include_phi1=False,
+            has_pas=True,
+            n_species=2,
+            n_zeta=1,
+            geom_scheme=1,
+        )
+        == "schur"
+    )
+    assert (
+        rhs1_pas_default_preconditioner_kind(
+            requested_env="default",
+            current_kind="theta_line",
+            rhs_mode=1,
+            include_phi1=False,
+            has_pas=True,
+            n_species=2,
+            n_zeta=9,
+            geom_scheme=5,
+        )
+        == "schur"
+    )
+
+
+def test_pas_default_preconditioner_kind_preserves_user_and_non_pas_choices() -> None:
+    kwargs = dict(
+        current_kind="theta_line",
+        rhs_mode=1,
+        include_phi1=False,
+        has_pas=True,
+        n_species=2,
+        n_zeta=1,
+        geom_scheme=1,
+    )
+    assert rhs1_pas_default_preconditioner_kind(requested_env="xblock_tz", **kwargs) == "theta_line"
+    assert (
+        rhs1_pas_default_preconditioner_kind(
+            requested_env="auto",
+            **{**kwargs, "include_phi1": True},
+        )
+        == "theta_line"
+    )
+    assert (
+        rhs1_pas_default_preconditioner_kind(
+            requested_env="auto",
+            **{**kwargs, "has_pas": False},
+        )
+        == "theta_line"
+    )
+    assert (
+        rhs1_pas_default_preconditioner_kind(
+            requested_env="auto",
+            **{**kwargs, "n_species": 1},
+        )
+        == "theta_line"
+    )
+    assert (
+        rhs1_pas_default_preconditioner_kind(
+            requested_env="auto",
+            **{**kwargs, "geom_scheme": 5, "n_zeta": 17},
+        )
+        == "theta_line"
+    )
+
+
+def test_pas_preconditioner_probe_admission_guards_heavy_paths() -> None:
+    config = RHS1PASPreconditionerProbeConfig(enabled=True, rel_max=0.9, build_max=20000)
+    kwargs = dict(
+        config=config,
+        preconditioner_kind="schur",
+        preconditioner_enabled=True,
+        solve_method_kind="gmres",
+        has_pas=True,
+        use_dkes=False,
+    )
+
+    assert rhs1_pas_preconditioner_probe_admitted(**kwargs)
+    assert not rhs1_pas_preconditioner_probe_admitted(**{**kwargs, "config": RHS1PASPreconditionerProbeConfig(enabled=False, rel_max=0.9, build_max=20000)})
+    assert not rhs1_pas_preconditioner_probe_admitted(**{**kwargs, "preconditioner_kind": "collision"})
+    assert not rhs1_pas_preconditioner_probe_admitted(**{**kwargs, "preconditioner_enabled": False})
+    assert not rhs1_pas_preconditioner_probe_admitted(**{**kwargs, "solve_method_kind": "dense"})
+    assert not rhs1_pas_preconditioner_probe_admitted(**{**kwargs, "has_pas": False})
+    assert not rhs1_pas_preconditioner_probe_admitted(**{**kwargs, "use_dkes": True})
+
+
+def test_pas_preconditioner_probe_large_collision_skip_preserves_constraint_tail_guard() -> None:
+    config = RHS1PASPreconditionerProbeConfig(enabled=True, rel_max=0.9, build_max=100)
+
+    decision, message = rhs1_pas_preconditioner_probe_large_collision_skip(
+        config=config,
+        cached_decision=None,
+        total_size=101,
+        constraint_scheme=0,
+        extra_size=0,
+    )
+    assert decision is True
+    assert message == "solve_v3_full_system_linear_gmres: PAS precond skip (size=101 >= 100) -> collision"
+
+    assert rhs1_pas_preconditioner_probe_large_collision_skip(
+        config=config,
+        cached_decision=False,
+        total_size=101,
+        constraint_scheme=0,
+        extra_size=0,
+    ) == (False, None)
+    assert rhs1_pas_preconditioner_probe_large_collision_skip(
+        config=config,
+        cached_decision=None,
+        total_size=99,
+        constraint_scheme=0,
+        extra_size=0,
+    ) == (None, None)
+    assert rhs1_pas_preconditioner_probe_large_collision_skip(
+        config=config,
+        cached_decision=None,
+        total_size=101,
+        constraint_scheme=2,
+        extra_size=1,
+    ) == (None, None)
+
+
+def test_pas_preconditioner_probe_residual_decision_uses_threshold() -> None:
+    assert rhs1_pas_preconditioner_probe_uses_collision(probe_rel=0.9, rel_max=0.9)
+    assert not rhs1_pas_preconditioner_probe_uses_collision(probe_rel=0.9001, rel_max=0.9)
+
+
+def test_pas_force_full_decision_defaults_to_pas_lite_or_hybrid(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_FORCE_FULL_RATIO", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PAS_LITE_MIN", raising=False)
+
+    kwargs = dict(
+        enabled=True,
+        has_pas=True,
+        residual_norm=51.0,
+        target=1.0,
+        requested_kind=None,
+    )
+    assert rhs1_pas_force_full_decision_from_env(active_size=20000, **kwargs) == RHS1PASForceFullDecision(
+        run=True,
+        ratio=50.0,
+        forced_kind="pas_lite",
+    )
+    assert rhs1_pas_force_full_decision_from_env(active_size=19999, **kwargs) == RHS1PASForceFullDecision(
+        run=True,
+        ratio=50.0,
+        forced_kind="pas_hybrid",
+    )
+
+
+def test_pas_force_full_decision_respects_guards_and_invalid_env(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_PAS_FORCE_FULL_RATIO", "bad")
+    monkeypatch.setenv("SFINCS_JAX_PAS_LITE_MIN", "bad")
+    kwargs = dict(
+        enabled=True,
+        has_pas=True,
+        residual_norm=51.0,
+        target=1.0,
+        active_size=20000,
+        requested_kind="collision",
+    )
+    assert rhs1_pas_force_full_decision_from_env(**kwargs) == RHS1PASForceFullDecision(
+        run=True,
+        ratio=50.0,
+        forced_kind="pas_lite",
+    )
+    assert not rhs1_pas_force_full_decision_from_env(**{**kwargs, "enabled": False}).run
+    assert not rhs1_pas_force_full_decision_from_env(**{**kwargs, "has_pas": False}).run
+    assert not rhs1_pas_force_full_decision_from_env(**{**kwargs, "residual_norm": 1.0}).run
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_FORCE_FULL_RATIO", "100")
+    assert not rhs1_pas_force_full_decision_from_env(**kwargs).run
+
+
+def test_pas_small_near_zero_er_kind_uses_lite_or_hybrid_threshold(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_LITE_TZ_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PAS_LITE_MIN", raising=False)
+
+    kwargs = dict(pas_tz_applicable=True, tz_size=128)
+
+    assert rhs1_pas_small_near_zero_er_kind(active_size=20_000, **kwargs) == "pas_lite"
+    assert rhs1_pas_small_near_zero_er_kind(active_size=19_999, **kwargs) == "pas_hybrid"
+
+
+def test_pas_small_near_zero_er_kind_falls_back_to_xmg_for_large_or_inapplicable_tz(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_LITE_TZ_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PAS_LITE_MIN", raising=False)
+
+    assert (
+        rhs1_pas_small_near_zero_er_kind(
+            pas_tz_applicable=True,
+            tz_size=257,
+            active_size=30_000,
+        )
+        == "xmg"
+    )
+    assert (
+        rhs1_pas_small_near_zero_er_kind(
+            pas_tz_applicable=False,
+            tz_size=128,
+            active_size=30_000,
+        )
+        == "xmg"
+    )
+
+
+def test_pas_small_near_zero_er_kind_respects_env_and_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_PAS_LITE_TZ_MAX", "bad")
+    monkeypatch.setenv("SFINCS_JAX_PAS_LITE_MIN", "bad")
+    assert (
+        rhs1_pas_small_near_zero_er_kind(
+            pas_tz_applicable=True,
+            tz_size=256,
+            active_size=20_000,
+        )
+        == "pas_lite"
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_LITE_TZ_MAX", "64")
+    assert (
+        rhs1_pas_small_near_zero_er_kind(
+            pas_tz_applicable=True,
+            tz_size=65,
+            active_size=20_000,
+        )
+        == "xmg"
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_LITE_TZ_MAX", "128")
+    monkeypatch.setenv("SFINCS_JAX_PAS_LITE_MIN", "40000")
+    assert (
+        rhs1_pas_small_near_zero_er_kind(
+            pas_tz_applicable=True,
+            tz_size=128,
+            active_size=30_000,
+        )
+        == "pas_hybrid"
+    )
+
+
 def test_pas_tz_memory_fallback_axis_preserves_default_behavior() -> None:
     assert preferred_pas_tz_schwarz_axis(_op()) == "zeta"
     assert (
@@ -238,6 +648,19 @@ def test_pas_tz_guarded_correction_kind_is_explicit() -> None:
     assert resolve_pas_tz_guarded_correction_kind(requested="tzfft") == "tzfft"
     assert resolve_pas_tz_guarded_correction_kind(requested="collision-tzfft-correction") == "tzfft"
     assert resolve_pas_tz_guarded_correction_kind(requested="unknown") is None
+
+
+def test_pas_tz_guarded_strong_retry_env_is_explicit(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY", raising=False)
+    assert not rhs1_pas_tz_guarded_strong_retry_from_env()
+
+    for value in ("1", "true", "yes", "on"):
+        monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY", value)
+        assert rhs1_pas_tz_guarded_strong_retry_from_env()
+
+    for value in ("0", "false", "no", "off", "unexpected"):
+        monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY", value)
+        assert not rhs1_pas_tz_guarded_strong_retry_from_env()
 
 
 def test_build_pas_tz_memory_fallback_can_force_zeta_schwarz(monkeypatch) -> None:

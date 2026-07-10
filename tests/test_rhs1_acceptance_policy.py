@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from sfincs_jax.rhs1_acceptance_policy import rhs1_host_factor_probe_ok, rhs1_pas_fast_accept
+from sfincs_jax.problems.profile_policies import rhs1_host_factor_probe_ok, rhs1_pas_fast_accept
 
 
 def _op(*, has_pas: bool = True, has_phi1: bool = False, rhs_mode: int = 1):

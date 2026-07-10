@@ -7,7 +7,7 @@ proxy transport objective, checks the gradient against a centered finite
 difference, and takes a few scalar optimization steps.
 
 The optimized scalar is a bounded geometry/transport proxy, not a full kinetic solve.
-It is the public handoff point for fully JAX-native geometry workflows while the full
+It is the public interface point for fully JAX-native geometry workflows while the full
 VMEC-boundary-to-transport-solve objective remains a larger research lane.
 
 Only the in-memory spectral scaling, ``booz_xform_jax`` call, and
@@ -42,7 +42,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.jax_geometry_adapters import (  # noqa: E402
+from sfincs_jax.geometry.jax_adapters import (  # noqa: E402
     boozer_spectrum_proxy_transport_gradient_gate,
     boozer_spectrum_proxy_transport_objective,
     geometry_proxy_no_solve_provenance_gate,
@@ -175,10 +175,10 @@ def _load_wout_from_vmec_case(args: argparse.Namespace):
 
 def _load_wout_from_file(path: Path):
     try:
-        from vmec_jax.wout import read_wout as read_vmec_jax_wout
+        from vmec_jax import read_wout as read_vmec_jax_wout
     except ImportError as exc:  # pragma: no cover - optional dependency
-        raise SystemExit("This example requires vmec_jax.wout.read_wout.") from exc
-    return read_vmec_jax_wout(path), f"vmec_jax.wout.read_wout('{path}')"
+        raise SystemExit("This example requires vmec_jax.read_wout.") from exc
+    return read_vmec_jax_wout(path), f"vmec_jax.read_wout('{path}')"
 
 
 def _build_boozer_context(wout_like, *, mboz: int, nboz: int, surface: float):

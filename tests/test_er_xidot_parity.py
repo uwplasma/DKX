@@ -5,12 +5,12 @@ from pathlib import Path
 import numpy as np
 import jax.numpy as jnp
 
-from sfincs_jax.collisionless_er import ErXiDotV3Operator, apply_er_xidot_v3_offdiag2
+from sfincs_jax.operators.profile_electric_field import ErXiDotV3Operator, apply_er_xidot_v3_offdiag2
 from sfincs_jax.geometry import boozer_geometry_scheme4
-from sfincs_jax.indices import V3Indexing
+from sfincs_jax.discretization.v3 import V3Indexing
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.petsc_binary import read_petsc_mat_aij
-from sfincs_jax.v3 import grids_from_namelist
+from sfincs_jax.validation.fortran import read_petsc_mat_aij
+from sfincs_jax.discretization.v3 import grids_from_namelist
 
 
 def _dphi_hat_dpsi_hat_from_er_scheme4(er: float) -> float:
@@ -71,8 +71,8 @@ def test_er_xidot_offdiag2_matvec_matches_fortran_matrix() -> None:
 
     # Pack into padded f tensor.
     f = np.zeros((1, indexing.n_x, indexing.n_xi_max, indexing.n_theta, indexing.n_zeta), dtype=np.float64)
-    for g, (s, ix, l, it, iz) in enumerate(inv):
-        f[s, ix, l, it, iz] = x_vec[g]
+    for g, (s, ix, ell, it, iz) in enumerate(inv):
+        f[s, ix, ell, it, iz] = x_vec[g]
 
     y_jax = np.asarray(apply_er_xidot_v3_offdiag2(op, jnp.asarray(f)))
 
@@ -97,7 +97,7 @@ def test_er_xidot_offdiag2_matvec_matches_fortran_matrix() -> None:
         y_ref[row] = acc
 
     y_jax_vec = np.zeros((n_f,), dtype=np.float64)
-    for g, (s, ix, l, it, iz) in enumerate(inv):
-        y_jax_vec[g] = y_jax[s, ix, l, it, iz]
+    for g, (s, ix, ell, it, iz) in enumerate(inv):
+        y_jax_vec[g] = y_jax[s, ix, ell, it, iz]
 
     np.testing.assert_allclose(y_jax_vec, y_ref, rtol=0, atol=1e-12)

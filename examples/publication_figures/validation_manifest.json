@@ -156,7 +156,7 @@
       "claim_status": "closed_deferred",
       "blocks_current_release": false,
       "evidence": "checked-in normalization audit and executable high-nu run plan, not completed high-nu scan evidence",
-      "closed_or_deferred_reason": "Closed for the current release as post-release research until wider high-nu LHD and W7-X scans are pinned",
+      "closed_or_deferred_reason": "Closed for the tagged release as post-release research until wider high-nu LHD and W7-X scans are pinned",
       "promotion_gate": "Promote only after completed high-nu scan artifacts satisfy the Simakov-Helander readiness gates"
     },
     "kind": "literature_reproduction",
@@ -164,8 +164,7 @@
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
     ],
     "scripts": [
-      "examples/publication_figures/generate_sfincs_paper_figs.py --plot-only",
-      "examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py"
+      "examples/publication_figures/generate_sfincs_paper_figs.py --plot-only"
     ],
     "artifacts": [
       "docs/_static/figures/paper/sfincs_jax_fig3_simakov_helander.png",
@@ -175,16 +174,14 @@
     ],
     "claims": [
       "High-collisionality transport-matrix trends should agree with analytic asymptotic limits",
-      "This full analytic-limit reproduction is closed as a post-release research lane until a wider high-nu scan is available; a bounded normalization audit is now checked in"
+      "This full analytic-limit reproduction is closed as a post-release research lane until a wider high-nu scan is available; a bounded normalization audit is included in the validation bundle"
     ],
     "source_code": [
       "examples/publication_figures/generate_sfincs_paper_figs.py",
-      "examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py",
-      "sfincs_jax/validation_artifacts.py"
+      "sfincs_jax/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_sfincs_paper_figs.py",
-      "tests/test_generate_simakov_helander_high_nu_run_plan.py",
       "tests/test_validation_artifacts.py"
     ],
     "acceptance_gates": [
@@ -207,9 +204,7 @@
       "https://doi.org/10.1063/1.4870077",
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
     ],
-    "scripts": [
-      "examples/publication_figures/generate_high_collisionality_trend_proxy.py"
-    ],
+    "scripts": [],
     "artifacts": [
       "examples/publication_figures/artifacts/sfincs_jax_high_collisionality_trend_proxy_summary.json",
       "docs/_static/figures/paper/sfincs_jax_high_collisionality_trend_proxy.png",
@@ -221,11 +216,9 @@
       "LHD Fokker-Planck L11/L12 tails do not yet reach the asymptotic inverse-nu gate on the checked-in scan, so this implemented artifact is a bounded trend proxy rather than the full analytic-limit reproduction"
     ],
     "source_code": [
-      "examples/publication_figures/generate_high_collisionality_trend_proxy.py",
-      "sfincs_jax/validation_artifacts.py"
+      "sfincs_jax/validation/artifacts.py"
     ],
     "tests": [
-      "tests/test_generate_high_collisionality_trend_proxy.py",
       "tests/test_validation_artifacts.py"
     ],
     "acceptance_gates": [
@@ -249,9 +242,7 @@
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf",
       "https://doi.org/10.1063/1.3104715"
     ],
-    "scripts": [
-      "examples/publication_figures/generate_simakov_helander_limit_audit.py"
-    ],
+    "scripts": [],
     "artifacts": [
       "examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json",
       "docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png",
@@ -263,11 +254,9 @@
       "W7-X FP L11/L12 tails satisfy the inverse-nu slope proxy on the current range, while LHD still fails that gate"
     ],
     "source_code": [
-      "examples/publication_figures/generate_simakov_helander_limit_audit.py",
-      "sfincs_jax/validation_artifacts.py"
+      "sfincs_jax/validation/artifacts.py"
     ],
     "tests": [
-      "tests/test_generate_simakov_helander_limit_audit.py",
       "tests/test_validation_artifacts.py"
     ],
     "acceptance_gates": [
@@ -381,7 +370,7 @@
     ],
     "source_code": [
       "examples/publication_figures/generate_validation_dashboard.py",
-      "sfincs_jax/validation_artifacts.py"
+      "sfincs_jax/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_validation_dashboard.py",
@@ -424,7 +413,7 @@
     ],
     "source_code": [
       "examples/publication_figures/generate_fortran_suite_benchmark_summary.py",
-      "sfincs_jax/validation_artifacts.py"
+      "sfincs_jax/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_fortran_suite_benchmark_summary.py",
@@ -443,8 +432,8 @@
     "release_gate": {
       "claim_status": "closed_deferred",
       "blocks_current_release": false,
-      "evidence": "checked-in scaffold script and incomplete provenance template only",
-      "closed_or_deferred_reason": "Closed for the current release as post-release profile validation until defensible W7-X equilibrium/profile provenance is supplied",
+      "evidence": "checked-in incomplete provenance template and package-level deferred artifact gates",
+      "closed_or_deferred_reason": "Closed for the tagged release as post-release profile validation until defensible W7-X equilibrium/profile provenance is supplied",
       "promotion_gate": "Promote only after complete provenance, bracketed ambipolar roots, checked-in source artifacts, and ready_for_literature_claim=true"
     },
     "kind": "profile_validation",
@@ -453,29 +442,27 @@
       "https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2018er.pdf",
       "https://www.nature.com/articles/s41586-021-03687-w"
     ],
-    "scripts": [
-      "examples/publication_figures/generate_w7x_ambipolar_validation.py --fast --n-points 7 --provenance-json examples/publication_figures/provenance/w7x_ambipolar_provenance_template.json"
-    ],
+    "scripts": [],
     "artifacts": [
       "examples/publication_figures/provenance/w7x_ambipolar_provenance_template.json"
     ],
     "claims": [
       "Ambipolar Er trends and neoclassical heat-flux ordering should follow the W7-X validation literature",
-      "This lane is closed for the current release as a post-release/nightly validation target because it requires a defensible W7-X profile and equilibrium reconstruction"
+      "This lane is closed for the tagged release as a post-release/nightly validation target because it requires a defensible W7-X profile and equilibrium reconstruction"
     ],
     "source_code": [
-      "examples/publication_figures/generate_w7x_ambipolar_validation.py",
       "sfincs_jax/ambipolar.py",
-      "sfincs_jax/io.py"
+      "sfincs_jax/io.py",
+      "sfincs_jax/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_er_scan_and_ambipolar.py",
-      "tests/test_generate_w7x_ambipolar_validation.py"
+      "tests/test_validation_figures.py"
     ],
     "acceptance_gates": [
       "Document the exact VMEC/Boozer/profile inputs used for the comparison",
       "Solve a finite ambipolar-Er root with bracket/provenance stored in the artifact",
-      "Generated summaries must report ready_for_literature_claim=false unless complete provenance is supplied",
+      "Deferred artifact gates must report ready_for_literature_claim=false unless complete provenance and a matching checked-in source artifact are supplied",
       "Compare heat-flux ordering and Er sign/magnitude trend against the published W7-X validation context without claiming experimental agreement beyond the reconstructed inputs"
     ]
   },
@@ -486,7 +473,7 @@
       "claim_status": "closed_deferred",
       "blocks_current_release": false,
       "evidence": "documented target with no checked-in cross-code comparison artifact",
-      "closed_or_deferred_reason": "Closed for the current release as post-release cross-code validation until shared-model normalizations and artifacts are pinned",
+      "closed_or_deferred_reason": "Closed for the tagged release as post-release cross-code validation until shared-model normalizations and artifacts are pinned",
       "promotion_gate": "Promote only after exact shared-model comparisons and qualitative trend checks are separated in machine-readable artifacts"
     },
     "kind": "cross_code_validation",
@@ -499,11 +486,11 @@
     "claims": [
       "Monoenergetic coefficients and low-collisionality trends should overlap with MONKES on shared model subsets",
       "KNOSOS-style low-collisionality ordering should be respected when exact model overlap is not available",
-      "This lane is closed for the current release as a post-release cross-code target because shared-model normalizations must be pinned before claiming overlap"
+      "This lane is closed for the tagged release as a post-release cross-code target because shared-model normalizations must be pinned before claiming overlap"
     ],
     "source_code": [
-      "sfincs_jax/transport_matrix.py",
-      "sfincs_jax/v3_driver.py"
+      "sfincs_jax/problems/transport_solve.py",
+      "sfincs_jax/problems/transport_linear_system.py"
     ],
     "tests": [
       "tests/test_transport_matrix_rhsmode2_parity.py",
@@ -545,9 +532,9 @@
       "Scheme-4 Boozer harmonic sensitivity maps are generated as publication-ready figures; full VMEC-boundary optimization remains outside this bounded validation claim"
     ],
     "source_code": [
-      "sfincs_jax/implicit_solve.py",
-      "sfincs_jax/geometry.py",
-      "sfincs_jax/validation_artifacts.py",
+      "sfincs_jax/solvers/implicit.py",
+      "sfincs_jax/geometry/__init__.py",
+      "sfincs_jax/validation/artifacts.py",
       "examples/publication_figures/generate_autodiff_sensitivity_validation.py"
     ],
     "tests": [

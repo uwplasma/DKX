@@ -4,9 +4,12 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from sfincs_jax.rhs1_host_policy import (
+from sfincs_jax.problems.profile_policies import (
     host_sparse_direct_refine_steps,
     host_sparse_factor_dtype,
+    read_bool_env,
+    read_float_env,
+    read_int_env,
     rhs1_dense_auto_fp_allowed,
     rhs1_constrained_pas_sparse_pc_auto_allowed,
     rhs1_dense_auto_fp_accelerator_min,
@@ -20,6 +23,8 @@ from sfincs_jax.rhs1_host_policy import (
     rhs1_explicit_sparse_host_direct_allowed,
     rhs1_host_dense_fallback_allowed,
     rhs1_host_dense_shortcut_allowed,
+    rhs1_host_dense_shortcut_estimated_nbytes,
+    rhs1_host_dense_shortcut_max_bytes,
     rhs1_host_sparse_direct_allowed,
     rhs1_host_sparse_skip_dense_ratio,
     rhs1_sparse_operator_preconditioned_rescue_allowed,
@@ -29,6 +34,27 @@ from sfincs_jax.rhs1_host_policy import (
     rhs1_tokamak_pas_er_sparse_pc_auto_allowed,
     rhs1_tokamak_pas_noer_sparse_pc_auto_allowed,
 )
+
+
+def test_policy_env_readers_accept_fortran_tokens_and_clamp_invalid_values() -> None:
+    env = {
+        "BOOL_TRUE": ".true.",
+        "BOOL_FALSE": ".f.",
+        "BOOL_INVALID": "maybe",
+        "INT_VALUE": "-4",
+        "INT_INVALID": "large",
+        "FLOAT_VALUE": "-2.5",
+        "FLOAT_INVALID": "tiny",
+    }
+
+    assert read_bool_env("BOOL_TRUE", env=env)
+    assert not read_bool_env("BOOL_FALSE", default=True, env=env)
+    assert read_bool_env("BOOL_INVALID", default=True, env=env)
+    assert not read_bool_env("BOOL_MISSING", default=False, env=env)
+    assert read_int_env("INT_VALUE", default=7, minimum=2, env=env) == 2
+    assert read_int_env("INT_INVALID", default=7, minimum=2, env=env) == 7
+    assert read_float_env("FLOAT_VALUE", default=3.0, minimum=0.25, env=env) == 0.25
+    assert read_float_env("FLOAT_INVALID", default=3.0, minimum=0.25, env=env) == 3.0
 
 
 def _op(
@@ -206,6 +232,8 @@ def test_rhs1_host_dense_fallback_and_krylov_policy(monkeypatch) -> None:
 def test_rhs1_host_dense_shortcut_guards_small_accelerator_fp(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX_BYTES", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_FACTOR_OVERHEAD", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", raising=False)
 
     assert rhs1_host_dense_shortcut_allowed(
@@ -216,6 +244,32 @@ def test_rhs1_host_dense_shortcut_guards_small_accelerator_fp(monkeypatch) -> No
         backend="gpu",
         dense_fallback_max=5000,
     )
+    assert rhs1_host_dense_shortcut_allowed(
+        op=_op(has_fp=True),
+        active_size=5000,
+        use_implicit=False,
+        solve_method_kind="incremental",
+        backend="gpu",
+        dense_fallback_max=5000,
+    )
+    assert not rhs1_host_dense_shortcut_allowed(
+        op=_op(has_fp=True),
+        active_size=5001,
+        use_implicit=False,
+        solve_method_kind="incremental",
+        backend="gpu",
+        dense_fallback_max=5000,
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", "900")
+    assert not rhs1_host_dense_shortcut_allowed(
+        op=_op(has_fp=True),
+        active_size=901,
+        use_implicit=False,
+        solve_method_kind="incremental",
+        backend="gpu",
+        dense_fallback_max=5000,
+    )
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", raising=False)
     assert not rhs1_host_dense_shortcut_allowed(
         op=_op(has_fp=True),
         active_size=600,
@@ -240,6 +294,35 @@ def test_rhs1_host_dense_shortcut_guards_small_accelerator_fp(monkeypatch) -> No
         solve_method_kind="incremental",
         backend="gpu",
         dense_fallback_max=5000,
+    )
+
+
+def test_rhs1_host_dense_shortcut_is_capped_by_estimated_memory(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", "12000")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX_BYTES", "1000000")
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_FACTOR_OVERHEAD", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", raising=False)
+
+    assert rhs1_host_dense_shortcut_max_bytes() == 1_000_000
+    assert rhs1_host_dense_shortcut_estimated_nbytes(12000) > 1_000_000
+    assert not rhs1_host_dense_shortcut_allowed(
+        op=_op(has_fp=True),
+        active_size=12000,
+        use_implicit=False,
+        solve_method_kind="incremental",
+        backend="gpu",
+        dense_fallback_max=12000,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX_BYTES", "0")
+    assert rhs1_host_dense_shortcut_allowed(
+        op=_op(has_fp=True),
+        active_size=12000,
+        use_implicit=False,
+        solve_method_kind="incremental",
+        backend="gpu",
+        dense_fallback_max=12000,
     )
 
 
@@ -299,18 +382,26 @@ def test_rhs1_dense_auto_fp_accelerator_min_is_tunable(monkeypatch) -> None:
 
 
 def test_rhs1_dense_auto_fp_allowed_keeps_tiny_accelerator_off_dense(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN", raising=False)
 
     assert rhs1_dense_auto_fp_allowed(backend="cpu", active_size=500, dense_active_cutoff=8000)
     assert not rhs1_dense_auto_fp_allowed(backend="gpu", active_size=500, dense_active_cutoff=8000)
-    assert rhs1_dense_auto_fp_allowed(backend="gpu", active_size=5007, dense_active_cutoff=8000)
+    assert not rhs1_dense_auto_fp_allowed(backend="gpu", active_size=5007, dense_active_cutoff=8000)
     assert rhs1_dense_auto_fp_allowed(backend="cpu", active_size=7264, dense_active_cutoff=8000)
+    assert not rhs1_dense_auto_fp_allowed(backend="gpu", active_size=7264, dense_active_cutoff=8000)
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR", "1")
+    assert rhs1_dense_auto_fp_allowed(backend="gpu", active_size=5007, dense_active_cutoff=8000)
     assert rhs1_dense_auto_fp_allowed(backend="gpu", active_size=7264, dense_active_cutoff=8000)
     assert not rhs1_dense_auto_fp_allowed(backend="gpu", active_size=9000, dense_active_cutoff=8000)
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN", "6000")
     assert not rhs1_dense_auto_fp_allowed(backend="gpu", active_size=5007, dense_active_cutoff=8000)
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR", "0")
+    assert not rhs1_dense_auto_fp_allowed(backend="gpu", active_size=7264, dense_active_cutoff=8000)
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", "0")
     assert not rhs1_dense_auto_fp_allowed(backend="cpu", active_size=500, dense_active_cutoff=8000)

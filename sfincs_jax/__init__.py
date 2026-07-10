@@ -163,9 +163,36 @@ except Exception:
     # Keep import lightweight for tooling that inspects the package without JAX.
     pass
 
+from .api import (  # noqa: E402
+    BenchmarkReport,
+    GeometryState,
+    GridState,
+    OperatorState,
+    OutputSchema,
+    PreconditionerState,
+    SolveInputs,
+    SolverResult,
+    TransportResult,
+    read_output,
+    run_ambipolar_brent,
+    write_output,
+)
+
 __all__ = [
+    "BenchmarkReport",
+    "GeometryState",
+    "GridState",
+    "OperatorState",
+    "OutputSchema",
+    "PreconditionerState",
+    "SolveInputs",
+    "SolverResult",
+    "TransportResult",
     "__version__",
     "initialize_distributed_runtime_from_env",
+    "read_output",
+    "run_ambipolar_brent",
+    "write_output",
 ]
 
 __version__ = "1.1.7"

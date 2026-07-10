@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sfincs_jax.optimization_ladder import estimate_rhs1_active_size
+from sfincs_jax.workflows.optimization import estimate_rhs1_active_size
 
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -190,34 +190,6 @@ def test_finite_beta_xblock_policy_probe_window_stays_below_production_floor() -
         assert policy["default_multispecies_nxi_max"] >= probe["resolution"]["Nxi"]
 
 
-def test_qi_electron_root_nfp_screen_recommends_qi_nfp2_without_kinetic_claim() -> None:
-    payload = _load("qi_electron_root_nfp_screen.json")
-
-    assert payload["workflow"] == "sfincs_jax_qi_qa_electron_root_nfp_screening_proxy"
-    assert "not a kinetic SFINCS transport claim" in payload["claim_boundary"]
-    best = payload["recommended_candidate"]
-    assert isinstance(best, dict)
-    assert best["candidate"] == "qi:nfp2"
-    assert best["symmetry"] == "qi"
-    assert best["nfp"] == 2
-    assert best["screening_gate"]["status"] == "defer"
-
-    candidates = payload["candidates"]
-    assert isinstance(candidates, list)
-    labels = {row["candidate"] for row in candidates}
-    assert {"qa:nfp2", "qi:nfp1", "qi:nfp2", "qi:nfp5"}.issubset(labels)
-    qi_candidates = [row for row in candidates if row["symmetry"] == "qi"]
-    assert qi_candidates
-    assert all(row["screening_gate"]["claim_boundary"].startswith("proxy screening") for row in qi_candidates)
-    assert all(row["final_components"]["electron_root_drive"] > 0.0 for row in qi_candidates)
-    assert all(row["final_components"]["symmetry_regularization"] >= 0.0 for row in qi_candidates)
-
-    plan = payload["promotion_plan"]
-    assert plan["recommended_candidate"] == "qi:nfp2"
-    assert any("scan-er" in command for command in plan["next_commands"])
-    assert "positive ambipolar root bracket from completed kinetic scan" in plan["required_gates"]
-
-
 def test_qa_bootstrap_current_comparison_artifact_is_vmec_backed_and_finite_iota() -> None:
     payload = _load("qa_nfp2_bootstrap_current_comparison.json")
 
@@ -233,130 +205,3 @@ def test_qa_bootstrap_current_comparison_artifact_is_vmec_backed_and_finite_iota
     assert qa["metrics"]["jdotb_over_root_bdotb_rms"] > 0.0
     assert "preserve finite target iota" in " ".join(payload["promotion_plan"]["required_gates"])
     assert "FSABjHatOverRootFSAB2" in " ".join(payload["promotion_plan"]["required_gates"])
-
-
-def test_qi_nfp2_lowres_kinetic_electron_root_artifacts_pass_cpu_gpu_and_reference_gates() -> None:
-    cpu = _load("qi_nfp2_electron_root_lowres_cpu.json")
-    gpu = _load("qi_nfp2_electron_root_lowres_gpu.json")
-    fortran = _load("qi_nfp2_electron_root_lowres_fortran.json")
-    comparison = _load("qi_nfp2_electron_root_lowres_reference_tolerance_comparison.json")
-
-    for payload in (cpu, gpu, fortran):
-        assert payload["workflow"] == "sfincs_jax_optimization_high_fidelity_promotion"
-        assert payload["gate_status"] == "pass"
-        assert payload["failures"] == []
-        root = payload["selected_root"]
-        assert root["root_type"] == "electron"
-        assert root["bracket"] == [2.0, 3.0]
-        assert 2.43 < root["er"] < 2.45
-        assert root["slope"] > 0.0
-        assert len(payload["runs"]) == 8
-
-    assert abs(cpu["selected_root"]["er"] - gpu["selected_root"]["er"]) < 1.0e-10
-    assert abs(cpu["selected_root"]["er"] - fortran["selected_root"]["er"]) < 2.0e-6
-
-    for run in cpu["runs"] + gpu["runs"]:
-        assert run["residual_norm"] <= run["residual_target"]
-        assert run["residual_gate"]["status"] == "pass"
-
-    assert comparison["status"] == "pass"
-    assert comparison["failures"] == []
-    assert comparison["tolerances"] == {
-        "bootstrap_objective_rtol": 1.0e-3,
-        "flux_objective_total_rtol": 1.0e-5,
-        "selected_root_er_atol": 1.0e-10,
-        "selected_root_er_rtol": 1.0e-6,
-    }
-    assert comparison["comparisons"]["cpu_gpu"]["status"] == "pass"
-    assert comparison["comparisons"]["sfincs_jax_fortran_v3"]["status"] == "pass"
-
-
-def test_qi_nfp2_first_refined_resolution_cpu_gpu_fortran_artifacts_pass_but_remain_unconverged() -> None:
-    lowres = _load("qi_nfp2_electron_root_lowres_cpu.json")
-    cpu = _load("qi_nfp2_electron_root_res9_cpu.json")
-    gpu = _load("qi_nfp2_electron_root_res9_gpu.json")
-    fortran = _load("qi_nfp2_electron_root_res9_fortran.json")
-    cpu_gpu_comparison = _load("qi_nfp2_electron_root_res9_cpu_gpu.json")
-    reference_comparison = _load("qi_nfp2_electron_root_res9_reference_tolerance_comparison.json")
-
-    for payload in (cpu, gpu, fortran):
-        assert payload["workflow"] == "sfincs_jax_optimization_high_fidelity_promotion"
-        assert payload["gate_status"] == "pass"
-        assert payload["failures"] == []
-        assert payload["flux_objective"] is None
-        root = payload["selected_root"]
-        assert root["root_type"] == "electron"
-        assert root["bracket"] == [2.0, 3.0]
-        assert 2.28 < root["er"] < 2.29
-        assert root["slope"] > 0.0
-        assert len(payload["runs"]) == 8
-        if payload in (cpu, gpu):
-            for run in payload["runs"]:
-                assert run["residual_norm"] <= run["residual_target"]
-                assert run["residual_gate"]["status"] == "pass"
-
-    assert cpu_gpu_comparison["status"] == "pass"
-    assert cpu_gpu_comparison["failures"] == []
-    assert cpu_gpu_comparison["comparisons"]["cpu_gpu"]["status"] == "pass"
-    assert abs(cpu["selected_root"]["er"] - gpu["selected_root"]["er"]) < 1.0e-10
-    assert reference_comparison["status"] == "pass"
-    assert reference_comparison["failures"] == []
-    assert reference_comparison["tolerances"] == {
-        "bootstrap_objective_rtol": 1.0e-4,
-        "flux_objective_total_rtol": 1.0e-6,
-        "selected_root_er_atol": 1.0e-10,
-        "selected_root_er_rtol": 2.0e-6,
-    }
-    assert reference_comparison["comparisons"]["cpu_gpu"]["status"] == "pass"
-    assert reference_comparison["comparisons"]["sfincs_jax_fortran_v3"]["status"] == "pass"
-    assert abs(cpu["selected_root"]["er"] - fortran["selected_root"]["er"]) < 5.0e-6
-
-    root_drift = abs(cpu["selected_root"]["er"] - lowres["selected_root"]["er"])
-    assert root_drift > 1.0e-1
-
-
-def test_qi_nfp2_second_refined_resolution_dense8000_artifacts_pass_but_remain_unconverged() -> None:
-    lowres = _load("qi_nfp2_electron_root_lowres_cpu.json")
-    res9 = _load("qi_nfp2_electron_root_res9_cpu.json")
-    cpu = _load("qi_nfp2_electron_root_res11_cpu_dense8000_default.json")
-    gpu = _load("qi_nfp2_electron_root_res11_gpu_dense8000_default.json")
-    fortran = _load("qi_nfp2_electron_root_res11_fortran.json")
-    reference_comparison = _load(
-        "qi_nfp2_electron_root_res11_reference_tolerance_comparison_dense8000_default.json"
-    )
-
-    for payload in (cpu, gpu, fortran):
-        assert payload["workflow"] == "sfincs_jax_optimization_high_fidelity_promotion"
-        assert payload["gate_status"] == "pass"
-        assert payload["failures"] == []
-        assert payload["flux_objective"] is None
-        root = payload["selected_root"]
-        assert root["root_type"] == "electron"
-        assert root["bracket"] == [2.0, 3.0]
-        assert 2.22 < root["er"] < 2.23
-        assert root["slope"] > 0.0
-        assert len(payload["runs"]) == 8
-
-    for payload in (cpu, gpu):
-        for run in payload["runs"]:
-            assert run["residual_norm"] <= run["residual_target"]
-            assert run["residual_gate"]["status"] == "pass"
-
-    assert abs(cpu["selected_root"]["er"] - gpu["selected_root"]["er"]) < 1.0e-10
-    assert abs(cpu["selected_root"]["er"] - fortran["selected_root"]["er"]) < 5.0e-6
-
-    assert reference_comparison["status"] == "pass"
-    assert reference_comparison["failures"] == []
-    assert reference_comparison["tolerances"] == {
-        "bootstrap_objective_rtol": 1.0e-4,
-        "flux_objective_total_rtol": 1.0e-6,
-        "selected_root_er_atol": 1.0e-10,
-        "selected_root_er_rtol": 2.0e-6,
-    }
-    assert reference_comparison["comparisons"]["cpu_gpu"]["status"] == "pass"
-    assert reference_comparison["comparisons"]["sfincs_jax_fortran_v3"]["status"] == "pass"
-
-    root_drift_from_res9 = abs(cpu["selected_root"]["er"] - res9["selected_root"]["er"])
-    root_drift_from_lowres = abs(cpu["selected_root"]["er"] - lowres["selected_root"]["er"])
-    assert root_drift_from_res9 > 5.0e-2
-    assert root_drift_from_lowres > 2.0e-1

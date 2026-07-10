@@ -1,13 +1,29 @@
 Performance techniques (full detail)
 ====================================
 
-This page documents **every performance enhancement currently implemented in `sfincs_jax`**,
+This page documents the supported performance mechanisms in `sfincs_jax`,
 including the mathematical model context, implementation strategy, tuning knobs, and
 how each change differs from (or complements) the original Fortran v3 solver.
 
 Where relevant we reference the upstream SFINCS documentation that defines the
 physics and discretization being accelerated. The primary sources are the
 vendored v3 manual and technical notes in ``docs/upstream`` (see references below).
+
+.. note::
+
+   This page describes the retained **legacy pipeline** (the CLI solver
+   ladder for the deferred features and its environment-variable tuning) and
+   preserves historical benchmark records. The canonical workflow —
+   ``inputs -> drift_kinetic -> solve -> moments`` with three solver tiers —
+   is documented in :doc:`performance` and needs none of these knobs.
+
+   The sparse-direct/CSR-assembly solver families referenced by some
+   historical sections (``structured_csr``/``host_structured_csr``,
+   ``sparse_pc_gmres``/``xblock_sparse_pc_gmres``/``fortran_reduced_pc_gmres``,
+   ``fp_fortran_reduced_lu``/``fp_xblock_tz_lu``/``fp_structured_fblock_lu``,
+   and their env knobs) were **deleted** in the RHSMode-1 legacy deletion
+   pass; those sections remain only as measured evidence records and the
+   named routes can no longer be selected.
 
 Baseline model and linear system (v3)
 -------------------------------------
@@ -88,7 +104,7 @@ operators directly on the state vector.
 
 **Implementation.**
 
-- Core operator apply: ``sfincs_jax.v3_system.apply_v3_full_system_operator_cached``.
+- Core operator apply: ``sfincs_jax.operators.profile_system.apply_v3_full_system_operator_cached``.
 - Per-operator **signature cache** prevents re-JITing the matvec when the operator
   shape and static fields are unchanged. See ``_operator_signature_cached``.
 
@@ -125,7 +141,7 @@ a bounded block-tridiagonal proxy.
 **Implementation.**
 
 - Structured block solver:
-  ``sfincs_jax.structured_velocity.factor_block_tridiagonal``.
+  ``sfincs_jax.discretization.structured_velocity.factor_block_tridiagonal``.
 - Benchmark harness:
   ``examples/performance/benchmark_structured_solve.py``.
 - Focused tests:
@@ -201,7 +217,7 @@ and enable persistent compilation caching for repeated runs.
 **Implementation.**
 
 - `sfincs_jax` JITs the matvec and solver wrappers (GMRES/BiCGStab).
-- The reduced-suite runner (`scripts/run_reduced_upstream_suite.py`) supports a
+- The reduced-suite runner (``python -m sfincs_jax.validation.suite reduced``) supports a
   persistent cache via ``--jax-cache-dir``.
 - The CLI defaults to a user cache directory (``~/.cache/sfincs_jax/jax_compilation_cache``)
   and enables ``jax.experimental.compilation_cache`` automatically unless disabled.
@@ -231,7 +247,7 @@ so repeated cases that share the same equilibrium file reuse the computed data.
 
 **Implementation.**
 
-- ``sfincs_jax.v3.geometry_from_namelist`` persists the full ``BoozerGeometry`` arrays
+- ``sfincs_jax.discretization.v3.geometry_from_namelist`` persists the full ``BoozerGeometry`` arrays
   to ``~/.cache/sfincs_jax/geometry_cache`` by default.
 - ``sfincs_jax.io.sfincs_jax_output_dict`` caches expensive output-only fields
   (``gpsiHatpsiHat``, ``uHat``, ``diotadpsiHat``, ``VPrimeHat``, ``FSABHat2``,
@@ -248,7 +264,7 @@ so repeated cases that share the same equilibrium file reuse the computed data.
   payload safely.
 - The RHSMode=1 output-writing path also reuses the already-built ``grids``,
   ``geom``, and full-system operator instead of rebuilding them again during the
-  solve handoff. This removes a full operator-construction pass from
+  solve stage. This removes a full operator-construction pass from
   ``write_sfincs_jax_output_h5(...)`` on staged HSX/geometry11 reruns.
 - Disable with ``SFINCS_JAX_GEOMETRY_CACHE=0`` / ``SFINCS_JAX_OUTPUT_CACHE=0`` or
   skip disk persistence with ``SFINCS_JAX_GEOMETRY_CACHE_PERSIST=0`` /
@@ -279,7 +295,8 @@ construct a reduced system that contains only active degrees of freedom.
 
 **Implementation.**
 
-- Transport solves: ``_transport_active_dof_indices`` in ``sfincs_jax.v3_driver``.
+- Transport solves: ``transport_active_dof_indices`` in
+  ``sfincs_jax.problems.transport_linear_system``.
 - RHSMode=1: similar logic for active DOFs to reduce matrix-free work.
 
 **Mathematics.**
@@ -322,15 +339,15 @@ candidate for future low-memory solves.
 Host-only LGMRES fast path
 --------------------------
 
-For explicit host-side solves, ``sfincs_jax`` now exposes a bounded SciPy
+For explicit host-side solves, ``sfincs_jax`` exposes a bounded SciPy
 ``lgmres`` path. This is intended for the fast CLI / explicit branch where
 differentiability is not required, and where restarted GMRES can spend too much
 time rebuilding a Krylov basis on hard nonsymmetric systems.
 
 **Implementation.**
 
-- Wrapper: ``sfincs_jax.solver.lgmres_solve_with_history_scipy``.
-- Dispatch point: ``sfincs_jax.solver._gmres_solve_core``.
+- Wrapper: ``sfincs_jax.solvers.krylov.lgmres_solve_with_history_scipy``.
+- Dispatch point: ``sfincs_jax.solvers.krylov._gmres_solve_core``.
 - Accepted methods: ``solve_method in {"lgmres", "lgmres_scipy"}``.
 
 **Behavior.**
@@ -342,13 +359,12 @@ time rebuilding a Krylov basis on hard nonsymmetric systems.
   context, `sfincs_jax` downgrades to traced-safe ``incremental`` GMRES instead of
   failing at runtime.
 
-This makes the new method safe as a CLI performance option: it can accelerate
+This makes the method safe as a CLI performance option: it can accelerate
 hard host-only Krylov runs without changing differentiable workflows or
-contaminating the differentiable reference route. Frozen-case offender probes on
-``main`` still support keeping this as an explicit tuning knob rather than an
-automatic default. On the current pinned heavy cases, ``lgmres`` preserves
-parity but is not yet a general win: it is only marginally different on the
-tokamak PAS+Er offender and is slower on the current frozen geometry4 and
+contaminating the differentiable reference route. Frozen-case offender probes
+support keeping this as an explicit tuning knob rather than an automatic default.
+On the pinned heavy cases, ``lgmres`` preserves parity but is not a general win:
+it is only marginally different on the tokamak PAS+Er offender and is slower on the frozen geometry4 and
 geometry5 full-system examples. The method is therefore kept available, but
 opt-in.
 
@@ -367,14 +383,14 @@ structural sparse pattern:
 4. Drop structural zeros, factor the resulting CSR matrix with host sparse LU,
    and apply iterative refinement against the true sparse operator.
 
-The implementation lives in ``sfincs_jax.v3_sparse_pattern`` and
-``sfincs_jax.explicit_sparse.build_operator_from_pattern``. Tests verify that the
+The implementation lives in ``sfincs_jax.operators.profile_sparse_pattern`` and
+``sfincs_jax.solvers.explicit_sparse.build_operator_from_pattern``. Tests verify that the
 conservative pattern covers frozen Fortran PETSc matrices for PAS, FP, and Phi1
 tiny systems, and that colored probing reconstructs the PAS tiny matrix to
 Fortran tolerances.
 
 This path is non-differentiable and should be used for CLI/Python production
-runs, not for gradient tracing. CPU 3D full-FP RHSMode=1 systems now have a
+runs, not for gradient tracing. CPU 3D full-FP RHSMode=1 systems use a
 narrow sparse-PC GMRES auto lane in the audited size window: HSX FP full,
 HSX FP DKES, and geometryScheme11 FP full probes all stayed Fortran-clean while
 using less RSS and less wall time than the dense FP shortcut. The gate excludes
@@ -414,28 +430,27 @@ Tokamak full-FP ``N_zeta=1`` production-floor rows are handled by separate,
 narrow GPU/CUDA policies rather than by the CPU 3D full-FP lane above.
 ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC`` covers no-Er
 ``constraintScheme=0`` rows and ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC``
-covers electric-field ``constraintScheme=1`` rows. These policies now select
+covers electric-field ``constraintScheme=1`` rows. These policies select
 ``xblock_sparse_pc_gmres`` for the validated full-FP branch, using compact
 per-x/TZ host preconditioners instead of the earlier global dense-velocity
 sparse-pattern probe. The audited ``25 x 1 x 8 x 100`` RTX A4000 default-policy
 checks stayed parity-clean against Fortran v3: no-Er compared ``188`` datasets
 with ``0`` mismatches in ``5.79 s`` wall / ``0.97 GB`` peak RSS, and with-Er
 compared ``214`` datasets with ``0`` mismatches in ``1:13.3`` wall / ``1.43 GB``
-peak RSS. The no-Er row replaces the previous global sparse-PC default that
+peak RSS. The no-Er policy avoids the slower global sparse-PC route that
 took ``2:31.6`` and about ``8.42 GB`` peak RSS.
 
 Controls for the CPU 3D full-FP auto lane are
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC``,
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN``, and
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MAX``.
-The production benchmark manifest now enforces at least ``25 x 51 x 4 x 100``
+Public performance rows use at least ``25 x 51 x 4 x 100``
 (``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``33 x 1 x 12 x 140`` for
 tokamak cases. RHSMode=1 PAS/no-``E_r`` tokamak rows use the calibrated
-``89 x 1 x 24 x 300`` floor. The manifest also records a ``10 s`` minimum
-SFINCS Fortran v3 timing target for public production rows. Performance claims
-for this lane should be regenerated from that manifest rather than from earlier
-lower-resolution bring-up probes. It is
-available via:
+``89 x 1 x 24 x 300`` floor. Public production rows also require a ``10 s``
+minimum SFINCS Fortran v3 timing target. Regenerate performance claims for this
+lane from the checked benchmark inputs and summary artifacts, not from
+lower-resolution development probes. The sparse-PC lane is available via:
 
 .. code-block:: bash
 
@@ -450,29 +465,9 @@ longer used as a public production baseline.
 Frozen-case variant benchmarking
 --------------------------------
 
-Use ``scripts/benchmark_case_variants.py`` to compare solver/preconditioner env
-overrides on one promoted suite case without disturbing the full-suite artifacts:
-
-.. code-block:: bash
-
-   python scripts/benchmark_case_variants.py \
-     --case-dir tests/scaled_example_suite_fast_cpu_full_v7_refresh/geometryScheme5_3species_loRes \
-     --variant 'lgmres=SFINCS_JAX_RHSMODE1_SOLVE_METHOD=lgmres'
-
-The helper runs the default variant plus any requested overrides, records wall
-time and ``ru_maxrss``, and compares each output H5 against both the frozen
-Fortran output (when present) and the default variant.
-
-For targeted rescue testing, skip the known default route with ``--no-default``:
-
-.. code-block:: bash
-
-   python scripts/benchmark_case_variants.py \
-     --case-dir tests/production_floor_cpu_bounded_2026-05-04/tokamak_1species_PASCollisions_withEr_fullTrajectories/variant_prod_case \
-     --no-default \
-     --variant 'schur=SFINCS_JAX_RHSMODE1_PRECONDITIONER=schur' \
-     --timeout-s 300 \
-     --profile
+Historical solver/preconditioner variant probes are preserved on research
+branches with their JSON summaries. The stable core keeps only automatic solver
+defaults, bounded parity/performance fixtures, and package-level profiling APIs.
 
 Use this mode only for controlled profiling. A variant is not eligible for
 automatic selection unless it is residual-clean, parity-clean against the frozen
@@ -483,7 +478,7 @@ Adaptive PAS smoother stage
 
 For PAS-heavy ``RHSMode=1`` solves, the expensive part of the fallback ladder is
 often not the base Krylov solve itself, but the sequence of progressively stronger
-preconditioner builds that follow when the residual is still above target. The new
+preconditioner builds that follow when the residual is still above target. The
 adaptive PAS smoother stage inserts a bounded Richardson-like correction before
 that escalation:
 
@@ -496,9 +491,11 @@ where :math:`P^{-1}` is the already-built PAS preconditioner application and
 
 **Implementation.**
 
-- Smoother kernel: ``sfincs_jax.pas_smoother.adaptive_pas_smoother``.
-- Driver gate: ``sfincs_jax.v3_driver._rhsmode1_pas_adaptive_smoother_allowed``.
-- Current integration point: immediately after the base PAS solve and before the
+- Smoother kernel:
+  ``sfincs_jax.solvers.preconditioner_pas_policy.adaptive_pas_smoother``.
+- Driver gate:
+  ``sfincs_jax.solvers.preconditioner_pas_policy.adaptive_pas_smoother_allowed``.
+- Integration point: immediately after the base PAS solve and before the
   strong-preconditioner tail in the linear RHSMode=1 driver.
 
 **Why this helps.**
@@ -530,7 +527,9 @@ heavier preconditioner build.
 
 **Implementation.**
 
-- ``_solve_linear`` and ``_solve_linear_with_residual`` in ``sfincs_jax.v3_driver``.
+- RHSMode=1 solve-loop dispatch in
+  ``sfincs_jax.problems.profile_solve`` and shared Krylov dispatch in
+  ``sfincs_jax.solvers.krylov_dispatch``.
 - Fallback controlled by ``SFINCS_JAX_BICGSTAB_FALLBACK``.
 
 **Compared to Fortran.**
@@ -562,8 +561,11 @@ and memory-bounded.
 
 **Implementation.**
 
-- ``sfincs_jax.implicit_solve.linear_custom_solve`` and
+- ``sfincs_jax.solvers.implicit.linear_custom_solve`` and
   ``linear_custom_solve_with_residual``.
+- ``sfincs_jax.solvers.implicit.implicit_solve_method_for_custom_linear_solve``
+  maps host-only CLI Krylov choices such as ``lgmres_scipy`` to traced-safe
+  ``incremental`` GMRES before entering ``jax.lax.custom_linear_solve``.
 - Controlled by ``SFINCS_JAX_IMPLICIT_SOLVE``.
 
 Transport preconditioning (RHSMode=2/3)
@@ -637,7 +639,7 @@ restricted additive Schwarz (RAS) variant with overlap:
 
 where :math:`R_i` restricts to an overlapped patch and the correction is written
 back to the non-overlapped core (RAS update). This improves conditioning across
-block boundaries compared with pure block-diagonal DD. The path is currently
+block boundaries compared with pure block-diagonal DD. The path is
 opt-in because setup/apply overhead can dominate on small-medium runs.
 
 Controls:
@@ -820,7 +822,7 @@ inside the local x-block factor or a genuinely coupled coarse residual over the
 dominant kinetic subspace, not more tail-Schur damping.
 
 ``SFINCS_JAX_TRANSPORT_PRECOND=fp_fortran_reduced_lu`` implements that stronger
-global route as a PETSc-like transport preconditioner. It is now the default
+global route as a PETSc-like transport preconditioner. It is the default
 ``auto`` candidate for eligible non-Phi1 RHSMode=2/3 full-FP transport cases
 unless explicitly disabled. It keeps the true SFINCS-JAX matrix-free operator as
 :math:`A`, but materializes a separate reduced sparse :math:`P` and factors it
@@ -913,8 +915,8 @@ The SFINCS-JAX implementation exposes two useful variants:
 
 On the production-floor ``25 x 51 x 100`` FP transport decks, direct emission
 removes the setup bottleneck but does not yet close the full production solve
-gate.  The geometry-scheme-11 active structural CSR now emits in about ``8.7 s``
-instead of the previous ``287.6 s`` pattern-color materialization, with the same
+gate.  The geometry-scheme-11 active structural CSR emits in about ``8.7 s``
+instead of requiring ``287.6 s`` pattern-color materialization, with the same
 ``8.68e6`` actual nonzeros and a ``~406 MB`` ILU factor estimate.  The first-RHS
 Krylov phase still needs a stronger lower-fill/coarse correction before this
 preconditioner can be promoted to ``auto``.
@@ -943,9 +945,9 @@ global ILU did not pass the true residual gate.  Therefore this exact emitter is
 infrastructure for the next block/reuse preconditioner, not a production default
 by itself.
 
-The direct-active true-operator emitter is also now paired with a reusable
+The direct-active true-operator emitter is paired with a reusable
 symbolic block/coarse factor layer in
-``sfincs_jax.transport_active_factor``. The layer separates symbolic block
+``sfincs_jax.problems.transport_linear_system``. The layer separates symbolic block
 ordering over active kinetic unknowns, numerical block inverse plus
 source/constraint Schur construction, and setup-time true-residual admission
 against the same active operator used by the residual gate. This mirrors the
@@ -969,7 +971,7 @@ active operator and :math:`S` closes the retained source/constraint tail.
 Select it with
 ``SFINCS_JAX_TRANSPORT_PRECOND=fp_direct_active_block_schur``. This path is
 test-covered and useful for residual-equation experiments, but it is **not** a
-production default. Setup admission now requires both a true residual below the
+production default. Setup admission requires both a true residual below the
 configured gate and a material improvement over the identity preconditioner. On
 reduced geometry-scheme-11, both zeta-line and angular-plane symbolic layouts
 are rejected before Krylov with deterministic probe metrics
@@ -1030,8 +1032,8 @@ Controls:
   sparse factor kind, factor precision, factor memory guard, and diagonal shift.
   Supported diagnostic factors are ``lu``, ``ilu``, ``jacobi``,
   ``symbolic_block_lu``, ``symbolic_block_lu_coarse``, and
-  ``symbolic_block_schur_lu``, ``symbolic_superblock_lu``, and
-  ``symbolic_nd_frontal_schur_lu``.  The symbolic options are native
+  ``symbolic_block_schur_lu``, ``symbolic_frontal_schur_lu``, and
+  ``symbolic_superblock_lu``.  The symbolic options are native
   lower-memory block/coarse/Schur/frontal experiments and are not automatic
   defaults unless they pass setup-time admission.
 - ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ORDERING`` controls the
@@ -1055,30 +1057,10 @@ Controls:
 - ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_NUMERIC_PARALLEL_WORKERS``
   controls bounded native parallel numeric setup for symbolic factors.  The
   direct reduced ``whichMatrix=0`` Pmat still uses the same symbolic metadata
-  and strict true-residual admission, but independent ``symbolic_superblock_lu``
-  superblocks and root children in ``symbolic_nd_frontal_schur_lu`` can be
-  factored concurrently before chunked Schur updates are applied.  The generic
+  and strict true-residual admission, and independent ``symbolic_superblock_lu``
+  superblocks can be factored concurrently.  The generic
   explicit-sparse equivalent is
   ``SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_NUMERIC_PARALLEL_WORKERS``.
-- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_COMPRESS_UPDATES``
-  enables the opt-in BLR/HSS-style separator-update path for
-  ``symbolic_nd_frontal_schur_lu``.  Each child-to-separator RHS chunk is
-  compressed with an SVD, only the retained basis is solved through the child
-  factor, and the separator update is stored as a low-rank ``U V^T``
-  contribution to the Schur operator.  The same setup-time true-residual
-  admission gate remains mandatory before Krylov can use the factor.
-- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_PARALLEL_UPDATE_WORKERS``
-  controls opt-in parallel execution of separator-update chunks.  This is
-  intentionally separate from ``..._SYMBOLIC_NUMERIC_PARALLEL_WORKERS`` because
-  production profiles show that sparse triangular solves and BLAS calls can
-  contend when too many separator chunks are threaded.  The generic
-  explicit-sparse equivalents are
-  ``SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_COMPRESS_UPDATES`` and
-  ``SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_PARALLEL_UPDATE_WORKERS``.
-  These BLR/HSS and nested-dissection controls are intentionally not promoted
-  into ``auto`` for the current release: production ``geom11`` probes still
-  reject the path on setup-time grounds before admission, so this remains a
-  deferred optimization lane rather than a release-blocking correctness issue.
 - ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLOCK_OVERLAP``
   extends each symbolic block by a fixed number of neighboring unknowns before
   factorization and restricts the local solution back to the owned block. This
@@ -1154,13 +1136,13 @@ Controls:
   ``max_rel=5.07e-13`` in ``4.32 s``.  Therefore this small coarse correction is
   retained only as tested infrastructure; it is not a production replacement
   for the Fortran/PETSc sparse factor.
-- A bounded native ``symbolic_block_schur_lu`` retry now uses actual graph
+- A bounded native ``symbolic_block_schur_lu`` retry uses actual graph
   cross-block nonzeros to choose separator candidates.  It improved the reduced
   setup residuals but remains non-promotable by itself: geometry-scheme-2 only
   passed admission when the separator cap retained most of the active system
   (``sep=2048``, ``max_rel=2.743e-5``, ``26.17 MB``), while
   geometry-scheme-11 still failed all tested separator/block-size settings.
-  With the new admission rescue enabled, both reduced all-RHS gates are clean:
+  With admission rescue enabled, both reduced all-RHS gates are clean:
   geometry-scheme-2 reaches relative residuals ``6.98e-11``, ``4.03e-11``, and
   ``7.66e-13`` in ``3.26 s`` after exact-Pmat LU rescue
   (``13.984 MB``), and geometry-scheme-11 reaches ``5.07e-13``,
@@ -1233,7 +1215,7 @@ Controls:
   improve materially over identity before it is used.
 - ``SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_FACTOR_DTYPE`` selects
   ``float64`` or ``float32`` block factors. ``float64`` is the default because
-  this path is currently an accuracy diagnostic.
+  this path is an accuracy diagnostic.
 
 **JAX sparse Jacobi (optional).**
 
@@ -1254,7 +1236,7 @@ path can therefore opt into a bounded host sparse-LU rescue:
    A X = B,\qquad B = [b_1,\ b_2,\ b_3],
 
 where the transport operator :math:`A` is unchanged across the three
-``whichRHS`` drives. ``sfincs_jax`` now exploits that structure in two ways:
+``whichRHS`` drives. ``sfincs_jax`` exploits that structure in two ways:
 
 - the explicit sparse helper assembles column blocks from local basis matrices
   instead of materializing a full identity matrix,
@@ -1270,10 +1252,10 @@ for end-to-end autodiff workflows.
 Implementation:
 
 - block-basis materialization and factorization helpers:
-  ``sfincs_jax.explicit_sparse.build_operator_from_matvec`` and
+  ``sfincs_jax.solvers.explicit_sparse.build_operator_from_matvec`` and
   ``factorize_host_sparse_operator``;
 - RHSMode=2/3 sparse-direct reuse:
-  ``sfincs_jax.v3_driver.solve_v3_transport_matrix_linear_gmres``.
+  ``sfincs_jax.problems.transport_solve.solve_v3_transport_matrix_linear_gmres``.
 
 Controls:
 
@@ -1312,7 +1294,7 @@ Controls:
 Measured production-floor evidence:
 
 - The ``monoenergetic_geometryScheme11`` row at
-  ``25 x 51 x 4 x 100`` previously failed on GPU by entering sparse direct
+  ``25 x 51 x 4 x 100`` can fail on GPU if sparse direct is entered
   without a pattern and attempting a dense ``127501 x 127501`` materialization
   (about ``121 GiB``), then falling back to matrix-free Krylov until timeout.
 - Sparse-pattern host LU fixed correctness first: the conservative pattern had
@@ -1321,7 +1303,7 @@ Measured production-floor evidence:
   residuals ``1.8e-18`` and ``3.6e-15`` but took ``511.1 s`` wall and
   ``25.96 GB`` process RSS, so it is retained as a rescue rather than a default
   performance route.
-- The promoted default is now the bounded structured ``tzfft`` first attempt
+- The promoted default is the bounded structured ``tzfft`` first attempt
   with strict true-residual checking. On the same production row it reached
   residuals ``5.3e-18`` and ``1.1e-13`` without invoking sparse LU, completed in
   ``13.6 s`` wall and used ``1.08 GB`` process RSS /
@@ -1331,12 +1313,10 @@ Measured production-floor evidence:
 
 **Implementation.**
 
-- ``_build_rhsmode23_sxblock_preconditioner`` in ``sfincs_jax.v3_driver``.
-- ``_build_rhsmode23_theta_dd_preconditioner`` / ``_build_rhsmode23_zeta_dd_preconditioner``
-  in ``sfincs_jax.v3_driver``.
-- ``_build_rhsmode23_theta_schwarz_preconditioner`` /
-  ``_build_rhsmode23_zeta_schwarz_preconditioner`` in ``sfincs_jax.v3_driver``.
-- ``_build_rhsmode23_fp_tzfft_preconditioner`` in ``sfincs_jax.v3_driver``.
+- RHSMode=2/3 transport preconditioner builders in
+  ``sfincs_jax.solvers.preconditioner_transport_matrix``.
+- Transport preconditioner selection and gating in
+  ``sfincs_jax.problems.transport_policies``.
 - Controlled by ``SFINCS_JAX_TRANSPORT_PRECOND`` (``auto``, ``sxblock``, ``collision``, etc.).
   ``auto`` picks the collision-diagonal preconditioner for the default BiCGStab transport
   solver and upgrades to species×x blocks for modest FP systems when GMRES is selected.
@@ -1379,7 +1359,8 @@ applied per species and :math:`x` using the same :math:`(\theta,\zeta)` weights
 as diagnostics. This stabilizes PAS tokamak-like cases and pairs with the
 ``xblock_tz`` preconditioner default.
 
-Implementation: ``sfincs_jax.v3_driver`` (``use_pas_projection`` and
+Implementation: the RHSMode=1 solve loop in
+``sfincs_jax.problems.profile_solve`` (``use_pas_projection`` and
 ``_project_pas_f``). Control: ``SFINCS_JAX_PAS_PROJECT_CONSTRAINTS`` (auto on for
 ``N_\zeta=1`` tokamak-like runs **except** ``geometryScheme=1`` analytic tokamak
 cases).
@@ -1398,12 +1379,13 @@ and a trailing log-slope over the last :math:`m` ratios,
 
    s_m = \frac{1}{m} \sum_{i=k-m+1}^{k} \log\left(\frac{r_i}{r_{i-1}}\right).
 
-The helper accepts a candidate smoother state when the latest residual is still
+The helper accepts a candidate smoother state while the residual is still
 improving and stops when either the single-step ratio or trailing log-slope
 crosses the configured worsening threshold. This provides a deterministic gate
 for the later PAS driver integration without hard-coding case-specific logic.
 
-Implementation: ``sfincs_jax.pas_smoother`` (``append_residual``,
+Implementation: ``sfincs_jax.solvers.preconditioner_pas_policy``
+(``append_residual``,
 ``summarize_residual_history``, ``decide_pas_smoother_action``,
 ``advance_pas_smoother``, ``adaptive_pas_smoother_allowed``, and
 ``adaptive_pas_smoother``). The returned metadata includes the residual
@@ -1423,7 +1405,7 @@ Controls:
 - ``PasSmootherConfig.max_consecutive_increases`` (limit on consecutive worsening
   steps, default ``1``)
 
-**RHSMode=1 angular DD / overlap Schwarz.** ``sfincs_jax`` now exposes
+**RHSMode=1 angular DD / overlap Schwarz.** ``sfincs_jax`` exposes
 theta/zeta domain-decomposition preconditioners for RHSMode=1:
 ``SFINCS_JAX_RHSMODE1_PRECONDITIONER=theta_dd`` / ``zeta_dd`` (block-Jacobi) and
 ``theta_schwarz`` / ``zeta_schwarz`` (overlap-RAS). Controls:
@@ -1471,7 +1453,8 @@ by recovering the diagonal Schur entries with a **single** base‑preconditioner
 column‑by‑column. This significantly reduces Schur setup time in tokamak‑like PAS runs
 with many :math:`x` points.
 
-Implementation: ``sfincs_jax.v3_driver`` (``_build_rhsmode1_schur_*``).
+Implementation: ``sfincs_jax.solvers.preconditioner_schur_profile``
+with integration in ``sfincs_jax.problems.profile_preconditioner_build``.
 Controls: ``SFINCS_JAX_RHSMODE1_SCHUR_MODE`` and
 ``SFINCS_JAX_RHSMODE1_SCHUR_FULL_MAX``. The base preconditioner used inside the
 Schur construction can be selected with ``SFINCS_JAX_RHSMODE1_SCHUR_BASE``; the
@@ -1486,22 +1469,22 @@ can trigger the Schur preconditioner automatically once ``total_size`` exceeds
 the threshold (default: ``2500``), which helps HSX-like cases.
 See ``docs/references.rst`` for Schur complement references.
 
-For FP-heavy RHSMode=1 systems, the strong-preconditioner fallback is now enabled
+For FP-heavy RHSMode=1 systems, the strong-preconditioner fallback is enabled
 automatically once the active system exceeds ``SFINCS_JAX_RHSMODE1_STRONG_PRECOND_MIN``,
 so difficult FP cases attempt a stronger angular block preconditioner before dense fallback.
-The fallback now uses a residual-ratio gate; tune
+The fallback uses a residual-ratio gate; tune
 ``SFINCS_JAX_RHSMODE1_STRONG_PRECOND_RATIO`` (default: ``1e2``) to avoid expensive
 fallbacks when the residual is only slightly above target.
 
 For PAS runs that already used a strong base preconditioner (``schur``,
 ``xblock_tz``, ``xblock_tz_lmax``, ``sxblock_tz``, ``species_block``,
-``theta_zeta``, or the ``pas_*`` family), auto mode now skips the extra
+``theta_zeta``, or the ``pas_*`` family), auto mode skips the extra
 strong-preconditioner retry when ``||r|| / target`` is already below
 ``SFINCS_JAX_PAS_AUTO_STRONG_RATIO`` (default: ``10``). This avoids paying for a
 second expensive PAS Krylov cycle in near-converged cases where the base solve
 already satisfies the practical parity tolerances.
 
-For **small FP systems**, ``sfincs_jax`` now defaults to a direct dense solve
+For **small FP systems**, ``sfincs_jax`` defaults to a direct dense solve
 instead of running GMRES first. This avoids JIT/Krylov overhead in cases where a
 direct solve is both faster and more robust for parity. The FP threshold is
 ``SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF`` (default:
@@ -1519,12 +1502,12 @@ larger PAS systems default to Krylov+preconditioning to avoid multi‑GB transie
 dense allocations.
 
 When the input requests a fully coupled preconditioner (``preconditioner_species = preconditioner_x = preconditioner_xi = 0``),
-``sfincs_jax`` now defaults to the Schur preconditioner for ``constraintScheme=2`` to avoid dense fallbacks while
+``sfincs_jax`` defaults to the Schur preconditioner for ``constraintScheme=2`` to avoid dense fallbacks while
 preserving the constraint coupling. For tokamak-like cases (``N_zeta=1``) with
 ``|Er|`` below ``SFINCS_JAX_RHSMODE1_SCHUR_ER_ABS_MIN`` (default: ``0``),
 the default switches to the cheaper ``xblock_tz`` preconditioner to reduce setup time.
 For bounded CPU tokamak PAS+Er branches with magnetic-drift coupling, the default
-now also promotes directly to ``xblock_tz`` instead of first forcing ``pas_schur``
+also promotes directly to ``xblock_tz`` instead of first forcing ``pas_schur``
 when the active system is below
 ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_CPU_XBLOCK_ACTIVE_MAX`` and the angular block
 fits inside ``SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX``. Set
@@ -1541,7 +1524,7 @@ Fortran-output comparisons and reduced the runtime from about ``18.2 s`` to
 older ``xblock_tz`` GPU route remains available behind an explicit active-size
 cap for users who want to benchmark it on a different accelerator.
 
-For bounded near-zero-:math:`E_r` geometryScheme=4 PAS branches, the default now
+For bounded near-zero-:math:`E_r` geometryScheme=4 PAS branches, the default
 uses direct top-level ``pas_tz`` instead of the constraint-Schur wrapper. This is
 a measured memory policy, not a new physics approximation: the same PAS
 angular-block model is used, but the extra Schur applications and buffers are
@@ -1549,7 +1532,7 @@ avoided. On ``geometryScheme4_2species_PAS_noEr`` this preserved all Fortran
 output comparisons and reduced focused GPU RSS from about ``2507 MB`` to
 ``1817 MB`` while also reducing the clean-remote elapsed time from ``5.899 s``
 with the disabled Schur route to ``4.774 s``. Set
-``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ=0`` to restore the previous Schur
+``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ=0`` to force the Schur
 route for comparison.
 
 **Sparse ILU (FP-heavy RHSMode=1).** For FP-heavy RHSMode=1 systems, a PETSc‑like
@@ -1576,8 +1559,8 @@ as a differentiable approximation to :math:`\tilde{A}^{-1}`. Explicit solves can
 apply SciPy’s sparse ILU and optionally use the sparse operator for matvecs.
 References: GMRES [#saad86]_, ILU/Preconditioning surveys [#benzi02]_.
 
-Implementation: ``sfincs_jax.v3_driver`` (``_build_sparse_ilu_from_matvec`` and
-the RHSMode=1 sparse fallback). Controls:
+Implementation: ``sfincs_jax.solvers.explicit_sparse`` and
+``sfincs_jax.problems.profile_sparse_solve``. Controls:
 
 - ``SFINCS_JAX_RHSMODE1_SPARSE_PRECOND`` (auto/on/off/jax/scipy)
 - ``SFINCS_JAX_RHSMODE1_SPARSE_OPERATOR`` (optional sparse matvec path)
@@ -1599,7 +1582,7 @@ forming the full species block, and it is selected automatically when
 :math:`L \times N_\theta \times N_\zeta` stays below
 ``SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX``.
 
-Implementation: ``sfincs_jax.v3_driver`` (``_build_rhsmode1_xblock_tz_preconditioner``).
+Implementation: flat ``sfincs_jax.solvers.preconditioner_xblock_*`` modules.
 
 These are cached to avoid recomputation. RHS-only gradients are excluded from the cache key
 so scan points can reuse the same preconditioner blocks. Controls:
@@ -1616,7 +1599,7 @@ so scan points can reuse the same preconditioner blocks. Controls:
 - ``SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_ACTIVE_MAX`` and ``SFINCS_JAX_RHSMODE1_PAS_DKES_GPU_PAS_TZ_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_DKES_GPU_PAS_TZ_ACTIVE_MAX`` (PAS DKES only: prefer the structured ``pas_tz`` angular block above this backend-specific angular-block size and below this active-DOF cap; defaults ``950`` and ``15000``)
 - ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_NZETA_MAX`` / ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_ACTIVE_MAX`` (CPU full-trajectory PAS only: prefer ``pas_tz`` over Schur for bounded geometryScheme=11 cases; defaults ``19``, ``950``, and ``15000``)
 - ``SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ`` plus ``SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_NZETA_MAX`` / ``SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_ACTIVE_MAX`` (one-GPU full-trajectory PAS geometryScheme=11 only: prefer ``pas_tz`` over Schur for the measured bounded HSX / SFINCS-paper rows; defaults enabled, ``19``, ``950``, and ``15000``)
-- ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL`` (bounded one-GPU tokamak PAS+Er only: default tight-GMRES tolerance ``1e-8`` for cases below the ``xblock_tz`` active-size window; ``0`` disables the tightening; legacy ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL`` is accepted)
+- ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL`` (bounded one-GPU tokamak PAS+Er only: default tight-GMRES tolerance ``1e-8`` for cases below the ``xblock_tz`` active-size window; ``0`` disables the tightening; compatibility alias ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL`` is accepted)
 - ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX`` (bounded one-GPU tokamak PAS+Er only: default ``1000`` / ``8000`` active-DOF window for the structured ``xblock_tz`` branch)
 - ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ`` and
   ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_*`` (geometryScheme=4 PAS no-Er
@@ -1690,15 +1673,13 @@ so scan points can reuse the same preconditioner blocks. Controls:
 - ``SFINCS_JAX_PRECOND_FP32_MIN_SIZE`` (threshold for auto mixed precision)
 
 The PAS benchmark promotion gate is intentionally stricter than a single
-threshold comparison. When ``scripts/benchmark_pas_tz_memory_fallback.py`` is
-run with ``--require-default-promotion-gate``, a residual-clean candidate must
-not regress either elapsed time or peak RSS against the supplied baseline, and
-must still show a material runtime or memory win. This prevents a PAS policy
-from being promoted when it is faster but higher-memory, or lower-memory but
-slower.
+threshold comparison. A residual-clean candidate must not regress either elapsed
+time or peak RSS against the supplied baseline, and must still show a material
+runtime or memory win. This prevents a PAS policy from being promoted when it
+is faster but higher-memory, or lower-memory but slower.
 
 **PAS-lite / PAS-hybrid / PAS-Schur preconditioners.** For PAS-only RHSMode=1
-systems, ``sfincs_jax`` now defaults to lightweight PAS-specific preconditioners
+systems, ``sfincs_jax`` defaults to lightweight PAS-specific preconditioners
 before attempting expensive global Schur or dense fallbacks:
 
 - **``pas_lite``**: for large PAS systems, combine a cheap angular/L block
@@ -1711,7 +1692,7 @@ before attempting expensive global Schur or dense fallbacks:
   angular block than ``pas_lite``. Uses a truncated‑:math:`L` angular block
   (``xblock_tz_lmax`` or ``pas_tokamak_theta``) followed by ``xmg``.
 - **``pas_schur``**: PAS‑specific block‑Schur composition (angular/L block +
-  x‑coarse + collision). This is now the default for tokamak‑like PAS cases
+  x‑coarse + collision). This is the default for tokamak‑like PAS cases
   (``N_\zeta \le 5`` or ``geometryScheme=1``), avoiding the expensive global
   constraint‑Schur fallback when PAS preconditioning is already active.
 
@@ -1724,7 +1705,7 @@ Key controls:
 
 **Large tokamak PAS BiCGStab fastpath.** For very large 1-species tokamak PAS
 RHSMode=1 systems (:math:`N_\zeta=1`, no :math:`\Phi_1`, ``active_size`` above
-``SFINCS_JAX_PAS_LARGE_BICGSTAB_FASTPATH_MIN``), ``auto`` now switches from
+``SFINCS_JAX_PAS_LARGE_BICGSTAB_FASTPATH_MIN``), ``auto`` switches from
 GMRES to BiCGStab and skips default stage-2/strong fallback passes. This trims
 runtime substantially on the largest PAS no-Er benchmarks while maintaining
 output agreement at suite tolerances. Controls:
@@ -1743,11 +1724,11 @@ preconditioner is:
 - apply the triangular factors in pure JAX inside GMRES iterations.
 
 This is primarily a fallback for large DKES PAS blocks (or strict memory caps). For
-medium DKES PAS systems, the default now prefers dense ``xblock_tz`` blocks when the
+medium DKES PAS systems, the default prefers dense ``xblock_tz`` blocks when the
 estimated dense memory stays within the configured cap, since that path is typically
 more robust and faster in practice.
 
-Implementation: ``sfincs_jax.v3_driver`` (``_build_rhsmode1_pas_xblock_ilu_preconditioner``).
+Implementation: ``sfincs_jax.solvers.preconditioner_pas_xblock_ilu``.
 Key controls:
 
 - ``SFINCS_JAX_RHSMODE1_SCHUR_BASE=pas_ilu`` (force as Schur base for constraintScheme=2)
@@ -1779,7 +1760,7 @@ JAX. This avoids the expensive dense-matvec assembly that ``xblock_tz`` uses and
 reduces preconditioner build time and peak memory on 3D PAS cases with large
 angular blocks.
 
-Implementation: ``sfincs_jax.v3_driver`` (``_build_rhsmode1_pas_tz_preconditioner``).
+Implementation: ``sfincs_jax.solvers.preconditioner_pas_angular``.
 
 Auto selection: for 3D PAS-only cases, ``auto`` selects ``pas_tz`` as the Schur
 base when :math:`L_{\max} N_\theta N_\zeta` exceeds ``SFINCS_JAX_RHSMODE1_PAS_TZ_MIN``
@@ -1787,7 +1768,7 @@ base when :math:`L_{\max} N_\theta N_\zeta` exceeds ``SFINCS_JAX_RHSMODE1_PAS_TZ
 
 **KSP history cost.** PETSc-style KSP residual histories and iteration counts are
 computed via an additional SciPy solve (to match the PETSc text). For large Krylov
-counts this can dominate runtime, so the defaults now skip these when the estimated
+counts this can dominate runtime, so the defaults skip these when the estimated
 iteration count exceeds ``SFINCS_JAX_KSP_HISTORY_MAX_ITER`` /
 ``SFINCS_JAX_SOLVER_ITER_STATS_MAX_ITER``. Raise those caps (or set to ``none``)
 only when strict per-iteration history is required.
@@ -1840,7 +1821,8 @@ while keeping the matvec control‑flow free (required for JAX GMRES/BiCGStab).
 
 **Implementation.**
 
-- ``SFINCS_JAX_FUSED_MATVEC`` (default enabled) in ``sfincs_jax.v3_fblock``.
+- ``SFINCS_JAX_FUSED_MATVEC`` (default enabled) in
+  ``sfincs_jax.operators.profile_fblock``.
 
 **Notes.** Avoid ``lax.scan``/``lax.fori_loop`` inside the matvec used by JAX
 iterative solvers: they assert on control‑flow. The collision operators (PAS/FP)
@@ -1873,12 +1855,12 @@ schemes used in reduced-suite inputs).
 **Implementation.**
 
 - Sparse-row extraction and apply:
-  ``sfincs_jax.periodic_stencil.extract_sparse_row_stencil`` and
-  ``sfincs_jax.periodic_stencil.apply_sparse_row_stencil_gather``.
+  ``sfincs_jax.discretization.periodic_stencil.extract_sparse_row_stencil`` and
+  ``sfincs_jax.discretization.periodic_stencil.apply_sparse_row_stencil_gather``.
 - Collisionless operator fast path:
-  ``sfincs_jax.collisionless.apply_collisionless_v3``.
+  ``sfincs_jax.operators.profile_collisionless.apply_collisionless_v3``.
 - Operator build wiring:
-  ``sfincs_jax.v3_fblock.collisionless_operator_from_namelist``.
+  ``sfincs_jax.operators.profile_fblock.collisionless_operator_from_namelist``.
 
 **Periodic circulant optimization.** For periodic circulant derivative matrices,
 an additional compact roll-based kernel is available and enabled on single-device
@@ -1899,7 +1881,7 @@ cross-device halo overhead regressions in current JAX CPU sharding.
   ``tests/test_periodic_stencil.py``,
   ``tests/test_collisionless_operator_parity.py``,
   ``tests/test_fblock_pas_matvec_parity.py``.
-- Benchmark (cache-warm, `transport_parallel_xxlarge`, 1 CPU device):
+- Benchmark (cache-warm, extracted large transport operator, 1 CPU device):
   mean matvec time improved from ``7.49e-4 s`` (stencil off) to
   ``5.87e-4 s`` (stencil on), about **1.28× faster**.
 
@@ -1926,8 +1908,8 @@ then compute diagnostics in one batched kernel.
    \mathrm{FSABFlow}_s \propto \int d\theta\,d\zeta\; \frac{B}{D}\,
    \sum_x w_x x^3 f_{s,L=1}.
 
-These are implemented in ``sfincs_jax.transport_matrix`` with strict-order
-reductions matching v3 when required.
+These are implemented in ``sfincs_jax.problems.transport_diagnostics``
+with strict-order reductions matching v3 when required.
 
 **Precompute constants + cache.**
 
@@ -1939,7 +1921,8 @@ and reused for all ``whichRHS`` solves.
 
 - ``v3_transport_diagnostics_vm_only_precompute`` and
   ``v3_transport_diagnostics_vm_only_batch_op0_precomputed``.
-- Cached by operator signature in ``sfincs_jax.transport_matrix`` to reuse
+- Cached by operator signature in
+  ``sfincs_jax.problems.transport_diagnostics`` to reuse
   geometry/species factors across repeated transport solves (default cache size: ``4``;
   override with ``SFINCS_JAX_TRANSPORT_DIAG_CACHE_MAX``).
 - For large transport solves, diagnostics can be processed in chunks to reduce peak
@@ -1971,7 +1954,8 @@ where :math:`U` contains recent solution vectors.
 
 **Implementation.**
 
-- ``SFINCS_JAX_TRANSPORT_RECYCLE_K`` in ``sfincs_jax.v3_driver``.
+- ``SFINCS_JAX_TRANSPORT_RECYCLE_K`` in
+  ``sfincs_jax.problems.transport_solve``.
 - ``SFINCS_JAX_STATE_IN``/``SFINCS_JAX_STATE_OUT`` (cross-run recycling).
 - ``SFINCS_JAX_SCAN_RECYCLE`` (auto-wires state files between scan points).
 - ``SFINCS_JAX_RHSMODE1_RECYCLE_K`` (RHSMode=1 scan reuse with least-squares deflation).
@@ -1990,7 +1974,7 @@ Fortran-like deterministic accumulation order when parity demands it.
 **Implementation.**
 
 - ``_weighted_sum_x_fortran`` and ``_weighted_sum_tz_fortran`` in
-  ``sfincs_jax.transport_matrix``.
+  ``sfincs_jax.problems.transport_diagnostics``.
 - Strict order controlled by ``SFINCS_JAX_STRICT_SUM_ORDER``.
 
 This reduces Python overhead and improves performance, while still preserving
@@ -2013,7 +1997,7 @@ rescue transport-matrix solves that stall.
   bypass the Newton–Krylov inner GMRES step and take a dense Newton step instead.
   This avoids GMRES setup cost and matches Fortran parity for Phi1‑collision fixtures.
   The cutoff is controlled by ``SFINCS_JAX_PHI1_NK_DENSE_CUTOFF`` (default: ``5000``).
-- For RHSMode=2 transport matrices with multiple RHS, ``sfincs_jax`` now
+- For RHSMode=2 transport matrices with multiple RHS, ``sfincs_jax``
   auto‑selects a **dense batched solve** when the active system size is modest
   (``n \le min(3000, SFINCS_JAX_TRANSPORT_DENSE_RETRY_MAX)``) and the dense
   memory budget allows it. This avoids spending time on Krylov retries when a
@@ -2140,27 +2124,22 @@ Controls:
   the SFINCS Fortran v3 preconditioner matrix, while accepting the solve only
   against the full SFINCS-JAX true residual. On the bounded Zenodo QA/QH
   ``s=0.5`` ``13 x 13 x 21 x 5`` gates, this reduced QA auto runtime from the
-  previous slow structured path (about ``169 s``) to ``3.82 s`` with residual
+  slower structured path (about ``169 s``) to ``3.82 s`` with residual
   ``3.37e-13`` below target, and QH completed in ``4.21 s`` with residual
   ``6.31e-13`` below target. Disable with ``0``/``false`` only when
   reproducing older policy-ladder behavior.
 - For full-grid finite-beta QA/QH ``25 x 39 x 60 x 7`` RHSMode=1 diagnostics,
   the robust non-autodiff reference route is the Fortran-reduced direct-tail
   active LU preconditioner. This Fortran-reduced direct-tail active LU
-  preconditioner remains the high-memory fallback. The default ``auto`` route now reaches this
-  direct-tail ladder with no manual ``PC_BACKEND=global`` or
-  ``DIRECT_TAIL_PC_MAX_MB`` overrides. The checked QA/QH active size remains
-  ``507004`` unknowns, and ``auto`` assigns the same adaptive
-  ``14708.1 MiB`` cap used by the active-LU reference route: it first tries
-  ``active_fortran_v3_reduced_native_stack`` as the lower-memory production
-  candidate, requires a true-residual preflight for that candidate, and falls
-  back to ``active_fortran_v3_reduced_lu`` when the preflight fails. The checked
-  QA full-grid auto audit selected native stack in ``9.17 s`` with
-  ``5,090,357,984`` estimated factor bytes, rejected it because the one-apply
-  residual worsened, accepted active LU as the no-required-preflight fallback,
-  and converged to residual ``9.002525e-13`` in ``343.5 s`` wall with ``46``
-  GMRES iterations. Earlier checked QA/QH active-LU reference audits converged
-  to ``9.950981e-13`` and ``8.712742e-14`` residual with a
+  preconditioner remains the production default for these cases. The default
+  ``auto`` route reaches this direct-tail ladder with no manual ``PC_BACKEND=global``
+  or ``DIRECT_TAIL_PC_MAX_MB`` overrides. The checked
+  QA/QH active size remains ``507004`` unknowns, and ``auto`` assigns the same
+  adaptive ``14708.1 MiB`` cap used by the active-LU reference route. Lower
+  memory native/coarse variants are explicit advanced candidates and must pass
+  the same true-residual gate before they are used in a published run. Checked
+  QA/QH active-LU reference audits converged to ``9.950981e-13`` and
+  ``8.712742e-14`` residual with a
   ``13,303,259,384`` byte active matrix. A stricter guarded rerun with
   ``tol=1e-10`` converged to residual ``7.269598e-16`` in ``354.6 s`` wall
   with ``67`` GMRES iterations and ``74`` matvecs. Native true-coupled rescue is
@@ -2171,505 +2150,15 @@ Controls:
   is robust and parity-facing; the open performance lane is making the
   lower-memory native block/coarse replacement pass the same true-residual gate
   so active LU is no longer needed at full grid.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX`` (default: ``30000`` for
-  non-differentiable full-FP host x-block factors; ``2000`` otherwise). Medium
-  full-FP :math:`(x,\theta,\zeta,L)` blocks now use exact SuperLU instead of ILU
-  because the scale-0.50 QI blocker showed that weak ILU factors caused the
-  residual floor. The checked CPU successor artifact
-  ``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json`` closes
-  the ``13 x 27 x 50 x 4`` seed in ``~12 s`` with residual ratio ``4.16e-2``;
-  the matching one-GPU artifact
-  ``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu.json`` closes
-  the same seed in ``~44.5 s`` with residual ratio ``0.63``. The five-seed
-  follow-up artifacts
-  ``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_cpu.json``
-  and
-  ``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_gpu.json``
-  pass the public ``auto`` path for seeds ``0..4`` on CPU and one GPU with all
-  outputs and solver traces written, maximum elapsed times ``11.58 s`` and
-  ``41.18 s``, and maximum residual ratios ``0.966`` and ``0.963``. This closes
-  the bounded public-auto route gate; the production-resolution QI ladder remains
-  separate. The next-scale
-  ``docs/_static/qi_seed_robustness_scale055_auto_cpu_blocker.json`` probe showed
-  that the old ``20000`` exact-LU cap sent the largest ``15 x 29 x 55 x 4``
-  block into ILU and timed out. Raising only the full-FP host exact-LU cap to
-  ``30000`` closes the CPU successor
-  ``docs/_static/qi_seed_robustness_scale055_xblock_lu_right_cpu.json`` in
-  ``~21.5 s`` with residual ratio ``8.25e-3``.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_RIGHT_PC_MAX`` (default: ``45000`` active
-  unknowns for 3D full-FP lanes only). The scale-0.50 QI evidence remains
-  faster with right preconditioning, but the harder scale-0.55 seed ``3`` probe
-  showed a seed-dependent right-PC slow mode. The size-aware default therefore
-  keeps right-PC for the checked scale-0.50 window and automatically uses
-  left-PC for larger 3D full-FP active systems unless the user explicitly sets
-  ``SFINCS_JAX_GMRES_PRECONDITION_SIDE``. The checked
-  ``docs/_static/qi_seed_robustness_scale055_xblock_auto_side_seed3_cpu.json``
-  artifact closes that hard CPU seed in ``~47 s`` with residual ratio
-  ``2.98e-3`` and records ``precondition_side=left``. The matching five-seed
-  CPU and one-GPU artifacts
-  ``docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_cpu.json``
-  and
-  ``docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_gpu.json``
-  pass seeds ``0..4`` with all outputs and solver traces written, maximum
-  elapsed times ``44.5 s`` and ``206.7 s``, and maximum residual ratios below
-  ``8.3e-3``. The default upper auto-size window remains bounded until the
-  next-size and production-resolution ladders pass. The first next-size
-  ``15 x 31 x 60 x 5`` seed-0 artifacts
-  ``docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_cpu.json``
-  and
-  ``docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_gpu.json``
-  also pass at active size ``81377`` with elapsed times ``42.2 s`` and
-  ``145.1 s`` and residual ratios below ``4.7e-3``; this is a bounded seed-0
-  probe, not a production-resolution five-seed claim. The harder scale-0.60
-  seed-3 rejected-probe summary
-  ``docs/_static/qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json``
-  keeps two-level x-block, GCROT(m,k), BiCGStab fallback, post-correction-only
-  BiCGStab, and JAX-factor/device-Krylov variants out of the default policy; the
-  only kept fallback behavior is reusing a non-GMRES candidate as a GMRES initial
-  guess when it strictly improves the finite RHS norm and is not a
-  right-preconditioned coordinate state.
-- Transformed RHSMode=1 matvecs use a different sharding boundary than
-  top-level operator applications. Setup probes that call the full-system
-  operator inside ``vmap`` and matvecs that run inside ``custom_linear_solve``
-  now force the local/unsharded JIT path. This avoids nested
-  ``jax.set_mesh``/``pjit`` contexts on multi-device hosts while preserving the
-  cached sharded path for top-level CPU/GPU matvecs. The safety gate was added
-  after the ``13 x 13 x 15 x 4`` QI single-point probe failed before Krylov
-  progress on a multi-device CPU runtime.
-- ``SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY`` (default: on): bounded
-  early-entry policy for mid-size explicit RHSMode=1 full-FP systems that are
-  just above the dense cutoff and within the measured exact active sparse-LU
-  cap. It skips theta-line/primary-Krylov/stage-2 setup and goes directly to the
-  existing active sparse-LU rescue. On the checked QI ``13 x 13 x 15 x 4``
-  single point, this reduced solver time from ``107.9 s`` to ``35.3 s`` with
-  zero difference in the recorded key HDF5 observables. Controls:
-  ``SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY=0``,
-  ``SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY_MIN`` (default
-  ``max(sparse_max+1, 8000)``), and
-  ``SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY_MAX`` (default
-  ``30000``).
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING`` (default: off): opt-in
-  smoothed global-coupling wrapper for explicit ``xblock_sparse_pc_gmres``. It
-  builds low-rank load vectors from RHS/source rows, low-L flux-surface-average
-  moments, and the lowest theta/zeta Fourier components, applies the existing
-  x-block preconditioner to form ``Z = B^{-1}P``, then uses a rank-revealed
-  ``A Z`` coarse solve inside each preconditioner application. This is more
-  physics-aware than the older fixed two-level basis, and it records rank,
-  setup time, basis names, and side-probe switch suppression metadata. The
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres`` and ``gmres-jax``
-  experimental routes now use a JAX-array global-coupling variant for this
-  wrapper: ``Z`` and a small coarse least-squares solve stay in JAX arrays
-  during the Krylov apply path, so the coarse correction no longer requires
-  host QR/SciPy calls on every iteration. The default device coarse solver is a
-  rank-revealed QR factorization built once at setup; the older
-  ridge-regularized normal-equation solver remains available through
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_DEVICE_SOLVER=normal-equations``
-  for diagnostics. Device global coupling now defaults to an identity/raw-load
-  smoother, while the older preconditioned-load smoothing remains available
-  through ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_SMOOTHER=base``.
-  This avoids spending hundreds of accelerator matvecs before the Krylov solve
-  starts on memory-sensitive QI probes. The setup can also be bounded with
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_SETUP_MAX_S``; metadata records
-  ``xblock_global_coupling_smoother`` and whether the setup budget was reached.
-  This is still opt-in and does not change default solver selection.
-  The
-  scale-0.60 hard-seed probe
-  ``docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json``
-  rejected it for defaults: CPU reached a near residual only after ``539 s`` and
-  ``6671`` matvecs without strict output acceptance, while one-GPU runs timed out
-  at ``620 s`` whether the side probe switched right or kept the left
-  global-coupling state.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR`` (default: off): opt-in
-  assembled/operator-reuse path for explicit ``xblock_sparse_pc_gmres``. It
-  materializes a conservative sparse full-system operator by graph-colored
-  pattern probing, validates sampled matvecs against the matrix-free operator,
-  and then reuses the assembled operator for Krylov matvecs. The preflight now
-  aborts as soon as the color count exceeds
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS`` so large
-  QI/PAS geometries do not spend minutes discovering an already-infeasible
-  operator. The CSR memory budget
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB`` is now enforced
-  as a hard cap when materialization is required. When
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF=1`` is also enabled, the preflight
-  builds the conservative pattern in active ``Nxi_for_x`` coordinates before
-  applying the cap, and records both full-system and active-DOF byte estimates
-  in solver metadata. This prevents reduced QI/PAS systems from rejecting a
-  feasible assembled Krylov operator because of inactive pitch modes.
-  Large active FP/QI patterns use a structured ``velocity ⊗ angular`` builder
-  rather than materializing the full inactive pattern and slicing it. On the
-  documented scale-0.60 QI seed-3 preflight, this changed pattern construction
-  from a 4.52 GB full CSR estimate and ``250.0 s`` full-pattern build, through a
-  ``174.6 s`` Python active-loop build, to a ``1.19 s`` structured active build
-  for the same 1.54 GB active CSR pattern. A bounded dummy-matvec probe then
-  rejected ``max_colors=64`` graph coloring in ``0.88 s``. A follow-up
-  production-color probe on the same active system built the pattern in
-  ``1.44 s`` and rejected ``max_colors=512`` coloring in ``2.04 s``. This keeps
-  infeasible materialization attempts bounded, but it also means the active
-  assembled path remains diagnostic-only until a large case shows strict
-  residual parity and lower wall time/memory.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE`` (default: on for
-  experimental JAX device Krylov, off otherwise): copies a successfully
-  materialized assembled x-block operator into budgeted JAX CSR arrays and uses a
-  JIT-compatible CSR matvec instead of calling SciPy from every Krylov
-  iteration. ``SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE_REQUIRED=1``
-  makes this a hard gate for GPU experiments, so a failed device transfer or
-  validation does not silently fall back to host round trips. Solver metadata
-  records ``xblock_assembled_operator_device_resident``,
-  ``xblock_assembled_operator_device_csr_nbytes_estimate``, validation errors,
-  and whether device-Krylov matvec/preconditioner application is
-  host-transfer-free. The device CSR stores precomputed row indices in addition
-  to ``data``, ``indices``, and ``indptr`` so accelerator matvecs avoid
-  per-trace ``repeat``/constant-folding work. This is the current QI
-  operator-reuse candidate; it is still opt-in until the bounded ``office``
-  hard-seed gate writes a converged HDF5 output and solver trace.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF`` (default: off): opt-in active-DOF
-  reduction for explicit ``xblock_sparse_pc_gmres``. When ``Nxi_for_x`` truncates
-  the pitch basis, this route solves the x-block Krylov system on the active
-  unknowns and expands the final state back to the full SFINCS vector. This is
-  intended as a memory-safety prerequisite for future assembled/operator-reuse
-  experiments on large QI grids; it is not enabled by default because the
-  release-facing exact-xblock path is already parity-clean on its current
-  bounded evidence set.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS`` (default: off): opt-in
-  device-factor x-block preconditioner experiment. It exposes the existing JAX
-  padded triangular-factor path through the explicit x-block solver so GPU
-  diagnostics can distinguish host-SuperLU application overhead from Krylov
-  convergence. The 2026-05-13 bounded probe did not promote it: even a small
-  local full-FP RHSMode=1 opt-in run was manually killed after about ``76 s`` of
-  setup/test time, so this path is evidence-gathering only.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres``, ``gmres-jax``,
-  ``bicgstab-jax``, or ``tfqmr-jax`` (default:
-  off): opt-in JAX-native device Krylov routes for the explicit x-block path.
-  ``fgmres`` uses fixed-shape JAX Arnoldi/Hessenberg work arrays, supports
-  iteration-dependent right preconditioners, and avoids per-iteration residual
-  conversion to Python scalars. ``gmres-jax`` uses the same fixed-shape
-  Arnoldi/least-squares primitive with a fixed left preconditioner so measured
-  left-preconditioned QI side choices can be tested without SciPy Krylov.
-  ``bicgstab-jax`` and ``tfqmr-jax`` are lower-memory short-recurrence paths
-  for device assembled-operator experiments; they avoid the :math:`O(n\,m)`
-  GMRES restart basis and record ``xblock_estimated_gmres_basis_nbytes``,
-  ``xblock_estimated_bicgstab_work_nbytes``, and
-  ``xblock_estimated_tfqmr_work_nbytes`` in solver metadata. These routes
-  force the JAX-factor x-block apply path and can use the device-resident
-  global-coupling correction above. Current tests cover the solver primitive,
-  JIT tracing, policy parsing, and small full-system metadata. The checked
-  ``docs/_static/qi_seed_robustness_scale060_device_krylov_rejected_2026_05_13.json``
-  artifact shows why these routes remain experimental: the one-GPU hard seed no
-  longer times out or triggers the earlier illegal-address failure, but it still
-  fails strict true-residual acceptance. The follow-up
-  ``docs/_static/qi_seed_robustness_scale060_device_operator_rejected_2026_05_13.json``
-  artifact verifies the next operator-reuse step: the active device CSR
-  assembled with ``2.88e6`` nonzeros in ``83.6 s`` and executed ``400`` device
-  matvecs by ``505.7 s``, but full-restart FGMRES still timed out at ``540 s``
-  without HDF5 output or a solver trace. The same artifact also records a
-  follow-up ``bicgstab-jax`` trial: peak RSS dropped to ``13.6 GB`` and the run
-  finished before timeout, but the short-recurrence solve diverged to
-  ``2.35e102`` and output was correctly refused. The same artifact records
-  ``tfqmr-jax`` and ``tfqmr-jax`` with true-residual replacement every 20
-  iterations. Plain TFQMR preserved the low-memory device path but diverged in
-  ``8:05``; residual replacement made the failure bounded and faster
-  (``4:23``) but still diverged to ``2.35e102``. TFQMR is therefore a useful
-  guardrail/diagnostic path, not a production QI replacement solver. The same
-  artifact also records the device QR global-coupling FGMRES probe: the
-  correction built successfully with ``32`` loads, ``20`` retained directions,
-  and rank ``20``, but the run still timed out at ``540 s`` after ``475``
-  device matvecs and peaked at ``46.1 GB`` RSS. This rejects QR global coupling
-  as a standalone hard-seed fix while keeping the better-conditioned coarse
-  implementation for future preconditioner work. A later identity-smoother
-  device QR probe reached global-coupling build and Krylov start with ``30``
-  retained directions and reduced the probe-coarse seed residual only from
-  ``3.021487e-05`` to ``3.019236e-05``; it still timed out after ``400`` device
-  matvecs, but peak RSS was lower than the preconditioned-load setup probe.
-  This promotes identity smoothing as a bounded setup default, not as a QI
-  hard-seed convergence fix. A
-  restart-20 device-FGMRES follow-up reached ``500`` device matvecs by
-  ``533.2 s`` but still timed out and increased peak host RSS to ``50.4 GB``.
-  The cycle-synchronized
-  restart-20 follow-up verified the new memory knob and reached ``500`` device
-  matvecs by ``528.8 s``, but still timed out and peaked at ``51.0 GB`` RSS.
-  That artifact is explicit blocker evidence, not a performance claim. The
-  next cycle-JIT implementation changes the device-Krylov execution model: it
-  JIT-compiles one restart cycle instead of tracing the entire Python-unrolled
-  solver. On the same scale-0.60 seed-3 GPU hard seed, cycle-JIT FGMRES with the
-  active device CSR operator finished in ``281.7 s`` and kept peak RSS near
-  ``13.9 GB`` instead of the full-solver JIT ``56.6 GB`` failure. Recycled
-  cycle-JIT with ``outer_k=6`` also stayed bounded (``386.4 s``, ``13.9 GB``)
-  and preserved the explicit right-preconditioned side after a rejected
-  right-side probe. Neither reduced the hard-seed residual below
-  ``3.019e-5`` versus the ``3.021e-13`` target, so these routes are promoted as
-  device/operator infrastructure only, not as QI closure.
-- The same blocker artifact records the final conditioning probes for this
-  push. Row equilibration solves ``D_r A x = D_r b`` and two-sided
-  equilibration solves ``D_r A D_c z = D_r b`` with the physical mapping
-  ``x = D_c z``. Both completed the scale-0.60 seed-3 GPU hard seed in about
-  ``275 s`` with output/trace enabled, but the physical residual remained near
-  ``3.02e-5``. Increasing the x-block JAX factor row cap to ``256`` also left
-  the residual unchanged. A closer GPU analogue of the CPU-closing path, exact
-  per-x sparse LU with left device GMRES and row cap ``1024``, reached the
-  intended factors but timed out at ``540 s`` with no output. These probes
-  reject scaling, ILU padding, and naive padded exact-LU transfer as production
-  GPU closure strategies. The replacement compact-CSR exact-factor path stores
-  only actual SuperLU factor nonzeros instead of padding every row to the widest
-  factor row. On the same hard seed it built the full exact per-x factors
-  (``1.10e8`` lower nonzeros, ``1.19e8`` upper nonzeros, ``2.76 GB`` estimated
-  factor arrays) and reduced the padded-factor memory problem, but the run still
-  timed out before writing a solver trace because the first device
-  transfer/apply remained too expensive. This keeps compact CSR as useful
-  infrastructure, not QI closure. The next QI algorithm must either reduce the
-  factor application cost by changing the block factorization itself, or replace
-  the x-block preconditioner with a residual-reducing block-Schur/coarse
-  operator.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT`` (default: off): opt-in JIT
-  execution for JAX-native x-block FGMRES/GMRES probes. With
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE=cycle`` (default), SFINCS_JAX
-  compiles a single restarted FGMRES cycle and calls it repeatedly. This avoids
-  the large HLO and host-RSS spike observed when the full multi-cycle solver is
-  JIT-compiled. ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K`` adds a
-  small LGMRES-style recycled augmentation space for diagnostics. Cycle-JIT now
-  exposes per-cycle progress callbacks, so timeout artifacts can distinguish
-  setup stalls from a Krylov cycle that is actively reducing the residual. The
-  2026-05-15 scale-0.60 QI seed-3 GPU probes showed that compact CSR exact
-  factors reach ``solve start`` with about ``5.9--6.4 GB`` of GPU memory when
-  ``XLA_PYTHON_CLIENT_PREALLOCATE=false`` is used, but even restart-4 and
-  restart-20 cycle-JIT probes did not return one full cycle within the bounded
-  window. This rejects compact exact triangular solves inside device Krylov as
-  the closure path for this hard seed.
-- ConstraintScheme=1 moment-Schur preconditioning is rank-gated. The
-  one-species QI hard seed produces a rank-``1`` moment Schur matrix for
-  ``extra=2``; SFINCS_JAX now refuses that unstable pseudo-inverse by default
-  instead of generating ``1e102`` residual seeds. For compact CSR JAX factors,
-  the moment-Schur default is also disabled because bounded GPU evidence showed
-  this setup can consume the budget before useful Krylov work. Users can still
-  force it with ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR=1`` for controlled
-  diagnostics.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_ROW_EQUILIBRATE`` and
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_COL_EQUILIBRATE`` (defaults:
-  off): opt-in active assembled-operator scaling probes. Row equilibration is a
-  left diagonal scaling; column equilibration additionally solves in scaled
-  unknowns and maps back before physical diagnostics/output. Both paths are
-  metadata-covered and acceptance-gated by the unscaled physical residual.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_FORMAT=csr`` (default:
-  ``padded``): opt-in compact CSR storage for JAX x-block SuperLU factors. This
-  avoids the padded max-row storage cliff and is the preferred diagnostic format
-  for exact-factor GPU probes, but it is still too expensive to promote on the
-  scale-0.60 QI hard seed without a stronger residual-reducing algorithm. The
-  current conclusion is explicit: the remaining GPU hard-seed blocker is not
-  side selection, LGMRES rescue, QI seed construction, moment-Schur setup, or
-  memory preallocation. It is the cost of applying exact compact triangular
-  factors inside device Krylov. The next GPU production path should replace that
-  per-iteration apply with a GPU-cheap residual-effective smoother/coarse
-  preconditioner or use a documented non-autodiff host fallback for this large
-  RHSMode=1 lane.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK`` (default: ``auto``):
-  documented non-autodiff fallback for large RHSMode=1, ConstraintScheme=1,
-  three-dimensional full-FP/QI solves when the user explicitly requests a
-  JAX-native x-block Krylov method (``fgmres``, ``gmres-jax``,
-  ``bicgstab-jax``, or ``tfqmr-jax``). In ``auto`` mode this fallback is scoped
-  to active systems above
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK_MIN_ACTIVE`` (default:
-  ``80000``) and rewrites the requested device solver to the host x-block auto
-  policy before x-block factors are built. This avoids constructing JAX factor
-  arrays that the accepted path will not use, while preserving the measured
-  host side-probe seed and LGMRES rescue that close the CPU hard seed. The
-  solver metadata records ``xblock_device_host_fallback_used``,
-  ``xblock_device_host_fallback_reason``, the requested method, the effective
-  method, and ``xblock_device_host_fallback_non_autodiff=True``. Set the
-  fallback to ``0`` to force the experimental device-Krylov path, or to
-  ``force``/``host`` to use the host x-block policy even below the automatic
-  active-size floor. This is the production-safe escape hatch for the current
-  large-QI hard-seed blocker; it is not an end-to-end differentiable solver
-  path.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_APPLY`` (default:
-  ``exact``): diagnostic compact-factor apply mode for device Krylov. ``exact``
-  applies both SuperLU triangular factors, ``diagonal`` applies only the pivoted
-  upper-factor diagonal, ``upper`` and ``lower`` apply one triangular factor,
-  and ``identity`` bypasses local factor application. These modes are
-  acceptance-gated by the unscaled true residual and are not default
-  performance claims. The 2026-05-15 ``office`` GPU hard-seed diagnostics showed
-  that ``diagonal`` returns synchronized restart cycles in about
-  ``124--153 s`` instead of timing out before the first cycle, but it leaves the
-  true residual near ``3.02e-5`` against a ``3.02e-13`` target. A row-cap-16
-  exact triangular apply reduced compact factor storage to about ``33 MB`` but
-  still needed about ``266 s`` and showed the same residual. This rejects
-  diagonal, one-sided, and storage-only triangular approximations as QI closure
-  strategies while keeping them as bounded profiling tools.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_FGMRES_BLOCK_BETWEEN_CYCLES`` (default:
-  off): opt-in memory diagnostic for the JAX-native FGMRES routes. When enabled,
-  SFINCS_JAX synchronizes at GMRES restart boundaries in eager accelerator runs
-  so queued work and basis buffers can be released before the next cycle. It is
-  ignored while tracing under ``jax.jit`` and is not a convergence fix by itself;
-  it exists to test whether hard-seed memory growth comes from cross-cycle
-  buffer retention or from the algorithmic basis/preconditioner footprint. The
-  scale-0.60 QI hard-seed evidence above shows no peak-memory gain, so this knob
-  remains diagnostic-only.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`` (default: ``0``): opt-in
-  matrix-free post-Krylov correction for explicit ``xblock_sparse_pc_gmres``.
-  Each accepted step applies the x-block preconditioner to the current residual
-  and chooses a scalar minimum-residual step using one extra operator
-  application. It did not materially reduce the scale-0.50 QI residual floor
-  and remains diagnostic-only.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE`` (default: off): opt-in
-  pre-Krylov projected coarse correction for explicit ``xblock_sparse_pc_gmres``.
-  It now initializes a zero x-block seed when no side probe or explicit
-  ``x0`` is present, records ``xblock_probe_coarse_seed_initialized``, and only
-  promotes the projected update if the measured true residual decreases. This
-  makes the hook useful as a bounded residual preflight before expensive GPU
-  Krylov launches; it is still experimental and does not alter public defaults.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE`` (default: off): opt-in
-  multidirectional post-Krylov coarse correction for explicit
-  ``xblock_sparse_pc_gmres``. When enabled, SFINCS_JAX forms a bounded
-  matrix-free least-squares problem from the preconditioned residual, optional
-  raw residual, flux-surface-averaged low-L residual components, and small
-  source/constraint directions. The update is accepted only if the measured true
-  residual decreases. This is stronger than the scalar post-minres cleanup, but
-  it also did not close the QI floor; the exact-xblock-LU policy above is the
-  promoted route.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION`` (default: off):
-  opt-in device-oriented residual-equation correction after a stalled
-  x-block Krylov solve. The correction reuses cached QI coarse columns and
-  their stored operator actions when available, appends bounded residual-derived
-  physics directions, and solves ``min_c ||r - A Q c||_2`` in JAX arrays. The
-  candidate is accepted only if the measured true residual decreases, and its
-  requested steps, accepted direction count, direction labels, and before/after
-  residuals are recorded in solver metadata and output diagnostics. This is the
-  preferred place for future QI hard-seed experiments that need the final Krylov
-  residual mode without returning to smoother, restart, or active-pattern
-  tuning. The first checked scale-0.60 CPU/GPU artifacts accepted one such
-  correction with ``89`` directions, reducing ``2.362283e-05 -> 2.105918e-05``
-  on CPU and ``2.450895e-05 -> 2.142936e-05`` on GPU1, but both remain
-  fail-closed because the production write tolerance is much tighter.
-  The scoped claim for this specific hard-seed case is therefore only that the
-  research path now gets below ``3e-5`` on both CPU and GPU. Closing the
-  remaining gap requires new coarse residual variables, not more smoother,
-  restart, or active-pattern tuning.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE`` (default: off): opt-in
-  pre-Krylov seed correction for explicit ``xblock_sparse_pc_gmres``. This uses
-  the same bounded least-squares correction basis as post-coarse, but applies it
-  to the side-probe or user-supplied initial state before the full Krylov solve.
-  On active-DOF solves the residual is expanded to full coordinates for
-  physics-aware basis construction and every candidate direction is projected
-  back to the active ``Nxi_for_x`` coordinate set before acceptance. The
-  scale-0.60 QI seed-3 CPU probe
-  ``docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_cpu.json`` used
-  this hook with ``32`` requested directions and ``fsavg_lmax=4``. The accepted
-  correction reduced the side-probe seed residual from ``2.57e-8`` to
-  ``1.43e-8`` in ``0.29 s``; the full solve then converged in ``222.5 s`` with
-  residual ratio ``3.43e-3``. This closes the bounded CPU hard-seed timeout, but
-  it remains off by default. The matching one-GPU probe
-  ``docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_gpu0_timeout.json``
-  still timed out at ``360 s``: the side probe switched from left to right,
-  probe-coarse did not apply to a physical seed, and the GPU path advanced only
-  to about ``700`` matvecs before the timeout. The remaining GPU blocker is
-  therefore a device-resident/preconditioner-application issue, not an illegal
-  address crash or CPU convergence issue.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ANGULAR_LMAX`` (default:
-  ``-1``): optional low-Fourier angular directions for the probe-coarse seed
-  basis. These modes target global angular coupling that is invisible to a pure
-  per-``x`` block inverse. The basis remains bounded by
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS`` and is accepted
-  only when the measured true residual decreases.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ANGULAR_RESIDUAL`` (default:
-  off): adds residual-weighted angular directions to the same bounded
-  probe-coarse seed. This is the current best bounded CPU hard-seed variant:
-  ``docs/_static/qi_seed_robustness_scale060_probe_coarse_angular_residual_seed3_cpu_2026_05_14.json``
-  passes the scale-0.60 seed-3 QI case in ``170.7 s`` with residual ratio
-  ``2.14e-3``, ``2024`` matvecs, active size ``81377``, and measured peak RSS
-  about ``4.77 GB``. It improves the probe seed from about ``4.57e-6`` to
-  ``2.85e-6`` before Krylov. This knob remains opt-in because the matching
-  one-GPU run still times out without HDF5 output.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED`` (default: off): opt-in
-  pre-Krylov QI coarse seed. This path builds a deterministic rank-gated basis
-  from block constants, species groups, radial ramps, and first angular
-  harmonics, pads it into the active ``Nxi_for_x`` Krylov space, and solves a
-  small least-squares problem for the seed correction. Metadata records the
-  residual before/after, improvement ratio, rank, candidate count, accepted
-  labels, rejection reason, and setup time. It is a genuine replacement
-  candidate for QI hard seeds. The checked scale-0.60 seed-3 CPU rerun
-  ``docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_cpu_2026_05_14.json``
-  passes in ``248.4 s`` with residual ratio ``1.36e-3``. The QI seed correction
-  itself is small, while the new angular probe-coarse directions supply the
-  material pre-Krylov drop. A matching one-GPU heartbeat probe
-  ``docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_gpu0_heartbeat_timeout_2026_05_14.json``
-  kept the process live and bounded for ``420 s`` on the same active
-  ``81377``/total ``139502`` system, but it still wrote no HDF5 or solver trace.
-  That probe also forced the host-oriented LGMRES rescue on GPU, so it is
-  retained only as negative liveness evidence. The follow-up GPU-compatible
-  policy probe
-  ``docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_gpu0_no_lgmres_timeout_2026_05_14.json``
-  explicitly disabled LGMRES rescue. It switched the side probe from left to
-  right GMRES, preserved the physical seed, improved that seed with the
-  probe-coarse basis from ``4.57e-6`` to ``2.83e-6``, and reached ``900`` matvecs
-  by ``412.7 s`` before the same bounded timeout. This is useful progress
-  evidence, but still rejected because no HDF5 output or solver trace was
-  written. Keep the route off by default until the GPU-compatible policy writes
-  HDF5/trace within budget and is competitive.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_BASIS=enriched``: A/B-test
-  basis that adds radial curvature, higher angular/mixed harmonics,
-  residual-independent constraint moments, and block-Schur-like species/``x``
-  contrasts before rank truncation. It is intentionally not the default. The
-  scale-0.60 CPU A/B run converged, but it took ``265.2 s`` and about ``5.34 GB``
-  RSS, slower and larger than the accepted residual-weighted angular
-  probe-coarse run, so
-  ``docs/_static/qi_seed_robustness_scale060_enriched_qi_coarse_seed3_cpu_rejected_2026_05_14.json``
-  marks it as a performance rejection. The matching GPU-compatible no-LGMRES
-  run reached ``925`` matvecs by ``409.9 s`` and timed out; the compact
-  JAX-factor device-Krylov run built ``57 MB`` compact CSR factors but timed out
-  before useful Krylov progress. These artifacts are negative evidence, not QI
-  promotion.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL`` (default: off): local x-block
-  factorization A/B hook. ``force`` replaces exact per-x SuperLU factors by
-  lower-fill ILU factors even inside the exact-LU size window; companion knobs
-  tune ``*_LOWER_FILL_FACTOR``, ``*_LOWER_FILL_ILU_DROP_TOL``,
-  ``*_LOWER_FILL_ROW_NNZ_MAX``, and ``*_LOWER_FILL_COMPACT_ROW_NNZ_MAX``. The
-  QI hard-seed tests show the tradeoff clearly: lower fill reduced peak RSS to
-  about ``3.0 GB`` but stalled at residual ``~6.6e-6`` against a ``3e-11`` target
-  after ``14835`` matvecs. The moderate-fill variant also failed. Keep this as
-  a memory diagnostic until an adaptive acceptance/probing layer can prove both
-  residual convergence and wall-time competitiveness.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL`` (default: off): opt-in two-level
-  global-coupling preconditioner for explicit ``xblock_sparse_pc_gmres``. It
-  builds a fixed low-dimensional coarse basis from RHS-like directions,
-  constraint/source rows, and flux-surface-averaged low-L moments, forms
-  ``A Z`` once, and wraps the x-block preconditioner with a coarse inverse during
-  Krylov rather than applying a post-hoc cleanup after Krylov stalls. The default
-  mode is additive; ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MODE`` can be set
-  to ``multiplicative`` for diagnostics. When
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF=1`` is also enabled, the same active
-  index projector is applied to each coarse vector before ``A Z`` is formed, so
-  the two-level wrapper now works on reduced ``Nxi_for_x`` systems instead of
-  disabling itself. The scale-0.50 QI probes rejected both historical modes, so
-  this remains off by default until a larger active-DOF QI/PAS probe demonstrates
-  lower true residual and lower wall time. A bounded scale-0.60 seed-3 CPU probe
-  with active DOFs and ``48`` requested directions built a rank-``45`` coarse
-  basis in about ``23 s``, but the solve still timed out at ``240 s`` after
-  ``2725`` reported matvecs without output, so the current fixed basis is kept
-  as opt-in infrastructure rather than a promoted QI hard-seed fix.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=lgmres`` or ``gcrotmk`` remains a
-  diagnostic-only Krylov-method toggle. On the scale-0.50 QI blocker, LGMRES
-  stalled at a slightly worse residual than GMRES, fell back to GMRES, doubled
-  the matrix-vector count, and ended at the same residual floor. The automatic
-  LGMRES rescue is now backend-gated through the tested x-block policy helper:
-  it is allowed by default on CPU, disabled by default on GPU, and only runs on
-  GPU when the user explicitly forces ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE=1``.
-  GCROT(m,k) also underperformed right-preconditioned GMRES on the checked QI
-  probe.
-
-Current QI promotion gate:
-
-- Further QI promotion must not be justified by another Krylov-name toggle,
-  restart-only change, or side-threshold adjustment. Those routes are useful only
-  as negative diagnostics unless a new preconditioner/operator path first changes
-  the measured true-residual trend.
-- The next admissible path must be device-resident or operator-reuse based. Before
-  launching the full expensive Krylov loop, it must apply the candidate
-  preconditioner, active assembled/reused operator, or physical seed correction to
-  the hard-seed state or physics load bases and show a lower true residual than
-  the incumbent preflight.
-- CPU/GPU parity remains part of the gate. A bounded CPU rescue is not enough to
-  widen public QI defaults; the matching one-GPU ``office`` gate must write HDF5
-  output and a solver trace, satisfy strict true-residual acceptance, and preserve
-  the bounded CPU result before any CPU/GPU multi-seed or production-resolution
-  ladder is attempted.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX`` controls the maximum size
+  for exact host x-block factors in non-differentiable full-FP ``RHSMode=1``
+  solves. Stable defaults keep this route bounded by residual and memory gates;
+  broader QI/device-QI tuning campaigns live on the
+  ``research/qi-device-hard-seed`` branch.
+- Device-resident assembled-operator, compact-factor, QI coarse-space, and
+  hard-seed residual-equation experiments are not stable performance claims.
+  They may return only after strict true-residual, output, runtime, memory, and
+  CPU/GPU gates pass on production grids.
 
 Large geometry-rich PAS closeout:
 
@@ -2685,7 +2174,7 @@ Large geometry-rich PAS closeout:
   implementation needs a new structured/chunked geometry-aware PAS
   preconditioner that avoids both global conservative sparse patterns and dense
   angular-block storage at ``Ntheta*Nzeta=1275``.
-- Dense PAS-TZ memory fallback now prefers the structured ``tzfft`` fallback
+- Dense PAS-TZ memory fallback prefers the structured ``tzfft`` fallback
   when an explicitly requested theta/zeta Schwarz fallback is rejected by the
   memory guard and the FFT fallback builder is available. This keeps the solve
   on the existing guarded true-residual path while avoiding dense
@@ -2753,7 +2242,7 @@ Large geometry-rich PAS closeout:
 - ``SFINCS_JAX_TRANSPORT_DENSE_PRECOND_MAX_MB`` (default: ``min(32, dense_max_mb)``).
   Disables dense LU preconditioners when they would exceed the memory budget.
 - ``SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY`` (default: auto). Set ``0`` to
-  restore the previous dense batched fallback for CPU VMEC monoenergetic
+  force the dense batched fallback for CPU VMEC monoenergetic
   comparison runs; set ``1`` to force the low-memory path regardless of the
   backend/size guard.
 - ``SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY_MIN`` /
@@ -2800,7 +2289,7 @@ allocator settings can change when memory is reserved, but they do not by
 themselves replace dense intermediates, Krylov basis storage, or replicated
 preconditioner state.
 
-``sfincs_jax.memory_model`` provides a small conservative model for the dominant
+``sfincs_jax.solvers.memory_model`` provides a small conservative model for the dominant
 linear-solve terms:
 
 .. math::
@@ -2819,10 +2308,10 @@ where :math:`n` is the active unknown count, :math:`r` is the GMRES restart,
 :math:`b` is scalar storage, :math:`b_i` is index storage, and
 :math:`M_\mathrm{pc}` / :math:`M_\mathrm{tmp}` are preconditioner and compiled
 temporary estimates when available. The GMRES restart cap in
-``sfincs_jax.solver`` now uses this shared model, and
-``sfincs_jax.solver_selection_policy`` can compare candidate routes using paired
+``sfincs_jax.solvers.krylov`` uses this shared model, and
+``sfincs_jax.solvers.path_policy`` can compare candidate routes using paired
 memory metrics in priority order: device peak memory, active RSS, compiled
-temporary memory, and finally legacy process peak RSS. This avoids promoting a
+temporary memory, and finally archived process peak RSS. This avoids promoting a
 route by comparing GPU device memory against CPU process RSS or by hiding a true
 solver-state regression behind the fixed Python/JAX runtime baseline.
 
@@ -2836,7 +2325,7 @@ The intended production gate for future memory optimizations is:
 - auto-promote a candidate only when it is residual-clean, parity-clean, and
   materially faster or lower-memory than the incumbent on the same memory metric.
 
-Solver traces now carry both measured and estimated memory fields. The JSON
+Solver traces carry both measured and estimated memory fields. The JSON
 sidecar records ``active_rss_mb``, ``device_peak_mb`` when available,
 ``estimated_dense_nbytes``, ``estimated_csr_nbytes``,
 ``estimated_gmres_basis_nbytes``, and a ``metadata.memory_estimate`` block with
@@ -2847,14 +2336,11 @@ factor storage estimates. This makes the next optimization pass auditable: a
 claimed memory win must reduce the measured active/device metric and should also
 reduce the estimated dominant storage term.
 
-The structured PAS-TZ memory fallback remains benchmark-only until a bounded
-route clears both runtime and residual gates. Use
-``scripts/benchmark_pas_tz_memory_fallback.py`` to run forced ``collision``,
-``hybrid``, ``theta``, ``zeta``, and ``tzfft`` fallback variants in subprocesses
-with hard timeouts.
-The companion ``scripts/benchmark_rhs1_pas_matrixfree.py`` production-solve
-planner can pass the same default-promotion baseline gate into those subprocess
-runs via the ``--production-solve-require-default-promotion-gate`` controls.
+The structured PAS-TZ memory fallback remains research-only until a bounded
+route clears both runtime and residual gates. Historical forced ``collision``,
+``hybrid``, ``theta``, ``zeta``, and ``tzfft`` fallback variants are preserved
+on the research branch; the stable core keeps only the underlying solver-policy
+gates and checked artifacts.
 The fallback benchmark also requires provenance that the guarded PAS-TZ fallback
 path actually ran. Rows must contain a guarded PAS-TZ message such as the
 structured-fallback guard, guarded correction, or guarded retry-skip trace before
@@ -2872,7 +2358,7 @@ The checked smoke artifact
 ``tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json``
 records the intended guard behavior on the geometryScheme=4 PAS deck. The
 cheap collision and guarded structured rows return in about ``1.6 s`` with
-residual ``6.4e5``; the explicit legacy ``hybrid`` row returns in about
+residual ``6.4e5``; the explicit ``hybrid`` row returns in about
 ``2.3 s`` but with residual ``2.5e16``. The experimental ``tzfft`` row returns
 in about ``3.3 s`` with residual ``1.9e-4`` and a higher RSS footprint
 (``~944 MB`` in the checked smoke). This is a useful matrix-free residual
@@ -2889,14 +2375,13 @@ from ``6.4e5`` to ``1.3e5`` with RSS about ``728 MB``. Increasing the correction
 steps to ``10`` did not materially improve the residual. This is therefore kept
 as an explicit profiling tool, not as a promoted default.
 The helper rejects exactly zero updates and zero-relaxation attempts before
-running a candidate residual matvec, so no-op PAS correction probes now spend one
+running a candidate residual matvec, so no-op PAS correction probes spend one
 matrix-free operator application instead of two while preserving the same reject
 reason and residual history.
 It also preflights candidate vector element and byte budgets before calling the
-correction builder. ``scripts/benchmark_rhs1_pas_matrixfree.py`` exposes this as
-``--max-candidate-elements`` and ``--max-candidate-bytes`` so production-floor
-PAS probes can fail closed before materializing large update or residual arrays.
-The byte budget is now also a promotion gate: every planned bounded probe writes
+correction builder so production-floor PAS probes can fail closed before
+materializing large update or residual arrays.
+The byte budget is also a promotion gate: every planned bounded probe writes
 ``byte_preflight`` provenance, metadata-backed production-floor probes write a
 conservative ``production_floor_byte_preflight`` record using the estimated full
 unknown count and float64 item size, and
@@ -2905,7 +2390,7 @@ unknown count and float64 item size, and
 keeps diagnostic dry-runs useful without allowing a memory-unsafe PAS candidate
 to be promoted from an unrelated runtime/residual artifact.
 
-The real-solve launcher now applies the same rule before *any* opt-in
+The real-solve launcher applies the same rule before *any* opt-in
 production-floor PAS probe: ``--run-production-solve-probe`` requires an
 explicit ``--max-candidate-bytes`` budget by default.  A developer can still
 force an unbudgeted diagnostic with
@@ -2935,7 +2420,7 @@ optimization must reduce algorithmic cost, for example by chunking/streaming
 the correction or by adding a geometry-aware residual-reducing update that does
 not materialize dense blocks.
 
-The same fail-fast rule is now applied to forced weak PAS baselines at
+The same fail-fast rule is applied to forced weak PAS baselines at
 astronomical residual ratios, with a cheap accept-only minres correction before
 the fail-fast decision. On the geometryScheme=4 smoke deck, forced
 ``collision``, ``xmg``, and ``point`` preconditioners no longer enter minutes of
@@ -2965,66 +2450,20 @@ The remaining high-impact memory lanes are algorithmic:
   value here is a cleaner matrix-free operator abstraction and differentiable
   solver state, not automatic memory reduction.
 
-JAX ecosystem gates
--------------------
+JAX ecosystem research lanes
+----------------------------
 
-External JAX libraries stay behind measured gates until they show a real
-reliability or performance advantage on SFINCS-owned workloads. These gates are
-optional and must degrade to skipped rows when their packages are unavailable.
+External JAX libraries stay outside the stable CLI and examples until they show
+a reviewed reliability or performance advantage on SFINCS-owned workloads. The
+stable code therefore uses the in-tree JAX Krylov, implicit-differentiation, and
+optimization-helper paths. Lineax, Equinox-wrapper, and JAXopt benchmark drivers
+are preserved as research-lane material rather than stable examples.
 
-Lineax is currently a candidate for differentiable linear-solve experiments, not
-a production CLI backend. The lightweight synthetic gate is:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_optional_lineax_implicit_solve.py \
-     --backend all \
-     --suite synthetic \
-     --size 4 \
-     --restart 4 \
-     --maxiter 60 \
-     --out-json /tmp/sfincs_lineax_synthetic_gate.json
-
-On the local 2026-05-12 smoke, the in-tree solve row was residual-clean
-(``relative_residual ~= 1.6e-16``) with gradient error about ``7.8e-12`` and
-elapsed time about ``0.89 s``. The Lineax row was also residual-clean
-(``relative_residual = 0``) with gradient error about ``2.3e-12`` and elapsed
-time about ``0.36 s``. This supports keeping Lineax under evaluation, but it
-does not promote it to production because the real tiny SFINCS gate still has to
-stay status-clean, parity-clean, and faster or lower-memory.
-
-Equinox and the historical opt-in JAXopt backend are checked as
-objective-wrapper tooling around a real ``geometryScheme=4`` differentiable
-objective:
-
-.. code-block:: bash
-
-   python examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py \
-     --backend all \
-     --n-theta 17 \
-     --n-zeta 17 \
-     --maxiter 5 \
-     --stepsize 0.1 \
-     --out-json /tmp/sfincs_eqx_jaxopt_gate.json
-
-On the local 2026-05-12 opt-in smoke, the Equinox wrapper matched a centered
-finite-difference directional derivative with about ``1.1e-11`` absolute error
-and elapsed time about ``0.038 s``. The JAXopt gradient-descent row reduced the
-loss to a ratio of about ``4.1e-14`` and recovered the target harmonic
-amplitudes to about ``1.6e-08`` in Euclidean norm with elapsed time about
-``0.15 s``. Default CI does not install JAXopt; it verifies that this row skips
-cleanly while keeping the Equinox wrapper gate active.
-
-The focused regression test for the measured summaries is:
-
-.. code-block:: bash
-
-   python -m pytest tests/test_optional_ecosystem_gates.py -q
-
-Promotion rule: optional ecosystem libraries may only move closer to production
-when the JSON gate contains measured ``ok`` rows for the relevant real SFINCS
-case, clean residual or gradient metrics, and no hard dependency on the optional
-package in default installs.
+Promotion rule: optional ecosystem libraries may only move into production when
+a reviewed gate contains measured ``ok`` rows for a real SFINCS case, clean
+residual or gradient metrics, no hard dependency on the optional package in
+default installs, and a runtime or memory win that survives the documented
+parity tests.
 
 Geometry parsing cache
 ----------------------
@@ -3032,7 +2471,7 @@ Geometry parsing cache
 `sfincs_jax` caches parsed Boozer geometry files (.bc) by content hash and
 geometry scheme to avoid repeated parsing for multiple runs of the same equilibrium.
 
-Implementation: ``sfincs_jax.geometry`` and ``sfincs_jax.v3``.
+Implementation: ``sfincs_jax.geometry`` and ``sfincs_jax.discretization.v3``.
 
 F-block operator cache
 ----------------------
@@ -3046,7 +2485,7 @@ Controls:
 - ``SFINCS_JAX_FBLOCK_CACHE`` (default: enabled)
 - ``SFINCS_JAX_FBLOCK_CACHE_MAX`` (max cached entries; default: ``8``)
 
-Implementation: ``sfincs_jax.v3_fblock``.
+Implementation: ``sfincs_jax.operators.profile_fblock``.
 
 Performance deltas (where measured)
 -----------------------------------
@@ -3064,7 +2503,6 @@ For quick reproduction:
 .. code-block:: bash
 
    python examples/performance/benchmark_transport_l11_vs_fortran.py --repeats 4
-   python examples/performance/profile_transport_compile_runtime_cache.py --repeats 3
 
 Implementation map (source code)
 --------------------------------
@@ -3073,23 +2511,27 @@ Key modules and functions referenced above:
 
 - **Operator apply + caching**:
 
-  - ``sfincs_jax/v3_system.py``: ``apply_v3_full_system_operator_cached``,
+  - ``sfincs_jax/operators/profile_system.py``: ``apply_v3_full_system_operator_cached``,
     ``_operator_signature_cached``.
 
 - **Transport solver + preconditioners**:
 
-  - ``sfincs_jax/v3_driver.py``: ``solve_v3_transport_matrix_linear_gmres``,
-    ``_build_rhsmode23_sxblock_preconditioner``,
-    ``_build_rhsmode23_collision_preconditioner``.
+  - ``sfincs_jax/problems/transport_solve.py``:
+    ``solve_v3_transport_matrix_linear_gmres``.
+  - ``sfincs_jax/problems/transport_linear_system.py`` and
+    ``sfincs_jax/problems/profile_preconditioner_build.py``:
+    transport reduced-system construction and RHSMode-2/3 preconditioner
+    builders.
 
 - **Diagnostics and flux formulas**:
 
-  - ``sfincs_jax/transport_matrix.py``: ``v3_transport_diagnostics_vm_only_precompute``,
+  - ``sfincs_jax/problems/transport_diagnostics.py``:
+    ``v3_transport_diagnostics_vm_only_precompute``,
     ``v3_transport_diagnostics_vm_only_batch_op0_precomputed``.
 
 - **Solver backends**:
 
-  - ``sfincs_jax/solver.py``: GMRES/BiCGStab wrappers, dense fallback options,
+  - ``sfincs_jax/solvers/krylov.py``: GMRES/BiCGStab wrappers, dense fallback options,
     memory-aware restart logic.
 
 

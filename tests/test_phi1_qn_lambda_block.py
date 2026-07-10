@@ -6,7 +6,7 @@ import numpy as np
 import jax.numpy as jnp
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist
+from sfincs_jax.operators.profile_system import apply_v3_full_system_operator, full_system_operator_from_namelist
 
 
 def test_phi1_qn_lambda_blocks_have_expected_size_and_action() -> None:

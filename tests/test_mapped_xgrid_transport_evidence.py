@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from sfincs_jax.mapped_xgrid_transport_evidence import (
+from sfincs_jax.workflows.mapped_xgrid import (
     copy_namelist_with_mapped_xgrid,
     copy_namelist_with_resolution,
     run_rational_tail_transport_comparison,
@@ -19,8 +19,8 @@ from sfincs_jax.mapped_xgrid_transport_evidence import (
     write_transport_evidence_json,
 )
 from sfincs_jax.namelist import Namelist, read_sfincs_input
-from sfincs_jax.v3 import grids_from_namelist
-from sfincs_jax.v3_driver import solve_v3_transport_matrix_linear_gmres
+from sfincs_jax.discretization.v3 import grids_from_namelist
+from sfincs_jax.problems.transport_solve import solve_v3_transport_matrix_linear_gmres
 
 
 def _nml() -> Namelist:

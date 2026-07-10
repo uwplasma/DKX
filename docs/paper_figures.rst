@@ -27,9 +27,10 @@ Generate the frozen CPU/GPU Fortran-suite runtime and memory comparison with
    python examples/publication_figures/generate_fortran_suite_benchmark_summary.py
 
 The default figure filters to reference-runtime-window rows whose Fortran v3
-runtime is at least ``10 s``. The summary JSON records which previous frozen rows
-still need full production-resolution reruns. Use ``--min-fortran-runtime-s 0``
-only for all-case CI/smoke diagnostics, not for public performance claims.
+runtime is at least ``10 s``. The summary JSON records which frozen rows are
+excluded from public performance claims until matching production-resolution
+reruns exist. Use ``--min-fortran-runtime-s 0`` only for all-case CI/smoke
+diagnostics, not for public performance claims.
 
 Generate the autodiff/sensitivity validation figures with
 
@@ -104,11 +105,9 @@ Autodiff and sensitivity validation
 High-collisionality trend proxy
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Generate the trend proxy with
-
-.. code-block:: bash
-
-   python examples/publication_figures/generate_high_collisionality_trend_proxy.py
+The checked trend proxy is retained as compact JSON and figure evidence. The
+long generator lives on the publication-audits research branch; stable docs use
+the checked artifact and package-level validation tests.
 
 .. figure:: _static/figures/paper/sfincs_jax_high_collisionality_trend_proxy.png
    :alt: High-collisionality trend proxy from checked-in collisionality artifacts
@@ -125,12 +124,9 @@ Generate the trend proxy with
 Simakov-Helander limit audit
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Generate the normalization/readiness audit with
-
-.. code-block:: bash
-
-   python examples/publication_figures/generate_simakov_helander_limit_audit.py
-   python examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py
+The normalization/readiness audit is retained as compact JSON and figure
+evidence. The long audit and high-nu run-plan generators live on the
+publication-audits research branch.
 
 .. figure:: _static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png
    :alt: Simakov-Helander high-collisionality normalization audit for sfincs_jax
@@ -181,12 +177,11 @@ host sparse-LU first attempts/rescues when a bounded pilot shows they are useful
 instead of the differentiable implicit path that intentionally avoids host-only
 direct solvers.
 
-On the current two-GPU ``office`` pilot for the first LHD FP high-``nu'`` point,
-this explicit worker lane produced residuals ``4.33e-16``, ``5.33e-14``, and
-``4.06e-11`` in about ``262 s``. The same explicit point on one GPU took about
-``345 s``; the older implicit-path pilot took about ``569 s`` and stalled at much
-larger residuals. The first full-resolution W7-X FP high-``nu'`` point now also
-has a residual-clean route: with one GPU worker,
+The two-GPU ``office`` pilot for the first LHD FP high-``nu'`` point produced
+residuals ``4.33e-16``, ``5.33e-14``, and ``4.06e-11`` in about ``262 s``. The
+same explicit point on one GPU took about ``345 s``; the implicit-path
+comparison took about ``569 s`` and stalled at much larger residuals. The first
+full-resolution W7-X FP high-``nu'`` point has a residual-clean route: with one GPU worker,
 ``SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE=float32``, and
 ``--transport-sparse-direct-max 40000``, the three RHS residual/RHS/relative
 tuples were ``1.297471e-10 / 1.885192e-04 / 6.882435e-07``,
@@ -194,7 +189,7 @@ tuples were ``1.297471e-10 / 1.885192e-04 / 6.882435e-07``,
 ``4.841651e-09 / 6.589011e-01 / 7.348069e-09``. With sparse-helper factor
 reuse, the scan took about ``582 s`` on one office GPU instead of about
 ``2028 s`` before reuse; RHS timings were about ``574.0 s``, ``2.47 s``, and
-``2.38 s``. The smaller ``30000`` cap and the current Krylov-only
+``2.38 s``. The smaller ``30000`` cap and Krylov-only
 preconditioners still fail this point, so the strict residual gates remain
 mandatory for widened scans.
 

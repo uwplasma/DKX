@@ -7,12 +7,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.transport_parallel_policy import (
+from sfincs_jax.problems.transport_parallel_runtime import (
+    audit_multi_gpu_case_throughput_summary,
     audit_parallel_scaling_claim_scope,
     audit_sharded_solve_scaling_summary,
     audit_transport_parallel_scaling_summary,
 )
-from sfincs_jax.transport_parallel_execution import (
+from sfincs_jax.problems.transport_parallel_runtime import (
     build_transport_parallel_payloads,
     run_transport_parallel_payloads,
     should_run_transport_parallel,
@@ -140,6 +141,34 @@ def test_parallel_scaling_claim_scope_distinguishes_throughput_from_single_case(
     assert throughput_scope.claim_scope == "independent_case_throughput_non_release"
     assert not throughput_scope.release_scaling_supported
     assert not throughput_scope.unsupported_single_case_strong_scaling
+
+
+def test_parallel_scaling_claim_scope_accepts_measured_transport_throughput_scope() -> None:
+    audit = audit_parallel_scaling_claim_scope(
+        {
+            "benchmark_kind": "transport_worker_scaling",
+            "claim_scope": "independent_transport_worker_throughput",
+            "backend": "gpu",
+            "rhs_count": 3,
+            "workers": ["1", "2"],
+            "artifact_kind": "benchmark_result",
+            "launches_solves": True,
+            "release_scaling_claim": True,
+            "results": [
+                {"workers": 1, "mean_s": 12.0},
+                {"workers": 2, "mean_s": 7.0},
+            ],
+        }
+    )
+
+    assert audit.claim_scope_release_eligible
+    assert audit.release_scaling_supported
+    assert audit.parallel_count == 2
+    assert audit.independent_task_count == 3
+    assert audit.release_gate_required == "audit_transport_parallel_scaling_summary"
+    assert audit.failures == ()
+    assert "artifact_kind=benchmark_result" in audit.notes
+    assert "launches_solves=True" in audit.notes
 
 
 def test_parallel_scaling_claim_scope_fails_closed_for_ambiguous_or_overclaimed_artifacts() -> None:
@@ -294,6 +323,41 @@ def test_audit_sharded_solve_scaling_summary_accepts_honest_experimental_payload
     assert any("not a release scaling claim" in note for note in audit.notes)
 
 
+def test_audit_sharded_solve_scaling_summary_accepts_legacy_deterministic_output_flag() -> None:
+    audit = audit_sharded_solve_scaling_summary(
+        {
+            "benchmark_kind": "single_case_sharded_solve",
+            "scaling_status": "experimental_single_case_sharding",
+            "experimental_single_case_scaling": True,
+            "release_scaling_claim": False,
+            "backend": "gpu",
+            "gpu_device_count": 2,
+            "timing_semantics": "hot_solve",
+            "operator_reuse_gate": {
+                "passes": True,
+                "timing_semantics": "hot_solve",
+                "timed_repeats": 1,
+                "min_timed_repeats": 1,
+                "compile_in_timed_region": False,
+                "warm_run_amortization_pass": True,
+                "persistent_compile_cache": True,
+                "compile_cache_dir": "examples/performance/output/cache",
+            },
+            "deterministic_output_check": True,
+            "devices": [1, 2],
+            "results": [
+                {"devices": 1, "mean_s": 10.0, "speedup": 1.0},
+                {"devices": 2, "mean_s": 8.0, "speedup": 1.25},
+            ],
+        }
+    )
+
+    assert audit.ci_gate_pass
+    assert audit.deterministic_output_check
+    assert audit.deterministic_output_gate
+    assert any("legacy deterministic_output_check=true" in note for note in audit.notes)
+
+
 def test_audit_sharded_solve_scaling_summary_requires_operator_reuse_gate() -> None:
     audit = audit_sharded_solve_scaling_summary(
         {
@@ -420,6 +484,33 @@ def test_audit_sharded_solve_scaling_summary_rejects_release_overclaim() -> None
 
 
 def test_audit_transport_parallel_scaling_summary_rejects_malformed_summaries() -> None:
+    with pytest.raises(ValueError, match="must be a dictionary"):
+        audit_transport_parallel_scaling_summary([])  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="min_speedup must be >= 1.0"):
+        audit_transport_parallel_scaling_summary(
+            {
+                "rhs_count": 2,
+                "results": [
+                    {"workers": 1, "mean_s": 10.0},
+                    {"workers": 2, "mean_s": 5.0},
+                ],
+            },
+            min_speedup=0.5,
+        )
+
+    with pytest.raises(ValueError, match="min_efficiency must be <= 1.0"):
+        audit_transport_parallel_scaling_summary(
+            {
+                "rhs_count": 2,
+                "results": [
+                    {"workers": 1, "mean_s": 10.0},
+                    {"workers": 2, "mean_s": 5.0},
+                ],
+            },
+            min_efficiency=1.5,
+        )
+
     with pytest.raises(ValueError, match="1-worker baseline"):
         audit_transport_parallel_scaling_summary(
             {
@@ -438,6 +529,95 @@ def test_audit_transport_parallel_scaling_summary_rejects_malformed_summaries() 
                 ],
             }
         )
+
+    with pytest.raises(ValueError, match=r"payloads\[0\] must be a dictionary"):
+        audit_transport_parallel_scaling_summary(
+            {
+                "rhs_count": 2,
+                "timing_semantics": "warm",
+                "deterministic_output_check": True,
+                "payloads": [["bad"]],
+                "results": [
+                    {"workers": 1, "mean_s": 10.0},
+                    {"workers": 2, "mean_s": 5.0},
+                ],
+            }
+        )
+
+    with pytest.raises(ValueError, match="compile_amortization_gate must be a dictionary"):
+        audit_transport_parallel_scaling_summary(
+            {
+                "rhs_count": 2,
+                "timing_semantics": "warm",
+                "deterministic_output_check": True,
+                "payloads": [{"which_rhs_values": [1]}, {"which_rhs_values": [2]}],
+                "results": [
+                    {"workers": 1, "mean_s": 10.0},
+                    {"workers": 2, "mean_s": 5.0},
+                ],
+                "compile_amortization_gate": "not-a-dict",
+            }
+        )
+
+
+def test_sharded_and_throughput_audits_reject_malformed_metadata() -> None:
+    with pytest.raises(ValueError, match="must be a dictionary"):
+        audit_sharded_solve_scaling_summary([])  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="transport-worker summaries must use"):
+        audit_sharded_solve_scaling_summary(
+            {
+                "benchmark_kind": "transport_worker_scaling",
+                "results": [{"devices": 1, "mean_s": 1.0}],
+            }
+        )
+
+    with pytest.raises(ValueError, match="deterministic_output_gate must be a dictionary"):
+        audit_sharded_solve_scaling_summary(
+            {
+                "benchmark_kind": "single_case_sharded_solve",
+                "backend": "gpu",
+                "timing_semantics": "warm",
+                "experimental_single_case_scaling": True,
+                "operator_reuse_gate": {"passes": True},
+                "deterministic_output_gate": "not-a-dict",
+                "results": [
+                    {"devices": 1, "mean_s": 10.0},
+                    {"devices": 2, "mean_s": 8.0},
+                ],
+            }
+        )
+
+    with pytest.raises(ValueError, match="must record passes=true/false"):
+        audit_sharded_solve_scaling_summary(
+            {
+                "benchmark_kind": "single_case_sharded_solve",
+                "backend": "gpu",
+                "timing_semantics": "warm",
+                "experimental_single_case_scaling": True,
+                "operator_reuse_gate": {"passes": True},
+                "deterministic_output_gate": {},
+                "results": [
+                    {"devices": 1, "mean_s": 10.0},
+                    {"devices": 2, "mean_s": 8.0},
+                ],
+            }
+        )
+
+    with pytest.raises(ValueError, match="must be a dictionary"):
+        audit_multi_gpu_case_throughput_summary([])  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="unsupported multi-GPU throughput benchmark_kind"):
+        audit_multi_gpu_case_throughput_summary(
+            {
+                "benchmark_kind": "transport_worker_scaling",
+                "sequential_one_gpu": {"wall_s": 10.0},
+                "parallel_two_gpu": {"wall_s": 5.0},
+            }
+        )
+
+    with pytest.raises(ValueError, match="parallel scaling claim scope summary must be a dictionary"):
+        audit_parallel_scaling_claim_scope([])  # type: ignore[arg-type]
 
 
 def test_run_transport_parallel_payloads_uses_gpu_runner() -> None:
@@ -531,7 +711,7 @@ def test_run_transport_parallel_payloads_preserves_payload_order_when_cpu_future
     ]
 
     monkeypatch.setattr(
-        "sfincs_jax.transport_parallel_execution.concurrent.futures.as_completed",
+        "sfincs_jax.problems.transport_parallel_runtime.concurrent.futures.as_completed",
         lambda futures: reversed(list(futures)),
     )
 

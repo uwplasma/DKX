@@ -76,8 +76,7 @@ problem structure.
 Examples:
 
 - ``examples/performance/benchmark_transport_parallel_scaling.py``
-- ``examples/performance/benchmark_multi_gpu_case_throughput.py``
-- ``examples/performance/benchmark_sharded_solve_scaling.py``
+- ``examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py``
 
 Plotting and postprocessing
 ---------------------------
@@ -86,7 +85,7 @@ The repository includes simple plotting scripts for users who want to inspect or
 results quickly:
 
 - ``examples/getting_started/plot_sfincs_output.py``
-- ``examples/publication_figures/magnetic_drifts_publication_figures.py``
+- ``examples/publication_figures/generate_er_trajectory_sweep.py``
 
 These examples are intentionally lightweight. They are meant to show how to read
 ``sfincsOutput.h5`` and how to turn the stored diagnostics into publication figures or

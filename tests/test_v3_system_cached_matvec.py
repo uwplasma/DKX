@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-import sfincs_jax.v3_system as vs
+import sfincs_jax.operators.profile_system as vs
 
 
 def test_cached_full_system_matvec_uses_local_path_inside_jax_transform(monkeypatch) -> None:
@@ -80,3 +80,46 @@ def test_cached_full_system_matvec_detects_real_jax_transform_tracers(
 
     assert calls == {"jit": 1}
     np.testing.assert_allclose(np.asarray(y), expected)
+
+
+def test_full_system_pjit_style_sharding_does_not_request_unbound_halo_axis(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pjit meshes do not bind the axis name required by lax.ppermute halos."""
+
+    seen: list[str | None] = []
+
+    def fake_fblock(_fblock, f, *, phi1_hat_base=None, shard_axis=None):
+        seen.append(shard_axis)
+        assert phi1_hat_base is None
+        return jnp.zeros_like(f)
+
+    monkeypatch.setattr(vs, "_matvec_shard_axis", lambda _op: "zeta")
+    monkeypatch.setattr(vs.jax, "device_count", lambda: 2)
+    monkeypatch.setattr(vs, "apply_v3_fblock_operator", fake_fblock)
+
+    op = SimpleNamespace(
+        total_size=4,
+        f_size=4,
+        fblock=SimpleNamespace(f_shape=(1, 1, 1, 2, 2), fp_phi1=None),
+        include_phi1=False,
+        constraint_scheme=0,
+        n_theta=2,
+        n_zeta=2,
+        n_x=1,
+        theta_weights=jnp.ones(2),
+        zeta_weights=jnp.ones(2),
+        d_hat=jnp.ones((2, 2)),
+        point_at_x0=False,
+    )
+
+    with vs.sharding_constraints(True):
+        y = vs.apply_v3_full_system_operator(
+            op,
+            jnp.arange(4.0),
+            include_jacobian_terms=True,
+            allow_sharding=True,
+        )
+
+    assert seen == [None]
+    np.testing.assert_allclose(np.asarray(y), np.zeros(4))

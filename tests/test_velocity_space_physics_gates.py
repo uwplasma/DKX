@@ -7,11 +7,21 @@ import numpy as np
 import pytest
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.rhs1_full_assembly import _source_basis_constraint_scheme1_np
-from sfincs_jax.transport_matrix import f0_l0_v3_from_operator
-from sfincs_jax.v3_system import full_system_operator_from_namelist
-from sfincs_jax.v3_system import _source_basis_constraint_scheme_1
-from sfincs_jax.xgrid import make_x_grid
+from sfincs_jax.problems.transport_diagnostics import f0_l0_v3_from_operator
+from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
+from sfincs_jax.operators.profile_system import _source_basis_constraint_scheme_1
+from sfincs_jax.discretization.xgrid import make_x_grid
+
+
+def _source_basis_constraint_scheme1_np(x_in) -> "tuple[np.ndarray, np.ndarray]":
+    """Closed-form constraint-scheme-1 source basis (diagnostics.F90 normalization)."""
+    x = np.asarray(x_in, dtype=np.float64)
+    x2 = x * x
+    sqrt_pi = np.sqrt(np.pi)
+    coef = np.exp(-x2) / (np.pi * sqrt_pi)
+    s1 = (-x2 + 2.5) * coef
+    s2 = ((2.0 / 3.0) * x2 - 1.0) * coef
+    return s1, s2
 
 
 @pytest.mark.parametrize("x_grid_k", [0.0, 2.0])

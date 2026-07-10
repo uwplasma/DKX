@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "purpose": "Machine-readable navigation map for public sfincs_jax examples.",
+  "folders": {
+    "autodiff": {
+      "category": "capability",
+      "role": "JAX gradients, JVP/VJP examples, and implicit differentiation.",
+      "start_here": "autodiff/autodiff_gradient_nu_n_residual.py"
+    },
+    "data": {
+      "category": "reference",
+      "role": "Small shared input files used by public examples.",
+      "start_here": "data/geometryScheme4_quick_2species.input.namelist"
+    },
+    "getting_started": {
+      "category": "learning",
+      "role": "Minimal CLI and Python workflows for outputs, plots, and geometry setup.",
+      "start_here": "getting_started/write_sfincs_output_python.py"
+    },
+    "optimization": {
+      "category": "capability",
+      "role": "Optimization objectives, candidate screening, and kinetic-promotion helpers.",
+      "start_here": "optimization/qa_nfp2_sfincs_jax_objectives.py"
+    },
+    "parity": {
+      "category": "validation",
+      "role": "Frozen-reference parity checks against SFINCS Fortran v3 artifacts.",
+      "start_here": "parity/output_parity_vs_fortran_fixture.py"
+    },
+    "performance": {
+      "category": "validation",
+      "role": "JIT, memory, output-format, CPU/GPU, and parallel scaling benchmarks.",
+      "start_here": "performance/benchmark_output_formats.py"
+    },
+    "publication_figures": {
+      "category": "validation",
+      "role": "Documentation and paper-figure regeneration from checked summaries or explicit runs.",
+      "start_here": "publication_figures/README.md"
+    },
+    "sfincs_examples": {
+      "category": "reference",
+      "role": "Vendored upstream SFINCS v3 examples for parity and benchmark audits.",
+      "start_here": "sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist"
+    },
+    "transport": {
+      "category": "capability",
+      "role": "RHSMode=2/3 transport-matrix workflows and scan utilities.",
+      "start_here": "transport/transport_matrix_rhsmode2_and_rhsmode3.py"
+    },
+    "tutorials": {
+      "category": "learning",
+      "role": "Notebook-led learning path and fast tutorial output writer.",
+      "start_here": "tutorials/00_start_here.ipynb"
+    },
+    "vmec_jax_finite_beta": {
+      "category": "capability",
+      "role": "Finite-beta VMEC, ambipolar electric field, Redl, and bootstrap-current workflows.",
+      "start_here": "vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py"
+    }
+  },
+  "workflows": [
+    {
+      "id": "cli_output_panel",
+      "goal": "Write output files and a diagnostics panel.",
+      "entrypoint": "tutorials/run_quick_output_and_plot.py",
+      "command": "python examples/tutorials/run_quick_output_and_plot.py --out-dir tutorial_output",
+      "topic": "getting_started",
+      "keywords": ["cli", "plot", "hdf5", "netcdf", "npz", "diagnostics"],
+      "runtime_budget": "seconds",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "multi_format_output",
+      "goal": "Inspect HDF5, NetCDF, NPZ, and plotting.",
+      "entrypoint": "getting_started/write_and_plot_multiple_formats.py",
+      "command": "python examples/getting_started/write_and_plot_multiple_formats.py",
+      "topic": "getting_started",
+      "keywords": ["output", "hdf5", "netcdf", "npz", "plot"],
+      "runtime_budget": "seconds",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "vmec_wout_path",
+      "goal": "Load VMEC geometry through wout_path.",
+      "entrypoint": "getting_started/write_sfincs_output_vmec.py",
+      "command": "python examples/getting_started/write_sfincs_output_vmec.py",
+      "topic": "geometry",
+      "keywords": ["vmec", "wout", "geometry", "scheme5"],
+      "runtime_budget": "seconds",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "transport_matrix",
+      "goal": "Compute a RHSMode=2/3 transport matrix.",
+      "entrypoint": "transport/transport_matrix_rhsmode2_and_rhsmode3.py",
+      "command": "python examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py",
+      "topic": "transport",
+      "keywords": ["transport", "rhsmode2", "rhsmode3", "coefficients", "matrix"],
+      "runtime_budget": "seconds",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "jax_residual_gradient",
+      "goal": "Differentiate a residual with JAX.",
+      "entrypoint": "autodiff/autodiff_gradient_nu_n_residual.py",
+      "command": "python examples/autodiff/autodiff_gradient_nu_n_residual.py",
+      "topic": "autodiff",
+      "keywords": ["autodiff", "jax", "gradient", "jvp", "residual"],
+      "runtime_budget": "seconds",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "bootstrap_redl",
+      "goal": "Compare kinetic bootstrap current with Redl.",
+      "entrypoint": "vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py",
+      "command": "python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py --case QA --quick --jax-vs-redl --solve-method auto",
+      "topic": "bootstrap_current",
+      "keywords": ["bootstrap", "redl", "vmec", "finite-beta", "qa", "qh"],
+      "runtime_budget": "bounded; use --quick for first run",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "output_format_benchmark",
+      "goal": "Time output formats and memory behavior.",
+      "entrypoint": "performance/benchmark_output_formats.py",
+      "command": "python examples/performance/benchmark_output_formats.py --repeats 2",
+      "topic": "performance",
+      "keywords": ["performance", "runtime", "memory", "io", "gpu", "cpu", "output"],
+      "runtime_budget": "seconds",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "frozen_fortran_fixture",
+      "goal": "Check a frozen Fortran-v3 output fixture.",
+      "entrypoint": "parity/output_parity_vs_fortran_fixture.py",
+      "command": "python examples/parity/output_parity_vs_fortran_fixture.py",
+      "topic": "validation",
+      "keywords": ["parity", "validation", "fortran", "fixture", "hdf5"],
+      "runtime_budget": "seconds",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "qa_optimization_objective",
+      "goal": "Add neoclassical objectives to QA/QI optimization.",
+      "entrypoint": "optimization/qa_nfp2_sfincs_jax_objectives.py",
+      "command": "python examples/optimization/qa_nfp2_sfincs_jax_objectives.py --help",
+      "topic": "optimization",
+      "keywords": ["optimization", "qa", "qi", "bootstrap", "objectives"],
+      "runtime_budget": "seconds for proxy setup; kinetic promotion is explicit",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "vmec_boozer_jax_pipeline",
+      "goal": "Inspect the VMEC-JAX to Boozer/SFINCS-JAX differentiable workflow.",
+      "entrypoint": "autodiff/vmec_jax_to_boozer_sfincs_pipeline.py",
+      "command": "python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --help",
+      "topic": "autodiff_geometry",
+      "keywords": ["vmec_jax", "booz_xform_jax", "boozer", "autodiff", "geometry"],
+      "runtime_budget": "optional dependency workflow",
+      "requires_fortran_v3": false
+    }
+  ]
+}

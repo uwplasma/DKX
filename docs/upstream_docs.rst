@@ -8,7 +8,7 @@ literature.
 To make `sfincs_jax` self-contained on Read the Docs, selected source documents are
 vendored in ``docs/upstream/`` and linked here for convenient browsing and download.
 
-The most important physics and numerical content from these notes is now also transcribed into the
+The most important physics and numerical content from these notes is transcribed into the
 main documentation set, especially:
 
 - :doc:`theory_from_upstream`

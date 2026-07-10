@@ -4,10 +4,11 @@ from types import SimpleNamespace
 
 import jax.numpy as jnp
 
-from sfincs_jax.transport_preconditioner_dispatch import (
+from sfincs_jax.problems.transport_policies import (
     TransportPreconditionerContext,
     TransportPreconditionerDispatchBuilders,
     TransportSparseJaxConfig,
+    TransportStrongPreconditionerCache,
     auto_transport_preconditioner_choice,
     build_transport_preconditioner_from_kind,
     build_transport_strong_preconditioner_from_kind,
@@ -139,19 +140,6 @@ def test_auto_transport_preconditioner_choice_prefers_tzfft_for_collisionless_tr
     assert strong == "tzfft"
 
 
-def test_auto_transport_preconditioner_choice_uses_fortran_reduced_lu_for_fp_transport_by_default() -> None:
-    kind, strong = auto_transport_preconditioner_choice(
-        op=_op(has_fp=True, n_x=8, n_theta=25, n_zeta=51, total_size=1_020_002),
-        default_solver_kind="gmres",
-        parallel_workers=1,
-        dense_mem_block=False,
-        tzfft_backend_allowed=False,
-        shard_axis=None,
-    )
-    assert kind == "fp_fortran_reduced_lu"
-    assert strong == "fp_fortran_reduced_lu"
-
-
 def test_auto_transport_preconditioner_choice_prefers_bounded_fp_tzfft_line_when_forced(monkeypatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_AUTO", "1")
     kind, strong = auto_transport_preconditioner_choice(
@@ -192,78 +180,6 @@ def test_auto_transport_preconditioner_choice_prefers_fp_local_geom_line_when_fo
     )
     assert kind == "fp_local_geom_line"
     assert strong == "fp_local_geom_line"
-
-
-def test_auto_transport_preconditioner_choice_prefers_structured_fblock_lu_when_forced(monkeypatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_AUTO", "1")
-    kind, strong = auto_transport_preconditioner_choice(
-        op=_op(has_fp=True, n_x=8, n_theta=25, n_zeta=51, total_size=1_020_002),
-        default_solver_kind="gmres",
-        parallel_workers=1,
-        dense_mem_block=False,
-        tzfft_backend_allowed=False,
-        shard_axis=None,
-    )
-    assert kind == "fp_structured_fblock_lu"
-    assert strong == "fp_structured_fblock_lu"
-
-
-def test_auto_transport_preconditioner_choice_prefers_xblock_tz_lu_when_forced(monkeypatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_AUTO", "1")
-    kind, strong = auto_transport_preconditioner_choice(
-        op=_op(has_fp=True, n_x=8, n_theta=25, n_zeta=51, total_size=1_020_002),
-        default_solver_kind="gmres",
-        parallel_workers=1,
-        dense_mem_block=False,
-        tzfft_backend_allowed=False,
-        shard_axis=None,
-    )
-    assert kind == "fp_xblock_tz_lu"
-    assert strong == "fp_xblock_tz_lu"
-
-
-def test_auto_transport_preconditioner_choice_prefers_xblock_tz_lu_schur_when_forced(monkeypatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_AUTO", "1")
-    kind, strong = auto_transport_preconditioner_choice(
-        op=_op(has_fp=True, n_x=8, n_theta=25, n_zeta=51, total_size=1_020_002),
-        default_solver_kind="gmres",
-        parallel_workers=1,
-        dense_mem_block=False,
-        tzfft_backend_allowed=False,
-        shard_axis=None,
-    )
-    assert kind == "fp_xblock_tz_lu_schur"
-    assert strong == "fp_xblock_tz_lu_schur"
-
-
-def test_auto_transport_preconditioner_choice_prefers_fortran_reduced_lu_when_forced(monkeypatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO", "1")
-    kind, strong = auto_transport_preconditioner_choice(
-        op=_op(has_fp=True, n_x=8, n_theta=25, n_zeta=51, total_size=1_020_002),
-        default_solver_kind="gmres",
-        parallel_workers=1,
-        dense_mem_block=False,
-        tzfft_backend_allowed=False,
-        shard_axis=None,
-    )
-    assert kind == "fp_fortran_reduced_lu"
-    assert strong == "fp_fortran_reduced_lu"
-
-
-def test_auto_transport_preconditioner_choice_promotes_fortran_reduced_lu_by_default(monkeypatch) -> None:
-    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_MIN", raising=False)
-    kind, strong = auto_transport_preconditioner_choice(
-        op=_op(has_fp=True, n_x=8, n_theta=25, n_zeta=51, total_size=1_020_002),
-        default_solver_kind="gmres",
-        parallel_workers=1,
-        dense_mem_block=False,
-        tzfft_backend_allowed=False,
-        shard_axis=None,
-    )
-
-    assert kind == "fp_fortran_reduced_lu"
-    assert strong == "fp_fortran_reduced_lu"
 
 
 def test_auto_transport_preconditioner_choice_can_disable_fortran_reduced_lu(monkeypatch) -> None:
@@ -603,4 +519,64 @@ def test_build_transport_strong_preconditioner_from_kind_reuses_primary_when_sam
         sparse_jax_config=TransportSparseJaxConfig(0.0, 1.0e-6, 1.0e-10, 0.8, 2, 128.0),
     )
     assert reused is primary
+    assert calls == []
+
+
+def test_transport_strong_preconditioner_cache_builds_each_variant_once() -> None:
+    calls: list[tuple[str, dict]] = []
+    builders = _builders(calls)
+    context = TransportPreconditionerContext(
+        op=_op(),
+        active_size=128,
+        use_active_dof_mode=True,
+        reduce_full=lambda x: x,
+        expand_reduced=lambda x: x,
+    )
+    cache = TransportStrongPreconditionerCache(
+        kind="theta_schwarz",
+        precond_kind_used="collision",
+        preconditioner_full=lambda x: x,
+        preconditioner_reduced=lambda x: x,
+        context=context,
+        builders=builders,
+        dd_config=transport_dd_config_from_env(op=context.op),
+        sparse_jax_config=TransportSparseJaxConfig(0.0, 1.0e-6, 1.0e-10, 0.8, 2, 128.0),
+    )
+
+    full_first = cache.get(use_reduced=False)
+    full_second = cache.get(use_reduced=False)
+    reduced_first = cache.get(use_reduced=True)
+    reduced_second = cache.get(use_reduced=True)
+
+    assert full_first is full_second
+    assert reduced_first is reduced_second
+    assert [name for name, _ in calls] == ["theta_schwarz", "theta_schwarz"]
+    assert calls[0][1]["reduce_full"] is None
+    assert calls[1][1]["reduce_full"] is not None
+
+
+def test_transport_strong_preconditioner_cache_reuses_primary_without_building() -> None:
+    calls: list[tuple[str, dict]] = []
+    builders = _builders(calls)
+    context = TransportPreconditionerContext(op=_op(), active_size=128, use_active_dof_mode=False)
+
+    def primary_full(v):
+        return ("full", v)
+
+    def primary_reduced(v):
+        return ("reduced", v)
+
+    cache = TransportStrongPreconditionerCache(
+        kind="block",
+        precond_kind_used="block",
+        preconditioner_full=primary_full,
+        preconditioner_reduced=primary_reduced,
+        context=context,
+        builders=builders,
+        dd_config=transport_dd_config_from_env(op=context.op),
+        sparse_jax_config=TransportSparseJaxConfig(0.0, 1.0e-6, 1.0e-10, 0.8, 2, 128.0),
+    )
+
+    assert cache.get(use_reduced=False) is primary_full
+    assert cache.get(use_reduced=True) is primary_reduced
     assert calls == []

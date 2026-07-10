@@ -6,8 +6,7 @@ import numpy as np
 
 import pytest
 
-from sfincs_jax.pas_smoother import (
-    AdaptivePassSmootherResult,
+from sfincs_jax.solvers.preconditioner_pas_policy import (
     PasSmootherConfig,
     adaptive_pas_smoother,
     adaptive_pas_smoother_allowed,

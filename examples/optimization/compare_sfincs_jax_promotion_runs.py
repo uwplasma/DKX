@@ -20,7 +20,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.optimization_comparison import (  # noqa: E402
+from sfincs_jax.workflows.optimization import (  # noqa: E402
     PromotionComparisonTolerances,
     compare_optimization_promotions,
     load_promotion_payload,

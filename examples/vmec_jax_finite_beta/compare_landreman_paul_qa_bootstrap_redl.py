@@ -51,7 +51,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5  # noqa: E402
-from sfincs_jax.vmec_wout import read_vmec_wout  # noqa: E402
+from sfincs_jax.geometry.vmec_wout import read_vmec_wout  # noqa: E402
 
 
 ELEMENTARY_CHARGE = 1.602176634e-19

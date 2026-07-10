@@ -1,0 +1,44 @@
+{
+  "case_checks": {
+    "HSX_PASCollisions_fullTrajectories": {
+      "jax_logged_elapsed_s": 7.574,
+      "jax_max_rss_mb": 1577.4,
+      "last_preconditioner": "pas_tz",
+      "n_mismatch_common": 0,
+      "strict_n_mismatch_common": 0
+    },
+    "monoenergetic_geometryScheme1": {
+      "jax_logged_elapsed_s": 2.731,
+      "jax_max_rss_mb": 981.0,
+      "last_preconditioner": null,
+      "n_mismatch_common": 0,
+      "strict_n_mismatch_common": 0
+    },
+    "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories": {
+      "jax_logged_elapsed_s": 5.519,
+      "jax_max_rss_mb": 1608.5,
+      "last_preconditioner": "pas_tz",
+      "n_mismatch_common": 0,
+      "strict_n_mismatch_common": 0
+    },
+    "tokamak_2species_PASCollisions_withEr_fullTrajectories": {
+      "jax_logged_elapsed_s": 6.866,
+      "jax_max_rss_mb": 1245.5,
+      "last_preconditioner": "schur",
+      "n_mismatch_common": 0,
+      "strict_n_mismatch_common": 0
+    }
+  },
+  "suite": {
+    "missing_output_key_total": 0,
+    "row_count": 39,
+    "runtime_drift_flagged_cases": 0,
+    "statuses": [
+      "parity_ok"
+    ],
+    "strict_row_count": 39,
+    "strict_statuses": [
+      "parity_ok"
+    ]
+  }
+}

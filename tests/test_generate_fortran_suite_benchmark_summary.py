@@ -136,7 +136,27 @@ def test_generate_fortran_suite_benchmark_summary_from_reports(tmp_path: Path) -
 
     assert rc == 0
     assert (out_dir / "suite_benchmark_test.png").exists()
-    assert (out_dir / "suite_benchmark_test.pdf").exists()
+    pdf_path = out_dir / "suite_benchmark_test.pdf"
+    assert pdf_path.exists()
+    pdf_bytes = pdf_path.read_bytes()
+    assert b"/Creator (sfincs_jax)" in pdf_bytes
+    assert b"/CreationDate (D:20260101000000Z)" in pdf_bytes
+    rc = mod.main(
+        [
+            "--cpu-report",
+            str(cpu_report),
+            "--gpu-report",
+            str(gpu_report),
+            "--out-dir",
+            str(out_dir),
+            "--summary-json",
+            str(summary_json),
+            "--stem",
+            "suite_benchmark_test",
+        ]
+    )
+    assert rc == 0
+    assert pdf_path.read_bytes() == pdf_bytes
     payload = json.loads(summary_json.read_text())
     assert payload["metadata"]["kind"] == "fortran_v3_suite_benchmark_summary"
     assert payload["reports"]["cpu"]["parity_ok_cases"] == 39
@@ -342,7 +362,14 @@ def test_case_order_prioritizes_warm_jax_speedup() -> None:
     assert mod._case_order(metrics, metrics) == ["largest_speedup", "medium_speedup", "slow_jax"]
 
 
-def test_checked_in_readme_table_matches_canonical_benchmark_rows(tmp_path: Path) -> None:
+def test_readme_no_longer_embeds_legacy_suite_table_but_generator_reproduces_it(
+    tmp_path: Path,
+) -> None:
+    """The root README reports the measured canonical-stack head-to-head
+    (tests/test_benchmark_doc_claims.py pins those claims); the legacy-pipeline
+    per-case suite table is no longer embedded there. It must remain fully
+    reproducible from the checked suite reports for the docs evidence pages."""
+
     mod = _load_module()
     repo = Path(__file__).resolve().parents[1]
     payload = mod.write_benchmark_summary(
@@ -353,10 +380,13 @@ def test_checked_in_readme_table_matches_canonical_benchmark_rows(tmp_path: Path
     )
 
     expected = mod.readme_benchmark_table_lines_from_payload(payload)
-    actual = _readme_benchmark_table_lines(repo / "README.md", mod.README_TABLE_HEADER)
+    assert expected[0] == mod.README_TABLE_HEADER
+    assert len(_row_map(expected[2:])) == int(
+        payload["metadata"]["reported_case_counts"]["cpu"]
+    )
 
-    assert actual[:2] == expected[:2]
-    assert _row_map(actual[2:]) == _row_map(expected[2:])
+    readme = (repo / "README.md").read_text()
+    assert mod.README_TABLE_HEADER not in readme
 
 
 def test_checked_in_summary_matches_default_suite_reports(tmp_path: Path) -> None:

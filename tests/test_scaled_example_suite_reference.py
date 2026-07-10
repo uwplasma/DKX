@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -9,37 +8,35 @@ import sys
 import h5py
 import pytest
 
+from sfincs_jax.validation import suite as reduced_suite
+from sfincs_jax.validation import suite as scaled_suite
+from sfincs_jax.validation.suite import (
+    CaseResult,
+    _classify_blocker,
+    _jax_attempt_metrics_from_log,
+    _parse_elapsed_s_from_log,
+    _parse_fortran_solver_profile_from_log,
+    _parse_jax_rhs_norm_from_log,
+    _parse_max_rss_mb_from_time_log,
+    _reference_solve_quality_note,
+    _run_case,
+    _runtime_metric_for_basis,
+    _solver_tolerance_from_namelist,
+)
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "run_scaled_example_suite.py"
-sys.path.insert(0, str(_SCRIPT_PATH.parent))
-_SPEC = importlib.util.spec_from_file_location("run_scaled_example_suite", _SCRIPT_PATH)
-assert _SPEC is not None and _SPEC.loader is not None
-_MODULE = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(_MODULE)
-_stage_reference_fortran_artifacts = _MODULE._stage_reference_fortran_artifacts
-_run_prepared_case = _MODULE._run_prepared_case
-_write_suite_audits = _MODULE._write_suite_audits
-_write_suite_outputs = _MODULE._write_suite_outputs
-_iter_inputs = _MODULE._iter_inputs
-_load_reference_case_metrics = _MODULE._load_reference_case_metrics
-_auto_production_manifest_path = _MODULE._auto_production_manifest_path
-_filter_inputs_by_production_recommendation = _MODULE._filter_inputs_by_production_recommendation
-_load_production_manifest_cases = _MODULE._load_production_manifest_cases
-_run_recommendation_allowed = _MODULE._run_recommendation_allowed
-_default_extra_inputs_for_run = _MODULE._default_extra_inputs_for_run
 
-from run_reduced_upstream_suite import CaseResult  # noqa: E402
-from run_reduced_upstream_suite import _run_case  # noqa: E402
-from run_reduced_upstream_suite import _classify_blocker  # noqa: E402
-from run_reduced_upstream_suite import _parse_jax_rhs_norm_from_log  # noqa: E402
-from run_reduced_upstream_suite import _parse_fortran_solver_profile_from_log  # noqa: E402
-from run_reduced_upstream_suite import _parse_elapsed_s_from_log  # noqa: E402
-from run_reduced_upstream_suite import _parse_max_rss_mb_from_time_log  # noqa: E402
-from run_reduced_upstream_suite import _jax_attempt_metrics_from_log  # noqa: E402
-from run_reduced_upstream_suite import _reference_solve_quality_note  # noqa: E402
-from run_reduced_upstream_suite import _runtime_metric_for_basis  # noqa: E402
-from run_reduced_upstream_suite import _solver_tolerance_from_namelist  # noqa: E402
-import run_reduced_upstream_suite as reduced_suite  # noqa: E402
+_MODULE = scaled_suite
+_stage_reference_fortran_artifacts = scaled_suite._stage_reference_fortran_artifacts
+_run_prepared_case = scaled_suite._run_prepared_case
+_write_suite_audits = scaled_suite._write_suite_audits
+_write_suite_outputs = scaled_suite._write_suite_outputs
+_iter_inputs = scaled_suite._iter_inputs
+_load_reference_case_metrics = scaled_suite._load_reference_case_metrics
+_auto_production_manifest_path = scaled_suite._auto_production_manifest_path
+_filter_inputs_by_production_recommendation = scaled_suite._filter_inputs_by_production_recommendation
+_load_production_manifest_cases = scaled_suite._load_production_manifest_cases
+_run_recommendation_allowed = scaled_suite._run_recommendation_allowed
+_default_extra_inputs_for_run = scaled_suite._default_extra_inputs_for_run
 
 
 def test_reduced_suite_can_disable_reduced_seed_for_production_inputs(
@@ -74,8 +71,10 @@ def test_reduced_suite_can_disable_reduced_seed_for_production_inputs(
 
 
 def test_scaled_suite_suppresses_default_extra_input_for_production_manifest() -> None:
-    assert _default_extra_inputs_for_run(Path("benchmarks/production_inputs/manifest.json")) == []
-    assert _default_extra_inputs_for_run(None) == [Path("examples") / "additional_examples" / "input.namelist"]
+    assert _default_extra_inputs_for_run(Path("outputs/benchmarks/production_inputs/manifest.json")) == []
+    assert _default_extra_inputs_for_run(None) == [
+        Path("examples") / "data" / "geometryScheme4_quick_2species.input.namelist"
+    ]
 
 
 def test_solver_trace_parser_prefers_realized_solver_metadata(tmp_path: Path) -> None:
@@ -638,7 +637,7 @@ def test_classify_blocker_treats_cuda_dense_custom_calls_as_solver_branch(tmp_pa
 def test_classify_blocker_treats_jax_signal_and_oom_as_resource_failure(tmp_path: Path) -> None:
     log_path = tmp_path / "sfincs_jax.log"
     log_path.write_text(
-        "input=wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc\n"
+        "input=wout_large_stellarator_reference.nc\n"
         "active_projected_rhs1_full_csr_preconditioner: auto candidate start\n"
         "Command terminated by signal 9\n"
         "[sfincs_jax subprocess failed rc=137]\n",
@@ -670,7 +669,7 @@ def test_classify_blocker_treats_fail_closed_solver_policy_before_geometry(tmp_p
     log_path = tmp_path / "sfincs_jax.log"
     log_path.write_text(
         "solve_v3_full_system_linear_gmres: VMEC operator build start "
-        "(wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc)\n"
+        "(wout_large_stellarator_reference.nc)\n"
         "active_projected_rhs1_full_csr_preconditioner: auto candidate done "
         "kind=active_fortran_v3_reduced_lu selected=False "
         "reason=active_fortran_v3_pc_matrix_lu_prefill_budget_exceeded:56607878656>17179869184\n"
@@ -696,7 +695,7 @@ def test_classify_blocker_treats_solver_preflight_failure_before_geometry(tmp_pa
     log_path = tmp_path / "sfincs_jax.log"
     log_path.write_text(
         "solve_v3_full_system_linear_gmres: VMEC operator build start "
-        "(wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc)\n"
+        "(wout_large_stellarator_reference.nc)\n"
         "solve_v3_full_system_linear_gmres: sparse_pc_gmres factor preflight "
         "residual=5.889121e-05->3.268501e-03 improvement=1.801781e-02\n"
         "sfincs_jax write-output failed: direct-tail structured preconditioner "

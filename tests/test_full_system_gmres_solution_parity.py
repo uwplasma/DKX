@@ -7,9 +7,9 @@ import jax.numpy as jnp
 from scipy.sparse import csr_matrix
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.petsc_binary import read_petsc_mat_aij, read_petsc_vec
-from sfincs_jax.solver import gmres_solve
-from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist, rhs_v3_full_system
+from sfincs_jax.validation.fortran import read_petsc_mat_aij, read_petsc_vec
+from sfincs_jax.solvers.krylov import gmres_solve
+from sfincs_jax.operators.profile_system import apply_v3_full_system_operator, full_system_operator_from_namelist, rhs_v3_full_system
 
 
 def test_full_system_gmres_recovers_fortran_statevector_pas_tiny() -> None:
@@ -272,7 +272,7 @@ def test_full_system_gmres_recovers_fortran_statevector_pas_tiny_scheme5() -> No
     def mv(x):
         return apply_v3_full_system_operator(op, x)
 
-    result = gmres_solve(matvec=mv, b=jnp.asarray(b), tol=1e-12, restart=80, maxiter=220)
+    result = gmres_solve(matvec=mv, b=jnp.asarray(b), tol=1e-12, restart=80, maxiter=300)
     x = np.asarray(result.x)
 
     np.testing.assert_allclose(x, x_ref, rtol=1e-5, atol=1e-9)

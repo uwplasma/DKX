@@ -5,8 +5,8 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 
-from sfincs_jax.validation_artifacts import CollisionalityRecord
-from sfincs_jax.validation_math import (
+from sfincs_jax.validation.artifacts import (
+    CollisionalityRecord,
     TRANSPORT_ELEMENTS,
     collisionality_grid,
     collisionality_labels,

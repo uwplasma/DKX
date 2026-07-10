@@ -11,7 +11,39 @@ import os
 import sys
 import time
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Callable, TextIO
+
+
+EmitFn = Callable[[int, str], None]
+
+
+def make_emit(*, verbose: int = 0, quiet: bool = False, stream: TextIO | None = None, prefix: str = "") -> EmitFn:
+    """Create the deterministic structured printer used by CLI/API paths."""
+
+    if stream is None:
+        stream = sys.stdout
+
+    verbosity = int(verbose)
+    quiet_mode = bool(quiet)
+    prefix_text = str(prefix)
+
+    def emit(level: int, msg: str) -> None:
+        if quiet_mode:
+            return
+        if verbosity >= int(level):
+            print(f"{prefix_text}{msg}", file=stream, flush=True)
+
+    return emit
+
+
+class Timer:
+    """Small helper for elapsed-time prints and phase accounting."""
+
+    def __init__(self) -> None:
+        self._t0 = time.perf_counter()
+
+    def elapsed_s(self) -> float:
+        return float(time.perf_counter() - self._t0)
 
 
 def _env_flag(name: str) -> str:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from sfincs_jax.transport_residual_quality import (
+from sfincs_jax.problems.transport_policies import (
     transport_residual_gate_failure,
     transport_residual_gate_failures_from_arrays,
     transport_residual_gate_thresholds_from_env,

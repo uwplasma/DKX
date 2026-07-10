@@ -5,10 +5,15 @@ from pathlib import Path
 import numpy as np
 import jax
 import jax.numpy as jnp
+from jax import tree_util as jtu
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.residual import V3FBlockLinearSystem
-from sfincs_jax.v3_fblock import fblock_operator_from_namelist, matvec_v3_fblock_flat
+from sfincs_jax.operators.profile_system import (
+    V3FBlockLinearSystem,
+    jacobian_matvec_v3_fblock_jit,
+    residual_v3_fblock_jit,
+)
+from sfincs_jax.operators.profile_fblock import fblock_operator_from_namelist, matvec_v3_fblock_flat
 
 
 def test_v3_fblock_residual_jvp_matches_matvec() -> None:
@@ -36,3 +41,16 @@ def test_v3_fblock_residual_jvp_matches_matvec() -> None:
     np.testing.assert_allclose(np.asarray(f_jit(x)), np.asarray(r), rtol=0, atol=1e-12)
     np.testing.assert_allclose(np.asarray(jv_jit(v)), np.asarray(jv), rtol=0, atol=1e-12)
 
+    children, aux = sys.tree_flatten()
+    rebuilt_direct = V3FBlockLinearSystem.tree_unflatten(aux, children)
+    rebuilt_tree = jtu.tree_unflatten(jtu.tree_structure(sys), jtu.tree_leaves(sys))
+
+    np.testing.assert_allclose(np.asarray(rebuilt_direct.residual(x)), np.asarray(r), rtol=0, atol=1e-12)
+    np.testing.assert_allclose(np.asarray(rebuilt_tree.jacobian_matvec(v)), np.asarray(jv), rtol=0, atol=1e-12)
+    np.testing.assert_allclose(np.asarray(residual_v3_fblock_jit(sys, x)), np.asarray(r), rtol=0, atol=1e-12)
+    np.testing.assert_allclose(
+        np.asarray(jacobian_matvec_v3_fblock_jit(sys, v)),
+        np.asarray(jv),
+        rtol=0,
+        atol=1e-12,
+    )

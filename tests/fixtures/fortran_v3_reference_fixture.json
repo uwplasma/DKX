@@ -1,0 +1,2238 @@
+{
+  "ambipolar": {
+    "namelists": {
+      "geometry1_helical_production_option1.namelist": "&general\n  RHSMode = 1\n  ambipolarSolve = .true.\n  ambipolarSolveOption = 1\n  NEr_ambipolarSolve = 12\n  Er_min = -20.0d+0\n  Er_max = 20.0d+0\n  Er_search_tolerance_f = 1.0d-10\n  Er_search_tolerance_dx = 1.0d-8\n/\n\n&geometryParameters\n  geometryScheme = 1\n  inputRadialCoordinate = 3\n  rN_wish = 0.3\n  B0OverBBar = 1.0d+0\n  GHat = 1.0d+0\n  IHat = 0.0d+0\n  iota = 1.31d+0\n  epsilon_t = 0.1d+0\n  epsilon_h = 0.08d+0\n  helicity_l = 1\n  helicity_n = 4\n  epsilon_antisymm = 0.0d+0\n  helicity_antisymm_l = 3\n  helicity_antisymm_n = 0\n  psiAHat = 0.045d+0\n  aHat = 0.1\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1.0d+0\n  nu_n = 8.4774d-3\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 13\n  Nzeta = 19\n  Nxi = 48\n  Nx = 5\n  solverTolerance = 1d-10\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n  preconditioner_species = 0\n  preconditioner_x = 0\n  preconditioner_xi = 0\n/\n\n&export_f\n/\n",
+      "geometry1_helical_production_option2.namelist": "&general\n  RHSMode = 1\n  ambipolarSolve = .true.\n  ambipolarSolveOption = 2\n  NEr_ambipolarSolve = 12\n  Er_min = -20.0d+0\n  Er_max = 20.0d+0\n  Er_search_tolerance_f = 1.0d-10\n  Er_search_tolerance_dx = 1.0d-8\n/\n\n&geometryParameters\n  geometryScheme = 1\n  inputRadialCoordinate = 3\n  rN_wish = 0.3\n  B0OverBBar = 1.0d+0\n  GHat = 1.0d+0\n  IHat = 0.0d+0\n  iota = 1.31d+0\n  epsilon_t = 0.1d+0\n  epsilon_h = 0.08d+0\n  helicity_l = 1\n  helicity_n = 4\n  epsilon_antisymm = 0.0d+0\n  helicity_antisymm_l = 3\n  helicity_antisymm_n = 0\n  psiAHat = 0.045d+0\n  aHat = 0.1\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1.0d+0\n  nu_n = 8.4774d-3\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 13\n  Nzeta = 19\n  Nxi = 48\n  Nx = 5\n  solverTolerance = 1d-10\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n  preconditioner_species = 0\n  preconditioner_x = 0\n  preconditioner_xi = 0\n/\n\n&export_f\n/\n",
+      "geometry1_helical_production_option3.namelist": "&general\n  RHSMode = 1\n  ambipolarSolve = .true.\n  ambipolarSolveOption = 3\n  NEr_ambipolarSolve = 12\n  Er_min = -20.0d+0\n  Er_max = 20.0d+0\n  Er_search_tolerance_f = 1.0d-10\n  Er_search_tolerance_dx = 1.0d-8\n/\n\n&geometryParameters\n  geometryScheme = 1\n  inputRadialCoordinate = 3\n  rN_wish = 0.3\n  B0OverBBar = 1.0d+0\n  GHat = 1.0d+0\n  IHat = 0.0d+0\n  iota = 1.31d+0\n  epsilon_t = 0.1d+0\n  epsilon_h = 0.08d+0\n  helicity_l = 1\n  helicity_n = 4\n  epsilon_antisymm = 0.0d+0\n  helicity_antisymm_l = 3\n  helicity_antisymm_n = 0\n  psiAHat = 0.045d+0\n  aHat = 0.1\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1.0d+0\n  nu_n = 8.4774d-3\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 13\n  Nzeta = 19\n  Nxi = 48\n  Nx = 5\n  solverTolerance = 1d-10\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n  preconditioner_species = 0\n  preconditioner_x = 0\n  preconditioner_xi = 0\n/\n\n&export_f\n/\n",
+      "geometry1_helical_small_option1.namelist": "&general\n  RHSMode = 1\n  ambipolarSolve = .true.\n  ambipolarSolveOption = 1\n  NEr_ambipolarSolve = 8\n  Er_min = -20.0d+0\n  Er_max = 20.0d+0\n  Er_search_tolerance_f = 1.0d-7\n  Er_search_tolerance_dx = 1.0d-6\n/\n\n&geometryParameters\n  geometryScheme = 1\n  inputRadialCoordinate = 3\n  rN_wish = 0.3\n  B0OverBBar = 1.0d+0\n  GHat = 1.0d+0\n  IHat = 0.0d+0\n  iota = 1.31d+0\n  epsilon_t = 0.1d+0\n  epsilon_h = 0.08d+0\n  helicity_l = 1\n  helicity_n = 4\n  epsilon_antisymm = 0.0d+0\n  helicity_antisymm_l = 3\n  helicity_antisymm_n = 0\n  psiAHat = 0.045d+0\n  aHat = 0.1\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1.0d+0\n  nu_n = 8.4774d-3\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 5\n  Nzeta = 7\n  Nxi = 7\n  Nx = 3\n  solverTolerance = 1d-7\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n  preconditioner_species = 0\n  preconditioner_x = 0\n  preconditioner_xi = 0\n/\n\n&export_f\n/\n",
+      "geometry1_helical_small_option2.namelist": "&general\n  RHSMode = 1\n  ambipolarSolve = .true.\n  ambipolarSolveOption = 2\n  NEr_ambipolarSolve = 8\n  Er_min = -20.0d+0\n  Er_max = 20.0d+0\n  Er_search_tolerance_f = 1.0d-7\n  Er_search_tolerance_dx = 1.0d-6\n/\n\n&geometryParameters\n  geometryScheme = 1\n  inputRadialCoordinate = 3\n  rN_wish = 0.3\n  B0OverBBar = 1.0d+0\n  GHat = 1.0d+0\n  IHat = 0.0d+0\n  iota = 1.31d+0\n  epsilon_t = 0.1d+0\n  epsilon_h = 0.08d+0\n  helicity_l = 1\n  helicity_n = 4\n  epsilon_antisymm = 0.0d+0\n  helicity_antisymm_l = 3\n  helicity_antisymm_n = 0\n  psiAHat = 0.045d+0\n  aHat = 0.1\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1.0d+0\n  nu_n = 8.4774d-3\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 5\n  Nzeta = 7\n  Nxi = 7\n  Nx = 3\n  solverTolerance = 1d-7\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n  preconditioner_species = 0\n  preconditioner_x = 0\n  preconditioner_xi = 0\n/\n\n&export_f\n/\n",
+      "geometry1_helical_small_option3.namelist": "&general\n  RHSMode = 1\n  ambipolarSolve = .true.\n  ambipolarSolveOption = 3\n  NEr_ambipolarSolve = 8\n  Er_min = -20.0d+0\n  Er_max = 20.0d+0\n  Er_search_tolerance_f = 1.0d-7\n  Er_search_tolerance_dx = 1.0d-6\n/\n\n&geometryParameters\n  geometryScheme = 1\n  inputRadialCoordinate = 3\n  rN_wish = 0.3\n  B0OverBBar = 1.0d+0\n  GHat = 1.0d+0\n  IHat = 0.0d+0\n  iota = 1.31d+0\n  epsilon_t = 0.1d+0\n  epsilon_h = 0.08d+0\n  helicity_l = 1\n  helicity_n = 4\n  epsilon_antisymm = 0.0d+0\n  helicity_antisymm_l = 3\n  helicity_antisymm_n = 0\n  psiAHat = 0.045d+0\n  aHat = 0.1\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1.0d+0\n  nu_n = 8.4774d-3\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 5\n  Nzeta = 7\n  Nxi = 7\n  Nx = 3\n  solverTolerance = 1d-7\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n  preconditioner_species = 0\n  preconditioner_x = 0\n  preconditioner_xi = 0\n/\n\n&export_f\n/\n",
+      "geometry4_w7x_like_production_option1.namelist": "&general\n  RHSMode = 1\n  ambipolarSolve = .true.\n  ambipolarSolveOption = 1\n  NEr_ambipolarSolve = 12\n  Er_min = -20.0d+0\n  Er_max = 20.0d+0\n  Er_search_tolerance_f = 1.0d-10\n  Er_search_tolerance_dx = 1.0d-8\n/\n\n&geometryParameters\n  geometryScheme = 4\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1d+0\n  nu_n = 0.00831565d+0\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 13\n  Nzeta = 19\n  Nxi = 48\n  Nx = 5\n  solverTolerance = 1d-10\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n/\n\n&export_f\n/\n",
+      "geometry4_w7x_like_production_option2.namelist": "&general\n  RHSMode = 1\n  ambipolarSolve = .true.\n  ambipolarSolveOption = 2\n  NEr_ambipolarSolve = 12\n  Er_min = -20.0d+0\n  Er_max = 20.0d+0\n  Er_search_tolerance_f = 1.0d-10\n  Er_search_tolerance_dx = 1.0d-8\n/\n\n&geometryParameters\n  geometryScheme = 4\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1d+0\n  nu_n = 0.00831565d+0\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 13\n  Nzeta = 19\n  Nxi = 48\n  Nx = 5\n  solverTolerance = 1d-10\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n/\n\n&export_f\n/\n",
+      "geometry4_w7x_like_production_option3.namelist": "&general\n  RHSMode = 1\n  ambipolarSolve = .true.\n  ambipolarSolveOption = 3\n  NEr_ambipolarSolve = 12\n  Er_min = -20.0d+0\n  Er_max = 20.0d+0\n  Er_search_tolerance_f = 1.0d-10\n  Er_search_tolerance_dx = 1.0d-8\n/\n\n&geometryParameters\n  geometryScheme = 4\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1d+0\n  nu_n = 0.00831565d+0\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 13\n  Nzeta = 19\n  Nxi = 48\n  Nx = 5\n  solverTolerance = 1d-10\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n/\n\n&export_f\n/\n",
+      "geometry4_w7x_like_small_option1.namelist": "&general\n  RHSMode = 1\n  ambipolarSolve = .true.\n  ambipolarSolveOption = 1\n  NEr_ambipolarSolve = 6\n  Er_min = -20.0d+0\n  Er_max = 20.0d+0\n  Er_search_tolerance_f = 1.0d-7\n  Er_search_tolerance_dx = 1.0d-6\n/\n\n&geometryParameters\n  geometryScheme = 4\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1d+0\n  nu_n = 0.00831565d+0\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 5\n  Nzeta = 7\n  Nxi = 7\n  Nx = 3\n  solverTolerance = 1d-7\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n/\n\n&export_f\n/\n",
+      "geometry4_w7x_like_small_option2.namelist": "&general\n  RHSMode = 1\n  ambipolarSolve = .true.\n  ambipolarSolveOption = 2\n  NEr_ambipolarSolve = 8\n  Er_min = -20.0d+0\n  Er_max = 20.0d+0\n  Er_search_tolerance_f = 1.0d-7\n  Er_search_tolerance_dx = 1.0d-6\n/\n\n&geometryParameters\n  geometryScheme = 4\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1d+0\n  nu_n = 0.00831565d+0\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 5\n  Nzeta = 7\n  Nxi = 7\n  Nx = 3\n  solverTolerance = 1d-7\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n/\n\n&export_f\n/\n",
+      "geometry4_w7x_like_small_option3.namelist": "&general\n  RHSMode = 1\n  ambipolarSolve = .true.\n  ambipolarSolveOption = 3\n  NEr_ambipolarSolve = 6\n  Er_min = -20.0d+0\n  Er_max = 20.0d+0\n  Er_search_tolerance_f = 1.0d-7\n  Er_search_tolerance_dx = 1.0d-6\n/\n\n&geometryParameters\n  geometryScheme = 4\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1d+0\n  nu_n = 0.00831565d+0\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 5\n  Nzeta = 7\n  Nxi = 7\n  Nx = 3\n  solverTolerance = 1d-7\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n/\n\n&export_f\n/\n"
+    },
+    "summaries": {
+      "production_probe_summary_2026-06-22.json": {
+        "cases": [
+          {
+            "ambipolarSolveOption": 2,
+            "case": "geometry4_w7x_like_production_option2",
+            "er_values": [
+              -20.0,
+              20.0,
+              0.0,
+              -3.5044098275302127,
+              -3.569440785155709,
+              -3.5773320425472463
+            ],
+            "geometryScheme": 4,
+            "goodbye_marker": true,
+            "internal_ambipolar_time_s": 32.96591199999966,
+            "jacobian_nnz": [
+              2277524,
+              2277524,
+              1568916,
+              2277524,
+              2277524,
+              2277524
+            ],
+            "main_solve_times_s": [
+              5.970236999999997,
+              8.808457999999973,
+              5.170586000000185,
+              5.876036999999997,
+              4.112824000000273,
+              2.956028999999944
+            ],
+            "max_ksp_iteration_index": 29,
+            "max_rss_bytes": null,
+            "mpi_finalize_error_after_solve": true,
+            "preconditioner_nnz": [
+              1541746,
+              1541746,
+              1267082,
+              1541746,
+              1541746,
+              1541746
+            ],
+            "radial_currents": [
+              -1.652657023067992e-06,
+              2.131171159756074e-06,
+              3.510991393834535e-07,
+              6.421005925957072e-09,
+              6.951472935618262e-10,
+              2.206662531726209e-12
+            ],
+            "resolution": {
+              "Ntheta": 13,
+              "Nx": 5,
+              "Nxi": 48,
+              "Nzeta": 19
+            },
+            "return_code": 143,
+            "runner_elapsed_wall_s": 108.14086712477729,
+            "solver_package": "mumps",
+            "wall_time_s": null
+          }
+        ],
+        "date": "2026-06-22",
+        "fortran_executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+        "kind": "sfincs_fortran_v3_ambipolar_production_probe_summary",
+        "notes": [
+          "The production probe was launched before the checked-in runner gained /usr/bin/time -lp wrapping, so peak RSS is not available in this summary.",
+          "The run wrote useful SFINCS diagnostics and printed Goodbye, but the MPI finalization layer returned code 143 after the physical solve.",
+          "The case exercises the Brent ambipolar path on a larger W7-X-like analytic geometry and pins repeated operator/matrix setup behavior for the sfincs_jax ambipolar implementation plan."
+        ]
+      },
+      "production_profile_summary_2026-06-23.json": {
+        "cases": [
+          {
+            "case": "geometry1_helical_production_option1",
+            "elapsed_wall_s": 241.28552066581324,
+            "log_path": "/tmp/sfincs_v3_ambipolar_reference_20260623_production_profile/geometry1_helical_production_option1/fortran_stdout.log",
+            "namelist": "tests/fixtures/fortran_v3_reference_fixture.json:ambipolar/geometry1_helical_production_option1.namelist",
+            "parsed": {
+              "adjoint_solve_times_s": [
+                1.2279279999997925,
+                1.0767439999999624,
+                0.5548690000000533,
+                1.0194250000004104,
+                1.2055450000002566,
+                0.9721309999999903,
+                2.221649999999954,
+                1.4565889999998944,
+                1.2562909999996918,
+                2.0617409999999836
+              ],
+              "er_values": [
+                -20.0,
+                20.0,
+                0.0,
+                -5.7112057031742625,
+                -0.199947288549998,
+                -2.06404405833331,
+                -2.8194069449549515,
+                -3.193743117915829,
+                -3.260175381918354,
+                -3.2618865363137988,
+                0.0,
+                0.0
+              ],
+              "internal_ambipolar_time_s": 166.18418900000006,
+              "jacobian_nnz": [
+                2277524,
+                2277524,
+                1568916,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524
+              ],
+              "ksp_convergence_reasons": [],
+              "main_solve_times_s": [
+                13.54547599999978,
+                15.295646999999917,
+                7.288450000000012,
+                15.373501000000033,
+                16.873078000000078,
+                15.323725000000195,
+                19.943804,
+                15.894770000000335,
+                13.801590000000033,
+                18.469734000000244
+              ],
+              "matrix_sizes": [],
+              "max_ksp_iteration_index": 3,
+              "max_rss_bytes": 5734858752,
+              "mumps_jobs": {
+                "analysis": 0,
+                "destroy": 0,
+                "factor": 0,
+                "solve": 0
+              },
+              "petsc_profile_markers": {
+                "ksp_view": true,
+                "log_view": true,
+                "pc_view": true
+              },
+              "preconditioner_nnz": [
+                2277524,
+                2277524,
+                1568916,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524
+              ],
+              "radial_currents": [
+                -0.00012535699185014935,
+                0.000124217235086464,
+                0.0008536312098557521,
+                -7.034407766267272e-05,
+                0.0007940271746671025,
+                0.00011728478349857011,
+                3.08611247417027e-05,
+                4.100241471632354e-06,
+                1.0048767315091141e-07,
+                6.456892835956054e-11,
+                0.0,
+                0.0
+              ],
+              "solver_packages": [
+                "mumps"
+              ],
+              "success_markers": {
+                "brent_successful": false,
+                "goodbye": true,
+                "mpi_finalize_error": true,
+                "newton_successful": true
+              },
+              "wall_time_s": 241.25
+            },
+            "return_code": 143,
+            "scratch_dir": "/tmp/sfincs_v3_ambipolar_reference_20260623_production_profile/geometry1_helical_production_option1",
+            "timed_out": false
+          },
+          {
+            "case": "geometry1_helical_production_option2",
+            "elapsed_wall_s": 170.11269829096273,
+            "log_path": "/tmp/sfincs_v3_ambipolar_reference_20260623_production_profile/geometry1_helical_production_option2/fortran_stdout.log",
+            "namelist": "tests/fixtures/fortran_v3_reference_fixture.json:ambipolar/geometry1_helical_production_option2.namelist",
+            "parsed": {
+              "adjoint_solve_times_s": [],
+              "er_values": [
+                -20.0,
+                20.0,
+                0.0,
+                -17.439049998116158,
+                -8.719524999058079,
+                -4.359762499529039,
+                -2.1798812497645197,
+                -3.686840210284829,
+                -3.1772463691479533,
+                -3.275604395969511,
+                -3.2623177918264656,
+                -3.2618874620826617
+              ],
+              "internal_ambipolar_time_s": null,
+              "jacobian_nnz": [
+                2277524,
+                2277524,
+                1568916,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524
+              ],
+              "ksp_convergence_reasons": [],
+              "main_solve_times_s": [
+                13.3395459999997,
+                15.509801000000152,
+                7.959806999999728,
+                14.065282000000025,
+                15.405490999999984,
+                15.97513600000002,
+                15.859523999999965,
+                15.60007399999995,
+                14.723352999999861,
+                15.304521000000022,
+                12.983843999999863,
+                12.428372000000309
+              ],
+              "matrix_sizes": [],
+              "max_ksp_iteration_index": 3,
+              "max_rss_bytes": 5770428416,
+              "mumps_jobs": {
+                "analysis": 0,
+                "destroy": 0,
+                "factor": 0,
+                "solve": 0
+              },
+              "petsc_profile_markers": {
+                "ksp_view": true,
+                "log_view": false,
+                "pc_view": true
+              },
+              "preconditioner_nnz": [
+                2277524,
+                2277524,
+                1568916,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524
+              ],
+              "radial_currents": [
+                -0.00012535699185014935,
+                0.000124217235086464,
+                0.0008536312098557521,
+                -0.00011913539844760219,
+                -9.215722605060292e-05,
+                -4.473569686487105e-05,
+                0.00010018223548718296,
+                -2.1426765660623544e-05,
+                5.1247831978245675e-06,
+                -8.003976367686209e-07,
+                -2.5229920612128155e-08,
+                8.117289714606448e-12
+              ],
+              "solver_packages": [
+                "mumps"
+              ],
+              "success_markers": {
+                "brent_successful": false,
+                "goodbye": false,
+                "mpi_finalize_error": false,
+                "newton_successful": false
+              },
+              "wall_time_s": 170.07
+            },
+            "return_code": 0,
+            "scratch_dir": "/tmp/sfincs_v3_ambipolar_reference_20260623_production_profile/geometry1_helical_production_option2",
+            "timed_out": false
+          },
+          {
+            "case": "geometry1_helical_production_option3",
+            "elapsed_wall_s": 192.8418201659806,
+            "log_path": "/tmp/sfincs_v3_ambipolar_reference_20260623_production_profile/geometry1_helical_production_option3/fortran_stdout.log",
+            "namelist": "tests/fixtures/fortran_v3_reference_fixture.json:ambipolar/geometry1_helical_production_option3.namelist",
+            "parsed": {
+              "adjoint_solve_times_s": [
+                0.5427090000002863,
+                1.2181519999999182,
+                1.5279679999998734,
+                1.3635999999996784,
+                1.2500959999997576,
+                1.1589899999999034,
+                0.8642289999997956,
+                1.07869699999992
+              ],
+              "er_values": [
+                0.0,
+                -5.7112057031742625,
+                -0.199947288549998,
+                -2.06404405833331,
+                -2.8194069449549515,
+                -3.193743117915829,
+                -3.260175381918354,
+                -3.2618865363137988,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "internal_ambipolar_time_s": 117.71128099999987,
+              "jacobian_nnz": [
+                1568916,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524
+              ],
+              "ksp_convergence_reasons": [],
+              "main_solve_times_s": [
+                5.704789999999775,
+                12.765972999999576,
+                15.621527000000242,
+                15.26441399999976,
+                13.957059999999728,
+                12.9335030000002,
+                15.624856999999793,
+                15.821068999999625
+              ],
+              "matrix_sizes": [],
+              "max_ksp_iteration_index": 3,
+              "max_rss_bytes": 5808996352,
+              "mumps_jobs": {
+                "analysis": 0,
+                "destroy": 0,
+                "factor": 0,
+                "solve": 0
+              },
+              "petsc_profile_markers": {
+                "ksp_view": true,
+                "log_view": true,
+                "pc_view": true
+              },
+              "preconditioner_nnz": [
+                1568916,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524,
+                2277524
+              ],
+              "radial_currents": [
+                0.0008536312098557521,
+                -7.034407766267272e-05,
+                0.0007940271746671025,
+                0.00011728478349857011,
+                3.08611247417027e-05,
+                4.100241471632354e-06,
+                1.0048767315091141e-07,
+                6.456892835956054e-11,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "solver_packages": [
+                "mumps"
+              ],
+              "success_markers": {
+                "brent_successful": false,
+                "goodbye": true,
+                "mpi_finalize_error": true,
+                "newton_successful": true
+              },
+              "wall_time_s": 192.78
+            },
+            "return_code": 143,
+            "scratch_dir": "/tmp/sfincs_v3_ambipolar_reference_20260623_production_profile/geometry1_helical_production_option3",
+            "timed_out": false
+          },
+          {
+            "case": "geometry4_w7x_like_production_option1",
+            "elapsed_wall_s": 93.79944891692139,
+            "log_path": "/tmp/sfincs_v3_ambipolar_reference_20260623_production_profile/geometry4_w7x_like_production_option1/fortran_stdout.log",
+            "namelist": "tests/fixtures/fortran_v3_reference_fixture.json:ambipolar/geometry4_w7x_like_production_option1.namelist",
+            "parsed": {
+              "adjoint_solve_times_s": [
+                0.7386649999998554,
+                0.7469969999997375,
+                0.6167540000001281,
+                0.7232009999997899,
+                0.7203159999999116,
+                0.7192829999999049
+              ],
+              "er_values": [
+                -20.0,
+                20.0,
+                0.0,
+                -4.011772237008571,
+                -3.570728446390763,
+                -3.5773555623680506,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "internal_ambipolar_time_s": 18.671838000000207,
+              "jacobian_nnz": [
+                2277524,
+                2277524,
+                1568916,
+                2277524,
+                2277524,
+                2277524
+              ],
+              "ksp_convergence_reasons": [],
+              "main_solve_times_s": [
+                2.4490529999998216,
+                2.3504470000002584,
+                2.0457140000003164,
+                2.3743509999999333,
+                2.342471999999816,
+                2.4264570000000276
+              ],
+              "matrix_sizes": [],
+              "max_ksp_iteration_index": 29,
+              "max_rss_bytes": 1389199360,
+              "mumps_jobs": {
+                "analysis": 0,
+                "destroy": 0,
+                "factor": 0,
+                "solve": 0
+              },
+              "petsc_profile_markers": {
+                "ksp_view": true,
+                "log_view": true,
+                "pc_view": true
+              },
+              "preconditioner_nnz": [
+                1541746,
+                1541746,
+                1267082,
+                1541746,
+                1541746,
+                1541746
+              ],
+              "radial_currents": [
+                -1.652657023067992e-06,
+                2.131171159756074e-06,
+                3.510991393834535e-07,
+                -3.754831154970728e-08,
+                5.820487515534432e-10,
+                1.4196067240644054e-13,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "solver_packages": [
+                "mumps"
+              ],
+              "success_markers": {
+                "brent_successful": false,
+                "goodbye": true,
+                "mpi_finalize_error": true,
+                "newton_successful": true
+              },
+              "wall_time_s": 93.74
+            },
+            "return_code": 143,
+            "scratch_dir": "/tmp/sfincs_v3_ambipolar_reference_20260623_production_profile/geometry4_w7x_like_production_option1",
+            "timed_out": false
+          },
+          {
+            "case": "geometry4_w7x_like_production_option2",
+            "elapsed_wall_s": 88.94052366609685,
+            "log_path": "/tmp/sfincs_v3_ambipolar_reference_20260623_production_profile/geometry4_w7x_like_production_option2/fortran_stdout.log",
+            "namelist": "tests/fixtures/fortran_v3_reference_fixture.json:ambipolar/geometry4_w7x_like_production_option2.namelist",
+            "parsed": {
+              "adjoint_solve_times_s": [],
+              "er_values": [
+                -20.0,
+                20.0,
+                0.0,
+                -3.5044098275302127,
+                -3.569440785155709,
+                -3.5773320425472463,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "internal_ambipolar_time_s": 13.849409999999807,
+              "jacobian_nnz": [
+                2277524,
+                2277524,
+                1568916,
+                2277524,
+                2277524,
+                2277524
+              ],
+              "ksp_convergence_reasons": [],
+              "main_solve_times_s": [
+                2.3732129999998506,
+                2.353041000000303,
+                2.0241860000000997,
+                2.346596999999747,
+                2.363698999999997,
+                2.3276050000004034
+              ],
+              "matrix_sizes": [],
+              "max_ksp_iteration_index": 29,
+              "max_rss_bytes": 1385906176,
+              "mumps_jobs": {
+                "analysis": 0,
+                "destroy": 0,
+                "factor": 0,
+                "solve": 0
+              },
+              "petsc_profile_markers": {
+                "ksp_view": true,
+                "log_view": true,
+                "pc_view": true
+              },
+              "preconditioner_nnz": [
+                1541746,
+                1541746,
+                1267082,
+                1541746,
+                1541746,
+                1541746
+              ],
+              "radial_currents": [
+                -1.652657023067992e-06,
+                2.131171159756074e-06,
+                3.510991393834535e-07,
+                6.421005925957072e-09,
+                6.951472935618262e-10,
+                2.206662531726209e-12,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "solver_packages": [
+                "mumps"
+              ],
+              "success_markers": {
+                "brent_successful": true,
+                "goodbye": true,
+                "mpi_finalize_error": true,
+                "newton_successful": false
+              },
+              "wall_time_s": 88.91
+            },
+            "return_code": 143,
+            "scratch_dir": "/tmp/sfincs_v3_ambipolar_reference_20260623_production_profile/geometry4_w7x_like_production_option2",
+            "timed_out": false
+          },
+          {
+            "case": "geometry4_w7x_like_production_option3",
+            "elapsed_wall_s": 87.23361941683106,
+            "log_path": "/tmp/sfincs_v3_ambipolar_reference_20260623_production_profile/geometry4_w7x_like_production_option3/fortran_stdout.log",
+            "namelist": "tests/fixtures/fortran_v3_reference_fixture.json:ambipolar/geometry4_w7x_like_production_option3.namelist",
+            "parsed": {
+              "adjoint_solve_times_s": [
+                0.6105659999998352,
+                0.7190850000001774,
+                0.7213029999998071,
+                0.7187080000003334
+              ],
+              "er_values": [
+                0.0,
+                -4.011772237008571,
+                -3.570728446390763,
+                -3.5773555623680506,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "internal_ambipolar_time_s": 12.133745999999974,
+              "jacobian_nnz": [
+                1568916,
+                2277524,
+                2277524,
+                2277524
+              ],
+              "ksp_convergence_reasons": [],
+              "main_solve_times_s": [
+                2.019662000000153,
+                2.380126999999902,
+                2.3444909999998345,
+                2.3391670000000886
+              ],
+              "matrix_sizes": [],
+              "max_ksp_iteration_index": 28,
+              "max_rss_bytes": 1347649536,
+              "mumps_jobs": {
+                "analysis": 0,
+                "destroy": 0,
+                "factor": 0,
+                "solve": 0
+              },
+              "petsc_profile_markers": {
+                "ksp_view": true,
+                "log_view": true,
+                "pc_view": true
+              },
+              "preconditioner_nnz": [
+                1267082,
+                1541746,
+                1541746,
+                1541746
+              ],
+              "radial_currents": [
+                3.510991393834535e-07,
+                -3.754831154970728e-08,
+                5.820487515534432e-10,
+                1.4196067240644054e-13,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "solver_packages": [
+                "mumps"
+              ],
+              "success_markers": {
+                "brent_successful": false,
+                "goodbye": true,
+                "mpi_finalize_error": true,
+                "newton_successful": true
+              },
+              "wall_time_s": 87.18
+            },
+            "return_code": 143,
+            "scratch_dir": "/tmp/sfincs_v3_ambipolar_reference_20260623_production_profile/geometry4_w7x_like_production_option3",
+            "timed_out": false
+          }
+        ],
+        "fortran_executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+        "kind": "sfincs_fortran_v3_ambipolar_reference",
+        "tier": "production"
+      },
+      "small_probe_summary_2026-06-22.json": {
+        "cases": [
+          {
+            "adjoint_solve_times_s": [
+              0.00148,
+              0.00135,
+              0.001624
+            ],
+            "ambipolarSolveOption": 1,
+            "case": "geometry4_w7x_like_small_option1",
+            "er_values": [
+              -20.0,
+              20.0,
+              0.0
+            ],
+            "geometryScheme": 4,
+            "internal_ambipolar_time_s": 0.14336699999989833,
+            "max_rss_bytes": 134922240,
+            "radial_currents": [
+              -1.0938436574558732e-06,
+              1.4274577144396906e-06,
+              2.513476802851773e-08
+            ],
+            "resolution": {
+              "Ntheta": 5,
+              "Nx": 3,
+              "Nxi": 7,
+              "Nzeta": 7
+            },
+            "solver_package": "mumps",
+            "typical_jacobian_nnz": [
+              19566,
+              26750
+            ],
+            "typical_preconditioner_nnz": [
+              15436,
+              19356
+            ],
+            "wall_time_s": 75.31
+          },
+          {
+            "ambipolarSolveOption": 2,
+            "case": "geometry4_w7x_like_small_option2",
+            "er_values": [
+              -20.0,
+              20.0,
+              0.0
+            ],
+            "geometryScheme": 4,
+            "internal_ambipolar_time_s": 0.14731099999994512,
+            "max_rss_bytes": 135151616,
+            "radial_currents": [
+              -1.0938436574558732e-06,
+              1.4274577144396906e-06,
+              2.513476802851773e-08
+            ],
+            "resolution": {
+              "Ntheta": 5,
+              "Nx": 3,
+              "Nxi": 7,
+              "Nzeta": 7
+            },
+            "solver_package": "mumps",
+            "typical_jacobian_nnz": [
+              19566,
+              26750
+            ],
+            "typical_preconditioner_nnz": [
+              15436,
+              19356
+            ],
+            "wall_time_s": 75.66
+          },
+          {
+            "adjoint_solve_times_s": [
+              0.001487
+            ],
+            "ambipolarSolveOption": 3,
+            "case": "geometry4_w7x_like_small_option3",
+            "er_values": [
+              0.0
+            ],
+            "geometryScheme": 4,
+            "internal_ambipolar_time_s": 0.06341700000007222,
+            "max_rss_bytes": 120422400,
+            "radial_currents": [
+              2.513476802851773e-08
+            ],
+            "resolution": {
+              "Ntheta": 5,
+              "Nx": 3,
+              "Nxi": 7,
+              "Nzeta": 7
+            },
+            "solver_package": "mumps",
+            "typical_jacobian_nnz": [
+              19566
+            ],
+            "typical_preconditioner_nnz": [
+              15436
+            ],
+            "wall_time_s": 75.19
+          },
+          {
+            "ambipolarSolveOption": 2,
+            "case": "geometry1_helical_small_option2",
+            "er_values": [
+              -20.0,
+              20.0,
+              0.0,
+              -1.7273170766902488,
+              -2.0106420714543676
+            ],
+            "geometryScheme": 1,
+            "internal_ambipolar_time_s": 0.37308800000027986,
+            "max_rss_bytes": 156221440,
+            "mpi_finalize_error_after_solve": true,
+            "radial_currents": [
+              -1.1412112272292334e-05,
+              1.3431619289899532e-05,
+              1.078787197904619e-06,
+              1.5377115084457295e-07,
+              1.7031683421752903e-09
+            ],
+            "resolution": {
+              "Ntheta": 5,
+              "Nx": 3,
+              "Nxi": 7,
+              "Nzeta": 7
+            },
+            "solver_package": "mumps",
+            "typical_jacobian_nnz": [
+              19566,
+              26750
+            ],
+            "typical_preconditioner_nnz": [
+              19566,
+              26750
+            ],
+            "wall_time_s": 75.54
+          }
+        ],
+        "date": "2026-06-22",
+        "fortran_executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+        "kind": "sfincs_fortran_v3_ambipolar_probe_summary",
+        "notes": [
+          "Scratch logs were intentionally not committed because MUMPS/PETSc output is verbose.",
+          "Fortran internal ambipolar timings are much smaller than process wall time in this local probe.",
+          "Derivative-assisted options 1 and 3 use forward solves plus an adjoint radial-current solve per Er evaluation.",
+          "The geometry1 Brent probe wrote useful diagnostics but reported an MPI_Finalize error after the solve; sfincs_jax should separate solve completion from finalization/profiling failures."
+        ]
+      },
+      "small_profile_summary_2026-06-23.json": {
+        "cases": [
+          {
+            "case": "geometry1_helical_small_option1",
+            "elapsed_wall_s": 75.37351058307104,
+            "log_path": "/tmp/sfincs_v3_ambipolar_reference_20260623_small_profile/geometry1_helical_small_option1/fortran_stdout.log",
+            "namelist": "tests/fixtures/fortran_v3_reference_fixture.json:ambipolar/geometry1_helical_small_option1.namelist",
+            "parsed": {
+              "adjoint_solve_times_s": [
+                0.0012899999996989209,
+                0.0015480000001844019,
+                0.0013429999999061693,
+                0.0014080000000831205
+              ],
+              "er_values": [
+                -20.0,
+                20.0,
+                0.0,
+                -2.01579684708909,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "internal_ambipolar_time_s": 0.25821200000018507,
+              "jacobian_nnz": [
+                26750,
+                26750,
+                19566,
+                26750
+              ],
+              "ksp_convergence_reasons": [],
+              "main_solve_times_s": [
+                0.07304500000009284,
+                0.06221799999957511,
+                0.06365499999992608,
+                0.03805800000009185
+              ],
+              "matrix_sizes": [],
+              "max_ksp_iteration_index": 2,
+              "max_rss_bytes": 153550848,
+              "mumps_jobs": {
+                "analysis": 0,
+                "destroy": 0,
+                "factor": 0,
+                "solve": 0
+              },
+              "petsc_profile_markers": {
+                "ksp_view": true,
+                "log_view": true,
+                "pc_view": true
+              },
+              "preconditioner_nnz": [
+                26750,
+                26750,
+                19566,
+                26750
+              ],
+              "radial_currents": [
+                -1.1412112272292334e-05,
+                1.3431619289899532e-05,
+                1.078787197904619e-06,
+                -1.0650279455435228e-09,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "solver_packages": [
+                "mumps"
+              ],
+              "success_markers": {
+                "brent_successful": false,
+                "goodbye": true,
+                "mpi_finalize_error": true,
+                "newton_successful": true
+              },
+              "wall_time_s": 75.33
+            },
+            "return_code": 143,
+            "scratch_dir": "/tmp/sfincs_v3_ambipolar_reference_20260623_small_profile/geometry1_helical_small_option1",
+            "timed_out": false
+          },
+          {
+            "case": "geometry1_helical_small_option2",
+            "elapsed_wall_s": 75.36506500001997,
+            "log_path": "/tmp/sfincs_v3_ambipolar_reference_20260623_small_profile/geometry1_helical_small_option2/fortran_stdout.log",
+            "namelist": "tests/fixtures/fortran_v3_reference_fixture.json:ambipolar/geometry1_helical_small_option2.namelist",
+            "parsed": {
+              "adjoint_solve_times_s": [],
+              "er_values": [
+                -20.0,
+                20.0,
+                0.0,
+                -1.7273170766902488,
+                -2.0106420714543676,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "internal_ambipolar_time_s": 0.2645999999999731,
+              "jacobian_nnz": [
+                26750,
+                26750,
+                19566,
+                26750,
+                26750
+              ],
+              "ksp_convergence_reasons": [],
+              "main_solve_times_s": [
+                0.05337599999984377,
+                0.054795999999896594,
+                0.04851099999996222,
+                0.05237199999965014,
+                0.04962400000022171
+              ],
+              "matrix_sizes": [],
+              "max_ksp_iteration_index": 2,
+              "max_rss_bytes": 150831104,
+              "mumps_jobs": {
+                "analysis": 0,
+                "destroy": 0,
+                "factor": 0,
+                "solve": 0
+              },
+              "petsc_profile_markers": {
+                "ksp_view": true,
+                "log_view": true,
+                "pc_view": true
+              },
+              "preconditioner_nnz": [
+                26750,
+                26750,
+                19566,
+                26750,
+                26750
+              ],
+              "radial_currents": [
+                -1.1412112272292334e-05,
+                1.3431619289899532e-05,
+                1.078787197904619e-06,
+                1.5377115084457295e-07,
+                1.7031683421752903e-09,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "solver_packages": [
+                "mumps"
+              ],
+              "success_markers": {
+                "brent_successful": true,
+                "goodbye": true,
+                "mpi_finalize_error": true,
+                "newton_successful": false
+              },
+              "wall_time_s": 75.31
+            },
+            "return_code": 143,
+            "scratch_dir": "/tmp/sfincs_v3_ambipolar_reference_20260623_small_profile/geometry1_helical_small_option2",
+            "timed_out": false
+          },
+          {
+            "case": "geometry1_helical_small_option3",
+            "elapsed_wall_s": 75.2686981249135,
+            "log_path": "/tmp/sfincs_v3_ambipolar_reference_20260623_small_profile/geometry1_helical_small_option3/fortran_stdout.log",
+            "namelist": "tests/fixtures/fortran_v3_reference_fixture.json:ambipolar/geometry1_helical_small_option3.namelist",
+            "parsed": {
+              "adjoint_solve_times_s": [
+                0.0012970000002496818,
+                0.0013800000001538137
+              ],
+              "er_values": [
+                0.0,
+                -2.01579684708909,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "internal_ambipolar_time_s": 0.1665000000002692,
+              "jacobian_nnz": [
+                19566,
+                26750
+              ],
+              "ksp_convergence_reasons": [],
+              "main_solve_times_s": [
+                0.0735130000002755,
+                0.08583099999987098
+              ],
+              "matrix_sizes": [],
+              "max_ksp_iteration_index": 2,
+              "max_rss_bytes": 141819904,
+              "mumps_jobs": {
+                "analysis": 0,
+                "destroy": 0,
+                "factor": 0,
+                "solve": 0
+              },
+              "petsc_profile_markers": {
+                "ksp_view": true,
+                "log_view": true,
+                "pc_view": true
+              },
+              "preconditioner_nnz": [
+                19566,
+                26750
+              ],
+              "radial_currents": [
+                1.078787197904619e-06,
+                -1.0650279455435228e-09,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "solver_packages": [
+                "mumps"
+              ],
+              "success_markers": {
+                "brent_successful": false,
+                "goodbye": true,
+                "mpi_finalize_error": true,
+                "newton_successful": true
+              },
+              "wall_time_s": 75.23
+            },
+            "return_code": 143,
+            "scratch_dir": "/tmp/sfincs_v3_ambipolar_reference_20260623_small_profile/geometry1_helical_small_option3",
+            "timed_out": false
+          },
+          {
+            "case": "geometry4_w7x_like_small_option1",
+            "elapsed_wall_s": 75.17704274994321,
+            "log_path": "/tmp/sfincs_v3_ambipolar_reference_20260623_small_profile/geometry4_w7x_like_small_option1/fortran_stdout.log",
+            "namelist": "tests/fixtures/fortran_v3_reference_fixture.json:ambipolar/geometry4_w7x_like_small_option1.namelist",
+            "parsed": {
+              "adjoint_solve_times_s": [
+                0.0019050000000788714,
+                0.0019980000001851295,
+                0.002051000000392378
+              ],
+              "er_values": [
+                -20.0,
+                20.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "internal_ambipolar_time_s": 0.09424300000000585,
+              "jacobian_nnz": [
+                26750,
+                26750,
+                19566
+              ],
+              "ksp_convergence_reasons": [],
+              "main_solve_times_s": [
+                0.027696999999989202,
+                0.027559000000110245,
+                0.02698899999995774
+              ],
+              "matrix_sizes": [],
+              "max_ksp_iteration_index": 14,
+              "max_rss_bytes": 126025728,
+              "mumps_jobs": {
+                "analysis": 0,
+                "destroy": 0,
+                "factor": 0,
+                "solve": 0
+              },
+              "petsc_profile_markers": {
+                "ksp_view": true,
+                "log_view": true,
+                "pc_view": true
+              },
+              "preconditioner_nnz": [
+                19356,
+                19356,
+                15436
+              ],
+              "radial_currents": [
+                -1.0938436574558732e-06,
+                1.4274577144396906e-06,
+                2.513476802851773e-08,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "solver_packages": [
+                "mumps"
+              ],
+              "success_markers": {
+                "brent_successful": false,
+                "goodbye": true,
+                "mpi_finalize_error": true,
+                "newton_successful": true
+              },
+              "wall_time_s": 75.14
+            },
+            "return_code": 143,
+            "scratch_dir": "/tmp/sfincs_v3_ambipolar_reference_20260623_small_profile/geometry4_w7x_like_small_option1",
+            "timed_out": false
+          },
+          {
+            "case": "geometry4_w7x_like_small_option2",
+            "elapsed_wall_s": 75.1754143750295,
+            "log_path": "/tmp/sfincs_v3_ambipolar_reference_20260623_small_profile/geometry4_w7x_like_small_option2/fortran_stdout.log",
+            "namelist": "tests/fixtures/fortran_v3_reference_fixture.json:ambipolar/geometry4_w7x_like_small_option2.namelist",
+            "parsed": {
+              "adjoint_solve_times_s": [],
+              "er_values": [
+                -20.0,
+                20.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "internal_ambipolar_time_s": 0.08792999999968742,
+              "jacobian_nnz": [
+                26750,
+                26750,
+                19566
+              ],
+              "ksp_convergence_reasons": [],
+              "main_solve_times_s": [
+                0.029367999999976746,
+                0.026682000000164408,
+                0.027563999999983935
+              ],
+              "matrix_sizes": [],
+              "max_ksp_iteration_index": 14,
+              "max_rss_bytes": 128548864,
+              "mumps_jobs": {
+                "analysis": 0,
+                "destroy": 0,
+                "factor": 0,
+                "solve": 0
+              },
+              "petsc_profile_markers": {
+                "ksp_view": true,
+                "log_view": true,
+                "pc_view": true
+              },
+              "preconditioner_nnz": [
+                19356,
+                19356,
+                15436
+              ],
+              "radial_currents": [
+                -1.0938436574558732e-06,
+                1.4274577144396906e-06,
+                2.513476802851773e-08,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "solver_packages": [
+                "mumps"
+              ],
+              "success_markers": {
+                "brent_successful": true,
+                "goodbye": true,
+                "mpi_finalize_error": true,
+                "newton_successful": false
+              },
+              "wall_time_s": 75.13
+            },
+            "return_code": 143,
+            "scratch_dir": "/tmp/sfincs_v3_ambipolar_reference_20260623_small_profile/geometry4_w7x_like_small_option2",
+            "timed_out": false
+          },
+          {
+            "case": "geometry4_w7x_like_small_option3",
+            "elapsed_wall_s": 75.12852487503551,
+            "log_path": "/tmp/sfincs_v3_ambipolar_reference_20260623_small_profile/geometry4_w7x_like_small_option3/fortran_stdout.log",
+            "namelist": "tests/fixtures/fortran_v3_reference_fixture.json:ambipolar/geometry4_w7x_like_small_option3.namelist",
+            "parsed": {
+              "adjoint_solve_times_s": [
+                0.0018230000000585278
+              ],
+              "er_values": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "internal_ambipolar_time_s": 0.032044000000041706,
+              "jacobian_nnz": [
+                19566
+              ],
+              "ksp_convergence_reasons": [],
+              "main_solve_times_s": [
+                0.0276400000002468
+              ],
+              "matrix_sizes": [],
+              "max_ksp_iteration_index": 13,
+              "max_rss_bytes": 117768192,
+              "mumps_jobs": {
+                "analysis": 0,
+                "destroy": 0,
+                "factor": 0,
+                "solve": 0
+              },
+              "petsc_profile_markers": {
+                "ksp_view": true,
+                "log_view": true,
+                "pc_view": true
+              },
+              "preconditioner_nnz": [
+                15436
+              ],
+              "radial_currents": [
+                2.513476802851773e-08,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "solver_packages": [
+                "mumps"
+              ],
+              "success_markers": {
+                "brent_successful": false,
+                "goodbye": true,
+                "mpi_finalize_error": true,
+                "newton_successful": true
+              },
+              "wall_time_s": 75.07
+            },
+            "return_code": 143,
+            "scratch_dir": "/tmp/sfincs_v3_ambipolar_reference_20260623_small_profile/geometry4_w7x_like_small_option3",
+            "timed_out": false
+          }
+        ],
+        "fortran_executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+        "kind": "sfincs_fortran_v3_ambipolar_reference",
+        "tier": "small"
+      }
+    }
+  },
+  "description": "Compact Fortran v3 reference summaries and namelist text used by bounded sfincs_jax physics gates.",
+  "schema_version": 1,
+  "sensitivity": {
+    "namelists": {
+      "geometry4_w7x_like_small_rhs4_debug_radial_current.namelist": "&general\n  RHSMode = 4\n  ambipolarSolve = .false.\n/\n\n&geometryParameters\n  geometryScheme = 4\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1d+0\n  nu_n = 0.00831565d+0\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 5\n  Nzeta = 7\n  Nxi = 7\n  Nx = 3\n  solverTolerance = 1d-7\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n/\n\n&export_f\n/\n\n&adjointOptions\n  adjointRadialCurrentOption = .true.\n  adjointParticleFluxOption = .true. .true.\n  adjointHeatFluxOption = .false. .false.\n  adjointParallelFlowOption = .false. .false.\n  adjointBootstrapOption = .false.\n  adjointTotalHeatFluxOption = .false.\n  discreteAdjointOption = .true.\n  nMaxAdjoint = 0\n  mMaxAdjoint = 0\n  debugAdjoint = .true.\n  deltaLambda = 1.0d-4\n/\n",
+      "geometry4_w7x_like_small_rhs4_heat_flux.namelist": "&general\n  RHSMode = 4\n  ambipolarSolve = .false.\n/\n\n&geometryParameters\n  geometryScheme = 4\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1d+0\n  nu_n = 0.00831565d+0\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 5\n  Nzeta = 7\n  Nxi = 7\n  Nx = 3\n  solverTolerance = 1d-7\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n/\n\n&export_f\n/\n\n&adjointOptions\n  adjointRadialCurrentOption = .false.\n  adjointParticleFluxOption = .false. .false.\n  adjointHeatFluxOption = .true. .true.\n  adjointParallelFlowOption = .false. .false.\n  adjointBootstrapOption = .false.\n  adjointTotalHeatFluxOption = .true.\n  discreteAdjointOption = .true.\n  nMaxAdjoint = 0\n  mMaxAdjoint = 0\n  debugAdjoint = .false.\n  deltaLambda = 1.0d-4\n/\n",
+      "geometry4_w7x_like_small_rhs4_parallel_bootstrap.namelist": "&general\n  RHSMode = 4\n  ambipolarSolve = .false.\n/\n\n&geometryParameters\n  geometryScheme = 4\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1d+0\n  nu_n = 0.00831565d+0\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 5\n  Nzeta = 7\n  Nxi = 7\n  Nx = 3\n  solverTolerance = 1d-7\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n/\n\n&export_f\n/\n\n&adjointOptions\n  adjointRadialCurrentOption = .false.\n  adjointParticleFluxOption = .true. .true.\n  adjointHeatFluxOption = .false. .false.\n  adjointParallelFlowOption = .true. .true.\n  adjointBootstrapOption = .true.\n  adjointTotalHeatFluxOption = .false.\n  discreteAdjointOption = .true.\n  nMaxAdjoint = 0\n  mMaxAdjoint = 0\n  debugAdjoint = .false.\n  deltaLambda = 1.0d-4\n/\n",
+      "geometry4_w7x_like_small_rhs4_radial_current.namelist": "&general\n  RHSMode = 4\n  ambipolarSolve = .false.\n/\n\n&geometryParameters\n  geometryScheme = 4\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1d+0\n  nu_n = 0.00831565d+0\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 5\n  Nzeta = 7\n  Nxi = 7\n  Nx = 3\n  solverTolerance = 1d-7\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n/\n\n&export_f\n/\n\n&adjointOptions\n  adjointRadialCurrentOption = .true.\n  adjointParticleFluxOption = .true. .true.\n  adjointHeatFluxOption = .false. .false.\n  adjointParallelFlowOption = .false. .false.\n  adjointBootstrapOption = .false.\n  adjointTotalHeatFluxOption = .false.\n  discreteAdjointOption = .true.\n  nMaxAdjoint = 0\n  mMaxAdjoint = 0\n  debugAdjoint = .false.\n  deltaLambda = 1.0d-4\n/\n\n",
+      "geometry4_w7x_like_small_rhs5_heat_flux.namelist": "&general\n  RHSMode = 5\n  ambipolarSolve = .true.\n  ambipolarSolveOption = 2\n  NEr_ambipolarSolve = 8\n  Er_min = -20.0d+0\n  Er_max = 20.0d+0\n  Er_search_tolerance_f = 1.0d-7\n  Er_search_tolerance_dx = 1.0d-6\n/\n\n&geometryParameters\n  geometryScheme = 4\n/\n\n&speciesParameters\n  Zs = 1 -1\n  mHats = 1 0.000545509d+0\n  nHats = 1.0d+0 1.0d+0\n  THats = 1.0d+0 1.0d+0\n  dNHatdrHats = -0.5d+0 -0.5d+0\n  dTHatdrHats = -2.0d+0 -2.0d+0\n/\n\n&physicsParameters\n  Delta = 4.5694d-3\n  alpha = 1d+0\n  nu_n = 0.00831565d+0\n  Er = 0.0d+0\n  collisionOperator = 0\n  constraintScheme = -1\n  magneticDriftScheme = 0\n  includeXDotTerm = .true.\n  includeElectricFieldTermInXiDot = .true.\n  useDKESExBDrift = .false.\n  includePhi1 = .false.\n/\n\n&resolutionParameters\n  Ntheta = 5\n  Nzeta = 7\n  Nxi = 7\n  Nx = 3\n  solverTolerance = 1d-7\n/\n\n&otherNumericalParameters\n/\n\n&preconditionerOptions\n/\n\n&export_f\n/\n\n&adjointOptions\n  adjointRadialCurrentOption = .false.\n  adjointParticleFluxOption = .false. .false.\n  adjointHeatFluxOption = .true. .true.\n  adjointParallelFlowOption = .false. .false.\n  adjointBootstrapOption = .false.\n  adjointTotalHeatFluxOption = .true.\n  discreteAdjointOption = .true.\n  nMaxAdjoint = 0\n  mMaxAdjoint = 0\n  debugAdjoint = .false.\n  deltaLambda = 1.0d-4\n/\n"
+    },
+    "summaries": {
+      "small_rhsmode45_summary_2026-06-25.json": {
+        "cases": [
+          {
+            "adjoint_diagnostics_times_s": [
+              0.0029770000001008157,
+              0.002680999999938649,
+              0.0026029999999082065
+            ],
+            "adjoint_solve_times_s": [
+              0.0019219999999222637,
+              0.0011730000001080043
+            ],
+            "case": "geometry4_w7x_like_small_rhs4_radial_current",
+            "hdf5_fields": {
+              "RHSMode": {
+                "shape": [],
+                "values": 4
+              },
+              "adjointParticleFluxOption": {
+                "shape": [
+                  2
+                ],
+                "values": [
+                  1,
+                  1
+                ]
+              },
+              "adjointRadialCurrentOption": {
+                "shape": [],
+                "values": 1
+              },
+              "dParallelFlowdLambda": {
+                "shape": [
+                  1,
+                  4,
+                  2,
+                  1
+                ],
+                "values": [
+                  [
+                    [
+                      [
+                        0.0
+                      ],
+                      [
+                        0.0
+                      ]
+                    ],
+                    [
+                      [
+                        0.0
+                      ],
+                      [
+                        0.0
+                      ]
+                    ],
+                    [
+                      [
+                        0.0
+                      ],
+                      [
+                        0.0
+                      ]
+                    ],
+                    [
+                      [
+                        0.0
+                      ],
+                      [
+                        0.0
+                      ]
+                    ]
+                  ]
+                ]
+              },
+              "dParticleFluxdLambda": {
+                "shape": [
+                  1,
+                  4,
+                  2,
+                  1
+                ],
+                "values": [
+                  [
+                    [
+                      [
+                        -2.5419940523818905e-08
+                      ],
+                      [
+                        -1.6688440185986772e-09
+                      ]
+                    ],
+                    [
+                      [
+                        -2.1452517447485144e-09
+                      ],
+                      [
+                        -1.718232244348001e-10
+                      ]
+                    ],
+                    [
+                      [
+                        -3.136924069231282e-09
+                      ],
+                      [
+                        -1.854722892664832e-10
+                      ]
+                    ],
+                    [
+                      [
+                        -4.507267303752549e-08
+                      ],
+                      [
+                        -2.59255992797443e-09
+                      ]
+                    ]
+                  ]
+                ]
+              },
+              "dRadialCurrentdLambda": {
+                "shape": [
+                  1,
+                  4,
+                  1
+                ],
+                "values": [
+                  [
+                    [
+                      -2.3751096505220246e-08
+                    ],
+                    [
+                      -1.9734285203137135e-09
+                    ],
+                    [
+                      -2.951451779964798e-09
+                    ],
+                    [
+                      -4.248011310955108e-08
+                    ]
+                  ]
+                ]
+              }
+            },
+            "jacobian_nnz": [
+              19566
+            ],
+            "main_solve_times_s": [
+              0.03550099999984013
+            ],
+            "max_rss_bytes": 122994688,
+            "preconditioner_nnz": [
+              15436
+            ],
+            "wall_time_s": 0.11
+          },
+          {
+            "adjoint_diagnostics_times_s": [
+              0.002727000000049884,
+              0.0026719999996203114,
+              0.002662999999756721
+            ],
+            "adjoint_solve_times_s": [
+              0.001787000000149419,
+              0.001146000000062486
+            ],
+            "case": "geometry4_w7x_like_small_rhs4_heat_flux",
+            "hdf5_fields": {
+              "RHSMode": {
+                "shape": [],
+                "values": 4
+              },
+              "adjointHeatFluxOption": {
+                "shape": [
+                  2
+                ],
+                "values": [
+                  1,
+                  1
+                ]
+              },
+              "adjointTotalHeatFluxOption": {
+                "shape": [],
+                "values": 1
+              },
+              "dHeatFluxdLambda": {
+                "shape": [
+                  1,
+                  4,
+                  2,
+                  1
+                ],
+                "values": [
+                  [
+                    [
+                      [
+                        -7.104785864400508e-08
+                      ],
+                      [
+                        -3.1012393376241924e-09
+                      ]
+                    ],
+                    [
+                      [
+                        -7.329460681557496e-09
+                      ],
+                      [
+                        -3.3485540173730997e-10
+                      ]
+                    ],
+                    [
+                      [
+                        -7.816151259972246e-09
+                      ],
+                      [
+                        -3.329944522871874e-10
+                      ]
+                    ],
+                    [
+                      [
+                        -1.0785322765689997e-07
+                      ],
+                      [
+                        -4.425608537044612e-09
+                      ]
+                    ]
+                  ]
+                ]
+              },
+              "dTotalHeatFluxdLambda": {
+                "shape": [
+                  1,
+                  4,
+                  1
+                ],
+                "values": [
+                  [
+                    [
+                      -7.414909798162927e-08
+                    ],
+                    [
+                      -7.6643160832948e-09
+                    ],
+                    [
+                      -8.149145712259431e-09
+                    ],
+                    [
+                      -1.1227883619394461e-07
+                    ]
+                  ]
+                ]
+              }
+            },
+            "jacobian_nnz": [
+              19566
+            ],
+            "main_solve_times_s": [
+              0.028633000000354514
+            ],
+            "max_rss_bytes": 125288448,
+            "preconditioner_nnz": [
+              15436
+            ],
+            "wall_time_s": 0.08
+          },
+          {
+            "adjoint_diagnostics_times_s": [
+              0.0034640000000081272,
+              0.003578000000004522,
+              0.0033320000000003347
+            ],
+            "adjoint_solve_times_s": [
+              0.0017229999999983647,
+              0.0018990000000087548,
+              0.0011729999999943175
+            ],
+            "ambipolar_solve_times_s": [
+              0.0871039999999823
+            ],
+            "case": "geometry4_w7x_like_small_rhs5_heat_flux",
+            "hdf5_fields": {
+              "Er": {
+                "shape": [],
+                "values": 0.0
+              },
+              "RHSMode": {
+                "shape": [],
+                "values": 5
+              },
+              "adjointHeatFluxOption": {
+                "shape": [
+                  2
+                ],
+                "values": [
+                  1,
+                  1
+                ]
+              },
+              "adjointTotalHeatFluxOption": {
+                "shape": [],
+                "values": 1
+              },
+              "dHeatFluxdLambda": {
+                "shape": [
+                  1,
+                  4,
+                  2,
+                  1
+                ],
+                "values": [
+                  [
+                    [
+                      [
+                        -4.590992526196004e-08
+                      ],
+                      [
+                        -4.175350711302064e-09
+                      ]
+                    ],
+                    [
+                      [
+                        -5.240837505473089e-09
+                      ],
+                      [
+                        -4.24099568099921e-10
+                      ]
+                    ],
+                    [
+                      [
+                        -4.6923629919796235e-09
+                      ],
+                      [
+                        -4.664698838836813e-10
+                      ]
+                    ],
+                    [
+                      [
+                        -6.289253587625765e-08
+                      ],
+                      [
+                        -6.346720733344194e-09
+                      ]
+                    ]
+                  ]
+                ]
+              },
+              "dPhiHatdpsiHat": {
+                "shape": [],
+                "values": 0.0
+              },
+              "dPhidPsidLambda": {
+                "shape": [
+                  1,
+                  4,
+                  1
+                ],
+                "values": [
+                  [
+                    [
+                      2.1089963333733737
+                    ],
+                    [
+                      0.17522914685209942
+                    ],
+                    [
+                      0.2620763570062116
+                    ],
+                    [
+                      3.7720656137561535
+                    ]
+                  ]
+                ]
+              },
+              "dTotalHeatFluxdLambda": {
+                "shape": [
+                  1,
+                  4,
+                  1
+                ],
+                "values": [
+                  [
+                    [
+                      -5.008527597326209e-08
+                    ],
+                    [
+                      -5.664937073573003e-09
+                    ],
+                    [
+                      -5.158832875863303e-09
+                    ],
+                    [
+                      -6.923925660960186e-08
+                    ]
+                  ]
+                ]
+              }
+            },
+            "jacobian_nnz": [
+              26750,
+              26750,
+              19566,
+              19566
+            ],
+            "main_solve_times_s": [
+              0.02811300000001893,
+              0.027858000000009042,
+              0.027388000000001966,
+              0.026404999999982692
+            ],
+            "max_rss_bytes": 138674176,
+            "preconditioner_nnz": [
+              19356,
+              19356,
+              15436,
+              15436
+            ],
+            "wall_time_s": 0.18
+          },
+          {
+            "adjoint_diagnostics_times_s": [
+              0.002928000000110842,
+              0.002796999999986838,
+              0.007785999999896376,
+              0.0028710000000273794,
+              0.0027739999999312204
+            ],
+            "adjoint_solve_times_s": [
+              0.002064999999902284,
+              0.0018039999999928114,
+              0.004645999999979722,
+              0.0018420000000105574
+            ],
+            "case": "geometry4_w7x_like_small_rhs4_parallel_bootstrap",
+            "hdf5_fields": {
+              "RHSMode": {
+                "shape": [],
+                "values": 4
+              },
+              "adjointBootstrapOption": {
+                "shape": [],
+                "values": 1
+              },
+              "adjointParallelFlowOption": {
+                "shape": [
+                  2
+                ],
+                "values": [
+                  1,
+                  1
+                ]
+              },
+              "adjointParticleFluxOption": {
+                "shape": [
+                  2
+                ],
+                "values": [
+                  1,
+                  1
+                ]
+              },
+              "dBootstrapdLambda": {
+                "shape": [
+                  1,
+                  4,
+                  1
+                ],
+                "values": [
+                  [
+                    [
+                      5.9949763055341655e-05
+                    ],
+                    [
+                      0.00046451772757640777
+                    ],
+                    [
+                      3.010737628517944e-06
+                    ],
+                    [
+                      -0.0011148255873392212
+                    ]
+                  ]
+                ]
+              },
+              "dParallelFlowdLambda": {
+                "shape": [
+                  1,
+                  4,
+                  2,
+                  1
+                ],
+                "values": [
+                  [
+                    [
+                      [
+                        0.00016826976577351984
+                      ],
+                      [
+                        0.00010832000271817962
+                      ]
+                    ],
+                    [
+                      [
+                        0.0019853468125089436
+                      ],
+                      [
+                        0.001520829084932537
+                      ]
+                    ],
+                    [
+                      [
+                        -1.7092083345925537e-05
+                      ],
+                      [
+                        -2.0102820974443197e-05
+                      ]
+                    ],
+                    [
+                      [
+                        -0.005405916192637947
+                      ],
+                      [
+                        -0.004291090605298729
+                      ]
+                    ]
+                  ]
+                ]
+              },
+              "dParticleFluxdLambda": {
+                "shape": [
+                  1,
+                  4,
+                  2,
+                  1
+                ],
+                "values": [
+                  [
+                    [
+                      [
+                        -2.5419940523818905e-08
+                      ],
+                      [
+                        -1.6688440185986772e-09
+                      ]
+                    ],
+                    [
+                      [
+                        -2.1452517447485144e-09
+                      ],
+                      [
+                        -1.718232244348001e-10
+                      ]
+                    ],
+                    [
+                      [
+                        -3.136924069231282e-09
+                      ],
+                      [
+                        -1.854722892664832e-10
+                      ]
+                    ],
+                    [
+                      [
+                        -4.507267303752549e-08
+                      ],
+                      [
+                        -2.59255992797443e-09
+                      ]
+                    ]
+                  ]
+                ]
+              }
+            },
+            "jacobian_nnz": [
+              19566
+            ],
+            "main_solve_times_s": [
+              0.04634899999996378
+            ],
+            "max_rss_bytes": 125599744,
+            "preconditioner_nnz": [
+              15436
+            ],
+            "wall_time_s": 0.27
+          }
+        ],
+        "fortran_executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+        "kind": "sfincs_fortran_v3_rhsmode45_sensitivity_reference",
+        "tier": "small"
+      },
+      "small_rhsmode4_debug_summary_2026-06-25.json": {
+        "case": "geometry4_w7x_like_small_rhs4_debug_radial_current",
+        "finite_difference_times_s": [
+          0.11030400000004192
+        ],
+        "fortran_executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+        "hdf5_fields": {
+          "RHSMode": {
+            "shape": [],
+            "values": 4
+          },
+          "bootstrapPercentError": {
+            "shape": [
+              1,
+              4,
+              1
+            ]
+          },
+          "dBootstrapdLambda": {
+            "shape": [
+              1,
+              4,
+              1
+            ]
+          },
+          "dBootstrapdLambda_finitediff": {
+            "shape": [
+              1,
+              4,
+              1
+            ]
+          },
+          "dHeatFluxdLambda": {
+            "shape": [
+              1,
+              4,
+              2,
+              1
+            ]
+          },
+          "dHeatFluxdLambda_finitediff": {
+            "shape": [
+              1,
+              4,
+              2,
+              1
+            ]
+          },
+          "dParallelFlowdLambda": {
+            "shape": [
+              1,
+              4,
+              2,
+              1
+            ]
+          },
+          "dParallelFlowdLambda_finitediff": {
+            "shape": [
+              1,
+              4,
+              2,
+              1
+            ]
+          },
+          "dParticleFluxdLambda": {
+            "shape": [
+              1,
+              4,
+              2,
+              1
+            ],
+            "values": [
+              [
+                [
+                  [
+                    -2.5419940523818905e-08
+                  ],
+                  [
+                    -1.6688440185986772e-09
+                  ]
+                ],
+                [
+                  [
+                    -2.1452517447485144e-09
+                  ],
+                  [
+                    -1.718232244348001e-10
+                  ]
+                ],
+                [
+                  [
+                    -3.136924069231282e-09
+                  ],
+                  [
+                    -1.854722892664832e-10
+                  ]
+                ],
+                [
+                  [
+                    -4.507267303752549e-08
+                  ],
+                  [
+                    -2.59255992797443e-09
+                  ]
+                ]
+              ]
+            ]
+          },
+          "dParticleFluxdLambda_finitediff": {
+            "shape": [
+              1,
+              4,
+              2,
+              1
+            ],
+            "values": [
+              [
+                [
+                  [
+                    -2.541524989581337e-08
+                  ],
+                  [
+                    -1.6685330196914764e-09
+                  ]
+                ],
+                [
+                  [
+                    null
+                  ],
+                  [
+                    null
+                  ]
+                ],
+                [
+                  [
+                    -3.1370940147600628e-09
+                  ],
+                  [
+                    -1.854799281090257e-10
+                  ]
+                ],
+                [
+                  [
+                    -4.5065027089298004e-08
+                  ],
+                  [
+                    -2.5917881658491387e-09
+                  ]
+                ]
+              ]
+            ]
+          },
+          "dRadialCurrentdLambda": {
+            "shape": [
+              1,
+              4,
+              1
+            ],
+            "values": [
+              [
+                [
+                  -2.3751096505220246e-08
+                ],
+                [
+                  -1.9734285203137135e-09
+                ],
+                [
+                  -2.951451779964798e-09
+                ],
+                [
+                  -4.248011310955108e-08
+                ]
+              ]
+            ]
+          },
+          "dRadialCurrentdLambda_finitediff": {
+            "shape": [
+              1,
+              4,
+              1
+            ],
+            "values": [
+              [
+                [
+                  -2.3746716876116538e-08
+                ],
+                [
+                  null
+                ],
+                [
+                  -2.951614086651037e-09
+                ],
+                [
+                  -4.247323892342985e-08
+                ]
+              ]
+            ]
+          },
+          "dTotalHeatFluxdLambda": {
+            "shape": [
+              1,
+              4,
+              1
+            ]
+          },
+          "dTotalHeatFluxdLambda_finitediff": {
+            "shape": [
+              1,
+              4,
+              1
+            ]
+          },
+          "debugAdjoint": {
+            "shape": [],
+            "values": 1
+          },
+          "heatFluxPercentError": {
+            "shape": [
+              1,
+              4,
+              2,
+              1
+            ]
+          },
+          "parallelFlowPercentError": {
+            "shape": [
+              1,
+              4,
+              2,
+              1
+            ]
+          },
+          "particleFluxPercentError": {
+            "shape": [
+              1,
+              4,
+              2,
+              1
+            ],
+            "values": [
+              [
+                [
+                  [
+                    0.018455958626276307
+                  ],
+                  [
+                    0.018639062189990195
+                  ]
+                ],
+                [
+                  [
+                    0.0
+                  ],
+                  [
+                    0.0
+                  ]
+                ],
+                [
+                  [
+                    0.005417291543736451
+                  ],
+                  [
+                    0.004118420047063769
+                  ]
+                ],
+                [
+                  [
+                    0.016966478711614087
+                  ],
+                  [
+                    0.02977720692842985
+                  ]
+                ]
+              ]
+            ]
+          },
+          "radialCurrentPercentError": {
+            "shape": [
+              1,
+              4,
+              1
+            ],
+            "values": [
+              [
+                [
+                  0.018443093108641975
+                ],
+                [
+                  0.0
+                ],
+                [
+                  0.005498912848163859
+                ],
+                [
+                  0.016184746667479516
+                ]
+              ]
+            ]
+          },
+          "totalHeatFluxPercentError": {
+            "shape": [
+              1,
+              4,
+              1
+            ]
+          }
+        },
+        "jacobian_nnz": [
+          19566,
+          19566,
+          19566,
+          19566,
+          19566
+        ],
+        "kind": "sfincs_fortran_v3_rhsmode4_debug_sensitivity_reference",
+        "main_solve_times_s": [
+          0.03562000000010812,
+          0.02771700000016608,
+          0.026217999999971653,
+          0.02627800000004754,
+          0.02585799999997107
+        ],
+        "max_rss_bytes": 144588800,
+        "preconditioner_nnz": [
+          15436,
+          15436,
+          15436,
+          15436,
+          15436
+        ],
+        "tier": "small",
+        "wall_time_s": 0.25
+      }
+    }
+  }
+}

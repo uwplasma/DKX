@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from sfincs_jax.namelist import Namelist
-from sfincs_jax.v3 import grids_from_namelist
+from sfincs_jax.discretization.v3 import grids_from_namelist
 
 
 def _nml(*, other: dict | None = None, rhs_mode: int = 1) -> Namelist:

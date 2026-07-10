@@ -13,10 +13,161 @@ For a full, technique-by-technique breakdown (equations, derivations, knobs, and
 implementation notes), see :doc:`performance_techniques`.
 
 
-Current release snapshot
-------------------------
+Measured head-to-head: canonical stack vs SFINCS Fortran v3
+-----------------------------------------------------------
 
-The current ``main`` branch release artifacts are:
+The canonical-stack benchmark case is ``HSX_PASCollisions_DKESTrajectories``
+(RHSMode=1) at ``Ntheta=25, Nzeta=51, Nxi=100, Nx=5`` — 744,610 unknowns —
+measured on the same development machine (MacBook, Apple M4, ~10 cores, 24 GB)
+for both codes. The Fortran reference is the conda PETSc 3.23 + MUMPS 5.8.2
+build of SFINCS v3; ``sfincs_jax`` uses the tier-1 truncated Legendre block
+elimination (``solvax`` ``block_thomas_truncated_fn``, blocks assembled on the
+fly from the analytic operator coefficients, ``keep_lowest=3`` — exact for
+every RHSMode=1 output).
+
+.. figure:: _static/figures/readme/tier1_hsx_runtime_memory.png
+   :alt: Runtime and peak memory bars for sfincs_jax and SFINCS Fortran v3 on the 744k-unknown HSX PAS case.
+   :align: center
+   :width: 90%
+
+   Measured warm solve time and peak process RSS. Regenerate with
+   ``python tools/benchmarks/readme_figures.py``; rerun the measurement with
+   ``python tools/benchmarks/tier1_hsx_head_to_head.py``.
+
+.. list-table:: Head-to-head (744k unknowns, HSX PAS DKES, RHSMode=1)
+   :header-rows: 1
+
+   * - Configuration
+     - Warm solve [s]
+     - Peak RSS [GB]
+   * - ``sfincs_jax`` MacBook M4 CPU, ``Nxi``-for-``x`` ramp
+     - 27.2
+     - 0.93
+   * - ``sfincs_jax`` MacBook M4 CPU, uniform ``Nxi``
+     - 44.3
+     - 1.16
+   * - ``sfincs_jax`` RTX A4000 GPU
+     - 45.0
+     - 1.88 (0.05 GB VRAM buffers)
+   * - SFINCS Fortran v3, 1 MPI rank
+     - 463.6
+     - 3.98
+   * - SFINCS Fortran v3, 2 MPI ranks (measured floor)
+     - 229.5
+     - 2.86
+
+With the matched ramp discretization this is 17x faster than 1-rank Fortran
+and 8.4x faster than Fortran's best measured parallel floor, at roughly 30% of
+the memory. Ramp-vs-uniform ``Nxi`` differences on the physics outputs are at
+most 0.9% (electrons). GPU time equals M4 CPU time because the Legendre scan
+is serial in ``L`` and the A4000 runs FP64 at 1/32 rate; GPU upside requires
+batching over (species, ``x``, surfaces/``Er``) or fp32 factors with fp64
+refinement. Scope: this is one measured 744k-unknown HSX PAS case; further
+cases are promoted as each vertical slice lands with its own evidence.
+
+Fortran strong-scaling baseline (same case, same machine)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+
+   * - MPI ranks
+     - Solve time [s]
+     - Speedup
+     - Parallel efficiency
+     - Peak RSS [GB]
+   * - 1
+     - 463.6
+     - 1.00
+     - —
+     - 3.98
+   * - 2
+     - 229.5
+     - 2.02
+     - 101%
+     - 2.86
+   * - 4
+     - 240.9
+     - 1.92
+     - 48%
+     - 2.88
+   * - 8
+     - 270.5
+     - 1.71
+     - 21%
+     - 1.61
+
+Fortran/MUMPS saturates at 2 ranks on this machine and degrades beyond
+(performance/efficiency core asymmetry plus MUMPS OpenMP contention), so the
+practical Fortran floor for this case is about ``230 s``.
+
+Memory findings
+~~~~~~~~~~~~~~~
+
+- At the full production resolution of this case
+  (``Ntheta=25, Nzeta=115, Nxi=149, Nx=5``; a 2,512,760-unknown system),
+  **neither** code fits a global sparse factorization on a 24 GB machine:
+  Fortran/MUMPS drove macOS swap to ~46.5 GB during factorization and was
+  killed, and the dense/CSR JAX host paths are size-capped well below it.
+- The truncated Legendre block elimination is the locally viable direct path:
+  its memory is ``O(K m^2)`` with ``m = Ntheta * Nzeta`` (one ~66 MB
+  ``2875^2`` block at production resolution, independent of ``Nxi``). On the
+  744k case the truncated route needs ~0.3 GB where a full-band tier-1 factor
+  would need ~91 GB.
+
+Solver-noise finding
+~~~~~~~~~~~~~~~~~~~~
+
+The direct solve is more converged than the Fortran reference: Fortran's own
+electron ``FSABFlow`` scatters 51% across its 1/2/4/8-rank runs of this case
+(KSP ``rtol=1e-6`` iterative-solver noise), while ``sfincs_jax`` matches the
+closest Fortran run to ``2e-10`` and sits inside Fortran's own spread on every
+compared quantity.
+
+Parity referees
+~~~~~~~~~~~~~~~
+
+.. figure:: _static/figures/readme/canonical_parity.png
+   :alt: Measured parity envelopes of the canonical stack against Fortran and recorded references.
+   :align: center
+   :width: 90%
+
+   Parity envelopes pinned by the CI referee tests
+   (``tests/test_run_rhsmode1.py``, ``tests/test_run_transport.py``):
+   RHSMode=1 output tables at ``8e-14``, tier-1 state vectors vs recorded
+   references at ``1e-11``, RHSMode=2/3 transport matrices vs Fortran golden
+   data at ``6e-13 .. 9e-9``.
+
+Known issues
+~~~~~~~~~~~~
+
+- **Silently wrong tier-2 adjoint on singular FP systems.** Full
+  Fokker-Planck with ``constraintScheme=1`` on the flagship-optimization deck
+  yields a numerically singular system (~5 zero singular values, condition
+  number ~2e36); the tier-2 GCROT adjoint stagnates and the implicit-diff VJP
+  returns a wrong gradient without any error (AD ``-1.7e-3`` vs FD
+  ``+2.8e-5`` on the affected dof). PAS+``Er`` tier-2 gradients on the same
+  chain are exact (``2.9e-6`` vs FD). Fix direction: surface adjoint-solve
+  convergence in ``SolveResult`` and raise/flag when the adjoint residual
+  misses tolerance. A reproducer is tracked.
+- **Ill-conditioned scheme-1 monoenergetic off-diagonal.** The Fortran build
+  itself fails upstream's ``tests.py`` on the ``monoenergetic_geometryScheme1``
+  ``transportMatrix[0,1]`` element only (``+1.62`` vs expected ``-1.08`` at
+  ``solverTolerance=1e-6``; ``+26.3`` at ``1e-12`` — tolerance-unstable, so
+  the element is ill-conditioned in this configuration). Parity tests pin that
+  element to upstream's expected value (``-1.07986``), which the ``sfincs_jax``
+  direct solve reproduces to ``4.2e-6``.
+
+Legacy example-suite snapshot
+-----------------------------
+
+Everything in the remainder of this page describes the retained **legacy
+pipeline** (``sfincs_jax.io.write_sfincs_jax_output_h5``, the full CLI solver
+ladder, and its env-var tuning), which keeps ownership of the cases the
+canonical stack defers. It stays tested, but it is not the canonical
+``inputs -> drift_kinetic -> solve -> moments`` path documented above.
+
+The release artifacts are:
 
 - CPU: ``tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak``
 - GPU: ``tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas``
@@ -53,20 +204,21 @@ active-memory bars are on the right, and each plotted reference-runtime-window c
 shown for SFINCS Fortran v3, ``sfincs_jax`` CPU cold/warm, and ``sfincs_jax`` GPU
 cold/warm. Cases are ordered by best warm ``sfincs_jax`` speedup over the Fortran
 v3 runtime. Cold is the first external suite command. Warm runtime uses
-``jax_runtime_s_warm`` when rerun timings are present. The current frozen reports
+``jax_runtime_s_warm`` when rerun timings are present. The frozen reports
 were collected with one external command per case, so the warm bars use the
 recorded ``jax_logged_elapsed_s`` field as a warm-path fallback; the summary JSON
 stores ``warm_or_logged_runtime_source_counts`` and the excluded short-reference
 rows to make that provenance explicit.
 
-The performance story is therefore:
+The performance summary is:
 
-- correctness and robustness are release-ready for the current vendored example suite,
+- correctness and robustness are release-ready for the vendored example suite,
 - the default CLI path is explicit and tuned for throughput and reliable convergence,
 - the differentiable path is available from Python when gradients are needed,
-- the CPU runtime drift watchlist is clean against the previously promoted frozen CPU lane,
-- the GPU runtime drift watchlist is clean against the previously promoted frozen GPU lane,
-- and the remaining work is to reduce runtime and memory on a small number of heavy PAS and geometry-rich cases.
+- the CPU runtime drift gate is clean against the promoted CPU reference lane,
+- the GPU runtime drift gate is clean against the promoted GPU reference lane,
+- and the heaviest PAS and geometry-rich cases are tracked as bounded
+  optimization lanes rather than correctness blockers.
 
 Production-resolution benchmark tier
 ------------------------------------
@@ -77,9 +229,9 @@ production-resolution input tier:
 
 .. code-block:: bash
 
-   python scripts/create_production_benchmark_inputs.py --clean
+   python -m sfincs_jax.validation.release production-inputs --clean
 
-By default this writes ``benchmarks/production_resolution_inputs_2026-05-04``
+By default this writes ``outputs/benchmarks/production_resolution_inputs_2026-05-04``
 from the public SFINCS_JAX example decks only. It enforces at least
 ``25 x 51 x 4 x 100`` (``Ntheta x Nzeta x Nx x Nxi``) on 3D grids and
 ``33 x 1 x 12 x 140`` on tokamak grids. RHSMode=1 PAS/no-``E_r`` tokamak rows
@@ -91,15 +243,14 @@ Additional local decks can be added without changing the public manifest:
 
 .. code-block:: bash
 
-   python scripts/create_production_benchmark_inputs.py \
+   python -m sfincs_jax.validation.release production-inputs \
      --external-input /path/to/input.namelist \
-     --out-root benchmarks/my_production_inputs \
+     --out-root outputs/benchmarks/my_production_inputs \
      --clean
 
-The default checked-in manifest now contains ``39`` example-derived cases and no
-downstream project decks. Historical downstream inputs can still be imported
-with compatibility flags for private reproduction, but they are not part of the
-SFINCS_JAX-owned production benchmark tier.
+The generated manifest is intentionally untracked. Historical downstream inputs
+can still be imported with compatibility flags for private reproduction, but
+they are not part of the SFINCS_JAX-owned production benchmark tier.
 
 The GitHub workflow ``Production Benchmark Inputs`` is manual-only and validates
 this tier without running expensive solves. It regenerates the production input
@@ -115,12 +266,12 @@ The scaled-suite runner also understands these manifest recommendations. When
 
 .. code-block:: bash
 
-   python scripts/run_scaled_example_suite.py \
-     --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs \
+   python -m sfincs_jax.validation.suite scaled \
+     --examples-root outputs/benchmarks/production_resolution_inputs_2026-05-04/inputs \
      --fortran-exe /path/to/sfincs/fortran/version3/sfincs \
      --fortran-min-runtime-s 10.0 \
      --runtime-adjustment-iters 0 \
-     --out-root benchmarks/production_resolution_cpu_local
+     --out-root outputs/benchmarks/production_resolution_cpu_local
 
 ``--fortran-min-runtime-s`` is a floor. It does not cap valid slower
 production references. Add ``--fortran-max-runtime-s`` only when an explicitly
@@ -134,19 +285,19 @@ If the reduced upstream-suite runner is used for a production input tree, pass
 promotion, so the runner cannot silently replace a generated production
 ``input.namelist`` with ``tests/reduced_inputs/<case>.input.namelist``.
 
-The latest local CPU raised-floor no-``E_r`` shard is
+The local CPU raised-floor no-``E_r`` shard is
 ``tests/production_resolution_suite_cpu_2026-06-08_noer_floor89_refreshed``.
 It gives both one-species PAS/no-``E_r`` rows strict parity at the checked-in
 ``89 x 1 x 24 x 300`` floor with no missing output keys:
 ``tokamak_1species_PASCollisions_noEr`` runs in ``10.38 s`` JAX CPU versus
 ``17.44 s`` SFINCS Fortran v3, and
 ``tokamak_1species_PASCollisions_noEr_Nx1`` runs in ``8.53 s`` JAX CPU versus
-``17.54 s`` SFINCS Fortran v3. The earlier
+``17.54 s`` SFINCS Fortran v3. The
 ``tests/production_resolution_suite_cpu_2026-06-08_caseaware_floor`` shard gives
 the bounded PAS/with-``E_r`` CPU rows strict parity at
 ``33 x 1 x 12 x 140``. The faster ``office`` host showed that the intermediate
 ``53 x 1 x 16 x 190`` PAS/no-``E_r`` floor was still too small for public
-GPU-host benchmarks, so the checked-in manifest now uses
+GPU-host benchmarks, so the checked-in manifest uses
 ``89 x 1 x 24 x 300`` for PAS/no-``E_r`` tokamak rows. The refreshed ``office``
 GPU shards
 ``tests/production_resolution_suite_gpu_2026-06-08_noer_floor89_refreshed_one``
@@ -164,11 +315,11 @@ attempt, reaches true residuals ``5.3e-18`` and ``1.1e-13``, and matches the
 Fortran v3 reference with ``0/210`` strict mismatches and no missing output keys.
 On the contended ``office`` host it took ``13.6 s`` wall and
 ``1.08 GB`` process RSS / ``0.52 GB`` incremental RSS, versus ``188.5 s`` and
-``3.26 GB`` for SFINCS Fortran v3/MUMPS. The earlier sparse-pattern host-LU
+``3.26 GB`` for SFINCS Fortran v3/MUMPS. The sparse-pattern host-LU
 route remains the strict-residual rescue if the structured attempt fails, but it
 is no longer the default performance path for this mono/PAS production row.
-The public README plot should be regenerated only after the remaining CPU and
-GPU production rows are collected from the checked-in manifest floor.
+Public runtime and memory figures are generated from checked summary manifests;
+rows without completed CPU/GPU evidence stay out of release-facing plots.
 
 For local SFINCS Fortran v3 references, use
 ``scripts/sfincs_fortran_mpi_wrapper.sh`` when a wrapper is needed. It defaults
@@ -183,7 +334,7 @@ Raise the guard only on an explicitly budgeted remote or cluster lane:
 remote-only HSX/W7-X production solves on a laptop while still keeping the full
 manifest available for scheduled benchmark campaigns.
 
-Current top offenders from the release artifacts plus focused current-tip
+Top offenders from the release artifacts plus focused policy
 reruns are:
 
 - CPU runtime: ``HSX_PASCollisions_fullTrajectories`` at ``4.027 s``
@@ -196,7 +347,7 @@ In other words, all examples run on CPU and GPU, but a handful of cases remain t
 Targeted solver profiling
 -------------------------
 
-Use ``scripts/profile_write_output_trace.py`` for one-case kernel, phase, and
+Use ``python -m sfincs_jax.validation.release write-output-trace`` for one-case kernel, phase, and
 device-memory investigations. The wrapper matches the CLI ``write-output`` path
 by default, meaning it uses the fast non-differentiable solve policy. Opt into
 the differentiable implicit path only when that is the object of the profile:
@@ -207,8 +358,8 @@ the differentiable implicit path only when that is the object of the profile:
    JAX_ENABLE_X64=True \
    XLA_PYTHON_CLIENT_PREALLOCATE=false \
    SFINCS_JAX_PROFILE=full \
-   python scripts/profile_write_output_trace.py \
-     --input benchmarks/production_resolution_inputs_2026-05-04/inputs/tokamak_1species_FPCollisions_withEr_fullTrajectories/input.namelist \
+   python -m sfincs_jax.validation.release write-output-trace \
+     --input outputs/benchmarks/production_resolution_inputs_2026-05-04/inputs/tokamak_1species_FPCollisions_withEr_fullTrajectories/input.namelist \
      --trace-dir outputs/profile_tokamak_fp_er \
      --out outputs/profile_tokamak_fp_er/sfincsOutput.h5 \
      --compute-solution \
@@ -219,17 +370,17 @@ the differentiable implicit path only when that is the object of the profile:
 Add ``--differentiable`` to profile the gradient-preserving implicit solve
 instead of the default CLI-equivalent production solve.
 
-Recent current-tip GPU fixes that are now reflected in the release artifacts:
+Validated GPU solver-path policies reflected in the release artifacts:
 
-- ``geometryScheme5_3species_loRes`` now takes the bounded host-dense shortcut on the small GPU full-FP branch and completed parity-clean in about ``3.99 s``, down from the older ``144.597 s`` artifact.
-- ``monoenergetic_geometryScheme5_ASCII`` now takes the bounded accelerator ``tzfft`` iterative path before any host sparse rescue on GPU and completed parity-clean in about ``3.94 s``.
-- ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` now skips an unnecessary sparse-ILU tail after a converged GPU ``schur`` accept and completed parity-clean in about ``7.42 s``.
+- ``geometryScheme5_3species_loRes`` takes the bounded host-dense shortcut on the small GPU full-FP branch and completed parity-clean in about ``3.99 s``.
+- ``monoenergetic_geometryScheme5_ASCII`` takes the bounded accelerator ``tzfft`` iterative path before any host sparse rescue on GPU and completed parity-clean in about ``3.94 s``.
+- ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` skips an unnecessary sparse-ILU tail after a converged GPU ``schur`` accept and completed parity-clean in about ``7.42 s``.
 
 Fresh bounded GPU solver-path validation:
 
 - The ``2026-04-28`` one-GPU ``office`` pass rejected blanket accelerator dense auto-selection: it remained parity-clean, but regressed ``16`` tiny GPU suite cases and is therefore not the default.
 - The accepted policy enables accelerator dense auto-selection only for moderate full-FP RHSMode=1 systems above ``SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN``. The full 39-case GPU suite stayed ``39/39 parity_ok``, strict-clean, output-key complete, and runtime-drift clean against ``tests/scaled_example_suite_release_gpu_2026-04-25_v106``.
-- The focused full-FP ``Ntheta=13, Nxi=40`` GPU repro now defaults to dense automatically at about ``2.794 s`` and ``1.04 GB`` RSS, compared with about ``9.539 s`` and ``2.14 GB`` for the forced Krylov path, with zero Fortran mismatches.
+- The focused full-FP ``Ntheta=13, Nxi=40`` GPU repro defaults to dense automatically at about ``2.794 s`` and ``1.04 GB`` RSS, compared with about ``9.539 s`` and ``2.14 GB`` for the forced Krylov path, with zero Fortran mismatches.
 - The focused ``Ntheta=13, Nxi=20`` repro also stays parity-clean and avoids the pathological forced-Krylov rescue path, which took about ``137.411 s`` on the same GPU.
 - A follow-up bounded offender pass promoted geometryScheme=11 full-trajectory
   PAS runs to top-level ``pas_tz`` on one GPU. In the 39-case artifact,
@@ -238,30 +389,30 @@ Fresh bounded GPU solver-path validation:
   SFINCS-paper geometry11 PAS row moved from about ``7.72 s`` / ``2098 MB`` to
   ``6.41 s`` / ``1609 MB``. Tokamak PAS+Er remains on Schur because forced
   ``xblock_tz``, unpreconditioned, and ``pas_hybrid`` probes all timed out.
-- The corrected RHSMode=3 variant benchmark now forces transport solves, not just
+- The corrected RHSMode=3 variant benchmark forces transport solves, not just
   output-field generation. With that harness fix, bounded dense GPU transport is
   enabled for the monoenergetic geometryScheme=1 row: the release artifact moved
   from about ``13.04 s`` / ``996 MB`` to ``3.54 s`` / ``981 MB`` with zero
   practical or strict mismatches.
 
-Recent current-tip PAS-DKES fix:
+PAS-DKES policy:
 
-- ``HSX_PASCollisions_DKESTrajectories`` now auto-selects the structured ``pas_tz`` angular preconditioner on bounded CPU/GPU PAS-DKES cases. The focused CPU frozen-reference probe completed parity-clean in ``3.94 s`` with about ``1019 MB`` RSS, down from the previous table entry of ``5.481 s`` and ``2053.6 MB``. The matching one-GPU default probe on ``office`` completed parity-clean in ``7.63 s`` with about ``1175 MB`` RSS, down from the earlier dense-``xblock_tz`` probe of ``14.18 s`` and ``1530 MB`` on the same machine.
+- ``HSX_PASCollisions_DKESTrajectories`` auto-selects the structured ``pas_tz`` angular preconditioner on bounded CPU/GPU PAS-DKES cases. The focused CPU frozen-reference probe completed parity-clean in ``3.94 s`` with about ``1019 MB`` RSS, compared with the dense-``xblock_tz`` reference of ``5.481 s`` and ``2053.6 MB``. The matching one-GPU default probe on ``office`` completed parity-clean in ``7.63 s`` with about ``1175 MB`` RSS, compared with the dense-``xblock_tz`` probe of ``14.18 s`` and ``1530 MB`` on the same machine.
 
-Recent current-tip PAS full-trajectory fix:
+PAS full-trajectory policy:
 
-- ``HSX_PASCollisions_fullTrajectories`` now auto-selects the structured ``pas_tz`` angular preconditioner on the bounded CPU HSX-like full-trajectory PAS case. The focused CPU frozen-reference probe completed parity-clean in ``4.027 s`` with about ``1384 MB`` RSS, down from the prior release table entry of ``5.274 s`` and ``2002 MB``. The guard intentionally stays off for larger-W7X geometry11 full-trajectory and GPU full-trajectory cases unless a future measured gate proves both faster runtime and unchanged parity.
-- The same CPU full-trajectory PAS policy now covers the bounded
+- ``HSX_PASCollisions_fullTrajectories`` auto-selects the structured ``pas_tz`` angular preconditioner on the bounded CPU HSX-like full-trajectory PAS case. The focused CPU frozen-reference probe completed parity-clean in ``4.027 s`` with about ``1384 MB`` RSS, compared with the dense-``xblock_tz`` reference of ``5.274 s`` and ``2002 MB``. The guard intentionally stays off for larger-W7X geometry11 full-trajectory and GPU full-trajectory cases unless a future measured gate proves both faster runtime and unchanged parity.
+- The same CPU full-trajectory PAS policy covers the bounded
   ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories``
-  row after a focused current-tip sweep showed ``pas_tz`` parity-clean and lower
+  row after a focused policy sweep showed ``pas_tz`` parity-clean and lower
   memory than Schur.  On the local CPU probe, default elapsed time dropped from
   about ``2.76 s`` / ``2263 MB`` to about ``2.01 s`` / ``1474 MB``.  The GPU
   full-trajectory default remains unchanged until a matching measured GPU gate
   proves a win.
 
-Recent production-floor tokamak PAS sparse-PC fill reduction:
+Production-floor tokamak PAS sparse-PC fill reduction:
 
-- Constrained tokamak PAS sparse-PC GMRES now defaults to active
+- Constrained tokamak PAS sparse-PC GMRES defaults to active
   ``Nxi_for_x`` factorization in the measured production-floor window. The no-Er
   rows use measured ``MMD_ATA`` SuperLU ordering, while PAS+Er
   full-trajectory rows use the lower-fill measured ``MMD_AT_PLUS_A`` ordering.
@@ -276,7 +427,7 @@ Recent production-floor tokamak PAS sparse-PC fill reduction:
   the RTX A4000; the one-species no-Er ``Nx=4`` row is strict-clean at about
   ``1.3 s`` / ``0.31 GB`` on CPU and ``3.0 s`` on the RTX A4000. On the PAS+Er
   CPU rows, the one-/two-species cases are strict-clean and log about ``6.2 s``
-  / ``9.7 s`` with active RSS about ``1.3 GB`` / ``1.6 GB``. The previous
+  / ``9.7 s`` with active RSS about ``1.3 GB`` / ``1.6 GB``. The reference
   ``COLAMD`` ordering remains an explicit override, but it is higher-fill on
   these audited constrained-PAS rows.
 
@@ -290,11 +441,11 @@ Large geometry-rich PAS closeout:
   structured/chunked PAS-preconditioner lane instead of a hidden default-policy
   change.
 
-Recent production-resolution CPU tokamak Er fix:
+Production-resolution CPU tokamak Er policy:
 
 - ``tokamak_1species_FPCollisions_withEr_DKESTrajectories``,
   ``tokamak_1species_FPCollisions_withEr_fullTrajectories``, and
-  ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` now use a bounded
+  ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` use a bounded
   CPU dense LU default when ``Er`` is nonzero and the active system size is in
   the measured ``5000`` to ``6500`` window. On the local production-resolution
   tier, the FP DKES+Er row dropped from ``130.379 s`` to ``2.148 s``, the FP
@@ -305,91 +456,34 @@ Recent production-resolution CPU tokamak Er fix:
   ``SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE=0``. The no-Er PAS control stayed on
   ``pas_tokamak_theta`` at ``1.775 s`` and about ``667 MB``.
 
-Recent current-tip geometry4 PAS memory fix:
+Geometry4 PAS memory policy:
 
-- ``geometryScheme4_2species_PAS_noEr`` now uses direct top-level ``pas_tz`` instead of wrapping the same angular block inside the constraint-Schur preconditioner on bounded near-zero-:math:`E_r` geometryScheme=4 PAS cases. The focused CPU probe completed parity-clean in ``1.962 s`` with about ``1728 MB`` RSS, while the clean-remote ``office`` GPU probe completed parity-clean in ``4.774 s`` with about ``1817 MB`` RSS. Disabling the policy with ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ=0`` restored the heavier Schur route in the same GPU probe (``5.899 s`` and about ``2507 MB`` RSS).
+- ``geometryScheme4_2species_PAS_noEr`` uses direct top-level ``pas_tz`` instead of wrapping the same angular block inside the constraint-Schur preconditioner on bounded near-zero-:math:`E_r` geometryScheme=4 PAS cases. The focused CPU probe completed parity-clean in ``1.962 s`` with about ``1728 MB`` RSS, while the clean-remote ``office`` GPU probe completed parity-clean in ``4.774 s`` with about ``1817 MB`` RSS. Disabling the policy with ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ=0`` restored the heavier Schur route in the same GPU probe (``5.899 s`` and about ``2507 MB`` RSS).
 
-Recent current-tip VMEC monoenergetic memory fix:
+VMEC monoenergetic memory policy:
 
-- ``monoenergetic_geometryScheme5_ASCII`` and ``monoenergetic_geometryScheme5_netCDF`` now use the low-memory Krylov/``tzfft`` transport path by default for bounded CPU ``RHSMode=3`` VMEC cases. The focused CLI probes stayed parity-clean and reduced profiled RSS from about ``2950-3066 MB`` to ``506.5 MB`` for the ASCII fixture and ``603.2 MB`` for the netCDF fixture. Set ``SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY=0`` to restore the previous dense batched fallback for comparison.
+- ``monoenergetic_geometryScheme5_ASCII`` and ``monoenergetic_geometryScheme5_netCDF`` use the low-memory Krylov/``tzfft`` transport path by default for bounded CPU ``RHSMode=3`` VMEC cases. The focused CLI probes stayed parity-clean and reduced profiled RSS from about ``2950-3066 MB`` to ``506.5 MB`` for the ASCII fixture and ``603.2 MB`` for the netCDF fixture. Set ``SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY=0`` to restore the dense batched fallback for comparison.
 
-External solver-library gates
------------------------------
+External solver-library research lanes
+--------------------------------------
 
-Additional JAX-ecosystem solver libraries are evaluated behind measured gates, not adopted on sight.
+The stable core uses the in-tree JAX Krylov and implicit-differentiation paths.
+Optional solver-library adoption studies, including Lineax, Equinox-wrapper, and
+JAXopt benchmark drivers, are research-lane material until they provide a
+reviewed real-case accuracy, runtime, memory, and dependency-policy advantage.
 
-- ``lineax`` remains the strongest current candidate for bounded differentiable linear-solve experiments, but it is not part of the default CLI path.
-- On a deterministic nonsymmetric stress matrix, the current local benchmark showed ``lineax.GMRES`` faster than the in-tree path while staying residual-clean (about ``0.39 s`` versus ``0.99 s``).
-- On the tiny real SFINCS implicit-diff operator and its repeated-RHS reuse lane, the same local benchmark reached tiny residuals with ``lineax`` (about ``3.2e-16`` and ``7.5e-16``) but still returned failure statuses (maximum-step reached or iterative breakdown), while the in-tree solver stayed admissible and residual-clean (about ``1.4e-14`` and ``4.3e-12``).
-
-So the current policy is:
-
-- do not add ``lineax`` to the production CLI solve ladder yet,
-- keep it as a candidate for explicitly bounded differentiable/reference-path experiments,
-- require a pinned real-case runtime/RSS/parity win with clean solver status before any production integration.
-
-The executable gate for this decision is:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_optional_lineax_implicit_solve.py \
-     --backend all \
-     --suite all \
-     --out-json examples/performance/output/lineax_implicit_gate.json
-
-This benchmark is intentionally optional. It always runs the current in-tree
-``jax.lax.custom_linear_solve`` path, and it records ``lineax`` as skipped when the
-library is not installed. Its summary JSON now also counts
-``residual_clean_status_mismatch_rows`` so a Lineax solve that has a tiny residual but
-a non-success solver result remains a blocker instead of being promoted by residuals
-alone. A future Lineax-backed implementation should only be promoted
-after all three gates below stay healthy:
-
-- a synthetic deterministic nonsymmetric stress system,
-- a tiny real SFINCS implicit-diff solve on
-  ``tests/ref/pas_1species_PAS_noEr_tiny_scheme5.input.namelist``,
-- and a repeated-RHS reuse case on that same tiny real operator.
-
-For the current in-tree solver, the tiny real gate is already residual-clean with the
-benchmark's parity-safe Krylov window. The remaining question is whether a Lineax-backed
-path can match that reliability and then provide a real runtime or memory win.
-
-A second optional ecosystem gate checks objective-wrapper libraries on a real
-``geometryScheme=4`` differentiable task:
-
-.. code-block:: bash
-
-   python examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py \
-     --backend all \
-     --n-theta 17 \
-     --n-zeta 17 \
-     --maxiter 5 \
-     --stepsize 0.1
-
-This gate keeps ``equinox`` and the historical ``jaxopt`` backend outside the
-production solver path while verifying that objective-wrapper tooling can wrap a
-real repository objective cleanly. The default CI optional-dependency lane
-installs ``equinox`` and exercises the ``jaxopt`` skip-safe path rather than
-installing JAXopt. In the current local opt-in run, the ``equinox`` wrapper
-matched a centered finite-difference directional derivative to about
-``1.1e-11`` absolute error, and the bounded ``jaxopt.GradientDescent`` lane
-reduced the loss by about ``4.1e-14`` relative to the initial value while
-recovering the target harmonic amplitudes to about ``1.6e-08`` in Euclidean
-norm.
-
-A no-optional-dependency VMEC/Boozer readiness gate also runs as part of
-``tests/test_optional_ecosystem_gates.py``. It evaluates a small Boozer spectrum
-through ``boozer_spectrum_proxy_transport_objective``, checks the full spectral
-gradient against centered finite differences, and checks a JVP against the
-gradient dot product. This is a proxy transport-objective differentiability gate,
-not execution of ``vmec_jax``, ``booz_xform_jax``, or the kinetic SFINCS transport
-solve.
+Stable differentiability evidence remains in direct package tests such as
+``tests/test_implicit_linear_solve_grad.py``,
+``tests/test_full_system_residual_jvp.py``, ``tests/test_sensitivity.py``, and
+the VMEC/Boozer proxy-gradient tests. These tests exercise the retained
+production code paths without requiring optional benchmark scripts or optional
+solver packages.
 
 
 What is differentiable today?
 -----------------------------
 
-Within the current parity-tested subset, the following are differentiable with respect to JAX-array parameters:
+Within the parity-tested subset, the following are differentiable with respect to JAX-array parameters:
 
 - The **matrix-free operator** application (F-block and full-system operator blocks).
 - The **linear residual** ``r(x) = A x - b`` and Jacobian-vector products via ``jax.jvp``.
@@ -401,7 +495,7 @@ differentiate objectives with respect to them. For example:
 - Differentiate a residual norm w.r.t. ``nu_n`` (see ``examples/autodiff/autodiff_sensitivity_nu_n_scheme5.py``).
 - Differentiate a diagnostics functional w.r.t. a differentiable geometry parameter in ``geometryScheme=4`` optimization demos.
 - Differentiate a Boozer-spectrum proxy transport objective through the optional
-  ``vmec_jax -> booz_xform_jax -> sfincs_jax`` handoff in
+  ``vmec_jax -> booz_xform_jax -> sfincs_jax`` workflow in
   ``examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py``.
 - Differentiate **through a linear solve** via implicit differentiation (see
   ``examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py``).
@@ -411,8 +505,8 @@ you can request implicit differentiation through the solve using ``differentiabl
 or the corresponding lower-level solve configuration. When the differentiable path is active,
 linear solves use implicit differentiation (``jax.lax.custom_linear_solve``).
 
-The VMEC/Boozer handoff example differentiates through JAX arrays and the
-``booz_xform_jax`` transform, not through file I/O.  The current file-based
+The VMEC/Boozer workflow example differentiates through JAX arrays and the
+``booz_xform_jax`` transform, not through file I/O.  The file-based
 ``wout`` and ``.bc`` readers remain provenance and parity tools; JAX-native
 producers are the route for geometry sensitivities.
 
@@ -422,7 +516,7 @@ JAX-native performance patterns used in `sfincs_jax`
 
 - **Keep arrays on-device**: build JAX arrays once and reuse them across matvec calls.
 - **Use stable dtypes**: the v3 parity target requires 64-bit floats; `sfincs_jax` enables `jax_enable_x64`.
-- **Avoid redundant dtype conversions**: collisionless and magnetic-drift operator kernels now cast
+- **Avoid redundant dtype conversions**: collisionless and magnetic-drift operator kernels cast
   `f` once per application (rather than per sub-term), reducing matvec overhead in PAS/FP hot cases.
 - **Avoid Python loops in hot paths**:
 
@@ -437,15 +531,15 @@ JAX-native performance patterns used in `sfincs_jax`
 - **Exploit linearity**: for linear runs, the operator is constant; store and reuse the assembled RHS and
   re-run only GMRES when parameters change.
 - **Batch transport RHS solves when possible**: for ``RHSMode=2/3`` dense branches, `sfincs_jax`
-  now assembles the dense operator once and solves all ``whichRHS`` right-hand sides in one
+  assembles the dense operator once and solves all ``whichRHS`` right-hand sides in one
   batched linear solve, reducing repeated operator assembly and retracing overhead.
 - **Vectorized RHSMode=1 diagnostics**: vm-only moment/flux accumulation and output shaping are
   stacked/batched in JAX for non-``Phi1`` runs, reducing Python-loop overhead during
   ``write_sfincs_jax_output_h5(..., compute_solution=True)``.
-- **Fast weighted reductions in diagnostics**: transport/rhsmode1 weighted sums now use
+- **Fast weighted reductions in diagnostics**: transport/rhsmode1 weighted sums use
   fused ``einsum`` kernels by default (with an opt-in strict-order fallback), reducing
   diagnostic accumulation overhead in both RHSMode=1 and RHSMode=2/3 paths.
-- **Vectorized transport-matrix assembly**: RHSMode=2/3 now builds
+- **Vectorized transport-matrix assembly**: RHSMode=2/3 builds
   ``transportMatrix`` directly from batched flux arrays, avoiding per-``whichRHS``
   Python loops and repeated diagnostic tree slicing.
 - **Precomputed transport diagnostics**: geometry/species factors shared across ``whichRHS``
@@ -466,7 +560,7 @@ JAX-native performance patterns used in `sfincs_jax`
   assembly and preserves parity on the reduced suite.
 - **Explicit sparse-helper factor reuse**: hard RHSMode=2/3 high-``nu'`` executable
   runs can opt into bounded host sparse-LU rescue. The W7-X FP high-``nu'`` pilot
-  now assembles/factorizes the active transport operator once and reuses it across
+  assembles/factorizes the active transport operator once and reuses it across
   the later RHS solves, reducing the one-point office GPU wall time from about
   ``2028 s`` to ``582 s`` while preserving identical transport outputs.
 - **FP collision preconditioning (RHSMode=1)**: when the collision preconditioner is active
@@ -485,21 +579,21 @@ JAX-native performance patterns used in `sfincs_jax`
 - **Auto Schur for PAS constraints**: when ``constraintScheme=2`` and PAS collisions
   are active, large systems default to a Schur-complement preconditioner
   (``SFINCS_JAX_RHSMODE1_SCHUR_AUTO_MIN``) to reduce Krylov iterations in HSX-like cases.
-- **Cached Boozer `.bc` parsing**: scheme11/12 geometry loading now caches parsed
+- **Cached Boozer `.bc` parsing**: scheme11/12 geometry loading caches parsed
   surfaces by content digest (plus geometry scheme), so repeated localized/copy paths of
   the same equilibrium file reuse one parsed surface table.
 - **Cached f-block operators**: reuse collisionless/collision/magnetic-drift operators
   across repeated runs with identical geometry and physics settings (e.g., scans that
   only change :math:`E_r`).
-- **Vectorized NTV accumulation across nonlinear iterates**: RHSMode=1 output writing now
+- **Vectorized NTV accumulation across nonlinear iterates**: RHSMode=1 output writing
   computes NTV from stacked iterates in one batched JAX call instead of Python per-iterate loops.
 - **Auto active-DOF reduction for RHSMode=1 (no Phi1)**: when ``Nxi_for_x`` truncates
-  the pitch basis, the linear solve now reduces to active unknowns by default, cutting
+  the pitch basis, the linear solve reduces to active unknowns by default, cutting
   both matrix-free solve cost and JIT work on upstream-style reduced cases.
-- **Persistent cache in automated suite runs**: ``scripts/run_reduced_upstream_suite.py`` and
+- **Persistent cache in automated suite runs**: ``python -m sfincs_jax.validation.suite reduced`` and
   the full example-suite runners can reuse a persistent JAX compilation cache when
   ``--jax-cache-dir`` is set explicitly.
-- **Opt-in eager precompile**: ``SFINCS_JAX_PRECOMPILE`` is now explicit opt-in. A persistent
+- **Opt-in eager precompile**: ``SFINCS_JAX_PRECOMPILE`` is explicit opt-in. A persistent
   JAX compilation cache can still amortize repeated workflows, but single-shot CLI solves and
   runtime audits no longer pay an extra eager compile pass just because a cache directory exists.
 - **Warm runtime reporting**: use repeated JAX runs in the reduced-suite or full example-suite
@@ -510,18 +604,45 @@ JAX-native performance patterns used in `sfincs_jax`
 - **Use implicit differentiation for solve gradients**: for objectives that depend on the solution `x(p)` of
   a linear system `A(p) x = b(p)`, prefer `jax.lax.custom_linear_solve` (adjoint solve) over
   differentiating through Krylov iterations.
+- **Use derivative certificates for scalar transport observables**:
+  ``sfincs_jax.sensitivity.implicit_linear_observable_derivative`` evaluates
+  both the tangent equation ``A x_p = b_p - A_p x`` and the adjoint equation
+  ``A^T lambda = c`` for ``J = c^T x``. The two derivatives and an optional
+  centered finite-difference check must agree before the derivative is used by
+  ambipolar Newton steps or optimization workflows. Concrete problem owners can
+  pass a fixed-shape ``LinearObservableSystem`` builder so the finite-difference
+  gate is generated from the same operator/RHS/observable graph as the
+  implicit derivative. For small validation decks,
+  ``probe_linear_observable_vector`` can recover the observable vector from an
+  existing linear diagnostic in bounded chunks; production paths should use the
+  pinned analytic weights once validated. The ambipolar owner also includes a
+  size-limited dense RHSMode-1 builder for validation gates that assembles
+  ``A``, ``b``, finite-differences ``A_p`` and ``b_p``, and then reuses the same
+  certificate machinery.
+- **Gate JVP/VJP adjoints with dot products**:
+  ``sfincs_jax.sensitivity.adjoint_dot_product_check`` verifies
+  ``<JVP(dp), y> = <dp, VJP(y)>``. The test suite applies this to a real
+  RHSMode-1 radial-current diagnostic, which is the same adjoint identity needed
+  by the RHSMode 4/5 sensitivity lane.
+- **Keep RHSMode 4/5 parity gates source-grounded**:
+  ``sfincs_jax.sensitivity.validate_fortran_v3_adjoint_sensitivity_constraints``
+  mirrors the Fortran-v3 source restrictions for adjoint sensitivity decks, and
+  ``sfincs_jax.sensitivity.fortran_v3_adjoint_sensitivity_output_fields`` pins
+  the HDF5 field names emitted by ``writeHDF5Output.F90``. These are lightweight
+  gates for input/output compatibility; numerical RHSMode 4/5 replay against
+  Fortran output files remains a separate production validation step.
 - **Default to short-recurrence Krylov for transport**: BiCGStab avoids storing a full GMRES basis and
   is therefore far more memory efficient for large RHSMode=2/3 systems. GMRES remains available and is
   used as a fallback when BiCGStab stagnates; transport-matrix solves default to BiCGStab with the
   collision-diagonal preconditioner for speed and memory efficiency. RHSMode=1 remains GMRES-first for
   parity. [#petsc-bcgs]_
-- **JIT-compiled Krylov solves (default)**: `sfincs_jax` now JIT-compiles the GMRES/BiCGStab wrappers
+- **JIT-compiled Krylov solves (default)**: `sfincs_jax` JIT-compiles the GMRES/BiCGStab wrappers
   to reduce Python overhead for iterative solves; set ``SFINCS_JAX_SOLVER_JIT=0`` to disable.
 
 Explicit sparse host/device split helper
 ----------------------------------------
 
-The reusable helper module ``sfincs_jax.explicit_sparse`` keeps the explicit sparse
+The reusable helper module ``sfincs_jax.solvers.explicit_sparse`` keeps the explicit sparse
 policy separate from the solver driver. It is intended for the performance-first
 CLI path and for future integration of sparse host-side rescues, not for the
 default differentiable reference path.
@@ -547,7 +668,7 @@ and for CSR,
    \text{csr bytes} \approx \text{nnz} \cdot (\text{data itemsize} + \text{index itemsize})
    + (N_{\text{rows}} + 1) \cdot \text{index itemsize}.
 
-Implementation: ``sfincs_jax.explicit_sparse``.
+Implementation: ``sfincs_jax.solvers.explicit_sparse``.
 
 Public entry points:
 
@@ -566,9 +687,9 @@ The helper can be used to:
 - or keep only a ``LinearOperator`` when even sparse materialization would exceed
   the configured budget.
 
-Current integration points:
+Integration points:
 
-- transport sparse-direct host solves now use the helper when
+- transport sparse-direct host solves use the helper when
   ``SFINCS_JAX_TRANSPORT_SPARSE_HELPER`` selects the explicit path,
 - RHSMode=1 host sparse-direct rescues can opt into the same explicit factor path
   through ``SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER``,
@@ -583,7 +704,7 @@ Solver defaults (Phi1 + sharding)
   v3 parity for small Phi1 fixtures.
   The cutoff is ``SFINCS_JAX_PHI1_NK_DENSE_CUTOFF`` (default: ``5000``) and is applied
   in ``sfincs_jax/io.py``.
-- **Full Newton updates for Phi1 by default**: includePhi1 runs now update the
+- **Full Newton updates for Phi1 by default**: includePhi1 runs update the
   Jacobian each Newton step (mirroring v3). Frozen linearization is opt‑in via
   ``SFINCS_JAX_PHI1_USE_FROZEN_LINEARIZATION``.
 - **FP dense fallback threshold (RHSMode=1)**: full Fokker–Planck cases use a higher
@@ -598,7 +719,7 @@ Solver defaults (Phi1 + sharding)
   ``min(SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF, 8000)``). On accelerators, the
   same shortcut is only automatic above
   ``SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN`` (default: ``1000``), since the
-  current GPU suite shows tiny FP systems are faster on the lower-overhead
+  GPU suite shows tiny FP systems are faster on the lower-overhead
   matrix-free path. PAS uses Krylov by default to preserve parity and can be
   forced into dense fallback by setting ``SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX`` explicitly.
 - **Bounded tokamak electric-field dense default (RHSMode=1)**: production-resolution
@@ -622,7 +743,7 @@ Solver defaults (Phi1 + sharding)
   line/block strong-preconditioner fallbacks are skipped by default to prevent
   out-of-memory allocations. The cutoff is
   ``SFINCS_JAX_RHSMODE1_FP_STRONG_PRECOND_MAX`` (default: ``120000`` active DOFs).
-- **PAS dense fallback threshold (RHSMode=1)**: PAS/constraintScheme=2 cases now
+- **PAS dense fallback threshold (RHSMode=1)**: PAS/constraintScheme=2 cases
   disable dense fallback unless explicitly enabled via
   ``SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX`` (or unless ``constraintScheme=0``), since
   the dense branch can drift from PETSc-style approximate solutions in small PAS runs.
@@ -641,7 +762,7 @@ Historical profiling notes
 
 The case studies below are still useful because they explain where time is spent inside the
 solver stack, but they are historical profiling notes rather than the release-facing status
-summary. For current release claims, use the full example-suite artifacts listed above.
+summary. For release claims, use the full example-suite artifacts listed above.
 
 **PAS, tokamak, no Er (``tokamak_1species_PASCollisions_noEr``)**:
 
@@ -656,17 +777,17 @@ summary. For current release claims, use the full example-suite artifacts listed
 **PAS, tokamak, with Er, full trajectories
 (``tokamak_1species_PASCollisions_withEr_fullTrajectories``)**:
 
-- Frozen full-suite artifact on ``main`` before the current bounded retune:
+- Frozen full-suite artifact before the bounded retune:
   Fortran ``~0.017 s``; JAX CPU ``~37.7 s``.
-- Current bounded CPU benchmark on the same frozen scaled case:
-  default auto path now promotes to ``xblock_tz`` and runs in ``~3.6 s`` with
+- Bounded CPU benchmark on the same frozen scaled case:
+  default auto path promotes to ``xblock_tz`` and runs in ``~3.6 s`` with
   ``0`` mismatches versus the pinned output artifact.
-- Current bounded one-GPU benchmark on ``office``:
+- Bounded one-GPU benchmark on ``office``:
   default auto path skips the expensive ``xblock_tz`` setup, tightens GMRES to
   ``1e-8``, and runs in ``~3.25 s`` with ``0`` mismatches versus the pinned output
   artifact. The maximum ``pressureAnisotropy`` difference against the frozen
   reference was below ``9e-10`` absolute and ``2e-7`` relative.
-- The key change is not a new equation or solver family. It is a better default
+- The key change is a better default
   branch choice for bounded tokamak PAS+Er cases: on CPU, prefer ``xblock_tz``
   before ``pas_schur`` when the active system and
   :math:`(L,\theta,\zeta)` block stay inside the configured cap; on GPU, avoid
@@ -690,17 +811,17 @@ summary. For current release claims, use the full example-suite artifacts listed
 - Dominant cost: RHSMode=2 ``whichRHS`` loop, each RHS falling back to a dense
   solve after BiCGStab/GMRES retries. Dense solver caching is already active,
   so the remaining cost is per‑RHS dense apply + matvec fallback.
-- **Update**: the new **dense batch fallback** now solves all RHS in one dense
+- **Dense batch fallback**: the dense batch fallback solves all RHS in one dense
   factorization once a dense fallback is triggered, reducing this case to
   ~5.1 s on the same input (single-device, cold start).
 - **Production-floor update**: the ``fp_fortran_reduced_lu``
-  preconditioner now emits the reduced FP transport ``Pmat`` directly from
+  preconditioner emits the reduced FP transport ``Pmat`` directly from
   structured terms instead of pattern-color probing. On the ``25 x 51 x 100 x 6``
   geometry-scheme-11 production deck, CSR materialization dropped from the
-  previous ``~288 s`` colored-probe setup to ``~8.7 s``. The remaining
+  colored-probe setup of ``~288 s`` to ``~8.7 s``. The remaining
   production blocker is the first-RHS Krylov phase for lower-memory native
   variants. The exact direct-LU route is promoted into ``auto`` for eligible
-  non-Phi1 RHSMode=2/3 full-FP transport because bounded true-residual gates now
+  non-Phi1 RHSMode=2/3 full-FP transport because bounded true-residual gates
   pass; lower-memory symbolic/native replacements remain gated.
 - Next optimization target: a stronger transport preconditioner/coarse
   correction to avoid dense fallbacks on small W7‑X geometryScheme=11 cases and
@@ -712,7 +833,7 @@ Krylov solver strategy (memory + recycling)
 `sfincs_jax` defaults RHSMode=1 linear solves to GMRES and supports BiCGStab as an
 opt-in low-memory option with GMRES fallback on stagnation. For RHSMode=2/3 transport-matrix solves we
 default to BiCGStab and apply the collision-diagonal preconditioner by default, with GMRES as the
-fallback. This keeps memory usage low while preserving the current release-facing parity guarantees. [#petsc-bcgs]_
+fallback. This keeps memory usage low while preserving the release-facing parity guarantees. [#petsc-bcgs]_
 
 For RHSMode=2/3 transport matrices, the ``whichRHS`` loop solves a sequence of linear systems with
 nearly identical operators. We prototype a lightweight recycling hook that reuses the last ``k``
@@ -786,7 +907,7 @@ BiCGStab can optionally reuse the RHSMode=1 preconditioner:
 Future optimization ideas (optional)
 ------------------------------------
 
-Parity is now achieved for the current full CPU and GPU example-suite audits, so remaining performance work is
+Parity is achieved for the full CPU and GPU example-suite audits, so remaining performance work is
 profiling-driven and optional. High-ROI ideas to revisit if runtime becomes a bottleneck:
 
 1. **Deeper Krylov recycling/deflation** (GCRO-DR / GMRES-DR) for long transport scans.
@@ -806,13 +927,12 @@ profiling-driven and optional. High-ROI ideas to revisit if runtime becomes a bo
 Links to the JAX ecosystem (optional)
 -------------------------------------
 
-The package currently uses a lightweight in-repo GMRES implementation for parity control. For more advanced
+The package uses a lightweight in-repo GMRES implementation for parity control. For more advanced
 workflows, the JAX ecosystem can be integrated cleanly once the residual is expressed in a differentiable way:
 
 - `optax`: gradient-based optimization with schedules, constraints, and modern optimizers.
-- `lineax`: optional benchmark target for differentiable linear solves, currently gated
-  by ``examples/performance/benchmark_optional_lineax_implicit_solve.py`` and not used
-  by the production CLI solver.
+- `lineax`: useful research target for differentiable linear solves; not used
+  by the production CLI solver or stable examples.
 
 
 Parity tuning environment variables (developer)
@@ -834,7 +954,7 @@ opt-in environment variables:
 - ``SFINCS_JAX_PHI1_GMRES_MAXITER``:
   override GMRES max iterations inside includePhi1 Newton–Krylov solves.
 - ``SFINCS_JAX_PHI1_LINESEARCH_FACTOR``:
-  override the relative residual decrease required to accept a Newton step (legacy mode).
+  override the relative residual decrease required to accept a Newton step (compatibility mode).
 - ``SFINCS_JAX_PHI1_LINESEARCH_C1``:
   Armijo coefficient for the PETSc-style backtracking rule (default 1e-4).
 - ``SFINCS_JAX_PHI1_LINESEARCH_MODE``:
@@ -896,7 +1016,7 @@ comparison figure used in ``README.md`` and the docs index:
 By default this uses frozen Fortran fixtures from ``tests/ref`` (no local Fortran runtime required).
 If a local Fortran executable is available, pass ``--fortran-exe /path/to/sfincs`` for live runs.
 
-Latest fixture-based snapshot (4 repeats, compile excluded for JAX):
+Reference fixture benchmark (4 repeats, compile excluded for JAX):
 
 .. list-table::
    :header-rows: 1
@@ -930,11 +1050,11 @@ executable is provided.
 Persistent-cache compile/runtime split
 --------------------------------------
 
-To separate compile cost from steady solve time with the JAX persistent cache:
-
-.. code-block:: bash
-
-   python examples/performance/profile_transport_compile_runtime_cache.py --repeats 3
+The checked figure below separates compile cost from steady solve time with the
+JAX persistent cache. The reusable user-facing performance workflows are the
+output-format benchmark, the structured-solve benchmark, and the transport L11
+comparison; ad hoc cache-profiling drivers are kept out of the stable examples
+tree.
 
 .. figure:: _static/figures/transport_compile_runtime_cache_2x2.png
    :alt: Compile/runtime split with persistent JAX cache across four reference cases.
@@ -943,7 +1063,7 @@ To separate compile cost from steady solve time with the JAX persistent cache:
 
    For each case, compile estimate = cold first call - warm first call; steady solve is the warm repeated runtime.
 
-Latest snapshot (3 repeats):
+Reference compile/runtime benchmark (3 repeats):
 
 .. list-table::
    :header-rows: 1
@@ -969,7 +1089,7 @@ Deep profiling without perturbing GPU timings
 ---------------------------------------------
 
 For release benchmarking and the reduced/full example-suite audits, the suite
-harness now runs ``sfincs_jax`` with profiler marks disabled by default.
+harness runs ``sfincs_jax`` with profiler marks disabled by default.
 Wall-clock runtime and the solver's ``elapsed_s=...`` output are sufficient for
 runtime drift auditing, and avoiding per-phase probes keeps the benchmark from
 measuring itself. Repeated ``jax.devices()[0].memory_stats()`` polling inside hot
@@ -990,7 +1110,7 @@ For full XLA/kernel traces, prefer the dedicated write-output trace helper:
 
 .. code-block:: bash
 
-   python scripts/profile_write_output_trace.py \
+   python -m sfincs_jax.validation.release write-output-trace \
      --input tests/reduced_inputs/tokamak_2species_PASCollisions_noEr.input.namelist \
      --trace-dir /tmp/sfincs_trace_tokamak2 \
      --perfetto
@@ -1038,10 +1158,10 @@ paths we use to guide performance work:
 - **Use ahead-of-time (AOT) compilation** for stable-shape kernels that dominate wall time;
   this reduces JIT latency during interactive or production runs. [#jax-aot]_
 - **Prefer short-recurrence Krylov methods** (e.g., BiCGStab/IDR(s)) when GMRES memory growth
-  becomes dominant, since GMRES stores all previous Krylov vectors. [#gmres-memory]_
+  becomes dominant, since GMRES stores all retained Krylov vectors. [#gmres-memory]_
 
 These sources inform our memory and compilation roadmap; any algorithmic change is still
-validated against unit tests, physics checks, and the current CPU/GPU example-suite parity artifacts before it becomes a default.
+validated against unit tests, physics checks, and the CPU/GPU example-suite parity artifacts before it becomes a default.
 
 .. [#jax-profiler] JAX profiling and device memory tools:
    https://docs.jax.dev/en/latest/device_memory_profiling.html
@@ -1072,22 +1192,3 @@ operator/residual in JAX so that:
 - Jacobian actions can be obtained via **automatic differentiation** (JVP/VJP),
 - and gradients through a solve can be obtained via **implicit differentiation**
   without forming matrices.
-
-
-Operator-level parity debugging utility
----------------------------------------
-
-For difficult upstream mismatches, compare a Fortran PETSc matrix directly against the
-JAX operator assembly:
-
-.. code-block:: bash
-
-   python scripts/compare_fortran_matrix_to_jax_operator.py \
-     --input /path/to/input.namelist \
-     --fortran-matrix /path/to/sfincsBinary_iteration_000_whichMatrix_3 \
-     --fortran-state /path/to/sfincsBinary_iteration_000_stateVector \
-     --project-active-dofs \
-     --out-json matrix_compare.json
-
-The report includes block-wise statistics (``f``/``phi``/``extra``) and top-entry deltas
-to localize missing couplings quickly.

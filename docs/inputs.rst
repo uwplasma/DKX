@@ -82,8 +82,9 @@ Geometry examples you can run immediately:
 - VMEC ``geometryScheme=5``:
   ``examples/getting_started/write_sfincs_output_vmec.py``
 
-There is not currently a separate public Miller-parameter geometry interface. Tokamak
-examples therefore use the supported analytic straight-field-line model family.
+The public geometry interfaces do not include a separate Miller-parameter
+surface input. Tokamak examples therefore use the supported analytic
+straight-field-line model family.
 
 Practical notes for users
 -------------------------
@@ -104,7 +105,7 @@ Practical notes for users
   - and release-hosted public W7-X/HSX/QI fixtures by basename.
 
 - The release-hosted fixture cache keeps regular clones and wheels small. Prefetch
-  it with ``python scripts/fetch_equilibria.py`` or set
+  it with ``python -m sfincs_jax.validation.data_fetch`` or set
   ``SFINCS_JAX_OFFLINE=1`` to require a pre-populated cache.
 
 - If you need to point a run at a different equilibrium without editing ``input.namelist``,
@@ -120,9 +121,9 @@ Transport-matrix modes (``RHSMode=2/3``)
 For ``RHSMode=2`` and ``RHSMode=3`` (transport-matrix modes), `sfincs_jax` runs a loop
 over ``whichRHS`` and overwrites the relevant drives internally before building each RHS.
 This behavior is exposed via
-:func:`sfincs_jax.v3_system.with_transport_rhs_settings` so parity fixtures can reproduce the v3 solver
+:func:`sfincs_jax.operators.profile_system.with_transport_rhs_settings` so parity fixtures can reproduce the v3 solver
 RHS exactly.
 
 For ``RHSMode=3`` (monoenergetic coefficients), v3 also overwrites the speed grid to a single point at
 ``x=1`` with ``xWeights=exp(1)`` (see v3 ``createGrids.F90``). `sfincs_jax` matches this behavior in
-:func:`sfincs_jax.v3.grids_from_namelist`.
+:func:`sfincs_jax.discretization.v3.grids_from_namelist`.

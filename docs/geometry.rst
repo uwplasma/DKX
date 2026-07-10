@@ -124,11 +124,11 @@ Optional JAX-native geometry producers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The standard release path for ``geometryScheme=5`` remains a VMEC ``wout`` file.
-For differentiable research workflows, `sfincs_jax` now also includes a small
-structural adapter layer in ``sfincs_jax/jax_geometry_adapters.py``. The adapter can
+For differentiable research workflows, `sfincs_jax` also includes a small
+structural adapter layer in ``sfincs_jax/geometry/jax_adapters.py``. The adapter can
 accept VMEC-like in-memory objects, including objects with the field layout used by
 ``vmec_jax.wout.WoutData``, and normalize them to the internal
-``sfincs_jax.vmec_wout.VmecWout`` convention without making ``vmec_jax`` a required
+``sfincs_jax.geometry.vmec_wout.VmecWout`` convention without making ``vmec_jax`` a required
 dependency.
 
 This is the intended staged path for JAX-native equilibrium coupling:
@@ -159,8 +159,8 @@ Minimal adapter workflow:
    import numpy as np
    from vmec_jax.wout import read_wout as read_vmec_jax_wout
 
-   from sfincs_jax.jax_geometry_adapters import vmec_wout_from_wout_like
-   from sfincs_jax.vmec_geometry import vmec_geometry_from_wout
+   from sfincs_jax.geometry.jax_adapters import vmec_wout_from_wout_like
+   from sfincs_jax.geometry.vmec import vmec_geometry_from_wout
 
    wout_like = read_vmec_jax_wout("wout_circular_tokamak.nc")
    wout = vmec_wout_from_wout_like(wout_like)
@@ -169,7 +169,7 @@ Minimal adapter workflow:
    zeta = np.linspace(0.0, 2.0 * np.pi / wout.nfp, 16, endpoint=False)
    geom = vmec_geometry_from_wout(w=wout, theta=theta, zeta=zeta, psi_n_wish=0.25)
 
-The public optional JAX-native handoff example is:
+The public optional JAX-native workflow example is:
 
 .. code-block:: bash
 
@@ -192,7 +192,7 @@ gradient-availability labels for each stage, a ``workflow_contract`` block, the
 differentiated graph, and the explicit non-claim that this is a geometry-proxy
 gradient gate rather than a full transport-gradient workflow.  The contract is
 also available directly from
-``sfincs_jax.jax_geometry_adapters.geometry_proxy_workflow_contract()`` and is
+``sfincs_jax.geometry.jax_adapters.geometry_proxy_workflow_contract()`` and is
 kept intentionally small enough for tests and notebook provenance:
 
 - default CI does not require ``vmec_jax`` or ``booz_xform_jax``,
@@ -245,24 +245,24 @@ Boozer transform:
 
 This script uses ``vmec_jax`` provenance for a VMEC ``wout`` object,
 ``booz_xform_jax`` for the Boozer transform, and
-``sfincs_jax.jax_geometry_adapters.boozer_spectrum_geometry_proxy_objective``
+``sfincs_jax.geometry.jax_adapters.boozer_spectrum_geometry_proxy_objective``
 for a differentiable scalar objective.  It reports the objective, the JAX
 gradient with respect to a VMEC magnetic-spectrum scale parameter, a centered
 finite-difference check, a pass/fail numerical gradient gate for that proxy
 path, and a few gradient-descent steps.
 
-The current example validates the differentiable
+This example validates the differentiable
 ``VMEC-like spectral arrays -> booz_xform_jax -> sfincs_jax Boozer-spectrum
 objective`` graph.  File I/O and the default ``vmec_geometry_from_wout`` file
 adapter remain outside the differentiable graph.  Full VMEC-boundary-to-kinetic
-transport optimization is still a larger research workflow, but the public handoff
-now has a fast, tested gradient gate.
+transport optimization is still a larger research workflow, but the public interface
+has a fast, tested gradient gate.
 
-Current differentiability boundary
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Differentiability boundary
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The optional ``vmec_jax`` / ``booz_xform_jax`` lane should currently be read as a
-geometry-handoff and objective-gradient lane, not as a complete transport
+The optional ``vmec_jax`` / ``booz_xform_jax`` lane should be read as a
+geometry-interface and objective-gradient lane, not as a complete transport
 optimization workflow.  The supported public pieces are:
 
 - shallow optional-backend discovery through
@@ -310,7 +310,7 @@ This finite-beta example is a primal transport workflow.  It records radial
 profile provenance in its summary JSON, including the requested ``r_N`` surfaces,
 the plotted :math:`\psi_N = r_N^2` values, the all-roots versus selected-branch
 policy, and the convergence-overlay status.  It does not claim gradients through
-the VMEC file handoff, scheme-5 geometry evaluation, SFINCS kinetic solve, or
+the VMEC file boundary, scheme-5 geometry evaluation, SFINCS kinetic solve, or
 radial postprocessing.
 
 Boozer ``.bc`` workflow
@@ -364,12 +364,15 @@ Geometry in the source tree
 
 The main geometry-related modules are:
 
-- ``sfincs_jax/geometry.py``: normalized geometric fields and coefficient assembly.
+- ``sfincs_jax/geometry/__init__.py``: normalized geometric fields and coefficient assembly.
+- ``sfincs_jax/geometry/{boozer.py,vmec_wout.py,vmec.py,jax_adapters.py}``: Boozer-file,
+  VMEC-file, VMEC Fourier-sum, and JAX-native geometry adapter owners.
 - ``sfincs_jax/input_compat.py``: equilibrium-file resolution and namelist overrides.
 - ``sfincs_jax/diagnostics.py``: geometry-derived scalar diagnostics and moments.
-- ``sfincs_jax/v3_system.py``: insertion of geometry coefficients into the kinetic
+- ``sfincs_jax/operators/profile_system.py``: insertion of geometry coefficients into the kinetic
   operator.
-- ``sfincs_jax/magnetic_drifts.py`` and ``sfincs_jax/collisionless_exb.py``:
+- ``sfincs_jax/operators/profile_magnetic_drifts.py`` and
+  ``sfincs_jax/operators/profile_exb.py``:
   construction of drift coefficients from the geometry arrays.
 
 The operator does not carry an opaque geometry object around. Instead, the solve path
@@ -387,8 +390,8 @@ operator assembly and differentiability tests use the internal layout directly.
 What is not a public geometry mode
 ----------------------------------
 
-There is currently no separate Miller-parameter public geometry interface in the CLI
-or Python API. For tokamak studies, the supported public path is the analytic
+The CLI and Python API do not expose a separate Miller-parameter public geometry
+interface. For tokamak studies, the supported public path is the analytic
 straight-field-line model family (primarily ``geometryScheme=1``). If a dedicated
 Miller workflow is added later, it should appear here as a first-class geometry mode,
 with explicit input definitions and examples.

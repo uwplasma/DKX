@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from sfincs_jax.rhs1_active_dof import (
+from sfincs_jax.problems.profile_setup import (
     build_rhs1_active_dof_state,
     resolve_rhs1_active_dof_mode,
 )

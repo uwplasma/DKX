@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from sfincs_jax.transport_handoff_policy import (
+from sfincs_jax.problems.transport_policies import (
     transport_candidate_is_better,
     transport_polish_config_from_env,
     transport_residual_value,

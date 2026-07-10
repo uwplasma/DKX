@@ -21,7 +21,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.jax_geometry_adapters import (  # noqa: E402
+from sfincs_jax.geometry.jax_adapters import (  # noqa: E402
     boozer_spectrum_proxy_transport_gradient_gate,
     geometry_proxy_no_solve_provenance_gate,
     geometry_proxy_workflow_summary,
@@ -115,7 +115,6 @@ def build_status(
         },
         "pytest_gates": [
             "python -m pytest tests/test_vmec_jax_workflow.py tests/test_jax_geometry_adapters.py -q",
-            "python -m pytest tests/test_optional_ecosystem_gates.py -q",
         ],
     }
 

@@ -5,8 +5,8 @@ from typing import Tuple
 
 from jax import config as _jax_config
 _jax_config.update("jax_enable_x64", True)
-import jax.numpy as jnp
-import numpy as np
+import jax.numpy as jnp  # noqa: E402
+import numpy as np  # noqa: E402
 
 
 def uniform_diff_matrices(

@@ -1,17 +1,10 @@
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
-import sys
+
+from sfincs_jax.validation import suite as _MODULE
 
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "run_reduced_upstream_suite.py"
-sys.path.insert(0, str(_SCRIPT_PATH.parent))
-_SPEC = importlib.util.spec_from_file_location("run_reduced_upstream_suite", _SCRIPT_PATH)
-assert _SPEC is not None and _SPEC.loader is not None
-_MODULE = importlib.util.module_from_spec(_SPEC)
-sys.modules[_SPEC.name] = _MODULE
-_SPEC.loader.exec_module(_MODULE)
 _clamp_resolution_to_reference_max_in_place = _MODULE._clamp_resolution_to_reference_max_in_place
 _canonicalize_fortran_v3_input_text = _MODULE._canonicalize_fortran_v3_input_text
 _resolution_from_namelist = _MODULE._resolution_from_namelist

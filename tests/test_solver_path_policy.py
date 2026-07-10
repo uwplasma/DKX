@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.solver_path_policy import (
+from sfincs_jax.solvers.path_policy import (
     PreconditionerPolicyHints,
     auto_pas_geom4_fp32_precond_allowed,
     is_resource_exhausted_error,

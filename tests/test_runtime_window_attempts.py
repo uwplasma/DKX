@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -11,13 +10,7 @@ import time
 
 import pytest
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "run_reduced_upstream_suite.py"
-sys.path.insert(0, str(_SCRIPT_PATH.parent))
-_SPEC = importlib.util.spec_from_file_location("run_reduced_upstream_suite", _SCRIPT_PATH)
-assert _SPEC is not None and _SPEC.loader is not None
-suite = importlib.util.module_from_spec(_SPEC)
-sys.modules[_SPEC.name] = suite
-_SPEC.loader.exec_module(suite)
+from sfincs_jax.validation import suite
 
 
 def test_executable_metadata_records_hash(tmp_path: Path) -> None:

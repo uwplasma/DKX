@@ -8,12 +8,13 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-import sfincs_jax.solver as solver_module
-from sfincs_jax.v3_driver import _rhs_krylov_method_for_context
-from sfincs_jax.solver import (
+import sfincs_jax.solvers.krylov as solver_module
+from sfincs_jax.solvers.krylov_dispatch import rhs_krylov_method_for_context as _rhs_krylov_method_for_context
+from sfincs_jax.solvers.krylov import (
     _materialize_distributed_input,
     _distributed_solver_kind,
     assemble_dense_matrix_from_matvec,
+    bicgstab_solve,
     bicgstab_solve_with_residual,
     dense_krylov_solve_from_matrix,
     dense_solve_from_matrix,
@@ -22,11 +23,14 @@ from sfincs_jax.solver import (
     fgmres_solve_with_residual,
     fgmres_solve_with_residual_jit,
     gcrotmk_solve_with_history_scipy,
+    gmres_solve_distributed,
     gmres_solve_with_history_scipy,
     gmres_solve_jit,
     gmres_solve,
     gmres_solve_with_residual,
+    gmres_solve_with_residual_distributed,
     lgmres_solve_with_history_scipy,
+    tfqmr_solve,
     tfqmr_solve_with_residual,
     tfqmr_solve_with_residual_jit,
 )
@@ -51,6 +55,45 @@ def test_gmres_solve_matches_numpy_for_spd_matrix() -> None:
 
     np.testing.assert_allclose(x, x_ref, rtol=1e-8, atol=1e-8)
     assert float(result.residual_norm) < 1e-8
+
+
+def test_solver_result_wrappers_are_jax_pytrees() -> None:
+    """Solver result dataclasses must remain transform-safe public contracts."""
+
+    flexible = solver_module.FlexibleGMRESSolveResult(
+        x=jnp.asarray([1.0, -2.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(1.0e-8, dtype=jnp.float64),
+        residual_history=jnp.asarray([1.0, 1.0e-8], dtype=jnp.float64),
+        n_iterations=jnp.asarray(1, dtype=jnp.int32),
+        n_restarts=jnp.asarray(0, dtype=jnp.int32),
+        converged=jnp.asarray(True),
+    )
+    bicgstab = solver_module.BiCGSTABSolveResult(
+        x=flexible.x,
+        residual_norm=flexible.residual_norm,
+        residual_history=flexible.residual_history,
+        n_iterations=flexible.n_iterations,
+        converged=flexible.converged,
+    )
+    tfqmr = solver_module.TFQMRSolveResult(
+        x=flexible.x,
+        residual_norm=flexible.residual_norm,
+        residual_history=flexible.residual_history,
+        n_iterations=flexible.n_iterations,
+        converged=flexible.converged,
+    )
+
+    for result in (flexible, bicgstab, tfqmr):
+        leaves, treedef = jax.tree_util.tree_flatten(result)
+        rebuilt = jax.tree_util.tree_unflatten(treedef, leaves)
+        np.testing.assert_allclose(np.asarray(rebuilt.x), np.asarray(result.x), rtol=0.0, atol=0.0)
+        np.testing.assert_allclose(
+            np.asarray(rebuilt.residual_history),
+            np.asarray(result.residual_history),
+            rtol=0.0,
+            atol=0.0,
+        )
+        assert bool(rebuilt.converged) is True
 
 
 def test_gcrotmk_solve_with_history_scipy_matches_numpy_for_small_system() -> None:
@@ -115,6 +158,78 @@ def test_dense_solve_from_matrix_regularizes_singular_system() -> None:
     assert float(rn) < 1e-8
 
 
+def test_dense_solve_modes_and_shape_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin dense direct-solve guardrails without running production systems."""
+
+    with pytest.raises(ValueError, match="square matrix"):
+        dense_solve_from_matrix(a=jnp.ones((2, 3), dtype=jnp.float64), b=jnp.ones(2, dtype=jnp.float64))
+    with pytest.raises(ValueError, match="b.ndim"):
+        dense_solve_from_matrix(a=jnp.eye(2, dtype=jnp.float64), b=jnp.ones((2, 1, 1), dtype=jnp.float64))
+    with pytest.raises(ValueError, match="shape mismatch"):
+        dense_solve_from_matrix(a=jnp.eye(3, dtype=jnp.float64), b=jnp.ones(2, dtype=jnp.float64))
+    with pytest.raises(ValueError, match="square matrix"):
+        solver_module.dense_solve_from_matrix_row_scaled(
+            a=jnp.ones((2, 3), dtype=jnp.float64),
+            b=jnp.ones(2, dtype=jnp.float64),
+        )
+
+    singular = jnp.asarray([[1.0, 1.0], [2.0, 2.0]], dtype=jnp.float64)
+    rhs = jnp.asarray([2.0, 4.0], dtype=jnp.float64)
+
+    monkeypatch.setenv("SFINCS_JAX_DENSE_FORCE_REG", "1")
+    monkeypatch.setenv("SFINCS_JAX_DENSE_REG", "1e-8")
+    x_reg, rn_reg = dense_solve_from_matrix(a=singular, b=rhs)
+    assert np.isfinite(np.asarray(x_reg)).all()
+    assert float(rn_reg) < 1.0e-6
+
+    monkeypatch.delenv("SFINCS_JAX_DENSE_FORCE_REG", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_DENSE_SINGULAR_MODE", "lstsq")
+    x_lstsq, rn_lstsq = dense_solve_from_matrix(a=singular, b=rhs)
+    assert np.isfinite(np.asarray(x_lstsq)).all()
+    assert float(rn_lstsq) < 1.0e-8
+
+
+def test_gmres_dense_dispatch_and_size_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Dense and row-scaled dense dispatch must remain explicit and bounded."""
+
+    a = np.asarray(
+        [
+            [2.0, -1.0, 0.25],
+            [0.5, 3.0, -0.75],
+            [0.0, 0.5, 2.5],
+        ],
+        dtype=np.float64,
+    )
+    b = np.asarray([1.0, -2.0, 0.5], dtype=np.float64)
+    x_ref = np.linalg.solve(a, b)
+    a_j = jnp.asarray(a)
+
+    def mv(x):
+        return a_j @ x
+
+    for method in ("dense", "dense_row_scaled"):
+        result, residual = gmres_solve_with_residual(
+            matvec=mv,
+            b=jnp.asarray(b),
+            solve_method=method,
+        )
+        np.testing.assert_allclose(np.asarray(result.x), x_ref, rtol=1.0e-10, atol=1.0e-10)
+        np.testing.assert_allclose(np.asarray(residual), b - a @ np.asarray(result.x), rtol=1.0e-12, atol=1.0e-12)
+        assert float(result.residual_norm) < 1.0e-10
+
+    monkeypatch.setenv("SFINCS_JAX_DENSE_MAX", "2")
+    with pytest.raises(ValueError, match="too large"):
+        gmres_solve_with_residual(
+            matvec=mv,
+            b=jnp.asarray(b),
+            solve_method="dense",
+        )
+
+    monkeypatch.setenv("SFINCS_JAX_DENSE_MAX", "bad")
+    result = gmres_solve(matvec=mv, b=jnp.asarray(b), solve_method="dense")
+    assert float(result.residual_norm) < 1.0e-10
+
+
 def test_dense_krylov_solve_from_matrix_matches_numpy() -> None:
     rng = np.random.default_rng(5)
     n = 20
@@ -134,6 +249,42 @@ def test_dense_krylov_solve_from_matrix_matches_numpy() -> None:
 
     np.testing.assert_allclose(np.asarray(x), x_ref, rtol=1e-8, atol=1e-8)
     assert float(rn) < 1e-8
+
+
+def test_dense_krylov_env_shape_and_row_scaled_contracts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Row-scaled Krylov solves disable incompatible user preconditioners."""
+
+    with pytest.raises(ValueError, match="square matrix"):
+        solver_module.dense_krylov_solve_from_matrix_with_residual(
+            a=jnp.ones((2, 3), dtype=jnp.float64),
+            b=jnp.ones(2, dtype=jnp.float64),
+        )
+    with pytest.raises(ValueError, match="b.shape"):
+        solver_module.dense_krylov_solve_from_matrix_with_residual(
+            a=jnp.eye(3, dtype=jnp.float64),
+            b=jnp.ones((3, 1), dtype=jnp.float64),
+        )
+
+    monkeypatch.setenv("SFINCS_JAX_DENSE_KRYLOV_RESTART", "bad")
+    monkeypatch.setenv("SFINCS_JAX_DENSE_KRYLOV_MAXITER", "bad")
+    a = jnp.diag(jnp.asarray([1.0e-8, 2.0, 5.0e3], dtype=jnp.float64))
+    b = jnp.asarray([2.0e-8, -4.0, 1.0e4], dtype=jnp.float64)
+
+    def forbidden_preconditioner(x):
+        raise AssertionError("row-scaled dense Krylov must ignore external preconditioners")
+
+    result, residual = solver_module.dense_krylov_solve_from_matrix_with_residual(
+        a=a,
+        b=b,
+        preconditioner=forbidden_preconditioner,
+        row_scaled=True,
+        tol=1.0e-12,
+        solve_method="incremental",
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), np.asarray([2.0, -2.0, 2.0]), rtol=1.0e-8, atol=1.0e-8)
+    np.testing.assert_allclose(np.asarray(residual), np.zeros(3), atol=1.0e-8)
+    assert float(result.residual_norm) < 1.0e-8
 
 
 def test_dense_krylov_lgmres_matches_numpy_on_nonsymmetric_matrix() -> None:
@@ -342,7 +493,7 @@ def test_fgmres_true_residual_is_preconditioner_side_invariant() -> None:
 
 
 def test_fgmres_right_preconditioner_is_transpose_safe() -> None:
-    """Guard the device-QI installed-Krylov path against scatter transpose failures."""
+    """Guard right-preconditioned device Krylov against scatter transpose failures."""
 
     a = jnp.asarray(
         [
@@ -756,6 +907,22 @@ def test_bicgstab_solve_with_residual_matches_matvec() -> None:
     assert bool(result.converged)
 
 
+def test_bicgstab_solve_wrapper_matches_numpy_for_diagonal_system() -> None:
+    diagonal = jnp.asarray([2.0, 3.0, 5.0, 7.0], dtype=jnp.float64)
+    b = jnp.asarray([1.0, -2.0, 4.0, 0.5], dtype=jnp.float64)
+
+    result = bicgstab_solve(
+        matvec=lambda x: diagonal * x,
+        b=b,
+        tol=1.0e-12,
+        maxiter=20,
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), np.asarray(b / diagonal), rtol=1.0e-10, atol=1.0e-10)
+    assert float(result.residual_norm) < 1.0e-10
+    assert bool(result.converged)
+
+
 def test_bicgstab_right_preconditioning_preserves_physical_initial_guess() -> None:
     a = np.array(
         [
@@ -824,6 +991,22 @@ def test_tfqmr_solve_with_residual_matches_numpy_for_nonsymmetric_matrix() -> No
     np.testing.assert_allclose(np.asarray(result.x), x_ref, rtol=1.0e-8, atol=1.0e-8)
     np.testing.assert_allclose(np.asarray(residual), b - a @ np.asarray(result.x), rtol=1.0e-10, atol=1.0e-10)
     assert float(result.residual_norm) < 1.0e-8
+    assert bool(result.converged)
+
+
+def test_tfqmr_solve_wrapper_matches_numpy_for_diagonal_system() -> None:
+    diagonal = jnp.asarray([2.5, 4.0, 6.0, 9.0], dtype=jnp.float64)
+    b = jnp.asarray([1.5, -1.0, 3.0, -4.5], dtype=jnp.float64)
+
+    result = tfqmr_solve(
+        matvec=lambda x: diagonal * x,
+        b=b,
+        tol=1.0e-12,
+        maxiter=20,
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), np.asarray(b / diagonal), rtol=1.0e-10, atol=1.0e-10)
+    assert float(result.residual_norm) < 1.0e-10
     assert bool(result.converged)
 
 
@@ -1313,12 +1496,173 @@ def test_distributed_solver_pjit_factories_reuse_wrappers() -> None:
     ) is solver_module._get_distributed_solve_with_residual_pjit("p")
 
 
+def test_distributed_gmres_wrappers_fall_back_to_host_without_axis() -> None:
+    a = jnp.asarray(
+        [
+            [3.0, 0.5, 0.0],
+            [0.25, 4.0, -0.5],
+            [0.0, 1.0, 2.5],
+        ],
+        dtype=jnp.float64,
+    )
+    b = jnp.asarray([1.0, -2.0, 0.5], dtype=jnp.float64)
+    ref = np.linalg.solve(np.asarray(a), np.asarray(b))
+
+    def mv(x):
+        return a @ x
+
+    result = gmres_solve_distributed(
+        matvec=mv,
+        b=b,
+        axis_name=None,
+        tol=1.0e-12,
+        restart=4,
+        maxiter=20,
+    )
+    result_with_residual, residual = gmres_solve_with_residual_distributed(
+        matvec=mv,
+        b=b,
+        axis_name=None,
+        tol=1.0e-12,
+        restart=4,
+        maxiter=20,
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), ref, rtol=1.0e-8, atol=1.0e-8)
+    np.testing.assert_allclose(np.asarray(result_with_residual.x), ref, rtol=1.0e-8, atol=1.0e-8)
+    np.testing.assert_allclose(np.asarray(residual), np.asarray(b - mv(result_with_residual.x)), rtol=1.0e-10)
+
+
+def test_distributed_gmres_wrappers_fall_back_when_sharded_callable_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Mesh:
+        devices = np.empty((2,), dtype=object)
+
+    a = jnp.asarray([[2.0, 0.25], [0.0, 3.0]], dtype=jnp.float64)
+    b = jnp.asarray([1.0, -2.0], dtype=jnp.float64)
+    ref = np.linalg.solve(np.asarray(a), np.asarray(b))
+
+    def mv(x):
+        return a @ x
+
+    monkeypatch.setattr(solver_module, "_get_gmres_mesh", lambda _axis_name: _Mesh())
+    monkeypatch.setattr(solver_module, "_get_distributed_solve_pjit", lambda _axis_name: None)
+    monkeypatch.setattr(solver_module, "_get_distributed_solve_with_residual_pjit", lambda _axis_name: None)
+
+    result = gmres_solve_distributed(
+        matvec=mv,
+        b=b,
+        axis_name="theta",
+        tol=1.0e-12,
+        restart=4,
+        maxiter=20,
+    )
+    result_with_residual, residual = gmres_solve_with_residual_distributed(
+        matvec=mv,
+        b=b,
+        axis_name="theta",
+        tol=1.0e-12,
+        restart=4,
+        maxiter=20,
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), ref, rtol=1.0e-8, atol=1.0e-8)
+    np.testing.assert_allclose(np.asarray(result_with_residual.x), ref, rtol=1.0e-8, atol=1.0e-8)
+    np.testing.assert_allclose(np.asarray(residual), np.asarray(b - mv(result_with_residual.x)), rtol=1.0e-10)
+
+
+def test_distributed_gmres_wrappers_pad_and_trim_fake_sharded_solve(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Mesh:
+        devices = np.empty((2,), dtype=object)
+
+    class _MeshContext:
+        def __enter__(self):
+            return None
+
+        def __exit__(self, *_exc):
+            return False
+
+    calls: list[tuple[str, tuple[int, ...], tuple[int, ...] | None, str]] = []
+    b = jnp.asarray([1.0, -2.0, 0.5], dtype=jnp.float64)
+
+    def mv(x):
+        return x
+
+    def preconditioner(x):
+        return 2.0 * x
+
+    def fake_solve_pjit(
+        b_use,
+        x0_use,
+        matvec_use,
+        preconditioner_use,
+        solver_kind,
+        *_args,
+    ):
+        preconditioned = preconditioner_use(jnp.ones_like(b_use))
+        calls.append(("solve", tuple(b_use.shape), tuple(preconditioned.shape), solver_kind))
+        np.testing.assert_allclose(np.asarray(x0_use), np.zeros((4,), dtype=np.float64))
+        np.testing.assert_allclose(np.asarray(matvec_use(b_use)), np.asarray(b_use))
+        return b_use, jnp.asarray(99.0, dtype=jnp.float64)
+
+    def fake_solve_with_residual_pjit(
+        b_use,
+        x0_use,
+        matvec_use,
+        preconditioner_use,
+        solver_kind,
+        *_args,
+    ):
+        preconditioned = preconditioner_use(jnp.ones_like(b_use))
+        calls.append(("residual", tuple(b_use.shape), tuple(preconditioned.shape), solver_kind))
+        np.testing.assert_allclose(np.asarray(x0_use), np.zeros((4,), dtype=np.float64))
+        np.testing.assert_allclose(np.asarray(matvec_use(b_use)), np.asarray(b_use))
+        return b_use, jnp.asarray(99.0, dtype=jnp.float64), -jnp.ones_like(b_use)
+
+    monkeypatch.setattr(solver_module, "_get_gmres_mesh", lambda _axis_name: _Mesh())
+    monkeypatch.setattr(solver_module, "_mesh_context", lambda _mesh: _MeshContext())
+    monkeypatch.setattr(solver_module, "_get_distributed_solve_pjit", lambda _axis_name: fake_solve_pjit)
+    monkeypatch.setattr(
+        solver_module,
+        "_get_distributed_solve_with_residual_pjit",
+        lambda _axis_name: fake_solve_with_residual_pjit,
+    )
+
+    result = gmres_solve_distributed(
+        matvec=mv,
+        b=b,
+        preconditioner=preconditioner,
+        axis_name="theta",
+        solve_method="bicgstab",
+    )
+    result_with_residual, residual = gmres_solve_with_residual_distributed(
+        matvec=mv,
+        b=b,
+        preconditioner=preconditioner,
+        axis_name="theta",
+        solve_method="bicgstab",
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), np.asarray(b))
+    np.testing.assert_allclose(np.asarray(result_with_residual.x), np.asarray(b))
+    np.testing.assert_allclose(np.asarray(result.residual_norm), 0.0)
+    np.testing.assert_allclose(np.asarray(result_with_residual.residual_norm), 0.0)
+    np.testing.assert_allclose(np.asarray(residual), np.zeros((3,), dtype=np.float64))
+    assert calls == [
+        ("solve", (4,), (4,), "bicgstab"),
+        ("residual", (4,), (4,), "bicgstab"),
+    ]
+
+
 def test_distributed_solver_sharded_jit_smoke_two_cpu_devices() -> None:
     code = r"""
 import numpy as np
 import jax
 import jax.numpy as jnp
-from sfincs_jax.solver import (
+from sfincs_jax.solvers.krylov import (
     distributed_gmres_enabled,
     gmres_solve_distributed,
     gmres_solve_with_residual_distributed,

@@ -3,11 +3,13 @@ from __future__ import annotations
 import numpy as np
 import jax
 import jax.numpy as jnp
+import pytest
 
-from sfincs_jax.structured_velocity import (
+from sfincs_jax.discretization.structured_velocity import (
     apply_block_tridiagonal,
     block_tridiagonal_to_dense,
     factor_block_tridiagonal,
+    solve_block_tridiagonal,
 )
 
 
@@ -43,10 +45,12 @@ def test_block_tridiagonal_solve_matches_dense_and_reuses_factor() -> None:
     rhs2 = np.random.default_rng(5).standard_normal(dense.shape[0])
 
     sol1 = np.asarray(factor.solve(jnp.asarray(rhs1)))
+    sol1_direct = np.asarray(solve_block_tridiagonal(factor, jnp.asarray(rhs1)))
     sol2 = np.asarray(factor.solve(jnp.asarray(rhs2)))
     sol_batch = np.asarray(factor.solve(jnp.asarray(np.stack([rhs1, rhs2], axis=0))))
 
     np.testing.assert_allclose(dense @ sol1, rhs1, rtol=0.0, atol=1e-11)
+    np.testing.assert_allclose(sol1_direct, sol1, rtol=0.0, atol=1e-12)
     np.testing.assert_allclose(dense @ sol2, rhs2, rtol=0.0, atol=1e-11)
     np.testing.assert_allclose(sol1, np.linalg.solve(dense, rhs1), rtol=0.0, atol=1e-10)
     np.testing.assert_allclose(sol2, np.linalg.solve(dense, rhs2), rtol=0.0, atol=1e-10)
@@ -98,3 +102,32 @@ def test_block_tridiagonal_factor_is_pytree_roundtrip() -> None:
         rtol=0.0,
         atol=1e-12,
     )
+
+
+def test_block_tridiagonal_validates_block_and_rhs_shapes() -> None:
+    diagonal, lower, upper = _make_well_conditioned_blocks(seed=10)
+
+    with pytest.raises(ValueError, match="diagonal must have shape"):
+        factor_block_tridiagonal(diagonal[0], lower, upper)
+    with pytest.raises(ValueError, match="diagonal blocks must be square"):
+        factor_block_tridiagonal(np.ones((2, 2, 3)), np.ones((1, 2, 2)), np.ones((1, 2, 2)))
+    with pytest.raises(ValueError, match="lower_diagonal"):
+        factor_block_tridiagonal(diagonal, np.zeros((1, 3, 3)), upper)
+    with pytest.raises(ValueError, match="upper_diagonal"):
+        factor_block_tridiagonal(diagonal, lower, np.zeros((1, 3, 3)))
+
+    factor = factor_block_tridiagonal(diagonal, lower, upper)
+    with pytest.raises(ValueError, match="rhs must have"):
+        factor.solve(jnp.ones((5,), dtype=jnp.float64))
+
+
+def test_block_tridiagonal_reverse_batched_apply_matches_dense() -> None:
+    diagonal, lower, upper = _make_well_conditioned_blocks(seed=11)
+    dense = np.asarray(block_tridiagonal_to_dense(diagonal, lower, upper))
+    factor = factor_block_tridiagonal(diagonal, lower, upper, reverse=True)
+    rhs = np.random.default_rng(12).standard_normal((2, diagonal.shape[0], diagonal.shape[1]))
+
+    applied = np.asarray(apply_block_tridiagonal(factor, jnp.asarray(rhs)))
+    expected = np.stack([(dense @ row.reshape(-1)).reshape(rhs.shape[1:]) for row in rhs], axis=0)
+
+    np.testing.assert_allclose(applied, expected, rtol=0.0, atol=1.0e-11)

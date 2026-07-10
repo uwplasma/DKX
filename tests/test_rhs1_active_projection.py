@@ -3,8 +3,9 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.rhs1_active_projection import (
+from sfincs_jax.problems.profile_setup import (
     expand_reduced_with_map,
+    fp_pitch_mode_active_indices,
     project_pas_constraint_f,
     reduce_full_with_indices,
 )
@@ -44,3 +45,52 @@ def test_pas_constraint_projection_removes_l0_flux_surface_average() -> None:
     assert np.isclose(l0_average[0, 0], np.asarray(f[:, 0, 0]).mean())
     assert np.allclose(l0_average[0, 1:], 0.0, atol=1.0e-14)
     assert np.allclose(np.asarray(projected[:, :, 1]), np.asarray(f[:, :, 1]))
+
+
+def test_fp_pitch_mode_active_indices_selects_full_low_l_band() -> None:
+    indices = fp_pitch_mode_active_indices(
+        n_species=1,
+        n_x=2,
+        n_xi=3,
+        n_theta=2,
+        n_zeta=2,
+        nxi_for_x=np.asarray([2, 1], dtype=np.int32),
+        l_min=0,
+        l_max=1,
+    )
+
+    np.testing.assert_array_equal(
+        indices,
+        np.asarray([0, 1, 2, 3, 4, 5, 6, 7, 12, 13, 14, 15], dtype=np.int32),
+    )
+
+
+def test_fp_pitch_mode_active_indices_maps_to_reduced_active_order() -> None:
+    full_to_active = np.zeros((16,), dtype=np.int32)
+    full_to_active[[4, 6, 12]] = np.asarray([1, 2, 3], dtype=np.int32)
+
+    l1_indices = fp_pitch_mode_active_indices(
+        n_species=1,
+        n_x=2,
+        n_xi=3,
+        n_theta=2,
+        n_zeta=2,
+        nxi_for_x=np.asarray([2, 1], dtype=np.int32),
+        l_min=1,
+        l_max=1,
+        full_to_active=full_to_active,
+    )
+    low_l_indices = fp_pitch_mode_active_indices(
+        n_species=1,
+        n_x=2,
+        n_xi=3,
+        n_theta=2,
+        n_zeta=2,
+        nxi_for_x=np.asarray([2, 1], dtype=np.int32),
+        l_min=0,
+        l_max=1,
+        full_to_active=full_to_active,
+    )
+
+    np.testing.assert_array_equal(l1_indices, np.asarray([0, 1], dtype=np.int32))
+    np.testing.assert_array_equal(low_l_indices, np.asarray([0, 1, 2], dtype=np.int32))

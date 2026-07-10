@@ -725,7 +725,7 @@ def _finite_beta_workflow_contract() -> dict[str, Any]:
         "contract_version": 1,
         "differentiability": {
             "vmec_jax_fixed_boundary_run": "primal_setup_not_differentiated_by_this_example",
-            "vmec_wout_file_handoff": "file_handoff_not_differentiated",
+            "vmec_wout_file_boundary": "file_boundary_not_differentiated",
             "sfincs_geometry_scheme5": "primal_geometry_evaluation_not_differentiated",
             "sfincs_kinetic_transport_solve": "primal_solve_only_not_differentiated",
             "radial_profile_postprocessing": "postprocessing_not_differentiated",
@@ -775,7 +775,7 @@ def _radial_profile_provenance(
         "branch_selection": (
             "At the innermost requested surface, choose the root nearest "
             "--profile-root-preference; on later surfaces, choose the root nearest "
-            "the previously selected root."
+            "the root selected on the neighboring surface."
         ),
         "all_bracketed_roots_preserved": all(
             len(row.roots_er) == len(row.bootstrap_current_at_roots) for row in profile
@@ -1190,7 +1190,7 @@ def build_summary(
             ),
             "profile_branch_selection": (
                 "At the innermost requested surface, choose the root nearest --profile-root-preference; "
-                "on later surfaces, choose the root nearest the previously selected root."
+                "on later surfaces, choose the root nearest the neighboring selected root."
             ),
             "radial_axis": "The radial-profile x-axis is normalized toroidal flux psi_N = r_N^2.",
             "workflow_contract": _finite_beta_workflow_contract(),

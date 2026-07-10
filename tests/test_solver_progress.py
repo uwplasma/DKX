@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.solver_progress import (
+from sfincs_jax.solvers.diagnostics import (
     RHS1ProgressNotes,
     format_duration,
     rhs1_large_progress_enabled,

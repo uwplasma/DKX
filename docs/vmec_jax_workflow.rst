@@ -29,10 +29,10 @@ machine-readable assertion that the workflow is still a proxy-gradient lane:
 ``kinetic_solve_executed`` is false, the differentiated object is the
 Boozer-spectrum transport-like scalar, and full VMEC-boundary-to-SFINCS kinetic
 gradients remain deferred.  Both workflow examples use the same shared
-``sfincs_jax.jax_geometry_adapters`` gate, so the skip-safe status path and the
+``sfincs_jax.geometry.jax_adapters`` gate, so the skip-safe status path and the
 file-backed proxy-gradient summary enforce the same scalar-contract boundary.
 
-The same payload now also carries ``kinetic_transport_scalar_contract`` and a
+The same payload carries ``kinetic_transport_scalar_contract`` and a
 copy of its gate in
 ``no_solve_provenance_gate.kinetic_transport_scalar_contract_gate``. This is the
 forward contract for a future VMEC/Boozer-to-kinetic-transport scalar.  It lists
@@ -91,7 +91,7 @@ The status scaffold should then report both optional backends as available.
 Proxy-gradient gate
 -------------------
 
-Run the documented file-backed handoff with an explicit ``wout`` file:
+Run the documented file-backed workflow with an explicit ``wout`` file:
 
 .. code-block:: bash
 
@@ -131,7 +131,7 @@ Differentiated in this lane:
 
 - scaled VMEC-like magnetic spectral arrays,
 - the ``booz_xform_jax`` transform,
-- ``sfincs_jax.jax_geometry_adapters.boozer_spectrum_proxy_transport_objective``.
+- ``sfincs_jax.geometry.jax_adapters.boozer_spectrum_proxy_transport_objective``.
 
 Setup or provenance only, not differentiated:
 
@@ -170,36 +170,10 @@ These gates also include a no-solve invariant check that the normalized Boozer
 proxy transport objective is unchanged by global :math:`|B|` spectrum scaling
 and is exactly zero, with zero gradient, for a constant-:math:`B` spectrum.
 
-Run the optional JAX ecosystem gates that protect future Lineax, Equinox, and
-opt-in JAXopt adoption:
-
-.. code-block:: bash
-
-   python -m pytest tests/test_optional_ecosystem_gates.py \
-     tests/test_optional_lineax_implicit_gate.py \
-     tests/test_optional_eqx_jaxopt_scheme4_gate.py -q
-
-The optional ecosystem benchmark CLIs also write measured adoption summaries
-without changing their row-list JSON outputs:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_optional_lineax_implicit_solve.py \
-     --backend all \
-     --suite all \
-     --out-json lineax-rows.json \
-     --summary-json lineax-summary.json
-
-   python examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py \
-     --backend all \
-     --out-json eqx-jaxopt-rows.json \
-     --summary-json eqx-jaxopt-summary.json
-
-Those summaries keep the production decision conservative: optional packages may
-be candidates for bounded experiments only when the measured gate is clean; they
-do not become hard dependencies or production solver defaults from these gates.
-Default CI installs ``lineax`` and ``equinox`` and leaves the JAXopt row
-skip-safe unless a developer installs JAXopt explicitly for local comparison.
+Optional ecosystem benchmark CLIs are not part of the stable VMEC workflow. The
+stable examples use the in-tree JAX differentiable geometry and solver paths;
+external solver-library adoption studies are handled on research branches until
+they satisfy the documented accuracy, runtime, memory, and dependency gates.
 
 The optional VMEC/Boozer integration tests use ``pytest.importorskip`` or a
 skip-status payload. Missing optional packages therefore record a skipped lane,

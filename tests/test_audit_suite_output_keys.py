@@ -1,22 +1,11 @@
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
 from pathlib import Path
 
 import h5py
 
-
-def _load_module():
-    repo = Path(__file__).resolve().parents[1]
-    path = repo / "scripts" / "audit_suite_output_keys.py"
-    spec = importlib.util.spec_from_file_location("audit_suite_output_keys", path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+from sfincs_jax.validation import release
 
 
 def _write_h5(path: Path, keys: dict[str, float]) -> None:
@@ -27,7 +16,6 @@ def _write_h5(path: Path, keys: dict[str, float]) -> None:
 
 
 def test_audit_suite_output_keys_reports_missing_and_extra(tmp_path: Path) -> None:
-    mod = _load_module()
     suite_root = tmp_path / "suite"
     report_path = suite_root / "suite_report.json"
 
@@ -51,7 +39,7 @@ def test_audit_suite_output_keys_reports_missing_and_extra(tmp_path: Path) -> No
         encoding="utf-8",
     )
 
-    coverage = mod.audit_suite_output_keys(suite_root=suite_root)
+    coverage = release.audit_suite_output_keys(suite_root=suite_root)
     by_case = {item.case: item for item in coverage}
     assert by_case["case_a"].missing_in_jax == ["b"]
     assert by_case["case_a"].extra_in_jax == []
@@ -60,7 +48,6 @@ def test_audit_suite_output_keys_reports_missing_and_extra(tmp_path: Path) -> No
 
 
 def test_audit_suite_output_keys_cli_can_fail_on_missing(tmp_path: Path) -> None:
-    mod = _load_module()
     suite_root = tmp_path / "suite"
     report_path = suite_root / "suite_report.json"
     fortran_h5 = suite_root / "case" / "fortran.h5"
@@ -73,12 +60,11 @@ def test_audit_suite_output_keys_cli_can_fail_on_missing(tmp_path: Path) -> None
         encoding="utf-8",
     )
 
-    rc = mod.main(["--suite-root", str(suite_root), "--fail-on-missing"])
+    rc = release.audit_output_keys_main(["--suite-root", str(suite_root), "--fail-on-missing"])
     assert rc == 1
 
 
 def test_audit_suite_output_keys_skips_cases_without_h5_paths(tmp_path: Path) -> None:
-    mod = _load_module()
     suite_root = tmp_path / "suite"
     report_path = suite_root / "suite_report.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,7 +77,7 @@ def test_audit_suite_output_keys_skips_cases_without_h5_paths(tmp_path: Path) ->
         encoding="utf-8",
     )
 
-    coverage = mod.audit_suite_output_keys(suite_root=suite_root)
+    coverage = release.audit_suite_output_keys(suite_root=suite_root)
     assert len(coverage) == 1
     assert coverage[0].case == "missing_paths"
     assert coverage[0].skipped is True

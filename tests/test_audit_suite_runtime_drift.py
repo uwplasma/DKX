@@ -1,24 +1,12 @@
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
 from pathlib import Path
 
-
-def _load_module():
-    repo = Path(__file__).resolve().parents[1]
-    path = repo / "scripts" / "audit_suite_runtime_drift.py"
-    spec = importlib.util.spec_from_file_location("audit_suite_runtime_drift", path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+from sfincs_jax.validation import release
 
 
 def test_audit_suite_runtime_drift_flags_only_cases_above_threshold(tmp_path: Path) -> None:
-    mod = _load_module()
     baseline = tmp_path / "baseline.json"
     candidate = tmp_path / "candidate.json"
     baseline.write_text(
@@ -42,7 +30,7 @@ def test_audit_suite_runtime_drift_flags_only_cases_above_threshold(tmp_path: Pa
         encoding="utf-8",
     )
 
-    flagged = mod.audit_suite_runtime_drift(
+    flagged = release.audit_suite_runtime_drift(
         baseline_report=baseline,
         candidate_report=candidate,
         threshold_ratio=1.25,
@@ -52,12 +40,11 @@ def test_audit_suite_runtime_drift_flags_only_cases_above_threshold(tmp_path: Pa
 
 
 def test_audit_suite_runtime_drift_cli_can_fail(tmp_path: Path) -> None:
-    mod = _load_module()
     baseline = tmp_path / "baseline.json"
     candidate = tmp_path / "candidate.json"
     baseline.write_text(json.dumps([{"case": "case", "jax_runtime_s": 1.0}]), encoding="utf-8")
     candidate.write_text(json.dumps([{"case": "case", "jax_runtime_s": 1.4}]), encoding="utf-8")
-    rc = mod.main(
+    rc = release.audit_runtime_drift_main(
         [
             "--baseline-report",
             str(baseline),
@@ -72,7 +59,6 @@ def test_audit_suite_runtime_drift_cli_can_fail(tmp_path: Path) -> None:
 
 
 def test_audit_suite_runtime_drift_prefers_logged_elapsed_when_available(tmp_path: Path) -> None:
-    mod = _load_module()
     baseline = tmp_path / "baseline.json"
     candidate = tmp_path / "candidate.json"
     baseline.write_text(
@@ -84,7 +70,7 @@ def test_audit_suite_runtime_drift_prefers_logged_elapsed_when_available(tmp_pat
         encoding="utf-8",
     )
 
-    flagged = mod.audit_suite_runtime_drift(
+    flagged = release.audit_suite_runtime_drift(
         baseline_report=baseline,
         candidate_report=candidate,
         threshold_ratio=1.10,

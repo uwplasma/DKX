@@ -18,55 +18,6 @@ def _load_script(path: Path, name: str):
     return module
 
 
-def test_optional_objective_summary_covers_missing_and_deferred_backend_branches() -> None:
-    mod = _load_script(
-        _REPO / "examples" / "optimization" / "benchmark_optional_eqx_jaxopt_scheme4_gate.py",
-        "wave3_eqx_jaxopt_gate",
-    )
-
-    eqx_bad = mod.ObjectiveGateResult(
-        case="scheme4_geometry_fit",
-        backend="equinox_wrapper",
-        status="ok",
-        initial_loss=1.0,
-        final_loss=1.0,
-        loss_ratio=1.0,
-        directional_grad=2.0,
-        finite_difference_grad=1.0,
-        directional_grad_abs_error=1.0,
-        final_param_error=0.0,
-        elapsed_s=0.01,
-    )
-    summary = mod.summarize_gate_results([eqx_bad])
-
-    assert summary["rows"] == 1
-    assert summary["measured_rows"] == 1
-    assert summary["backends"] == ["equinox_wrapper"]
-    assert summary["adoption_decision"]["equinox"] == "defer_gradient_gate_not_clean"
-    assert summary["adoption_decision"]["jaxopt"] == "not_evaluated"
-    assert summary["adoption_decision"]["hard_dependency"] is False
-
-    jaxopt_bad = mod.ObjectiveGateResult(
-        case="scheme4_geometry_fit",
-        backend="jaxopt_gradient_descent",
-        status="ok",
-        initial_loss=4.0,
-        final_loss=2.0,
-        loss_ratio=0.5,
-        directional_grad=None,
-        finite_difference_grad=None,
-        directional_grad_abs_error=None,
-        final_param_error=1.0,
-        elapsed_s=0.02,
-    )
-    summary = mod.summarize_gate_results([jaxopt_bad])
-
-    assert summary["adoption_decision"]["equinox"] == "not_evaluated"
-    assert summary["adoption_decision"]["jaxopt"] == "defer_optimization_gate_not_clean"
-    assert summary["evidence"]["jaxopt_loss_ratio"] == 0.5
-    assert summary["evidence"]["jaxopt_final_param_error"] == 1.0
-
-
 def test_vmec_workflow_status_helpers_are_skip_safe_and_strict(
     tmp_path: Path,
     monkeypatch,

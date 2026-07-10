@@ -2,16 +2,23 @@ from __future__ import annotations
 
 import numpy as np
 
-from sfincs_jax.memory_model import (
+from sfincs_jax.solvers.memory_model import (
     bicgstab_work_nbytes,
     csr_matrix_nbytes,
     dense_matrix_nbytes,
+    dtype_nbytes,
     estimate_linear_solve_memory,
     estimate_sparse_pc_memory,
     gmres_basis_nbytes,
     gmres_restart_for_budget,
     tfqmr_work_nbytes,
 )
+
+
+def test_dtype_nbytes_matches_numpy_dtype_itemsize() -> None:
+    assert dtype_nbytes(np.float64) == 8
+    assert dtype_nbytes(np.float32) == 4
+    assert dtype_nbytes(np.dtype(np.int32)) == 4
 
 
 def test_dense_and_csr_estimates_are_byte_exact() -> None:

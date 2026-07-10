@@ -90,7 +90,7 @@ def resolve_existing_path(
     # basename. These fixtures live in a release asset instead of the git tree,
     # so resolve them lazily into the user cache when requested.
     try:
-        from .data_fetch import resolve_external_equilibrium
+        from .validation.data_fetch import resolve_external_equilibrium
 
         found = resolve_external_equilibrium(p)
     except Exception as exc:  # noqa: BLE001

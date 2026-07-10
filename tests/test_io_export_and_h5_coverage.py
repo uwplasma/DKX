@@ -7,22 +7,30 @@ import numpy as np
 import pytest
 
 from sfincs_jax.io import (
-    _add_rhsmode1_solver_diagnostics,
     _apply_export_f_maps,
     _as_1d_float,
     _export_f_config,
     _legendre_matrix,
-    _raise_for_nonconverged_rhsmode1_output,
-    _rhsmode1_result_residual_and_target,
-    _should_fail_nonconverged_rhsmode1_output,
-    _write_nonconverged_rhsmode1_solver_trace_json,
     read_sfincs_h5,
     read_sfincs_output_file,
     write_sfincs_h5,
     write_sfincs_output_file,
 )
 from sfincs_jax.namelist import Namelist
-from sfincs_jax.solver_trace import read_solver_trace_json
+from sfincs_jax.outputs.formats import write_export_f_state_vectors_to_data
+from sfincs_jax.outputs.rhsmode1 import (
+    _add_rhsmode1_solver_diagnostics,
+    _compact_json_metadata,
+    _metadata_float,
+    _metadata_int,
+    _raise_for_nonconverged_rhsmode1_output,
+    _rhs1_active_size_for_trace,
+    _rhsmode1_result_residual_and_target,
+    _should_fail_nonconverged_rhsmode1_output,
+    _solver_metadata_dict,
+    _write_nonconverged_rhsmode1_solver_trace_json,
+)
+from sfincs_jax.solvers.diagnostics import read_solver_trace_json
 
 
 def _minimal_namelist(groups: dict[str, dict]) -> Namelist:
@@ -112,7 +120,6 @@ def test_nonconverged_rhsmode1_solver_trace_sidecar_is_written(tmp_path: Path) -
             "solve_s": 193.8,
             "matvecs": 803,
             "solver_kind": "xblock_sparse_pc_gmres",
-            "xblock_qi_device_operator_reuse_enabled": True,
             "sparse_pc_xblock_preconditioner_built": False,
         },
     )
@@ -151,8 +158,66 @@ def test_nonconverged_rhsmode1_solver_trace_sidecar_is_written(tmp_path: Path) -
     assert trace.metadata["output_refused"] is True
     assert trace.metadata["failure_reason"] == "nonconverged_rhsmode1_output"
     solver_metadata = trace.metadata["solver_metadata"]
-    assert solver_metadata["xblock_qi_device_operator_reuse_enabled"] is True
     assert solver_metadata["sparse_pc_xblock_preconditioner_built"] is False
+
+
+def test_rhsmode1_active_trace_size_uses_pas_projection_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
+    collisionless = SimpleNamespace(n_xi_for_x=np.asarray([3, 2, 1], dtype=np.int32))
+    op = SimpleNamespace(
+        n_species=2,
+        n_theta=3,
+        n_zeta=4,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=2,
+        phi1_size=0,
+        extra_size=2,
+        total_size=5000,
+        fblock=SimpleNamespace(collisionless=collisionless, pas=SimpleNamespace()),
+    )
+
+    active_f = 2 * int(np.sum(collisionless.n_xi_for_x)) * 3 * 4
+    assert _rhs1_active_size_for_trace(op) == active_f
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_PROJECT_MIN", "99999")
+    assert _rhs1_active_size_for_trace(op) == active_f + 2
+
+    op.include_phi1 = True
+    op.phi1_size = 7
+    assert _rhs1_active_size_for_trace(op) == active_f + 7 + 2
+    assert _rhs1_active_size_for_trace(SimpleNamespace()) is None
+
+
+def test_rhsmode1_solver_metadata_helpers_are_fail_closed_and_bounded() -> None:
+    metadata = {
+        "good_int": "12",
+        "bad_int": "not-an-int",
+        "negative_int": -1,
+        "good_float": "1.25",
+        "bad_float": "nan",
+        "inf_float": float("inf"),
+    }
+
+    assert _metadata_int(metadata, "good_int") == 12
+    assert _metadata_int(metadata, "bad_int") is None
+    assert _metadata_int(metadata, "negative_int") is None
+    assert _metadata_int(metadata, "missing") is None
+    assert _metadata_float(metadata, "good_float") == pytest.approx(1.25)
+    assert _metadata_float(metadata, "bad_float") is None
+    assert _metadata_float(metadata, "inf_float") is None
+    assert _metadata_float(metadata, "missing") is None
+
+    compact = _compact_json_metadata({"letters": "abcdef"}, max_chars=12)
+    assert compact is not None
+    assert compact.endswith("...<truncated>")
+    assert len(compact) <= len("...<truncated>")
+    assert _compact_json_metadata({"ok": (1, 2)}, max_chars=128) == '{"ok": [1, 2]}'
+
+    source = {"metadata": {"accepted_converged": True}}
+    copied = _solver_metadata_dict(SimpleNamespace(**source))
+    copied["accepted_converged"] = False
+    assert source["metadata"]["accepted_converged"] is True
+    assert _solver_metadata_dict(SimpleNamespace(metadata=("not", "dict"))) == {}
 
 
 def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
@@ -189,22 +254,6 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
             "xblock_initial_seed_used": True,
             "xblock_initial_seed_residual_norm": 3.0e-8,
             "xblock_initial_seed_residual_ratio": 0.3,
-            "xblock_post_minres_steps_requested": 3,
-            "xblock_post_minres_steps_accepted": 2,
-            "xblock_post_minres_residual_before": 4.0e-8,
-            "xblock_post_minres_residual_after": 2.5e-8,
-            "xblock_post_coarse_steps_requested": 1,
-            "xblock_post_coarse_steps_accepted": 1,
-            "xblock_post_coarse_direction_count": 6,
-            "xblock_post_coarse_residual_before": 2.5e-8,
-            "xblock_post_coarse_residual_after": 1.5e-8,
-            "xblock_post_residual_equation_steps_requested": 1,
-            "xblock_post_residual_equation_steps_accepted": 1,
-            "xblock_post_residual_equation_direction_count": 9,
-            "xblock_post_residual_equation_residual_before": 1.5e-8,
-            "xblock_post_residual_equation_residual_after": 9.0e-9,
-            "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_requested": True,
-            "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_selected": True,
             "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb": 1024.0,
             "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb_auto": True,
             "sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata": {
@@ -225,43 +274,6 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
                         },
                     ),
                 },
-            },
-            "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_metadata": {
-                "accepted_nonbaseline": True,
-                "selected_candidate": "x0",
-                "candidate_specs": ("current", "x0"),
-                "baseline_residual_after": 4.0e-4,
-                "best_residual_after": 2.0e-5,
-                "rhs_norm": 1.0,
-                "setup_s": 0.125,
-                "candidates": (
-                    {
-                        "label": "current",
-                        "selected": True,
-                        "residual_after": 4.0e-4,
-                        "factor_nbytes_actual": 2_000_000,
-                    },
-                    {
-                        "label": "x0",
-                        "selected": True,
-                        "residual_after": 2.0e-5,
-                        "factor_nbytes_actual": 8_000_000,
-                    },
-                ),
-            },
-            "sparse_pc_direct_tail_true_coupled_coarse_requested": True,
-            "sparse_pc_direct_tail_true_coupled_coarse_explicit_requested": False,
-            "sparse_pc_direct_tail_true_coupled_coarse_auto_enabled": True,
-            "sparse_pc_direct_tail_true_coupled_coarse_auto_selected": True,
-            "sparse_pc_direct_tail_true_coupled_coarse_auto_target_ratio": 10.0,
-            "sparse_pc_direct_tail_true_coupled_coarse_auto_min_size": 300_000,
-            "sparse_pc_direct_tail_true_coupled_coarse_selected": True,
-            "sparse_pc_direct_tail_true_coupled_coarse_residual_after": 7.5e-9,
-            "sparse_pc_direct_tail_true_coupled_coarse_metadata": {
-                "base_residual_after": 4.0e-7,
-                "coarse_size": 12,
-                "factor_nbytes_estimate": 4096,
-                "basis_names": ("tail_residual", "dominant_kinetic_residual_window"),
             },
         },
     )
@@ -301,47 +313,10 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
     assert int(np.asarray(data["linearSolverXBlockInitialSeedUsed"])) == 1
     assert float(np.asarray(data["linearSolverXBlockInitialSeedResidualNorm"])) == pytest.approx(3.0e-8)
     assert float(np.asarray(data["linearSolverXBlockInitialSeedResidualRatio"])) == pytest.approx(0.3)
-    assert int(np.asarray(data["linearSolverXBlockPostMinresStepsRequested"])) == 3
-    assert int(np.asarray(data["linearSolverXBlockPostMinresStepsAccepted"])) == 2
-    assert float(np.asarray(data["linearSolverXBlockPostMinresResidualBefore"])) == pytest.approx(4.0e-8)
-    assert float(np.asarray(data["linearSolverXBlockPostMinresResidualAfter"])) == pytest.approx(2.5e-8)
-    assert int(np.asarray(data["linearSolverXBlockPostCoarseStepsRequested"])) == 1
-    assert int(np.asarray(data["linearSolverXBlockPostCoarseStepsAccepted"])) == 1
-    assert int(np.asarray(data["linearSolverXBlockPostCoarseDirectionCount"])) == 6
-    assert float(np.asarray(data["linearSolverXBlockPostCoarseResidualBefore"])) == pytest.approx(2.5e-8)
-    assert float(np.asarray(data["linearSolverXBlockPostCoarseResidualAfter"])) == pytest.approx(1.5e-8)
-    assert int(np.asarray(data["linearSolverXBlockPostResidualEquationStepsRequested"])) == 1
-    assert int(np.asarray(data["linearSolverXBlockPostResidualEquationStepsAccepted"])) == 1
-    assert int(np.asarray(data["linearSolverXBlockPostResidualEquationDirectionCount"])) == 9
-    assert float(np.asarray(data["linearSolverXBlockPostResidualEquationResidualBefore"])) == pytest.approx(1.5e-8)
-    assert float(np.asarray(data["linearSolverXBlockPostResidualEquationResidualAfter"])) == pytest.approx(9.0e-9)
-    assert int(np.asarray(data["linearSolverDirectTailSupportModePreflightRequested"])) == 1
-    assert int(np.asarray(data["linearSolverDirectTailSupportModePreflightSelected"])) == 1
-    assert int(np.asarray(data["linearSolverDirectTailSupportModeAcceptedNonbaseline"])) == 1
-    assert data["linearSolverDirectTailSupportModeSelectedCandidate"] == "x0"
-    assert int(np.asarray(data["linearSolverDirectTailSupportModeRequestedCandidateCount"])) == 2
-    assert int(np.asarray(data["linearSolverDirectTailSupportModeCandidateCount"])) == 2
-    assert float(np.asarray(data["linearSolverDirectTailSupportModeBaselineResidualAfter"])) == pytest.approx(4.0e-4)
-    assert float(np.asarray(data["linearSolverDirectTailSupportModeBestResidualAfter"])) == pytest.approx(2.0e-5)
-    assert float(np.asarray(data["linearSolverDirectTailSupportModeRhsNorm"])) == pytest.approx(1.0)
-    assert float(np.asarray(data["linearSolverDirectTailSupportModeSetupTime"])) == pytest.approx(0.125)
-    assert '"label": "x0"' in data["linearSolverDirectTailSupportModeCandidatesJson"]
     assert float(np.asarray(data["linearSolverDirectTailStructuredPCMaxMB"])) == pytest.approx(1024.0)
     assert int(np.asarray(data["linearSolverDirectTailStructuredPCMaxMBAuto"])) == 1
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseRequested"])) == 1
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseExplicitRequested"])) == -1
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseAutoEnabled"])) == 1
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseAutoSelected"])) == 1
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseSelected"])) == 1
-    assert float(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseAutoTargetRatio"])) == pytest.approx(10.0)
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseAutoMinSize"])) == 300_000
-    assert float(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseResidualAfter"])) == pytest.approx(7.5e-9)
-    assert float(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseBaseResidualAfter"])) == pytest.approx(
-        4.0e-7
-    )
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseSize"])) == 12
-    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseNbytesEstimate"])) == 4096
-    assert "dominant_kinetic_residual_window" in data["linearSolverDirectTailTrueCoupledCoarseBasisJson"]
+    assert not any("DirectTailSupportMode" in key for key in data)
+    assert not any("TrueCoupledCoarse" in key for key in data)
     assert float(np.asarray(data["linearSolverResidualTargetRatio"])) == pytest.approx(0.2)
 
 
@@ -466,6 +441,73 @@ def test_export_f_config_builds_identity_like_maps_and_preserves_constant_distri
     mapped = _apply_export_f_maps(f, cfg)
     assert mapped.shape == (2, 2, 3, 2, 2)
     np.testing.assert_allclose(mapped, 1.0)
+
+
+def test_write_export_f_state_vectors_to_data_writes_delta_and_full_iterations() -> None:
+    nml = _minimal_namelist(
+        {
+            "export_f": {
+                "EXPORT_FULL_F": True,
+                "EXPORT_DELTA_F": True,
+                "EXPORT_F_THETA_OPTION": 0,
+                "EXPORT_F_ZETA_OPTION": 0,
+                "EXPORT_F_X_OPTION": 0,
+                "EXPORT_F_XI_OPTION": 0,
+            },
+            "otherNumericalParameters": {},
+        }
+    )
+    grids = SimpleNamespace(
+        theta=np.asarray([0.0, np.pi]),
+        zeta=np.asarray([0.0]),
+        x=np.asarray([0.4]),
+        n_xi=2,
+    )
+    geom = SimpleNamespace(n_periods=5)
+    cfg = _export_f_config(nml=nml, grids=grids, geom=geom)
+    assert cfg is not None
+
+    f_shape = (1, 1, 2, 2, 1)
+    f0_l0 = np.asarray([[[[10.0], [20.0]]]])
+    state0 = np.arange(np.prod(f_shape), dtype=np.float64)
+    state1 = state0 + 100.0
+    data = {"export_full_f": np.int32(1), "export_delta_f": np.int32(1)}
+
+    write_export_f_state_vectors_to_data(
+        data=data,
+        state_vectors=[state0, state1],
+        f_size=state0.size,
+        f_shape=f_shape,
+        f0_l0=f0_l0,
+        export_cfg=cfg,
+        fortran_h5_layout_fn=lambda x: x,
+    )
+
+    assert data["delta_f"].shape == (1, 2, 1, 2, 1, 2)
+    assert data["full_f"].shape == data["delta_f"].shape
+    np.testing.assert_allclose(data["delta_f"][0, 0, 0, :, 0, 0], np.asarray([0.0, 1.0]))
+    np.testing.assert_allclose(data["full_f"][0, 0, 0, :, 0, 0], np.asarray([10.0, 21.0]))
+    np.testing.assert_allclose(data["full_f"][0, 0, 0, :, 0, 1], np.asarray([110.0, 121.0]))
+
+
+def test_write_export_f_state_vectors_to_data_noops_without_enabled_export() -> None:
+    cfg = SimpleNamespace(
+        map_x=np.eye(1),
+        map_xi=np.eye(1),
+        map_theta=np.eye(1),
+        map_zeta=np.eye(1),
+    )
+    data = {"export_full_f": np.int32(-1), "export_delta_f": np.int32(-1)}
+    write_export_f_state_vectors_to_data(
+        data=data,
+        state_vectors=[np.asarray([1.0])],
+        f_size=1,
+        f_shape=(1, 1, 1, 1, 1),
+        f0_l0=np.ones((1, 1, 1, 1)),
+        export_cfg=cfg,
+    )
+
+    assert set(data) == {"export_full_f", "export_delta_f"}
 
 
 def test_export_f_config_nearest_neighbor_x_and_invalid_theta_option() -> None:

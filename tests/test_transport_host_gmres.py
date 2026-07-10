@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.transport_host_gmres import transport_host_gmres_solve
+from sfincs_jax.problems.transport_solve import transport_host_gmres_solve
 
 
 def _op(*, rhs_mode: int = 2, has_fp: bool = True, n_x: int = 4):

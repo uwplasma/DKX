@@ -13,7 +13,7 @@ concurrency:
 jobs:
   coverage:
     runs-on: ubuntu-22.04
-    timeout-minutes: 25
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -37,10 +37,10 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[dev,structured]"
       - name: Fetch external equilibrium data
         run: |
-          python scripts/fetch_equilibria.py --quiet
+          python -m sfincs_jax.validation.data_fetch --quiet
       - name: Coverage shard
         run: |
           python -m pytest -q -n auto --dist=loadscope --splits 4 --group ${{ matrix.group }} --splitting-algorithm least_duration --cov=sfincs_jax --cov-report=
@@ -78,7 +78,7 @@ jobs:
       - name: Combine coverage
         run: |
           python -m coverage combine $(find coverage-parts -type f -name '.coverage.*' | sort)
-          python -m coverage report --fail-under=43
+          python -m coverage report --fail-under=80
           python -m coverage xml
       - name: Upload coverage
         uses: codecov/codecov-action@v6
@@ -88,7 +88,7 @@ jobs:
 
   examples-smoke:
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
@@ -110,7 +110,7 @@ jobs:
           pip install -e "."
       - name: Fetch external equilibrium data
         run: |
-          python scripts/fetch_equilibria.py --quiet
+          python -m sfincs_jax.validation.data_fetch --quiet
       - name: Smoke-run examples (no optional deps)
         env:
           SFINCS_JAX_OFFLINE: "1"
@@ -121,6 +121,7 @@ jobs:
           python examples/getting_started/write_sfincs_output_cli.py
           python examples/getting_started/write_sfincs_output_vmec.py --out "${RUNNER_TEMP}/sfincsOutput_vmec_release_data.h5"
           python examples/getting_started/plot_sfincs_output.py
+          python examples/tutorials/run_quick_output_and_plot.py --out-dir "${RUNNER_TEMP}/sfincs_jax_tutorial_output"
           python examples/parity/write_output_upstream_quick2species_python.py
           python examples/parity/write_output_upstream_quick2species_cli.py
           python examples/parity/geometry_scheme4_parity.py
@@ -134,57 +135,6 @@ jobs:
           python examples/autodiff/autodiff_sensitivity_nu_n_scheme5.py
 
   external-data-smoke:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 15
-    env:
-      JAX_ENABLE_X64: "True"
-      JAX_DISABLE_JIT: "0"
-      SFINCS_JAX_SOLVER_JIT: "1"
-      SFINCS_JAX_PRECOMPILE: "0"
-      SFINCS_JAX_PROFILE: "0"
-      SFINCS_JAX_CI: "1"
-      SFINCS_JAX_FAST_EXAMPLES: "1"
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: "pyproject.toml"
-      - name: Install
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-      - name: Fetch release-hosted equilibrium data
-        env:
-          SFINCS_JAX_DATA_DIR: "${{ runner.temp }}/sfincs_jax_release_data"
-        run: |
-          python scripts/fetch_equilibria.py --quiet
-      - name: Verify release data in offline mode
-        env:
-          SFINCS_JAX_DATA_DIR: "${{ runner.temp }}/sfincs_jax_release_data"
-          SFINCS_JAX_OFFLINE: "1"
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          from sfincs_jax.data_fetch import external_data_dir, external_data_manifest
-
-          root = external_data_dir()
-          manifest = external_data_manifest()
-          missing = [item["path"] for item in manifest["files"] if not (root / item["path"]).exists()]
-          if missing:
-              raise SystemExit(f"Missing release-hosted data files after fetch: {missing}")
-          print(f"Release-hosted equilibrium data ready in {root}")
-          PY
-          python -m pytest -q \
-            tests/test_data_fetch.py::test_external_data_manifest_lists_release_fixtures \
-            tests/test_data_fetch.py::test_unknown_external_equilibrium_does_not_fetch \
-            tests/test_write_output_return_results.py::test_write_output_wout_path_override_resolves_missing_scheme5_input
-          python examples/getting_started/write_sfincs_output_vmec.py --out "${RUNNER_TEMP}/sfincsOutput_vmec_release_data.h5"
-          test -s "${RUNNER_TEMP}/sfincsOutput_vmec_release_data.h5"
-
-  optional-ecosystem-gates:
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     env:
@@ -205,13 +155,42 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-          pip install lineax equinox
-      - name: Optional ecosystem benchmark gates
+          pip install -e ".[dev,structured]"
+      - name: Fetch release-hosted equilibrium data
+        env:
+          SFINCS_JAX_DATA_DIR: "${{ runner.temp }}/sfincs_jax_release_data"
         run: |
+          python -m sfincs_jax.validation.data_fetch --quiet
+      - name: Verify release data in offline mode
+        env:
+          SFINCS_JAX_DATA_DIR: "${{ runner.temp }}/sfincs_jax_release_data"
+          SFINCS_JAX_OFFLINE: "1"
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          from sfincs_jax.validation.data_fetch import external_data_dir, external_data_manifest
+
+          root = external_data_dir()
+          manifest = external_data_manifest()
+          missing = [item["path"] for item in manifest["files"] if not (root / item["path"]).exists()]
+          if missing:
+              raise SystemExit(f"Missing release-hosted data files after fetch: {missing}")
+          print(f"Release-hosted equilibrium data ready in {root}")
+          PY
           python -m pytest -q \
-            tests/test_optional_lineax_implicit_gate.py \
-            tests/test_optional_eqx_jaxopt_scheme4_gate.py
+            tests/test_data_fetch.py::test_external_data_manifest_lists_release_fixtures \
+            tests/test_data_fetch.py::test_unknown_external_equilibrium_does_not_fetch \
+            tests/test_write_output_return_results.py::test_write_output_wout_path_override_resolves_missing_scheme5_input
+          python examples/getting_started/write_sfincs_output_vmec.py --out "${RUNNER_TEMP}/sfincsOutput_vmec_release_data.h5"
+          test -s "${RUNNER_TEMP}/sfincsOutput_vmec_release_data.h5"
+
+  # NOTE: the former `optional-ecosystem-gates` job was removed. Its only
+  # sfincs-specific probe depended on the deleted structured-CSR internals
+  # (sfincs_jax.operators.profile_full_system), and the remaining lineax/
+  # equinox/interpax checks were third-party library smoke tests with no
+  # sfincs_jax coverage. The real structured backend (solvax) is exercised by
+  # the coverage shards, which install the `structured` extra.
 
   tests:
     runs-on: ubuntu-22.04
@@ -220,7 +199,6 @@ jobs:
       - coverage-report
       - examples-smoke
       - external-data-smoke
-      - optional-ecosystem-gates
     if: always()
     steps:
       - name: Check required CI jobs

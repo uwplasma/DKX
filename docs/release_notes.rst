@@ -4,6 +4,228 @@ Release notes
 Unreleased
 ----------
 
+- Added the first domain-package skeletons for the active ``v3_driver.py``
+  architecture refactor: input, physics, discretization, operators, problems,
+  solvers/preconditioners, parallel, workflows, validation, benchmarks, and
+  compatibility. Import-contract tests verify that the new packages are
+  importable while ``sfincs_jax.geometry`` now owns analytic Boozer, Boozer-file,
+  VMEC, and JAX-native geometry adapters as a package. The ``io.py`` module path
+  remains a compatibility facade until its later migration. The post-skeleton
+  local full suite passed with ``2662 passed in 549.92 s``.
+- Added ``sfincs_jax/api.py`` with frozen public dataclass contracts for
+  normalized solve inputs, geometry/grid/operator summaries, preconditioner and
+  solver metadata, transport summaries, output schemas, and benchmark reports.
+  These contracts are JAX-free orchestration boundaries; solver-specific pytrees
+  remain in numerical modules. The post-contract local full suite passed with
+  ``2667 passed in 565.10 s``.
+- Extended ``sfincs_jax.api`` with lazy public facades for Python workflows:
+  ``write_output``, ``read_output``, and ``run_ambipolar_brent``. These names are
+  re-exported from ``sfincs_jax`` and are covered by fast monkeypatched routing
+  tests so refactoring can move internal modules without changing public user
+  code.
+- Added explicit fixed-shape setup-reuse admission metadata to the in-process
+  ambipolar evaluator and CLI summary JSON. Ambipolar runs now report whether a
+  prior Krylov/setup state existed, whether it was actually admitted for the
+  current same-shape solve, the fixed-shape signature used for the decision, and
+  a cumulative reuse count.
+- Added a matrix-free implicit linear-observable derivative contract in
+  ``sfincs_jax.sensitivity`` plus ambipolar radial-current adapters. Production
+  problem owners can now provide operator actions, transpose actions,
+  parameter-derivative actions, and selected solve/transpose-solve closures
+  without assembling dense matrices, while tests compare the matrix-free
+  tangent/adjoint certificate against the dense certificate and centered finite
+  differences.
+- Added ``matrix_free_rhs1_vm_radial_current_linear_observable_system`` as the
+  first RHSMode=1 production-facing radial-current derivative builder. It uses
+  real full-system matrix-free operator actions, caller-supplied transpose and
+  solve closures, finite-difference derivative actions, and the existing
+  radial-current observable weights without dense matrix assembly inside the
+  builder.
+- Extended the RHSMode=1 matrix-free derivative builder with optional
+  caller-supplied derivative actions and JAX ``jvp`` operator tangents. The new
+  ``operator_tangent_from_centered_difference`` helper builds valid pytrees
+  with ``float0`` tangents for static integer/bool leaves, and tests verify the
+  JVP action against centered differences on a real electric-field ``xDot``
+  operator block.
+- Added ``matrix_free_radial_current_derivative_provider`` so ambipolar
+  safeguarded Newton/bisection and pure Newton paths can consume matrix-free
+  implicit derivative certificates directly. Fast option-1/3-style tests now
+  verify root convergence, derivative metadata, tangent/adjoint consistency,
+  and finite-difference agreement through the root-solver API.
+- Added analytic no-Phi1 ``E_r`` operator-tangent helpers for fixed-shape
+  RHSMode=1 operators. ``dphi_hat_dpsi_hat_er_derivative_from_namelist`` reuses
+  the v3 radial-coordinate conversion, and
+  ``er_operator_tangent_from_dphi_hat_dpsi_hat_derivative`` updates existing
+  ``dphi_hat_dpsi_hat`` leaves in the full operator and f-block suboperators.
+  Tests verify the analytic JVP action against centered operator differences
+  on a real electric-field ``xDot`` fixture.
+- Added an explicit ``keep_zero_er_terms`` option to the f-block and full-system
+  operator builders. Normal solves keep the previous default branch behavior,
+  while derivative/ambipolar gates can retain zero-valued ExB and ``E_r``
+  suboperators at ``E_r=0`` so JVP tangents see the same fixed-shape operator
+  family used at nearby nonzero fields.
+- Added ``rhsmode1_radial_current_response_from_namelist`` as the first
+  namelist-backed RHSMode=1 radial-current response/derivative provider. It
+  keeps zero-field ``E_r`` branches for fixed-shape derivative gates, reuses
+  the analytic/JVP operator tangent path, and is covered by a real small-deck
+  implicit derivative versus centered finite-difference test.
+- The namelist-backed RHSMode=1 response now uses a Fortran-style active
+  pitch-mode dense validation path for small decks, defaults to the Fortran
+  ambipolar ``particleFlux_vm_rN`` current convention, and infers radial
+  conversion factors from the namelist. A checked
+  ``geometry1_helical_small_option1`` regression now reproduces the Fortran v3
+  option-1 current and Newton ``dJ_r/dE_r`` slope within ``2e-5`` relative
+  tolerance.
+- Added small option-3 physical replay coverage for the same active
+  namelist-backed RHSMode=1 response. The helical and W7-X-like checked
+  Fortran v3 option-3 radial-current points now match within ``2e-5`` relative
+  tolerance.
+- Added ``solve_rhsmode1_ambipolar_from_namelist`` as a bounded small-deck
+  option-1/2/3 root driver over the active namelist-backed RHSMode=1 response.
+  The checked helical option-1 and option-3 roots now run through the real
+  active ``particleFlux_vm_rN`` response and replay the Fortran v3 roots within
+  the documented current and electric-field tolerances.
+- Added Fortran-v3 RHSMode=4/5 adjoint-sensitivity source contracts to
+  ``sfincs_jax.sensitivity``. The new helpers validate the Fortran-compatible
+  adjoint namelist restrictions and return the sensitivity HDF5 fields written
+  by ``writeHDF5Output.F90``, including the documented source-code gate for
+  ``dParallelFlowdLambda``.
+- Added the first compact SFINCS Fortran v3 RHSMode=4 sensitivity reference
+  summary: a tiny W7-X-like analytic radial-current sensitivity deck. Tests pin
+  the output fields and the identity
+  ``dRadialCurrentdLambda = sum_s Z_s dParticleFlux_s/dLambda`` without
+  checking in the generated HDF5 file.
+- Added a second compact RHSMode=4 sensitivity reference for heat-flux and
+  total-heat-flux adjoints, plus reusable output-surface validation for
+  Fortran-v3 sensitivity field names and tensor ranks. Tests pin
+  ``dTotalHeatFluxdLambda = sum_s dHeatFluxdLambda_s`` without committing the
+  generated HDF5 file.
+- Added a compact RHSMode=4 parallel-flow/bootstrap sensitivity reference.
+  Tests pin the Fortran writer-gated ``dParallelFlowdLambda`` field and the
+  identity ``dBootstrapdLambda = sum_s Z_s dParallelFlowdLambda_s``.
+- Added the first compact RHSMode=5 constant-current sensitivity reference. It
+  runs the small Fortran v3 Brent ambipolar solve, then pins the heat-flux
+  adjoint outputs and the extra ``dPhidPsidLambda`` field emitted at ambipolar
+  ``E_r``.
+- Added a compact RHSMode=4 debug-adjoint finite-difference reference. The
+  regression validates every debug output field name/rank, finite selected
+  percent errors, and the Fortran NaN mask for lambda/mode entries that the
+  finite-difference diagnostic does not fill.
+- Added an aggregate RHSMode=4/5 fixture coverage gate so the checked
+  references must collectively cover particle flux, heat flux, parallel flow,
+  bootstrap current, total heat flux, radial current, constant-current
+  ``dPhidPsidLambda``, and debug finite-difference percent-error outputs.
+- Moved the first RHSMode=2/3 transport implementation cluster into
+  ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
+  support, finalization, streaming outputs, and postsolve diagnostics. The old
+  top-level module paths now alias the new modules so existing imports and
+  monkeypatch-based debug tests keep working. The post-move local full suite
+  passed with ``2668 passed in 562.12 s``.
+- Moved the RHSMode=2/3 transport policy and solver-support cluster into
+  ``sfincs_jax.problems.transport_matrix``: backend/sparse/recycle policies,
+  solve policy, residual-quality gates, handoff policy, host-GMRES rescue,
+  KSP iteration diagnostics, and linear-solve dispatch. The old top-level module
+  paths remain aliases to preserve existing imports and monkeypatch seams. The
+  post-move local full suite passed with ``2668 passed in 556.85 s``.
+- Moved the RHSMode=2/3 dense/active/sparse solve-support cluster into
+  ``sfincs_jax.problems.transport_matrix``: cached dense LU, batched all-RHS
+  dense solves, active block-Schur/coarse factors, and sparse-direct rescue.
+  The old top-level module paths remain aliases, so existing user scripts,
+  tests, and debug monkeypatches keep working while the maintained source map
+  uses the domain package. The post-move local full suite passed with
+  ``2668 passed in 556.60 s``.
+- Moved the transport parallelism cluster into
+  ``sfincs_jax.problems.transport_matrix.parallel``: worker payloads, process/GPU
+  execution, runtime merge/partition helpers, persistent-pool management,
+  scaling/sharding policy, validation, and the subprocess worker entry point.
+  The maintained worker entry point is
+  ``python -m sfincs_jax.problems.transport_parallel_runtime`` for GPU
+  worker subprocesses; top-level ``sfincs_jax.transport_parallel_*`` aliases
+  were removed in the consolidation pass. Focused parallel/import tests passed with
+  ``139 passed``, a broader transport/CLI slice passed with ``169 passed``, and
+  the post-move local full suite passed with ``2668 passed in 552.24 s``.
+- Moved the RHSMode=2/3 transport preconditioner/direct-operator cluster into
+  ``sfincs_jax.problems.transport_matrix``: preconditioner-kind dispatch,
+  direct reduced ``Pmat`` emission, direct active block-Schur setup, and
+  Fortran-reduced sparse-factor preconditioning. Maintained imports now use the
+  ``sfincs_jax.problems.transport_matrix`` package directly; top-level
+  ``sfincs_jax.transport_*`` aliases were removed in the consolidation pass.
+  Focused preconditioner/direct tests passed with ``117 passed`` and a broader
+  transport/preconditioner slice passed with ``148 passed``. The post-move
+  local full suite passed with
+  ``2668 passed in 554.82 s``.
+- Moved the RHSMode=1/2/3 transport diagnostics and transport-matrix assembly
+  implementation into ``sfincs_jax.problems.transport_diagnostics``.
+  Existing notebooks and scripts should import this maintained domain module
+  directly.
+- Moved RHSMode=1 host sparse ILU/LU matvec assembly, CSR factorization, cached
+  dense/JAX triangular-factor materialization, and the full-system
+  matrix-free adapter into
+  ``sfincs_jax.solvers.preconditioner_host_sparse``. The
+  historical ``v3_driver`` private helper names remain compatibility aliases,
+  while the non-differentiable host-factor path now lives in the solver-domain
+  package.
+- Moved RHSMode=1 profile-response support utilities into flat
+  ``sfincs_jax.problems.profile_*`` modules: residual gates, active-DOF
+  decisions, active full/reduced projection, accepted-solve handoff, and solver
+  diagnostics. Maintained imports use the canonical flat modules directly; the
+  top-level ``sfincs_jax.rhs1_*`` aliases for these utilities were removed in
+  the consolidation pass.
+- Consolidated RHSMode=1 profile-response solve-routing and strong
+  preconditioner controls into
+  ``sfincs_jax.problems.profile_policies`` and
+  ``sfincs_jax.problems.profile_preconditioner_build``. The old
+  top-level ``sfincs_jax.rhs1_*`` policy aliases were removed in the
+  consolidation pass; the maintained source map, API docs, and driver imports
+  now use the domain package. Focused policy/import/driver validation passed with ``282`` tests
+  and the post-consolidation local full suite passed with
+  ``2670 passed in 579.02 s``.
+- Moved the remaining small RHSMode=1 x-block/QI control helpers into
+  ``sfincs_jax.problems.profile_policies``: guarded PAS-TZ structured
+  levels, QI device extra-coarse controls, QI minres-step probe selection, and
+  safe x-block fallback initial-guess admission. ``v3_driver.py`` keeps the old
+  private names as imported aliases, and focused policy/driver validation
+  passed with ``285`` tests. The post-move local full suite passed with
+  ``2678 passed in 555.29 s``.
+- Moved the constraintScheme=1 x-block moment-Schur wrapper into
+  ``sfincs_jax.operators.profile_system`` and the bounded host/device subspace
+  residual-equation corrections into
+  ``sfincs_jax.problems.profile_residual``. The driver now imports
+  the historical private names as aliases, while direct algebraic tests cover
+  the canonical helper modules.
+- Moved the physics-aware x-block post-coarse direction builder into
+  ``sfincs_jax.problems.profile_residual`` next to the correction
+  kernels that consume it. The driver keeps the historical private alias, and
+  the sparse-pattern tests now validate the canonical helper path directly.
+- Moved residual-correction preconditioner composition, the safe
+  non-finite/clipped preconditioner wrapper, and scalar preconditioned-minres
+  polish into ``sfincs_jax.problems.profile_residual``. The driver
+  retains the historical private aliases while direct tests exercise the
+  canonical helpers.
+- Moved the operator-derived x-block QI coarse-basis and block-metadata helpers
+  from ``v3_driver.py`` into ``rhs1_qi_coarse.py``. The driver now imports the
+  historical private names as aliases while the canonical implementation lives
+  beside the QI coarse-space builders, Galerkin correction, and hard-seed
+  basis logic. Focused QI validation passed with ``13`` tests and the broader
+  RHSMode=1 QI/device/sparse policy slice passed with
+  ``251 passed in 149.96 s``. The post-move local full suite passed with
+  ``2680 passed in 555.56 s``.
+- Moved the x-block global coarse/load-vector builders and smoothed-load QI
+  basis construction from ``v3_driver.py`` into ``rhs1_qi_coarse.py``. The new
+  direct tests cover RHS, tail, constraint-source, flux-surface-average, and
+  low-angular load labels, smoothed-load rank gating, and driver alias
+  compatibility. Focused validation passed with ``15`` tests and the broader
+  RHSMode=1 QI/device/sparse policy slice passed with
+  ``253 passed in 153.39 s``. The post-move local full suite passed with
+  ``2682 passed in 527.23 s``.
+- Moved the x-block fixed two-level, host smoothed global-coupling, and device
+  global-coupling preconditioner builders from ``v3_driver.py`` into
+  ``rhs1_qi_two_level.py``. The driver now imports the historical private
+  names as aliases while the canonical implementation lives beside the QI
+  two-level primitive. Focused wrapper validation passed with ``13`` tests and
+  the broader RHSMode=1 QI/device/sparse policy slice passed with
+  ``256 passed in 153.50 s``. The post-move local full suite passed with
+  ``2685 passed in 575.33 s``.
 - Continued the ``v3_driver.py`` refactor path by moving the coupled
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,
@@ -13,6 +235,240 @@ Unreleased
   shard-aware block sizing, overlap clamping, environment override handling,
   and multi-level coarse-block termination. The post-extraction local full
   suite passed with ``2520 passed in 537.83 s``.
+- Started the dedicated v3-driver architecture branch by extracting v3 result
+  dataclasses, small solver-runtime helpers, and matrix-reduction primitives
+  into focused modules with direct tests while preserving compatibility imports
+  from ``v3_driver.py``.
+- Moved mutable preconditioner hint/context state out of ``v3_driver.py`` and
+  into ``preconditioning.py``. The driver keeps the same private
+  compatibility names, while dtype, structural-tolerance, and solver-JIT policy
+  now have direct module tests. The post-extraction local full suite passed
+  with ``2531 passed in 508.54 s``.
+- Extracted Krylov dispatch, host-only SciPy method routing, concrete solver
+  labels, and distributed-GMRES axis resolution into ``solvers/krylov_dispatch.py``.
+  ``v3_driver.py`` retains thin compatibility wrappers for monkeypatch-based
+  tests and local debugging while the extracted module has direct route-policy
+  tests. The post-extraction local full suite passed with
+  ``2537 passed in 534.28 s``.
+- Moved passive RHSMode=1 and RHSMode=2/3 preconditioner cache dataclasses and
+  global cache registries into ``preconditioning.py``. The driver still
+  re-exports the same registry objects under the existing private names, so
+  existing cache-clearing tests and debugging scripts keep working while the
+  containers now have direct lightweight tests. The post-extraction local full
+  suite passed with ``2545 passed in 535.59 s``.
+- Moved JAX-native padded-row and compact-CSR triangular sparse-factor solves
+  under ``solvers/explicit_sparse.py`` with dense-reference tests. The driver
+  keeps the old private helper names by import, preserving sparse-preconditioner
+  apply behavior while keeping the explicit sparse factor lane in one owner.
+- Extracted preconditioner setup utilities into ``preconditioning.py``:
+  chunk-size policy, matrix-free selected submatrix probing, and stable array
+  hashing for cache keys. ``v3_driver.py`` keeps a compatibility wrapper for
+  submatrix probing so tests and debugging hooks can still monkeypatch the
+  driver-level unsharded operator application. The post-extraction local full
+  suite passed with ``2553 passed in 541.27 s``.
+- Moved RHSMode=1 structured-preconditioner and RHSMode=2/3 transport
+  preconditioner cache-key construction into ``preconditioning.py``.
+  Driver wrappers keep the historical private function names and live
+  ``_precond_dtype()`` behavior, while direct tests now cover key stability,
+  Phi1 participation, PAS/FP signatures, and dtype partitioning. The
+  post-extraction local full suite passed with ``2556 passed in 543.16 s``.
+- Extracted the backend-safe tiny regularized least-squares kernel; it now
+  lives in ``sfincs_jax.solvers.krylov`` with the recycled Krylov initial-guess helper. The
+  driver keeps the historical private alias, while direct tests now cover
+  dense-reference agreement, near-rank-deficient systems, empty coarse bases,
+  and finite autodiff through the helper. The
+  post-extraction local full suite passed with ``2558 passed in 542.63 s``.
+- Moved host sparse-direct GMRES polish next to the explicit host-sparse solver
+  owner; it now lives in ``sfincs_jax.solvers.explicit_sparse`` with the
+  existing host direct-refinement kernels. Direct tests cover the polish helper
+  with an injected solver and sparse-factor preconditioner. The post-extraction
+  local full suite passed with ``2559 passed in 543.75 s``.
+- Moved transport-worker XLA flag rewriting into the consolidated
+  ``problems.transport_matrix.parallel.runtime`` owner next to the backend,
+  environment, sharding, and process-pool policy helpers. The driver now
+  imports the helper under the historical private name instead of carrying a
+  forwarding wrapper, and focused tests cover stale XLA thread/device-cap
+  replacement. The
+  post-extraction local full suite passed with ``2562 passed in 550.40 s``.
+- Extracted shared transport parallel payload handling into
+  ``transport_parallel_payload.py``. CPU process workers and GPU subprocess
+  workers now use the same injected-dependency payload parser, child-worker
+  recursion guard, solve-call construction, merge-ready result packing, and
+  NPZ conversion path, with direct tests covering non-contiguous
+  ``whichRHS`` chunks. The post-extraction local full suite passed with
+  ``2566 passed in 543.33 s``.
+- Extracted RHSMode=1/transport constraint-source moment kernels into
+  ``rhs1_constraint_sources.py``. The driver now imports the extracted kernels
+  under the historical private names instead of carrying forwarding wrappers,
+  while direct algebraic tests cover constraintScheme=1 and 2 flux-surface
+  averages, density/pressure moments, source injection, and ``pointAtX0``
+  handling. The post-extraction local full suite passed with
+  ``2570 passed in 542.11 s``.
+- Tightened the active refactor rule: extracted functions that need no
+  dependency injection, live-global adaptation, or monkeypatch seam should be
+  compatibility import aliases, not one-line wrapper bodies. This reduces
+  ``v3_driver.py`` without adding new runtime layers and keeps future line-count
+  reductions focused on whole solve-orchestration clusters.
+- Consolidated the RHSMode=2/3 streamed transport-output accumulator into
+  ``outputs.transport``. The driver now delegates per-``whichRHS`` diagnostic
+  collection, NTV/source handling, final output-field assembly, and streaming
+  HDF5 output to the same output-domain owner, with regression tests comparing
+  streamed diagnostics against the established batched transport-output path.
+- Consolidated the RHSMode=2/3 all-RHS dense batch solve path into
+  ``problems.transport_matrix.solve``. The driver now builds a transport context and
+  delegates dense matrix assembly, active-DOF projection, streamed diagnostics,
+  residual bookkeeping, and progress logging to a focused helper with direct
+  unit coverage plus the existing transport-output regression.
+- Consolidated optional RHSMode=2/3 transport KSP iteration-count diagnostics
+  into ``problems.transport_matrix.solve``. The production solve loop now calls
+  a focused helper for small host SciPy history reruns while preserving the
+  same skip/error messages and keeping diagnostic failures non-fatal.
+- Consolidated RHSMode=2/3 transport Krylov dispatch into
+  ``problems.transport_matrix.solve``. The driver delegates transport-specific
+  solver-kind mapping, restart policy, implicit custom-solve routing,
+  JIT/non-JIT selection, and distributed residual-solve routing to tested
+  solve-owner helpers.
+- Consolidated the RHSMode=2/3 sparse-direct rescue implementation into
+  ``problems.transport_matrix.solve``. The driver now builds an explicit
+  context for pattern probing, direct active FP factors, explicit sparse helper
+  setup, fallback sparse-ILU setup, host refinement, float32 polish, and
+  float64 retry, preserving the existing sparse rescue behavior with direct
+  unit coverage and sparse-direct regressions.
+- Extracted RHSMode=1 optional KSP residual-history replay and iteration-count
+  diagnostics into ``rhs1_ksp_diagnostics.py``. The driver now keeps only thin
+  wrappers that inject the active matvec, preconditioner, emit callback, and
+  size/iteration guards, while the SciPy replay and non-fatal diagnostic
+  failure paths have direct unit tests.
+- Extracted optional Newton-Krylov/Phi1 GMRES history replay into the
+  profile-response solver diagnostics owner with direct tests for disabled
+  diagnostics, size/iteration skip gates, successful residual-history emission,
+  and non-fatal replay failures.
+- Extracted explicit sparse host-factor policy parsing into
+  ``explicit_sparse.py``. Factor-kind aliases, numeric/boolean
+  environment parsing, and monolithic LU/ILU guard sizing now have direct tests
+  while the driver keeps the monkeypatch-sensitive operator/factorization seam.
+- Moved the remaining explicit sparse host-factor environment bundle into the
+  typed ``ExplicitSparseFactorSettings`` policy object. Default/override
+  parsing for dense/CSR budgets, pattern probing, symbolic Schur/frontal/ND
+  settings, SuperLU options, and ILU options is now tested in one focused
+  owner.
+- Extracted explicit sparse host-factor assembly/factorization orchestration
+  into ``explicit_sparse.py``. ``v3_driver.py`` now keeps a
+  compatibility wrapper that injects the current operator-build, pattern-build,
+  factorization, backend, and guard callbacks, preserving existing debug and
+  monkeypatch seams while removing another large block from the monolith.
+- Extracted RHSMode=1 direct-tail structured-preconditioner cache and memory-cap
+  policy into ``rhs1_direct_tail_policy.py``. The driver still re-exports the
+  private compatibility names, but cache keys, cache metadata, direct reduced
+  Pmat aliases, adaptive memory caps, and the structured host sparse adapter
+  now have focused tests outside the main solve loop.
+- Extracted RHSMode=1 true-operator rescue support bundles and helper routines
+  into ``rhs1_true_operator_rescue.py``. The solver builders remain in
+  ``v3_driver.py`` for this checkpoint, while residual-window/coarse bundle
+  solves, reusable true-action column caching, graph expansion, sparse-factor
+  storage estimates, and residual-window target selection now have direct tests
+  outside the driver monolith.
+- Extended ``rhs1_true_operator_rescue.py`` with the residual sparse-window and
+  residual-coarse builder routines plus active reduced-residual diagnostics.
+  Existing ``v3_driver`` private names remain import-compatible while the
+  builder and diagnostic behavior is now directly testable in the focused
+  module.
+- Moved the remaining RHSMode=1 true-operator LSQ rescue builders into
+  ``rhs1_true_operator_rescue.py``: residual-window LSQ, deterministic
+  active-block LSQ, active-residual-block LSQ, active-submatrix, and
+  coupled-coarse correction construction now live with the true-action cache and
+  residual-window utilities they use.
+- Extracted RHSMode=1 Fortran-reduced constraintScheme=1 direct-tail sparse
+  operator materialization into ``rhs1_fortran_reduced_direct_tail.py``. The
+  driver injects the structured full-CSR callback so monkeypatch/debug seams are
+  preserved, while the source-column, moment-row, and active term-level
+  ``whichMatrix=0`` assembly logic is no longer embedded in the main solve
+  orchestrator.
+- Extracted the RHSMode=1 structured full-CSR ``SparseOperatorBundle`` wrapper
+  into ``rhs1_structured_full_csr.py``. The analytic full-CSR assembly still
+  lives in ``rhs1_full_assembly.py``; the new module owns the runtime sparse-PC
+  adapter, active projection, memory-budget admission, and no-probe metadata
+  emission previously embedded in ``v3_driver.py``.
+- Extracted RHSMode=1 and RHSMode=2/3 preconditioner-operator shaping into
+  ``preconditioning.py``. Point, theta/zeta line, theta/zeta
+  domain-decomposition, and Fortran-reduced operator builders are now pure
+  dataclass/JAX transformations outside the solve driver, with the existing
+  driver private names preserved as import aliases.
+- Consolidated RHSMode=2/3 active-system, direct reduced-``Pmat``, exact active
+  transport-operator sparse emission, direct block-Schur setup, and full-FP
+  Fortran-reduced LU preconditioner code into
+  ``sfincs_jax.problems.transport_linear_system``. Focused tests verify
+  the emitted CSR matrices against the matrix-free active operator, physics
+  coarse-basis source/constraint columns, direct block-Schur callback path, and
+  Fortran-reduced LU symbolic/ND metadata.
+- Moved the RHSMode=1 full-FP sparse x-block/TZ preconditioner into
+  ``sfincs_jax.solvers.preconditioner_xblock_tz_sparse``. The module owns
+  host/JAX x-block factor setup, compact CSR and padded triangular apply,
+  skipped-block diagonal fallback, and extra-variable Schur handling; the old
+  top-level ``sfincs_jax.rhs1_xblock_tz_sparse`` alias was removed in the
+  consolidation pass.
+- Moved the PAS-only RHSMode=1 sparse x-block ILU/LU preconditioner into
+  ``sfincs_jax.solvers.preconditioner_pas_xblock_ilu``. The module owns the
+  per-``(species,x)`` Legendre/theta/zeta block assembly, PETSc-style
+  ILU/exact-LU setup policy, padded triangular-factor apply, threaded factor
+  build, cache storage, and extra-variable Schur solve; the old
+  top-level ``sfincs_jax.rhs1_pas_xblock_ilu`` alias was removed in the
+  consolidation pass.
+- Consolidated RHSMode=2/3 post-solve diagnostic assembly into
+  ``problems.transport_matrix.finalize``. The owner now covers streamed versus
+  batched diagnostic selection, rematerialization/precompute/chunking policy,
+  final flux-array assembly, optional output-field propagation, and transport
+  matrix construction after the Krylov solve loop.
+- Extracted the parent-side RHSMode=2/3 parallel solve branch into
+  ``transport_parallel_solve.py``. The new module owns ``whichRHS`` partitioning,
+  CPU/GPU worker launch through injected runtime hooks, worker payload merging,
+  parallel-result diagnostics assembly, and early transport-matrix result
+  construction.
+- Consolidated the initial RHSMode=2/3 transport solve policy into
+  ``problems.transport_matrix.policies``. The driver delegates geometryScheme parsing,
+  low-memory output routing, streamed-diagnostic/state-vector retention,
+  force-dense/force-Krylov handling, dense fallback admission, dense memory-cap
+  blocking, and GMRES restart/max-iteration guards to a focused policy object
+  before active-DOF and preconditioner setup.
+- Consolidated RHSMode=2/3 sequential-loop matvec caching and recycle-basis
+  bookkeeping into ``problems.transport_matrix.solve``. The driver delegates
+  cached full/reduced matvec closure construction, recycle-size admission,
+  stored-state recycle seeding, basis trimming, and recycled initial-guess
+  construction to a focused helper before the per-``whichRHS`` solve branches.
+- Moved the sequential RHSMode=2/3 post-``whichRHS`` residual/ETA bookkeeping
+  into the same helper. The driver now records elapsed times, emits residual
+  summaries, applies configured residual abort gates, and reports remaining-time
+  estimates through ``TransportLoopProgress`` instead of carrying mutable
+  progress state inline.
+- Moved the RHSMode=2/3 per-``whichRHS`` loop policy into
+  ``problems.transport_matrix.policies``. The driver delegates E_parallel loose/Krylov
+  routing, constraint-nullspace projection admission, optional KSP iteration-stat
+  settings, and dense-batch fallback admission to a focused policy object before
+  entering the sequential solve branches.
+- Extracted sequential RHSMode=2/3 branch-finalization bookkeeping into
+  ``transport_solve_finalization.py``. The helper now owns reduced/full
+  accepted-state recording, optional constraint projection, true-residual
+  recomputation, streamed-output collection, recycle-basis updates, solver-method
+  recording, and KSP iteration-stat dispatch, with direct unit coverage for dense
+  fallback accepted-state overrides.
+- Extracted the constraintScheme=1 nullspace/source-row projection; it now
+  lives in ``sfincs_jax.solvers.preconditioning`` so RHSMode=1 and RHSMode=2/3
+  solve paths share the same owner. Direct tests cover no-op admission,
+  environment disablement, transport roundoff skip behavior, and source-row
+  residual reduction.
+- Extracted RHSMode=2/3 entry setup into ``transport_solve_setup.py``. The
+  driver now delegates transport max-iteration environment overrides, optional
+  Krylov state checkpoint loading, ``whichRHS`` subset normalization, and
+  CPU/GPU process-parallel worker request resolution to focused helpers with
+  direct unit coverage.
+- The transport linear-system owner also owns RHSMode=2/3 active-DOF and
+  dense-path setup: initial output/restart policy, active-index compaction
+  state, dense fallback and dense preconditioner admission, and ordered
+  user-facing notes before preconditioner setup and the transport loop.
+- The post-extraction strict docs build passed, the repo-size audit now has no
+  reviewed files above 2 MiB after ``v3_driver.py`` dropped below the threshold,
+  and the latest local full suite after the active/dense setup extraction passed
+  with ``2659 passed in 551.86 s``.
 
 v1.1.7
 ------
@@ -194,9 +650,9 @@ Highlights
   bounded chunks from configured byte budgets, and tight budgets fail before
   launching a matvec or correction.
 - Added release-safe single-case sharded-solve planning metadata in
-  ``sfincs_jax/transport_parallel_sharding.py``. The helper caps requested
-  devices to available work, records per-device balance diagnostics, and
-  fail-closes release scaling claims for experimental single-case sharding.
+  ``sfincs_jax/problems/transport_parallel_runtime.py``. The helper caps
+  requested devices to available work, records per-device balance diagnostics,
+  and fail-closes release scaling claims for experimental single-case sharding.
 - Refreshed QI evidence metadata to include the scale-0.60 smoothed-load and
   probed moment-Schur CPU artifacts. The moment-Schur probe rejected itself
   after worsening the hard-seed residual, preserving the baseline x-block path.
@@ -414,7 +870,7 @@ Validation artifacts
 The release-facing validation roots are:
 
 - ``tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106``
-- ``tests/scaled_example_suite_gpu_bounded_default_2026-04-28``
+- ``tests/reference_solver_path_artifacts/gpu_bounded_default_summary_2026-04-28.json``
 
 The latest focused GPU performance pass measured:
 

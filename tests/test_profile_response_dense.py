@@ -1,0 +1,1756 @@
+from __future__ import annotations
+
+import numpy as np
+import pytest
+import jax.numpy as jnp
+
+from sfincs_jax.problems.profile_dense import (
+    HostDenseFullSolveContext,
+    HostDenseReducedSolveContext,
+    RHS1DenseFallbackThresholds,
+    RHS1DenseFallbackAdmission,
+    RHS1DenseProbeStageContext,
+    RHS1FullDenseFallbackContext,
+    RHS1FullDenseFallbackStageContext,
+    RHS1FullHostDenseShortcutContext,
+    RHS1PostKrylovDenseShortcutEvaluationContext,
+    RHS1ReducedDenseFallbackAdmissionStageContext,
+    RHS1ReducedDenseFallbackCandidateContext,
+    RHS1ReducedDenseFallbackStageContext,
+    RHS1ReducedHostDenseShortcutContext,
+    run_rhs1_full_dense_fallback_candidate,
+    run_rhs1_full_dense_fallback_stage,
+    run_rhs1_full_host_dense_shortcut_stage,
+    run_rhs1_dense_probe_stage,
+    run_rhs1_reduced_dense_fallback_admission_stage,
+    run_rhs1_reduced_dense_fallback_stage,
+    run_rhs1_reduced_host_dense_shortcut_stage,
+    rhs1_dense_fallback_thresholds_from_env,
+    rhs1_dense_probe_admission,
+    rhs1_dense_probe_enabled_from_env,
+    rhs1_dense_probe_shortcut_decision,
+    rhs1_dense_shortcut_setup_from_env,
+    rhs1_early_dense_shortcut_decision,
+    rhs1_evaluate_post_krylov_dense_shortcut,
+    rhs1_fp_preconditioner_probe_kind_from_env,
+    rhs1_host_dense_shortcut_metadata,
+    rhs1_post_krylov_dense_shortcut_decision,
+    resolve_rhs1_full_dense_fallback_admission,
+    resolve_rhs1_reduced_dense_fallback_admission,
+    solve_rhs1_reduced_dense_fallback_candidate,
+    solve_host_dense_full,
+    solve_host_dense_reduced,
+)
+from sfincs_jax.solvers.krylov import GMRESSolveResult
+
+
+def test_rhs1_dense_shortcut_setup_from_env_uses_default_ratio(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_SHORTCUT_RATIO", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_DENSE_ALLOW_MAX", raising=False)
+
+    setup = rhs1_dense_shortcut_setup_from_env(
+        has_pas=False,
+        include_phi1=False,
+        constraint_scheme=0,
+        active_size=1000,
+        dense_fallback_max=5000,
+        dense_backend_allowed=True,
+        host_dense_fallback_allowed=False,
+        dense_krylov_allowed=False,
+        backend="cpu",
+    )
+    assert setup.dense_shortcut_ratio == 1.0e6
+    assert setup.dense_fallback_max == 5000
+    assert not setup.disable_dense_pas
+    assert setup.messages == ()
+
+
+def test_rhs1_dense_shortcut_setup_from_env_handles_pas_dense_gate(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_SHORTCUT_RATIO", "bad")
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_DENSE_ALLOW_MAX", raising=False)
+
+    setup = rhs1_dense_shortcut_setup_from_env(
+        has_pas=True,
+        include_phi1=False,
+        constraint_scheme=1,
+        active_size=3000,
+        dense_fallback_max=5000,
+        dense_backend_allowed=True,
+        host_dense_fallback_allowed=False,
+        dense_krylov_allowed=False,
+        backend="gpu",
+    )
+    assert setup.dense_shortcut_ratio == 0.0
+    assert setup.dense_fallback_max == 5000
+    assert not setup.disable_dense_pas
+
+    setup = rhs1_dense_shortcut_setup_from_env(
+        has_pas=True,
+        include_phi1=False,
+        constraint_scheme=1,
+        active_size=5000,
+        dense_fallback_max=5000,
+        dense_backend_allowed=True,
+        host_dense_fallback_allowed=False,
+        dense_krylov_allowed=False,
+        backend="gpu",
+    )
+    assert setup.dense_shortcut_ratio == 0.0
+    assert setup.dense_fallback_max == 0
+    assert setup.disable_dense_pas
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_DENSE_ALLOW_MAX", "6000")
+    setup = rhs1_dense_shortcut_setup_from_env(
+        has_pas=True,
+        include_phi1=False,
+        constraint_scheme=1,
+        active_size=5000,
+        dense_fallback_max=5000,
+        dense_backend_allowed=True,
+        host_dense_fallback_allowed=False,
+        dense_krylov_allowed=False,
+        backend="gpu",
+    )
+    assert setup.dense_fallback_max == 5000
+    assert not setup.disable_dense_pas
+
+
+def test_rhs1_dense_shortcut_setup_from_env_reports_backend_disable(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_SHORTCUT_RATIO", "12")
+
+    setup = rhs1_dense_shortcut_setup_from_env(
+        has_pas=False,
+        include_phi1=False,
+        constraint_scheme=0,
+        active_size=1000,
+        dense_fallback_max=5000,
+        dense_backend_allowed=False,
+        host_dense_fallback_allowed=False,
+        dense_krylov_allowed=False,
+        backend="gpu",
+    )
+    assert setup.dense_shortcut_ratio == 0.0
+    assert setup.dense_fallback_max == 0
+    assert setup.messages == ((
+        1,
+        "solve_v3_full_system_linear_gmres: disabling RHSMode=1 "
+        "dense shortcut/fallback on backend=gpu",
+    ),)
+
+    setup = rhs1_dense_shortcut_setup_from_env(
+        has_pas=False,
+        include_phi1=False,
+        constraint_scheme=0,
+        active_size=1000,
+        dense_fallback_max=5000,
+        dense_backend_allowed=False,
+        host_dense_fallback_allowed=True,
+        dense_krylov_allowed=False,
+        backend="gpu",
+    )
+    assert setup.dense_fallback_max == 5000
+    assert setup.messages == ((
+        1,
+        "solve_v3_full_system_linear_gmres: disabling RHSMode=1 "
+        "dense shortcut (host dense fallback kept) on backend=gpu",
+    ),)
+
+    setup = rhs1_dense_shortcut_setup_from_env(
+        has_pas=False,
+        include_phi1=False,
+        constraint_scheme=0,
+        active_size=1000,
+        dense_fallback_max=5000,
+        dense_backend_allowed=False,
+        host_dense_fallback_allowed=False,
+        dense_krylov_allowed=True,
+        backend="gpu",
+    )
+    assert setup.dense_fallback_max == 5000
+    assert setup.messages == ((
+        1,
+        "solve_v3_full_system_linear_gmres: disabling RHSMode=1 "
+        "dense shortcut disabled (dense Krylov fallback kept) on backend=gpu",
+    ),)
+
+
+def test_rhs1_dense_fallback_thresholds_use_default_ratio_and_huge_limit(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX_HUGE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_RATIO", raising=False)
+
+    assert rhs1_dense_fallback_thresholds_from_env(
+        dense_fallback_max=5000,
+        residual_ratio=10.0,
+    ) == RHS1DenseFallbackThresholds(
+        dense_fallback_max_huge=5000,
+        dense_fallback_ratio=100.0,
+        dense_fallback_limit=5000,
+        dense_fallback_trigger=False,
+    )
+    assert rhs1_dense_fallback_thresholds_from_env(
+        dense_fallback_max=5000,
+        residual_ratio=200.0,
+    ) == RHS1DenseFallbackThresholds(
+        dense_fallback_max_huge=5000,
+        dense_fallback_ratio=100.0,
+        dense_fallback_limit=5000,
+        dense_fallback_trigger=True,
+    )
+
+
+def test_rhs1_dense_fallback_thresholds_respect_env_and_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX_HUGE", "12000")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_RATIO", "25")
+
+    assert rhs1_dense_fallback_thresholds_from_env(
+        dense_fallback_max=5000,
+        residual_ratio=30.0,
+    ) == RHS1DenseFallbackThresholds(
+        dense_fallback_max_huge=12000,
+        dense_fallback_ratio=25.0,
+        dense_fallback_limit=12000,
+        dense_fallback_trigger=True,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX_HUGE", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_RATIO", "bad")
+    assert rhs1_dense_fallback_thresholds_from_env(
+        dense_fallback_max=5000,
+        residual_ratio=200.0,
+    ) == RHS1DenseFallbackThresholds(
+        dense_fallback_max_huge=5000,
+        dense_fallback_ratio=100.0,
+        dense_fallback_limit=5000,
+        dense_fallback_trigger=True,
+    )
+
+
+def test_rhs1_dense_fallback_thresholds_can_disable_huge_limit(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX_HUGE", "12000")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_RATIO", "25")
+
+    assert rhs1_dense_fallback_thresholds_from_env(
+        dense_fallback_max=5000,
+        residual_ratio=30.0,
+        allow_huge_limit=False,
+    ) == RHS1DenseFallbackThresholds(
+        dense_fallback_max_huge=5000,
+        dense_fallback_ratio=25.0,
+        dense_fallback_limit=5000,
+        dense_fallback_trigger=True,
+    )
+
+
+def test_rhs1_early_dense_shortcut_decision_accepts_small_active_system() -> None:
+    decision = rhs1_early_dense_shortcut_decision(
+        early_dense_shortcut=False,
+        cs0_sparse_first=False,
+        cs0_dense_fallback_allowed=True,
+        constraint_scheme=0,
+        dense_shortcut_ratio=10.0,
+        residual_ratio=20.0,
+        sparse_prefer_over_dense_shortcut=False,
+        dense_fallback_max=100,
+        active_size=50,
+    )
+
+    assert decision.early_dense_shortcut
+    assert decision.messages == ((
+        0,
+        "solve_v3_full_system_linear_gmres: dense fallback shortcut (early) "
+        "(ratio=2.000e+01 >= 1.0e+01)",
+    ),)
+
+
+def test_rhs1_early_dense_shortcut_decision_reports_size_skip() -> None:
+    decision = rhs1_early_dense_shortcut_decision(
+        early_dense_shortcut=False,
+        cs0_sparse_first=False,
+        cs0_dense_fallback_allowed=True,
+        constraint_scheme=0,
+        dense_shortcut_ratio=10.0,
+        residual_ratio=20.0,
+        sparse_prefer_over_dense_shortcut=False,
+        dense_fallback_max=10,
+        active_size=50,
+    )
+
+    assert not decision.early_dense_shortcut
+    assert decision.messages == ((
+        1,
+        "solve_v3_full_system_linear_gmres: dense fallback shortcut skipped "
+        "(size=50 > dense_max=10)",
+    ),)
+
+
+def test_rhs1_early_dense_shortcut_decision_preserves_disabled_state() -> None:
+    decision = rhs1_early_dense_shortcut_decision(
+        early_dense_shortcut=True,
+        cs0_sparse_first=False,
+        cs0_dense_fallback_allowed=True,
+        constraint_scheme=0,
+        dense_shortcut_ratio=10.0,
+        residual_ratio=20.0,
+        sparse_prefer_over_dense_shortcut=False,
+        dense_fallback_max=100,
+        active_size=50,
+    )
+    assert decision.early_dense_shortcut
+    assert decision.messages == ()
+
+    decision = rhs1_early_dense_shortcut_decision(
+        early_dense_shortcut=False,
+        cs0_sparse_first=True,
+        cs0_dense_fallback_allowed=True,
+        constraint_scheme=0,
+        dense_shortcut_ratio=10.0,
+        residual_ratio=20.0,
+        sparse_prefer_over_dense_shortcut=False,
+        dense_fallback_max=100,
+        active_size=50,
+    )
+    assert not decision.early_dense_shortcut
+    assert decision.messages == ()
+
+
+def test_rhs1_post_krylov_dense_shortcut_decision_accepts() -> None:
+    decision = rhs1_post_krylov_dense_shortcut_decision(
+        dense_shortcut=False,
+        dense_shortcut_ratio=10.0,
+        residual_norm_true=1.0e-4,
+        residual_ratio=200.0,
+        target=1.0e-8,
+        dense_fallback_max=100,
+        active_size=50,
+        constraint_scheme=1,
+        cs0_sparse_first=False,
+        sparse_prefer_over_dense_shortcut=False,
+        sparse_exact_direct=False,
+    )
+
+    assert decision.dense_shortcut
+    assert decision.messages == ((
+        0,
+        "solve_v3_full_system_linear_gmres: dense fallback shortcut "
+        "(ratio=2.000e+02 >= 1.0e+01)",
+    ),)
+
+
+def test_rhs1_post_krylov_dense_shortcut_decision_prefers_sparse_when_requested() -> None:
+    decision = rhs1_post_krylov_dense_shortcut_decision(
+        dense_shortcut=False,
+        dense_shortcut_ratio=10.0,
+        residual_norm_true=1.0e-4,
+        residual_ratio=200.0,
+        target=1.0e-8,
+        dense_fallback_max=100,
+        active_size=50,
+        constraint_scheme=1,
+        cs0_sparse_first=False,
+        sparse_prefer_over_dense_shortcut=True,
+        sparse_exact_direct=False,
+    )
+
+    assert not decision.dense_shortcut
+    assert decision.messages == ((
+        1,
+        "solve_v3_full_system_linear_gmres: dense shortcut skipped "
+        "(preferring sparse rescue over dense shortcut)",
+    ),)
+
+
+def test_rhs1_post_krylov_dense_shortcut_decision_rejects_when_not_admitted() -> None:
+    decision = rhs1_post_krylov_dense_shortcut_decision(
+        dense_shortcut=False,
+        dense_shortcut_ratio=10.0,
+        residual_norm_true=1.0e-4,
+        residual_ratio=5.0,
+        target=1.0e-8,
+        dense_fallback_max=100,
+        active_size=50,
+        constraint_scheme=1,
+        cs0_sparse_first=False,
+        sparse_prefer_over_dense_shortcut=False,
+        sparse_exact_direct=False,
+    )
+
+    assert not decision.dense_shortcut
+    assert decision.messages == ()
+
+
+def test_rhs1_evaluate_post_krylov_dense_shortcut_skips_true_residual_when_quick_ratio_low() -> None:
+    def raising_matvec(_x):
+        raise AssertionError("true residual should not be evaluated")
+
+    evaluation = rhs1_evaluate_post_krylov_dense_shortcut(
+        RHS1PostKrylovDenseShortcutEvaluationContext(
+            dense_shortcut=False,
+            dense_shortcut_ratio=10.0,
+            current_result=GMRESSolveResult(
+                x=jnp.asarray([0.0], dtype=jnp.float64),
+                residual_norm=jnp.asarray(1.0, dtype=jnp.float64),
+            ),
+            rhs=jnp.asarray([1.0], dtype=jnp.float64),
+            matvec=raising_matvec,
+            target=1.0,
+            dense_fallback_max=100,
+            active_size=50,
+            constraint_scheme=1,
+            cs0_sparse_first=False,
+            sparse_prefer_over_dense_shortcut=False,
+            sparse_exact_direct=False,
+        )
+    )
+
+    assert not evaluation.dense_shortcut
+    assert evaluation.residual_norm_true is None
+    assert evaluation.residual_ratio is None
+    assert evaluation.messages == ()
+
+
+def test_rhs1_evaluate_post_krylov_dense_shortcut_accepts_from_true_residual(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_RATIO", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX_HUGE", "100")
+
+    evaluation = rhs1_evaluate_post_krylov_dense_shortcut(
+        RHS1PostKrylovDenseShortcutEvaluationContext(
+            dense_shortcut=False,
+            dense_shortcut_ratio=1.0,
+            current_result=GMRESSolveResult(
+                x=jnp.asarray([0.0, 0.0], dtype=jnp.float64),
+                residual_norm=jnp.asarray(10.0, dtype=jnp.float64),
+            ),
+            rhs=jnp.asarray([1.0, 0.0], dtype=jnp.float64),
+            matvec=lambda x: jnp.zeros_like(x),
+            target=1.0e-3,
+            dense_fallback_max=100,
+            active_size=50,
+            constraint_scheme=1,
+            cs0_sparse_first=False,
+            sparse_prefer_over_dense_shortcut=False,
+            sparse_exact_direct=False,
+        )
+    )
+
+    assert evaluation.dense_shortcut
+    assert evaluation.residual_norm_true == pytest.approx(1.0)
+    assert evaluation.residual_ratio == pytest.approx(1000.0)
+    assert evaluation.messages == ((
+        0,
+        "solve_v3_full_system_linear_gmres: dense fallback shortcut "
+        "(ratio=1.000e+03 >= 1.0e+00)",
+    ),)
+
+
+def test_reduced_dense_fallback_admission_skips_after_host_sparse_lu() -> None:
+    admission = resolve_rhs1_reduced_dense_fallback_admission(
+        dense_fallback_max=100,
+        residual_norm_true=1.0e-5,
+        reported_residual_norm=1.0e-5,
+        target=1.0e-8,
+        active_size=50,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=2,
+        has_fp=False,
+        disable_dense_pas=False,
+        any_dense_path_allowed=True,
+        host_sparse_direct_used=True,
+        backend="gpu",
+        host_sparse_skip_ratio=2.0e3,
+        cs0_dense_fallback_allowed=True,
+        cs0_sparse_first=False,
+        cs0_petsc_compat=False,
+    )
+
+    assert admission == RHS1DenseFallbackAdmission(
+        should_run=False,
+        dense_fallback_max=0,
+        dense_fallback_limit=0,
+        dense_fallback_trigger=False,
+        force_dense_cs0=False,
+        messages=((
+            0,
+            "solve_v3_full_system_linear_gmres: skipping dense fallback after host sparse LU "
+            "(ratio=1.000e+03 <= 2.0e+03)",
+        ),),
+    )
+
+
+def test_reduced_dense_fallback_admission_handles_force_dense_paths() -> None:
+    fp_admission = resolve_rhs1_reduced_dense_fallback_admission(
+        dense_fallback_max=100,
+        residual_norm_true=1.0e-4,
+        reported_residual_norm=1.0e-4,
+        target=1.0e-8,
+        active_size=50,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=1,
+        has_fp=True,
+        disable_dense_pas=False,
+        any_dense_path_allowed=True,
+        host_sparse_direct_used=False,
+        backend="cpu",
+        host_sparse_skip_ratio=0.0,
+        cs0_dense_fallback_allowed=True,
+        cs0_sparse_first=False,
+        cs0_petsc_compat=False,
+    )
+    assert fp_admission.should_run
+    assert fp_admission.dense_fallback_limit >= 100
+    assert not fp_admission.force_dense_cs0
+
+    cs0_admission = resolve_rhs1_reduced_dense_fallback_admission(
+        dense_fallback_max=100,
+        residual_norm_true=0.0,
+        reported_residual_norm=0.0,
+        target=1.0e-8,
+        active_size=50,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=0,
+        has_fp=False,
+        disable_dense_pas=False,
+        any_dense_path_allowed=True,
+        host_sparse_direct_used=False,
+        backend="cpu",
+        host_sparse_skip_ratio=0.0,
+        cs0_dense_fallback_allowed=True,
+        cs0_sparse_first=False,
+        cs0_petsc_compat=False,
+    )
+    assert cs0_admission.should_run
+    assert cs0_admission.force_dense_cs0
+
+    cs0_disabled = resolve_rhs1_reduced_dense_fallback_admission(
+        dense_fallback_max=100,
+        residual_norm_true=1.0e-4,
+        reported_residual_norm=1.0e-4,
+        target=1.0e-8,
+        active_size=50,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=0,
+        has_fp=False,
+        disable_dense_pas=False,
+        any_dense_path_allowed=True,
+        host_sparse_direct_used=False,
+        backend="cpu",
+        host_sparse_skip_ratio=0.0,
+        cs0_dense_fallback_allowed=False,
+        cs0_sparse_first=False,
+        cs0_petsc_compat=False,
+    )
+    assert not cs0_disabled.should_run
+    assert cs0_disabled.dense_fallback_limit == 0
+
+
+def test_full_dense_fallback_admission_preserves_full_size_and_cs0_rules() -> None:
+    admission = resolve_rhs1_full_dense_fallback_admission(
+        dense_fallback_max=100,
+        residual_norm_true=1.0e-4,
+        target=1.0e-8,
+        active_size=50,
+        total_size=80,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=1,
+        has_fp=True,
+        any_dense_path_allowed=True,
+        host_sparse_direct_used=False,
+        backend="cpu",
+        host_sparse_skip_ratio=0.0,
+        cs0_sparse_first=False,
+    )
+    assert admission.should_run
+    assert admission.dense_fallback_max == 100
+    assert admission.dense_fallback_limit == 100
+    assert not admission.force_dense_cs0
+
+    too_large = resolve_rhs1_full_dense_fallback_admission(
+        dense_fallback_max=100,
+        residual_norm_true=1.0e-4,
+        target=1.0e-8,
+        active_size=50,
+        total_size=120,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=1,
+        has_fp=True,
+        any_dense_path_allowed=True,
+        host_sparse_direct_used=False,
+        backend="cpu",
+        host_sparse_skip_ratio=0.0,
+        cs0_sparse_first=False,
+    )
+    assert not too_large.should_run
+
+    cs0_clean = resolve_rhs1_full_dense_fallback_admission(
+        dense_fallback_max=100,
+        residual_norm_true=0.0,
+        target=1.0e-8,
+        active_size=50,
+        total_size=80,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=0,
+        has_fp=False,
+        any_dense_path_allowed=True,
+        host_sparse_direct_used=False,
+        backend="cpu",
+        host_sparse_skip_ratio=0.0,
+        cs0_sparse_first=False,
+    )
+    assert not cs0_clean.should_run
+    assert cs0_clean.force_dense_cs0
+
+
+def test_rhs1_fp_preconditioner_probe_kind_from_env_selects_collision(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE_MIN", raising=False)
+
+    assert (
+        rhs1_fp_preconditioner_probe_kind_from_env(
+            rhs1_precond_kind="theta_line",
+            rhs1_precond_env="",
+            has_fp=True,
+            use_dkes=True,
+            include_phi1=False,
+            dense_fallback_max=6000,
+            active_size=3000,
+            rhs1_precond_enabled=True,
+            solve_method_kind="incremental",
+        )
+        == "collision"
+    )
+
+
+def test_rhs1_fp_preconditioner_probe_kind_from_env_respects_guards(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE", raising=False)
+    base = dict(
+        rhs1_precond_kind="theta_line",
+        rhs1_precond_env="",
+        has_fp=True,
+        use_dkes=True,
+        include_phi1=False,
+        dense_fallback_max=6000,
+        active_size=3000,
+        rhs1_precond_enabled=True,
+        solve_method_kind="incremental",
+    )
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "use_dkes": False}) == "theta_line"
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "include_phi1": True}) == "theta_line"
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "dense_fallback_max": 0}) == "theta_line"
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "active_size": 2000}) == "theta_line"
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "active_size": 7000}) == "theta_line"
+    assert not rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "rhs1_precond_kind": None})
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "rhs1_precond_kind": "collision"}) == "collision"
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "rhs1_precond_env": "schur"}) == "theta_line"
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "has_fp": False}) == "theta_line"
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "rhs1_precond_enabled": False}) == "theta_line"
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "solve_method_kind": "dense"}) == "theta_line"
+
+
+def test_rhs1_fp_preconditioner_probe_kind_from_env_respects_env(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE", "off")
+    assert (
+        rhs1_fp_preconditioner_probe_kind_from_env(
+            rhs1_precond_kind="theta_line",
+            rhs1_precond_env="",
+            has_fp=True,
+            use_dkes=True,
+            include_phi1=False,
+            dense_fallback_max=6000,
+            active_size=3000,
+            rhs1_precond_enabled=True,
+            solve_method_kind="incremental",
+        )
+        == "theta_line"
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE", "on")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE_MIN", "bad")
+    assert (
+        rhs1_fp_preconditioner_probe_kind_from_env(
+            rhs1_precond_kind="theta_line",
+            rhs1_precond_env="",
+            has_fp=True,
+            use_dkes=True,
+            include_phi1=False,
+            dense_fallback_max=6000,
+            active_size=3000,
+            rhs1_precond_enabled=True,
+            solve_method_kind="incremental",
+        )
+        == "collision"
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE_MIN", "3500")
+    assert (
+        rhs1_fp_preconditioner_probe_kind_from_env(
+            rhs1_precond_kind="theta_line",
+            rhs1_precond_env="",
+            has_fp=True,
+            use_dkes=True,
+            include_phi1=False,
+            dense_fallback_max=6000,
+            active_size=3000,
+            rhs1_precond_enabled=True,
+            solve_method_kind="incremental",
+        )
+        == "theta_line"
+    )
+
+
+def test_host_dense_reduced_row_scaled_lu_solves_square_system() -> None:
+    a_np = np.asarray([[2.0, 0.0], [0.0, 4.0]])
+    rhs = jnp.asarray([2.0, 8.0])
+    result = solve_host_dense_reduced(
+        context=HostDenseReducedSolveContext(
+            matvec=lambda x: jnp.asarray(a_np) @ x,
+            rhs=rhs,
+            active_size=2,
+            constraint_scheme=0,
+            has_fp=False,
+            dense_matrix_cache=a_np,
+        ),
+        x0=jnp.zeros(2),
+    )
+
+    assert result.x.tolist() == pytest.approx([1.0, 2.0])
+    assert float(result.residual_norm) == pytest.approx(0.0, abs=1.0e-12)
+
+
+def test_host_dense_reduced_lstsq_handles_rectangular_cache() -> None:
+    a_np = np.asarray([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    rhs = jnp.asarray([1.0, 2.0, 3.0])
+    result = solve_host_dense_reduced(
+        context=HostDenseReducedSolveContext(
+            matvec=lambda x: jnp.asarray(a_np) @ x,
+            rhs=rhs,
+            active_size=2,
+            constraint_scheme=2,
+            has_fp=False,
+            dense_matrix_cache=a_np,
+        )
+    )
+
+    expected = np.linalg.lstsq(a_np, np.asarray(rhs), rcond=None)[0]
+    assert result.x.tolist() == pytest.approx(expected.tolist())
+    assert float(result.residual_norm) == pytest.approx(0.0, abs=1.0e-12)
+
+
+def test_host_dense_full_lu_returns_residual_vector() -> None:
+    a_np = np.asarray([[3.0, 0.0], [0.0, 5.0]])
+    rhs = jnp.asarray([6.0, 15.0])
+    result, residual = solve_host_dense_full(
+        context=HostDenseFullSolveContext(
+            matvec=lambda x: jnp.asarray(a_np) @ x,
+            rhs=rhs,
+            total_size=2,
+        ),
+        x0=jnp.zeros(2),
+    )
+
+    assert result.x.tolist() == pytest.approx([2.0, 3.0])
+    assert residual.tolist() == pytest.approx([0.0, 0.0])
+    assert float(result.residual_norm) == pytest.approx(0.0, abs=1.0e-12)
+
+
+def test_host_dense_full_lstsq_handles_rectangular_operator(monkeypatch) -> None:
+    a_np = np.asarray([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    rhs = jnp.asarray([1.0, 2.0, 3.0])
+
+    def fake_assemble_dense_matrix_from_matvec(**_kwargs):
+        return jnp.asarray(a_np)
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_dense.assemble_dense_matrix_from_matvec",
+        fake_assemble_dense_matrix_from_matvec,
+    )
+    result, residual = solve_host_dense_full(
+        context=HostDenseFullSolveContext(
+            matvec=lambda x: jnp.asarray(a_np) @ x,
+            rhs=rhs,
+            total_size=2,
+        )
+    )
+
+    expected = np.linalg.lstsq(a_np, np.asarray(rhs), rcond=None)[0]
+    assert result.x.tolist() == pytest.approx(expected.tolist())
+    assert residual.tolist() == pytest.approx((np.asarray(rhs) - a_np @ expected).tolist())
+    assert float(result.residual_norm) == pytest.approx(float(np.linalg.norm(np.asarray(residual))))
+
+
+def test_reduced_host_dense_shortcut_stage_preserves_disabled_state() -> None:
+    current = GMRESSolveResult(x=jnp.ones(2), residual_norm=jnp.asarray(3.0))
+    result = run_rhs1_reduced_host_dense_shortcut_stage(
+        context=RHS1ReducedHostDenseShortcutContext(
+            enabled=False,
+            solve_context=HostDenseReducedSolveContext(
+                matvec=lambda x: x,
+                rhs=jnp.asarray([1.0, 2.0]),
+                active_size=2,
+                constraint_scheme=1,
+                has_fp=True,
+            ),
+            current_result=current,
+            x0=None,
+            active_size=2,
+            early_dense_shortcut=True,
+            probe_shortcut=True,
+        ),
+        replay_state=object(),
+        record_replay_problem=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("replay should not be recorded")
+        ),
+        solver_kind=lambda method: (method, method),
+    )
+
+    assert result.result is current
+    assert result.early_dense_shortcut
+    assert result.probe_shortcut
+
+
+def test_reduced_host_dense_shortcut_stage_solves_and_records_replay() -> None:
+    calls: dict[str, dict[str, object]] = {}
+    messages: list[tuple[int, str]] = []
+    marks: list[str] = []
+    replay_state = object()
+    a_np = np.asarray([[2.0, 0.0], [0.0, 4.0]])
+    rhs = jnp.asarray([4.0, 12.0])
+
+    def record_replay_problem(state, **kwargs):
+        calls["record"] = {"state": state, **kwargs}
+
+    result = run_rhs1_reduced_host_dense_shortcut_stage(
+        context=RHS1ReducedHostDenseShortcutContext(
+            enabled=True,
+            solve_context=HostDenseReducedSolveContext(
+                matvec=lambda x: jnp.asarray(a_np) @ x,
+                rhs=rhs,
+                active_size=2,
+                constraint_scheme=1,
+                has_fp=True,
+                dense_matrix_cache=a_np,
+            ),
+            current_result=GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0)),
+            x0=jnp.zeros(2),
+            active_size=2,
+            early_dense_shortcut=False,
+            probe_shortcut=False,
+        ),
+        replay_state=replay_state,
+        record_replay_problem=record_replay_problem,
+        solver_kind=lambda method: (f"kind:{method}", "unused"),
+        emit=lambda level, msg: messages.append((level, msg)),
+        mark=marks.append,
+    )
+
+    assert result.result.x.tolist() == pytest.approx([2.0, 3.0])
+    assert result.early_dense_shortcut
+    assert result.probe_shortcut
+    assert calls["record"]["state"] is replay_state
+    assert calls["record"]["precond_side"] == "none"
+    assert calls["record"]["solver_kind"] == "kind:incremental"
+    assert marks == ["rhs1_host_dense_shortcut_start", "rhs1_host_dense_shortcut_done"]
+    assert messages == [(
+        0,
+        "solve_v3_full_system_linear_gmres: accelerator FP bounded system -> "
+        "using host dense shortcut (size=2)",
+    )]
+
+
+def test_full_host_dense_shortcut_stage_solves_and_records_replay() -> None:
+    calls: dict[str, dict[str, object]] = {}
+    messages: list[tuple[int, str]] = []
+    marks: list[str] = []
+    replay_state = object()
+    a_np = np.asarray([[3.0, 0.0], [0.0, 5.0]])
+    rhs = jnp.asarray([6.0, 15.0])
+
+    def record_replay_problem(state, **kwargs):
+        calls["record"] = {"state": state, **kwargs}
+
+    result = run_rhs1_full_host_dense_shortcut_stage(
+        context=RHS1FullHostDenseShortcutContext(
+            enabled=True,
+            solve_context=HostDenseFullSolveContext(
+                matvec=lambda x: jnp.asarray(a_np) @ x,
+                rhs=rhs,
+                total_size=2,
+            ),
+            current_result=GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0)),
+            current_residual_vec=jnp.ones(2),
+            x0=jnp.zeros(2),
+            total_size=2,
+        ),
+        replay_state=replay_state,
+        record_replay_problem=record_replay_problem,
+        solver_kind=lambda method: (f"kind:{method}", "unused"),
+        emit=lambda level, msg: messages.append((level, msg)),
+        mark=marks.append,
+    )
+
+    assert result.result.x.tolist() == pytest.approx([2.0, 3.0])
+    assert result.residual_vec.tolist() == pytest.approx([0.0, 0.0])
+    assert calls["record"]["state"] is replay_state
+    assert calls["record"]["precond_side"] == "none"
+    assert calls["record"]["solver_kind"] == "kind:incremental"
+    assert marks == ["rhs1_host_dense_shortcut_start", "rhs1_host_dense_shortcut_done"]
+    assert messages == [(
+        0,
+        "solve_v3_full_system_linear_gmres: accelerator FP bounded system -> "
+        "using host dense shortcut (size=2)",
+    )]
+
+
+def test_host_dense_shortcut_metadata_has_stable_solver_path(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX_BYTES", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_FACTOR_OVERHEAD", raising=False)
+
+    metadata = rhs1_host_dense_shortcut_metadata(
+        size=4096,
+        reduced_system=True,
+        backend="gpu",
+    )
+
+    assert metadata == {
+        "solver_path": "host_dense_shortcut",
+        "solver_kind": "host_dense_lu",
+        "host_dense_shortcut": True,
+        "host_dense_shortcut_backend": "gpu",
+        "host_dense_shortcut_size": 4096,
+        "host_dense_shortcut_system": "reduced",
+        "host_dense_shortcut_estimated_nbytes": 335740928,
+        "host_dense_shortcut_max_nbytes": 1_500_000_000,
+    }
+    assert rhs1_host_dense_shortcut_metadata(
+        size=12,
+        reduced_system=False,
+        backend="cpu",
+    )["host_dense_shortcut_system"] == "full"
+
+
+def test_rhs1_dense_probe_enabled_from_env_defaults_on_and_respects_false(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_PROBE", raising=False)
+    assert rhs1_dense_probe_enabled_from_env()
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_PROBE", "off")
+    assert not rhs1_dense_probe_enabled_from_env()
+
+
+def test_rhs1_dense_probe_admission_applies_driver_guards() -> None:
+    base = dict(
+        probe_enabled=True,
+        probe_shortcut=False,
+        cs0_petsc_compat=False,
+        cs0_sparse_first=False,
+        cs0_dense_fallback_allowed=True,
+        constraint_scheme=0,
+        has_preconditioner=True,
+        solve_method_kind="incremental",
+    )
+    assert rhs1_dense_probe_admission(**base).enabled
+    assert not rhs1_dense_probe_admission(**{**base, "probe_enabled": False}).enabled
+    assert not rhs1_dense_probe_admission(**{**base, "probe_shortcut": True}).enabled
+    assert not rhs1_dense_probe_admission(**{**base, "cs0_petsc_compat": True}).enabled
+    assert not rhs1_dense_probe_admission(**{**base, "cs0_sparse_first": True}).enabled
+    assert not rhs1_dense_probe_admission(
+        **{**base, "cs0_dense_fallback_allowed": False, "constraint_scheme": 0}
+    ).enabled
+    assert rhs1_dense_probe_admission(
+        **{**base, "cs0_dense_fallback_allowed": False, "constraint_scheme": 1}
+    ).enabled
+    assert not rhs1_dense_probe_admission(**{**base, "has_preconditioner": False}).enabled
+    assert not rhs1_dense_probe_admission(**{**base, "solve_method_kind": "dense"}).enabled
+    assert not rhs1_dense_probe_admission(**{**base, "solve_method_kind": "dense_ksp"}).enabled
+
+
+def test_rhs1_dense_probe_shortcut_decision_accepts_or_seeds_probe() -> None:
+    decision = rhs1_dense_probe_shortcut_decision(
+        dense_shortcut_ratio=10.0,
+        probe_ratio=12.0,
+        dense_fallback_max=200,
+        active_size=100,
+        sparse_prefer_over_dense_shortcut=False,
+    )
+    assert decision.accept_shortcut
+    assert not decision.seed_x0_if_missing
+    assert decision.messages == ((
+        0,
+        "solve_v3_full_system_linear_gmres: dense fallback shortcut (probe) "
+        "(ratio=1.200e+01 >= 1.0e+01)",
+    ),)
+
+    decision = rhs1_dense_probe_shortcut_decision(
+        dense_shortcut_ratio=10.0,
+        probe_ratio=8.0,
+        dense_fallback_max=200,
+        active_size=100,
+        sparse_prefer_over_dense_shortcut=False,
+    )
+    assert not decision.accept_shortcut
+    assert decision.seed_x0_if_missing
+    assert decision.messages == ()
+
+
+def test_rhs1_dense_probe_shortcut_decision_reports_skip_reasons() -> None:
+    decision = rhs1_dense_probe_shortcut_decision(
+        dense_shortcut_ratio=10.0,
+        probe_ratio=12.0,
+        dense_fallback_max=200,
+        active_size=100,
+        sparse_prefer_over_dense_shortcut=True,
+    )
+    assert not decision.accept_shortcut
+    assert decision.seed_x0_if_missing
+    assert decision.messages == ((
+        1,
+        "solve_v3_full_system_linear_gmres: probe shortcut skipped "
+        "(preferring sparse rescue over dense shortcut)",
+    ),)
+
+    decision = rhs1_dense_probe_shortcut_decision(
+        dense_shortcut_ratio=10.0,
+        probe_ratio=12.0,
+        dense_fallback_max=50,
+        active_size=100,
+        sparse_prefer_over_dense_shortcut=False,
+    )
+    assert not decision.accept_shortcut
+    assert decision.seed_x0_if_missing
+    assert decision.messages == ((
+        1,
+        "solve_v3_full_system_linear_gmres: probe shortcut skipped "
+        "(size=100 > dense_max=50)",
+    ),)
+
+
+def test_rhs1_dense_probe_stage_accepts_shortcut_and_records_replay() -> None:
+    calls: dict[str, dict[str, object]] = {}
+    messages: list[tuple[int, str]] = []
+    replay_state = object()
+    rhs = jnp.asarray([1.0, 2.0])
+    current = GMRESSolveResult(x=jnp.ones(2), residual_norm=jnp.asarray(10.0))
+    probe_x0 = jnp.asarray([0.0, 0.0])
+
+    def record_replay_problem(state, **kwargs):
+        calls["record"] = {"state": state, **kwargs}
+
+    result = run_rhs1_dense_probe_stage(
+        context=RHS1DenseProbeStageContext(
+            matvec=lambda x: jnp.zeros_like(x),
+            rhs=rhs,
+            preconditioner=lambda _rhs: probe_x0,
+            current_result=current,
+            x0_reduced=None,
+            target=1.0e-8,
+            active_size=2,
+            constraint_scheme=1,
+            probe_shortcut=False,
+            cs0_petsc_compat=False,
+            cs0_sparse_first=False,
+            cs0_dense_fallback_allowed=True,
+            solve_method_kind="incremental",
+            solve_method="incremental",
+            dense_shortcut_ratio=10.0,
+            dense_fallback_max=10,
+            sparse_prefer_over_dense_shortcut=False,
+            gmres_precond_side="left",
+        ),
+        replay_state=replay_state,
+        record_replay_problem=record_replay_problem,
+        solver_kind=lambda method: (f"kind:{method}", "unused"),
+        emit=lambda level, msg: messages.append((level, msg)),
+    )
+
+    assert result.early_dense_shortcut
+    assert result.probe_shortcut
+    assert result.x0_reduced is None
+    assert result.result.x.tolist() == pytest.approx(probe_x0.tolist())
+    assert calls["record"]["state"] is replay_state
+    assert calls["record"]["precond_side"] == "left"
+    assert calls["record"]["solver_kind"] == "kind:incremental"
+    assert messages == [(
+        0,
+        "solve_v3_full_system_linear_gmres: dense fallback shortcut (probe) "
+        "(ratio=2.236e+08 >= 1.0e+01)",
+    )]
+
+
+def test_rhs1_dense_probe_stage_seeds_x0_when_shortcut_not_accepted() -> None:
+    rhs = jnp.asarray([1.0, 2.0])
+    current = GMRESSolveResult(x=jnp.ones(2), residual_norm=jnp.asarray(10.0))
+    probe_x0 = jnp.asarray([3.0, 4.0])
+
+    result = run_rhs1_dense_probe_stage(
+        context=RHS1DenseProbeStageContext(
+            matvec=lambda x: x,
+            rhs=rhs,
+            preconditioner=lambda _rhs: probe_x0,
+            current_result=current,
+            x0_reduced=None,
+            target=1.0,
+            active_size=2,
+            constraint_scheme=1,
+            probe_shortcut=False,
+            cs0_petsc_compat=False,
+            cs0_sparse_first=False,
+            cs0_dense_fallback_allowed=True,
+            solve_method_kind="incremental",
+            solve_method="incremental",
+            dense_shortcut_ratio=1.0e9,
+            dense_fallback_max=10,
+            sparse_prefer_over_dense_shortcut=False,
+            gmres_precond_side="left",
+        ),
+        replay_state=object(),
+        record_replay_problem=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("shortcut replay should not run")
+        ),
+        solver_kind=lambda method: (method, method),
+    )
+
+    assert not result.early_dense_shortcut
+    assert not result.probe_shortcut
+    assert result.result is current
+    assert result.x0_reduced is probe_x0
+
+
+def test_rhs1_reduced_dense_fallback_candidate_host_lu(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "1")
+    a_np = np.asarray([[4.0, 1.0], [2.0, 3.0]])
+    rhs = jnp.asarray([6.0, 8.0])
+
+    result, elapsed_s = solve_rhs1_reduced_dense_fallback_candidate(
+        context=RHS1ReducedDenseFallbackCandidateContext(
+            matvec=lambda x: jnp.asarray(a_np) @ x,
+            rhs=rhs,
+            x0=jnp.zeros(2),
+            active_size=2,
+            constraint_scheme=2,
+            has_fp=False,
+            has_pas=False,
+            dense_matrix_cache=a_np,
+            dense_backend_allowed=True,
+            use_implicit=False,
+            tol=1.0e-12,
+            atol=0.0,
+            restart=10,
+            maxiter=20,
+            gmres_precond_side="left",
+            backend="cpu",
+        )
+    )
+
+    expected = np.linalg.solve(a_np, np.asarray(rhs))
+    assert result.x.tolist() == pytest.approx(expected.tolist())
+    assert float(result.residual_norm) == pytest.approx(0.0, abs=1.0e-12)
+    assert elapsed_s >= 0.0
+
+
+def test_rhs1_reduced_dense_fallback_candidate_uses_cached_jax_dense(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "0")
+    a_np = np.asarray([[2.0, 0.0], [0.0, 5.0]])
+    rhs = jnp.asarray([4.0, 15.0])
+
+    result, elapsed_s = solve_rhs1_reduced_dense_fallback_candidate(
+        context=RHS1ReducedDenseFallbackCandidateContext(
+            matvec=lambda x: jnp.asarray(a_np) @ x,
+            rhs=rhs,
+            x0=jnp.zeros(2),
+            active_size=2,
+            constraint_scheme=2,
+            has_fp=False,
+            has_pas=False,
+            dense_matrix_cache=a_np,
+            dense_backend_allowed=True,
+            use_implicit=False,
+            tol=1.0e-12,
+            atol=0.0,
+            restart=10,
+            maxiter=20,
+            gmres_precond_side="left",
+            backend="cpu",
+        )
+    )
+
+    assert result.x.tolist() == pytest.approx([2.0, 3.0])
+    assert float(result.residual_norm) == pytest.approx(0.0, abs=1.0e-12)
+    assert elapsed_s >= 0.0
+
+
+def test_rhs1_reduced_dense_fallback_stage_runs_candidate_and_accepts(monkeypatch) -> None:
+    calls: dict[str, dict[str, object]] = {}
+    messages: list[tuple[int, str]] = []
+    marks: list[str] = []
+    rhs = jnp.asarray([1.0, 2.0])
+    current = GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0))
+    current_residual = jnp.ones(2)
+    candidate = GMRESSolveResult(x=jnp.asarray([1.0, 2.0]), residual_norm=jnp.asarray(0.0))
+
+    def fake_candidate(**kwargs):
+        calls["candidate"] = kwargs
+        return candidate, 0.25
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_dense.solve_rhs1_reduced_dense_fallback_candidate",
+        fake_candidate,
+    )
+
+    def accept_candidate(**kwargs):
+        calls["accept"] = kwargs
+        return kwargs["candidate_result"], kwargs["current_residual_vec"], True
+
+    result, residual_vec, accepted = run_rhs1_reduced_dense_fallback_stage(
+        context=RHS1ReducedDenseFallbackStageContext(
+            candidate_context=RHS1ReducedDenseFallbackCandidateContext(
+                matvec=lambda x: x,
+                rhs=rhs,
+                x0=current.x,
+                active_size=2,
+                constraint_scheme=2,
+                has_fp=False,
+                has_pas=False,
+                dense_matrix_cache=None,
+                dense_backend_allowed=True,
+                use_implicit=False,
+                tol=1.0e-10,
+                atol=0.0,
+                restart=11,
+                maxiter=13,
+                gmres_precond_side="left",
+            ),
+            current_result=current,
+            current_residual_vec=current_residual,
+            target=1.0e-8,
+        ),
+        replay_state=object(),
+        accept_candidate=accept_candidate,
+        emit=lambda level, msg: messages.append((level, msg)),
+        mark=marks.append,
+        peak_rss_mb=lambda: 123.0,
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec is current_residual
+    assert calls["candidate"]["emit"] is not None
+    assert calls["accept"]["candidate_name"] == "dense_reduced"
+    assert calls["accept"]["baseline_name"] == "current_reduced"
+    assert calls["accept"]["solve_s"] == 0.25
+    assert calls["accept"]["peak_rss_mb"] == 123.0
+    assert marks == ["rhs1_dense_fallback_start", "rhs1_dense_fallback_done"]
+    assert messages == [(
+        0,
+        "solve_v3_full_system_linear_gmres: dense fallback "
+        "(size=2 residual=9.000e+00 > target=1.000e-08)",
+    )]
+
+
+def test_rhs1_reduced_dense_fallback_stage_reports_failure(monkeypatch) -> None:
+    rhs = jnp.asarray([1.0, 2.0])
+    current = GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0))
+    current_residual = jnp.ones(2)
+    messages: list[tuple[int, str]] = []
+    marks: list[str] = []
+
+    def fail_candidate(**_kwargs):
+        raise RuntimeError("reduced dense failed")
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_dense.solve_rhs1_reduced_dense_fallback_candidate",
+        fail_candidate,
+    )
+
+    result, residual_vec, accepted = run_rhs1_reduced_dense_fallback_stage(
+        context=RHS1ReducedDenseFallbackStageContext(
+            candidate_context=RHS1ReducedDenseFallbackCandidateContext(
+                matvec=lambda x: x,
+                rhs=rhs,
+                x0=current.x,
+                active_size=2,
+                constraint_scheme=2,
+                has_fp=False,
+                has_pas=False,
+                dense_matrix_cache=None,
+                dense_backend_allowed=True,
+                use_implicit=False,
+                tol=1.0e-10,
+                atol=0.0,
+                restart=11,
+                maxiter=13,
+                gmres_precond_side="left",
+            ),
+            current_result=current,
+            current_residual_vec=current_residual,
+            target=1.0e-8,
+        ),
+        replay_state=object(),
+        accept_candidate=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("acceptance should not run")
+        ),
+        emit=lambda level, msg: messages.append((level, msg)),
+        mark=marks.append,
+    )
+
+    assert not accepted
+    assert result is current
+    assert residual_vec is current_residual
+    assert messages[-1] == (
+        1,
+        "solve_v3_full_system_linear_gmres: dense fallback failed "
+        "(RuntimeError: reduced dense failed)",
+    )
+    assert marks == ["rhs1_dense_fallback_start", "rhs1_dense_fallback_done"]
+
+
+def test_rhs1_reduced_dense_fallback_admission_stage_skips_when_rejected(
+    monkeypatch,
+) -> None:
+    rhs = jnp.asarray([1.0, 2.0])
+    current = GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0))
+    current_residual = jnp.ones(2)
+
+    def fail_stage(**_kwargs):
+        raise AssertionError("reduced dense stage should not run")
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_dense.run_rhs1_reduced_dense_fallback_stage",
+        fail_stage,
+    )
+
+    result, residual_vec, accepted = run_rhs1_reduced_dense_fallback_admission_stage(
+        context=RHS1ReducedDenseFallbackAdmissionStageContext(
+            stage_context=RHS1ReducedDenseFallbackStageContext(
+                candidate_context=RHS1ReducedDenseFallbackCandidateContext(
+                    matvec=lambda x: x,
+                    rhs=rhs,
+                    x0=current.x,
+                    active_size=20,
+                    constraint_scheme=1,
+                    has_fp=True,
+                    has_pas=False,
+                    dense_matrix_cache=None,
+                    dense_backend_allowed=True,
+                    use_implicit=False,
+                    tol=1.0e-10,
+                    atol=0.0,
+                    restart=11,
+                    maxiter=13,
+                    gmres_precond_side="left",
+                ),
+                current_result=current,
+                current_residual_vec=current_residual,
+                target=1.0e-8,
+            ),
+            dense_fallback_max=10,
+            residual_norm_true=1.0e-4,
+            reported_residual_norm=9.0,
+            active_size=20,
+            rhs_mode=1,
+            include_phi1=False,
+            has_fp=True,
+            disable_dense_pas=False,
+            any_dense_path_allowed=True,
+            host_sparse_direct_used=False,
+            backend="cpu",
+            host_sparse_skip_ratio=0.0,
+            cs0_dense_fallback_allowed=True,
+            cs0_sparse_first=False,
+            cs0_petsc_compat=False,
+        ),
+        replay_state=object(),
+        accept_candidate=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("acceptance should not run")
+        ),
+    )
+
+    assert not accepted
+    assert result is current
+    assert residual_vec is current_residual
+
+
+def test_rhs1_reduced_dense_fallback_admission_stage_runs_when_admitted(
+    monkeypatch,
+) -> None:
+    calls: dict[str, dict[str, object]] = {}
+    messages: list[tuple[int, str]] = []
+    marks: list[str] = []
+    replay_state = object()
+    rhs = jnp.asarray([1.0, 2.0])
+    current = GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0))
+    current_residual = jnp.ones(2)
+    candidate = GMRESSolveResult(x=jnp.asarray([1.0, 2.0]), residual_norm=jnp.asarray(0.0))
+
+    def fake_stage(**kwargs):
+        calls["stage"] = kwargs
+        return candidate, current_residual, True
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_dense.run_rhs1_reduced_dense_fallback_stage",
+        fake_stage,
+    )
+
+    result, residual_vec, accepted = run_rhs1_reduced_dense_fallback_admission_stage(
+        context=RHS1ReducedDenseFallbackAdmissionStageContext(
+            stage_context=RHS1ReducedDenseFallbackStageContext(
+                candidate_context=RHS1ReducedDenseFallbackCandidateContext(
+                    matvec=lambda x: x,
+                    rhs=rhs,
+                    x0=current.x,
+                    active_size=2,
+                    constraint_scheme=1,
+                    has_fp=True,
+                    has_pas=False,
+                    dense_matrix_cache=None,
+                    dense_backend_allowed=True,
+                    use_implicit=False,
+                    tol=1.0e-10,
+                    atol=0.0,
+                    restart=11,
+                    maxiter=13,
+                    gmres_precond_side="left",
+                ),
+                current_result=current,
+                current_residual_vec=current_residual,
+                target=1.0e-8,
+            ),
+            dense_fallback_max=10,
+            residual_norm_true=1.0e-4,
+            reported_residual_norm=9.0,
+            active_size=2,
+            rhs_mode=1,
+            include_phi1=False,
+            has_fp=True,
+            disable_dense_pas=False,
+            any_dense_path_allowed=True,
+            host_sparse_direct_used=False,
+            backend="cpu",
+            host_sparse_skip_ratio=0.0,
+            cs0_dense_fallback_allowed=True,
+            cs0_sparse_first=False,
+            cs0_petsc_compat=False,
+        ),
+        replay_state=replay_state,
+        accept_candidate=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("acceptance is delegated to stage helper")
+        ),
+        emit=lambda level, msg: messages.append((level, msg)),
+        mark=marks.append,
+        peak_rss_mb=lambda: 123.0,
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec is current_residual
+    assert calls["stage"]["replay_state"] is replay_state
+    assert calls["stage"]["emit"] is not None
+    assert callable(calls["stage"]["mark"])
+    assert calls["stage"]["peak_rss_mb"] is not None
+    assert messages == []
+    assert marks == []
+
+
+def test_rhs1_full_dense_fallback_candidate_uses_dense_backend() -> None:
+    calls: dict[str, dict[str, object]] = {}
+    messages: list[tuple[int, str]] = []
+    marks: list[str] = []
+    rhs = jnp.asarray([1.0, 2.0])
+    current = GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0))
+    candidate = GMRESSolveResult(x=jnp.asarray([1.0, 2.0]), residual_norm=jnp.asarray(0.0))
+    candidate_residual = jnp.zeros(2)
+
+    def solve_linear_with_residual(**kwargs):
+        calls["solve"] = kwargs
+        return candidate, candidate_residual
+
+    def accept_candidate(**kwargs):
+        calls["accept"] = kwargs
+        return kwargs["candidate_result"], kwargs["candidate_residual_vec"], True
+
+    result, residual_vec, accepted = run_rhs1_full_dense_fallback_candidate(
+        context=RHS1FullDenseFallbackContext(
+            matvec=lambda x: x,
+            rhs=rhs,
+            current_result=current,
+            current_residual_vec=jnp.ones(2),
+            total_size=2,
+            constraint_scheme=0,
+            dense_matrix_cache=None,
+            dense_backend_allowed=True,
+            residual_norm_check=9.0,
+            target=1.0e-8,
+            tol=1.0e-10,
+            atol=0.0,
+            restart=11,
+            maxiter=13,
+            backend="cpu",
+        ),
+        replay_state=object(),
+        accept_candidate=accept_candidate,
+        solve_linear_with_residual=solve_linear_with_residual,
+        emit=lambda level, msg: messages.append((level, msg)),
+        mark=marks.append,
+        peak_rss_mb=lambda: 123.0,
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec is candidate_residual
+    assert calls["solve"]["solve_method_val"] == "dense_row_scaled"
+    assert calls["solve"]["precond_side"] == "none"
+    assert calls["accept"]["candidate_name"] == "dense_full"
+    assert calls["accept"]["baseline_name"] == "current_full"
+    assert calls["accept"]["peak_rss_mb"] == 123.0
+    assert marks == ["rhs1_dense_fallback_start", "rhs1_dense_fallback_done"]
+    assert messages == [(
+        0,
+        "solve_v3_full_system_linear_gmres: dense fallback "
+        "(size=2 residual=9.000e+00 > target=1.000e-08)",
+    )]
+
+
+def test_rhs1_full_dense_fallback_candidate_uses_explicit_dense_krylov(monkeypatch) -> None:
+    calls: dict[str, dict[str, object]] = {}
+    rhs = jnp.asarray([4.0, 15.0])
+    current = GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0))
+    candidate = GMRESSolveResult(x=jnp.asarray([2.0, 3.0]), residual_norm=jnp.asarray(0.0))
+    candidate_residual = jnp.zeros(2)
+    a_dense = jnp.asarray([[2.0, 0.0], [0.0, 5.0]])
+    messages: list[tuple[int, str]] = []
+
+    def fake_dense_krylov_solve_from_matrix_with_residual(**kwargs):
+        calls["krylov"] = kwargs
+        return candidate, candidate_residual
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_dense.dense_krylov_solve_from_matrix_with_residual",
+        fake_dense_krylov_solve_from_matrix_with_residual,
+    )
+
+    def accept_candidate(**kwargs):
+        calls["accept"] = kwargs
+        return kwargs["candidate_result"], kwargs["candidate_residual_vec"], True
+
+    result, residual_vec, accepted = run_rhs1_full_dense_fallback_candidate(
+        context=RHS1FullDenseFallbackContext(
+            matvec=lambda x: a_dense @ x,
+            rhs=rhs,
+            current_result=current,
+            current_residual_vec=None,
+            total_size=2,
+            constraint_scheme=2,
+            dense_matrix_cache=a_dense,
+            dense_backend_allowed=False,
+            residual_norm_check=9.0,
+            target=1.0e-8,
+            tol=1.0e-10,
+            atol=0.0,
+            restart=11,
+            maxiter=13,
+            backend="gpu",
+        ),
+        replay_state=object(),
+        accept_candidate=accept_candidate,
+        solve_linear_with_residual=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("dense backend path should not run")
+        ),
+        emit=lambda level, msg: messages.append((level, msg)),
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec is candidate_residual
+    assert calls["krylov"]["row_scaled"] is False
+    assert calls["krylov"]["precondition_side"] == "none"
+    assert calls["accept"]["x0_vec"] is candidate.x
+    assert messages[-1] == (
+        0,
+        "solve_v3_full_system_linear_gmres: dense fallback using explicit dense Krylov "
+        "on backend=gpu",
+    )
+
+
+def test_rhs1_full_dense_fallback_candidate_reports_failure() -> None:
+    rhs = jnp.asarray([1.0, 2.0])
+    current_residual = jnp.asarray([3.0, 4.0])
+    current = GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0))
+    messages: list[tuple[int, str]] = []
+    marks: list[str] = []
+
+    def fail_solve(**_kwargs):
+        raise RuntimeError("dense failed")
+
+    result, residual_vec, accepted = run_rhs1_full_dense_fallback_candidate(
+        context=RHS1FullDenseFallbackContext(
+            matvec=lambda x: x,
+            rhs=rhs,
+            current_result=current,
+            current_residual_vec=current_residual,
+            total_size=2,
+            constraint_scheme=2,
+            dense_matrix_cache=None,
+            dense_backend_allowed=True,
+            residual_norm_check=9.0,
+            target=1.0e-8,
+            tol=1.0e-10,
+            atol=0.0,
+            restart=11,
+            maxiter=13,
+            backend="cpu",
+        ),
+        replay_state=object(),
+        accept_candidate=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("acceptance should not run")
+        ),
+        solve_linear_with_residual=fail_solve,
+        emit=lambda level, msg: messages.append((level, msg)),
+        mark=marks.append,
+    )
+
+    assert not accepted
+    assert result is current
+    assert residual_vec is current_residual
+    assert messages[-1] == (
+        1,
+        "solve_v3_full_system_linear_gmres: dense fallback failed "
+        "(RuntimeError: dense failed)",
+    )
+    assert marks == ["rhs1_dense_fallback_start", "rhs1_dense_fallback_done"]
+
+
+def test_rhs1_full_dense_fallback_stage_skips_when_admission_rejects(
+    monkeypatch,
+) -> None:
+    rhs = jnp.asarray([1.0, 2.0])
+    current_residual = jnp.asarray([3.0, 4.0])
+    current = GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0))
+
+    def fail_candidate(**_kwargs):
+        raise AssertionError("candidate should not run")
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_dense.run_rhs1_full_dense_fallback_candidate",
+        fail_candidate,
+    )
+
+    result, residual_vec, accepted = run_rhs1_full_dense_fallback_stage(
+        context=RHS1FullDenseFallbackStageContext(
+            candidate_context=RHS1FullDenseFallbackContext(
+                matvec=lambda x: x,
+                rhs=rhs,
+                current_result=current,
+                current_residual_vec=current_residual,
+                total_size=20,
+                constraint_scheme=1,
+                dense_matrix_cache=None,
+                dense_backend_allowed=True,
+                residual_norm_check=9.0,
+                target=1.0e-8,
+                tol=1.0e-10,
+                atol=0.0,
+                restart=11,
+                maxiter=13,
+                backend="cpu",
+            ),
+            dense_fallback_max=10,
+            residual_norm_true=1.0e-4,
+            active_size=2,
+            rhs_mode=1,
+            include_phi1=False,
+            has_fp=True,
+            any_dense_path_allowed=True,
+            host_sparse_direct_used=False,
+            host_sparse_skip_ratio=0.0,
+            cs0_sparse_first=False,
+        ),
+        replay_state=object(),
+        accept_candidate=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("acceptance should not run")
+        ),
+        solve_linear_with_residual=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("solve should not run")
+        ),
+    )
+
+    assert not accepted
+    assert result is current
+    assert residual_vec is current_residual
+
+
+def test_rhs1_full_dense_fallback_stage_runs_candidate_when_admitted(
+    monkeypatch,
+) -> None:
+    calls: dict[str, dict[str, object]] = {}
+    messages: list[tuple[int, str]] = []
+    marks: list[str] = []
+    replay_state = object()
+    rhs = jnp.asarray([1.0, 2.0])
+    current_residual = jnp.asarray([3.0, 4.0])
+    current = GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0))
+    candidate = GMRESSolveResult(x=jnp.asarray([1.0, 2.0]), residual_norm=jnp.asarray(0.0))
+
+    def fake_candidate(**kwargs):
+        calls["candidate"] = kwargs
+        return candidate, current_residual, True
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_dense.run_rhs1_full_dense_fallback_candidate",
+        fake_candidate,
+    )
+
+    result, residual_vec, accepted = run_rhs1_full_dense_fallback_stage(
+        context=RHS1FullDenseFallbackStageContext(
+            candidate_context=RHS1FullDenseFallbackContext(
+                matvec=lambda x: x,
+                rhs=rhs,
+                current_result=current,
+                current_residual_vec=current_residual,
+                total_size=2,
+                constraint_scheme=1,
+                dense_matrix_cache=None,
+                dense_backend_allowed=True,
+                residual_norm_check=9.0,
+                target=1.0e-8,
+                tol=1.0e-10,
+                atol=0.0,
+                restart=11,
+                maxiter=13,
+                backend="cpu",
+            ),
+            dense_fallback_max=10,
+            residual_norm_true=1.0e-4,
+            active_size=2,
+            rhs_mode=1,
+            include_phi1=False,
+            has_fp=True,
+            any_dense_path_allowed=True,
+            host_sparse_direct_used=False,
+            host_sparse_skip_ratio=0.0,
+            cs0_sparse_first=False,
+        ),
+        replay_state=replay_state,
+        accept_candidate=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("acceptance is delegated to candidate helper")
+        ),
+        solve_linear_with_residual=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("solve is delegated to candidate helper")
+        ),
+        emit=lambda level, msg: messages.append((level, msg)),
+        mark=marks.append,
+        peak_rss_mb=lambda: 123.0,
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec is current_residual
+    assert calls["candidate"]["replay_state"] is replay_state
+    assert calls["candidate"]["emit"] is not None
+    assert callable(calls["candidate"]["mark"])
+    assert calls["candidate"]["peak_rss_mb"] is not None
+    assert messages == []
+    assert marks == []

@@ -9,7 +9,7 @@ import numpy as np
 from sfincs_jax.diagnostics import _u_hat_loop, u_hat, u_hat_np
 from sfincs_jax.geometry import boozer_geometry_scheme1, boozer_geometry_scheme4
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist
+from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 
 
 def test_u_hat_fft_matches_numpy_reference_for_scheme4_fixture() -> None:

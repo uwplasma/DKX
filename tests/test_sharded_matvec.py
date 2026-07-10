@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3_driver import full_system_operator_from_namelist
-from sfincs_jax.v3_system import apply_v3_full_system_operator_cached
+from sfincs_jax.operators.profile_system import apply_v3_full_system_operator_cached, full_system_operator_from_namelist
 
 
 def test_sharded_matvec_fallback_matches_unsharded(monkeypatch) -> None:

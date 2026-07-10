@@ -1,8 +1,78 @@
 Examples
 ========
 
+Canonical examples
+------------------
+
+Six pedagogic scripts on the canonical API sit at the top of ``examples/``.
+Each follows the same style contract: no ``main()``, all parameters at the top
+of the file, printed setup/progress/final results, at least one plot, and
+output files written and read back. All run on a laptop CPU; CI runs each one
+at shrunken resolution (``SFINCS_JAX_CI=1``) in
+``tests/test_examples_pedagogic.py``.
+
+``examples/run_tokamak.py`` — first solve, from Python
+   Builds a circular-tokamak ``input.namelist`` from Python dicts
+   (``geometryScheme=1``, one ion species, pitch-angle-scattering collisions),
+   runs the canonical driver, and reads the HDF5 output back. The key lines:
+
+   .. code-block:: python
+
+      from sfincs_jax.run import run_profile
+
+      run = run_profile(deck_path, solve_method="auto", out_path=h5_path)
+      gamma = float(run.moments["particleFlux_vm_psiHat"][0])
+
+   It teaches the per-species results table, the four radial-coordinate flux
+   conventions, and HDF5/NetCDF output selection by file suffix.
+
+``examples/run_w7x.py`` — stellarator geometry and full Fokker-Planck
+   Loads a W7-X Boozer equilibrium and solves with the linearized
+   Fokker-Planck operator, which routes ``auto`` to the tier-2 recycled-Krylov
+   (GCROT) solver instead of the tier-1 structured direct path. It teaches
+   geometry files, collision-operator selection, and how to inspect which
+   solver tier ran (``run.solve_result.method``).
+
+``examples/transport_coefficients.py`` — RHSMode=3 transport matrices
+   Computes monoenergetic transport matrices over a collisionality scan,
+   checks Onsager symmetry, and plots ``L11`` versus ``nuPrime``.
+
+``examples/ambipolar_er_scan.py`` — ambipolar radial electric field
+   Scans ``Er``, brackets the sign change of the radial current, solves for
+   the ambipolar root, and writes/reads the output at the root.
+
+``examples/gradients_tour.py`` — differentiating the solve
+   Takes ``jax.grad`` of fluxes and bootstrap current with respect to
+   temperature and ``Er`` drives through the implicit-differentiation solve
+   path, and verifies every gradient against central finite differences.
+
+``examples/optimize_QA_bootstrap.py`` — flagship optimization
+   Gradient-based optimization of a quasi-axisymmetric stellarator boundary
+   for low bootstrap current: boundary Fourier coefficients ->
+   ``vmec_jax`` fixed-boundary equilibrium (implicit-adjoint VJP) ->
+   differentiable Boozer transform (``booz_xform_jax``) ->
+   ``FluxSurfaceGeometry.from_fourier`` (geometryScheme-13 pure-JAX path) ->
+   canonical kinetic solve (tier-2 GCROT, warm-started and recycled across
+   optimizer iterations) -> ``FSABjHat``. One ``jax.value_and_grad`` call
+   differentiates the whole chain; the example verifies the end-to-end
+   gradient against central finite differences and holds aspect ratio, mean
+   iota, and quasisymmetry with penalty terms. Alternative objective lines
+   (e.g. ``D11``-style targets) ship commented and CI-tested. Requires
+   ``vmec_jax`` and ``booz_xform_jax``.
+
+   .. figure:: _static/figures/readme/optimize_QA_bootstrap.png
+      :alt: QA low-bootstrap optimization dashboard: objective history, boundary cross-sections, |B| spectrum, and <j.B> profile.
+      :align: center
+      :width: 90%
+
+      Output figure of ``examples/optimize_QA_bootstrap.py``.
+
+Example tree
+------------
+
 The repository includes a structured `examples/` tree:
 
+- `examples/tutorials/`: notebook-led learning path and a fast output/plot script
 - `examples/getting_started/`: basic API usage (no external reference code required)
 - `examples/parity/`: focused validation scripts against frozen reference fixtures
 - `examples/transport/`: `RHSMode=2/3` transport-matrix workflows + upstream scanplot scripts
@@ -17,7 +87,188 @@ Run from the repo root:
 .. code-block:: bash
 
    cd sfincs_jax
+   python examples/tutorials/run_quick_output_and_plot.py --out-dir tutorial_output
    python examples/getting_started/build_grids_and_geometry.py
+
+For a guided classroom-style path, open the notebooks in
+``examples/tutorials``:
+
+- ``01_cli_outputs_and_plots.ipynb``: CLI, output formats, and diagnostics panels.
+- ``02_transport_and_autodiff.ipynb``: RHSMode=2/3 transport matrices and JAX differentiation.
+- ``03_bootstrap_redl_and_optimization.ipynb``: bootstrap-current/Redl comparisons and optimization objectives.
+
+The checked catalog ``examples/workflow_catalog.json`` mirrors the tables on
+this page. It records the supported topic folders, first-pass entry points,
+typical commands, runtime budgets, and whether a workflow requires a local
+SFINCS Fortran v3 executable.
+
+For a terminal browser over the same catalog:
+
+.. code-block:: bash
+
+   python examples/list_workflows.py --list-topics
+   python examples/list_workflows.py --topic bootstrap --long
+   python examples/list_workflows.py --search "VMEC geometry"
+
+One-command start points
+------------------------
+
+These entries are the shortest useful commands for common workflows. They avoid
+a local SFINCS Fortran v3 executable unless the command explicitly says it is a
+frozen-reference or benchmark workflow.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 36 36
+
+   * - Goal
+     - Entry script
+     - Typical command
+   * - Write output files and a diagnostics panel
+     - ``examples/tutorials/run_quick_output_and_plot.py``
+     - ``python examples/tutorials/run_quick_output_and_plot.py --out-dir tutorial_output``
+   * - Inspect HDF5, NetCDF, NPZ, and plotting
+     - ``examples/getting_started/write_and_plot_multiple_formats.py``
+     - ``python examples/getting_started/write_and_plot_multiple_formats.py``
+   * - Load VMEC geometry through ``wout_path``
+     - ``examples/getting_started/write_sfincs_output_vmec.py``
+     - ``python examples/getting_started/write_sfincs_output_vmec.py``
+   * - Compute a RHSMode=2/3 transport matrix
+     - ``examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py``
+     - ``python examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py``
+   * - Differentiate a residual with JAX
+     - ``examples/autodiff/autodiff_gradient_nu_n_residual.py``
+     - ``python examples/autodiff/autodiff_gradient_nu_n_residual.py``
+   * - Compare kinetic bootstrap current with Redl
+     - ``examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py``
+     - ``python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py --case QA --quick --jax-vs-redl --solve-method auto``
+   * - Time output formats and memory behavior
+     - ``examples/performance/benchmark_output_formats.py``
+     - ``python examples/performance/benchmark_output_formats.py --repeats 2``
+   * - Check a frozen Fortran-v3 output fixture
+     - ``examples/parity/output_parity_vs_fortran_fixture.py``
+     - ``python examples/parity/output_parity_vs_fortran_fixture.py``
+
+Fast tutorial, getting-started, and frozen-fixture parity entries are designed
+for seconds-scale laptop CPU runs. VMEC, Redl, optimization, and performance
+entries may take longer; use ``--quick`` where available and inspect generated
+solver metadata before treating a result as quantitative evidence.
+
+Decision map
+------------
+
+Use this map when you know the kind of task you need, but not the example
+folder name.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 32 40
+
+   * - Starting question
+     - Go here
+     - Why
+   * - I want to run one case and plot the output.
+     - ``examples/tutorials/run_quick_output_and_plot.py``
+     - Writes HDF5, NetCDF, NPZ, and a PDF panel in one bounded command.
+   * - I want to learn the file formats and CLI/API basics.
+     - ``examples/getting_started/``
+     - Isolates input parsing, output writing, VMEC paths, and plotting.
+   * - I need transport coefficients.
+     - ``examples/transport/``
+     - Covers RHSMode=2/3 transport matrices and scan postprocessing.
+   * - I need gradients or optimization hooks.
+     - ``examples/autodiff/`` and ``examples/optimization/``
+     - Starts with residual/JVP examples, then moves to QA/QI objectives and promotion gates.
+   * - I need bootstrap current or Redl comparisons.
+     - ``examples/vmec_jax_finite_beta/``
+     - Owns the VMEC, Redl, ambipolar-root, and bootstrap-current profile scripts.
+   * - I need to validate against SFINCS Fortran v3 behavior.
+     - ``examples/parity/`` and ``examples/publication_figures/``
+     - Provides frozen fixtures and release-facing comparison plot generators.
+   * - I need CPU/GPU runtime or memory evidence.
+     - ``examples/performance/``
+     - Benchmarks output formats, JIT, sharding, transport workers, and optional backends.
+   * - I recognize an upstream SFINCS input name.
+     - ``examples/sfincs_examples/``
+     - Preserves upstream-style decks for parity and benchmark audits, not first-pass learning.
+
+Application recipe map
+----------------------
+
+Use this table when you know the physics or software task, but not the folder
+name. The first entry point is the smallest useful run; the research workflow
+points to the script or notebook that adds production-style validation,
+convergence, or profiling detail.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 36 36
+
+   * - Application
+     - Smallest useful entry point
+     - Research workflow
+   * - CLI output and diagnostics panel
+     - ``examples/tutorials/run_quick_output_and_plot.py``
+     - ``examples/getting_started/write_and_plot_multiple_formats.py``
+   * - Analytic tokamak input
+     - ``examples/getting_started/write_sfincs_output_tokamak.py``
+     - ``examples/sfincs_examples/tokamak_1species_FPCollisions_noEr/input.namelist``
+   * - VMEC ``wout_path`` input
+     - ``examples/getting_started/write_sfincs_output_vmec.py``
+     - ``examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py``
+   * - RHSMode=2/3 transport matrix
+     - ``examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py``
+     - ``examples/transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py``
+   * - Bootstrap current vs Redl
+     - ``examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py``
+     - ``examples/tutorials/03_bootstrap_redl_and_optimization.ipynb``
+   * - Ambipolar electric-field scan
+     - ``examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py``
+     - ``examples/optimization/evaluate_sfincs_jax_promotion_scan.py``
+   * - Differentiable residual or flux
+     - ``examples/autodiff/autodiff_gradient_nu_n_residual.py``
+     - ``examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py``
+   * - VMEC/Boozer/JAX workflow
+     - ``examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py``
+     - ``examples/tutorials/04_geometry_validation_and_performance.ipynb``
+   * - QA/QI optimization objective
+     - ``examples/optimization/qa_nfp2_sfincs_jax_objectives.py``
+     - ``examples/optimization/QA_optimization_bootstrap_current.py``
+   * - CPU/GPU timing and output I/O
+     - ``examples/performance/benchmark_output_formats.py``
+     - ``examples/performance/benchmark_transport_parallel_scaling.py``
+   * - Frozen Fortran-v3 parity check
+     - ``examples/parity/output_parity_vs_fortran_fixture.py``
+     - ``examples/sfincs_examples/`` for retained upstream-style decks
+
+Top-level folder categories
+---------------------------
+
+The top-level folders are grouped by user intent. Start with the ``learning``
+folders when exploring the code, use ``capability`` folders for physics or
+differentiability workflows, and use ``validation`` folders when producing
+parity, performance, or publication evidence. The ``reference`` folders are not
+the recommended first stop for new workflows.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 18 32 50
+
+   * - Category
+     - Folders
+     - Use when
+   * - ``learning``
+     - ``examples/tutorials/``, ``examples/getting_started/``
+     - You want to learn the CLI, Python API, plots, output formats, and first operator or geometry concepts.
+   * - ``capability``
+     - ``examples/transport/``, ``examples/autodiff/``, ``examples/optimization/``, ``examples/vmec_jax_finite_beta/``
+     - You need a specific physics, optimization, VMEC, Redl, bootstrap-current, or differentiability workflow.
+   * - ``validation``
+     - ``examples/parity/``, ``examples/performance/``, ``examples/publication_figures/``
+     - You need parity checks, runtime/memory evidence, CPU/GPU benchmark drivers, or regenerated documentation figures.
+   * - ``reference``
+     - ``examples/data/``, ``examples/sfincs_examples/``
+     - You need small shared inputs or recognizable SFINCS Fortran v3 decks for audits and compatibility checks.
 
 Some geometry examples reference public W7-X/HSX/QI equilibrium fixtures by
 basename. Those multi-megabyte files are fetched from the
@@ -26,7 +277,7 @@ use. To prefetch them before running examples, use:
 
 .. code-block:: bash
 
-   python scripts/fetch_equilibria.py
+   python -m sfincs_jax.validation.data_fetch
 
 Writing `sfincsOutput.h5` (Python + CLI):
 
@@ -78,9 +329,9 @@ The radial-profile x-axis is normalized toroidal flux,
 The direct VMEC path does not require a Boozer transform: ``sfincs_jax`` consumes
 the generated ``wout`` through the same scheme-5 geometry implementation used by
 file-based VMEC runs.  ``booz_xform_jax`` remains useful for the separate
-differentiable Boozer-spectrum handoff described below.  This finite-beta script
+differentiable Boozer-spectrum workflow described below.  This finite-beta script
 is a primal transport example: it does not differentiate through the VMEC-JAX
-fixed-boundary run, the ``wout`` file handoff, scheme-5 geometry evaluation, the
+fixed-boundary run, the ``wout`` file boundary, scheme-5 geometry evaluation, the
 SFINCS kinetic solve, or radial postprocessing.  Its summary JSON records that
 boundary in a workflow-contract block, plus radial-profile provenance for the
 ``r_N`` surfaces, plotted :math:`\psi_N = r_N^2` values, selected ambipolar branch,
@@ -201,6 +452,15 @@ If those local reduced-resolution Fortran sidecars are not present, add
 Add ``--quick`` for a three-surface smoke plot, or increase the surface list to
 rerun a denser radial diagnostic.
 
+To re-render a checked figure bundle from its summary JSON without rerunning
+kinetic solves or requiring local HDF5 sidecars:
+
+.. code-block:: bash
+
+   python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+     --from-summary-json docs/_static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface.json \
+     --stem qs_paper_qa_same_resolution_11surface
+
 Add ``--jax-vs-redl`` (alias ``--hide-fortran``) for a pure ``sfincs_jax``
 versus Redl plot. The default ``--s-values all`` evaluates all 39 archived
 surfaces; increase the grid beyond ``13 x 13 x 21 x 5`` for production accuracy
@@ -231,7 +491,7 @@ Use ``--verbose-sfincs`` or set ``SFINCS_JAX_EXAMPLE_VERBOSE=1`` for
 production-grid reruns so the script forwards phase, preconditioner, and Krylov
 progress messages while setup is running.
 
-The current apples-to-apples QA/QH documentation check reruns SFINCS Fortran v3
+The apples-to-apples QA/QH documentation check reruns SFINCS Fortran v3
 at the same ``13 x 13 x 21 x 5`` grid used by the fast JAX documentation solve
 on 11 surfaces, ``s = 0.10, 0.15, 0.25, 0.30, 0.45, 0.50, 0.60, 0.70, 0.75,
 0.85, 0.90``. JAX
@@ -243,88 +503,16 @@ difference is ``1.21e-3`` for QA and ``3.54e-3`` for QH. The largest JAX
 refinement bar is ``4.21%`` for QA and ``24.43%`` for QH, so QH is still a
 reduced-grid convergence stress test rather than a production-resolution claim.
 
-For this benchmark script, ``--solve-method auto`` is run in the
-runtime/non-autodiff lane: the script sets ``SFINCS_JAX_IMPLICIT_SOLVE=0`` and
-uses the residual-clean ``fortran_reduced_pc_gmres`` host route automatically
-for eligible finite-beta/full-FP points, with a guarded native-stack attempt and
-robust active-LU fallback. A no-probe
-full-CSR host lane with
-``xblock_tz_low_l_schur`` is available for explicit non-differentiable
-structured-CSR benchmarks, but it is not part of the public default after early
-Zenodo QA/QH Krylov preconditioner probes showed multi-minute unsuccessful
-trials on medium finite-beta profile-current decks. A newer active projected
-direct mode solves the residual-clean host diagnostic system without the
-matrix-free pattern probe; low-resolution QA/QH bootstrap-current agreement must
-still be treated as a convergence study, not as a production parity claim. The
-script refuses to write nonconverged production-sized diagnostics and will also
-reject sparse builds that exceed the configured memory budget.
-
-Builds that include the no-probe full-CSR lane can still force the host-only,
-non-autodiff structured solve explicitly with ``--solve-method structured_csr``
-or ``--solve-method host_structured_csr`` for reproducibility/debugging.  The
-current residual-clean finite-beta QA/QH diagnostic route uses
-``fortran_reduced_pc_gmres`` with direct-tail active-auto preconditioning. The
-auto ladder first tries the lower-memory
-``active_fortran_v3_reduced_native_stack`` candidate, requires it to pass a
-true-residual preflight, and falls back to the robust
-``active_fortran_v3_reduced_lu`` reference route when that preflight fails. On
-the full archived ``25 x 39 x 60 x 7`` QA surface, this hands-off route rejected
-native stack and then converged with active LU to residual ``7.27e-16`` in
-``354.6 s`` wall in the latest guarded audit. Other combined multiline, scaled-ILU, and sparse-coarse
-preconditioners remain implemented and tested research candidates, but they are
-not public defaults until they pass the same true-residual gate. Physical RHSMode=1
-``host_structured_csr`` output remains available for explicit structured-CSR
-experiments; the environment variables below make that older route explicit and
-also override shifted benchmark defaults:
-
-.. code-block:: bash
-
-   SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=direct \
-   SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_DOF=1 \
-   SFINCS_JAX_RHS1_FULL_CSR_MAX_MB=1024 \
-   python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
-     --quick \
-     --solve-method host_structured_csr
-
-``SFINCS_JAX_RHS1_FULL_CSR_MAX_MB`` is the assembled-matrix cap: an over-budget
-CSR build is rejected before solving instead of silently falling back to a dense
-probe. ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_DOF=1`` projects to the active
-transport unknowns before the host solve and expands back to the full output
-vector. Krylov experiments can still use
-``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER``,
-``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB``, and
-``SFINCS_JAX_RHS1_FULL_CSR_XBLOCK_LMAX`` to control the x-block/coarse residual
-preconditioner candidates, but those candidates are not yet the promoted
-finite-beta QA/QH parity path.
-For a lower-memory iterative comparison, use
-``SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=gmres`` or ``lgmres`` with
-``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER=active_low_l_schur``. This projected
-field-split candidate uses a sparse exact Schur residual equation over the
-full-angle low-pitch active variables and the global tail. The low-pitch cutoff
-is controlled by
-``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_LOW_L_SCHUR_LMAX``, and the sparse factor is
-bounded by ``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB``. The older
-``active_coarse`` candidate remains available; it uses low-``l``/angular/tail
-modal coarse residual modes. Its default coarse equation is Galerkin; set
-``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COARSE_SOLVER=least_squares`` or use
-``active_coarse_ls`` for the residual-minimizing comparison. Explicit
-``active_overlap_schwarz`` builds a restricted additive-Schwarz residual
-correction over overlapping speed-space patches; control its pitch cutoff and
-overlap with ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SCHWARZ_LMAX`` and
-``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SCHWARZ_RADIUS``. The combined
-``active_schwarz_low_l_schur`` path uses that Schwarz correction as the base for
-the low-pitch Schur residual equation. Explicit ``active_xblock`` and
-``active_xblock_low_l_schur`` probes factor active sparse blocks at fixed
-species and speed index; control their cutoff with
-``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_XBLOCK_LMAX``. These are retained as
-benchmark/debug routes after the first QA gate showed they are not yet a
-promotion path. Generic
-``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER=active_ilu`` is also available and tuned
-with ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ILU_DROP_TOL`` and
-``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ILU_FILL_FACTOR``. Treat it as a benchmark
-candidate: physical finite-beta bootstrap-current outputs should remain on the
-current active-auto host route unless active low-L/xblock/coarse/ILU satisfies
-the true-residual gate for that case.
+For this benchmark script, ``--solve-method auto`` runs in the
+runtime/non-autodiff lane (the script sets ``SFINCS_JAX_IMPLICIT_SOLVE=0``).
+The former structured-CSR/sparse-PC host lanes referenced by earlier revisions
+of this benchmark (``structured_csr``/``host_structured_csr``,
+``fortran_reduced_pc_gmres``, and the ``SFINCS_JAX_RHS1_FULL_CSR_*``
+preconditioner candidates) were deleted with the legacy sparse solver
+families; the recorded finite-beta QA/QH figures below remain valid measured
+evidence of the archived runs, and new runs use the retained matrix-free
+``auto`` policy. The script refuses to write nonconverged production-sized
+diagnostics.
 
 .. figure:: _static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface.png
    :alt: Same-resolution SFINCS_JAX and SFINCS Fortran v3 QA bootstrap-current comparison against the Redl analytic formula.
@@ -354,7 +542,7 @@ the true-residual gate for that case.
    archived VMEC equilibrium and the same polynomial profile contract used in
    the original SFINCS/Redl comparison.  The black curve is the archived
    SFINCS Fortran v3 output at the paper resolution ``25 x 39 x 60 x 7``.
-   The red markers are the current ``sfincs_jax`` benchmark ``auto`` policy at
+   The red markers are the ``sfincs_jax`` benchmark ``auto`` policy at
    ``13 x 13 x 21 x 5`` on the same 39 archived radial surfaces.  All solves
    selected ``fortran_reduced_pc_gmres`` and reached the true-residual target.
    The right panels compare the total solve wall time over all plotted radii and
@@ -376,7 +564,7 @@ the true-residual gate for that case.
    effective total MUMPS factor memory for the archived Fortran v3 run.  Max
    differences are ``15.31%`` versus Redl and ``18.77%`` versus Fortran on the
    reduced JAX grid.  This keeps the QH production-resolution convergence lane
-   open; current term-level audits point away from a simple stale-radius
+   open; term-level audits point away from a simple stale-radius
    geometry, radial-gradient conversion, or current-assembly normalization bug,
    but the production-resolution convergence gate remains the acceptance
    criterion.
@@ -507,11 +695,13 @@ in `examples/sfincs_examples/utils/` and can run them non-interactively:
 
    sfincs_jax postprocess-upstream --case-dir /path/to/case --util sfincsScanPlot_1 -- pdf
 
-There is also a small end-to-end demo that generates PDF figures for a tiny transport-matrix case:
+For a small end-to-end transport-matrix postprocessing workflow, generate a
+matrix and then call the supported upstream utility wrapper:
 
 .. code-block:: bash
 
-   python examples/transport/postprocess_upstream_scanplot_1_transport_matrix.py
+   sfincs_jax transport-matrix-v3 --input input.namelist --out-matrix transportMatrix.npy
+   sfincs_jax postprocess-upstream --case-dir . --util sfincsScanPlot_1 -- --pdf
 
 Some advanced examples require optional dependencies:
 
@@ -522,24 +712,19 @@ Some advanced examples require optional dependencies:
 Optimization + figures
 ----------------------
 
-Two examples that showcase autodiff-driven optimization (and write publication-style figures when `matplotlib`
-is available):
+The retained optimization examples focus on a QA nfp=2 workflow: a fast
+differentiable proxy objective, an editable VMEC-JAX-style QA script with an
+optional bootstrap-current term, and promotion audits from completed
+``sfincs_jax scan-er`` outputs.
 
 .. code-block:: bash
 
-   pip install optax
-   python examples/optimization/optimize_scheme4_harmonics_publication_figures.py
-   python examples/optimization/calibrate_nu_n_to_fortran_residual_fixture.py
+   python examples/optimization/qa_nfp2_sfincs_jax_objectives.py --objective balanced --steps 20
+   python examples/optimization/QA_optimization_bootstrap_current.py
 
-For bounded optional ecosystem checks around differentiable objective wrappers:
-
-.. code-block:: bash
-
-   pip install equinox
-   python examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py --backend all
-
-The ``jaxopt`` row in that command is intentionally skip-safe unless you install
-``jaxopt`` yourself for a local historical comparison.
+Optional ecosystem solver-library comparisons are research-lane material rather
+than stable user examples. The retained examples use the in-tree JAX
+differentiable geometry and optimization helpers.
 
 Implicit differentiation through solves
 ---------------------------------------
@@ -553,11 +738,11 @@ based on `jax.lax.custom_linear_solve` and demonstrates it here:
    python examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py --solver gmres
    python examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py --solver bicgstab
 
-VMEC-to-Boozer differentiable geometry handoff
-----------------------------------------------
+VMEC-to-Boozer Differentiable Geometry Workflow
+-----------------------------------------------
 
 For optional ``vmec_jax`` and ``booz_xform_jax`` installations, this example
-checks a public differentiable geometry handoff into ``sfincs_jax``:
+checks a public differentiable geometry workflow into ``sfincs_jax``:
 
 .. code-block:: bash
 
@@ -584,16 +769,6 @@ labels, the exact geometry-proxy gradient claim, deferred kinetic-gradient work,
 and a no-overclaim gate that forbids presenting this lane as full
 VMEC-boundary-to-SFINCS transport differentiation.
 
-JIT-compiled optimization with implicit gradients
---------------------------------------------------
-
-This example performs a fully JIT-compiled objective evaluation and gradient-based
-optimization loop using implicit differentiation through the linear solve:
-
-.. code-block:: bash
-
-   python examples/autodiff/optimize_nu_n_implicit.py
-
 Parallel and scaling examples
 -----------------------------
 
@@ -614,57 +789,44 @@ For transport-matrix throughput on a 2-GPU node:
      --input examples/performance/transport_parallel_2min.input.namelist \
      --workers 1 2
 
-For sharded single-RHS solves on CPU or GPU:
+Single-case sharded RHSMode=1 scaling remains a research lane rather than a
+stable example. Use transport-worker scaling for supported parallel throughput:
 
 .. code-block:: bash
 
-   python examples/performance/benchmark_sharded_solve_scaling.py \
+   python examples/performance/benchmark_transport_parallel_scaling.py \
      --backend cpu \
-     --input examples/performance/rhsmode1_sharded.input.namelist \
-     --devices 1 2 4 8 \
-     --inner-warmup-solves 1 \
-     --sample-timeout-s 300 \
-     --rhs1-precond theta_schwarz \
-     --schwarz-coarse-levels 2
+     --input examples/performance/transport_parallel_2min.input.namelist \
+     --workers 1 2 4
 
-For the current one-GPU-per-case throughput benchmark on a 2-GPU node:
+For transport-worker throughput on a 2-GPU node:
 
 .. code-block:: bash
 
-   PYTHONPATH=. python examples/performance/benchmark_multi_gpu_case_throughput.py \
-     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
-     --nsolve 4
+   PYTHONPATH=. python examples/performance/benchmark_transport_parallel_scaling.py \
+     --backend gpu \
+     --input examples/performance/transport_parallel_2min.input.namelist \
+     --workers 1 2
 
 .. note::
 
    ``geometryScheme=5`` (VMEC) and analytic tokamak ``geometryScheme=1`` are
-   supported public examples today. `sfincs_jax` does not currently expose a
+   supported public examples. `sfincs_jax` does not expose a
    separate Miller-parameter geometry mode in the public CLI/API, so tokamak
    examples use the supported analytic Boozer tokamak path instead.
 
-It builds a cached operator once, treats :math:`\\nu_n` as a differentiable parameter,
-and minimizes :math:`0.5\\|x(\\nu_n)\\|^2` where :math:`A(\\nu_n)x=b(\\nu_n)` is solved
-with `custom_linear_solve`. This is the recommended pattern for fast, memory-efficient
-gradients without backpropagating through Krylov iterations.
-
-Transport-matrix recycling warm starts
---------------------------------------
-
-To reuse recent Krylov solutions across ``whichRHS`` solves (RHSMode=2/3), use:
-
-.. code-block:: bash
-
-   python examples/transport/transport_matrix_recycle_demo.py --recycle-k 4
+The autodiff examples build cached operators, treat scalar inputs such as
+:math:`\\nu_n` as differentiable parameters, and use `custom_linear_solve` where
+implicit gradients are the memory-efficient path. This is the recommended
+pattern for gradients without backpropagating through every Krylov iteration.
 
 Upstream SFINCS example inputs
 --------------------------------
 
-For convenience, `sfincs_jax` also vendors the original example-input families (multi-species,
-and MATLAB v3) in `examples/upstream/`. These files are intended as recognizable reference points for
-SFINCS users; not all of them are runnable end-to-end in `sfincs_jax` yet.
-
-The full upstream-style example suite (plus the upstream postprocessing scripts) is also vendored in
-`examples/sfincs_examples/`. A best-effort runner is provided:
+For convenience, `sfincs_jax` vendors the upstream-style SFINCS-v3 example suite
+in `examples/sfincs_examples/`. These files are recognizable reference points
+for SFINCS users and support compatibility audits. A best-effort runner is
+provided:
 
 .. code-block:: bash
 

@@ -33,13 +33,13 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.structured_velocity import (  # noqa: E402
+from sfincs_jax.discretization.structured_velocity import (  # noqa: E402
     block_tridiagonal_to_dense,
     factor_block_tridiagonal,
 )
 from sfincs_jax.namelist import read_sfincs_input  # noqa: E402
-from sfincs_jax.v3_fblock import apply_v3_fblock_operator  # noqa: E402
-from sfincs_jax.v3_system import full_system_operator_from_namelist  # noqa: E402
+from sfincs_jax.operators.profile_fblock import apply_v3_fblock_operator  # noqa: E402
+from sfincs_jax.operators.profile_system import full_system_operator_from_namelist  # noqa: E402
 
 
 _DEFAULT_SFINCS_BLOCK_INPUT = _REPO_ROOT / "tests" / "ref" / "monoenergetic_PAS_tiny_scheme1.input.namelist"

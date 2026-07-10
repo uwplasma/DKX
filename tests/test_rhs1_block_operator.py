@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.rhs1_block_operator import (
+from sfincs_jax.operators.profile_layout import (
     RHS1ActiveBlockLayout,
     RHS1ActiveFieldSplitOrdering,
     RHS1BlockCOOBuilder,
@@ -23,7 +23,7 @@ from sfincs_jax.rhs1_block_operator import (
     probe_rhs1_block_jacobi_preconditioner,
     probe_rhs1_block_preconditioner,
 )
-from sfincs_jax.solver import fgmres_solve_with_residual
+from sfincs_jax.solvers.krylov import fgmres_solve_with_residual
 
 
 def _fake_op(

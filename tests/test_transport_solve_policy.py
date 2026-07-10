@@ -4,21 +4,188 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from sfincs_jax.transport_solve_policy import (
+from sfincs_jax.problems.transport_policies import (
     build_transport_active_dof_state,
     resolve_transport_active_dof_mode,
     resolve_transport_dense_policy,
+    resolve_transport_initial_solve_policy,
+    resolve_transport_per_rhs_loop_policy,
     transport_geometry5_mono_low_memory_preferred,
+    transport_geometry_scheme_from_namelist,
 )
 
 
-def _op(*, rhs_mode: int = 2, n_xi: int = 4, nxi_for_x=(4, 2), total_size: int = 40):
+def _op(
+    *,
+    rhs_mode: int = 2,
+    n_xi: int = 4,
+    nxi_for_x=(4, 2),
+    total_size: int = 40,
+    constraint_scheme: int = 1,
+    phi1_size: int = 0,
+    extra_size: int = 2,
+):
     return SimpleNamespace(
         rhs_mode=rhs_mode,
         n_xi=n_xi,
         total_size=total_size,
-        fblock=SimpleNamespace(collisionless=SimpleNamespace(n_xi_for_x=np.asarray(nxi_for_x, dtype=np.int32))),
+        constraint_scheme=constraint_scheme,
+        phi1_size=phi1_size,
+        extra_size=extra_size,
+        n_x=1,
+        fblock=SimpleNamespace(
+            collisionless=SimpleNamespace(n_xi_for_x=np.asarray(nxi_for_x, dtype=np.int32)),
+            fp=None,
+        ),
     )
+
+
+class _FakeNamelist:
+    def __init__(self, geometry_parameters: dict[str, object]):
+        self.geometry_parameters = dict(geometry_parameters)
+
+    def group(self, name: str) -> dict[str, object]:
+        assert name == "geometryParameters"
+        return self.geometry_parameters
+
+
+def _clear_initial_policy_env(monkeypatch) -> None:
+    for name in (
+        "SFINCS_JAX_TRANSPORT_LOW_MEMORY",
+        "SFINCS_JAX_TRANSPORT_STREAM_DIAGNOSTICS",
+        "SFINCS_JAX_TRANSPORT_STORE_STATE",
+        "SFINCS_JAX_TRANSPORT_FORCE_KRYLOV",
+        "SFINCS_JAX_TRANSPORT_FORCE_DENSE",
+        "SFINCS_JAX_TRANSPORT_DENSE_FALLBACK",
+        "SFINCS_JAX_TRANSPORT_DENSE_FALLBACK_MAX",
+        "SFINCS_JAX_TRANSPORT_DENSE_RETRY_MAX",
+        "SFINCS_JAX_TRANSPORT_DENSE_MAX_MB",
+        "SFINCS_JAX_TRANSPORT_GMRES_RESTART",
+        "SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY",
+        "SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY_MIN",
+        "SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY_MAX",
+        "SFINCS_JAX_TRANSPORT_EPAR_LOOSE",
+        "SFINCS_JAX_TRANSPORT_EPAR_KRYLOV",
+        "SFINCS_JAX_TRANSPORT_PROJECT_NULLSPACE",
+        "SFINCS_JAX_SOLVER_ITER_STATS",
+        "SFINCS_JAX_SOLVER_ITER_STATS_MAX_SIZE",
+        "SFINCS_JAX_TRANSPORT_DENSE_BATCH_FALLBACK",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_transport_geometry_scheme_from_namelist_accepts_v3_key_variants() -> None:
+    assert transport_geometry_scheme_from_namelist(_FakeNamelist({"GEOMETRYSCHEME": "5"})) == 5
+    assert transport_geometry_scheme_from_namelist(_FakeNamelist({"geometryScheme": 11})) == 11
+    assert transport_geometry_scheme_from_namelist(_FakeNamelist({"GEOMETRYSCHEME": "bad"})) == -1
+    assert transport_geometry_scheme_from_namelist(_FakeNamelist({})) == -1
+
+
+def test_resolve_transport_initial_solve_policy_auto_dense_rhs2(monkeypatch) -> None:
+    _clear_initial_policy_env(monkeypatch)
+    policy = resolve_transport_initial_solve_policy(
+        op=_op(total_size=400),
+        rhs_mode=2,
+        n_rhs=2,
+        solve_method="auto",
+        restart=60,
+        maxiter=None,
+        backend="cpu",
+        geometry_scheme=1,
+        dense_accelerator_auto_allowed=False,
+        dense_backend_policy_allowed=True,
+        state_out_requested=False,
+        force_stream_diagnostics=None,
+        force_store_state=None,
+        subset_mode=False,
+    )
+    assert policy.solve_method_use == "dense"
+    assert not policy.low_memory_outputs
+    assert not policy.stream_diagnostics
+    assert policy.store_state_vectors
+    assert not policy.force_krylov
+    assert policy.dense_retry_max == 6000
+    assert policy.gmres_restart == 40
+    assert any("auto dense solve for RHSMode=2" in message for _, message in policy.notes)
+
+
+def test_resolve_transport_initial_solve_policy_memory_cap_blocks_dense(monkeypatch) -> None:
+    _clear_initial_policy_env(monkeypatch)
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_DENSE_MAX_MB", "1")
+    policy = resolve_transport_initial_solve_policy(
+        op=_op(total_size=1000),
+        rhs_mode=2,
+        n_rhs=1,
+        solve_method="auto",
+        restart=20,
+        maxiter=None,
+        backend="cpu",
+        geometry_scheme=1,
+        dense_accelerator_auto_allowed=False,
+        dense_backend_policy_allowed=True,
+        state_out_requested=False,
+        force_stream_diagnostics=None,
+        force_store_state=None,
+        subset_mode=False,
+    )
+    assert policy.solve_method_use == "incremental"
+    assert policy.dense_mem_block
+    assert not policy.force_dense
+    assert not policy.dense_fallback
+    assert policy.dense_retry_max == 0
+    assert policy.gmres_restart == 80
+    assert policy.maxiter == 800
+    assert any("dense fallback disabled" in message for _, message in policy.notes)
+
+
+def test_resolve_transport_initial_solve_policy_forces_subset_streaming(monkeypatch) -> None:
+    _clear_initial_policy_env(monkeypatch)
+    policy = resolve_transport_initial_solve_policy(
+        op=_op(total_size=100),
+        rhs_mode=2,
+        n_rhs=1,
+        solve_method="incremental",
+        restart=30,
+        maxiter=50,
+        backend="cpu",
+        geometry_scheme=1,
+        dense_accelerator_auto_allowed=False,
+        dense_backend_policy_allowed=True,
+        state_out_requested=False,
+        force_stream_diagnostics=None,
+        force_store_state=None,
+        subset_mode=True,
+    )
+    assert policy.stream_diagnostics
+    assert policy.store_state_vectors
+    assert policy.maxiter == 50
+    assert any("streaming diagnostics forced for subset" in message for _, message in policy.notes)
+
+
+def test_resolve_transport_initial_solve_policy_geom5_mono_low_memory(monkeypatch) -> None:
+    _clear_initial_policy_env(monkeypatch)
+    policy = resolve_transport_initial_solve_policy(
+        op=_op(rhs_mode=3, total_size=3697),
+        rhs_mode=3,
+        n_rhs=1,
+        solve_method="auto",
+        restart=30,
+        maxiter=None,
+        backend="cpu",
+        geometry_scheme=5,
+        dense_accelerator_auto_allowed=False,
+        dense_backend_policy_allowed=True,
+        state_out_requested=False,
+        force_stream_diagnostics=None,
+        force_store_state=None,
+        subset_mode=False,
+    )
+    assert policy.low_memory_outputs
+    assert policy.stream_diagnostics
+    assert not policy.dense_fallback
+    assert policy.dense_retry_max == 0
+    assert policy.force_krylov
+    assert any("geometryScheme=5 RHSMode=3 auto" in message for _, message in policy.notes)
 
 
 def test_resolve_transport_active_dof_mode_respects_env_and_auto() -> None:
@@ -109,6 +276,70 @@ def test_resolve_transport_dense_policy_handles_memory_caps_and_auto_dense(monke
     assert capped.solve_method_use == "incremental"
     assert not capped.force_dense
     assert not capped.dense_fallback
+
+
+def test_resolve_transport_per_rhs_loop_policy_defaults_and_projection(monkeypatch) -> None:
+    _clear_initial_policy_env(monkeypatch)
+    policy = resolve_transport_per_rhs_loop_policy(op=_op(), rhs_mode=2)
+
+    assert policy.rhs3_krylov_flags(3) == (False, False)
+    assert policy.projection_candidate(3)
+    assert not policy.projection_candidate(2)
+    assert policy.projection_needed(3)
+    assert not policy.projection_needed(2)
+    assert not policy.iter_stats_enabled
+    assert policy.iter_stats_max_size is None
+    assert policy.dense_batch_fallback_enabled
+
+
+def test_resolve_transport_per_rhs_loop_policy_env_overrides(monkeypatch) -> None:
+    _clear_initial_policy_env(monkeypatch)
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_EPAR_LOOSE", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_EPAR_KRYLOV", "true")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PROJECT_NULLSPACE", "0")
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "yes")
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS_MAX_SIZE", "17")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_DENSE_BATCH_FALLBACK", "off")
+
+    policy = resolve_transport_per_rhs_loop_policy(op=_op(), rhs_mode=2)
+
+    assert policy.rhs3_krylov_flags(3) == (True, True)
+    assert policy.rhs3_krylov_flags(2) == (False, False)
+    assert policy.projection_candidate(3)
+    assert not policy.projection_needed(3)
+    assert policy.iter_stats_enabled
+    assert policy.iter_stats_max_size == 17
+    assert not policy.dense_batch_fallback_enabled
+
+
+def test_resolve_transport_per_rhs_loop_policy_invalid_iter_limit_and_rhs3_projection(monkeypatch) -> None:
+    _clear_initial_policy_env(monkeypatch)
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS_MAX_SIZE", "not-an-int")
+
+    policy = resolve_transport_per_rhs_loop_policy(op=_op(constraint_scheme=1, phi1_size=0, extra_size=4), rhs_mode=3)
+
+    assert policy.iter_stats_max_size is None
+    assert policy.projection_candidate(2)
+    assert policy.projection_needed(2)
+    assert not policy.projection_candidate(3)
+    assert policy.rhs3_krylov_flags(3) == (False, False)
+
+
+def test_resolve_transport_per_rhs_loop_policy_requires_constraint_source_rows(monkeypatch) -> None:
+    _clear_initial_policy_env(monkeypatch)
+
+    assert not resolve_transport_per_rhs_loop_policy(
+        op=_op(constraint_scheme=0, phi1_size=0, extra_size=2),
+        rhs_mode=2,
+    ).projection_needed(3)
+    assert not resolve_transport_per_rhs_loop_policy(
+        op=_op(constraint_scheme=1, phi1_size=2, extra_size=2),
+        rhs_mode=2,
+    ).projection_needed(3)
+    assert not resolve_transport_per_rhs_loop_policy(
+        op=_op(constraint_scheme=1, phi1_size=0, extra_size=0),
+        rhs_mode=2,
+    ).projection_needed(3)
 
 
 def test_geometry5_mono_low_memory_policy_is_guarded(monkeypatch) -> None:

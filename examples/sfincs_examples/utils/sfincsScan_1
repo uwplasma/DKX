@@ -1,9 +1,18 @@
 #!/usr/bin/env python
 
+"""Resolution convergence scan (scanType=1).
+
+Called by ``sfincsScan`` when ``!ss scanType = 1``. Reads the ``...MinFactor``,
+``...MaxFactor``, and ``...NumRuns`` directives for resolution parameters and
+launches sfincs_jax runs in subdirectories.
+"""
+
 # This script will not work if called directly.
 # From the command line, you should call sfincsScan instead.
 
 import os, inspect
+from pathlib import Path
+from sfincs_jax_driver import run_sfincs_jax
 from builtins import input
 
 #print ("This is "+ inspect.getfile(inspect.currentframe()))
@@ -469,15 +478,13 @@ if waitBeforeSubmitting:
     if proceed=="n":
         exit(0)
 
-print ("launching jobs...")
+print ("launching runs...")
 
-# Read in the job.sfincsScan file:
-with open(jobFilename, 'r') as f:
-    jobFile = f.readlines()
-
+scan_progress = start_scan_progress(total_runs=numRunsInScan, label=this_filename)
+prev_dir = None
 for runNum in range(numRunsInScan):
     directory = descriptions[runNum]
-    print ("Beginning to handle job "+str(runNum+1)+" of "+str(numRunsInScan)+": "+directory)
+    run_started_at = note_scan_run_start(progress=scan_progress, run_index=runNum+1, directory=directory)
 
     # To be extra safe, check again to see if the directory exists.
     if os.path.exists(directory):
@@ -491,17 +498,11 @@ for runNum in range(numRunsInScan):
         directory = directory2
     os.makedirs(directory)
     os.chdir(directory)
-
-    # Copy the job.sfincsScan file:
-    thisJobFile = list(jobFile)
-    # This next function is defined separately for each system in sfincsScan
-    nameJobFile(thisJobFile,directory)
-    f = open(jobFilename,"w")
-    f.writelines(thisJobFile)
-    f.close()
+    current_dir = Path(os.getcwd())
+    configure_krylov_recycle(prev_dir, current_dir)
 
     # Now copy the input.namelist file:
-    f = open(filename,"w")
+    input_lines = []
     for line in inputFile:
         if namelistLineContains(line,"Ntheta"):
             line = "  Ntheta = "+str(parametersForScan[runNum][0])+" ! Set by sfincsScan_1.\n"
@@ -519,21 +520,15 @@ for runNum in range(numRunsInScan):
             line = "  xMax = "+str(parametersForScan[runNum][6])+" ! Set by sfincsScan_1.\n"
         if namelistLineContains(line,"solverTolerance"):
             line = "  solverTolerance = "+str(parametersForScan[runNum][7])+" ! Set by sfincsScan_1.\n"
-        f.write(line)
-    f.close()
+        input_lines.append(line)
 
-    # Submit the sfincs job:
-    try:
-        # We need to include .split(" ") to separate the command-line arguments into an array of strings.   
-        # I'm not sure why python requires this. 
-        submissionResult = subprocess.call(submitCommand.split(" "))
-    except:
-        print ("ERROR! Unable to submit run "+directory+" for some reason.")
-        raise
-    else:
-        if submissionResult==0:
-            print ("No errors submitting job "+directory)
-        else:
-            print ("Nonzero exit code returned when trying to submit job "+directory)
+    input_path = Path(filename)
+    input_path.write_text("".join(input_lines))
+    run_sfincs_jax(
+        input_namelist=input_path,
+        output_path=Path(outputFilename),
+    )
+    note_scan_run_done(progress=scan_progress, run_index=runNum+1, directory=directory, run_started_at=run_started_at)
 
     os.chdir("..")
+    prev_dir = current_dir

@@ -6,7 +6,11 @@ import numpy as np
 import jax.numpy as jnp
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3_fblock import fblock_operator_from_namelist, matvec_v3_fblock_flat, solve_v3_fblock_gmres
+from sfincs_jax.operators.profile_fblock import (
+    fblock_operator_from_namelist,
+    matvec_v3_fblock_flat,
+    solve_v3_fblock_gmres,
+)
 
 
 def test_v3_fblock_matvec_and_gmres_smoke() -> None:
@@ -25,4 +29,5 @@ def test_v3_fblock_matvec_and_gmres_smoke() -> None:
 
     np.testing.assert_allclose(x, np.asarray(x_true), rtol=1e-7, atol=1e-7)
     assert float(result.residual_norm) < 1e-7
+
 

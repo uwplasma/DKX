@@ -7,7 +7,22 @@ import pytest
 import jax.numpy as jnp
 
 from sfincs_jax.namelist import read_sfincs_input
-import sfincs_jax.v3_driver as vd
+from sfincs_jax.problems.profile_residual import (
+    apply_preconditioned_minres_correction,
+    apply_subspace_minres_correction,
+    compose_multilevel_minres_correction_preconditioner,
+    compose_multilevel_residual_correction_preconditioner,
+    compose_residual_correction_preconditioner,
+)
+import sfincs_jax.solvers.preconditioner_pas_policy as pas_policy
+from sfincs_jax.solvers.preconditioner_domain_decomposition import (
+    _rhs1_dd_auto_block_size,
+    _rhs1_dd_coarse_block_size,
+    _rhs1_dd_coarse_block_sizes,
+    _rhs1_dd_coarse_level_count,
+)
+import sfincs_jax.problems.profile_solve as vd
+import sfincs_jax.problems.profile_preconditioner_build as pb
 
 
 def test_rhs1_auto_prefers_theta_schwarz_when_sharded(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -35,7 +50,7 @@ def test_rhs1_auto_prefers_theta_schwarz_when_sharded(monkeypatch: pytest.Monkey
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_COLLISION_PRECOND_MIN", "1000000000")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_PATCH_UNKNOWNS", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_INVERSE_ENTRIES", "0")
-    monkeypatch.setattr(vd.jax, "device_count", lambda: 2)
+    monkeypatch.setattr(pb.jax, "device_count", lambda: 2)
 
     res = vd.solve_v3_full_system_linear_gmres(nml=nml, tol=1e-8, emit=emit)
     assert np.isfinite(float(res.residual_norm))
@@ -58,9 +73,9 @@ def test_rhs1_auto_preserves_auto_solver_selection_on_multidevice_sharded_path(
     monkeypatch.setenv("SFINCS_JAX_GMRES_DISTRIBUTED", "theta")
     monkeypatch.setenv("SFINCS_JAX_GMRES_DISTRIBUTED_ALLOW_ACCELERATOR", "1")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND", "0")
-    monkeypatch.setattr(vd.jax, "device_count", lambda: 2)
-    monkeypatch.setattr(vd.jax, "local_device_count", lambda: 2)
-    monkeypatch.setattr(vd.jax, "default_backend", lambda: "gpu")
+    monkeypatch.setattr(pb.jax, "device_count", lambda: 2)
+    monkeypatch.setattr(pb.jax, "local_device_count", lambda: 2)
+    monkeypatch.setattr(pb.jax, "default_backend", lambda: "gpu")
 
     res = vd.solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -100,9 +115,9 @@ def test_pas_tz_memory_estimate_flags_large_case() -> None:
         n_zeta = 127
         fblock = _FBlock()
 
-    estimate = vd._estimate_rhs1_pas_tz_build_bytes(_Op())
+    estimate = pas_policy.estimate_rhs1_pas_tz_build_bytes(_Op())
     assert estimate > 100 * 2**30
-    assert not vd._pas_tz_preconditioner_memory_safe(_Op())
+    assert not pas_policy.pas_tz_preconditioner_memory_safe(_Op())
 
 
 def test_pas_tz_builder_falls_back_to_theta_schwarz_when_memory_unsafe(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -137,16 +152,16 @@ def test_pas_tz_builder_falls_back_to_theta_schwarz_when_memory_unsafe(monkeypat
     monkeypatch.setenv("SFINCS_JAX_AUTO_SHARD", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_PATCH_UNKNOWNS", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_INVERSE_ENTRIES", "0")
-    monkeypatch.setattr(vd.jax, "device_count", lambda: 2)
-    monkeypatch.setattr(vd, "_estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
-    monkeypatch.setattr(vd, "_rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
-    monkeypatch.setattr(vd, "_build_rhsmode1_theta_schwarz_preconditioner", lambda **_kwargs: sentinel)
+    monkeypatch.setattr(pb.jax, "device_count", lambda: 2)
+    monkeypatch.setattr(pas_policy, "estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
+    monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
+    monkeypatch.setattr(pb, "_build_rhsmode1_theta_schwarz_preconditioner", lambda **_kwargs: sentinel)
 
-    assert vd._build_rhsmode1_pas_tz_preconditioner(op=_Op()) is sentinel
+    assert pb._build_rhsmode1_pas_tz_preconditioner(op=_Op()) is sentinel
 
 
 def test_rhs1_dd_auto_block_size_spans_more_than_one_local_shard() -> None:
-    block = vd._rhs1_dd_auto_block_size(
+    block = _rhs1_dd_auto_block_size(
         n=31,
         n_dev=8,
         sum_nxi=144,
@@ -157,7 +172,7 @@ def test_rhs1_dd_auto_block_size_spans_more_than_one_local_shard() -> None:
 
 
 def test_rhs1_dd_auto_block_size_respects_global_extent() -> None:
-    block = vd._rhs1_dd_auto_block_size(
+    block = _rhs1_dd_auto_block_size(
         n=31,
         n_dev=2,
         sum_nxi=144,
@@ -168,20 +183,20 @@ def test_rhs1_dd_auto_block_size_respects_global_extent() -> None:
 
 
 def test_rhs1_dd_coarse_block_size_widens_local_patch() -> None:
-    coarse = vd._rhs1_dd_coarse_block_size(n=31, block=12, overlap=1)
+    coarse = _rhs1_dd_coarse_block_size(n=31, block=12, overlap=1)
     assert coarse == 20
     assert coarse > 12
 
 
 def test_rhs1_dd_coarse_level_count_auto(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_LEVELS", raising=False)
-    assert vd._rhs1_dd_coarse_level_count(n_dev=2) == 0
-    assert vd._rhs1_dd_coarse_level_count(n_dev=4) == 1
-    assert vd._rhs1_dd_coarse_level_count(n_dev=8) == 2
+    assert _rhs1_dd_coarse_level_count(n_dev=2) == 0
+    assert _rhs1_dd_coarse_level_count(n_dev=4) == 1
+    assert _rhs1_dd_coarse_level_count(n_dev=8) == 2
 
 
 def test_rhs1_dd_coarse_block_sizes_build_multiple_levels() -> None:
-    coarse_blocks = vd._rhs1_dd_coarse_block_sizes(n=63, block=12, overlap=1, levels=2)
+    coarse_blocks = _rhs1_dd_coarse_block_sizes(n=63, block=12, overlap=1, levels=2)
     assert coarse_blocks == (20, 30)
 
 
@@ -195,7 +210,7 @@ def test_compose_residual_correction_preconditioner_matches_one_step() -> None:
     def matvec(v):
         return 2.0 * v
 
-    precond = vd._compose_residual_correction_preconditioner(
+    precond = compose_residual_correction_preconditioner(
         base=base,
         coarse=coarse,
         matvec=matvec,
@@ -219,7 +234,7 @@ def test_compose_multilevel_residual_correction_preconditioner_applies_levels_in
     def matvec(v):
         return 2.0 * v
 
-    precond = vd._compose_multilevel_residual_correction_preconditioner(
+    precond = compose_multilevel_residual_correction_preconditioner(
         base=base,
         coarse_levels=(coarse_1, coarse_2),
         matvec=matvec,
@@ -240,7 +255,7 @@ def test_compose_multilevel_minres_correction_rejects_zero_direction() -> None:
     def matvec(v):
         return 2.0 * v
 
-    precond = vd._compose_multilevel_minres_correction_preconditioner(
+    precond = compose_multilevel_minres_correction_preconditioner(
         base=base,
         coarse_levels=(bad_coarse,),
         matvec=matvec,
@@ -261,7 +276,7 @@ def test_compose_multilevel_minres_correction_accepts_better_direction() -> None
     def matvec(v):
         return 2.0 * v
 
-    precond = vd._compose_multilevel_minres_correction_preconditioner(
+    precond = compose_multilevel_minres_correction_preconditioner(
         base=base,
         coarse_levels=(coarse,),
         matvec=matvec,
@@ -282,7 +297,7 @@ def test_preconditioned_minres_correction_accepts_only_residual_improvement() ->
     rhs = jnp.asarray([2.0, 4.0], dtype=jnp.float64)
     x0 = jnp.zeros((2,), dtype=jnp.float64)
 
-    x, residual, history, alphas = vd._apply_preconditioned_minres_correction(
+    x, residual, history, alphas = apply_preconditioned_minres_correction(
         matvec=matvec,
         rhs=rhs,
         x0=x0,
@@ -309,7 +324,7 @@ def test_subspace_minres_correction_combines_multiple_directions() -> None:
     rhs = jnp.asarray([2.0, 10.0], dtype=jnp.float64)
     x0 = jnp.zeros((2,), dtype=jnp.float64)
 
-    x, residual, history, counts, names = vd._apply_subspace_minres_correction(
+    x, residual, history, counts, names = apply_subspace_minres_correction(
         matvec=matvec,
         rhs=rhs,
         x0=x0,
@@ -333,7 +348,7 @@ def test_subspace_minres_correction_rejects_nonimproving_basis() -> None:
         return (("zero", jnp.zeros((2,), dtype=jnp.float64)),)
 
     rhs = jnp.asarray([1.0, 0.0], dtype=jnp.float64)
-    x, residual, history, counts, names = vd._apply_subspace_minres_correction(
+    x, residual, history, counts, names = apply_subspace_minres_correction(
         matvec=matvec,
         rhs=rhs,
         x0=jnp.zeros((2,), dtype=jnp.float64),

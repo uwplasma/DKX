@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
+import h5py
 import numpy as np
 
 from .io import read_sfincs_h5
@@ -27,6 +28,34 @@ class CompareResult:
     max_abs: float
     max_rel: float
     ok: bool
+
+
+@dataclass(frozen=True)
+class H5DatasetParity:
+    """Strict parity status for one numeric HDF5 dataset."""
+
+    key: str
+    status: str
+    reference_shape: tuple[int, ...] | None
+    candidate_shape: tuple[int, ...] | None
+    max_abs: float | None
+    max_rel: float | None
+    atol: float
+    rtol: float
+
+    @property
+    def ok(self) -> bool:
+        """Return whether this dataset is non-failing in strict parity mode."""
+
+        return self.status in {"ok", "extra_in_candidate", "non_numeric"}
+
+    def to_json(self) -> dict[str, Any]:
+        """Return a JSON-ready representation of the dataset status."""
+
+        payload = asdict(self)
+        payload["reference_shape"] = list(self.reference_shape) if self.reference_shape is not None else None
+        payload["candidate_shape"] = list(self.candidate_shape) if self.candidate_shape is not None else None
+        return payload
 
 
 def _as_numpy(x: Any) -> np.ndarray | None:
@@ -79,6 +108,164 @@ def _merge_tolerance_floor(
             current_value = None
         merged[name] = floor_value if current_value is None else max(current_value, floor_value)
     tolerances[key] = merged
+
+
+def _is_numeric_array(array: np.ndarray) -> bool:
+    return array.dtype.kind in {"b", "i", "u", "f", "c"}
+
+
+def _numeric_datasets(path: Path) -> dict[str, np.ndarray]:
+    """Read all numeric datasets from an HDF5 file into memory."""
+
+    path = path.resolve()
+    if not path.exists():
+        raise FileNotFoundError(str(path))
+
+    datasets: dict[str, np.ndarray] = {}
+    with h5py.File(path, "r") as h5:
+
+        def visit(name: str, obj: Any) -> None:
+            if not isinstance(obj, h5py.Dataset):
+                return
+            value = np.asarray(obj[...])
+            if _is_numeric_array(value):
+                datasets[name] = value
+
+        h5.visititems(visit)
+    return datasets
+
+
+def _dataset_tolerance(
+    key: str,
+    *,
+    atol: float,
+    rtol: float,
+    tolerances: Mapping[str, Mapping[str, float]] | None,
+) -> tuple[float, float]:
+    if not tolerances or key not in tolerances:
+        return atol, rtol
+    local = tolerances[key]
+    return float(local.get("atol", atol)), float(local.get("rtol", rtol))
+
+
+def _strict_max_errors(reference: np.ndarray, candidate: np.ndarray, *, atol: float) -> tuple[float, float]:
+    ref = np.asarray(reference)
+    cand = np.asarray(candidate)
+    absdiff = np.abs(cand - ref)
+    max_abs = float(np.nanmax(absdiff)) if absdiff.size else 0.0
+    denom_floor = max(float(atol), np.finfo(np.float64).tiny)
+    denom = np.maximum(np.abs(ref), denom_floor)
+    rel = absdiff / denom
+    max_rel = float(np.nanmax(rel)) if rel.size else 0.0
+    return max_abs, max_rel
+
+
+def compare_h5_outputs(
+    *,
+    reference_path: Path,
+    candidate_path: Path,
+    keys: Iterable[str] | None = None,
+    ignore_keys: Iterable[str] = (),
+    include_extra: bool = True,
+    atol: float = 1.0e-12,
+    rtol: float = 1.0e-12,
+    tolerances: Mapping[str, Mapping[str, float]] | None = None,
+) -> dict[str, Any]:
+    """Strictly compare numeric datasets from two HDF5 files.
+
+    Unlike :func:`compare_sfincs_outputs`, this helper does not apply
+    SFINCS-specific skip rules for gauge or convention differences. It records
+    missing datasets, shape mismatches, candidate-only extras, and max errors
+    for campaign-style output-contract audits.
+    """
+
+    reference = _numeric_datasets(reference_path)
+    candidate = _numeric_datasets(candidate_path)
+    ignored = set(ignore_keys)
+    selected = set(keys) if keys is not None else set(reference)
+    selected -= ignored
+
+    results: list[H5DatasetParity] = []
+    for key in sorted(selected):
+        local_atol, local_rtol = _dataset_tolerance(key, atol=atol, rtol=rtol, tolerances=tolerances)
+        if key not in reference:
+            results.append(H5DatasetParity(key, "missing_in_reference", None, None, None, None, local_atol, local_rtol))
+            continue
+        if key not in candidate:
+            results.append(
+                H5DatasetParity(
+                    key,
+                    "missing_in_candidate",
+                    reference[key].shape,
+                    None,
+                    None,
+                    None,
+                    local_atol,
+                    local_rtol,
+                )
+            )
+            continue
+        ref = reference[key]
+        cand = candidate[key]
+        if ref.shape != cand.shape:
+            results.append(
+                H5DatasetParity(key, "shape_mismatch", ref.shape, cand.shape, None, None, local_atol, local_rtol)
+            )
+            continue
+        max_abs, max_rel = _strict_max_errors(ref, cand, atol=local_atol)
+        ok = bool(np.allclose(ref, cand, atol=local_atol, rtol=local_rtol, equal_nan=True))
+        results.append(
+            H5DatasetParity(
+                key,
+                "ok" if ok else "value_mismatch",
+                ref.shape,
+                cand.shape,
+                max_abs,
+                max_rel,
+                local_atol,
+                local_rtol,
+            )
+        )
+
+    if include_extra:
+        for key in sorted(set(candidate) - set(reference) - ignored):
+            local_atol, local_rtol = _dataset_tolerance(key, atol=atol, rtol=rtol, tolerances=tolerances)
+            results.append(
+                H5DatasetParity(key, "extra_in_candidate", None, candidate[key].shape, None, None, local_atol, local_rtol)
+            )
+
+    failing = [
+        item
+        for item in results
+        if item.status
+        in {
+            "missing_in_reference",
+            "missing_in_candidate",
+            "shape_mismatch",
+            "value_mismatch",
+        }
+    ]
+    compared = [item for item in results if item.status in {"ok", "value_mismatch"}]
+    max_abs = max((item.max_abs or 0.0 for item in compared), default=0.0)
+    max_rel = max((item.max_rel or 0.0 for item in compared), default=0.0)
+    counts: dict[str, int] = {}
+    for item in results:
+        counts[item.status] = counts.get(item.status, 0) + 1
+
+    return {
+        "schema_version": 1,
+        "reference_path": str(Path(reference_path).resolve()),
+        "candidate_path": str(Path(candidate_path).resolve()),
+        "overall_status": "pass" if not failing else "fail",
+        "numeric_reference_dataset_count": len(reference),
+        "numeric_candidate_dataset_count": len(candidate),
+        "compared_dataset_count": len(compared),
+        "failing_dataset_count": len(failing),
+        "max_abs": max_abs,
+        "max_rel": max_rel,
+        "status_counts": counts,
+        "datasets": [item.to_json() for item in results],
+    }
 
 
 def compare_sfincs_outputs(
@@ -376,7 +563,6 @@ def compare_sfincs_outputs(
                 "heatFlux_vm_rHat": {"rtol": 1e-1},
                 "heatFlux_vm_rN": {"rtol": 1e-1},
                 "momentumFluxBeforeSurfaceIntegral_vm": {"rtol": 1e-1},
-                "momentumFlux_vm_psiHat": {"rtol": 1e-1},
             }
             for k, v in dkes_flow_tol.items():
                 if k in local_tolerances:
@@ -483,8 +669,8 @@ def compare_sfincs_outputs(
                         merged = dict(local_tolerances.get(k, {}))
                         merged.update(v)
                         local_tolerances[k] = merged
-                else:
-                    local_tolerances[k] = dict(v)
+                    else:
+                        local_tolerances[k] = dict(v)
     if rhs_mode_a == 1 and rhs_mode_b == 1 and constraint_a == 0 and constraint_b == 0:
         # constraintScheme=0 leaves the FSA density/pressure gauge unconstrained, so compare
         # gauge-invariant local structure and allow small absolute floors on near-zero flux

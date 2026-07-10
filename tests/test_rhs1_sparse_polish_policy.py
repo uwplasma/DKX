@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.rhs1_sparse_polish_policy import (
+from sfincs_jax.problems.profile_policies import (
     rhs1_parse_accept_ratio,
     rhs1_parse_polish_gmres_config,
     rhs1_polish_enabled,

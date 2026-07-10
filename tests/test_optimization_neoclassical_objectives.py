@@ -9,7 +9,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from sfincs_jax.optimization_objectives import (
+from sfincs_jax.workflows.optimization import (
     bootstrap_current_objective,
     electron_root_penalty,
     find_ambipolar_roots,

@@ -60,7 +60,7 @@ or, when the flux-surface-varying potential is included,
 
 The normalization conventions used for hats and dimensionless drives are summarized in
 :doc:`normalizations`. These conventions matter directly for the coefficients used in
-``sfincs_jax/v3_system.py`` and the diagnostics written by ``sfincs_jax/io.py``.
+``sfincs_jax/operators/profile_system.py`` and the diagnostics written by ``sfincs_jax/io.py``.
 
 Geometry and guiding-center drifts
 ----------------------------------
@@ -157,7 +157,7 @@ schematically
    j_\parallel = \sum_s Z_s e V_{\parallel,s}.
 
 `sfincs_jax` evaluates these moments in ``sfincs_jax/diagnostics.py`` and
-``sfincs_jax/transport_matrix.py``.
+``sfincs_jax/problems/transport_diagnostics.py``.
 
 Trajectory-model knobs
 ----------------------

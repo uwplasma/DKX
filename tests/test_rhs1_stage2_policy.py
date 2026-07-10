@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-from sfincs_jax.rhs1_stage2_policy import (
+from sfincs_jax.problems.profile_policies import (
+    RHS1Stage2AdmissionControls,
+    RHS1Stage2RetryControls,
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
     rhs1_pas_tz_guarded_stage2_retry,
+    rhs1_stage2_admission_controls_from_env,
     rhs1_stage2_ratio,
+    rhs1_stage2_retry_admission_decision,
+    rhs1_stage2_retry_controls_from_env,
     rhs1_stage2_trigger,
+    rhs1_stage2_trigger_decision,
 )
 
 
@@ -23,6 +29,434 @@ def test_rhs1_stage2_trigger_uses_ratio_policy(monkeypatch) -> None:
     assert not rhs1_stage2_trigger(res_ratio=9.0, use_dkes=False)
     assert rhs1_stage2_trigger(res_ratio=1.1, use_dkes=True)
     assert not rhs1_stage2_trigger(res_ratio=0.9, use_dkes=True)
+
+
+def test_rhs1_stage2_trigger_decision_forces_fp_stage2(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_RATIO", "100")
+    monkeypatch.delenv("SFINCS_JAX_FP_STAGE2_ABS", raising=False)
+
+    decision = rhs1_stage2_trigger_decision(
+        res_ratio=1.0,
+        use_dkes=False,
+        has_fp=True,
+        include_phi1=False,
+        residual_norm=2.0e-6,
+        cpu_large_xblock_shortcut=False,
+        cpu_large_sparse_shortcut=False,
+        has_pas=False,
+        rhs1_precond_kind=None,
+        pas_tz_guarded_fallback=False,
+        pas_tz_guarded_retry=False,
+    )
+
+    assert decision.stage2_trigger
+    assert decision.fp_force_stage2
+    assert decision.messages == ()
+
+
+def test_rhs1_stage2_trigger_decision_reports_shortcut_skips() -> None:
+    decision = rhs1_stage2_trigger_decision(
+        res_ratio=1.0e6,
+        use_dkes=False,
+        has_fp=True,
+        include_phi1=False,
+        residual_norm=1.0e-2,
+        cpu_large_xblock_shortcut=True,
+        cpu_large_sparse_shortcut=True,
+        has_pas=False,
+        rhs1_precond_kind=None,
+        pas_tz_guarded_fallback=False,
+        pas_tz_guarded_retry=False,
+    )
+
+    assert not decision.stage2_trigger
+    assert decision.fp_force_stage2
+    assert len(decision.messages) == 2
+    assert "x-block shortcut" in decision.messages[0][1]
+    assert "sparse-LU shortcut" in decision.messages[1][1]
+
+
+def test_rhs1_stage2_trigger_decision_reports_pas_skip(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_PAS_STAGE2_SKIP_RATIO", "10")
+
+    decision = rhs1_stage2_trigger_decision(
+        res_ratio=11.0,
+        use_dkes=False,
+        has_fp=False,
+        include_phi1=False,
+        residual_norm=0.0,
+        cpu_large_xblock_shortcut=False,
+        cpu_large_sparse_shortcut=False,
+        has_pas=True,
+        rhs1_precond_kind="pas_hybrid",
+        pas_tz_guarded_fallback=False,
+        pas_tz_guarded_retry=False,
+    )
+
+    assert not decision.stage2_trigger
+    assert not decision.fp_force_stage2
+    assert len(decision.messages) == 1
+    assert "PAS stage2 skipped" in decision.messages[0][1]
+
+
+def test_rhs1_stage2_trigger_decision_reports_guarded_pas_tz_retry_gate(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_RATIO", "10")
+
+    decision = rhs1_stage2_trigger_decision(
+        res_ratio=11.0,
+        use_dkes=False,
+        has_fp=False,
+        include_phi1=False,
+        residual_norm=0.0,
+        cpu_large_xblock_shortcut=False,
+        cpu_large_sparse_shortcut=False,
+        has_pas=False,
+        rhs1_precond_kind=None,
+        pas_tz_guarded_fallback=True,
+        pas_tz_guarded_retry=False,
+    )
+
+    assert not decision.stage2_trigger
+    assert decision.messages == (
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped "
+            "after guarded PAS-TZ fallback; set "
+            "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
+        ),
+    )
+
+    retry_decision = rhs1_stage2_trigger_decision(
+        res_ratio=11.0,
+        use_dkes=False,
+        has_fp=False,
+        include_phi1=False,
+        residual_norm=0.0,
+        cpu_large_xblock_shortcut=False,
+        cpu_large_sparse_shortcut=False,
+        has_pas=False,
+        rhs1_precond_kind=None,
+        pas_tz_guarded_fallback=True,
+        pas_tz_guarded_retry=True,
+    )
+    assert retry_decision.stage2_trigger
+    assert retry_decision.messages == ()
+
+
+def test_rhs1_stage2_retry_admission_decision_runs_before_time_cap() -> None:
+    decision = rhs1_stage2_retry_admission_decision(
+        residual_norm=2.0,
+        target=1.0,
+        fp_force_stage2=False,
+        stage2_enabled=True,
+        stage2_trigger=True,
+        early_dense_shortcut=False,
+        gpu_dkes_sparse_shortcut=False,
+        sparse_prefer_skips_stage2=False,
+        elapsed_s=9.0,
+        time_cap_s=10.0,
+    )
+
+    assert decision.run_retry
+    assert decision.messages == ()
+
+
+def test_rhs1_stage2_retry_admission_decision_allows_fp_force_at_target() -> None:
+    decision = rhs1_stage2_retry_admission_decision(
+        residual_norm=0.5,
+        target=1.0,
+        fp_force_stage2=True,
+        stage2_enabled=True,
+        stage2_trigger=True,
+        early_dense_shortcut=False,
+        gpu_dkes_sparse_shortcut=False,
+        sparse_prefer_skips_stage2=False,
+        elapsed_s=0.0,
+        time_cap_s=10.0,
+    )
+
+    assert decision.run_retry
+    assert decision.messages == ()
+
+
+def test_rhs1_stage2_retry_admission_decision_reports_sparse_prefer_skip() -> None:
+    decision = rhs1_stage2_retry_admission_decision(
+        residual_norm=2.0,
+        target=1.0,
+        fp_force_stage2=False,
+        stage2_enabled=True,
+        stage2_trigger=True,
+        early_dense_shortcut=False,
+        gpu_dkes_sparse_shortcut=False,
+        sparse_prefer_skips_stage2=True,
+        elapsed_s=0.0,
+        time_cap_s=10.0,
+    )
+
+    assert not decision.run_retry
+    assert decision.messages == (
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped "
+            "(preferring sparse rescue first)",
+        ),
+    )
+
+
+def test_rhs1_stage2_retry_admission_decision_respects_guards() -> None:
+    common = dict(
+        residual_norm=2.0,
+        target=1.0,
+        fp_force_stage2=False,
+        stage2_enabled=True,
+        stage2_trigger=True,
+        early_dense_shortcut=False,
+        gpu_dkes_sparse_shortcut=False,
+        sparse_prefer_skips_stage2=False,
+        elapsed_s=0.0,
+        time_cap_s=10.0,
+    )
+
+    assert not rhs1_stage2_retry_admission_decision(**{**common, "stage2_enabled": False}).run_retry
+    assert not rhs1_stage2_retry_admission_decision(**{**common, "stage2_trigger": False}).run_retry
+    assert not rhs1_stage2_retry_admission_decision(**{**common, "early_dense_shortcut": True}).run_retry
+    assert not rhs1_stage2_retry_admission_decision(**{**common, "gpu_dkes_sparse_shortcut": True}).run_retry
+    assert not rhs1_stage2_retry_admission_decision(**{**common, "elapsed_s": 10.0}).run_retry
+
+
+def test_rhs1_stage2_admission_controls_preserve_default_gate(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2_MAX_ELAPSED_S", raising=False)
+
+    assert rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        solver_kind_default="gmres",
+        pas_large_bicgstab_fastpath=False,
+        tokamak_pas=False,
+        has_fp=False,
+        use_dkes=False,
+        total_size=1000,
+    ) == RHS1Stage2AdmissionControls(enabled=True, time_cap_s=30.0)
+
+    assert not rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=True,
+        solver_kind_default="gmres",
+        pas_large_bicgstab_fastpath=False,
+        tokamak_pas=False,
+        has_fp=False,
+        use_dkes=False,
+        total_size=1000,
+    ).enabled
+
+    assert not rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        solver_kind_default="dense",
+        pas_large_bicgstab_fastpath=False,
+        tokamak_pas=False,
+        has_fp=False,
+        use_dkes=False,
+        total_size=1000,
+    ).enabled
+
+
+def test_rhs1_stage2_admission_controls_respect_env_and_fastpath(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2", "off")
+    assert not rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        solver_kind_default="gmres",
+        pas_large_bicgstab_fastpath=False,
+        tokamak_pas=False,
+        has_fp=False,
+        use_dkes=False,
+        total_size=1000,
+    ).enabled
+
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2", "on")
+    assert rhs1_stage2_admission_controls_from_env(
+        rhs_mode=2,
+        include_phi1=True,
+        solver_kind_default="dense",
+        pas_large_bicgstab_fastpath=True,
+        tokamak_pas=False,
+        has_fp=False,
+        use_dkes=False,
+        total_size=1000,
+    ).enabled
+
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2", raising=False)
+    assert not rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        solver_kind_default="bicgstab",
+        pas_large_bicgstab_fastpath=True,
+        tokamak_pas=False,
+        has_fp=False,
+        use_dkes=False,
+        total_size=1000,
+    ).enabled
+
+
+def test_rhs1_stage2_admission_controls_raise_time_budget_floors(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_MAX_ELAPSED_S", "10")
+
+    assert rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        solver_kind_default="gmres",
+        pas_large_bicgstab_fastpath=False,
+        tokamak_pas=True,
+        has_fp=False,
+        use_dkes=False,
+        total_size=1000,
+    ).time_cap_s == 120.0
+
+    assert rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        solver_kind_default="gmres",
+        pas_large_bicgstab_fastpath=False,
+        tokamak_pas=False,
+        has_fp=True,
+        use_dkes=True,
+        total_size=1000,
+    ).time_cap_s == 120.0
+
+    assert rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        solver_kind_default="gmres",
+        pas_large_bicgstab_fastpath=False,
+        tokamak_pas=False,
+        has_fp=True,
+        use_dkes=False,
+        total_size=300000,
+    ).time_cap_s == 1200.0
+
+    assert rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        solver_kind_default="gmres",
+        pas_large_bicgstab_fastpath=False,
+        tokamak_pas=False,
+        has_fp=True,
+        use_dkes=False,
+        total_size=600000,
+    ).time_cap_s == 2400.0
+
+
+def test_rhs1_stage2_admission_controls_preserve_invalid_time_cap_error(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_MAX_ELAPSED_S", "bad")
+
+    try:
+        rhs1_stage2_admission_controls_from_env(
+            rhs_mode=1,
+            include_phi1=False,
+            solver_kind_default="gmres",
+            pas_large_bicgstab_fastpath=False,
+            tokamak_pas=False,
+            has_fp=False,
+            use_dkes=False,
+            total_size=1000,
+        )
+    except ValueError:
+        pass
+    else:  # pragma: no cover - defensive clarity for this legacy contract
+        raise AssertionError("invalid Stage-2 elapsed-time env should still raise ValueError")
+
+
+def test_rhs1_stage2_retry_controls_preserve_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2_MAXITER", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2_RESTART", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2_METHOD", raising=False)
+
+    assert rhs1_stage2_retry_controls_from_env(
+        restart=80,
+        maxiter=300,
+        active_size=1000,
+        has_fp=False,
+        has_pas=False,
+    ) == RHS1Stage2RetryControls(restart=120, maxiter=600, method="incremental")
+
+    assert rhs1_stage2_retry_controls_from_env(
+        restart=160,
+        maxiter=500,
+        active_size=1000,
+        has_fp=False,
+        has_pas=False,
+    ) == RHS1Stage2RetryControls(restart=160, maxiter=1000, method="incremental")
+
+
+def test_rhs1_stage2_retry_controls_tokamak_pas_and_large_fp_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2_MAXITER", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2_RESTART", raising=False)
+
+    assert rhs1_stage2_retry_controls_from_env(
+        restart=80,
+        maxiter=300,
+        active_size=1000,
+        has_fp=False,
+        has_pas=True,
+        tokamak_pas=True,
+    ) == RHS1Stage2RetryControls(restart=160, maxiter=2000, method="incremental")
+
+    assert rhs1_stage2_retry_controls_from_env(
+        restart=160,
+        maxiter=500,
+        active_size=300000,
+        has_fp=True,
+        has_pas=False,
+    ) == RHS1Stage2RetryControls(restart=100, maxiter=600, method="incremental")
+
+
+def test_rhs1_stage2_retry_controls_respect_user_caps_and_method(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_MAXITER", "77")
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_RESTART", "33")
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_METHOD", "dense")
+
+    assert rhs1_stage2_retry_controls_from_env(
+        restart=80,
+        maxiter=300,
+        active_size=300000,
+        has_fp=True,
+        has_pas=False,
+        tokamak_pas=True,
+    ) == RHS1Stage2RetryControls(restart=33, maxiter=77, method="dense")
+
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_METHOD", "bad")
+    assert (
+        rhs1_stage2_retry_controls_from_env(
+            restart=80,
+            maxiter=300,
+            active_size=1000,
+            has_fp=False,
+            has_pas=False,
+        ).method
+        == "incremental"
+    )
+
+
+def test_rhs1_stage2_retry_controls_preserve_invalid_integer_errors(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_MAXITER", "bad")
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2_RESTART", raising=False)
+
+    try:
+        rhs1_stage2_retry_controls_from_env(
+            restart=80,
+            maxiter=300,
+            active_size=1000,
+            has_fp=False,
+            has_pas=False,
+        )
+    except ValueError:
+        pass
+    else:  # pragma: no cover - defensive clarity for this legacy contract
+        raise AssertionError("invalid Stage-2 maxiter env should still raise ValueError")
 
 
 def test_rhs1_fp_force_stage2_respects_abs_floor_and_include_phi1(monkeypatch) -> None:

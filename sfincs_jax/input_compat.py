@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 import re
+import shutil
 from typing import Any, Mapping
 
-from .namelist import Namelist
+from .namelist import Namelist, read_sfincs_input
+from .paths import resolve_existing_path
 
 
 def _group_get(group: Mapping[str, Any], *keys: str) -> Any | None:
@@ -13,6 +16,74 @@ def _group_get(group: Mapping[str, Any], *keys: str) -> Any | None:
         if value is not None:
             return value
     return None
+
+
+def lookup_config_value(config: Any, groups: tuple[str, ...], key: str, default: Any = None) -> Any:
+    """Read a SFINCS option from either a ``Namelist`` or nested mapping.
+
+    This is intentionally small but shared: problem modules need the same
+    Fortran-style case-insensitive lookup when validating source-compatible
+    ambipolar and adjoint-sensitivity settings.
+    """
+
+    key_upper = key.upper()
+    for group in groups:
+        group_data: Any
+        if hasattr(config, "group"):
+            group_data = config.group(group)
+        elif isinstance(config, Mapping):
+            group_data = config.get(group, config.get(group.lower(), config.get(group.upper(), {})))
+        else:
+            group_data = {}
+        if isinstance(group_data, Mapping):
+            if key_upper in group_data:
+                return group_data[key_upper]
+            if key in group_data:
+                return group_data[key]
+            lower_map = {str(k).lower(): v for k, v in group_data.items()}
+            if key.lower() in lower_map:
+                return lower_map[key.lower()]
+    if isinstance(config, Mapping):
+        if key_upper in config:
+            return config[key_upper]
+        if key in config:
+            return config[key]
+        lower_map = {str(k).lower(): v for k, v in config.items()}
+        if key.lower() in lower_map:
+            return lower_map[key.lower()]
+    return default
+
+
+def first_config_value(value: Any, default: Any = None) -> Any:
+    """Return the first scalar from a namelist value or ``default`` if empty."""
+
+    if value is None:
+        return default
+    if isinstance(value, (list, tuple)):
+        return value[0] if value else default
+    return value
+
+
+def bool_config_values(value: Any) -> tuple[bool, ...]:
+    """Return a tuple of booleans from scalar or vector namelist values."""
+
+    if value is None:
+        return ()
+    if isinstance(value, (list, tuple)):
+        return tuple(bool(item) for item in value)
+    return (bool(value),)
+
+
+def config_bool(config: Any, groups: tuple[str, ...], key: str, default: bool = False) -> bool:
+    return bool(first_config_value(lookup_config_value(config, groups, key, default), default))
+
+
+def config_int(config: Any, groups: tuple[str, ...], key: str, default: int = 0) -> int:
+    return int(first_config_value(lookup_config_value(config, groups, key, default), default))
+
+
+def config_float(config: Any, groups: tuple[str, ...], key: str, default: float = 0.0) -> float:
+    return float(first_config_value(lookup_config_value(config, groups, key, default), default))
 
 
 def effective_equilibrium_file(*, geom_params: Mapping[str, Any]) -> Any | None:
@@ -27,6 +98,84 @@ def effective_equilibrium_file(*, geom_params: Mapping[str, Any]) -> Any | None:
     if geometry_scheme == 12:
         return _group_get(geom_params, "JGboozer_file_NonStelSym")
     return None
+
+
+def _resolve_equilibrium_file_from_namelist(*, nml: Namelist) -> Path:
+    """Resolve the effective VMEC/Boozer equilibrium referenced by a namelist.
+
+    The resolver follows SFINCS-v3 input conventions, including the legacy
+    Boozer alias keys and the VMEC ASCII-to-NetCDF sibling preference used by
+    mixed upstream benchmark directories.
+    """
+
+    geom_params = nml.group("geometryParameters")
+    equilibrium_file = effective_equilibrium_file(geom_params=geom_params)
+    if equilibrium_file is None:
+        raise ValueError("Missing geometryParameters.equilibriumFile")
+    base_dir = nml.source_path.parent if nml.source_path is not None else None
+    repo_root = Path(__file__).resolve().parents[1]
+    extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
+    geometry_scheme = int(_group_get(geom_params, "geometryScheme") or -1)
+
+    raw = str(equilibrium_file).strip().strip('"').strip("'")
+    p = Path(raw)
+    if geometry_scheme == 5 and p.suffix.lower() in {".txt", ".dat"}:
+        p_nc = p.with_suffix(".nc")
+        try:
+            return resolve_existing_path(str(p_nc), base_dir=base_dir, extra_search_dirs=extra).path
+        except FileNotFoundError:
+            pass
+    return resolve_existing_path(raw, base_dir=base_dir, extra_search_dirs=extra).path
+
+
+def localize_equilibrium_file_in_place(*, input_namelist: Path, overwrite: bool = False) -> Path | None:
+    """Copy the effective equilibrium next to an input file and patch the input.
+
+    Example and benchmark decks often refer to equilibria relative to an
+    upstream source tree. Localizing keeps a staged run directory self-contained
+    for both SFINCS_JAX and SFINCS Fortran v3 comparisons.
+    """
+
+    input_namelist = Path(input_namelist).resolve()
+    nml = read_sfincs_input(input_namelist)
+    geom_params = nml.group("geometryParameters")
+    equilibrium_file = effective_equilibrium_file(geom_params=geom_params)
+    if equilibrium_file is None:
+        return None
+
+    resolved = _resolve_equilibrium_file_from_namelist(nml=nml)
+    dst = input_namelist.parent / resolved.name
+    if overwrite or (not dst.exists()):
+        shutil.copyfile(resolved, dst)
+
+    txt = input_namelist.read_text()
+    geometry_scheme = int(_group_get(geom_params, "geometryScheme") or -1)
+    if geometry_scheme == 10:
+        key_candidates = ("fort996boozer_file", "equilibriumFile")
+    elif geometry_scheme == 11:
+        key_candidates = ("JGboozer_file", "equilibriumFile")
+    elif geometry_scheme == 12:
+        key_candidates = ("JGboozer_file_NonStelSym", "equilibriumFile")
+    else:
+        key_candidates = ("equilibriumFile",)
+
+    txt2 = txt
+    for key_name in key_candidates:
+        pat = re.compile(rf"(?im)^\s*{re.escape(key_name)}\s*=\s*(['\"])(.*?)\1\s*$")
+        m = pat.search(txt)
+        if m is not None:
+            quote = m.group(1)
+            txt2 = txt.replace(m.group(0), f"  {key_name} = {quote}{dst.name}{quote}")
+            break
+        pat2 = re.compile(rf"(?im)^\s*{re.escape(key_name)}\s*=\s*([^!\n\r]+)\s*$")
+        m2 = pat2.search(txt)
+        if m2 is not None:
+            txt2 = txt.replace(m2.group(0), f'  {key_name} = "{dst.name}"')
+            break
+
+    if txt2 != txt:
+        input_namelist.write_text(txt2)
+    return dst
 
 
 def canonical_equilibrium_override(
@@ -165,6 +314,75 @@ def effective_psi_a_hat(
     if value is None:
         value = _group_get(phys_params, "psiAHat")
     return float(value) if value is not None else float(default)
+
+
+def dphi_hat_dpsi_hat_from_er_geometry_scheme4(er: float) -> float:
+    """Compute ``dPhiHat/dpsiHat`` from ``Er`` for v3 ``geometryScheme=4``.
+
+    SFINCS v3 treats the built-in W7-X simplified model as if
+    ``inputRadialCoordinateForGradients=4`` at fixed ``rN=sqrt(psiN)=0.5``.
+    Centralizing the conversion here keeps the input parser, output writer, and
+    geometry tests on the same legacy-normalization contract.
+    """
+
+    psi_a_hat, a_hat = scheme4_radial_constants()
+    psi_n = 0.25
+    ddrhat2ddpsihat = a_hat / (2.0 * psi_a_hat * math.sqrt(psi_n))
+    return float(ddrhat2ddpsihat * (-er))
+
+
+def scheme4_radial_constants() -> tuple[float, float]:
+    """Return v3's built-in ``geometryScheme=4`` radial normalization constants."""
+
+    psi_a_hat = -0.384935
+    a_hat = 0.5109
+    return psi_a_hat, a_hat
+
+
+def set_input_radial_coordinate_wish(
+    *,
+    input_radial_coordinate: int,
+    psi_a_hat: float,
+    a_hat: float,
+    psi_hat_wish_in: float,
+    psi_n_wish_in: float,
+    r_hat_wish_in: float,
+    r_n_wish_in: float,
+) -> tuple[float, float, float, float]:
+    """Replicate v3 ``radialCoordinates.setInputRadialCoordinateWish``.
+
+    The four SFINCS input modes all name the same flux surface using either
+    ``psiHat``, ``psiN``, ``rHat``, or ``rN``. The returned tuple is
+    ``(psiHat_wish, psiN_wish, rHat_wish, rN_wish)``.
+    """
+
+    if input_radial_coordinate == 0:
+        psi_hat_wish = float(psi_hat_wish_in)
+    elif input_radial_coordinate == 1:
+        psi_hat_wish = float(psi_n_wish_in) * float(psi_a_hat)
+    elif input_radial_coordinate == 2:
+        psi_hat_wish = (
+            float(psi_a_hat)
+            * float(r_hat_wish_in)
+            * float(r_hat_wish_in)
+            / (float(a_hat) * float(a_hat))
+        )
+    elif input_radial_coordinate == 3:
+        psi_hat_wish = float(r_n_wish_in) * float(r_n_wish_in) * float(psi_a_hat)
+    else:
+        raise ValueError(f"Invalid inputRadialCoordinate={input_radial_coordinate}")
+
+    psi_n_wish = float(psi_hat_wish) / float(psi_a_hat)
+    r_hat_wish = float(
+        math.sqrt(float(a_hat) * float(a_hat) * float(psi_hat_wish) / float(psi_a_hat))
+    )
+    r_n_wish = float(math.sqrt(float(psi_hat_wish) / float(psi_a_hat)))
+    return psi_hat_wish, psi_n_wish, r_hat_wish, r_n_wish
+
+
+_dphi_hat_dpsi_hat_from_er_geometry_scheme4 = dphi_hat_dpsi_hat_from_er_geometry_scheme4
+_scheme4_radial_constants = scheme4_radial_constants
+_set_input_radial_coordinate_wish = set_input_radial_coordinate_wish
 
 
 def infer_species_input_radial_coordinate_for_gradients(

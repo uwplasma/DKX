@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.petsc_binary import read_petsc_vec
-from sfincs_jax.v3_driver import solve_v3_full_system_newton_krylov
+from sfincs_jax.validation.fortran import read_petsc_vec
+import sfincs_jax.problems.profile_phi1_newton as phi1_newton
 
 
 def test_newton_krylov_converges_for_pas_tiny_phi1_in_kinetic_fixture() -> None:
@@ -21,7 +21,7 @@ def test_newton_krylov_converges_for_pas_tiny_phi1_in_kinetic_fixture() -> None:
     nml = read_sfincs_input(input_path)
     x_ref = read_petsc_vec(vec_path).values
 
-    result = solve_v3_full_system_newton_krylov(
+    result = phi1_newton.solve_v3_full_system_newton_krylov(
         nml=nml,
         x0=None,
         tol=1e-9,
@@ -35,4 +35,3 @@ def test_newton_krylov_converges_for_pas_tiny_phi1_in_kinetic_fixture() -> None:
     # Converged residual and solution parity.
     assert float(result.residual_norm) < 1e-9
     np.testing.assert_allclose(x, x_ref, rtol=0, atol=5e-8)
-

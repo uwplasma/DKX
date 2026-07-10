@@ -10,8 +10,9 @@ import pytest
 from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax import cli
-from sfincs_jax import v3_driver
-from sfincs_jax.v3_driver import solve_v3_transport_matrix_linear_gmres
+import sfincs_jax.problems.transport_solve as transport_solve
+import sfincs_jax.problems.transport_parallel_runtime as transport_parallel_pool
+from sfincs_jax.problems.transport_solve import solve_v3_transport_matrix_linear_gmres
 
 
 def test_transport_parallel_worker_preserves_differentiable_payload(
@@ -22,7 +23,7 @@ def test_transport_parallel_worker_preserves_differentiable_payload(
     input_path.write_text("&general\n/\n")
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(v3_driver, "read_sfincs_input", lambda _path: object())
+    monkeypatch.setattr(transport_solve, "read_sfincs_input", lambda _path: object())
 
     def _fake_solve(**kwargs):
         captured.update(kwargs)
@@ -32,9 +33,9 @@ def test_transport_parallel_worker_preserves_differentiable_payload(
             elapsed_time_s=np.asarray([0.5]),
         )
 
-    monkeypatch.setattr(v3_driver, "solve_v3_transport_matrix_linear_gmres", _fake_solve)
+    monkeypatch.setattr(transport_solve, "solve_v3_transport_matrix_linear_gmres", _fake_solve)
 
-    result = v3_driver._transport_parallel_worker(
+    result = transport_solve._transport_parallel_worker(
         {
             "input_path": str(input_path),
             "which_rhs_values": [1],
@@ -145,9 +146,9 @@ def test_transport_parallel_gpu_backend_merges_subset_elapsed(monkeypatch: pytes
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL", "process")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "gpu")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS", "2")
-    monkeypatch.setattr(v3_driver, "_transport_parallel_backend", lambda: "gpu")
-    monkeypatch.setattr(v3_driver, "_transport_parallel_visible_gpu_ids", lambda _workers: ["0", "1"])
-    monkeypatch.setattr(v3_driver, "_run_transport_parallel_gpu_subprocesses", lambda **_kwargs: fake_results)
+    monkeypatch.setattr(transport_solve, "_transport_parallel_backend", lambda: "gpu")
+    monkeypatch.setattr(transport_solve, "_transport_parallel_visible_gpu_ids", lambda _workers: ["0", "1"])
+    monkeypatch.setattr(transport_solve, "_run_transport_parallel_gpu_subprocesses", lambda **_kwargs: fake_results)
 
     par = solve_v3_transport_matrix_linear_gmres(
         nml=nml,
@@ -226,7 +227,7 @@ def test_transport_scheme1_monoenergetic_gpu_heuristic_regression(tmp_path, monk
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL", "off")
     monkeypatch.setenv("SFINCS_JAX_FORTRAN_STDOUT", "0")
     monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "0")
-    monkeypatch.setattr(v3_driver.jax, "default_backend", lambda: "gpu")
+    monkeypatch.setattr(transport_solve.jax, "default_backend", lambda: "gpu")
 
     out_path = tmp_path / "mono_scheme1_gpu.h5"
     write_sfincs_jax_output_h5(
@@ -424,18 +425,88 @@ def test_transport_parallel_pool_reuses_workers(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_POOL_PERSIST", "1")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_MP_START_METHOD", "spawn")
-    monkeypatch.setattr(v3_driver.concurrent.futures, "ProcessPoolExecutor", _DummyPool)
-    monkeypatch.setattr(v3_driver.mp, "get_context", lambda _name: object())
+    monkeypatch.setattr(transport_parallel_pool.concurrent.futures, "ProcessPoolExecutor", _DummyPool)
+    monkeypatch.setattr(transport_parallel_pool.mp, "get_context", lambda _name: object())
 
-    v3_driver._shutdown_transport_parallel_pool()
+    transport_solve._shutdown_transport_parallel_pool()
     try:
-        pool_1 = v3_driver._get_transport_parallel_pool(parallel_workers=2)
-        pool_2 = v3_driver._get_transport_parallel_pool(parallel_workers=2)
+        pool_1 = transport_solve._get_transport_parallel_pool(parallel_workers=2)
+        pool_2 = transport_solve._get_transport_parallel_pool(parallel_workers=2)
         assert pool_1 is pool_2
         assert _DummyPool.init_calls == 1
     finally:
-        v3_driver._shutdown_transport_parallel_pool()
+        transport_solve._shutdown_transport_parallel_pool()
     assert _DummyPool.shutdown_calls == 1
+
+
+def test_transport_parallel_runtime_direct_worker_count_validation() -> None:
+    assert transport_parallel_pool.validate_transport_parallel_worker_count("3") == 3
+    with pytest.raises(ValueError, match="worker count"):
+        transport_parallel_pool.validate_transport_parallel_worker_count(0, context="unit")
+    with pytest.raises(ValueError, match="worker count"):
+        transport_parallel_pool.validate_transport_parallel_worker_count("bad")
+
+
+def test_transport_parallel_runtime_direct_gpu_policy_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_gpu_runner(**kwargs):
+        seen.update(kwargs)
+        return [{"ok": True}]
+
+    monkeypatch.setattr(
+        transport_parallel_pool,
+        "run_transport_parallel_gpu_subprocesses",
+        fake_gpu_runner,
+    )
+
+    result = transport_parallel_pool.run_transport_parallel_gpu_subprocesses_with_policy(
+        payloads=[{"which": 1}],
+        parallel_workers=2,
+        emit=None,
+    )
+
+    assert result == [{"ok": True}]
+    assert seen["payloads"] == [{"which": 1}]
+    assert seen["parallel_workers"] == 2
+    assert seen["visible_gpu_ids"] is transport_parallel_pool.transport_parallel_visible_gpu_ids
+    assert seen["gpu_worker_env"] is transport_parallel_pool.transport_parallel_gpu_worker_env
+
+
+def test_transport_parallel_runtime_direct_pool_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _DummyPool:
+        init_calls = 0
+        shutdown_calls = 0
+
+        def __init__(self, **kwargs):
+            type(self).init_calls += 1
+            self.kwargs = kwargs
+            self._shutdown = False
+
+        def shutdown(self, wait: bool = True, cancel_futures: bool = True) -> None:
+            _ = (wait, cancel_futures)
+            if not self._shutdown:
+                self._shutdown = True
+                type(self).shutdown_calls += 1
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_POOL_PERSIST", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_MP_START_METHOD", "spawn")
+    monkeypatch.setattr(transport_parallel_pool.concurrent.futures, "ProcessPoolExecutor", _DummyPool)
+    monkeypatch.setattr(transport_parallel_pool.mp, "get_context", lambda _name: object())
+
+    direct_pool = transport_parallel_pool.transport_parallel_process_pool_executor(max_workers=1)
+    assert isinstance(direct_pool, _DummyPool)
+    assert direct_pool.kwargs["max_workers"] == 1
+    direct_pool.shutdown()
+
+    transport_parallel_pool.shutdown_transport_parallel_pool()
+    try:
+        cached_1 = transport_parallel_pool.get_transport_parallel_pool(parallel_workers=2)
+        cached_2 = transport_parallel_pool.get_transport_parallel_pool(parallel_workers=2)
+        assert cached_1 is cached_2
+    finally:
+        transport_parallel_pool.shutdown_transport_parallel_pool()
+    assert _DummyPool.shutdown_calls >= 2
 
 
 def test_transport_parallel_pool_rebuilds_on_worker_change(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -457,35 +528,50 @@ def test_transport_parallel_pool_rebuilds_on_worker_change(monkeypatch: pytest.M
 
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_POOL_PERSIST", "1")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_MP_START_METHOD", "spawn")
-    monkeypatch.setattr(v3_driver.concurrent.futures, "ProcessPoolExecutor", _DummyPool)
-    monkeypatch.setattr(v3_driver.mp, "get_context", lambda _name: object())
+    monkeypatch.setattr(transport_parallel_pool.concurrent.futures, "ProcessPoolExecutor", _DummyPool)
+    monkeypatch.setattr(transport_parallel_pool.mp, "get_context", lambda _name: object())
 
-    v3_driver._shutdown_transport_parallel_pool()
+    transport_solve._shutdown_transport_parallel_pool()
     try:
-        pool_1 = v3_driver._get_transport_parallel_pool(parallel_workers=2)
-        pool_2 = v3_driver._get_transport_parallel_pool(parallel_workers=3)
+        pool_1 = transport_solve._get_transport_parallel_pool(parallel_workers=2)
+        pool_2 = transport_solve._get_transport_parallel_pool(parallel_workers=3)
         assert pool_1 is not pool_2
         assert _DummyPool.init_calls == 2
         # First pool should be shut down on key change.
         assert _DummyPool.shutdown_calls == 1
     finally:
-        v3_driver._shutdown_transport_parallel_pool()
+        transport_solve._shutdown_transport_parallel_pool()
     assert _DummyPool.shutdown_calls == 2
 
 
 def test_transport_parallel_backend_gpu_visible_ids(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "gpu")
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3,5,3,,5")
-    assert v3_driver._transport_parallel_backend() == "gpu"
-    assert v3_driver._transport_parallel_visible_gpu_ids(4) == ["3", "5"]
+    assert transport_solve._transport_parallel_backend() == "gpu"
+    assert transport_solve._transport_parallel_visible_gpu_ids(4) == ["3", "5"]
 
 
 def test_transport_parallel_pool_key_tracks_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "cpu")
-    key_cpu = v3_driver._transport_parallel_pool_key(2)
+    key_cpu = transport_solve._transport_parallel_pool_key(2)
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "gpu")
-    key_gpu = v3_driver._transport_parallel_pool_key(2)
+    key_gpu = transport_solve._transport_parallel_pool_key(2)
     assert key_cpu != key_gpu
+
+
+def test_parallel_policy_xla_rewrite_accepts_worker_env_positional_callback() -> None:
+    rewritten = transport_parallel_pool.rewrite_xla_flags(
+        "--xla_cpu_multi_thread_eigen=false --keep=1",
+        3,
+        1,
+    )
+
+    assert rewritten == (
+        "--keep=1 "
+        "--xla_cpu_multi_thread_eigen=true "
+        "--xla_cpu_multi_thread_eigen_num_threads=3 "
+        "--xla_force_host_platform_device_count=1"
+    )
 
 
 def test_apply_cores_setting_does_not_force_transport_parallel(monkeypatch: pytest.MonkeyPatch) -> None:

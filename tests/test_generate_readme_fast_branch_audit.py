@@ -1,17 +1,10 @@
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
+from sfincs_jax.validation import release as readme_audit
 
 
 def _load_module():
-    module_path = Path(__file__).resolve().parents[1] / "scripts" / "generate_readme_fast_branch_audit.py"
-    spec = importlib.util.spec_from_file_location("generate_readme_fast_branch_audit", module_path)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return readme_audit
 
 
 def test_case_table_reports_cold_and_warm_logged_runtimes() -> None:
@@ -91,16 +84,41 @@ def test_public_comparison_cases_filter_short_fortran_reference_runs() -> None:
 def test_runtime_drift_summary_skips_mismatched_resolution_tiers() -> None:
     module = _load_module()
 
+    lines = [
+        module._format_runtime_drift_summary(
+            "GPU",
+            {
+                "status": "not_applicable",
+                "reason": reason,
+                "flagged_cases": 999,
+            },
+        )
+        for reason in (
+            "production-floor reruns are not same-resolution with the frozen smoke baseline",
+            "production-floor reruns are not same-resolution with the older frozen smoke baseline",
+        )
+    ]
+
+    assert lines == [
+        (
+            "- GPU runtime drift gate: not applicable: "
+            "suite rows are not same-resolution with the optional runtime baseline"
+        ),
+        (
+            "- GPU runtime drift gate: not applicable: "
+            "suite rows are not same-resolution with the optional runtime baseline"
+        ),
+    ]
+
+
+def test_runtime_drift_summary_keeps_actionable_custom_reason() -> None:
+    module = _load_module()
+
     line = module._format_runtime_drift_summary(
-        "GPU",
-        {
-            "status": "not_applicable",
-            "reason": "production-floor reruns are not same-resolution with the frozen smoke baseline",
-            "flagged_cases": 999,
-        },
+        "CPU",
+        {"status": "skipped", "reason": "missing same-resolution baseline"},
     )
 
     assert line == (
-        "- GPU runtime drift watchlist: not applicable: "
-        "production-floor reruns are not same-resolution with the frozen smoke baseline"
+        "- CPU runtime drift gate: not applicable: missing same-resolution baseline"
     )

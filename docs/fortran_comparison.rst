@@ -6,14 +6,20 @@ Validation against reference implementations
 `sfincs_jax` validates outputs and solver behavior against a mature Fortran SFINCS implementation as a
 reference implementation.
 
-On the current ``main`` branch, the release-facing comparison is the full vendored
+.. note::
+
+   The suite evidence on this page audits the retained **legacy pipeline**.
+   The canonical-stack head-to-head runtime/memory evidence and its parity
+   referees live in :doc:`performance`.
+
+The release-facing comparison is the full vendored
 example-suite audit, with production-floor tokamak reruns merged into the frozen
 reference suite:
 
 - CPU: ``tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak``
 - GPU: ``tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas``
 
-Those artifacts currently report:
+Those artifacts report:
 
 - ``39/39 parity_ok`` on CPU,
 - ``39/39 parity_ok`` on GPU,
@@ -40,7 +46,7 @@ checks unless they are rerun at production-comparison resolution.
    CPU and GPU.
    Cases are ordered by best warm ``sfincs_jax`` speedup over the Fortran v3
    runtime.
-   The current artifacts have median cold JAX/Fortran wall-clock ratios of about
+   The benchmark artifacts have median cold JAX/Fortran wall-clock ratios of about
    ``0.021x`` on CPU and ``0.037x`` on GPU for the plotted reference-runtime
    subset. Median process maximum-RSS ratios remain available in the JSON audit
    fields, while the public memory bars use profiler active RSS deltas over the

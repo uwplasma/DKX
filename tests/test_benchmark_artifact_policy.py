@@ -6,9 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.check_benchmark_artifacts import main as check_benchmark_artifacts_main
-from scripts.benchmark_artifact_index import main as benchmark_artifact_index_main
-from sfincs_jax.benchmark_artifact_policy import (
+from sfincs_jax.validation.artifacts import (
     ARTIFACT_CLASS_FORTRAN_SUITE_SUMMARY,
     ARTIFACT_CLASS_LEGACY,
     ARTIFACT_CLASS_NON_PAS,
@@ -288,6 +286,73 @@ def test_timeout_row_does_not_require_solver_or_phase_metadata() -> None:
     assert benchmark_artifact_policy_errors(payload) == []
 
 
+def test_default_promotion_plan_requires_quantitative_baselines() -> None:
+    payload = _valid_payload()
+    plan = payload["plan"]
+    assert isinstance(plan, dict)
+    plan["gates"] = {
+        "default_promotion_required": True,
+        "baseline_elapsed_s": 0.0,
+        "baseline_rss_mb": "missing",
+        "min_runtime_speedup": 0.75,
+        "min_memory_reduction": 0.5,
+    }
+
+    errors = benchmark_artifact_policy_errors(payload)
+
+    assert "field plan.gates.baseline_elapsed_s must be a positive finite number when default promotion is required" in errors
+    assert "field plan.gates.baseline_rss_mb must be a positive finite number when default promotion is required" in errors
+    assert "field plan.gates.min_runtime_speedup must be a finite number >= 1 when default promotion is required" in errors
+    assert "field plan.gates.min_memory_reduction must be a finite number >= 1 when default promotion is required" in errors
+
+
+def test_default_promotion_result_gates_must_pass_for_completed_rows() -> None:
+    payload = _valid_payload()
+    plan = payload["plan"]
+    assert isinstance(plan, dict)
+    plan["gates"] = {
+        "default_promotion_required": True,
+        "baseline_elapsed_s": 10.0,
+        "baseline_rss_mb": 2000.0,
+        "min_runtime_speedup": 1.2,
+        "min_memory_reduction": 1.1,
+    }
+
+    errors = benchmark_artifact_policy_errors(payload)
+
+    assert "field summary.all_gates_passed must be true when default promotion is required" in errors
+    assert "missing field results[0].gates" in errors
+    assert not any("results[1].gates" in error for error in errors)
+
+
+def test_default_promotion_artifact_passes_with_complete_quantitative_gates() -> None:
+    payload = _valid_payload()
+    plan = payload["plan"]
+    assert isinstance(plan, dict)
+    plan["gates"] = {
+        "default_promotion_required": True,
+        "baseline_elapsed_s": 10.0,
+        "baseline_rss_mb": 2000.0,
+        "min_runtime_speedup": 1.2,
+        "min_memory_reduction": 1.1,
+    }
+    payload["summary"] = {"all_gates_passed": True}
+    results = payload["results"]
+    assert isinstance(results, list)
+    ok_row = results[0]
+    assert isinstance(ok_row, dict)
+    ok_row["gates"] = {
+        "stall": {"status": "pass"},
+        "residual": {"status": "pass"},
+        "memory": {"status": "pass"},
+        "solver_path": {"status": "pass"},
+        "default_promotion": {"status": "pass"},
+    }
+
+    assert benchmark_artifact_policy_errors(payload) == []
+    validate_benchmark_artifact(payload)
+
+
 def test_fortran_suite_summary_payload_passes_release_policy() -> None:
     payload = _valid_fortran_suite_summary_payload()
 
@@ -351,34 +416,56 @@ def test_fortran_suite_summary_rejects_active_memory_that_ignores_incremental_fi
     assert "active_jax_memory_mb must use jax_incremental_max_rss_mb" in "\n".join(errors)
 
 
-def test_cli_reports_success_for_valid_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    artifact = tmp_path / "valid.json"
-    artifact.write_text(json.dumps(_valid_payload()) + "\n")
+def test_fortran_suite_summary_rejects_included_low_runtime_exclusion_rows() -> None:
+    payload = _valid_fortran_suite_summary_payload()
+    metadata = payload["metadata"]
+    assert isinstance(metadata, dict)
+    excluded = metadata["excluded_low_fortran_runtime_cases"]
+    assert isinstance(excluded, list)
+    excluded[0]["fortran_runtime_s"] = 12.0
 
-    rc = check_benchmark_artifacts_main([str(artifact)])
+    errors = fortran_suite_benchmark_summary_errors(payload)
 
-    captured = capsys.readouterr()
-    assert rc == 0
-    assert captured.out == f"{artifact}: ok\n"
-    assert captured.err == ""
+    assert "field metadata.excluded_low_fortran_runtime_cases[0].fortran_runtime_s must be below 10, got 12" in errors
 
 
-def test_cli_reports_failure_for_invalid_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    payload = copy.deepcopy(_valid_payload())
-    results = payload["results"]
-    assert isinstance(results, list)
-    row = results[1]
-    assert isinstance(row, dict)
-    del row["variant_provenance"]
-    artifact = tmp_path / "invalid.json"
-    artifact.write_text(json.dumps(payload) + "\n")
+def test_fortran_suite_summary_rejects_unsorted_summary_rows() -> None:
+    payload = _valid_fortran_suite_summary_payload()
+    reports = payload["reports"]
+    assert isinstance(reports, dict)
+    cpu_report = reports["cpu"]
+    assert isinstance(cpu_report, dict)
+    rows = cpu_report["fastest_jax_vs_fortran_cases"]
+    assert isinstance(rows, list)
+    rows.reverse()
 
-    rc = check_benchmark_artifacts_main([str(artifact)])
+    errors = fortran_suite_benchmark_summary_errors(payload)
 
-    captured = capsys.readouterr()
-    assert rc == 1
-    assert captured.out == ""
-    assert captured.err == f"{artifact}: missing field results[1].variant_provenance\n"
+    assert "reports.cpu.fastest_jax_vs_fortran_cases must be sorted ascending by runtime_ratio" in "\n".join(errors)
+
+
+def test_fortran_suite_summary_rejects_canonical_order_mismatches() -> None:
+    payload = _valid_fortran_suite_summary_payload()
+    canonical_rows = payload["canonical_rows"]
+    assert isinstance(canonical_rows, dict)
+    cpu_rows = canonical_rows["cpu"]
+    assert isinstance(cpu_rows, list)
+    cpu_rows.reverse()
+
+    errors = fortran_suite_benchmark_summary_errors(payload)
+
+    assert "field canonical_rows.cpu must follow metadata.canonical_case_order" in errors
+
+
+def test_fortran_suite_summary_rejects_duplicate_canonical_case_order() -> None:
+    payload = _valid_fortran_suite_summary_payload()
+    metadata = payload["metadata"]
+    assert isinstance(metadata, dict)
+    metadata["canonical_case_order"] = ["fast_case", "fast_case"]
+
+    errors = fortran_suite_benchmark_summary_errors(payload)
+
+    assert "field metadata.canonical_case_order must not contain duplicates" in errors
 
 
 def test_release_index_classifies_schema_v2_compliant_file(tmp_path: Path) -> None:
@@ -497,25 +584,3 @@ def test_release_index_summary_counts(tmp_path: Path) -> None:
         ARTIFACT_CLASS_RELEASE_BLOCKING: 1,
     }
     assert [entry.path for entry in index.release_blocking] == [malformed]
-
-
-def test_release_index_cli_reports_counts_and_fails_for_blockers(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    valid = tmp_path / "valid.json"
-    valid.write_text(json.dumps(_valid_payload()) + "\n")
-    malformed = tmp_path / "malformed.json"
-    malformed.write_text("{")
-
-    rc = benchmark_artifact_index_main([str(tmp_path)])
-
-    captured = capsys.readouterr()
-    assert rc == 1
-    assert f"{valid}: schema-v2-compliant\n" in captured.out
-    assert f"{malformed}: release-blocking\n" in captured.out
-    assert "summary: total=2" in captured.out
-    assert "schema-v2-compliant=1" in captured.out
-    assert "release-blocking=1" in captured.out
-    assert f"{malformed}: invalid JSON:" in captured.err
-    assert "release gate: fail (1 blocking artifact(s))" in captured.err
