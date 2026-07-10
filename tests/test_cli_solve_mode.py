@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from argparse import Namespace
 from pathlib import Path
@@ -108,7 +109,10 @@ def test_cmd_solve_v3_forces_explicit_mode(monkeypatch, tmp_path: Path) -> None:
         return SimpleNamespace(x=np.zeros((2,), dtype=np.float64), residual_norm=np.float64(0.0))
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.v3_driver.solve_v3_full_system_linear_gmres", _fake_solve)
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_solve.solve_v3_full_system_linear_gmres",
+        _fake_solve,
+    )
 
     args = Namespace(
         input=str(tmp_path / "input.namelist"),
@@ -128,36 +132,44 @@ def test_cmd_solve_v3_forces_explicit_mode(monkeypatch, tmp_path: Path) -> None:
     assert captured["differentiable"] is False
 
 
-def test_cmd_transport_matrix_v3_forces_explicit_mode(monkeypatch, tmp_path: Path) -> None:
+def test_cmd_transport_matrix_v3_uses_canonical_run(monkeypatch, tmp_path: Path) -> None:
+    """transport-matrix-v3 routes through the canonical sfincs_jax.run driver."""
     captured: dict[str, object] = {}
 
-    def _fake_transport(**kwargs):
+    def _fake_run_transport_matrix(namelist_path, **kwargs):
+        captured["namelist_path"] = Path(namelist_path)
         captured.update(kwargs)
         return SimpleNamespace(
             transport_matrix=np.zeros((2, 2), dtype=np.float64),
-            state_vectors_by_rhs={},
-            residual_norms_by_rhs={1: np.float64(0.0)},
+            state_vectors=np.zeros((2, 4), dtype=np.float64),
+            solve_result=SimpleNamespace(residual_norms=np.zeros((2,), dtype=np.float64)),
+            output_path=None,
         )
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=2))
-    monkeypatch.setattr("sfincs_jax.v3_driver.solve_v3_transport_matrix_linear_gmres", _fake_transport)
+    monkeypatch.setattr("sfincs_jax.run.run_transport_matrix", _fake_run_transport_matrix)
 
     args = Namespace(
         input=str(tmp_path / "input.namelist"),
         out_matrix=str(tmp_path / "tm.npy"),
-        out_state_prefix=None,
+        out=None,
+        out_state_prefix=str(tmp_path / "state"),
         equilibrium_file=None,
         wout_path=None,
         tol=1e-8,
-        atol=0.0,
-        restart=20,
-        maxiter=40,
-        solve_method="incremental",
+        solve_method="auto",
         quiet=True,
         verbose=0,
     )
     assert cli._cmd_transport_matrix_v3(args) == 0
-    assert captured["differentiable"] is False
+    assert captured["namelist_path"] == Path(args.input)
+    assert captured["tol"] == 1e-8
+    assert captured["solve_method"] == "auto"
+    assert captured["out_path"] is None
+    assert captured["emit"] is None  # --quiet silences the Fortran-parity stdout
+    assert (tmp_path / "tm.npy").exists()
+    assert (tmp_path / "state.whichRHS1.npy").exists()
+    assert (tmp_path / "state.whichRHS2.npy").exists()
 
 
 def test_write_output_full_system_regression(tmp_path: Path, monkeypatch) -> None:
@@ -675,7 +687,10 @@ def test_cmd_solve_v3_applies_equilibrium_override(monkeypatch, tmp_path: Path) 
         captured.update(kwargs)
         return SimpleNamespace(x=np.zeros((2,), dtype=np.float64), residual_norm=np.float64(0.0))
 
-    monkeypatch.setattr("sfincs_jax.v3_driver.solve_v3_full_system_linear_gmres", _fake_solve)
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_solve.solve_v3_full_system_linear_gmres",
+        _fake_solve,
+    )
 
     args = Namespace(
         input=str(input_path),
@@ -699,15 +714,16 @@ def test_cmd_solve_v3_applies_equilibrium_override(monkeypatch, tmp_path: Path) 
 def test_main_accepts_quiet_after_subcommand(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_write_output_h5(**kwargs):
+    def _fake_run_profile(namelist_path, **kwargs):
+        captured["namelist_path"] = Path(namelist_path)
         captured.update(kwargs)
-        out = Path(kwargs["output_path"])
+        out = Path(kwargs["out_path"])
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"")
-        return out
+        return SimpleNamespace(output_path=out)
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
 
     rc = cli.main(
         [
@@ -721,7 +737,8 @@ def test_main_accepts_quiet_after_subcommand(monkeypatch, tmp_path: Path) -> Non
     )
 
     assert rc == 0
-    assert captured["output_path"] == Path(tmp_path / "sfincsOutput.h5")
+    assert captured["out_path"] == Path(tmp_path / "sfincsOutput.h5")
+    assert captured["solve_method"] == "auto"
 
 
 def test_main_bare_input_uses_public_auto_contract(monkeypatch, tmp_path: Path) -> None:
@@ -734,7 +751,19 @@ def test_main_bare_input_uses_public_auto_contract(monkeypatch, tmp_path: Path) 
         out.write_bytes(b"")
         return out
 
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    def _fake_namelist_with_source(_path):
+        nml = _FakeNamelist(rhs_mode=1)
+        nml.source_text = "&general\n/\n"
+        return nml
+
+    # The canonical stack materializes the --wout-path override and would solve;
+    # here we exercise the documented legacy fallback (NotImplementedError) so the
+    # public auto contract forwarded to the writer stays covered.
+    def _canonical_refuses(*_args, **_kwargs):
+        raise NotImplementedError("canonical stack deferred to legacy writer")
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", _fake_namelist_with_source)
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
     monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
 
     rc = cli.main(
@@ -810,7 +839,11 @@ def test_main_write_output_forwards_sparse_host_solve_method(monkeypatch, tmp_pa
         out.write_bytes(b"")
         return out
 
+    def _canonical_refuses(*_args, **_kwargs):
+        raise NotImplementedError("solve_method=sparse_host was removed from the canonical stack")
+
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
     monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
 
     rc = cli.main(
@@ -840,7 +873,11 @@ def test_main_write_output_forwards_sparse_pc_gmres_solve_method(monkeypatch, tm
         out.write_bytes(b"")
         return out
 
+    def _canonical_refuses(*_args, **_kwargs):
+        raise NotImplementedError("solve_method=sparse_pc_gmres was removed from the canonical stack")
+
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
     monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
 
     rc = cli.main(
@@ -870,7 +907,11 @@ def test_main_write_output_forwards_xblock_sparse_pc_gmres_solve_method(monkeypa
         out.write_bytes(b"")
         return out
 
+    def _canonical_refuses(*_args, **_kwargs):
+        raise NotImplementedError("solve_method=xblock_sparse_pc_gmres was removed from the canonical stack")
+
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
     monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
 
     rc = cli.main(
@@ -900,7 +941,11 @@ def test_main_write_output_forwards_sparse_lsmr_solve_method(monkeypatch, tmp_pa
         out.write_bytes(b"")
         return out
 
+    def _canonical_refuses(*_args, **_kwargs):
+        raise NotImplementedError("solve_method=sparse_lsmr was removed from the canonical stack")
+
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
     monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
 
     rc = cli.main(
@@ -923,15 +968,18 @@ def test_main_write_output_forwards_sparse_lsmr_solve_method(monkeypatch, tmp_pa
 def test_main_write_output_forwards_sparse_host_safe_solve_method(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_write_output_h5(**kwargs):
+    # sparse_host_safe survives on the canonical RHSMode=1 stack, so the CLI
+    # forwards the override to run_profile rather than the legacy writer.
+    def _fake_run_profile(namelist_path, **kwargs):
+        captured["namelist_path"] = Path(namelist_path)
         captured.update(kwargs)
-        out = Path(kwargs["output_path"])
+        out = Path(kwargs["out_path"])
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"")
-        return out
+        return SimpleNamespace(output_path=out)
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
 
     rc = cli.main(
         [
@@ -960,7 +1008,11 @@ def test_main_write_output_forwards_petsc_compat_solve_method(monkeypatch, tmp_p
         out.write_bytes(b"")
         return out
 
+    def _canonical_refuses(*_args, **_kwargs):
+        raise NotImplementedError("solve_method=petsc_compat was removed from the canonical stack")
+
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
     monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
 
     rc = cli.main(
@@ -987,7 +1039,7 @@ def test_main_scan_er_forwards_structured_csr_solve_method(monkeypatch, tmp_path
         captured.update(kwargs)
         return SimpleNamespace()
 
-    monkeypatch.setattr("sfincs_jax.scans.run_er_scan", _fake_run_er_scan)
+    monkeypatch.setattr("sfincs_jax.workflows.scans.run_er_scan", _fake_run_er_scan)
 
     rc = cli.main(
         [
@@ -1015,7 +1067,11 @@ def test_main_write_output_reports_runtime_errors_without_traceback(monkeypatch,
     def _fake_write_output_h5(**_kwargs):
         raise RuntimeError("host sparse factorization failed")
 
+    def _fake_run_profile(*_args, **_kwargs):
+        raise RuntimeError("host sparse factorization failed")
+
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
     monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
 
     rc = cli.main(
@@ -1073,16 +1129,16 @@ def test_main_preserves_shard_axis_before_subcommand(monkeypatch, tmp_path: Path
 def test_main_preserves_transport_workers_before_subcommand(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_write_output_h5(**kwargs):
+    def _fake_run_transport_matrix(namelist_path, **kwargs):
         captured["parallel_mode"] = os.environ.get("SFINCS_JAX_TRANSPORT_PARALLEL")
         captured["workers"] = os.environ.get("SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS")
-        out = Path(kwargs["output_path"])
+        out = Path(kwargs["out_path"])
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"")
-        return out
+        return SimpleNamespace(output_path=out)
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=2))
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+    monkeypatch.setattr("sfincs_jax.run.run_transport_matrix", _fake_run_transport_matrix)
 
     rc = cli.main(
         [
@@ -1100,3 +1156,157 @@ def test_main_preserves_transport_workers_before_subcommand(monkeypatch, tmp_pat
     assert rc == 0
     assert captured["parallel_mode"] == "process"
     assert captured["workers"] == "3"
+
+
+def test_cmd_run_fortran_reports_output_path(monkeypatch, tmp_path: Path, capsys) -> None:
+    output_path = tmp_path / "run" / "sfincsOutput.h5"
+    captured: dict[str, object] = {}
+
+    def _fake_run_fortran(**kwargs):
+        captured.update(kwargs)
+        return output_path
+
+    monkeypatch.setattr("sfincs_jax.validation.fortran.run_sfincs_fortran", _fake_run_fortran)
+
+    rc = cli._cmd_run_fortran(
+        Namespace(
+            input=str(tmp_path / "input.namelist"),
+            exe=str(tmp_path / "sfincs"),
+            workdir=str(tmp_path / "work"),
+            quiet=False,
+            verbose=1,
+        )
+    )
+
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert captured["input_namelist"] == Path(tmp_path / "input.namelist")
+    assert captured["exe"] == Path(tmp_path / "sfincs")
+    assert captured["workdir"] == Path(tmp_path / "work")
+    assert f"wrote sfincsOutput.h5 -> {output_path}" in out
+
+
+def test_cmd_dump_h5_keys_and_json_payload(monkeypatch, tmp_path: Path, capsys) -> None:
+    data = {"zeta": np.asarray([2.0]), "alpha": np.asarray([[1, 2]])}
+    monkeypatch.setattr("sfincs_jax.io.read_sfincs_h5", lambda _path: data)
+
+    rc = cli._cmd_dump_h5(
+        Namespace(
+            sfincs_output=str(tmp_path / "sfincsOutput.h5"),
+            out_json=str(tmp_path / "unused.json"),
+            keys_only=True,
+        )
+    )
+    assert rc == 0
+    assert capsys.readouterr().out.splitlines() == ["alpha", "zeta"]
+
+    out_json = tmp_path / "dump.json"
+    rc = cli._cmd_dump_h5(
+        Namespace(
+            sfincs_output=str(tmp_path / "sfincsOutput.h5"),
+            out_json=str(out_json),
+            keys_only=False,
+        )
+    )
+    assert rc == 0
+    payload = json.loads(out_json.read_text())
+    assert payload == {"alpha": [[1, 2]], "zeta": [2.0]}
+
+
+def test_cmd_compare_h5_prints_failures_and_show_all(monkeypatch, tmp_path: Path, capsys) -> None:
+    results = [
+        SimpleNamespace(ok=True, key="ok_key", max_abs=0.0, max_rel=0.0),
+        SimpleNamespace(ok=False, key="bad_key", max_abs=1.0e-3, max_rel=2.0e-2),
+    ]
+    captured: dict[str, object] = {}
+
+    def _fake_compare(**kwargs):
+        captured.update(kwargs)
+        return results
+
+    monkeypatch.setattr("sfincs_jax.compare.compare_sfincs_outputs", _fake_compare)
+
+    tolerances = tmp_path / "tolerances.json"
+    tolerances.write_text(json.dumps({"bad_key": {"rtol": 0.1}}))
+    rc = cli._cmd_compare_h5(
+        Namespace(
+            a=str(tmp_path / "a.h5"),
+            b=str(tmp_path / "b.h5"),
+            rtol="1e-4",
+            atol="1e-6",
+            tolerances_json=str(tolerances),
+            show_all=False,
+        )
+    )
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "FAIL bad_key" in out
+    assert captured["tolerances"] == {"bad_key": {"rtol": 0.1}}
+
+    rc = cli._cmd_compare_h5(
+        Namespace(
+            a=str(tmp_path / "a.h5"),
+            b=str(tmp_path / "b.h5"),
+            rtol="1e-4",
+            atol="1e-6",
+            tolerances_json=None,
+            show_all=True,
+        )
+    )
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "OK ok_key" in out
+    assert "FAIL bad_key" in out
+
+
+def test_auto_cores_for_args_handles_no_or_unreadable_input(monkeypatch) -> None:
+    monkeypatch.setattr(cli.os, "cpu_count", lambda: 16)
+
+    assert cli._auto_cores_for_args(Namespace(func=None, input=None)) == 3
+    assert cli._auto_cores_for_args(Namespace(func=lambda: None, input="/does/not/exist")) == 3
+
+
+def test_normalize_default_argv_edge_cases() -> None:
+    assert cli._normalize_default_argv([]) == []
+    assert cli._normalize_default_argv(["--help"]) == ["--help"]
+    assert cli._normalize_default_argv(["--cores=4", "input.namelist"]) == [
+        "--cores=4",
+        "write-output",
+        "--input",
+        "input.namelist",
+    ]
+    assert cli._normalize_default_argv(["plot-output", "--input-h5", "out.h5"]) == [
+        "plot-output",
+        "--input-h5",
+        "out.h5",
+    ]
+
+
+def test_postprocess_upstream_cli_strips_separator_and_forwards_flags(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_run_upstream_util(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr("sfincs_jax.workflows.scans.run_upstream_util", _fake_run_upstream_util)
+
+    rc = cli.main(
+        [
+            "postprocess-upstream",
+            "--case-dir",
+            str(tmp_path / "case"),
+            "--util",
+            "sfincsScanPlot_1",
+            "--utils-dir",
+            str(tmp_path / "utils"),
+            "--",
+            "pdf",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["util"] == "sfincsScanPlot_1"
+    assert captured["case_dir"] == Path(tmp_path / "case")
+    assert captured["args"] == ["pdf"]
+    assert captured["utils_dir"] == Path(tmp_path / "utils")
+    assert captured["noninteractive"] is True

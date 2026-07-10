@@ -1,6 +1,15 @@
 Usage
 =====
 
+.. note::
+
+   For RHSMode=1/2/3 cases the recommended entry points are the canonical
+   drivers (``sfincs_jax.run.run_profile`` and the transport-matrix runners)
+   shown in the quickstart on :doc:`index` and in :doc:`examples`. This page
+   documents the full API surface, including the retained legacy pipeline
+   modules that keep ownership of the deferred cases (``Phi1``, tangential
+   magnetic drifts, constraint schemes 3/4, mapped speed grids, ``export_f``).
+
 Parsing an input file
 ---------------------
 
@@ -16,7 +25,7 @@ Building v3 grids and geometry
 
 .. code-block:: python
 
-   from sfincs_jax.v3 import grids_from_namelist, geometry_from_namelist
+   from sfincs_jax.discretization.v3 import grids_from_namelist, geometry_from_namelist
 
    grids = grids_from_namelist(nml)
    geom = geometry_from_namelist(nml=nml, grids=grids)
@@ -46,7 +55,7 @@ Collisionless v3 operator slice (streaming + mirror):
    import jax.numpy as jnp
    import numpy as np
 
-   from sfincs_jax.collisionless import CollisionlessV3Operator, apply_collisionless_v3
+   from sfincs_jax.operators.profile_collisionless import CollisionlessV3Operator, apply_collisionless_v3
 
    species = nml.group("speciesParameters")
    t_hats = jnp.asarray(np.atleast_1d(np.asarray(species["THATS"], dtype=float)))
@@ -73,7 +82,7 @@ Pitch-angle scattering collisions (``collisionOperator = 1`` without Phi1):
 
 .. code-block:: python
 
-   from sfincs_jax.collisions import make_pitch_angle_scattering_v3_operator, apply_pitch_angle_scattering_v3
+   from sfincs_jax.physics.collisions import make_pitch_angle_scattering_v3_operator, apply_pitch_angle_scattering_v3
 
    z_s = jnp.asarray(np.atleast_1d(np.asarray(species["ZS"], dtype=float)))
    n_hats = jnp.asarray(np.atleast_1d(np.asarray(species["NHATS"], dtype=float)))
@@ -152,7 +161,7 @@ Advanced linear-state export
 .. note::
 
    The matrix-free solve path is parity-tested on a growing subset of v3 options.
-   In particular, VMEC ``geometryScheme=5`` is now supported for the parity-tested tiny PAS case
+   In particular, VMEC ``geometryScheme=5`` is supported for the parity-tested tiny PAS case
    (see ``tests/ref/pas_1species_PAS_noEr_tiny_scheme5.input.namelist``).
 
 .. note::
@@ -171,61 +180,24 @@ Only force a solver when reproducing a benchmark, debugging a path choice, or
 running an expert study where the output ``linearSolver*`` diagnostics and
 ``--solver-trace`` sidecar will be inspected.
 
-The currently supported RHSMode=1 overrides are ``incremental``, ``dense``,
-``sparse_host``, ``sparse_host_safe``, ``sparse_pc_gmres``,
-``xblock_sparse_pc_gmres``, ``fortran_reduced_pc_gmres``,
-``structured_csr``, ``host_structured_csr``, ``structured_full_csr``,
-``host_full_csr``, ``sparse_lsmr``, and
-``petsc_compat``. Transport matrix overrides include ``bicgstab``,
-``batched``, ``incremental``, and ``dense``. These names are intentionally
-advanced API: scripts intended for general users should omit them and rely on
-``auto``.
-
-.. code-block:: bash
-
-   sfincs_jax write-output \
-     --input /path/to/input.namelist \
-     --out sfincsOutput.h5 \
-     --solve-method sparse_host_safe \
-     --solver-trace solver_trace.json
-
-   sfincs_jax write-output \
-     --input /path/to/input.namelist \
-     --out sfincsOutput.h5 \
-     --solve-method xblock_sparse_pc_gmres \
-     --solver-trace solver_trace.json
-
-The sparse-host lane is intentionally explicit rather than the default
-differentiable path. It is appropriate for CLI/Python production solves that do
-not require end-to-end autodiff, but it is not a universal default. The
-``sparse_host_safe`` mode first tries host sparse LU; if that factorization
-exposes a singular/gauge-sensitive constrained-PAS system, it falls back to a
-PETSc-compatible minimum-norm branch and labels that branch explicitly. The
-diagnostic ``sparse_lsmr`` lane can probe the same minimum-norm branch directly,
-but use it for research triage only unless ``linearSolverAccepted`` is true in
-the output and the acceptance criterion is the one intended for that study.
-The explicit ``xblock_sparse_pc_gmres`` lane targets nondifferentiable full-FP
-RHSMode=1 systems where compact per-x/TZ host preconditioning is preferable to a
-global sparse-pattern probe. The explicit ``fortran_reduced_pc_gmres`` lane
-targets large nondifferentiable full-FP ``constraintScheme=1`` systems without
-``Phi1``. It builds a simplified global preconditioner matrix analogous to the
-SFINCS Fortran v3 preconditioner operator, then checks convergence against the
-full SFINCS-JAX operator true residual. The default ``auto`` policy can select
-this route for eligible large systems, so ordinary CLI users do not need to pass
-the method name. The
-production benchmark manifest now enforces at least ``25 x 51 x 4 x 100``
-(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``33 x 1 x 12 x 140`` for
-tokamak cases; RHSMode=1 PAS/no-``E_r`` tokamak rows use
-``89 x 1 x 24 x 300``. The manifest also records a ``10 s`` minimum
-SFINCS Fortran v3 timing target for public production rows. Earlier
-``17 x 21 x 5 x 12`` finite-beta/profile-current
-timings were lower-resolution bring-up checks for this sparse-host lane, not
-public production baselines.
+Supported RHSMode=1 overrides on the retained legacy pipeline are
+``incremental``, ``dense``, and ``petsc_compat``; the transport-matrix
+overrides are ``bicgstab``, ``batched``, ``incremental``, and ``dense``. The
+former explicit sparse-direct/CSR-assembly lanes (``sparse_host``,
+``sparse_pc_gmres``, ``xblock_sparse_pc_gmres``, ``fortran_reduced_pc_gmres``,
+``structured_full_csr``, ``sparse_lsmr``, and their aliases) were deleted with
+the legacy sparse solver families: the canonical three-tier ``auto`` policy in
+``sfincs_jax.solve`` owns the supported surface, and the retained legacy
+fallback uses its matrix-free Krylov policy with the dense/PAS/collision
+preconditioner families plus the SciPy rescue. Requesting a removed method
+raises ``NotImplementedError`` naming the removal. These names are
+intentionally advanced API: scripts intended for general users should omit
+them and rely on ``auto``.
 
 Parallel CLI controls
 ---------------------
 
-The executable path now exposes the main parallel runtime controls directly, so
+The executable path exposes the main parallel runtime controls directly, so
 you do not need to rely on undocumented shell environment setup for common
 one-node and multi-host runs.
 
@@ -234,10 +206,10 @@ one-node and multi-host runs.
    # Multi-core CPU host devices + auto sharding
    sfincs_jax --cores 8 --shard-axis auto /path/to/input.namelist
 
-   # Independent RHS transport parallelism
+   # RHSMode=2/3 transport-matrix run (canonical stack; all whichRHS drives
+   # are solved in one shared multi-RHS solve)
    sfincs_jax transport-matrix-v3 \
-     --input /path/to/input.namelist \
-     --transport-workers 4
+     --input /path/to/input.namelist
 
    # High-nu publication pilot with one transport RHS worker per visible GPU
    CUDA_VISIBLE_DEVICES=0,1 \
@@ -259,12 +231,10 @@ one-node and multi-host runs.
      --distributed-gmres auto \
      --distributed-krylov auto
 
-   # Production multi-GPU throughput path: one transport worker per GPU
-   CUDA_VISIBLE_DEVICES=0,1 \
+   # RHSMode=2/3 transport-matrix run on a selected GPU
+   CUDA_VISIBLE_DEVICES=0 \
    sfincs_jax transport-matrix-v3 \
-     --input /path/to/input.namelist \
-     --transport-workers 2 \
-     --transport-parallel-backend gpu
+     --input /path/to/input.namelist
 
    # Multi-host JAX bootstrap for sharded solves
    sfincs_jax write-output \
@@ -279,7 +249,9 @@ Relevant CLI flags:
 
 - ``--cores``: request multiple host CPU devices before JAX loads.
 - ``--transport-workers``: run independent ``whichRHS`` solves in parallel
-  worker processes.
+  worker processes on the legacy RHSMode=2/3 output path (scan/export_f
+  workflows); the canonical ``transport-matrix-v3`` driver solves all drives
+  in one shared multi-RHS solve.
 - ``--shard-axis {auto,off,theta,zeta,x,flat}``: choose the single-solve sharding
   mode for the executable path.
 - ``--distributed-gmres`` and ``--distributed-krylov``: control distributed
@@ -297,7 +269,7 @@ For actual scaling measurements, prefer the benchmark scripts in
 ``examples/performance`` over ad hoc shell timing. They handle warmup, backend
 selection, cache reuse, and output JSON/figure generation consistently.
 
-At verbosity level ``-v`` or higher, the CLI now prints the active parallel
+At verbosity level ``-v`` or higher, the CLI prints the active parallel
 runtime summary (requested cores, host-device count, shard axis, transport
 worker mode, distributed Krylov settings, and multi-host bootstrap fields).
 This is the supported way to verify what the executable is actually doing on a
@@ -318,30 +290,15 @@ performance without changing the input file:
   - ``1``/``true``: always enable.
   - ``0``/``false``: always disable.
 
-- ``SFINCS_JAX_RHSMODE1_SOLVE_METHOD``: choose the RHSMode=1 linear solve backend:
+- ``SFINCS_JAX_RHSMODE1_SOLVE_METHOD``: choose the retained legacy RHSMode=1
+  linear solve backend:
 
-  - ``auto`` (default): choose the measured policy for the input/backend. After
-    the Zenodo QA/QH negative gate, public ``auto`` does not try the no-probe
-    structured full-CSR host lane by default; it may choose sparse-PC, dense,
-    the Fortran-reduced sparse-PC GMRES host route, BiCGStab, or matrix-free
-    GMRES according to the guarded runtime/memory/parity policies. Expert
-    benchmark runs can opt into the structured candidate with
-    ``SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO=1`` or force it with
-    ``--solve-method structured_csr``.
-  - ``fortran_reduced_pc_gmres``: force the simplified-global-preconditioner
-    sparse-PC GMRES route used by the large RHSMode=1 full-FP host policy. This
-    path is non-differentiable but keeps full-operator true-residual acceptance.
-    For large direct-tail active systems, the default structured-PC order is
-    ``active_fortran_v3_reduced_native_stack`` first and
-    ``active_fortran_v3_reduced_lu`` second. The native-stack candidate must
-    pass a true-residual preflight; if it fails, active LU remains the robust
-    high-memory fallback. Advanced users can override this with
-    ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER=auto``,
-    ``active_fortran_v3_reduced_native_stack``, or
-    ``active_fortran_v3_reduced_lu``.
-  - ``structured_csr`` / ``host_structured_csr``: force the no-probe full-CSR
-    host lane for supported RHSMode=1 systems. This is non-differentiable and
-    fails closed if the case is unsupported or exceeds the CSR memory cap.
+  - ``auto`` (default): the measured matrix-free policy for the input/backend.
+    It may choose dense, BiCGStab, or matrix-free GMRES with the retained
+    preconditioner families according to the guarded runtime/memory/parity
+    policies. The former sparse-PC/CSR-assembly host lanes were deleted with
+    the legacy sparse solver families; the canonical three-tier ``auto`` policy
+    in ``sfincs_jax.solve`` owns the supported surface.
   - ``bicgstab``: force BiCGStab for a low-memory Krylov solve (with GMRES fallback on stagnation).
   - ``dense``: assemble the dense operator from matvecs and solve directly (fast for tiny fixtures,
     but scales poorly).
@@ -357,107 +314,6 @@ performance without changing the input file:
 
 - ``SFINCS_JAX_RHSMODE1_GMRES_SMALL_MAX``: force GMRES for RHSMode=1 when the total
   system size is below this threshold (default: ``600``). Set to ``0`` to disable.
-
-- ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC``: enable or disable the CPU-only
-  3D full-FP sparse-PC GMRES auto lane. The default is ``auto``. Set to ``0`` to
-  force the older dense/Krylov policy, or ``1`` to remove the lower active-size
-  floor while keeping the other safety checks.
-
-- ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN`` /
-  ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MAX``: active-DOF bounds for the audited
-  CPU 3D full-FP sparse-PC GMRES auto lane. Defaults are ``300`` and ``20000``.
-
-- ``SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO``: opt into the automatic no-probe
-  structured full-CSR host candidate for eligible non-differentiable 3D full-FP
-  RHSMode=1 output benchmarks. The default is disabled after the Zenodo QA/QH
-  negative gate. Set to ``1`` only when reproducing a structured-CSR benchmark;
-  unsupported multi-ion/finite-beta cases and over-budget cases still fail
-  closed or fall back through the guarded policy ladder.
-
-- ``SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MIN_SIZE`` /
-  ``SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MAX_SIZE`` /
-  ``SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MIN_NXI``: active-size and pitch-grid
-  bounds for that automatic structured full-CSR lane. Defaults are ``10000``,
-  no upper size cap, and ``12``.
-
-- ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_AUTO``: enable the automatic
-  Fortran-reduced sparse-PC GMRES host route for eligible non-differentiable
-  RHSMode=1 full-FP, no-``Phi1``, ``constraintScheme=1`` systems. The default is
-  enabled. Set to ``0``/``false`` to force the older policy ladder.
-
-- ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_AUTO_MIN_SIZE``: minimum total
-  system size before the automatic Fortran-reduced route is considered
-  (default: ``10000``).
-
-- ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC`` and
-  ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC``: enable or disable the
-  GPU/CUDA tokamak full-FP sparse-PC GMRES auto lanes for the measured
-  production-floor ``N_zeta=1`` windows. Defaults are ``auto``. Set to ``0`` to
-  force the older matrix-free policy, or ``1`` to allow CPU as well while keeping
-  the other safety checks.
-
-- ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC_MIN`` /
-  ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC_MAX`` and
-  ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC_MIN`` /
-  ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC_MAX``: active-DOF bounds for
-  those GPU tokamak full-FP sparse-PC GMRES auto lanes. Defaults are ``10000``
-  and ``60000``.
-
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_INITIAL_SEED``: opt-in diagnostic for
-  explicit ``xblock_sparse_pc_gmres``. Set to ``1`` to test an x-block
-  preconditioner-derived initial guess; the guess is used only when it lowers
-  the true residual. It is off by default because current production-floor QI
-  probes reject it and need a stronger global/coarse correction instead.
-
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_RIGHT_PC_MAX``: active-size cap for the default
-  right-preconditioned 3D full-FP x-block sparse-PC lane. The default is
-  ``45000`` active unknowns, which keeps the checked scale-0.50 QI window on the
-  faster right-PC path while avoiding the seed-dependent right-PC slow mode seen
-  at scale ``0.55``. Explicit ``SFINCS_JAX_GMRES_PRECONDITION_SIDE=left`` or
-  ``right`` still takes precedence.
-
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS``: opt-in matrix-free
-  post-Krylov correction for explicit ``xblock_sparse_pc_gmres``. Set to a small
-  integer, for example ``2`` or ``4``, to test residual-polishing steps that do
-  not materialize the full sparse matrix. Leave it off for production unless the
-  resulting solver trace shows a lower true residual without runtime regression.
-
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE``: opt-in multidirectional
-  post-Krylov coarse correction for explicit ``xblock_sparse_pc_gmres``. Set to
-  ``1`` to test a small matrix-free least-squares correction over residual,
-  flux-surface-average, and source/constraint directions. Related diagnostic
-  controls include ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_STEPS`` and
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_MAX_DIRECTIONS``.
-
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION``: opt-in
-  post-Krylov residual-equation correction for explicit
-  ``xblock_sparse_pc_gmres``. This is the device-oriented replacement for
-  whole-vector host post-processing: it solves a bounded JAX least-squares
-  problem over the final true residual, optional cached QI ``(U, A U)`` coarse
-  columns, and fresh residual-derived physics directions. Related diagnostic
-  controls include
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_MAX_DIRECTIONS``,
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_QI_BASIS``,
-  and ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_RCOND``.
-
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE``: opt-in pre-Krylov seed
-  correction for explicit ``xblock_sparse_pc_gmres``. Set to ``1`` to apply the
-  same bounded coarse correction basis to a side-probe or supplied initial state
-  before the full Krylov solve. Related diagnostic controls include
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS`` and
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_FSAVG_LMAX``. This remains off by
-  default for the differentiable/device-QI lane until the GPU hard-seed gate
-  passes.
-
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK``: non-autodiff production
-  fallback for large RHSMode=1 QI-like systems when an explicit JAX-native
-  x-block Krylov method is requested. The default ``auto`` mode rewrites
-  qualifying large ConstraintScheme=1 full-FP/QI requests to the host x-block
-  auto policy before JAX factor arrays are built, preserving the measured
-  side-probe seed plus host ``lgmres`` rescue. Set to ``0`` to force the
-  experimental device-Krylov lane, or ``force``/``host`` to use the host policy
-  below the automatic active-size floor. Solver metadata records that this is a
-  non-autodiff fallback; it is not an end-to-end differentiable device-QI path.
 
 - ``SFINCS_JAX_RHSMODE1_PRECONDITIONER`` (GMRES only): optional RHSMode=1 preconditioning.
 
@@ -644,16 +500,8 @@ performance without changing the input file:
     source/constraint tail rows with kinetic moment test directions. It reduces
     small-fixture tail residuals. Optional kinetic residual-error and RHS-drive
     residual-correction columns can be enabled for research probes, but the
-    latest bounded all-RHS promotion gate still failed, so it is not an
+    bounded all-RHS promotion gate still failed, so it is not an
     ``auto`` default.
-  - ``fp_fortran_reduced_lu``/``fp_petsc_like_lu``/``fp_reduced_pmat_lu``:
-    PETSc-like FP transport preconditioner for RHSMode=2/3. The true operator
-    remains matrix-free, while a separate Fortran-reduced ``Pmat`` is
-    materialized and factored once, then reused across the transport RHS
-    columns. This is the strongest bounded residual-clean route today and is
-    now the default ``auto`` candidate for eligible non-Phi1 full-FP transport
-    cases. Set ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO=0`` to disable
-    it for a benchmark campaign.
   - ``collision``: collision-diagonal preconditioner (PAS/FP + identity shift).
   - ``0``/``none``: disable.
 
@@ -734,23 +582,8 @@ performance without changing the input file:
   fixture residual gate but did not pass the bounded ``13 x 17 x 30 x 4``
   all-RHS promotion run.
 
-- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO``: controls whether
-  ``auto`` tries the global Fortran-reduced ``Pmat`` factor route for
-  RHSMode=2/3 FP transport. It is enabled by default for eligible non-Phi1
-  full-FP transport cases; set it to ``0``/``false``/``no``/``off`` to disable.
-  ``_AUTO_MIN`` controls the auto-size floor. ``_PRECONDITIONER_X``,
-  ``_PRECONDITIONER_XI``,
-  ``_PRECONDITIONER_SPECIES``, and ``_PRECONDITIONER_X_MIN_L`` control the
-  Fortran-style kinetic reduction. ``_KEEPS_THETA_ZETA`` defaults to ``1``,
-  matching Fortran v3 ``preconditioner_theta=0`` and
-  ``preconditioner_zeta=0``; setting it to ``0`` is only an angular-drop
-  diagnostic. ``_FACTOR``, ``_FACTOR_DTYPE``, ``_FACTOR_MAX_MB``, and
-  ``_SHIFT`` control factor kind, precision, memory guard, and diagonal shift.
-
-  ``fp_tzfft_line``, ``fp_tzfft_line_schur``, ``fp_local_geom_line``, and
-  ``fp_structured_fblock_lu``, ``fp_xblock_tz_lu``, and
-  ``fp_xblock_tz_lu_schur``, and ``fp_fortran_reduced_lu`` are applied as left
-  preconditioners. If
+  ``fp_tzfft_line``, ``fp_tzfft_line_schur``, and ``fp_local_geom_line`` are
+  applied as left preconditioners. If
   ``SFINCS_JAX_TRANSPORT_PRECONDITION_SIDE=right`` is set together with any of
   these candidates, sfincs_jax overrides the side to ``left`` before the Krylov
   solve; this avoids backend-dependent transpose failures and preserves the
@@ -862,10 +695,10 @@ performance without changing the input file:
 
 - ``SFINCS_JAX_STATE_IN``/``SFINCS_JAX_STATE_OUT``: path for reading/writing Krylov
   recycle states (used for scan warm-starting and multi-RHS reuse). RHSMode=1 states
-  now store a short history of prior solutions for recycling.
+  store a short history of prior solutions for recycling.
 
 - ``SFINCS_JAX_SCAN_RECYCLE``: enable automatic scan-level Krylov recycling in
-  :func:`sfincs_jax.scans.run_er_scan` by wiring ``SFINCS_JAX_STATE_IN/OUT`` between
+  :func:`sfincs_jax.workflows.scans.run_er_scan` by wiring ``SFINCS_JAX_STATE_IN/OUT`` between
   adjacent scan points (default: disabled).
 
 - ``SFINCS_JAX_FBLOCK_CACHE``: reuse geometry- and physics-dependent operator blocks
@@ -954,10 +787,10 @@ performance without changing the input file:
 - ``SFINCS_JAX_OUTPUT_CACHE_DIR``: override the output cache directory
   (default: ``~/.cache/sfincs_jax/output_cache``).
 
-- ``SFINCS_JAX_TRANSPORT_RECYCLE_K``: recycle up to ``k`` previous Krylov solution vectors across
+- ``SFINCS_JAX_TRANSPORT_RECYCLE_K``: recycle up to ``k`` Krylov solution vectors across
   successive ``whichRHS`` solves in transport-matrix runs. Set to ``0`` to disable.
 
-- ``SFINCS_JAX_RHSMODE1_RECYCLE_K``: recycle up to ``k`` previous RHSMode=1 solution vectors
+- ``SFINCS_JAX_RHSMODE1_RECYCLE_K``: recycle up to ``k`` RHSMode=1 solution vectors
   (via least-squares deflation) when ``SFINCS_JAX_STATE_IN`` is provided. Set to ``0`` to
   disable (default: ``4``).
 
@@ -982,7 +815,7 @@ performance without changing the input file:
   when GMRES stagnates. This is only applied when the active system size is below the
   specified threshold (default: ``400``; see the FP-specific override below).
 - ``SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF``: for small full FP systems (``collisionOperator=0``),
-  `sfincs_jax` now **defaults to a direct dense solve** instead of Krylov to match
+  `sfincs_jax` **defaults to a direct dense solve** instead of Krylov to match
   Fortran and avoid expensive fallback paths. This cutoff controls the active-size
   threshold for that default (default: ``min(SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF,
   8000)``; set ``0`` to disable the initial dense path).
@@ -1052,7 +885,7 @@ performance without changing the input file:
 
 - ``SFINCS_JAX_PHI1_PRECOND_KIND``: Newton–Krylov preconditioner for includePhi1 solves
   (active when ``SFINCS_JAX_PHI1_USE_PRECONDITIONER`` is enabled and frozen linearization is used;
-  frozen linearization is now opt‑in via ``SFINCS_JAX_PHI1_USE_FROZEN_LINEARIZATION``).
+  frozen linearization is opt-in via ``SFINCS_JAX_PHI1_USE_FROZEN_LINEARIZATION``).
 
   - ``collision`` (default for includePhi1): collision-diagonal preconditioner.
   - ``block``/``block_jacobi``: RHSMode=1 block-Jacobi preconditioner (stronger).
@@ -1134,8 +967,8 @@ performance without changing the input file:
   the old ``pas_schur -> xblock_tz`` fallback ladder.
 - ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL``: solve tolerance for bounded
   one-GPU tokamak PAS+Er runs that use the tight unpreconditioned GMRES route
-  (default: ``1e-8``; set ``0``/``false`` to disable). The legacy
-  ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL`` name is still accepted.
+  (default: ``1e-8``; set ``0``/``false`` to disable). The compatibility alias
+  ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL`` is accepted.
 - ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MIN`` /
   ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX``: active-size window
   for bounded one-GPU tokamak PAS+Er auto-promotion to ``xblock_tz`` (defaults:
@@ -1415,6 +1248,56 @@ For job arrays, slice the scan values with ``--index`` and ``--stride``:
      --min -0.1 --max 0.1 --n 401 \
      --index ${SLURM_ARRAY_TASK_ID} \
      --stride 64
+
+Solving the ambipolar root directly
+-----------------------------------
+
+For ``RHSMode=1`` inputs, the ``ambipolar`` command evaluates radial-current
+outputs in process and applies a bracketed Brent solve:
+
+.. code-block:: bash
+
+   sfincs_jax ambipolar \
+     --input /path/to/input.namelist \
+     --out-dir /path/to/ambipolar_run \
+     --er-min -0.1 --er-max 0.1 --er-initial 0.0
+
+The output directory contains one subdirectory per :math:`E_r` evaluation,
+the corresponding ``sfincsOutput.h5`` files, solver-trace JSON sidecars, and
+``ambipolar_result.json``.  The summary records the selected solver path,
+preconditioner, residual norm, residual target, setup/solve/elapsed time,
+active size, and whether the scoped geometry/output cache was used.  The cache
+is enabled by default across evaluations with the same input shape; pass
+``--no-output-cache`` when debugging raw setup cost.  The direct driver also
+keeps a private, shape-checked Krylov state file across evaluations so nearby
+electric-field solves can warm start and recycle a small basis.  Pass
+``--no-solver-state`` when comparing against completely cold solves.  The same
+fixed-shape signature is used internally for symbolic RHSMode=1 field-split
+ordering caches; numerical matrices and factors are still rebuilt unless a
+solver path explicitly proves they are safe to reuse.
+
+Python workflows can also call the derivative-assisted root solvers directly.
+The derivative provider can be a finite-difference gate today or an exact
+implicit/adjoint derivative when that Lane-4 path is enabled:
+
+.. code-block:: python
+
+   from sfincs_jax.problems.ambipolar import (
+       finite_difference_radial_current_derivative,
+       safeguarded_newton_ambipolar_root,
+   )
+
+   result = safeguarded_newton_ambipolar_root(
+       evaluate_radial_current,
+       lambda er: finite_difference_radial_current_derivative(
+           evaluate_radial_current,
+           er=er,
+           step=1.0e-4,
+       ),
+       er_min=-0.1,
+       er_max=0.1,
+       er_initial=0.0,
+   )
 
 Running upstream postprocessing scripts (utils/)
 ------------------------------------------------

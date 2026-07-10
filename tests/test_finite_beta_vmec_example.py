@@ -278,6 +278,8 @@ def test_qs_paper_redl_comparison_parses_surfaces_and_names_dirs() -> None:
     assert claim_args.require_same_resolution is True
     custom_fortran_args = mod._build_parser().parse_args(["--fortran-case-root", "/tmp/fortran_lowres"])
     assert custom_fortran_args.fortran_case_root == Path("/tmp/fortran_lowres")
+    from_summary_args = mod._build_parser().parse_args(["--from-summary-json", "/tmp/summary.json"])
+    assert from_summary_args.from_summary_json == Path("/tmp/summary.json")
 
 
 def test_qs_paper_redl_comparison_forwards_verbose_to_sfincs_writer(tmp_path, monkeypatch) -> None:
@@ -495,6 +497,46 @@ def test_qs_paper_redl_comparison_plots_synthetic_payload(tmp_path) -> None:
     assert (tmp_path / "qs_redl.pdf").exists()
     assert (tmp_path / "qs_redl.png").stat().st_size > 10_000
     assert (tmp_path / "qs_redl.pdf").stat().st_size > 1_000
+
+
+def test_qs_paper_redl_comparison_regenerates_plot_from_summary_json(tmp_path) -> None:
+    mod = _load_qs_paper_redl_module()
+    payload = {
+        "case_title": "Synthetic QH benchmark",
+        "sfincs_resolution_label": "13x13x21x5",
+        "resolution_comparison": {"same_resolution_on_compared_surfaces": True},
+        "redl": {"s": [0.45, 0.5, 0.55], "jdotb_si": [-3.0e6, -2.6e6, -2.4e6]},
+        "sfincs_fortran_v3": [{"status": "ok", "s": 0.5, "jdotb_si": -2.55e6}],
+        "sfincs_jax": [{"status": "ok", "s": 0.5, "jdotb_si": -2.58e6}],
+        "metrics": {
+            "requested_points": 1,
+            "completed_points": 1,
+            "max_jax_relative_difference_vs_redl": 0.02,
+            "max_jax_relative_difference_vs_fortran": 0.01,
+        },
+        "performance": {
+            "runtime_total_s": {"sfincs_jax": 1.5, "sfincs_fortran_v3": 2.0},
+            "memory_peak_mb": {"sfincs_jax": 20.0, "sfincs_fortran_v3": 30.0},
+        },
+    }
+    summary = tmp_path / "summary.json"
+    summary.write_text(json.dumps(payload), encoding="utf-8")
+
+    rc = mod.main(
+        [
+            "--from-summary-json",
+            str(summary),
+            "--fig-dir",
+            str(tmp_path / "figures"),
+            "--stem",
+            "rerendered",
+        ]
+    )
+
+    assert rc == 0
+    assert (tmp_path / "figures" / "rerendered.png").stat().st_size > 10_000
+    assert (tmp_path / "figures" / "rerendered.pdf").stat().st_size > 1_000
+    assert json.loads((tmp_path / "figures" / "rerendered.json").read_text(encoding="utf-8")) == payload
 
 
 def test_qs_paper_redl_comparison_errorbars_use_refinement_deltas() -> None:

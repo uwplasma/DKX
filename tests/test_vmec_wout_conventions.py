@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from sfincs_jax.vmec_wout import VmecWout, _set_scale_factor, psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
+from sfincs_jax.geometry import vmec_wout as vmec_wout_module
+from sfincs_jax.geometry.vmec_wout import (
+    VmecWout,
+    _set_scale_factor,
+    gpsipsi_from_wout_file,
+    psi_a_hat_from_wout,
+    read_vmec_wout,
+    vmec_interpolation,
+)
 
 
 def _minimal_wout(*, ns: int = 5) -> VmecWout:
@@ -162,6 +171,83 @@ def test_vmec_ripple_scale_factor_matches_helicity_selection_rules() -> None:
     assert _set_scale_factor(n=2, m=1, helicity_n=2, helicity_l=1, ripple_scale=0.3) == pytest.approx(1.0)
     assert _set_scale_factor(n=2, m=2, helicity_n=2, helicity_l=1, ripple_scale=0.3) == pytest.approx(0.3)
     assert _set_scale_factor(n=0, m=1, helicity_n=2, helicity_l=1, ripple_scale=0.3) == pytest.approx(0.3)
+
+
+def test_gpsipsi_from_wout_file_reconstructs_finite_metric_and_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ns = 5
+    base = _minimal_wout(ns=ns)
+    w = replace(
+        base,
+        nfp=1,
+        ntor=0,
+        xm=np.asarray([0, 1], dtype=np.int32),
+        xn=np.asarray([0, 0], dtype=np.int32),
+        xm_nyq=np.asarray([0, 1], dtype=np.int32),
+        xn_nyq=np.asarray([0, 0], dtype=np.int32),
+        bmnc=np.asarray(
+            [[1.0, 1.0, 1.0, 1.0, 1.0], [0.05, 0.05, 0.05, 0.05, 0.05]],
+            dtype=np.float64,
+        ),
+        rmnc=np.asarray(
+            [[1.5, 1.6, 1.7, 1.8, 1.9], [0.10, 0.12, 0.14, 0.16, 0.18]],
+            dtype=np.float64,
+        ),
+        zmns=np.asarray(
+            [[0.0, 0.0, 0.0, 0.0, 0.0], [0.08, 0.10, 0.12, 0.14, 0.16]],
+            dtype=np.float64,
+        ),
+    )
+    monkeypatch.setattr(vmec_wout_module, "read_vmec_wout", lambda _path: w)
+
+    theta = np.asarray([0.0, np.pi / 2.0, np.pi], dtype=np.float64)
+    zeta = np.asarray([0.0, np.pi], dtype=np.float64)
+    metric = gpsipsi_from_wout_file(
+        path="unused.nc",
+        theta=theta,
+        zeta=zeta,
+        psi_n_wish=0.5,
+        vmec_radial_option=0,
+        min_bmn_to_load=0.02,
+        ripple_scale=0.5,
+        vmec_nyquist_option=1,
+    )
+
+    assert metric.shape == (3, 2)
+    assert np.all(np.isfinite(metric))
+    assert np.all(metric > 0.0)
+
+    with pytest.raises(ValueError, match="VMEC_Nyquist_option"):
+        gpsipsi_from_wout_file(
+            path="unused.nc",
+            theta=theta,
+            zeta=zeta,
+            psi_n_wish=0.5,
+            vmec_radial_option=0,
+            vmec_nyquist_option=99,
+        )
+
+    with pytest.raises(ValueError, match="No VMEC modes"):
+        gpsipsi_from_wout_file(
+            path="unused.nc",
+            theta=theta,
+            zeta=zeta,
+            psi_n_wish=0.5,
+            vmec_radial_option=0,
+            min_bmn_to_load=2.0,
+        )
+
+    zero_b00 = replace(w, bmnc=np.zeros_like(w.bmnc))
+    monkeypatch.setattr(vmec_wout_module, "read_vmec_wout", lambda _path: zero_b00)
+    with pytest.raises(ValueError, match=r"bmnc\(0,0\)"):
+        gpsipsi_from_wout_file(
+            path="unused.nc",
+            theta=theta,
+            zeta=zeta,
+            psi_n_wish=0.5,
+            vmec_radial_option=0,
+        )
 
 
 def test_read_vmec_wout_transposes_radius_mode_tables_and_uses_nc_sibling(tmp_path: Path) -> None:

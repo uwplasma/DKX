@@ -22,7 +22,7 @@ import numpy as np
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-UTILS = REPO_ROOT / "utils"
+UTILS = REPO_ROOT / "examples" / "sfincs_examples" / "utils"
 EXAMPLES = REPO_ROOT / "examples" / "sfincs_examples"
 
 

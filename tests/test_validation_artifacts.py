@@ -7,11 +7,16 @@ import h5py
 import numpy as np
 import pytest
 
-from sfincs_jax.validation_artifacts import (
+import sfincs_jax.validation.artifacts as artifacts
+from sfincs_jax.validation.artifacts import (
     appendix_b_geometry_audit_from_h5,
     autodiff_gradient_error_summary,
+    benchmark_artifact_policy_errors,
     build_fortran_suite_benchmark_summary,
     benchmark_resolution_floor_violations,
+    check_benchmark_artifact_file,
+    check_benchmark_artifact_files,
+    classify_benchmark_artifact_file,
     load_autodiff_sensitivity_summary,
     build_high_collisionality_trend_proxy_summary,
     build_publication_validation_summary,
@@ -22,8 +27,10 @@ from sfincs_jax.validation_artifacts import (
     er_nonzero_model_spread,
     er_zero_field_spread,
     fortran_suite_benchmark_schema_errors,
+    fortran_suite_benchmark_summary_errors,
     fp_pas_l11_separation,
     high_collisionality_trend_summary,
+    index_benchmark_artifact_files,
     load_collisionality_records,
     load_er_sweep_records,
     load_suite_report,
@@ -31,10 +38,21 @@ from sfincs_jax.validation_artifacts import (
     suite_case_metrics,
     suite_report_summary,
 )
+from sfincs_jax.validation.data_fetch import external_data_dir, external_data_version
 
 
 def _artifact_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "examples" / "publication_figures" / "artifacts"
+
+
+def test_external_data_version_and_dir_follow_manifest_and_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(tmp_path / "data"))
+
+    version = external_data_version()
+    path = external_data_dir()
+
+    assert version
+    assert path == tmp_path / "data" / version
 
 
 def _synthetic_suite_rows(n: int = 39) -> list[dict[str, object]]:
@@ -370,3 +388,374 @@ def test_autodiff_sensitivity_summary_records_gradient_and_residual_gates() -> N
     assert payload["cost_scaling"][-1]["centered_finite_difference_solve_count_model"] > payload["cost_scaling"][-1][
         "implicit_solve_count_model"
     ]
+
+
+def test_validation_artifact_small_helper_edges(tmp_path: Path) -> None:
+    assert recommended_high_collisionality_nuprime_grid(
+        [100.0],
+        min_nuprime_for_full_limit=50.0,
+    ) == []
+    with pytest.raises(ValueError, match="positive finite"):
+        recommended_high_collisionality_nuprime_grid([0.0, float("nan")], min_nuprime_for_full_limit=50.0)
+
+    assert artifacts.maxrss_mb(platform="darwin", raw_value=1024 * 1024) == pytest.approx(1.0)
+    assert artifacts.maxrss_mb(platform="linux", raw_value=1024) == pytest.approx(1.0)
+
+    timer = artifacts.PhaseTimer()
+    with pytest.raises(RuntimeError, match="boom"):
+        with timer.phase("failing-phase", step="synthetic"):
+            raise RuntimeError("boom")
+    summary = timer.summary()
+    assert summary["phase_count"] == 1
+    assert summary["phases"][0]["status"] == "error"
+    assert summary["phases"][0]["metadata"] == {"step": "synthetic"}
+
+    ok_timer = artifacts.PhaseTimer()
+    with ok_timer.phase("ok-phase"):
+        pass
+    assert ok_timer.records[0].to_json()["status"] == "ok"
+
+    suite_path = tmp_path / "bad_suite.json"
+    suite_path.write_text(json.dumps({"rows": "not a list"}), encoding="utf-8")
+    with pytest.raises(ValueError, match="list of case rows"):
+        load_suite_report(suite_path)
+
+    autodiff_path = tmp_path / "bad_autodiff.json"
+    autodiff_path.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
+    with pytest.raises(ValueError, match="JSON object"):
+        load_autodiff_sensitivity_summary(autodiff_path)
+    autodiff_path.write_text(json.dumps({"metadata": {"kind": "wrong"}}), encoding="utf-8")
+    with pytest.raises(ValueError, match="metadata.kind"):
+        load_autodiff_sensitivity_summary(autodiff_path)
+
+    with pytest.raises(ValueError, match="gradient_checks"):
+        autodiff_gradient_error_summary({"gradient_checks": object()})
+    summary = autodiff_gradient_error_summary({"gradient_checks": [{"relative_error": "bad"}, "skip"]})
+    assert summary["count"] == 0
+    assert np.isnan(summary["max_relative_error"])
+
+
+def test_validation_artifact_resolution_and_geometry_fail_closed_edges(tmp_path: Path) -> None:
+    rows = [
+        {"case": "tokamak_case", "final_resolution": {"NTHETA": 25, "NZETA": 1, "NX": 4, "NXI": 100}},
+        {"case": "stellarator_missing_resolution"},
+        {"case": "stellarator_bad_resolution", "final_resolution": {"NTHETA": "bad", "NZETA": 51, "NX": 4}},
+    ]
+
+    violations = benchmark_resolution_floor_violations(rows)
+
+    assert violations[0]["case"] == "stellarator_missing_resolution"
+    assert violations[0]["reason"] == "missing_final_resolution"
+    assert violations[1]["case"] == "stellarator_bad_resolution"
+    assert violations[1]["fields"]["NTHETA"]["actual"] is None
+    assert violations[1]["fields"]["NXI"]["actual"] is None
+
+    derivative = artifacts._periodic_central_derivative(
+        np.asarray([1.0, 2.0, 4.0]),
+        np.asarray([0.0, 1.0, 2.0]),
+        axis=0,
+    )
+    np.testing.assert_allclose(derivative, np.asarray([-1.0, 1.5, -0.5]))
+    np.testing.assert_allclose(
+        artifacts._periodic_central_derivative(np.asarray([1.0]), np.asarray([0.0]), axis=0),
+        np.asarray([0.0]),
+    )
+    with pytest.raises(ValueError, match="finite nonzero spacing"):
+        artifacts._periodic_central_derivative(np.asarray([1.0, 2.0]), np.asarray([0.0, 0.0]), axis=0)
+    with pytest.raises(ValueError, match="two-dimensional"):
+        artifacts._theta_zeta_axes((2, 3, 4), n_theta=2, n_zeta=3)
+    with pytest.raises(ValueError, match="theta/zeta sizes"):
+        artifacts._theta_zeta_axes((4, 4), n_theta=2, n_zeta=3)
+
+    missing_h5 = tmp_path / "missing_geometry.h5"
+    with h5py.File(missing_h5, "w") as h5:
+        h5["BHat"] = np.ones((2, 2))
+    with pytest.raises(ValueError, match="missing Appendix-B audit fields"):
+        appendix_b_geometry_audit_from_h5(missing_h5)
+
+    zero_dhat = tmp_path / "zero_dhat.h5"
+    _write_appendix_b_geometry_fixture(zero_dhat)
+    with h5py.File(zero_dhat, "a") as h5:
+        del h5["DHat"]
+        h5["DHat"] = np.zeros((6, 5))
+    with pytest.raises(ValueError, match="zero DHat"):
+        appendix_b_geometry_audit_from_h5(zero_dhat)
+
+
+def test_benchmark_artifact_policy_and_file_classification_fail_closed(tmp_path: Path) -> None:
+    assert benchmark_artifact_policy_errors(["not an object"], source="artifact.json") == [
+        "artifact.json: artifact must be a JSON object"
+    ]
+
+    bad_payload = {
+        "schema_version": True,
+        "kind": "pas_runtime_benchmark",
+        "plan": {
+            "variant_methods": [
+                {"variant": "baseline"},
+                {"variant": "baseline"},
+                "not a mapping",
+            ],
+            "gates": {
+                "default_promotion_required": True,
+                "baseline_elapsed_s": 0.0,
+                "baseline_rss_mb": None,
+                "min_runtime_speedup": 0.5,
+                "min_memory_reduction": "bad",
+            },
+        },
+        "summary": {"all_gates_passed": False},
+        "results": [
+            {
+                "variant": "baseline",
+                "status": "ok",
+                "variant_provenance": "not a mapping",
+                "solver_provenance": {},
+                "phase_metadata": "not a list",
+                "gates": {"stall": {"status": "fail"}},
+            },
+            {
+                "variant": "baseline",
+                "status": "timeout",
+                "variant_provenance": {},
+                "tail_metadata": "not a mapping",
+            },
+            "not a mapping",
+        ],
+    }
+
+    errors = benchmark_artifact_policy_errors(bad_payload, source="bad_pas.json")
+
+    assert any("schema_version must be a number" in error for error in errors)
+    assert any("duplicate variant 'baseline' in plan.variant_methods" in error for error in errors)
+    assert any("plan.gates.baseline_elapsed_s" in error for error in errors)
+    assert any("summary.all_gates_passed" in error for error in errors)
+    assert any("phase_metadata must be a list" in error for error in errors)
+    assert any("gates.residual" in error for error in errors)
+    assert any("tail_metadata must be a JSON object" in error for error in errors)
+    assert any("results[2] must be a JSON object" in error for error in errors)
+    assert any("duplicate variant 'baseline' in results" in error for error in errors)
+
+    missing_errors = check_benchmark_artifact_file(tmp_path / "missing.json")
+    assert "could not read JSON file" in missing_errors[0]
+    malformed = tmp_path / "bad.json"
+    malformed.write_text("{not json", encoding="utf-8")
+    assert "invalid JSON" in check_benchmark_artifact_file(malformed)[0]
+    assert check_benchmark_artifact_files([malformed, tmp_path / "missing_again.json"])
+
+    scalar = tmp_path / "scalar.json"
+    scalar.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
+    scalar_entry = classify_benchmark_artifact_file(scalar)
+    assert scalar_entry.classification == artifacts.ARTIFACT_CLASS_NON_PAS
+    assert scalar_entry.release_blocking is False
+
+    legacy = tmp_path / "legacy.json"
+    legacy.write_text(json.dumps({"schema_version": 1, "kind": "pas_runtime_benchmark"}), encoding="utf-8")
+    legacy_entry = classify_benchmark_artifact_file(legacy)
+    assert legacy_entry.classification == artifacts.ARTIFACT_CLASS_LEGACY
+
+    bad_pas = tmp_path / "bad_pas.json"
+    bad_pas.write_text(json.dumps(bad_payload), encoding="utf-8")
+    bad_entry = classify_benchmark_artifact_file(bad_pas)
+    assert bad_entry.classification == artifacts.ARTIFACT_CLASS_RELEASE_BLOCKING
+    assert bad_entry.release_blocking is True
+
+    missing_entry = classify_benchmark_artifact_file(tmp_path / "missing_classify.json")
+    assert missing_entry.classification == artifacts.ARTIFACT_CLASS_RELEASE_BLOCKING
+    malformed_entry = classify_benchmark_artifact_file(malformed)
+    assert malformed_entry.classification == artifacts.ARTIFACT_CLASS_RELEASE_BLOCKING
+
+    valid_pas = tmp_path / "valid_pas.json"
+    valid_pas.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "kind": "pas_runtime_benchmark",
+                "plan": {"variant_methods": [{"variant": "baseline"}]},
+                "results": [
+                    {
+                        "variant": "baseline",
+                        "status": "ok",
+                        "variant_provenance": {},
+                        "solver_provenance": {},
+                        "phase_metadata": [],
+                        "tail_metadata": {},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert classify_benchmark_artifact_file(valid_pas).classification == artifacts.ARTIFACT_CLASS_SCHEMA_V2
+
+    index = index_benchmark_artifact_files([scalar, legacy, bad_pas])
+    assert index.counts[artifacts.ARTIFACT_CLASS_NON_PAS] == 1
+    assert index.counts[artifacts.ARTIFACT_CLASS_LEGACY] == 1
+    assert index.counts[artifacts.ARTIFACT_CLASS_RELEASE_BLOCKING] == 1
+    assert index.release_blocking == (bad_entry,)
+
+
+def test_fortran_suite_benchmark_summary_release_policy_fail_closed() -> None:
+    assert fortran_suite_benchmark_summary_errors(["not an object"], source="suite.json") == [
+        "suite.json: Fortran suite benchmark summary must be a JSON object"
+    ]
+    assert fortran_suite_benchmark_summary_errors({"metadata": []}) == ["missing field metadata"]
+    assert fortran_suite_benchmark_summary_errors(
+        {
+            "metadata": {
+                "kind": "wrong",
+                "min_fortran_runtime_s": None,
+                "excluded_low_fortran_runtime_cases": "not a list",
+            }
+        }
+    ) == [
+        "field metadata.kind must be 'fortran_v3_suite_benchmark_summary'",
+        "field metadata.min_fortran_runtime_s must be a finite number",
+        "field metadata.excluded_low_fortran_runtime_cases must be a list",
+        "missing field reports",
+    ]
+
+    payload = {
+        "metadata": {
+            "kind": "fortran_v3_suite_benchmark_summary",
+            "min_fortran_runtime_s": 10.0,
+            "reported_case_counts": {"cpu": 2, "gpu": 1},
+            "excluded_low_fortran_runtime_cases": [
+                {"case": "", "fortran_runtime_s": 20.0},
+                "not a row",
+            ],
+        },
+        "reports": {
+            "cpu": {
+                "total_cases": 1,
+                "parity_ok_cases": 0,
+                "strict_mismatch_total": 1,
+                "cold_runtime_ratio_summary": {"count": 0},
+                "active_memory_ratio_summary": {},
+                "warm_or_logged_runtime_source_counts": {"unknown": -1},
+                "fastest_jax_vs_fortran_cases": [
+                    {
+                        "case": "",
+                        "status": "jax_error",
+                        "fortran_runtime_s": 5.0,
+                        "jax_runtime_s_cold": 0.0,
+                        "warm_or_logged_runtime_s": None,
+                        "warm_or_logged_runtime_source": "bad",
+                        "active_jax_memory_mb": 0.0,
+                        "runtime_ratio": 2.0,
+                    },
+                    {
+                        "case": "later",
+                        "status": "parity_ok",
+                        "fortran_runtime_s": 20.0,
+                        "jax_runtime_s_cold": 2.0,
+                        "warm_or_logged_runtime_s": 1.0,
+                        "warm_or_logged_runtime_source": "jax_runtime_s_warm",
+                        "jax_runtime_s_warm": 1.0,
+                        "active_jax_memory_mb": 3.0,
+                        "jax_incremental_max_rss_mb": 4.0,
+                        "runtime_ratio": 1.0,
+                    },
+                ],
+                "slowest_jax_vs_fortran_cases": ["not a row"],
+                "highest_active_jax_memory_cases": [
+                    {
+                        "case": "mem",
+                        "status": "parity_ok",
+                        "fortran_runtime_s": 20.0,
+                        "jax_runtime_s_cold": 2.0,
+                        "warm_or_logged_runtime_s": 1.0,
+                        "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
+                        "jax_logged_elapsed_s": 1.0,
+                        "jax_incremental_max_rss_mb": 4.0,
+                        "active_jax_memory_mb": 4.0,
+                    }
+                ],
+            },
+            "gpu": {"total_cases": 0, "parity_ok_cases": 0, "strict_mismatch_total": 0},
+        },
+        "canonical_rows": {
+            "cpu": [
+                {
+                    "case": "b",
+                    "status": "parity_ok",
+                    "fortran_runtime_s": 20.0,
+                    "jax_runtime_s_cold": 2.0,
+                    "warm_or_logged_runtime_s": 1.0,
+                    "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
+                    "jax_logged_elapsed_s": 1.0,
+                    "active_jax_memory_mb": 4.0,
+                    "jax_incremental_max_rss_mb": 4.0,
+                },
+                {
+                    "case": "b",
+                    "status": "parity_ok",
+                    "fortran_runtime_s": 20.0,
+                    "jax_runtime_s_cold": 2.0,
+                    "warm_or_logged_runtime_s": 1.0,
+                    "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
+                    "jax_logged_elapsed_s": 1.0,
+                    "active_jax_memory_mb": 4.0,
+                    "jax_incremental_max_rss_mb": 4.0,
+                },
+            ],
+            "gpu": "not a list",
+        },
+    }
+
+    errors = fortran_suite_benchmark_summary_errors(payload)
+
+    assert any("excluded_low_fortran_runtime_cases[0].case" in error for error in errors)
+    assert any("excluded_low_fortran_runtime_cases[1] must be a JSON object" in error for error in errors)
+    assert any("total_cases must match metadata.reported_case_counts.cpu" in error for error in errors)
+    assert any("parity_ok_cases must equal total_cases" in error for error in errors)
+    assert any("strict_mismatch_total must be 0" in error for error in errors)
+    assert any("warm_or_logged_runtime_ratio_summary" in error for error in errors)
+    assert any("unknown source" in error for error in errors)
+    assert any("must sum to total_cases" in error for error in errors)
+    assert any("fastest_jax_vs_fortran_cases must be sorted ascending" in error for error in errors)
+    assert any("fortran_runtime_s must be >= 10" in error for error in errors)
+    assert any("warm_or_logged_runtime_source must be one of" in error for error in errors)
+    assert any("active_jax_memory_mb must use" in error for error in errors)
+    assert any("slowest_jax_vs_fortran_cases[0] must be a JSON object" in error for error in errors)
+    assert any("canonical_rows.gpu must be a list" in error for error in errors)
+    assert any("missing field metadata.canonical_case_order" in error for error in errors)
+
+
+def test_validation_artifact_research_and_collisionality_fail_closed_edges() -> None:
+    assert artifacts.research_lane_completion_errors({"schema_version": 1, "lanes": "not a list"}) == [
+        "field lanes must be a non-empty list"
+    ]
+    errors = artifacts.research_lane_completion_errors(
+        {
+            "schema_version": 1,
+            "lanes": [
+                {
+                    "title": "Missing id",
+                    "status": "active",
+                    "before_percent": 10,
+                    "current_percent": 20,
+                    "target_percent": 15,
+                    "evidence": [{"path": "docs/performance_techniques.rst", "claim": "ok"}],
+                    "gates": "not a list",
+                    "next_actions": ["ok"],
+                }
+            ],
+        },
+        repo_root=Path(__file__).resolve().parents[1],
+    )
+    assert "lanes[0].id must be a non-empty string" in errors
+    assert "lanes[0]: current_percent must be <= target_percent" in errors
+    assert "lanes[0]: field gates must be a non-empty list" in errors
+
+    records = [
+        artifacts.CollisionalityRecord("Fokker-Planck", 1.0, np.eye(3)),
+        artifacts.CollisionalityRecord("PAS", 1.0, 2.0 * np.eye(3)),
+    ]
+    nuprime, l11 = artifacts.l11_abs_series(records, label="PAS")
+    np.testing.assert_allclose(nuprime, np.asarray([1.0]))
+    np.testing.assert_allclose(l11, np.asarray([2.0]))
+    with pytest.raises(ValueError, match="n_fit"):
+        collisionality_power_law_slope(records, label="PAS", element=(0, 0), n_fit=1)
+    with pytest.raises(ValueError, match="Need at least 2 records"):
+        collisionality_power_law_slope(records, label="PAS", element=(0, 0), n_fit=2)
