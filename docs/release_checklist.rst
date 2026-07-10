@@ -181,10 +181,8 @@ full-suite solves:
 
    python examples/publication_figures/generate_fortran_suite_benchmark_summary.py
 
-   python -m sfincs_jax.validation.release readme-audit \
-     --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
-     --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas \
-     --min-fortran-runtime-s 10
+   # Canonical-stack README figures (recorded measured values):
+   python tools/benchmarks/readme_figures.py
 
    python examples/publication_figures/generate_w7x_high_nu_performance.py
 

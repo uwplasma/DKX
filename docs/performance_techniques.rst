@@ -9,6 +9,16 @@ Where relevant we reference the upstream SFINCS documentation that defines the
 physics and discretization being accelerated. The primary sources are the
 vendored v3 manual and technical notes in ``docs/upstream`` (see references below).
 
+.. note::
+
+   This page describes the retained **legacy pipeline** (the full CLI solver
+   ladder and its environment-variable tuning). The canonical workflow —
+   ``inputs -> drift_kinetic -> solve -> moments`` with three solver tiers —
+   is documented in :doc:`performance` and needs none of these knobs. Within
+   the legacy structured-CSR lane, physical RHSMode=1 ``host_structured_csr``
+   output defaults to the active projected direct solve; the iterative
+   active-preconditioner variants are benchmark/debug routes.
+
 Baseline model and linear system (v3)
 -------------------------------------
 

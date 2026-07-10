@@ -163,14 +163,14 @@ useful for faster debugging and historical comparison:
 - ``tests/reduced_upstream_examples/suite_report.json``
 - ``tests/reduced_upstream_examples/suite_report_strict.json``
 
-Regenerate the release-facing README table from the tracked CPU/GPU reports:
+Regenerate the legacy-suite per-case table and audit counts from the tracked
+CPU/GPU reports (the root README carries the canonical-stack evidence instead
+of this block, so the ``readme-audit`` splice targets require the audit
+markers; use the summary generator to reproduce the table and figure):
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.release readme-audit \
-     --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
-     --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas \
-     --min-fortran-runtime-s 10
+   python examples/publication_figures/generate_fortran_suite_benchmark_summary.py
 
 To replace the tracked reports, run
 ``python -m sfincs_jax.validation.suite scaled`` with

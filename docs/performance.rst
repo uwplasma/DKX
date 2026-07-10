@@ -13,8 +13,159 @@ For a full, technique-by-technique breakdown (equations, derivations, knobs, and
 implementation notes), see :doc:`performance_techniques`.
 
 
-Release snapshot
-----------------
+Measured head-to-head: canonical stack vs SFINCS Fortran v3
+-----------------------------------------------------------
+
+The canonical-stack benchmark case is ``HSX_PASCollisions_DKESTrajectories``
+(RHSMode=1) at ``Ntheta=25, Nzeta=51, Nxi=100, Nx=5`` — 744,610 unknowns —
+measured on the same development machine (MacBook, Apple M4, ~10 cores, 24 GB)
+for both codes. The Fortran reference is the conda PETSc 3.23 + MUMPS 5.8.2
+build of SFINCS v3; ``sfincs_jax`` uses the tier-1 truncated Legendre block
+elimination (``solvax`` ``block_thomas_truncated_fn``, blocks assembled on the
+fly from the analytic operator coefficients, ``keep_lowest=3`` — exact for
+every RHSMode=1 output).
+
+.. figure:: _static/figures/readme/tier1_hsx_runtime_memory.png
+   :alt: Runtime and peak memory bars for sfincs_jax and SFINCS Fortran v3 on the 744k-unknown HSX PAS case.
+   :align: center
+   :width: 90%
+
+   Measured warm solve time and peak process RSS. Regenerate with
+   ``python tools/benchmarks/readme_figures.py``; rerun the measurement with
+   ``python tools/benchmarks/tier1_hsx_head_to_head.py``.
+
+.. list-table:: Head-to-head (744k unknowns, HSX PAS DKES, RHSMode=1)
+   :header-rows: 1
+
+   * - Configuration
+     - Warm solve [s]
+     - Peak RSS [GB]
+   * - ``sfincs_jax`` MacBook M4 CPU, ``Nxi``-for-``x`` ramp
+     - 27.2
+     - 0.93
+   * - ``sfincs_jax`` MacBook M4 CPU, uniform ``Nxi``
+     - 44.3
+     - 1.16
+   * - ``sfincs_jax`` RTX A4000 GPU
+     - 45.0
+     - 1.88 (0.05 GB VRAM buffers)
+   * - SFINCS Fortran v3, 1 MPI rank
+     - 463.6
+     - 3.98
+   * - SFINCS Fortran v3, 2 MPI ranks (measured floor)
+     - 229.5
+     - 2.86
+
+With the matched ramp discretization this is 17x faster than 1-rank Fortran
+and 8.4x faster than Fortran's best measured parallel floor, at roughly 30% of
+the memory. Ramp-vs-uniform ``Nxi`` differences on the physics outputs are at
+most 0.9% (electrons). GPU time equals M4 CPU time because the Legendre scan
+is serial in ``L`` and the A4000 runs FP64 at 1/32 rate; GPU upside requires
+batching over (species, ``x``, surfaces/``Er``) or fp32 factors with fp64
+refinement. Scope: this is one measured 744k-unknown HSX PAS case; further
+cases are promoted as each vertical slice lands with its own evidence.
+
+Fortran strong-scaling baseline (same case, same machine)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+
+   * - MPI ranks
+     - Solve time [s]
+     - Speedup
+     - Parallel efficiency
+     - Peak RSS [GB]
+   * - 1
+     - 463.6
+     - 1.00
+     - —
+     - 3.98
+   * - 2
+     - 229.5
+     - 2.02
+     - 101%
+     - 2.86
+   * - 4
+     - 240.9
+     - 1.92
+     - 48%
+     - 2.88
+   * - 8
+     - 270.5
+     - 1.71
+     - 21%
+     - 1.61
+
+Fortran/MUMPS saturates at 2 ranks on this machine and degrades beyond
+(performance/efficiency core asymmetry plus MUMPS OpenMP contention), so the
+practical Fortran floor for this case is about ``230 s``.
+
+Memory findings
+~~~~~~~~~~~~~~~
+
+- At the full production resolution of this case
+  (``Ntheta=25, Nzeta=115, Nxi=149, Nx=5``; a 2,512,760-unknown system),
+  **neither** code fits a global sparse factorization on a 24 GB machine:
+  Fortran/MUMPS drove macOS swap to ~46.5 GB during factorization and was
+  killed, and the dense/CSR JAX host paths are size-capped well below it.
+- The truncated Legendre block elimination is the locally viable direct path:
+  its memory is ``O(K m^2)`` with ``m = Ntheta * Nzeta`` (one ~66 MB
+  ``2875^2`` block at production resolution, independent of ``Nxi``). On the
+  744k case the truncated route needs ~0.3 GB where a full-band tier-1 factor
+  would need ~91 GB.
+
+Solver-noise finding
+~~~~~~~~~~~~~~~~~~~~
+
+The direct solve is more converged than the Fortran reference: Fortran's own
+electron ``FSABFlow`` scatters 51% across its 1/2/4/8-rank runs of this case
+(KSP ``rtol=1e-6`` iterative-solver noise), while ``sfincs_jax`` matches the
+closest Fortran run to ``2e-10`` and sits inside Fortran's own spread on every
+compared quantity.
+
+Parity referees
+~~~~~~~~~~~~~~~
+
+.. figure:: _static/figures/readme/canonical_parity.png
+   :alt: Measured parity envelopes of the canonical stack against Fortran and recorded references.
+   :align: center
+   :width: 90%
+
+   Parity envelopes pinned by the CI referee tests
+   (``tests/test_run_rhsmode1.py``, ``tests/test_run_transport.py``):
+   RHSMode=1 output tables at ``8e-14``, tier-1 state vectors vs recorded
+   references at ``1e-11``, RHSMode=2/3 transport matrices vs Fortran golden
+   data at ``6e-13 .. 9e-9``.
+
+Known issues
+~~~~~~~~~~~~
+
+- **Silently wrong tier-2 adjoint on singular FP systems.** Full
+  Fokker-Planck with ``constraintScheme=1`` on the flagship-optimization deck
+  yields a numerically singular system (~5 zero singular values, condition
+  number ~2e36); the tier-2 GCROT adjoint stagnates and the implicit-diff VJP
+  returns a wrong gradient without any error (AD ``-1.7e-3`` vs FD
+  ``+2.8e-5`` on the affected dof). PAS+``Er`` tier-2 gradients on the same
+  chain are exact (``2.9e-6`` vs FD). Fix direction: surface adjoint-solve
+  convergence in ``SolveResult`` and raise/flag when the adjoint residual
+  misses tolerance. A reproducer is tracked.
+- **Ill-conditioned scheme-1 monoenergetic off-diagonal.** The Fortran build
+  itself fails upstream's ``tests.py`` on the ``monoenergetic_geometryScheme1``
+  ``transportMatrix[0,1]`` element only (``+1.62`` vs expected ``-1.08`` at
+  ``solverTolerance=1e-6``; ``+26.3`` at ``1e-12`` — tolerance-unstable, so
+  the element is ill-conditioned in this configuration). Parity tests pin that
+  element to upstream's expected value (``-1.07986``), which the ``sfincs_jax``
+  direct solve reproduces to ``4.2e-6``.
+
+Legacy example-suite snapshot
+-----------------------------
+
+Everything in the remainder of this page describes the retained **legacy
+pipeline** (``sfincs_jax.io.write_sfincs_jax_output_h5``, the full CLI solver
+ladder, and its env-var tuning), which keeps ownership of the cases the
+canonical stack defers. It stays tested, but it is not the canonical
+``inputs -> drift_kinetic -> solve -> moments`` path documented above.
 
 The release artifacts are:
 

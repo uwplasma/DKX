@@ -6,6 +6,12 @@ Validation against reference implementations
 `sfincs_jax` validates outputs and solver behavior against a mature Fortran SFINCS implementation as a
 reference implementation.
 
+.. note::
+
+   The suite evidence on this page audits the retained **legacy pipeline**.
+   The canonical-stack head-to-head runtime/memory evidence and its parity
+   referees live in :doc:`performance`.
+
 The release-facing comparison is the full vendored
 example-suite audit, with production-floor tokamak reruns merged into the frozen
 reference suite:
