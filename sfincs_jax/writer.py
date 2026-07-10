@@ -1,14 +1,15 @@
-"""Canonical ``sfincsOutput`` writer for RHSMode=2/3 transport-matrix runs.
+"""Canonical ``sfincsOutput`` writer for RHSMode=1/2/3 runs.
 
 Fortran counterpart: ``writeHDF5Output.F90`` (dataset names, shapes, and the
 Fortran column-major storage layout) plus the per-``whichRHS`` diagnostic
 writes of ``diagnostics.F90``.  This module is the canonical-stack replacement
-for the RHSMode=2/3 subset of the legacy ``outputs/writer.py`` +
-``outputs/transport.py`` pipeline: it consumes only canonical objects
-(:mod:`sfincs_jax.inputs`, :mod:`sfincs_jax.drift_kinetic`,
-:mod:`sfincs_jax.moments`, :mod:`sfincs_jax.magnetic_geometry`) and writes the
-same datasets the legacy writer emits for these modes.  RHSMode=1 output lands
-in a later vertical slice.
+for the legacy ``outputs/writer.py`` + ``outputs/transport.py`` +
+``outputs/rhsmode1.py`` pipeline for the supported case families: it consumes
+only canonical objects (:mod:`sfincs_jax.inputs`,
+:mod:`sfincs_jax.drift_kinetic`, :mod:`sfincs_jax.moments`,
+:mod:`sfincs_jax.magnetic_geometry`) and writes the same datasets the legacy
+writer emits for these modes.  Deferred families (Phi1, magnetic drifts,
+export_f data arrays) are intentionally absent — the operator defers them.
 
 Layout convention: like the legacy writer (``fortran_layout=True``),
 grid/geometry/normalization fields are stored reversed-transposed (Fortran
@@ -56,7 +57,7 @@ from sfincs_jax.moments import (
 )
 from sfincs_jax.phase_space import Grids
 
-__all__ = ["operator_containers", "write_transport_output"]
+__all__ = ["operator_containers", "write_profile_output", "write_transport_output"]
 
 _I32 = np.int32
 
@@ -472,19 +473,118 @@ def _iteration_fields(
     out["classicalHeatFlux_psiHat"] = classical_hf
 
     # Radial-coordinate flux variants (radialCoordinates.F90 projections).
-    for base in (
-        "particleFlux_vm_psiHat", "heatFlux_vm_psiHat", "momentumFlux_vm_psiHat",
-        "particleFlux_vm0_psiHat", "heatFlux_vm0_psiHat", "momentumFlux_vm0_psiHat",
-        "classicalParticleFlux_psiHat", "classicalHeatFlux_psiHat",
-    ):  # fmt: skip
+    _add_radial_flux_variants(out, radial)
+
+    # Transport matrix is stored transposed (Fortran column-major layout).
+    out["transportMatrix"] = np.asarray(transport_matrix, dtype=np.float64).T
+    out["elapsed time (s)"] = np.asarray(elapsed_times, dtype=np.float64).reshape((n,))
+    return out
+
+
+# Bases expanded to the psiN/rHat/rN radial-coordinate flux variants
+# (radialCoordinates.F90 projections), shared by RHSMode 1 and 2/3.
+_RADIAL_VARIANT_BASES = (
+    "particleFlux_vm_psiHat", "heatFlux_vm_psiHat", "momentumFlux_vm_psiHat",
+    "particleFlux_vm0_psiHat", "heatFlux_vm0_psiHat", "momentumFlux_vm0_psiHat",
+    "classicalParticleFlux_psiHat", "classicalHeatFlux_psiHat",
+)  # fmt: skip
+
+
+def _add_radial_flux_variants(out: Dict[str, np.ndarray], radial: RadialCoordinates) -> None:
+    for base in _RADIAL_VARIANT_BASES:
         arr = out[base]
         out[base.replace("_psiHat", "_psiN")] = arr * radial.d_dpsi_n_to_d_dpsi_hat
         out[base.replace("_psiHat", "_rHat")] = arr * radial.d_dr_hat_to_d_dpsi_hat
         out[base.replace("_psiHat", "_rN")] = arr * radial.d_dr_n_to_d_dpsi_hat
 
-    # Transport matrix is stored transposed (Fortran column-major layout).
-    out["transportMatrix"] = np.asarray(transport_matrix, dtype=np.float64).T
-    out["elapsed time (s)"] = np.asarray(elapsed_times, dtype=np.float64).reshape((n,))
+
+# RHSMode=1 moment-table keys by sfincsOutput.h5 storage layout: (S,T,Z)
+# canonical arrays land as (Z,T,S,1), (S,) as (S,1), (X,S) as (X,S,1).
+_RHSMODE1_ZTSN_KEYS = (
+    "densityPerturbation", "pressurePerturbation", "pressureAnisotropy", "flow",
+    "totalDensity", "totalPressure", "velocityUsingFSADensity",
+    "velocityUsingTotalDensity", "MachUsingFSAThermalSpeed",
+    "particleFluxBeforeSurfaceIntegral_vm", "particleFluxBeforeSurfaceIntegral_vm0",
+    "particleFluxBeforeSurfaceIntegral_vE", "particleFluxBeforeSurfaceIntegral_vE0",
+    "heatFluxBeforeSurfaceIntegral_vm", "heatFluxBeforeSurfaceIntegral_vm0",
+    "heatFluxBeforeSurfaceIntegral_vE", "heatFluxBeforeSurfaceIntegral_vE0",
+    "momentumFluxBeforeSurfaceIntegral_vm", "momentumFluxBeforeSurfaceIntegral_vm0",
+    "momentumFluxBeforeSurfaceIntegral_vE", "momentumFluxBeforeSurfaceIntegral_vE0",
+    "NTVBeforeSurfaceIntegral",
+)  # fmt: skip
+_RHSMODE1_SN_KEYS = (
+    "FSADensityPerturbation", "FSAPressurePerturbation", "FSABFlow",
+    "FSABVelocityUsingFSADensity", "FSABVelocityUsingFSADensityOverB0",
+    "FSABVelocityUsingFSADensityOverRootFSAB2", "NTV",
+    "particleFlux_vm_psiHat", "particleFlux_vm0_psiHat",
+    "heatFlux_vm_psiHat", "heatFlux_vm0_psiHat",
+    "momentumFlux_vm_psiHat", "momentumFlux_vm0_psiHat",
+)  # fmt: skip
+_RHSMODE1_SCALAR_KEYS = ("FSABjHat", "FSABjHatOverB0", "FSABjHatOverRootFSAB2")
+_RHSMODE1_XSN_KEYS = ("FSABFlow_vs_x", "particleFlux_vm_psiHat_vs_x", "heatFlux_vm_psiHat_vs_x")
+
+
+def _rhsmode1_iteration_fields(
+    *,
+    inp: SfincsInput,
+    op: KineticOperator,
+    geom: FluxSurfaceGeometry,
+    radial: RadialCoordinates,
+    gpsipsi: np.ndarray,
+    u_hat: np.ndarray,
+    g_eff: float,
+    i_eff: float,
+    nu_n_eff: float,
+    state_vector: np.ndarray,
+    elapsed_seconds: float,
+) -> Dict[str, np.ndarray]:
+    """RHSMode=1 solution-derived datasets, stored in Fortran-file read order.
+
+    The single iteration axis (``NIterations=1``) is the trailing axis of every
+    per-iteration dataset, matching ``writeHDF5Output.F90``.
+    """
+    import jax.numpy as jnp  # noqa: PLC0415
+
+    layout, vgrid, surface, species = operator_containers(op)
+    x_full = jnp.asarray(state_vector, dtype=jnp.float64)
+    d = dict(
+        rhsmode1_moments(layout, vgrid, surface, species, x_full, delta=op.delta, alpha=op.alpha)
+    )
+
+    # NTV torque (zero for VMEC scheme 5, where v3 does not populate uHat).
+    if inp.geometry.geometry_scheme == 5:
+        kernel = jnp.zeros_like(jnp.asarray(op.b_hat))
+    else:
+        kernel = ntv_kernel(surface, u_hat=u_hat, g_hat=g_eff, i_hat=i_eff, iota=float(geom.iota))
+    ntv_before, ntv_s = ntv_moments(layout, vgrid, surface, species, x_full, kernel=kernel)
+    d["NTVBeforeSurfaceIntegral"] = ntv_before
+    d["NTV"] = ntv_s
+
+    out: Dict[str, np.ndarray] = {}
+    for key in _RHSMODE1_ZTSN_KEYS:
+        out[key] = np.transpose(np.asarray(d[key], dtype=np.float64), (2, 1, 0))[:, :, :, None]
+    for key in _RHSMODE1_SN_KEYS:
+        out[key] = np.asarray(d[key], dtype=np.float64)[:, None]
+    for key in _RHSMODE1_SCALAR_KEYS:
+        out[key] = np.asarray(d[key], dtype=np.float64).reshape((1,))
+    for key in _RHSMODE1_XSN_KEYS:
+        out[key] = np.asarray(d[key], dtype=np.float64)[:, :, None]
+    out["jHat"] = np.transpose(np.asarray(d["jHat"], dtype=np.float64), (1, 0))[:, :, None]
+    if "sources" in d:
+        out["sources"] = np.asarray(d["sources"], dtype=np.float64)[:, :, None]
+
+    # Classical fluxes at the run's actual gradients (classicalTransport.F90).
+    pf, hf = classical_fluxes(
+        use_phi1=False, surface=surface, species=species,
+        gpsipsi=gpsipsi, phi1_hat=np.zeros_like(gpsipsi),
+        alpha=op.alpha, delta=op.delta, nu_n=nu_n_eff,
+        dn_hat_dpsi_hat=op.dn_hat_dpsi_hat, dt_hat_dpsi_hat=op.dt_hat_dpsi_hat,
+    )  # fmt: skip
+    out["classicalParticleFlux_psiHat"] = np.asarray(pf, dtype=np.float64)[:, None]
+    out["classicalHeatFlux_psiHat"] = np.asarray(hf, dtype=np.float64)[:, None]
+
+    _add_radial_flux_variants(out, radial)
+    out["elapsed time (s)"] = np.asarray([elapsed_seconds], dtype=np.float64)
     return out
 
 
@@ -572,6 +672,66 @@ def write_transport_output(
         g_eff=float(base["GHat"]), i_eff=float(base["IHat"]),
         nu_n_eff=float(base["nu_n"]), state_vectors=state_vectors,
         transport_matrix=transport_matrix, elapsed_times=np.asarray(elapsed_times),
+    )  # fmt: skip
+
+    text = inp.raw.source_text if (inp.raw is not None and inp.raw.source_text is not None) else ""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.suffix.lower() in {".nc", ".netcdf"}:
+        _write_netcdf(path, base, iteration, text)
+    else:
+        _write_h5(path, base, iteration, text)
+    return path.resolve()
+
+
+def write_profile_output(
+    *,
+    path: str | Path,
+    inp: SfincsInput,
+    op: KineticOperator,
+    grids: Grids,
+    geom: FluxSurfaceGeometry,
+    radial: RadialCoordinates,
+    state_vector: np.ndarray,
+    elapsed_seconds: float = 0.0,
+) -> Path:
+    """Write the RHSMode=1 ``sfincsOutput`` file from canonical-stack objects.
+
+    Same non-iteration machinery as :func:`write_transport_output`; the
+    iteration datasets carry the full RHSMode=1 per-species moment table
+    (:func:`sfincs_jax.moments.rhsmode1_moments`), NTV, and the classical
+    fluxes at the run's gradients, all with a single trailing iteration axis
+    (``NIterations=1``).  The deferred Phi1 / magnetic-drift / export_f data
+    families are intentionally not written.
+
+    Args:
+        path: output file; ``.h5``/``.hdf5`` (or no suffix) writes HDF5 and
+            ``.nc``/``.netcdf`` writes NetCDF4.
+        inp: the validated typed input (``inputs.load_sfincs_input``).
+        op: the canonical operator the state was solved with.
+        grids: phase-space grids (theta/zeta nodes are not stored on ``op``).
+        geom: full flux-surface geometry (radial-derivative fields included).
+        radial: radial-coordinate conversion factors for the selected surface.
+        state_vector: the solved state, shape ``(total_size,)``.
+        elapsed_seconds: wall-clock seconds for ``elapsed time (s)``.
+
+    Returns:
+        The resolved output path.
+    """
+    path = Path(path)
+    if inp.general.rhs_mode != 1:
+        raise NotImplementedError("write_profile_output supports RHSMode=1 only.")
+    state_vector = np.asarray(state_vector, dtype=np.float64).reshape((-1,))
+
+    gpsipsi, diotadpsi_hat = _geometry_extras(inp=inp, grids=grids, geom=geom, radial=radial)
+    base = _base_fields(
+        inp=inp, op=op, grids=grids, geom=geom, radial=radial,
+        gpsipsi=gpsipsi, diotadpsi_hat=diotadpsi_hat, n_rhs=1,
+    )  # fmt: skip
+    iteration = _rhsmode1_iteration_fields(
+        inp=inp, op=op, geom=geom, radial=radial, gpsipsi=gpsipsi,
+        u_hat=base["uHat"], g_eff=float(base["GHat"]), i_eff=float(base["IHat"]),
+        nu_n_eff=float(base["nu_n"]), state_vector=state_vector,
+        elapsed_seconds=elapsed_seconds,
     )  # fmt: skip
 
     text = inp.raw.source_text if (inp.raw is not None and inp.raw.source_text is not None) else ""
