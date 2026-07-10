@@ -234,7 +234,9 @@ def test_examples_top_level_folders_are_intentional() -> None:
     folders = {
         path.name
         for path in EXAMPLES_ROOT.iterdir()
-        if path.is_dir() and path.name not in {".ipynb_checkpoints", "__pycache__"}
+        # "output" holds generated (gitignored, examples/**/output/) artifacts
+        # written by the flat pedagogic example scripts.
+        if path.is_dir() and path.name not in {".ipynb_checkpoints", "__pycache__", "output"}
     }
 
     assert folders == ALLOWED_EXAMPLE_FOLDERS
