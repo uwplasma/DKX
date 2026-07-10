@@ -196,7 +196,6 @@ def test_solve_phi1_newton_linear_step_retries_without_preconditioner() -> None:
         gmres_tol=1e-10,
         gmres_restart=80,
         gmres_maxiter=300,
-        sparse_direct_solve=lambda **kwargs: (_ for _ in ()).throw(AssertionError("unexpected sparse direct")),
         gmres_dispatch=gmres_dispatch,
         gmres_result_is_finite=lambda res: bool(np.isfinite(float(res.residual_norm))),
         emit_ksp_history=emit_ksp_history,
@@ -240,7 +239,6 @@ def test_solve_phi1_newton_linear_step_active_gmres_retries_and_recomputes_true_
         gmres_tol=1e-9,
         gmres_restart=5,
         gmres_maxiter=10,
-        sparse_direct_solve=lambda **kwargs: (_ for _ in ()).throw(AssertionError("unexpected sparse direct")),
         gmres_dispatch=gmres_dispatch,
         gmres_result_is_finite=lambda res: bool(np.isfinite(float(res.residual_norm))),
         emit_ksp_history=lambda **kwargs: history_calls.append(kwargs["precond_fn"]),
@@ -258,81 +256,3 @@ def test_solve_phi1_newton_linear_step_active_gmres_retries_and_recomputes_true_
     assert float(linear_resid_norm) == 0.0
 
 
-def test_solve_phi1_newton_linear_step_full_sparse_direct_uses_full_cache_tag() -> None:
-    sparse_calls: list[dict[str, object]] = []
-
-    def sparse_direct_solve(**kwargs):
-        sparse_calls.append(kwargs)
-        return GMRESSolveResult(
-            x=jnp.array([0.25, -0.5]),
-            residual_norm=jnp.array(1.0e-9),
-        )
-
-    lin, step_vec, linear_resid_norm = solve_phi1_newton_linear_step(
-        use_active_dof_mode=False,
-        solve_method_linear="sparse_direct",
-        matvec=lambda x: 2.0 * x,
-        residual_vec=jnp.array([-0.5, 1.0]),
-        preconditioner="unused",
-        gmres_tol=1e-8,
-        gmres_restart=40,
-        gmres_maxiter=12,
-        sparse_direct_solve=sparse_direct_solve,
-        gmres_dispatch=lambda **kwargs: (_ for _ in ()).throw(AssertionError("unexpected gmres dispatch")),
-        gmres_result_is_finite=lambda res: True,
-        emit_ksp_history=lambda **kwargs: (_ for _ in ()).throw(AssertionError("unexpected history emission")),
-        emit=None,
-        newton_iter=3,
-        total_size=2,
-    )
-
-    assert sparse_calls
-    assert sparse_calls[0]["cache_tag"] == ("full", 3, 2)
-    assert sparse_calls[0]["n"] == 2
-    assert sparse_calls[0]["restart_val"] == 40
-    np.testing.assert_allclose(np.asarray(lin.x), np.asarray([0.25, -0.5]))
-    np.testing.assert_allclose(np.asarray(step_vec), np.asarray([0.25, -0.5]))
-    np.testing.assert_allclose(float(linear_resid_norm), 1.0e-9)
-
-
-def test_solve_phi1_newton_linear_step_reduced_sparse_direct_expands_and_recomputes_residual() -> None:
-    sparse_calls: list[dict[str, object]] = []
-
-    def sparse_direct_solve(**kwargs):
-        sparse_calls.append(kwargs)
-        return GMRESSolveResult(
-            x=jnp.array([1.0, 2.0]),
-            residual_norm=jnp.array(99.0),
-        )
-
-    def reduce_full(v):
-        return jnp.asarray([v[0], v[2]])
-
-    def expand_reduced(v):
-        return jnp.asarray([v[0], 0.0, v[1], 0.0])
-
-    lin, step_vec, linear_resid_norm = solve_phi1_newton_linear_step(
-        use_active_dof_mode=True,
-        solve_method_linear="sparse_direct",
-        matvec=lambda x: x,
-        residual_vec=jnp.array([-1.0, 0.0, -2.0, 0.0]),
-        preconditioner=None,
-        gmres_tol=1e-10,
-        gmres_restart=80,
-        gmres_maxiter=300,
-        sparse_direct_solve=sparse_direct_solve,
-        gmres_dispatch=lambda **kwargs: (_ for _ in ()).throw(AssertionError("unexpected gmres dispatch")),
-        gmres_result_is_finite=lambda res: True,
-        emit_ksp_history=lambda **kwargs: (_ for _ in ()).throw(AssertionError("unexpected history emission")),
-        emit=None,
-        newton_iter=1,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-        active_size=2,
-    )
-
-    assert sparse_calls
-    assert sparse_calls[0]["cache_tag"] == ("reduced", 1, 2)
-    assert np.allclose(np.asarray(lin.x), np.array([1.0, 2.0]))
-    assert np.allclose(np.asarray(step_vec), np.array([1.0, 0.0, 2.0, 0.0]))
-    assert float(linear_resid_norm) == 0.0

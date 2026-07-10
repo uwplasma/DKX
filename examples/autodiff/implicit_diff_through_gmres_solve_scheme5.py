@@ -30,7 +30,6 @@ from pathlib import Path
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:

@@ -695,26 +695,6 @@ def solve_v3_full_system_linear_gmres(
     )
     if auto_host_result is not None:
         return auto_host_result
-    structured_full_csr_requested = bool(structured_full_csr_explicit_requested)
-    if structured_full_csr_requested:
-        return solve_rhs1_structured_full_csr_explicit(
-            RHS1StructuredCSRSolveContext(
-                nml=nml,
-                op=op,
-                x0=x0,
-                rhs_norm=rhs_norm,
-                tol=float(tol),
-                atol=float(atol),
-                restart=int(restart),
-                maxiter=maxiter,
-                solve_method=str(solve_method),
-                identity_shift=float(identity_shift),
-                phi1_hat_base=phi1_hat_base,
-                differentiable=differentiable,
-                emit=emit,
-                structured_solver=solve_v3_full_system_structured_csr,
-            )
-        )
 
     recycle_basis_setup = resolve_rhs1_recycle_basis_setup(
         recycle_basis=recycle_basis,

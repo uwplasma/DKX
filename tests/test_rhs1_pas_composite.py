@@ -229,14 +229,6 @@ def _dispatch_builder_bundle(calls: list[tuple[str, dict[str, object]]]) -> RHS1
         "zeta_schwarz_builder",
         "schur_builder",
         "collision_builder",
-        "structured_fblock_jacobi_builder",
-        "structured_fblock_angular_jacobi_builder",
-        "structured_fblock_xi_angular_jacobi_builder",
-        "structured_fblock_fp_radial_jacobi_builder",
-        "structured_fblock_fp_lowmode_schur_builder",
-        "structured_fblock_fp_moment_schur_builder",
-        "structured_fblock_fp_coupled_moment_schur_builder",
-        "structured_fblock_fp_tail_coupled_schur_builder",
         "block_builder",
     )
     kwargs = {field: _builder(field.removesuffix("_builder")) for field in names}
@@ -375,7 +367,6 @@ def test_direct_dispatch_default_forwards_block_dimensions() -> None:
         ("pas_hybrid", "pas_hybrid"),
         ("pas_schur", "pas_schur"),
         ("pas_tzfft", "pas_tzfft"),
-        ("structured_fblock_fp_tail_coupled_schur", "structured_fblock_fp_tail_coupled_schur"),
     ],
 )
 def test_direct_dispatch_routes_named_preconditioner_families(kind: str, expected: str) -> None:

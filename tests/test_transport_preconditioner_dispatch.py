@@ -140,19 +140,6 @@ def test_auto_transport_preconditioner_choice_prefers_tzfft_for_collisionless_tr
     assert strong == "tzfft"
 
 
-def test_auto_transport_preconditioner_choice_uses_fortran_reduced_lu_for_fp_transport_by_default() -> None:
-    kind, strong = auto_transport_preconditioner_choice(
-        op=_op(has_fp=True, n_x=8, n_theta=25, n_zeta=51, total_size=1_020_002),
-        default_solver_kind="gmres",
-        parallel_workers=1,
-        dense_mem_block=False,
-        tzfft_backend_allowed=False,
-        shard_axis=None,
-    )
-    assert kind == "fp_fortran_reduced_lu"
-    assert strong == "fp_fortran_reduced_lu"
-
-
 def test_auto_transport_preconditioner_choice_prefers_bounded_fp_tzfft_line_when_forced(monkeypatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_AUTO", "1")
     kind, strong = auto_transport_preconditioner_choice(
@@ -193,78 +180,6 @@ def test_auto_transport_preconditioner_choice_prefers_fp_local_geom_line_when_fo
     )
     assert kind == "fp_local_geom_line"
     assert strong == "fp_local_geom_line"
-
-
-def test_auto_transport_preconditioner_choice_prefers_structured_fblock_lu_when_forced(monkeypatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_AUTO", "1")
-    kind, strong = auto_transport_preconditioner_choice(
-        op=_op(has_fp=True, n_x=8, n_theta=25, n_zeta=51, total_size=1_020_002),
-        default_solver_kind="gmres",
-        parallel_workers=1,
-        dense_mem_block=False,
-        tzfft_backend_allowed=False,
-        shard_axis=None,
-    )
-    assert kind == "fp_structured_fblock_lu"
-    assert strong == "fp_structured_fblock_lu"
-
-
-def test_auto_transport_preconditioner_choice_prefers_xblock_tz_lu_when_forced(monkeypatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_AUTO", "1")
-    kind, strong = auto_transport_preconditioner_choice(
-        op=_op(has_fp=True, n_x=8, n_theta=25, n_zeta=51, total_size=1_020_002),
-        default_solver_kind="gmres",
-        parallel_workers=1,
-        dense_mem_block=False,
-        tzfft_backend_allowed=False,
-        shard_axis=None,
-    )
-    assert kind == "fp_xblock_tz_lu"
-    assert strong == "fp_xblock_tz_lu"
-
-
-def test_auto_transport_preconditioner_choice_prefers_xblock_tz_lu_schur_when_forced(monkeypatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_AUTO", "1")
-    kind, strong = auto_transport_preconditioner_choice(
-        op=_op(has_fp=True, n_x=8, n_theta=25, n_zeta=51, total_size=1_020_002),
-        default_solver_kind="gmres",
-        parallel_workers=1,
-        dense_mem_block=False,
-        tzfft_backend_allowed=False,
-        shard_axis=None,
-    )
-    assert kind == "fp_xblock_tz_lu_schur"
-    assert strong == "fp_xblock_tz_lu_schur"
-
-
-def test_auto_transport_preconditioner_choice_prefers_fortran_reduced_lu_when_forced(monkeypatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO", "1")
-    kind, strong = auto_transport_preconditioner_choice(
-        op=_op(has_fp=True, n_x=8, n_theta=25, n_zeta=51, total_size=1_020_002),
-        default_solver_kind="gmres",
-        parallel_workers=1,
-        dense_mem_block=False,
-        tzfft_backend_allowed=False,
-        shard_axis=None,
-    )
-    assert kind == "fp_fortran_reduced_lu"
-    assert strong == "fp_fortran_reduced_lu"
-
-
-def test_auto_transport_preconditioner_choice_promotes_fortran_reduced_lu_by_default(monkeypatch) -> None:
-    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_MIN", raising=False)
-    kind, strong = auto_transport_preconditioner_choice(
-        op=_op(has_fp=True, n_x=8, n_theta=25, n_zeta=51, total_size=1_020_002),
-        default_solver_kind="gmres",
-        parallel_workers=1,
-        dense_mem_block=False,
-        tzfft_backend_allowed=False,
-        shard_axis=None,
-    )
-
-    assert kind == "fp_fortran_reduced_lu"
-    assert strong == "fp_fortran_reduced_lu"
 
 
 def test_auto_transport_preconditioner_choice_can_disable_fortran_reduced_lu(monkeypatch) -> None:

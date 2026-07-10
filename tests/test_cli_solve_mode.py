@@ -714,15 +714,16 @@ def test_cmd_solve_v3_applies_equilibrium_override(monkeypatch, tmp_path: Path) 
 def test_main_accepts_quiet_after_subcommand(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_write_output_h5(**kwargs):
+    def _fake_run_profile(namelist_path, **kwargs):
+        captured["namelist_path"] = Path(namelist_path)
         captured.update(kwargs)
-        out = Path(kwargs["output_path"])
+        out = Path(kwargs["out_path"])
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"")
-        return out
+        return SimpleNamespace(output_path=out)
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
 
     rc = cli.main(
         [
@@ -736,7 +737,8 @@ def test_main_accepts_quiet_after_subcommand(monkeypatch, tmp_path: Path) -> Non
     )
 
     assert rc == 0
-    assert captured["output_path"] == Path(tmp_path / "sfincsOutput.h5")
+    assert captured["out_path"] == Path(tmp_path / "sfincsOutput.h5")
+    assert captured["solve_method"] == "auto"
 
 
 def test_main_bare_input_uses_public_auto_contract(monkeypatch, tmp_path: Path) -> None:
@@ -749,7 +751,19 @@ def test_main_bare_input_uses_public_auto_contract(monkeypatch, tmp_path: Path) 
         out.write_bytes(b"")
         return out
 
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    def _fake_namelist_with_source(_path):
+        nml = _FakeNamelist(rhs_mode=1)
+        nml.source_text = "&general\n/\n"
+        return nml
+
+    # The canonical stack materializes the --wout-path override and would solve;
+    # here we exercise the documented legacy fallback (NotImplementedError) so the
+    # public auto contract forwarded to the writer stays covered.
+    def _canonical_refuses(*_args, **_kwargs):
+        raise NotImplementedError("canonical stack deferred to legacy writer")
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", _fake_namelist_with_source)
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
     monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
 
     rc = cli.main(
@@ -825,7 +839,11 @@ def test_main_write_output_forwards_sparse_host_solve_method(monkeypatch, tmp_pa
         out.write_bytes(b"")
         return out
 
+    def _canonical_refuses(*_args, **_kwargs):
+        raise NotImplementedError("solve_method=sparse_host was removed from the canonical stack")
+
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
     monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
 
     rc = cli.main(
@@ -855,7 +873,11 @@ def test_main_write_output_forwards_sparse_pc_gmres_solve_method(monkeypatch, tm
         out.write_bytes(b"")
         return out
 
+    def _canonical_refuses(*_args, **_kwargs):
+        raise NotImplementedError("solve_method=sparse_pc_gmres was removed from the canonical stack")
+
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
     monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
 
     rc = cli.main(
@@ -885,7 +907,11 @@ def test_main_write_output_forwards_xblock_sparse_pc_gmres_solve_method(monkeypa
         out.write_bytes(b"")
         return out
 
+    def _canonical_refuses(*_args, **_kwargs):
+        raise NotImplementedError("solve_method=xblock_sparse_pc_gmres was removed from the canonical stack")
+
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
     monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
 
     rc = cli.main(
@@ -915,7 +941,11 @@ def test_main_write_output_forwards_sparse_lsmr_solve_method(monkeypatch, tmp_pa
         out.write_bytes(b"")
         return out
 
+    def _canonical_refuses(*_args, **_kwargs):
+        raise NotImplementedError("solve_method=sparse_lsmr was removed from the canonical stack")
+
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
     monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
 
     rc = cli.main(
@@ -938,15 +968,18 @@ def test_main_write_output_forwards_sparse_lsmr_solve_method(monkeypatch, tmp_pa
 def test_main_write_output_forwards_sparse_host_safe_solve_method(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_write_output_h5(**kwargs):
+    # sparse_host_safe survives on the canonical RHSMode=1 stack, so the CLI
+    # forwards the override to run_profile rather than the legacy writer.
+    def _fake_run_profile(namelist_path, **kwargs):
+        captured["namelist_path"] = Path(namelist_path)
         captured.update(kwargs)
-        out = Path(kwargs["output_path"])
+        out = Path(kwargs["out_path"])
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"")
-        return out
+        return SimpleNamespace(output_path=out)
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
 
     rc = cli.main(
         [
@@ -975,7 +1008,11 @@ def test_main_write_output_forwards_petsc_compat_solve_method(monkeypatch, tmp_p
         out.write_bytes(b"")
         return out
 
+    def _canonical_refuses(*_args, **_kwargs):
+        raise NotImplementedError("solve_method=petsc_compat was removed from the canonical stack")
+
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
     monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
 
     rc = cli.main(
@@ -1030,7 +1067,11 @@ def test_main_write_output_reports_runtime_errors_without_traceback(monkeypatch,
     def _fake_write_output_h5(**_kwargs):
         raise RuntimeError("host sparse factorization failed")
 
+    def _fake_run_profile(*_args, **_kwargs):
+        raise RuntimeError("host sparse factorization failed")
+
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
     monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
 
     rc = cli.main(

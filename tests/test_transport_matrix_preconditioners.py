@@ -271,7 +271,6 @@ def test_transport_fp_angular_builders_fall_back_without_streaming_metadata(monk
         tm.build_rhsmode23_fp_tzfft_preconditioner,
         tm.build_rhsmode23_fp_tzfft_line_preconditioner,
         tm.build_rhsmode23_fp_local_geom_line_preconditioner,
-        tm.build_rhsmode23_fp_xblock_tz_lu_preconditioner,
     )
     for builder in builders:
         _clear_transport_caches()
@@ -574,9 +573,6 @@ def test_transport_fp_builders_without_fp_route_to_collisionless_tzfft(monkeypat
         tm.build_rhsmode23_fp_tzfft_line_preconditioner,
         tm.build_rhsmode23_fp_tzfft_line_schur_preconditioner,
         tm.build_rhsmode23_fp_local_geom_line_preconditioner,
-        tm.build_rhsmode23_fp_xblock_tz_lu_preconditioner,
-        tm.build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner,
-        tm.build_rhsmode23_fp_structured_fblock_lu_preconditioner,
     )
     for builder in builders:
         _clear_transport_caches()
@@ -632,116 +628,6 @@ def test_transport_fp_schur_wrappers_bypass_for_phi1_reduced_views(monkeypatch) 
     np.testing.assert_allclose(np.asarray(line_schur(reduced_rhs)), np.asarray(expected_line), rtol=3e-6, atol=3e-6)
     assert len(_TRANSPORT_FP_TZFFT_LINE_SCHUR_PRECOND_CACHE) == 0
 
-    _clear_transport_caches()
-    base_xblock = tm.build_rhsmode23_fp_xblock_tz_lu_preconditioner(op=op)
-    xblock_schur = tm.build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-    expected_xblock = reduce_full(base_xblock(expand_reduced(reduced_rhs)))
-    np.testing.assert_allclose(np.asarray(xblock_schur(reduced_rhs)), np.asarray(expected_xblock), rtol=3e-6, atol=3e-6)
-    assert len(_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_PRECOND_CACHE) == 0
-
-
-def test_transport_fp_xblock_tz_lu_factor_is_finite_cached_and_reduced(monkeypatch) -> None:
-    op = _transport_operator()
-    vector = _vector(op)
-
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_MAX_MB", "128")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_FACTOR_MAX_MB", "128")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_REG", "not-a-float")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_FACTOR", "unknown")
-    _clear_transport_caches()
-
-    full_preconditioner = tm.build_rhsmode23_fp_xblock_tz_lu_preconditioner(op=op)
-    full_result = full_preconditioner(vector)
-
-    assert full_result.shape == vector.shape
-    assert bool(jnp.all(jnp.isfinite(full_result)))
-    assert len(_TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE) == 1
-    cache = next(iter(_TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE.values()))
-    assert cache.metadata["kind"] == "fp_xblock_tz_lu"
-    assert cache.metadata["factor_kind"] == "lu"
-    assert cache.metadata["block_failures"] == 0
-    assert cache.metadata["n_species"] == op.n_species
-
-    active = jnp.arange(op.total_size, dtype=jnp.int32)[::4]
-
-    def reduce_full(candidate: jnp.ndarray) -> jnp.ndarray:
-        return candidate[active]
-
-    def expand_reduced(candidate: jnp.ndarray) -> jnp.ndarray:
-        expanded = jnp.zeros((op.total_size,), dtype=jnp.float64)
-        return expanded.at[active].set(candidate)
-
-    reduced_preconditioner = tm.build_rhsmode23_fp_xblock_tz_lu_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-    reduced_rhs = reduce_full(vector)
-    expected = reduce_full(full_preconditioner(expand_reduced(reduced_rhs)))
-    np.testing.assert_allclose(np.asarray(reduced_preconditioner(reduced_rhs)), np.asarray(expected))
-    assert len(_TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE) == 1
-
-
-def test_transport_fp_xblock_tz_lu_factor_solve_failure_keeps_bounded_identity_fallback(
-    monkeypatch,
-) -> None:
-    """A per-block host-factor failure during apply does not poison the full transport solve."""
-    op = _transport_operator()
-    vector = _vector(op)
-
-    class _RaisingFactor:
-        factor_nbytes_estimate = 16
-        factor_nnz_estimate = 4
-
-        def solve(self, rhs: np.ndarray) -> np.ndarray:
-            del rhs
-            raise RuntimeError("synthetic block solve failure")
-
-    monkeypatch.setattr(tm, "factorize_host_sparse_operator", lambda *args, **kwargs: _RaisingFactor())
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_MAX_MB", "128")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_FACTOR_MAX_MB", "128")
-    _clear_transport_caches()
-
-    preconditioner = tm.build_rhsmode23_fp_xblock_tz_lu_preconditioner(op=op)
-    result = np.asarray(preconditioner(vector))
-
-    np.testing.assert_allclose(result, np.asarray(vector), rtol=0.0, atol=0.0)
-    cache = next(iter(_TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE.values()))
-    assert cache.metadata["block_failures"] == 0
-
-
-def test_transport_fp_xblock_tz_lu_uses_diagonal_and_memory_fallbacks(monkeypatch) -> None:
-    op = _transport_operator()
-    vector = _vector(op)
-
-    def fail_factorization(*args, **kwargs):
-        del args, kwargs
-        raise RuntimeError("synthetic factorization failure")
-
-    monkeypatch.setattr(tm, "factorize_host_sparse_operator", fail_factorization)
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_MAX_MB", "128")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_FACTOR_MAX_MB", "128")
-    _clear_transport_caches()
-    diagonal_fallback = tm.build_rhsmode23_fp_xblock_tz_lu_preconditioner(op=op)
-    diagonal_result = diagonal_fallback(vector)
-    assert diagonal_result.shape == vector.shape
-    assert bool(jnp.all(jnp.isfinite(diagonal_result)))
-    cache = next(iter(_TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE.values()))
-    assert cache.metadata["block_failures"] == op.n_species * op.n_x
-    assert cache.metadata["block_diagonal_fallbacks"] == op.n_species * op.n_x
-
-    monkeypatch.setattr(tm, "factorize_host_sparse_operator", lambda *args, **kwargs: None)
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_MAX_MB", "1e-12")
-    _clear_transport_caches()
-    capped = tm.build_rhsmode23_fp_xblock_tz_lu_preconditioner(op=op)
-    expected = tm.build_rhsmode23_fp_tzfft_line_preconditioner(op=op)
-    np.testing.assert_allclose(np.asarray(capped(vector)), np.asarray(expected(vector)))
-    assert len(_TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE) == 0
-
 
 def test_transport_fp_schur_wrappers_disable_cleanly_and_support_reduced_view(monkeypatch) -> None:
     op = _transport_operator()
@@ -768,19 +654,6 @@ def test_transport_fp_schur_wrappers_disable_cleanly_and_support_reduced_view(mo
     np.testing.assert_allclose(np.asarray(schur_reduced(rhs_reduced)), np.asarray(expected))
     assert len(_TRANSPORT_FP_TZFFT_LINE_SCHUR_PRECOND_CACHE) == 0
 
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_MAX_COLS", "0")
-    _clear_transport_caches()
-    op.point_at_x0 = True
-    base_xblock = tm.build_rhsmode23_fp_xblock_tz_lu_preconditioner(op=op)
-    xblock_schur_reduced = tm.build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-    expected_xblock = reduce_full(base_xblock(expand_reduced(rhs_reduced)))
-    np.testing.assert_allclose(np.asarray(xblock_schur_reduced(rhs_reduced)), np.asarray(expected_xblock))
-    assert len(_TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE) == 0
-
 
 def test_transport_fp_tzfft_line_schur_builds_true_action_coarse_space(monkeypatch) -> None:
     op = _transport_operator()
@@ -805,85 +678,3 @@ def test_transport_fp_tzfft_line_schur_builds_true_action_coarse_space(monkeypat
     assert any(label.startswith("tail_") or "constraint1" in label for label in cache.basis_labels)
 
 
-def test_transport_fp_xblock_tz_lu_schur_builds_kinetic_error_columns(monkeypatch) -> None:
-    op = _transport_operator()
-    op.point_at_x0 = True
-    vector = _vector(op)
-
-    monkeypatch.setattr(tm, "apply_v3_full_system_operator_cached", lambda _op, x: jnp.asarray(x, dtype=jnp.float64))
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_FACTOR_MAX_MB", "64")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_MAX_COLS", "8")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_RESTRICTION", "tail_galerkin")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_KINETIC_RESIDUAL", "1")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_RHS_RESIDUAL", "0")
-    _clear_transport_caches()
-
-    schur = tm.build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner(op=op)
-    result = schur(vector)
-
-    assert result.shape == vector.shape
-    assert bool(jnp.all(jnp.isfinite(result)))
-    cache = next(iter(_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_PRECOND_CACHE.values()))
-    assert 0 < cache.n_columns <= 8
-    assert cache.restriction_kind == "tail_galerkin"
-    assert any(label.endswith("_xblock_residual_error") for label in cache.basis_labels)
-
-
-def test_transport_structured_fblock_lu_uses_factor_metadata_and_memory_fallback(monkeypatch) -> None:
-    import scipy.sparse as sp
-
-    op = _transport_operator()
-    vector = _vector(op)
-
-    class _Selection:
-        selected = True
-        matrix = sp.eye(op.f_size, dtype=np.float64, format="csr")
-
-        def to_dict(self) -> dict[str, object]:
-            return {"selected": True, "nnz": int(self.matrix.nnz)}
-
-    class _Factor:
-        factor_nbytes_estimate = 512
-        factor_nnz_estimate = op.f_size
-        factor_s = 1.5e-3
-
-        def solve(self, rhs: np.ndarray) -> np.ndarray:
-            return 0.5 * np.asarray(rhs, dtype=np.float64)
-
-    monkeypatch.setattr(tm, "select_structured_rhs1_fblock_csr_operator", lambda *args, **kwargs: _Selection())
-    monkeypatch.setattr(tm, "factorize_host_sparse_operator", lambda *args, **kwargs: _Factor())
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_REG", "bad")
-    _clear_transport_caches()
-
-    preconditioner = tm.build_rhsmode23_fp_structured_fblock_lu_preconditioner(op=op)
-    result = np.asarray(preconditioner(vector))
-    np.testing.assert_allclose(result[: op.f_size], 0.5 * np.asarray(vector[: op.f_size]))
-    np.testing.assert_allclose(result[op.f_size :], np.asarray(vector[op.f_size :]))
-    cache = next(iter(_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE.values()))
-    assert cache.metadata["selection"] == {"selected": True, "nnz": op.f_size}
-    assert cache.metadata["factor_nbytes_estimate"] == 512
-
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_FACTOR_MAX_MB", "1e-12")
-    _clear_transport_caches()
-    fallback = tm.build_rhsmode23_fp_structured_fblock_lu_preconditioner(op=op)
-    np.testing.assert_allclose(
-        np.asarray(fallback(vector)),
-        np.asarray(tm.build_rhsmode23_sxblock_preconditioner(op=op)(vector)),
-    )
-    assert len(_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE) == 0
-
-    class _RejectedSelection:
-        selected = False
-        matrix = None
-
-        def to_dict(self) -> dict[str, object]:
-            return {"selected": False}
-
-    monkeypatch.setattr(tm, "select_structured_rhs1_fblock_csr_operator", lambda *args, **kwargs: _RejectedSelection())
-    _clear_transport_caches()
-    rejected = tm.build_rhsmode23_fp_structured_fblock_lu_preconditioner(op=op)
-    np.testing.assert_allclose(
-        np.asarray(rejected(vector)),
-        np.asarray(tm.build_rhsmode23_sxblock_preconditioner(op=op)(vector)),
-    )
-    assert len(_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE) == 0

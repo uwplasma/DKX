@@ -5,7 +5,6 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 
 import sfincs_jax.problems.profile_solve as profile_solve
-import sfincs_jax.problems.transport_solve as transport_solve
 
 
 def test_profile_solve_distributed_axis_wrapper_uses_profile_system_policy(monkeypatch) -> None:
@@ -22,18 +21,6 @@ def test_profile_solve_distributed_axis_wrapper_uses_profile_system_policy(monke
     assert profile_solve._resolve_distributed_gmres_axis(op=op, emit=None) == "axis-fixture"
     assert captured["op"] is op
     assert captured["emit"] is None
-
-
-def test_profile_solve_reuses_canonical_transport_preconditioner_wrappers() -> None:
-    assert profile_solve._transport_precond_cache_key is transport_solve._transport_precond_cache_key
-    assert (
-        profile_solve._build_rhsmode23_fp_direct_active_block_schur_preconditioner
-        is transport_solve._build_rhsmode23_fp_direct_active_block_schur_preconditioner
-    )
-    assert (
-        profile_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner
-        is transport_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner
-    )
 
 
 def test_profile_solve_dense_fallback_max_delegates_to_policy(monkeypatch) -> None:
@@ -152,104 +139,6 @@ def test_profile_solve_top_level_orchestrator_can_exit_through_auto_host(monkeyp
     assert set(captured) == {"materialize_context", "route_setup", "auto_host_context"}
 
 
-def test_profile_solve_top_level_orchestrator_can_exit_through_structured_csr(monkeypatch) -> None:
-    """Lock the explicit structured-CSR branch before expensive RHSMode=1 setup."""
-
-    captured: dict[str, object] = {}
-    nml = SimpleNamespace(label="nml")
-    op = SimpleNamespace(
-        rhs_mode=1,
-        total_size=31,
-        fblock=SimpleNamespace(collisionless=SimpleNamespace(n_xi_for_x=jnp.asarray([3, 3]))),
-    )
-    x0 = jnp.asarray([0.25, -0.5, 0.75])
-    phi1_hat_base = jnp.asarray([[0.0]])
-    recycle_basis = [jnp.asarray([1.0, 0.0, 0.0])]
-    sentinel = SimpleNamespace(kind="structured-csr-result")
-
-    def fake_materialize(context):
-        captured["materialize_context"] = context
-        return SimpleNamespace(
-            op=op,
-            which_rhs=1,
-            rhs=jnp.asarray([1.0, 0.0, -1.0]),
-            rhs_norm=jnp.asarray(2.0),
-            tol=4.0e-9,
-            fp_tol=5.0e-9,
-            restart=44,
-            maxiter=88,
-            restart_env_forced=False,
-            maxiter_env_forced=True,
-            geom_scheme_hint=11,
-        )
-
-    def fake_route_setup(**kwargs):
-        captured["route_setup"] = kwargs
-        assert kwargs["solve_method"] == "structured_full_csr"
-        assert kwargs["use_implicit"] is True
-        method_flags = SimpleNamespace(
-            kind="structured_full_csr",
-            sparse_host_like_requested=False,
-            xblock_active_dof_requested=False,
-            structured_full_csr_explicit_requested=True,
-        )
-        return SimpleNamespace(
-            method_flags=method_flags,
-            use_implicit_requested=True,
-            structured_auto_allowed=True,
-            structured_sharded_multidevice=True,
-        )
-
-    def fake_structured(context):
-        captured["structured_context"] = context
-        assert context.nml is nml
-        assert context.op is op
-        assert context.x0 is x0
-        assert float(context.rhs_norm) == 2.0
-        assert context.tol == 4.0e-9
-        assert context.atol == 7.0e-12
-        assert context.restart == 44
-        assert context.maxiter == 88
-        assert context.solve_method == "structured_full_csr"
-        assert context.identity_shift == 0.25
-        assert context.phi1_hat_base is phi1_hat_base
-        assert context.differentiable is True
-        assert context.structured_solver is profile_solve.solve_v3_full_system_structured_csr
-        return sentinel
-
-    monkeypatch.setattr(profile_solve, "maybe_profiler", lambda **_kwargs: None)
-    monkeypatch.setattr(profile_solve, "materialize_profile_response_linear_problem", fake_materialize)
-    monkeypatch.setattr(profile_solve, "resolve_rhs1_initial_route_setup", fake_route_setup)
-    monkeypatch.setattr(profile_solve, "try_rhs1_auto_host_solve", lambda _context: None)
-    monkeypatch.setattr(profile_solve, "solve_rhs1_structured_full_csr_explicit", fake_structured)
-    monkeypatch.setattr(profile_solve, "_resolve_use_implicit", lambda *, differentiable: bool(differentiable))
-    monkeypatch.setattr(profile_solve, "_matvec_shard_axis", lambda _op: "theta")
-    monkeypatch.setattr(profile_solve.jax, "default_backend", lambda: "gpu")
-    monkeypatch.setattr(profile_solve.jax, "device_count", lambda: 2)
-
-    result = profile_solve.solve_v3_full_system_linear_gmres(
-        nml=nml,
-        which_rhs=1,
-        op=op,
-        x0=x0,
-        tol=1.0e-8,
-        atol=7.0e-12,
-        restart=40,
-        maxiter=80,
-        solve_method="structured_full_csr",
-        identity_shift=0.25,
-        phi1_hat_base=phi1_hat_base,
-        differentiable=True,
-        recycle_basis=recycle_basis,
-    )
-
-    assert result is sentinel
-    assert set(captured) == {"materialize_context", "route_setup", "structured_context"}
-    assert captured["route_setup"]["sharded_axis"] == "theta"
-    assert captured["route_setup"]["backend"] == "gpu"
-    assert captured["route_setup"]["device_count"] == 2
-
-
 def _install_profile_solve_sparse_branch_scaffold(
     monkeypatch,
     *,
@@ -359,47 +248,11 @@ def _install_profile_solve_sparse_branch_scaffold(
         ),
     )
     monkeypatch.setattr(profile_solve, "try_rhs1_sparse_host_safe_solve", lambda _context: None)
-    monkeypatch.setattr(profile_solve, "try_run_requested_sparse_pc_gmres_branch", lambda _context: None)
     monkeypatch.setattr(profile_solve, "_resolve_use_implicit", lambda *, differentiable: bool(differentiable))
     monkeypatch.setattr(profile_solve, "_matvec_shard_axis", lambda _op: None)
     monkeypatch.setattr(profile_solve.jax, "default_backend", lambda: "cpu")
     monkeypatch.setattr(profile_solve.jax, "device_count", lambda: 1)
     return nml, captured
-
-
-def test_profile_solve_top_level_orchestrator_can_exit_through_sparse_minimum_norm(monkeypatch) -> None:
-    nml, captured = _install_profile_solve_sparse_branch_scaffold(monkeypatch, solve_method="sparse_minimum_norm")
-    sentinel_payload = SimpleNamespace(kind="minimum-norm-payload")
-    sentinel_result = SimpleNamespace(kind="minimum-norm-result")
-
-    def fake_minimum_norm(context):
-        captured["minimum_norm_context"] = context
-        assert context.solve_method_kind == "sparse_minimum_norm"
-        assert context.use_active_dof is False
-        assert context.tol == 1.0e-8
-        assert context.maxiter == 37
-        assert context.backend == "cpu"
-        assert context.build_operator_from_pattern is profile_solve.build_operator_from_pattern
-        return sentinel_payload
-
-    def fake_result(**kwargs):
-        captured["result_payload"] = kwargs
-        assert kwargs["payload"] is sentinel_payload
-        return sentinel_result
-
-    monkeypatch.setattr(profile_solve, "solve_explicit_sparse_minimum_norm_branch", fake_minimum_norm)
-    monkeypatch.setattr(profile_solve, "v3_linear_solve_result_from_payload", fake_result)
-
-    result = profile_solve.solve_v3_full_system_linear_gmres(
-        nml=nml,
-        solve_method="sparse_minimum_norm",
-        differentiable=False,
-        atol=1.0e-12,
-    )
-
-    assert result is sentinel_result
-    assert "minimum_norm_context" in captured
-    assert "result_payload" in captured
 
 
 def test_profile_solve_top_level_orchestrator_can_exit_through_sparse_host_safe(monkeypatch) -> None:
@@ -472,63 +325,3 @@ def test_profile_solve_sparse_host_safe_progress_and_profiler_are_forwarded(monk
     assert any("evaluateJacobian called" in message for message in emitted)
 
 
-def test_profile_solve_top_level_orchestrator_can_exit_through_sparse_pc_replay(monkeypatch) -> None:
-    nml, captured = _install_profile_solve_sparse_branch_scaffold(monkeypatch, solve_method="sparse_pc_gmres")
-    sentinel = SimpleNamespace(kind="sparse-pc-result")
-
-    def fake_sparse_pc(context):
-        captured["sparse_pc_context"] = context
-        assert context.values["nml"] is nml
-        assert context.values["solve_method_kind_explicit"] == "sparse_pc_gmres"
-        assert context.values["tol"] == 1.0e-8
-        assert context.values["restart"] == 31
-        assert context.values["maxiter"] == 37
-        assert context.values["active_size"] == 8
-        return sentinel
-
-    monkeypatch.setattr(profile_solve, "try_run_requested_sparse_pc_gmres_branch", fake_sparse_pc)
-
-    result = profile_solve.solve_v3_full_system_linear_gmres(
-        nml=nml,
-        solve_method="sparse_pc_gmres",
-        differentiable=False,
-        atol=1.0e-12,
-    )
-
-    assert result is sentinel
-    assert "sparse_pc_context" in captured
-    assert "minimum_norm_context" not in captured
-
-
-def test_profile_solve_top_level_orchestrator_can_exit_through_sparse_host_direct(monkeypatch) -> None:
-    nml, captured = _install_profile_solve_sparse_branch_scaffold(monkeypatch, solve_method="sparse_host")
-    sentinel_payload = SimpleNamespace(kind="host-direct-payload")
-    sentinel_result = SimpleNamespace(kind="host-direct-result")
-
-    def fake_sparse_direct(context):
-        captured["sparse_direct_context"] = context
-        assert context.use_active_dof is False
-        assert context.tol == 1.0e-8
-        assert context.atol == 1.0e-12
-        assert context.refine_steps >= 0
-        assert context.build_host_sparse_direct_factor_from_matvec is profile_solve._build_host_sparse_direct_factor_from_matvec
-        return sentinel_payload
-
-    def fake_result(**kwargs):
-        captured["result_payload"] = kwargs
-        assert kwargs["payload"] is sentinel_payload
-        return sentinel_result
-
-    monkeypatch.setattr(profile_solve, "solve_explicit_sparse_host_direct_branch", fake_sparse_direct)
-    monkeypatch.setattr(profile_solve, "v3_linear_solve_result_from_payload", fake_result)
-
-    result = profile_solve.solve_v3_full_system_linear_gmres(
-        nml=nml,
-        solve_method="sparse_host",
-        differentiable=False,
-        atol=1.0e-12,
-    )
-
-    assert result is sentinel_result
-    assert "sparse_direct_context" in captured
-    assert "result_payload" in captured

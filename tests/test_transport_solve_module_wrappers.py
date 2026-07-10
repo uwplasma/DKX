@@ -46,52 +46,6 @@ def test_transport_solve_preconditioner_cache_key_injects_current_dtype(monkeypa
     assert captured["args"][0] is op
 
 
-def test_transport_solve_fp_preconditioner_wrappers_inject_reusable_hooks(monkeypatch) -> None:
-    captured: dict[str, dict[str, object]] = {}
-
-    def fake_direct_builder(**kwargs):
-        captured["direct"] = kwargs
-        return "direct-pc"
-
-    def fake_reduced_builder(**kwargs):
-        captured["reduced"] = kwargs
-        return "reduced-pc"
-
-    monkeypatch.setattr(
-        transport_solve,
-        "build_transport_fp_direct_active_block_schur_preconditioner",
-        fake_direct_builder,
-    )
-    monkeypatch.setattr(
-        transport_solve,
-        "build_transport_fp_fortran_reduced_lu_preconditioner",
-        fake_reduced_builder,
-    )
-    op = SimpleNamespace(label="op")
-
-    direct = transport_solve._build_rhsmode23_fp_direct_active_block_schur_preconditioner(
-        op=op,
-        active_indices_np=jnp.asarray([0, 2]),
-        emit=None,
-    )
-    reduced = transport_solve._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
-        op=op,
-        active_indices_np=jnp.asarray([1, 3]),
-        emit=None,
-    )
-
-    assert direct == "direct-pc"
-    assert reduced == "reduced-pc"
-    assert captured["direct"]["fallback_builder"] is transport_solve._build_rhsmode23_sxblock_preconditioner
-    assert captured["direct"]["transport_precond_cache_key"] is transport_solve._transport_precond_cache_key
-    assert captured["reduced"]["fallback_builder"] is transport_solve._build_rhsmode23_sxblock_preconditioner
-    assert captured["reduced"]["transport_precond_cache_key"] is transport_solve._transport_precond_cache_key
-    assert captured["reduced"]["build_host_sparse_direct_factor_from_matvec"] is (
-        transport_solve._build_host_sparse_direct_factor_from_matvec
-    )
-    assert captured["reduced"]["host_physical_memory_mb"] is transport_solve._host_physical_memory_mb
-
-
 def test_transport_parallel_worker_delegates_payload_with_public_solver(monkeypatch) -> None:
     captured: dict[str, object] = {}
     sentinel = {"ok": True}

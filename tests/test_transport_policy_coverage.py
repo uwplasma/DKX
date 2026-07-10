@@ -786,16 +786,6 @@ def test_transport_preconditioner_selection_and_dispatch_are_fail_closed(
         shard_axis=None,
     ) == ("block", "block")
 
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_AUTO", "1")
-    assert auto_transport_preconditioner_choice(
-        op=_op(rhs_mode=2, has_fp=True, total_size=10_000, n_theta=9, n_zeta=9),
-        default_solver_kind="bicgstab",
-        parallel_workers=1,
-        dense_mem_block=False,
-        tzfft_backend_allowed=True,
-        shard_axis=None,
-    ) == ("fp_xblock_tz_lu_schur", "fp_xblock_tz_lu_schur")
-
     messages: list[str] = []
     assert resolve_transport_preconditioner_choice(
         op=_op(rhs_mode=3, has_fp=False, total_size=200),
@@ -883,10 +873,6 @@ def test_transport_preconditioner_aliases_configs_and_auto_fp_branches(
             monkeypatch.setenv(env_name, "0")
 
     forced_cases = {
-        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO": "fp_fortran_reduced_lu",
-        "SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_AUTO": "fp_xblock_tz_lu_schur",
-        "SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_AUTO": "fp_xblock_tz_lu",
-        "SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_AUTO": "fp_structured_fblock_lu",
         "SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_AUTO": "fp_local_geom_line",
         "SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_AUTO": "fp_tzfft_line_schur",
         "SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_AUTO": "fp_tzfft_line",
