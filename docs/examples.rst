@@ -1,6 +1,75 @@
 Examples
 ========
 
+Canonical examples
+------------------
+
+Six pedagogic scripts on the canonical API sit at the top of ``examples/``.
+Each follows the same style contract: no ``main()``, all parameters at the top
+of the file, printed setup/progress/final results, at least one plot, and
+output files written and read back. All run on a laptop CPU; CI runs each one
+at shrunken resolution (``SFINCS_JAX_CI=1``) in
+``tests/test_examples_pedagogic.py``.
+
+``examples/run_tokamak.py`` — first solve, from Python
+   Builds a circular-tokamak ``input.namelist`` from Python dicts
+   (``geometryScheme=1``, one ion species, pitch-angle-scattering collisions),
+   runs the canonical driver, and reads the HDF5 output back. The key lines:
+
+   .. code-block:: python
+
+      from sfincs_jax.run import run_profile
+
+      run = run_profile(deck_path, solve_method="auto", out_path=h5_path)
+      gamma = float(run.moments["particleFlux_vm_psiHat"][0])
+
+   It teaches the per-species results table, the four radial-coordinate flux
+   conventions, and HDF5/NetCDF output selection by file suffix.
+
+``examples/run_w7x.py`` — stellarator geometry and full Fokker-Planck
+   Loads a W7-X Boozer equilibrium and solves with the linearized
+   Fokker-Planck operator, which routes ``auto`` to the tier-2 recycled-Krylov
+   (GCROT) solver instead of the tier-1 structured direct path. It teaches
+   geometry files, collision-operator selection, and how to inspect which
+   solver tier ran (``run.solve_result.method``).
+
+``examples/transport_coefficients.py`` — RHSMode=3 transport matrices
+   Computes monoenergetic transport matrices over a collisionality scan,
+   checks Onsager symmetry, and plots ``L11`` versus ``nuPrime``.
+
+``examples/ambipolar_er_scan.py`` — ambipolar radial electric field
+   Scans ``Er``, brackets the sign change of the radial current, solves for
+   the ambipolar root, and writes/reads the output at the root.
+
+``examples/gradients_tour.py`` — differentiating the solve
+   Takes ``jax.grad`` of fluxes and bootstrap current with respect to
+   temperature and ``Er`` drives through the implicit-differentiation solve
+   path, and verifies every gradient against central finite differences.
+
+``examples/optimize_QA_bootstrap.py`` — flagship optimization
+   Gradient-based optimization of a quasi-axisymmetric stellarator boundary
+   for low bootstrap current: boundary Fourier coefficients ->
+   ``vmec_jax`` fixed-boundary equilibrium (implicit-adjoint VJP) ->
+   differentiable Boozer transform (``booz_xform_jax``) ->
+   ``FluxSurfaceGeometry.from_fourier`` (geometryScheme-13 pure-JAX path) ->
+   canonical kinetic solve (tier-2 GCROT, warm-started and recycled across
+   optimizer iterations) -> ``FSABjHat``. One ``jax.value_and_grad`` call
+   differentiates the whole chain; the example verifies the end-to-end
+   gradient against central finite differences and holds aspect ratio, mean
+   iota, and quasisymmetry with penalty terms. Alternative objective lines
+   (e.g. ``D11``-style targets) ship commented and CI-tested. Requires
+   ``vmec_jax`` and ``booz_xform_jax``.
+
+   .. figure:: _static/figures/readme/optimize_QA_bootstrap.png
+      :alt: QA low-bootstrap optimization dashboard: objective history, boundary cross-sections, |B| spectrum, and <j.B> profile.
+      :align: center
+      :width: 90%
+
+      Output figure of ``examples/optimize_QA_bootstrap.py``.
+
+Example tree
+------------
+
 The repository includes a structured `examples/` tree:
 
 - `examples/tutorials/`: notebook-led learning path and a fast output/plot script
@@ -434,87 +503,16 @@ difference is ``1.21e-3`` for QA and ``3.54e-3`` for QH. The largest JAX
 refinement bar is ``4.21%`` for QA and ``24.43%`` for QH, so QH is still a
 reduced-grid convergence stress test rather than a production-resolution claim.
 
-For this benchmark script, ``--solve-method auto`` is run in the
-runtime/non-autodiff lane: the script sets ``SFINCS_JAX_IMPLICIT_SOLVE=0`` and
-uses the residual-clean ``fortran_reduced_pc_gmres`` host route automatically
-for eligible finite-beta/full-FP points, with a guarded native-stack attempt and
-robust active-LU fallback. A no-probe
-full-CSR host lane with
-``xblock_tz_low_l_schur`` is available for explicit non-differentiable
-structured-CSR benchmarks, but it is not part of the public default after
-Zenodo QA/QH Krylov preconditioner probes showed multi-minute unsuccessful
-trials on medium finite-beta profile-current decks. An active projected
-direct mode solves the residual-clean host diagnostic system without the
-matrix-free pattern probe; low-resolution QA/QH bootstrap-current agreement must
-still be treated as a convergence study, not as a production parity claim. The
-script refuses to write nonconverged production-sized diagnostics and will also
-reject sparse builds that exceed the configured memory budget.
-
-Builds that include the no-probe full-CSR lane can still force the host-only,
-non-autodiff structured solve explicitly with ``--solve-method structured_csr``
-or ``--solve-method host_structured_csr`` for reproducibility/debugging.  The
-residual-clean finite-beta QA/QH diagnostic route uses
-``fortran_reduced_pc_gmres`` with direct-tail active-auto preconditioning. The
-auto ladder starts from the robust ``active_fortran_v3_reduced_lu`` reference
-route. Lower-memory native-stack candidates remain explicit advanced options and
-must pass the same true-residual preflight before their results are trusted. On
-the full archived ``25 x 39 x 60 x 7`` QA surface, this hands-off active-LU
-route converged to residual ``7.27e-16`` in ``354.6 s`` wall in the guarded
-audit. Other combined multiline, scaled-ILU, and sparse-coarse
-preconditioners remain implemented and tested research candidates, but they are
-not public defaults until they pass the same true-residual gate. Physical RHSMode=1
-``host_structured_csr`` output remains available for explicit structured-CSR
-experiments; the environment variables below make that structured route explicit and
-also override shifted benchmark defaults:
-
-.. code-block:: bash
-
-   SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=direct \
-   SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_DOF=1 \
-   SFINCS_JAX_RHS1_FULL_CSR_MAX_MB=1024 \
-   python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
-     --quick \
-     --solve-method host_structured_csr
-
-``SFINCS_JAX_RHS1_FULL_CSR_MAX_MB`` is the assembled-matrix cap: an over-budget
-CSR build is rejected before solving instead of silently falling back to a dense
-probe. ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_DOF=1`` projects to the active
-transport unknowns before the host solve and expands back to the full output
-vector. Krylov experiments can still use
-``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER``,
-``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB``, and
-``SFINCS_JAX_RHS1_FULL_CSR_XBLOCK_LMAX`` to control the x-block/coarse residual
-preconditioner candidates, but those candidates are not yet the promoted
-finite-beta QA/QH parity path.
-For a lower-memory iterative comparison, use
-``SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=gmres`` or ``lgmres`` with
-``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER=active_low_l_schur``. This projected
-field-split candidate uses a sparse exact Schur residual equation over the
-full-angle low-pitch active variables and the global tail. The low-pitch cutoff
-is controlled by
-``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_LOW_L_SCHUR_LMAX``, and the sparse factor is
-bounded by ``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB``. The alternate
-``active_coarse`` candidate remains available; it uses low-``l``/angular/tail
-modal coarse residual modes. Its default coarse equation is Galerkin; set
-``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COARSE_SOLVER=least_squares`` or use
-``active_coarse_ls`` for the residual-minimizing comparison. Explicit
-``active_overlap_schwarz`` builds a restricted additive-Schwarz residual
-correction over overlapping speed-space patches; control its pitch cutoff and
-overlap with ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SCHWARZ_LMAX`` and
-``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SCHWARZ_RADIUS``. The combined
-``active_schwarz_low_l_schur`` path uses that Schwarz correction as the base for
-the low-pitch Schur residual equation. Explicit ``active_xblock`` and
-``active_xblock_low_l_schur`` probes factor active sparse blocks at fixed
-species and speed index; control their cutoff with
-``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_XBLOCK_LMAX``. These are retained as
-benchmark/debug routes after the first QA gate showed they are not yet a
-promotion path. Generic
-``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER=active_ilu`` is also available and tuned
-with ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ILU_DROP_TOL`` and
-``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ILU_FILL_FACTOR``. Treat it as a benchmark
-candidate: physical finite-beta bootstrap-current outputs should remain on the
-active-auto host route unless active low-L/xblock/coarse/ILU satisfies
-the true-residual gate for that case.
+For this benchmark script, ``--solve-method auto`` runs in the
+runtime/non-autodiff lane (the script sets ``SFINCS_JAX_IMPLICIT_SOLVE=0``).
+The former structured-CSR/sparse-PC host lanes referenced by earlier revisions
+of this benchmark (``structured_csr``/``host_structured_csr``,
+``fortran_reduced_pc_gmres``, and the ``SFINCS_JAX_RHS1_FULL_CSR_*``
+preconditioner candidates) were deleted with the legacy sparse solver
+families; the recorded finite-beta QA/QH figures below remain valid measured
+evidence of the archived runs, and new runs use the retained matrix-free
+``auto`` policy. The script refuses to write nonconverged production-sized
+diagnostics.
 
 .. figure:: _static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface.png
    :alt: Same-resolution SFINCS_JAX and SFINCS Fortran v3 QA bootstrap-current comparison against the Redl analytic formula.
