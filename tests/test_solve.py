@@ -242,6 +242,143 @@ def test_gradient_through_tier1_solve_matches_finite_differences() -> None:
 
 
 # ---------------------------------------------------------------------------
+# FP + constraintScheme=1 with Nxi_for_x truncation: the rectangular state
+# layout embeds the packed Fortran system with exact zero rows on the
+# truncated (x, L) DOFs, so the raw embedding is structurally singular and
+# the naive adjoint (transposed) solve is inconsistent -> silently wrong
+# gradients.  solve() must pin those DOFs (identity rows/columns) and the
+# implicit-function-theorem gradient must then match finite differences.
+# ---------------------------------------------------------------------------
+
+FP_CS1_TRUNCATED_TEXT = """
+&general
+/
+&geometryParameters
+  geometryScheme = 1
+/
+&speciesParameters
+  Zs = 1 6
+  mHats = 1 6
+  nHats = 0.6d+0 0.009d+0
+  THats = 0.5d+0 0.8d+0
+  dNHatdrHats = -0.587199 -0.00195733
+  dTHatdrHats = -0.587199 -0.391466
+/
+&physicsParameters
+  Delta = 4.5694d-3
+  alpha = 1.0d+0
+  nu_n = 8.4774d-3
+  Er = 0
+  collisionOperator = 0
+  includePhi1 = .false.
+/
+&resolutionParameters
+  Ntheta = 7
+  Nzeta = 5
+  Nxi = 6
+  Nx = 4
+/
+"""
+
+
+def _fp_cs1_truncated_op() -> KineticOperator:
+    op = KineticOperator.from_namelist(parse_sfincs_input_text(FP_CS1_TRUNCATED_TEXT))
+    # The whole point of this fixture: the default Nxi_for_x truncates L at
+    # low x (constraintScheme=1 Fokker-Planck), so the rectangular embedding
+    # is structurally singular.
+    assert op.constraint_scheme == 1 and op.fp is not None
+    assert int(np.min(np.asarray(op.n_xi_for_x))) < op.n_xi
+    return op
+
+
+def test_fp_cs1_truncated_embedding_is_singular_and_pinning_fixes_it() -> None:
+    op = _fp_cs1_truncated_op()
+    mask = np.asarray(op.active_dof_mask())
+    assert mask is not None and mask.min() == 0.0
+
+    raw = materialize_dense(op)
+    # Truncated DOFs are exact zero rows of the raw embedding (Fortran v3
+    # never carries them: packed indexing in indices.F90).
+    assert np.max(np.abs(raw[mask == 0.0, :])) == 0.0
+
+    pinned = materialize_dense(op, pin_masked_dofs=True)
+    # Pinned rows/columns are exactly the identity...
+    n = op.total_size
+    eye = np.eye(n)
+    assert np.array_equal(pinned[mask == 0.0, :], eye[mask == 0.0, :])
+    assert np.array_equal(pinned[:, mask == 0.0], eye[:, mask == 0.0])
+    # ...and the active block is untouched and nonsingular.
+    act = mask == 1.0
+    assert np.array_equal(pinned[np.ix_(act, act)], raw[np.ix_(act, act)])
+    s = np.linalg.svd(pinned, compute_uv=False)
+    assert s[-1] > 1e-8
+
+    # The tier-2 solve on the physical RHS matches the pinned dense solve.
+    rhs = op.rhs()
+    assert float(np.max(np.abs(np.asarray(rhs)[mask == 0.0]))) == 0.0
+    result = solve(op, rhs, method="gmres", tol=1e-10)
+    assert result.converged
+    x_ref = sla.solve(pinned, np.asarray(rhs))
+    assert _rel_err(np.asarray(result.x), x_ref) < 1e-8
+
+
+def test_fp_cs1_gradients_match_fd() -> None:
+    """jax.grad through the differentiable tier-2 solve vs central FD.
+
+    Before the truncated-DOF pinning this returned catastrophically wrong
+    gradients (the adjoint system was inconsistent) while the forward solve
+    converged fine — the historical silent-wrong-gradient failure.
+    """
+    op0 = _fp_cs1_truncated_op()
+
+    def loss(scale: jnp.ndarray, differentiable: bool = True) -> jnp.ndarray:
+        # Thread the scalar through the operator pytree (streaming/mirror and
+        # the RHS drive depend on THat); the Fokker-Planck matrices stay
+        # frozen, so finite differences see the same function.
+        op = replace(op0, t_hat=op0.t_hat * scale)
+        result = solve(
+            op, op.rhs(), method="gmres", tol=1e-10, differentiable=differentiable
+        )
+        return jnp.sum(result.x**2)
+
+    g = float(jax.grad(loss)(jnp.asarray(1.0)))
+    eps = 1e-4
+    fd = float(
+        (loss(jnp.asarray(1.0 + eps), differentiable=False)
+         - loss(jnp.asarray(1.0 - eps), differentiable=False)) / (2.0 * eps)
+    )
+    assert np.isfinite(g) and np.isfinite(fd) and abs(fd) > 0.0
+    np.testing.assert_allclose(g, fd, rtol=1e-4)
+
+
+def test_differentiable_solve_aborts_loudly_on_genuinely_singular_operator() -> None:
+    """check_adjoint (default on) must abort instead of silently corrupting grads.
+
+    Dropping the constraint scheme leaves the Fokker-Planck f-block with its
+    physical (Maxwellian) null space, which pinning cannot fix; the stalled
+    forward/adjoint GCROT solve must raise.
+    """
+    op0 = _fp_cs1_truncated_op()
+    op_singular = replace(op0, constraint_scheme=0)
+    # A generic linear functional of the solution: its cotangent is not in
+    # range(A^T) of the singular operator, so the adjoint solve must stall.
+    w = jnp.asarray(
+        np.random.default_rng(7).standard_normal(op_singular.total_size)
+    )
+
+    def loss(scale: jnp.ndarray) -> jnp.ndarray:
+        op = replace(op_singular, t_hat=op_singular.t_hat * scale)
+        result = solve(
+            op, op.rhs(), method="gmres", tol=1e-10, differentiable=True,
+            max_restarts=10,
+        )
+        return jnp.dot(w, result.x)
+
+    with pytest.raises(Exception, match="GCROT solve failed to converge"):
+        jax.grad(loss)(jnp.asarray(1.0))
+
+
+# ---------------------------------------------------------------------------
 # Optional-dependency policy: solvax is optional until its PyPI release.
 # ---------------------------------------------------------------------------
 
