@@ -613,13 +613,6 @@ owners are:
   extra-variable tail solves, and
   reduced/full apply wrappers. Compatibility access is not an implementation
   owner.
-- ``sfincs_jax/solvers/preconditioner_full_fp_structured.py``:
-  structured full-Fokker-Planck RHSMode=1 f-block preconditioners. The module
-  owns block-Jacobi, angular-line, pitch-angular, FP-radial grouped factors,
-  and low-mode/moment/tail Schur correction builders over the structured
-  f-block operator. Same-shape cache keys, metadata emission, memory guards,
-  and matrix-free residual-correction composition live here; compatibility
-  access is not an implementation owner.
 - ``sfincs_jax/solvers/preconditioner_xblock_block_jacobi.py``:
   dense x-block Jacobi preconditioners for RHSMode=1, including
   per-``(species,x)`` blocks, the truncated-low-:math:`L` variant used by PAS
@@ -633,36 +626,6 @@ owners are:
   module owns coarse-x selection, Legendre-low-mode xDot coupling, upwind
   line-factor setup, cache population, and reduced/full apply wrappers.
   Compatibility access is not an implementation owner.
-- ``sfincs_jax/solvers/preconditioner_xblock_tz_sparse.py``:
-  sparse per-``x`` RHSMode=1 full-FP preconditioner setup. This module owns the
-  host/JAX x-block LU/ILU policy, compact CSR/padded triangular-factor apply,
-  selected theta/zeta upwind sparse-stencil assembly, explicit FP assembled-host
-  cache, host-assembly admission policy, per-block sparse matrix/diagonal
-  assembly, sparse per-:math:`L` species/``x`` host rescue factors, one-shot
-  sparse species/``x`` seed construction, skipped-block diagonal fallback,
-  host-factor probe/cache-key policy, shared chunked unsharded matrix probing,
-  and extra-variable Schur solve. Compatibility access is not an
-  implementation owner.
-- ``sfincs_jax/solvers/preconditioner_xblock_low_l_schur.py``:
-  low-pitch x-block Schur preconditioners for exact RHSMode=1 full-CSR systems.
-  This module owns the opt-in native ``x_ell`` kinetic factor, native
-  ``x_ell`` plus dense-tail Schur factor, sparse low-``ell`` ``(theta,zeta)``
-  x-block factor, physics low-mode coarse residual correction, and the shared
-  low-``ell`` x-block index helper. Dispatch/admission wiring lives in the
-  profile-response sparse owners and the public solve owner.
-- ``sfincs_jax/solvers/preconditioner_xblock_active.py``:
-  active-projected x-block, diagonal-Schur, x-ell kinetic-line, angular-line,
-  native indexed Schwarz, restricted-additive-Schwarz, global field-split,
-  multiline field-split, bounded native-stack, and Fortran-v3-reduced
-  native-stack preconditioners for exact RHSMode=1 active CSR systems. This
-  module owns active full-index to projected-position mapping, active x-block
-  sparse LU/ILU residual correction, optional block scaling, singular block
-  fallback metadata, compact active kinetic/angular line inverses, native
-  padded-indexed block factors, active global-tail Schur setup,
-  overlap-Schwarz patch setup, local base dispatch for extracted x-block
-  families, and the bounded line/patch/coarse native-stack architecture.
-  Dispatch/admission wiring lives in the profile-response sparse owners and the
-  public solve owner.
 - ``sfincs_jax/solvers/preconditioner_domain_decomposition.py``:
   angular line-block and restricted-additive-Schwarz preconditioners for
   RHSMode=1 domain-decomposition and strong fallback paths. It owns the
@@ -695,63 +658,16 @@ owners are:
   host-GMRES, active-factor, direct-``Pmat``, direct block-Schur, and
   Fortran-reduced LU implementation files are represented by this single
   linear-system owner.
-- ``sfincs_jax/solvers/explicit_sparse.py``:
-  explicit-sparse host-factor environment parsing, canonical factor-kind alias
-  resolution, monolithic LU/ILU guard sizing, and the typed
-  ``ExplicitSparseFactorSettings`` bundle, dense/CSR storage decisions,
-  pattern-color probing, symbolic Schur/frontal/ND settings, SuperLU
-  pivot/permutation options, ILU options, host explicit-sparse operator
-  assembly, padded and compact-CSR JAX triangular-factor apply kernels,
-  permutation inversion, logging, monolithic preflight guard, and factorization
-  orchestration. Profile-response and transport solve owners pass the concrete
-  operator/factor callbacks. The old explicit-sparse policy, builder support,
-  and triangular solve helper files were absorbed here so the explicit sparse
-  host-factor lane has one review surface.
-- ``sfincs_jax/solvers/preconditioner_host_sparse.py``:
-  RHSMode=1 host sparse ILU/LU factor setup used by non-differentiable
-  CLI-oriented rescue paths. The module owns matrix-free column assembly,
-  structural-threshold application, SuperLU retry/regularization policy, cached
-  dense/JAX triangular-factor materialization, and the matrix-free full-system
-  adapter used by coarse/Galerkin corrections. Historical private helper names
-  are exposed through the profile-response solve owner only when that owner
-  still needs them for orchestration.
-- ``sfincs_jax/solvers/preconditioner_reduced_pmat.py``:
-  Fortran-v3-style reduced active sparse factors for RHSMode=1. The module owns
-  factor-kind policy, large-matrix ILU guards, LU prefill safety defaults,
-  SuperLU/RCM ordering candidates, reduced active matrix construction,
-  support-mode parsing and preflight, symbolic-plan permutation, sparse
-  equilibration, LU/ILU memory admission, and SuperLU factor setup for the
-  non-differentiable host CSR lane. Historical private names are exposed through
-  the profile-response solve owner; direct ``Pmat`` emission and
-  active-preconditioner dispatch live in profile-response sparse/operator
-  owners.
-- ``sfincs_jax/solvers/preconditioner_active_sparse.py``:
-  active-projected RHSMode=1 sparse-factor preconditioners. The module owns the
-  global active sparse factor, row/column-equilibrated active factor, and
-  physics-filtered active sparse factor that retains selected off-diagonal
-  kinetic couplings. These are host-side, non-differentiable preconditioner
-  setup routines for explicit CSR solves; candidate dispatch lives in the
-  profile-response sparse/solve owners.
 - ``sfincs_jax/problems/profile_policies.py``:
   RHSMode=1 direct-tail structured-preconditioner adapter, direct reduced-Pmat
   aliases, stable cache-key hashing, cache-hit metadata tagging, and adaptive
   direct-tail memory-cap policy. Canonical debug scripts should import this
   owner directly when clearing the direct-tail cache or inspecting the policy.
-- ``sfincs_jax/operators/profile_reduced_tail.py``:
-  RHSMode=1 Fortran-reduced constraintScheme=1 direct-tail sparse-operator
-  materialization. The module emits source/tail columns and moment rows from the
-  same formulas used by the matrix-free v3 operator, while structured full-CSR
-  builder callbacks are supplied by the profile-response solve/operator owners.
 - ``sfincs_jax/problems/profile_policies.py``:
   active-projected RHSMode=1 full-CSR preconditioner auto-policy. The module
   owns environment parsing for the candidate ladder, large-system fallback
   guard, skipped-fallback metadata, and progress logging default. Candidate
   dispatch and setup timing live in the profile-response sparse/solve owners.
-- ``sfincs_jax/operators/profile_full_system.py``:
-  analytic RHSMode=1 full-CSR assembly plus the runtime/non-autodiff
-  ``SparseOperatorBundle`` adapter used by sparse-PC solver paths. Unsupported
-  or over-budget cases return ``None`` so callers can fall back to the
-  established matrix-free or pattern-probed path.
 - ``sfincs_jax/solvers/krylov_dispatch.py``:
   concrete Krylov solver routing for host-only SciPy methods, JIT/non-JIT JAX
   GMRES, distributed GMRES, diagnostic solver labels, and
@@ -771,11 +687,6 @@ owners are:
 - ``sfincs_jax/solvers/preconditioner_pas_policy.py``:
   PAS applicability, PAS-TZ memory safety, PAS fallback routing, and PAS
   adaptive-smoother eligibility.
-- ``sfincs_jax/solvers/preconditioner_pas_matrix_free.py``:
-  bounded matrix-free PAS correction probes, streaming L2 norms, candidate
-  byte-budget preflights, and ``PasRuntimeChunkPlan`` metadata for keeping
-  PAS-heavy residual/correction reductions inside configured memory budgets
-  before a matvec is launched.
 - ``sfincs_jax/problems/profile_policies.py``:
   typed RHSMode=1 solve-routing policy parsing for x-block probe-coarse,
   post-minres, post-coarse, post-residual-equation, bounded sparse-polish,
@@ -814,60 +725,11 @@ owners are:
   layer for dispatch, PAS-family builders, Schur binding,
   transport ``tzfft`` reuse, x-block builders, and strong fallback binding; the
   solve owner imports these names only as compatibility seams.
-- ``sfincs_jax/problems/profile_sparse_solve.py``:
-  RHSMode=1/profile-response sparse-PC solve orchestration layer. It owns the
-  driver-facing sparse-PC attempt orchestration that depends on solve-local
-  cache/replay/residual routing, generic sparse-PC retry execution, direct-tail
-  correction admission, finalization, and x-block sparse branch orchestration.
-  Its public ``__all__`` is limited to owned orchestration and diagnostics
-  symbols. Direct sparse, finalization, policy, QI, Fortran-reduced, and x-block
-  helpers are imported from their canonical split owners; tests guard that the
-  old broad sparse-solve namespace is not needed.
-- ``sfincs_jax/problems/profile_sparse_policy.py``:
-  generic sparse-PC policy and admission helpers: active-DOF map construction,
-  entry classification, sparse factor policy, conservative-pattern setup,
-  memory-budget preflight, factor residual-preflight gates, rescue-candidate
-  acceptance, auto-retry selection, GMRES stagnation/post-MinRes controls, and
-  the shared sparse env-token parser family used by direct, x-block, QI, and
-  Fortran-reduced sparse owners. This module is intentionally independent of
-  x-block assembled-operator and QI-device setup so it can stay reusable and
-  easy to test.
-- ``sfincs_jax/operators/profile_sparse_pattern.py``:
-  conservative and Fortran-reduced sparse structural patterns for
-  profile-response full-system operators, including active-index restricted
-  patterns, sparse-pattern summaries, and memory-preflight estimates. This
-  replaces the historical root ``sfincs_jax/v3_sparse_pattern.py`` owner.
 - ``sfincs_jax/operators/profile_fblock.py``:
   matrix-free kinetic f-block operator builder and matvec for RHSMode-1
   profile-response solves, including collisionless streaming, ExB, magnetic
   drift, Er, PAS, and Fokker-Planck terms. This replaces the historical root
   ``sfincs_jax/v3_fblock.py`` owner.
-- ``sfincs_jax/problems/profile_sparse_finalization.py``:
-  sparse-PC GMRES result contracts, post-MinRes polish metadata, dtype-retry
-  result assembly, completion messages, and final payload construction.
-- ``sfincs_jax/problems/profile_sparse_direct.py``:
-  explicit sparse operator admission, minimum-norm/direct host shortcuts,
-  sparse-factor cache keys, host-memory probing, sparse-JAX preconditioner
-  materialization, conservative full-pattern probing, ILU/direct-tail policy
-  parsing through the shared sparse policy parser, structured direct-tail
-  materialization, and final direct-tail metadata assembly.
-- ``sfincs_jax/problems/profile_sparse_xblock.py``:
-  x-block and sxblock rescue/correction helpers, shared x-block Krylov matvec
-  and initial-guess policy dataclasses, x-block sparse-PC setup/side-policy
-  resolution, assembled-operator setup and preflight, local factor setup,
-  precondition-side/probe-coarse gates, moment-Schur/two-level/global-coupling
-  stage setup, device/host Krylov control, optional augmented Krylov setup,
-  GMRES fallback routing, work estimates, progress messages, physical-residual
-  measurement, post-Krylov post-solve correction/completion orchestration,
-  x-block branch orchestration, and final x-block sparse-PC diagnostic metadata
-  assembly. This module owns generic x-block stage mechanics in the stable
-  core; QI-specific coarse-basis research is preserved on
-  ``research/qi-device-hard-seed``.
-- ``sfincs_jax/problems/profile_sparse_fortran_reduced.py``:
-  Fortran-reduced x-block backend policy, factor-build, Krylov setup/solve,
-  optional moment/global coarse stages, and final payload construction. The
-  optional global-coupling stage is injected by tests or advanced callers; the
-  stable core no longer imports QI host builders by default.
 - ``sfincs_jax/problems/profile_dense.py``:
   RHSMode=1/profile-response dense and linear-solve helpers. This module owns
   Krylov routing for implicit, JIT, distributed, GMRES, and BiCGStab solve
@@ -888,12 +750,6 @@ owners are:
   acceptance-floor metadata, wraps the result in ``V3LinearSolveResult``, and
   owns the bounded PETSc-style GMRES history replay for the optional
   Phi1/Newton-Krylov full-system path.
-- ``sfincs_jax/solvers/preconditioner_xblock_coarse.py``:
-  low-mode angular, moment, coupled f/tail, and tail-only feature construction
-  plus matrix-free Galerkin/least-squares residual-correction builders for
-  structured RHSMode=1 f-block preconditioners. The module keeps coarse-space
-  algebra independently testable without materializing dense operator bases in
-  the driver.
 - ``sfincs_jax/solvers/preconditioner_domain_decomposition.py``:
   deterministic angular domain-decomposition patch ranges, shard-aware block
   sizing, and two-level Schwarz coarse-block heuristics. These rules are kept
@@ -917,10 +773,6 @@ owners are:
   non-finite/clipped preconditioner wrapping, and scalar preconditioned-minres
   polish. This keeps fail-closed residual-polish algebra testable without
   entering the production driver.
-- ``sfincs_jax/operators/profile_device_sparse.py``:
-  bounded JAX-device CSR materialization, active-index slicing, sparse matvec
-  closures, and host-vs-device validation utilities for opt-in RHSMode=1
-  device-QI and operator-reuse experiments.
 - ``sfincs_jax/problems/profile_setup.py``:
   shared RHSMode=1 preconditioner-kind dispatch.
 - ``sfincs_jax/problems/profile_policies.py``:
@@ -961,22 +813,9 @@ owners are:
   RHSMode=1 host dense fallback, host sparse-direct, sparse-preconditioned
   GMRES rescue, factor-dtype, explicit sparse-helper policy, and automatic
   solver/fallback admission.
-- ``sfincs_jax/solvers/explicit_sparse.py``:
-  explicit host-sparse operator assembly/factorization policy plus host
-  direct-solve refinement and sparse-direct GMRES polish helpers. The monotone
-  refinement loops are NumPy-only, while the polish helper accepts the JAX
-  matvec and a host sparse factor so residual-polish behavior can be tested
-  without importing the full driver.
 - ``sfincs_jax/problems/profile_policies.py``:
   large explicit full-FP CPU sparse rescue, x-block seed, exact-LU promotion,
   host x-block assembly, and species-x-block rescue policy.
-- ``sfincs_jax/solvers/preconditioner_xblock_policy.py``:
-  pure x-block sparse-PC routing, Krylov-side selection, local factorization
-  tuning, lower-fill acceptance gates, and non-autodiff device-host fallback
-  metadata for large RHSMode=1 QI/full-FP solves.
-- ``sfincs_jax/solvers/preconditioner_xblock_policy.py``:
-  host sparse x-block rescue policy and metadata normalization for the
-  non-autodiff large-system fallback path.
 - ``sfincs_jax/problems/profile_policies.py``:
   RHSMode=1 profile-response admission, post-solve correction, solver-path,
   and implicit/differentiable solve-mode policy.

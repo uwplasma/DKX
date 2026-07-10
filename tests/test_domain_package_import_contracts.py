@@ -127,7 +127,6 @@ LEGACY_MODULES_THAT_KEEP_THEIR_IMPORT_PATHS = (
     "sfincs_jax.namelist",
     "sfincs_jax.geometry",
     "sfincs_jax.io",
-    "sfincs_jax.solver",
 )
 
 RESERVED_MODULE_NAMES_UNTIL_MIGRATION = (
@@ -151,11 +150,6 @@ MOVED_ROOT_MODULE_OWNERS = {
         "phi1_line_search_policy",
         "phi1_use_active_dof_mode",
         "solve_phi1_newton_linear_step",
-    ),
-    "sfincs_jax.solvers.explicit_sparse": (
-        "host_direct_solve_with_refinement",
-        "host_sparse_direct_polish",
-        "host_sparse_direct_solve_with_refinement",
     ),
     "sfincs_jax.solvers.preconditioning": (
         "project_constraint_scheme1_nullspace_solution",
@@ -316,7 +310,6 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "run.py": "public API",
     "sensitivity.py": "public differentiation API",
     "solve.py": "stable solver kernel",
-    "solver.py": "compatibility facade",
     "species.py": "stable physics kernel",
     "writer.py": "stable support utility",
 }
@@ -352,10 +345,6 @@ ROOT_MODULE_CLOSURE_MANIFEST = {
     "plotting.py": ("outputs/plotting public helper", "keep root public helper unless API replacement is documented"),
     "profiling.py": ("solvers/validation profiling support", "defer until profiling API boundary is explicit"),
     "sensitivity.py": ("package root differentiation API", "keep at root"),
-    "solver.py": (
-        "solvers.krylov public contracts owner",
-        "root facade aliases ``sfincs_jax.solvers.krylov`` for compatibility",
-    ),
 }
 
 TRANSPORT_COMPATIBILITY_IMPORTS = (
@@ -445,34 +434,9 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "solve_transport_dense_batch",
     ),
     (
-        "sfincs_jax.problems.transport_linear_system",
-        "sfincs_jax.problems.transport_linear_system",
-        "build_active_block_schur_factor",
-    ),
-    (
-        "sfincs_jax.problems.transport_solve",
-        "sfincs_jax.problems.transport_solve",
-        "transport_sparse_direct_solve",
-    ),
-    (
         "sfincs_jax.problems.transport_policies",
         "sfincs_jax.problems.transport_policies",
         "build_transport_preconditioner_from_kind",
-    ),
-    (
-        "sfincs_jax.problems.transport_linear_system",
-        "sfincs_jax.problems.transport_linear_system",
-        "_try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle",
-    ),
-    (
-        "sfincs_jax.problems.transport_linear_system",
-        "sfincs_jax.problems.transport_linear_system",
-        "build_transport_fp_direct_active_block_schur_preconditioner",
-    ),
-    (
-        "sfincs_jax.problems.transport_linear_system",
-        "sfincs_jax.problems.transport_linear_system",
-        "build_transport_fp_fortran_reduced_lu_preconditioner",
     ),
     (
         "sfincs_jax.problems.transport_parallel_runtime",
@@ -528,11 +492,6 @@ PRECONDITIONER_COMPATIBILITY_IMPORTS = (
         "build_rhs1_pas_xblock_ilu_preconditioner",
     ),
     (
-        "sfincs_jax.solvers.preconditioner_xblock_tz_sparse",
-        "sfincs_jax.solvers.preconditioner_xblock_tz_sparse",
-        "build_rhs1_xblock_tz_sparse_preconditioner",
-    ),
-    (
         "sfincs_jax.solvers.preconditioner_full_fp_kinetic",
         "sfincs_jax.solvers.preconditioner_full_fp_kinetic",
         "build_rhs1_collision_preconditioner",
@@ -541,11 +500,6 @@ PRECONDITIONER_COMPATIBILITY_IMPORTS = (
         "sfincs_jax.solvers.preconditioner_schur_profile",
         "sfincs_jax.solvers.preconditioner_schur_profile",
         "build_rhs1_schur_preconditioner",
-    ),
-    (
-        "sfincs_jax.solvers.preconditioner_reduced_pmat",
-        "sfincs_jax.solvers.preconditioner_reduced_pmat",
-        "build_active_fortran_v3_reduced_sparse_factor_preconditioner",
     ),
 )
 
@@ -564,10 +518,6 @@ PRECONDITIONER_IMPLEMENTATION_IMPORTS = (
     ),
     (
         "sfincs_jax.solvers.preconditioner_transport_matrix",
-        "build_rhsmode23_fp_structured_fblock_lu_preconditioner",
-    ),
-    (
-        "sfincs_jax.solvers.preconditioner_transport_matrix",
         "build_rhsmode23_fp_tzfft_line_preconditioner",
     ),
     (
@@ -577,14 +527,6 @@ PRECONDITIONER_IMPLEMENTATION_IMPORTS = (
     (
         "sfincs_jax.solvers.preconditioner_transport_matrix",
         "build_rhsmode23_fp_tzfft_preconditioner",
-    ),
-    (
-        "sfincs_jax.solvers.preconditioner_transport_matrix",
-        "build_rhsmode23_fp_xblock_tz_lu_preconditioner",
-    ),
-    (
-        "sfincs_jax.solvers.preconditioner_transport_matrix",
-        "build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner",
     ),
     (
         "sfincs_jax.solvers.preconditioner_transport_matrix",
@@ -677,16 +619,6 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "v3_linear_solve_result_from_payload",
     ),
     (
-        "sfincs_jax.operators.profile_sparse_pattern",
-        "sfincs_jax.operators.profile_sparse_pattern",
-        "v3_full_system_conservative_sparsity_pattern",
-    ),
-    (
-        "sfincs_jax.operators.profile_sparse_pattern",
-        "sfincs_jax.operators.profile_sparse_pattern",
-        "v3_full_system_fortran_reduced_preconditioner_sparsity_pattern",
-    ),
-    (
         "sfincs_jax.operators.profile_fblock",
         "sfincs_jax.operators.profile_fblock",
         "V3FBlockOperator",
@@ -745,46 +677,6 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "sfincs_jax.problems.profile_preconditioner_build",
         "sfincs_jax.problems.profile_preconditioner_build",
         "requested_rhs1_strong_preconditioner_kind",
-    ),
-    (
-        "sfincs_jax.problems.profile_sparse_solve",
-        "sfincs_jax.problems.profile_sparse_solve",
-        "FortranReducedXBlockBackendContext",
-    ),
-    (
-        "sfincs_jax.problems.profile_sparse_solve",
-        "sfincs_jax.problems.profile_sparse_solve",
-        "SparsePCDirectTailFactorSetupContext",
-    ),
-    (
-        "sfincs_jax.problems.profile_sparse_solve",
-        "sfincs_jax.problems.profile_sparse_solve",
-        "SparsePCDirectTailRescuePolicySetupContext",
-    ),
-    (
-        "sfincs_jax.problems.profile_sparse_solve",
-        "sfincs_jax.problems.profile_sparse_solve",
-        "SparsePCGenericBranchSetupContext",
-    ),
-    (
-        "sfincs_jax.problems.profile_sparse_solve",
-        "sfincs_jax.problems.profile_sparse_solve",
-        "build_sparse_pc_direct_tail_factor_setup",
-    ),
-    (
-        "sfincs_jax.problems.profile_sparse_solve",
-        "sfincs_jax.problems.profile_sparse_solve",
-        "build_sparse_pc_direct_tail_rescue_policy_setup",
-    ),
-    (
-        "sfincs_jax.problems.profile_sparse_solve",
-        "sfincs_jax.problems.profile_sparse_solve",
-        "build_sparse_pc_generic_branch_setup",
-    ),
-    (
-        "sfincs_jax.problems.profile_sparse_solve",
-        "sfincs_jax.problems.profile_sparse_solve",
-        "solve_fortran_reduced_xblock_backend",
     ),
 )
 
@@ -971,10 +863,7 @@ def test_profile_response_canonical_modules_expose_expected_symbols() -> None:
             assert public_name in new_module.__all__
 
 
-def test_sparse_solve_has_no_transitional_attribute_waiver() -> None:
-    """Sparse solve should expose owned orchestration helpers without reexport waivers."""
+def test_sparse_solve_module_stays_deleted() -> None:
+    """The RHSMode-1 sparse-PC orchestration owner was deleted with its families."""
 
-    source = Path("sfincs_jax/problems/profile_sparse_solve.py").read_text()
-    assert "# ruff: noqa: F401,F811" not in source
-    assert "transitional attributes" not in source
-    assert "Delete this waiver after direct owner imports are complete" not in source
+    assert not Path("sfincs_jax/problems/profile_sparse_solve.py").exists()

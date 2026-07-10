@@ -680,7 +680,8 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    non-dense rung for this same finite-beta QA deck.  At
    :math:`N_\theta=17`, :math:`N_\zeta=21`, :math:`N_\xi=12`,
    :math:`N_L=4`, :math:`N_x=4` with two species, ``solve_method="auto"``
-   selects ``xblock_sparse_pc_gmres``.  The CPU run wrote output in about
+   selected the (since-deleted) ``xblock_sparse_pc_gmres`` lane at the time of
+   the recorded audit.  The CPU run wrote output in about
    7 seconds, required 139 matrix-vector products, and reached a true residual
    :math:`1.44\times10^{-13}` against a target
    :math:`2.71\times10^{-13}`.  The same point matched the written Fortran-v3
@@ -715,7 +716,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    The next medium rung,
    :math:`N_\theta=25`, :math:`N_\zeta=31`, :math:`N_\xi=16`,
    :math:`N_L=4`, :math:`N_x=4`, has :math:`99{,}204` active unknowns and
-   estimated dense storage of about 73 GiB.  Forced ``xblock_sparse_pc_gmres``
+   estimated dense storage of about 73 GiB.  The (since-deleted) forced ``xblock_sparse_pc_gmres`` lane
    converged on local CPU in 68.1 seconds wrapper time with residual
    :math:`2.74\times10^{-14}` against target :math:`4.00\times10^{-13}`.
    The same input converged on one office GPU in 232 seconds wrapper time with
