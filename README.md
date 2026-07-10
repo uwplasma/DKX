@@ -205,11 +205,11 @@ issues), [docs/inputs.rst](docs/inputs.rst) / [docs/outputs.rst](docs/outputs.rs
 
 ## Known issues
 
-- The tier-2 differentiable adjoint can return a silently wrong gradient on
-  numerically singular full-Fokker-Planck systems with `constraintScheme=1`
-  (the adjoint GCROT stagnates without erroring). PAS+`Er` gradients on the
-  same chain are exact to 2.9e-6 vs finite differences. Tracked with a
-  reproducer; check adjoint residuals before trusting FP gradients there.
+- `Nxi_for_x` ramps embed truncated degrees of freedom as exact zero rows
+  (the Fortran code packs them out of its matrix). The differentiable solver
+  pins those rows — equivalent to the packed Fortran system; gradients match
+  finite differences to 4.4e-8 on the regression deck — and raises at
+  execution time if a forward or adjoint solve fails to converge.
 - The scheme-1 monoenergetic `transportMatrix[0,1]` element is ill-conditioned
   in the upstream configuration itself (tolerance-unstable in the Fortran
   build); parity for it is pinned to upstream's expected value.
