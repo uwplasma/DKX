@@ -232,10 +232,10 @@ one-node and multi-host runs.
    # Multi-core CPU host devices + auto sharding
    sfincs_jax --cores 8 --shard-axis auto /path/to/input.namelist
 
-   # Independent RHS transport parallelism
+   # RHSMode=2/3 transport-matrix run (canonical stack; all whichRHS drives
+   # are solved in one shared multi-RHS solve)
    sfincs_jax transport-matrix-v3 \
-     --input /path/to/input.namelist \
-     --transport-workers 4
+     --input /path/to/input.namelist
 
    # High-nu publication pilot with one transport RHS worker per visible GPU
    CUDA_VISIBLE_DEVICES=0,1 \
@@ -257,12 +257,10 @@ one-node and multi-host runs.
      --distributed-gmres auto \
      --distributed-krylov auto
 
-   # Production multi-GPU throughput path: one transport worker per GPU
-   CUDA_VISIBLE_DEVICES=0,1 \
+   # RHSMode=2/3 transport-matrix run on a selected GPU
+   CUDA_VISIBLE_DEVICES=0 \
    sfincs_jax transport-matrix-v3 \
-     --input /path/to/input.namelist \
-     --transport-workers 2 \
-     --transport-parallel-backend gpu
+     --input /path/to/input.namelist
 
    # Multi-host JAX bootstrap for sharded solves
    sfincs_jax write-output \
@@ -277,7 +275,9 @@ Relevant CLI flags:
 
 - ``--cores``: request multiple host CPU devices before JAX loads.
 - ``--transport-workers``: run independent ``whichRHS`` solves in parallel
-  worker processes.
+  worker processes on the legacy RHSMode=2/3 output path (scan/export_f
+  workflows); the canonical ``transport-matrix-v3`` driver solves all drives
+  in one shared multi-RHS solve.
 - ``--shard-axis {auto,off,theta,zeta,x,flat}``: choose the single-solve sharding
   mode for the executable path.
 - ``--distributed-gmres`` and ``--distributed-krylov``: control distributed
