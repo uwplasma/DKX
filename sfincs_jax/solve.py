@@ -14,8 +14,8 @@ Tier 1 — structured direct (``solvax.direct`` block Thomas over Legendre modes
     too, so the full system splits into ``n_species * n_x`` independent
     block-tridiagonal systems of ``n_xi`` dense (Ntheta*Nzeta) blocks with a
     rank-one border each.  The border is absorbed exactly with the rank-one
-    trick of ``sfincs_jax/solvers/block_tridiagonal_transport.py``
-    (``A~ = A + gamma B C``; algebraically exact for any ``gamma != 0``) and
+    trick ``A~ = A + gamma B C`` (algebraically exact for any ``gamma != 0``,
+    inherited from the retired probing-based RHSMode=3 solver POC) and
     the batch is solved by ``vmap``-ed ``solvax.block_thomas_factor`` /
     ``block_thomas_solve``.  Multi-RHS shares one elimination.
 
@@ -287,10 +287,9 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
     """Assemble and factor the tier-1 batched bordered block-tridiagonal solver.
 
     Uses the analytic (probing-free) :meth:`KineticOperator.to_block_tridiagonal`
-    blocks — the replacement for the probing-based extraction in
-    ``sfincs_jax/solvers/block_tridiagonal_transport.py`` — and absorbs the
-    ``constraintScheme=2`` border with the exact rank-one trick
-    ``A~ = A + gamma B C`` documented there.
+    blocks — the replacement for the retired probing-based RHSMode=3 solver POC
+    — and absorbs the ``constraintScheme=2`` border with the exact rank-one
+    trick ``A~ = A + gamma B C`` documented in the module docstring.
 
     Raises:
         NotImplementedError: when :func:`tier1_available` says no.

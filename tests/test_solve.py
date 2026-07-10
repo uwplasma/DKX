@@ -4,8 +4,9 @@ Tiny fixtures only (shared with ``tests/test_drift_kinetic.py``):
 
 - tier 1 (analytic block-Thomas) must match the tier-3 dense solve to 1e-10
   on the monoenergetic (RHSMode=3) and PAS (RHSMode=1) fixtures, and match the
-  committed probing-based ``solvers/block_tridiagonal_transport`` path on the
-  RHSMode=3 transport columns;
+  recorded Fortran v3 ``stateVector`` fixtures on the RHSMode=3 transport
+  columns (the referee formerly provided by the retired probing-based
+  ``solvers/block_tridiagonal_transport`` POC);
 - tier 2 (GCROT + coarse-operator preconditioner) must converge on the
   Fokker-Planck two-species fixture, match tier-3 dense to 1e-8, and need
   strictly fewer iterations than the unpreconditioned solve;
@@ -76,21 +77,24 @@ def test_tier1_matches_dense_pas_rhsmode1() -> None:
     assert result.x.shape == rhs.shape
 
 
-def test_tier1_matches_committed_block_tridiagonal_transport_path() -> None:
-    """The analytic tier-1 replaces the committed probing-based RHSMode=3 solver."""
-    from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
-    from sfincs_jax.solvers.block_tridiagonal_transport import (
-        solve_rhs3_block_tridiagonal,
-    )
+@pytest.mark.parametrize("base", ("monoenergetic_PAS_tiny_scheme1", "monoenergetic_PAS_tiny_scheme11"))
+def test_tier1_matches_recorded_fortran_state_vectors_rhsmode3(base: str) -> None:
+    """Tier 1 must reproduce the frozen v3 PETSc stateVector for both transport drives.
 
-    nml = read_sfincs_input(REF / "monoenergetic_PAS_tiny_scheme1.input.namelist")
-    op_new = KineticOperator.from_namelist(nml)
-    op_old = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+    This is the direct Fortran referee for the structured-direct tier on the
+    RHSMode=3 transport columns; it replaces the equality test against the
+    retired probing-based ``solvers/block_tridiagonal_transport`` POC.
+    """
+    from sfincs_jax.validation.fortran import read_petsc_vec
 
-    rhs = jnp.stack([op_new.rhs(1), op_new.rhs(2)], axis=1)
-    x_new = np.asarray(solve(op_new, rhs, method="block_tridiagonal").x)
-    x_old = np.asarray(solve_rhs3_block_tridiagonal(op=op_old, rhs_columns=rhs))
-    assert _rel_err(x_new, x_old) < 1e-10
+    op = _load_op(base)
+    rhs = jnp.stack([op.rhs(1), op.rhs(2)], axis=1)
+    result = solve(op, rhs, method="block_tridiagonal")
+    assert result.converged
+    x = np.asarray(result.x)
+    for which_rhs in (1, 2):
+        x_ref = read_petsc_vec(REF / f"{base}.whichRHS{which_rhs}.stateVector.petscbin").values
+        assert _rel_err(x[:, which_rhs - 1], x_ref) < 1e-10, f"whichRHS={which_rhs}"
 
 
 # ---------------------------------------------------------------------------
@@ -258,16 +262,13 @@ def test_solve_importable_without_solvax_and_fails_loudly_on_use() -> None:
             "          'solvax.native', 'solvax.operators'):",
             "    sys.modules[m] = None  # poisoned: import raises ImportError",
             "import sfincs_jax.solve as solve_mod",
-            "import sfincs_jax.solvers.block_tridiagonal_transport as bt_mod",
             "assert solve_mod._SOLVAX_IMPORT_ERROR is not None",
-            "assert bt_mod._SOLVAX_IMPORT_ERROR is not None",
-            "for fn in (solve_mod._require_solvax, bt_mod._require_solvax):",
-            "    try:",
-            "        fn()",
-            "    except ImportError as exc:",
-            "        assert 'solvax' in str(exc)",
-            "    else:",
-            "        raise SystemExit('expected ImportError on solvax use')",
+            "try:",
+            "    solve_mod._require_solvax()",
+            "except ImportError as exc:",
+            "    assert 'solvax' in str(exc)",
+            "else:",
+            "    raise SystemExit('expected ImportError on solvax use')",
             "print('guarded-import-ok')",
         ]
     )

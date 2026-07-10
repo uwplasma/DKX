@@ -132,39 +132,44 @@ def test_cmd_solve_v3_forces_explicit_mode(monkeypatch, tmp_path: Path) -> None:
     assert captured["differentiable"] is False
 
 
-def test_cmd_transport_matrix_v3_forces_explicit_mode(monkeypatch, tmp_path: Path) -> None:
+def test_cmd_transport_matrix_v3_uses_canonical_run(monkeypatch, tmp_path: Path) -> None:
+    """transport-matrix-v3 routes through the canonical sfincs_jax.run driver."""
     captured: dict[str, object] = {}
 
-    def _fake_transport(**kwargs):
+    def _fake_run_transport_matrix(namelist_path, **kwargs):
+        captured["namelist_path"] = Path(namelist_path)
         captured.update(kwargs)
         return SimpleNamespace(
             transport_matrix=np.zeros((2, 2), dtype=np.float64),
-            state_vectors_by_rhs={},
-            residual_norms_by_rhs={1: np.float64(0.0)},
+            state_vectors=np.zeros((2, 4), dtype=np.float64),
+            solve_result=SimpleNamespace(residual_norms=np.zeros((2,), dtype=np.float64)),
+            output_path=None,
         )
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=2))
-    monkeypatch.setattr(
-        "sfincs_jax.problems.transport_solve.solve_v3_transport_matrix_linear_gmres",
-        _fake_transport,
-    )
+    monkeypatch.setattr("sfincs_jax.run.run_transport_matrix", _fake_run_transport_matrix)
 
     args = Namespace(
         input=str(tmp_path / "input.namelist"),
         out_matrix=str(tmp_path / "tm.npy"),
-        out_state_prefix=None,
+        out=None,
+        out_state_prefix=str(tmp_path / "state"),
         equilibrium_file=None,
         wout_path=None,
         tol=1e-8,
-        atol=0.0,
-        restart=20,
-        maxiter=40,
-        solve_method="incremental",
+        solve_method="auto",
         quiet=True,
         verbose=0,
     )
     assert cli._cmd_transport_matrix_v3(args) == 0
-    assert captured["differentiable"] is False
+    assert captured["namelist_path"] == Path(args.input)
+    assert captured["tol"] == 1e-8
+    assert captured["solve_method"] == "auto"
+    assert captured["out_path"] is None
+    assert captured["emit"] is None  # --quiet silences the Fortran-parity stdout
+    assert (tmp_path / "tm.npy").exists()
+    assert (tmp_path / "state.whichRHS1.npy").exists()
+    assert (tmp_path / "state.whichRHS2.npy").exists()
 
 
 def test_write_output_full_system_regression(tmp_path: Path, monkeypatch) -> None:
@@ -1083,16 +1088,16 @@ def test_main_preserves_shard_axis_before_subcommand(monkeypatch, tmp_path: Path
 def test_main_preserves_transport_workers_before_subcommand(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_write_output_h5(**kwargs):
+    def _fake_run_transport_matrix(namelist_path, **kwargs):
         captured["parallel_mode"] = os.environ.get("SFINCS_JAX_TRANSPORT_PARALLEL")
         captured["workers"] = os.environ.get("SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS")
-        out = Path(kwargs["output_path"])
+        out = Path(kwargs["out_path"])
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"")
-        return out
+        return SimpleNamespace(output_path=out)
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=2))
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+    monkeypatch.setattr("sfincs_jax.run.run_transport_matrix", _fake_run_transport_matrix)
 
     rc = cli.main(
         [

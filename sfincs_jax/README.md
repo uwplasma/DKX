@@ -37,7 +37,7 @@ keeps existing scripts working while the implementation lives in a domain folder
 | Module | Role | Typical user |
 | --- | --- | --- |
 | `api.py` | High-level Python entry points for output writing, solves, and result loading. | Python users and notebooks |
-| `cli.py`, `__main__.py` | Console interface behind `python -m sfincs_jax` and `sfincs_jax`. | CLI users |
+| `cli.py`, `__main__.py` | Console interface behind `python -m sfincs_jax` and `sfincs_jax`; RHSMode 2/3 transport runs dispatch to the canonical `run.py` driver. | CLI users |
 | `__init__.py` | Public package exports, JAX precision/cache setup, and compatibility aliases. | All importers |
 | `solver.py` | Compatibility alias for `solvers/krylov.py`. | Existing scripts importing `sfincs_jax.solver` |
 | `ambipolar.py` | Public ambipolar-root workflows. | Transport/profile workflows |
@@ -122,7 +122,10 @@ Use this map before adding a file or following an internal import:
   environment-policy decisions.
 - `problems/profile_residual.py`: RHSMode-1 post-Krylov residual correction and
   polish stages.
-- `problems/transport_solve.py`: RHSMode-2/3 transport solve orchestration.
+- `problems/transport_solve.py`: legacy RHSMode-2/3 transport solve
+  orchestration (the default CLI path is the canonical `run.py`; retained for
+  the legacy RHSMode-1 stack, export_f/streaming output options, and
+  mapped-x-grid workflows until their slices land).
 - `problems/transport_linear_system.py`: transport linear-system construction,
   batched RHS solves, and dense/host/JAX dispatch helpers.
 - `problems/transport_parallel_runtime.py`: RHSMode-2/3 whichRHS

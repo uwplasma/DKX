@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 from pathlib import Path
 import sys
+import tempfile
 import time
 
 import numpy as np
@@ -146,6 +148,47 @@ def _nml_with_cli_equilibrium_override(nml, args: argparse.Namespace):
         equilibrium_file=getattr(args, "equilibrium_file", None),
         wout_path=getattr(args, "wout_path", None),
     )
+
+
+@contextlib.contextmanager
+def _canonical_namelist_path(*, nml, input_path: Path, args: argparse.Namespace):
+    """Yield a namelist path for the canonical driver, honoring CLI equilibrium overrides.
+
+    The canonical :func:`sfincs_jax.run.run_transport_matrix` reads the input
+    file itself, so a ``--equilibrium-file``/``--wout-path`` override is
+    materialized as a sibling temporary namelist (same directory, so any other
+    relative paths keep resolving) and removed afterwards.
+    """
+    from .input_compat import canonical_equilibrium_override  # noqa: PLC0415
+
+    override = canonical_equilibrium_override(
+        equilibrium_file=getattr(args, "equilibrium_file", None),
+        wout_path=getattr(args, "wout_path", None),
+    )
+    if override is None:
+        yield input_path
+        return
+    if nml.source_text is None:
+        raise ValueError(
+            "--equilibrium-file/--wout-path require a readable input.namelist source text."
+        )
+    tmp = tempfile.NamedTemporaryFile(
+        "w",
+        dir=str(input_path.parent),
+        prefix=f".{input_path.stem}.override.",
+        suffix=".namelist",
+        delete=False,
+        encoding="utf-8",
+    )
+    try:
+        tmp.write(nml.source_text)
+        tmp.close()
+        yield Path(tmp.name)
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
 
 
 def _add_equilibrium_override_args(parser: argparse.ArgumentParser) -> None:
@@ -318,6 +361,50 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
     compute_solution = (not geometry_only) and (bool(getattr(args, "compute_solution", False)) or rhs_mode == 1)
     compute_transport_matrix = (not geometry_only) and (bool(args.compute_transport_matrix) or rhs_mode in (2, 3))
 
+    # RHSMode=2/3 default path: the canonical stack (sfincs_jax.run). The legacy
+    # outputs writer remains the owner only for options the canonical writer does
+    # not cover yet (npz output, export_f, solver traces, non-Fortran layout,
+    # --no-overwrite), and for all RHSMode=1 runs.
+    export_f_group = nml.group("export_f")
+    export_f_requested = bool(export_f_group.get("EXPORT_FULL_F", False)) or bool(
+        export_f_group.get("EXPORT_DELTA_F", False)
+    )
+    use_canonical_transport = (
+        rhs_mode in (2, 3)
+        and compute_transport_matrix
+        and output_format in {"h5", "netcdf"}
+        and bool(args.fortran_layout)
+        and bool(args.overwrite)
+        and getattr(args, "solver_trace", None) is None
+        and not export_f_requested
+    )
+    if use_canonical_transport:
+        from .run import run_transport_matrix  # noqa: PLC0415
+
+        res_group = nml.group("resolutionParameters")
+        try:
+            solver_tol = float(res_group.get("SOLVERTOLERANCE", 1e-10))
+        except (TypeError, ValueError):
+            solver_tol = 1e-10
+        quiet = bool(getattr(args, "quiet", False))
+        try:
+            with _canonical_namelist_path(nml=nml, input_path=Path(args.input), args=args) as namelist_path:
+                run = run_transport_matrix(
+                    namelist_path,
+                    solve_method=str(getattr(args, "solve_method", "auto")),
+                    tol=solver_tol,
+                    out_path=Path(args.out),
+                    emit=None if quiet else (lambda line: _emit(line, level=0, args=args)),
+                )
+        except RuntimeError as exc:
+            if os.environ.get("SFINCS_JAX_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}:
+                raise
+            print(f"sfincs_jax write-output failed: {exc}", file=sys.stderr, flush=True)
+            return 2
+        _emit(f" wrote output -> {run.output_path}", level=0, args=args)
+        _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
+        return 0
+
     try:
         out_path = write_sfincs_jax_output_h5(
             input_namelist=Path(args.input),
@@ -345,43 +432,47 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
 
 
 def _cmd_transport_matrix_v3(args: argparse.Namespace) -> int:
+    """RHSMode=2/3 transport-matrix runs on the canonical stack (:mod:`sfincs_jax.run`)."""
     t0 = _now()
-    from .problems.transport_solve import solve_v3_transport_matrix_linear_gmres  # noqa: PLC0415
+    from .run import run_transport_matrix  # noqa: PLC0415
 
-    nml = _nml_with_cli_equilibrium_override(read_sfincs_input(Path(args.input)), args)
+    input_path = Path(args.input)
+    nml = _nml_with_cli_equilibrium_override(read_sfincs_input(input_path), args)
     _emit("################################################################", level=0, args=args)
     _emit(" sfincs_jax transport-matrix-v3", level=0, args=args)
-    _emit(f" input={Path(args.input).resolve()}", level=0, args=args)
+    _emit(f" input={input_path.resolve()}", level=0, args=args)
     _emit_namelist_summary(nml=nml, args=args)
     _emit_runtime_info(args=args)
     _emit_parallel_runtime_info(args=args)
-    _emit(f" tol={args.tol} atol={args.atol} restart={args.restart} maxiter={args.maxiter} solve_method={args.solve_method}", level=1, args=args)
-    result = solve_v3_transport_matrix_linear_gmres(
-        nml=nml,
-        tol=float(args.tol),
-        atol=float(args.atol),
-        restart=int(args.restart),
-        maxiter=int(args.maxiter) if args.maxiter is not None else None,
-        solve_method=str(args.solve_method),
-        differentiable=False,
-        emit=lambda level, msg: _emit(msg, level=level, args=args),
-    )
+    _emit(f" tol={args.tol} solve_method={args.solve_method}", level=1, args=args)
+    quiet = bool(getattr(args, "quiet", False))
+    with _canonical_namelist_path(nml=nml, input_path=input_path, args=args) as namelist_path:
+        run = run_transport_matrix(
+            namelist_path,
+            solve_method=str(args.solve_method),
+            tol=float(args.tol),
+            out_path=Path(args.out) if getattr(args, "out", None) else None,
+            emit=None if quiet else (lambda line: _emit(line, level=0, args=args)),
+        )
 
     out_tm = Path(args.out_matrix)
     out_tm.parent.mkdir(parents=True, exist_ok=True)
-    np.save(out_tm, np.asarray(result.transport_matrix))
+    np.save(out_tm, np.asarray(run.transport_matrix))
     _emit(f" wrote transportMatrix -> {out_tm.resolve()}", level=0, args=args)
+    if run.output_path is not None:
+        _emit(f" wrote output -> {Path(run.output_path).resolve()}", level=0, args=args)
 
     if args.out_state_prefix is not None:
         pref = Path(args.out_state_prefix)
         pref.parent.mkdir(parents=True, exist_ok=True)
-        for which_rhs, x in sorted(result.state_vectors_by_rhs.items()):
-            p = pref.with_name(f"{pref.name}.whichRHS{which_rhs}.npy")
+        for idx, x in enumerate(np.asarray(run.state_vectors), start=1):
+            p = pref.with_name(f"{pref.name}.whichRHS{idx}.npy")
             np.save(p, np.asarray(x))
-            _emit(f" wrote stateVector(whichRHS={which_rhs}) -> {p.resolve()}", level=1, args=args)
+            _emit(f" wrote stateVector(whichRHS={idx}) -> {p.resolve()}", level=1, args=args)
 
-    for which_rhs, rn in sorted(result.residual_norms_by_rhs.items()):
-        _emit(f" whichRHS={which_rhs} residual_norm={float(rn):.6e}", level=0, args=args)
+    residual_norms = np.atleast_1d(np.asarray(run.solve_result.residual_norms, dtype=np.float64))
+    for idx, rn in enumerate(residual_norms, start=1):
+        _emit(f" whichRHS={idx} residual_norm={float(rn):.6e}", level=0, args=args)
     _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
     return 0
 
@@ -1098,24 +1189,29 @@ def main(argv: list[str] | None = None) -> int:
     _add_equilibrium_override_args(p_out)
     p_out.set_defaults(func=_cmd_write_output)
 
-    p_tm = sub.add_parser("transport-matrix-v3", help="Solve RHSMode=2/3 transport-matrix systems and write transportMatrix.npy.")
+    p_tm = sub.add_parser(
+        "transport-matrix-v3",
+        help="Solve RHSMode=2/3 transport-matrix systems on the canonical stack and write transportMatrix.npy.",
+    )
     _add_common_cli_args(p_tm)
     _add_parallel_cli_args(p_tm)
     p_tm.add_argument("--input", required=True, help="Path to input.namelist (must have RHSMode=2 or 3)")
     p_tm.add_argument("--out-matrix", default="transportMatrix.npy", help="Where to write the transport matrix (NumPy .npy)")
     p_tm.add_argument(
+        "--out",
+        default=None,
+        help="Optional sfincsOutput file (.h5/.hdf5 or .nc/.netcdf) written by the canonical writer.",
+    )
+    p_tm.add_argument(
         "--out-state-prefix",
         default=None,
         help="Optional prefix for saving solution vectors as <prefix>.whichRHS{k}.npy",
     )
-    p_tm.add_argument("--tol", default="1e-10", help="GMRES relative tolerance")
-    p_tm.add_argument("--atol", default="0.0", help="GMRES absolute tolerance")
-    p_tm.add_argument("--restart", default="80", help="GMRES restart")
-    p_tm.add_argument("--maxiter", default=None, help="GMRES maxiter (default: library default)")
+    p_tm.add_argument("--tol", default="1e-10", help="Relative residual tolerance per whichRHS column")
     p_tm.add_argument(
         "--solve-method",
         default="auto",
-        help="Advanced transport solver override. Default 'auto' is recommended for normal runs; see docs/usage.rst.",
+        help="Advanced solver override (sfincs_jax.solve tiers). Default 'auto' is recommended; see docs/usage.rst.",
     )
     _add_equilibrium_override_args(p_tm)
     p_tm.set_defaults(func=_cmd_transport_matrix_v3)

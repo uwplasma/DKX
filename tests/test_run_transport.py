@@ -117,6 +117,20 @@ def test_run_transport_matrix_matches_legacy_stack(base: str, tmp_path: Path) ->
     assert run.state_vectors.shape == (n, run.operator.total_size)
     assert run.solve_result.converged
 
+    # 1b) Direct Fortran referee, independent of the legacy pipeline: the
+    # canonical transport matrix must match the recorded v3 sfincsOutput.h5.
+    # Unlike tests/test_transport_matrix_rhsmode{2,3}_parity.py (which insert
+    # the frozen Fortran state vectors, atol 2e-10..5e-10), this re-solves the
+    # systems, so the comparison is limited by the finite PETSc KSP tolerance
+    # of the recorded solutions; the ill-conditioned tiny scheme1/scheme2
+    # fixtures sit at ~1e-9 relative.  Fortran stores the matrix column-major,
+    # so the h5 dataset reads back transposed vs mathematical row/column order.
+    import h5py
+
+    with h5py.File(REF / f"{base}.sfincsOutput.h5", "r") as f:
+        tm_fortran = np.asarray(f["transportMatrix"][...], dtype=np.float64)
+    np.testing.assert_allclose(run.transport_matrix.T, tm_fortran, rtol=2e-8, atol=1e-13)
+
     # 2) Every dataset of the legacy writer's file, at the same tolerance.
     legacy = _legacy_h5(base, tmp_path)
     canonical = _read_h5(run.output_path)

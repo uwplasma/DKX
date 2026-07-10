@@ -429,32 +429,6 @@ def solve_v3_transport_matrix_linear_gmres(
     )
     if parallel_result is not None:
         return parallel_result
-    # Opt-in RHSMode=3 direct solve over Legendre blocks (solvax block Thomas).
-    # solvax is optional: import lazily so every standard path works without it,
-    # but fail loudly if the user explicitly requested the block-Thomas method.
-    try:
-        from sfincs_jax.solvers.block_tridiagonal_transport import (
-            rhs3_block_tridiagonal_requested,
-            solve_transport_block_tridiagonal_batch,
-        )
-    except ImportError as exc:
-        if str(solve_method).strip().lower() in {"block_tridiagonal", "block_thomas"}:
-            raise ImportError(
-                "solve_method='block_tridiagonal' requires the solvax package "
-                "(pip install solvax)"
-            ) from exc
-        rhs3_block_tridiagonal_requested = None
-        solve_transport_block_tridiagonal_batch = None
-    use_rhs3_block_thomas = bool(
-        rhs3_block_tridiagonal_requested is not None
-        and rhs3_block_tridiagonal_requested(
-            solve_method=str(solve_method), rhs_mode=int(rhs_mode)
-        )
-    )
-    if str(solve_method).strip().lower() in {"block_tridiagonal", "block_thomas"}:
-        # Downstream policy resolution only understands the standard method names;
-        # the block-Thomas request is handled before the per-RHS loop below.
-        solve_method = "auto"
     if emit is not None:
         emit(1, f"solve_v3_transport_matrix_linear_gmres: rhs_mode={rhs_mode} whichRHS_count={n} total_size={int(op0.total_size)}")
         emit(
@@ -860,17 +834,6 @@ def solve_v3_transport_matrix_linear_gmres(
             op_probe_ref=op_probe_ref,
             reason=reason,
         )
-
-    if use_rhs3_block_thomas and not dense_batch_done:
-        if solve_transport_block_tridiagonal_batch(
-            context=_make_dense_batch_context(),
-            op_probe_ref=op_matvec_by_index[0],
-            tol=float(tol),
-            atol=float(atol),
-        ):
-            dense_batch_done = True
-        elif emit is not None:
-            emit(0, "solve_v3_transport_matrix_linear_gmres: block-Thomas path unavailable; using standard path")
 
     if (not dense_batch_done) and str(solve_method_use).lower() == "dense":
         op_probe_ref = op_matvec_by_index[0]

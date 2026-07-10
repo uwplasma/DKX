@@ -787,8 +787,7 @@ The CLI flags are the public entry point for that rollout:
    sfincs_jax --cores 8 --shard-axis auto /path/to/input.namelist
 
    sfincs_jax transport-matrix-v3 \
-     --input /path/to/input.namelist \
-     --transport-workers 4
+     --input /path/to/input.namelist
 
    CUDA_VISIBLE_DEVICES=0,1 \
    sfincs_jax write-output \
