@@ -113,3 +113,28 @@ not harder, as N grows on laptop-class hardware.
 - [ ] Same case via the solvax block-Thomas tier-1 path (POC in progress).
 - [ ] QH bootstrap profile at 25×51×100×4 (queued behind machine load).
 - [ ] Fortran `mpiexec -n {1,2,4,8}` strong-scaling baselines (Phase 5.1).
+
+## Phase-4 head-to-head: canonical tier-1 vs Fortran (744k unknowns, HSX PAS DKES RHSMode=1)
+
+Truncated Legendre elimination (`block_thomas_truncated_fn`, blocks assembled on the
+fly from the analytic operator coefficients, keep_lowest=3 — exact for every
+RHSMode-1 output). Full-band tier-1 would need ~91 GB; the truncated route ~0.3 GB.
+
+| | MacBook M4 CPU | office Xeon (36t) | RTX A4000 | Fortran 1 rank | Fortran 2 ranks |
+|---|---|---|---|---|---|
+| solve warm [s] | 44.3 (uniform) / **27.2 (ramp)** | 1591 | 45.0 | 463.6 | 229.5 |
+| peak RSS [GB] | 0.93 / 1.16 | 1.68 | 1.88 (0.05 GB VRAM buffers) | 3.98 | 2.86 |
+
+- Matched (ramp) discretization: **17x faster than 1-rank Fortran, 8.4x faster than
+  its best parallel floor, at ~30% of the memory** — the G3/G7 gates are exceeded by
+  nearly an order of magnitude on this case.
+- Physics: the direct solve is *more* converged than the Fortran reference — Fortran's
+  own electron FSABFlow scatters 51% across its 1/2/4/8-rank runs (KSP rtol=1e-6
+  noise); JAX matches the closest Fortran run to 2e-10 and sits inside Fortran's own
+  spread on every quantity. Ramp-vs-uniform Nxi differences are <=0.9% (electrons).
+- Where time goes: ~100% in the L-scan elimination (42.3 ms/step at TZ=1275; block
+  assembly is ~3%). GPU == M4 because the scan is serial in L and A4000 FP64 is 1/32
+  rate: GPU upside requires batching over (species, x, surfaces/Er) or fp32 factors
+  with fp64 refinement.
+- office Xeon XLA-CPU pathology: 36 threads, 36x slower than the M4 on sequential
+  1275^2 LU steps — Phase-5 thread budgeting must cap intra-op parallelism per step.
