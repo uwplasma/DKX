@@ -297,68 +297,59 @@ def test_public_read_output_facade_routes_output_reader(monkeypatch: pytest.Monk
     assert calls == [Path("sfincsOutput.npz")]
 
 
-def test_public_ambipolar_facade_routes_brent_solver(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_public_ambipolar_facade_routes_canonical_er_solver(monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_ambipolar_brent routes to the canonical sfincs_jax.er slice."""
     calls: list[dict] = []
 
-    def fake_solve_sfincs_jax_ambipolar_brent(**kwargs):
-        calls.append(kwargs)
+    def fake_find_ambipolar_er(input_path, **kwargs):
+        calls.append({"input_path": input_path, **kwargs})
         return "ambipolar-result"
 
-    monkeypatch.setattr(
-        "sfincs_jax.problems.ambipolar.solve_sfincs_jax_ambipolar_brent",
-        fake_solve_sfincs_jax_ambipolar_brent,
-    )
+    monkeypatch.setattr("sfincs_jax.er.find_ambipolar_er", fake_find_ambipolar_er)
 
     request = SolveInputs(input_path="input.namelist", requires_autodiff=True, options={"emit": None})
 
     assert run_ambipolar_brent(
         request,
-        work_dir="ambipolar-work",
         er_min=-5.0,
         er_max=5.0,
         max_evaluations=7,
     ) == "ambipolar-result"
     assert calls == [
         {
-            "input_namelist": Path("input.namelist"),
-            "work_dir": "ambipolar-work",
-            "er_min": -5.0,
-            "er_max": 5.0,
+            "input_path": Path("input.namelist"),
+            "er_bracket": (-5.0, 5.0),
             "er_initial": 0.0,
-            "max_evaluations": 7,
-            "current_tolerance": 1.0e-10,
-            "step_tolerance": 1.0e-8,
+            "max_iter": 7,
+            "current_tol": 1.0e-10,
             "solve_method": "auto",
-            "differentiable": True,
-            "reuse_output_geometry_cache": True,
-            "reuse_solver_state": True,
             "emit": None,
         }
     ]
 
 
-def test_public_ambipolar_facade_honors_explicit_differentiable_override(
+def test_public_ambipolar_facade_forwards_bracket_and_tolerances(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[dict] = []
 
-    def fake_solve_sfincs_jax_ambipolar_brent(**kwargs):
-        calls.append(kwargs)
+    def fake_find_ambipolar_er(input_path, **kwargs):
+        calls.append({"input_path": input_path, **kwargs})
         return "ambipolar-result"
 
-    monkeypatch.setattr(
-        "sfincs_jax.problems.ambipolar.solve_sfincs_jax_ambipolar_brent",
-        fake_solve_sfincs_jax_ambipolar_brent,
-    )
+    monkeypatch.setattr("sfincs_jax.er.find_ambipolar_er", fake_find_ambipolar_er)
 
-    request = SolveInputs(input_path="input.namelist", requires_autodiff=True, options={"extra": 3})
+    request = SolveInputs(input_path="input.namelist", requires_autodiff=True, options={})
     assert run_ambipolar_brent(
         request,
-        work_dir="ambipolar-work",
         er_min=-1.0,
         er_max=1.0,
-        differentiable=False,
+        er_initial=0.25,
+        current_tolerance=1e-9,
+        solve_method="gmres",
     ) == "ambipolar-result"
 
-    assert calls[0]["differentiable"] is False
-    assert calls[0]["extra"] == 3
+    assert calls[0]["er_bracket"] == (-1.0, 1.0)
+    assert calls[0]["er_initial"] == 0.25
+    assert calls[0]["current_tol"] == 1e-9
+    assert calls[0]["solve_method"] == "gmres"
