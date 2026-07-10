@@ -91,22 +91,10 @@ maintained domain modules.
 .. automodule:: sfincs_jax.solvers.preconditioner_schur_profile
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioner_xblock_low_l_schur
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioner_xblock_active
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioner_xblock_tz_sparse
-   :members:
-
 .. automodule:: sfincs_jax.problems.transport_linear_system
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_setup
-   :members:
-
-.. automodule:: sfincs_jax.solvers.explicit_sparse
    :members:
 
 .. automodule:: sfincs_jax.solvers.krylov_dispatch
@@ -132,46 +120,13 @@ research workflows.
 .. automodule:: sfincs_jax.problems.profile_preconditioner_build
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioner_xblock_coarse
-   :members:
-
 .. automodule:: sfincs_jax.solvers.preconditioner_domain_decomposition
-   :members:
-
-.. automodule:: sfincs_jax.operators.profile_device_sparse
-   :members:
-
-.. automodule:: sfincs_jax.operators.profile_reduced_tail
-   :members:
-
-.. automodule:: sfincs_jax.operators.profile_sparse_pattern
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioner_pas_matrix_free
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioner_pas_policy
    :members:
 
 .. automodule:: sfincs_jax.problems.profile_residual
-   :members:
-
-.. automodule:: sfincs_jax.problems.profile_sparse_direct
-   :members:
-
-.. automodule:: sfincs_jax.problems.profile_sparse_finalization
-   :members:
-
-.. automodule:: sfincs_jax.problems.profile_sparse_fortran_reduced
-   :members:
-
-.. automodule:: sfincs_jax.problems.profile_sparse_solve
-   :members:
-
-.. automodule:: sfincs_jax.problems.profile_sparse_xblock
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioner_xblock_policy
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_policies

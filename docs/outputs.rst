@@ -39,19 +39,10 @@ main file:
   Python API, or environment policy. ``linearSolverRequestedMethod`` repeats the
   requested method when the selected solver reports it explicitly.
 - ``linearSolverPath`` and ``linearSolverKind`` record the selected
-  implementation route when the solver exposes it, for example
-  ``structured_full_csr_host_gmres`` and ``structured_full_csr`` for the
-  no-probe host-CSR RHSMode=1 lane.
+  implementation route when the solver exposes it.
 - ``linearSolverPreconditionerKind`` records the selected preconditioner when
-  available, for example ``xblock_tz_low_l_schur``.
-- ``linearSolverSparsePCSelectedKind`` records the direct-tail structured
-  preconditioner selected by sparse-PC solves when available, for example
-  ``active_fortran_v3_reduced_native_stack`` for a preflight-gated lower-memory
-  candidate or ``active_fortran_v3_reduced_lu`` for the robust active-LU
-  fallback. Direct-tail fields such as
-  ``linearSolverDirectTailStructuredPCMaxMB*`` expose memory caps when the
-  selected route provides them; experimental support-mode and coarse-correction
-  diagnostics are not part of the stable output schema.
+  available, for example ``pas_tz`` or ``collision``. (Fields describing the
+  deleted sparse-PC/structured-CSR lanes no longer appear in new outputs.)
 - ``linearSolverResidualNorm`` and ``linearSolverResidualTarget`` record the
   true residual norm and requested target used by the output safety gate.
 - ``linearSolverResidualTargetRatio`` is residual divided by target.
@@ -64,24 +55,11 @@ main file:
 - ``linearSolverIterations`` and ``linearSolverMatvecs`` record iteration work
   when the selected solver exposes those counters.
 - ``linearSolverSetupTime``, ``linearSolverSolveTime``, and
-  ``linearSolverElapsedTime`` split host sparse-PC setup from Krylov iteration
-  time for large production solves.
-- ``linearSolverSparsePatternBuildTime`` and
-  ``linearSolverSparsePCFactorTime`` isolate sparse-pattern construction and
-  preconditioner factorization cost for sparse-PC GMRES.
-- ``linearSolverSparsePatternNnz``, ``linearSolverSparsePatternAvgRowNnz``, and
-  ``linearSolverSparsePatternMaxRowNnz`` record the structural sparse pattern
-  used by the explicit host sparse-PC lane.
-- ``linearSolverCsrNnz`` and ``linearSolverCsrOperatorNbytes`` record the actual
-  assembled full-CSR operator size for the no-probe structured CSR route.
-- ``linearSolverSparsePCFactorNbytesEstimate`` and
-  ``linearSolverSparsePCFactorNnzEstimate`` estimate SuperLU ``L``/``U`` factor
-  storage for sparse-PC routes. These are estimates of factor arrays, not full
-  process RSS, and should be compared with solver-trace active/device memory
-  fields when auditing memory-limited runs.
-- The optional solver-trace sidecar also records string-valued sparse-PC policy
-  metadata such as ``sparse_pc_permc_spec`` and ``sparse_pc_factor_dtype``. Use
-  this sidecar when auditing why two runs with the same input used different
+  ``linearSolverElapsedTime`` split preconditioner setup from Krylov iteration
+  time for large production solves. (The sparse-pattern/CSR/factor-estimate
+  metadata of the deleted sparse-PC lanes no longer appears in new outputs.)
+- The optional solver-trace sidecar records string-valued solver policy
+  metadata. Use this sidecar when auditing why two runs with the same input used different
   sparse-factor ordering or precision.
 
 For a publication-style PDF diagnostics panel from an existing output file:

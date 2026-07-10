@@ -1,211 +1,145 @@
 # sfincs_jax Source Layout
 
-This directory contains the importable `sfincs_jax` package. The package uses a
-small public API and a one-level domain structure: root modules are for
-user-facing entry points, while domain folders own physics, geometry,
-discretization, operators, solvers, outputs, validation, and research workflows.
+This directory contains the importable `sfincs_jax` package. The architecture
+is the canonical stack of flat, physics-named root modules
+(`plan_final.md`, "Source Structure Rules"): one input file plus one geometry
+runs through `inputs -> drift_kinetic -> solve -> moments -> writer/console`,
+and the public API/CLI route every supported case through that chain by
+default. The remaining one-level domain packages are explicitly transitional:
+they are the interim owners of the deferred features (Phi1/quasineutrality,
+tangential magnetic drifts, constraint schemes 3/4, mapped speed grids,
+export_f, non-stellarator-symmetric VMEC) plus a handful of workflow surfaces
+(`.npz` output, solver traces, scan-er, ambipolar, sensitivity/compare/plot
+utilities), and they shrink to zero as each vertical slice lands.
 
-## Where To Start
+## The Canonical Stack (the architecture)
 
-- `api.py`: high-level Python helpers for running solves from scripts or
-  notebooks.
-- `__init__.py`: stable package exports and compatibility aliases.
-- `cli.py` and `__main__.py`: command-line entry points used by `sfincs_jax`.
-- `solver.py`: compatibility import path for Krylov solver contracts.
-- `ambipolar.py`: public ambipolar electric-field workflows.
-- `sensitivity.py`: differentiable JVP, VJP, adjoint, and implicit derivative
-  helpers.
-- `plotting.py`: output plotting utilities used by `sfincs_jax --plot`.
-- `compare.py`: comparison utilities for frozen SFINCS Fortran v3 references,
-  strict numeric HDF5 parity, regression fixtures, and benchmark summaries.
-- `io.py`, `namelist.py`, `input_compat.py`, and `paths.py`: file I/O, input
-  parsing, input compatibility, and cache or data-path helpers.
-- `diagnostics.py` and `grids.py`: stable scientific helper APIs for
-  flux-surface averages, `uHat`, and Fortran-v3 grid/stencil construction.
-- `profiling.py`: lightweight timers and memory probes used by CLI, examples,
-  and benchmark paths.
+| Canonical owner | Purpose |
+| --- | --- |
+| `constants.py`, `species.py` | Normalizations, radial-coordinate Jacobians, species pytrees, collisionality. |
+| `phase_space.py` | Theta/zeta grids and derivative matrices, Legendre pitch machinery, speed grid, Nxi-for-x ramps. |
+| `magnetic_geometry.py` | All supported geometry schemes, VMEC/Boozer readers, differentiable Fourier path. |
+| `collisions.py` | Pitch-angle scattering and full Fokker-Planck with Rosenbluth terms. |
+| `drift_kinetic.py` | The `KineticOperator`: term assembly, matrix-free apply, analytic Legendre blocks, RHS drives, bordered constraints. |
+| `solve.py` | Three-tier policy (structured block elimination, preconditioned recycled Krylov, host direct referee) on the optional `solvax` library; implicit differentiation. |
+| `moments.py` | Velocity-space moments, flux families, transport matrices, NTV, classical transport, keyed by sfincsOutput.h5 names. |
+| `inputs.py`, `console.py` | Typed namelist with Fortran-cited defaults/validation; byte-parity Fortran stdout blocks. |
+| `run.py` | End-to-end RHSMode 1/2/3 drivers (`run_profile`, `run_transport_matrix`). |
+| `writer.py` | Canonical `sfincsOutput.h5`/`.nc` writer for RHSMode 1/2/3. |
+| `api.py`, `cli.py`, `__main__.py` | Thin public surface over the canonical modules. |
 
-Normal users should use these public modules or the CLI. Implementation modules
-inside domain folders are for contributors and advanced research workflows.
+The CLI (`write-output` and the bare-run form) dispatches RHSMode 1/2/3 decks
+through `run.py` unless `cli.deck_requires_legacy_pipeline` reports a deferred
+feature (or a legacy-only CLI option such as `.npz` output, `--solver-trace`,
+`--geometry-only`, `--no-fortran-layout`, `--no-overwrite` is requested), in
+which case it prints the reason and falls back to the retained legacy owner
+(`io.write_sfincs_jax_output_h5`).
 
-## Root Modules At A Glance
+## Other Root Modules
 
-The root of the package is intentionally small. A file belongs here only when it
-is a stable user-facing API, a CLI entry point, or a compatibility surface that
-keeps existing scripts working while the implementation lives in a domain folder.
+| Module | Role |
+| --- | --- |
+| `__init__.py` | Public package exports, JAX precision/cache setup, compatibility aliases. |
+| `ambipolar.py` | Public ambipolar-root workflows (legacy-stack owner until the canonical `er.py` slice lands). |
+| `sensitivity.py` | JVP/VJP, adjoint, and implicit differentiation helpers. |
+| `plotting.py` | Output plotting used by the CLI and examples. |
+| `compare.py` | HDF5 comparison, frozen-reference parity, benchmark-table utilities. |
+| `io.py`, `namelist.py`, `input_compat.py`, `paths.py` | File formats, SFINCS-style namelist parsing, input aliases, data/cache paths. `io.py` is the retained legacy write entry. |
+| `diagnostics.py`, `grids.py`, `profiling.py` | Stable diagnostics, v3 grid helpers, timers, memory probes. |
 
-| Module | Role | Typical user |
-| --- | --- | --- |
-| `api.py` | High-level Python entry points for output writing, solves, and result loading. | Python users and notebooks |
-| `cli.py`, `__main__.py` | Console interface behind `python -m sfincs_jax` and `sfincs_jax`; RHSMode 2/3 transport runs dispatch to the canonical `run.py` driver. | CLI users |
-| `__init__.py` | Public package exports, JAX precision/cache setup, and compatibility aliases. | All importers |
-| `solver.py` | Compatibility alias for `solvers/krylov.py`. | Existing scripts importing `sfincs_jax.solver` |
-| `ambipolar.py` | Public ambipolar-root workflows. | Transport/profile workflows |
-| `sensitivity.py` | JVP/VJP, adjoint, and implicit differentiation helpers. | Optimization and UQ workflows |
-| `plotting.py` | Output plotting used by the CLI and examples. | CLI and postprocessing users |
-| `compare.py` | HDF5 comparison, frozen-reference parity, and benchmark-table utilities. | Validation workflows |
-| `io.py`, `namelist.py`, `input_compat.py`, `paths.py` | File formats, SFINCS-style namelist parsing, input aliases, and data/cache paths. | Input/output workflows |
-| `diagnostics.py`, `grids.py`, `profiling.py` | Stable diagnostics, v3 grid helpers, timers, and memory probes. | Advanced users and benchmark scripts |
-| `constants.py`, `species.py` | Canonical normalizations, radial-coordinate Jacobians, species pytrees, and collisionality. | Canonical-stack users |
-| `phase_space.py` | Canonical theta/zeta grids and derivative matrices, Legendre pitch machinery, speed grid, Nxi-for-x ramps. | Canonical-stack users |
-| `magnetic_geometry.py` | Canonical flux-surface geometry for all supported geometry schemes, VMEC/Boozer readers, differentiable Fourier path. | Canonical-stack users |
-| `collisions.py` | Canonical pitch-angle scattering and full Fokker-Planck collision operators. | Canonical-stack users |
-| `drift_kinetic.py` | The canonical `KineticOperator`: term assembly, matrix-free apply, analytic Legendre blocks, RHS drives, bordered constraints. | Canonical-stack users |
-| `solve.py` | Three-tier solver policy (structured direct, preconditioned Krylov, host direct) on the optional `solvax` library; implicit differentiation. | Canonical-stack users |
-| `moments.py` | Canonical velocity-space moments, flux families, and transport matrices keyed by sfincsOutput.h5 names. | Canonical-stack users |
-| `inputs.py`, `console.py` | Typed namelist with Fortran-cited defaults and byte-parity Fortran stdout blocks. | Canonical-stack users |
-| `run.py` | End-to-end RHSMode 2/3 transport-matrix driver on the canonical stack (`inputs -> drift_kinetic -> solve -> moments -> writer/console`). | Canonical-stack users |
-| `writer.py` | Canonical `sfincsOutput.h5`/`.nc` writer for the RHSMode 2/3 transport-matrix modes. | Canonical-stack users |
+## Transitional Domain Packages
 
-If a new feature is not meant to be imported directly by users, put it in a
-domain folder and expose it through one of the public root modules only when a
-documented workflow needs it.
+These packages are the legacy stack. They exist only until the deferred
+features are consolidated into the canonical root modules; every slice that
+promotes a case family deletes its superseded owners in the same series
+(`plan_final.md`, "Repository-Wide Line Sweep"). Do not add new implementation
+here unless it serves a deferred feature.
 
-## Domain Folders
-
-- `discretization/`: grids, differentiation stencils, active indices, and
-  coordinate maps.
-- `geometry/`: analytic magnetic geometries, VMEC `wout` loading, Boozer data,
-  and JAX geometry adapters.
-- `operators/`: drift-kinetic operator terms, profile-response layouts,
-  matrix-free actions, sparse operator helpers, and full-system assembly.
-  Profile-response owners use flat `profile_*.py` names.
-- `physics/`: collision, classical-transport, bootstrap-current, and
-  normalization formulas.
-- `problems/`: physical problem owners, including flat RHSMode-1
-  `profile_*.py` modules, flat RHSMode-2/3 `transport_*.py` modules, and
-  ambipolar root solves.
-- `solvers/`: Krylov dispatch, solver-path selection, sparse/native factors,
-  memory models, Krylov result contracts, and flat `preconditioner_*.py`
-  modules.
-- `outputs/`: HDF5/NetCDF/NPZ schemas, writer logic, and post-solve
-  diagnostics.
+- `discretization/`: v3 grids, stencils, mapped-x-grid coordinate maps.
+- `geometry/`: Boozer/VMEC readers and JAX geometry adapters used by the
+  legacy stack and workflows.
+- `operators/`: the legacy matrix-free profile-response operator
+  (`profile_system.py`, `profile_fblock.py`, term modules, layouts).
+- `physics/`: legacy collision/classical-transport formula owners.
+- `problems/`: legacy RHSMode-1 (`profile_*.py`) and RHSMode-2/3
+  (`transport_*.py`) solve orchestration plus the ambipolar Brent solve.
+- `solvers/`: legacy Krylov wrappers, dispatch, and the retained
+  `preconditioner_*.py` family the legacy auto policy can still select.
+- `outputs/`: legacy HDF5/NetCDF/NPZ schemas, writer logic, export_f mapping,
+  and post-solve diagnostics.
 - `validation/`: frozen-reference loading, Fortran/PETSc fixture readers,
-  parity checks, release-data manifest/fetching, claim gates, and validation
-  figure helpers.
-- `workflows/`: optional research workflows that combine public APIs into
-  scans, optimization tasks, and reusable evidence-generation tasks.
+  release-data manifest/fetching, evidence gates.
+- `workflows/`: scans, optimization support, and mapped-x-grid workflows.
 
-## Domain Packages At A Glance
+The deleted sparse-direct/CSR-assembly solver families
+(`operators/profile_full_system.py`, `solvers/explicit_sparse.py`, the
+`profile_sparse_*` and `preconditioner_xblock_*_sparse` modules, and their
+policy plumbing) must not be reintroduced; the retained legacy auto route is
+the matrix-free Krylov policy with the dense/pas/collision preconditioner
+families plus the SciPy rescue, and the canonical `solve.py` tiers own the
+supported surface.
 
-The package has one level of domain folders below `sfincs_jax/`. There are no implementation packages nested inside those folders; if a domain grows too large, split by ownership inside that same folder rather than creating another package level.
+## Main Legacy Implementation Owners
 
-| Folder | Owns | Does not own |
-| --- | --- | --- |
-| `discretization/` | Grid objects, finite-difference stencils, velocity grids, active maps. | Physics-specific solve policy. |
-| `geometry/` | Analytic Boozer geometry, Boozer files, VMEC `wout` loading, JAX geometry adapters. | Kinetic operator assembly. |
-| `operators/` | Drift-kinetic operator terms, layouts, sparse patterns, matrix-free actions. | High-level solve orchestration. |
-| `physics/` | Standalone physics formulas and analytic validation helpers. | File I/O or solver fallback policy. |
-| `problems/` | RHSMode-1 profiles, RHSMode-2/3 transport matrices, ambipolar solves. | Reusable Krylov kernels. |
-| `solvers/` | Krylov wrappers, preconditioners, native factors, memory/path policy. | Geometry parsing or output schema. |
-| `outputs/` | Output dictionaries, HDF5/NetCDF/NPZ writing, post-solve diagnostics. | Numerical solve decisions. |
-| `validation/` | Frozen references, release-data fetching, artifact policy, evidence gates. | User-facing example scripts. |
-| `workflows/` | Reusable scans, optimization support, and evidence-generation workflows. | One-off benchmark outputs. |
-
-## Main Implementation Owners
-
-Use this map before adding a file or following an internal import:
-
-- `operators/profile_system.py`: RHSMode-1 full-system operator, RHS assembly,
-  matrix-free residual and JVP wrappers, and constraint-source moment kernels.
-- `operators/profile_layout.py`: RHSMode-1 full, active, field-split, and
-  Fortran-style compressed pitch-space layouts.
+- `operators/profile_system.py`: legacy RHSMode-1 full-system operator, RHS
+  assembly, matrix-free residual/JVP wrappers, constraint-source kernels.
+- `operators/profile_layout.py`: RHSMode-1 layout family.
 - `operators/profile_fblock.py`: kinetic distribution-function block assembly.
-- `operators/profile_full_system.py`: explicit sparse/full-system assembly and
-  reduced-Pmat helpers.
-- `geometry/boozer.py`: Boozer `.bc` parsing, radial surface selection, and
-  Boozer-grid metric reconstruction for output diagnostics.
-- `geometry/vmec_wout.py`: VMEC `wout` reading, radial interpolation, and
-  VMEC-grid metric reconstruction for output diagnostics.
-- `problems/profile_solve.py`: RHSMode-1 solve orchestration.
-- `problems/profile_policies.py`: RHSMode-1 automatic solver, fallback, and
-  environment-policy decisions.
-- `problems/profile_residual.py`: RHSMode-1 post-Krylov residual correction and
-  polish stages.
-- `problems/transport_solve.py`: legacy RHSMode-2/3 transport solve
-  orchestration (the default CLI path is the canonical `run.py`; retained for
-  the legacy RHSMode-1 stack, export_f/streaming output options, and
-  mapped-x-grid workflows until their slices land).
-- `problems/transport_linear_system.py`: transport linear-system construction,
-  batched RHS solves, and dense/host/JAX dispatch helpers.
-- `problems/transport_parallel_runtime.py`: RHSMode-2/3 whichRHS
-  parallelism, GPU subprocess worker CLI, worker payload schemas, and result
-  merging.
-- `solvers/krylov.py`: GMRES, flexible GMRES, BiCGStab, TFQMR, dense fallback,
-  recycled initial guesses, residual histories, JIT wrappers, and distributed
-  GMRES contracts.
-- `input_compat.py`: SFINCS-v3 input aliases, radial-coordinate conversions,
-  equilibrium-file overrides, VMEC/Boozer path resolution, and staged-run
-  equilibrium localization.
-- `solvers/preconditioning.py`: shared preconditioner caches, projection
-  helpers, and RHSMode-1 preconditioner dispatch.
-- `solvers/preconditioner_full_fp_kinetic.py`: full-FP RHSMode-1 kinetic,
-  species-block, and collision preconditioners.
-- `solvers/preconditioner_schur_profile.py`: RHSMode-1 Schur/coarse
-  preconditioners and active sparse-coarse policies.
-- `outputs/writer.py`: public output-write orchestration.
-- `outputs/formats.py`: HDF5/NetCDF/NPZ schemas, output cache persistence, and
-  `export_f` mapping helpers.
-- `outputs/rhsmode1.py`: RHSMode-1 output diagnostics and output-path policy.
-- `validation/artifacts.py`: validation artifact manifests and research-lane
-  evidence gates.
-
-Do not reintroduce helper-only modules for residual wrappers, constraint-source
-kernels, compressed pitch layouts, full-FP species preconditioners, output
-caches, preconditioner dispatch, or research-lane manifests. Those concepts are
-owned by the canonical modules listed above and guarded by source-tree tests.
+- `problems/profile_solve.py`: legacy RHSMode-1 solve orchestration (the
+  deferred-deck fallback).
+- `problems/profile_policies.py`: legacy RHSMode-1 automatic solver policy.
+- `problems/profile_phi1_newton.py`: the Phi1/quasineutrality Newton-Krylov
+  owner (deferred slice).
+- `problems/transport_solve.py`, `problems/transport_linear_system.py`,
+  `problems/transport_parallel_runtime.py`: legacy RHSMode-2/3 orchestration,
+  retained for `.npz`/solver-trace/export_f options and mapped-x-grid
+  workflows.
+- `solvers/krylov.py`: GMRES/FGMRES/BiCGStab/TFQMR wrappers, residual
+  histories, distributed GMRES contracts.
+- `solvers/preconditioning.py`: shared preconditioner caches and RHSMode-1
+  preconditioner dispatch.
+- `solvers/preconditioner_full_fp_kinetic.py`,
+  `solvers/preconditioner_pas_*.py`, `solvers/preconditioner_schur_profile.py`,
+  `solvers/preconditioner_xblock_{block_jacobi,radial}.py`,
+  `solvers/preconditioner_domain_decomposition.py`,
+  `solvers/preconditioner_transport_matrix.py`: the preconditioner kinds the
+  legacy auto policy can select.
+- `outputs/writer.py`, `outputs/formats.py`, `outputs/rhsmode1.py`,
+  `outputs/transport.py`: legacy output writing and diagnostics.
+- `validation/artifacts.py`: validation artifact manifests and evidence gates.
 
 ## Design Rules
 
-- Keep root modules user-facing. New implementation code should go into a
-  domain folder, not the package root. Root support modules are acceptable only
-  when they are documented stable APIs such as `diagnostics.py`, `grids.py`, or
-  `profiling.py`.
-- Keep package depth shallow. The consolidation target is one folder below
-  `sfincs_jax/`; deeper folders must be explicitly justified in
-  `plan_final.md` and covered by import-structure tests.
-- Keep domain folders substantive. A folder that contains only `__init__.py`, or
-  only `__init__.py` plus another folder, is a navigation smell and should be
-  removed or folded into an existing owner.
-- Prefer descriptive domain names over historical names. For example, use
-  `profile_*`, `transport_*`, or `preconditioner_*` names only when they point
-  to the physics or numerical role of the module.
-- Preserve public imports through compatibility aliases only when they are
-  documented user workflows. Internal imports should point at the canonical
-  domain modules, and deleted non-root facades should not be reintroduced.
-- Keep large validation data out of the git clone and wheel. Small frozen
-  references can live in `tests/fixtures`; large equilibria or benchmark outputs
-  should be fetched through `validation.data_fetch` from release assets. The
-  embedded manifest lives in `validation/equilibria_manifest.json`; the large
-  files named by that manifest remain release-hosted.
+- New stable code goes into a flat, physics-named canonical root module; the
+  domain packages only shrink.
+- Keep package depth shallow: one folder below `sfincs_jax/`, no nested
+  packages.
+- Stable file names describe physics or numerics — no version suffixes or
+  experiment names (`plan_final.md`, "Source Structure Rules").
+- No env-var-only solver routes in stable code; opt-in switches are namelist
+  or API arguments with documented semantics.
+- Keep large validation data out of the git clone and wheel; large equilibria
+  are fetched through `validation.data_fetch` from release assets
+  (`validation/equilibria_manifest.json`).
 
 ## Stability And Compatibility
 
-Public root modules are the stable import surface. Domain modules are stable
-when they are documented in this file or in the API docs; private helpers remain
-free to change as long as the public CLI, Python API, validation fixtures, and
-documented examples keep working. Compatibility aliases may remain in
-`__init__.py` or package `__init__` files when removing them would break a
-documented workflow, but new implementation code should not import through those
-aliases.
+The canonical root modules are the stable import surface. Legacy domain
+modules are transitional: they may change or disappear as slices land, with
+their public behavior preserved through the canonical replacements and the
+parity gates. Compatibility aliases may remain in `__init__.py` only while a
+documented workflow needs them.
 
 ## Generated Files Policy
 
-The importable package must stay light. Do not commit `__pycache__`, `.pyc`,
-profiling traces, device-memory dumps, HDF5/NetCDF/NPZ solve outputs, XLA
-profiles, or large equilibrium files inside `sfincs_jax/`. Large external data belongs in release-hosted assets referenced by `validation/equilibria_manifest.json`.
+Do not commit `__pycache__`, `.pyc`, profiling traces, HDF5/NetCDF/NPZ solve
+outputs, XLA profiles, or large equilibrium files inside `sfincs_jax/`.
 
 ## Contributor Workflow
 
-When moving code:
-
-1. Add or update the import-structure test before moving files.
-2. Move one coherent owner at a time, not one helper at a time.
-3. Update internal imports, docs API references, and compatibility aliases in
-   the same commit.
-4. Run focused unit tests for the moved owner, then run the package import and
-   docs checks.
-5. Do not commit generated output, caches, local traces, or large benchmark
-   artifacts.
-
-The authoritative consolidation sequence lives in `../plan_final.md`.
+1. Start from the slice queue in `../plan_final.md`; delete or extract before
+   moving code.
+2. Update the source-tree manifest, this file, and the plan in the same
+   commit as any module addition, rename, or deletion.
+3. Run focused tests plus the import/compile guards before committing; full
+   suite at slice milestones.

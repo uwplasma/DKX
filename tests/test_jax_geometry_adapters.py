@@ -650,20 +650,20 @@ def _optional_vmec_jax_wout_fixture(vmec_jax_module) -> Path | None:
     env_text = os.environ.get("SFINCS_JAX_VMEC_JAX_WOUT", "").strip()
     if env_text:
         candidates.append(Path(env_text))
-    candidates.extend(
-        [
-            Path(vmec_jax_module.__file__).resolve().parents[1]
-            / "examples"
-            / "data"
-            / "wout_circular_tokamak.nc",
-            Path("/Users/rogeriojorge/local/vmec_jax/examples/data/wout_circular_tokamak.nc"),
-            Path.cwd() / "sfincs_jax" / "data" / "equilibria" / "wout_w7x_standardConfig.nc",
-        ]
+    candidates.append(
+        Path(vmec_jax_module.__file__).resolve().parents[1]
+        / "examples"
+        / "data"
+        / "wout_circular_tokamak.nc"
     )
     for candidate in candidates:
         if candidate.exists():
             return candidate
-    return None
+    # The package is installed, so the integration gate must run: fall back to
+    # the release-asset equilibrium cache rather than skipping on local paths.
+    from sfincs_jax.validation.data_fetch import resolve_external_equilibrium
+
+    return resolve_external_equilibrium(Path("wout_w7x_standardConfig.nc"))
 
 
 def test_vmec_jax_boozer_spectrum_proxy_gradient_matches_fd_on_optional_backends() -> None:

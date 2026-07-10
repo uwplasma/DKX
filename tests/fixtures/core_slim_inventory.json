@@ -38,158 +38,21 @@
   ],
   "extraction_groups": [
     {
-      "branch": "research/qi-device-hard-seed",
-      "core_extracted": true,
-      "purpose": "Preserve QI and true device-QI solver research outside the stable core.",
-      "source_paths": [
-        "sfincs_jax/problems/profile_sparse_qi.py",
-        "sfincs_jax/solvers/preconditioner_qi_basis.py",
-        "sfincs_jax/solvers/preconditioner_qi_corrections.py",
-        "sfincs_jax/solvers/preconditioner_qi_device.py",
-        "sfincs_jax/validation/qi_device.py"
-      ],
-      "test_paths": [
-        "tests/test_profile_response_qi_device_seed.py",
-        "tests/test_research_lane_policy.py",
-        "tests/test_qi_res15_gpu_campaign.py",
-        "tests/test_rhs1_qi_device_preconditioner.py",
-        "tests/test_rhs1_qi_device_smoother.py",
-        "tests/test_run_qi_seed_robustness.py"
-      ],
-      "example_paths": [
-        "examples/data/qi_nfp2_reference.input.namelist",
-        "examples/optimization/materialize_qi_nfp2_promotion_input.py",
-        "examples/optimization/screen_qi_electron_root_nfp.py"
-      ],
-      "script_paths": [
-        "python -m sfincs_jax.validation.release check-research-lanes",
-        "scripts/run_qi_seed_robustness.py"
-      ],
-      "core_coupling_paths": [
-        "sfincs_jax/problems/profile_solve.py",
-        "sfincs_jax/problems/profile_sparse_fortran_reduced.py",
-        "sfincs_jax/problems/profile_diagnostics.py",
-        "sfincs_jax/workflows/optimization.py"
-      ],
-      "doc_paths": [
-        "docs/research_lanes.rst",
-        "docs/optimization.rst"
-      ],
-      "core_removal_gate": "No retained core import may reference preconditioner_qi, profile_sparse_qi, or validation.qi_device."
-    },
-    {
-      "branch": "research/native-sparse-direct",
-      "purpose": "Preserve native sparse-direct, symbolic factor, true-operator rescue, and active-factor research outside the stable core.",
-      "core_extracted_paths": [
-        "sfincs_jax/operators/profile_true_operator_rescue.py",
-        "tests/test_rhs1_true_operator_rescue.py",
-        "scripts/audit_rhs1_solver_stack.py",
-        "scripts/compare_fortran_matrix_to_jax_operator.py",
-        "scripts/benchmark_jax_ecosystem_backends.py",
-        "scripts/benchmark_rhs1_fblock_csr_reuse.py",
-        "scripts/benchmark_rhs1_full_csr_reuse.py",
-        "scripts/benchmark_structured_fblock_preconditioners.py",
-        "scripts/benchmark_pas_tz_memory_fallback.py",
-        "scripts/benchmark_rhs1_pas_matrixfree.py",
-        "scripts/audit_fortran_jax_operator.py",
-        "scripts/compare_petsc_operator.py",
-        "tests/test_audit_fortran_jax_operator.py"
-      ],
-      "source_paths": [
-        "sfincs_jax/operators/profile_true_operator_rescue.py",
-        "sfincs_jax/problems/profile_sparse_direct.py",
-        "sfincs_jax/solvers/native_block_factor.py",
-        "sfincs_jax/solvers/preconditioner_active_sparse.py",
-        "sfincs_jax/solvers/preconditioner_host_sparse.py",
-        "sfincs_jax/solvers/preconditioner_reduced_pmat.py",
-        "sfincs_jax/solvers/preconditioner_xblock_active.py"
-      ],
-      "test_paths": [
-        "tests/test_explicit_sparse_symbolic_native.py",
-        "tests/test_rhs1_active_sparse_factors.py",
-        "tests/test_rhs1_reduced_pmat_plan.py",
-        "tests/test_rhs1_true_operator_rescue.py",
-        "tests/test_audit_fortran_jax_operator.py",
-        "tests/test_transport_active_factor.py",
-        "tests/test_transport_sparse_direct.py"
-      ],
-      "example_paths": [],
-      "script_paths": [
-        "scripts/audit_rhs1_solver_stack.py",
-        "scripts/compare_fortran_matrix_to_jax_operator.py",
-        "scripts/benchmark_jax_ecosystem_backends.py",
-        "scripts/benchmark_rhs1_fblock_csr_reuse.py",
-        "scripts/benchmark_rhs1_full_csr_reuse.py",
-        "scripts/benchmark_structured_fblock_preconditioners.py",
-        "scripts/benchmark_pas_tz_memory_fallback.py",
-        "scripts/benchmark_rhs1_pas_matrixfree.py",
-        "scripts/audit_fortran_jax_operator.py",
-        "scripts/compare_petsc_operator.py"
-      ],
-      "doc_paths": [
-        "docs/research_lanes.rst",
-        "docs/numerics.rst"
-      ],
-      "core_removal_gate": "Core sparse paths must still pass strict residual gates without symbolic/native rescue imports."
-    },
-    {
       "branch": "research/parallel-performance",
       "purpose": "Preserve sharded, multi-worker, multi-GPU, and long profiling campaigns outside the stable core.",
-      "core_extracted_paths": [
-        "scripts/generate_parallel_scaling_snapshot.py",
-        "scripts/profile_transport_traces.py",
-        "examples/performance/benchmark_shard_map_halo.py",
-        "examples/performance/benchmark_optional_lineax_implicit_solve.py",
-        "examples/performance/benchmark_multi_gpu_case_throughput.py",
-        "examples/performance/benchmark_sharded_matvec_scaling.py",
-        "examples/performance/benchmark_sharded_solve_scaling.py",
-        "examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py",
-        "examples/performance/rhsmode1_sharded.input.namelist",
-        "examples/performance/rhsmode1_sharded_scaling.input.namelist",
-        "examples/performance/transport_parallel_large.input.namelist",
-        "examples/performance/transport_parallel_medium.input.namelist",
-        "examples/performance/transport_parallel_sharded.input.namelist",
-        "examples/performance/transport_parallel_xlarge.input.namelist",
-        "examples/performance/transport_parallel_xxlarge.input.namelist",
-        "tests/test_benchmark_multi_gpu_case_throughput.py",
-        "tests/test_benchmark_sharded_solve_scaling.py",
-        "tests/test_optional_ecosystem_gates.py",
-        "tests/test_optional_eqx_jaxopt_scheme4_gate.py",
-        "tests/test_optional_lineax_implicit_gate.py"
-      ],
+      "core_extracted_paths": [],
       "source_paths": [
         "sfincs_jax/problems/transport_parallel_runtime.py"
       ],
       "test_paths": [
-        "tests/test_benchmark_multi_gpu_case_throughput.py",
-        "tests/test_benchmark_sharded_solve_scaling.py",
         "tests/test_benchmark_transport_parallel_scaling.py",
-        "tests/test_optional_ecosystem_gates.py",
-        "tests/test_optional_eqx_jaxopt_scheme4_gate.py",
-        "tests/test_optional_lineax_implicit_gate.py",
         "tests/test_transport_parallel_runtime.py",
         "tests/test_transport_parallel_worker_cli.py"
       ],
       "example_paths": [
-        "examples/performance/benchmark_shard_map_halo.py",
-        "examples/performance/benchmark_optional_lineax_implicit_solve.py",
-        "examples/performance/benchmark_multi_gpu_case_throughput.py",
-        "examples/performance/benchmark_sharded_matvec_scaling.py",
-        "examples/performance/benchmark_sharded_solve_scaling.py",
-        "examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py",
-        "examples/performance/rhsmode1_sharded.input.namelist",
-        "examples/performance/rhsmode1_sharded_scaling.input.namelist",
-        "examples/performance/transport_parallel_large.input.namelist",
-        "examples/performance/transport_parallel_medium.input.namelist",
-        "examples/performance/transport_parallel_sharded.input.namelist",
-        "examples/performance/transport_parallel_xlarge.input.namelist",
-        "examples/performance/transport_parallel_xxlarge.input.namelist",
         "examples/performance/benchmark_transport_parallel_scaling.py"
       ],
-      "script_paths": [
-        "scripts/generate_parallel_scaling_snapshot.py",
-        "scripts/profile_transport_traces.py"
-      ],
+      "script_paths": [],
       "doc_paths": [
         "docs/parallelism.rst",
         "docs/performance.rst"
@@ -199,89 +62,19 @@
     {
       "branch": "research/publication-audits",
       "purpose": "Preserve historical benchmark campaigns, publication figures, Zenodo audits, and long-run validation scripts outside the stable core.",
-      "core_extracted_paths": [
-        "scripts/audit_qs_paper_terms.py",
-        "scripts/compare_v3_example_suite.py",
-        "scripts/generate_fortran_fixture.py",
-        "scripts/create_production_stress_campaign.py",
-        "scripts/materialize_production_stress_manifest.py",
-        "scripts/summarize_production_stress_campaign.py",
-        "scripts/build_zenodo_vmec_manifest.py",
-        "scripts/select_zenodo_vmec_benchmark_cases.py",
-        "scripts/run_zenodo_vmec_parity_campaign.py",
-        "scripts/compare_rhsmode1_diagnostics_from_state.py",
-        "scripts/run_mapped_xgrid_transport_evidence.py",
-        "tests/test_run_mapped_xgrid_transport_evidence.py",
-        "scripts/benchmark_case_variants.py",
-        "scripts/summarize_solver_paths.py",
-        "scripts/compare_fortran_jax_solver_profiles.py",
-        "scripts/summarize_fortran_v3_profile.py",
-        "scripts/generate_fortran_example_audit.py",
-        "scripts/generate_fortran_example_output_status.py",
-        "scripts/generate_readme_reduced_suite_table.py",
-        "tests/test_benchmark_case_variants.py",
-        "tests/test_summarize_solver_paths.py",
-        "tests/test_solver_profile_compare.py",
-        "tests/test_fortran_profile.py",
-        "examples/publication_figures/generate_high_collisionality_trend_proxy.py",
-        "examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py",
-        "examples/publication_figures/generate_simakov_helander_limit_audit.py",
-        "examples/publication_figures/generate_w7x_ambipolar_validation.py",
-        "examples/sfincs_examples/utils/ModelTest_AI/modelFunctions.py",
-        "examples/sfincs_examples/utils/ModelTest_AI/testModel.py",
-        "examples/sfincs_examples/utils/ModelTest_AI/usefulFun.py",
-        "tests/test_generate_high_collisionality_trend_proxy.py",
-        "tests/test_generate_simakov_helander_high_nu_run_plan.py",
-        "tests/test_generate_simakov_helander_limit_audit.py",
-        "tests/test_generate_w7x_ambipolar_validation.py"
-      ],
+      "core_extracted_paths": [],
       "source_paths": [
         "sfincs_jax/validation/artifacts.py"
       ],
       "test_paths": [
         "tests/test_benchmark_artifact_policy.py",
         "tests/test_generate_fortran_suite_benchmark_summary.py",
-        "tests/test_run_mapped_xgrid_transport_evidence.py",
-        "tests/test_benchmark_case_variants.py",
-        "tests/test_summarize_solver_paths.py",
-        "tests/test_solver_profile_compare.py",
-        "tests/test_fortran_profile.py",
-        "tests/test_generate_high_collisionality_trend_proxy.py",
-        "tests/test_generate_simakov_helander_high_nu_run_plan.py",
-        "tests/test_generate_simakov_helander_limit_audit.py",
-        "tests/test_generate_w7x_ambipolar_validation.py",
         "tests/test_validation_figures.py"
       ],
       "example_paths": [
-        "examples/publication_figures",
-        "examples/publication_figures/generate_high_collisionality_trend_proxy.py",
-        "examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py",
-        "examples/publication_figures/generate_simakov_helander_limit_audit.py",
-        "examples/publication_figures/generate_w7x_ambipolar_validation.py",
-        "examples/sfincs_examples/utils/ModelTest_AI/modelFunctions.py",
-        "examples/sfincs_examples/utils/ModelTest_AI/testModel.py",
-        "examples/sfincs_examples/utils/ModelTest_AI/usefulFun.py"
+        "examples/publication_figures"
       ],
-      "script_paths": [
-        "scripts/audit_qs_paper_terms.py",
-        "scripts/compare_v3_example_suite.py",
-        "scripts/generate_fortran_fixture.py",
-        "scripts/create_production_stress_campaign.py",
-        "scripts/materialize_production_stress_manifest.py",
-        "scripts/build_zenodo_vmec_manifest.py",
-        "scripts/select_zenodo_vmec_benchmark_cases.py",
-        "scripts/run_zenodo_vmec_parity_campaign.py",
-        "scripts/compare_rhsmode1_diagnostics_from_state.py",
-        "scripts/run_mapped_xgrid_transport_evidence.py",
-        "scripts/benchmark_case_variants.py",
-        "scripts/summarize_solver_paths.py",
-        "scripts/compare_fortran_jax_solver_profiles.py",
-        "scripts/summarize_fortran_v3_profile.py",
-        "scripts/generate_fortran_example_audit.py",
-        "scripts/generate_fortran_example_output_status.py",
-        "scripts/generate_readme_reduced_suite_table.py",
-        "scripts/summarize_production_stress_campaign.py"
-      ],
+      "script_paths": [],
       "doc_paths": [
         "docs/paper_figures.rst",
         "docs/validation_matrix.rst"
@@ -631,264 +424,6 @@
       ]
     },
     {
-      "path": "sfincs_jax/problems/profile_sparse_xblock.py",
-      "lines_at_audit": 6953,
-      "category": "core",
-      "action": "split",
-      "reduction_target_lines": 2800,
-      "public_imports": [],
-      "internal_callers": [
-        "sfincs_jax/problems/profile_sparse_solve.py",
-        "sfincs_jax/problems/profile_policies.py"
-      ],
-      "tests": [
-        "tests/test_rhs1_sxblock_tz_sparse_host.py",
-        "tests/test_rhs1_xblock_policy.py"
-      ],
-      "docs_examples": [
-        "docs/performance.rst"
-      ],
-      "retention_reason": "The promoted x-block/tz sparse route is part of the current automatic RHSMode-1 path, but lower-confidence variants should move to research.",
-      "next_step": "Keep the strict residual-clean route and extract fallback experiments to research/native-sparse-direct.",
-      "review_status": "section_card_seeded",
-      "line_target": "<=2800",
-      "section_cards": [
-        {
-          "lines": "1-1087",
-          "disposition": "extract-research",
-          "owner_tags": [
-            "PERF"
-          ],
-          "reason": "rescue/seed/global/high-x correction experiments are not a single stable default route"
-        },
-        {
-          "lines": "1088-3248",
-          "disposition": "keep-core",
-          "owner_tags": [
-            "NUMERICS",
-            "PERF"
-          ],
-          "reason": "x-block matvec, initial guess, assembled preflight, and stable sparse-PC setup"
-        },
-        {
-          "lines": "3249-4527",
-          "disposition": "merge-core",
-          "owner_tags": [
-            "API",
-            "PERF"
-          ],
-          "reason": "metadata builders and route-state dictionaries duplicate output and policy owners"
-        },
-        {
-          "lines": "4528-6874",
-          "disposition": "keep-core",
-          "owner_tags": [
-            "NUMERICS",
-            "PERF"
-          ],
-          "reason": "Krylov execution and final residual gate remain until RHSMode-1 pipeline collapse"
-        }
-      ]
-    },
-    {
-      "path": "sfincs_jax/operators/profile_full_system.py",
-      "lines_at_audit": 6133,
-      "category": "core",
-      "action": "trim",
-      "reduction_target_lines": 3000,
-      "public_imports": [],
-      "internal_callers": [
-        "sfincs_jax/problems/profile_setup.py",
-        "sfincs_jax/problems/profile_solve.py"
-      ],
-      "tests": [
-        "tests/test_rhs1_full_assembly.py",
-        "tests/test_profile_full_system_structured_selection.py"
-      ],
-      "docs_examples": [
-        "docs/method.rst",
-        "docs/source_map.rst"
-      ],
-      "retention_reason": "RHSMode-1 full-system operator assembly is core physics/numerics and must remain readable.",
-      "next_step": "Remove unused assembly variants, collapse duplicated layout glue, and keep equation blocks close to their tests.",
-      "review_status": "section_card_seeded",
-      "line_target": "<=3000",
-      "section_cards": [
-        {
-          "lines": "1-2088",
-          "disposition": "keep-core",
-          "owner_tags": [
-            "PHYSICS",
-            "NUMERICS"
-          ],
-          "reason": "structured RHSMode-1 CSR assembly and active projected full-system preconditioner"
-        },
-        {
-          "lines": "2089-3888",
-          "disposition": "extract-research",
-          "owner_tags": [
-            "NUMERICS",
-            "PERF"
-          ],
-          "reason": "coupled kinetic experiments remain; active symbolic frontal/superblock/block-schur wrappers were removed from stable"
-        },
-        {
-          "lines": "3889-5583",
-          "disposition": "merge-core",
-          "owner_tags": [
-            "NUMERICS"
-          ],
-          "reason": "native x-ell and low-l/ell-band/window coarse variants must reduce to admitted defaults"
-        },
-        {
-          "lines": "5584-6078",
-          "disposition": "keep-core",
-          "owner_tags": [
-            "PHYSICS",
-            "NUMERICS"
-          ],
-          "reason": "tail assembly and source/constraint/Phi1 helpers used by structured full CSR"
-        }
-      ]
-    },
-    {
-      "path": "sfincs_jax/solvers/preconditioner_qi_device.py",
-      "lines_at_audit": 5594,
-      "category": "extract-pr",
-      "action": "extract",
-      "extract_branch": "research/qi-device-hard-seed",
-      "reduction_target_lines": 0,
-      "public_imports": [],
-      "internal_callers": [
-        "sfincs_jax/problems/profile_sparse_qi.py"
-      ],
-      "tests": [
-        "tests/test_rhs1_qi_device_preconditioner.py",
-        "tests/test_rhs1_qi_device_smoother.py"
-      ],
-      "docs_examples": [
-        "docs/research_lanes.rst"
-      ],
-      "retention_reason": "True device-QI remains a research lane and should not be shipped in the slim core.",
-      "next_step": "Preserve on research branch, remove from core imports, and keep only a deferred-lane documentation pointer."
-    },
-    {
-      "path": "sfincs_jax/solvers/explicit_sparse.py",
-      "lines_at_audit": 5207,
-      "category": "core",
-      "action": "split",
-      "extract_branch": "research/native-sparse-direct",
-      "reduction_target_lines": 2200,
-      "public_imports": [],
-      "internal_callers": [
-        "sfincs_jax/problems/transport_linear_system.py",
-        "sfincs_jax/problems/profile_sparse_solve.py"
-      ],
-      "tests": [
-        "tests/test_explicit_sparse.py",
-        "tests/test_explicit_sparse_factor_policy.py"
-      ],
-      "docs_examples": [
-        "docs/numerics.rst"
-      ],
-      "retention_reason": "Sparse CSR primitives needed by default solvers are core; native direct-factor experiments should be extracted.",
-      "next_step": "Keep CSR construction/solve primitives with strict tests and move symbolic/native factor experiments out.",
-      "review_status": "section_card_seeded",
-      "line_target": "<=2200",
-      "section_cards": [
-        {
-          "lines": "1-720",
-          "disposition": "keep-core",
-          "owner_tags": [
-            "NUMERICS"
-          ],
-          "reason": "CSR matvec, triangular solves, storage estimates, and factor admission contracts"
-        },
-        {
-          "lines": "721-2175",
-          "disposition": "extract-research",
-          "owner_tags": [
-            "NUMERICS",
-            "PERF"
-          ],
-          "reason": "symbolic block/coarse/schur/frontal/superblock factors are native sparse-direct research"
-        },
-        {
-          "lines": "2176-3713",
-          "disposition": "merge-core",
-          "owner_tags": [
-            "NUMERICS",
-            "API"
-          ],
-          "reason": "operator construction, pattern coloring, host direct solve, and refinement should keep only stable default paths"
-        }
-      ]
-    },
-    {
-      "path": "sfincs_jax/problems/profile_sparse_solve.py",
-      "lines_at_audit": 3069,
-      "category": "core",
-      "action": "trim",
-      "reduction_target_lines": 2300,
-      "public_imports": [],
-      "internal_callers": [
-        "sfincs_jax/problems/profile_solve.py"
-      ],
-      "tests": [
-        "tests/test_profile_response_sparse_pc.py",
-        "tests/test_profile_sparse_helper_coverage.py"
-      ],
-      "docs_examples": [
-        "docs/numerics.rst"
-      ],
-      "retention_reason": "Sparse RHSMode-1 solve orchestration is core only for parity-clean automatic routes.",
-      "next_step": "Continue collapsing generic branch setup and direct-tail policy wiring after disconnected true-operator rescue stages and direct-tail support-mode preflight were removed.",
-      "decision": "trim",
-      "justification": "Stable sparse-PC orchestration keeps factor-preflight flow; disconnected direct-tail residual/true-active/coupled-coarse rescue policy expansion and support-mode preflight were removed."
-    },
-    {
-      "path": "sfincs_jax/problems/profile_sparse_qi.py",
-      "lines_at_audit": 4873,
-      "category": "extract-pr",
-      "action": "extract",
-      "extract_branch": "research/qi-device-hard-seed",
-      "reduction_target_lines": 0,
-      "public_imports": [],
-      "internal_callers": [
-        "sfincs_jax/problems/profile_sparse_solve.py"
-      ],
-      "tests": [
-        "tests/test_rhs1_qi_promotion.py",
-        "tests/test_qi_wave3_coverage.py"
-      ],
-      "docs_examples": [
-        "docs/research_lanes.rst"
-      ],
-      "retention_reason": "QI solve variants are not part of the stable core until production residual/runtime gates pass.",
-      "next_step": "Extract with QI tests, examples, and docs to a research PR."
-    },
-    {
-      "path": "sfincs_jax/solvers/preconditioner_qi_corrections.py",
-      "lines_at_audit": 4258,
-      "category": "extract-pr",
-      "action": "extract",
-      "extract_branch": "research/qi-device-hard-seed",
-      "reduction_target_lines": 0,
-      "public_imports": [],
-      "internal_callers": [
-        "sfincs_jax/solvers/preconditioner_qi_device.py"
-      ],
-      "tests": [
-        "tests/test_rhs1_qi_coupled_residual.py",
-        "tests/test_rhs1_qi_residual_galerkin.py"
-      ],
-      "docs_examples": [
-        "docs/research_lanes.rst"
-      ],
-      "retention_reason": "QI correction experiments are explicitly deferred research.",
-      "next_step": "Move as a family with QI device code and remove core route references."
-    },
-    {
       "path": "sfincs_jax/problems/profile_solve.py",
       "lines_at_audit": 4164,
       "category": "core",
@@ -959,50 +494,6 @@
           "reason": "direct reduced-Pmat symbolic/native sparse controls and hidden-env variants need research extraction or collapse"
         }
       ]
-    },
-    {
-      "path": "sfincs_jax/solvers/preconditioner_qi_basis.py",
-      "lines_at_audit": 3655,
-      "category": "extract-pr",
-      "action": "extract",
-      "extract_branch": "research/qi-device-hard-seed",
-      "reduction_target_lines": 0,
-      "public_imports": [],
-      "internal_callers": [
-        "sfincs_jax/solvers/preconditioner_qi_device.py"
-      ],
-      "tests": [
-        "tests/test_rhs1_qi_coarse.py",
-        "tests/test_rhs1_qi_multilevel_coarse.py"
-      ],
-      "docs_examples": [
-        "docs/research_lanes.rst"
-      ],
-      "retention_reason": "QI basis/coarse-space experiments are not core.",
-      "next_step": "Extract with QI preconditioner family."
-    },
-    {
-      "path": "sfincs_jax/problems/profile_sparse_direct.py",
-      "lines_at_audit": 2567,
-      "category": "extract-pr",
-      "action": "extract",
-      "extract_branch": "research/native-sparse-direct",
-      "reduction_target_lines": 0,
-      "public_imports": [],
-      "internal_callers": [
-        "sfincs_jax/problems/profile_sparse_solve.py"
-      ],
-      "tests": [
-        "tests/test_rhs1_sparse_exact_policy.py",
-        "tests/test_transport_sparse_direct.py"
-      ],
-      "docs_examples": [
-        "docs/research_lanes.rst"
-      ],
-      "retention_reason": "Native sparse-direct replacement remains a research lane until it is smaller, faster, and production-clean.",
-      "next_step": "Extract with symbolic/native sparse factor code.",
-      "decision": "trim",
-      "justification": "Stable direct-tail direct/structured preconditioner helpers remain; residual/true-active/coupled-coarse rescue policies, support-mode preflight dataclasses, and resolvers were deleted from stable core."
     },
     {
       "path": "sfincs_jax/problems/transport_parallel_runtime.py",
@@ -1178,26 +669,6 @@
       "next_step": "Keep schema checks and compact figure-panel evidence used by retained docs/tests; extract publication/benchmark campaign validators and reduce this owner below 900 lines."
     },
     {
-      "path": "sfincs_jax/operators/profile_true_operator_rescue.py",
-      "lines_at_audit": 2493,
-      "category": "extract-pr",
-      "action": "extract",
-      "extract_branch": "research/native-sparse-direct",
-      "reduction_target_lines": 0,
-      "public_imports": [],
-      "internal_callers": [
-        "sfincs_jax/problems/profile_sparse_solve.py"
-      ],
-      "tests": [
-        "tests/test_rhs1_true_operator_rescue.py"
-      ],
-      "docs_examples": [
-        "docs/research_lanes.rst"
-      ],
-      "retention_reason": "True-operator rescue is a research fallback, not a default stable solver path.",
-      "next_step": "Extract with native sparse-direct work and remove default-policy hooks."
-    },
-    {
       "path": "examples",
       "lines_at_audit": 63205,
       "category": "core",
@@ -1232,24 +703,6 @@
       ],
       "retention_reason": "Tests must prove the slim core, not preserve every historical experiment.",
       "next_step": "Reorganize into unit, physics, regression, cli_io, fixtures, and integration_optional after extraction."
-    },
-    {
-      "path": "benchmarks",
-      "lines_at_audit": 18343,
-      "category": "extract-pr",
-      "action": "extract",
-      "extract_branch": "research/publication-audits",
-      "reduction_target_lines": 0,
-      "public_imports": [],
-      "internal_callers": [],
-      "tests": [
-        "tests/test_benchmark_doc_claims.py"
-      ],
-      "docs_examples": [
-        "docs/performance.rst"
-      ],
-      "retention_reason": "Long benchmark campaigns do not belong in the installable/review core.",
-      "next_step": "Keep only small summary fixtures and one docs-consistency test in core."
     },
     {
       "path": "scripts",
@@ -1310,25 +763,6 @@
       ],
       "retention_reason": "Publication figure regeneration is valuable but not required in the slim user-facing core.",
       "next_step": "Move figure generation campaigns to publication-audits PR and keep checked final figures only if small."
-    },
-    {
-      "path": "sfincs_jax/validation/qi_device.py",
-      "lines_at_audit": 573,
-      "category": "extract-pr",
-      "action": "extract",
-      "extract_branch": "research/qi-device-hard-seed",
-      "reduction_target_lines": 0,
-      "public_imports": [],
-      "internal_callers": [],
-      "tests": [
-        "tests/test_research_lane_policy.py",
-        "tests/test_qi_res15_gpu_campaign.py"
-      ],
-      "docs_examples": [
-        "docs/research_lanes.rst"
-      ],
-      "retention_reason": "QI device artifact validation supports a deferred research lane.",
-      "next_step": "Extract with QI device branch and remove from core validation surface."
     }
   ]
 }

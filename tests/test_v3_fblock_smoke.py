@@ -5,15 +5,10 @@ from pathlib import Path
 import numpy as np
 import jax.numpy as jnp
 
-from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.operators.profile_fblock import (
-    collisionless_operator_from_namelist,
     fblock_operator_from_namelist,
-    fokker_planck_collision_operator_from_namelist,
-    fokker_planck_collision_operator_with_phi1_from_namelist,
     matvec_v3_fblock_flat,
-    pas_collision_operator_from_namelist,
     solve_v3_fblock_gmres,
 )
 

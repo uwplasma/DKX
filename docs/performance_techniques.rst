@@ -11,13 +11,19 @@ vendored v3 manual and technical notes in ``docs/upstream`` (see references belo
 
 .. note::
 
-   This page describes the retained **legacy pipeline** (the full CLI solver
-   ladder and its environment-variable tuning). The canonical workflow —
+   This page describes the retained **legacy pipeline** (the CLI solver
+   ladder for the deferred features and its environment-variable tuning) and
+   preserves historical benchmark records. The canonical workflow —
    ``inputs -> drift_kinetic -> solve -> moments`` with three solver tiers —
-   is documented in :doc:`performance` and needs none of these knobs. Within
-   the legacy structured-CSR lane, physical RHSMode=1 ``host_structured_csr``
-   output defaults to the active projected direct solve; the iterative
-   active-preconditioner variants are benchmark/debug routes.
+   is documented in :doc:`performance` and needs none of these knobs.
+
+   The sparse-direct/CSR-assembly solver families referenced by some
+   historical sections (``structured_csr``/``host_structured_csr``,
+   ``sparse_pc_gmres``/``xblock_sparse_pc_gmres``/``fortran_reduced_pc_gmres``,
+   ``fp_fortran_reduced_lu``/``fp_xblock_tz_lu``/``fp_structured_fblock_lu``,
+   and their env knobs) were **deleted** in the RHSMode-1 legacy deletion
+   pass; those sections remain only as measured evidence records and the
+   named routes can no longer be selected.
 
 Baseline model and linear system (v3)
 -------------------------------------

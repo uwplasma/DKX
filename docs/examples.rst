@@ -503,87 +503,16 @@ difference is ``1.21e-3`` for QA and ``3.54e-3`` for QH. The largest JAX
 refinement bar is ``4.21%`` for QA and ``24.43%`` for QH, so QH is still a
 reduced-grid convergence stress test rather than a production-resolution claim.
 
-For this benchmark script, ``--solve-method auto`` is run in the
-runtime/non-autodiff lane: the script sets ``SFINCS_JAX_IMPLICIT_SOLVE=0`` and
-uses the residual-clean ``fortran_reduced_pc_gmres`` host route automatically
-for eligible finite-beta/full-FP points, with a guarded native-stack attempt and
-robust active-LU fallback. A no-probe
-full-CSR host lane with
-``xblock_tz_low_l_schur`` is available for explicit non-differentiable
-structured-CSR benchmarks, but it is not part of the public default after
-Zenodo QA/QH Krylov preconditioner probes showed multi-minute unsuccessful
-trials on medium finite-beta profile-current decks. An active projected
-direct mode solves the residual-clean host diagnostic system without the
-matrix-free pattern probe; low-resolution QA/QH bootstrap-current agreement must
-still be treated as a convergence study, not as a production parity claim. The
-script refuses to write nonconverged production-sized diagnostics and will also
-reject sparse builds that exceed the configured memory budget.
-
-Builds that include the no-probe full-CSR lane can still force the host-only,
-non-autodiff structured solve explicitly with ``--solve-method structured_csr``
-or ``--solve-method host_structured_csr`` for reproducibility/debugging.  The
-residual-clean finite-beta QA/QH diagnostic route uses
-``fortran_reduced_pc_gmres`` with direct-tail active-auto preconditioning. The
-auto ladder starts from the robust ``active_fortran_v3_reduced_lu`` reference
-route. Lower-memory native-stack candidates remain explicit advanced options and
-must pass the same true-residual preflight before their results are trusted. On
-the full archived ``25 x 39 x 60 x 7`` QA surface, this hands-off active-LU
-route converged to residual ``7.27e-16`` in ``354.6 s`` wall in the guarded
-audit. Other combined multiline, scaled-ILU, and sparse-coarse
-preconditioners remain implemented and tested research candidates, but they are
-not public defaults until they pass the same true-residual gate. Physical RHSMode=1
-``host_structured_csr`` output remains available for explicit structured-CSR
-experiments; the environment variables below make that structured route explicit and
-also override shifted benchmark defaults:
-
-.. code-block:: bash
-
-   SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=direct \
-   SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_DOF=1 \
-   SFINCS_JAX_RHS1_FULL_CSR_MAX_MB=1024 \
-   python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
-     --quick \
-     --solve-method host_structured_csr
-
-``SFINCS_JAX_RHS1_FULL_CSR_MAX_MB`` is the assembled-matrix cap: an over-budget
-CSR build is rejected before solving instead of silently falling back to a dense
-probe. ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_DOF=1`` projects to the active
-transport unknowns before the host solve and expands back to the full output
-vector. Krylov experiments can still use
-``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER``,
-``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB``, and
-``SFINCS_JAX_RHS1_FULL_CSR_XBLOCK_LMAX`` to control the x-block/coarse residual
-preconditioner candidates, but those candidates are not yet the promoted
-finite-beta QA/QH parity path.
-For a lower-memory iterative comparison, use
-``SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=gmres`` or ``lgmres`` with
-``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER=active_low_l_schur``. This projected
-field-split candidate uses a sparse exact Schur residual equation over the
-full-angle low-pitch active variables and the global tail. The low-pitch cutoff
-is controlled by
-``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_LOW_L_SCHUR_LMAX``, and the sparse factor is
-bounded by ``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB``. The alternate
-``active_coarse`` candidate remains available; it uses low-``l``/angular/tail
-modal coarse residual modes. Its default coarse equation is Galerkin; set
-``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COARSE_SOLVER=least_squares`` or use
-``active_coarse_ls`` for the residual-minimizing comparison. Explicit
-``active_overlap_schwarz`` builds a restricted additive-Schwarz residual
-correction over overlapping speed-space patches; control its pitch cutoff and
-overlap with ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SCHWARZ_LMAX`` and
-``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SCHWARZ_RADIUS``. The combined
-``active_schwarz_low_l_schur`` path uses that Schwarz correction as the base for
-the low-pitch Schur residual equation. Explicit ``active_xblock`` and
-``active_xblock_low_l_schur`` probes factor active sparse blocks at fixed
-species and speed index; control their cutoff with
-``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_XBLOCK_LMAX``. These are retained as
-benchmark/debug routes after the first QA gate showed they are not yet a
-promotion path. Generic
-``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER=active_ilu`` is also available and tuned
-with ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ILU_DROP_TOL`` and
-``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ILU_FILL_FACTOR``. Treat it as a benchmark
-candidate: physical finite-beta bootstrap-current outputs should remain on the
-active-auto host route unless active low-L/xblock/coarse/ILU satisfies
-the true-residual gate for that case.
+For this benchmark script, ``--solve-method auto`` runs in the
+runtime/non-autodiff lane (the script sets ``SFINCS_JAX_IMPLICIT_SOLVE=0``).
+The former structured-CSR/sparse-PC host lanes referenced by earlier revisions
+of this benchmark (``structured_csr``/``host_structured_csr``,
+``fortran_reduced_pc_gmres``, and the ``SFINCS_JAX_RHS1_FULL_CSR_*``
+preconditioner candidates) were deleted with the legacy sparse solver
+families; the recorded finite-beta QA/QH figures below remain valid measured
+evidence of the archived runs, and new runs use the retained matrix-free
+``auto`` policy. The script refuses to write nonconverged production-sized
+diagnostics.
 
 .. figure:: _static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface.png
    :alt: Same-resolution SFINCS_JAX and SFINCS Fortran v3 QA bootstrap-current comparison against the Redl analytic formula.

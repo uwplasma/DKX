@@ -2,25 +2,17 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import jax.numpy as jnp
 import numpy as np
 import pytest
-import scipy.sparse as sp
 
 from sfincs_jax.compare import CompareResult, H5DatasetParity
 from sfincs_jax.geometry.vmec_wout import VmecInterpolation
 from sfincs_jax.operators.profile_layout import (
     RHS1BlockCOOBuilder,
     RHS1BlockLayout,
-    RHS1BlockPreconditionerProbe,
-    RHS1KineticIndices,
-    RHS1MatrixFreeLeastSquaresResidualCorrection,
-    build_rhs1_compressed_pitch_layout,
 )
-from sfincs_jax.paths import ResolveResult
-from sfincs_jax.problems.profile_phi1_newton import Phi1FrozenJacobianPolicy, Phi1LineSearchPolicy
 from sfincs_jax.problems.profile_preconditioner_build import (
     RHS1FullBasePreconditionerSetupResult,
     RHS1FullStrongRetryStageResult,
@@ -31,8 +23,6 @@ from sfincs_jax.problems.profile_preconditioner_build import (
     RHS1ReducedStrongPreconditionerSelection,
     RHS1StrongAutoSelection,
 )
-from sfincs_jax.problems.profile_residual import ProjectedResidualPolishOutcome
-from sfincs_jax.problems.transport_finalize import TransportPostsolveDiagnostics, TransportRHSFinalizationResult
 from sfincs_jax.solvers.diagnostics import compare_solver_profile_files
 from sfincs_jax.solvers.memory_model import LinearSolveMemoryEstimate
 from sfincs_jax.solvers.path_policy import SolverCandidateGate

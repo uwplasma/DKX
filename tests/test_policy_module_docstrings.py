@@ -18,7 +18,6 @@ SOURCE_MAPPED_CONTROL_MODULES = (
     "sfincs_jax.solvers.preconditioner_pas_xblock_ilu",
     "sfincs_jax.solvers.preconditioner_schur_profile",
     "sfincs_jax.solvers.preconditioner_schur_profile",
-    "sfincs_jax.solvers.preconditioner_xblock_tz_sparse",
     "sfincs_jax.problems.transport_parallel_runtime",
     "sfincs_jax.problems.transport_finalize",
 )
