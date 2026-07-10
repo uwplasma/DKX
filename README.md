@@ -138,7 +138,7 @@ value to 4.2e-6 by construction.
 | Collisions: pitch-angle scattering, full Fokker-Planck (Rosenbluth) | Supported |
 | Trajectory models: full and DKES; radial electric field | Supported |
 | Constraint schemes 0 / 1 / 2 | Supported |
-| Geometry schemes 1, 2, 3, 4 (three-helicity), 5 (VMEC), 11/12/13 (Boozer, differentiable Fourier) | Supported |
+| Geometry schemes 1, 2, 3, 4 (analytic), 5 (VMEC), 11/12 (Boozer file) from the namelist; scheme 13 (namelist Boozer spectrum) via the differentiable `from_fourier` API only | Supported |
 | Solver tiers: structured direct, recycled Krylov (GCROT), host direct referee | Supported (`solve_method="auto"`) |
 | Autodiff: `jax.grad`/JVP through geometry, profiles, and the linear solve | Supported (implicit differentiation) |
 | `Phi1`/quasineutrality, tangential magnetic drifts | Deferred (served by the retained legacy pipeline) |
