@@ -671,7 +671,7 @@ def test_vmec_jax_boozer_spectrum_proxy_gradient_matches_fd_on_optional_backends
     pytest.importorskip("booz_xform_jax")
     from booz_xform_jax import Booz_xform
     from booz_xform_jax.jax_api import booz_xform_jax
-    from vmec_jax.wout import read_wout as read_vmec_jax_wout
+    read_vmec_jax_wout = vmec_jax.read_wout
 
     fixture = _optional_vmec_jax_wout_fixture(vmec_jax)
     if fixture is None:
@@ -743,7 +743,7 @@ def test_vmec_jax_boozer_spectrum_proxy_gradient_matches_fd_on_optional_backends
 def test_vmec_jax_woutdata_adapter_matches_file_reader_on_optional_fixture() -> None:
     vmec_jax = pytest.importorskip("vmec_jax")
     pytest.importorskip("netCDF4")
-    from vmec_jax.wout import read_wout as read_vmec_jax_wout
+    read_vmec_jax_wout = vmec_jax.read_wout
 
     fixture = _optional_vmec_jax_wout_fixture(vmec_jax)
     if fixture is None:
