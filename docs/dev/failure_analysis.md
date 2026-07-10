@@ -150,3 +150,22 @@ direction: surface adjoint-solve convergence in SolveResult and raise/flag when
 the adjoint residual misses tolerance; investigate the constraintScheme=1
 bordering conditioning in drift_kinetic. A reproducer was filed as a spawned
 task from the flagship-example work.
+
+## Mixed precision on GPU: measured negative result (do not auto-engage)
+
+solvax 0.2.0 ships `mixed_precision_block_thomas` (fp32 factor + fp64 refinement).
+On RANDOM well-conditioned diagonally-dominant blocks it is 1.79x faster on an
+RTX A4000 at 1e-15 accuracy (and 0.22-0.98x, up to 4.5x SLOWER, on CPU — fp32 gives
+no CPU throughput gain). BUT on the ACTUAL tier-1 bordered kinetic operators the
+result reverses: the constraint-bordered, low-collisionality streaming operators are
+too ill-conditioned for float32 (kappa * u_fp32 >> 1), so refinement DIVERGES on every
+realistic-sized case (m >= ~169 probed at low Nxi / high collisionality all diverge;
+only m <= 49 converge, too small to benefit). The isolated fp32 factorization is ~1.5x
+faster on the A4000, but the "large enough to help" and "well-conditioned enough for
+fp32" regimes do not overlap for these operators. Conclusion: mixed precision is NOT
+the GPU lever for sfincs_jax tier-1 and must not be auto-engaged (it would silently
+return non-converged results or always fall back to fp64, a net regression). The tool
+remains in solvax for well-conditioned consumers. The real GPU levers here are (a)
+better operator conditioning / preconditioning so fp32 becomes viable, and (b)
+accepting that the per-subsystem Schur L-scan is inherently serial — GPU parallelism is
+across the (species, x, Er, surface) subsystems (already vmapped), not within the scan.
