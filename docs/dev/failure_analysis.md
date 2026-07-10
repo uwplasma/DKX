@@ -138,3 +138,15 @@ RHSMode-1 output). Full-band tier-1 would need ~91 GB; the truncated route ~0.3 
   with fp64 refinement.
 - office Xeon XLA-CPU pathology: 36 threads, 36x slower than the M4 on sequential
   1275^2 LU steps — Phase-5 thread budgeting must cap intra-op parallelism per step.
+
+## Bug: tier-2 differentiable adjoint silently wrong on singular FP systems
+
+Full Fokker-Planck with constraintScheme=1 on the flagship-optimization deck
+yields a numerically singular system (~5 zero singular values, cond ~2e36); the
+tier-2 GCROT adjoint stagnates and the implicit-diff VJP returns a wrong
+gradient without any error (AD -1.7e-3 vs FD +2.8e-5 on the affected dof).
+PAS+Er tier-2 gradients on the same chain are exact (2.9e-6 vs FD). Fix
+direction: surface adjoint-solve convergence in SolveResult and raise/flag when
+the adjoint residual misses tolerance; investigate the constraintScheme=1
+bordering conditioning in drift_kinetic. A reproducer was filed as a spawned
+task from the flagship-example work.
