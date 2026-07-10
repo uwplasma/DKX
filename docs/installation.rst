@@ -8,20 +8,15 @@ Standard install
 
    pip install sfincs_jax
 
-Structured solver extra (``solvax``)
-------------------------------------
+Solver library (``solvax``)
+---------------------------
 
-The structured linear-algebra tiers (block-tridiagonal Legendre elimination,
-recycled GCROT Krylov, implicit differentiation) live in the external
-`solvax <https://github.com/uwplasma/SOLVAX>`_ library. ``sfincs_jax`` imports
-it lazily; every module stays importable without it, and the ``auto`` solve
-policy falls back to host/direct paths when it is absent. Until the ``solvax``
-PyPI release, install it from git (afterwards ``pip install "sfincs_jax[structured]"``
-resolves it directly):
-
-.. code-block:: bash
-
-   pip install git+https://github.com/uwplasma/SOLVAX
+The structured linear-algebra solver tiers (block-tridiagonal Legendre
+elimination, recycled GCROT Krylov, implicit differentiation) live in the
+external `solvax <https://pypi.org/project/solvax/>`_ library. It is a core
+dependency and installs automatically with ``sfincs_jax``; every canonical
+solve uses it. The ``sfincs_jax[structured]`` extra is retained as a no-op
+alias for backward compatibility.
 
 GPU
 ---

@@ -15,11 +15,15 @@ dependencies = [
   "h5py",
   "netCDF4",
   "matplotlib",
+  # solvax (PyPI) owns the structured linear-algebra solver tiers (block-Thomas
+  # elimination, recycled GCROT, implicit differentiation) that every canonical
+  # solve uses; it is a core dependency, not optional.
+  "solvax",
 ]
 
 [project.optional-dependencies]
-# solvax (PyPI) owns the structured linear-algebra tiers (block-Thomas,
-# GCROT, implicit differentiation); sfincs_jax imports it lazily/guarded.
+# Retained as a no-op alias so existing `pip install sfincs_jax[structured]`
+# invocations keep working; solvax is now a core dependency (see above).
 structured = [
   "solvax",
 ]
