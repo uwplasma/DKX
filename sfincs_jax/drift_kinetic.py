@@ -40,7 +40,7 @@ State-vector layout (matches v3 ``indices.F90`` with ``BLOCK_F`` first)::
 Coefficient provenance: everything is built from the committed consolidated
 modules — :mod:`sfincs_jax.phase_space` (grids, differentiation matrices, Legendre
 couplings), :mod:`sfincs_jax.magnetic_geometry` (flux-surface geometry for
-geometrySchemes 1/2/4/5/11/12), :mod:`sfincs_jax.species` (charges, profiles,
+geometrySchemes 1/2/3/4/5/11/12), :mod:`sfincs_jax.species` (charges, profiles,
 psiHat-gradients), and :mod:`sfincs_jax.constants` (normalizations and radial
 conversions).  Collision matrices are built by the stable
 :mod:`sfincs_jax.physics.collisions` (they migrate to ``collisions`` when
@@ -74,7 +74,11 @@ for them until then):
 - ``collisionOperator`` other than 0 (Fokker-Planck) and 1 (pitch-angle
   scattering);
 - mapped x-grids (``xGridScheme >= 50``) and ``xDotDerivativeScheme != 0``;
-- ``geometryScheme`` 3 (not supported by the old operator path either).
+- ``geometryScheme`` 13 (namelist Boozer spectrum): the differentiable
+  :meth:`sfincs_jax.magnetic_geometry.FluxSurfaceGeometry.from_fourier` builds
+  this geometry, but :meth:`from_namelist` does not yet parse ``bmnc``/``bmns``
+  from the deck and route them (the analytic schemes {1,2,3,4} and the
+  file-based schemes {5,11,12} are the namelist-wired set).
 """
 
 from __future__ import annotations
@@ -937,6 +941,16 @@ def _geometry_and_radial(
             RadialCoordinates(psi_a_hat=(a_hat * a_hat) / 2.0, a_hat=a_hat, r_n=0.5),
         )
 
+    if scheme == 3:
+        # v3 fixed LHD inward-shifted analytic Boozer model (geometry.F90 case 3);
+        # aHat=0.5400, psiAHat=aHat^2/2, rN forced to 0.5 (rN_wish ignored).  The
+        # B-field harmonics/flux functions come from from_scheme(3).
+        a_hat = 0.5400
+        return (
+            FluxSurfaceGeometry.from_scheme(3, theta=grids.theta, zeta=grids.zeta),
+            RadialCoordinates(psi_a_hat=(a_hat * a_hat) / 2.0, a_hat=a_hat, r_n=0.5),
+        )
+
     if scheme == 4:
         # v3 built-in W7-X standard model; rN forced to 0.5.
         return (
@@ -996,7 +1010,7 @@ def _geometry_and_radial(
         return geom, RadialCoordinates(psi_a_hat=psi_a_hat, a_hat=a_hat, r_n=r_n)
 
     raise NotImplementedError(
-        f"KineticOperator.from_namelist supports geometryScheme in {{1,2,4,5,11,12}}; got {scheme}."
+        f"KineticOperator.from_namelist supports geometryScheme in {{1,2,3,4,5,11,12}}; got {scheme}."
     )
 
 
@@ -1035,7 +1049,7 @@ def _n_periods_from_namelist(*, nml: Any) -> int:
         path = _resolve_equilibrium_path(nml=nml, geom_params=geom_params, vmec=True)
         return int(read_vmec_wout(path).nfp)
     raise NotImplementedError(
-        f"KineticOperator.from_namelist supports geometryScheme in {{1,2,4,5,11,12}}; got {scheme}."
+        f"KineticOperator.from_namelist supports geometryScheme in {{1,2,3,4,5,11,12}}; got {scheme}."
     )
 
 
@@ -1049,9 +1063,11 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     and monoenergetic conversions from :mod:`sfincs_jax.constants`, and
     collision matrices from :mod:`sfincs_jax.physics.collisions`.
 
-    Raises ``NotImplementedError`` for the deferred features listed in the
-    module docstring (Phi1, magnetic drifts, constraintScheme 3/4, mapped
-    x-grids, geometryScheme 3).
+    Supports ``geometryScheme`` in {1, 2, 3, 4, 5, 11, 12} (analytic schemes
+    1/2/3/4 and file-based 5/11/12).  Raises ``NotImplementedError`` for the
+    deferred features listed in the module docstring (Phi1, magnetic drifts,
+    constraintScheme 3/4, mapped x-grids, and the namelist Boozer-spectrum
+    geometryScheme 13).
     """
     general = nml.group("general")
     phys = nml.group("physicsParameters")

@@ -152,7 +152,11 @@ class SolveResult:
             by construction for the direct tiers when residuals are finite.
         recycle: GCROT recycle pair ``(C, U)`` from the last right-hand side
             (tier 2), for warm-starting the next solve of a continuation.
-        timings: wall-clock seconds per phase (``build``, ``solve``).
+        timings: wall-clock seconds per phase (``build``, ``solve``).  Each
+            phase ends with a ``jax.block_until_ready`` so the numbers are real
+            device-compute time, not JAX async-dispatch latency (which would
+            under-report by ~10x).  Under ``jit``/``grad`` the blocks are no-ops
+            and the values are trace-time only.
     """
 
     x: jnp.ndarray
@@ -718,6 +722,14 @@ def _solve_tier1(
 ) -> SolveResult:
     t0 = time.perf_counter()
     t1_solver = build_tier1_solver(op)
+    # Force the async block-Thomas factorization to complete so the "build"
+    # timing reflects real compute, not JAX dispatch latency.  We block on the
+    # array fields (the Tier1Solver dataclass itself is not a pytree, so
+    # block_until_ready would treat it as an opaque leaf); a no-op under
+    # jit/grad tracing.
+    jax.block_until_ready(
+        (t1_solver.factors, t1_solver.z_fwd, t1_solver.z_t, t1_solver.gamma)
+    )
     t1 = time.perf_counter()
 
     def _solve_refined(b: jnp.ndarray, *, transpose: bool = False) -> jnp.ndarray:
@@ -749,6 +761,7 @@ def _solve_tier1(
         x2d = jnp.stack(cols, axis=1)
     else:
         x2d = _solve_refined(rhs2d)
+    x2d = jax.block_until_ready(x2d)  # real solve compute, not just dispatch
     t2 = time.perf_counter()
     res = _residual_norms(op.apply, x2d, rhs2d)
     return SolveResult(
@@ -935,6 +948,9 @@ def _solve_tier1_truncated(
     f_low_b, s_b = jax.lax.map(
         solve_one, (stream_b, mirror_b, pas_b, x_b, gamma_b, rhs_low_b, r_c_b)
     )
+    # Force the async truncated block-Thomas sweep to complete so the timing is
+    # real compute, not JAX dispatch latency (a no-op under jit/grad tracing).
+    f_low_b, s_b = jax.block_until_ready((f_low_b, s_b))
     t1 = time.perf_counter()
 
     f_full = jnp.zeros((n_s, n_x, n_xi, n_tz, n_rhs), dtype=jnp.float64)
@@ -945,6 +961,7 @@ def _solve_tier1_truncated(
     x2d = jnp.concatenate(parts, axis=0)
 
     res = _truncated_partial_residual(op, coef, stream_b, mirror_b, pas_b, x_b, f_low_b, s_b, rhs_low_b, r_c_b, keep)
+    x2d, res = jax.block_until_ready((x2d, res))  # real residual/assembly time, not dispatch
     t2 = time.perf_counter()
     return SolveResult(
         x=x2d,
@@ -1026,12 +1043,20 @@ def _solve_tier2(
     differentiable: bool,
     check_adjoint: bool,
 ) -> SolveResult:
+    traced = _is_traced(rhs2d, *jax.tree_util.tree_leaves(op))
     t0 = time.perf_counter()
     precond = precond_t = None
     if use_preconditioner:
         precond, precond_t = build_coarse_preconditioner(
             op, drop_l_coupling=drop_l_coupling_in_precond
         )
+        # The preconditioner closure captures the async coarse block-Thomas
+        # factorization; force it to complete (a zero probe) so the "build"
+        # timing is real compute, not JAX dispatch latency.  Skipped under
+        # jit/grad tracing, where block_until_ready is a no-op on tracers and
+        # the probe would only add dead nodes to the trace.
+        if not traced:
+            jax.block_until_ready(precond(jnp.zeros((op.total_size,), dtype=jnp.float64)))
     t1 = time.perf_counter()
 
     x0_2d = None
@@ -1044,7 +1069,6 @@ def _solve_tier2(
     # on the Nxi_for_x-truncated DOFs, so the system (and in particular its
     # transpose, used by the differentiable adjoint) is nonsingular.
     matvec, matvec_t = _pinned_matvecs(op)
-    traced = _is_traced(rhs2d, *jax.tree_util.tree_leaves(op))
     cols: list[jnp.ndarray] = []
     total_iters: int | None = 0
     converged = True
@@ -1104,9 +1128,10 @@ def _solve_tier2(
             cols.append(_implicit_solve(matvec, matvec_t, b, fwd_solve, t_solve))
         else:
             cols.append(sol.x)
+    x_stacked = jax.block_until_ready(jnp.stack(cols, axis=1))  # real solve time, not dispatch
     t2 = time.perf_counter()
     return SolveResult(
-        x=jnp.stack(cols, axis=1),
+        x=x_stacked,
         method="gcrot",
         iterations=total_iters,
         residual_norms=jnp.stack(res_norms),

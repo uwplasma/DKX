@@ -151,13 +151,31 @@ try:
     from jax import config as _jax_config  # noqa: PLC0415
 
     _jax_config.update("jax_enable_x64", True)
+    # Enable the persistent compilation cache via the current jax config API.
+    # The JAX_COMPILATION_CACHE_DIR env var set above only takes effect if jax
+    # reads its config for the first time here; when the user imported jax
+    # before sfincs_jax that ordering is already lost, so set the flags
+    # explicitly (works regardless of import order).  The retired
+    # jax.experimental.compilation_cache.set_cache_dir was removed in recent jax
+    # (e.g. 0.10.x) and silently no-ops, so it must not be relied on.  Forcing
+    # the min-compile-time / min-entry-size thresholds to zero makes even the
+    # tiny fast-compiling kernels cacheable.
     _cache_dir = os.environ.get("JAX_COMPILATION_CACHE_DIR", "").strip()
     if _cache_dir:
-        try:  # pragma: no cover - best-effort cache enable
-            from jax.experimental import compilation_cache as _compilation_cache  # noqa: PLC0415
-
-            _compilation_cache.set_cache_dir(_cache_dir)
-        except Exception:
+        _jax_config.update("jax_compilation_cache_dir", _cache_dir)
+        # Mirror the thresholds set above as env-var defaults (respecting any
+        # explicit user override) via config so they also apply when jax was
+        # imported before sfincs_jax and never read the env vars.
+        try:
+            _jax_config.update(
+                "jax_persistent_cache_min_compile_time_secs",
+                float(os.environ.get("JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS", "0")),
+            )
+            _jax_config.update(
+                "jax_persistent_cache_min_entry_size_bytes",
+                int(os.environ.get("JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES", "0")),
+            )
+        except ValueError:
             pass
 except Exception:
     # Keep import lightweight for tooling that inspects the package without JAX.
