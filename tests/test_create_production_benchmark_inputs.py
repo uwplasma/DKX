@@ -1,18 +1,9 @@
 from __future__ import annotations
 
-import importlib.util
 import json
 from pathlib import Path
-import sys
 
-
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "create_production_benchmark_inputs.py"
-sys.path.insert(0, str(_SCRIPT_PATH.parent))
-_SPEC = importlib.util.spec_from_file_location("create_production_benchmark_inputs", _SCRIPT_PATH)
-assert _SPEC is not None and _SPEC.loader is not None
-bench_inputs = importlib.util.module_from_spec(_SPEC)
-sys.modules[_SPEC.name] = bench_inputs
-_SPEC.loader.exec_module(bench_inputs)
+from sfincs_jax.validation import release as bench_inputs
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -54,19 +45,11 @@ def _write_input(
     )
 
 
-def test_checked_in_production_manifest_is_sfincs_jax_only() -> None:
-    manifest_path = REPO_ROOT / "benchmarks" / "production_resolution_inputs_2026-05-04" / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    cases = manifest["cases"]
-
-    assert manifest["case_count"] == 39
-    assert manifest["minimum_3d_resolution"] == MIN_3D
-    assert manifest["minimum_tokamak_resolution"] == MIN_TOKAMAK
-    assert manifest["minimum_tokamak_pas_noer_resolution"] == MIN_TOKAMAK_PAS_NOER
-    assert manifest["target_fortran_min_runtime_s"] == 10.0
-    assert {case["source_group"] for case in cases} == {"examples"}
-    assert not any("ntx" in str(case["case"]).lower() for case in cases)
-    assert not any("ntx" in str(case["source_input"]).lower() for case in cases)
+def test_production_manifest_generator_defaults_to_untracked_outputs_tree() -> None:
+    assert (
+        bench_inputs.DEFAULT_OUT_ROOT
+        == REPO_ROOT / "outputs" / "benchmarks" / "production_resolution_inputs_2026-05-04"
+    )
 
 
 def _assert_floor(resolution: dict[str, int], floor: dict[str, int]) -> None:
@@ -87,7 +70,7 @@ def test_generator_enforces_research_baseline_on_examples_and_external_inputs(tm
 
     out_root = tmp_path / "production_inputs"
     assert (
-        bench_inputs.main(
+        bench_inputs.production_inputs_main(
             [
                 "--examples-root",
                 str(examples_root),
@@ -140,7 +123,7 @@ def test_generator_can_preserve_external_resolution_for_reproduction(tmp_path: P
 
     out_root = tmp_path / "production_inputs"
     assert (
-        bench_inputs.main(
+        bench_inputs.production_inputs_main(
             [
                 "--examples-root",
                 str(examples_root),
@@ -180,7 +163,7 @@ def test_generator_relabels_historic_external_deck_with_benchmark_resolution(tmp
 
     out_root = tmp_path / "production_inputs"
     assert (
-        bench_inputs.main(
+        bench_inputs.production_inputs_main(
             [
                 "--examples-root",
                 str(examples_root),
@@ -229,7 +212,7 @@ def test_generator_uses_calibrated_floor_for_tokamak_pas_noer(tmp_path: Path) ->
 
     out_root = tmp_path / "production_inputs"
     assert (
-        bench_inputs.main(
+        bench_inputs.production_inputs_main(
             [
                 "--examples-root",
                 str(examples_root),
@@ -278,7 +261,7 @@ def test_generator_estimates_large_pas_xdot_case_as_remote_only(tmp_path: Path) 
 
     out_root = tmp_path / "production_inputs"
     assert (
-        bench_inputs.main(
+        bench_inputs.production_inputs_main(
             [
                 "--examples-root",
                 str(examples_root),
@@ -327,7 +310,7 @@ def test_generator_does_not_overestimate_zero_er_xdot_case(tmp_path: Path) -> No
 
     out_root = tmp_path / "production_inputs"
     assert (
-        bench_inputs.main(
+        bench_inputs.production_inputs_main(
             [
                 "--examples-root",
                 str(examples_root),
@@ -364,7 +347,7 @@ def test_generator_default_floor_keeps_hsx_fp_at_authored_large_resolution(tmp_p
 
     out_root = tmp_path / "production_inputs"
     assert (
-        bench_inputs.main(
+        bench_inputs.production_inputs_main(
             [
                 "--examples-root",
                 str(examples_root),

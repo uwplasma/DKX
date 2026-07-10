@@ -1,11 +1,20 @@
 #!/usr/bin/env python
 
+"""Nested radial + Er scan (scanType=5).
+
+Called by ``sfincsScan`` when ``!ss scanType = 5``. Uses ``profiles`` to set
+plasma profiles, then launches an Er scan at each radius.
+"""
+
 # This script will not work if called directly.
 # From the command line, you should call sfincsScan instead.
 
 profilesFilename = 'profiles'
 
 import os, inspect
+import sys
+import subprocess
+from pathlib import Path
 from builtins import input
 
 #print ("This is "+ inspect.getfile(inspect.currentframe()))
@@ -29,15 +38,15 @@ if waitBeforeSubmitting:
     if proceed=="n":
         exit(0)
 
-print ("launching jobs...")
+print ("launching runs...")
 
-# Read in the job.sfincsScan file:
-with open(jobFilename, 'r') as f:
-    jobFile = f.readlines()
+base_dir = os.getcwd()
+scan_progress = start_scan_progress(total_runs=len(radii), label=this_filename)
+prev_dir = None
 
 for runNum in range(len(radii)):
     directory = directories[runNum]
-    print ("Beginning to handle radius "+str(runNum+1)+" of "+str(len(radii))+": "+directory)
+    run_started_at = note_scan_run_start(progress=scan_progress, run_index=runNum+1, directory=directory)
 
     # To be extra safe, check again to see if the directory exists.
     if os.path.exists(directory):
@@ -46,18 +55,13 @@ for runNum in range(len(radii)):
         print ("Creating directory "+directory)
         os.makedirs(directory)
     os.chdir(directory)
-
-    # Copy the job.sfincsScan file:
-    thisJobFile = list(jobFile)
-    ## This next function is defined separately for each system in sfincsScan
-    #nameJobFile(thisJobFile,directory)
-    f = open(jobFilename,"w")
-    f.writelines(thisJobFile)
-    f.close()
+    work_dir = os.getcwd()
+    current_dir = Path(work_dir)
+    configure_krylov_recycle(prev_dir, current_dir)
 
     # Now copy the input.namelist file:
 
-    f = open(filename,"w")
+    input_lines = []
     for line in inputFile:
         # Set sfincsScan directives:
         if namelistLineContainsSS(line,"scanType"):
@@ -126,37 +130,25 @@ for runNum in range(len(radii)):
             line += " ! Set by sfincsScan_5.\n"    
 
         #######################    
-        f.write(line)
+        input_lines.append(line)
 
     line = "!ss scanType = 2  ! set by sfincsScan_5.\n"
     line += "!ss NErs = "+str(int(NErs[runNum]))+"  ! set by sfincsScan_5.\n"
     line += "!ss "+generalErName+"Max = "+str(generalEr_max[runNum])+"  ! set by sfincsScan_5.\n"
     line += "!ss "+generalErName+"Min = "+str(generalEr_min[runNum])+"  ! set by sfincsScan_5.\n"
-    f.write(line)
+    input_lines.append(line)
 
-    f.close()
+    input_path = Path(filename)
+    input_path.write_text("".join(input_lines))
 
     #################################################
 
     # Submit the Er scan:
 ##    submitCommand = "sfincsScan -f" 
     #submitCommand = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))+"/sfincsScan -f"
-    submitCommand = os.path.dirname(os.path.abspath(__file__))+"/sfincsScan -f"
-    #############################
-    try:
-        # We need to include .split(" ") to separate the command-line arguments into an array of strings.   
-        # I'm not sure why python requires this. 
-        submissionResult = subprocess.call(submitCommand.split(" "))
-        #submissionResult=0
-    except:
-        print ("ERROR! Unable to submit run "+directory+" for some reason.")
-        raise
-    else:
-        if submissionResult==0:
-            print ("No errors submitting job "+directory)
-        else:
-            print ("Nonzero exit code returned when trying to submit job "+directory)
+    submitCommand = [sys.executable, str(Path(__file__).resolve().with_name("sfincsScan")), "--yes", "--input", str(input_path)]
+    subprocess.call(submitCommand, cwd=work_dir)
+    note_scan_run_done(progress=scan_progress, run_index=runNum+1, directory=directory, run_started_at=run_started_at)
 
-    os.chdir("..")
-
-
+    os.chdir(base_dir)
+    prev_dir = current_dir

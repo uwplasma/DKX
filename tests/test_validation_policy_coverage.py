@@ -6,8 +6,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.validation_artifacts import (
+from sfincs_jax.validation.artifacts import (
     CollisionalityRecord,
+    autodiff_gradient_error_summary,
     build_autodiff_sensitivity_validation_summary,
     collisionality_power_law_slope,
     filter_suite_metrics_by_fortran_runtime,
@@ -68,6 +69,31 @@ def test_suite_filter_uses_cpu_reference_runtime_before_gpu_fallback() -> None:
     assert excluded == [{"case": "shared_too_small_on_cpu", "fortran_runtime_s": 0.5}]
 
 
+def test_suite_filter_without_runtime_floor_keeps_sorted_cpu_gpu_metrics() -> None:
+    cpu_metrics = suite_case_metrics(
+        [
+            _row("b_cpu", fortran_runtime_s=None),
+            _row("a_cpu", fortran_runtime_s=0.1),
+        ]
+    )
+    gpu_metrics = suite_case_metrics(
+        [
+            _row("b_gpu", fortran_runtime_s=None),
+            _row("a_gpu", fortran_runtime_s=0.1),
+        ]
+    )
+
+    filtered_cpu, filtered_gpu, excluded = filter_suite_metrics_by_fortran_runtime(
+        cpu_metrics,
+        gpu_metrics,
+        min_fortran_runtime_s=None,
+    )
+
+    assert [metric.case for metric in filtered_cpu] == ["a_cpu", "b_cpu"]
+    assert [metric.case for metric in filtered_gpu] == ["a_gpu", "b_gpu"]
+    assert excluded == []
+
+
 def test_suite_summary_prefers_warm_runtime_but_falls_back_to_logged_elapsed() -> None:
     rows = [
         _row("logged_only", fortran_runtime_s=10.0, jax_logged_elapsed_s=2.0),
@@ -123,6 +149,16 @@ def test_autodiff_validation_gates_fail_closed_on_bad_gradient_or_residual(tmp_p
         load_autodiff_sensitivity_summary(bad_path)
 
 
+def test_autodiff_artifact_loaders_reject_non_object_and_bad_gradient_shape(tmp_path: Path) -> None:
+    bad_shape_path = tmp_path / "bad_shape.json"
+    bad_shape_path.write_text("[1, 2, 3]\n")
+    with pytest.raises(ValueError, match="must contain a JSON object"):
+        load_autodiff_sensitivity_summary(bad_shape_path)
+
+    with pytest.raises(ValueError, match="gradient_checks must be a sequence"):
+        autodiff_gradient_error_summary({"gradient_checks": 7})
+
+
 def test_collisionality_slope_and_fp_pas_separation_are_scale_invariants() -> None:
     records: list[CollisionalityRecord] = []
     for nuprime in (1.0, 10.0, 100.0):
@@ -160,3 +196,14 @@ def test_load_suite_report_rejects_non_list_payload(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="must contain a list"):
         load_suite_report(path)
+
+
+def test_load_suite_report_accepts_wrapped_rows_and_ignores_non_mapping_entries(tmp_path: Path) -> None:
+    path = tmp_path / "suite_report.json"
+    path.write_text(
+        json.dumps({"rows": [{"case": "kept"}, ["drop"], "drop", {"case": "also_kept"}]}) + "\n"
+    )
+
+    rows = load_suite_report(path)
+
+    assert rows == [{"case": "kept"}, {"case": "also_kept"}]

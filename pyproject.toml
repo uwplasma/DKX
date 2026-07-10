@@ -15,9 +15,18 @@ dependencies = [
   "h5py",
   "netCDF4",
   "matplotlib",
+  # solvax (PyPI) owns the structured linear-algebra solver tiers (block-Thomas
+  # elimination, recycled GCROT, implicit differentiation) that every canonical
+  # solve uses; it is a core dependency, not optional.
+  "solvax",
 ]
 
 [project.optional-dependencies]
+# Retained as a no-op alias so existing `pip install sfincs_jax[structured]`
+# invocations keep working; solvax is now a core dependency (see above).
+structured = [
+  "solvax",
+]
 dev = [
   "pytest",
   "pytest-cov",
@@ -37,16 +46,16 @@ where = ["."]
 include = ["sfincs_jax*"]
 
 [tool.setuptools.package-data]
-sfincs_jax = ["data/**"]
+sfincs_jax = ["validation/*.json"]
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=prepend"]
 testpaths = ["tests"]
 
 [tool.ruff.lint.per-file-ignores]
-# v3_driver.py is the compatibility monolith under active extraction. Keep
-# release lint strict for new split modules while allowing the existing import
-# ordering, legacy l-index names, and staged fallback branches until they move
-# behind focused policy modules.
-"sfincs_jax/v3_driver.py" = ["E402", "E741", "F401", "F841", "E731"]
-"sfincs_jax/v3_system.py" = ["E402", "E741"]
+# The large profile and transport solve owners still retain dynamic globals and
+# optional solver imports that are exercised through policy tests. Keep the rest
+# of the package strict while these owners are simplified in the retained-owner
+# audit.
+"sfincs_jax/problems/profile_solve.py" = ["E402", "E731", "E741", "F401", "F811", "F821", "F841"]
+"sfincs_jax/problems/transport_solve.py" = ["E402", "E731", "E741", "F401", "F811", "F821", "F841"]

@@ -27,15 +27,15 @@ import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.geometry import boozer_geometry_scheme4
-from sfincs_jax.implicit_solve import linear_custom_solve
+from sfincs_jax.solvers.implicit import linear_custom_solve
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.validation_artifacts import (
+from sfincs_jax.validation.artifacts import (
     PAUL_2019_ADJOINT_URL,
     SFINCS_ADJOINT_APS_URL,
     build_autodiff_sensitivity_validation_summary,
     load_autodiff_sensitivity_summary,
 )
-from sfincs_jax.v3_system import (
+from sfincs_jax.operators.profile_system import (
     apply_v3_full_system_operator,
     full_system_operator_from_namelist,
     rhs_v3_full_system,

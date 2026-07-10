@@ -19,14 +19,14 @@ from sfincs_jax.ambipolar import (
     radial_current_from_output,
 )
 from sfincs_jax.diagnostics import b0_over_bbar, fsab_hat2, g_hat_i_hat, u_hat, u_hat_np, vprime_hat
-from sfincs_jax.fortran import default_fortran_exe, run_sfincs_fortran
-from sfincs_jax.indices import V3Indexing
+from sfincs_jax.validation.fortran import default_fortran_exe, run_sfincs_fortran
+from sfincs_jax.discretization.v3 import V3Indexing
 from sfincs_jax.namelist import Namelist
 from sfincs_jax.paths import _strip_quotes, resolve_existing_path
 from sfincs_jax.profiling import SimpleProfiler, _device_mem_mb, _rss_mb, maybe_profiler
-from sfincs_jax.scans import _er_scan_var_name, _patch_scalar_in_group, linspace_including_endpoints, run_er_scan
-from sfincs_jax.transport_parallel_worker import main as transport_worker_main
-from sfincs_jax.verbose import Timer, make_emit
+from sfincs_jax.workflows.scans import _er_scan_var_name, _patch_scalar_in_group, linspace_including_endpoints, run_er_scan
+from sfincs_jax.problems.transport_parallel_runtime import main as transport_worker_main
+from sfincs_jax.profiling import Timer, make_emit
 
 
 def test_fortran_bool_and_radial_current_helpers() -> None:
@@ -34,6 +34,8 @@ def test_fortran_bool_and_radial_current_helpers() -> None:
     assert _fortran_bool_to_py(np.bool_(False)) is False
     assert _fortran_bool_to_py(np.asarray([1])) is True
     assert _fortran_bool_to_py(np.asarray(0)) is False
+    assert _fortran_bool_to_py("nonempty-token") is True
+    assert _fortran_bool_to_py("") is False
 
     include_phi1 = {
         "includePhi1": 1,
@@ -51,7 +53,14 @@ def test_fortran_bool_and_radial_current_helpers() -> None:
     assert radial_current_from_output(no_phi1) == pytest.approx(5.0)
 
 
-def test_scanplot2_helpers_cover_single_and_multi_species() -> None:
+def test_scanplot2_helpers_cover_single_and_multi_species(tmp_path: Path) -> None:
+    scan_input = tmp_path / "input.namelist"
+    scan_input.write_text("!ss dPhiHatdpsiNMin = -1\n!ss dPhiHatdpsiNMax = 1\n", encoding="utf-8")
+    assert _infer_var_name_from_scan_input(scan_input) == "dPhiHatdpsiN"
+    fallback_input = tmp_path / "fallback.input.namelist"
+    fallback_input.write_text("&general\n/\n", encoding="utf-8")
+    assert _infer_var_name_from_scan_input(fallback_input) == "Er"
+
     labels = _scanplot2_labels(n_species=1, include_phi1=False)
     assert labels[-1] == "radial current"
     assert "source 1" in labels
@@ -81,6 +90,20 @@ def test_scanplot2_helpers_cover_single_and_multi_species() -> None:
     out_single = _scanplot2_outputs_for_run(single)
     np.testing.assert_allclose(out_single, np.asarray([2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 6.0]))
 
+    single_phi1 = {
+        "Nspecies": 1,
+        "includePhi1": 1,
+        "FSABFlow": np.asarray([[9.0, 2.0]]),
+        "particleFlux_vm_rHat": np.asarray([[9.0, 3.0]]),
+        "particleFlux_vd_rHat": np.asarray([[9.0, 4.0]]),
+        "heatFlux_vm_rHat": np.asarray([[9.0, 5.0]]),
+        "heatFlux_withoutPhi1_rHat": np.asarray([[9.0, 6.0]]),
+        "FSABjHat": np.asarray([9.0, 7.0]),
+        "Zs": np.asarray([2.0]),
+    }
+    out_single_phi1 = _scanplot2_outputs_for_run(single_phi1)
+    np.testing.assert_allclose(out_single_phi1, np.asarray([2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]))
+
     multi = {
         "Nspecies": 2,
         "includePhi1": 1,
@@ -92,6 +115,18 @@ def test_scanplot2_helpers_cover_single_and_multi_species() -> None:
     }
     out_multi = _scanplot2_outputs_for_run(multi)
     np.testing.assert_allclose(out_multi, np.asarray([1.0, 3.0, 5.0, 2.0, 4.0, 6.0, 7.0, -1.0]))
+
+    with pytest.raises(ValueError, match="Unexpected dataset rank"):
+        _scanplot2_outputs_for_run(
+            {
+                "Nspecies": 1,
+                "includePhi1": 0,
+                "FSABFlow": np.zeros((1, 1, 1)),
+                "particleFlux_vm_rHat": np.asarray([1.0]),
+                "heatFlux_vm_rHat": np.asarray([1.0]),
+                "Zs": np.asarray([1.0]),
+            }
+        )
 
 
 def test_diagnostics_flux_surface_averages_for_constant_geometry() -> None:
@@ -219,7 +254,7 @@ def test_profiling_and_verbose_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
     assert any("hello" in line for line in lines)
     assert not any("skip" in line for line in lines)
 
-    import sfincs_jax.verbose as verbose
+    import sfincs_jax.profiling as verbose
 
     t = iter([2.0, 2.4])
     monkeypatch.setattr(verbose.time, "perf_counter", lambda: next(t))
@@ -251,7 +286,7 @@ def test_fortran_wrapper_and_entrypoint_helpers(tmp_path: Path, monkeypatch: pyt
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr("sfincs_jax.io.localize_equilibrium_file_in_place", _fake_localize)
-    monkeypatch.setattr("sfincs_jax.fortran.subprocess.run", _fake_run)
+    monkeypatch.setattr("sfincs_jax.validation.fortran.subprocess.run", _fake_run)
 
     out = run_sfincs_fortran(
         input_namelist=input_path,
@@ -270,7 +305,7 @@ def test_fortran_wrapper_and_entrypoint_helpers(tmp_path: Path, monkeypatch: pyt
         stdout.write("MPI_Finalize failed\n")
         return SimpleNamespace(returncode=143)
 
-    monkeypatch.setattr("sfincs_jax.fortran.subprocess.run", _fake_finalize_failure)
+    monkeypatch.setattr("sfincs_jax.validation.fortran.subprocess.run", _fake_finalize_failure)
     out = run_sfincs_fortran(input_namelist=input_path, exe=exe, workdir=workdir)
     assert out == workdir / "sfincsOutput.h5"
 
@@ -279,7 +314,7 @@ def test_fortran_wrapper_and_entrypoint_helpers(tmp_path: Path, monkeypatch: pyt
         stdout.write("MPI_Finalize failed\n")
         return SimpleNamespace(returncode=2)
 
-    monkeypatch.setattr("sfincs_jax.fortran.subprocess.run", _fake_real_failure)
+    monkeypatch.setattr("sfincs_jax.validation.fortran.subprocess.run", _fake_real_failure)
     with pytest.raises(subprocess.CalledProcessError):
         run_sfincs_fortran(input_namelist=input_path, exe=exe, workdir=workdir)
 
@@ -341,8 +376,8 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
         )
         Path(kwargs["output_path"]).write_bytes(b"")
 
-    monkeypatch.setattr("sfincs_jax.scans.localize_equilibrium_file_in_place", _fake_localize)
-    monkeypatch.setattr("sfincs_jax.scans.write_sfincs_jax_output_h5", _fake_write)
+    monkeypatch.setattr("sfincs_jax.workflows.scans.localize_equilibrium_file_in_place", _fake_localize)
+    monkeypatch.setattr("sfincs_jax.workflows.scans.write_sfincs_jax_output_h5", _fake_write)
     emits: list[tuple[int, str]] = []
 
     result = run_er_scan(
@@ -412,9 +447,9 @@ def test_transport_parallel_worker_writes_npz(tmp_path: Path, monkeypatch: pytes
     }
     payload_path.write_text(json.dumps(payload))
 
-    monkeypatch.setattr("sfincs_jax.transport_parallel_worker.read_sfincs_input", lambda _p: object())
+    monkeypatch.setattr("sfincs_jax.problems.transport_parallel_runtime._read_worker_input", lambda _p: object())
     monkeypatch.setattr(
-        "sfincs_jax.transport_parallel_worker.solve_v3_transport_matrix_linear_gmres",
+        "sfincs_jax.problems.transport_parallel_runtime._solve_worker_transport",
         lambda **_kwargs: SimpleNamespace(
             state_vectors_by_rhs={1: np.asarray([1.0, 2.0]), 3: np.asarray([3.0, 4.0])},
             residual_norms_by_rhs={1: np.float64(0.25), 3: np.float64(0.75)},

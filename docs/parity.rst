@@ -23,19 +23,19 @@ High-level summary (parity-tested)
      - Output parity fixtures
    * - Geometry scheme ``5`` (VMEC ``wout_*.nc``)
      - Yes
-     - End-to-end output parity in the current full example-suite audit, plus frozen fixture coverage
+     - End-to-end output parity in the full example-suite audit, plus frozen fixture coverage
    * - Geometry schemes ``11/12`` (Boozer ``.bc``)
      - Yes
      - Geometry + transport-matrix end-to-end fixtures
    * - Linear runs (RHSMode=1)
      - Yes
-     - Explicit CPU/GPU release lanes are parity-clean across the current vendored example suite
+     - Explicit CPU/GPU release lanes are parity-clean across the vendored example suite
    * - Transport matrices (RHSMode=2/3)
      - Yes
      - End-to-end ``sfincsOutput.h5`` parity for 2×2 and 3×3 cases
    * - Full upstream v3 example suite
      - Yes
-     - Current ``main`` release audit is ``39/39 parity_ok`` on CPU and ``39/39 parity_ok`` on GPU, with no strict mismatches, no ``jax_error``, no ``max_attempts``, and zero missing Fortran top-level output keys in JAX.
+     - The release audit is ``39/39 parity_ok`` on CPU and ``39/39 parity_ok`` on GPU, with no strict mismatches, no ``jax_error``, no ``max_attempts``, and zero missing Fortran top-level output keys in JAX.
 
 Implemented (parity-tested)
 ---------------------------
@@ -104,7 +104,7 @@ Current scope limits
   - ``tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak``
   - ``tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas``
 
-  The older reduced-suite artifacts remain useful for debugging, fixture history, and faster local
+  The reduced-suite artifacts remain useful for debugging, fixture history, and faster local
   triage, but they are no longer the primary release status.
 - The unconstrained ``constraintScheme=0`` branch is rank-deficient, so different solvers can select different nullspace
   components. For comparisons, sfincs_jax treats a small set of density/pressure-like outputs as gauge-dependent and
@@ -118,15 +118,15 @@ Current scope limits
   preconditioned-residual branches remain explicitly labeled.
 - The default CLI and ``write-output`` path use an explicit performance-oriented solve strategy.
   End-to-end differentiable solves remain available from Python via the implicit/differentiable path when requested.
-- Full Phi1 coupling end-to-end (nonlinear residual assembly + collision operator contributions) is still being expanded beyond the currently parity-tested subset.
-- VMEC-based geometry schemes beyond the current ``geometryScheme=5`` parity subset.
+- Full Phi1 coupling end-to-end (nonlinear residual assembly + collision operator contributions) is still being expanded beyond the parity-tested subset.
+- VMEC-based geometry schemes beyond the ``geometryScheme=5`` parity subset.
 - Rosenbluth response matrices for FP cross-species coupling are computed with QUADPACK (matching v3). We added strict
   scalar-order accumulation for the collocation-to-modal projection, but the remaining ~1e-10 deltas appear dominated by
   quadrature rounding differences rather than matrix-ordering effects.
 - VMEC geometryScheme=5 full Fokker–Planck fixtures exhibit small (~1e-6 absolute) differences in local flow/Mach
   diagnostics at isolated grid points. These deltas are well below the physics tolerance but can trip strict relative
   checks when the true value is near zero, so we apply a dedicated absolute-floor override for the VMEC FP subset in
-  ``sfincs_jax/compare.py``. The current release-facing CPU and GPU example-suite audits remain strict-clean.
+  ``sfincs_jax/compare.py``. The release-facing CPU and GPU example-suite audits remain strict-clean.
 
 Near-zero tolerances
 --------------------
@@ -163,36 +163,36 @@ useful for faster debugging and historical comparison:
 - ``tests/reduced_upstream_examples/suite_report.json``
 - ``tests/reduced_upstream_examples/suite_report_strict.json``
 
-Regenerate the full release-facing suite:
+Regenerate the legacy-suite per-case table and audit counts from the tracked
+CPU/GPU reports (the root README carries the canonical-stack evidence instead
+of this block, so the ``readme-audit`` splice targets require the audit
+markers; use the summary generator to reproduce the table and figure):
 
 .. code-block:: bash
 
-   python scripts/run_scaled_example_suite.py \
-     --examples-root examples/sfincs_examples \
-     --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
-     --reference-results-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
-     --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
-     --scale-factor 1.0 \
-     --runtime-target-basis fortran \
-     --fortran-min-runtime-s 0.0 \
-     --runtime-adjustment-iters 0 \
-     --runtime-baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
-     --jax-profile-marks on
+   python examples/publication_figures/generate_fortran_suite_benchmark_summary.py
+
+To replace the tracked reports, run
+``python -m sfincs_jax.validation.suite scaled`` with
+either ``--fortran-exe /path/to/sfincs`` or a locally restored
+``--reference-results-root``. Slim source checkouts do not include the frozen
+Fortran HDF5 reference root used to produce the release-facing report files.
 
 After a suite refresh, verify the structural output coverage explicitly:
 
 .. code-block:: bash
 
-   python scripts/audit_suite_output_keys.py \
+   python -m sfincs_jax.validation.release audit-output-keys \
      --suite-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
      --fail-on-missing
 
-When refreshing a frozen CPU lane, compare runtime against the previously promoted lane:
+When refreshing a CPU lane and a local frozen baseline is available, compare
+runtime against that promoted reference lane:
 
 .. code-block:: bash
 
-   python scripts/audit_suite_runtime_drift.py \
-     --baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
+   python -m sfincs_jax.validation.release audit-runtime-drift \
+     --baseline-report /path/to/frozen_cpu_baseline/suite_report.json \
      --candidate-report tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak/suite_report.json \
      --threshold-ratio 1.25 \
      --min-baseline-runtime-s 1.0
@@ -201,7 +201,7 @@ For faster targeted debugging, regenerate the reduced-suite files:
 
 .. code-block:: bash
 
-   python scripts/run_reduced_upstream_suite.py --timeout-s 120 --max-attempts 1
+   python -m sfincs_jax.validation.suite reduced --timeout-s 120 --max-attempts 1
 
 Reduced-suite default tolerances are ``rtol=5e-4`` and ``atol=1e-9``; override with ``--rtol``/``--atol``.
 
@@ -209,27 +209,10 @@ Target a single case family:
 
 .. code-block:: bash
 
-   python scripts/run_reduced_upstream_suite.py \
+   python -m sfincs_jax.validation.suite reduced \
      --pattern 'HSX_FPCollisions|filteredW7XNetCDF_2species_magneticDrifts|geometryScheme4_2species' \
      --timeout-s 120 --max-attempts 1
 
-Matrix/operator parity diagnosis (Fortran PETSc matrix vs JAX matvec):
-
-.. code-block:: bash
-
-   python scripts/compare_fortran_matrix_to_jax_operator.py \
-     --input /path/to/input.namelist \
-     --fortran-matrix /path/to/sfincsBinary_iteration_000_whichMatrix_3 \
-     --fortran-state /path/to/sfincsBinary_iteration_000_stateVector \
-     --project-active-dofs \
-     --out-json matrix_compare.json
-
-Frozen-state diagnostics isolation (solver-vs-diagnostics for RHSMode=1 moment families):
-
-.. code-block:: bash
-
-   python scripts/compare_rhsmode1_diagnostics_from_state.py \
-     --input /path/to/input.namelist \
-     --state /path/to/sfincsBinary_iteration_000_stateVector \
-     --fortran-h5 /path/to/sfincsOutput.h5 \
-     --out-json diagnostics_from_frozen_state.json
+Matrix/operator parity diagnosis against raw Fortran PETSc dumps is a
+research-branch workflow. The stable core keeps frozen-state diagnostic checks
+and public output parity gates rather than shipping dense matrix-dump tooling.

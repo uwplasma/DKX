@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from scripts.check_release_gates import main as check_release_gates_main
-from scripts.check_release_gates import release_gate_errors
+from sfincs_jax.validation.release import check_release_gates_main
+from sfincs_jax.validation.release import release_gate_errors
 
 
 def _repo_root() -> Path:

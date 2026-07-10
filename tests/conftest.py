@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-import sys
 import os
 from pathlib import Path
+import sys
+
+os.environ.setdefault("JAX_ENABLE_X64", "True")
+from jax import config as jax_config
 
 import pytest
+
+jax_config.update("jax_enable_x64", True)
 
 
 def pytest_configure() -> None:
@@ -34,14 +39,11 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     # Skip only the heaviest end-to-end tests in CI; keep unit + fast parity checks.
     slow_mark = pytest.mark.skip(reason="Skipped slow integration test in CI mode.")
     slow_patterns = (
-        "test_transport_matrix_",
-        "test_transport_parallel",
-        "test_state_recycle_parity",
-        "test_er_scan_and_ambipolar",
-        "test_upstream_scanplot2_smoke",
-        "test_rhsmode1_write_output_end_to_end",
-        "test_rhsmode1_phi1_write_output_end_to_end",
-        "test_output_h5_scheme",
+        "tests/test_transport_matrix_rhsmode2_parity.py::",
+        "tests/test_transport_matrix_rhsmode3_parity.py::",
+        "tests/test_transport_matrix_write_output_end_to_end.py::",
+        "tests/test_transport_parallel.py::",
+        "tests/test_output_h5_scheme11_parity.py::",
         "test_full_system_newton_krylov",
         "test_full_system_gmres_solution_parity",
     )

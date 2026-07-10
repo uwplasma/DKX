@@ -14,7 +14,7 @@ workflow is therefore to optimize with cheap JAX-native terms and promote only
 selected candidates to full ``sfincs_jax`` scans.
 
 The implementation lives in
-``sfincs_jax.optimization_objectives`` and the public example is
+``sfincs_jax.workflows.optimization`` and the public example is
 ``examples/optimization/qa_nfp2_sfincs_jax_objectives.py``.
 
 QA nfp=2 Example
@@ -60,6 +60,72 @@ Available objective presets are:
 ``balanced``
    Combine all terms in one tradeoff objective for demonstrations and optimizer
    smoke tests.
+
+Bootstrap-Current Comparison Example
+------------------------------------
+
+The most direct way to teach the geometry-to-transport workflow is to start from
+the real ``vmec_jax`` QA optimization output, verify that the VMEC equilibrium
+has the intended finite rotational transform, and then use that equilibrium as
+the input to kinetic ``sfincs_jax`` promotion scans.  The checked figure below
+uses ``vmec_jax/examples/optimization/QA_optimization.py``, whose public target
+is aspect ratio 5 and mean iota 0.41.
+
+.. code-block:: bash
+
+   python examples/optimization/qa_nfp2_bootstrap_current_comparison.py \
+     --vmec-jax-root /path/to/vmec_jax \
+     --out-dir docs/_static/figures/optimization \
+     --stem qa_nfp2_bootstrap_current_comparison
+
+.. figure:: _static/figures/optimization/qa_nfp2_bootstrap_current_comparison.png
+   :alt: VMEC-backed QA nfp=2 optimization current diagnostic.
+   :align: center
+   :width: 95%
+
+   VMEC-backed QA nfp=2 optimization diagnostic.  Panels A-B show the real
+   VMEC last-closed-flux-surface and LCFS field strength.  Panel C shows LCFS
+   cuts.  Panel D shows the finite rotational-transform profile from the final
+   VMEC ``wout``.  Panel E shows the VMEC equilibrium current diagnostic
+   :math:`J\cdot B/\sqrt{B\cdot B}` versus normalized toroidal-flux radius.
+   Panel F audits the ``QA_optimization.py`` objective and the final aspect/iota
+   gate.  The checked artifact has aspect ratio 4.999999 and mean iota 0.4097.
+
+Pass ``--comparison-result-dir`` to overlay a second ``vmec_jax`` result, for
+example a QA run in which ``QA_optimization.py`` has been edited to add
+``JDotB`` or ``RedlBootstrapMismatch`` to ``objective_tuples``.  That overlay is
+accepted only if it reduces the VMEC current diagnostic while preserving the
+finite-iota/aspect gate.  The plotted current profile is still not a completed
+kinetic SFINCS current.  A candidate selected from this step should be promoted
+with completed ``sfincs_jax scan-er`` outputs.  The corresponding kinetic
+observable is ``FSABjHatOverRootFSAB2``, i.e.
+
+For a directly editable script, use
+``examples/optimization/QA_optimization_bootstrap_current.py``.  It follows the
+same workflow as ``vmec_jax/examples/optimization/QA_optimization.py`` but sets
+``MAX_MODE = 3`` for faster iteration and exposes
+``INCLUDE_BOOTSTRAP_CURRENT_OBJECTIVE`` at the top of the file.  Run once with
+the flag disabled, once with it enabled, then compare the two result
+directories:
+
+.. code-block:: bash
+
+   SFINCS_JAX_VMEC_JAX_ROOT=/path/to/vmec_jax \
+     python examples/optimization/QA_optimization_bootstrap_current.py
+
+   python examples/optimization/qa_nfp2_bootstrap_current_comparison.py \
+     --vmec-jax-root /path/to/vmec_jax \
+     --qa-result-dir results/qa_opt_bootstrap_current_maxmode3/qa_only \
+     --comparison-result-dir results/qa_opt_bootstrap_current_maxmode3/with_jdotb_current_objective
+
+.. math::
+
+   \frac{\langle\mathbf{J}\cdot\mathbf{B}\rangle}
+        {\sqrt{\langle B^2\rangle}},
+
+which should be checked together with residual convergence, CPU/GPU agreement,
+radial and velocity-space convergence, and SFINCS Fortran v3 comparison when
+the input lies in shared model scope.
 
 Objective Terms
 ---------------
@@ -201,32 +267,11 @@ directory; anything before that is proxy provenance or scan planning.
      --impurity-species-index 2 \
      --target-impurity-flux 0.01
 
-For production evidence, the one-command campaign wrapper is preferred because
-it records the CPU, GPU, optional Fortran, audit, and comparison commands in one
-JSON plan before launching any expensive solves:
-
-.. code-block:: bash
-
-   python examples/optimization/run_promotion_evidence_campaign.py \
-     --input runs/qa_candidate01/input_r0p50.namelist \
-     --out-dir runs/qa_candidate01/evidence_r0p50 \
-     --values -3 -2 -1 0 1 2 3 \
-     --run-cpu \
-     --run-gpu \
-     --gpu-device 0 \
-     --run-fortran \
-     --fortran-exe /path/to/sfincs \
-     --jobs 4 \
-     --impurity-species-index 2 \
-     --target-impurity-flux 0.01
-
-Add ``--dry-run`` to write ``promotion_evidence_plan.json`` without executing
-the scans.  The manual commands below are equivalent and are useful when a
-cluster scheduler should own each lane separately.  Fortran-v3 HDF5 files often
-do not contain the JAX linear-residual datasets, so the campaign wrapper allows
-missing residuals only for the Fortran lane by default; JAX CPU/GPU promotion
-still requires residual diagnostics unless the user explicitly relaxes the
-standalone evaluator with ``--allow-missing-residuals``.
+Run production evidence as explicit scan, audit, and comparison commands. This
+keeps the stable examples small and makes each expensive CPU, GPU, or optional
+Fortran-v3 lane scheduler-friendly. Fortran-v3 HDF5 files often do not contain
+the JAX linear-residual datasets, so only relax residual requirements for
+Fortran-derived promotion JSON files when that absence is documented.
 
 .. code-block:: bash
 
@@ -351,7 +396,7 @@ not a kinetic solve.  It can rank candidates and record a gradient/provenance
 gate, but it cannot by itself establish ambipolar roots, bootstrap-current
 accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
 
-1. Run the optional VMEC/Boozer preflight and proxy-gradient handoff.
+1. Run the optional VMEC/Boozer preflight and proxy-gradient workflow.
 
    The status command is safe when optional geometry packages are absent:
 
@@ -473,6 +518,21 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
       sfincs_jax ambipolar-solve \
         --scan-dir runs/qa_candidate01/scan_cpu/r0p50 \
         --n-fine 1000
+
+   For ``RHSMode=1`` inputs where the root should be solved directly instead
+   of inferred from a precomputed scan, use the in-process Brent driver:
+
+   .. code-block:: bash
+
+      sfincs_jax ambipolar \
+        --input runs/qa_candidate01/input_r0p50.namelist \
+        --out-dir runs/qa_candidate01/ambipolar_cpu/r0p50 \
+        --er-min -3 --er-max 3 --er-initial 0
+
+   This direct path writes per-evaluation ``sfincsOutput.h5`` files and solver
+   traces, then summarizes the selected solver lane, residual, timing, active
+   size, cache provenance, and shape-checked Krylov state reuse in
+   ``ambipolar_result.json``.
 
    Passing this audit means the specific completed scan has internally
    consistent promotion evidence.  It does not imply convergence with respect
@@ -616,11 +676,12 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
       :math:`N_\theta=25`, :math:`N_\zeta=51`, :math:`N_\xi=100`,
       :math:`N_L=4`, :math:`N_x=4`.
 
-   A follow-up medium-resolution solver-policy probe now covers the next
+   A medium-resolution solver-policy probe covers the next
    non-dense rung for this same finite-beta QA deck.  At
    :math:`N_\theta=17`, :math:`N_\zeta=21`, :math:`N_\xi=12`,
    :math:`N_L=4`, :math:`N_x=4` with two species, ``solve_method="auto"``
-   selects ``xblock_sparse_pc_gmres``.  The CPU run wrote output in about
+   selected the (since-deleted) ``xblock_sparse_pc_gmres`` lane at the time of
+   the recorded audit.  The CPU run wrote output in about
    7 seconds, required 139 matrix-vector products, and reached a true residual
    :math:`1.44\times10^{-13}` against a target
    :math:`2.71\times10^{-13}`.  The same point matched the written Fortran-v3
@@ -644,7 +705,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    was better than :math:`2.7\times10^{-8}` relative on current and flux
    observables; GPU/Fortran-v3 agreement was better than
    :math:`2.7\times10^{-6}` relative.  The default multispecies non-dense
-   x-block policy is now bounded to this measured window
+   x-block policy is bounded to this measured window
    (:math:`30{,}000 \le n_\mathrm{active} \le 60{,}000`,
    :math:`12 \le N_\xi \le 14`) and intentionally does not cover the
    million-unknown production floor.
@@ -655,7 +716,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    The next medium rung,
    :math:`N_\theta=25`, :math:`N_\zeta=31`, :math:`N_\xi=16`,
    :math:`N_L=4`, :math:`N_x=4`, has :math:`99{,}204` active unknowns and
-   estimated dense storage of about 73 GiB.  Forced ``xblock_sparse_pc_gmres``
+   estimated dense storage of about 73 GiB.  The (since-deleted) forced ``xblock_sparse_pc_gmres`` lane
    converged on local CPU in 68.1 seconds wrapper time with residual
    :math:`2.74\times10^{-14}` against target :math:`4.00\times10^{-13}`.
    The same input converged on one office GPU in 232 seconds wrapper time with
@@ -665,7 +726,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    on those observables.  Since this path uses host sparse factors, it is a
    correctness-safe GPU route but not a GPU-performance claim at this size; the
    CPU path is faster for this rung.  The default multispecies non-dense
-   x-block policy is now bounded to
+   x-block policy is bounded to
    :math:`30{,}000 \le n_\mathrm{active} \le 100{,}000`,
    :math:`12 \le N_\xi \le 16`.
 
@@ -692,194 +753,16 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
         --backend-root-atol 1e-6 \
         --root-drift-atol 2e-2
 
-QI fallback screen
-------------------
+QI/device-QI optimization research
+----------------------------------
 
-The finite-beta QA artifacts above are useful positive-root evidence, but they
-are not yet production-resolution evidence.  If a QA optimizer cannot preserve a
-positive electron-root candidate under the production ladder, start the QI
-fallback lane with a cheap NFP screen:
-
-.. code-block:: bash
-
-   python examples/optimization/screen_qi_electron_root_nfp.py \
-     --steps 70 \
-     --out-dir docs/_static/figures/optimization \
-     --stem qi_electron_root_nfp_screen
-
-.. figure:: _static/figures/optimization/qi_electron_root_nfp_screen.png
-   :alt: QA/QI electron-root NFP screening proxy.
-
-   QA/QI NFP screening proxy.  The checked run recommends QI ``nfp=2`` as the
-   first fallback target because the current QA lane is still under production
-   resolution and the repository already has QI ``nfp=2`` fixtures and
-   seed-robustness infrastructure.  This is also consistent with recent
-   SFINCS-based QI electron-root optimization work (`Lascas Neto et al. 2025
-   <https://doi.org/10.1017/S0022377824001466>`_, open preprint
-   `arXiv:2405.12058 <https://arxiv.org/abs/2405.12058>`_).  This is not a
-   kinetic electron-root claim: it only selects the next ``sfincs_jax scan-er``
-   CPU/GPU/Fortran promotion campaign.
-
-The screen writes ``qi_electron_root_nfp_screen.json`` with the full candidate
-table, proxy gates, and next commands.  A candidate is publication-eligible only
-after completed kinetic scans show a positive ambipolar root, residual
-convergence, CPU/GPU agreement, resolution convergence, and Fortran-v3
-agreement when the input is in the shared model scope.
-
-First bounded QI kinetic promotion artifact
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The first QI ``nfp=2`` kinetic artifact is now checked in as a bounded
-low-resolution promotion, not as a production-resolution optimization claim.
-It starts from ``examples/additional_examples/input.namelist``, converts that
-one-species QI seed into a two-species ion/electron kinetic scan, and runs
-the same electric-field grid on CPU, one office GPU, and SFINCS Fortran v3:
-
-.. code-block:: bash
-
-   python examples/optimization/materialize_qi_nfp2_promotion_input.py \
-     --out-dir runs/qi_nfp2_candidate01 \
-     --stem qi_nfp2_lowres
-   python examples/optimization/run_promotion_evidence_campaign.py \
-     --input runs/qi_nfp2_candidate01/qi_nfp2_lowres.input.namelist \
-     --out-dir runs/qi_nfp2_candidate01/evidence \
-     --values -0.3 -0.1 0 0.1 0.3 1 2 3 \
-     --run-cpu \
-     --run-gpu \
-     --gpu-device 0 \
-     --run-fortran \
-     --fortran-exe /path/to/sfincs \
-     --jobs 1
-
-For two-species ion/electron electron-root promotion scans, omit
-``--impurity-species-index`` so the flux-selectivity objective is not
-evaluated as if the electron were an impurity.  Add that option only for
-three-or-more-species studies with a real impurity objective.  The comparison
-wrapper then automatically allows missing flux-objective scalars while still
-checking the selected root, bootstrap objective, residual gates, and backend
-agreement.
-
-The checked run used
-:math:`N_\theta=7`, :math:`N_\zeta=7`, :math:`N_\xi=7`,
-:math:`N_L=4`, :math:`N_x=4`, ``RHSMode=1``, ``collisionOperator=0``,
-``includeXDotTerm=.true.``, ``includeElectricFieldTermInXiDot=.true.``,
-``useDKESExBDrift=.false.``, and ``includePhi1=.false.``.  The CPU scan
-completed the eight points in about 25 seconds.  The one-GPU scan completed in
-about 86 seconds from a clean checkout on an RTX A4000.  The Fortran-v3
-reference campaign completed in about 528 seconds; the wrapper accepts outputs
-that reached ``Goodbye!`` and wrote ``sfincsOutput.h5`` even when the local MPI
-runtime reports a post-output ``MPI_Finalize`` error.
-
-.. figure:: _static/figures/optimization/qi_nfp2_electron_root_lowres_reference_tolerance_comparison.png
-   :alt: QI nfp=2 low-resolution kinetic electron-root CPU, GPU, and Fortran comparison.
-
-   First bounded QI ``nfp=2`` kinetic electron-root comparison.  CPU and GPU
-   select the same positive ambipolar root,
-   :math:`E_r=2.4386009865`, to better than :math:`10^{-10}` absolute
-   agreement.  The SFINCS Fortran v3 root differs by
-   :math:`1.02\times10^{-6}` in normalized :math:`E_r`; this passes the
-   documented low-resolution reference tolerance
-   :math:`|\Delta E_r|/|E_r| < 10^{-6}`.  Bootstrap and flux objectives agree
-   within the checked reference tolerances
-   (:math:`10^{-3}` and :math:`10^{-5}` relative, respectively).
-
-The checked machine-readable artifacts are:
-
-- ``docs/_static/figures/optimization/qi_nfp2_electron_root_lowres_cpu.json``
-- ``docs/_static/figures/optimization/qi_nfp2_electron_root_lowres_gpu.json``
-- ``docs/_static/figures/optimization/qi_nfp2_electron_root_lowres_fortran.json``
-- ``docs/_static/figures/optimization/qi_nfp2_electron_root_lowres_reference_tolerance_comparison.json``
-
-This closes the first real QI kinetic promotion artifact and validates the
-QA-to-QI fallback workflow at a bounded low resolution.  It does not close the
-production-resolution QI ladder, the radial/profile convergence ladder, or the
-true differentiable device-QI hard-seed lane.  The next promotion step is the
-same two-species QI ``nfp=2`` contract through a resolution ladder with stable
-selected roots under documented tolerances.
-
-First QI refinement rung
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-The next bounded CPU/GPU/Fortran rung has also been run at
-:math:`N_\theta=9`, :math:`N_\zeta=9`, :math:`N_\xi=11`,
-:math:`N_L=4`, :math:`N_x=4` with the same eight electric-field points.  This
-is still below the production-resolution floor, but it is useful because it
-tests whether the positive root survives a first refinement, whether CPU and
-GPU remain consistent, and whether the shared-scope Fortran-v3 reference still
-agrees when the flux-selectivity objective is intentionally disabled for the
-two-species ion/electron contract.
-
-The CPU lane completed the eight points in about ``9.7 s`` locally, and the
-one-GPU lane completed them in about ``28.6 s`` on office GPU0.  Both lanes
-passed residual gates and selected
-:math:`E_r=2.2834299271` in the bracket :math:`[2,3]`; the CPU/GPU root
-difference was :math:`4.3\times10^{-14}`.  The Fortran-v3 reference selected
-:math:`E_r=2.2834273232`, differing from the CPU result by
-:math:`2.6\times10^{-6}` and passing the documented refined-grid reference
-tolerance.  However, the root drift from the
-``7 x 7 x 7 x 4`` low-resolution CPU artifact is about ``0.155``, so this rung
-is evidence that the positive root persists, not evidence that the QI ladder is
-converged.
-
-.. figure:: _static/figures/optimization/qi_nfp2_electron_root_res9_reference_tolerance_comparison.png
-   :alt: QI nfp=2 first refined CPU/GPU/Fortran electron-root comparison.
-
-   First refined QI ``nfp=2`` CPU/GPU/Fortran electron-root comparison.
-   Backend agreement and the Fortran-v3 refined-grid audit are clean at fixed
-   resolution, but the low-to-refined root drift keeps the
-   production-resolution QI ladder open.
-
-The checked machine-readable artifacts for this first refinement rung are:
-
-- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res9_cpu.json``
-- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res9_gpu.json``
-- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res9_fortran.json``
-- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res9_cpu_gpu.json``
-- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res9_reference_tolerance_comparison.json``
-
-Second QI refinement rung and solver-policy audit
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The following bounded rung uses
-:math:`N_\theta=11`, :math:`N_\zeta=11`, :math:`N_\xi=13`,
-:math:`N_L=4`, :math:`N_x=4`, again with the same eight electric-field points.
-It was added after profiling exposed a mid-size RHSMode=1 full-FP policy cliff:
-the old automatic path crossed the dense cutoff, entered a slower generic
-fallback, and took about ``326 s`` for the CPU scan even though the active dense
-operator was small enough for the checked workstation/GPU hosts.  The default
-full-FP dense policy now covers active sizes up to ``8000`` and ``scan-er``
-writes a per-point ``sfincsOutput.solver_trace.json`` sidecar so this kind of
-solver-path change is auditable.
-
-With that policy in place, the ``11 x 11 x 13 x 4`` CPU scan completed in about
-``23 s`` locally and the matching office GPU0 scan completed in about ``23 s``.
-Both selected :math:`E_r=2.2224054815` in the bracket :math:`[2,3]`; the
-CPU/GPU root difference was :math:`2.5\times10^{-13}`.  The Fortran-v3
-reference selected :math:`E_r=2.2224043880`, giving a relative root difference
-of :math:`4.9\times10^{-7}` and passing the documented
-:math:`2\times10^{-6}` reference tolerance.  The root still shifts by about
-``0.061`` from the first refinement rung, so this is stronger persistence and
-backend/reference evidence, not a production-converged QI claim.
-
-.. figure:: _static/figures/optimization/qi_nfp2_electron_root_res11_reference_tolerance_comparison_dense8000_default.png
-   :alt: QI nfp=2 second refined CPU/GPU/Fortran electron-root comparison.
-
-   Second refined QI ``nfp=2`` CPU/GPU/Fortran electron-root comparison after
-   the bounded RHSMode=1 dense-policy fix.  The fixed-resolution CPU, GPU, and
-   Fortran-v3 roots agree within the documented tolerance, while the
-   resolution-ladder drift keeps the production-resolution lane open.
-
-The checked machine-readable artifacts for this second refinement rung are:
-
-- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res11_cpu_dense8000_default.json``
-- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res11_gpu_dense8000_default.json``
-- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res11_fortran.json``
-- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res11_reference_tolerance_comparison_dense8000_default.json``
-
-The next rung should continue to a wider CPU/GPU/Fortran resolution ladder.  Do
-not promote the QI electron-root candidate as production-resolution evidence
-until the selected root, bootstrap current, fluxes, residuals, and
-backend/reference comparisons are stable across that ladder.
+QI electron-root screening, QI kinetic promotion ladders, and true device-QI
+operator-reuse experiments are preserved on the
+``research/qi-device-hard-seed`` branch. They are not part of the stable
+examples or release-facing optimization evidence until the same gates used for
+the QA workflows pass at production resolution: strict true residuals,
+CPU/GPU agreement, resolution convergence, runtime/memory budgets, and
+Fortran-v3 comparison where the models overlap.
 
 VMEC JAX Integration
 --------------------
@@ -890,7 +773,7 @@ added as an outer-loop or accepted-candidate gate:
 
 .. code-block:: python
 
-   from sfincs_jax.optimization_objectives import (
+   from sfincs_jax.workflows.optimization import (
        bootstrap_current_objective,
        find_ambipolar_roots,
        flux_selectivity_objective,

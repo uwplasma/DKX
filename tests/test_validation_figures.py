@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
 
+import numpy as np
 import pytest
 
-import sfincs_jax.validation_figures as validation_figures
-from sfincs_jax.validation_figures import (
+import sfincs_jax.validation.artifacts as validation_figures
+from sfincs_jax.validation.artifacts import (
     build_simakov_helander_high_nu_panel,
     build_w7x_ambipolar_root_provenance_panel,
 )
@@ -195,6 +197,77 @@ def test_w7x_ambipolar_panel_records_provenance_but_keeps_untracked_artifact_def
     ]
 
 
+def test_w7x_ambipolar_panel_can_be_literature_ready_with_checked_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = _ambipolar_payload(provenance=_complete_provenance())
+    source_artifact = tmp_path / "sfincs_jax_w7x_ambipolar_validation_summary.json"
+    source_artifact.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(validation_figures, "_is_git_tracked_file", lambda path: True)
+
+    panel = build_w7x_ambipolar_root_provenance_panel(
+        payload,
+        source_artifact=source_artifact,
+    )
+
+    assert panel["metadata"]["validation_state"] == "artifact_backed_literature_ready"
+    assert panel["metadata"]["figure_label"].startswith("ARTIFACT-BACKED")
+    assert panel["metadata"]["publication_figure"] == {
+        "claim_status": "checked_in_converged_artifact",
+        "artifact_class": "checked_in_w7x_ambipolar_literature_artifact",
+        "checked_in_converged_artifact": True,
+        "ready_for_physics_validation_claim": True,
+        "manuscript_label": "checked-in W7-X ambipolar-root validation",
+    }
+    assert panel["source_artifact"]["status"] == "checked_in"
+    assert panel["source_artifact"]["tracked"] is True
+    assert panel["source_artifact"]["payload_matches"] is True
+    assert panel["source_artifact"]["checked_in"] is True
+    assert panel["gates"]["provenance_complete"] is True
+    assert panel["gates"]["source_artifact_checked_in"] is True
+    assert panel["gates"]["ready_for_literature_claim"] is True
+    assert panel["gates"]["checked_in_converged_artifact"] is True
+    assert panel["metadata"]["deferred_reason_codes"] == []
+    assert panel["deferred_reasons"] == []
+
+
+def test_w7x_ambipolar_panel_fails_closed_for_tracked_payload_or_name_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = _ambipolar_payload(provenance=_complete_provenance())
+    monkeypatch.setattr(validation_figures, "_is_git_tracked_file", lambda path: True)
+
+    wrong_name = tmp_path / "local_scan_summary.json"
+    wrong_name.write_text(json.dumps(payload), encoding="utf-8")
+    wrong_name_panel = build_w7x_ambipolar_root_provenance_panel(
+        payload,
+        source_artifact=wrong_name,
+    )
+    assert wrong_name_panel["source_artifact"]["tracked"] is True
+    assert wrong_name_panel["source_artifact"]["looks_like_w7x_ambipolar_artifact"] is False
+    assert wrong_name_panel["source_artifact"]["status"] == "tracked_non_w7x_ambipolar_artifact"
+    assert wrong_name_panel["gates"]["source_artifact_checked_in"] is False
+    assert wrong_name_panel["metadata"]["deferred_reason_codes"] == ["source_artifact_not_checked_in"]
+
+    mismatched_payload = tmp_path / "sfincs_jax_w7x_ambipolar_validation_summary.json"
+    mismatched_payload.write_text(
+        json.dumps({**payload, "runs": payload["runs"][:-1]}),
+        encoding="utf-8",
+    )
+    mismatch_panel = build_w7x_ambipolar_root_provenance_panel(
+        payload,
+        source_artifact=mismatched_payload,
+    )
+    assert mismatch_panel["source_artifact"]["tracked"] is True
+    assert mismatch_panel["source_artifact"]["looks_like_w7x_ambipolar_artifact"] is True
+    assert mismatch_panel["source_artifact"]["payload_matches"] is False
+    assert mismatch_panel["source_artifact"]["status"] == "tracked_w7x_ambipolar_artifact_payload_mismatch"
+    assert mismatch_panel["gates"]["source_artifact_checked_in"] is False
+    assert mismatch_panel["metadata"]["deferred_reason_codes"] == ["source_artifact_not_checked_in"]
+
+
 def test_w7x_ambipolar_panel_rejects_root_not_supported_by_current_bracket() -> None:
     payload = _ambipolar_payload(root_er=0.8, root_type="electron")
     panel = build_w7x_ambipolar_root_provenance_panel(payload)
@@ -218,6 +291,106 @@ def test_w7x_ambipolar_panel_rejects_root_not_supported_by_current_bracket() -> 
         "source_artifact_not_checked_in",
     ]
     assert panel["metadata"]["deferred_reason_codes"] == reason_codes
+
+
+def test_w7x_ambipolar_panel_fails_closed_for_degenerate_zero_bracket_and_metadata() -> None:
+    payload = {
+        "metadata": "local scratch metadata",
+        "provenance": "not a provenance mapping",
+        "runs": [
+            {"er": -1.0, "radial_current": 0.0},
+            {"er": 1.0, "radial_current": 0.0},
+        ],
+        "ambipolar": {"roots_er": [0.0], "root_types": []},
+    }
+
+    panel = build_w7x_ambipolar_root_provenance_panel(payload)
+
+    bracket = panel["zero_crossing_brackets"][0]
+    assert bracket["linear_interpolated_root_er"] is None
+    assert bracket["local_radial_current_slope"] == 0.0
+    root = panel["roots"][0]
+    assert root["root_type"] == "unknown"
+    assert root["linear_interpolated_root_er"] is None
+    assert root["root_to_linear_delta"] is None
+    assert root["ion_root_candidate"] is False
+    assert panel["metadata"]["source_kind"] is None
+    assert panel["metadata"]["source_validation_scope"] is None
+    assert panel["provenance"]["present_required_fields"] == 0
+    assert panel["gates"]["ambipolar_root_slope_resolved"] is False
+    assert panel["gates"]["ion_root_candidate"] is False
+    assert panel["metadata"]["deferred_reason_codes"] == [
+        "ambipolar_root_slope_unresolved",
+        "ion_root_candidate_missing",
+        "incomplete_provenance",
+        "source_artifact_not_checked_in",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"runs": "not a scan", "ambipolar": {"roots_er": [0.0]}}, "runs"),
+        ({"runs": ["not a mapping"], "ambipolar": {"roots_er": [0.0]}}, "run must be a mapping"),
+        (
+            {"runs": [{"er": 0.0}], "ambipolar": {"roots_er": [0.0]}},
+            "finite er and radial_current",
+        ),
+        (
+            {"runs": [{"er": 0.0, "radial_current": float("nan")}], "ambipolar": {"roots_er": [0.0]}},
+            "finite er and radial_current",
+        ),
+        (
+            {"runs": [{"er": 0.0, "radial_current": 1.0}], "ambipolar": {"roots_er": [0.0]}},
+            "Need at least two",
+        ),
+        (
+            {
+                "runs": [
+                    {"er": 0.0, "radial_current": -1.0},
+                    {"er": 0.0, "radial_current": 1.0},
+                ],
+                "ambipolar": {"roots_er": [0.0]},
+            },
+            "distinct",
+        ),
+        ({"runs": [{"er": -1.0, "radial_current": -1.0}, {"er": 1.0, "radial_current": 1.0}]}, "ambipolar"),
+        (
+            {
+                "runs": [{"er": -1.0, "radial_current": -1.0}, {"er": 1.0, "radial_current": 1.0}],
+                "ambipolar": {"roots_er": "0.0"},
+            },
+            "roots_er",
+        ),
+        (
+            {
+                "runs": [{"er": -1.0, "radial_current": -1.0}, {"er": 1.0, "radial_current": 1.0}],
+                "ambipolar": {"roots_er": ["not numeric"]},
+            },
+            "numeric",
+        ),
+    ],
+)
+def test_w7x_ambipolar_panel_rejects_malformed_payloads(
+    payload: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        build_w7x_ambipolar_root_provenance_panel(payload)
+
+
+def test_w7x_ambipolar_artifact_summary_reports_missing_named_artifact(tmp_path: Path) -> None:
+    payload = _ambipolar_payload(provenance=_complete_provenance())
+    missing_artifact = tmp_path / "sfincs_jax_w7x_ambipolar_missing.json"
+
+    panel = build_w7x_ambipolar_root_provenance_panel(
+        payload,
+        source_artifact=missing_artifact,
+    )
+
+    assert panel["source_artifact"]["exists"] is False
+    assert panel["source_artifact"]["status"] == "missing"
+    assert panel["source_artifact"]["checked_in"] is False
 
 
 def test_simakov_helander_high_nu_panel_can_be_literature_ready_with_checked_artifact(
@@ -274,6 +447,18 @@ def test_simakov_helander_high_nu_panel_can_be_literature_ready_with_checked_art
     assert gates["ready_for_literature_claim"] is True
     assert gates["checked_in_converged_artifact"] is True
     assert panel["deferred_reasons"] == []
+
+
+def test_simakov_helander_high_nu_panel_defaults_metadata_and_missing_artifact() -> None:
+    payload = _simakov_helander_payload()
+    payload["metadata"] = ["not", "a", "mapping"]
+
+    panel = build_simakov_helander_high_nu_panel(payload)
+
+    assert panel["metadata"]["source_kind"] is None
+    assert panel["metadata"]["source_validation_scope"] is None
+    assert panel["source_artifact"]["status"] == "missing"
+    assert panel["metadata"]["deferred_reason_codes"] == ["source_artifact_not_checked_in"]
 
 
 def test_simakov_helander_high_nu_panel_defers_when_high_nu_range_is_insufficient(
@@ -369,3 +554,168 @@ def test_simakov_helander_high_nu_panel_reports_provenance_gaps_and_untracked_ar
             "message": "The source JSON is not a matching Git-tracked Simakov-Helander artifact.",
         },
     ]
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"runs": "not a scan"}, "runs"),
+        ({"runs": ["not a mapping"]}, "run must be a mapping"),
+        ({"runs": [{"nuprime": 1.0, "value": 2.0}]}, "nuprime, value, and analytic_limit"),
+        (
+            {"runs": [{"nuprime": float("nan"), "value": 2.0, "analytic_limit": 1.0}]},
+            "positive finite nuprime",
+        ),
+        (
+            {"runs": [{"nuprime": 1.0, "value": 2.0, "analytic_limit": 0.0}]},
+            "positive finite nuprime",
+        ),
+        (
+            {"runs": [{"nuprime": 1.0, "value": 2.0, "analytic_limit": 1.0}]},
+            "Need at least two",
+        ),
+        (
+            {
+                "runs": [
+                    {"nuprime": 1.0, "value": 2.0, "analytic_limit": 1.0},
+                    {"nuprime": 1.0, "value": 1.5, "analytic_limit": 1.0},
+                ],
+            },
+            "distinct",
+        ),
+    ],
+)
+def test_simakov_helander_high_nu_panel_rejects_malformed_payloads(
+    payload: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        build_simakov_helander_high_nu_panel(payload)
+
+
+def test_simakov_helander_high_nu_panel_rejects_invalid_tail_fit() -> None:
+    with pytest.raises(ValueError, match="n_tail_fit"):
+        build_simakov_helander_high_nu_panel(_simakov_helander_payload(), n_tail_fit=1)
+
+
+def test_simakov_helander_artifact_summary_fail_closed_statuses(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = _simakov_helander_payload()
+    monkeypatch.setattr(validation_figures, "_is_git_tracked_file", lambda path: True)
+
+    wrong_name = tmp_path / "local_high_nu_scan.json"
+    wrong_name.write_text(json.dumps(payload), encoding="utf-8")
+    wrong_name_panel = build_simakov_helander_high_nu_panel(payload, source_artifact=wrong_name)
+    assert wrong_name_panel["source_artifact"]["tracked"] is True
+    assert wrong_name_panel["source_artifact"]["looks_like_simakov_helander_artifact"] is False
+    assert wrong_name_panel["source_artifact"]["status"] == "tracked_non_simakov_helander_artifact"
+
+    mismatched_payload = tmp_path / "sfincs_jax_simakov_helander_high_nu_panel.json"
+    mismatched_payload.write_text(
+        json.dumps({**payload, "runs": payload["runs"][:-1]}),
+        encoding="utf-8",
+    )
+    mismatch_panel = build_simakov_helander_high_nu_panel(payload, source_artifact=mismatched_payload)
+    assert mismatch_panel["source_artifact"]["tracked"] is True
+    assert mismatch_panel["source_artifact"]["looks_like_simakov_helander_artifact"] is True
+    assert mismatch_panel["source_artifact"]["payload_matches"] is False
+    assert mismatch_panel["source_artifact"]["status"] == "tracked_simakov_helander_artifact_payload_mismatch"
+
+    missing_artifact = tmp_path / "sfincs_jax_simakov_helander_missing.json"
+    missing_panel = build_simakov_helander_high_nu_panel(payload, source_artifact=missing_artifact)
+    assert missing_panel["source_artifact"]["exists"] is False
+    assert missing_panel["source_artifact"]["status"] == "missing"
+
+
+def test_private_validation_helpers_cover_git_and_tail_fail_closed_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    malformed_json = tmp_path / "broken.json"
+    malformed_json.write_text("{not valid json", encoding="utf-8")
+    assert validation_figures._json_payload_matches(path=malformed_json, payload={}) is False
+
+    outside_git_file = tmp_path / "outside.json"
+    outside_git_file.write_text("{}", encoding="utf-8")
+    assert validation_figures._find_git_root(tmp_path) is None
+    assert validation_figures._is_git_tracked_file(outside_git_file) is False
+
+    git_root = tmp_path / "repo"
+    nested_file = git_root / "nested" / "data.json"
+    nested_file.parent.mkdir(parents=True)
+    nested_file.write_text("{}", encoding="utf-8")
+    (git_root / ".git").mkdir()
+
+    def _raise_timeout(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(cmd="git ls-files", timeout=2.0)
+
+    monkeypatch.setattr(validation_figures.subprocess, "run", _raise_timeout)
+    assert validation_figures._is_git_tracked_file(nested_file) is False
+
+    tail = validation_figures._tail_asymptotic_metadata(
+        nuprime=np.asarray([1.0]),
+        relative_error=np.asarray([0.25]),
+        n_tail_fit=1,
+        monotonic_tolerance=0.0,
+    )
+    assert tail["fit_point_count"] == 1
+    assert tail["slope"] is None
+    assert tail["intercept"] is None
+    assert tail["relative_error_nonincreasing"] is False
+    assert tail["tail_error_reduction_factor"] is None
+
+    assert validation_figures._is_monotonic(np.asarray([0.0, 1.0, 0.5])) is False
+
+
+def test_private_w7x_helpers_cover_fallbacks_and_reason_codes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert validation_figures._root_types({}, n_roots=2) == ["unknown", "unknown"]
+    assert validation_figures._root_types({"ambipolar": {"root_types": "ion"}}, n_roots=1) == ["unknown"]
+    assert validation_figures._root_types({"ambipolar": {"root_types": ["electron"]}}, n_roots=2) == [
+        "electron",
+        "unknown",
+    ]
+
+    reasons = validation_figures._deferred_reasons(
+        gates={
+            "ready_for_literature_claim": False,
+            "finite_er_current_series": False,
+            "radial_current_brackets_zero": False,
+            "finite_ambipolar_roots": False,
+            "root_inside_scanned_er_range": False,
+            "root_consistent_with_sign_change": True,
+            "ambipolar_root_slope_resolved": True,
+            "ion_root_candidate": True,
+            "provenance_complete": True,
+            "source_artifact_checked_in": True,
+        },
+        provenance={"missing_fields": [], "completeness_score": 1.0},
+        source_artifact={"status": "checked_in"},
+    )
+    assert [reason["code"] for reason in reasons] == [
+        "nonfinite_or_underresolved_scan",
+        "missing_zero_current_bracket",
+        "missing_finite_ambipolar_root",
+        "root_outside_scanned_er_range",
+    ]
+
+    tracked = tmp_path / "tracked.json"
+    tracked.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(validation_figures, "_find_git_root", lambda path: tmp_path / "other_repo")
+    assert validation_figures._is_git_tracked_file(tracked) is False
+
+    repo = tmp_path / "repo"
+    nested = repo / "nested" / "tracked.json"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(validation_figures, "_find_git_root", lambda path: repo)
+    monkeypatch.setattr(
+        validation_figures.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args=args[0], returncode=1),
+    )
+    assert validation_figures._is_git_tracked_file(nested) is False

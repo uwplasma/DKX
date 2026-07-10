@@ -5,31 +5,67 @@ from pathlib import Path
 import numpy as np
 
 from sfincs_jax.input_compat import (
+    _resolve_equilibrium_file_from_namelist,
+    bool_config_values,
     canonical_equilibrium_override,
+    config_bool,
+    config_float,
+    config_int,
     effective_equilibrium_file,
+    effective_psi_a_hat,
     effective_psi_n_wish,
     effective_r_n_wish,
     effective_use_iterative_linear_solver,
+    first_config_value,
     infer_phi_input_radial_coordinate_for_gradients,
     infer_input_radial_coordinate_for_gradients,
     infer_species_input_radial_coordinate_for_gradients,
+    localize_equilibrium_file_in_place,
+    lookup_config_value,
+    render_input_with_equilibrium_override,
     with_equilibrium_override,
 )
-from sfincs_jax.io import _resolve_equilibrium_file_from_namelist, localize_equilibrium_file_in_place, sfincs_jax_output_dict
+from sfincs_jax.io import sfincs_jax_output_dict
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3 import grids_from_namelist
-from sfincs_jax.v3_fblock import _dphi_hat_dpsi_hat_from_er
-from sfincs_jax.v3_system import full_system_operator_from_namelist
+from sfincs_jax.discretization.v3 import grids_from_namelist
+from sfincs_jax.operators.profile_fblock import _dphi_hat_dpsi_hat_from_er
+from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
+
+
+def test_shared_config_lookup_handles_namelists_and_nested_mappings() -> None:
+    input_path = Path(__file__).parent / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
+    nml = read_sfincs_input(input_path)
+    nested = {
+        "general": {"rhsmode": 4},
+        "physicsParameters": {"includePhi1": False, "EParallelHat": 1.25},
+        "adjointOptions": {"adjointParticleFluxOption": [True, False]},
+    }
+
+    assert lookup_config_value(nml, ("general",), "RHSMode", 1) == 1
+    assert lookup_config_value(nested, ("general",), "RHSMode") == 4
+    assert first_config_value([3, 4], default=0) == 3
+    assert bool_config_values([1, 0, True]) == (True, False, True)
+    assert config_int(nested, ("general",), "RHSMode") == 4
+    assert config_bool(nested, ("physicsParameters",), "includePhi1", True) is False
+    assert config_float(nested, ("physicsParameters",), "EParallelHat") == 1.25
+
+
+def test_config_lookup_covers_top_level_case_insensitive_and_empty_values() -> None:
+    flat = {"rhsMode": [3], "includePhi1": (), "eparallelhat": 0.75}
+
+    assert lookup_config_value(object(), ("missing",), "RHSMode", "fallback") == "fallback"
+    assert lookup_config_value(flat, ("unused",), "RHSMODE") == [3]
+    assert config_int(flat, ("unused",), "rhsMode") == 3
+    assert config_bool(flat, ("unused",), "includePhi1", default=True) is True
+    assert config_float(flat, ("unused",), "EParallelHat") == 0.75
+    assert first_config_value([], default="fallback") == "fallback"
+    assert bool_config_values(None) == ()
+    assert bool_config_values(0) == (False,)
 
 
 def test_infer_input_radial_coordinate_for_gradients_legacy_multispecies_psin() -> None:
     input_path = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "upstream"
-        / "fortran_multispecies"
-        / "quick_2species_FPCollisions_noEr"
-        / "input.namelist"
+        Path(__file__).resolve().parent / "ref" / "multispecies_quick_2species_FPCollisions_noEr.input.namelist"
     )
     nml = read_sfincs_input(input_path)
     assert (
@@ -93,16 +129,17 @@ def test_infer_gradient_coordinates_prefers_v3_default_when_mixed_fields_are_pre
 
 def test_effective_equilibrium_file_supports_legacy_jgboozer_alias() -> None:
     input_path = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "upstream"
-        / "fortran_multispecies"
-        / "HSX_FPCollisions_DKESTrajectories"
-        / "input.namelist"
+        Path(__file__).resolve().parent / "ref" / "multispecies_HSX_FPCollisions_DKESTrajectories.input.namelist"
     )
     nml = read_sfincs_input(input_path)
     equilibrium_file = effective_equilibrium_file(geom_params=nml.group("geometryParameters"))
     assert str(equilibrium_file).strip('"').strip("'").endswith("hsx3free.bc")
+
+
+def test_effective_equilibrium_file_covers_legacy_scheme_aliases() -> None:
+    assert effective_equilibrium_file(geom_params={"GEOMETRYSCHEME": 10, "FORT996BOOZER_FILE": "fort.bc"}) == "fort.bc"
+    assert effective_equilibrium_file(geom_params={"GEOMETRYSCHEME": 12, "JGBOOZER_FILE_NONSTELSYM": "non.bc"}) == "non.bc"
+    assert effective_equilibrium_file(geom_params={"GEOMETRYSCHEME": 5}) is None
 
 
 def test_canonical_equilibrium_override_accepts_matching_wout_alias() -> None:
@@ -138,14 +175,35 @@ def test_with_equilibrium_override_preserves_source_path_and_updates_text() -> N
     assert 'equilibriumFile = "override_wout.nc"' in updated.source_text
 
 
+def test_equilibrium_override_rendering_inserts_only_when_geometry_group_exists() -> None:
+    inserted = render_input_with_equilibrium_override(
+        source_text="&geometryParameters\n  geometryScheme = 5\n/\n",
+        equilibrium_override="wout_inserted.nc",
+    )
+    unchanged = render_input_with_equilibrium_override(
+        source_text="&physicsParameters\n/\n",
+        equilibrium_override="unused.nc",
+    )
+    replaced = render_input_with_equilibrium_override(
+        source_text="&geometryParameters\n  equilibriumFile = 'old.nc'\n/\n",
+        equilibrium_override="new.nc",
+    )
+
+    assert 'equilibriumFile = "wout_inserted.nc"' in inserted
+    assert unchanged == "&physicsParameters\n/\n"
+    assert 'equilibriumFile = "new.nc"' in replaced
+
+
+def test_with_equilibrium_override_returns_original_when_no_override() -> None:
+    input_path = Path(__file__).parent / "ref" / "output_scheme5_1species_tiny.input.namelist"
+    nml = read_sfincs_input(input_path)
+
+    assert with_equilibrium_override(nml=nml) is nml
+
+
 def test_effective_r_n_wish_supports_legacy_normradius_alias() -> None:
     input_path = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "upstream"
-        / "fortran_multispecies"
-        / "HSX_FPCollisions_DKESTrajectories"
-        / "input.namelist"
+        Path(__file__).resolve().parent / "ref" / "multispecies_HSX_FPCollisions_DKESTrajectories.input.namelist"
     )
     nml = read_sfincs_input(input_path)
     assert effective_r_n_wish(geom_params=nml.group("geometryParameters"), default=0.5) == 0.22
@@ -167,6 +225,50 @@ def test_effective_psi_n_wish_respects_declared_input_radial_coordinate() -> Non
             psi_a_hat=0.2,
         ),
         0.2,
+    )
+
+
+def test_effective_psi_n_wish_reports_missing_normalizations_and_bad_coordinate() -> None:
+    try:
+        effective_psi_n_wish(geom_params={"INPUTRADIALCOORDINATE": 0, "PSIHAT_WISH": 0.1})
+    except ValueError as exc:
+        assert "psi_a_hat is required" in str(exc)
+    else:
+        raise AssertionError("expected psiHat conversion without psi_a_hat to fail")
+
+    try:
+        effective_psi_n_wish(geom_params={"INPUTRADIALCOORDINATE": 2, "RHAT_WISH": 0.1})
+    except ValueError as exc:
+        assert "a_hat is required" in str(exc)
+    else:
+        raise AssertionError("expected rHat conversion without a_hat to fail")
+
+    try:
+        effective_psi_n_wish(geom_params={"INPUTRADIALCOORDINATE": 99})
+    except ValueError as exc:
+        assert "Invalid inputRadialCoordinate=99" in str(exc)
+    else:
+        raise AssertionError("expected invalid inputRadialCoordinate to fail")
+
+
+def test_effective_psi_a_hat_prefers_geometry_then_physics_default() -> None:
+    assert effective_psi_a_hat(geom_params={"PSIAHAT": 3.0}, phys_params={"PSIAHAT": 4.0}, default=1.0) == 3.0
+    assert effective_psi_a_hat(geom_params={}, phys_params={"PSIAHAT": 4.0}, default=1.0) == 4.0
+    assert effective_psi_a_hat(geom_params={}, phys_params={}, default=1.0) == 1.0
+
+
+def test_gradient_coordinate_inference_honors_explicit_override() -> None:
+    geom = {"INPUTRADIALCOORDINATEFORGRADIENTS": 2}
+    assert infer_species_input_radial_coordinate_for_gradients(geom_params=geom, species_params={}, default=4) == 2
+    assert infer_phi_input_radial_coordinate_for_gradients(geom_params=geom, phys_params={}, default=4) == 2
+    assert (
+        infer_input_radial_coordinate_for_gradients(
+            geom_params=geom,
+            species_params={},
+            phys_params={},
+            default=4,
+        )
+        == 2
     )
 
 
@@ -192,12 +294,7 @@ def test_er_conversion_supports_psin_selected_surface(tmp_path: Path) -> None:
 
 def test_effective_use_iterative_linear_solver_supports_legacy_alias() -> None:
     input_path = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "upstream"
-        / "fortran_multispecies"
-        / "inductiveE_noEr"
-        / "input.namelist"
+        Path(__file__).resolve().parent / "ref" / "multispecies_inductiveE_noEr.input.namelist"
     )
     nml = read_sfincs_input(input_path)
     assert effective_use_iterative_linear_solver(other_params=nml.group("otherNumericalParameters"), default=0) == 1
@@ -205,12 +302,7 @@ def test_effective_use_iterative_linear_solver_supports_legacy_alias() -> None:
 
 def test_sfincs_output_dict_uses_legacy_gradient_coordinate_inference() -> None:
     input_path = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "upstream"
-        / "fortran_multispecies"
-        / "inductiveE_noEr"
-        / "input.namelist"
+        Path(__file__).resolve().parent / "ref" / "multispecies_inductiveE_noEr.input.namelist"
     )
     nml = read_sfincs_input(input_path)
     grids = grids_from_namelist(nml)
@@ -220,12 +312,7 @@ def test_sfincs_output_dict_uses_legacy_gradient_coordinate_inference() -> None:
 
 def test_sfincs_output_dict_uses_legacy_normradius_wish_for_bc_geometry() -> None:
     input_path = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "upstream"
-        / "fortran_multispecies"
-        / "HSX_FPCollisions_DKESTrajectories"
-        / "input.namelist"
+        Path(__file__).resolve().parent / "ref" / "multispecies_HSX_FPCollisions_DKESTrajectories.input.namelist"
     )
     nml = read_sfincs_input(input_path)
     grids = grids_from_namelist(nml)
@@ -235,12 +322,7 @@ def test_sfincs_output_dict_uses_legacy_normradius_wish_for_bc_geometry() -> Non
 
 def test_localize_equilibrium_file_in_place_patches_legacy_boozer_key(tmp_path: Path) -> None:
     source_input = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "upstream"
-        / "fortran_multispecies"
-        / "HSX_FPCollisions_DKESTrajectories"
-        / "input.namelist"
+        Path(__file__).resolve().parent / "ref" / "multispecies_HSX_FPCollisions_DKESTrajectories.input.namelist"
     )
     dst_input = tmp_path / "input.namelist"
     dst_input.write_text(source_input.read_text(encoding="utf-8"), encoding="utf-8")

@@ -1,7 +1,7 @@
-"""Write `sfincsOutput.h5` using an upstream Fortran v3 example input (CLI).
+"""Write `sfincsOutput.h5` using a vendored SFINCS-v3 example input (CLI).
 
-This example uses the vendored upstream input:
-  examples/upstream/fortran_v3/quick_2species_FPCollisions_noEr/input.namelist
+This example uses the retained upstream SFINCS-v3 deck:
+  examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist
 
 Run:
   python examples/parity/write_output_upstream_quick2species_cli.py
@@ -23,8 +23,7 @@ def _select_input_path() -> Path:
     return (
         _REPO_ROOT
         / "examples"
-        / "upstream"
-        / "fortran_v3"
+        / "sfincs_examples"
         / "quick_2species_FPCollisions_noEr"
         / "input.namelist"
     )

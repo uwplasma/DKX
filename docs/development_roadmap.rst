@@ -1,11 +1,16 @@
 Development Roadmap
 ===================
 
-``sfincs_jax`` has grown from a parity implementation into a larger research
-codebase with production CLI/API paths, optional differentiable paths, GPU
-solver paths, benchmark generation, and research-only QI/parallelism probes.
-The next phase should improve maintainability without changing the validated
-physics behavior. This page is the working plan for that phase.
+``sfincs_jax`` is a research neoclassical-transport code with production
+CLI/API paths, optional differentiable Python paths, CPU/GPU solver paths,
+benchmark generation, and explicitly gated research probes for difficult QI
+and parallel-scaling cases. The code-health roadmap is to keep those
+capabilities in a compact domain-organized package without changing validated
+physics behavior.
+
+The authoritative branch checklist lives in the repository root as
+``plan_final.md``. This page summarizes stable development principles and does
+not define a competing sequence of work.
 
 Goals
 -----
@@ -22,58 +27,99 @@ Goals
 - Keep autodiff explicit: differentiable paths should remain JAX-native and
   tested separately from faster non-autodiff production fallbacks.
 
+Solver And Differentiation Contract
+-----------------------------------
+
+The refactor keeps two solver lanes because they have different technical
+contracts.
+
+1. Production CLI/non-autodiff lane
+   This is the default for ``sfincs_jax input.namelist`` and for Python calls
+   with ``differentiable=False``. It may use the fastest safe host or device
+   path available for the requested model, including sparse factors,
+   preconditioner caches, and other non-differentiable setup work. This lane
+   must fail closed: accepted results need true-residual checks, phase timings,
+   solver metadata, and output diagnostics.
+
+2. Differentiable Python/API lane
+   This lane is selected explicitly with ``differentiable=True``. It should use
+   JAX-native operators and implicit differentiation for linear solves. The
+   central contract is the same one used by ``jax.lax.custom_linear_solve``:
+   gradients are defined by the linear equation and transpose/adjoint solve at
+   the converged solution, not by differentiating through every Krylov or setup
+   iteration. This keeps memory bounded and matches the adjoint strategy used
+   in modern spectral-solver differentiation work.
+
+3. Adaptive branch decisions
+   The ``auto`` policy is a hard discrete decision and is not itself a smooth
+   differentiable map. Gradients are valid through the selected accepted branch,
+   away from branch boundaries. The code should therefore record a branch
+   certificate: selected method, rejected candidates, predicates, residual
+   margins, capability metadata, and warnings when the solve is near a branch
+   boundary. Smooth or relaxed branch selectors should only be added as
+   deliberate surrogate objectives, not as hidden replacements for production
+   ``auto``.
+
+4. Optional JAX ecosystem libraries
+   ``lineax``, ``jaxopt``, ``equinox``, and ``optax`` remain measured optional
+   lanes unless they clearly improve accuracy, runtime, memory, or code
+   clarity on checked fixtures. ``lineax`` is most relevant to operator-based
+   solves, ``jaxopt`` to implicit root/fixed-point examples, ``equinox`` to
+   PyTree state boundaries, and ``optax`` to optimization workflows rather than
+   core transport solves.
+
 Refactoring Plan
 ----------------
 
-The main code-health target is to reduce the responsibility of
-``sfincs_jax/v3_driver.py``. The refactor should be behavior-preserving and
-land in small, gated slices.
+The main code-health target is to keep implementation ownership in one level of
+domain folders below ``sfincs_jax/`` with only public entry points and stable
+facades at package root. The monolithic transport driver has been
+retired; refactor work should remain behavior-preserving, tested in gated
+slices, and should avoid new historical helper names such as top-level
+``rhs1_*`` files.
 
-1. Operator and state extraction
-   Move RHSMode=1 operator construction, active-DOF projection, residual
-   evaluation, and solver-state metadata into focused modules. Target modules:
-   ``rhs1_operator.py``, ``rhs1_state.py``, and ``rhs1_metadata.py``. The
-   active-DOF routing/index-map portion has started in
-   ``rhs1_active_dof.py``.
+1. Package structure and import contract
+   The retained package folders are ``discretization``, ``geometry``,
+   ``operators``, ``outputs``, ``physics``, ``problems``, ``solvers``,
+   ``validation``, and ``workflows``. Root modules are reserved for public
+   entry points and stable facades: API, CLI, solver results, input parsing,
+   plotting, sensitivity, diagnostics, grid helpers, paths, comparison, and
+   compatibility I/O. Import tests verify the package folders, documented root
+   modules, compatibility aliases, and absence of nested implementation
+   packages.
 
-2. Solver-policy extraction
-   Move auto-selection heuristics, environment parsing, fallback policy, and
-   promotion gates into a dedicated policy module. The policy layer should
-   return a typed decision object rather than mutating driver-local flags.
-   The first landed slice is ``sfincs_jax/rhs1_solver_policy.py``, which owns
-   typed parsing for x-block probe-coarse, post-minres, post-coarse, and
-   post-residual-equation controls.
-   The second landed slice is ``sfincs_jax/rhs1_solver_diagnostics.py``, which
-   owns x-block correction diagnostic records and output-visible metadata key
-   assembly.
-   The third landed slice is ``sfincs_jax/rhs1_active_dof.py``, which owns
-   active-DOF routing and index-map construction for RHSMode=1 truncated pitch
-   grids and PAS constraint-projection solves.
-   The fourth landed slice is ``sfincs_jax/rhs1_active_projection.py``, which
-   owns reusable JAX full/reduced vector gathers, one-based scatter expansion,
-   and PAS constraint projection primitives used by sparse-PC and x-block
-   active-DOF residual paths.
-   The fifth landed slice is ``sfincs_jax/rhs1_residual.py``, which owns small
-   residual norm/target/ratio helpers used by sparse-PC and x-block solver
-   metadata.
+2. Problem owners
+   RHSMode=1 profile-current/bootstrap-current orchestration belongs to flat
+   ``problems/profile_*.py`` modules. RHSMode=2/3 transport-matrix and
+   monoenergetic-response orchestration belongs to flat
+   ``problems/transport_*.py`` modules. Do not reintroduce non-root
+   compatibility facades for profile-response or transport-matrix owners; user
+   and contributor imports should point to canonical owners directly.
 
-3. Preconditioner registry
-   Keep x-block, PAS-lite, Schur, QI, and post-residual-equation preconditioners
-   behind a registry with explicit capability metadata: CPU/GPU safe,
-   differentiable/non-differentiable, setup memory estimate, and expected
-   operator shape.
+3. Physics, discretization, and operators
+   Model terms, grids, quadrature, active layouts, residual construction, and
+   sparse/operator assembly live in domain packages named for the equations or
+   numerical objects they own. Each owner should have shape, masking,
+   zero-drive or constant-field, order-condition, conservation, or parity tests
+   where those properties apply.
 
-4. Output and diagnostics boundary
-   Keep HDF5/NPZ/NetCDF writes outside solver internals. Solver code should
-   return structured diagnostics; output modules should serialize those
-   diagnostics without reinterpreting convergence. The first concrete step is
-   the RHSMode=1 x-block correction metadata extraction, which preserves the
-   historical field names while making schema regressions unit-testable.
+4. Solver and preconditioner architecture
+   Reusable Krylov dispatch, residual gates, progress reporting, sparse
+   factors, recycling, checkpoints, and implicit-differentiation contracts live
+   in ``solvers``. Preconditioners are flat ``preconditioner_*.py`` modules
+   named by numerical structure: PAS, full-FP, QI, Schur, domain decomposition,
+   x-block, symbolic sparse, and transport-matrix blocks. Auto-selection remains
+   the user-facing default; implementation decisions should return metadata for
+   CPU/GPU safety, differentiable or non-differentiable status, setup-memory
+   estimates, expected operator shape, residual gates, and rejected candidates.
 
-5. Benchmark and evidence schema
-   Consolidate benchmark JSON schemas so README plots, documentation figures,
-   and research-lane manifests consume the same fields for runtime, memory,
-   residuals, backend, solver path, and comparison status.
+5. I/O, workflow, validation, and benchmark boundaries
+   HDF5/NPZ/NetCDF writes stay outside solver internals. Solver code returns
+   structured diagnostics; output modules serialize those diagnostics without
+   reinterpreting convergence. Benchmark JSON schemas are shared by README
+   plots, documentation figures, and research-lane manifests so runtime,
+   memory, residuals, backend, solver path, and comparison status use one
+   contract.
 
 Testing Plan
 ------------
@@ -191,12 +237,12 @@ all relevant gates:
 - documentation: new methods include equations, controls, failure modes, and
   reproducible benchmark commands.
 
-Current QI Scope Boundary
--------------------------
+QI Scope Boundary
+-----------------
 
-The scale-0.60 QI hard seed is now below ``3e-5`` residual on both CPU and GPU
-with the post-residual-equation research path. This is a useful bounded result
-and confirms that the implementation is device-safe for the checked path. It is
-not a production convergence claim. Closing that lane requires new
-residual-equation/coarse variables built from the remaining Krylov error modes
-and current/constraint/profile moments.
+The documented scale-0.60 QI hard seed reaches residuals below ``3e-5`` on both
+CPU and GPU with the post-residual-equation research path. This bounded result
+confirms device safety for that checked path, but it is not a production
+convergence claim. Promoting the lane requires residual-equation/coarse
+variables built from the remaining Krylov error modes and from
+current/constraint/profile moments.

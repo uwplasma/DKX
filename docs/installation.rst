@@ -8,6 +8,41 @@ Standard install
 
    pip install sfincs_jax
 
+Solver library (``solvax``)
+---------------------------
+
+The structured linear-algebra solver tiers (block-tridiagonal Legendre
+elimination, recycled GCROT Krylov, implicit differentiation) live in the
+external `solvax <https://pypi.org/project/solvax/>`_ library. It is a core
+dependency and installs automatically with ``sfincs_jax``; every canonical
+solve uses it. The ``sfincs_jax[structured]`` extra is retained as a no-op
+alias for backward compatibility.
+
+GPU
+---
+
+Install the CUDA build of JAX that matches your driver, for example:
+
+.. code-block:: bash
+
+   pip install -U "jax[cuda12]"
+
+No ``sfincs_jax`` change is needed; the same solves run on the accelerator.
+
+SFINCS Fortran v3 reference build (optional)
+--------------------------------------------
+
+Parity and benchmark tooling can compare against a local SFINCS Fortran v3
+executable. A reproducible route on macOS/Linux is a conda environment that
+provides PETSc and MUMPS (the measured baselines in :doc:`performance` use
+conda PETSc 3.23 + MUMPS 5.8.2) together with upstream's
+``makefiles/makefile.conda`` in the SFINCS repository
+(``fortran/version3``). Modern PETSc ``mpi_f08`` typing needs two local,
+version-guarded ``MPIU_Comm`` declaration patches in ``globalVariables.F90``
+and ``sfincs_main.F90``; the resulting binary passes upstream's own example
+checks to about ``4e-5`` relative. None of this is required to use
+``sfincs_jax`` itself — frozen reference outputs ship with the test fixtures.
+
 Release-hosted equilibrium fixtures
 -----------------------------------
 
@@ -21,7 +56,7 @@ data explicitly, run:
 
 .. code-block:: bash
 
-   python scripts/fetch_equilibria.py
+   python -m sfincs_jax.validation.data_fetch
 
 Use ``SFINCS_JAX_DATA_DIR=/path/to/cache`` to choose a different cache root. Use
 ``SFINCS_JAX_OFFLINE=1`` in CI or cluster jobs when a run must fail instead of
@@ -44,7 +79,7 @@ Documentation tooling
 Additional example-only packages
 --------------------------------
 
-The core install now includes ``matplotlib`` and ``netCDF4``, so plotting examples,
+The core install includes ``matplotlib`` and ``netCDF4``, so plotting examples,
 ``sfincs_jax --plot``, and ``--out sfincsOutput.nc`` work without any extra plotting
 or file-format dependency group.
 
@@ -55,14 +90,6 @@ you want those examples:
 
    pip install optax
 
-The optional ecosystem benchmark gates also use extra packages when you want to run
-the actively evaluated branches locally:
-
-.. code-block:: bash
-
-   pip install lineax equinox
-
-The historical JAXopt backend in
-``examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py`` remains
-skip-safe and can be installed explicitly for local comparison, but it is not part
-of the default CI optional-dependency install.
+Optional solver-library adoption studies, including Lineax, Equinox-wrapper, and
+JAXopt comparisons, are research-lane material. They are not required for the
+stable install, stable examples, or default CI.

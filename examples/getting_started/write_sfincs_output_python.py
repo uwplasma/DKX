@@ -2,7 +2,7 @@
 
 This example demonstrates:
   - parsing a Fortran `input.namelist`
-  - generating `sfincsOutput.h5` for supported modes (currently geometryScheme=4)
+  - generating `sfincsOutput.h5` for the fast geometryScheme=4 example
   - loading the resulting HDF5 file and inspecting a few datasets
 
 Run:
