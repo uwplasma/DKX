@@ -381,6 +381,31 @@ class KineticOperator:
     def _mask(self) -> jnp.ndarray:
         return _mask_xi(self.n_xi_for_x, self.n_xi)  # (X,L)
 
+    def active_dof_mask(self) -> jnp.ndarray | None:
+        """Flat 0/1 mask of the DOFs retained by the ``Nxi_for_x`` truncation.
+
+        The rectangular ``(species, x, L, theta, zeta)`` state layout carries
+        entries for Legendre modes ``l >= Nxi_for_x(ix)`` that Fortran v3
+        excludes from the matrix entirely (packed indexing, ``indices.F90``
+        ``DKE_size``).  Those rows of :meth:`apply` are identically zero, so
+        the rectangular embedding of the operator is structurally singular:
+        one exact zero singular value per truncated DOF.  Solvers must pin
+        them (``A M + (I - M)`` with ``M = diag(mask)``) to recover the
+        nonsingular packed system — see :func:`sfincs_jax.solve.solve`.
+
+        Returns:
+            ``None`` when every speed node keeps the full Legendre resolution
+            (no truncation, operator nonsingular as embedded); otherwise a
+            ``(total_size,)`` float64 vector with 1.0 on active DOFs (all
+            bordered source unknowns are active) and 0.0 on truncated ones.
+        """
+        if int(np.min(np.asarray(self.n_xi_for_x))) >= self.n_xi:
+            return None
+        m = jnp.broadcast_to(self._mask()[None, :, :, None, None], self.f_shape)
+        return jnp.concatenate(
+            [m.reshape((-1,)), jnp.ones((self.extra_size,), dtype=jnp.float64)]
+        )
+
     def _streaming_mirror(self, f: jnp.ndarray) -> jnp.ndarray:
         """Parallel streaming + mirror terms (populateMatrix.F90 ddtheta/ddzeta/ddxi blocks).
 

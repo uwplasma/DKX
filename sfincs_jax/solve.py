@@ -158,8 +158,10 @@ def _is_traced(*arrays: Any) -> bool:
     return any(isinstance(a, jax.core.Tracer) for a in arrays)
 
 
-def _residual_norms(op: KineticOperator, x2d: jnp.ndarray, rhs2d: jnp.ndarray) -> jnp.ndarray:
-    res = jax.vmap(op.apply, in_axes=1, out_axes=1)(x2d) - rhs2d
+def _residual_norms(
+    matvec: Callable[[jnp.ndarray], jnp.ndarray], x2d: jnp.ndarray, rhs2d: jnp.ndarray
+) -> jnp.ndarray:
+    res = jax.vmap(matvec, in_axes=1, out_axes=1)(x2d) - rhs2d
     return jnp.linalg.norm(res, axis=0)
 
 
@@ -183,6 +185,67 @@ def _transposed_apply(op: KineticOperator) -> Callable[[jnp.ndarray], jnp.ndarra
         return out
 
     return apply_t
+
+
+def _pinned_matvecs(
+    op: KineticOperator,
+) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], Callable[[jnp.ndarray], jnp.ndarray]]:
+    """Forward/transposed matvecs with the truncated ``Nxi_for_x`` DOFs pinned.
+
+    Fortran v3 packs the ``(x, l >= Nxi_for_x(x))`` DOFs out of the matrix
+    (``indices.F90`` packed indexing), so its matrix is nonsingular.  The
+    rectangular jax layout keeps those DOFs as exact zero *rows* of
+    :meth:`KineticOperator.apply` (with leaked nonzero *columns* from the
+    x-dense Fokker-Planck blocks), i.e. the embedded operator is structurally
+    singular and its transpose is inconsistent for generic adjoint cotangents
+    — the root cause of the FP+constraintScheme=1 silently-wrong gradients.
+
+    Pinning substitutes ``A_pinned = A M + (I - M)`` with ``M`` the
+    active-DOF projector from :meth:`KineticOperator.active_dof_mask`:
+    identical to ``A`` on the active subspace, identity on the truncated
+    DOFs.  For the physical right-hand sides (zero on truncated DOFs, as
+    :meth:`KineticOperator.rhs` guarantees) the solution is unchanged, and
+    both ``A_pinned`` and ``A_pinned^T`` are nonsingular, so forward solves,
+    transposed solves, and implicit-function-theorem adjoints are all
+    well-posed.  This is exactly the packed Fortran system, extended with
+    trivial identity equations on the DOFs Fortran does not carry.
+    """
+    apply_t_raw = _transposed_apply(op)
+    mask = op.active_dof_mask()
+    if mask is None:
+        return op.apply, apply_t_raw
+
+    def matvec(v: jnp.ndarray) -> jnp.ndarray:
+        return op.apply(mask * v) + (1.0 - mask) * v
+
+    def matvec_t(w: jnp.ndarray) -> jnp.ndarray:
+        return mask * apply_t_raw(w) + (1.0 - mask) * w
+
+    return matvec, matvec_t
+
+
+def _convergence_guard(label: str) -> Callable[[jnp.ndarray, jnp.ndarray], None]:
+    """Host callback that aborts loudly when a differentiable solve stalls.
+
+    Used on both the forward and the adjoint (transposed) GCROT solves of the
+    ``differentiable=True`` tier-2 path: a stalled Krylov solve there would
+    otherwise return a silently wrong solution/gradient (the historical
+    FP+constraintScheme=1 failure mode).  Runs at execution time via
+    ``jax.debug.callback`` so it works under ``jit``/``grad`` tracing.
+    """
+
+    def guard(converged: jnp.ndarray, res_norm: jnp.ndarray) -> None:
+        if not bool(np.asarray(converged)):
+            raise RuntimeError(
+                f"[sfincs_jax.solve] differentiable {label} GCROT solve failed to "
+                f"converge (residual norm {float(np.asarray(res_norm)):.3e}). "
+                "A stalled solve here silently corrupts gradients, so it aborts "
+                "instead: the operator is likely singular (e.g. a physical null "
+                "space the constraint scheme does not fix). Pass "
+                "check_adjoint=False to bypass at your own risk."
+            )
+
+    return guard
 
 
 # =============================================================================
@@ -445,15 +508,26 @@ def build_coarse_preconditioner(
 # =============================================================================
 
 
-def materialize_dense(op: KineticOperator, *, column_chunk: int = 1024) -> np.ndarray:
+def materialize_dense(
+    op: KineticOperator, *, column_chunk: int = 1024, pin_masked_dofs: bool = False
+) -> np.ndarray:
     """Materialize the full bordered operator as a dense numpy matrix.
 
     Applies the matrix-free operator to identity columns in vmapped chunks.
     Meant for tiny systems (tier-3 fallback and referee tests) — memory is
     ``O(total_size**2)``.
+
+    Args:
+        op: the kinetic operator.
+        column_chunk: identity columns per vmapped batch.
+        pin_masked_dofs: materialize the pinned operator (identity rows and
+            columns on the DOFs truncated by ``Nxi_for_x``; see
+            :func:`_pinned_matvecs`) instead of the raw rectangular embedding,
+            which has exact zero rows on those DOFs.
     """
     n = op.total_size
-    batched = jax.jit(jax.vmap(op.apply, in_axes=1, out_axes=1))
+    apply = _pinned_matvecs(op)[0] if pin_masked_dofs else op.apply
+    batched = jax.jit(jax.vmap(apply, in_axes=1, out_axes=1))
     cols: list[np.ndarray] = []
     for j0 in range(0, n, column_chunk):
         j1 = min(j0 + column_chunk, n)
@@ -487,14 +561,14 @@ def _solve_tier3(
     import scipy.sparse as sp  # lazy: matches solvax.native's optional-scipy policy
 
     t0 = time.perf_counter()
-    dense = materialize_dense(op)
+    dense = materialize_dense(op, pin_masked_dofs=True)
     lu = SpluFactorization(sp.csr_matrix(dense))
     t1 = time.perf_counter()
     x2d = jnp.asarray(lu.solve(np.asarray(rhs2d)))
     if x2d.ndim == 1:
         x2d = x2d[:, None]
     t2 = time.perf_counter()
-    res = _residual_norms(op, x2d, rhs2d)
+    res = _residual_norms(_pinned_matvecs(op)[0], x2d, rhs2d)
     return SolveResult(
         x=x2d,
         method="direct",
@@ -512,7 +586,8 @@ def _solve_tier3(
 
 
 def _implicit_solve(
-    op: KineticOperator,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    matvec_t: Callable[[jnp.ndarray], jnp.ndarray],
     rhs_col: jnp.ndarray,
     fwd_solve: Callable[[jnp.ndarray], jnp.ndarray],
     t_solve: Callable[[jnp.ndarray], jnp.ndarray],
@@ -523,12 +598,11 @@ def _implicit_solve(
     forward and transposed factorized solves by identity of the matvec it is
     handed (``linear_solve`` passes ``transpose_matvec`` through verbatim).
     """
-    apply_t = _transposed_apply(op)
 
     def solver(mv: Callable, b: jnp.ndarray) -> jnp.ndarray:
-        return t_solve(b) if mv is apply_t else fwd_solve(b)
+        return t_solve(b) if mv is matvec_t else fwd_solve(b)
 
-    return solvax_linear_solve(op.apply, rhs_col, solver, transpose_matvec=apply_t)
+    return solvax_linear_solve(matvec, rhs_col, solver, transpose_matvec=matvec_t)
 
 
 def _solve_tier1(
@@ -543,9 +617,11 @@ def _solve_tier1(
     t1_solver = build_tier1_solver(op)
     t1 = time.perf_counter()
     if differentiable:
+        apply_t = _transposed_apply(op)
         cols = [
             _implicit_solve(
-                op,
+                op.apply,
+                apply_t,
                 rhs2d[:, j],
                 lambda b: t1_solver.solve(b),
                 lambda b: t1_solver.solve(b, transpose=True),
@@ -556,7 +632,7 @@ def _solve_tier1(
     else:
         x2d = t1_solver.solve(rhs2d)
     t2 = time.perf_counter()
-    res = _residual_norms(op, x2d, rhs2d)
+    res = _residual_norms(op.apply, x2d, rhs2d)
     return SolveResult(
         x=x2d,
         method="block_tridiagonal",
@@ -582,6 +658,7 @@ def _solve_tier2(
     recycle_dim: int,
     max_restarts: int,
     differentiable: bool,
+    check_adjoint: bool,
 ) -> SolveResult:
     t0 = time.perf_counter()
     precond = precond_t = None
@@ -597,7 +674,10 @@ def _solve_tier2(
         if x0_2d.shape != rhs2d.shape:
             raise ValueError(f"x0 shape {x0_2d.shape} must match rhs shape {rhs2d.shape}")
 
-    apply_t = _transposed_apply(op)
+    # Pinned matvecs: identical to op.apply on the physical subspace, identity
+    # on the Nxi_for_x-truncated DOFs, so the system (and in particular its
+    # transpose, used by the differentiable adjoint) is nonsingular.
+    matvec, matvec_t = _pinned_matvecs(op)
     traced = _is_traced(rhs2d, *jax.tree_util.tree_leaves(op))
     cols: list[jnp.ndarray] = []
     total_iters: int | None = 0
@@ -606,7 +686,7 @@ def _solve_tier2(
     for j in range(rhs2d.shape[1]):
         b = rhs2d[:, j]
         sol = gcrot(
-            op.apply,
+            matvec,
             b,
             x0=None if x0_2d is None else x0_2d[:, j],
             precond=precond,
@@ -627,20 +707,35 @@ def _solve_tier2(
         if differentiable:
             # Re-run under the implicit-function-theorem wrapper so gradients
             # flow (one extra solve; the adjoint uses the transposed
-            # preconditioner and the same recycle-free GCROT).
+            # preconditioner and the same recycle-free GCROT).  With
+            # check_adjoint on, both the forward and the adjoint solves abort
+            # loudly on non-convergence instead of silently corrupting the
+            # gradient (jax.debug.callback fires at execution time).
             def fwd_solve(rhs_col: jnp.ndarray) -> jnp.ndarray:
-                return gcrot(
-                    op.apply, rhs_col, precond=precond, m=restart, k=recycle_dim,
+                s = gcrot(
+                    matvec, rhs_col, precond=precond, m=restart, k=recycle_dim,
                     rtol=tol, atol=atol, max_restarts=max_restarts,
-                ).x
+                )
+                if check_adjoint:
+                    jax.debug.callback(
+                        _convergence_guard("forward"), s.converged, s.residual_norm
+                    )
+                return s.x
 
             def t_solve(rhs_col: jnp.ndarray) -> jnp.ndarray:
-                return gcrot(
-                    apply_t, rhs_col, precond=precond_t, m=restart, k=recycle_dim,
+                s = gcrot(
+                    matvec_t, rhs_col, precond=precond_t, m=restart, k=recycle_dim,
                     rtol=tol, atol=atol, max_restarts=max_restarts,
-                ).x
+                )
+                if check_adjoint:
+                    jax.debug.callback(
+                        _convergence_guard("adjoint (transposed)"),
+                        s.converged,
+                        s.residual_norm,
+                    )
+                return s.x
 
-            cols.append(_implicit_solve(op, b, fwd_solve, t_solve))
+            cols.append(_implicit_solve(matvec, matvec_t, b, fwd_solve, t_solve))
         else:
             cols.append(sol.x)
     t2 = time.perf_counter()
@@ -670,6 +765,7 @@ def solve(
     x0: jnp.ndarray | None = None,
     recycle: tuple[jnp.ndarray, jnp.ndarray] | None = None,
     differentiable: bool = False,
+    check_adjoint: bool = True,
     use_preconditioner: bool = True,
     drop_l_coupling_in_precond: bool = False,
     restart: int = 30,
@@ -704,6 +800,24 @@ def solve(
         differentiable: wrap the solution in
             ``solvax.implicit.linear_solve`` so ``jax.grad`` flows through
             (tiers 1/2; tier 3 refuses).  Tier 2 pays one extra solve.
+        check_adjoint: (differentiable tier 2 only, default on) abort loudly
+            — a ``RuntimeError`` raised from a ``jax.debug.callback`` at
+            execution time — when the forward or the adjoint (transposed)
+            GCROT solve fails to converge.  A stalled Krylov solve under the
+            implicit-function-theorem wrapper otherwise returns silently
+            wrong gradients; this is how the singular FP+constraintScheme=1
+            embedding used to fail before truncated-DOF pinning (see below).
+
+    Operators with a truncated Legendre resolution (non-uniform ``Nxi_for_x``)
+    are structurally singular in the rectangular state layout: the truncated
+    DOFs are exact zero rows of :meth:`KineticOperator.apply` (Fortran v3
+    never carries them — packed indexing in ``indices.F90``).  Tiers 2 and 3
+    therefore solve the *pinned* system ``(A M + I - M) x = rhs`` with ``M``
+    the active-DOF projector (:meth:`KineticOperator.active_dof_mask`): it is
+    nonsingular, agrees with ``A`` on the physical subspace, and forces
+    ``x = rhs = 0`` on the truncated DOFs, so solutions, residuals, and
+    implicit-function-theorem gradients all match the packed Fortran system.
+    Tier 1 requires uniform ``Nxi_for_x`` and is unaffected.
         use_preconditioner: tier-2 coarse-operator preconditioner on/off.
         drop_l_coupling_in_precond: the Fortran ``preconditioner_xi=1`` knob
             (drop the L±1 streaming coupling in the coarse operator).
@@ -744,6 +858,7 @@ def solve(
             recycle_dim=recycle_dim,
             max_restarts=max_restarts,
             differentiable=differentiable,
+            check_adjoint=check_adjoint,
         )
         if method == "auto" and not result.converged and not differentiable:
             print(
