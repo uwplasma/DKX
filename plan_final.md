@@ -161,6 +161,18 @@ helpers (<=30k lines including docstrings).
    plot, Python solve, output formats, transport coefficients, bootstrap/Redl,
    ambipolar root, autodiff/JVP, VMEC/Boozer loading, optimization objective,
    validation comparison), each a single readable script on the public API.
+   Example style contract (simsopt-like): no main() functions; input
+   parameters at the top; the user writes the objective function in the
+   script; gradients come from jax.grad/value_and_grad or library functions
+   that ship with gradients; scripts show how to read/create input files,
+   write outputs, plot, and print initial conditions, run progress, and final
+   results; no auxiliary functions that belong in the library. Flagship
+   optimization: QA stellarator with low bootstrap current following the
+   vmec_jax QA workflow with <j.B> from the kinetic solve (warm-started
+   solves + recycling across iterations, autodiff accuracy tested vs finite
+   differences, fast on CPU and GPU); alternative objectives (D11, L1, ...)
+   present as commented lines that are themselves CI-tested so uncommenting
+   them just works.
 6. Consolidate tests into behavior suites; coverage >=95% comes primarily from
    deleting unreachable/experimental code, not from new test mass; default CI
    under 10 minutes.
