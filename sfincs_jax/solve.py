@@ -52,6 +52,7 @@ and the PETSc ``Pmat`` idiom of production SFINCS.
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass, replace
 from typing import Any, Callable
@@ -71,6 +72,7 @@ try:  # noqa: E402
         BlockTridiagFactors,
         block_thomas_factor,
         block_thomas_solve,
+        block_thomas_truncated_fn,
     )
     from solvax.implicit import linear_solve as solvax_linear_solve
     from solvax.krylov import gcrot
@@ -82,6 +84,7 @@ except ImportError as _solvax_exc:
     BlockTridiagFactors = None  # type: ignore[assignment, misc]
     block_thomas_factor = None  # type: ignore[assignment]
     block_thomas_solve = None  # type: ignore[assignment]
+    block_thomas_truncated_fn = None  # type: ignore[assignment]
     solvax_linear_solve = None  # type: ignore[assignment]
     gcrot = None  # type: ignore[assignment]
     SpluFactorization = None  # type: ignore[assignment, misc]
@@ -108,7 +111,23 @@ __all__ = [
     "materialize_dense",
     "solve",
     "tier1_available",
+    "tier1_full_band_bytes",
+    "tier1_peak_memory_bytes",
 ]
+
+# Default memory budget above which ``solve(method="auto")`` prefers the
+# memory-lean truncated tier-1 kernel over the full-band factorization.  Chosen
+# to match the validated HSX head-to-head benchmark
+# (tools/benchmarks/tier1_hsx_head_to_head.py).  Overridable per call via the
+# ``tier1_memory_budget_gb`` argument or the environment variable below.
+_TIER1_BUDGET_GB_DEFAULT = 8.0
+_TIER1_BUDGET_ENV = "SFINCS_TIER1_MEMORY_BUDGET_GB"
+
+# RHSMode 1/2/3 drives (radial gradient on L=0,2; inductive E_parallel on L=1)
+# and every RHSMode 1/2/3 output moment (fluxes, flows, sources, FSA
+# constraints) live on the lowest three Legendre modes, so keeping three
+# solution blocks is exact for the standard transport quantities.
+_TIER1_KEEP_LOWEST_DEFAULT = 3
 
 
 # =============================================================================
@@ -279,6 +298,90 @@ def tier1_available(op: KineticOperator) -> tuple[bool, str]:
     if int(np.min(np.asarray(op.n_xi_for_x))) < op.n_xi:
         return False, "non-uniform Nxi_for_x leaves zero rows in the truncated-L blocks"
     return True, ""
+
+
+# =============================================================================
+# Tier 1 memory model and the full-vs-truncated route decision
+# =============================================================================
+
+
+def tier1_full_band_bytes(op: KineticOperator) -> float:
+    """Bytes of the full tier-1 Legendre bands (``lower``/``diag``/``upper``).
+
+    :func:`build_tier1_solver` materializes the three block-tridiagonal bands
+    of :meth:`KineticOperator.to_block_tridiagonal`, each of shape
+    ``(n_xi, n_species, n_x, m, m)`` with block dimension ``m = n_theta *
+    n_zeta`` (the dense theta*zeta angular block per Legendre mode, per
+    (species, x) subsystem), in float64::
+
+        bytes = 3 * n_xi * n_species * n_x * (n_theta * n_zeta)**2 * 8
+
+    The leading ``3`` counts ``lower``, ``diag`` and ``upper``.  This is the
+    ~39 GB figure for the 744k-unknown HSX case (n_theta=25, n_zeta=51,
+    n_xi=100, n_x=5, n_species=2).
+    """
+    m = float(op.n_theta * op.n_zeta)
+    return 3.0 * float(op.n_xi) * float(op.n_species) * float(op.n_x) * m * m * 8.0
+
+
+def tier1_peak_memory_bytes(op: KineticOperator) -> float:
+    """Peak-memory estimate of the full tier-1 factorization.
+
+    Adds the block-Thomas LU factors and elimination temporaries on top of the
+    three input bands (:func:`tier1_full_band_bytes`).  The
+    ``BlockTridiagFactors`` store the per-block LU factors plus the two
+    off-diagonal bands (~2x the band storage), and the vmapped sweep holds a
+    few block temporaries live, so the peak is estimated at ``2.5x`` the band
+    storage — the multiplier used by the validated HSX benchmark.
+    """
+    return 2.5 * tier1_full_band_bytes(op)
+
+
+def _tier1_budget_bytes(budget_gb: float | None) -> tuple[float, float]:
+    """Resolve the truncation budget (bytes, GB) from arg / env / default."""
+    if budget_gb is None:
+        env = os.environ.get(_TIER1_BUDGET_ENV)
+        budget_gb = float(env) if env not in (None, "") else _TIER1_BUDGET_GB_DEFAULT
+    return float(budget_gb) * 2.0**30, float(budget_gb)
+
+
+def _truncation_supported(op: KineticOperator, keep: int) -> tuple[bool, str]:
+    """Structural check that the truncated tier-1 kernel applies to ``op``.
+
+    Assumes :func:`tier1_available` already passed (PAS/DKES family, uniform
+    Nxi_for_x, constraintScheme in {0, 2}, no point_at_x0).  Additionally every
+    closed (species, x) subsystem must retain at least ``keep`` Legendre blocks.
+    """
+    if op.constraint_scheme not in (0, 2):
+        return False, f"constraintScheme={op.constraint_scheme} border couples Legendre modes"
+    if op.point_at_x0:
+        return False, "point_at_x0 x-grids are not handled by the truncated kernel"
+    if keep > op.n_xi:
+        return False, f"keep_lowest={keep} exceeds Nxi={op.n_xi}"
+    if int(np.min(np.asarray(op.n_xi_for_x))) < keep:
+        return False, f"min Nxi_for_x={int(np.min(np.asarray(op.n_xi_for_x)))} < keep_lowest={keep}"
+    return True, ""
+
+
+def _rhs_confined_to_lowest_blocks(
+    op: KineticOperator, rhs2d: jnp.ndarray, keep: int
+) -> bool | None:
+    """Whether the RHS has Legendre support only on modes ``l < keep``.
+
+    Returns ``None`` when ``rhs2d`` is a tracer (support cannot be read under
+    jit/grad); callers then fall back to the structural ``rhs_mode`` guarantee.
+    The truncated kernel computes exactly the lowest ``keep`` Legendre blocks
+    and zero-pads the rest, so it is exact iff both the drive and the requested
+    output moments live on ``l < keep`` — true for the RHSMode 1/2/3 transport
+    drives and their fluxes/flows/sources, which touch only ``l <= 2``.
+    """
+    if _is_traced(rhs2d):
+        return None
+    n_s, n_x, n_xi, n_t, n_z = op.f_shape
+    if keep >= n_xi:
+        return True
+    f = np.asarray(rhs2d)[: op.f_size].reshape(n_s, n_x, n_xi, n_t * n_z, -1)
+    return bool(np.max(np.abs(f[:, :, keep:])) == 0.0)
 
 
 @dataclass(frozen=True)
@@ -659,6 +762,254 @@ def _solve_tier1(
     )
 
 
+# =============================================================================
+# Tier 1 (truncated) — memory-lean block Thomas over the lowest K Legendre modes
+# =============================================================================
+
+
+def _truncated_coefficients(op: KineticOperator) -> dict[str, jnp.ndarray]:
+    """Compact per-term coefficient matrices for the on-the-fly Legendre blocks.
+
+    Mirrors :meth:`KineticOperator.legendre_blocks` exactly (same analytic
+    streaming/mirror/ExB/PAS coefficients), but keeps only the per-term factors
+    so the ``(m, m)`` blocks can be assembled inside
+    ``solvax.direct.block_thomas_truncated_fn`` without ever materializing the
+    full ``(n_xi, ...)`` bands.  Everything here is a differentiable function of
+    the operator pytree, so gradients flow to the physics inputs.
+    """
+    n_tz = op.n_theta * op.n_zeta
+    eye_t = jnp.eye(op.n_theta, dtype=jnp.float64)
+    eye_z = jnp.eye(op.n_zeta, dtype=jnp.float64)
+    d_theta_tz = jnp.kron(op.ddtheta, eye_z)
+    d_zeta_tz = jnp.kron(eye_t, op.ddzeta)
+
+    sqrt_t_over_m = jnp.sqrt(op.t_hat / op.m_hat)  # (S,)
+    v_theta = (op.b_hat_sup_theta / op.b_hat).reshape((-1,))
+    v_zeta = (op.b_hat_sup_zeta / op.b_hat).reshape((-1,))
+    stream = sqrt_t_over_m[:, None, None] * (
+        v_theta[None, :, None] * d_theta_tz[None, :, :]
+        + v_zeta[None, :, None] * d_zeta_tz[None, :, :]
+    )  # (S, TZ, TZ)
+    mirror_geom = op.b_hat_sup_theta * op.db_hat_dtheta + op.b_hat_sup_zeta * op.db_hat_dzeta
+    mirror = -sqrt_t_over_m[:, None] * (mirror_geom / (2.0 * op.b_hat**2)).reshape((-1,))[None, :]
+    if op.with_exb:
+        coef_theta, coef_zeta = op._exb_coefficients()
+        exb = (
+            coef_theta.reshape((-1,))[:, None] * d_theta_tz
+            + coef_zeta.reshape((-1,))[:, None] * d_zeta_tz
+        )  # (TZ, TZ)
+    else:
+        exb = jnp.zeros((n_tz, n_tz), dtype=jnp.float64)
+
+    b0 = jnp.ones((n_tz,), dtype=jnp.float64)
+    c0 = op._fs_average_factor().reshape((-1,))
+    pas_coef = op.pas.coef if op.pas is not None else jnp.zeros(
+        (op.n_species, op.n_x, op.n_xi), dtype=jnp.float64
+    )  # (S, X, L)
+    # Conditioning-friendly rank-one scale per (S, X) (any nonzero value is
+    # algebraically exact) — identical recipe to the benchmark's TruncatedTier1.
+    exb_diag_mean = jnp.mean(jnp.abs(jnp.diagonal(exb)))
+    scale = jnp.mean(jnp.abs(pas_coef), axis=2) + exb_diag_mean  # (S, X)
+    scale = jnp.where(scale > 0.0, scale, 1.0)
+    gamma = scale / jnp.max(jnp.abs(c0))  # (S, X)
+    return {
+        "stream": stream, "mirror": mirror, "exb": exb, "pas": pas_coef,
+        "cl": op.xi_coupling_lower, "cu": op.xi_coupling_upper,
+        "b0": b0, "c0": c0, "gamma": gamma,
+    }  # fmt: skip
+
+
+def _truncated_block_fn(
+    coef: dict[str, jnp.ndarray],
+    n_xi: int,
+    stream: jnp.ndarray,
+    mirror: jnp.ndarray,
+    pas_row: jnp.ndarray,
+    x_val: jnp.ndarray,
+    gamma: jnp.ndarray,
+    *,
+    shift_border: bool,
+) -> Callable[[jnp.ndarray], tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
+    """Analytic ``(L_k, D_k, U_k)`` for one (species, x) subsystem — as legendre_blocks.
+
+    With ``shift_border`` the rank-one border ``gamma * outer(b0, c0)`` is added
+    to the ``l=0`` diagonal block (the exact ``A~ = A + gamma B C`` absorption);
+    without it the raw physical blocks are returned (used for residual checks).
+    """
+    exb, b0, c0, cl, cu = coef["exb"], coef["b0"], coef["c0"], coef["cl"], coef["cu"]
+    m = exb.shape[0]
+    idx = jnp.arange(m)
+
+    def block_fn(k: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        kf = k.astype(jnp.float64)
+        cl_k = jnp.take(cl, k)
+        lower = (x_val * cl_k) * stream
+        lower = lower.at[idx, idx].add((x_val * (-cl_k * (kf - 1.0))) * mirror)
+        cu_k = jnp.take(cu, jnp.minimum(k, n_xi - 1))
+        upper = (x_val * cu_k) * stream
+        upper = upper.at[idx, idx].add((x_val * (cu_k * (kf + 2.0))) * mirror)
+        diag = exb.at[idx, idx].add(jnp.take(pas_row, k))
+        if shift_border:
+            diag = jnp.where(k == 0, diag + gamma * jnp.outer(b0, c0), diag)
+        return lower, diag, upper
+
+    return block_fn
+
+
+def _solve_tier1_truncated(
+    op: KineticOperator,
+    rhs2d: jnp.ndarray,
+    *,
+    keep: int,
+    tol: float,
+    atol: float,
+) -> SolveResult:
+    """Memory-lean tier-1 solve: only the lowest ``keep`` Legendre blocks.
+
+    Assembles each ``(m, m)`` Legendre block on the fly inside
+    ``solvax.direct.block_thomas_truncated_fn`` (peak memory ``O(keep * m^2)``
+    per subsystem, independent of ``n_xi``), so the ~39 GB full-band storage is
+    never allocated.  The ``constraintScheme=2`` border is absorbed with the
+    same exact rank-one trick as :func:`build_tier1_solver`.  The lowest
+    ``keep`` blocks (and the source unknowns) are exact; blocks ``l >= keep``
+    are zero-padded — valid because the drive and all requested output moments
+    live on ``l < keep`` (see :func:`_rhs_confined_to_lowest_blocks`).
+
+    Differentiability: the whole solve is a pure-JAX composition of
+    ``block_thomas_truncated_fn`` sweeps, so ``jax.grad`` differentiates
+    straight through it (the block-Thomas scan is short and reverse-mode
+    cheap).  It is *not* wrapped in the full-operator implicit-function-theorem
+    adjoint used by the full tier-1/tier-2 paths: this solve inverts the
+    *reduced* Schur-complemented operator on the lowest ``keep`` blocks, not
+    the full band, so a full-operator ``A^T`` adjoint would be inconsistent and
+    silently corrupt gradients.  Direct autodiff is exact here.
+    """
+    _require_solvax()
+    n_s, n_x, n_xi, n_t, n_z = op.f_shape
+    n_tz = n_t * n_z
+    batch = n_s * n_x
+    n_rhs = rhs2d.shape[1]
+    cs = op.constraint_scheme
+
+    t0 = time.perf_counter()
+    coef = _truncated_coefficients(op)
+
+    # Per-subsystem inputs, flattened to batch index b = s * n_x + x (matching
+    # the (S, X) reshape used by KineticOperator.apply / build_tier1_solver).
+    stream_b = jnp.repeat(coef["stream"], n_x, axis=0)  # (B, TZ, TZ)
+    mirror_b = jnp.repeat(coef["mirror"], n_x, axis=0)  # (B, TZ)
+    pas_b = coef["pas"].reshape(batch, n_xi)  # (B, L)
+    x_b = jnp.tile(op.x, n_s)  # (B,)
+    gamma_b = coef["gamma"].reshape(batch)  # (B,)
+    b0, c0 = coef["b0"], coef["c0"]
+
+    rhs_f = rhs2d[: op.f_size].reshape(n_s, n_x, n_xi, n_tz, n_rhs)
+    rhs_low_b = rhs_f[:, :, :keep].reshape(batch, keep, n_tz, n_rhs)  # (B, keep, TZ, R)
+    if cs == 2:
+        r_c_b = rhs2d[op.f_size :].reshape(batch, n_rhs)  # (B, R)
+    else:
+        r_c_b = jnp.zeros((batch, n_rhs), dtype=jnp.float64)
+
+    def solve_one(inputs):
+        stream, mirror, pas_row, x_val, gamma, rhs_low, r_c = inputs
+        block_fn = _truncated_block_fn(
+            coef, n_xi, stream, mirror, pas_row, x_val, gamma, shift_border=(cs == 2)
+        )
+        if cs == 2:
+            z_col = jnp.zeros((keep, n_tz, 1), dtype=jnp.float64).at[0, :, 0].set(b0)
+            rhs_stack = jnp.concatenate([rhs_low, z_col], axis=2)  # (keep, TZ, R+1)
+            sol = block_thomas_truncated_fn(block_fn, n_xi, rhs_stack, keep)
+            y = sol[:, :, :n_rhs]  # (keep, TZ, R)
+            z = sol[:, :, n_rhs]  # (keep, TZ)
+            c_y0 = c0 @ y[0]  # (R,)
+            c_z0 = c0 @ z[0]  # scalar
+            shift = (c_y0 - r_c) / c_z0  # (R,)
+            s = gamma * r_c + shift  # (R,)
+            f_low = y - shift[None, None, :] * z[:, :, None]  # (keep, TZ, R)
+            return f_low, s
+        sol = block_thomas_truncated_fn(block_fn, n_xi, rhs_low, keep)  # (keep, TZ, R)
+        return sol, jnp.zeros((n_rhs,), dtype=jnp.float64)
+
+    # lax.map processes one subsystem at a time (scan-based) so the peak stays
+    # at a single subsystem's O(keep * m^2) working set, not B times it.
+    f_low_b, s_b = jax.lax.map(
+        solve_one, (stream_b, mirror_b, pas_b, x_b, gamma_b, rhs_low_b, r_c_b)
+    )
+    t1 = time.perf_counter()
+
+    f_full = jnp.zeros((n_s, n_x, n_xi, n_tz, n_rhs), dtype=jnp.float64)
+    f_full = f_full.at[:, :, :keep].set(f_low_b.reshape(n_s, n_x, keep, n_tz, n_rhs))
+    parts = [f_full.reshape(op.f_size, n_rhs)]
+    if op.extra_size:
+        parts.append(s_b.reshape(op.extra_size, n_rhs))
+    x2d = jnp.concatenate(parts, axis=0)
+
+    res = _truncated_partial_residual(op, coef, stream_b, mirror_b, pas_b, x_b, f_low_b, s_b, rhs_low_b, r_c_b, keep)
+    t2 = time.perf_counter()
+    return SolveResult(
+        x=x2d,
+        method="block_tridiagonal_truncated",
+        iterations=None,
+        residual_norms=res,
+        converged=_converged_flag(res, rhs2d, tol, atol),
+        recycle=None,
+        timings={"build": t1 - t0, "solve": t2 - t1},
+    )
+
+
+def _truncated_partial_residual(
+    op: KineticOperator,
+    coef: dict[str, jnp.ndarray],
+    stream_b: jnp.ndarray,
+    mirror_b: jnp.ndarray,
+    pas_b: jnp.ndarray,
+    x_b: jnp.ndarray,
+    f_low_b: jnp.ndarray,
+    s_b: jnp.ndarray,
+    rhs_low_b: jnp.ndarray,
+    r_c_b: jnp.ndarray,
+    keep: int,
+) -> jnp.ndarray:
+    """Residual over the rows fully determined by the computed lowest-K blocks.
+
+    Legendre row ``l`` couples to columns ``l-1, l, l+1``, so rows
+    ``l = 0 .. keep-2`` (plus the ``constraintScheme=2`` FSA rows) are entirely
+    fixed by the ``keep`` computed blocks and must vanish to machine precision;
+    row ``keep-1`` couples to the (deliberately unsolved) block ``keep`` and is
+    excluded.  This mirrors ``TruncatedTier1.partial_residual`` and is the
+    honest convergence signal for the truncated solve.  Returns per-column
+    norms of shape ``(n_rhs,)``.
+    """
+    cs = op.constraint_scheme
+    n_rhs = rhs_low_b.shape[-1]
+    b0, c0 = coef["b0"], coef["c0"]
+
+    def per_subsystem(inputs):
+        stream, mirror, pas_row, x_val, f_low, s, rhs_low, r_c = inputs
+        raw = _truncated_block_fn(
+            coef, op.n_xi, stream, mirror, pas_row, x_val, 0.0, shift_border=False
+        )
+        acc = jnp.zeros((n_rhs,), dtype=jnp.float64)
+        for ell in range(keep - 1):
+            lo, di, up = raw(jnp.asarray(ell, dtype=jnp.int32))
+            r = jnp.einsum("ij,jr->ir", di, f_low[ell]) - rhs_low[ell]
+            if ell > 0:
+                r = r + jnp.einsum("ij,jr->ir", lo, f_low[ell - 1])
+            r = r + jnp.einsum("ij,jr->ir", up, f_low[ell + 1])
+            if ell == 0 and cs == 2:
+                r = r + b0[:, None] * s[None, :]
+            acc = acc + jnp.sum(r * r, axis=0)
+        if cs == 2:
+            rc = (c0 @ f_low[0]) - r_c  # (R,)
+            acc = acc + rc * rc
+        return acc
+
+    sq = jax.lax.map(
+        per_subsystem, (stream_b, mirror_b, pas_b, x_b, f_low_b, s_b, rhs_low_b, r_c_b)
+    )  # (B, R)
+    return jnp.sqrt(jnp.sum(sq, axis=0))
+
+
 def _solve_tier2(
     op: KineticOperator,
     rhs2d: jnp.ndarray,
@@ -770,6 +1121,53 @@ def _solve_tier2(
 # =============================================================================
 
 
+def _auto_route(
+    op: KineticOperator,
+    rhs2d: jnp.ndarray,
+    budget_gb: float | None,
+    keep_lowest: int,
+) -> str:
+    """Pick the tier for ``method="auto"`` and print a Fortran-style one-liner."""
+    ok, _reason = tier1_available(op)
+    if not ok:
+        return "gmres"
+
+    peak = tier1_peak_memory_bytes(op)
+    bands = tier1_full_band_bytes(op)
+    budget_bytes, budget_gb_val = _tier1_budget_bytes(budget_gb)
+    peak_gb = peak / 2.0**30
+    if peak <= budget_bytes:
+        print(
+            f"[sfincs_jax.solve] tier-1 route: full factorization; "
+            f"peak estimate {peak_gb:.2f} GB <= budget {budget_gb_val:.1f} GB "
+            f"(bands {bands / 2.0**30:.2f} GB x2.5)."
+        )
+        return "block_tridiagonal"
+
+    keep = min(keep_lowest, op.n_xi)
+    sup_ok, sup_reason = _truncation_supported(op, keep)
+    rhs_ok = _rhs_confined_to_lowest_blocks(op, rhs2d, keep)
+    # Under trace the RHS support is unreadable; trust the structural RHSMode
+    # 1/2/3 guarantee (drives + moments on l <= 2).
+    rhs_valid = rhs_ok if rhs_ok is not None else (int(op.rhs_mode) in (1, 2, 3))
+    if sup_ok and rhs_valid:
+        print(
+            f"[sfincs_jax.solve] tier-1 route: truncated block-Thomas "
+            f"(keep_lowest={keep}); peak estimate {peak_gb:.2f} GB > budget "
+            f"{budget_gb_val:.1f} GB (bands {bands / 2.0**30:.2f} GB x2.5), "
+            f"solving the lowest {keep} Legendre blocks."
+        )
+        return "block_tridiagonal_truncated"
+
+    why = sup_reason if not sup_ok else "RHS/output needs Legendre modes l >= keep"
+    print(
+        f"[sfincs_jax.solve] tier-1 route: full-band estimate {peak_gb:.2f} GB > "
+        f"budget {budget_gb_val:.1f} GB but truncation is invalid ({why}); "
+        "falling back to tier-2 GCROT."
+    )
+    return "gmres"
+
+
 def solve(
     op: KineticOperator,
     rhs: jnp.ndarray,
@@ -787,6 +1185,8 @@ def solve(
     recycle_dim: int = 8,
     max_restarts: int = 200,
     max_dense_size: int = 8192,
+    tier1_memory_budget_gb: float | None = None,
+    tier1_keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
 ) -> SolveResult:
     """Solve ``K x = rhs`` with the plan-§2.3 three-tier auto-policy.
 
@@ -840,25 +1240,63 @@ def solve(
         recycle_dim: GCROT recycle directions ``k``.
         max_restarts: tier-2 outer-cycle cap (the tier-3 trigger in auto).
         max_dense_size: tier-3 materialization guard.
+        tier1_memory_budget_gb: budget (GB) above which ``method="auto"``
+            prefers the memory-lean truncated tier-1 kernel over the full-band
+            factorization.  ``None`` reads the ``SFINCS_TIER1_MEMORY_BUDGET_GB``
+            environment variable, else the 8 GB default.  The full-band peak is
+            estimated by :func:`tier1_peak_memory_bytes`.
+        tier1_keep_lowest: number of Legendre blocks the truncated tier-1
+            kernel computes exactly (default 3 — the RHSMode 1/2/3 drives and
+            output moments live on ``l <= 2``).
+
+    Auto-policy tier-1 routing (``method="auto"``, :func:`tier1_available` true):
+
+    ===============================  ==============================================
+    condition                        route
+    ===============================  ==============================================
+    peak estimate <= budget          full ``"block_tridiagonal"`` (any output mode,
+                                     multi-RHS factor reuse)
+    estimate > budget, trunc valid   ``"block_tridiagonal_truncated"`` (lowest
+                                     ``keep`` blocks only, ~O(keep m^2) memory)
+    estimate > budget, trunc invalid ``"gcrot"`` tier 2, with a printed notice
+                                     (high-l output the truncation cannot supply)
+    ===============================  ==============================================
+
+    "Truncation valid" means the operator admits the truncated kernel
+    (:func:`_truncation_supported`) and the RHS support is confined to
+    ``l < keep`` (:func:`_rhs_confined_to_lowest_blocks`; under jit/grad the
+    structural ``rhs_mode in {1,2,3}`` guarantee is used).
 
     Returns:
         A :class:`SolveResult`; ``x`` matches the shape of ``rhs``.
     """
     _require_solvax()
     method = str(method).strip().lower()
-    if method not in {"auto", "block_tridiagonal", "gmres", "direct"}:
+    if method not in {
+        "auto", "block_tridiagonal", "block_tridiagonal_truncated", "gmres", "direct"
+    }:
         raise ValueError(f"unknown method {method!r}")
+    if method == "block_tridiagonal_truncated":
+        ok, reason = tier1_available(op)
+        if not ok:
+            raise NotImplementedError(f"tier-1 truncated path unavailable: {reason}")
+        keep = min(tier1_keep_lowest, op.n_xi)
+        sup_ok, sup_reason = _truncation_supported(op, keep)
+        if not sup_ok:
+            raise NotImplementedError(f"tier-1 truncated path unavailable: {sup_reason}")
     rhs2d, squeeze = _as_columns(rhs)
     if rhs2d.shape[0] != op.total_size:
         raise ValueError(f"rhs has {rhs2d.shape[0]} rows; operator expects {op.total_size}")
 
     chosen = method
     if method == "auto":
-        ok, _reason = tier1_available(op)
-        chosen = "block_tridiagonal" if ok else "gmres"
+        chosen = _auto_route(op, rhs2d, tier1_memory_budget_gb, tier1_keep_lowest)
 
     if chosen == "block_tridiagonal":
         result = _solve_tier1(op, rhs2d, tol=tol, atol=atol, differentiable=differentiable)
+    elif chosen == "block_tridiagonal_truncated":
+        keep = min(tier1_keep_lowest, op.n_xi)
+        result = _solve_tier1_truncated(op, rhs2d, keep=keep, tol=tol, atol=atol)
     elif chosen == "gmres":
         result = _solve_tier2(
             op,
