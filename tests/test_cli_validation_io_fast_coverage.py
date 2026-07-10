@@ -103,60 +103,31 @@ def test_cmd_dump_h5_keys_only_and_json(tmp_path: Path, capsys: pytest.CaptureFi
     assert payload["BHat"] == [[0.0, 1.0], [2.0, 3.0]]
 
 
-def test_cmd_ambipolar_summary_records_solver_state_reuse(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    from sfincs_jax.problems.ambipolar import AmbipolarIteration, AmbipolarResult, SfincsJaxEvaluationRecord
+def test_cmd_ambipolar_summary_records_canonical_er_result(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from sfincs_jax.er import AmbipolarIteration, AmbipolarResult, AmbipolarRoot
 
     input_path = tmp_path / "input.namelist"
     input_path.write_text("&general\n RHSMode = 1\n/\n", encoding="utf-8")
     out_dir = tmp_path / "ambipolar"
-    state_path = out_dir / ".sfincs_jax_solver_state" / "rhsmode1_state.npz"
 
-    def fake_solve_sfincs_jax_ambipolar_brent(**kwargs):
-        assert kwargs["reuse_output_geometry_cache"] is False
-        assert kwargs["reuse_solver_state"] is True
-        result = AmbipolarResult(
+    def fake_find_ambipolar_er(input_arg, **kwargs):
+        assert kwargs["er_bracket"] == (-1.0, 1.0)
+        assert kwargs["max_iter"] == 4
+        return AmbipolarResult(
             converged=True,
             method="brent",
-            root_er=0.0,
-            root_radial_current=0.0,
+            status="converged",
+            er=-0.25,
+            radial_current=1.0e-13,
+            root_type="ion",
+            per_species_flux=np.asarray([1.0e-9, 1.0e-9]),
             iterations=(
                 AmbipolarIteration(index=1, er=0.0, radial_current=0.0, stage="initial"),
             ),
-            status="converged",
-            root_type="ion",
+            roots=(AmbipolarRoot(er=-0.25, radial_current=1.0e-13, slope=3.0e-8, root_type="ion"),),
         )
-        record = SfincsJaxEvaluationRecord(
-            er=0.0,
-            radial_current=0.0,
-            input_path=out_dir / "eval_001" / "input.namelist",
-            output_path=out_dir / "eval_001" / "sfincsOutput.h5",
-            solver_trace_path=out_dir / "eval_001" / "sfincsOutput.solver_trace.json",
-            selected_path="rhsmode1_solution",
-            solve_method="auto",
-            residual_norm=0.0,
-            residual_target=1.0e-10,
-            converged=True,
-            total_size=12,
-            active_size=10,
-            cache_enabled=False,
-            solver_state_reuse_enabled=True,
-            solver_state_path=state_path,
-            solver_state_input_exists=True,
-            solver_state_input_used=True,
-            solver_state_output_exists=True,
-            fixed_shape_input_signature=(1, 12, 1, 2, 3, 4, 5, 1, 0, 0, 1),
-            fixed_shape_signature=(1, 12, 1, 2, 3, 4, 5, 1, 0, 0, 1),
-            fixed_shape_reuse_enabled=True,
-            fixed_shape_reuse_admitted=True,
-            fixed_shape_reuse_reason="fixed_shape_signature_match",
-            fixed_shape_reuse_count=1,
-        )
-        return result, type("FakeEvaluator", (), {"records": [record]})()
 
-    monkeypatch.setattr(
-        "sfincs_jax.problems.ambipolar.solve_sfincs_jax_ambipolar_brent",
-        fake_solve_sfincs_jax_ambipolar_brent,
-    )
+    monkeypatch.setattr("sfincs_jax.er.find_ambipolar_er", fake_find_ambipolar_er)
 
     summary_path = tmp_path / "summary.json"
     rc = cli._cmd_ambipolar(
@@ -181,18 +152,10 @@ def test_cmd_ambipolar_summary_records_solver_state_reuse(monkeypatch: pytest.Mo
     assert rc == 0
     payload = json.loads(summary_path.read_text(encoding="utf-8"))
     assert payload["converged"] is True
-    assert payload["evaluations"][0]["cache_enabled"] is False
-    assert payload["evaluations"][0]["solver_state_reuse_enabled"] is True
-    assert payload["evaluations"][0]["solver_state_input_exists"] is True
-    assert payload["evaluations"][0]["solver_state_input_used"] is True
-    assert payload["evaluations"][0]["solver_state_output_exists"] is True
-    assert payload["evaluations"][0]["solver_state_path"] == str(state_path)
-    assert payload["evaluations"][0]["fixed_shape_input_signature"] == [1, 12, 1, 2, 3, 4, 5, 1, 0, 0, 1]
-    assert payload["evaluations"][0]["fixed_shape_signature"] == [1, 12, 1, 2, 3, 4, 5, 1, 0, 0, 1]
-    assert payload["evaluations"][0]["fixed_shape_reuse_enabled"] is True
-    assert payload["evaluations"][0]["fixed_shape_reuse_admitted"] is True
-    assert payload["evaluations"][0]["fixed_shape_reuse_reason"] == "fixed_shape_signature_match"
-    assert payload["evaluations"][0]["fixed_shape_reuse_count"] == 1
+    assert payload["root_er"] == -0.25
+    assert payload["root_type"] == "ion"
+    assert payload["iterations"][0]["stage"] == "initial"
+    assert payload["roots"][0]["root_type"] == "ion"
 
 
 def test_cmd_compare_h5_honors_tolerance_json(tmp_path: Path) -> None:

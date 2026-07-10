@@ -55,8 +55,9 @@ CASES = {
     ),
     "ambipolar_er_scan.py": (
         (
-            "sign change found in Er bracket",
+            "ambipolar root via er.find_ambipolar_er",
             "ambipolar root: Er =",
+            "root classified as:",
             "read back from h5: Er =",
             "Gamma_ions at the root =",
         ),
