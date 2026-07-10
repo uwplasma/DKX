@@ -18,9 +18,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# solvax owns the structured linear-algebra tiers (block-Thomas, GCROT,
-# implicit differentiation). Until its PyPI release, CI installs it from git
-# (github.com/uwplasma/SOLVAX); sfincs_jax imports it lazily/guarded.
+# solvax (PyPI) owns the structured linear-algebra tiers (block-Thomas,
+# GCROT, implicit differentiation); sfincs_jax imports it lazily/guarded.
 structured = [
   "solvax",
 ]
