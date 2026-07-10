@@ -224,7 +224,7 @@ def read_output(path: str | Path) -> dict[str, Any]:
 def run_ambipolar_brent(
     request: SolveInputs | str | Path,
     *,
-    work_dir: str | Path,
+    work_dir: str | Path | None = None,
     er_min: float,
     er_max: float,
     er_initial: float = 0.0,
@@ -235,32 +235,37 @@ def run_ambipolar_brent(
     differentiable: bool | None = None,
     reuse_output_geometry_cache: bool = True,
     reuse_solver_state: bool = True,
+    emit: Any = None,
     **kwargs: Any,
 ) -> Any:
-    """Run the real-solve Brent ambipolar workflow from a stable public facade."""
+    """Run the canonical-stack Brent ambipolar ``E_r`` solve (stable public facade).
 
-    input_path, _wout_path, _output_path, _backend, requires_autodiff, options = _solve_request_paths(request)
-    if differentiable is None:
-        differentiable = bool(requires_autodiff)
-    for key, value in options.items():
-        kwargs.setdefault(str(key), value)
+    Routes to :func:`sfincs_jax.er.find_ambipolar_er` (the canonical
+    ``inputs -> drift_kinetic -> solve -> moments`` slice, replacing the legacy
+    in-process Brent owner).  ``work_dir``, ``step_tolerance``,
+    ``reuse_output_geometry_cache`` and ``reuse_solver_state`` are accepted for
+    backwards compatibility; warm starts / recycling are threaded internally.
 
-    from .problems.ambipolar import solve_sfincs_jax_ambipolar_brent  # noqa: PLC0415
+    Returns:
+        A :class:`sfincs_jax.er.AmbipolarResult` (``.er`` is the ambipolar
+        ``E_r``; ``.roots`` lists every classified root).
+    """
+    input_path, _wout_path, _output_path, _backend, _requires_autodiff, _options = (
+        _solve_request_paths(request)
+    )
+    del work_dir, step_tolerance, differentiable
+    del reuse_output_geometry_cache, reuse_solver_state, kwargs
 
-    return solve_sfincs_jax_ambipolar_brent(
-        input_namelist=input_path,
-        work_dir=work_dir,
-        er_min=er_min,
-        er_max=er_max,
-        er_initial=er_initial,
-        max_evaluations=max_evaluations,
-        current_tolerance=current_tolerance,
-        step_tolerance=step_tolerance,
-        solve_method=solve_method,
-        differentiable=bool(differentiable),
-        reuse_output_geometry_cache=reuse_output_geometry_cache,
-        reuse_solver_state=reuse_solver_state,
-        **kwargs,
+    from .er import find_ambipolar_er  # noqa: PLC0415
+
+    return find_ambipolar_er(
+        input_path,
+        er_bracket=(float(er_min), float(er_max)),
+        er_initial=float(er_initial),
+        max_iter=int(max_evaluations),
+        current_tol=float(current_tolerance),
+        solve_method=str(solve_method),
+        emit=emit,
     )
 
 

@@ -11,6 +11,7 @@
     "constants.py",
     "diagnostics.py",
     "drift_kinetic.py",
+    "er.py",
     "grids.py",
     "input_compat.py",
     "inputs.py",
@@ -40,6 +41,7 @@
     "constants.py",
     "diagnostics.py",
     "drift_kinetic.py",
+    "er.py",
     "grids.py",
     "input_compat.py",
     "inputs.py",
@@ -113,7 +115,6 @@
       "collisions.py"
     ],
     "problems": [
-      "ambipolar.py",
       "profile_dense.py",
       "profile_diagnostics.py",
       "profile_phi1_newton.py",

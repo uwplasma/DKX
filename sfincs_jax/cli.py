@@ -676,7 +676,7 @@ def _cmd_ambipolar_solve(args: argparse.Namespace) -> int:
 
 def _cmd_ambipolar(args: argparse.Namespace) -> int:
     t0 = _now()
-    from .problems.ambipolar import solve_sfincs_jax_ambipolar_brent  # noqa: PLC0415
+    from .er import find_ambipolar_er  # noqa: PLC0415
 
     _emit("################################################################", level=0, args=args)
     _emit(" sfincs_jax ambipolar", level=0, args=args)
@@ -690,26 +690,19 @@ def _cmd_ambipolar(args: argparse.Namespace) -> int:
         f" er_max={float(args.er_max):.16g}"
         f" er_initial={float(args.er_initial):.16g}"
         f" max_evaluations={int(args.max_evaluations)}"
-        f" current_tolerance={float(args.current_tolerance):.3e}"
-        f" step_tolerance={float(args.step_tolerance):.3e}",
+        f" current_tolerance={float(args.current_tolerance):.3e}",
         level=0,
         args=args,
     )
 
-    result, evaluator = solve_sfincs_jax_ambipolar_brent(
-        input_namelist=Path(args.input),
-        work_dir=Path(args.out_dir),
-        er_min=float(args.er_min),
-        er_max=float(args.er_max),
+    result = find_ambipolar_er(
+        Path(args.input),
+        er_bracket=(float(args.er_min), float(args.er_max)),
         er_initial=float(args.er_initial),
-        max_evaluations=int(args.max_evaluations),
-        current_tolerance=float(args.current_tolerance),
-        step_tolerance=float(args.step_tolerance),
+        max_iter=int(args.max_evaluations),
+        current_tol=float(args.current_tolerance),
         solve_method=str(args.solve_method),
-        differentiable=False,
-        reuse_output_geometry_cache=not bool(getattr(args, "no_output_cache", False)),
-        reuse_solver_state=not bool(getattr(args, "no_solver_state", False)),
-        emit=lambda level, msg: _emit(msg, level=level, args=args),
+        emit=lambda msg: _emit(msg, level=1, args=args),
     )
 
     summary_path = Path(args.summary_json) if args.summary_json else Path(args.out_dir) / "ambipolar_result.json"
@@ -719,8 +712,8 @@ def _cmd_ambipolar(args: argparse.Namespace) -> int:
         "method": result.method,
         "status": result.status,
         "message": result.message,
-        "root_er": result.root_er,
-        "root_radial_current": result.root_radial_current,
+        "root_er": result.er,
+        "root_radial_current": result.radial_current,
         "root_type": result.root_type,
         "iterations": [
             {
@@ -731,54 +724,23 @@ def _cmd_ambipolar(args: argparse.Namespace) -> int:
             }
             for item in result.iterations
         ],
-        "evaluations": [
+        "roots": [
             {
-                "er": item.er,
-                "radial_current": item.radial_current,
-                "input_path": str(item.input_path),
-                "output_path": str(item.output_path),
-                "solver_trace_path": None if item.solver_trace_path is None else str(item.solver_trace_path),
-                "selected_path": item.selected_path,
-                "solve_method": item.solve_method,
-                "preconditioner": item.preconditioner,
-                "residual_norm": item.residual_norm,
-                "residual_target": item.residual_target,
-                "converged": item.converged,
-                "setup_s": item.setup_s,
-                "solve_s": item.solve_s,
-                "elapsed_s": item.elapsed_s,
-                "total_size": item.total_size,
-                "active_size": item.active_size,
-                "cache_enabled": item.cache_enabled,
-                "cache_dir": None if item.cache_dir is None else str(item.cache_dir),
-                "solver_state_reuse_enabled": item.solver_state_reuse_enabled,
-                "solver_state_path": None if item.solver_state_path is None else str(item.solver_state_path),
-                "solver_state_input_exists": item.solver_state_input_exists,
-                "solver_state_input_used": item.solver_state_input_used,
-                "solver_state_output_exists": item.solver_state_output_exists,
-                "fixed_shape_input_signature": (
-                    None
-                    if item.fixed_shape_input_signature is None
-                    else list(item.fixed_shape_input_signature)
-                ),
-                "fixed_shape_signature": (
-                    None if item.fixed_shape_signature is None else list(item.fixed_shape_signature)
-                ),
-                "fixed_shape_reuse_enabled": item.fixed_shape_reuse_enabled,
-                "fixed_shape_reuse_admitted": item.fixed_shape_reuse_admitted,
-                "fixed_shape_reuse_reason": item.fixed_shape_reuse_reason,
-                "fixed_shape_reuse_count": item.fixed_shape_reuse_count,
+                "er": root.er,
+                "radial_current": root.radial_current,
+                "slope": root.slope,
+                "root_type": root.root_type,
             }
-            for item in evaluator.records
+            for root in result.roots
         ],
         "elapsed_s": float(_now() - t0),
     }
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True))
 
-    if result.converged:
+    if result.converged and result.er is not None:
         _emit(
-            f" ambipolar root: Er={float(result.root_er):.16g} "
-            f"radial_current={float(result.root_radial_current):.6e} type={result.root_type}",
+            f" ambipolar root: Er={float(result.er):.16g} "
+            f"radial_current={float(result.radial_current):.6e} type={result.root_type}",
             level=0,
             args=args,
         )

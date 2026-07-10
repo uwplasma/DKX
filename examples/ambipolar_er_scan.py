@@ -1,12 +1,14 @@
-"""Ambipolar radial electric field: scan Er, then bisect the radial current to zero.
+"""Ambipolar radial electric field: scan Er, then solve J_r(Er) = 0 with sfincs_jax.er.
 
 What this example teaches:
   - the ambipolarity workflow: in a stellarator the species' radial fluxes
     depend independently on Er, and the physical Er is the root of the radial
     current J_r(Er) = sum_s Z_s Gamma_s(Er) = 0,
-  - how to compose many run_profile() calls into a parameter scan,
-  - how to compute the residual from the moments table and find its root with
-    a simple in-script bisection,
+  - how to evaluate the radial current at one Er with ``sfincs_jax.er.radial_current``
+    (one canonical drift-kinetic solve) and map Gamma_s(Er),
+  - how to find the ambipolar root with ``sfincs_jax.er.find_ambipolar_er`` — the
+    Fortran-parity Brent solver (bracket expansion, warm starts, ion/electron/
+    unstable classification) that replaces a hand-written bisection,
   - how to plot Gamma_s(Er) and the residual with the root marked.
 
 Physics context: unlike tokamaks, non-axisymmetric (stellarator) magnetic
@@ -21,13 +23,13 @@ ripple is added to a model field (geometryScheme=1) and an ion+electron pair
 is scanned over Er; the E x B drift enters the kinetic equation through the
 DKES collisionality-like term (useDKESExBDrift).
 
-NOTE: this script does the root find with a plain bisection written in the
-script itself so the workflow is fully visible.  A dedicated differentiable
-ambipolar-root solver (``sfincs_jax.er``, Brent parity plus implicit
-differentiation of the root) is on the roadmap (plan_final.md, slice #4).
+The ambipolar root is found by ``sfincs_jax.er.find_ambipolar_er``, which mirrors
+SFINCS Fortran v3 ``ambipolarSolver.F90`` (option 2 Brent) and additionally
+exposes a differentiable root ``sfincs_jax.er.ambipolar_er`` (see the autodiff
+examples) so ``jax.grad`` can flow through the ambipolar Er.
 
-Expected runtime: ~25 s on a laptop CPU (the first solve compiles; each of the
-~15 further Er points reuses the compiled kernels at ~0.4 s each).
+Expected runtime: ~25 s on a laptop CPU (the first solve compiles; each further
+Er point reuses the compiled kernels at ~0.4 s each).
 
 Run:
   python examples/ambipolar_er_scan.py
@@ -43,6 +45,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+from sfincs_jax import er as er_solver
 from sfincs_jax.run import run_profile
 
 # ----------------------------------------------------------------------------
@@ -50,9 +53,8 @@ from sfincs_jax.run import run_profile
 # ----------------------------------------------------------------------------
 CI = os.environ.get("SFINCS_JAX_CI") == "1"  # shrink resolution for CI
 
-# Er scan bracket (normalized units of the deck's Er entry) and bisection.
-ER_SCAN = np.linspace(-3.0, 1.0, 5 if CI else 7)
-BISECT_TOL = 0.1 if CI else 0.02  # |Er| interval width at which to stop
+ER_BRACKET = (-3.0, 1.0)          # Er search bracket (normalized deck units)
+ER_SCAN = np.linspace(*ER_BRACKET, 5 if CI else 7)  # coarse scan for the plot
 
 # Resolution (small non-axisymmetric case; PAS collisions keep tier 1 active).
 N_THETA = 7 if CI else 11
@@ -115,88 +117,78 @@ OUT_DIR = Path(__file__).parent / "output"
 H5_PATH = OUT_DIR / "ambipolar_er_scan.sfincsOutput.h5"
 PLOT_PATH = OUT_DIR / "ambipolar_er_scan.png"
 
-# ----------------------------------------------------------------------------
-# 1) The residual: one drift-kinetic solve per Er value
-# ----------------------------------------------------------------------------
-print("=== examples/ambipolar_er_scan.py ===")
-print("Step 1: setting up the Er scan")
-print("  geometry:   model stellarator (epsilon_t=0.1, epsilon_h=0.05, l=2, n=5)")
-print("  species:    ions (Z=+1) + electrons, PAS collisions, DKES ExB drift")
-print(f"  resolution: Ntheta={N_THETA} Nzeta={N_ZETA} Nxi={N_XI} Nx={N_X} (CI={CI})")
-print(f"  scan:       Er in [{ER_SCAN[0]:.2f}, {ER_SCAN[-1]:.2f}], {ER_SCAN.size} points; "
-      f"bisection to |bracket| < {BISECT_TOL}")
-OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-n_solves = 0
-
-
-def fluxes_at(er: float, out_path=None):
-    """Solve at one Er; return (Gamma_per_species, J_r = sum_s Z_s Gamma_s)."""
-    global n_solves
+def write_deck(er: float) -> Path:
+    """Write the input.namelist for one Er and return its path."""
     deck = OUT_DIR / "ambipolar_er_scan.input.namelist"
     deck.write_text(
         DECK_TEMPLATE.format(
             er=er, n_theta=N_THETA, n_zeta=N_ZETA, n_xi=N_XI, n_l=N_L, n_x=N_X
         )
     )
-    run = run_profile(deck, solve_method="auto", emit=None, out_path=out_path)
-    n_solves += 1
-    gamma = np.asarray(run.moments["particleFlux_vm_psiHat"], dtype=np.float64)
-    z_s = np.asarray(run.operator.z_s, dtype=np.float64)
-    return gamma, float(np.dot(z_s, gamma))
+    return deck
 
 
 # ----------------------------------------------------------------------------
-# 2) Coarse scan: map Gamma_s(Er) and locate a sign change of J_r
+# 1) Coarse scan: map Gamma_s(Er) and J_r(Er) with sfincs_jax.er.radial_current
 # ----------------------------------------------------------------------------
-print("Step 2: coarse Er scan")
+print("=== examples/ambipolar_er_scan.py ===")
+print("Step 1: coarse Er scan (one canonical solve per Er via er.radial_current)")
+print("  geometry:   model stellarator (epsilon_t=0.1, epsilon_h=0.05, l=2, n=5)")
+print("  species:    ions (Z=+1) + electrons, PAS collisions, DKES ExB drift")
+print(f"  resolution: Ntheta={N_THETA} Nzeta={N_ZETA} Nxi={N_XI} Nx={N_X} (CI={CI})")
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+# Build the shape-stable ambipolar problem once (base operator + Er->dPhiHat
+# conversion), then reuse it at every Er with a warm start threaded through.
+problem = er_solver.prepare(write_deck(0.0), er_bracket=ER_BRACKET)
+
 print(f"  {'Er':>8} {'Gamma_ions':>14} {'Gamma_electrons':>16} {'J_r = sum Z*Gamma':>18}")
-scan_gamma, scan_jr = [], []
+scan_gamma, scan_jr, warm = [], [], None
 for er in ER_SCAN:
-    gamma, j_r = fluxes_at(float(er))
+    j_r, gamma, state = er_solver.radial_current(
+        problem, float(er),
+        x0=(warm.x if warm else None), recycle=(warm.recycle if warm else None),
+    )
+    warm = state
+    gamma = np.asarray(gamma, dtype=np.float64)
     scan_gamma.append(gamma)
-    scan_jr.append(j_r)
-    print(f"  {er:>8.3f} {gamma[0]:>14.6e} {gamma[1]:>16.6e} {j_r:>18.6e}")
+    scan_jr.append(float(j_r))
+    print(f"  {er:>8.3f} {gamma[0]:>14.6e} {gamma[1]:>16.6e} {float(j_r):>18.6e}")
 scan_gamma = np.asarray(scan_gamma)
 scan_jr = np.asarray(scan_jr)
 
-sign_changes = np.nonzero(np.diff(np.sign(scan_jr)) != 0)[0]
-if sign_changes.size == 0:
-    raise SystemExit("No sign change of J_r in the scan bracket; widen ER_SCAN.")
-lo = float(ER_SCAN[sign_changes[0]])
-hi = float(ER_SCAN[sign_changes[0] + 1])
-f_lo = float(scan_jr[sign_changes[0]])
-print(f"  sign change found in Er bracket [{lo:.3f}, {hi:.3f}]")
+# ----------------------------------------------------------------------------
+# 2) Solve for the ambipolar root with the library Brent solver
+# ----------------------------------------------------------------------------
+print("Step 2: ambipolar root via er.find_ambipolar_er (Fortran-parity Brent)")
+result = er_solver.find_ambipolar_er(
+    write_deck(0.0), er_bracket=ER_BRACKET, max_iter=20, emit=None
+)
+if not result.converged or result.er is None:
+    raise SystemExit(f"ambipolar solve failed: {result.status} ({result.message})")
+er_root = float(result.er)
+gamma_root = np.asarray(result.per_species_flux, dtype=np.float64)
+print(f"  ambipolar root: Er = {er_root:.4f}  (J_r = {result.radial_current:.3e}, "
+      f"{len(result.iterations)} solves)")
+print(f"  root classified as: {result.root_type} root")
+print(f"  all roots in bracket: {[(round(r.er, 3), r.root_type) for r in result.roots]}")
 
 # ----------------------------------------------------------------------------
-# 3) Bisection on J_r(Er) (see the module docstring: a dedicated
-#    differentiable root solver, er.py, is on the roadmap)
+# 3) One final solve at the root, writing + reading back the sfincsOutput file
 # ----------------------------------------------------------------------------
-print("Step 3: bisection for the ambipolar root")
-while hi - lo > BISECT_TOL:
-    mid = 0.5 * (lo + hi)
-    _, f_mid = fluxes_at(mid)
-    print(f"  bisection: Er={mid:>8.4f}  J_r={f_mid:>13.6e}  bracket width={hi - lo:.4f}")
-    if np.sign(f_mid) == np.sign(f_lo):
-        lo, f_lo = mid, f_mid
-    else:
-        hi = mid
-er_root = 0.5 * (lo + hi)
-
-# One final solve at the root, writing the sfincsOutput file.
-gamma_root, jr_root = fluxes_at(er_root, out_path=H5_PATH)
-print(f"  ambipolar root: Er = {er_root:.4f}  (J_r = {jr_root:.3e}, {n_solves} solves total)")
-
-# ----------------------------------------------------------------------------
-# 4) Read the root run's output back, then plot
-# ----------------------------------------------------------------------------
-print("Step 4: reading the root run's h5 output back and plotting")
+print("Step 3: writing the root run's h5 output and reading it back")
+run_profile(write_deck(er_root), solve_method="auto", emit=None, out_path=H5_PATH)
 with h5py.File(H5_PATH, "r") as f:
     er_h5 = float(np.asarray(f["Er"][...]))
     gamma_h5 = np.asarray(f["particleFlux_vm_psiHat"][...], dtype=np.float64).reshape(-1)
 print(f"  read back from h5: Er = {er_h5:.4f}")
 print(f"  read back from h5: particleFlux_vm_psiHat = {gamma_h5}")
 
+# ----------------------------------------------------------------------------
+# 4) Plot Gamma_s(Er) and the residual with the ambipolar root marked
+# ----------------------------------------------------------------------------
+print("Step 4: plotting")
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.5, 3.8))
 ax1.plot(ER_SCAN, scan_gamma[:, 0], "o-", label=r"$\Gamma_i$ (ions)")
 ax1.plot(ER_SCAN, scan_gamma[:, 1], "s-", label=r"$\Gamma_e$ (electrons)")
@@ -207,10 +199,10 @@ ax1.set_title("species fluxes vs $E_r$")
 ax1.legend()
 ax2.plot(ER_SCAN, scan_jr, "o-", color="tab:red")
 ax2.axhline(0.0, color="k", lw=1)
-ax2.plot([er_root], [jr_root], "k*", ms=14, label=f"root $E_r$={er_root:.2f}")
+ax2.plot([er_root], [result.radial_current], "k*", ms=14, label=f"root $E_r$={er_root:.2f}")
 ax2.set_xlabel(r"$E_r$")
 ax2.set_ylabel(r"$J_r = \sum_s Z_s \Gamma_s$")
-ax2.set_title("radial-current residual and its root")
+ax2.set_title(f"radial current and its {result.root_type} root")
 ax2.legend()
 fig.tight_layout()
 fig.savefig(PLOT_PATH, dpi=140)
@@ -220,11 +212,11 @@ plt.close(fig)
 # 5) Final results
 # ----------------------------------------------------------------------------
 print("=== Final results ===")
-print(f"  ambipolar Er (bisection, tol {BISECT_TOL}) = {er_root:.4f}")
-print(f"  J_r at the root = {jr_root:.6e}")
+print(f"  ambipolar root: Er = {er_root:.4f}  ({result.root_type} root)")
+print(f"  J_r at the root = {result.radial_current:.6e}")
 print(f"  Gamma_ions at the root = {gamma_root[0]:.6e}")
 print(f"  Gamma_electrons at the root = {gamma_root[1]:.6e}")
-print(f"  total drift-kinetic solves: {n_solves}")
+print(f"  total drift-kinetic solves (root find): {len(result.iterations)}")
 print(f"  Saved plot: {PLOT_PATH}")
 print(f"  Wrote output file: {H5_PATH.name}")
 print("Done: examples/ambipolar_er_scan.py")

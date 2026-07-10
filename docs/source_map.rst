@@ -92,7 +92,10 @@ facades.
      - Command-line parser and dispatch surface.
    * - ``ambipolar.py``
      - public physics API
-     - Lightweight ambipolar postprocessing helpers used by workflows and tests.
+     - Lightweight ambipolar postprocessing helpers (scan-directory root finding) used by workflows and tests.
+   * - ``er.py``
+     - public physics API
+     - Canonical ambipolar radial-electric-field slice: ``radial_current``, Brent ``find_ambipolar_er``, and the differentiable ``ambipolar_er``.
    * - ``compare.py``
      - public validation API
      - SFINCS output comparison, strict numeric HDF5 parity, and benchmark-summary helpers used by examples, scripts, and validation tools.
@@ -166,6 +169,9 @@ documented compatibility facade, and passes the corresponding owner tests.
    * - ``drift_kinetic.py``
      - canonical KineticOperator owner
      - keep at root as canonical stack module
+   * - ``er.py``
+     - canonical ambipolar-Er owner
+     - keep at root as canonical stack module
    * - ``solve.py``
      - canonical three-tier solver owner
      - keep at root as canonical stack module
@@ -191,8 +197,8 @@ documented compatibility facade, and passes the corresponding owner tests.
      - package root CLI entry point
      - keep at root
    * - ``ambipolar.py``
-     - problems.ambipolar via public API facade
-     - keep root facade until public docs/examples migrate
+     - scanplot-compatible ambipolar post-processing (sfincsScanPlot_5)
+     - keep root helper; in-process ambipolar solves live in er.py
    * - ``compare.py``
      - package root public comparison API
      - keep at root; it owns user-facing SFINCS comparison helpers and strict HDF5 output parity
@@ -267,9 +273,10 @@ Differentiation contracts for optimization and validation workflows:
   paths are used in ambipolar Newton solves or RHSMode=4/5-style adjoint
   diagnostics.
 
-This module is intentionally problem-agnostic. Problem packages such as
-``sfincs_jax.problems.ambipolar`` adapt these certificates to physical
-observables including radial-current derivatives.
+This module is intentionally problem-agnostic. The canonical ambipolar slice
+``sfincs_jax.er`` uses ``solvax.implicit.root_solve`` (the implicit function
+theorem) to differentiate the ambipolar ``E_r`` through radial-current
+autodiff.
 
 ``sfincs_jax/cli.py``
 ^^^^^^^^^^^^^^^^^^^^^

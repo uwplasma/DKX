@@ -25,6 +25,7 @@ utilities), and they shrink to zero as each vertical slice lands.
 | `moments.py` | Velocity-space moments, flux families, transport matrices, NTV, classical transport, keyed by sfincsOutput.h5 names. |
 | `inputs.py`, `console.py` | Typed namelist with Fortran-cited defaults/validation; byte-parity Fortran stdout blocks. |
 | `run.py` | End-to-end RHSMode 1/2/3 drivers (`run_profile`, `run_transport_matrix`). |
+| `er.py` | Ambipolar radial-electric-field slice: `radial_current`, Fortran-parity Brent `find_ambipolar_er` (bracket expansion + root classification, warm starts/recycling), and the differentiable `ambipolar_er` (`solvax.implicit.root_solve`). |
 | `writer.py` | Canonical `sfincsOutput.h5`/`.nc` writer for RHSMode 1/2/3. |
 | `api.py`, `cli.py`, `__main__.py` | Thin public surface over the canonical modules. |
 
@@ -40,7 +41,7 @@ which case it prints the reason and falls back to the retained legacy owner
 | Module | Role |
 | --- | --- |
 | `__init__.py` | Public package exports, JAX precision/cache setup, compatibility aliases. |
-| `ambipolar.py` | Public ambipolar-root workflows (legacy-stack owner until the canonical `er.py` slice lands). |
+| `ambipolar.py` | Scanplot-compatible ambipolar post-processing (`solve_ambipolar_from_scan_dir`, `radial_current_from_output`) over precomputed scan directories; in-process ambipolar solves live in `er.py`. |
 | `sensitivity.py` | JVP/VJP, adjoint, and implicit differentiation helpers. |
 | `plotting.py` | Output plotting used by the CLI and examples. |
 | `compare.py` | HDF5 comparison, frozen-reference parity, benchmark-table utilities. |
@@ -62,7 +63,8 @@ here unless it serves a deferred feature.
   (`profile_system.py`, `profile_fblock.py`, term modules, layouts).
 - `physics/`: legacy collision/classical-transport formula owners.
 - `problems/`: legacy RHSMode-1 (`profile_*.py`) and RHSMode-2/3
-  (`transport_*.py`) solve orchestration plus the ambipolar Brent solve.
+  (`transport_*.py`) solve orchestration. (The ambipolar Brent owner
+  `problems/ambipolar.py` was deleted; `er.py` replaces it.)
 - `solvers/`: legacy Krylov wrappers, dispatch, and the retained
   `preconditioner_*.py` family the legacy auto policy can still select.
 - `outputs/`: legacy HDF5/NetCDF/NPZ schemas, writer logic, export_f mapping,

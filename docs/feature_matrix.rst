@@ -70,30 +70,28 @@ Fortran v3 feature ownership
      - ``ambipolarSolver.F90``, ``solver.F90``, ``adjointDiagnostics.F90``
      - Safeguarded Newton/bisection uses an adjoint-computed
        ``dRadialCurrentdEr`` and maintains a bracket.
-     - ``sfincs_jax.problems.ambipolar`` and ``sfincs_jax.sensitivity``:
-       implemented with gates. Root-policy logic, dense certificates, matrix-free/JVP
-       derivative-provider gates, analytic existing-branch ``E_r`` tangents,
-       opt-in fixed-shape zero-field branch retention, and a namelist-backed
-       RHSMode-1 derivative-response helper run a bounded small-deck
-       Fortran active-operator ``particleFlux_vm_rN`` option-1 root replay.
-       Production physical replay gates remain outside normal CI.
+     - ``sfincs_jax.er``: superseded by the differentiable
+       :func:`sfincs_jax.er.ambipolar_er`. Rather than a finite-difference /
+       adjoint ``dRadialCurrentdEr`` inside a hand-rolled Newton, the canonical
+       slice finds the root with Brent and differentiates it exactly through the
+       implicit function theorem (``solvax.implicit.root_solve``), with
+       ``dJr/dEr``/``dJr/dp`` from autodiff of ``radial_current``.
    * - Ambipolar root solve option 2
      - ``ambipolarSolver.F90``
      - Brent method evaluates the radial current at bracket endpoints and an
        initial guess, then uses inverse interpolation or bisection.
-     - ``sfincs_jax.problems.ambipolar``: implemented and tested against checked
-       small helical summaries.
+     - ``sfincs_jax.er.find_ambipolar_er``: implemented on the canonical stack
+       with bracket expansion, warm starts / GCROT recycling, and root
+       classification; pinned to the legacy Brent root and to a direct
+       ``run_profile`` particle-flux computation in ``tests/test_er.py``.
    * - Ambipolar root solve option 3
      - ``ambipolarSolver.F90``, ``solver.F90``, ``adjointDiagnostics.F90``
      - Pure Newton uses the adjoint-computed ``dRadialCurrentdEr`` and exits if
        a step leaves the allowed ``E_r`` bounds.
-     - ``sfincs_jax.problems.ambipolar`` and ``sfincs_jax.sensitivity``:
-       implemented with bounded gates. Fast option-3-style matrix-free
-       derivative-provider root tests are covered, checked small helical plus
-       W7-X-like option-3 currents replay with the active namelist-backed
-       provider, and the helical small-deck pure-Newton root replay runs
-       through the same namelist-backed provider. Production refresh benchmarks
-       remain external to normal CI.
+     - ``sfincs_jax.er``: superseded by the differentiable
+       :func:`sfincs_jax.er.ambipolar_er`, whose implicit-function-theorem
+       gradient is finite-difference-verified in ``tests/test_er.py``
+       (``jax.grad`` vs central FD, rtol 1e-4).
    * - RHSMode 4 fixed-``E_r`` sensitivities
      - ``solver.F90``, ``populateAdjointRHS.F90``,
        ``populatedMatrixdLambda.F90``, ``populatedRHSdLambda.F90``,

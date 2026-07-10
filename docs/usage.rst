@@ -1262,42 +1262,33 @@ outputs in process and applies a bracketed Brent solve:
      --out-dir /path/to/ambipolar_run \
      --er-min -0.1 --er-max 0.1 --er-initial 0.0
 
-The output directory contains one subdirectory per :math:`E_r` evaluation,
-the corresponding ``sfincsOutput.h5`` files, solver-trace JSON sidecars, and
-``ambipolar_result.json``.  The summary records the selected solver path,
-preconditioner, residual norm, residual target, setup/solve/elapsed time,
-active size, and whether the scoped geometry/output cache was used.  The cache
-is enabled by default across evaluations with the same input shape; pass
-``--no-output-cache`` when debugging raw setup cost.  The direct driver also
-keeps a private, shape-checked Krylov state file across evaluations so nearby
-electric-field solves can warm start and recycle a small basis.  Pass
-``--no-solver-state`` when comparing against completely cold solves.  The same
-fixed-shape signature is used internally for symbolic RHSMode=1 field-split
-ordering caches; numerical matrices and factors are still rebuilt unless a
-solver path explicitly proves they are safe to reuse.
+The command routes through the canonical :mod:`sfincs_jax.er` slice
+(:func:`sfincs_jax.er.find_ambipolar_er`) and writes ``ambipolar_result.json``
+with the converged flag, the selected root ``root_er``, its ``root_type``
+(ion / electron / unstable), the ordered radial-current ``iterations``, and
+every classified root in the bracket.  Warm starts and GCROT recycling are
+threaded across the :math:`E_r` evaluations internally.
 
-Python workflows can also call the derivative-assisted root solvers directly.
-The derivative provider can be a finite-difference gate today or an exact
-implicit/adjoint derivative when that Lane-4 path is enabled:
+Python workflows can call the same canonical slice directly, and — unlike the
+CLI — also obtain a *differentiable* ambipolar :math:`E_r`:
 
 .. code-block:: python
 
-   from sfincs_jax.problems.ambipolar import (
-       finite_difference_radial_current_derivative,
-       safeguarded_newton_ambipolar_root,
-   )
+   from sfincs_jax import er
 
-   result = safeguarded_newton_ambipolar_root(
-       evaluate_radial_current,
-       lambda er: finite_difference_radial_current_derivative(
-           evaluate_radial_current,
-           er=er,
-           step=1.0e-4,
-       ),
-       er_min=-0.1,
-       er_max=0.1,
-       er_initial=0.0,
+   # Fortran-parity Brent root (bracket expansion + classification):
+   result = er.find_ambipolar_er(
+       "input.namelist", er_bracket=(-0.1, 0.1), er_initial=0.0,
    )
+   print(result.er, result.root_type, [r.root_type for r in result.roots])
+
+   # Differentiable ambipolar Er: jax.grad flows through the root via the
+   # implicit function theorem (solvax.implicit.root_solve), with dJr/dEr and
+   # dJr/dp taken from autodiff of er.radial_current (not finite differences).
+   import jax
+   root = er.prepare("input.namelist")
+   er_star = er.ambipolar_er(root.operator, er0=result.er,
+                             dphi_per_er=root.dphi_per_er, z_s=root.z_s)
 
 Running upstream postprocessing scripts (utils/)
 ------------------------------------------------
