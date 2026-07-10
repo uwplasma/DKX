@@ -45,11 +45,11 @@
         },
         {
           "claim": "Matrix-free PAS policy and correction code own byte-budget and fail-fast guards.",
-          "path": "sfincs_jax/solvers/preconditioner_pas_matrix_free.py"
+          "path": "sfincs_jax/solvers/preconditioner_pas_policy.py"
         },
         {
           "claim": "PAS matrix-free tests cover fail-fast allocation gates without launching slow production solves.",
-          "path": "tests/test_rhs1_pas_matrixfree.py"
+          "path": "tests/test_pas_preconditioner_policy.py"
         }
       ],
       "gates": [
