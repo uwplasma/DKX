@@ -7,717 +7,212 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/github/license/uwplasma/sfincs_jax)](LICENSE)
 
-`sfincs_jax` is a standalone neoclassical transport code for radially local
-drift-kinetic calculations in stellarator and tokamak geometry. It combines
-high-fidelity kinetic models, CPU/GPU execution, modern matrix-free numerics,
-parallel workflows, and optional differentiable solve paths in one codebase.
-
-On the current `main` branch, the audited 39-case example suite runs cleanly on
-CPU and GPU. Release-facing runtime/memory plots use the canonical
-reference-runtime-window rows from that suite, while research-scale performance
-claims use the separate production-resolution benchmark tier; larger
-finite-beta/profile-current cases remain tracked separately from fast smoke and
-parity checks. The default CLI path is tuned for robust explicit solves and
-practical throughput, while the Python API can opt into differentiable solve
-paths when gradients matter.
-
-Current release claims intentionally exclude production-resolution QI CPU/GPU
-seed ladders, true differentiable device-QI closure, and single-case multi-GPU
-strong scaling; those remain bounded or deferred research lanes until their
-promotion artifacts pass.
-
-It is designed for:
-
-- high-performance runs on CPU/GPU,
-- research and production transport workflows,
-- memory-efficient large solves,
-- end-to-end differentiable workflows.
+`sfincs_jax` solves the radially local, linearized drift-kinetic equation on a
+flux surface — the same physics as [SFINCS Fortran v3](https://github.com/landreman/sfincs)
+— in pure JAX. One `input.namelist` plus one geometry file gives neoclassical
+particle/heat fluxes, parallel flows, bootstrap current, and transport matrices
+for stellarators and tokamaks, on CPU or GPU, with end-to-end automatic
+differentiation for sensitivities and optimization. Outputs, per-species result
+tables, and console prints are pinned field-by-field against SFINCS Fortran v3.
 
 ## Installation
-
-Install from PyPI:
 
 ```bash
 pip install sfincs_jax
 ```
 
-Install from source:
+Optional extras:
 
-```bash
-git clone https://github.com/uwplasma/sfincs_jax.git
-cd sfincs_jax
-pip install .
-```
+- **Structured direct solvers** (`solvax`, the external library that owns the
+  block-tridiagonal Legendre elimination and recycled-Krylov tiers): until the
+  `solvax` PyPI release, install it from git — the `[structured]` extra then
+  resolves locally:
 
-Large public equilibrium fixtures are not stored in the git clone or wheel. They
-are fetched from the `sfincs-jax-data-v1` GitHub release on first use and cached
-under `~/.cache/sfincs_jax/data/2026-05-26-v1` by default. To prefetch them for
-CI, offline work, or reproducible examples, run:
+  ```bash
+  pip install git+https://github.com/uwplasma/SOLVAX
+  ```
 
-```bash
-python scripts/fetch_equilibria.py
-```
+  Without it, `sfincs_jax` imports lazily and falls back to host/direct paths.
+- **GPU**: install the matching CUDA build of JAX, e.g.
+  `pip install -U "jax[cuda12]"`.
 
-Set `SFINCS_JAX_DATA_DIR=/path/to/cache` to choose a different cache root, or set
-`SFINCS_JAX_OFFLINE=1` to require that the release data is already cached.
+Large public equilibrium files (W7-X, HSX) are not shipped in the wheel; they
+are fetched from a GitHub release on first use and cached under
+`~/.cache/sfincs_jax/data`. Prefetch with
+`python -m sfincs_jax.validation.data_fetch`; see the
+[installation docs](docs/installation.rst) for offline/cache options and for
+building the SFINCS Fortran v3 reference executable with conda-provided
+PETSc/MUMPS.
 
-After installing, run the CLI on an input file. For most users this is the
-entire workflow: provide `input.namelist`, optionally override the geometry file
-with `--wout-path`, and let the default `auto` policy choose the fastest
-validated solve path for the problem.
+## Quickstart
 
-```bash
-cd sfincs_jax
-sfincs_jax examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist --out sfincsOutput.h5
-sfincs_jax --plot sfincsOutput.h5
-```
-
-This writes `sfincsOutput.h5` and then creates a multi-page PDF diagnostics panel
-next to it as `sfincsOutput_summary.pdf`. The same command works for NetCDF and
-NPZ by changing the output suffix:
-
-```bash
-sfincs_jax examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist --out sfincsOutput.nc
-sfincs_jax examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist --out sfincsOutput.npz
-sfincs_jax --plot sfincsOutput.nc
-```
-
-For VMEC geometry, either put the VMEC `wout` path in the namelist or pass it at
-runtime:
-
-```bash
-sfincs_jax /path/to/input.namelist --wout-path /path/to/wout.nc --out sfincsOutput.h5
-```
-
-Advanced users can still force solver methods and write solver traces for
-profiling or reproducibility, but these are not required for normal production
-runs:
-
-```bash
-sfincs_jax /path/to/input.namelist \
-  --out sfincsOutput.h5 \
-  --solver-trace solver_trace.json \
-  --solve-method xblock_sparse_pc_gmres
-```
-
-RHSMode=1 outputs include `linearSolverMethod`, `linearSolverResidualNorm`,
-`linearSolverResidualTarget`, `linearSolverResidualTargetRatio`,
-`linearSolverConverged`, `linearSolverAccepted`, and
-`linearSolverAcceptanceCriterion` in the output file so automatic choices remain
-auditable after the run.
-The production benchmark manifest now enforces large research-scale floors:
-`25 x 51 x 4 x 100` (`Ntheta x Nzeta x Nx x Nxi`) for 3D cases and
-`25 x 1 x 4 x 100` for tokamak cases. Public production timing rows target
-SFINCS Fortran v3 runtimes of at least `10 s`; earlier `17 x 21 x 5 x 12`
-finite-beta/profile-current timings were lower-resolution bring-up checks for
-this solver lane, not public production baselines.
-
-## Runtime and Memory Summary
-
-![Runtime and memory comparison against SFINCS Fortran v3](docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png)
-
-The release benchmark above compares SFINCS Fortran v3, `sfincs_jax` CPU cold,
-`sfincs_jax` CPU warm, `sfincs_jax` GPU cold, and `sfincs_jax` GPU warm only for
-reference-runtime-window rows whose Fortran v3 reference runtime is at least
-`10 s`; the summary JSON records which previous frozen rows still need a full
-production-resolution rerun.
-The left panel shows wall-clock runtime and the right panel shows active solver
-memory, both on log axes. Fortran memory is process maximum RSS; JAX memory uses
-profiler RSS deltas over the fixed Python/JAX/XLA runtime baseline, while the
-full process peak remains in the JSON reports as `jax_max_rss_mb`. Cold is the
-first external suite command. Warm runtime
-uses `jax_runtime_s_warm` when reports were generated with `--jax-repeats >= 2`;
-for the current frozen release reports, it falls back to the CLI
-`jax_logged_elapsed_s` field. Cases are ordered by best warm `sfincs_jax` speedup
-over the Fortran v3 runtime, so the strongest JAX wins appear first. The plot
-and README runtime/memory table are checked against the same canonical filtered
-rows emitted by the benchmark-summary generator. Regenerate the plot with
-`python examples/publication_figures/generate_fortran_suite_benchmark_summary.py`.
-
-Scope note: the full 39-case frozen suite remains the parity and CI smoke audit,
-but sub-`10 s` Fortran rows are not shown as public performance comparisons. They
-must either be rerun from the higher-resolution benchmark tier in
-`benchmarks/production_resolution_inputs_2026-05-04` or remain CI/regression
-checks only. The production tier enforces `25 x 51 x 4 x 100` 3D grids and
-`25 x 1 x 4 x 100` tokamak grids, including public examples and optional
-user-supplied production-resolution workloads. The manual GitHub workflow
-`Production Benchmark Inputs` validates and uploads the production input tree
-without running expensive solves; full CPU/GPU/Fortran runtime and memory sweeps
-should be launched on local, `office`, or cluster hardware with explicit
-resource budgets.
-
-## Optimization Lane
-
-`sfincs_jax` also provides optimization-oriented helpers for adding
-neoclassical objectives to stellarator design loops. The recommended workflow is
-two-tiered: use fast JAX-native proxy objectives inside the optimizer, then
-promote accepted designs to full `sfincs_jax` electric-field scans and kinetic
-validation gates before making physics claims.
-
-```bash
-python examples/optimization/qa_nfp2_sfincs_jax_objectives.py --objective balanced --steps 120
-```
-
-![QA nfp=2 sfincs_jax optimization proxy dashboard](docs/_static/figures/optimization/qa_nfp2_sfincs_jax_optimization_lane.png)
-
-The QA example supports `bootstrap`, `electron-root`, `flux-selective`, and
-`balanced` presets. If the QA proxy does not provide a strong electron-root
-candidate, use the QI/QA NFP screen to pick the next kinetic promotion target:
-
-```bash
-python examples/optimization/screen_qi_electron_root_nfp.py --steps 70
-```
-
-![QI electron-root NFP screening proxy](docs/_static/figures/optimization/qi_electron_root_nfp_screen.png)
-
-The checked screen recommends QI `nfp=2` as the first fallback target, because
-QA has only low/mid-resolution positive-root evidence so far and QI electron-root
-promotion now has a first bounded kinetic artifact. Both scripts write JSON
-provenance plus PNG/PDF plots. The proxy layer is differentiable and
-finite-difference checked; this does not make the promoted kinetic scan
-differentiable. Accepted designs still need completed `sfincs_jax scan-er`
-outputs before high-fidelity SFINCS kinetic gates can be used for bootstrap
-current, ambipolar roots, particle/heat/impurity fluxes, residual convergence,
-CPU/GPU agreement, and Fortran v3 comparison when applicable. See
-`docs/optimization.rst`.
-
-Concise real-promotion sequence:
-
-```bash
-python examples/optimization/qa_nfp2_sfincs_jax_objectives.py --objective balanced --steps 120 --out-dir runs/qa_candidate01/proxy --stem candidate01_proxy
-python examples/optimization/launch_sfincs_jax_candidate_scan.py --proxy-summary runs/qa_candidate01/proxy/candidate01_proxy.json --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/scan_cpu/r0p50 --er-min -3 --er-max 3 --n-er 7 --jobs 4
-python examples/optimization/run_promotion_evidence_campaign.py --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/evidence_r0p50 --values -3 -2 -1 0 1 2 3 --run-cpu --run-gpu --gpu-device 0 --run-fortran --fortran-exe /path/to/sfincs --jobs 4 --impurity-species-index 2 --target-impurity-flux 0.01
-```
-
-The campaign command writes a JSON plan, launches matching CPU/GPU/Fortran scan
-lanes, audits each completed scan, and compares the resulting promotion JSON
-files. To inspect commands without launching solves, add `--dry-run`. Fortran
-v3 outputs often do not contain JAX linear-residual datasets, so the campaign
-allows missing residuals only for the Fortran lane by default; CPU/GPU JAX lanes
-still require residual diagnostics.
-
-Equivalent manual commands are:
-
-```bash
-JAX_PLATFORM_NAME=cpu sfincs_jax scan-er --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/scan_cpu/r0p50 --values -3 -2 -1 0 1 2 3 --compute-solution --skip-existing --jobs 4
-python examples/optimization/evaluate_sfincs_jax_promotion_scan.py --scan-dir runs/qa_candidate01/scan_cpu/r0p50 --out-dir runs/qa_candidate01/audit --stem candidate01_r0p50_cpu --require-electron-root
-CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu sfincs_jax scan-er --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/scan_gpu/r0p50 --values -3 -2 -1 0 1 2 3 --compute-solution --skip-existing --jobs 1
-python examples/optimization/evaluate_sfincs_jax_promotion_scan.py --scan-dir runs/qa_candidate01/scan_gpu/r0p50 --out-dir runs/qa_candidate01/audit --stem candidate01_r0p50_gpu --require-electron-root
-python examples/optimization/compare_sfincs_jax_promotion_runs.py --cpu runs/qa_candidate01/audit/candidate01_r0p50_cpu.json --gpu runs/qa_candidate01/audit/candidate01_r0p50_gpu.json --out-dir runs/qa_candidate01/audit --stem candidate01_r0p50_comparison
-```
-
-After running a real `sfincs_jax scan-er` for an accepted candidate, audit the
-high-fidelity promotion gate with:
-
-```bash
-python examples/optimization/evaluate_sfincs_jax_promotion_scan.py --scan-dir /path/to/scan-er-directory
-```
-
-Pass `--impurity-species-index` only when the scan includes a real impurity
-species and the flux-selectivity objective is part of the claim. For two-species
-ion/electron electron-root scans, omit it; the backend comparison still checks
-the selected root, bootstrap objective, residuals, and CPU/GPU agreement.
-
-To go from a proxy optimization JSON to a reproducible scan command without
-starting a long solve immediately:
-
-```bash
-python examples/optimization/launch_sfincs_jax_candidate_scan.py --proxy-summary qa_nfp2_sfincs_jax_optimization_lane.json --input input.namelist --out-dir candidate_scan
-```
-
-CPU/GPU and optional Fortran-v3 promotion summaries can be compared with:
-
-```bash
-python examples/optimization/compare_sfincs_jax_promotion_runs.py --cpu cpu_promotion.json --gpu gpu_promotion.json --fortran fortran_promotion.json
-```
-
-The checked documentation includes two real promotion artifacts generated from
-separate CPU, GPU, and SFINCS Fortran v3 JSON files: a reduced-W7-X PAS/DKES
-two-species comparison for shared-model backend/reference agreement, and a
-low-resolution finite-beta QA positive-electron-root comparison. The finite-beta
-artifact demonstrates the full promotion workflow on a VMEC finite-beta QA
-geometry; production-resolution radial/profile convergence remains a separate
-claim-specific validation step.
-It also now includes a first bounded QI `nfp=2` kinetic electron-root promotion
-artifact from a two-species VMEC scan at `7 x 7 x 7 x 4`. CPU and GPU pass
-strict agreement for the positive ambipolar root at `E_r = 2.4386009865`; the
-SFINCS Fortran v3 reference agrees within the documented low-resolution
-reference tolerances. This closes the first QI kinetic artifact, not the
-production-resolution QI ladder.
-
-![QI nfp=2 low-resolution kinetic electron-root comparison](docs/_static/figures/optimization/qi_nfp2_electron_root_lowres_reference_tolerance_comparison.png)
-
-The first refined QI `nfp=2` rung at `9 x 9 x 11 x 4` also passes
-fixed-resolution CPU/GPU/Fortran gates: CPU selected `E_r = 2.2834299271`, GPU
-selected the same root within `4.3e-14`, and the Fortran-v3 reference selected
-`E_r = 2.2834273232` within the documented refined-grid tolerance. The root
-drift from the `7 x 7 x 7 x 4` artifact is about `0.155`, so this is
-persistence evidence, not a convergence claim.
-
-![QI nfp=2 first refined CPU/GPU/Fortran electron-root comparison](docs/_static/figures/optimization/qi_nfp2_electron_root_res9_reference_tolerance_comparison.png)
-
-A second bounded rung at `11 x 11 x 13 x 4` now checks the same CPU/GPU/Fortran
-contract after fixing a mid-size RHSMode=1 solver-policy cliff. The default
-dense full-FP lane covers active sizes up to `8000`; this reduced the checked
-`11 x 11 x 13 x 4` CPU scan from about `326 s` to about `23 s`, and the office
-GPU0 scan also completes in about `23 s`. CPU and GPU selected
-`E_r = 2.2224054815` within `2.5e-13`; Fortran-v3 selected
-`E_r = 2.2224043880`, within the documented `2e-6` reference tolerance. The
-root still drifts from the `9 x 9 x 11 x 4` rung, so production-resolution QI
-remains an explicit research lane.
-
-![QI nfp=2 second refined CPU/GPU/Fortran electron-root comparison](docs/_static/figures/optimization/qi_nfp2_electron_root_res11_reference_tolerance_comparison_dense8000_default.png)
-
-The separate finite-beta QA convergence ladder extends the finite-beta QA
-artifact to `9 x 9 x 7 x 4` at the central surface and remains explicitly
-`deferred` because it does not meet the production floor.
-A follow-up medium-resolution solver-policy probe at `17 x 21 x 12 x 4`
-validated the non-dense `xblock_sparse_pc_gmres` route for the same two-species
-finite-beta QA deck: the automatic CPU path converged in about 7 s wall time,
-matched the written Fortran-v3 output to better than `1.6e-6` relative on the
-reported current/flux observables, and avoids dense matrix materialization. The
-next `21 x 25 x 14 x 4` rung also converged on CPU and GPU and matched the
-written Fortran-v3 output to better than `2.7e-6` relative on the same
-observables. A larger `25 x 31 x 16 x 4` rung (`99,204` active unknowns) also
-converged on CPU and one office GPU, stayed parity-clean against the written
-Fortran-v3 output, and established the current default non-dense multispecies
-x-block policy window through `100,000` active unknowns and `Nxi <= 16`.
-This is still a host-factor non-differentiable route; at this rung CPU is
-faster than GPU because the sparse factors are host-backed. The full
-`25 x 51 x 100 x 4` production floor is still documented as a larger
-algorithmic validation step rather than a closed convergence claim.
-
-## Physics in One Page
-
-`sfincs_jax` solves the radially local, steady, linearized drift-kinetic
-equation for the non-adiabatic distribution-function perturbation
-`f_s1` on a flux surface. In normalized form the solved kinetic balance is
-
-```text
-(parallel streaming + mirror force + E x B drift + magnetic drift
- + energy/pitch-angle drifts - linearized collisions) f_s1 = thermodynamic drives.
-```
-
-The unknown distribution can be coupled to the flux-surface electrostatic
-potential variation `Phi1(theta,zeta)` through quasineutrality when requested.
-The output fluxes, flows, transport matrices, and diagnostics are moments of
-this solved `f_s1`. The full equations, normalizations, switches, and source-code
-mapping are documented in `docs/system_equations.rst`, `docs/physics_models.rst`,
-and `docs/method.rst`.
-
-## Quick Start (CLI)
-
-You can run `sfincs_jax` from anywhere in your terminal. You do not need to be
-inside the repository folder.
-
-Run an input file:
-
-```bash
-sfincs_jax /path/to/input.namelist
-```
-
-Write output explicitly:
-
-```bash
-sfincs_jax write-output --input /path/to/input.namelist --out /path/to/sfincsOutput.h5
-```
-
-Plot an existing output file:
-
-```bash
-sfincs_jax --plot /path/to/sfincsOutput.h5
-```
-
-By default this writes `/path/to/sfincsOutput_summary.pdf`, a multi-page panel
-with geometry, radial profiles, particle/heat/momentum fluxes, NTV, moments, and
-transport-matrix diagnostics when those datasets are present. Use
-`sfincs_jax plot-output --input-h5 ... --out custom.pdf` to choose a filename.
-
-Override the equilibrium file at the CLI without changing `input.namelist`:
-
-```bash
-sfincs_jax write-output \
-  --input /path/to/input.namelist \
-  --out /path/to/sfincsOutput.h5 \
-  --wout-path /path/to/wout.nc
-```
-
-The bare `sfincs_jax /path/to/input.namelist` form accepts the same
-`--equilibrium-file` and `--wout-path` overrides.
-
-## Quick Start (Python)
-
-Read a namelist, run `sfincs_jax`, write an output file, and inspect results directly in memory:
+Run a small circular-tokamak deck through the canonical driver (this mirrors
+[`examples/run_tokamak.py`](examples/run_tokamak.py), which also builds the
+namelist from Python dicts and plots the results):
 
 ```python
 from pathlib import Path
+from sfincs_jax.run import run_profile
 
-from sfincs_jax.io import write_sfincs_jax_output_h5
+deck = Path("input.namelist")
+deck.write_text("""\
+&geometryParameters
+  geometryScheme = 1  ! circular tokamak: BHat = 1 + 0.1 cos(theta)
+  inputRadialCoordinate = 3
+  rN_wish = 0.3
+  B0OverBBar = 1.0  GHat = 1.0  IHat = 0.0  iota = 1.31
+  epsilon_t = 0.1  epsilon_h = 0.0  psiAHat = 0.045  aHat = 0.1
+/
+&speciesParameters
+  Zs = 1  mHats = 1.0  nHats = 1.0  THats = 0.5
+  dNHatdrHats = -6.0  dTHatdrHats = -3.0
+/
+&physicsParameters
+  Delta = 4.5694d-3  alpha = 1.0  nu_n = 8.4774d-3
+  Er = 0.0  collisionOperator = 1  ! pitch-angle scattering
+/
+&resolutionParameters
+  Ntheta = 15  Nzeta = 1  Nxi = 8  NL = 4  Nx = 6
+  solverTolerance = 1d-10
+/
+""")
 
-input_namelist = Path("input.namelist")
-out_path, results = write_sfincs_jax_output_h5(
-    input_namelist=input_namelist,
-    output_path=Path("sfincsOutput.h5"),
-    return_results=True,
-)
-
-print("Wrote:", out_path)
-print("Available datasets:", len(results))
-print("Example key:", "particleFlux_vm_psiHat" in results)
+run = run_profile(deck, solve_method="auto", out_path=Path("sfincsOutput.h5"))
+print("particle flux:", float(run.moments["particleFlux_vm_psiHat"][0]))
+print("bootstrap current <j.B>:", float(run.moments["FSABjHat"]))
 ```
 
-Set `output_path=Path("sfincsOutput.nc")` for NetCDF4 or
-`output_path=Path("sfincsOutput.npz")` for a fast NumPy archive. The calculation
-is identical; only the writer changes.
+`run_profile` prints the Fortran-parity console flow (banner, grids, solve
+progress, per-species results table), writes `sfincsOutput.h5`/`.nc` keyed by
+the SFINCS output names, and returns the state vector, solver statistics, and
+all moments in memory. The CLI equivalent is
+`sfincs_jax input.namelist --out sfincsOutput.h5`, and
+`sfincs_jax --plot sfincsOutput.h5` builds a PDF diagnostics panel.
 
-If you need to override the equilibrium file without editing the namelist, pass
-``equilibrium_file=...`` or the VMEC-friendly alias ``wout_path=...``:
+## Performance vs SFINCS Fortran v3
 
-```python
-write_sfincs_jax_output_h5(
-    input_namelist=input_namelist,
-    output_path=Path("sfincsOutput.h5"),
-    wout_path=Path("/path/to/wout.nc"),
-)
-```
+Measured head-to-head on the same machine (MacBook, Apple M4, 24 GB) and the
+same deck: `HSX_PASCollisions_DKESTrajectories`, RHSMode=1, at
+`Ntheta=25, Nzeta=51, Nxi=100, Nx=5` — 744,610 unknowns. The Fortran reference
+is the conda PETSc 3.23 + MUMPS 5.8.2 build of SFINCS v3; `sfincs_jax` uses
+the tier-1 truncated Legendre block elimination from `solvax`.
 
-`sfincs_jax write-output` and the scan utilities use `solve_method="auto"` and
-`differentiable=False` by default. When calling
-`write_sfincs_jax_output_h5(...)` directly, keep those defaults for production
-runs or request the implicit/differentiable linear-solve path only when you need
-gradients:
+![Runtime and peak memory: sfincs_jax vs SFINCS Fortran v3 on the 744k-unknown HSX PAS case](docs/_static/figures/readme/tier1_hsx_runtime_memory.png)
 
-```python
-write_sfincs_jax_output_h5(
-    input_namelist=input_namelist,
-    output_path=Path("sfincsOutput.h5"),
-    differentiable=False,
-)
+- With the matched `Nxi`-for-`x` ramp discretization, `sfincs_jax` solves in
+  **27.2 s at 0.93 GB** — 17x faster than 1-rank Fortran (463.6 s, 3.98 GB) and
+  8.4x faster than Fortran's best measured parallel floor (229.5 s / 2.86 GB
+  at 2 ranks; 4 and 8 ranks are slower on this machine), at roughly 30% of the
+  memory. With uniform `Nxi` it takes 44.3 s at 1.16 GB; an RTX A4000 GPU
+  takes 45.0 s (the Legendre scan is serial and A4000 FP64 is 1/32 rate).
+- The Fortran strong-scaling baseline on the same case: 463.6 s (1 rank),
+  229.5 s (2 ranks, 101% efficiency), 240.9 s (4 ranks), 270.5 s (8 ranks).
+- At the full production resolution of this case (2.5 M unknowns), **neither**
+  code fits a global sparse factorization in 24 GB; the truncated Legendre
+  elimination needs only O(K m^2) memory (~0.3 GB here, vs ~91 GB for the
+  full-band factor) and is the locally viable direct path.
+- The direct solve is more converged than the Fortran reference: Fortran's own
+  electron `FSABFlow` scatters 51% across its 1/2/4/8-rank runs (KSP
+  rtol=1e-6 solver noise), while `sfincs_jax` matches the closest Fortran run
+  to 2e-10 and sits inside Fortran's spread on every quantity.
 
-write_sfincs_jax_output_h5(
-    input_namelist=input_namelist,
-    output_path=Path("sfincsOutput.h5"),
-    solve_method="sparse_host",
-    differentiable=False,
-)
+Scope: this is one measured 744k-unknown HSX PAS case; further cases are
+promoted here as each vertical slice lands with its own evidence. Regenerate
+the figure from the recorded values with
+`python tools/benchmarks/readme_figures.py`; rerun the measurement with
+`python tools/benchmarks/tier1_hsx_head_to_head.py`. Full tables, provenance,
+and known issues: [docs/performance.rst](docs/performance.rst).
 
-write_sfincs_jax_output_h5(
-    input_namelist=input_namelist,
-    output_path=Path("sfincsOutput.h5"),
-    differentiable=True,
-)
-```
+## Parity with SFINCS Fortran v3
 
-Repository examples that map directly onto common first tasks:
+Every canonical module was admitted against the reference implementation
+(Fortran golden outputs, tiny-grid PETSc matrix dumps, or the retained legacy
+implementation) at pinned tolerances that run in CI:
 
-- run the bundled solved CLI example: `sfincs_jax examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist`
-- write a tiny tokamak output: `python examples/getting_started/write_sfincs_output_tokamak.py`
-- write a tiny VMEC output with `wout_path`: `python examples/getting_started/write_sfincs_output_vmec.py`
-- run a finite-beta `vmec_jax` equilibrium into convergence-gated `sfincs_jax` radial profiles of ambipolar `E_r` and bootstrap current: `python examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py`
-- plot the finite-beta kinetic/angular/root-bracket convergence scan from cached outputs: `python examples/vmec_jax_finite_beta/plot_convergence_scan.py`
-- plot an output file: `python examples/getting_started/plot_sfincs_output.py`
-- write HDF5/NetCDF/NPZ and plot a PDF panel: `python examples/getting_started/write_and_plot_multiple_formats.py`
-- run autodiff examples: `python examples/autodiff/autodiff_gradient_nu_n_residual.py`
-- run the optional VMEC/Boozer differentiable geometry handoff: `python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --wout /path/to/wout.nc`
-- benchmark CPU/GPU parallel solves: `python examples/performance/benchmark_sharded_solve_scaling.py --backend cpu --devices 1 2 --inner-warmup-solves 1 --sample-timeout-s 300 ...`
+![Measured parity envelopes of the canonical stack](docs/_static/figures/readme/canonical_parity.png)
 
-Parallel CLI controls are now first-class:
+The scheme-1 monoenergetic `transportMatrix[0,1]` element is pinned to
+upstream's expected value because that element is tolerance-unstable in the
+Fortran build itself; the `sfincs_jax` direct solve reproduces the expected
+value to 4.2e-6 by construction.
 
-```bash
-# Multi-core CPU host sharding on one node
-sfincs_jax --cores 8 --shard-axis auto /path/to/input.namelist
+## Functionality
 
-# Parallel transport-matrix RHS solves
-sfincs_jax transport-matrix-v3 \
-  --input /path/to/input.namelist \
-  --transport-workers 4
+| Capability | Status |
+| --- | --- |
+| RHSMode 1 (fluxes/flows), 2 and 3 (transport matrices) | Supported, Fortran-parity pinned |
+| Collisions: pitch-angle scattering, full Fokker-Planck (Rosenbluth) | Supported |
+| Trajectory models: full and DKES; radial electric field | Supported |
+| Constraint schemes 0 / 1 / 2 | Supported |
+| Geometry schemes 1, 2, 3, 4 (three-helicity), 5 (VMEC), 11/12/13 (Boozer, differentiable Fourier) | Supported |
+| Solver tiers: structured direct, recycled Krylov (GCROT), host direct referee | Supported (`solve_method="auto"`) |
+| Autodiff: `jax.grad`/JVP through geometry, profiles, and the linear solve | Supported (implicit differentiation) |
+| `Phi1`/quasineutrality, tangential magnetic drifts | Deferred (served by the retained legacy pipeline) |
+| Constraint schemes 3 / 4, mapped speed grids, `export_f` | Deferred (served by the retained legacy pipeline) |
+| Non-stellarator-symmetric VMEC | Deferred |
 
-# High-nu LHD/W7-X campaign pilot on a dual-GPU node
-CUDA_VISIBLE_DEVICES=0,1 \
-python examples/publication_figures/generate_sfincs_paper_figs.py \
-  --case lhd \
-  --collision-operators 0 \
-  --nuprime-min 17.78279101649707 \
-  --nuprime-max 17.78279101649707 \
-  --n-points 1 \
-  --transport-workers 2 \
-  --transport-parallel-backend gpu \
-  --transport-sparse-direct-max 30000 \
-  --require-residuals \
-  --max-transport-residual 1e-6 \
-  --max-transport-relative-residual 1e-6 \
-  --scan-only
+Deferred physics is explicitly out of the canonical stack until each vertical
+slice lands with parity evidence; the legacy pipeline
+(`sfincs_jax.io.write_sfincs_jax_output_h5` and the full CLI) keeps ownership
+of those cases and remains tested. See
+[docs/feature_matrix.rst](docs/feature_matrix.rst) for the detailed matrix.
 
-# The current office dual-GPU LHD pilot for that point is residual-clean in
-# ~262 s, compared with ~345 s on one GPU and ~569 s on the older implicit path.
-# For the first W7-X FP high-nu point, use the bounded one-worker sparse-LU lane
-# below: it closes all three RHS residual gates in ~9.7 min on one office GPU
-# with sparse-helper factor reuse, compared with ~33.8 min before reuse.
+## Optimization showcase
 
-# W7-X FP high-nu residual-clean pilot, intentionally one worker to limit sparse
-# LU memory pressure:
-CUDA_VISIBLE_DEVICES=0 \
-SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE=float32 \
-python examples/publication_figures/generate_sfincs_paper_figs.py \
-  --case w7x \
-  --collision-operators 0 \
-  --nuprime-min 17.78332923601508 \
-  --nuprime-max 17.78332923601508 \
-  --n-points 1 \
-  --transport-workers 1 \
-  --transport-parallel-backend gpu \
-  --transport-sparse-direct-max 40000 \
-  --transport-maxiter 800 \
-  --require-residuals \
-  --max-transport-residual 1e-6 \
-  --max-transport-relative-residual 1e-6 \
-  --scan-only
+[`examples/optimize_QA_bootstrap.py`](examples/optimize_QA_bootstrap.py) runs a
+gradient-based optimization of a quasi-axisymmetric stellarator boundary for
+low bootstrap current, where `<j.B>` comes from the kinetic solve: boundary
+Fourier coefficients -> `vmec_jax` fixed-boundary equilibrium (implicit-adjoint
+VJP) -> differentiable Boozer transform (`booz_xform_jax`) -> `sfincs_jax`
+kinetic solve (tier-2 GCROT with implicit differentiation, warm-started and
+recycled across optimizer iterations) -> `FSABjHat`. One `jax.value_and_grad`
+call differentiates the whole physics chain; the end-to-end gradient is
+verified against central finite differences in the example and its CI test
+(the kinetic segment agrees to ~3e-6; the full chain to ~1.7e-3, limited by
+the host equilibrium solver's termination noise, not by autodiff).
 
-# To compare candidate preconditioners before widening W7-X high-nu scans,
-# isolate single-RHS behavior:
-CUDA_VISIBLE_DEVICES=0 \
-python examples/performance/benchmark_w7x_high_nu_preconditioners.py \
-  --preconditioners auto,fp_tzfft,xmg \
-  --which-rhs 2 \
-  --sparse-direct-max 40000 \
-  --sparse-factor-dtype float32 \
-  --maxiter 800 \
-  --timeout-s 900
-```
+![QA low-bootstrap optimization: objective history, boundary cross-sections, |B| spectrum, and <j.B> profile](docs/_static/figures/readme/optimize_QA_bootstrap.png)
 
-![W7-X high-nu sparse-helper factor reuse](docs/_static/figures/paper/sfincs_jax_w7x_high_nu_performance.png)
+## Examples
 
-The W7-X high-nu figure is generated by
-`python examples/publication_figures/generate_w7x_high_nu_performance.py`.
-The checked run preserves the previous residual-clean transport matrix exactly,
-reduces the full one-point wall time from about `2028 s` to `582 s`, and lowers
-measured peak RSS from about `19.9 GB` to `15.3 GB`.
+Six pedagogic scripts on the canonical API live at the top of
+[`examples/`](examples/) — no `main()`, parameters at the top, printed
+progress, a plot, and output files written and read back:
 
-```bash
-# One-node multi-GPU sharded solve (experimental for very large single-RHS cases)
-CUDA_VISIBLE_DEVICES=0,1 \
-sfincs_jax write-output \
-  --input /path/to/input.namelist \
-  --shard-axis theta \
-  --distributed-gmres auto
+- [`run_tokamak.py`](examples/run_tokamak.py) — build a namelist in Python, solve, read HDF5/NetCDF back.
+- [`run_w7x.py`](examples/run_w7x.py) — W7-X Boozer geometry with full Fokker-Planck collisions (tier-2 Krylov).
+- [`transport_coefficients.py`](examples/transport_coefficients.py) — monoenergetic transport matrices and a collisionality scan.
+- [`ambipolar_er_scan.py`](examples/ambipolar_er_scan.py) — scan `Er`, bracket and solve the ambipolar root.
+- [`gradients_tour.py`](examples/gradients_tour.py) — `jax.grad` through the solve, verified against finite differences.
+- [`optimize_QA_bootstrap.py`](examples/optimize_QA_bootstrap.py) — the flagship optimization above.
 
-# Multi-host JAX distributed bootstrap
-sfincs_jax write-output \
-  --input /path/to/input.namelist \
-  --distributed \
-  --process-count 8 \
-  --process-id ${RANK} \
-  --coordinator-address node0 \
-  --coordinator-port 1234
-```
-
-Use `-v` to have the executable print the active parallel runtime summary
-(cores, shard axis, transport workers, distributed Krylov mode, and multi-host
-bootstrap fields) before the solve starts.
-
-Current recommendation:
-
-- CPU host sharding is supported and deterministic, but the measured speedup is
-  still case-dependent.
-- The current sharded RHSMode=1 CPU path uses a wider Schwarz patch rule plus a
-  bounded multilevel residual correction to avoid the worst 4/8-device
-  fragmentation failures seen in earlier releases.
-- Use one GPU per case or scan point for production throughput today.
-- Multi-GPU single-case sharding is available for benchmarking and very large
-  runs, but it remains experimental and is not yet the default recommendation.
-- The sharded-solve benchmark helper supports both `--backend cpu` and
-  `--backend gpu`; the GPU path uses `CUDA_VISIBLE_DEVICES` and disables JAX
-  preallocation in the subprocess, with `cuda_malloc_async` enabled for the
-  benchmark subprocess allocator, so one-node GPU scaling experiments are more
-  reproducible.
-- For practical multi-GPU usage today, the strongest measured path is
-  transport-worker parallelism with one worker per GPU on RHSMode=2/3 runs.
-  On the fresh office 2-GPU rerun of
-  `examples/performance/transport_parallel_2min.input.namelist`, this path
-  measured `351.1s -> 237.7s` from `1 -> 2` GPU workers, i.e. `1.48x` speedup
-  on a 3-RHS case, essentially at the finite-task ideal of `1.5x`.
-- Multi-GPU single-case sharding remains experimental. Use it for research and
-  benchmarking, not as the default production scaling path.
-
-You can reproduce the recommended multi-GPU transport-worker benchmark with:
-
-```bash
-python examples/performance/benchmark_transport_parallel_scaling.py \
-  --input examples/performance/transport_parallel_2min.input.namelist \
-  --backend gpu \
-  --workers 1 2
-```
-
-To regenerate only the checked-in figure from the saved JSON payload without
-rerunning the multi-minute GPU benchmark:
-
-```bash
-python examples/performance/benchmark_transport_parallel_scaling.py \
-  --from-json examples/performance/output/transport_parallel_scaling_gpu.json \
-  --out-dir docs/_static/figures/parallel \
-  --figure-name transport_parallel_scaling_gpu.png
-```
-
-![GPU transport scaling](docs/_static/figures/parallel/transport_parallel_scaling_gpu.png)
-
-Compare two outputs:
-
-```bash
-sfincs_jax compare-h5 --a sfincsOutput_jax.h5 --b sfincsOutput_fortran.h5
-```
-
-Advanced CLI, plotting, and solver options are documented in `docs/usage.rst`,
-`docs/outputs.rst`, and `docs/performance_techniques.rst`.
-
-## Models, Numerics, and Validation
-
-`sfincs_jax` solves the same class of neoclassical drift-kinetic problems as mature
-SFINCS workflows, but it is documented and maintained as its own code. In particular:
-
-- the public executable favors bounded, performance-oriented solve strategies,
-- the Python API can switch to differentiable solve paths when end-to-end sensitivities are needed,
-- CPU runs lean on JIT-cached kernels and selected host sparse factorizations for hard linear branches,
-- repeated RHSMode=1 output-writing runs reuse prebuilt grids, geometry, and operator state to cut setup cost on large HSX/geometry11 cases,
-- GPU runs keep operator applications on device, then fall back to accelerator-safe or host rescue paths only when conditioning or memory demands it,
-- and the documentation maps the governing equations directly onto the source tree.
-
-The main documentation entry points are:
-
-- physics and equations: `docs/physics_models.rst`, `docs/system_equations.rst`, `docs/physics_reference.rst`
-- geometry and numerics: `docs/geometry.rst`, `docs/method.rst`, `docs/numerics.rst`
-- inputs and outputs: `docs/inputs.rst`, `docs/outputs.rst`
-- parallel and performance workflows: `docs/parallelism.rst`, `docs/performance.rst`
-- examples, applications, and testing: `docs/examples.rst`, `docs/applications.rst`, `docs/testing.rst`
-- external trust-building comparisons: `docs/fortran_comparison.rst`
-
-## Current Example-Suite Audit
-
-Regenerate this block from the current `main` working tree with:
-
-```bash
-python scripts/run_scaled_example_suite.py \
-  --examples-root examples/sfincs_examples \
-  --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
-  --reference-results-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
-  --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
-  --scale-factor 1.0 \
-  --runtime-target-basis fortran \
-  --fortran-min-runtime-s 0.0 \
-  --runtime-adjustment-iters 0 \
-  --runtime-baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
-  --jax-profile-marks on
-python scripts/generate_readme_fast_branch_audit.py \
-  --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
-  --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas \
-  --baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
-  --min-fortran-runtime-s 10
-```
-
-The benchmark policy on `main` is:
-
-- start from the original Fortran v3 example resolution,
-- only downscale when a case is too expensive for a practical suite run,
-- benchmark JAX CPU and GPU against a frozen CPU-generated Fortran reference root,
-- and never intentionally push a reduced case below about `1s` of Fortran wall time unless
-  the original example is already that small.
-
-That avoids the misleading sub-second Fortran rows that came from blind global downscaling,
-keeps the GPU lane tied to a deterministic reference, and makes the additional example part
-of the same artifact set as the standard suite.
-
-Production-resolution inputs are generated separately with
-`scripts/create_production_benchmark_inputs.py`. When
-`scripts/run_scaled_example_suite.py` is pointed at one of those generated
-`inputs/` trees, it detects the sibling `manifest.json` and launches only
-`bounded_local_ok` rows by default. Use `--max-run-recommendation bounded_remote`,
-`--max-run-recommendation remote_or_cluster_only`, or
-`--max-run-recommendation all` only on explicitly budgeted remote or cluster
-lanes.
-
-<!-- BEGIN FAST_BRANCH_AUDIT -->
-Current `main` CPU audit comes from `tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak`.
-Matching `main` GPU audit comes from `tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas`.
-
-- Recorded cases: `39/39`
-- Practical status counts: `parity_ok=39`
-- Strict status counts: `parity_ok=39`
-- GPU practical status counts: `parity_ok=39`
-- GPU strict status counts: `parity_ok=39`
-- CPU output-key coverage: `missing_total=0, extra_total=-, audited_cases=39, skipped_cases=0`
-- GPU output-key coverage: `missing_total=0, extra_total=-, audited_cases=39, skipped_cases=0`
-- CPU runtime drift watchlist: not applicable: production-floor reruns are not same-resolution with the older frozen smoke baseline
-- GPU runtime drift watchlist: not applicable: production-floor reruns are not same-resolution with the older frozen smoke baseline
-- Remaining cases: none
-- Additional example: `parity_ok` on CPU and `parity_ok` on GPU
-
-Current mismatches:
-- CPU practical mismatches: none
-- CPU strict mismatches: none
-- GPU practical/strict mismatches: none
-
-Runtime columns match the summary plot: cold is `jax_runtime_s`; warm/logged is `jax_runtime_s_warm` when available, otherwise `jax_logged_elapsed_s`. The JAX memory columns match the plot and use profiler active RSS deltas (`jax_incremental_max_rss_mb`) when present; full process peak RSS remains available as `jax_max_rss_mb` in the merged JSON reports. The generator emits canonical filtered rows for the plot and the table consistency gate.
-The benchmark summary JSON records production-resolution floor violations for previous frozen rows, so the table should be read as a reference-runtime-window comparison until every row has been rerun at the current production floor.
-README-facing runtime/memory rows are restricted to cases where the SFINCS Fortran v3 reference runtime is at least `10 s`. Excluded lower-resolution CI parity/smoke rows: `HSX_PASCollisions_DKESTrajectories` (0.994s), `HSX_PASCollisions_fullTrajectories` (2.510s), `geometryScheme4_1species_PAS_withEr_DKESTrajectories` (1.365s), `geometryScheme4_2species_PAS_noEr` (0.953s), `monoenergetic_geometryScheme1` (0.795s), `monoenergetic_geometryScheme11` (0.861s), `monoenergetic_geometryScheme5_ASCII` (1.052s), `monoenergetic_geometryScheme5_netCDF` (1.029s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` (1.104s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (1.706s), `tokamak_1species_FPCollisions_noEr` (7.897s), `tokamak_1species_FPCollisions_withEr_DKESTrajectories` (6.958s), `tokamak_1species_FPCollisions_withEr_fullTrajectories` (6.736s), `transportMatrix_geometryScheme11` (0.025s), `transportMatrix_geometryScheme2` (0.031s).
-
-Full per-case runtime / memory table:
-| Case | Fortran CPU(s) | JAX CPU cold(s) | CPU cold x | JAX CPU warm/logged(s) | CPU warm/logged x | JAX GPU cold(s) | GPU cold x | JAX GPU warm/logged(s) | GPU warm/logged x | Fortran MB | JAX CPU active MB | CPU MB x | JAX GPU active MB | GPU MB x | CPU mismatch | GPU mismatch | CPU print | GPU print | CPU status | GPU status |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |
-| `HSX_FPCollisions_DKESTrajectories` | 29.664 | 3.060 | 0.10x | 2.438 | 0.08x | 5.298 | 0.18x | 4.514 | 0.15x | 103.0 | 303.6 | 2.95x | 370.1 | 3.59x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `HSX_FPCollisions_fullTrajectories` | 88.504 | 3.054 | 0.03x | 2.414 | 0.03x | 5.247 | 0.06x | 4.493 | 0.05x | 100.8 | 314.1 | 3.12x | 374.9 | 3.72x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `additional_examples` | 120.074 | 1.733 | 0.01x | 1.063 | 0.01x | 2.633 | 0.02x | 1.898 | 0.02x | 102.1 | 237.2 | 2.32x | 336.1 | 3.29x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `filteredW7XNetCDF_2species_magneticDrifts_noEr` | 89.052 | 2.069 | 0.02x | 1.417 | 0.02x | 2.834 | 0.03x | 2.115 | 0.02x | 103.2 | 288.3 | 2.79x | 349.3 | 3.38x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `filteredW7XNetCDF_2species_magneticDrifts_withEr` | 95.440 | 2.011 | 0.02x | 1.372 | 0.01x | 3.339 | 0.03x | 2.590 | 0.03x | 96.2 | 318.7 | 3.31x | 355.4 | 3.69x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `filteredW7XNetCDF_2species_noEr` | 128.508 | 1.550 | 0.01x | 0.978 | 0.01x | 2.734 | 0.02x | 1.964 | 0.02x | 100.3 | 266.9 | 2.66x | 343.8 | 3.43x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme4_2species_noEr` | 139.240 | 1.733 | 0.01x | 1.112 | 0.01x | 2.888 | 0.02x | 2.105 | 0.02x | 92.2 | 276.8 | 3.00x | 364.2 | 3.95x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme4_2species_noEr_withPhi1InDKE` | 293.275 | 1.936 | 0.01x | 1.353 | 0.00x | 3.340 | 0.01x | 2.596 | 0.01x | 100.6 | 288.6 | 2.87x | 394.0 | 3.91x | 0/265 (strict 0/265) | 0/265 (strict 0/265) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme4_2species_noEr_withQN` | 146.734 | 1.769 | 0.01x | 1.140 | 0.01x | 3.132 | 0.02x | 2.402 | 0.02x | 95.1 | 276.2 | 2.91x | 381.2 | 4.01x | 0/265 (strict 0/265) | 0/265 (strict 0/265) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme4_2species_withEr_fullTrajectories` | 58.053 | 1.710 | 0.03x | 1.144 | 0.02x | 3.032 | 0.05x | 2.258 | 0.04x | 113.4 | 284.6 | 2.51x | 359.1 | 3.17x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme4_2species_withEr_fullTrajectories_withQN` | 211.358 | 1.889 | 0.01x | 1.310 | 0.01x | 3.087 | 0.01x | 2.314 | 0.01x | 98.8 | 295.1 | 2.99x | 384.2 | 3.89x | 0/251 (strict 0/251) | 0/251 (strict 0/251) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme5_3species_loRes` | 98.976 | 1.615 | 0.02x | 1.074 | 0.01x | 3.691 | 0.04x | 2.908 | 0.03x | 129.6 | 352.8 | 2.72x | 363.3 | 2.80x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `inductiveE_noEr` | 166.614 | 1.644 | 0.01x | 1.039 | 0.01x | 2.785 | 0.02x | 1.992 | 0.01x | 99.2 | 279.7 | 2.82x | 364.8 | 3.68x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `quick_2species_FPCollisions_noEr` | 166.945 | 1.531 | 0.01x | 0.983 | 0.01x | 2.938 | 0.02x | 2.200 | 0.01x | 97.1 | 269.0 | 2.77x | 363.7 | 3.74x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories` | 76.666 | 1.653 | 0.02x | 1.110 | 0.01x | 3.188 | 0.04x | 2.391 | 0.03x | 106.7 | 294.2 | 2.76x | 367.6 | 3.44x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories` | 93.439 | 1.767 | 0.02x | 1.177 | 0.01x | 3.138 | 0.03x | 2.363 | 0.03x | 94.0 | 303.6 | 3.23x | 372.2 | 3.96x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_noEr_withPhi1InDKE` | 41.132 | 13.276 | 0.32x | 12.527 | 0.30x | 16.744 | 0.41x | 16.744 | 0.41x | 169.1 | 796.8 | 4.71x | 613.9 | 3.63x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_noEr_withQN` | 10.952 | 9.019 | 0.82x | 8.255 | 0.75x | 7.175 | 0.66x | 7.175 | 0.66x | 159.4 | 800.0 | 5.02x | 469.1 | 2.94x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_PASCollisions_noEr` | 75.566 | 2.297 | 0.03x | 2.281 | 0.03x | 3.629 | 0.05x | 3.591 | 0.05x | 155.3 | 336.5 | 2.17x | 1094.1 | 7.05x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_PASCollisions_noEr_Nx1` | 75.533 | 1.339 | 0.02x | 1.330 | 0.02x | 2.728 | 0.04x | 2.718 | 0.04x | 119.2 | 278.2 | 2.33x | 1076.7 | 9.03x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_PASCollisions_noEr_withQN` | 75.242 | 5.147 | 0.07x | 5.147 | 0.07x | 11.444 | 0.15x | 10.019 | 0.13x | 165.0 | 612.3 | 3.71x | 459.5 | 2.78x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_PASCollisions_withEr_fullTrajectories` | 75.698 | 7.049 | 0.09x | 6.231 | 0.08x | 14.423 | 0.19x | 13.193 | 0.17x | 248.9 | 1319.5 | 5.30x | 1572.1 | 6.32x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
-| `tokamak_2species_PASCollisions_noEr` | 75.362 | 2.033 | 0.03x | 2.023 | 0.03x | 5.243 | 0.07x | 5.207 | 0.07x | 215.3 | 393.5 | 1.83x | 1168.7 | 5.43x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_2species_PASCollisions_withEr_fullTrajectories` | 76.530 | 9.435 | 0.12x | 8.669 | 0.11x | 23.369 | 0.31x | 22.264 | 0.29x | 386.6 | 1389.9 | 3.60x | 2007.0 | 5.19x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
-
-Largest CPU runtime improvements vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
-- `tokamak_2species_PASCollisions_noEr`: 4.0s -> 2.0s (delta=2.0s)
-- `tokamak_1species_PASCollisions_noEr_Nx1`: 2.4s -> 1.3s (delta=1.1s)
-- `quick_2species_FPCollisions_noEr`: 2.1s -> 1.5s (delta=0.6s)
-- `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories`: 2.3s -> 1.8s (delta=0.5s)
-- `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories`: 2.2s -> 1.7s (delta=0.5s)
-
-Largest CPU process peak-RSS improvements vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
-- `tokamak_2species_PASCollisions_noEr`: 2088.6 MB -> 584.8 MB (delta=1503.8 MB)
-- `tokamak_1species_PASCollisions_noEr`: 612.9 MB -> 527.8 MB (delta=85.1 MB)
-- `tokamak_1species_PASCollisions_noEr_Nx1`: 520.3 MB -> 464.3 MB (delta=56.0 MB)
-- `geometryScheme5_3species_loRes`: 569.4 MB -> 540.3 MB (delta=29.1 MB)
-- `geometryScheme4_2species_withEr_fullTrajectories_withQN`: 512.4 MB -> 486.4 MB (delta=26.0 MB)
-<!-- END FAST_BRANCH_AUDIT -->
+The wider `examples/` tree (tutorial notebooks, parity/benchmark drivers,
+upstream SFINCS decks) is mapped in [`examples/README.md`](examples/README.md).
 
 ## Documentation
 
-Build docs locally:
-
 ```bash
+pip install -e ".[docs]"
 sphinx-build -b html -W docs docs/_build/html
 ```
 
-Entry points:
+Entry points: [docs/index.rst](docs/index.rst) (landing + quickstart),
+[docs/examples.rst](docs/examples.rst),
+[docs/performance.rst](docs/performance.rst) (measured evidence and known
+issues), [docs/inputs.rst](docs/inputs.rst) / [docs/outputs.rst](docs/outputs.rst)
+(namelist and output references), and
+[docs/system_equations.rst](docs/system_equations.rst) (the equations solved).
 
-- `docs/index.rst`
-- `docs/system_equations.rst`
-- `docs/method.rst`
-- `docs/normalizations.rst`
-- `docs/performance.rst`
-- `docs/parallelism.rst`
+## Known issues
+
+- The tier-2 differentiable adjoint can return a silently wrong gradient on
+  numerically singular full-Fokker-Planck systems with `constraintScheme=1`
+  (the adjoint GCROT stagnates without erroring). PAS+`Er` gradients on the
+  same chain are exact to 2.9e-6 vs finite differences. Tracked with a
+  reproducer; check adjoint residuals before trusting FP gradients there.
+- The scheme-1 monoenergetic `transportMatrix[0,1]` element is ill-conditioned
+  in the upstream configuration itself (tolerance-unstable in the Fortran
+  build); parity for it is pinned to upstream's expected value.
 
 ## Testing
 
@@ -727,4 +222,4 @@ pytest -q
 
 ## License
 
-See `LICENSE`.
+See [LICENSE](LICENSE).
