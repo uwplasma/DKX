@@ -328,3 +328,43 @@ def test_deferred_magnetic_drifts_raise() -> None:
     nml = _load("magdrift_1species_tiny")
     with pytest.raises(NotImplementedError, match="magneticDriftScheme"):
         KineticOperator.from_namelist(nml)
+
+
+# ---------------------------------------------------------------------------
+# geometryScheme 3 (LHD inward-shifted analytic Boozer model)
+# ---------------------------------------------------------------------------
+
+
+def test_geometry_scheme3_bfield_parity_and_end_to_end() -> None:
+    """geometryScheme=3 is wired into the canonical operator and runs end to end.
+
+    The analytic LHD inward-shifted geometry already lives in
+    :meth:`sfincs_jax.magnetic_geometry.FluxSurfaceGeometry.from_scheme` (scheme
+    3); the operator builder used to raise ``NotImplementedError`` for it.  This
+    pins the now-wired path: the operator B-field must equal ``from_scheme(3)``
+    exactly, and a tiny monoenergetic (RHSMode=3) transport-matrix run must
+    converge to finite fluxes through the canonical ``run_transport_matrix``.
+    """
+    from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry
+    from sfincs_jax.phase_space import make_grids
+    from sfincs_jax.run import run_transport_matrix
+
+    name = "monoenergetic_PAS_tiny_scheme3"
+    op = KineticOperator.from_namelist(_load(name))
+
+    # B-field parity: the operator's geometry must match the from_scheme source
+    # of truth on the same theta/zeta grids (NPeriods=10 for scheme 3).
+    grids = make_grids(
+        n_theta=op.n_theta, n_zeta=op.n_zeta, n_xi=op.n_xi, n_x=op.n_x,
+        n_l=3, n_periods=10, monoenergetic=True,
+    )
+    geom = FluxSurfaceGeometry.from_scheme(3, theta=grids.theta, zeta=grids.zeta)
+    assert np.array_equal(np.asarray(op.b_hat), np.asarray(geom.b_hat))
+
+    # End-to-end monoenergetic run: converged, finite 2x2 transport matrix.
+    run = run_transport_matrix(REF / f"{name}.input.namelist", emit=None)
+    assert run.solve_result.converged
+    tm = np.asarray(run.transport_matrix)
+    assert tm.shape == (2, 2)
+    assert np.all(np.isfinite(tm))
+    assert np.all(np.isfinite(np.asarray(run.state_vectors)))
