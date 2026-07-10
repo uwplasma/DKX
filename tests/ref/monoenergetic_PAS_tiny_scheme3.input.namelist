@@ -1,0 +1,52 @@
+! Tiny monoenergetic (RHSMode=3) PAS example for sfincs_jax on geometryScheme=3
+! (LHD inward-shifted analytic Boozer model; geometry.F90 case 3, harmonics from
+! Beidler et al., Nuclear Fusion 51, 076001 (2011), Table 1).
+!
+! No Fortran PETSc binaries are stored for this fixture: it is an end-to-end
+! smoke/parity test that the canonical operator now accepts geometryScheme=3 and
+! that its B-field equals FluxSurfaceGeometry.from_scheme(3). Geometry comes
+! entirely from the fixed v3 harmonic table (aHat=0.5400, psiAHat=aHat^2/2,
+! rN=0.5), so no epsilon/helicity/GHat inputs are needed.
+
+&general
+  RHSMode = 3
+/
+
+&geometryParameters
+  geometryScheme = 3
+/
+
+&speciesParameters
+  ! Intentionally empty: monoenergetic runs can omit species inputs in v3.
+/
+
+&physicsParameters
+  nuPrime = 1.196132d-3
+  EStar = 0.0d+0
+  collisionOperator = 1
+  includeXDotTerm = .false.
+  includeElectricFieldTermInXiDot = .false.
+  useDKESExBDrift = .true.
+  includePhi1 = .false.
+/
+
+&resolutionParameters
+  Ntheta = 9
+  Nzeta = 9
+  Nxi = 6
+  NL = 3
+  Nx = 1
+  solverTolerance = 1d-12
+/
+
+&otherNumericalParameters
+  Nxi_for_x_option = 0
+/
+
+&preconditionerOptions
+/
+
+&export_f
+  export_full_f = .false.
+  export_delta_f = .false.
+/
