@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import jax
 import jax.numpy as jnp
@@ -29,7 +30,13 @@ import scipy.linalg as sla
 
 from sfincs_jax.drift_kinetic import KineticOperator
 from sfincs_jax.namelist import parse_sfincs_input_text, read_sfincs_input
-from sfincs_jax.solve import materialize_dense, solve, tier1_available
+from sfincs_jax.solve import (
+    materialize_dense,
+    solve,
+    tier1_available,
+    tier1_full_band_bytes,
+    tier1_peak_memory_bytes,
+)
 
 REF = Path(__file__).parent / "ref"
 
@@ -95,6 +102,136 @@ def test_tier1_matches_recorded_fortran_state_vectors_rhsmode3(base: str) -> Non
     for which_rhs in (1, 2):
         x_ref = read_petsc_vec(REF / f"{base}.whichRHS{which_rhs}.stateVector.petscbin").values
         assert _rel_err(x[:, which_rhs - 1], x_ref) < 1e-10, f"whichRHS={which_rhs}"
+
+
+# ---------------------------------------------------------------------------
+# Truncated tier 1: memory-driven routing, full parity, moments, gradients
+# ---------------------------------------------------------------------------
+
+
+def _vm_moments(op: KineticOperator, x_stack: np.ndarray) -> dict[str, np.ndarray]:
+    """vm particle/heat fluxes + FSABFlow of solved states (moments module)."""
+    from sfincs_jax.moments import (
+        FluxSurface,
+        SpeciesParams,
+        StateLayout,
+        VelocityGrid,
+        vm_flux_moments_batch,
+    )
+
+    layout = StateLayout(
+        n_species=op.n_species, n_x=op.n_x, n_xi=op.n_xi, n_theta=op.n_theta,
+        n_zeta=op.n_zeta, include_phi1=False, constraint_scheme=op.constraint_scheme,
+    )  # fmt: skip
+    vgrid = VelocityGrid(x=op.x, x_weights=op.x_weights, n_xi_for_x=op.n_xi_for_x)
+    surface = FluxSurface.from_operator(op)
+    species = SpeciesParams.from_operator(op)
+    m = vm_flux_moments_batch(
+        layout, vgrid, surface, species, jnp.asarray(x_stack), delta=op.delta, alpha=op.alpha
+    )
+    return {
+        "particleFlux": np.asarray(m.particle_flux_vm_psi_hat),
+        "heatFlux": np.asarray(m.heat_flux_vm_psi_hat),
+        "FSABFlow": np.asarray(m.fsab_flow),
+    }
+
+
+def test_tier1_memory_estimate_hand_computed() -> None:
+    """The full-band byte formula must match a hand-computed value exactly.
+
+    ``bytes = 3 * n_xi * n_species * n_x * (n_theta * n_zeta)**2 * 8`` — here
+    n_theta=3, n_zeta=2 (m=6, m**2=36), n_xi=4, n_x=2, n_species=1:
+    3 * 4 * 1 * 2 * 36 * 8 = 6912 bytes; the peak estimate is 2.5x that.
+    """
+    fake = SimpleNamespace(n_theta=3, n_zeta=2, n_xi=4, n_x=2, n_species=1)
+    assert tier1_full_band_bytes(fake) == 3 * 4 * 1 * 2 * 36 * 8
+    assert tier1_full_band_bytes(fake) == pytest.approx(6912.0)
+    assert tier1_peak_memory_bytes(fake) == pytest.approx(2.5 * 6912.0)
+
+
+def test_auto_policy_selects_full_vs_truncated_by_budget() -> None:
+    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    rhs = op.rhs()
+    # Default (8 GB) budget dwarfs this tiny case: full factorization.
+    r_full = solve(op, rhs, method="auto")
+    assert r_full.method == "block_tridiagonal"
+    # A deliberately tiny budget forces the truncated block-Thomas kernel.
+    r_trunc = solve(op, rhs, method="auto", tier1_memory_budget_gb=1e-12)
+    assert r_trunc.method == "block_tridiagonal_truncated"
+    assert r_trunc.converged
+
+
+def test_auto_policy_truncation_invalid_falls_through_to_tier2() -> None:
+    # Tier-1-eligible operator, but the RHS carries Legendre support at l>=keep:
+    # the truncated kernel would be inexact, so auto must fall back to tier 2.
+    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    rhs = np.asarray(op.rhs())
+    n_s, n_x, n_xi, n_t, n_z = op.f_shape
+    f = rhs[: op.f_size].reshape(n_s, n_x, n_xi, n_t * n_z).copy()
+    f[0, 0, 3, 0] = 1.0  # inject l=3 support (keep defaults to 3)
+    rhs_bad = jnp.concatenate([jnp.asarray(f).reshape(-1), jnp.asarray(rhs[op.f_size :])])
+    r = solve(op, rhs_bad, method="auto", tier1_memory_budget_gb=1e-12, tol=1e-9)
+    assert r.method == "gcrot"
+    assert r.converged
+
+
+@pytest.mark.parametrize(
+    "name,which",
+    [
+        ("pas_1species_PAS_noEr_tiny_scheme1", None),  # RHSMode=1 drive
+        ("monoenergetic_PAS_tiny_scheme1", (1, 2)),  # RHSMode=3 transport drives
+    ],
+)
+def test_truncated_matches_full_lowest_blocks_and_moments(name: str, which) -> None:
+    op = _load_op(name)
+    if which is None:
+        rhs = op.rhs()
+    else:
+        rhs = jnp.stack([op.rhs(w) for w in which], axis=1)
+
+    full = solve(op, rhs, method="block_tridiagonal")
+    trunc = solve(op, rhs, method="block_tridiagonal_truncated")
+    assert trunc.method == "block_tridiagonal_truncated"
+    assert trunc.converged
+
+    n_s, n_x, n_xi, n_t, n_z = op.f_shape
+    n_tz = n_t * n_z
+    xf, xt = np.asarray(full.x), np.asarray(trunc.x)
+    ff = xf[: op.f_size].reshape(n_s, n_x, n_xi, n_tz, -1)
+    ft = xt[: op.f_size].reshape(n_s, n_x, n_xi, n_tz, -1)
+    # lowest-3 Legendre blocks are exact; blocks l>=3 are zero-padded.
+    dl = np.linalg.norm(ft[:, :, :3] - ff[:, :, :3]) / np.linalg.norm(ff[:, :, :3])
+    assert dl < 1e-10
+    assert np.max(np.abs(ft[:, :, 3:])) == 0.0
+
+    # Output moments (fluxes / FSABFlow) contract only l<=2, so they match.
+    xf_stack = xf.T if xf.ndim == 2 else xf[None, :]
+    xt_stack = xt.T if xt.ndim == 2 else xt[None, :]
+    m_full, m_trunc = _vm_moments(op, xf_stack), _vm_moments(op, xt_stack)
+    for key in ("particleFlux", "heatFlux", "FSABFlow"):
+        a, b = m_full[key], m_trunc[key]
+        rel = np.abs(a - b) / np.maximum(np.abs(a), 1e-300)
+        assert rel.max() < 1e-10, f"{key}: {rel.max():.3e}"
+
+
+def test_gradient_through_truncated_route_matches_finite_differences() -> None:
+    op0 = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+
+    def loss(t_hat_scalar: jnp.ndarray) -> jnp.ndarray:
+        op = replace(op0, t_hat=jnp.reshape(t_hat_scalar, (1,)))
+        # Tiny budget forces the truncated kernel; grad flows straight through
+        # the block-Thomas sweeps (no full-operator IFT wrapper).
+        result = solve(
+            op, op.rhs(), method="auto", tier1_memory_budget_gb=1e-12, differentiable=True
+        )
+        return jnp.sum(result.x**2)
+
+    t0 = float(op0.t_hat[0])
+    g = float(jax.grad(loss)(jnp.asarray(t0)))
+    eps = 1e-6
+    fd = float((loss(jnp.asarray(t0 + eps)) - loss(jnp.asarray(t0 - eps))) / (2.0 * eps))
+    assert np.isfinite(g) and np.isfinite(fd) and abs(fd) > 0.0
+    np.testing.assert_allclose(g, fd, rtol=1e-4)
 
 
 # ---------------------------------------------------------------------------
