@@ -282,6 +282,13 @@ Public command-line interface:
 - comparison and utility commands,
 - parallel runtime/bootstrap flags.
 
+RHSMode=2/3 transport-matrix runs (``transport-matrix-v3`` and the default
+``write-output`` dispatch for RHSMode=2/3 inputs) route through the canonical
+stack driver ``sfincs_jax.run.run_transport_matrix``; the legacy outputs
+writer remains the owner only for RHSMode=1 runs and for options the
+canonical writer does not cover yet (``.npz`` output, ``export_f``, solver
+traces, ``--no-overwrite``, non-Fortran layout).
+
 ``sfincs_jax/io.py``
 ^^^^^^^^^^^^^^^^^^^^
 

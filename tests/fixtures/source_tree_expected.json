@@ -147,7 +147,6 @@
       "transport_solve.py"
     ],
     "solvers": [
-      "block_tridiagonal_transport.py",
       "diagnostics.py",
       "explicit_sparse.py",
       "implicit.py",
