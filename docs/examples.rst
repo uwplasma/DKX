@@ -1,6 +1,75 @@
 Examples
 ========
 
+Canonical examples
+------------------
+
+Six pedagogic scripts on the canonical API sit at the top of ``examples/``.
+Each follows the same style contract: no ``main()``, all parameters at the top
+of the file, printed setup/progress/final results, at least one plot, and
+output files written and read back. All run on a laptop CPU; CI runs each one
+at shrunken resolution (``SFINCS_JAX_CI=1``) in
+``tests/test_examples_pedagogic.py``.
+
+``examples/run_tokamak.py`` — first solve, from Python
+   Builds a circular-tokamak ``input.namelist`` from Python dicts
+   (``geometryScheme=1``, one ion species, pitch-angle-scattering collisions),
+   runs the canonical driver, and reads the HDF5 output back. The key lines:
+
+   .. code-block:: python
+
+      from sfincs_jax.run import run_profile
+
+      run = run_profile(deck_path, solve_method="auto", out_path=h5_path)
+      gamma = float(run.moments["particleFlux_vm_psiHat"][0])
+
+   It teaches the per-species results table, the four radial-coordinate flux
+   conventions, and HDF5/NetCDF output selection by file suffix.
+
+``examples/run_w7x.py`` — stellarator geometry and full Fokker-Planck
+   Loads a W7-X Boozer equilibrium and solves with the linearized
+   Fokker-Planck operator, which routes ``auto`` to the tier-2 recycled-Krylov
+   (GCROT) solver instead of the tier-1 structured direct path. It teaches
+   geometry files, collision-operator selection, and how to inspect which
+   solver tier ran (``run.solve_result.method``).
+
+``examples/transport_coefficients.py`` — RHSMode=3 transport matrices
+   Computes monoenergetic transport matrices over a collisionality scan,
+   checks Onsager symmetry, and plots ``L11`` versus ``nuPrime``.
+
+``examples/ambipolar_er_scan.py`` — ambipolar radial electric field
+   Scans ``Er``, brackets the sign change of the radial current, solves for
+   the ambipolar root, and writes/reads the output at the root.
+
+``examples/gradients_tour.py`` — differentiating the solve
+   Takes ``jax.grad`` of fluxes and bootstrap current with respect to
+   temperature and ``Er`` drives through the implicit-differentiation solve
+   path, and verifies every gradient against central finite differences.
+
+``examples/optimize_QA_bootstrap.py`` — flagship optimization
+   Gradient-based optimization of a quasi-axisymmetric stellarator boundary
+   for low bootstrap current: boundary Fourier coefficients ->
+   ``vmec_jax`` fixed-boundary equilibrium (implicit-adjoint VJP) ->
+   differentiable Boozer transform (``booz_xform_jax``) ->
+   ``FluxSurfaceGeometry.from_fourier`` (geometryScheme-13 pure-JAX path) ->
+   canonical kinetic solve (tier-2 GCROT, warm-started and recycled across
+   optimizer iterations) -> ``FSABjHat``. One ``jax.value_and_grad`` call
+   differentiates the whole chain; the example verifies the end-to-end
+   gradient against central finite differences and holds aspect ratio, mean
+   iota, and quasisymmetry with penalty terms. Alternative objective lines
+   (e.g. ``D11``-style targets) ship commented and CI-tested. Requires
+   ``vmec_jax`` and ``booz_xform_jax``.
+
+   .. figure:: _static/figures/readme/optimize_QA_bootstrap.png
+      :alt: QA low-bootstrap optimization dashboard: objective history, boundary cross-sections, |B| spectrum, and <j.B> profile.
+      :align: center
+      :width: 90%
+
+      Output figure of ``examples/optimize_QA_bootstrap.py``.
+
+Example tree
+------------
+
 The repository includes a structured `examples/` tree:
 
 - `examples/tutorials/`: notebook-led learning path and a fast output/plot script

@@ -1,6 +1,15 @@
 Usage
 =====
 
+.. note::
+
+   For RHSMode=1/2/3 cases the recommended entry points are the canonical
+   drivers (``sfincs_jax.run.run_profile`` and the transport-matrix runners)
+   shown in the quickstart on :doc:`index` and in :doc:`examples`. This page
+   documents the full API surface, including the retained legacy pipeline
+   modules that keep ownership of the deferred cases (``Phi1``, tangential
+   magnetic drifts, constraint schemes 3/4, mapped speed grids, ``export_f``).
+
 Parsing an input file
 ---------------------
 
