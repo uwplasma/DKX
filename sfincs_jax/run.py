@@ -52,6 +52,7 @@ from sfincs_jax.writer import (
     _u_hat,
     operator_containers,
     write_profile_output,
+    write_run_solver_trace,
     write_transport_output,
 )
 
@@ -228,6 +229,7 @@ def run_transport_matrix(
     solve_method: str = "auto",
     tol: float = 1e-10,
     out_path: str | Path | None = None,
+    solver_trace_path: str | Path | None = None,
     emit: Callable[[str], None] | None = print,
 ) -> TransportRun:
     """Run a SFINCS v3 RHSMode=2/3 transport-matrix calculation end to end.
@@ -238,8 +240,11 @@ def run_transport_matrix(
         solve_method: :func:`sfincs_jax.solve.solve` method (``"auto"`` picks
             the tier-1 structured direct path for the PAS/DKES family).
         tol: relative residual tolerance per whichRHS column.
-        out_path: optional ``sfincsOutput`` file (``.h5`` or ``.nc``) written by
-            :func:`sfincs_jax.writer.write_transport_output`.
+        out_path: optional ``sfincsOutput`` file (``.h5``, ``.nc``, or ``.npz``)
+            written by :func:`sfincs_jax.writer.write_transport_output`.
+        solver_trace_path: optional JSON sidecar path; when set, a versioned
+            :class:`sfincs_jax.solvers.diagnostics.SolverTrace` is written from
+            the shared multi-RHS :class:`sfincs_jax.solve.SolveResult`.
         emit: per-line stdout sink for the Fortran-parity print blocks
             (``print`` reproduces the v3 console flow); ``None`` silences it.
 
@@ -308,6 +313,15 @@ def run_transport_matrix(
             path=out_path, inp=inp, op=op, grids=grids, geom=geom, radial=radial,
             state_vectors=state_vectors, transport_matrix=transport_matrix,
             elapsed_times=elapsed,
+        )  # fmt: skip
+
+    if solver_trace_path is not None:
+        rhs_norm = float(np.max(np.linalg.norm(np.asarray(rhs, dtype=np.float64), axis=0)))
+        write_run_solver_trace(
+            path=solver_trace_path, inp=inp, op=op, solve_result=result,
+            rhs_norm=rhs_norm, solver_tol=float(tol), selected_path="transport_matrix",
+            elapsed_seconds=solve_seconds, input_namelist=namelist_path, output_path=out_path,
+            compute_solution=False, compute_transport_matrix=True,
         )  # fmt: skip
 
     _emit_lines(emit, [console.goodbye_line()])
@@ -424,6 +438,7 @@ def run_profile(
     solve_method: str = "auto",
     tol: float = 1e-10,
     out_path: str | Path | None = None,
+    solver_trace_path: str | Path | None = None,
     emit: Callable[[str], None] | None = print,
 ) -> ProfileRun:
     """Run a SFINCS v3 RHSMode=1 profile-gradient calculation end to end.
@@ -436,8 +451,11 @@ def run_profile(
             tier 1 for the PAS/DKES family and tier-2 recycled Krylov for
             Fokker-Planck collisions).
         tol: relative residual tolerance for the single-RHS solve.
-        out_path: optional ``sfincsOutput`` file (``.h5`` or ``.nc``) written by
-            :func:`sfincs_jax.writer.write_profile_output`.
+        out_path: optional ``sfincsOutput`` file (``.h5``, ``.nc``, or ``.npz``)
+            written by :func:`sfincs_jax.writer.write_profile_output`.
+        solver_trace_path: optional JSON sidecar path; when set, a versioned
+            :class:`sfincs_jax.solvers.diagnostics.SolverTrace` is written from
+            the single-RHS :class:`sfincs_jax.solve.SolveResult`.
         emit: per-line stdout sink for the Fortran-parity print blocks
             (``print`` reproduces the v3 console flow); ``None`` silences it.
 
@@ -522,6 +540,18 @@ def run_profile(
         output_path = write_profile_output(
             path=out_path, inp=inp, op=op, grids=grids, geom=geom, radial=radial,
             state_vector=state_vector, elapsed_seconds=solve_seconds,
+        )  # fmt: skip
+
+    if solver_trace_path is not None:
+        try:
+            rhs_norm = float(np.linalg.norm(np.asarray(op.rhs(), dtype=np.float64)))
+        except Exception:  # noqa: BLE001
+            rhs_norm = 0.0
+        write_run_solver_trace(
+            path=solver_trace_path, inp=inp, op=op, solve_result=result,
+            rhs_norm=rhs_norm, solver_tol=float(tol), selected_path="rhsmode1_solution",
+            elapsed_seconds=solve_seconds, input_namelist=namelist_path, output_path=out_path,
+            compute_solution=True, compute_transport_matrix=False,
         )  # fmt: skip
 
     _emit_lines(emit, [console.goodbye_line()])

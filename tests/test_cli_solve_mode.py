@@ -36,18 +36,24 @@ class _FakeNamelist:
         return self.groups.get(name.lower(), {})
 
 
-def test_cmd_write_output_forces_explicit_mode(monkeypatch, tmp_path: Path) -> None:
+def test_cmd_write_output_routes_solver_trace_through_canonical(monkeypatch, tmp_path: Path) -> None:
+    """A supported RHSMode=1 --solver-trace deck now emits the sidecar from run_profile."""
     captured: dict[str, object] = {}
 
-    def _fake_write_output_h5(**kwargs):
+    def _fake_run_profile(namelist_path, **kwargs):
+        captured["namelist_path"] = Path(namelist_path)
         captured.update(kwargs)
-        out = Path(kwargs["output_path"])
+        out = Path(kwargs["out_path"])
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"")
-        return out
+        return SimpleNamespace(output_path=out)
+
+    def _fail_legacy(**_kwargs):  # pragma: no cover - canonical deck must not use the legacy writer
+        raise AssertionError("a canonical RHSMode=1 --solver-trace deck must not enter the legacy writer")
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fail_legacy)
 
     args = Namespace(
         input=str(tmp_path / "input.namelist"),
@@ -64,8 +70,8 @@ def test_cmd_write_output_forces_explicit_mode(monkeypatch, tmp_path: Path) -> N
         verbose=0,
     )
     assert cli._cmd_write_output(args) == 0
-    assert captured["differentiable"] is False
     assert captured["solver_trace_path"] == Path(tmp_path / "solver_trace.json")
+    assert captured["out_path"] == Path(tmp_path / "sfincsOutput.h5")
 
 
 def test_cmd_write_output_accepts_extension_selected_formats(monkeypatch, tmp_path: Path) -> None:
@@ -894,15 +900,20 @@ def test_write_output_help_presents_solver_override_as_advanced(capsys) -> None:
 def test_main_write_output_forwards_solver_trace_sidecar(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_write_output_h5(**kwargs):
+    def _fake_run_profile(namelist_path, **kwargs):
+        captured["namelist_path"] = Path(namelist_path)
         captured.update(kwargs)
-        out = Path(kwargs["output_path"])
+        out = Path(kwargs["out_path"])
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"")
-        return out
+        return SimpleNamespace(output_path=out)
+
+    def _fail_legacy(**_kwargs):  # pragma: no cover - canonical deck must not use the legacy writer
+        raise AssertionError("a canonical RHSMode=1 --solver-trace deck must not enter the legacy writer")
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fail_legacy)
 
     trace_path = tmp_path / "solver_trace.json"
     rc = cli.main(

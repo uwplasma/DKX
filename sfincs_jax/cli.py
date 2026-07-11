@@ -414,7 +414,6 @@ def deck_requires_legacy_pipeline(nml) -> str | None:
     general = nml.group("general")
     phys = nml.group("physicsParameters")
     other = nml.group("otherNumericalParameters")
-    export_f = nml.group("export_f")
 
     rhs_mode = int(general.get("RHSMODE", 1))
     if rhs_mode not in (1, 2, 3):
@@ -447,8 +446,6 @@ def deck_requires_legacy_pipeline(nml) -> str | None:
         return f"xGridScheme={x_grid_scheme} (mapped/other speed grids) is deferred to the legacy pipeline"
     if int(other.get("XDOTDERIVATIVESCHEME", 0)) != 0:
         return "xDotDerivativeScheme != 0 is deferred to the legacy pipeline"
-    if bool(export_f.get("EXPORT_FULL_F", False)) or bool(export_f.get("EXPORT_DELTA_F", False)):
-        return "export_f output is deferred to the legacy pipeline"
     return None
 
 
@@ -473,19 +470,18 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
     compute_transport_matrix = (not geometry_only) and (bool(args.compute_transport_matrix) or rhs_mode in (2, 3))
 
     # Default path: the canonical stack (sfincs_jax.run) for RHSMode=1/2/3. The
-    # legacy outputs writer remains the owner only for the deferred features
-    # (deck_requires_legacy_pipeline) and options the canonical writer does not
-    # cover yet (npz output, solver traces, non-Fortran layout, --no-overwrite,
-    # --geometry-only).
+    # canonical writer now covers .npz output, --solver-trace sidecars, and the
+    # export_f data family, so the legacy outputs writer remains the owner only
+    # for the deferred-physics decks (deck_requires_legacy_pipeline) and the
+    # output options the canonical writer does not cover yet (non-Fortran
+    # layout, --no-overwrite, --geometry-only).
     legacy_reason: str | None = None
-    if output_format not in {"h5", "netcdf"}:
+    if output_format not in {"h5", "netcdf", "npz"}:
         legacy_reason = f"output format {output_format!r} is written by the legacy pipeline"
     elif not bool(args.fortran_layout):
         legacy_reason = "--no-fortran-layout output is written by the legacy pipeline"
     elif not bool(args.overwrite):
         legacy_reason = "--no-overwrite is handled by the legacy pipeline"
-    elif getattr(args, "solver_trace", None) is not None:
-        legacy_reason = "--solver-trace sidecars are written by the legacy pipeline"
     elif geometry_only:
         legacy_reason = "--geometry-only output is written by the legacy pipeline"
     else:
@@ -501,6 +497,7 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
             solver_tol = 1e-10
         quiet = bool(getattr(args, "quiet", False))
         emit_line = None if quiet else (lambda line: _emit(line, level=0, args=args))
+        solver_trace_path = Path(args.solver_trace) if getattr(args, "solver_trace", None) else None
         try:
             with _canonical_namelist_path(nml=nml, input_path=Path(args.input), args=args) as namelist_path:
                 if rhs_mode == 1:
@@ -511,6 +508,7 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
                         solve_method=str(getattr(args, "solve_method", "auto")),
                         tol=solver_tol,
                         out_path=Path(args.out),
+                        solver_trace_path=solver_trace_path,
                         emit=emit_line,
                     )
                 else:
@@ -521,6 +519,7 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
                         solve_method=str(getattr(args, "solve_method", "auto")),
                         tol=solver_tol,
                         out_path=Path(args.out),
+                        solver_trace_path=solver_trace_path,
                         emit=emit_line,
                     )
         except NotImplementedError as exc:
@@ -536,6 +535,8 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
             return 2
         if use_canonical:
             _emit(f" wrote output -> {run.output_path}", level=0, args=args)
+            if solver_trace_path is not None:
+                _emit(f" wrote solver trace -> {solver_trace_path.resolve()}", level=0, args=args)
             _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
             return 0
 

@@ -8,8 +8,10 @@ for the legacy ``outputs/writer.py`` + ``outputs/transport.py`` +
 only canonical objects (:mod:`sfincs_jax.inputs`,
 :mod:`sfincs_jax.drift_kinetic`, :mod:`sfincs_jax.moments`,
 :mod:`sfincs_jax.magnetic_geometry`) and writes the same datasets the legacy
-writer emits for these modes.  Deferred families (Phi1, magnetic drifts,
-export_f data arrays) are intentionally absent — the operator defers them.
+writer emits for these modes, including the ``export_f`` distribution-function
+family (``full_f``/``delta_f`` on the user grids).  The remaining Phi1 electric
+-drift flux families the legacy writer emits are the writer-consolidation
+follow-up.
 
 Layout convention: like the legacy writer (``fortran_layout=True``),
 grid/geometry/normalization fields are stored reversed-transposed (Fortran
@@ -23,9 +25,10 @@ see :mod:`sfincs_jax.moments` for the flux conventions.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import math
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -57,7 +60,12 @@ from sfincs_jax.moments import (
 )
 from sfincs_jax.phase_space import Grids
 
-__all__ = ["operator_containers", "write_profile_output", "write_transport_output"]
+__all__ = [
+    "operator_containers",
+    "write_profile_output",
+    "write_run_solver_trace",
+    "write_transport_output",
+]
 
 _I32 = np.int32
 
@@ -612,6 +620,31 @@ def _write_h5(path: Path, base: Dict[str, np.ndarray], iteration: Dict[str, np.n
         f.create_dataset("input.namelist", data=text)
 
 
+def _write_npz(path: Path, base: Dict[str, np.ndarray], iteration: Dict[str, np.ndarray], text: str) -> None:
+    """Write an uncompressed ``.npz`` archive with the SFINCS Fortran readback layout.
+
+    Mirrors :func:`_write_h5`: ``base`` grid/geometry/normalization fields are
+    stored reversed-transposed (Fortran column-major view), the per-``whichRHS``
+    diagnostic fields are stored directly, and the ``input.namelist`` source
+    text is stored as a 0-d string array.  This is the canonical-stack
+    replacement for the legacy ``outputs.formats.write_sfincs_npz`` path so
+    ``--out *.npz`` no longer needs the legacy writer.
+    """
+    payload: Dict[str, np.ndarray] = {}
+    for key, value in base.items():
+        arr = _reversed_axes(np.asarray(value))
+        if arr.ndim > 0 and arr.dtype.kind != "O":
+            arr = np.ascontiguousarray(arr)
+        payload[key] = arr
+    for key, value in iteration.items():
+        arr = np.asarray(value)
+        if arr.ndim > 0 and arr.dtype.kind != "O":
+            arr = np.ascontiguousarray(arr)
+        payload[key] = arr
+    payload["input.namelist"] = np.asarray(text)
+    np.savez(path, **payload)
+
+
 def _write_netcdf(path: Path, base: Dict[str, np.ndarray], iteration: Dict[str, np.ndarray], text: str) -> None:
     from netCDF4 import Dataset  # noqa: PLC0415
 
@@ -635,6 +668,338 @@ def _write_netcdf(path: Path, base: Dict[str, np.ndarray], iteration: Dict[str, 
                 var.assignValue(value)
             else:
                 var[:] = value
+
+
+def _write_output_by_suffix(
+    path: Path, base: Dict[str, np.ndarray], iteration: Dict[str, np.ndarray], text: str
+) -> None:
+    """Dispatch to the h5/netcdf/npz writer selected by ``path``'s suffix."""
+    suffix = path.suffix.lower()
+    if suffix in {".nc", ".netcdf"}:
+        _write_netcdf(path, base, iteration, text)
+    elif suffix == ".npz":
+        _write_npz(path, base, iteration, text)
+    else:
+        _write_h5(path, base, iteration, text)
+
+
+# ---------------------------------------------------------------------------
+# export_f: distribution-function export on the user grids (export_f.F90).
+#
+# Ported from the legacy ``outputs.formats`` export_f mapping so the canonical
+# writer emits the full_f/delta_f data family (and the export_f_* grid/option
+# datasets) directly from the canonical solved state, without the legacy
+# outputs pipeline.  The maps and Legendre/interpolation kernels are pure NumPy;
+# the ``export_f_x_option=1`` interpolation reuses the canonical
+# :func:`sfincs_jax.collisions.polynomial_interpolation_matrix_np`.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _ExportFConfig:
+    """Axis maps and metadata for Fortran-compatible ``export_f`` output."""
+
+    export_full_f: bool
+    export_delta_f: bool
+    theta_option: int
+    zeta_option: int
+    x_option: int
+    xi_option: int
+    export_theta: np.ndarray
+    export_zeta: np.ndarray
+    export_x: np.ndarray
+    export_xi: Optional[np.ndarray]
+    n_export_theta: int
+    n_export_zeta: int
+    n_export_x: int
+    n_export_xi: int
+    map_theta: np.ndarray
+    map_zeta: np.ndarray
+    map_x: np.ndarray
+    map_xi: np.ndarray
+
+
+def _export_f_int(group: dict, key: str, default: int) -> int:
+    v = group.get(key.upper(), default)
+    if isinstance(v, list):
+        v = v[0] if v else default
+    return int(v)
+
+
+def _export_f_float(group: dict, key: str, default: float) -> float:
+    v = group.get(key.upper(), default)
+    if isinstance(v, list):
+        v = v[0] if v else default
+    return float(v)
+
+
+def _export_f_1d(group: dict, key: str, *, default: float) -> np.ndarray:
+    k = key.upper()
+    if k not in group:
+        return np.atleast_1d(np.asarray([default], dtype=np.float64))
+    return np.atleast_1d(np.asarray(group[k], dtype=np.float64))
+
+
+def _export_f_legendre_matrix(xi: np.ndarray, *, n_l: int) -> np.ndarray:
+    """Evaluate Legendre polynomials ``P_0`` .. ``P_{n_l-1}`` at ``xi`` (rows=xi)."""
+    xi = np.asarray(xi, dtype=np.float64).reshape(-1)
+    if n_l < 1:
+        raise ValueError("n_l must be >= 1")
+    out = np.zeros((xi.size, n_l), dtype=np.float64)
+    out[:, 0] = 1.0
+    if n_l == 1:
+        return out
+    out[:, 1] = xi
+    for ell in range(2, n_l):
+        out[:, ell] = ((2 * ell - 1) * xi * out[:, ell - 1] - (ell - 1) * out[:, ell - 2]) / float(ell)
+    return out
+
+
+def _export_f_config(*, raw, grids: Grids, geom: FluxSurfaceGeometry) -> _ExportFConfig | None:
+    """Build Fortran-compatible ``export_f`` axis maps (export_f.F90 semantics)."""
+    export_f = raw.group("export_f")
+    export_full_f = bool(export_f.get("EXPORT_FULL_F", False))
+    export_delta_f = bool(export_f.get("EXPORT_DELTA_F", False))
+    if not (export_full_f or export_delta_f):
+        return None
+
+    theta_option = _export_f_int(export_f, "EXPORT_F_THETA_OPTION", 2)
+    zeta_option = _export_f_int(export_f, "EXPORT_F_ZETA_OPTION", 2)
+    xi_option = _export_f_int(export_f, "EXPORT_F_XI_OPTION", 1)
+    x_option = _export_f_int(export_f, "EXPORT_F_X_OPTION", 0)
+
+    export_theta = _export_f_1d(export_f, "EXPORT_F_THETA", default=0.0)
+    export_zeta = _export_f_1d(export_f, "EXPORT_F_ZETA", default=0.0)
+    export_xi = _export_f_1d(export_f, "EXPORT_F_XI", default=0.0)
+    export_x = _export_f_1d(export_f, "EXPORT_F_X", default=1.0)
+
+    theta = np.asarray(grids.theta, dtype=np.float64)
+    zeta = np.asarray(grids.zeta, dtype=np.float64)
+    x = np.asarray(grids.x, dtype=np.float64)
+    n_theta = int(theta.size)
+    n_zeta = int(zeta.size)
+    n_x = int(x.size)
+    n_xi = int(grids.n_xi)
+
+    if theta_option == 0:
+        export_theta = theta.copy()
+        map_theta = np.eye(n_theta, dtype=np.float64)
+    elif theta_option == 1:
+        export_theta = np.mod(export_theta, 2.0 * math.pi)
+        map_theta = np.zeros((export_theta.size, n_theta), dtype=np.float64)
+        for j, val in enumerate(export_theta):
+            idx1 = int(math.floor(val * n_theta / (2.0 * math.pi))) + 1
+            if idx1 < 1:
+                raise ValueError(f"Invalid export_f_theta index for value {val}")
+            if idx1 == n_theta + 1:
+                idx1, idx2 = n_theta, 1
+            elif idx1 == n_theta:
+                idx2 = 1
+            elif idx1 > n_theta + 1:
+                raise ValueError(f"Invalid export_f_theta index for value {val}")
+            else:
+                idx2 = idx1 + 1
+            weight1 = idx1 - val * n_theta / (2.0 * math.pi)
+            map_theta[j, idx1 - 1] = weight1
+            map_theta[j, idx2 - 1] = 1.0 - weight1
+    elif theta_option == 2:
+        export_theta = np.mod(export_theta, 2.0 * math.pi)
+        include = np.zeros((n_theta,), dtype=bool)
+        for val in export_theta:
+            err = np.minimum.reduce(
+                [(val - theta) ** 2, (val - theta - 2.0 * math.pi) ** 2, (val - theta + 2.0 * math.pi) ** 2]
+            )
+            include[int(np.argmin(err))] = True
+        export_theta = theta[include].copy()
+        map_theta = np.zeros((export_theta.size, n_theta), dtype=np.float64)
+        for row_idx, j in enumerate(np.where(include)[0]):
+            map_theta[row_idx, j] = 1.0
+    else:
+        raise ValueError("Invalid export_f_theta_option")
+
+    if n_zeta == 1:
+        export_zeta = np.asarray([0.0], dtype=np.float64)
+        map_zeta = np.ones((1, 1), dtype=np.float64)
+    else:
+        zeta_period = 2.0 * math.pi / float(geom.n_periods)
+        if zeta_option == 0:
+            export_zeta = zeta.copy()
+            map_zeta = np.eye(n_zeta, dtype=np.float64)
+        elif zeta_option == 1:
+            export_zeta = np.mod(export_zeta, zeta_period)
+            map_zeta = np.zeros((export_zeta.size, n_zeta), dtype=np.float64)
+            for j, val in enumerate(export_zeta):
+                idx1 = int(math.floor(val * n_zeta / zeta_period)) + 1
+                if idx1 < 1:
+                    raise ValueError(f"Invalid export_f_zeta index for value {val}")
+                if idx1 == n_zeta + 1:
+                    idx1, idx2 = n_zeta, 1
+                elif idx1 == n_zeta:
+                    idx2 = 1
+                elif idx1 > n_zeta + 1:
+                    raise ValueError(f"Invalid export_f_zeta index for value {val}")
+                else:
+                    idx2 = idx1 + 1
+                weight1 = idx1 - val * n_zeta / zeta_period
+                map_zeta[j, idx1 - 1] = weight1
+                map_zeta[j, idx2 - 1] = 1.0 - weight1
+        elif zeta_option == 2:
+            export_zeta = np.mod(export_zeta, zeta_period)
+            include = np.zeros((n_zeta,), dtype=bool)
+            for val in export_zeta:
+                err = np.minimum.reduce(
+                    [(val - zeta) ** 2, (val - zeta - zeta_period) ** 2, (val - zeta + zeta_period) ** 2]
+                )
+                include[int(np.argmin(err))] = True
+            export_zeta = zeta[include].copy()
+            map_zeta = np.zeros((export_zeta.size, n_zeta), dtype=np.float64)
+            for row_idx, j in enumerate(np.where(include)[0]):
+                map_zeta[row_idx, j] = 1.0
+        else:
+            raise ValueError("Invalid export_f_zeta_option")
+
+    if x_option == 0:
+        export_x = x.copy()
+        map_x = np.eye(n_x, dtype=np.float64)
+    elif x_option == 1:
+        from sfincs_jax.collisions import polynomial_interpolation_matrix_np  # noqa: PLC0415
+
+        other = raw.group("otherNumericalParameters")
+        x_grid_scheme = _export_f_int(other, "XGRIDSCHEME", _export_f_int(other, "xGridScheme", 5))
+        x_grid_k = _export_f_float(other, "xGrid_k", 0.0)
+        if x_grid_scheme not in {1, 2, 5, 6}:
+            raise NotImplementedError(
+                f"export_f_x_option=1 is only implemented for xGridScheme in {{1,2,5,6}} (got {x_grid_scheme})."
+            )
+        alpxk = np.exp(-(x * x)) * (x**x_grid_k)
+        alpx = np.exp(-(export_x * export_x)) * (export_x**x_grid_k)
+        map_x = polynomial_interpolation_matrix_np(xk=x, x=export_x, alpxk=alpxk, alpx=alpx)
+    elif x_option == 2:
+        include = np.zeros((n_x,), dtype=bool)
+        for val in export_x:
+            include[int(np.argmin((val - x) ** 2))] = True
+        export_x = x[include].copy()
+        map_x = np.zeros((export_x.size, n_x), dtype=np.float64)
+        for row_idx, j in enumerate(np.where(include)[0]):
+            map_x[row_idx, j] = 1.0
+    else:
+        raise ValueError("Invalid export_f_x_option")
+
+    if xi_option == 0:
+        map_xi = np.eye(n_xi, dtype=np.float64)
+        export_xi_out: Optional[np.ndarray] = None
+        n_export_xi = n_xi
+    elif xi_option == 1:
+        map_xi = _export_f_legendre_matrix(export_xi, n_l=n_xi)
+        export_xi_out = export_xi.copy()
+        n_export_xi = int(export_xi.size)
+    else:
+        raise ValueError("Invalid export_f_xi_option")
+
+    return _ExportFConfig(
+        export_full_f=export_full_f, export_delta_f=export_delta_f,
+        theta_option=int(theta_option), zeta_option=int(zeta_option),
+        x_option=int(x_option), xi_option=int(xi_option),
+        export_theta=np.asarray(export_theta, dtype=np.float64),
+        export_zeta=np.asarray(export_zeta, dtype=np.float64),
+        export_x=np.asarray(export_x, dtype=np.float64),
+        export_xi=export_xi_out,
+        n_export_theta=int(export_theta.size), n_export_zeta=int(export_zeta.size),
+        n_export_x=int(export_x.size), n_export_xi=int(n_export_xi),
+        map_theta=map_theta, map_zeta=map_zeta, map_x=map_x, map_xi=map_xi,
+    )  # fmt: skip
+
+
+def _apply_export_f_maps(f: np.ndarray, cfg: _ExportFConfig) -> np.ndarray:
+    """Apply the ``export_f`` maps to ``(S, X, L, theta, zeta)`` -> ``(S, x, xi, theta, zeta)`` export axes."""
+    f = np.asarray(f, dtype=np.float64)
+    f = np.einsum("ax,sxltz->saltz", cfg.map_x, f, optimize=True)
+    f = np.einsum("bl,saltz->sabtz", cfg.map_xi, f, optimize=True)
+    f = np.einsum("ct,sabtz->sabcz", cfg.map_theta, f, optimize=True)
+    f = np.einsum("dz,sabcz->sabcd", cfg.map_zeta, f, optimize=True)
+    return f
+
+
+def _f0_l0_maxwellian(op: KineticOperator) -> np.ndarray:
+    """v3 ``f0`` at ``L=0`` for the export full_f base, shape ``(S, X, theta, zeta)``.
+
+    Mirrors ``export_f.F90``/``transport_diagnostics.f0_l0_v3_from_operator``:
+    a shifted Maxwellian ``n m/(pi T) sqrt(m/(pi T)) exp(-x^2) exp(-Z alpha Phi1 / T)``.
+    """
+    x = np.asarray(op.x, dtype=np.float64)
+    expx2 = np.exp(-(x * x))
+    z = np.asarray(op.z_s, dtype=np.float64)
+    n_hat = np.asarray(op.n_hat, dtype=np.float64)
+    t_hat = np.asarray(op.t_hat, dtype=np.float64)
+    m_hat = np.asarray(op.m_hat, dtype=np.float64)
+    pref = n_hat[:, None] * m_hat[:, None] / (np.pi * t_hat[:, None])
+    pref = pref * np.sqrt(m_hat[:, None] / (np.pi * t_hat[:, None])) * expx2[None, :]  # (S, X)
+    phi1_base = getattr(op, "phi1_hat_base", None)
+    if phi1_base is None:
+        phi1 = np.zeros((int(op.n_theta), int(op.n_zeta)), dtype=np.float64)
+    else:
+        phi1 = np.asarray(phi1_base, dtype=np.float64)
+    exp_phi1 = np.exp(-(z[:, None, None] * float(op.alpha) / t_hat[:, None, None]) * phi1[None, :, :])  # (S, T, Z)
+    return pref[:, :, None, None] * exp_phi1[:, None, :, :]  # (S, X, T, Z)
+
+
+def _export_f_data(
+    *, op: KineticOperator, state_vectors: List[np.ndarray], cfg: _ExportFConfig
+) -> Dict[str, np.ndarray]:
+    """Compute ``full_f``/``delta_f`` on the export grids, in the stored Fortran read order.
+
+    The stored order is ``(x_export, xi_export, zeta_export, theta_export,
+    species, iteration)`` (the canonical writer stores iteration datasets
+    directly, so no additional layout reversal is applied here).
+    """
+    f_size = int(op.f_size)
+    f_shape = tuple(op.f_shape)
+    f0_l0 = _f0_l0_maxwellian(op) if cfg.export_full_f else None
+
+    delta_list: List[np.ndarray] = []
+    full_list: List[np.ndarray] = []
+    for x_full in state_vectors:
+        f_delta = np.asarray(x_full[:f_size], dtype=np.float64).reshape(f_shape)
+        if cfg.export_delta_f:
+            delta_np = _apply_export_f_maps(f_delta, cfg)
+            delta_list.append(np.transpose(delta_np, (1, 2, 4, 3, 0)))
+        if cfg.export_full_f:
+            f_full = np.array(f_delta, dtype=np.float64, copy=True)
+            f_full[:, :, 0, :, :] += f0_l0
+            full_np = _apply_export_f_maps(f_full, cfg)
+            full_list.append(np.transpose(full_np, (1, 2, 4, 3, 0)))
+
+    out: Dict[str, np.ndarray] = {}
+    if cfg.export_delta_f and delta_list:
+        out["delta_f"] = np.ascontiguousarray(np.stack(delta_list, axis=-1))
+    if cfg.export_full_f and full_list:
+        out["full_f"] = np.ascontiguousarray(np.stack(full_list, axis=-1))
+    return out
+
+
+def _add_export_f_datasets(
+    base: Dict[str, np.ndarray],
+    iteration: Dict[str, np.ndarray],
+    *,
+    op: KineticOperator,
+    state_vectors: List[np.ndarray],
+    cfg: _ExportFConfig,
+) -> None:
+    """Add the export_f grid/option datasets to ``base`` and full_f/delta_f to ``iteration``."""
+    base["export_f_theta_option"] = np.asarray(cfg.theta_option, dtype=_I32)
+    base["export_f_zeta_option"] = np.asarray(cfg.zeta_option, dtype=_I32)
+    base["export_f_x_option"] = np.asarray(cfg.x_option, dtype=_I32)
+    base["export_f_xi_option"] = np.asarray(cfg.xi_option, dtype=_I32)
+    base["export_f_theta"] = np.asarray(cfg.export_theta, dtype=np.float64)
+    base["export_f_zeta"] = np.asarray(cfg.export_zeta, dtype=np.float64)
+    base["export_f_x"] = np.asarray(cfg.export_x, dtype=np.float64)
+    base["N_export_f_theta"] = np.asarray(cfg.n_export_theta, dtype=_I32)
+    base["N_export_f_zeta"] = np.asarray(cfg.n_export_zeta, dtype=_I32)
+    base["N_export_f_x"] = np.asarray(cfg.n_export_x, dtype=_I32)
+    if cfg.export_xi is not None:
+        base["export_f_xi"] = np.asarray(cfg.export_xi, dtype=np.float64)
+        base["N_export_f_xi"] = np.asarray(cfg.n_export_xi, dtype=_I32)
+    iteration.update(_export_f_data(op=op, state_vectors=state_vectors, cfg=cfg))
 
 
 def write_transport_output(
@@ -687,12 +1052,16 @@ def write_transport_output(
         transport_matrix=transport_matrix, elapsed_times=np.asarray(elapsed_times),
     )  # fmt: skip
 
+    export_cfg = _export_f_config(raw=inp.raw, grids=grids, geom=geom) if inp.raw is not None else None
+    if export_cfg is not None:
+        _add_export_f_datasets(
+            base, iteration, op=op,
+            state_vectors=[state_vectors[k] for k in range(n_rhs)], cfg=export_cfg,
+        )  # fmt: skip
+
     text = inp.raw.source_text if (inp.raw is not None and inp.raw.source_text is not None) else ""
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.suffix.lower() in {".nc", ".netcdf"}:
-        _write_netcdf(path, base, iteration, text)
-    else:
-        _write_h5(path, base, iteration, text)
+    _write_output_by_suffix(path, base, iteration, text)
     return path.resolve()
 
 
@@ -713,8 +1082,8 @@ def write_profile_output(
     iteration datasets carry the full RHSMode=1 per-species moment table
     (:func:`sfincs_jax.moments.rhsmode1_moments`), NTV, and the classical
     fluxes at the run's gradients, all with a single trailing iteration axis
-    (``NIterations=1``).  The deferred Phi1 / magnetic-drift / export_f data
-    families are intentionally not written.
+    (``NIterations=1``).  When the deck requests ``export_f``, the ``full_f`` /
+    ``delta_f`` distribution-function datasets are written on the user grids.
 
     Args:
         path: output file; ``.h5``/``.hdf5`` (or no suffix) writes HDF5 and
@@ -747,10 +1116,99 @@ def write_profile_output(
         elapsed_seconds=elapsed_seconds,
     )  # fmt: skip
 
+    export_cfg = _export_f_config(raw=inp.raw, grids=grids, geom=geom) if inp.raw is not None else None
+    if export_cfg is not None:
+        _add_export_f_datasets(
+            base, iteration, op=op, state_vectors=[state_vector], cfg=export_cfg
+        )
+
     text = inp.raw.source_text if (inp.raw is not None and inp.raw.source_text is not None) else ""
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.suffix.lower() in {".nc", ".netcdf"}:
-        _write_netcdf(path, base, iteration, text)
-    else:
-        _write_h5(path, base, iteration, text)
+    _write_output_by_suffix(path, base, iteration, text)
+    return path.resolve()
+
+
+def _active_size(op: KineticOperator) -> int:
+    """Packed active-DOF count of the operator (``Nxi_for_x`` truncation applied)."""
+    mask = op.active_dof_mask()
+    if mask is None:
+        return int(op.total_size)
+    return int(np.asarray(mask, dtype=np.float64).sum())
+
+
+def write_run_solver_trace(
+    *,
+    path: str | Path,
+    inp: SfincsInput,
+    op: KineticOperator,
+    solve_result: Any,
+    rhs_norm: float,
+    solver_tol: float,
+    selected_path: str,
+    elapsed_seconds: float,
+    input_namelist: str | Path | None = None,
+    output_path: str | Path | None = None,
+    compute_solution: bool,
+    compute_transport_matrix: bool,
+) -> Path:
+    """Write a versioned solver-trace JSON sidecar from a canonical run.
+
+    Emits the same :class:`sfincs_jax.solvers.diagnostics.SolverTrace` schema
+    the legacy ``--solver-trace`` path produces, populated from the canonical
+    :class:`sfincs_jax.solve.SolveResult` (method, residual norms, convergence,
+    per-phase timings).  Solver-implementation fields (``solve_method``,
+    per-phase timings, memory estimates) naturally differ from the retired
+    GMRES pipeline; the parity-relevant fields (backend, ``rhs_mode``,
+    ``selected_path``, ``geometry_scheme``, sizes, residual norm vs target,
+    convergence) match.  Imported lazily so the canonical writer keeps no
+    module-load dependency on the retained ``solvers`` package.
+    """
+    from sfincs_jax.solvers.diagnostics import SolverTrace, write_solver_trace_json  # noqa: PLC0415
+
+    try:
+        import jax  # noqa: PLC0415
+
+        backend = str(jax.default_backend())
+        device_count = len(jax.devices())
+    except Exception:  # noqa: BLE001
+        backend = "unknown"
+        device_count = None
+
+    residual_norms = np.atleast_1d(np.asarray(solve_result.residual_norms, dtype=np.float64))
+    residual_norm = float(np.max(residual_norms)) if residual_norms.size else None
+    residual_target = max(0.0, float(solver_tol) * float(rhs_norm))
+    converged = bool(solve_result.converged)
+    timings = dict(getattr(solve_result, "timings", {}) or {})
+    iterations = getattr(solve_result, "iterations", None)
+
+    trace = SolverTrace(
+        backend=backend,
+        rhs_mode=int(inp.general.rhs_mode),
+        selected_path=selected_path,
+        solve_method=str(getattr(solve_result, "method", "auto")),
+        geometry_scheme=int(inp.geometry.geometry_scheme),
+        collision_operator=str(int(inp.physics.collision_operator)),
+        total_size=int(op.total_size),
+        active_size=_active_size(op),
+        device_count=device_count,
+        residual_norm=residual_norm,
+        residual_target=residual_target,
+        converged=converged,
+        elapsed_s=float(elapsed_seconds),
+        setup_s=(float(timings["build"]) if "build" in timings else None),
+        solve_s=(float(timings["solve"]) if "solve" in timings else None),
+        matvec_count=(int(iterations) if iterations is not None else None),
+        metadata={
+            "input_namelist": str(Path(input_namelist).resolve()) if input_namelist else "",
+            "output_path": str(Path(output_path).resolve()) if output_path is not None else "",
+            "output_format": (Path(output_path).suffix.lstrip(".") if output_path is not None else ""),
+            "compute_solution": bool(compute_solution),
+            "compute_transport_matrix": bool(compute_transport_matrix),
+            "differentiable": False,
+            "converged": converged,
+        },
+    )
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_solver_trace_json(path, trace)
     return path.resolve()
