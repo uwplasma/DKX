@@ -420,3 +420,61 @@ def test_geometry_scheme3_bfield_parity_and_end_to_end() -> None:
     assert tm.shape == (2, 2)
     assert np.all(np.isfinite(tm))
     assert np.all(np.isfinite(np.asarray(run.state_vectors)))
+
+
+# ---------------------------------------------------------------------------
+# constraintScheme 3 and 4 (constant+quartic / quadratic+quartic sources)
+#
+# cs3/4 differ from cs1 ONLY in the two source x-shapes injected into the L=0
+# DKE rows (populateMatrix.F90 lines 2915-2938); the flux-surface-averaged
+# density/pressure constraint rows are shared.  Canonical-vs-Fortran output
+# parity lives in tests/test_output_h5_constraintscheme34_parity.py (the legacy
+# stack reuses the cs1 basis for cs3/4, so it is NOT a valid oracle here).
+# ---------------------------------------------------------------------------
+
+
+def test_constraint_scheme_3_4_source_basis_matches_fortran() -> None:
+    """``_source_basis`` equals populateMatrix.F90's xPartOfSource1/2 for 1/3/4."""
+    op = KineticOperator.from_namelist(_load("fp_1species_FPCollisions_noEr_tiny_cs3"))
+    x2 = np.asarray(op.x) ** 2
+    coef = np.exp(-x2) / (np.pi * np.sqrt(np.pi))
+    expected = {
+        1: ((-x2 + 2.5) * coef, (2.0 / 3.0 * x2 - 1.0) * coef),
+        3: ((-1.0 / 5.0 * x2 * x2 + 7.0 / 4.0) * coef, (2.0 / 15.0 * x2 * x2 - 0.5) * coef),
+        4: (
+            (-2.0 / 3.0 * x2 * x2 + 7.0 / 3.0 * x2) * coef,
+            (4.0 / 15.0 * x2 * x2 - 2.0 / 3.0 * x2) * coef,
+        ),
+    }
+    for scheme, (e1, e2) in expected.items():
+        s1, s2 = op._source_basis(scheme)
+        np.testing.assert_allclose(np.asarray(s1), e1, rtol=0, atol=1e-14)
+        np.testing.assert_allclose(np.asarray(s2), e2, rtol=0, atol=1e-14)
+
+
+def test_constraint_scheme_3_4_operator_differs_from_scheme1() -> None:
+    """Canonical cs3/cs4 apply differs from cs1 on the same deck (basis took effect).
+
+    The bordered source columns carry the scheme-specific x-shapes, so the full
+    apply must differ from cs1 — the guard against the legacy fall-through that
+    silently reused the cs1 basis.  ``extra_size`` and the shared density/pressure
+    constraint rows are unchanged (both carry ``2*Nspecies`` source unknowns).
+    """
+    base = (REF / "fp_1species_FPCollisions_noEr_tiny_cs3.input.namelist").read_text()
+    ops = {
+        cs: KineticOperator.from_namelist(
+            parse_sfincs_input_text(base.replace("constraintScheme = 3", f"constraintScheme = {cs}"))
+        )
+        for cs in (1, 3, 4)
+    }
+    for cs in (1, 3, 4):
+        assert ops[cs].constraint_scheme == cs
+        assert ops[cs].extra_size == 2 * ops[cs].n_species
+
+    rng = np.random.default_rng(0)
+    v = jnp.asarray(rng.standard_normal(ops[1].total_size))
+    y = {cs: np.asarray(ops[cs].apply(v)) for cs in (1, 3, 4)}
+    # The three source bases are genuinely distinct, so the applies must separate.
+    assert np.max(np.abs(y[3] - y[1])) > 1e-3
+    assert np.max(np.abs(y[4] - y[1])) > 1e-3
+    assert np.max(np.abs(y[4] - y[3])) > 1e-3

@@ -404,7 +404,7 @@ def deck_requires_legacy_pipeline(nml) -> str | None:
 
     The canonical stack (:func:`sfincs_jax.run.run_profile`) owns the supported
     RHSMode=1 surface: PAS/Fokker-Planck collisions, DKES or full trajectories,
-    constraint schemes 0/1/2, geometry schemes 1-5/11-13.  The legacy
+    constraint schemes 0/1/2/3/4, geometry schemes 1-5/11-13.  The legacy
     ``problems``/``outputs`` pipeline remains the interim owner for the
     explicitly deferred features (plan_final.md "Explicit Deferred Items");
     this predicate mirrors the refusal list of
@@ -439,7 +439,7 @@ def deck_requires_legacy_pipeline(nml) -> str | None:
     constraint_scheme = int(phys.get("CONSTRAINTSCHEME", other.get("CONSTRAINTSCHEME", -1)))
     if constraint_scheme < 0:
         constraint_scheme = 1 if collision_operator == 0 else 2
-    if constraint_scheme not in (0, 1, 2):
+    if constraint_scheme not in (0, 1, 2, 3, 4):
         return f"constraintScheme={constraint_scheme} is deferred to the legacy pipeline"
     x_grid_scheme = int(other.get("XGRIDSCHEME", 5))
     if x_grid_scheme not in (1, 2, 5, 6):

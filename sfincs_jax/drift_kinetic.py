@@ -81,7 +81,6 @@ for them until then):
   poloidal+toroidal tangential magnetic drift, is consolidated here; scheme 1
   couples L, L±2 so :meth:`to_block_tridiagonal` refuses it and tier-2 GCROT owns
   those decks);
-- ``constraintScheme`` 3 and 4;
 - ``collisionOperator`` other than 0 (Fokker-Planck) and 1 (pitch-angle
   scattering);
 - mapped x-grids (``xGridScheme >= 50``) and ``xDotDerivativeScheme != 0``.
@@ -446,7 +445,7 @@ class KineticOperator:
         """Number of bordered source unknowns (= number of constraint rows)."""
         if self.constraint_scheme == 0:
             return 0
-        if self.constraint_scheme == 1:
+        if self.constraint_scheme in (1, 3, 4):
             return 2 * self.n_species
         if self.constraint_scheme == 2:
             return self.n_species * self.n_x
@@ -775,11 +774,33 @@ class KineticOperator:
         """(T,Z) weights of the flux-surface average (w_theta w_zeta / DHat)."""
         return (self.theta_weights[:, None] * self.zeta_weights[None, :]) / self.d_hat
 
-    def _source_basis_constraint_scheme_1(self) -> tuple[jnp.ndarray, jnp.ndarray]:
-        """(xPartOfSource1, xPartOfSource2) for constraintScheme=1 (whichMatrix != 4,5)."""
+    def _source_basis(self, scheme: int) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """(xPartOfSource1, xPartOfSource2) source x-shapes for constraintScheme 1/3/4.
+
+        ``populateMatrix.F90`` lines 2915-2938 (the ``whichMatrix != 4,5`` branch):
+        the particle source ``S_p`` provides particles but no heat and the energy
+        source ``S_e`` provides heat but no particles, both normalized to the same
+        density/pressure moments.  The three schemes differ only in which two
+        Laguerre-like polynomial terms carry the sources (the density/pressure
+        constraint rows built in :meth:`apply` are identical across 1/3/4):
+
+        * scheme 1 — constant + quadratic;
+        * scheme 3 — constant + quartic;
+        * scheme 4 — quadratic + quartic.
+        """
         x2 = self.x * self.x
+        x4 = x2 * x2
         coef = jnp.exp(-x2) / (jnp.pi * jnp.sqrt(jnp.pi))
-        return (-x2 + 2.5) * coef, ((2.0 / 3.0) * x2 - 1.0) * coef
+        if scheme == 1:
+            return (-x2 + 2.5) * coef, ((2.0 / 3.0) * x2 - 1.0) * coef
+        if scheme == 3:
+            return (-(1.0 / 5.0) * x4 + 7.0 / 4.0) * coef, ((2.0 / 15.0) * x4 - 0.5) * coef
+        if scheme == 4:
+            return (
+                (-(2.0 / 3.0) * x4 + (7.0 / 3.0) * x2) * coef,
+                ((4.0 / 15.0) * x4 - (2.0 / 3.0) * x2) * coef,
+            )
+        raise NotImplementedError(f"constraintScheme={scheme} has no source basis.")
 
     def apply(self, v: jnp.ndarray) -> jnp.ndarray:
         """Apply the full bordered operator ``[[A, B], [C, 0]]`` to a flat state.
@@ -814,9 +835,9 @@ class KineticOperator:
         if self.constraint_scheme == 0:
             y_extra = jnp.zeros((0,), dtype=jnp.float64)
 
-        elif self.constraint_scheme == 1:
+        elif self.constraint_scheme in (1, 3, 4):
             src = extra.reshape((self.n_species, 2))
-            xpart1, xpart2 = self._source_basis_constraint_scheme_1()
+            xpart1, xpart2 = self._source_basis(self.constraint_scheme)
             y_f = y_f.at[:, ix0:, 0, :, :].add(
                 xpart1[ix0:][None, :, None, None] * src[:, 0, None, None, None]
                 + xpart2[ix0:][None, :, None, None] * src[:, 1, None, None, None]
@@ -1016,9 +1037,9 @@ class KineticOperator:
         ix0 = _ix_min(self.point_at_x0)
         if self.constraint_scheme == 0:
             y_extra = jnp.zeros((0,), dtype=jnp.float64)
-        elif self.constraint_scheme == 1:
+        elif self.constraint_scheme in (1, 3, 4):
             src = extra.reshape((self.n_species, 2))
-            xpart1, xpart2 = self._source_basis_constraint_scheme_1()
+            xpart1, xpart2 = self._source_basis(self.constraint_scheme)
             y_f = y_f.at[:, ix0:, 0, :, :].add(
                 xpart1[ix0:][None, :, None, None] * src[:, 0, None, None, None]
                 + xpart2[ix0:][None, :, None, None] * src[:, 1, None, None, None]
@@ -1642,8 +1663,7 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     ``magneticDriftScheme`` 0/1 (scheme 1, the tangential magnetic drift, needs a
     geometryScheme in {5, 11, 12} that carries the radial B-field derivatives).
     Raises ``NotImplementedError`` for the deferred features listed in the module
-    docstring (readExternalPhi1, magneticDriftScheme 2-9, constraintScheme 3/4,
-    and mapped x-grids).
+    docstring (readExternalPhi1, magneticDriftScheme 2-9, and mapped x-grids).
     """
     general = nml.group("general")
     phys = nml.group("physicsParameters")
@@ -1700,7 +1720,7 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     constraint_scheme = _get_int(phys, "constraintScheme", -1)
     if constraint_scheme < 0:
         constraint_scheme = 1 if collision_operator == 0 else 2
-    if constraint_scheme not in {0, 1, 2}:
+    if constraint_scheme not in {0, 1, 2, 3, 4}:
         raise NotImplementedError(f"constraintScheme={constraint_scheme} is not supported.")
 
     x_grid_scheme = _get_int(other, "xGridScheme", 5)
