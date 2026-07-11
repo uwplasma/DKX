@@ -29,7 +29,8 @@ REF = Path(__file__).parent / "ref"
 
 # Tiny fixtures spanning: RHSMode 1/3, PAS + FP collisions, 1 and 2 species,
 # Er=0 and Er!=0 (ExB + Er xDot / xiDot terms), geometry schemes 1, 4, 12,
-# constraintScheme 1 and 2, Nzeta=1 (axisymmetric) and Nzeta>1.
+# constraintScheme 1 and 2, Nzeta=1 (axisymmetric) and Nzeta>1, and the
+# tangential magnetic drifts (magneticDriftScheme=1, geometryScheme 11).
 CASES = [
     "monoenergetic_PAS_tiny_scheme1",
     "pas_1species_PAS_noEr_tiny_scheme1",
@@ -37,6 +38,7 @@ CASES = [
     "er_xdot_1species_tiny",
     "er_xidot_1species_tiny",
     "pas_1species_PAS_noEr_tiny_scheme12",
+    "magdrift_1species_tiny",
 ]
 
 RHSMODE2_TEXT = """
@@ -311,6 +313,10 @@ def test_legendre_blocks_reject_l2_coupled_terms() -> None:
     op_fp = KineticOperator.from_namelist(_load("quick_2species_FPCollisions_noEr"))
     with pytest.raises(NotImplementedError):
         op_fp.to_block_tridiagonal()
+    # Tangential magnetic drifts couple L±2: also not block-tridiagonal.
+    op_md = KineticOperator.from_namelist(_load("magdrift_1species_tiny"))
+    with pytest.raises(NotImplementedError, match="magnetic drift"):
+        op_md.legendre_blocks(0)
 
 
 # ---------------------------------------------------------------------------
@@ -342,10 +348,38 @@ def test_include_phi1_is_canonical_with_collision_coupling() -> None:
     _assert_close(op_c.residual_phi1(x), residual_v3_full_system(leg_c, x))
 
 
-def test_deferred_magnetic_drifts_raise() -> None:
+def test_magnetic_drifts_are_canonical_and_reject_block_extraction() -> None:
+    # magneticDriftScheme=1 (tangential magnetic drift) is consolidated: the
+    # operator builds and reproduces the legacy full-system apply element-wise.
     nml = _load("magdrift_1species_tiny")
+    op_new = KineticOperator.from_namelist(nml)
+    assert op_new.with_magnetic_drifts
+    op_old = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+
+    rng = np.random.default_rng(11)
+    for _ in range(5):
+        v = jnp.asarray(rng.standard_normal(op_new.total_size))
+        y_old = np.asarray(apply_v3_full_system_operator(op_old, v))
+        y_new = np.asarray(op_new.apply(v))
+        assert np.max(np.abs(y_old)) > 0.0
+        # 5 random vectors, absolute tolerance 1e-12 (task parity spec).
+        np.testing.assert_allclose(y_new, y_old, rtol=0.0, atol=1e-12)
+
+    # The d/dtheta, d/dzeta, and d/dxi drift terms couple L±2, so the
+    # block-tridiagonal extraction must refuse (solve.py routes to tier-2 GCROT).
+    with pytest.raises(NotImplementedError, match="magnetic drift"):
+        op_new.legendre_blocks(0)
+    with pytest.raises(NotImplementedError, match="magnetic drift"):
+        op_new.to_block_tridiagonal()
+
+
+def test_magnetic_drift_subschemes_still_deferred() -> None:
+    # Only scheme 1 is consolidated; schemes 2-9 remain deferred, and scheme 1
+    # requires a geometryScheme carrying the radial B-field derivatives.
+    text = (REF / "magdrift_1species_tiny.input.namelist").read_text()
+    nml2 = parse_sfincs_input_text(text.replace("magneticDriftScheme = 1", "magneticDriftScheme = 2"))
     with pytest.raises(NotImplementedError, match="magneticDriftScheme"):
-        KineticOperator.from_namelist(nml)
+        KineticOperator.from_namelist(nml2)
 
 
 # ---------------------------------------------------------------------------
