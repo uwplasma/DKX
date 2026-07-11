@@ -10,9 +10,17 @@ Legacy stays reachable through exactly TWO doors:
 - `cli solve-v3` (direct legacy RHSMode-1 entry) — CLOSE by routing to run.run_profile
 - `io.write_sfincs_jax_output_h5` (write fallback for deferred decks)
 
-## Near-term (~13,800 lines, no physics gate)
-- validation/suite.py(4199)+artifacts.py(3346)+release.py(2329): retire to the
-  reference-data-v2 gate (0 production importers) — ~8000, med risk (41 test files)
+## Near-term (no physics gate)
+- validation/suite.py(4199): retire to the reference-data-v2 gate — CLEAN (0
+  production importers, top-of-chain; its 3 tests exercise suite tooling, not
+  physics parity). CORRECTION: artifacts.py(3346) and release.py(2329) are NOT
+  retirable near-term — import-reachability missed that artifacts.py is a live
+  examples/publication_figures dependency (hard-required by REQUIRED_CORE_SLIM
+  owners), and release.py hosts 6 live `python -m ...release` CLI tools
+  (repo-size hygiene gate, production-input generation, write-output-trace,
+  readme-audit) imported by 9 mostly-non-slow tests. release.py can only be
+  trimmed after its live tools are relocated to durable homes (a structural
+  slice); artifacts.py retirement is an examples/-touching task.
 - profile_policies.py: 281 SFINCS_JAX_* research toggles — trim ~2000
 - workflows/optimization.py(2021)+geometry/jax_adapters.py(964): relocate to
   examples/ — 2985 (AFTER the optimization-examples agent finishes)
