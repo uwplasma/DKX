@@ -141,9 +141,15 @@ Fortran v3 feature ownership
      - ``evaluateResidual.F90``, ``populateMatrix.F90``, ``diagnostics.F90``
      - Fortran solves coupled kinetic/quasineutrality systems for compatible
        RHSMode-1 settings and rejects RHSMode>3 with Phi1.
-     - ``sfincs_jax.operators.profile_system`` and profile-response modules: implemented for
-       documented RHSMode-1 cases. RHSMode 4/5 with Phi1 remains invalid by
-       design, matching Fortran validation.
+     - Canonical: ``sfincs_jax.drift_kinetic`` (the quasineutrality block, the
+       ``<Phi1>=0`` lambda row, and the ``includePhi1InKineticEquation`` coupling
+       for ``quasineutralityOption`` 1/2) and ``sfincs_jax.phi1`` (the nonlinear
+       Newton solve ``solve_phi1`` -- ``solve.solve`` inner linear step,
+       warm-started -- and the differentiable ``phi1_state``); the default
+       through ``run_profile`` and the CLI. ``includePhi1InCollisionOperator``
+       stays with ``sfincs_jax.operators.profile_system`` /
+       ``problems.profile_phi1_newton`` (the interim owner). RHSMode 4/5 with
+       Phi1 remains invalid by design, matching Fortran validation.
    * - Sparse solver and preconditioner backend
      - ``solver.F90`` with PETSc ``KSP``, ``PCLU``, MUMPS, SuperLU_DIST, serial
        sparse direct fallback, transpose solves, and MUMPS memory retry controls.

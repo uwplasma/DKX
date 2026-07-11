@@ -33,9 +33,16 @@ State-vector layout (matches v3 ``indices.F90`` with ``BLOCK_F`` first)::
   moments.
 - ``constraintScheme=2`` (default for pitch-angle scattering): one L=0 source
   unknown per (species, x), constraint rows enforce ``<f1>=0`` at each x.
-- ``includePhi1`` rows (quasineutrality + lambda) are **not** yet part of this
-  consolidated operator; :meth:`KineticOperator.from_namelist` raises
-  ``NotImplementedError`` for them (see the "deferred" list below).
+- ``includePhi1`` extends the state with ``Ntheta*Nzeta`` quasineutrality rows
+  and one ``<Phi1>=0`` (lambda) row, laid out ``[f | Phi1 | lambda | sources]``
+  (indices.F90).  The system becomes nonlinear (Phi1 couples back through
+  quasineutrality and, with ``includePhi1InKineticEquation``, the kinetic
+  equation); :meth:`KineticOperator.residual_phi1` is the nonlinear residual and
+  the Newton outer solve lives in :mod:`sfincs_jax.phi1`.  Supported:
+  ``quasineutralityOption`` 1 (full) and 2 (EUTERPE, incl. an adiabatic
+  species), ``includePhi1InKineticEquation``.  Deferred (raise
+  ``NotImplementedError``): ``includePhi1InCollisionOperator`` and
+  ``readExternalPhi1``.
 
 Coefficient provenance: everything is built from the committed consolidated
 modules — :mod:`sfincs_jax.phase_space` (grids, differentiation matrices, Legendre
@@ -66,8 +73,10 @@ Deferred (raise ``NotImplementedError`` in :meth:`from_namelist`, tracked for a
 follow-up pass; the old ``operators/profile_*`` code paths remain authoritative
 for them until then):
 
-- ``includePhi1`` (quasineutrality block, lambda row, Phi1-in-kinetic-equation
-  and Phi1-in-collision-operator couplings, ``readExternalPhi1``);
+- ``includePhi1InCollisionOperator`` (Phi1 inside the collision operator) and
+  ``readExternalPhi1`` (the quasineutrality block, the lambda row, and the
+  Phi1-in-kinetic-equation coupling for ``quasineutralityOption`` 1/2 are now
+  consolidated here — see :mod:`sfincs_jax.phi1`);
 - ``magneticDriftScheme != 0`` (tangential magnetic drifts and their upwinded
   stencils);
 - ``constraintScheme`` 3 and 4;
@@ -285,6 +294,25 @@ class KineticOperator:
     pas: PitchAngleScatteringV3Operator | None
     fp: FokkerPlanckV3Operator | None
 
+    # ---- Phi1 / quasineutrality (populateMatrix.F90 QN block + lambda row;
+    #      evaluateResidual.F90 nonlinear QN drive; the includePhi1 vertical
+    #      slice). All default to the no-Phi1 configuration so the base RHSMode
+    #      1/2/3 operators are unchanged. ----
+    include_phi1: bool = False
+    quasineutrality_option: int = 1
+    include_phi1_in_kinetic: bool = False
+    with_adiabatic: bool = False
+    adiabatic_z: jnp.ndarray = 1.0  # scalar
+    adiabatic_n_hat: jnp.ndarray = 0.0  # scalar
+    adiabatic_t_hat: jnp.ndarray = 1.0  # scalar
+    # Base Phi1(theta,zeta) linearization point for the QN/kinetic exp couplings.
+    phi1_hat_base: jnp.ndarray | None = None  # (T,Z) or None
+    # Full-state Newton linearization point: when set (Phi1 runs) ``apply`` is
+    # the Jacobian-vector product of :meth:`residual_phi1` at this state, so the
+    # nonlinear solve reuses :func:`sfincs_jax.solve.solve` as the inner linear
+    # solver.  ``None`` for the base linear operators.
+    phi1_lin_state: jnp.ndarray | None = None  # (total_size,) or None
+
     # ------------------------------------------------------------------
     # pytree protocol
     # ------------------------------------------------------------------
@@ -302,6 +330,10 @@ class KineticOperator:
         "with_exb",
         "with_er_xidot",
         "with_er_xdot",
+        "include_phi1",
+        "quasineutrality_option",
+        "include_phi1_in_kinetic",
+        "with_adiabatic",
     )
     _CHILD_FIELDS = (
         "x",
@@ -337,6 +369,11 @@ class KineticOperator:
         "e_parallel_hat_spec",
         "pas",
         "fp",
+        "adiabatic_z",
+        "adiabatic_n_hat",
+        "adiabatic_t_hat",
+        "phi1_hat_base",
+        "phi1_lin_state",
     )
 
     def tree_flatten(self):
@@ -375,8 +412,15 @@ class KineticOperator:
         raise NotImplementedError(f"constraintScheme={self.constraint_scheme} is not supported.")
 
     @property
+    def phi1_size(self) -> int:
+        """Phi1(theta,zeta) unknowns plus the ``<Phi1>=0`` lambda row (indices.F90)."""
+        if self.include_phi1:
+            return self.n_theta * self.n_zeta + 1
+        return 0
+
+    @property
     def total_size(self) -> int:
-        return self.f_size + self.extra_size
+        return self.f_size + self.phi1_size + self.extra_size
 
     # ------------------------------------------------------------------
     # matrix-free apply
@@ -407,7 +451,7 @@ class KineticOperator:
             return None
         m = jnp.broadcast_to(self._mask()[None, :, :, None, None], self.f_shape)
         return jnp.concatenate(
-            [m.reshape((-1,)), jnp.ones((self.extra_size,), dtype=jnp.float64)]
+            [m.reshape((-1,)), jnp.ones((self.phi1_size + self.extra_size,), dtype=jnp.float64)]
         )
 
     def _streaming_mirror(self, f: jnp.ndarray) -> jnp.ndarray:
@@ -589,6 +633,18 @@ class KineticOperator:
         if v.shape != (self.total_size,):
             raise ValueError(f"v must have shape {(self.total_size,)}, got {v.shape}")
 
+        if self.include_phi1:
+            # Phi1 makes the DKE nonlinear (quasineutrality couples Phi1 back into
+            # the kinetic equation).  ``apply`` is the linear operator consumed by
+            # :func:`sfincs_jax.solve.solve`, so for Phi1 runs it is the
+            # Jacobian-vector product of :meth:`residual_phi1` at
+            # ``phi1_lin_state`` (the current Newton iterate) — the exact
+            # linearization that the parity oracle takes with ``jax.linearize``.
+            base = self.phi1_lin_state
+            if base is None:
+                base = jnp.zeros((self.total_size,), dtype=jnp.float64)
+            return jax.jvp(self.residual_phi1, (base,), (v,))[1]
+
         f = v[: self.f_size].reshape(self.f_shape)
         extra = v[self.f_size :]
         y_f = self.apply_f(f)
@@ -625,6 +681,303 @@ class KineticOperator:
             raise NotImplementedError(f"constraintScheme={self.constraint_scheme} is not supported.")
 
         return jnp.concatenate([y_f.reshape((-1,)), y_extra], axis=0)
+
+    # ------------------------------------------------------------------
+    # Phi1 / quasineutrality (includePhi1 vertical slice)
+    #
+    # State layout with Phi1 (indices.F90 ordering):
+    #     [ f(species,x,L,theta,zeta) | Phi1(theta,zeta) | lambda | sources ]
+    #
+    # ``residual_phi1`` is the nonlinear residual ``A(x) - b(x)`` (Newton is the
+    # outer solve in ``sfincs_jax.phi1``); it is element-wise bit-comparable to
+    # ``operators.profile_system.residual_v3_full_system``.
+    # ------------------------------------------------------------------
+
+    def _nonlinear_temp_vector_phi1(self, f: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        """``tempVector2`` L-coupling of ``d f/dx`` for the Phi1-in-kinetic terms.
+
+        Mirrors ``populateMatrix.F90``'s tempVector2 assembly (see the legacy
+        ``operators.profile_system._nonlinear_temp_vector``): a speed-derivative
+        (``x ddx``) combined with the L±1 Legendre couplings, masked to the
+        retained (x, L) DOFs.
+        """
+        n_xi = int(self.n_xi)
+        inv_x = 1.0 / self.x  # (X,)
+        ddx_to_use = jnp.where(jnp.abs(self.ddx) > 1e-12, self.ddx, 0.0)  # sparsify.F90 threshold
+        ddx_f = jnp.einsum("ij,sltzj->sltzi", ddx_to_use, jnp.transpose(f, (0, 2, 3, 4, 1)))
+        ddx_f = jnp.transpose(ddx_f, (0, 4, 1, 2, 3))  # (S,X,L,T,Z)
+
+        out_nl = jnp.zeros_like(f, dtype=jnp.float64)
+        ell = jnp.arange(n_xi, dtype=jnp.float64)
+        if n_xi > 1:
+            lp1 = ell[:-1]
+            coef = (lp1 + 1.0) / (2.0 * lp1 + 3.0)
+            diag_xl = (((lp1 + 1.0) * (lp1 + 2.0) / (2.0 * lp1 + 3.0))[:, None] * inv_x[None, :]).T
+            src = f[:, :, 1:, :, :]
+            ddx_src = ddx_f[:, :, 1:, :, :]
+            term = coef[None, None, :, None, None] * ddx_src + diag_xl[None, :, :, None, None] * src
+            out_nl = out_nl.at[:, :, :-1, :, :].add(term)
+
+            lm1 = ell[1:]
+            coef = lm1 / (2.0 * lm1 - 1.0)
+            diag_xl = ((-(lm1 - 1.0) * lm1 / (2.0 * lm1 - 1.0))[:, None] * inv_x[None, :]).T
+            src = f[:, :, :-1, :, :]
+            ddx_src = ddx_f[:, :, :-1, :, :]
+            term = coef[None, None, :, None, None] * ddx_src + diag_xl[None, :, :, None, None] * src
+            out_nl = out_nl.at[:, :, 1:, :, :].add(term)
+
+        ix0 = _ix_min(bool(self.point_at_x0))
+        mask_x = (jnp.arange(self.n_x) >= ix0).astype(jnp.float64)  # (X,)
+        mask_l = _mask_xi(self.n_xi_for_x, self.n_xi)  # (X,L)
+        return out_nl, mask_l, mask_x
+
+    def _add_phi1_in_kinetic(self, y_f: jnp.ndarray, f: jnp.ndarray, phi1: jnp.ndarray) -> jnp.ndarray:
+        """Add the Phi1-in-kinetic-equation coupling to the L=0 DKE rows.
+
+        Residual-mode (``includeJacobianTerms=False``) counterpart of the
+        ``populateMatrix.F90`` Phi1-gradient blocks: uses the *current* Phi1
+        (not the frozen base state).
+        """
+        ddtheta = self.ddtheta
+        ddzeta = self.ddzeta
+        dphi1_dtheta = ddtheta @ phi1  # (T,Z)
+        dphi1_dzeta = phi1 @ ddzeta.T  # (T,Z)
+
+        e_term = self.b_hat_sup_theta * dphi1_dtheta + self.b_hat_sup_zeta * dphi1_dzeta  # (T,Z)
+        nonlinear_factor = (
+            -(self.alpha * self.z_s)[:, None, None]
+            / (2.0 * self.b_hat[None, :, :] * jnp.sqrt(self.t_hat)[:, None, None] * jnp.sqrt(self.m_hat)[:, None, None])
+            * e_term[None, :, :]
+        )  # (S,T,Z)
+        out_nl, mask_l, mask_x = self._nonlinear_temp_vector_phi1(f)
+        y_f = y_f + (
+            out_nl
+            * nonlinear_factor[:, None, None, :, :]
+            * mask_l[None, :, :, None, None]
+            * mask_x[None, :, None, None, None]
+        )
+
+        x2 = self.x * self.x
+        expx2 = jnp.exp(-x2)
+        sqrt_pi = jnp.sqrt(jnp.pi)
+        norm = jnp.pi * sqrt_pi
+
+        exp_phi = jnp.exp(-(self.z_s[:, None, None] * self.alpha / self.t_hat[:, None, None]) * phi1[None, :, :])
+        sp_pref1 = self.n_hat * (self.m_hat * jnp.sqrt(self.m_hat)) / (self.t_hat * jnp.sqrt(self.t_hat) * norm)
+        bracket = (self.dn_hat_dpsi_hat / self.n_hat)[:, None] + (x2[None, :] - 1.5) * (
+            self.dt_hat_dpsi_hat / self.t_hat
+        )[:, None]  # (S,X)
+        fm = sp_pref1[:, None] * expx2[None, :] * bracket  # (S,X)
+
+        geom_theta = -self.alpha * self.delta * self.d_hat * self.b_hat_sub_zeta / (2.0 * (self.b_hat * self.b_hat))
+        geom_zeta = self.alpha * self.delta * self.d_hat * self.b_hat_sub_theta / (2.0 * (self.b_hat * self.b_hat))
+        coeff1_theta = fm[:, :, None, None] * geom_theta[None, None, :, :] * exp_phi[:, None, :, :]
+        coeff1_zeta = fm[:, :, None, None] * geom_zeta[None, None, :, :] * exp_phi[:, None, :, :]
+
+        sp_pref2 = self.z_s * self.n_hat * (self.m_hat * jnp.sqrt(self.m_hat)) / (
+            self.t_hat * self.t_hat * jnp.sqrt(self.t_hat)
+        )
+        phi_term = self.dphi_hat_dpsi_hat + phi1[None, :, :] * (self.dt_hat_dpsi_hat / self.t_hat)[:, None, None]
+        geom2_theta = -(self.alpha * self.alpha) * self.delta * self.d_hat * self.b_hat_sub_zeta / (
+            2.0 * norm * (self.b_hat * self.b_hat)
+        )
+        geom2_zeta = (self.alpha * self.alpha) * self.delta * self.d_hat * self.b_hat_sub_theta / (
+            2.0 * norm * (self.b_hat * self.b_hat)
+        )
+        coeff2_theta = (
+            sp_pref2[:, None, None, None]
+            * expx2[None, :, None, None]
+            * exp_phi[:, None, :, :]
+            * phi_term[:, None, :, :]
+            * geom2_theta[None, None, :, :]
+        )
+        coeff2_zeta = (
+            sp_pref2[:, None, None, None]
+            * expx2[None, :, None, None]
+            * exp_phi[:, None, :, :]
+            * phi_term[:, None, :, :]
+            * geom2_zeta[None, None, :, :]
+        )
+        y_f = y_f.at[:, :, 0, :, :].add((coeff1_theta + coeff2_theta) * dphi1_dtheta[None, None, :, :])
+        y_f = y_f.at[:, :, 0, :, :].add((coeff1_zeta + coeff2_zeta) * dphi1_dzeta[None, None, :, :])
+        return y_f
+
+    def _quasineutrality_rows(self, f: jnp.ndarray, phi1: jnp.ndarray, lam: jnp.ndarray) -> jnp.ndarray:
+        """The quasineutrality rows + ``<Phi1>=0`` lambda row (residual mode).
+
+        quasineutralityOption 1 (full): the nonlinear Boltzmann response lives in
+        :meth:`rhs_phi1` so the operator row is ``qn_from_f + lambda``.
+        quasineutralityOption 2 (EUTERPE): only the first kinetic species enters
+        the charge density and Phi1 has a linear (adiabatic) diagonal.
+        """
+        x2w = (self.x * self.x) * self.x_weights  # (X,)
+        species_factor = 4.0 * jnp.pi * self.z_s * self.t_hat / self.m_hat * jnp.sqrt(self.t_hat / self.m_hat)
+        if int(self.quasineutrality_option) == 2:
+            qn_from_f = species_factor[0] * jnp.einsum("x,xtz->tz", x2w, f[0, :, 0, :, :])
+            phi1_diag = jnp.asarray(0.0, dtype=jnp.float64)
+            if self.with_adiabatic and self.n_species > 0:
+                phi1_diag = -self.alpha * (
+                    (self.z_s[0] * self.z_s[0]) * self.n_hat[0] / self.t_hat[0]
+                    + (self.adiabatic_z * self.adiabatic_z) * self.adiabatic_n_hat / self.adiabatic_t_hat
+                )
+            qn = qn_from_f + phi1_diag * phi1
+        elif int(self.quasineutrality_option) == 1:
+            qn = jnp.einsum("s,x,sxtz->tz", species_factor, x2w, f[:, :, 0, :, :])
+        else:
+            raise NotImplementedError(
+                f"quasineutralityOption={self.quasineutrality_option} is not supported "
+                "(only 1 (full) and 2 (EUTERPE) are consolidated)."
+            )
+        qn = qn + lam
+        factor = self._fs_average_factor()
+        y_lam = jnp.sum(factor * phi1)
+        return jnp.concatenate([qn.reshape((-1,)), jnp.asarray([y_lam], dtype=jnp.float64)], axis=0)
+
+    def _apply_phi1_operator(self, v: jnp.ndarray) -> jnp.ndarray:
+        """Nonlinear operator ``A(x)`` for the Phi1 system (residual assembly).
+
+        Element-wise counterpart of
+        ``apply_v3_full_system_operator(..., include_jacobian_terms=False)``.
+        """
+        f = v[: self.f_size].reshape(self.f_shape)
+        rest = v[self.f_size :]
+        phi1 = rest[: self.n_theta * self.n_zeta].reshape((self.n_theta, self.n_zeta))
+        lam = rest[self.n_theta * self.n_zeta]
+        extra = rest[self.phi1_size :]
+
+        y_f = self.apply_f(f)
+        y_phi1 = self._quasineutrality_rows(f, phi1, lam)
+        if self.include_phi1_in_kinetic:
+            y_f = self._add_phi1_in_kinetic(y_f, f, phi1)
+
+        factor = self._fs_average_factor()
+        ix0 = _ix_min(self.point_at_x0)
+        if self.constraint_scheme == 0:
+            y_extra = jnp.zeros((0,), dtype=jnp.float64)
+        elif self.constraint_scheme == 1:
+            src = extra.reshape((self.n_species, 2))
+            xpart1, xpart2 = self._source_basis_constraint_scheme_1()
+            y_f = y_f.at[:, ix0:, 0, :, :].add(
+                xpart1[ix0:][None, :, None, None] * src[:, 0, None, None, None]
+                + xpart2[ix0:][None, :, None, None] * src[:, 1, None, None, None]
+            )
+            x2 = self.x * self.x
+            w2 = x2 * self.x_weights
+            w4 = x2 * x2 * self.x_weights
+            y_dens = jnp.einsum("x,tz,sxtz->s", w2, factor, f[:, :, 0, :, :])
+            y_pres = jnp.einsum("x,tz,sxtz->s", w4, factor, f[:, :, 0, :, :])
+            y_extra = jnp.stack([y_dens, y_pres], axis=1).reshape((-1,))
+        elif self.constraint_scheme == 2:
+            src = extra.reshape((self.n_species, self.n_x))
+            y_f = y_f.at[:, ix0:, 0, :, :].add(src[:, ix0:, None, None])
+            y_avg = jnp.einsum("tz,sxtz->sx", factor, f[:, :, 0, :, :])
+            if self.point_at_x0:
+                y_avg = y_avg.at[:, 0].set(src[:, 0])
+            y_extra = y_avg.reshape((-1,))
+        else:
+            raise NotImplementedError(f"constraintScheme={self.constraint_scheme} is not supported.")
+
+        return jnp.concatenate([y_f.reshape((-1,)), y_phi1, y_extra], axis=0)
+
+    def rhs_phi1(self) -> jnp.ndarray:
+        """Inhomogeneous drive of the Phi1 system (evaluateResidual.F90, f=0).
+
+        The radial-gradient / inductive drive is multiplied by
+        ``exp(-Z*alpha*Phi1Hat/THat)`` (and carries the extra
+        ``Phi1Hat*dTHat/dpsiHat`` piece) when Phi1 enters the kinetic equation;
+        quasineutralityOption 1 additionally drives the QN rows with the
+        nonlinear Boltzmann response ``-sum_s Z_s n_s exp(...)``.  Depends on
+        ``phi1_hat_base`` (the linearization point).
+        """
+        phi1 = self.phi1_hat_base
+        if phi1 is None:
+            phi1 = jnp.zeros((self.n_theta, self.n_zeta), dtype=jnp.float64)
+
+        f_rhs = jnp.zeros(self.f_shape, dtype=jnp.float64)
+        ix0 = _ix_min(self.point_at_x0)
+        x2 = self.x * self.x
+        expx2 = jnp.exp(-x2)
+        x2_expx2 = x2 * expx2
+        sqrt_pi = jnp.sqrt(jnp.pi)
+        two_pi = jnp.asarray(2.0 * jnp.pi, dtype=jnp.float64)
+
+        geom2 = (
+            (self.b_hat_sub_zeta * self.db_hat_dtheta - self.b_hat_sub_theta * self.db_hat_dzeta)
+            * self.d_hat
+            / self.b_hat**3
+        )  # (T,Z)
+        mask_x = (jnp.arange(self.n_x) >= ix0).astype(jnp.float64)
+
+        x_part = x2_expx2[None, :] * (
+            (self.dn_hat_dpsi_hat / self.n_hat)[:, None]
+            + (self.alpha * self.z_s / self.t_hat)[:, None] * self.dphi_hat_dpsi_hat
+            + (x2[None, :] - 1.5) * (self.dt_hat_dpsi_hat / self.t_hat)[:, None]
+        )  # (S,X)
+
+        if self.include_phi1_in_kinetic:
+            x_part2 = x2_expx2[None, :] * (self.dt_hat_dpsi_hat / (self.t_hat * self.t_hat))[:, None]
+            exp_phi1 = jnp.exp(-(self.z_s[:, None, None] * self.alpha / self.t_hat[:, None, None]) * phi1[None, :, :])
+            x_part_total = x_part[:, :, None, None] + (
+                x_part2[:, :, None, None] * (self.z_s * self.alpha)[:, None, None, None] * phi1[None, None, :, :]
+            )
+            x_part_total = x_part_total * exp_phi1[:, None, :, :]  # (S,X,T,Z)
+        else:
+            x_part_total = x_part[:, :, None, None]  # (S,X,1,1)
+
+        pref = self.delta * self.n_hat * self.m_hat * jnp.sqrt(self.m_hat) / (
+            two_pi * sqrt_pi * self.z_s * jnp.sqrt(self.t_hat)
+        )  # (S,)
+        factor = pref[:, None, None, None] * geom2[None, None, :, :] * x_part_total
+        factor = factor * mask_x[None, :, None, None]
+
+        if self.n_xi > 0:
+            mask_l0 = (self.n_xi_for_x > 0).astype(jnp.float64) * mask_x
+            f_rhs = f_rhs.at[:, :, 0, :, :].add((4.0 / 3.0) * factor * mask_l0[None, :, None, None])
+        if self.n_xi > 2:
+            mask_l2 = (self.n_xi_for_x > 2).astype(jnp.float64) * mask_x
+            f_rhs = f_rhs.at[:, :, 2, :, :].add((2.0 / 3.0) * factor * mask_l2[None, :, None, None])
+
+        if self.n_xi > 1:
+            epar = self.e_parallel_hat + self.e_parallel_hat_spec  # (S,)
+            factor_e = (
+                self.alpha
+                * self.z_s[:, None]
+                * self.x[None, :]
+                * expx2[None, :]
+                * epar[:, None]
+                * self.n_hat[:, None]
+                * self.m_hat[:, None]
+                / (jnp.pi * sqrt_pi * (self.t_hat * self.t_hat)[:, None] * self.fsab_hat2)
+            )  # (S,X)
+            factor_e = factor_e * mask_x[None, :]
+            f_rhs = f_rhs.at[:, :, 1, :, :].add(factor_e[:, :, None, None] * self.b_hat[None, None, :, :])
+
+        rhs_phi1 = jnp.zeros((self.phi1_size,), dtype=jnp.float64)
+        if int(self.quasineutrality_option) == 1:
+            exp_phi = jnp.exp(-(self.z_s[:, None, None] * self.alpha / self.t_hat[:, None, None]) * phi1[None, :, :])
+            qn_nonlin = -jnp.sum((self.z_s * self.n_hat)[:, None, None] * exp_phi, axis=0)
+            if self.with_adiabatic:
+                qn_nonlin = qn_nonlin - self.adiabatic_z * self.adiabatic_n_hat * jnp.exp(
+                    -(self.adiabatic_z * self.alpha / self.adiabatic_t_hat) * phi1
+                )
+            rhs_phi1 = jnp.concatenate([qn_nonlin.reshape((-1,)), jnp.asarray([0.0], dtype=jnp.float64)], axis=0)
+
+        rhs_extra = jnp.zeros((self.extra_size,), dtype=jnp.float64)
+        return jnp.concatenate([f_rhs.reshape((-1,)), rhs_phi1, rhs_extra], axis=0)
+
+    def residual_phi1(self, x_full: jnp.ndarray) -> jnp.ndarray:
+        """Nonlinear residual ``A(x) - b(x)`` of the Phi1 system.
+
+        Relinearizes ``phi1_hat_base`` at the current Phi1 field (v3 ``SNES``
+        residual evaluation); element-wise comparable to
+        ``operators.profile_system.residual_v3_full_system``.
+        """
+        x_full = jnp.asarray(x_full, dtype=jnp.float64)
+        phi1 = x_full[self.f_size : self.f_size + self.n_theta * self.n_zeta].reshape(
+            (self.n_theta, self.n_zeta)
+        )
+        op_use = replace(self, phi1_hat_base=phi1)
+        return op_use._apply_phi1_operator(x_full) - op_use.rhs_phi1()
 
     # ------------------------------------------------------------------
     # RHS drives (evaluateResidual.F90 with f = 0)
@@ -1075,14 +1428,28 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     res = nml.group("resolutionParameters")
     geom_params = nml.group("geometryParameters")
 
-    # ---- reject deferred physics up front ----
-    if _get_bool(phys, "includePhi1", False):
-        raise NotImplementedError(
-            "includePhi1 (quasineutrality/lambda rows, Phi1 kinetic/collision couplings) "
-            "is not yet consolidated into KineticOperator; use the operators/profile_* path."
-        )
-    if _get_bool(phys, "readExternalPhi1", False):
+    # ---- Phi1 / quasineutrality configuration (includePhi1 vertical slice) ----
+    species_params = nml.group("speciesParameters")
+    include_phi1 = _get_bool(phys, "includePhi1", False)
+    if include_phi1 and _get_bool(phys, "readExternalPhi1", False):
         raise NotImplementedError("readExternalPhi1 is not supported.")
+    include_phi1_in_kinetic = include_phi1 and _get_bool(phys, "includePhi1InKineticEquation", False)
+    if include_phi1 and _get_bool(phys, "includePhi1InCollisionOperator", False):
+        raise NotImplementedError(
+            "includePhi1InCollisionOperator (Phi1 inside the collision operator) is deferred; "
+            "the operators/profile_* path remains the owner for that variant."
+        )
+    quasineutrality_option = _get_int(phys, "quasineutralityOption", 1)
+    if include_phi1 and quasineutrality_option not in {1, 2}:
+        raise NotImplementedError(
+            f"quasineutralityOption={quasineutrality_option} is not supported "
+            "(only 1 (full) and 2 (EUTERPE) are consolidated)."
+        )
+    with_adiabatic = include_phi1 and _get_bool(species_params, "withAdiabatic", False)
+    adiabatic_z = _get_float(species_params, "adiabaticZ", 1.0)
+    adiabatic_n_hat = _get_float(species_params, "adiabaticNHat", 0.0)
+    adiabatic_t_hat = _get_float(species_params, "adiabaticTHat", 1.0)
+
     magnetic_drift_scheme = _get_int(phys, "magneticDriftScheme", 0)
     if magnetic_drift_scheme != 0:
         raise NotImplementedError(
@@ -1299,6 +1666,17 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
         e_parallel_hat_spec=e_parallel_hat_spec,
         pas=pas,
         fp=fp,
+        include_phi1=bool(include_phi1),
+        quasineutrality_option=int(quasineutrality_option),
+        include_phi1_in_kinetic=bool(include_phi1_in_kinetic),
+        with_adiabatic=bool(with_adiabatic),
+        adiabatic_z=jnp.asarray(adiabatic_z, dtype=jnp.float64),
+        adiabatic_n_hat=jnp.asarray(adiabatic_n_hat, dtype=jnp.float64),
+        adiabatic_t_hat=jnp.asarray(adiabatic_t_hat, dtype=jnp.float64),
+        phi1_hat_base=(
+            jnp.zeros((grids.n_theta, grids.n_zeta), dtype=jnp.float64) if include_phi1 else None
+        ),
+        phi1_lin_state=None,
     )
 
 

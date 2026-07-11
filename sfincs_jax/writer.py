@@ -84,7 +84,7 @@ def operator_containers(
     """The :mod:`sfincs_jax.moments` input containers of a canonical operator."""
     layout = StateLayout(
         n_species=op.n_species, n_x=op.n_x, n_xi=op.n_xi, n_theta=op.n_theta,
-        n_zeta=op.n_zeta, include_phi1=False, constraint_scheme=op.constraint_scheme,
+        n_zeta=op.n_zeta, include_phi1=bool(op.include_phi1), constraint_scheme=op.constraint_scheme,
     )  # fmt: skip
     import jax.numpy as jnp  # noqa: PLC0415
 
@@ -548,7 +548,10 @@ def _rhsmode1_iteration_fields(
     layout, vgrid, surface, species = operator_containers(op)
     x_full = jnp.asarray(state_vector, dtype=jnp.float64)
     d = dict(
-        rhsmode1_moments(layout, vgrid, surface, species, x_full, delta=op.delta, alpha=op.alpha)
+        rhsmode1_moments(
+            layout, vgrid, surface, species, x_full,
+            delta=op.delta, alpha=op.alpha, phi1_from_state=bool(op.include_phi1),
+        )  # fmt: skip
     )
 
     # NTV torque (zero for VMEC scheme 5, where v3 does not populate uHat).
@@ -572,6 +575,16 @@ def _rhsmode1_iteration_fields(
     out["jHat"] = np.transpose(np.asarray(d["jHat"], dtype=np.float64), (1, 0))[:, :, None]
     if "sources" in d:
         out["sources"] = np.asarray(d["sources"], dtype=np.float64)[:, :, None]
+
+    # Phi1Hat(theta,zeta): stored (Nzeta, Ntheta, NIterations) as in
+    # writeHDF5Output.F90.  The canonical Newton solve records the converged
+    # state (NIterations=1); the legacy in-process writer stored every accepted
+    # Newton iterate.  Phi1-dependent electric-drift (vE) and total-drift (vd)
+    # flux families plus dPhi1Hat gradients are the writer-consolidation
+    # follow-up (enumerated in tests/test_phi1.py::_KNOWN_MISSING_PHI1_H5).
+    phi1_hat = layout.phi1_hat(x_full)
+    if phi1_hat is not None:
+        out["Phi1Hat"] = np.transpose(np.asarray(phi1_hat, dtype=np.float64), (1, 0))[:, :, None]
 
     # Classical fluxes at the run's actual gradients (classicalTransport.F90).
     pf, hf = classical_fluxes(

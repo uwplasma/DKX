@@ -318,9 +318,18 @@ def test_legendre_blocks_reject_l2_coupled_terms() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_deferred_phi1_raises() -> None:
+def test_include_phi1_is_canonical_but_collision_coupling_deferred() -> None:
+    # includePhi1 (quasineutrality + kinetic coupling) is now consolidated: the
+    # operator builds and carries the Phi1 rows/lambda layout.
     nml = _load("pas_1species_PAS_noEr_tiny_withPhi1_linear")
-    with pytest.raises(NotImplementedError, match="includePhi1"):
+    op = KineticOperator.from_namelist(nml)
+    assert op.include_phi1
+    assert op.phi1_size == op.n_theta * op.n_zeta + 1
+    assert op.total_size == op.f_size + op.phi1_size + op.extra_size
+    # The collision coupling stays with the legacy owner.
+    phys = nml.group("physicsParameters")
+    phys["INCLUDEPHI1INCOLLISIONOPERATOR"] = True
+    with pytest.raises(NotImplementedError, match="includePhi1InCollisionOperator"):
         KineticOperator.from_namelist(nml)
 
 

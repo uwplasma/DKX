@@ -357,7 +357,10 @@ def profile_moments_from_operator(
     layout, vgrid, surface, species = operator_containers(op)
     x_full = jnp.asarray(state_vector, dtype=jnp.float64)
     table = dict(
-        rhsmode1_moments(layout, vgrid, surface, species, x_full, delta=op.delta, alpha=op.alpha)
+        rhsmode1_moments(
+            layout, vgrid, surface, species, x_full,
+            delta=op.delta, alpha=op.alpha, phi1_from_state=bool(op.include_phi1),
+        )  # fmt: skip
     )
     if ntv_kernel_tz is not None:
         before, ntv = ntv_moments(layout, vgrid, surface, species, x_full, kernel=ntv_kernel_tz)
@@ -460,10 +463,31 @@ def run_profile(
 
     _emit_lines(emit, _startup_lines(inp=inp, op=op, grids=grids, input_name=namelist_path.name))
 
-    rhs = op.rhs()
     _emit_lines(emit, [console.entering_solver_line(), console.main_solve_begin_line()])
     t0 = time.perf_counter()
-    result = solve(op, rhs, method=solve_method, tol=tol)
+    if op.include_phi1:
+        # includePhi1 makes the DKE nonlinear (quasineutrality); the canonical
+        # Newton solve in sfincs_jax.phi1 wraps solve() as its inner linear step.
+        import jax.numpy as jnp  # noqa: PLC0415
+
+        from sfincs_jax.phi1 import solve_phi1  # noqa: PLC0415
+
+        phi1_result = solve_phi1(op, tol=tol, emit=emit)
+        state_vector = np.asarray(phi1_result.x, dtype=np.float64).reshape((-1,))
+        op = phi1_result.operator  # carries phi1_lin_state = solved state
+        result = SolveResult(
+            x=jnp.reshape(phi1_result.x, (-1, 1)),
+            method="phi1_newton_krylov",
+            iterations=phi1_result.inner_iterations_total,
+            residual_norms=jnp.asarray([phi1_result.residual_norm], dtype=jnp.float64),
+            converged=phi1_result.converged,
+            recycle=None,
+            timings=phi1_result.timings or {},
+        )
+    else:
+        rhs = op.rhs()
+        result = solve(op, rhs, method=solve_method, tol=tol)
+        state_vector = np.asarray(result.x, dtype=np.float64).reshape((-1,))
     solve_seconds = time.perf_counter() - t0
     _emit_lines(emit, [console.main_solve_done_line(seconds=solve_seconds)])
     if not result.converged:
@@ -471,7 +495,6 @@ def run_profile(
             f"RHSMode=1 solve did not converge (method={result.method}, "
             f"residuals={np.asarray(result.residual_norms)!r})"
         )
-    state_vector = np.asarray(result.x, dtype=np.float64).reshape((-1,))
 
     table = profile_moments_from_operator(
         op, state_vector, ntv_kernel_tz=_ntv_kernel_for(inp, op, geom)

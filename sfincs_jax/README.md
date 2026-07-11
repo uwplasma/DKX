@@ -26,7 +26,8 @@ utilities), and they shrink to zero as each vertical slice lands.
 | `inputs.py`, `console.py` | Typed namelist with Fortran-cited defaults/validation; byte-parity Fortran stdout blocks. |
 | `run.py` | End-to-end RHSMode 1/2/3 drivers (`run_profile`, `run_transport_matrix`). |
 | `er.py` | Ambipolar radial-electric-field slice: `radial_current`, Fortran-parity Brent `find_ambipolar_er` (bracket expansion + root classification, warm starts/recycling), and the differentiable `ambipolar_er` (`solvax.implicit.root_solve`). |
-| `writer.py` | Canonical `sfincsOutput.h5`/`.nc` writer for RHSMode 1/2/3. |
+| `phi1.py` | Phi1/quasineutrality slice: the nonlinear Newton solve `solve_phi1` (each step linearizes `KineticOperator.residual_phi1` and calls `solve.solve` as the inner linear solve, warm-started) and the differentiable `phi1_state` (`solvax.implicit.root_solve`). Covers `includePhi1InKineticEquation` with `quasineutralityOption` 1/2; `includePhi1InCollisionOperator` stays with the interim owner. |
+| `writer.py` | Canonical `sfincsOutput.h5`/`.nc` writer for RHSMode 1/2/3 (emits `Phi1Hat` for Phi1 runs). |
 | `api.py`, `cli.py`, `__main__.py` | Thin public surface over the canonical modules. |
 
 The CLI (`write-output` and the bare-run form) dispatches RHSMode 1/2/3 decks
@@ -90,8 +91,13 @@ supported surface.
 - `problems/profile_solve.py`: legacy RHSMode-1 solve orchestration (the
   deferred-deck fallback).
 - `problems/profile_policies.py`: legacy RHSMode-1 automatic solver policy.
-- `problems/profile_phi1_newton.py`: the Phi1/quasineutrality Newton-Krylov
-  owner (deferred slice).
+- `problems/profile_phi1_newton.py`: the legacy Phi1/quasineutrality
+  Newton-Krylov loop. The canonical `phi1.py` slice now owns
+  `includePhi1InKineticEquation` with `quasineutralityOption` 1/2 (the default
+  through `run_profile`/CLI); this legacy loop is retained as the interim owner
+  of the deferred variants (`includePhi1InCollisionOperator`) and of the legacy
+  `outputs/writer.py` Phi1 output path, and is removed by the writer-
+  consolidation slice.
 - `problems/transport_solve.py`, `problems/transport_linear_system.py`,
   `problems/transport_parallel_runtime.py`: legacy RHSMode-2/3 orchestration,
   retained for `.npz`/solver-trace/export_f options and mapped-x-grid
