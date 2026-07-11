@@ -109,12 +109,6 @@ MOVED_ROOT_MODULE_OWNERS = {
     "sfincs_jax.physics.classical_transport": (
         "classical_flux_v3",
     ),
-    "sfincs_jax.physics.collisions": (
-        "FokkerPlanckV3Operator",
-        "FokkerPlanckV3Phi1Operator",
-        "PitchAngleScatteringV3Operator",
-        "apply_pitch_angle_scattering_v3",
-    ),
     "sfincs_jax.solvers.preconditioning": (
         "project_constraint_scheme1_nullspace_solution",
         "project_constraint_scheme1_nullspace_solution_with_residual",

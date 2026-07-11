@@ -7,7 +7,7 @@ agreement with the modules being replaced:
 * ``sfincs_jax.discretization.xgrid`` (``make_x_grid``,
   ``make_x_polynomial_diff_matrices``)
 * ``sfincs_jax.discretization.v3.grids_from_namelist``
-* ``sfincs_jax.physics.collisions.polynomial_interpolation_matrix_np``
+* ``sfincs_jax.collisions.polynomial_interpolation_matrix_np``
 * the Legendre coupling formulas inlined in ``operators/profile_collisionless``
 
 plus a few absolute checks (quadrature exactness, hardcoded nodes).
@@ -25,7 +25,7 @@ from sfincs_jax.discretization.v3 import grids_from_namelist
 from sfincs_jax.discretization.xgrid import make_x_grid, make_x_polynomial_diff_matrices
 from sfincs_jax.grids import uniform_diff_matrices
 from sfincs_jax.namelist import parse_sfincs_input_text
-from sfincs_jax.physics.collisions import polynomial_interpolation_matrix_np
+from sfincs_jax.collisions import polynomial_interpolation_matrix_np
 
 TOL = dict(rtol=0.0, atol=1e-15)
 
