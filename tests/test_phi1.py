@@ -455,3 +455,17 @@ def test_collision_phi1_run_profile_routes_to_canonical() -> None:
     assert run.solve_result.method == "phi1_newton_krylov"
     assert run.solve_result.converged
     np.testing.assert_allclose(run.state_vector, _coll_fortran_state(), rtol=0.0, atol=5e-8)
+
+
+def test_collision_phi1_cli_predicate_routes_to_canonical() -> None:
+    """The CLI dispatch predicate no longer defers includePhi1InCollisionOperator.
+
+    The canonical writer emits the vE/vd flux families for Phi1 runs, so the
+    ``write-output`` CLI routes the collision-Phi1 deck through the canonical
+    stack (``deck_requires_legacy_pipeline`` returns ``None``) rather than the
+    legacy outputs writer.
+    """
+    from sfincs_jax.cli import deck_requires_legacy_pipeline
+    from sfincs_jax.inputs import read_sfincs_input
+
+    assert deck_requires_legacy_pipeline(read_sfincs_input(_COLL_INPUT)) is None

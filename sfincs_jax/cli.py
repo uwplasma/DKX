@@ -419,11 +419,11 @@ def deck_requires_legacy_pipeline(nml) -> str | None:
     if rhs_mode not in (1, 2, 3):
         return f"RHSMode={rhs_mode} is not covered by the canonical stack"
     if bool(phys.get("INCLUDEPHI1", False)):
-        # includePhi1 with the kinetic coupling and quasineutralityOption 1/2 is
-        # canonical (run_profile -> sfincs_jax.phi1); only the collision coupling
-        # and readExternalPhi1 stay with the legacy pipeline.
-        if bool(phys.get("INCLUDEPHI1INCOLLISIONOPERATOR", False)):
-            return "includePhi1InCollisionOperator is deferred to the legacy pipeline"
+        # includePhi1 with the kinetic coupling, the collision coupling
+        # (includePhi1InCollisionOperator), and quasineutralityOption 1/2 is
+        # canonical (run_profile -> sfincs_jax.phi1, which emits the vE/vd
+        # electric-/total-drift flux families); only readExternalPhi1 stays with
+        # the legacy pipeline.
         if int(phys.get("QUASINEUTRALITYOPTION", 1)) not in (1, 2):
             return "quasineutralityOption not in {1,2} is deferred to the legacy pipeline"
     if bool(phys.get("READEXTERNALPHI1", False)):
