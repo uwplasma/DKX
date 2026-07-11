@@ -412,8 +412,10 @@ The table below summarizes where each term in the v3 drift-kinetic equation is i
 - Collision operators (PAS and full FP):
   ``sfincs_jax/physics/collisions.py`` with modal transforms in ``sfincs_jax/discretization/xgrid.py``.
 - Constraint rows/columns and Phi1 blocks:
-  ``sfincs_jax/operators/profile_system.py`` and
-  ``sfincs_jax/problems/profile_phi1_newton.py``.
+  ``sfincs_jax/operators/profile_system.py`` (legacy assembly) and
+  ``sfincs_jax/drift_kinetic.py`` / ``sfincs_jax/phi1.py`` (the canonical
+  quasineutrality block, ``<Phi1>=0`` lambda row, and Phi1-in-kinetic /
+  Phi1-in-collision couplings with the ``solve_phi1`` Newton solve).
 - Diagnostics and flux assembly:
   ``sfincs_jax/diagnostics.py`` and
   ``sfincs_jax/problems/transport_diagnostics.py``.

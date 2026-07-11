@@ -1006,6 +1006,7 @@ def write_sfincs_jax_output_h5(
     if bool(compute_solution) and rhs_mode == 1:
         rhs1_branch_t0 = time.perf_counter()
         # Import lazily to keep geometry-only use-cases lightweight.
+        import types
         from dataclasses import replace
 
         import jax.numpy as jnp
@@ -1020,10 +1021,10 @@ def write_sfincs_jax_output_h5(
             rhs1_dense_fallback_max,
             rhs1_host_dense_shortcut_allowed,
         )
+        from ..phi1 import solve_phi1_history
         from ..problems.profile_solve import (
             _resolve_use_implicit,
             solve_v3_full_system_linear_gmres,
-            solve_v3_full_system_newton_krylov_history,
         )
 
         def _rhsmode1_host_dense_shortcut_allowed(
@@ -1223,16 +1224,6 @@ def write_sfincs_jax_output_h5(
                 solve_method=str(nk_solve_method),
                 env_value=os.environ.get("SFINCS_JAX_PHI1_USE_FROZEN_LINEARIZATION", ""),
             )
-            # Use a slightly looser relative threshold than PETSc defaults for
-            # QN-only runs, but keep PETSc-like rtol when Phi1 enters the kinetic equation.
-            if use_frozen_linearization:
-                nonlinear_rtol = 1e-8 if include_phi1_in_kinetic else 5e-8
-            else:
-                nonlinear_rtol = 0.0
-            if use_frozen_linearization:
-                env_rtol = os.environ.get("SFINCS_JAX_PHI1_NONLINEAR_RTOL", "").strip()
-                if env_rtol:
-                    nonlinear_rtol = float(env_rtol)
             if emit is not None:
                 emit(1, f"write_sfincs_jax_output_h5: includePhi1 linearized solve_method={nk_solve_method}")
                 if use_frozen_linearization:
@@ -1266,15 +1257,6 @@ def write_sfincs_jax_output_h5(
                     newton_tol = 5.0e-9
             if emit is not None:
                 emit(1, f"write_sfincs_jax_output_h5: includePhi1 Newton tol={newton_tol:.3e}")
-            gmres_maxiter = 2000
-            env_gmres_maxiter = os.environ.get("SFINCS_JAX_PHI1_GMRES_MAXITER", "").strip()
-            if env_gmres_maxiter:
-                try:
-                    gmres_maxiter = int(env_gmres_maxiter)
-                except ValueError:
-                    gmres_maxiter = 2000
-            elif fast_explicit_phi1:
-                gmres_maxiter = 600 if int(active_total_size) >= 20000 else 400
             gmres_tol = 1.0e-12
             env_phi1_gmres_tol = os.environ.get("SFINCS_JAX_PHI1_GMRES_TOL", "").strip()
             if env_phi1_gmres_tol:
@@ -1297,32 +1279,30 @@ def write_sfincs_jax_output_h5(
                     gmres_tol = 1.0e-8
                 elif int(active_total_size) >= 8000:
                     gmres_tol = 5.0e-9
-            gmres_restart = 2000
-            env_gmres_restart = os.environ.get("SFINCS_JAX_PHI1_GMRES_RESTART", "").strip()
-            if env_gmres_restart:
-                try:
-                    gmres_restart = int(env_gmres_restart)
-                except ValueError:
-                    gmres_restart = 2000
-            elif fast_explicit_phi1:
-                gmres_restart = _phi1_fast_explicit_gmres_restart_default(active_total_size)
             if emit is not None:
                 emit(1, f"write_sfincs_jax_output_h5: includePhi1 GMRES tol={gmres_tol:.3e}")
-                emit(1, f"write_sfincs_jax_output_h5: includePhi1 GMRES restart={gmres_restart}")
-                emit(1, f"write_sfincs_jax_output_h5: includePhi1 GMRES maxiter={gmres_maxiter}")
             _mark("rhs1_solve_start")
-            result, x_hist = solve_v3_full_system_newton_krylov_history(
-                nml=nml,
+            # Canonical Phi1 Newton-Krylov solve (sfincs_jax.phi1): each accepted
+            # iterate is a full-restart (exact for the small Phi1 cases) Newton
+            # update on the parity residual the Fortran SNES solves, so the
+            # recorded history reproduces v3's per-iteration NIterations axis.
+            phi1_result, x_hist = solve_phi1_history(
+                input_namelist,
                 x0=x0_state,
                 tol=float(newton_tol),
                 max_newton=12,
                 gmres_tol=float(gmres_tol),
-                gmres_restart=gmres_restart,
-                gmres_maxiter=gmres_maxiter,
-                solve_method=nk_solve_method,
-                nonlinear_rtol=nonlinear_rtol,
-                use_frozen_linearization=use_frozen_linearization,
-                emit=emit,
+                emit=(lambda line: emit(1, line)) if emit is not None else None,
+            )
+            # The RHSMode=1 output machinery reads the accepted-iterate history plus
+            # the legacy output operator; keep every output-field computation on op0
+            # (the writer's Fortran-parity V3FullSystemOperator) while the solve
+            # itself is the canonical sfincs_jax.phi1 Newton-Krylov.
+            result = types.SimpleNamespace(
+                x=phi1_result.x,
+                residual_norm=phi1_result.residual_norm,
+                n_newton=int(phi1_result.n_newton),
+                op=op0,
             )
             _mark("rhs1_solve_done")
             xs = x_hist if x_hist else [result.x]

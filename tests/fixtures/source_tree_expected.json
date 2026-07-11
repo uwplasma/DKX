@@ -119,7 +119,6 @@
     "problems": [
       "profile_dense.py",
       "profile_diagnostics.py",
-      "profile_phi1_newton.py",
       "profile_policies.py",
       "profile_preconditioner_build.py",
       "profile_residual.py",

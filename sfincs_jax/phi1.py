@@ -58,6 +58,7 @@ __all__ = [
     "operator_from_input",
     "phi1_state",
     "solve_phi1",
+    "solve_phi1_history",
 ]
 
 
@@ -130,9 +131,10 @@ def operator_from_input(
 ) -> KineticOperator:
     """Build (or accept) the canonical Phi1 operator for a deck.
 
-    Requires ``includePhi1 = .true.``; the deferred variants
-    (``includePhi1InCollisionOperator``, ``readExternalPhi1``,
-    ``quasineutralityOption`` other than 1/2) raise from
+    Requires ``includePhi1 = .true.``.  Handles ``includePhi1InKineticEquation``
+    and ``includePhi1InCollisionOperator`` with ``quasineutralityOption`` 1/2;
+    the deferred variants (``readExternalPhi1``, ``quasineutralityOption`` other
+    than 1/2) raise from
     :func:`sfincs_jax.drift_kinetic.kinetic_operator_from_namelist`.
     """
     if isinstance(inp, KineticOperator):
@@ -227,7 +229,83 @@ def solve_phi1(
     Returns:
         A :class:`Phi1Result`.
     """
-    op = operator_from_input(inp)
+    result, _ = _newton_solve_phi1(
+        operator_from_input(inp),
+        x0=x0,
+        tol=tol,
+        max_newton=max_newton,
+        gmres_tol=gmres_tol,
+        gmres_restart=gmres_restart,
+        gmres_recycle_dim=gmres_recycle_dim,
+        gmres_max_restarts=gmres_max_restarts,
+        warm_start=warm_start,
+        line_search=line_search,
+        solve_method=solve_method,
+        emit=emit,
+        record_history=False,
+    )
+    return result
+
+
+def solve_phi1_history(
+    inp: SfincsInput | RawNamelist | str | Path | KineticOperator,
+    *,
+    x0: Any | None = None,
+    tol: float = 1e-9,
+    max_newton: int = 20,
+    gmres_tol: float = 1e-11,
+    gmres_restart: int | None = None,
+    gmres_recycle_dim: int = 16,
+    gmres_max_restarts: int = 40,
+    warm_start: bool = True,
+    line_search: bool = True,
+    solve_method: str = "gmres",
+    emit: Callable[[str], None] | None = None,
+) -> tuple[Phi1Result, list[jnp.ndarray]]:
+    """:func:`solve_phi1` that also returns the accepted Newton-iterate history.
+
+    The output writer serializes v3's per-Newton-iteration diagnostics
+    (the ``NIterations`` axis), so it needs the state after each accepted Newton
+    step, not only the converged state.  Because each inner step is a full-restart
+    (exact for the small Phi1 cases) Newton update on the same parity residual the
+    Fortran ``SNES`` solves, the accepted iterates reproduce the Fortran
+    per-iteration states.  Returns ``(result, history)`` where ``history[k]`` is
+    the state after accepted Newton step ``k``.
+    """
+    return _newton_solve_phi1(
+        operator_from_input(inp),
+        x0=x0,
+        tol=tol,
+        max_newton=max_newton,
+        gmres_tol=gmres_tol,
+        gmres_restart=gmres_restart,
+        gmres_recycle_dim=gmres_recycle_dim,
+        gmres_max_restarts=gmres_max_restarts,
+        warm_start=warm_start,
+        line_search=line_search,
+        solve_method=solve_method,
+        emit=emit,
+        record_history=True,
+    )
+
+
+def _newton_solve_phi1(
+    op: KineticOperator,
+    *,
+    x0: Any | None,
+    tol: float,
+    max_newton: int,
+    gmres_tol: float,
+    gmres_restart: int | None,
+    gmres_recycle_dim: int,
+    gmres_max_restarts: int,
+    warm_start: bool,
+    line_search: bool,
+    solve_method: str,
+    emit: Callable[[str], None] | None,
+    record_history: bool,
+) -> tuple[Phi1Result, list[jnp.ndarray]]:
+    """Newton-Krylov core shared by :func:`solve_phi1` / :func:`solve_phi1_history`."""
     restart = _inner_restart(op, gmres_restart)
 
     if x0 is None:
@@ -239,6 +317,7 @@ def solve_phi1(
 
     recycle: tuple[jnp.ndarray, jnp.ndarray] | None = None
     iterations: list[NewtonIteration] = []
+    history: list[jnp.ndarray] = []
     inner_total: int | None = 0
     converged = False
     t0 = time.perf_counter()
@@ -276,6 +355,8 @@ def solve_phi1(
         if line_search:
             scale = _line_search_scale(op, x, step, rnorm)
         x = x + scale * step
+        if record_history:
+            history.append(x)
         iterations.append(
             NewtonIteration(k, rnorm, res.iterations, bool(res.converged), float(scale))
         )
@@ -289,7 +370,7 @@ def solve_phi1(
     op_out = replace(op, phi1_lin_state=x)
     phi1_hat = x[op.f_size : op.f_size + op.n_theta * op.n_zeta].reshape((op.n_theta, op.n_zeta))
     final_rnorm = float(jnp.linalg.norm(op.residual_phi1(x)))
-    return Phi1Result(
+    result = Phi1Result(
         x=x,
         phi1_hat=phi1_hat,
         operator=op_out,
@@ -300,6 +381,7 @@ def solve_phi1(
         inner_iterations_total=inner_total,
         timings={"solve": elapsed},
     )
+    return result, history
 
 
 def _line_search_scale(

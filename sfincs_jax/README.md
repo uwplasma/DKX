@@ -6,8 +6,8 @@ is the canonical stack of flat, physics-named root modules
 runs through `inputs -> drift_kinetic -> solve -> moments -> writer/console`,
 and the public API/CLI route every supported case through that chain by
 default. The remaining one-level domain packages are explicitly transitional:
-they are the interim owners of the deferred features (Phi1/quasineutrality,
-tangential magnetic drifts, constraint schemes 3/4, mapped speed grids,
+they are the interim owners of the deferred features (tangential magnetic
+drifts, constraint schemes 3/4, mapped speed grids,
 export_f, non-stellarator-symmetric VMEC) plus a handful of workflow surfaces
 (`.npz` output, solver traces, scan-er, ambipolar, sensitivity/compare/plot
 utilities), and they shrink to zero as each vertical slice lands.
@@ -26,7 +26,7 @@ utilities), and they shrink to zero as each vertical slice lands.
 | `inputs.py`, `console.py` | Typed namelist with Fortran-cited defaults/validation; byte-parity Fortran stdout blocks. |
 | `run.py` | End-to-end RHSMode 1/2/3 drivers (`run_profile`, `run_transport_matrix`). |
 | `er.py` | Ambipolar radial-electric-field slice: `radial_current`, Fortran-parity Brent `find_ambipolar_er` (bracket expansion + root classification, warm starts/recycling), and the differentiable `ambipolar_er` (`solvax.implicit.root_solve`). |
-| `phi1.py` | Phi1/quasineutrality slice: the nonlinear Newton solve `solve_phi1` (each step linearizes `KineticOperator.residual_phi1` and calls `solve.solve` as the inner linear solve, warm-started) and the differentiable `phi1_state` (`solvax.implicit.root_solve`). Covers `includePhi1InKineticEquation` with `quasineutralityOption` 1/2; `includePhi1InCollisionOperator` stays with the interim owner. |
+| `phi1.py` | Phi1/quasineutrality slice: the nonlinear Newton solve `solve_phi1` (each step linearizes `KineticOperator.residual_phi1` and calls `solve.solve` as the inner linear solve, warm-started), its accepted-iterate history variant `solve_phi1_history` (the writer's per-iteration output), and the differentiable `phi1_state` (`solvax.implicit.root_solve`). Covers `includePhi1InKineticEquation` and `includePhi1InCollisionOperator` (the poloidally varying Fokker-Planck collision operator) with `quasineutralityOption` 1/2. |
 | `writer.py` | Canonical `sfincsOutput.h5`/`.nc` writer for RHSMode 1/2/3 (emits `Phi1Hat` for Phi1 runs). |
 | `api.py`, `cli.py`, `__main__.py` | Thin public surface over the canonical modules. |
 
@@ -91,13 +91,6 @@ supported surface.
 - `problems/profile_solve.py`: legacy RHSMode-1 solve orchestration (the
   deferred-deck fallback).
 - `problems/profile_policies.py`: legacy RHSMode-1 automatic solver policy.
-- `problems/profile_phi1_newton.py`: the legacy Phi1/quasineutrality
-  Newton-Krylov loop. The canonical `phi1.py` slice owns
-  `includePhi1InKineticEquation` with `quasineutralityOption` 1/2 (the default
-  through `run_profile`/CLI); this legacy loop is the interim owner
-  of the deferred variants (`includePhi1InCollisionOperator`) and of the legacy
-  `outputs/writer.py` Phi1 output path, and is removed by the writer-
-  consolidation slice.
 - `problems/transport_solve.py`, `problems/transport_linear_system.py`,
   `problems/transport_parallel_runtime.py`: legacy RHSMode-2/3 orchestration,
   retained for `.npz`/solver-trace/export_f options and mapped-x-grid

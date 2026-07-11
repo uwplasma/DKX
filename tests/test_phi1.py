@@ -10,6 +10,11 @@ Parity oracle: ``operators.profile_system`` (the legacy ``V3FullSystemOperator``
 residual/matvec) and the Fortran reference state vector.  This test conserves
 the Fortran-parity assertion of the retired
 ``tests/test_full_system_newton_krylov.py`` (same fixture, atol 5e-8).
+
+Section 6 conserves the ``includePhi1InCollisionOperator`` physics of the
+retired legacy owner (the poloidally varying Fokker-Planck collision operator):
+canonical residual/operator/Jacobian parity vs the legacy assembly and a Fortran
+state-vector end-to-end check on the collision-Phi1 fixture.
 """
 
 from __future__ import annotations
@@ -20,7 +25,6 @@ from pathlib import Path
 import jax
 import jax.numpy as jnp
 import numpy as np
-import pytest
 
 # x64 is enabled on import of any sfincs_jax operator module (drift_kinetic).
 from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
@@ -127,17 +131,6 @@ def test_solve_phi1_phi1hat_matches_fortran_reference() -> None:
     x_ref = _fortran_state()
     phi1_ref = x_ref[op.f_size : op.f_size + op.n_theta * op.n_zeta].reshape((op.n_theta, op.n_zeta))
     np.testing.assert_allclose(np.asarray(res.phi1_hat), phi1_ref, rtol=0.0, atol=5e-8)
-
-
-def test_solve_phi1_matches_legacy_newton_krylov() -> None:
-    from sfincs_jax.problems.profile_phi1_newton import solve_v3_full_system_newton_krylov
-
-    legacy = solve_v3_full_system_newton_krylov(
-        nml=read_sfincs_input(_INPUT), x0=None, tol=1e-9, max_newton=10,
-        gmres_tol=1e-10, gmres_restart=80, gmres_maxiter=300,
-    )  # fmt: skip
-    canon = solve_phi1(_INPUT, tol=1e-9)
-    np.testing.assert_allclose(np.asarray(canon.x), np.asarray(legacy.x), rtol=0.0, atol=5e-8)
 
 
 # ---------------------------------------------------------------------------
@@ -271,13 +264,87 @@ def test_h5_phi1_fields_vs_legacy_writer(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 6. Deferred variants raise loudly
+# 6. includePhi1InCollisionOperator: canonical parity + Fortran end-to-end
+#
+# Conserves the collision-Phi1 physics of the retired legacy owner
+# (profile_phi1_newton / FokkerPlanckV3Phi1Operator): the collisional densities
+# become poloidally varying, n_pol = nHat*exp(-Z*alpha*Phi1Hat/THat).  The
+# fixture activates collisionOperator=0 (full FP) + includePhi1 +
+# includePhi1InKineticEquation + includePhi1InCollisionOperator, and ships a
+# Fortran state-vector reference.
 # ---------------------------------------------------------------------------
 
+_COLL_FIXTURE = "fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision"
+_COLL_INPUT = _REF / f"{_COLL_FIXTURE}.input.namelist"
+_COLL_STATEVEC = _REF / f"{_COLL_FIXTURE}.stateVector.petscbin"
 
-def test_include_phi1_in_collision_operator_deferred() -> None:
-    raw = read_sfincs_input(_INPUT)
-    phys = raw.group("physicsParameters")
-    phys["INCLUDEPHI1INCOLLISIONOPERATOR"] = True
-    with pytest.raises(NotImplementedError, match="includePhi1InCollisionOperator"):
-        kinetic_operator_from_namelist(raw)
+
+def _coll_canonical_op():
+    return kinetic_operator_from_namelist(read_sfincs_input(_COLL_INPUT))
+
+
+def _coll_legacy_op():
+    return full_system_operator_from_namelist(nml=read_sfincs_input(_COLL_INPUT))
+
+
+def _coll_fortran_state() -> np.ndarray:
+    return np.asarray(read_petsc_vec(_COLL_STATEVEC).values, dtype=np.float64)
+
+
+def test_collision_phi1_operator_is_canonical() -> None:
+    op = _coll_canonical_op()
+    assert op.include_phi1 and op.include_phi1_in_kinetic
+    assert op.fp_phi1 is not None and op.fp is None
+
+
+def test_collision_phi1_residual_elementwise_parity_vs_legacy() -> None:
+    op, leg = _coll_canonical_op(), _coll_legacy_op()
+    rng = np.random.default_rng(0)
+    for _ in range(3):
+        x = jnp.asarray(rng.standard_normal(op.total_size))
+        r_can = np.asarray(op.residual_phi1(x))
+        r_leg = np.asarray(residual_v3_full_system(leg, x))
+        np.testing.assert_allclose(r_can, r_leg, rtol=0.0, atol=1e-12)
+
+
+def test_collision_phi1_operator_and_rhs_elementwise_parity_vs_legacy() -> None:
+    op, leg = _coll_canonical_op(), _coll_legacy_op()
+    np.testing.assert_allclose(
+        np.asarray(op.rhs_phi1()), np.asarray(rhs_v3_full_system(leg)), rtol=0.0, atol=1e-12
+    )
+    rng = np.random.default_rng(1)
+    x = jnp.asarray(rng.standard_normal(op.total_size))
+    phi1 = x[op.f_size : op.f_size + op.n_theta * op.n_zeta].reshape((op.n_theta, op.n_zeta))
+    a_can = np.asarray(replace(op, phi1_hat_base=phi1)._apply_phi1_operator(x))
+    a_leg = np.asarray(
+        apply_v3_full_system_operator(replace(leg, phi1_hat_base=phi1), x, include_jacobian_terms=False)
+    )
+    np.testing.assert_allclose(a_can, a_leg, rtol=0.0, atol=1e-12)
+
+
+def test_collision_phi1_jacobian_matvec_parity_vs_legacy_linearize() -> None:
+    op, leg = _coll_canonical_op(), _coll_legacy_op()
+    x0 = jnp.asarray(_coll_fortran_state())
+    op_lin = replace(op, phi1_lin_state=x0)
+    rng = np.random.default_rng(2)
+    v = jnp.asarray(rng.standard_normal(op.total_size))
+    jvp_can = np.asarray(op_lin.apply(v))
+    _, jvp_leg = jax.linearize(lambda xx: residual_v3_full_system(leg, xx), x0)
+    np.testing.assert_allclose(jvp_can, np.asarray(jvp_leg(v)), rtol=0.0, atol=1e-11)
+
+
+def test_collision_phi1_solve_matches_fortran_reference() -> None:
+    """Conserves the collision-Phi1 Fortran-parity end-to-end (atol 5e-8)."""
+    res = solve_phi1(_COLL_INPUT, tol=1e-9)
+    assert res.converged
+    assert float(res.residual_norm) < 1e-9
+    np.testing.assert_allclose(np.asarray(res.x), _coll_fortran_state(), rtol=0.0, atol=5e-8)
+
+
+def test_collision_phi1_run_profile_routes_to_canonical() -> None:
+    from sfincs_jax.run import run_profile
+
+    run = run_profile(_COLL_INPUT, tol=1e-9, emit=None)
+    assert run.solve_result.method == "phi1_newton_krylov"
+    assert run.solve_result.converged
+    np.testing.assert_allclose(run.state_vector, _coll_fortran_state(), rtol=0.0, atol=5e-8)

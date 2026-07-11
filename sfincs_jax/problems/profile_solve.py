@@ -111,9 +111,6 @@ from sfincs_jax.problems.profile_dense import (
     run_rhs1_dense_probe_stage, run_rhs1_full_dense_fallback_stage, run_rhs1_full_host_dense_shortcut_stage,
     run_rhs1_reduced_dense_fallback_admission_stage, run_rhs1_reduced_host_dense_shortcut_stage,
 )
-from sfincs_jax.problems.profile_phi1_newton import (
-    solve_v3_full_system_newton_krylov, solve_v3_full_system_newton_krylov_history,
-)
 from sfincs_jax.problems.profile_preconditioner_build import (
     RHS1FullBasePreconditionerSetupContext, RHS1FullPreconditionerBuildContext, RHS1FullStrongRetryStageContext,
     RHS1ReducedPreconditionerBuildContext, RHS1ReducedStrongRetryStageContext, _build_rhsmode1_block_preconditioner,
@@ -334,13 +331,6 @@ from sfincs_jax.problems.transport_parallel_runtime import (
 from sfincs_jax.problems.profile_policies import (
     resolve_use_implicit as _resolve_use_implicit_impl,
 )
-from sfincs_jax.problems.profile_phi1_newton import (
-    phi1_frozen_jacobian_policy, phi1_gmres_restart, phi1_line_search_policy, phi1_use_active_dof_mode,
-)
-from sfincs_jax.problems.profile_phi1_newton import (
-    build_phi1_newton_preconditioner, solve_phi1_newton_linear_step,
-)
-from sfincs_jax.problems.profile_phi1_newton import advance_phi1_newton_iterate
 from sfincs_jax.solvers.diagnostics import (
     RHS1ProgressNotes, rhs1_large_progress_enabled,
 )

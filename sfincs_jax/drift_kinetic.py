@@ -40,9 +40,10 @@ State-vector layout (matches v3 ``indices.F90`` with ``BLOCK_F`` first)::
   equation); :meth:`KineticOperator.residual_phi1` is the nonlinear residual and
   the Newton outer solve lives in :mod:`sfincs_jax.phi1`.  Supported:
   ``quasineutralityOption`` 1 (full) and 2 (EUTERPE, incl. an adiabatic
-  species), ``includePhi1InKineticEquation``.  Deferred (raise
-  ``NotImplementedError``): ``includePhi1InCollisionOperator`` and
-  ``readExternalPhi1``.
+  species), ``includePhi1InKineticEquation``, and
+  ``includePhi1InCollisionOperator`` (the collisional densities become
+  poloidally varying, ``n_pol = nHat*exp(-Z*alpha*Phi1Hat/THat)``).  Deferred
+  (raise ``NotImplementedError``): ``readExternalPhi1``.
 
 Coefficient provenance: everything is built from the committed consolidated
 modules — :mod:`sfincs_jax.phase_space` (grids, differentiation matrices, Legendre
@@ -73,10 +74,10 @@ Deferred (raise ``NotImplementedError`` in :meth:`from_namelist`, tracked for a
 follow-up pass; the old ``operators/profile_*`` code paths remain authoritative
 for them until then):
 
-- ``includePhi1InCollisionOperator`` (Phi1 inside the collision operator) and
-  ``readExternalPhi1`` (the quasineutrality block, the lambda row, and the
-  Phi1-in-kinetic-equation coupling for ``quasineutralityOption`` 1/2 are now
-  consolidated here — see :mod:`sfincs_jax.phi1`);
+- ``readExternalPhi1`` (the quasineutrality block, the lambda row, the
+  Phi1-in-kinetic-equation coupling, and the Phi1-in-collision-operator densities
+  for ``quasineutralityOption`` 1/2 are consolidated here — see
+  :mod:`sfincs_jax.phi1`);
 - ``magneticDriftScheme != 0`` (tangential magnetic drifts and their upwinded
   stencils);
 - ``constraintScheme`` 3 and 4;
@@ -140,10 +141,13 @@ from sfincs_jax.paths import resolve_existing_path  # noqa: E402
 # to `sfincs_jax.collisions` when that consolidation lands (same public API).
 from sfincs_jax.physics.collisions import (  # noqa: E402
     FokkerPlanckV3Operator,
+    FokkerPlanckV3Phi1Operator,
     PitchAngleScatteringV3Operator,
     apply_fokker_planck_v3,
+    apply_fokker_planck_v3_phi1,
     apply_pitch_angle_scattering_v3,
     make_fokker_planck_v3_operator,
+    make_fokker_planck_v3_phi1_operator,
     make_pitch_angle_scattering_v3_operator,
 )
 from sfincs_jax.species import SpeciesSet, species_set_from_namelist  # noqa: E402
@@ -293,6 +297,13 @@ class KineticOperator:
     # ---- collisions (physics.collisions; -> collisions later) ----
     pas: PitchAngleScatteringV3Operator | None
     fp: FokkerPlanckV3Operator | None
+    # ``includePhi1InCollisionOperator``: the poloidally varying Fokker-Planck
+    # operator whose collisional densities are shifted by the Boltzmann factor
+    # ``exp(-Z*alpha*Phi1Hat/THat)`` (``populateMatrix.F90`` Phi1-in-collision
+    # branch).  Mutually exclusive with ``fp``: a collisionOperator=0 deck builds
+    # one or the other.  Applied with the current ``Phi1Hat`` field so it enters
+    # both the nonlinear residual and (via autodiff of the residual) the Jacobian.
+    fp_phi1: FokkerPlanckV3Phi1Operator | None = None
 
     # ---- Phi1 / quasineutrality (populateMatrix.F90 QN block + lambda row;
     #      evaluateResidual.F90 nonlinear QN drive; the includePhi1 vertical
@@ -369,6 +380,7 @@ class KineticOperator:
         "e_parallel_hat_spec",
         "pas",
         "fp",
+        "fp_phi1",
         "adiabatic_z",
         "adiabatic_n_hat",
         "adiabatic_t_hat",
@@ -594,8 +606,17 @@ class KineticOperator:
 
         return out * self._mask()[None, :, :, None, None]
 
-    def apply_f(self, f: jnp.ndarray) -> jnp.ndarray:
-        """Apply the f-block (kinetic) part of the operator to a 5-D ``f``."""
+    def apply_f(self, f: jnp.ndarray, phi1_hat: jnp.ndarray | None = None) -> jnp.ndarray:
+        """Apply the f-block (kinetic) part of the operator to a 5-D ``f``.
+
+        ``phi1_hat`` is the ``Phi1Hat(theta, zeta)`` field the collision operator
+        uses when ``includePhi1InCollisionOperator`` is active (``fp_phi1``): the
+        collisional densities become poloidally varying,
+        ``n_pol = nHat * exp(-Z*alpha*Phi1Hat/THat)``.  For the non-Phi1
+        collision operators (``pas``/``fp``) it is ignored; it defaults to the
+        frozen linearization field ``phi1_hat_base`` (zeros for the base linear
+        operators).
+        """
         f = jnp.asarray(f, dtype=jnp.float64)
         if f.shape != self.f_shape:
             raise ValueError(f"f must have shape {self.f_shape}, got {f.shape}")
@@ -610,6 +631,11 @@ class KineticOperator:
             out = out + apply_pitch_angle_scattering_v3(self.pas, f)
         if self.fp is not None:
             out = out + apply_fokker_planck_v3(self.fp, f)
+        if self.fp_phi1 is not None:
+            ph = phi1_hat if phi1_hat is not None else self.phi1_hat_base
+            if ph is None:
+                ph = jnp.zeros((self.n_theta, self.n_zeta), dtype=jnp.float64)
+            out = out + apply_fokker_planck_v3_phi1(self.fp_phi1, f, phi1_hat=ph)
         return out
 
     def _fs_average_factor(self) -> jnp.ndarray:
@@ -845,7 +871,10 @@ class KineticOperator:
         lam = rest[self.n_theta * self.n_zeta]
         extra = rest[self.phi1_size :]
 
-        y_f = self.apply_f(f)
+        # includePhi1InCollisionOperator: the collision operator uses the current
+        # Phi1 field (residual-mode ``whichMatrix=3``); the autodiff of this
+        # residual then supplies the exact Jacobian coupling.
+        y_f = self.apply_f(f, phi1_hat=phi1)
         y_phi1 = self._quasineutrality_rows(f, phi1, lam)
         if self.include_phi1_in_kinetic:
             y_f = self._add_phi1_in_kinetic(y_f, f, phi1)
@@ -1110,7 +1139,7 @@ class KineticOperator:
                 "legendre_blocks requires DKES trajectories: the Er xiDot/xDot terms "
                 "couple L±2 and break the block-tridiagonal-in-L structure."
             )
-        if self.fp is not None:
+        if self.fp is not None or self.fp_phi1 is not None:
             raise NotImplementedError(
                 "legendre_blocks currently supports pitch-angle-scattering collisions only; "
                 "Fokker-Planck couples (species, x) densely within each L "
@@ -1434,10 +1463,12 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     if include_phi1 and _get_bool(phys, "readExternalPhi1", False):
         raise NotImplementedError("readExternalPhi1 is not supported.")
     include_phi1_in_kinetic = include_phi1 and _get_bool(phys, "includePhi1InKineticEquation", False)
-    if include_phi1 and _get_bool(phys, "includePhi1InCollisionOperator", False):
+    include_phi1_in_collision = include_phi1 and _get_bool(phys, "includePhi1InCollisionOperator", False)
+    if include_phi1_in_collision and not include_phi1_in_kinetic:
         raise NotImplementedError(
-            "includePhi1InCollisionOperator (Phi1 inside the collision operator) is deferred; "
-            "the operators/profile_* path remains the owner for that variant."
+            "includePhi1InCollisionOperator=.true. requires includePhi1InKineticEquation=.true. "
+            "(populateMatrix.F90 assembles the Phi1-in-collision densities alongside the "
+            "Phi1-in-kinetic couplings)."
         )
     quasineutrality_option = _get_int(phys, "quasineutralityOption", 1)
     if include_phi1 and quasineutrality_option not in {1, 2}:
@@ -1557,6 +1588,12 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     # ---- collisions (physics.collisions builders) ----
     pas = None
     fp = None
+    fp_phi1 = None
+    if include_phi1_in_collision and collision_operator != 0:
+        raise NotImplementedError(
+            "includePhi1InCollisionOperator=.true. requires collisionOperator=0 "
+            "(the linearized Fokker-Planck operator carries the Phi1-shifted densities)."
+        )
     if collision_operator == 1:
         nu_n_use = nu_n
         if rhs_mode == 3:
@@ -1577,6 +1614,27 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
             krook=krook,
             n_xi_for_x=grids.n_xi_for_x,
             n_xi=grids.n_xi,
+        )
+    elif include_phi1_in_collision:
+        # includePhi1InCollisionOperator=.true.: the poloidally varying FP
+        # operator (physics.collisions.FokkerPlanckV3Phi1Operator); the collision
+        # densities are shifted by exp(-Z*alpha*Phi1Hat/THat) at apply time.
+        fp_phi1 = make_fokker_planck_v3_phi1_operator(
+            x=np.asarray(grids.x, dtype=np.float64),
+            x_weights=np.asarray(grids.x_weights, dtype=np.float64),
+            ddx=np.asarray(grids.ddx, dtype=np.float64),
+            d2dx2=np.asarray(grids.d2dx2, dtype=np.float64),
+            x_grid_k=_get_float(other, "xGrid_k", 0.0),
+            z_s=np.asarray(species.z, dtype=np.float64),
+            m_hats=np.asarray(species.m_hat, dtype=np.float64),
+            n_hats=np.asarray(species.n_hat, dtype=np.float64),
+            t_hats=np.asarray(species.t_hat, dtype=np.float64),
+            nu_n=nu_n,
+            krook=krook,
+            n_xi=grids.n_xi,
+            nl=grids.n_l,
+            alpha=alpha,
+            n_xi_for_x=np.asarray(grids.n_xi_for_x, dtype=np.int32),
         )
     else:
         import os  # noqa: PLC0415
@@ -1666,6 +1724,7 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
         e_parallel_hat_spec=e_parallel_hat_spec,
         pas=pas,
         fp=fp,
+        fp_phi1=fp_phi1,
         include_phi1=bool(include_phi1),
         quasineutrality_option=int(quasineutrality_option),
         include_phi1_in_kinetic=bool(include_phi1_in_kinetic),
