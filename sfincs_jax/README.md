@@ -92,9 +92,9 @@ supported surface.
   deferred-deck fallback).
 - `problems/profile_policies.py`: legacy RHSMode-1 automatic solver policy.
 - `problems/profile_phi1_newton.py`: the legacy Phi1/quasineutrality
-  Newton-Krylov loop. The canonical `phi1.py` slice now owns
+  Newton-Krylov loop. The canonical `phi1.py` slice owns
   `includePhi1InKineticEquation` with `quasineutralityOption` 1/2 (the default
-  through `run_profile`/CLI); this legacy loop is retained as the interim owner
+  through `run_profile`/CLI); this legacy loop is the interim owner
   of the deferred variants (`includePhi1InCollisionOperator`) and of the legacy
   `outputs/writer.py` Phi1 output path, and is removed by the writer-
   consolidation slice.
