@@ -51,6 +51,9 @@ sfincs_jax = ["validation/*.json"]
 [tool.pytest.ini_options]
 addopts = ["--import-mode=prepend"]
 testpaths = ["tests"]
+markers = [
+  "slow: heavy end-to-end example/optimization tests; excluded from the fast coverage shards via -m 'not slow' (still run in the full local suite).",
+]
 
 [tool.ruff.lint.per-file-ignores]
 # The large profile and transport solve owners still retain dynamic globals and
