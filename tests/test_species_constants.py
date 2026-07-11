@@ -1,7 +1,7 @@
 """Referee tests for Phase 3.1c: constants.py / species.py == old code paths.
 
 New modules must reproduce the existing scattered implementations to 1e-15:
-- ``physics/collisions.py`` (nuDHat deflection frequency),
+- ``collisions.py`` (nuDHat deflection frequency),
 - ``outputs/transport.py`` (radial-coordinate conversion factors),
 - ``operators/profile_system.py`` (namelist -> species arrays + psiHat gradients),
 - ``operators/profile_fblock.py`` / ``outputs/writer.py`` (Fortran defaults),
@@ -24,7 +24,7 @@ from sfincs_jax.input_compat import (
 from sfincs_jax.namelist import parse_sfincs_input_text, read_sfincs_input
 from sfincs_jax.operators.profile_fblock import _V3_DEFAULT_DELTA, _V3_DEFAULT_NU_N
 from sfincs_jax.outputs.transport import conversion_factors_to_from_dpsi_hat
-from sfincs_jax.physics.collisions import _V3_PI, _V3_SQRTPI, nu_d_hat_pitch_angle_scattering_v3
+from sfincs_jax.collisions import _V3_PI, _V3_SQRTPI, nu_d_hat_pitch_angle_scattering_v3
 
 FORTRAN_EXAMPLE = (
     Path(__file__).resolve().parent / "ref" / "quick_2species_FPCollisions_noEr.input.namelist"
@@ -60,7 +60,7 @@ def test_defaults_match_fortran_globalvariables() -> None:
     assert constants.DEFAULT_DELTA == _V3_DEFAULT_DELTA == 4.5694e-3
     assert constants.DEFAULT_NU_N == _V3_DEFAULT_NU_N == 8.330e-3
     assert constants.DEFAULT_ALPHA == 1.0
-    # globalVariables.F90 lines 16-17 (via physics/collisions.py literals).
+    # globalVariables.F90 lines 16-17 (via collisions.py literals).
     assert constants.PI_V3 == _V3_PI
     assert constants.SQRT_PI_V3 == _V3_SQRTPI
     # globalVariables.F90 line 155.

@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.physics.collisions import (
+from sfincs_jax.collisions import (
     _V3_SQRTPI,
     _psi_chandra,
     apply_pitch_angle_scattering_v3,
@@ -12,12 +12,14 @@ from sfincs_jax.physics.collisions import (
     apply_fokker_planck_v3_phi1,
     FokkerPlanckV3Operator,
     FokkerPlanckV3Phi1Operator,
+    make_fokker_planck_v3_operator,
     make_pitch_angle_scattering_v3_operator,
     nu_d_hat_pitch_angle_scattering_v3,
     polynomial_interpolation_matrix_np,
     rosenbluth_potential_terms_v3_np,
 )
 from sfincs_jax.discretization.xgrid import make_x_grid
+from sfincs_jax.phase_space import make_speed_grid, speed_grid_diff_matrices
 
 
 def _pas_operator():
@@ -285,3 +287,86 @@ def test_phi1_fokker_planck_apply_rejects_bad_shapes() -> None:
     )
     with pytest.raises(ValueError, match="op.k_nu has shape"):
         apply_fokker_planck_v3_phi1(bad_op, f, phi1_hat=jnp.zeros((1, 1), dtype=jnp.float64))
+
+
+def test_pas_apply_rejects_bad_shapes() -> None:
+    op = _pas_operator()
+    with pytest.raises(ValueError, match="f must have shape"):
+        apply_pitch_angle_scattering_v3(op, jnp.ones((1, 3, 5, 2), dtype=jnp.float64))
+
+
+# ----------------------------------------------------------------------------
+# Discrete conservation: the linearized Fokker-Planck blocks annihilate the
+# Maxwellian null vectors (particle number, parallel momentum incl. interspecies
+# exchange, energy) at the collocation level, to machine precision.
+# ----------------------------------------------------------------------------
+
+_FP_XGRID_K = 0.0
+
+
+def _fp_blocks_v3(z, m, n, t, *, n_x: int = 8, nl: int = 4, n_xi: int = 5) -> np.ndarray:
+    sg = make_speed_grid(n_x=n_x, k=_FP_XGRID_K)
+    x = np.asarray(sg.x, dtype=np.float64)
+    x_weights = np.asarray(sg.dx_weights(_FP_XGRID_K), dtype=np.float64)
+    ddx, d2dx2 = speed_grid_diff_matrices(x, k=_FP_XGRID_K)
+    op = make_fokker_planck_v3_operator(
+        x=x,
+        x_weights=x_weights,
+        ddx=ddx,
+        d2dx2=d2dx2,
+        x_grid_k=_FP_XGRID_K,
+        z_s=np.asarray(z, dtype=np.float64),
+        m_hats=np.asarray(m, dtype=np.float64),
+        n_hats=np.asarray(n, dtype=np.float64),
+        t_hats=np.asarray(t, dtype=np.float64),
+        nu_n=1.0,
+        krook=0.0,
+        n_xi=n_xi,
+        nl=nl,
+        n_xi_for_x=np.full((n_x,), n_xi, dtype=np.int32),
+    )
+    return np.asarray(op.mat)
+
+
+def test_fokker_planck_annihilates_maxwellian_null_vectors_single_species() -> None:
+    """C[F_M] = 0 at L=0 (density AND energy) and C[x F_M] = 0 at L=1 (momentum).
+
+    The linearized self-collision operator annihilates the perturbations that
+    correspond to shifting the background Maxwellian's density, temperature,
+    and mean velocity; the discretization preserves this to machine precision.
+    """
+    mat = _fp_blocks_v3([1.0], [1.0], [1.0], [1.0])
+    x = np.asarray(make_speed_grid(n_x=8, k=_FP_XGRID_K).x)
+    f_m = np.exp(-(x * x))
+    scale = float(np.max(np.abs(mat[0, 0, :2])))
+
+    assert np.max(np.abs(mat[0, 0, 0] @ f_m)) <= 1e-15 * scale  # particle number
+    assert np.max(np.abs(mat[0, 0, 0] @ ((x * x - 1.5) * f_m))) <= 1e-15 * scale  # energy
+    assert np.max(np.abs(mat[0, 0, 1] @ (x * f_m))) <= 1e-15 * scale  # momentum
+    # L=2 has no conservation law: the same Maxwellian-weighted vector is NOT null.
+    assert np.max(np.abs(mat[0, 0, 2] @ (x * x * f_m))) > 1e-6 * scale
+
+
+def test_fokker_planck_interspecies_conservation_equal_temperature() -> None:
+    """Cross-species null vectors: per-species density at L=0 and a common flow at L=1.
+
+    For equal temperatures, C_ab[F_Ma, F_Mb] = 0, so per-species density
+    perturbations (nHat_a e^{-x^2}) are annihilated at L=0.  A common mean
+    velocity u gives f1_a = u (m_a v / T) F_Ma, i.e. collocation values
+    proportional to nHat_a mHat_a^2 x e^{-x^2}; interspecies momentum exchange
+    must cancel it at L=1.  Both hold to machine precision discretely.
+    """
+    n_hat = np.asarray([0.6, 0.009], dtype=np.float64)
+    m_hat = np.asarray([1.0, 6.0], dtype=np.float64)
+    mat = _fp_blocks_v3([1.0, 6.0], m_hat, n_hat, [1.0, 1.0])
+    x = np.asarray(make_speed_grid(n_x=8, k=_FP_XGRID_K).x)
+    f_m = np.exp(-(x * x))
+    scale = float(np.max(np.abs(mat[:, :, :2])))
+
+    density = n_hat[:, None] * f_m[None, :]
+    r0 = np.einsum("abij,bj->ai", mat[:, :, 0, :, :], density)
+    assert np.max(np.abs(r0)) <= 1e-15 * scale
+
+    flow = (n_hat * m_hat**2)[:, None] * (x * f_m)[None, :]
+    r1 = np.einsum("abij,bj->ai", mat[:, :, 1, :, :], flow)
+    assert np.max(np.abs(r1)) <= 1e-15 * scale
