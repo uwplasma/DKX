@@ -537,9 +537,14 @@ def run_profile(
 
     output_path: Path | None = None
     if out_path is not None:
+        residual_norms = np.atleast_1d(np.asarray(result.residual_norms, dtype=np.float64))
+        residual_norm = float(np.max(residual_norms)) if residual_norms.size else None
         output_path = write_profile_output(
             path=out_path, inp=inp, op=op, grids=grids, geom=geom, radial=radial,
             state_vector=state_vector, elapsed_seconds=solve_seconds,
+            converged=bool(result.converged) if op.include_phi1 else None,
+            solver_method=result.method, solver_requested_method=result.method,
+            residual_norm=residual_norm if op.include_phi1 else None,
         )  # fmt: skip
 
     if solver_trace_path is not None:

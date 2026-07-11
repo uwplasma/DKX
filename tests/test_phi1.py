@@ -25,6 +25,7 @@ from pathlib import Path
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 # x64 is enabled on import of any sfincs_jax operator module (drift_kinetic).
 from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
@@ -197,23 +198,24 @@ def test_run_profile_routes_phi1_to_canonical() -> None:
     np.testing.assert_allclose(run.state_vector, _fortran_state(), rtol=0.0, atol=5e-8)
 
 
-# Phi1-dependent output fields the canonical writer does NOT yet emit (the
-# writer-consolidation follow-up): the electric-drift (vE) and total-drift
-# (vd/vd1) flux families, the dPhi1Hat gradients, the lambda multiplier, the
-# withoutPhi1 fluxes, and the Newton-specific solver metadata.  Enumerated so
-# the parity test fails loudly if the *shared* field set regresses.
+# The canonical writer now emits every Phi1-dependent physics field the legacy
+# writer produces: the electric-drift (vE/vE0) and total-drift (vd/vd1) flux
+# families with their psiN/rHat/rN variants, the heat withoutPhi1 flux, the
+# dPhi1Hat gradients, the lambda multiplier, the Phi1 scalar metadata
+# (quasineutralityOption, readExternalPhi1, adiabatic{Z,NHat,THat,MHat}), and the
+# Newton metadata (didNonlinearCalculationConverge, linearSolver{Method,
+# RequestedMethod,ResidualNorm}).  The only residual fields are the legacy
+# inner-linear-solver ACCEPTANCE diagnostics emitted solely on the legacy dense
+# solve path (scheme5 deck): they describe the legacy GMRES/dense acceptance test
+# (target = solverTol*||rhs||, ratio = ||r||/target, accepted/criterion flags),
+# which has no analogue in the canonical Newton-Krylov solve.  The canonical
+# solve reports only nonlinear convergence + the converged residual norm (both
+# emitted); linearSolverResidualTargetRatio in particular cannot match (it is
+# the legacy dense solve's ||r||/target).
 _KNOWN_MISSING_PHI1_H5 = frozenset(
-    {"lambda", "dPhi1Hatdtheta", "dPhi1Hatdzeta", "didNonlinearCalculationConverge",
-     "linearSolverMethod", "linearSolverRequestedMethod", "linearSolverResidualNorm",
-     "adiabaticZ", "adiabaticNHat", "adiabaticTHat", "adiabaticMHat",
-     "quasineutralityOption", "readExternalPhi1"}
-    | {f"{fam}Flux_{drift}_{coord}"
-       for fam in ("particle", "heat", "momentum")
-       for drift in ("vE", "vE0", "vd", "vd1")
-       for coord in ("psiHat", "psiN", "rHat", "rN")}
-    | {f"{fam}Flux_withoutPhi1_{coord}"
-       for fam in ("particle", "heat", "momentum")
-       for coord in ("psiHat", "psiN", "rHat", "rN")}
+    {"linearSolverAccepted", "linearSolverAcceptanceCriterion", "linearSolverConverged",
+     "linearSolverResidualTarget", "linearSolverResidualTargetRatio",
+     "linearSolverTrueResidualConverged"}
 )  # fmt: skip
 
 
@@ -261,6 +263,111 @@ def test_h5_phi1_fields_vs_legacy_writer(tmp_path: Path) -> None:
             # Iteration axis: canonical stores the converged state (NIterations=1),
             # legacy stored the whole Newton history; compare the converged slice.
             np.testing.assert_allclose(cv[..., 0], lv[..., -1], rtol=0.0, atol=5e-8, err_msg=f"field {key}")
+
+
+# Per-deck parity budgets for the Phi1-derived output families.  Each new family
+# is an EXACT algebraic function of the converged (Phi1, f) state, so the
+# canonical-vs-legacy parity is inherited from the two solvers' state parity:
+#   * scheme5 is the LINEAR Phi1 deck (1 Newton step): state parity ~3e-16 here,
+#     so both tiers assert tight.
+#   * inKinetic / inCollision are NONLINEAR: state parity is the documented
+#     Phi1Hat bound (measured ~5e-12 and ~1e-9 here).  The O(1e-8) flux families
+#     land far below that (tight f-parity, small fluxes); the Phi1-scale
+#     gradients (dPhi1Hat) and the near-zero multiplier (lambda) track Phi1Hat.
+# ``state`` covers Phi1-scale/near-zero fields; ``flux`` covers the O(1e-8)
+# electric-/total-drift flux families (compared in absolute terms because the
+# vd/vd1/momentum components pass through zero, making relative error ill-posed).
+_PHI1_H5_DECKS = {
+    "pas_1species_PAS_noEr_tiny_scheme5_withPhi1_linear": {"state": 1e-12, "flux": 1e-13},
+    "pas_1species_PAS_noEr_tiny_withPhi1_inKinetic_linear": {"state": 1e-9, "flux": 1e-12},
+    "fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision": {"state": 5e-8, "flux": 1e-10},
+}
+
+_COORDS = ("psiHat", "psiN", "rHat", "rN")
+_FLUX_FAMILY_KEYS = (
+    [f"{fam}Flux_{drift}_{c}"
+     for fam in ("particle", "heat", "momentum")
+     for drift in ("vE", "vE0", "vd", "vd1") for c in _COORDS]
+    + [f"heatFlux_withoutPhi1_{c}" for c in _COORDS]
+    + [f"{fam}FluxBeforeSurfaceIntegral_{d}"
+       for fam in ("particle", "heat", "momentum") for d in ("vE", "vE0")]
+)  # fmt: skip
+_STATE_FAMILY_KEYS = ("dPhi1Hatdtheta", "dPhi1Hatdzeta", "lambda")
+
+
+def _converged_slice_pair(cv: object, lv: object) -> tuple[np.ndarray, np.ndarray]:
+    """(canonical converged, legacy last-iteration) numeric slices for one field."""
+    cva = np.asarray(cv, dtype=np.float64)
+    lva = np.asarray(lv, dtype=np.float64)
+    if cva.shape == lva.shape:
+        return cva, lva
+    assert cva.ndim == lva.ndim and cva.shape[:-1] == lva.shape[:-1] and cva.shape[-1] == 1
+    return cva[..., 0], lva[..., -1]
+
+
+@pytest.mark.parametrize("stem", sorted(_PHI1_H5_DECKS))
+def test_h5_phi1_new_families_vs_legacy_writer(stem: str, tmp_path: Path) -> None:
+    """Value parity of the newly-emitted Phi1 families vs legacy, all three decks.
+
+    Covers the electric-drift (vE/vE0) and total-drift (vd/vd1) flux families and
+    their psiN/rHat/rN variants, the heat withoutPhi1 flux, the vE/vE0
+    BeforeSurfaceIntegral fields, the dPhi1Hat gradients, the lambda multiplier,
+    the Phi1 scalar metadata, and the Newton metadata.
+    """
+    from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
+    from sfincs_jax.run import run_profile
+
+    deck = _REF / f"{stem}.input.namelist"
+    tol = _PHI1_H5_DECKS[stem]
+
+    leg_path = tmp_path / "legacy.h5"
+    write_sfincs_jax_output_h5(input_namelist=deck, output_path=leg_path, compute_solution=True, verbose=False)
+    leg = read_sfincs_h5(leg_path)
+    can_path = tmp_path / "canon.h5"
+    run_profile(deck, tol=1e-9, out_path=can_path, emit=None)
+    can = read_sfincs_h5(can_path)
+
+    # The only legacy fields the canonical writer omits are documented.
+    missing = set(leg.keys()) - set(can.keys()) - {"Phi1Hat"}
+    assert missing <= _KNOWN_MISSING_PHI1_H5, f"unexpected missing: {sorted(missing - _KNOWN_MISSING_PHI1_H5)}"
+
+    # Electric-/total-drift flux families + heat withoutPhi1 (O(1e-8) budget).
+    seen_scale = 0.0
+    for key in _FLUX_FAMILY_KEYS:
+        assert key in can, f"{key} not emitted"
+        assert key in leg, f"{key} absent from legacy for {stem}"
+        cvs, lvs = _converged_slice_pair(can[key], leg[key])
+        np.testing.assert_allclose(cvs, lvs, rtol=0.0, atol=tol["flux"], err_msg=f"{stem}:{key}")
+        seen_scale = max(seen_scale, float(np.max(np.abs(lvs))))
+    # Guard against a trivial all-zero pass: the particle/heat vE/vd fluxes are non-zero.
+    assert seen_scale > 1e-12, f"{stem}: flux families are unexpectedly ~0 (scale={seen_scale:.2e})"
+
+    # dPhi1Hat gradients and the <Phi1>=0 multiplier track the Phi1 state parity
+    # (dPhi1Hat is the spectral theta/zeta derivative of the converged Phi1Hat).
+    for key in _STATE_FAMILY_KEYS:
+        assert key in can, f"{key} not emitted"
+        assert key in leg, f"{key} absent from legacy for {stem}"
+        cvs, lvs = _converged_slice_pair(can[key], leg[key])
+        np.testing.assert_allclose(cvs, lvs, rtol=0.0, atol=tol["state"], err_msg=f"{stem}:{key}")
+
+    # linearSolverResidualNorm is a converged-solve residual (legacy stores the
+    # inner linear residual, canonical the Newton residual): both are ~0, well
+    # below any physical scale.  Assert convergence, not tight value parity.
+    assert "linearSolverResidualNorm" in can and "linearSolverResidualNorm" in leg
+    assert float(np.asarray(can["linearSolverResidualNorm"])) < 1e-6
+    assert float(np.asarray(leg["linearSolverResidualNorm"])) < 1e-6
+
+    # Phi1 scalar metadata: exact integer/logical parity.
+    assert int(np.asarray(can["quasineutralityOption"])) == int(np.asarray(leg["quasineutralityOption"]))
+    assert int(np.asarray(can["readExternalPhi1"])) == int(np.asarray(leg["readExternalPhi1"]))
+    assert int(np.asarray(can["didNonlinearCalculationConverge"])) == 1
+    for key in ("adiabaticZ", "adiabaticNHat", "adiabaticTHat", "adiabaticMHat"):
+        np.testing.assert_allclose(
+            float(np.asarray(can[key])), float(np.asarray(leg[key])), rtol=0.0, atol=1e-12, err_msg=f"{stem}:{key}"
+        )
+    # Method-name metadata is present (string value is a solver label, not physics).
+    for key in ("linearSolverMethod", "linearSolverRequestedMethod"):
+        assert key in can and key in leg
 
 
 # ---------------------------------------------------------------------------

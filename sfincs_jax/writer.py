@@ -52,7 +52,10 @@ from sfincs_jax.moments import (
     StateLayout,
     VelocityGrid,
     classical_fluxes,
+    combined_drift_fluxes,
+    electric_drift_flux_moments,
     flux_surface_b_integrals,
+    heat_flux_without_phi1,
     ntv_kernel,
     ntv_moments,
     rhsmode1_moments,
@@ -81,9 +84,17 @@ def _f64(value: Any) -> np.ndarray:
 
 def _reversed_axes(arr: np.ndarray) -> np.ndarray:
     """Fortran column-major storage view of a row-major logical array."""
-    if arr.ndim <= 1:
+    if not isinstance(arr, np.ndarray) or arr.ndim <= 1:
         return arr
     return np.ascontiguousarray(np.transpose(arr, tuple(reversed(range(arr.ndim)))))
+
+
+def _namelist_float(group: dict, key: str, default: float) -> float:
+    """Case-insensitive namelist float read (list-valued entries take the first)."""
+    value = group.get(key.upper(), default)
+    if isinstance(value, list):
+        value = value[0] if value else default
+    return float(value)
 
 
 def operator_containers(
@@ -390,6 +401,21 @@ def _base_fields(
         out[f"classical{tag}FluxNoPhi1_rHat"] = arr * radial.d_dr_hat_to_d_dpsi_hat
         out[f"classical{tag}FluxNoPhi1_rN"] = arr * radial.d_dr_n_to_d_dpsi_hat
 
+    # Phi1 scalar metadata (writeHDF5Output.F90): v3 writes quasineutralityOption
+    # and readExternalPhi1 for every Phi1 run; the adiabatic-species parameters
+    # only when withAdiabatic is active (readExternalPhi1 is always False here,
+    # as the canonical operator rejects readExternalPhi1=.true.).
+    if bool(op.include_phi1):
+        out["quasineutralityOption"] = np.asarray(int(op.quasineutrality_option), dtype=_I32)
+        out["readExternalPhi1"] = _logical(False)
+        if bool(op.with_adiabatic):
+            spec = inp.raw.group("speciesParameters") if inp.raw is not None else {}
+            out["adiabaticZ"] = _f64(float(op.adiabatic_z))
+            out["adiabaticNHat"] = _f64(float(op.adiabatic_n_hat))
+            out["adiabaticTHat"] = _f64(float(op.adiabatic_t_hat))
+            # v3 default adiabaticMHat = m_e/m_p; not carried on the operator.
+            out["adiabaticMHat"] = _f64(_namelist_float(spec, "adiabaticMHat", 5.446170214e-4))
+
     return out
 
 
@@ -498,8 +524,10 @@ _RADIAL_VARIANT_BASES = (
 )  # fmt: skip
 
 
-def _add_radial_flux_variants(out: Dict[str, np.ndarray], radial: RadialCoordinates) -> None:
-    for base in _RADIAL_VARIANT_BASES:
+def _add_radial_flux_variants(
+    out: Dict[str, np.ndarray], radial: RadialCoordinates, bases: Tuple[str, ...] = _RADIAL_VARIANT_BASES
+) -> None:
+    for base in bases:
         arr = out[base]
         out[base.replace("_psiHat", "_psiN")] = arr * radial.d_dpsi_n_to_d_dpsi_hat
         out[base.replace("_psiHat", "_rHat")] = arr * radial.d_dr_hat_to_d_dpsi_hat
@@ -530,6 +558,120 @@ _RHSMODE1_SN_KEYS = (
 )  # fmt: skip
 _RHSMODE1_SCALAR_KEYS = ("FSABjHat", "FSABjHatOverB0", "FSABjHatOverRootFSAB2")
 _RHSMODE1_XSN_KEYS = ("FSABFlow_vs_x", "particleFlux_vm_psiHat_vs_x", "heatFlux_vm_psiHat_vs_x")
+
+
+# Phi1 electric-drift (vE/vE0) and total-drift (vd/vd1) psiHat flux bases whose
+# psiN/rHat/rN variants are the radialCoordinates.F90 projections (diagnostics.F90
+# vE/vd family), plus the heat-only withoutPhi1 flux (heatFlux_vm + (5/3) heatFlux_vE0).
+_PHI1_FLUX_VARIANT_BASES = tuple(
+    f"{fam}Flux_{drift}_psiHat"
+    for fam in ("particle", "heat", "momentum")
+    for drift in ("vE", "vE0", "vd", "vd1")
+) + ("heatFlux_withoutPhi1_psiHat",)
+
+
+def _add_phi1_drift_output_fields(
+    out: Dict[str, np.ndarray],
+    *,
+    op: KineticOperator,
+    layout: StateLayout,
+    vgrid: VelocityGrid,
+    surface: FluxSurface,
+    species: SpeciesParams,
+    x_full: Any,
+    phi1_hat: Any,
+    moments: Dict[str, Any],
+    radial: RadialCoordinates,
+) -> None:
+    """Phi1-only electric-/total-drift flux families, dPhi1Hat gradients, lambda.
+
+    Mirrors ``diagnostics.F90`` (and the legacy ``outputs/rhsmode1.py``
+    ``write_rhsmode1_electric_drift_diagnostics_to_data`` template): the ExB
+    (vE/vE0) flux moments come from :func:`electric_drift_flux_moments`, the
+    total drift ``(vd1, vd) = (vm + vE0, vm + vE)`` from
+    :func:`combined_drift_fluxes`, and ``heatFlux_withoutPhi1`` from
+    :func:`heat_flux_without_phi1`.  The Phi1 gradients reuse the operator's
+    theta/zeta differentiation matrices (the same ``ddtheta``/``ddzeta`` the DKE
+    streaming term uses).  All per-iteration arrays carry the trailing
+    ``NIterations=1`` axis in the ``sfincsOutput.h5`` read order.
+    """
+    phi1 = np.asarray(phi1_hat, dtype=np.float64)
+    ddtheta = np.asarray(op.ddtheta, dtype=np.float64)
+    ddzeta = np.asarray(op.ddzeta, dtype=np.float64)
+    dphi1_dtheta = ddtheta @ phi1  # (T, Z)
+    dphi1_dzeta = phi1 @ ddzeta.T  # (T, Z)
+    out["dPhi1Hatdtheta"] = np.transpose(dphi1_dtheta, (1, 0))[:, :, None]
+    out["dPhi1Hatdzeta"] = np.transpose(dphi1_dzeta, (1, 0))[:, :, None]
+
+    ve = electric_drift_flux_moments(
+        layout, vgrid, surface, species, x_full,
+        delta=op.delta, alpha=op.alpha, phi1_hat=phi1_hat,
+        dphi1_hat_dtheta=dphi1_dtheta, dphi1_hat_dzeta=dphi1_dzeta,
+    )  # fmt: skip
+
+    # Overwrite the vE/vE0 BeforeSurfaceIntegral placeholders (zeros for the
+    # non-Phi1 moment table) with the ExB values, stored (Z, T, S, 1).
+    for key, arr in (
+        ("particleFluxBeforeSurfaceIntegral_vE", ve.particle_flux_before_surface_integral_ve),
+        ("particleFluxBeforeSurfaceIntegral_vE0", ve.particle_flux_before_surface_integral_ve0),
+        ("heatFluxBeforeSurfaceIntegral_vE", ve.heat_flux_before_surface_integral_ve),
+        ("heatFluxBeforeSurfaceIntegral_vE0", ve.heat_flux_before_surface_integral_ve0),
+        ("momentumFluxBeforeSurfaceIntegral_vE", ve.momentum_flux_before_surface_integral_ve),
+        ("momentumFluxBeforeSurfaceIntegral_vE0", ve.momentum_flux_before_surface_integral_ve0),
+    ):  # fmt: skip
+        out[key] = np.transpose(np.asarray(arr, dtype=np.float64), (2, 1, 0))[:, :, :, None]
+
+    # Surface-integrated vE/vE0 and total-drift vd/vd1 psiHat fluxes, stored (S, 1).
+    for fam, ve_s, ve0_s in (
+        ("particleFlux", ve.particle_flux_ve_psi_hat, ve.particle_flux_ve0_psi_hat),
+        ("heatFlux", ve.heat_flux_ve_psi_hat, ve.heat_flux_ve0_psi_hat),
+        ("momentumFlux", ve.momentum_flux_ve_psi_hat, ve.momentum_flux_ve0_psi_hat),
+    ):
+        vm_s = np.asarray(moments[f"{fam}_vm_psiHat"], dtype=np.float64)
+        ve_a = np.asarray(ve_s, dtype=np.float64)
+        ve0_a = np.asarray(ve0_s, dtype=np.float64)
+        vd1, vd = combined_drift_fluxes(flux_vm_psi_hat=vm_s, flux_ve0_psi_hat=ve0_a, flux_ve_psi_hat=ve_a)
+        out[f"{fam}_vE_psiHat"] = ve_a[:, None]
+        out[f"{fam}_vE0_psiHat"] = ve0_a[:, None]
+        out[f"{fam}_vd_psiHat"] = np.asarray(vd, dtype=np.float64)[:, None]
+        out[f"{fam}_vd1_psiHat"] = np.asarray(vd1, dtype=np.float64)[:, None]
+
+    hf_wo = heat_flux_without_phi1(
+        heat_flux_vm_psi_hat=np.asarray(moments["heatFlux_vm_psiHat"], dtype=np.float64),
+        heat_flux_ve0_psi_hat=np.asarray(ve.heat_flux_ve0_psi_hat, dtype=np.float64),
+    )
+    out["heatFlux_withoutPhi1_psiHat"] = np.asarray(hf_wo, dtype=np.float64)[:, None]
+
+    _add_radial_flux_variants(out, radial, _PHI1_FLUX_VARIANT_BASES)
+
+    # <Phi1>=0 Lagrange multiplier (state row after the Phi1(theta,zeta) block).
+    lam = float(np.asarray(x_full, dtype=np.float64)[layout.f_size + layout.n_theta * layout.n_zeta])
+    out["lambda"] = np.asarray([lam], dtype=np.float64)
+
+
+def _add_phi1_solver_metadata(
+    base: Dict[str, np.ndarray],
+    *,
+    converged: bool | None,
+    solver_method: str | None,
+    solver_requested_method: str | None,
+    residual_norm: float | None,
+) -> None:
+    """Phi1 Newton-solve metadata (writeHDF5Output.F90 nonlinear-run fields).
+
+    ``didNonlinearCalculationConverge`` is the Newton convergence flag; the
+    ``linearSolver*`` fields describe the inner linear solve.  The method names
+    are stored as strings (skipped by the io name-map value comparison); the
+    residual norm is the converged solve residual (near zero for both the
+    canonical Newton and the legacy inner GMRES/dense solve).
+    """
+    if converged is not None:
+        base["didNonlinearCalculationConverge"] = _logical(bool(converged))
+    if solver_method is not None:
+        base["linearSolverMethod"] = str(solver_method)
+        base["linearSolverRequestedMethod"] = str(solver_requested_method or solver_method)
+    if residual_norm is not None:
+        base["linearSolverResidualNorm"] = _f64(float(residual_norm))
 
 
 def _rhsmode1_iteration_fields(
@@ -587,12 +729,18 @@ def _rhsmode1_iteration_fields(
     # Phi1Hat(theta,zeta): stored (Nzeta, Ntheta, NIterations) as in
     # writeHDF5Output.F90.  The canonical Newton solve records the converged
     # state (NIterations=1); the legacy in-process writer stored every accepted
-    # Newton iterate.  Phi1-dependent electric-drift (vE) and total-drift (vd)
-    # flux families plus dPhi1Hat gradients are the writer-consolidation
-    # follow-up (enumerated in tests/test_phi1.py::_KNOWN_MISSING_PHI1_H5).
+    # Newton iterate.  For Phi1 runs the electric-drift (vE/vE0) and total-drift
+    # (vd/vd1) flux families, the heat withoutPhi1 flux, the dPhi1Hat gradients,
+    # and the lambda multiplier are emitted here from the canonical moments
+    # (diagnostics.F90 parity); the Phi1 scalar/solver metadata is added by
+    # ``_base_fields``/``write_profile_output``.
     phi1_hat = layout.phi1_hat(x_full)
     if phi1_hat is not None:
         out["Phi1Hat"] = np.transpose(np.asarray(phi1_hat, dtype=np.float64), (1, 0))[:, :, None]
+        _add_phi1_drift_output_fields(
+            out, op=op, layout=layout, vgrid=vgrid, surface=surface, species=species,
+            x_full=x_full, phi1_hat=phi1_hat, moments=d, radial=radial,
+        )  # fmt: skip
 
     # Classical fluxes at the run's actual gradients (classicalTransport.F90).
     pf, hf = classical_fluxes(
@@ -663,7 +811,11 @@ def _write_netcdf(path: Path, base: Dict[str, np.ndarray], iteration: Dict[str, 
             return tuple(names)
 
         for key, value in {**{k: _reversed_axes(v) for k, v in base.items()}, **iteration}.items():
-            var = f.createVariable(key.replace("/", "_").replace(" ", "_"), value.dtype, _dims_for(value.shape))
+            safe_key = key.replace("/", "_").replace(" ", "_")
+            if isinstance(value, str) or (isinstance(value, np.ndarray) and value.dtype.kind in {"U", "S"}):
+                f.setncattr(safe_key, str(value))
+                continue
+            var = f.createVariable(safe_key, value.dtype, _dims_for(value.shape))
             if value.ndim == 0:
                 var.assignValue(value)
             else:
@@ -1075,6 +1227,10 @@ def write_profile_output(
     radial: RadialCoordinates,
     state_vector: np.ndarray,
     elapsed_seconds: float = 0.0,
+    converged: bool | None = None,
+    solver_method: str | None = None,
+    solver_requested_method: str | None = None,
+    residual_norm: float | None = None,
 ) -> Path:
     """Write the RHSMode=1 ``sfincsOutput`` file from canonical-stack objects.
 
@@ -1095,6 +1251,12 @@ def write_profile_output(
         radial: radial-coordinate conversion factors for the selected surface.
         state_vector: the solved state, shape ``(total_size,)``.
         elapsed_seconds: wall-clock seconds for ``elapsed time (s)``.
+        converged: Phi1-run Newton convergence flag; when provided (Phi1 runs)
+            emits ``didNonlinearCalculationConverge`` (writeHDF5Output.F90).
+        solver_method / solver_requested_method: linear-solver method names
+            emitted as ``linearSolverMethod`` / ``linearSolverRequestedMethod``.
+        residual_norm: converged residual norm emitted as
+            ``linearSolverResidualNorm``.
 
     Returns:
         The resolved output path.
@@ -1109,6 +1271,11 @@ def write_profile_output(
         inp=inp, op=op, grids=grids, geom=geom, radial=radial,
         gpsipsi=gpsipsi, diotadpsi_hat=diotadpsi_hat, n_rhs=1,
     )  # fmt: skip
+    if bool(op.include_phi1):
+        _add_phi1_solver_metadata(
+            base, converged=converged, solver_method=solver_method,
+            solver_requested_method=solver_requested_method, residual_norm=residual_norm,
+        )  # fmt: skip
     iteration = _rhsmode1_iteration_fields(
         inp=inp, op=op, geom=geom, radial=radial, gpsipsi=gpsipsi,
         u_hat=base["uHat"], g_eff=float(base["GHat"]), i_eff=float(base["IHat"]),
