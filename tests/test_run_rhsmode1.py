@@ -10,10 +10,9 @@ Vertical slice #3 referee (plan_final.md "File-Level Execution Queues"):
 - the ``sfincs_jax.writer.write_profile_output`` h5 file must contain every
   dataset the legacy ``outputs`` writer emits for RHSMode=1, equal to 1e-10
   (scaled), with the known-missing set enumerated explicitly: the legacy
-  JAX-only ``linearSolver*`` metadata and — where the deck requests it — the
-  export_f data family, which the canonical operator defers (unlike Phi1 and
-  the tangential magnetic drifts, which are now canonical — see
-  ``test_run_profile_magnetic_drifts_match_legacy`` below);
+  JAX-only ``linearSolver*`` metadata.  Phi1, the tangential magnetic drifts,
+  and — where the deck requests it — the export_f data family are all now
+  canonical (see ``test_run_profile_magnetic_drifts_match_legacy`` below);
 - stdout must contain the diagnostics.F90 species-results block rendered by
   the golden-pinned ``console.species_results_lines`` helpers
   (format byte-parity is pinned in ``tests/test_inputs_console.py``), with
@@ -42,26 +41,22 @@ FIXTURES = (
 
 # Datasets present in the legacy RHSMode=1 output file but not written by the
 # canonical writer.  ``linearSolver*`` is legacy-JAX solver metadata (not a
-# Fortran dataset); the export_f data family is deferred by the canonical
-# operator (plan_final.md "Explicit Deferred Items").  Phi1 and
-# magnetic-drift families never appear here because the canonical operator
-# refuses those decks at construction (tests/test_drift_kinetic.py).
+# Fortran dataset).  The export_f data family (full_f/delta_f + export_f grids)
+# is now written by the canonical writer (sfincs_jax.writer._export_f_data), so
+# it is no longer in the known-missing set.  Phi1 and magnetic-drift families
+# never appear here because the canonical operator refuses those decks at
+# construction (tests/test_drift_kinetic.py).
 _LEGACY_SOLVER_METADATA = frozenset({
     "linearSolverAcceptanceCriterion", "linearSolverAccepted", "linearSolverConverged",
     "linearSolverMethod", "linearSolverRequestedMethod", "linearSolverResidualNorm",
     "linearSolverResidualTarget", "linearSolverResidualTargetRatio",
     "linearSolverTrueResidualConverged",
 })  # fmt: skip
-_EXPORT_F_MISSING = frozenset({
-    "N_export_f_theta", "N_export_f_x", "N_export_f_xi", "N_export_f_zeta",
-    "delta_f", "full_f",
-    "export_f_theta", "export_f_theta_option", "export_f_x", "export_f_x_option",
-    "export_f_xi", "export_f_xi_option", "export_f_zeta", "export_f_zeta_option",
-})  # fmt: skip
 KNOWN_MISSING = {
     "pas_1species_PAS_noEr_tiny_scheme1": _LEGACY_SOLVER_METADATA,
-    # The quick_2species deck sets export_full_f/export_delta_f = .true.
-    "quick_2species_FPCollisions_noEr": _LEGACY_SOLVER_METADATA | _EXPORT_F_MISSING,
+    # The quick_2species deck sets export_full_f/export_delta_f = .true.; the
+    # canonical writer now emits the full_f/delta_f data family (parity ~1e-10).
+    "quick_2species_FPCollisions_noEr": _LEGACY_SOLVER_METADATA,
     WITH_ER_BASE: _LEGACY_SOLVER_METADATA,
 }
 
