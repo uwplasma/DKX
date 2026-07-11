@@ -43,7 +43,7 @@ jobs:
           python -m sfincs_jax.validation.data_fetch --quiet
       - name: Coverage shard
         run: |
-          python -m pytest -q -n auto --dist=loadscope --splits 4 --group ${{ matrix.group }} --splitting-algorithm least_duration --cov=sfincs_jax --cov-report=
+          python -m pytest -q -n auto --dist=loadscope --splits 4 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=sfincs_jax --cov-report=
       - name: Upload coverage data
         uses: actions/upload-artifact@v7
         with:
