@@ -405,11 +405,11 @@ def _base_fields(
 
     # Phi1 scalar metadata (writeHDF5Output.F90): v3 writes quasineutralityOption
     # and readExternalPhi1 for every Phi1 run; the adiabatic-species parameters
-    # only when withAdiabatic is active (readExternalPhi1 is always False here,
-    # as the canonical operator rejects readExternalPhi1=.true.).
-    if bool(op.include_phi1):
+    # only when withAdiabatic is active.  readExternalPhi1 keeps the f-only linear
+    # layout (op.include_phi1 is False) but is still a Phi1 run.
+    if bool(op.include_phi1) or op.external_phi1_hat is not None:
         out["quasineutralityOption"] = np.asarray(int(op.quasineutrality_option), dtype=_I32)
-        out["readExternalPhi1"] = _logical(False)
+        out["readExternalPhi1"] = _logical(op.external_phi1_hat is not None)
         if bool(op.with_adiabatic):
             spec = inp.raw.group("speciesParameters") if inp.raw is not None else {}
             out["adiabaticZ"] = _f64(float(op.adiabatic_z))
@@ -584,6 +584,7 @@ def _add_phi1_drift_output_fields(
     phi1_hat: Any,
     moments: Dict[str, Any],
     radial: RadialCoordinates,
+    include_lambda: bool = True,
 ) -> None:
     """Phi1-only electric-/total-drift flux families, dPhi1Hat gradients, lambda.
 
@@ -647,8 +648,10 @@ def _add_phi1_drift_output_fields(
     _add_radial_flux_variants(out, radial, _PHI1_FLUX_VARIANT_BASES)
 
     # <Phi1>=0 Lagrange multiplier (state row after the Phi1(theta,zeta) block).
-    lam = float(np.asarray(x_full, dtype=np.float64)[layout.f_size + layout.n_theta * layout.n_zeta])
-    out["lambda"] = np.asarray([lam], dtype=np.float64)
+    # readExternalPhi1 has no lambda row (the field is fixed, not solved).
+    if include_lambda:
+        lam = float(np.asarray(x_full, dtype=np.float64)[layout.f_size + layout.n_theta * layout.n_zeta])
+        out["lambda"] = np.asarray([lam], dtype=np.float64)
 
 
 def _add_phi1_solver_metadata(
@@ -703,6 +706,7 @@ def _rhsmode1_iteration_fields(
         rhsmode1_moments(
             layout, vgrid, surface, species, x_full,
             delta=op.delta, alpha=op.alpha, phi1_from_state=bool(op.include_phi1),
+            phi1_hat=op.external_phi1_hat,
         )  # fmt: skip
     )
 
@@ -736,12 +740,16 @@ def _rhsmode1_iteration_fields(
     # and the lambda multiplier are emitted here from the canonical moments
     # (diagnostics.F90 parity); the Phi1 scalar/solver metadata is added by
     # ``_base_fields``/``write_profile_output``.
-    phi1_hat = layout.phi1_hat(x_full)
+    # For readExternalPhi1 the Phi1 field is fixed (not in the state); the
+    # self-consistent path extracts it from the state.  Either way it drives the
+    # same electric-/total-drift flux families.
+    phi1_hat = op.external_phi1_hat if op.external_phi1_hat is not None else layout.phi1_hat(x_full)
     if phi1_hat is not None:
         out["Phi1Hat"] = np.transpose(np.asarray(phi1_hat, dtype=np.float64), (1, 0))[:, :, None]
         _add_phi1_drift_output_fields(
             out, op=op, layout=layout, vgrid=vgrid, surface=surface, species=species,
             x_full=x_full, phi1_hat=phi1_hat, moments=d, radial=radial,
+            include_lambda=op.external_phi1_hat is None,
         )  # fmt: skip
 
     # Classical fluxes at the run's actual gradients (classicalTransport.F90).

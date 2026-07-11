@@ -469,3 +469,142 @@ def test_collision_phi1_cli_predicate_routes_to_canonical() -> None:
     from sfincs_jax.inputs import read_sfincs_input
 
     assert deck_requires_legacy_pipeline(read_sfincs_input(_COLL_INPUT)) is None
+
+
+# ---------------------------------------------------------------------------
+# 7. readExternalPhi1: FIXED external Phi1 field, LINEAR f-only solve
+#
+# With includePhi1=.true. and readExternalPhi1=.true. SFINCS reads a fixed
+# Phi1(theta,zeta) from an external HDF5 file instead of solving quasineutrality:
+# the DKE is LINEAR again (state = f only, no QN block, no lambda row), the fixed
+# field enters the same Phi1-in-kinetic terms, and the solve is a single linear
+# solve (no Newton).  The external field here is the sfincsOutput.h5 of the
+# self-consistent inKinetic deck (same grid -> no interpolation), so the Fortran
+# golden's Phi1Hat equals that field exactly.
+# ---------------------------------------------------------------------------
+
+_REXT = "pas_1species_PAS_noEr_tiny_readExternalPhi1"
+_REXT_DECK = _REF / f"{_REXT}.input.namelist"
+_REXT_FIELD = _REF / f"{_REXT}.externalPhi1.h5"
+_REXT_GOLDEN = _REF / f"{_REXT}.sfincsOutput.h5"
+_REXT_STATEVEC = _REF / f"{_REXT}.stateVector.petscbin"
+
+
+def _rext_run_dir(tmp_path: Path) -> Path:
+    """Deck + external field laid out as SFINCS runs it (field named externalPhi1.h5)."""
+    import shutil
+
+    shutil.copy(_REXT_DECK, tmp_path / "input.namelist")
+    shutil.copy(_REXT_FIELD, tmp_path / "externalPhi1.h5")
+    return tmp_path / "input.namelist"
+
+
+def test_read_external_phi1_operator_is_linear_f_only(tmp_path: Path) -> None:
+    """The operator keeps the f-only layout (no QN block / lambda) and stays linear."""
+    op = kinetic_operator_from_namelist(read_sfincs_input(_rext_run_dir(tmp_path)))
+    assert op.external_phi1_hat is not None
+    assert not op.include_phi1  # no QN block, no Phi1 unknown, no lambda row
+    assert op.include_phi1_in_kinetic
+    assert op.phi1_size == 0
+    # f-only + constraint sources (constraintScheme 2): f_size + n_species*n_x.
+    assert int(op.total_size) == int(op.f_size) + op.n_species * op.n_x
+    # apply is genuinely linear: apply(0) == 0.
+    y0 = np.asarray(op.apply(jnp.zeros((op.total_size,), dtype=jnp.float64)))
+    assert float(np.max(np.abs(y0))) == 0.0
+
+
+def test_read_external_phi1_state_matches_fortran(tmp_path: Path) -> None:
+    """Canonical linear solve state vs the Fortran readExternalPhi1 golden state."""
+    from sfincs_jax.solve import solve
+
+    op = kinetic_operator_from_namelist(read_sfincs_input(_rext_run_dir(tmp_path)))
+    res = solve(op, op.rhs(), method="auto", tol=1e-11)
+    assert res.converged
+    x = np.asarray(res.x, dtype=np.float64).reshape((-1,))
+    fort = np.asarray(read_petsc_vec(_REXT_STATEVEC).values, dtype=np.float64)
+    worst = float(np.max(np.abs(x - fort)))
+    assert worst < 5e-8, f"worst state |canonical-Fortran| = {worst:.3e}"
+
+
+def test_read_external_phi1_not_deferred() -> None:
+    """The CLI routes the readExternalPhi1 deck through the canonical stack."""
+    from sfincs_jax.cli import deck_requires_legacy_pipeline
+    from sfincs_jax.inputs import read_sfincs_input as read_input_typed
+
+    assert deck_requires_legacy_pipeline(read_input_typed(_REXT_DECK)) is None
+
+
+def test_read_external_phi1_run_profile_is_linear(tmp_path: Path) -> None:
+    """run_profile solves readExternalPhi1 with a single LINEAR solve (no Newton)."""
+    from sfincs_jax.run import run_profile
+
+    deck = _rext_run_dir(tmp_path)
+    run = run_profile(deck, tol=1e-11, emit=None)
+    assert run.solve_result.method != "phi1_newton_krylov"
+    assert run.solve_result.converged
+    np.testing.assert_allclose(
+        run.state_vector, np.asarray(read_petsc_vec(_REXT_STATEVEC).values, dtype=np.float64),
+        rtol=0.0, atol=5e-8,
+    )  # fmt: skip
+
+
+def test_read_external_phi1_uses_external_field(tmp_path: Path) -> None:
+    """The emitted Phi1Hat equals the external field's last-iteration slice."""
+    from sfincs_jax.io import read_sfincs_h5
+    from sfincs_jax.run import run_profile
+
+    deck = _rext_run_dir(tmp_path)
+    can_path = tmp_path / "canon.h5"
+    run_profile(deck, tol=1e-11, out_path=can_path, emit=None)
+    can = read_sfincs_h5(can_path)
+    ext = read_sfincs_h5(_REXT_FIELD)
+    assert "Phi1Hat" in can and "lambda" not in can  # fixed field, no lambda row
+    np.testing.assert_allclose(
+        np.asarray(can["Phi1Hat"])[..., -1], np.asarray(ext["Phi1Hat"])[..., -1],
+        rtol=0.0, atol=1e-12,
+    )  # fmt: skip
+
+
+def test_read_external_phi1_output_matches_fortran(tmp_path: Path) -> None:
+    """run_profile output h5 vs the Fortran golden: state, fluxes, moments, Phi1Hat.
+
+    Every shared numeric field agrees to the sibling tiny-deck budget (atol 5e-8);
+    the core neoclassical/flux/moment/Phi1 fields agree far tighter (~1e-10).
+    """
+    from sfincs_jax.io import read_sfincs_h5
+    from sfincs_jax.run import run_profile
+
+    deck = _rext_run_dir(tmp_path)
+    can_path = tmp_path / "canon.h5"
+    run_profile(deck, tol=1e-11, out_path=can_path, emit=None)
+    can = read_sfincs_h5(can_path)
+    gold = read_sfincs_h5(_REXT_GOLDEN)
+
+    assert set(gold) == set(can), (
+        f"golden-only={sorted(set(gold) - set(can))}, canonical-only={sorted(set(can) - set(gold))}"
+    )
+
+    skip_value = {"elapsed time (s)"}  # wall-clock, not a physics field
+    worst_key, worst = "", 0.0
+    for key in sorted(set(gold) & set(can)):
+        if key in skip_value:
+            continue
+        gv, cv = gold[key], can[key]
+        if isinstance(gv, (str, bytes)) or isinstance(cv, (str, bytes)):
+            continue
+        ga = np.asarray(gv, dtype=np.float64)
+        ca = np.asarray(cv, dtype=np.float64)
+        if ga.shape != ca.shape or ga.size == 0:
+            continue
+        np.testing.assert_allclose(ca, ga, rtol=0.0, atol=5e-8, err_msg=f"field {key}")
+        d = float(np.max(np.abs(ca - ga)))
+        if d > worst:
+            worst_key, worst = key, d
+    # The core physics families must agree far tighter than the 5e-8 field budget.
+    for key in ("Phi1Hat", "particleFlux_vm_psiHat", "heatFlux_vm_psiHat",
+                "particleFlux_vd_psiHat", "FSABFlow", "densityPerturbation"):  # fmt: skip
+        np.testing.assert_allclose(
+            np.asarray(can[key], dtype=np.float64), np.asarray(gold[key], dtype=np.float64),
+            rtol=0.0, atol=1e-10, err_msg=f"core field {key}",
+        )  # fmt: skip
+    assert worst < 5e-8, f"worst shared-field diff {worst:.3e} at {worst_key!r}"

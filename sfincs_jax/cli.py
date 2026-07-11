@@ -422,12 +422,13 @@ def deck_requires_legacy_pipeline(nml) -> str | None:
         # includePhi1 with the kinetic coupling, the collision coupling
         # (includePhi1InCollisionOperator), and quasineutralityOption 1/2 is
         # canonical (run_profile -> sfincs_jax.phi1, which emits the vE/vd
-        # electric-/total-drift flux families); only readExternalPhi1 stays with
-        # the legacy pipeline.
-        if int(phys.get("QUASINEUTRALITYOPTION", 1)) not in (1, 2):
+        # electric-/total-drift flux families) and readExternalPhi1 (the fixed
+        # external Phi1 field, a linear f-only solve) are canonical.  quasineutrality
+        # is bypassed entirely when readExternalPhi1, so its option is irrelevant then.
+        if not bool(phys.get("READEXTERNALPHI1", False)) and int(
+            phys.get("QUASINEUTRALITYOPTION", 1)
+        ) not in (1, 2):
             return "quasineutralityOption not in {1,2} is deferred to the legacy pipeline"
-    if bool(phys.get("READEXTERNALPHI1", False)):
-        return "readExternalPhi1 is deferred to the legacy pipeline"
     if int(phys.get("MAGNETICDRIFTSCHEME", 0)) not in (0, 1):
         return (
             "magneticDriftScheme not in {0,1} (tangential magnetic-drift sub-scheme) is "

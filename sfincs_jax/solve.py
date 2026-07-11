@@ -561,7 +561,8 @@ def build_coarse_preconditioner(
     batch = n_s * n_x
 
     stripped = replace(
-        op, fp=None, with_er_xidot=False, with_er_xdot=False, with_magnetic_drifts=False
+        op, fp=None, with_er_xidot=False, with_er_xdot=False, with_magnetic_drifts=False,
+        external_phi1_hat=None, include_phi1_in_kinetic=False,
     )
     blocks = stripped.to_block_tridiagonal()  # (L, S, X, TZ, TZ)
     lower, diag, upper = (jnp.transpose(a, (1, 2, 0, 3, 4)) for a in blocks)  # (S,X,L,TZ,TZ)

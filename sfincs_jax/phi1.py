@@ -131,11 +131,12 @@ def operator_from_input(
 ) -> KineticOperator:
     """Build (or accept) the canonical Phi1 operator for a deck.
 
-    Requires ``includePhi1 = .true.``.  Handles ``includePhi1InKineticEquation``
-    and ``includePhi1InCollisionOperator`` with ``quasineutralityOption`` 1/2;
-    the deferred variants (``readExternalPhi1``, ``quasineutralityOption`` other
-    than 1/2) raise from
-    :func:`sfincs_jax.drift_kinetic.kinetic_operator_from_namelist`.
+    Requires ``includePhi1 = .true.`` with a *self-consistent* (solved) Phi1:
+    handles ``includePhi1InKineticEquation`` and ``includePhi1InCollisionOperator``
+    with ``quasineutralityOption`` 1/2.  ``readExternalPhi1`` is a fixed-field
+    LINEAR solve (no Newton) routed through :func:`sfincs_jax.run.run_profile`,
+    not this Newton entry point; ``quasineutralityOption`` other than 1/2 raises
+    from :func:`sfincs_jax.drift_kinetic.kinetic_operator_from_namelist`.
     """
     if isinstance(inp, KineticOperator):
         op = inp

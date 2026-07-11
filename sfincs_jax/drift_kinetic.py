@@ -42,8 +42,11 @@ State-vector layout (matches v3 ``indices.F90`` with ``BLOCK_F`` first)::
   ``quasineutralityOption`` 1 (full) and 2 (EUTERPE, incl. an adiabatic
   species), ``includePhi1InKineticEquation``, and
   ``includePhi1InCollisionOperator`` (the collisional densities become
-  poloidally varying, ``n_pol = nHat*exp(-Z*alpha*Phi1Hat/THat)``).  Deferred
-  (raise ``NotImplementedError``): ``readExternalPhi1``.
+  poloidally varying, ``n_pol = nHat*exp(-Z*alpha*Phi1Hat/THat)``).
+  ``readExternalPhi1`` reads a FIXED external Phi1(theta,zeta) field and holds it
+  constant (NO quasineutrality block, NO Phi1 unknown, NO lambda row): the DKE is
+  LINEAR again and the external field enters the same Phi1 terms via
+  ``external_phi1_hat`` (see :meth:`KineticOperator._apply_external_phi1`).
 
 Coefficient provenance: everything is built from the committed consolidated
 modules — :mod:`sfincs_jax.phase_space` (grids, differentiation matrices, Legendre
@@ -73,10 +76,6 @@ Deferred (raise ``NotImplementedError`` in :meth:`from_namelist`, tracked for a
 follow-up pass; the old ``operators/profile_*`` code paths remain authoritative
 for them until then):
 
-- ``readExternalPhi1`` (the quasineutrality block, the lambda row, the
-  Phi1-in-kinetic-equation coupling, and the Phi1-in-collision-operator densities
-  for ``quasineutralityOption`` 1/2 are consolidated here — see
-  :mod:`sfincs_jax.phi1`);
 - ``magneticDriftScheme`` 2-9 (only scheme 1, the ``force0RadialCurrentInEquilibrium``
   poloidal+toroidal tangential magnetic drift, is consolidated here; scheme 1
   couples L, L±2 so :meth:`to_block_tridiagonal` refuses it and tier-2 GCROT owns
@@ -320,6 +319,14 @@ class KineticOperator:
     # nonlinear solve reuses :func:`sfincs_jax.solve.solve` as the inner linear
     # solver.  ``None`` for the base linear operators.
     phi1_lin_state: jnp.ndarray | None = None  # (total_size,) or None
+    # ``readExternalPhi1``: a FIXED external Phi1(theta,zeta) field read from an
+    # HDF5 file (``externalPhi1Filename``).  When set, ``include_phi1`` is False
+    # (the state stays f-only: NO quasineutrality block, NO Phi1 unknown, NO
+    # lambda row -- indices.F90 for readExternalPhi1) and the DKE is LINEAR
+    # again: :meth:`apply` and :meth:`rhs` evaluate the Phi1-in-kinetic /
+    # Phi1-in-collision term coefficients at this fixed field instead of a Newton
+    # iterate (evaluateResidual.F90 readExternalPhi1 branch).
+    external_phi1_hat: jnp.ndarray | None = None  # (T,Z) or None
 
     # ---- tangential magnetic drifts (``magneticDriftScheme=1``;
     #      populateMatrix.F90 d/dtheta, d/dzeta, and non-standard d/dxi drift
@@ -404,6 +411,7 @@ class KineticOperator:
         "adiabatic_t_hat",
         "phi1_hat_base",
         "phi1_lin_state",
+        "external_phi1_hat",
         "b_hat_sub_psi",
         "db_hat_dpsi_hat",
         "db_hat_sub_psi_dtheta",
@@ -802,6 +810,46 @@ class KineticOperator:
             )
         raise NotImplementedError(f"constraintScheme={scheme} has no source basis.")
 
+    def _source_and_constraint_rows(
+        self, y_f: jnp.ndarray, f: jnp.ndarray, extra: jnp.ndarray
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Border ``y_f`` with the source injection and evaluate the constraint rows.
+
+        ``B`` injects the constraint-scheme source shapes into the L=0 DKE rows
+        of ``y_f`` and ``C`` evaluates the flux-surface-average moment rows of
+        ``f`` (populateMatrix.F90 source/constraint blocks).  Shared by the base
+        linear :meth:`apply` and the fixed-external-Phi1 :meth:`_apply_external_phi1`.
+        """
+        factor = self._fs_average_factor()
+        ix0 = _ix_min(self.point_at_x0)
+
+        if self.constraint_scheme == 0:
+            return y_f, jnp.zeros((0,), dtype=jnp.float64)
+
+        if self.constraint_scheme in (1, 3, 4):
+            src = extra.reshape((self.n_species, 2))
+            xpart1, xpart2 = self._source_basis(self.constraint_scheme)
+            y_f = y_f.at[:, ix0:, 0, :, :].add(
+                xpart1[ix0:][None, :, None, None] * src[:, 0, None, None, None]
+                + xpart2[ix0:][None, :, None, None] * src[:, 1, None, None, None]
+            )
+            x2 = self.x * self.x
+            w2 = x2 * self.x_weights
+            w4 = x2 * x2 * self.x_weights
+            y_dens = jnp.einsum("x,tz,sxtz->s", w2, factor, f[:, :, 0, :, :])
+            y_pres = jnp.einsum("x,tz,sxtz->s", w4, factor, f[:, :, 0, :, :])
+            return y_f, jnp.stack([y_dens, y_pres], axis=1).reshape((-1,))
+
+        if self.constraint_scheme == 2:
+            src = extra.reshape((self.n_species, self.n_x))
+            y_f = y_f.at[:, ix0:, 0, :, :].add(src[:, ix0:, None, None])
+            y_avg = jnp.einsum("tz,sxtz->sx", factor, f[:, :, 0, :, :])
+            if self.point_at_x0:
+                y_avg = y_avg.at[:, 0].set(src[:, 0])
+            return y_f, y_avg.reshape((-1,))
+
+        raise NotImplementedError(f"constraintScheme={self.constraint_scheme} is not supported.")
+
     def apply(self, v: jnp.ndarray) -> jnp.ndarray:
         """Apply the full bordered operator ``[[A, B], [C, 0]]`` to a flat state.
 
@@ -812,6 +860,11 @@ class KineticOperator:
         v = jnp.asarray(v, dtype=jnp.float64)
         if v.shape != (self.total_size,):
             raise ValueError(f"v must have shape {(self.total_size,)}, got {v.shape}")
+
+        if self.external_phi1_hat is not None:
+            # readExternalPhi1: the state is f-only and the DKE is LINEAR, with the
+            # Phi1 terms evaluated at the fixed external field (no Newton, no QN).
+            return self._apply_external_phi1(v)
 
         if self.include_phi1:
             # Phi1 makes the DKE nonlinear (quasineutrality couples Phi1 back into
@@ -827,39 +880,7 @@ class KineticOperator:
 
         f = v[: self.f_size].reshape(self.f_shape)
         extra = v[self.f_size :]
-        y_f = self.apply_f(f)
-
-        factor = self._fs_average_factor()
-        ix0 = _ix_min(self.point_at_x0)
-
-        if self.constraint_scheme == 0:
-            y_extra = jnp.zeros((0,), dtype=jnp.float64)
-
-        elif self.constraint_scheme in (1, 3, 4):
-            src = extra.reshape((self.n_species, 2))
-            xpart1, xpart2 = self._source_basis(self.constraint_scheme)
-            y_f = y_f.at[:, ix0:, 0, :, :].add(
-                xpart1[ix0:][None, :, None, None] * src[:, 0, None, None, None]
-                + xpart2[ix0:][None, :, None, None] * src[:, 1, None, None, None]
-            )
-            x2 = self.x * self.x
-            w2 = x2 * self.x_weights
-            w4 = x2 * x2 * self.x_weights
-            y_dens = jnp.einsum("x,tz,sxtz->s", w2, factor, f[:, :, 0, :, :])
-            y_pres = jnp.einsum("x,tz,sxtz->s", w4, factor, f[:, :, 0, :, :])
-            y_extra = jnp.stack([y_dens, y_pres], axis=1).reshape((-1,))
-
-        elif self.constraint_scheme == 2:
-            src = extra.reshape((self.n_species, self.n_x))
-            y_f = y_f.at[:, ix0:, 0, :, :].add(src[:, ix0:, None, None])
-            y_avg = jnp.einsum("tz,sxtz->sx", factor, f[:, :, 0, :, :])
-            if self.point_at_x0:
-                y_avg = y_avg.at[:, 0].set(src[:, 0])
-            y_extra = y_avg.reshape((-1,))
-
-        else:
-            raise NotImplementedError(f"constraintScheme={self.constraint_scheme} is not supported.")
-
+        y_f, y_extra = self._source_and_constraint_rows(self.apply_f(f), f, extra)
         return jnp.concatenate([y_f.reshape((-1,)), y_extra], axis=0)
 
     # ------------------------------------------------------------------
@@ -911,18 +932,16 @@ class KineticOperator:
         mask_l = _mask_xi(self.n_xi_for_x, self.n_xi)  # (X,L)
         return out_nl, mask_l, mask_x
 
-    def _add_phi1_in_kinetic(self, y_f: jnp.ndarray, f: jnp.ndarray, phi1: jnp.ndarray) -> jnp.ndarray:
-        """Add the Phi1-in-kinetic-equation coupling to the L=0 DKE rows.
+    def _phi1_in_kinetic_flinear(self, f: jnp.ndarray, phi1: jnp.ndarray) -> jnp.ndarray:
+        """The ``f``-linear part of the Phi1-in-kinetic coupling (``populateMatrix.F90``).
 
-        Residual-mode (``includeJacobianTerms=False``) counterpart of the
-        ``populateMatrix.F90`` Phi1-gradient blocks: uses the *current* Phi1
-        (not the frozen base state).
+        The tempVector2 speed-derivative term ``x d f/dx`` combined with the
+        L±1 Legendre couplings and the ``E·b`` Phi1-gradient factor.  Linear in
+        ``f`` at fixed ``phi1``; used both by the self-consistent Newton residual
+        (via :meth:`_add_phi1_in_kinetic`) and the fixed-external-Phi1 operator.
         """
-        ddtheta = self.ddtheta
-        ddzeta = self.ddzeta
-        dphi1_dtheta = ddtheta @ phi1  # (T,Z)
-        dphi1_dzeta = phi1 @ ddzeta.T  # (T,Z)
-
+        dphi1_dtheta = self.ddtheta @ phi1  # (T,Z)
+        dphi1_dzeta = phi1 @ self.ddzeta.T  # (T,Z)
         e_term = self.b_hat_sup_theta * dphi1_dtheta + self.b_hat_sup_zeta * dphi1_dzeta  # (T,Z)
         nonlinear_factor = (
             -(self.alpha * self.z_s)[:, None, None]
@@ -930,13 +949,24 @@ class KineticOperator:
             * e_term[None, :, :]
         )  # (S,T,Z)
         out_nl, mask_l, mask_x = self._nonlinear_temp_vector_phi1(f)
-        y_f = y_f + (
+        return (
             out_nl
             * nonlinear_factor[:, None, None, :, :]
             * mask_l[None, :, :, None, None]
             * mask_x[None, :, None, None, None]
         )
 
+    def _phi1_in_kinetic_source(self, phi1: jnp.ndarray) -> jnp.ndarray:
+        """The Phi1-only (``f``-independent) part of the Phi1-in-kinetic coupling.
+
+        The ``coeff1``/``coeff2`` × ``dPhi1`` pieces added to the L=0 DKE rows;
+        depends on ``phi1`` (and the species/geometry) but not on ``f``.  For the
+        self-consistent Newton residual it is a Jacobian-frozen contribution; for
+        the fixed-external-Phi1 linear system it is a constant that moves to the
+        right-hand side.  Returns the ``(S,X,T,Z)`` array added to ``y_f[:,:,0]``.
+        """
+        dphi1_dtheta = self.ddtheta @ phi1  # (T,Z)
+        dphi1_dzeta = phi1 @ self.ddzeta.T  # (T,Z)
         x2 = self.x * self.x
         expx2 = jnp.exp(-x2)
         sqrt_pi = jnp.sqrt(jnp.pi)
@@ -978,9 +1008,21 @@ class KineticOperator:
             * phi_term[:, None, :, :]
             * geom2_zeta[None, None, :, :]
         )
-        y_f = y_f.at[:, :, 0, :, :].add((coeff1_theta + coeff2_theta) * dphi1_dtheta[None, None, :, :])
-        y_f = y_f.at[:, :, 0, :, :].add((coeff1_zeta + coeff2_zeta) * dphi1_dzeta[None, None, :, :])
-        return y_f
+        return (coeff1_theta + coeff2_theta) * dphi1_dtheta[None, None, :, :] + (
+            coeff1_zeta + coeff2_zeta
+        ) * dphi1_dzeta[None, None, :, :]
+
+    def _add_phi1_in_kinetic(self, y_f: jnp.ndarray, f: jnp.ndarray, phi1: jnp.ndarray) -> jnp.ndarray:
+        """Add the Phi1-in-kinetic-equation coupling to the L=0 DKE rows.
+
+        Residual-mode (``includeJacobianTerms=False``) counterpart of the
+        ``populateMatrix.F90`` Phi1-gradient blocks: uses the *current* Phi1
+        (not the frozen base state).  The ``f``-linear part
+        (:meth:`_phi1_in_kinetic_flinear`) and the Phi1-only part
+        (:meth:`_phi1_in_kinetic_source`) together reproduce the original block.
+        """
+        y_f = y_f + self._phi1_in_kinetic_flinear(f, phi1)
+        return y_f.at[:, :, 0, :, :].add(self._phi1_in_kinetic_source(phi1))
 
     def _quasineutrality_rows(self, f: jnp.ndarray, phi1: jnp.ndarray, lam: jnp.ndarray) -> jnp.ndarray:
         """The quasineutrality rows + ``<Phi1>=0`` lambda row (residual mode).
@@ -1163,6 +1205,48 @@ class KineticOperator:
         return op_use._apply_phi1_operator(x_full) - op_use.rhs_phi1()
 
     # ------------------------------------------------------------------
+    # readExternalPhi1: fixed external Phi1 field, LINEAR f-only system
+    #
+    # State layout = f-only (like a non-Phi1 run): [ f | sources ] with NO
+    # quasineutrality block, NO Phi1 unknown, NO lambda row (indices.F90 errors
+    # out if those exist with readExternalPhi1).  The external Phi1 enters the
+    # SAME Phi1-in-kinetic / Phi1-in-collision terms as the self-consistent path,
+    # only evaluated at a given field.  Because the residual on the f + source
+    # rows is affine in [f | sources] at fixed Phi1, ``apply`` is its linear part
+    # (source injection + moment rows around the Phi1-shifted f-block) and ``rhs``
+    # is the constant part negated (drive minus the Phi1-only source term).
+    # ------------------------------------------------------------------
+
+    def _apply_external_phi1(self, v: jnp.ndarray) -> jnp.ndarray:
+        """Linear f-only operator with the fixed external Phi1 (readExternalPhi1)."""
+        phi1 = self.external_phi1_hat
+        f = v[: self.f_size].reshape(self.f_shape)
+        extra = v[self.f_size :]
+        y_f = self.apply_f(f, phi1_hat=phi1)
+        if self.include_phi1_in_kinetic:
+            y_f = y_f + self._phi1_in_kinetic_flinear(f, phi1)
+        y_f, y_extra = self._source_and_constraint_rows(y_f, f, extra)
+        return jnp.concatenate([y_f.reshape((-1,)), y_extra], axis=0)
+
+    def _rhs_external_phi1(self) -> jnp.ndarray:
+        """RHS drive of the fixed-external-Phi1 system (drive minus the Phi1-only term).
+
+        The gradient / inductive drive is the ``rhs_phi1`` f-block evaluated at the
+        external field (exp(-Z*alpha*Phi1Hat/THat) factors included when Phi1 is in
+        the kinetic equation); the Phi1-only :meth:`_phi1_in_kinetic_source` term is
+        f-independent so it moves from the operator to the right-hand side.
+        """
+        phi1 = self.external_phi1_hat
+        # ``rhs_phi1`` needs the include_phi1 layout to assemble its f-block drive;
+        # take that block (unchanged by the QN option) evaluated at the external field.
+        aux = replace(self, include_phi1=True, phi1_hat_base=phi1, external_phi1_hat=None)
+        f_rhs = aux.rhs_phi1()[: self.f_size].reshape(self.f_shape)
+        if self.include_phi1_in_kinetic:
+            f_rhs = f_rhs.at[:, :, 0, :, :].add(-self._phi1_in_kinetic_source(phi1))
+        rhs_extra = jnp.zeros((self.extra_size,), dtype=jnp.float64)
+        return jnp.concatenate([f_rhs.reshape((-1,)), rhs_extra], axis=0)
+
+    # ------------------------------------------------------------------
     # RHS drives (evaluateResidual.F90 with f = 0)
     # ------------------------------------------------------------------
 
@@ -1216,6 +1300,10 @@ class KineticOperator:
 
         ``which_rhs`` selects the RHSMode 2/3 transport-matrix drive column.
         """
+        if self.external_phi1_hat is not None:
+            # readExternalPhi1 is a single-RHS (RHSMode=1) linear system whose drive
+            # is evaluated at the fixed external Phi1 field.
+            return self._rhs_external_phi1()
         op = self._with_rhs_settings(which_rhs)
 
         f_rhs = jnp.zeros(op.f_shape, dtype=jnp.float64)
@@ -1305,6 +1393,12 @@ class KineticOperator:
                 "legendre_blocks currently supports pitch-angle-scattering collisions only; "
                 "Fokker-Planck couples (species, x) densely within each L "
                 "(its per-L blocks live in KineticOperator.fp.mat)."
+            )
+        if self.external_phi1_hat is not None and self.include_phi1_in_kinetic:
+            raise NotImplementedError(
+                "legendre_blocks does not support the readExternalPhi1 Phi1-in-kinetic "
+                "coupling: the fixed-external-Phi1 speed-derivative term couples x densely "
+                "(tier-2 GCROT owns these decks)."
             )
 
     def legendre_blocks(self, ell: int) -> LegendreBlocks:
@@ -1648,6 +1742,52 @@ def _n_periods_from_namelist(*, nml: Any) -> int:
     )
 
 
+def _load_external_phi1(*, nml: Any, phys: dict, grids: Grids) -> jnp.ndarray:
+    """Read the FIXED external Phi1(theta,zeta) field for ``readExternalPhi1``.
+
+    Reuses :func:`sfincs_jax.io.read_sfincs_h5` (the ``sfincsOutput.h5`` reader) on
+    ``externalPhi1Filename`` (default ``externalPhi1.h5``, resolved relative to the
+    input deck's directory), takes the LAST ``NIterations`` slice, and returns it
+    as a ``(Ntheta, Nzeta)`` array (readHDF5Input.F90:264-320; SFINCS stores
+    ``Phi1Hat`` as ``(Nzeta, Ntheta, NIterations)``).  The external (theta, zeta)
+    grid must equal the run grid; external-to-run grid interpolation is a
+    documented follow-up.
+    """
+    from sfincs_jax.io import read_sfincs_h5  # noqa: PLC0415
+
+    raw = phys.get("EXTERNALPHI1FILENAME", "externalPhi1.h5")
+    if isinstance(raw, list):
+        raw = raw[0] if raw else "externalPhi1.h5"
+    filename = str(raw).strip().strip('"').strip("'")
+    base_dir = nml.source_path.parent if nml.source_path is not None else None
+    repo_root = Path(__file__).resolve().parents[1]
+    extra = (repo_root / "tests" / "ref",)
+    path = resolve_existing_path(filename, base_dir=base_dir, extra_search_dirs=extra).path
+
+    data = read_sfincs_h5(path)
+    if "Phi1Hat" not in data:
+        raise ValueError(f"external Phi1 file {path} has no Phi1Hat dataset.")
+    phi1 = np.asarray(data["Phi1Hat"], dtype=np.float64)
+    if phi1.ndim == 3:  # (Nzeta, Ntheta, NIterations) -> last iteration
+        phi1 = phi1[..., -1]
+    phi1 = phi1.T  # (Ntheta, Nzeta)
+    if phi1.shape != (grids.n_theta, grids.n_zeta):
+        raise ValueError(
+            f"external Phi1Hat has shape {phi1.shape}; run grid is "
+            f"{(grids.n_theta, grids.n_zeta)}.  External-to-run grid interpolation is a "
+            "documented follow-up; make the external grid equal the run grid."
+        )
+    for name, ext_key, run in (("theta", "theta", grids.theta), ("zeta", "zeta", grids.zeta)):
+        if ext_key in data and not np.allclose(
+            np.asarray(data[ext_key], dtype=np.float64), np.asarray(run, dtype=np.float64), rtol=0.0, atol=1e-10
+        ):
+            raise NotImplementedError(
+                f"external Phi1 {name} grid differs from the run grid; external-to-run grid "
+                "interpolation is a documented follow-up (make the external grid equal the run grid)."
+            )
+    return jnp.asarray(phi1, dtype=jnp.float64)
+
+
 def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     """Build a :class:`KineticOperator` from a parsed SFINCS input namelist.
 
@@ -1663,7 +1803,7 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     ``magneticDriftScheme`` 0/1 (scheme 1, the tangential magnetic drift, needs a
     geometryScheme in {5, 11, 12} that carries the radial B-field derivatives).
     Raises ``NotImplementedError`` for the deferred features listed in the module
-    docstring (readExternalPhi1, magneticDriftScheme 2-9, and mapped x-grids).
+    docstring (magneticDriftScheme 2-9 and mapped x-grids).
     """
     general = nml.group("general")
     phys = nml.group("physicsParameters")
@@ -1673,11 +1813,15 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
 
     # ---- Phi1 / quasineutrality configuration (includePhi1 vertical slice) ----
     species_params = nml.group("speciesParameters")
-    include_phi1 = _get_bool(phys, "includePhi1", False)
-    if include_phi1 and _get_bool(phys, "readExternalPhi1", False):
-        raise NotImplementedError("readExternalPhi1 is not supported.")
-    include_phi1_in_kinetic = include_phi1 and _get_bool(phys, "includePhi1InKineticEquation", False)
-    include_phi1_in_collision = include_phi1 and _get_bool(phys, "includePhi1InCollisionOperator", False)
+    include_phi1_input = _get_bool(phys, "includePhi1", False)
+    read_external_phi1 = include_phi1_input and _get_bool(phys, "readExternalPhi1", False)
+    # ``readExternalPhi1`` holds Phi1 fixed (read from an external file), so the
+    # DKE stays LINEAR and the state is f-only: the operator's ``include_phi1``
+    # (the QN block + Phi1 unknown + lambda row) is off, but the Phi1-in-kinetic /
+    # Phi1-in-collision term coefficients still evaluate at the external field.
+    include_phi1 = include_phi1_input and not read_external_phi1
+    include_phi1_in_kinetic = include_phi1_input and _get_bool(phys, "includePhi1InKineticEquation", False)
+    include_phi1_in_collision = include_phi1_input and _get_bool(phys, "includePhi1InCollisionOperator", False)
     if include_phi1_in_collision and not include_phi1_in_kinetic:
         raise NotImplementedError(
             "includePhi1InCollisionOperator=.true. requires includePhi1InKineticEquation=.true. "
@@ -1690,7 +1834,9 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
             f"quasineutralityOption={quasineutrality_option} is not supported "
             "(only 1 (full) and 2 (EUTERPE) are consolidated)."
         )
-    with_adiabatic = include_phi1 and _get_bool(species_params, "withAdiabatic", False)
+    # withAdiabatic only enters quasineutrality; for readExternalPhi1 (no QN) it is
+    # physically inert but still echoed to output, so track the namelist flag.
+    with_adiabatic = include_phi1_input and _get_bool(species_params, "withAdiabatic", False)
     adiabatic_z = _get_float(species_params, "adiabaticZ", 1.0)
     adiabatic_n_hat = _get_float(species_params, "adiabaticNHat", 0.0)
     adiabatic_t_hat = _get_float(species_params, "adiabaticTHat", 1.0)
@@ -1746,6 +1892,9 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
         n_xi_for_x_option=_get_int(other, "Nxi_for_x_option", 1),
         monoenergetic=(rhs_mode == 3),
     )
+
+    # ---- readExternalPhi1: read the FIXED external Phi1(theta,zeta) field ----
+    external_phi1_hat = _load_external_phi1(nml=nml, phys=phys, grids=grids) if read_external_phi1 else None
 
     # ---- geometry + radial conversions (magnetic_geometry / constants) ----
     geom, radial = _geometry_and_radial(nml=nml, grids=grids)
@@ -1980,6 +2129,7 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
             jnp.zeros((grids.n_theta, grids.n_zeta), dtype=jnp.float64) if include_phi1 else None
         ),
         phi1_lin_state=None,
+        external_phi1_hat=external_phi1_hat,
         with_magnetic_drifts=with_magnetic_drifts,
         **magnetic_drift_arrays,
     )

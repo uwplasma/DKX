@@ -199,6 +199,9 @@ def _startup_lines(
         alpha=inp.physics.alpha,
         nu_n=inp.physics.nu_n,
         include_phi1=inp.physics.include_phi1,
+        include_phi1_in_kinetic_equation=inp.physics.include_phi1_in_kinetic_equation,
+        quasineutrality_option=inp.physics.quasineutrality_option,
+        read_external_phi1=inp.physics.read_external_phi1,
     )
     n_xi_for_x = np.asarray(grids.n_xi_for_x)
     lines += console.grid_summary_lines(
@@ -374,6 +377,7 @@ def profile_moments_from_operator(
         rhsmode1_moments(
             layout, vgrid, surface, species, x_full,
             delta=op.delta, alpha=op.alpha, phi1_from_state=bool(op.include_phi1),
+            phi1_hat=op.external_phi1_hat,
         )  # fmt: skip
     )
     if ntv_kernel_tz is not None:
