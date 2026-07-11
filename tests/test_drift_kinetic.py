@@ -318,19 +318,28 @@ def test_legendre_blocks_reject_l2_coupled_terms() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_include_phi1_is_canonical_but_collision_coupling_deferred() -> None:
-    # includePhi1 (quasineutrality + kinetic coupling) is now consolidated: the
+def test_include_phi1_is_canonical_with_collision_coupling() -> None:
+    # includePhi1 (quasineutrality + kinetic coupling) is consolidated: the
     # operator builds and carries the Phi1 rows/lambda layout.
     nml = _load("pas_1species_PAS_noEr_tiny_withPhi1_linear")
     op = KineticOperator.from_namelist(nml)
     assert op.include_phi1
     assert op.phi1_size == op.n_theta * op.n_zeta + 1
     assert op.total_size == op.f_size + op.phi1_size + op.extra_size
-    # The collision coupling stays with the legacy owner.
-    phys = nml.group("physicsParameters")
-    phys["INCLUDEPHI1INCOLLISIONOPERATOR"] = True
-    with pytest.raises(NotImplementedError, match="includePhi1InCollisionOperator"):
-        KineticOperator.from_namelist(nml)
+    assert op.fp_phi1 is None
+
+    # includePhi1InCollisionOperator is canonical: the operator builds the
+    # poloidally varying Fokker-Planck collision operator (fp_phi1, not fp) and
+    # reproduces the legacy residual assembly element-wise.
+    coll = _load("fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision")
+    op_c = KineticOperator.from_namelist(coll)
+    assert op_c.fp_phi1 is not None and op_c.fp is None
+    leg_c = full_system_operator_from_namelist(nml=coll)
+    from sfincs_jax.operators.profile_system import residual_v3_full_system
+
+    rng = np.random.default_rng(7)
+    x = jnp.asarray(rng.standard_normal(op_c.total_size))
+    _assert_close(op_c.residual_phi1(x), residual_v3_full_system(leg_c, x))
 
 
 def test_deferred_magnetic_drifts_raise() -> None:
