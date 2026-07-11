@@ -4,21 +4,74 @@ References and related work
 This page collects the main literature that informs the physics model, numerics,
 validation strategy, and workflow design of `sfincs_jax`.
 
-Core neoclassical and SFINCS literature
----------------------------------------
+Foundational neoclassical theory
+--------------------------------
 
-- M. Landreman, H. M. Smith, M. Mollén, and P. Helander,
-  `Comparison of particle trajectories and collision operators for collisional transport in nonaxisymmetric plasmas <https://doi.org/10.1063/1.4870077>`_.
-- M. Mollén et al.,
-  `Implementation of a full linearized Fokker-Planck collision operator in SFINCS <https://arxiv.org/abs/1504.04810>`_.
+- P. Helander and D. J. Sigmar,
+  *Collisional Transport in Magnetized Plasmas*, Cambridge University Press (2002).
+  The standard textbook derivation of the drift-kinetic equation, the linearized
+  Fokker--Planck collision operator, and the neoclassical flux/flow moments that
+  underpin :doc:`physics_reference`.
+- P. Helander,
+  `Theory of plasma confinement in non-axisymmetric magnetic fields <https://doi.org/10.1088/0034-4885/77/8/087001>`_,
+  Rep. Prog. Phys. **77**, 087001 (2014). Review of stellarator neoclassical
+  theory, ambipolarity, and the :math:`1/\nu`, :math:`\sqrt{\nu}`, and plateau regimes.
 - A. H. Boozer,
   `Guiding center drift equations <https://www.osti.gov/biblio/5655342>`_.
+- H. Sugama and S. Nishimura,
+  `How to calculate the neoclassical viscosity, diffusion, and current coefficients in general toroidal plasmas <https://doi.org/10.1063/1.1512917>`_,
+  Phys. Plasmas **9**, 4637 (2002). Trajectory and moment-equation conventions
+  relevant to the SFINCS ``full`` and DKES trajectory models.
+
+SFINCS model, collision operator, and speed grid
+-------------------------------------------------
+
+- M. Landreman, H. M. Smith, A. Mollén, and P. Helander,
+  `Comparison of particle trajectories and collision operators for collisional transport in nonaxisymmetric plasmas <https://doi.org/10.1063/1.4870077>`_,
+  Phys. Plasmas **21**, 042503 (2014). The SFINCS paper: the radially local
+  drift-kinetic model, the ``Delta``/``alpha``/``nu_n`` normalization, and the
+  full-vs-DKES trajectory comparison implemented in
+  :mod:`sfincs_jax.drift_kinetic`.
+- M. Mollén et al.,
+  `Implementation of a full linearized Fokker-Planck collision operator in SFINCS <https://arxiv.org/abs/1504.04810>`_.
+  Basis for the Fokker--Planck operator in :mod:`sfincs_jax.collisions`.
+- M. Landreman and D. R. Ernst,
+  `New velocity-space discretization for continuum kinetic calculations and Fokker--Planck collisions <https://arxiv.org/abs/1210.5289>`_,
+  J. Comput. Phys. **243**, 130 (2013). The non-classical orthogonal-polynomial
+  speed grid and Rosenbluth-potential field-term treatment implemented in
+  :func:`sfincs_jax.phase_space.make_speed_grid` and the Rosenbluth-potential
+  terms in :mod:`sfincs_jax.collisions`.
 - A. Redl et al.,
-  `A new set of analytical formulae for the computation of the bootstrap current and the neoclassical conductivity in tokamaks <https://doi.org/10.1063/5.0012664>`_.
+  `A new set of analytical formulae for the computation of the bootstrap current and the neoclassical conductivity in tokamaks <https://doi.org/10.1063/5.0012664>`_,
+  Phys. Plasmas **28**, 022502 (2021). Bootstrap-current formula used as an
+  analytic cross-check for :math:`\langle \mathbf{j}\cdot\mathbf{B}\rangle`.
 - O. Sauter, C. Angioni, and Y. R. Lin-Liu,
   `Neoclassical conductivity and bootstrap current formulas for general axisymmetric equilibria and arbitrary collisionality regime <https://doi.org/10.1063/1.873240>`_.
 - M. Landreman and E. J. Paul,
   `Magnetic Fields with Precise Quasisymmetry for Plasma Confinement <https://doi.org/10.1103/PhysRevLett.128.035001>`_.
+
+Block-tridiagonal Legendre solver
+---------------------------------
+
+The tier-1 structured solve (:doc:`numerics`) eliminates the Legendre chain of
+the monoenergetic drift-kinetic equation with a block-tridiagonal factorization
+and a truncated-storage back-substitution:
+
+- F. J. Escoto,
+  `Fast and accurate calculation of the bootstrap current and radial neoclassical transport in low collisionality stellarator plasmas <https://arxiv.org/abs/2510.27513>`_,
+  PhD thesis (2025). Derives the tridiagonal structure of the Legendre-mode
+  representation of the monoenergetic drift-kinetic equation and the block
+  elimination that :meth:`sfincs_jax.drift_kinetic.KineticOperator.to_block_tridiagonal`
+  and :func:`sfincs_jax.solve.solve` exploit.
+
+Geometry and benchmark configurations
+-------------------------------------
+
+- C. D. Beidler et al.,
+  `Benchmarking of the mono-energetic transport coefficients -- results from the International Collaboration on Neoclassical Transport in Stellarators (ICNTS) <https://doi.org/10.1088/0029-5515/51/7/076001>`_,
+  Nucl. Fusion **51**, 076001 (2011). Source of the analytic W7-X / LHD harmonic
+  tables used by :meth:`sfincs_jax.magnetic_geometry.FluxSurfaceGeometry.from_scheme`
+  (geometry schemes 2/3/4) and of the monoenergetic benchmark coefficients.
 
 Experimental and cross-code validation anchors
 ----------------------------------------------
@@ -29,8 +82,6 @@ Experimental and cross-code validation anchors
   `Investigation of the ion-root solution in Wendelstein 7-X <https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2020ionroot.pdf>`_.
 - C. D. Beidler et al.,
   `Demonstration of reduced neoclassical energy transport in Wendelstein 7-X <https://www.nature.com/articles/s41586-021-03687-w>`_.
-- F. J. Escoto et al.,
-  `MONKES: a fast neoclassical code for the evaluation of monoenergetic transport coefficients <https://arxiv.org/abs/2312.12248>`_.
 - J. L. Velasco et al.,
   `KNOSOS: A fast orbit-averaging neoclassical code for stellarator optimization studies <https://arxiv.org/abs/1908.11615>`_.
 

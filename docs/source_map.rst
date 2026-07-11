@@ -530,8 +530,8 @@ supported.
 Magnetic-drift coefficient construction, angular advection terms, upwinding masks, and
 associated :math:`\partial_\xi` couplings.
 
-``sfincs_jax/physics/collisions.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+``sfincs_jax/collisions.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Collision models:
 

@@ -146,27 +146,138 @@ When an equilibrium override is supplied, ``sfincs_jax`` updates the embedded
 configuration. Use ``sfincs_jax.io.read_sfincs_output_file(...)`` to load HDF5,
 NetCDF, or NPZ outputs with the same dictionary interface.
 
-Supported output coverage
+Output-variable reference
 -------------------------
 
-`sfincs_jax` output writing supports:
+The writer emits a **base** field set for every ``RHSMode`` plus a per-iteration
+set (``RHSMode=1`` profile diagnostics, or ``RHSMode=2/3`` transport columns).
+The moment producers are :func:`sfincs_jax.moments.rhsmode1_moments` and
+``transport_moments_table``. In the shapes below, **S** = species, **T** =
+Ntheta, **Z** = Nzeta, **X** = Nx, **N** = number of RHS columns (1 for
+RHSMode 1). Base :math:`(\theta,\zeta)` geometry arrays are stored transposed and
+read back as :math:`(Z, T)` in ``h5py`` (:ref:`fortran-layout`).
 
-- ``geometryScheme = 4`` (simplified W7-X Boozer model)
-- ``geometryScheme = 5`` (VMEC ``wout_*.nc`` netCDF workflow)
-- ``geometryScheme = 11/12`` (Boozer `.bc` files for W7-X / general non-stellarator-symmetric equilibria)
-- ``geometryScheme = 1/2`` (analytic Boozer models used by several v3 examples)
-- v3 grids: ``theta``, ``zeta``, ``x`` and ``Nxi_for_x``
-- core geometry fields: ``BHat``, ``DHat`` and derivatives available in `sfincs_jax.geometry`
-- basic scalar integrals: ``VPrimeHat`` and ``FSABHat2`` (see `sfincs_jax.diagnostics`)
-- selected run parameters, radial-coordinate conversions, and species arrays (e.g. ``Delta``, ``alpha``, ``Er``, ``dPhiHatdpsiHat``,
-  ``psiAHat``, ``aHat``, ``rN``, ``Zs``, ``THats``)
-- `NTV`-related geometry diagnostic ``uHat`` (computed from harmonics of :math:`1/\hat B^2`)
-- transport-matrix output fields for RHSMode=2/3 runs: ``transportMatrix`` and the minimal
-  diagnostics needed by upstream plotting scripts (see above)
-- v3 classical transport fluxes (`calculateClassicalFlux`) for geometries with `gpsiHatpsiHat` support
-  (VMEC `geometryScheme=5` and `.bc` `geometryScheme=11/12`), written as:
-  ``classicalParticleFluxNoPhi1_*`` / ``classicalHeatFluxNoPhi1_*`` (static) and
-  ``classicalParticleFlux_*`` / ``classicalHeatFlux_*`` (per-iteration diagnostics)
+Grids and geometry (base, all modes)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- Grids: ``theta`` (T), ``zeta`` (Z), ``x`` (X speed nodes), ``Nxi_for_x`` (X;
+  Legendre modes kept per speed node).
+- Scalars: ``NPeriods``, ``B0OverBBar``, ``GHat``, ``IHat``, ``iota``,
+  ``VPrimeHat`` (:math:`\hat V'`), ``FSABHat2`` (:math:`\langle\hat B^2\rangle`),
+  ``diotadpsiHat``.
+- Field arrays (Z,T): ``BHat``, ``DHat``, ``dBHatdtheta``, ``dBHatdzeta``,
+  ``dBHatdpsiHat``, the covariant/contravariant components
+  ``BHat_sub_{theta,zeta,psi}`` and ``BHat_sup_{theta,zeta}`` with their
+  derivatives, ``BDotCurlB``, and ``uHat`` (NTV geometry potential, zero for VMEC
+  scheme 5). ``gpsiHatpsiHat`` (:math:`|\nabla\hat\psi|^2`) is populated for
+  Boozer/VMEC input and zero for the analytic schemes.
+- Scheme-1 only: ``epsilon_t``, ``epsilon_h``, ``epsilon_antisymm``,
+  ``helicity_l``, ``helicity_n``, ``helicity_antisymm_l``,
+  ``helicity_antisymm_n``.
+
+Normalization scalars and species profiles (base)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- Ordering parameters ``Delta``, ``alpha``, ``nu_n`` (:doc:`normalizations`);
+  ``EParallelHat``; the radial-electric-field drive ``Er`` and
+  ``dPhiHatd{psiHat,psiN,rHat,rN}``.
+- Surface label in four coordinates: ``psiHat``, ``psiN``, ``rHat``, ``rN``,
+  plus ``psiAHat``, ``aHat``.
+- Species arrays (S): ``Zs``, ``mHats``, ``THats``, ``nHats``, and the gradients
+  ``dnHatd{psiHat,psiN,rHat,rN}`` / ``dTHatd{...}``.
+- ``RHSMode=3`` adds ``nuPrime`` and ``EStar``.
+
+Per-species radial fluxes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Surface-integrated fluxes are ``(S,N)`` (or ``(S,1)`` for RHSMode 1):
+
+- ``particleFlux_vm_psiHat``, ``heatFlux_vm_psiHat``, ``momentumFlux_vm_psiHat``
+  — the magnetic-drift radial fluxes (the ``FSABjHat``/flow diagnostics and the
+  transport matrix are built from these).
+- ``*_vm0_psiHat`` variants use only the leading-order :math:`f_{s0}`.
+- Per-speed decompositions ``particleFlux_vm_psiHat_vs_x``,
+  ``heatFlux_vm_psiHat_vs_x`` (X,S,N), and the ``*BeforeSurfaceIntegral_vm/_vm0``
+  integrands (Z,T,S,N).
+- Each ``_psiHat`` flux is also emitted in ``_psiN``, ``_rHat``, ``_rN``
+  (see :ref:`flux-legend`).
+
+Parallel flows and bootstrap current
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- Grid moments (Z,T,S,N): ``densityPerturbation``, ``pressurePerturbation``,
+  ``pressureAnisotropy``, ``flow`` (parallel flow), ``totalDensity``,
+  ``totalPressure``, ``velocityUsingFSADensity``, ``velocityUsingTotalDensity``,
+  ``MachUsingFSAThermalSpeed``.
+- Flux-surface averages (S,N): ``FSADensityPerturbation``,
+  ``FSAPressurePerturbation``, ``FSABFlow`` (:math:`\langle\hat B\hat
+  V_{\parallel s}\rangle`) and its ``FSABVelocity*`` normalizations;
+  ``FSABFlow_vs_x`` (X,S,N).
+- **Bootstrap current**: ``FSABjHat`` :math:`=\langle\mathbf{j}\cdot\mathbf{B}\rangle
+  =\sum_s Z_s\,\mathrm{FSABFlow}_s` (N), with ``FSABjHatOverB0`` and
+  ``FSABjHatOverRootFSAB2``; ``jHat`` :math:`=\sum_s Z_s\,\mathrm{flow}_s(\theta,\zeta)`
+  (Z,T,N), the parallel current density on the grid.
+
+Transport matrix (``RHSMode=2/3`` only)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- ``transportMatrix`` — the :math:`3\times3` Onsager matrix (RHSMode 2) or the
+  :math:`2\times2` monoenergetic/DKES matrix (RHSMode 3), stored transposed
+  (Fortran column-major); ``NIterations`` records the matrix dimension.
+
+:math:`\Phi_1` / quasineutrality
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- ``Phi1Hat`` — :math:`\Phi_1(\theta,\zeta)` (Z,T,1), written for ``RHSMode=1``
+  with ``includePhi1`` set. The ``includePhi1``,
+  ``includePhi1InKineticEquation``, ``includePhi1InCollisionOperator`` logical
+  flags are in the base set.
+
+Classical fluxes, NTV, sources, and metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- Classical (collisional) fluxes for geometries with the
+  :math:`|\nabla\hat\psi|^2` metric (VMEC scheme 5 and Boozer schemes 11/12):
+  ``classicalParticleFluxNoPhi1_*`` / ``classicalHeatFluxNoPhi1_*`` (at input
+  gradients) and ``classicalParticleFlux_*`` / ``classicalHeatFlux_*``
+  (per-iteration), each in the four radial coordinates.
+- ``NTV`` and ``NTVBeforeSurfaceIntegral`` — neoclassical toroidal viscosity
+  (zero for VMEC scheme 5).
+- ``sources`` — constraint-scheme particle/heat source unknowns.
+- ``elapsed time (s)`` (N), and the raw ``input.namelist`` dataset (NetCDF:
+  ``input_namelist`` global attribute), plus the resolution/option integers and
+  run-config logicals (v3 ±1 encoding for booleans).
+
+.. _flux-legend:
+
+Flux-flavor and radial-coordinate legend
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+**Drift flavor** (suffix on flux names):
+
+- ``_vm`` — magnetic (:math:`\nabla B` + curvature) drift on the full
+  distribution; geometric factor
+  :math:`(\hat B_\theta\,\partial_\zeta\hat B - \hat B_\zeta\,\partial_\theta\hat B)/\hat B^3`.
+- ``_vm0`` — the same operator on :math:`f_{s0}` only.
+- ``_vE`` / ``_vE0`` — :math:`E\times B` drift (factor with :math:`/\hat B^2` and
+  :math:`\partial\Phi_1`). **Deferred in the file**: the moment functions exist
+  (``electric_drift_flux_moments``), but only zero ``BeforeSurfaceIntegral_vE``
+  arrays are written — the surface-integrated ``_vE`` / total-drift ``_vd``
+  scalars are not emitted.
+
+**Radial coordinate** (a :math:`\nabla\hat\psi` flux is converted by
+:math:`\times\,d(\text{coord})/d\hat\psi`):
+
+- ``_psiHat`` — native normalized poloidal flux (all fluxes computed here first);
+- ``_psiN`` = ``_psiHat`` / ``psiAHat``; ``_rHat`` = :math:`r/\bar R`;
+  ``_rN`` = :math:`r/a`.
+
+There is **no explicit** ``radialCurrent`` **dataset**: ambipolarity is the
+post-processing condition :math:`\sum_s Z_s\,\Gamma_s = 0` on the per-species
+``particleFlux_*`` outputs (:mod:`sfincs_jax.er`, :doc:`physics_reference`).
+
+Regression coverage
+-------------------
 
 Output-writing regression tests live in:
 
@@ -222,6 +333,8 @@ neoclassical-transport papers:
    Fortran fixture (absolute errors :math:`\sim 10^{-9}` in the small scheme-4 test case),
    so the parity test compares ``uHat`` with a slightly looser tolerance than most other
    datasets.
+
+.. _fortran-layout:
 
 Fortran vs Python array layout
 ------------------------------

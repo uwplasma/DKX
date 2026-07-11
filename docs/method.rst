@@ -129,6 +129,17 @@ the same polynomial-grid differentiation matrix is used for both upwind directio
 Magnetic drift terms (ΔL = 0 and ΔL = ±2)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. note::
+
+   The tangential magnetic drift is deferred on the canonical stack: the default
+   is ``magneticDriftScheme = 0``, and the consolidated
+   :class:`sfincs_jax.drift_kinetic.KineticOperator` raises ``NotImplementedError``
+   for ``magneticDriftScheme > 0``. The v3 coefficient forms below are documented
+   for reference and were parity-tested in the retained legacy pipeline; the
+   ``full`` vs ``DKES`` distinction on the canonical stack is carried by the
+   :math:`E_r` energy/pitch terms and the ``useDKESExBDrift`` switch
+   (:doc:`physics_reference`).
+
 SFINCS v3 includes magnetic-drift advection in the angular directions, plus an associated
 non-standard :math:`\partial/\partial\xi` term.
 
@@ -183,8 +194,9 @@ To stabilize the drift advection, v3 supports upwinded angular derivative matric
 
    \mathrm{use\_plus}(\theta,\zeta) = \big(g_1\,\hat D(1,1)/Z\big) > 0.
 
-This upwind selection is implemented in `sfincs_jax.operators.profile_magnetic_drifts` and parity-tested against
-frozen PETSc binaries for a `geometryScheme=11` fixture.
+This upwind selection was parity-tested against frozen PETSc binaries for a
+`geometryScheme=11` fixture in the legacy pipeline; on the canonical stack the
+term is gated off by the default ``magneticDriftScheme = 0``.
 
 Collision operators (PAS and FP)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -206,8 +218,11 @@ For a fixed :math:`L`, the action can be written as a dense x-space matrix-vecto
    \mathsf{C}^{(L)}_{a b, i j}\; f_{b, j, L, \theta, \zeta}.
 
 In the v3 matrix assembly, the overall normalization is applied via ``nu_n`` (see ``populateMatrix.F90``).
-In `sfincs_jax`, this model is implemented in `sfincs_jax.physics.collisions` and parity-tested by comparing a full
-F-block matvec against a frozen PETSc Jacobian for the v3 example ``quick_2species_FPCollisions_noEr``.
+On the canonical stack this model is :mod:`sfincs_jax.collisions` (the
+pitch-angle-scattering and full Fokker--Planck operators), applied inside
+``KineticOperator.apply_f`` and parity-tested by comparing a
+full F-block matvec against a frozen PETSc Jacobian for the v3 example
+``quick_2species_FPCollisions_noEr``.
 
 Poloidally varying collisions (Phi1 in the collision operator)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -222,10 +237,14 @@ collision operator coefficients through a poloidally varying effective density
 so that the Fokker--Planck operator remains diagonal in :math:`(\theta,\zeta)` but is no longer uniform on the
 flux surface.
 
-In `sfincs_jax`, the corresponding matrix-free operator is implemented as
-`sfincs_jax.physics.collisions.FokkerPlanckV3Phi1Operator` and parity-tested against a frozen v3 PETSc matrix for the
-fixture ``fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision``. For derivations and implementation details,
-see the vendored upstream note linked from `docs/upstream_docs.rst`.
+On the canonical stack this poloidally varying collision operator is applied
+inside :meth:`sfincs_jax.drift_kinetic.KineticOperator.apply_f`, which rescales
+the :mod:`sfincs_jax.collisions` Fokker--Planck blocks by the poloidal density
+factor when ``includePhi1InCollisionOperator = .true.``. It is parity-tested
+against a frozen v3 PETSc matrix for the fixture
+``fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision``. For derivations and
+implementation details, see the vendored upstream note linked from
+:doc:`upstream_docs`.
 
 Why JAX?
 --------
@@ -264,58 +283,40 @@ function rather than an assembled sparse matrix. For the linear kinetic block th
 
 where :math:`A` is represented by a matrix-free matvec and :math:`b` is a right-hand side.
 
-In `sfincs_jax`, the residual interface lives in `sfincs_jax.operators.profile_system`:
+On the canonical stack the residual and Jacobian interface is the consolidated
+:class:`sfincs_jax.drift_kinetic.KineticOperator`:
 
-- :class:`sfincs_jax.operators.profile_system.V3FBlockLinearSystem` computes ``residual(x)`` and
-  provides a matrix-free Jacobian matvec ``jacobian_matvec(v)``.
-- :class:`sfincs_jax.operators.profile_system.V3FullLinearSystem` provides the same interface for the
-  profile-response linear system operator.
-- For linear operators, the Jacobian matvec is identical to the operator matvec; for nonlinear
-  residuals later in the port, `jax.jvp` provides an efficient Jacobian-vector product (JVP)
-  without ever forming a dense or sparse Jacobian matrix.
+- ``KineticOperator.apply(v)`` is the matrix-free matvec :math:`Av`, and
+  ``KineticOperator.rhs()`` is the right-hand side :math:`b`.
+- For the linear kinetic block the Jacobian matvec is identical to the operator
+  matvec; for the nonlinear :math:`\Phi_1` residual ``residual_phi1(x)``,
+  ``jax.jvp`` provides an efficient Jacobian-vector product without ever forming
+  a dense or sparse Jacobian matrix.
 
 Linear solvers and preconditioning
 ----------------------------------
 
-SFINCS v3 systems are large, stiff, and often ill-conditioned due to collision operators,
-constraint nullspaces, and mixed dense/sparse structure. `sfincs_jax` mirrors the v3
-iterative strategy but keeps the operator matrix-free:
+SFINCS v3 systems are large, stiff, and often ill-conditioned due to collision
+operators, constraint nullspaces, and mixed dense/sparse structure. The canonical
+stack keeps the operator matrix-free and applies a three-tier auto policy
+(:func:`sfincs_jax.solve.solve`) described in full in :doc:`numerics`:
 
-- **GMRES** (Saad & Schultz, 1986) is the default for RHSMode=1 robust implicit solves and is
-  used as a robust fallback when short-recurrence solvers stagnate.
-- **BiCGStab** (van der Vorst, 1992) is the default for transport solves and is
-  available for RHSMode=1 when low memory is preferred.
-- **IDR(s)** (Sonneveld & van Gijzen, 2008) is available for memory-efficient,
-  short-recurrence solves.
-- **Preconditioning** follows a block structure: collision-diagonal approximations,
-  constraint-aware Schur complements, and (for PAS) strong diagonal F-block preconditioners.
+- **Tier 1** — a structured direct solve (block-tridiagonal Legendre
+  elimination) for the DKES-trajectory / pitch-angle-scattering family;
+- **Tier 2** — matrix-free recycled Krylov (FGMRES + GCROT) right-preconditioned
+  by an exact tier-1 solve of a SFINCS-simplified coarse operator (the Fortran
+  ``preconditionerOptions`` idiom);
+- **Tier 3** — a host sparse-direct (SuperLU) escape hatch.
 
-For large non-differentiable RHSMode=1 constrained-PAS profile-current solves,
-``solve_method=auto`` may route to the host sparse-preconditioned GMRES branch.
-That branch factors an explicit sparse preconditioner but still polishes the
-true matrix-free residual.  Branch-sensitive diagnostics are labeled with
-``sfincs_jax.solvers.preconditioner_pas_policy``: exact true-residual branches,
-PETSc-compatible minimum-norm diagnostics, and weak preconditioned-residual
-references are kept distinct so current/flow parity is not claimed across
-different nullspace gauges.
+The structured factorizations, recycled Krylov, and implicit-solve wrappers are
+provided by the ``solvax`` library.
 
-The implementations live in:
+Block-tridiagonal elimination for the Legendre chain
+----------------------------------------------------
 
-- `sfincs_jax/solvers/krylov.py` (Krylov wrappers and history tracking),
-- `sfincs_jax/solvers/` (preconditioners, path selection, and sparse/native
-  factors),
-- `sfincs_jax/problems/` (problem setup, projections, residual gates, and
-  fallback orchestration).
-
-Structured block solves for monoenergetic and weakly coupled subproblems
--------------------------------------------------------------------------
-
-The monoenergetic examples and some weakly coupled velocity-space subproblems have a
-structure that is closer to block tridiagonal than to a fully dense unstructured solve.
-That makes them a good fit for a factor-and-reuse strategy.
-
-For blocks :math:`D_k` on the diagonal and couplings :math:`L_k` and :math:`U_k`
-between neighboring blocks, the matrix can be written schematically as
+The tier-1 solve exploits the block-tridiagonal-in-:math:`L` structure of the
+monoenergetic operator. For diagonal blocks :math:`D_k` and neighbour couplings
+:math:`L_k`, :math:`U_k`,
 
 .. math::
 
@@ -325,9 +326,9 @@ between neighboring blocks, the matrix can be written schematically as
    L_0 & D_1 & U_1 \\
    & \ddots & \ddots & \ddots \\
    & & L_{n-2} & D_{n-1}
-   \end{bmatrix}.
+   \end{bmatrix},
 
-The block-Schur recursion used by `sfincs_jax.discretization.structured_velocity` is
+the block-Schur (block-Thomas) recursion is
 
 .. math::
 
@@ -335,26 +336,18 @@ The block-Schur recursion used by `sfincs_jax.discretization.structured_velocity
 
 .. math::
 
-   S_k = D_k - L_{k-1} C_{k-1}, \qquad C_k = S_k^{-1} U_k \quad (k \ge 1).
+   S_k = D_k - L_{k-1} C_{k-1}, \qquad C_k = S_k^{-1} U_k \quad (k \ge 1),
 
-Once the factorization :math:`\{S_k, C_k\}` is available, repeated solves only need
-forward and backward substitutions:
+and repeated solves need only forward/backward substitution:
 
 .. math::
 
    y_0 = S_0^{-1} b_0, \qquad y_k = S_k^{-1}(b_k - L_{k-1} y_{k-1}),
+   \qquad x_k = y_k - C_k x_{k+1}.
 
-.. math::
-
-   x_k = y_k - C_k x_{k+1}.
-
-This is the same factor-and-reuse pattern used by memory-efficient block-tridiagonal
-solvers. In `sfincs_jax`, the reusable implementation lives in
-`sfincs_jax/discretization/structured_velocity.py`. It is used in the weakly coupled
-`pas_tokamak_theta` tail solve for the `L>=2` block chain, while the
-special `(L=0,1)` entrance block remains handled explicitly in
-`sfincs_jax/problems/profile_sparse_solve.py`. A reverse factorization is available for cases where
-the leading block is singular or badly conditioned, so the solve can start from
-the opposite end of the block chain. The structured tail is an expert opt-in
-path (`SFINCS_JAX_PAS_TOKAMAK_STRUCTURED=1`); the automatic policy keeps the
-established tail path when bounded parity, runtime, and RSS gates favor it.
+On the canonical stack the blocks come from
+:meth:`sfincs_jax.drift_kinetic.KineticOperator.to_block_tridiagonal`, and the
+factor/solve is the ``solvax`` block-Thomas kernel with a **truncated-storage**
+back-substitution that retains only the low-:math:`L` blocks the right-hand side
+and moments touch. This is the Legendre block-tridiagonal method of
+`Escoto (2025) <https://arxiv.org/abs/2510.27513>`_ (see :doc:`numerics`).

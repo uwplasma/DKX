@@ -134,9 +134,11 @@ For ``RHSMode=2`` (transport matrix) and ``RHSMode=3`` (monoenergetic transport)
 - ``EParallelHat`` (inductive field),
 - and, for ``RHSMode=3``, the single-point ``x=1`` grid used to compute monoenergetic coefficients.
 
-`sfincs_jax` mirrors this behavior via
-:func:`sfincs_jax.operators.profile_system.with_transport_rhs_settings`, ensuring that the transport-mode
-RHS matches v3 ``evaluateResidual(f=0)`` exactly.
+On the canonical stack this behavior is
+``KineticOperator._with_rhs_settings``, which overwrites
+the ``whichRHS`` drive columns before ``KineticOperator.rhs`` builds each RHS,
+so the transport-mode right-hand side matches v3 ``evaluateResidual(f=0)``
+exactly.
 
 Quasineutrality and Phi1 constraint
 -----------------------------------
@@ -158,6 +160,10 @@ Implementation note
 
 Not every optional Phi1 coupling that appears in the extended literature is active in
 every public workflow. The supported scope is documented in :doc:`inputs`,
-:doc:`outputs`, and :doc:`fortran_comparison`, and the code paths that construct these
-blocks live primarily in ``sfincs_jax/operators/profile_system.py`` and
-``sfincs_jax/physics/collisions.py``.
+:doc:`outputs`, and :doc:`fortran_comparison`. On the canonical stack the blocks
+above are built by the consolidated
+:class:`sfincs_jax.drift_kinetic.KineticOperator` (streaming/mirror, ExB, the
+:math:`E_r` terms, the quasineutrality rows, and the ``<Phi1>=0`` Lagrange row),
+by :mod:`sfincs_jax.collisions` (PAS and Fokker--Planck blocks), and by
+:mod:`sfincs_jax.phi1` (the nonlinear :math:`\Phi_1` Newton solve). See the
+equation-to-code map in :doc:`physics_reference`.
