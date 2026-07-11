@@ -51,8 +51,7 @@ couplings), :mod:`sfincs_jax.magnetic_geometry` (flux-surface geometry for
 geometrySchemes 1/2/3/4/5/11/12), :mod:`sfincs_jax.species` (charges, profiles,
 psiHat-gradients), and :mod:`sfincs_jax.constants` (normalizations and radial
 conversions).  Collision matrices are built by the stable
-:mod:`sfincs_jax.physics.collisions` (they migrate to ``collisions`` when
-that consolidation lands).
+:mod:`sfincs_jax.collisions` (the canonical collision-operator owner).
 
 Three consumers, one source of truth (plan §2.2):
 
@@ -139,7 +138,7 @@ from sfincs_jax.paths import resolve_existing_path  # noqa: E402
 
 # Collision matrices: the stable, committed implementation.  This import moves
 # to `sfincs_jax.collisions` when that consolidation lands (same public API).
-from sfincs_jax.physics.collisions import (  # noqa: E402
+from sfincs_jax.collisions import (  # noqa: E402
     FokkerPlanckV3Operator,
     FokkerPlanckV3Phi1Operator,
     PitchAngleScatteringV3Operator,
@@ -294,7 +293,7 @@ class KineticOperator:
     e_parallel_hat: jnp.ndarray  # scalar
     e_parallel_hat_spec: jnp.ndarray  # (S,)
 
-    # ---- collisions (physics.collisions; -> collisions later) ----
+    # ---- collisions (sfincs_jax.collisions) ----
     pas: PitchAngleScatteringV3Operator | None
     fp: FokkerPlanckV3Operator | None
     # ``includePhi1InCollisionOperator``: the poloidally varying Fokker-Planck
@@ -1443,7 +1442,7 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     :class:`sfincs_jax.magnetic_geometry.FluxSurfaceGeometry`, species from
     :func:`sfincs_jax.species.species_set_from_namelist`, radial-coordinate
     and monoenergetic conversions from :mod:`sfincs_jax.constants`, and
-    collision matrices from :mod:`sfincs_jax.physics.collisions`.
+    collision matrices from :mod:`sfincs_jax.collisions`.
 
     Supports ``geometryScheme`` in {1, 2, 3, 4, 5, 11, 12} (analytic schemes
     1/2/3/4 and file-based 5/11/12).  Raises ``NotImplementedError`` for the
@@ -1585,7 +1584,7 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     use_dkes_exb = _get_bool(phys, "useDKESExBDrift", False)
     has_er = float(dphi_kinetic) != 0.0
 
-    # ---- collisions (physics.collisions builders) ----
+    # ---- collisions (sfincs_jax.collisions builders) ----
     pas = None
     fp = None
     fp_phi1 = None
@@ -1617,7 +1616,7 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
         )
     elif include_phi1_in_collision:
         # includePhi1InCollisionOperator=.true.: the poloidally varying FP
-        # operator (physics.collisions.FokkerPlanckV3Phi1Operator); the collision
+        # operator (collisions.FokkerPlanckV3Phi1Operator); the collision
         # densities are shifted by exp(-Z*alpha*Phi1Hat/THat) at apply time.
         fp_phi1 = make_fokker_planck_v3_phi1_operator(
             x=np.asarray(grids.x, dtype=np.float64),

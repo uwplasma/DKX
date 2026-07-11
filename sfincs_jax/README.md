@@ -62,7 +62,7 @@ here unless it serves a deferred feature.
   legacy stack and workflows.
 - `operators/`: the legacy matrix-free profile-response operator
   (`profile_system.py`, `profile_fblock.py`, term modules, layouts).
-- `physics/`: legacy collision/classical-transport formula owners.
+- `physics/`: legacy classical-transport formula owner.
 - `problems/`: legacy RHSMode-1 (`profile_*.py`) and RHSMode-2/3
   (`transport_*.py`) solve orchestration. (The ambipolar Brent owner
   `problems/ambipolar.py` was deleted; `er.py` replaces it.)

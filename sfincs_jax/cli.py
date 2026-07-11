@@ -292,9 +292,8 @@ def _add_parallel_cli_args(parser: argparse.ArgumentParser) -> None:
 
 def _cmd_solve_v3(args: argparse.Namespace) -> int:
     t0 = _now()
-    from .problems.profile_solve import solve_v3_full_system_linear_gmres  # noqa: PLC0415
-
     nml = _nml_with_cli_equilibrium_override(read_sfincs_input(Path(args.input)), args)
+    rhs_mode = int(nml.group("general").get("RHSMODE", 1))
     _emit("################################################################", level=0, args=args)
     _emit(" sfincs_jax solve-v3", level=0, args=args)
     _emit(f" input={Path(args.input).resolve()}", level=0, args=args)
@@ -304,6 +303,66 @@ def _cmd_solve_v3(args: argparse.Namespace) -> int:
     _emit(f" tol={args.tol} atol={args.atol} restart={args.restart} maxiter={args.maxiter} solve_method={args.solve_method}", level=1, args=args)
     if args.which_rhs is not None:
         _emit(f" whichRHS={args.which_rhs}", level=0, args=args)
+
+    out_state = Path(args.out_state)
+
+    # Default path: the canonical stack (sfincs_jax.run) for RHSMode 1/2/3, so a
+    # supported deck no longer opens a non-deferred door into problems/. The
+    # legacy problems/ solver stays the owner only for the explicitly deferred
+    # features (deck_requires_legacy_pipeline mirrors write-output's routing).
+    legacy_reason = deck_requires_legacy_pipeline(nml)
+    if legacy_reason is None:
+        quiet = bool(getattr(args, "quiet", False))
+        emit_line = None if quiet else (lambda line: _emit(line, level=0, args=args))
+        try:
+            with _canonical_namelist_path(nml=nml, input_path=Path(args.input), args=args) as namelist_path:
+                if rhs_mode == 1:
+                    from .run import run_profile  # noqa: PLC0415
+
+                    run = run_profile(
+                        namelist_path,
+                        solve_method=str(args.solve_method),
+                        tol=float(args.tol),
+                        emit=emit_line,
+                    )
+                    state = np.asarray(run.state_vector)
+                    residual = float(np.atleast_1d(np.asarray(run.solve_result.residual_norms, dtype=np.float64))[0])
+                else:
+                    from .run import run_transport_matrix  # noqa: PLC0415
+
+                    run = run_transport_matrix(
+                        namelist_path,
+                        solve_method=str(args.solve_method),
+                        tol=float(args.tol),
+                        emit=emit_line,
+                    )
+                    state_vectors = np.asarray(run.state_vectors)
+                    residual_norms = np.atleast_1d(np.asarray(run.solve_result.residual_norms, dtype=np.float64))
+                    col = (int(args.which_rhs) - 1) if args.which_rhs is not None else 0
+                    if not (0 <= col < state_vectors.shape[0]):
+                        raise ValueError(
+                            f"whichRHS={args.which_rhs} is out of range for the "
+                            f"{state_vectors.shape[0]} transport-matrix RHS columns"
+                        )
+                    state = state_vectors[col]
+                    residual = float(residual_norms[col])
+        except NotImplementedError as exc:
+            # Defensive fallback: features the canonical stack refuses that the
+            # predicate cannot see from the deck alone (for example a
+            # non-stellarator-symmetric VMEC equilibrium) run on the legacy owner.
+            legacy_reason = str(exc)
+        else:
+            out_state.parent.mkdir(parents=True, exist_ok=True)
+            np.save(out_state, state)
+            _emit(f" wrote stateVector -> {out_state.resolve()}", level=0, args=args)
+            _emit(f" residual_norm={residual:.6e}", level=0, args=args)
+            _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
+            return 0
+
+    # Legacy fallback: deferred-feature decks keep the retained problems/ owner.
+    _emit(f" legacy pipeline: {legacy_reason}", level=0, args=args)
+    from .problems.profile_solve import solve_v3_full_system_linear_gmres  # noqa: PLC0415
+
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
         which_rhs=int(args.which_rhs) if args.which_rhs is not None else None,
@@ -315,7 +374,6 @@ def _cmd_solve_v3(args: argparse.Namespace) -> int:
         differentiable=False,
         emit=lambda level, msg: _emit(msg, level=level, args=args),
     )
-    out_state = Path(args.out_state)
     out_state.parent.mkdir(parents=True, exist_ok=True)
     np.save(out_state, np.asarray(result.x))
     _emit(f" wrote stateVector -> {out_state.resolve()}", level=0, args=args)

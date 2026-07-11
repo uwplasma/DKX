@@ -113,8 +113,7 @@
       "writer.py"
     ],
     "physics": [
-      "classical_transport.py",
-      "collisions.py"
+      "classical_transport.py"
     ],
     "problems": [
       "profile_dense.py",

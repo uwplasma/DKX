@@ -3,7 +3,7 @@
 This module consolidates the per-species bookkeeping previously scattered across
 ``sfincs_jax/operators/profile_system.py`` (``full_system_operator_from_namelist``
 species parsing), ``sfincs_jax/outputs/writer.py`` (species arrays and the four
-radial-gradient output variants), and ``sfincs_jax/physics/collisions.py``
+radial-gradient output variants), and ``sfincs_jax/collisions.py``
 (``nu_d_hat_pitch_angle_scattering_v3``).  It becomes ``sfincs_jax/species.py``
 at the v2 purge.
 
@@ -100,7 +100,7 @@ class SpeciesSet:
 
         Matches the "WITHOUT PHI1" ``collisionOperator=1`` branch of v3
         ``populateMatrix.F90`` and reproduces
-        ``physics.collisions.nu_d_hat_pitch_angle_scattering_v3`` bit-for-bit:
+        ``collisions.nu_d_hat_pitch_angle_scattering_v3`` bit-for-bit:
 
           nuDHat_a(x) = (3*sqrt(pi)/4) * Za^2 / (THat_a*sqrt(THat_a*mHat_a))
                         * sum_b Zb^2 * nHat_b * (erf(x_b) - Psi(x_b)) / x^3
@@ -129,7 +129,7 @@ class SpeciesSet:
 def _chandrasekhar(x: jnp.ndarray) -> jnp.ndarray:
     """Chandrasekhar function Psi(x) = (erf(x) - (2/sqrt(pi)) x exp(-x^2)) / (2 x^2).
 
-    Identical to ``physics.collisions._psi_chandra`` (v3 ``populateMatrix.F90``),
+    Identical to ``collisions._psi_chandra`` (v3 ``populateMatrix.F90``),
     including the small-x series switch at |x| < 1e-5.
     """
     x = x.astype(jnp.float64)

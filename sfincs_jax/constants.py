@@ -33,7 +33,7 @@ from typing import NamedTuple
 
 # --- Reference numerical constants (globalVariables.F90 lines 16-17). -------------------
 # v3 hard-codes 15-digit literals rather than computing pi to machine precision;
-# strict-parity kernels (physics/collisions.py) reuse exactly these values.
+# strict-parity kernels (collisions.py) reuse exactly these values.
 PI_V3: float = 3.14159265358979
 SQRT_PI_V3: float = 1.77245385090552
 

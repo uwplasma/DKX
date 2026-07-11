@@ -469,7 +469,7 @@ def _export_f_config(*, nml: Any, grids: Any, geom: Any) -> ExportFConfig | None
         export_x = x.copy()
         map_x = np.eye(n_x, dtype=np.float64)
     elif x_option == 1:
-        from ..physics.collisions import polynomial_interpolation_matrix_np  # noqa: PLC0415
+        from ..collisions import polynomial_interpolation_matrix_np  # noqa: PLC0415
 
         other = nml.group("otherNumericalParameters")
         x_grid_scheme = _format_get_int(other, "XGRIDSCHEME", _format_get_int(other, "xGridScheme", 5))

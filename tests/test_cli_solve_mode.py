@@ -10,6 +10,7 @@ import numpy as np
 
 from sfincs_jax import cli
 from sfincs_jax.input_compat import effective_equilibrium_file
+from sfincs_jax.namelist import parse_sfincs_input_text
 from sfincs_jax.io import (
     _select_rhsmode1_linear_solve_method,
     _select_phi1_newton_linear_solve_method,
@@ -101,14 +102,98 @@ def test_default_plot_output_path_uses_pdf() -> None:
     assert cli._default_plot_output_path(Path("sfincsOutput.h5")).name == "sfincsOutput_summary.pdf"
 
 
-def test_cmd_solve_v3_forces_explicit_mode(monkeypatch, tmp_path: Path) -> None:
+def test_cmd_solve_v3_routes_canonical_run_profile(monkeypatch, tmp_path: Path) -> None:
+    """A supported RHSMode=1 deck routes through run_profile, not the legacy problems/ owner."""
+    captured: dict[str, object] = {}
+
+    def _fake_run_profile(namelist_path, **kwargs):
+        captured["namelist_path"] = Path(namelist_path)
+        captured.update(kwargs)
+        return SimpleNamespace(
+            state_vector=np.asarray([1.0, 2.0, 3.0], dtype=np.float64),
+            solve_result=SimpleNamespace(residual_norms=np.asarray([1.5e-11], dtype=np.float64)),
+            output_path=None,
+        )
+
+    def _fail_legacy(**_kwargs):  # pragma: no cover - must not be called for a canonical deck
+        raise AssertionError("solve-v3 must not enter the legacy problems/ pipeline for a canonical deck")
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_solve.solve_v3_full_system_linear_gmres",
+        _fail_legacy,
+    )
+
+    out_state = tmp_path / "state.npy"
+    args = Namespace(
+        input=str(tmp_path / "input.namelist"),
+        out_state=str(out_state),
+        equilibrium_file=None,
+        wout_path=None,
+        tol=1e-8,
+        atol=0.0,
+        restart=20,
+        maxiter=40,
+        solve_method="incremental",
+        which_rhs=None,
+        quiet=True,
+        verbose=0,
+    )
+    assert cli._cmd_solve_v3(args) == 0
+    assert captured["solve_method"] == "incremental"
+    assert captured["tol"] == 1e-8
+    assert captured["emit"] is None  # --quiet silences the Fortran-parity console
+    np.testing.assert_array_equal(np.load(out_state), np.asarray([1.0, 2.0, 3.0]))
+
+
+def test_cmd_solve_v3_transport_mode_selects_which_rhs_column(monkeypatch, tmp_path: Path) -> None:
+    """RHSMode=2/3 decks route through run_transport_matrix; --which-rhs selects the column."""
+    captured: dict[str, object] = {}
+
+    def _fake_run_transport_matrix(namelist_path, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            state_vectors=np.asarray([[1.0, 1.0], [2.0, 2.0], [3.0, 3.0]], dtype=np.float64),
+            solve_result=SimpleNamespace(
+                residual_norms=np.asarray([1e-11, 2e-11, 3e-11], dtype=np.float64)
+            ),
+            output_path=None,
+        )
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=2))
+    monkeypatch.setattr("sfincs_jax.run.run_transport_matrix", _fake_run_transport_matrix)
+
+    out_state = tmp_path / "state.npy"
+    args = Namespace(
+        input=str(tmp_path / "input.namelist"),
+        out_state=str(out_state),
+        equilibrium_file=None,
+        wout_path=None,
+        tol=1e-8,
+        atol=0.0,
+        restart=20,
+        maxiter=40,
+        solve_method="auto",
+        which_rhs=2,
+        quiet=True,
+        verbose=0,
+    )
+    assert cli._cmd_solve_v3(args) == 0
+    # whichRHS=2 -> zero-based column index 1.
+    np.testing.assert_array_equal(np.load(out_state), np.asarray([2.0, 2.0]))
+
+
+def test_cmd_solve_v3_deferred_deck_uses_legacy_pipeline(monkeypatch, tmp_path: Path) -> None:
+    """A deferred-feature deck still falls back to the retained legacy problems/ owner."""
     captured: dict[str, object] = {}
 
     def _fake_solve(**kwargs):
         captured.update(kwargs)
         return SimpleNamespace(x=np.zeros((2,), dtype=np.float64), residual_norm=np.float64(0.0))
 
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    # RHSMode=4 is not covered by the canonical stack (deck_requires_legacy_pipeline).
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=4))
     monkeypatch.setattr(
         "sfincs_jax.problems.profile_solve.solve_v3_full_system_linear_gmres",
         _fake_solve,
@@ -130,6 +215,7 @@ def test_cmd_solve_v3_forces_explicit_mode(monkeypatch, tmp_path: Path) -> None:
     )
     assert cli._cmd_solve_v3(args) == 0
     assert captured["differentiable"] is False
+    assert (tmp_path / "state.npy").exists()
 
 
 def test_cmd_transport_matrix_v3_uses_canonical_run(monkeypatch, tmp_path: Path) -> None:
@@ -683,14 +769,18 @@ def test_cmd_solve_v3_applies_equilibrium_override(monkeypatch, tmp_path: Path) 
     input_path = Path(__file__).parent / "ref" / "output_scheme5_1species_tiny.input.namelist"
     captured: dict[str, object] = {}
 
-    def _fake_solve(**kwargs):
+    def _fake_run_profile(namelist_path, **kwargs):
+        # The canonical driver reads the namelist file itself, so the CLI
+        # equilibrium override is materialized into the namelist it is handed.
+        captured["namelist_text"] = Path(namelist_path).read_text(encoding="utf-8")
         captured.update(kwargs)
-        return SimpleNamespace(x=np.zeros((2,), dtype=np.float64), residual_norm=np.float64(0.0))
+        return SimpleNamespace(
+            state_vector=np.zeros((2,), dtype=np.float64),
+            solve_result=SimpleNamespace(residual_norms=np.zeros((1,), dtype=np.float64)),
+            output_path=None,
+        )
 
-    monkeypatch.setattr(
-        "sfincs_jax.problems.profile_solve.solve_v3_full_system_linear_gmres",
-        _fake_solve,
-    )
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
 
     args = Namespace(
         input=str(input_path),
@@ -707,8 +797,11 @@ def test_cmd_solve_v3_applies_equilibrium_override(monkeypatch, tmp_path: Path) 
         verbose=0,
     )
     assert cli._cmd_solve_v3(args) == 0
-    nml = captured["nml"]
-    assert effective_equilibrium_file(geom_params=nml.group("geometryParameters")) == "override_wout.nc"
+    materialized = parse_sfincs_input_text(captured["namelist_text"])
+    assert (
+        effective_equilibrium_file(geom_params=materialized.group("geometryParameters"))
+        == "override_wout.nc"
+    )
 
 
 def test_main_accepts_quiet_after_subcommand(monkeypatch, tmp_path: Path) -> None:

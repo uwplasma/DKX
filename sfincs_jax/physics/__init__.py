@@ -1,7 +1,8 @@
 """Physics formulas and model-term helpers for SFINCS_JAX.
 
-This package will own drift-kinetic terms, collisions, ambipolarity, bootstrap
-current normalizations, and literature-anchored analytic validation helpers.
+Legacy formula owner for classical (Pfirsch-Schluter) transport
+(``classical_transport.py``).  The collision operators moved to the canonical
+root module :mod:`sfincs_jax.collisions`.
 """
 
 from __future__ import annotations
