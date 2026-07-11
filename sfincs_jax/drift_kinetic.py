@@ -48,7 +48,7 @@ State-vector layout (matches v3 ``indices.F90`` with ``BLOCK_F`` first)::
 Coefficient provenance: everything is built from the committed consolidated
 modules — :mod:`sfincs_jax.phase_space` (grids, differentiation matrices, Legendre
 couplings), :mod:`sfincs_jax.magnetic_geometry` (flux-surface geometry for
-geometrySchemes 1/2/3/4/5/11/12), :mod:`sfincs_jax.species` (charges, profiles,
+geometrySchemes 1/2/3/4/5/11/12/13), :mod:`sfincs_jax.species` (charges, profiles,
 psiHat-gradients), and :mod:`sfincs_jax.constants` (normalizations and radial
 conversions).  Collision matrices are built by the stable
 :mod:`sfincs_jax.collisions` (the canonical collision-operator owner).
@@ -84,12 +84,7 @@ for them until then):
 - ``constraintScheme`` 3 and 4;
 - ``collisionOperator`` other than 0 (Fokker-Planck) and 1 (pitch-angle
   scattering);
-- mapped x-grids (``xGridScheme >= 50``) and ``xDotDerivativeScheme != 0``;
-- ``geometryScheme`` 13 (namelist Boozer spectrum): the differentiable
-  :meth:`sfincs_jax.magnetic_geometry.FluxSurfaceGeometry.from_fourier` builds
-  this geometry, but :meth:`from_namelist` does not yet parse ``bmnc``/``bmns``
-  from the deck and route them (the analytic schemes {1,2,3,4} and the
-  file-based schemes {5,11,12} are the namelist-wired set).
+- mapped x-grids (``xGridScheme >= 50``) and ``xDotDerivativeScheme != 0``.
 """
 
 from __future__ import annotations
@@ -1536,8 +1531,57 @@ def _geometry_and_radial(
         )
         return geom, RadialCoordinates(psi_a_hat=psi_a_hat, a_hat=a_hat, r_n=r_n)
 
+    if scheme == 13:
+        # Namelist Boozer |B| spectrum (geometry.F90 case 13, the STELLOPT/BMNC
+        # optimization path).  ``boozer_bmnc(m,n)`` / ``boozer_bmns(m,n)`` are 2-D
+        # indexed arrays in geometryParameters; NPeriods, psiAHat, aHat, iota,
+        # GHat, IHat are read from the namelist.  The field is analytic
+        # (nearbyRadiiGiven=.false., radial derivatives 0, rN = rN_wish), so the
+        # radial coordinate mirrors the scheme-1 analytic pattern.
+        psi_a_hat = effective_psi_a_hat(geom_params=geom_params, phys_params=phys, default=0.15596)
+        a_hat = _get_float(geom_params, "aHat", 0.5585)
+        psi_n_wish = effective_psi_n_wish(
+            geom_params=geom_params, default_r_n=0.5, psi_a_hat=psi_a_hat, a_hat=a_hat
+        )
+        r_n = math.sqrt(float(psi_n_wish))
+        idx = nml.indexed.get("geometryparameters", {})
+        bmnc_map = idx.get("BOOZER_BMNC", {})
+        bmns_map = idx.get("BOOZER_BMNS", {})
+        if not bmnc_map and not bmns_map:
+            raise ValueError(
+                "geometryScheme=13 requires at least one boozer_bmnc/boozer_bmns amplitude "
+                "in geometryParameters (validateInput.F90)."
+            )
+        # from_fourier takes 1-D (amp, m, n) arrays with the (0,0) mode included
+        # (it extracts B0OverBBar = bmnc(0,0) internally).  When a sine spectrum is
+        # present, align it to the same (m,n) order as the cosine spectrum by
+        # unioning the mode keys and zero-filling both sides.
+        if bmns_map:
+            keys = sorted(set(bmnc_map) | set(bmns_map))
+            bmnc = jnp.asarray([float(bmnc_map.get(k, 0.0)) for k in keys], dtype=jnp.float64)
+            bmns = jnp.asarray([float(bmns_map.get(k, 0.0)) for k in keys], dtype=jnp.float64)
+        else:
+            keys = sorted(bmnc_map)
+            bmnc = jnp.asarray([float(bmnc_map[k]) for k in keys], dtype=jnp.float64)
+            bmns = None
+        m_arr = jnp.asarray([int(k[0]) for k in keys])
+        n_arr = jnp.asarray([int(k[1]) for k in keys])
+        geom = FluxSurfaceGeometry.from_fourier(
+            theta=grids.theta,
+            zeta=grids.zeta,
+            bmnc=bmnc,
+            m=m_arr,
+            n=n_arr,
+            bmns=bmns,
+            n_periods=max(1, _get_int(geom_params, "Nperiods", 1)),
+            iota=_get_float(geom_params, "iota", 0.4542),
+            g_hat=_get_float(geom_params, "GHat", 3.7481),
+            i_hat=_get_float(geom_params, "IHat", 0.0),
+        )
+        return geom, RadialCoordinates(psi_a_hat=float(psi_a_hat), a_hat=float(a_hat), r_n=r_n)
+
     raise NotImplementedError(
-        f"KineticOperator.from_namelist supports geometryScheme in {{1,2,3,4,5,11,12}}; got {scheme}."
+        f"KineticOperator.from_namelist supports geometryScheme in {{1,2,3,4,5,11,12,13}}; got {scheme}."
     )
 
 
@@ -1575,8 +1619,11 @@ def _n_periods_from_namelist(*, nml: Any) -> int:
     if scheme == 5:
         path = _resolve_equilibrium_path(nml=nml, geom_params=geom_params, vmec=True)
         return int(read_vmec_wout(path).nfp)
+    if scheme == 13:
+        # geometry.F90 case 13: NPeriods is read from the namelist.
+        return max(1, _get_int(geom_params, "Nperiods", 1))
     raise NotImplementedError(
-        f"KineticOperator.from_namelist supports geometryScheme in {{1,2,3,4,5,11,12}}; got {scheme}."
+        f"KineticOperator.from_namelist supports geometryScheme in {{1,2,3,4,5,11,12,13}}; got {scheme}."
     )
 
 
@@ -1590,13 +1637,13 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     and monoenergetic conversions from :mod:`sfincs_jax.constants`, and
     collision matrices from :mod:`sfincs_jax.collisions`.
 
-    Supports ``geometryScheme`` in {1, 2, 3, 4, 5, 11, 12} (analytic schemes
-    1/2/3/4 and file-based 5/11/12) and ``magneticDriftScheme`` 0/1 (scheme 1,
-    the tangential magnetic drift, needs a geometryScheme in {5, 11, 12} that
-    carries the radial B-field derivatives).  Raises ``NotImplementedError`` for
-    the deferred features listed in the module docstring (readExternalPhi1,
-    magneticDriftScheme 2-9, constraintScheme 3/4, mapped x-grids, and the
-    namelist Boozer-spectrum geometryScheme 13).
+    Supports ``geometryScheme`` in {1, 2, 3, 4, 5, 11, 12, 13} (analytic schemes
+    1/2/3/4, file-based 5/11/12, and the namelist Boozer |B| spectrum 13) and
+    ``magneticDriftScheme`` 0/1 (scheme 1, the tangential magnetic drift, needs a
+    geometryScheme in {5, 11, 12} that carries the radial B-field derivatives).
+    Raises ``NotImplementedError`` for the deferred features listed in the module
+    docstring (readExternalPhi1, magneticDriftScheme 2-9, constraintScheme 3/4,
+    and mapped x-grids).
     """
     general = nml.group("general")
     phys = nml.group("physicsParameters")

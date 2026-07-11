@@ -140,13 +140,15 @@ def _geometry_extras(
 ) -> tuple[np.ndarray, float]:
     """``(gpsiHatpsiHat, diotadpsiHat)`` for the supported geometry schemes.
 
-    Analytic schemes (1/2/4) store zeros, matching v3.  Boozer ``.bc`` and VMEC
-    schemes recompute the |grad psiHat|^2 metric with the canonical geometry
+    Analytic schemes (1/2/4/13) store zeros, matching v3.  Boozer ``.bc`` and
+    VMEC schemes recompute the |grad psiHat|^2 metric with the canonical geometry
     constructors and the iota radial derivative from the bracketing surfaces.
     """
     scheme = inp.geometry.geometry_scheme
     zeros = np.zeros_like(np.asarray(geom.b_hat, dtype=np.float64))
-    if scheme in {1, 2, 4}:
+    if scheme in {1, 2, 4, 13}:
+        # geometryScheme=13 is analytic (nearbyRadiiGiven=.false. in geometry.F90):
+        # no nearby surfaces, so the |grad psiHat|^2 metric and diota/dpsiHat are 0.
         return zeros, 0.0
 
     raw = inp.raw

@@ -412,14 +412,21 @@ class SfincsInput:
 def _merge_indexed(
     group_values: Dict[str, Value], indexed: Mapping[str, Mapping[Tuple[int, ...], Scalar]]
 ) -> Dict[str, Value]:
-    """Fold Fortran indexed assignments (``mHats(2) = 6.0``) into vectors."""
+    """Fold Fortran indexed assignments (``mHats(2) = 6.0``) into vectors.
+
+    Rank-2 indexed assignments (the ``boozer_bmnc(m,n)`` / ``boozer_bmns(m,n)``
+    Boozer |B| spectrum used by geometryScheme=13) are not modeled as a typed
+    vector here; the geometry builder reads them directly from
+    :attr:`RawNamelist.indexed`.  Such bases are left out of the merged typed
+    section rather than raising.
+    """
     merged = dict(group_values)
     for base, entries in indexed.items():
+        if any(len(idx) != 1 for idx in entries):
+            continue  # rank-2+ array (e.g. boozer_bmnc(m,n)); consumed via .indexed
         existing = merged.get(base)
         vec: List[Scalar] = list(existing) if isinstance(existing, list) else ([existing] if base in merged else [])
         for idx, val in sorted(entries.items()):
-            if len(idx) != 1:
-                raise ValueError(f"Only rank-1 indexed namelist assignments are supported ({base}{idx}).")
             while len(vec) < idx[0]:
                 vec.append(0)
             vec[idx[0] - 1] = val

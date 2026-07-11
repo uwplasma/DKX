@@ -1,0 +1,71 @@
+! Tiny PAS geometryScheme=13 (namelist Boozer |B| spectrum) fixture for sfincs_jax.
+! Reproduces a scheme-1-like analytic field supplied directly as a Boozer spectrum
+! (geometry.F90 case 13):
+!   |B| = B0*(1 + 0.03*cos(theta) + 0.01*cos(2*theta - 3*zeta)),  B0OverBBar = 1, NPeriods = 3.
+! Mirrors pas_1species_PAS_noEr_tiny_scheme1 (PAS collisionOperator=1, RHSMode=1, noEr,
+! includePhi1=.false.) on tiny grids, but exercises the boozer_bmnc(m,n) namelist path.
+
+&general
+  RHSMode = 1
+/
+
+&geometryParameters
+  geometryScheme = 13
+  inputRadialCoordinate = 3
+  rN_wish = 0.3
+
+  Nperiods = 3
+  iota = 0.9d+0
+  GHat = 3.0d+0
+  IHat = 0.0d+0
+
+  boozer_bmnc(0,0) = 1.0d+0
+  boozer_bmnc(1,0) = 0.03d+0
+  boozer_bmnc(2,1) = 0.01d+0
+
+  psiAHat = 0.045d+0
+  aHat = 0.1
+/
+
+&speciesParameters
+  Zs = 1
+  mHats = 1.0d+0
+  nHats = 1.0d+0
+  THats = 0.5d+0
+  dNHatdrHats = -6.0d+0
+  dTHatdrHats = -3.0d+0
+/
+
+&physicsParameters
+  Delta = 4.5694d-3
+  alpha = 1.0d+0
+  nu_n = 8.4774d-3
+  Er = 0.0d+0
+
+  collisionOperator = 1
+  includeXDotTerm = .true.
+  includeElectricFieldTermInXiDot = .true.
+  useDKESExBDrift = .false.
+  includePhi1 = .false.
+/
+
+&resolutionParameters
+  Ntheta = 5
+  Nzeta = 5
+  Nxi = 4
+  NL = 2
+  Nx = 3
+  solverTolerance = 1d-10
+/
+
+&otherNumericalParameters
+  Nxi_for_x_option = 0
+/
+
+&preconditionerOptions
+/
+
+&export_f
+  export_full_f = .false.
+  export_delta_f = .false.
+/
