@@ -53,8 +53,8 @@ Fortran v3 feature ownership
      - Fortran performs a nonlinear or linear profile-response solve, then
        writes particle fluxes, heat fluxes, flows, currents, Phi1 fields, and
        convergence diagnostics.
-     - ``sfincs_jax.problems.profile_solve`` plus flat ``profile_*`` problem
-       owners:
+     - ``sfincs_jax.run`` :math:`\to` ``sfincs_jax.solve`` (three-tier auto
+       policy) over the consolidated ``sfincs_jax.drift_kinetic``:
        implemented with gates. QA/QH production-grid convergence is supported
        with documented solver-policy limits; lower-memory replacement remains a
        performance lane, not a correctness blocker.
@@ -62,8 +62,8 @@ Fortran v3 feature ownership
      - ``solver.F90``, ``diagnostics.F90``, ``validateInput.F90``
      - Fortran loops over transport RHS columns; RHSMode 3 enforces
        monoenergetic constraints such as ``Nx=1`` and DKES-compatible settings.
-     - ``sfincs_jax.problems.transport_solve`` plus flat ``transport_*``
-       problem owners: implemented with gates.
+     - ``sfincs_jax.run.run_transport_matrix`` :math:`\to` ``sfincs_jax.solve``:
+       implemented with gates.
        Geometry-rich production preconditioners are bounded by residual and
        setup-time admission tests before auto promotion.
    * - Ambipolar root solve option 1
@@ -119,7 +119,8 @@ Fortran v3 feature ownership
      - ``populateMatrix.F90`` and collision-specific helpers
      - Manual and validation checks distinguish PAS and full Fokker-Planck
        branches, plus field-particle and momentum-restoring terms.
-     - ``sfincs_jax.physics.collisions`` and assembly helpers: implemented for the
+     - ``sfincs_jax.collisions`` (pitch-angle-scattering and full Fokker--Planck
+       operators): implemented for the
        release-facing suite, with high-pitch/geometry-rich performance gates
        tracked separately.
    * - Magnetic and electric drift branches
@@ -133,10 +134,11 @@ Fortran v3 feature ownership
      - ``geometry.F90``, ``radialCoordinates.F90``, ``updateBoozerGeometry.F90``
      - Fortran supports analytic, Boozer, VMEC-derived, and related geometry
        schemes, with RHSMode>3 restricted to Boozer coordinates.
-     - ``sfincs_jax.geometry``, ``sfincs_jax.geometry.vmec``,
-       ``sfincs_jax.geometry.jax_adapters``: implemented with gates. VMEC and
-       differentiable adapters are supported; broader QI and scheme-13
-       production promotion remains documented research work.
+     - ``sfincs_jax.magnetic_geometry`` (``FluxSurfaceGeometry`` with schemes
+       1--5/11/12 and the differentiable ``from_fourier``): implemented with
+       gates. VMEC and differentiable spectra are supported; broader QI and
+       scheme-13-via-namelist production promotion remains documented research
+       work.
    * - Phi1/quasineutrality
      - ``evaluateResidual.F90``, ``populateMatrix.F90``, ``diagnostics.F90``
      - Fortran solves coupled kinetic/quasineutrality systems for compatible
@@ -164,7 +166,8 @@ Fortran v3 feature ownership
      - ``writeHDF5Output.F90`` and diagnostics writers
      - Fortran writes HDF5 fields for inputs, geometry, solution, diagnostics,
        and adjoint quantities when enabled.
-     - ``sfincs_jax.outputs`` and CLI plotting: implemented for HDF5, NetCDF,
+     - ``sfincs_jax.writer`` / ``sfincs_jax.io`` and CLI plotting: implemented
+       for HDF5, NetCDF,
        NPZ, and PDF plot workflows. RHSMode 4/5 adjoint output contracts are
        pinned by compact Fortran-v3 sensitivity fixtures; production refreshes
        remain benchmark artifacts rather than normal CI data.
