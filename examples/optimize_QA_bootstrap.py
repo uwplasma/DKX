@@ -44,9 +44,11 @@ Gradient accuracy (measured, documented honestly):
   - CPU vs GPU: the objective agrees to ~8e-11 relative at identical inputs.
 
 Expected runtime: the default settings (one warm-start demo, one FD gradient
-check, a 6-iteration L-BFGS-B loop) take ~15 min on a laptop CPU (the host
-VMEC equilibrium solves dominate at ~30-60 s per objective+gradient
-evaluation).  With SFINCS_JAX_CI=1 everything shrinks to a few minutes.
+check, a 25-iteration L-BFGS-B loop) are dominated by the host VMEC
+equilibrium solves at ~30-60 s per objective+gradient evaluation, so the loop
+runs on the order of half an hour on a laptop CPU (override the count with
+SFINCS_JAX_QA_MAXITER).  With SFINCS_JAX_CI=1 everything shrinks to a few
+minutes.
 
 Requires the optional companions of this example (not needed by sfincs_jax
 itself):  pip install -e /path/to/vmec_jax /path/to/booz_xform_jax
@@ -62,35 +64,10 @@ import time
 from pathlib import Path
 
 import jax
-
-jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import scipy.optimize
-
-try:
-    from vmec_jax.core import implicit as vmec_implicit
-    from vmec_jax.core import optimize as vmec_optimize
-    from vmec_jax.core import solver as vmec_solver
-    from vmec_jax.core.boozer_tables import boozer_input_tables
-    from vmec_jax.core.input import VmecInput
-    from vmec_jax.core.wout import wout_from_state, write_wout
-except ImportError as exc:  # optional companion package
-    raise SystemExit(
-        "This example needs vmec_jax (new core API, with core.boozer_tables). "
-        "Install it with `pip install -e /path/to/vmec_jax`."
-    ) from exc
-try:
-    from booz_xform_jax.jax_api import booz_xform_jax as booz_transform
-except ImportError as exc:  # optional companion package
-    raise SystemExit(
-        "This example needs booz_xform_jax. Install it with "
-        "`pip install booz_xform_jax` (or -e /path/to/booz_xform_jax)."
-    ) from exc
 
 from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
 from sfincs_jax.inputs import parse_sfincs_input_text
@@ -98,6 +75,27 @@ from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry
 from sfincs_jax.phase_space import make_grids
 from sfincs_jax.run import profile_moments_from_operator
 from sfincs_jax.solve import solve as kinetic_solve
+
+jax.config.update("jax_enable_x64", True)
+matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt  # noqa: E402
+
+try:  # optional companion packages (not needed by sfincs_jax itself)
+    import vmec_jax as _vmec_jax_pkg
+    from vmec_jax.core import implicit as vmec_implicit
+    from vmec_jax.core import optimize as vmec_optimize
+    from vmec_jax.core import solver as vmec_solver
+    from vmec_jax.core.boozer_tables import boozer_input_tables
+    from vmec_jax.core.input import VmecInput
+    from vmec_jax.core.wout import wout_from_state, write_wout
+    from booz_xform_jax.jax_api import booz_xform_jax as booz_transform
+except ImportError as exc:
+    raise SystemExit(
+        "This example needs vmec_jax (new core API, with core.boozer_tables) and "
+        "booz_xform_jax. Install with `pip install -e /path/to/vmec_jax "
+        "/path/to/booz_xform_jax`."
+    ) from exc
 
 # ----------------------------------------------------------------------------
 # Parameters
@@ -107,8 +105,6 @@ CI = os.environ.get("SFINCS_JAX_CI") == "1"  # shrink resolution for CI
 # Starting equilibrium: Landreman & Paul (2021) precise QA, low resolution.
 # Shipped with vmec_jax (examples/data of an editable checkout); resolved from
 # the installed package so no sibling-directory layout is assumed.
-import vmec_jax as _vmec_jax_pkg
-
 VMEC_INPUT = (
     Path(_vmec_jax_pkg.__file__).resolve().parents[1]
     / "examples" / "data" / "input.LandremanPaul2021_QA_lowres"
@@ -151,8 +147,10 @@ KINETIC_OBJECTIVE = "bootstrap_jbs2"  # (<j.B>/sqrt(<B^2>))^2 -> drive to zero
 # KINETIC_OBJECTIVE = "particle_flux_l1"  # tested: uncomment to use (L1-style smooth |Gamma_s| sum)
 # KINETIC_OBJECTIVE = "heat_flux_l2"      # tested: uncomment to use (sum_s Q_s^2)
 
-# Optimizer (scipy L-BFGS-B on jax.value_and_grad of the objective).
-MAXITER = int(os.environ.get("SFINCS_JAX_QA_MAXITER", "2" if CI else "6"))
+# Optimizer (scipy L-BFGS-B on jax.value_and_grad of the objective).  The
+# default runs enough iterations to converge the objective; SFINCS_JAX_CI=1
+# shrinks it to a couple of iterations for the smoke test.
+MAXITER = int(os.environ.get("SFINCS_JAX_QA_MAXITER", "2" if CI else "25"))
 BOUND_RADIUS = 0.02  # box bounds |dof - dof0| <= radius keep trial boundaries physical
 PENALTY_VALUE = 1.0e6  # returned for trial boundaries where VMEC fails (zero-crash)
 RUN_FD_CHECK = os.environ.get("SFINCS_JAX_QA_FD_CHECK", "1") == "1"

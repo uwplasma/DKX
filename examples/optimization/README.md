@@ -7,6 +7,34 @@ Optimization examples that leverage differentiability:
   objective
 - CPU/GPU/Fortran promotion audits for completed high-fidelity scans
 
+## Differentiable-kinetic optimization family
+
+A simsopt-style family of single-script gradient optimizations that carry
+`jax.grad` through the canonical kinetic solve. Each script keeps its input
+parameters at the top, writes its objective inline, uses warm starts + GCROT
+recycling across optimizer iterations, verifies autodiff against finite
+differences, and saves a compressed before/after plot plus a history JSON.
+Set `SFINCS_JAX_CI=1` to shrink resolution and iteration counts for a fast
+smoke run.
+
+- `examples/optimize_QA_bootstrap.py` — the flagship: a quasi-axisymmetric
+  boundary optimized for low bootstrap current `<j.B>` through the full
+  boundary -> vmec_jax equilibrium -> Boozer -> kinetic-solve chain.
+- `optimize_QH_bootstrap.py` — the quasi-helical analog on a precise-QH
+  reactor-scale seed (nfp=4), following the vmec_jax QH workflow.
+- `optimize_electron_root.py` — shapes a Boozer `|B|` spectrum to steer the
+  ambipolar radial electric field toward the electron root, differentiating
+  through the ambipolar root (implicit function theorem, `sfincs_jax.er`).
+- `optimize_impurity_screening.py` — shapes `|B|` to push a trace C6+ impurity
+  flux outward (temperature screening) with the multi-species Fokker-Planck
+  operator; also reports the temperature-screening coefficient from autodiff.
+- `objectives.py` — a small shared library of composable `jax` figures of merit
+  (bootstrap, particle/heat-flux L1/L2, impurity screening, ambipolar-root and
+  quasisymmetry-residual metrics) plus two geometry/solve plumbing helpers.
+
+These four scripts and `objectives.py` are exercised at CI resolution by the
+optimization example test suite under the repository ``tests`` directory.
+
 Examples:
 - `qa_nfp2_sfincs_jax_objectives.py` — fast JAX proxy lane for adding
   neoclassical objectives to QA optimization. It supports bootstrap-current,
