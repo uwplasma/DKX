@@ -32,6 +32,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+# These build full vmec_jax->Boozer->kinetic optimization chains; too heavy for
+# the fast coverage shards. Marked slow and excluded there (run in the full suite).
+pytestmark = pytest.mark.slow
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EX_DIR = REPO_ROOT / "examples" / "optimization"
 
