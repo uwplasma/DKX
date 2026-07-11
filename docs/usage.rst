@@ -45,63 +45,34 @@ VMEC ``geometryScheme=5`` workflow with an explicit ``wout_path`` override.
 For simplified Boozer and `.bc` workflows, use the examples under
 ``examples/sfincs_examples/`` or the tiny parity fixtures under ``tests/ref``.
 
-Applying operator building blocks
----------------------------------
+Applying the operator directly
+------------------------------
 
-Collisionless v3 operator slice (streaming + mirror):
+On the canonical stack the whole drift-kinetic operator is the single
+consolidated :class:`sfincs_jax.drift_kinetic.KineticOperator`. Build it from a
+parsed namelist and apply it matrix-free — no manual assembly of streaming,
+mirror, drift, or collision blocks is needed:
 
 .. code-block:: python
 
    import jax.numpy as jnp
-   import numpy as np
+   from pathlib import Path
+   from sfincs_jax.inputs import parse_sfincs_input_text
+   from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
 
-   from sfincs_jax.operators.profile_collisionless import CollisionlessV3Operator, apply_collisionless_v3
+   raw = parse_sfincs_input_text(Path("input.namelist").read_text())
+   op = kinetic_operator_from_namelist(raw)
 
-   species = nml.group("speciesParameters")
-   t_hats = jnp.asarray(np.atleast_1d(np.asarray(species["THATS"], dtype=float)))
-   m_hats = jnp.asarray(np.atleast_1d(np.asarray(species["MHATS"], dtype=float)))
+   b = op.rhs()                     # right-hand side S_s (thermodynamic + inductive drives)
+   y = op.apply(jnp.zeros_like(b))  # matrix-free A @ v on the full state vector
 
-   op = CollisionlessV3Operator(
-       x=grids.x,
-       ddtheta=grids.ddtheta,
-       ddzeta=grids.ddzeta,
-       b_hat=geom.b_hat,
-       b_hat_sup_theta=geom.b_hat_sup_theta,
-       b_hat_sup_zeta=geom.b_hat_sup_zeta,
-       db_hat_dtheta=geom.db_hat_dtheta,
-       db_hat_dzeta=geom.db_hat_dzeta,
-       t_hats=t_hats,
-       m_hats=m_hats,
-       n_xi_for_x=grids.n_xi_for_x,
-   )
-
-   f = jnp.zeros((t_hats.size, grids.x.size, grids.n_xi, grids.theta.size, grids.zeta.size))
-   y = apply_collisionless_v3(op, f)
-
-Pitch-angle scattering collisions (``collisionOperator = 1`` without Phi1):
-
-.. code-block:: python
-
-   from sfincs_jax.physics.collisions import make_pitch_angle_scattering_v3_operator, apply_pitch_angle_scattering_v3
-
-   z_s = jnp.asarray(np.atleast_1d(np.asarray(species["ZS"], dtype=float)))
-   n_hats = jnp.asarray(np.atleast_1d(np.asarray(species["NHATS"], dtype=float)))
-
-   phys = nml.group("physicsParameters")
-   nu_n = float(phys["NU_N"])
-
-   cop = make_pitch_angle_scattering_v3_operator(
-       x=grids.x,
-       z_s=z_s,
-       m_hats=m_hats,
-       n_hats=n_hats,
-       t_hats=t_hats,
-       nu_n=nu_n,
-       n_xi_for_x=grids.n_xi_for_x,
-       n_xi=int(grids.n_xi),
-   )
-
-   y_col = apply_pitch_angle_scattering_v3(cop, f)
+The collision blocks are assembled into the operator automatically from
+``collisionOperator``: pitch-angle scattering (``= 1``) or the full
+Fokker--Planck / Rosenbluth operator (``= 0``), both from
+:mod:`sfincs_jax.collisions` and applied inside ``KineticOperator.apply_f`` (the
+distribution-block-only action). To solve the assembled system, hand the
+operator to :func:`sfincs_jax.solve.solve` (the three-tier auto policy in
+:doc:`numerics`), or use the high-level :func:`sfincs_jax.run.run_profile`.
 
 Running the Fortran v3 executable
 ---------------------------------

@@ -1,96 +1,87 @@
 Numerics and algorithms
 =======================
 
-`sfincs_jax` solves a large structured linear system that comes from discretizing the
-radially local drift-kinetic equation and its auxiliary constraints on a single flux
-surface. This page focuses on the numerical representation of that system and the
-algorithms used to solve it efficiently on CPU and GPU.
+`sfincs_jax` solves a large structured linear (or, with :math:`\Phi_1`,
+nonlinear) system that comes from discretizing the radially local drift-kinetic
+equation of :doc:`physics_reference` on a single flux surface. This page
+describes the discretization, the three-tier solver policy, and the
+implicit-differentiation adjoint.
 
 Discrete unknowns
 -----------------
 
-For each kinetic species, the unknown first-order distribution is represented on the
-tensor grid
+For each kinetic species the first-order distribution is represented on the
+tensor grid :math:`(x_i, L, \theta_j, \zeta_k)`:
+
+- :math:`x = v/v_\mathrm{th}` — normalized speed (collocation nodes);
+- :math:`L` — Legendre index in :math:`\xi = v_\parallel/v`;
+- :math:`\theta,\zeta` — periodic straight-field-line angles.
+
+The total number of degrees of freedom scales as
 
 .. math::
 
-   (x_i, L, \theta_j, \zeta_k),
+   N_\mathrm{dof} \sim
+   N_\mathrm{species}\,N_x\,N_\xi\,N_\theta\,N_\zeta
+   + N_\theta N_\zeta + N_\mathrm{constraints},
 
-where:
-
-- :math:`x=v/v_\mathrm{th}` is the normalized speed coordinate,
-- :math:`L` is the Legendre index in :math:`\xi=v_\parallel/v`,
-- :math:`\theta` and :math:`\zeta` are straight-field-line angular coordinates.
-
-The unknown vector therefore contains, schematically,
-
-.. math::
-
-   f_{s1}(x_i, L, \theta_j, \zeta_k),
-
-plus optional :math:`\Phi_1(\theta,\zeta)` unknowns and constraint/source coefficients.
-
-The total number of degrees of freedom scales like
-
-.. math::
-
-   N_\mathrm{dof}
-   \sim
-   N_\mathrm{species}\, N_x\, N_L\, N_\theta\, N_\zeta
-   + N_\theta N_\zeta
-   + N_\mathrm{constraints}.
-
-This scaling is why solver design, preconditioning, and memory layout matter.
+where the last two terms are the optional :math:`\Phi_1(\theta,\zeta)` unknowns
+and the constraint/source coefficients. This scaling is why memory layout,
+truncation, and preconditioning matter — a production HSX case is
+:math:`\sim 7.4\times10^5` unknowns.
 
 Angular discretization
 ----------------------
 
-The angular coordinates are discretized on periodic grids. First derivatives are
-represented by dense differentiation matrices acting along the corresponding axis:
-
-.. math::
-
-   \partial_\theta f \approx D_\theta f,
-   \qquad
-   \partial_\zeta f \approx D_\zeta f.
-
-For advection-dominated magnetic-drift terms, `sfincs_jax` can also use directional
-upwind derivative matrices selected pointwise from the sign of the local drift
-coefficient. This is important at low collisionality, where the trapped-passing
-boundary and narrow angular structures can otherwise produce poor Krylov behavior.
+The angles use periodic grids with dense differentiation matrices acting along
+each axis, :math:`\partial_\theta f \approx D_\theta f`,
+:math:`\partial_\zeta f \approx D_\zeta f` (``thetaDerivativeScheme`` /
+``zetaDerivativeScheme``). For the advection-dominated magnetic-drift terms the
+code can use directional **upwind** derivative matrices selected pointwise from
+the sign of the local drift coefficient, which stabilizes the trapped-passing
+boundary layer at low collisionality.
 
 Velocity-space discretization
 -----------------------------
 
-The speed coordinate uses the same polynomial-grid philosophy as the mature SFINCS
-formulation: collocation points in :math:`x` together with quadrature weights and
-modal transforms tailored to Maxwellian-weighted integrals. The pitch-angle dependence
-is expanded in Legendre modes,
+**Pitch angle** is expanded in Legendre modes,
+:math:`f = \sum_{L=0}^{N_\xi-1} f_L(x,\theta,\zeta)\,P_L(\xi)`. This has two
+structural consequences that drive the solver design:
 
-.. math::
+- streaming and mirror couple :math:`L\leftrightarrow L\pm1`;
+- the :math:`E_r` energy/pitch drifts couple :math:`L\leftrightarrow L\pm2`;
+- collisions are diagonal in :math:`L` for pitch-angle scattering and dense in
+  :math:`x` for the full Fokker--Planck operator.
 
-   f(x,\xi,\theta,\zeta)
-   =
-   \sum_{L=0}^{N_L-1} f_L(x,\theta,\zeta) P_L(\xi).
+**Speed** uses the Landreman--Ernst grid: collocation nodes of the non-classical
+orthogonal polynomials for the weight :math:`e^{-x^2}x^{k}` (``xGrid_k``),
+constructed by a Stieltjes three-term recurrence and Golub--Welsch
+eigendecomposition. This gives spectral accuracy for Maxwellian-weighted moments
+with few nodes, and the matching spectral differentiation matrices
+:math:`d/dx`, :math:`d^2/dx^2` for the energy-drift and Fokker--Planck terms
+(`Landreman & Ernst, J. Comput. Phys. 243 (2013) <https://arxiv.org/abs/1210.5289>`_).
 
-This representation has two major numerical consequences:
+**The** :math:`N_\xi`-**for-**:math:`x` **ramp** keeps fewer Legendre modes at
+high speed, where the distribution is smoother in pitch: ``Nxi_for_x_option``
+sets :math:`N_\xi(x)` to ramp from a floor (the Rosenbluth :math:`N_L`) up to
+:math:`N_\xi`. On the 744k-unknown HSX case this ramp is the difference between a
+warm solve at ``0.93 GB`` (ramp) and ``1.16 GB`` (uniform :math:`N_\xi`) — see
+:doc:`performance`.
 
-- streaming and mirror terms couple :math:`L \leftrightarrow L\pm 1`,
-- several drift terms couple :math:`L \leftrightarrow L\pm 2`,
+.. admonition:: Where in the code
 
-while collision operators are diagonal in :math:`L` for PAS and dense in :math:`x`
-for full linearized Fokker-Planck.
+   Legendre couplings and Lorentz eigenvalues:
+   :func:`sfincs_jax.phase_space.legendre_coupling_upper` /
+   ``legendre_coupling_lower`` / ``lorentz_eigenvalues``. Speed grid:
+   :func:`sfincs_jax.phase_space.make_speed_grid` and
+   ``speed_grid_diff_matrices``. Ramp:
+   :func:`sfincs_jax.phase_space.n_xi_for_x_ramp`. All are collected in
+   :class:`sfincs_jax.phase_space.Grids` via ``make_grids``.
 
 Linear-system structure
 -----------------------
 
-After discretization, the linear problem can be written as
-
-.. math::
-
-   A u = b,
-
-with the block structure
+After discretization the problem is :math:`A u = b` with the block structure
 
 .. math::
 
@@ -101,119 +92,146 @@ with the block structure
      A_{cf} & A_{c\Phi} & A_{cc}
    \end{bmatrix},
 
-where:
+with :math:`A_{ff}` the kinetic block, :math:`A_{\Phi\Phi}` the quasineutrality
+block (when :math:`\Phi_1` is active), and the :math:`c` rows/columns imposing
+density, energy, and gauge constraints. The operator is applied **matrix-free**
+as a composition of tensor contractions and directional derivatives rather than
+an assembled sparse matrix, so it JIT-compiles for CPU or GPU and differentiates
+cleanly.
 
-- :math:`A_{ff}` is the kinetic block,
-- :math:`A_{\Phi\Phi}` is the quasineutrality / potential block when active,
-- :math:`A_{cc}` and the off-diagonal constraint blocks impose density, energy,
-  and gauge conditions.
+.. admonition:: Where in the code
 
-The explicit matrix is usually too large or too wasteful to assemble densely, so the
-main production path uses matrix-free operator application.
+   The matrix-free action is :meth:`sfincs_jax.drift_kinetic.KineticOperator.apply`;
+   the right-hand side is ``KineticOperator.rhs``. The analytic
+   block-tridiagonal-in-:math:`L` extraction is
+   ``KineticOperator.to_block_tridiagonal``.
 
-Matrix-free operator evaluation
--------------------------------
+The three solver tiers
+----------------------
 
-The central numerical design choice in `sfincs_jax` is to express the kinetic operator
-as a composition of tensor contractions, sparse/dense directional derivative
-applications, collision blocks, and constraint evaluations rather than as one global
-assembled sparse matrix.
+The solve policy (:func:`sfincs_jax.solve.solve`, ``solve_method="auto"``) picks
+the cheapest adequate tier over a :class:`~sfincs_jax.drift_kinetic.KineticOperator`.
 
-The advantages are:
+Tier 1 — structured direct (block-tridiagonal Legendre elimination)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- the operator can be JIT-compiled for CPU or GPU,
-- the same operator can be differentiated when the differentiable path is selected,
-- and large solve branches can stay on device until a rescue path is actually needed.
+When the operator reduces to the **DKES-trajectory / pitch-angle-scattering
+family** — streaming and mirror couple :math:`L\pm1`, :math:`E\times B` and PAS
+are diagonal in :math:`L`, no :math:`E_r` :math:`L\pm2` terms, and no
+Fokker--Planck :math:`(\text{species},x)` coupling — the Legendre-mode
+representation of the drift-kinetic operator is **block tridiagonal** in
+:math:`L`. In that case the :math:`(\text{species}, x)` axes are mutually
+uncoupled, so the full system splits into :math:`N_\mathrm{species}\times N_x`
+independent block-tridiagonal systems of :math:`N_\xi` dense
+:math:`(N_\theta N_\zeta)` blocks, each with a rank-one constraint border. The
+border is absorbed exactly with a rank-one update, and the batch is solved by a
+``vmap``-ed block-Thomas factor/solve; multiple right-hand sides share one
+elimination.
 
-In the source tree, the core operator assembly and cached application live in
-``sfincs_jax/operators/profile_system.py``. RHSMode-1 solve orchestration lives in
-``sfincs_jax/problems/profile_solve.py``; RHSMode-2/3 transport orchestration lives in
-``sfincs_jax/problems/transport_solve.py``.
+The tridiagonal structure and its block elimination follow the Legendre
+analysis of `Escoto, PhD thesis (2025), arXiv:2510.27513
+<https://arxiv.org/abs/2510.27513>`_. The implementation adds a
+**truncated-storage** back-substitution: the forward elimination visits all
+:math:`N_\xi` blocks, but only the lowest ``keep`` blocks — the ones the
+right-hand side and the physical moments actually touch — are retained, so peak
+memory is bounded by the truncation depth instead of the full Legendre chain.
+This is the origin of the tier-1 memory advantage over an assembled sparse
+factorization.
 
-Solve modes
------------
+Tier 2 — preconditioned, recycled Krylov
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-`sfincs_jax` intentionally separates two use cases:
+When tier 1 does not apply (full Fokker--Planck, or the full-trajectory
+:math:`E_r` terms), the code runs matrix-free FGMRES with subspace recycling
+(GCROT) on ``KineticOperator.apply``, right-preconditioned by an **exact tier-1
+solve of a SFINCS-simplified coarse operator**. The coarse operator uses the
+Fortran ``preconditionerOptions`` idiom — ``preconditioner_species=1``
+(self-collisions only) and ``preconditioner_x=1`` (:math:`x`-diagonal
+collisions) reduce Fokker--Planck to a PAS-like :math:`L`-diagonal coefficient,
+and the :math:`E_r` :math:`L\pm2` terms are dropped — so the preconditioner is
+itself a tier-1 direct solve. The recycle pair :math:`(C,U)` is returned for
+warm-starting continuation, which makes neighbouring points in an :math:`E_r`
+scan or Newton :math:`\Phi_1` iteration converge in a handful of iterations.
 
-- **CLI / production explicit path**:
-  tuned for robustness, throughput, and bounded memory use.
-- **Python differentiable path**:
-  preserves JAX-native solve structure when end-to-end derivatives matter.
+Tier 3 — host sparse-direct fallback
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This split avoids forcing the public executable into the same algorithmic constraints
-as the differentiable research workflow.
+As an escape hatch the operator is materialized (vmapped unit vectors, guarded
+by ``max_dense_size``) into CSR and factored by SuperLU on the host. This tier
+is non-differentiable and non-jittable and prints a one-line notice; it is used
+on explicit request (``method="direct"``) or when tier 2 breaches its iteration
+cap under ``method="auto"``.
 
-Krylov methods and preconditioners
-----------------------------------
+.. admonition:: Where in the code
 
-The dominant linear solves are nonsymmetric and often ill-conditioned, so Krylov
-methods are the baseline:
+   :func:`sfincs_jax.solve.solve` (auto policy, solve.py); tier-1 build
+   ``build_tier1_solver`` and the truncated variant ``_solve_tier1_truncated``;
+   tier-2 ``_solve_tier2`` with ``build_coarse_preconditioner``; tier-3
+   ``_solve_tier3``. The structured factorization, recycled Krylov, and host
+   direct solves are provided by the ``solvax`` library
+   (`github.com/uwplasma/SOLVAX <https://github.com/uwplasma/SOLVAX>`_,
+   `PyPI <https://pypi.org/project/solvax/>`_).
 
-- GMRES and closely related variants for the main implicit solve path,
-- bounded host sparse-direct or host dense-direct rescues when the problem is small
-  enough or badly conditioned,
-- structured PAS and collision-based preconditioners for the hard branches.
+Implicit differentiation (IFT adjoint)
+--------------------------------------
 
-The practical preconditioner family includes:
+For gradient-based workflows tiers 1 and 2 are wrapped with the implicit
+function theorem (``jax.lax.custom_linear_solve`` via
+``solvax.implicit.linear_solve``). Rather than differentiating through the
+solver iterations, the adjoint of a linear solve :math:`Au=b` is one **transposed
+solve**, which reuses the same tier-1 block-Thomas factors
+(``block_thomas_solve(transpose=True)``) or a transposed-preconditioner GCROT
+solve. The cost of a gradient is therefore one additional solve, independent of
+the iteration count of the forward solve. The ambipolar :math:`E_r` root and the
+nonlinear :math:`\Phi_1` Newton solve are differentiated the same way at the
+outer (root) level (:func:`sfincs_jax.er.ambipolar_er`,
+:func:`sfincs_jax.phi1.phi1_state`).
 
-- simplified PAS angular/velocity blocks,
-- collision-only approximations,
-- block-structured ``xblock`` and Schur-style reductions,
-- sparse host factorizations for selected medium and large branches,
-- and multilevel Schwarz corrections for sharded multi-device experiments.
+Numerical building blocks — the structured factorizations, the recycled Krylov,
+the mixed-precision block-Thomas, and the implicit-solve wrappers — live in the
+standalone ``solvax`` package so they can be tested and reused independently.
+The mixed-precision block-Thomas path is GPU-gated (it is faster on GPU FP64 but
+slower on CPU), so the CPU path uses the plain block-Thomas factorization.
 
-The preconditioner is not required to be a physically exact operator. Its job is to
-reduce the Krylov iteration count and stabilize convergence while preserving the
-solution of the full system.
+When to use which tier
+----------------------
 
-JAX-specific implementation choices
------------------------------------
+.. list-table::
+   :header-rows: 1
+   :widths: 26 20 30 24
 
-JAX is used where it gives concrete numerical leverage:
-
-- **JIT compilation** removes Python overhead from repeated operator applications.
-- **XLA fusion** reduces intermediate allocations for tensor-heavy kernels.
-- **Device portability** keeps the same math on CPU and GPU.
-- **Automatic differentiation** is available when the solve path stays within the
-  supported differentiable subset.
-- **Sharding / distributed execution** can be used for selected transport-worker and
-  experimental sharded solves.
-
-At the same time, `sfincs_jax` does not force every solve through a pure-JAX path.
-When a bounded host sparse or dense solve is the right tool for the CLI, the code uses
-it.
-
-Code locations
---------------
-
-The most important numerical modules are:
-
-- ``sfincs_jax/operators/profile_system.py``: system definition, cached
-  operators, block structure, residual and right-hand-side evaluation.
-- ``sfincs_jax/problems/profile_solve.py``: RHSMode-1 solve orchestration,
-  solver/preconditioner selection, and rescue policy.
-- ``sfincs_jax/problems/transport_solve.py`` and
-  ``sfincs_jax/problems/transport_parallel_runtime.py``: RHSMode-2/3 transport
-  solves and parallel transport execution.
-- ``sfincs_jax/solvers/krylov.py``: linear-solver wrappers and Krylov helpers.
-- ``sfincs_jax/solvers/implicit.py``: differentiable linear solve path.
-- ``sfincs_jax/physics/collisions.py``: PAS and full FP operator kernels.
-- ``sfincs_jax/grids.py`` and ``sfincs_jax/discretization/xgrid.py``: collocation grids, quadrature,
-  modal transforms.
+   * - Case
+     - Auto tier
+     - Why
+     - Differentiable
+   * - DKES trajectories + PAS (RHSMode 3, monoenergetic)
+     - Tier 1
+     - Block-tridiagonal in :math:`L`; :math:`N_s N_x` independent chains
+     - yes (transposed factors)
+   * - PAS, full profile solve (RHSMode 1)
+     - Tier 1
+     - Same structure; multi-RHS shares one elimination
+     - yes
+   * - Full Fokker--Planck collisions
+     - Tier 2
+     - Dense :math:`x`/species coupling breaks tridiagonality
+     - yes (transposed preconditioner)
+   * - Full-trajectory :math:`E_r` (:math:`L\pm2` terms)
+     - Tier 2
+     - :math:`L\pm2` coupling breaks tridiagonality
+     - yes
+   * - Ill-conditioned / small, or tier-2 stall
+     - Tier 3
+     - Host SuperLU direct
+     - no (loud escape hatch)
 
 Resolution guidance
 -------------------
 
-The most important practical resolution knobs are
-
-.. math::
-
-   N_\theta, \qquad N_\zeta, \qquad N_\xi, \qquad N_x.
-
-Low-collisionality runs are especially sensitive to :math:`N_\zeta` and :math:`N_\xi`
-because of the trapped-passing boundary layer. In contrast, :math:`N_x` often changes
-more slowly with collisionality. This is why the automated suite and examples choose
-resolution changes by axis, not by a blind global scaling factor.
-
-For user-facing guidance and benchmark examples, see :doc:`performance`,
-:doc:`parallelism`, and :doc:`examples`.
+The practical knobs are :math:`N_\theta, N_\zeta, N_\xi, N_x`. Low-collisionality
+runs are especially sensitive to :math:`N_\zeta` and :math:`N_\xi` because of the
+trapped-passing boundary layer, while :math:`N_x` changes more slowly with
+collisionality. Convergence is therefore best checked by refining one axis at a
+time rather than by a blind global scale factor; the examples and audited suite
+choose resolution changes per axis. For measured runtime/memory and parity
+evidence see :doc:`performance` and :doc:`parity`.

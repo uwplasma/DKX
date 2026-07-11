@@ -1,151 +1,85 @@
 API reference
 =============
 
+The stable public facade is :mod:`sfincs_jax.api` (re-exported at the package
+top level). The canonical modules that implement the physics and solver stack
+are indexed below, with links to the pages that document them in depth and to
+:doc:`source_map` for the full source catalogue.
+
+Public facade
+-------------
+
 .. automodule:: sfincs_jax.api
    :members:
+
+High-level runners live in :mod:`sfincs_jax.run` (``run_profile``,
+``run_transport_matrix``) and the CLI in :mod:`sfincs_jax.cli`; see :doc:`usage`.
+
+Canonical modules
+-----------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 45 25
+
+   * - Module
+     - Role
+     - Reference
+   * - ``sfincs_jax.run``
+     - ``run_profile`` / ``run_transport_matrix`` orchestration and console flow
+     - :doc:`usage`
+   * - ``sfincs_jax.inputs`` / ``sfincs_jax.namelist``
+     - Typed ``SfincsInput`` parser and raw namelist reader
+     - :doc:`inputs`
+   * - ``sfincs_jax.magnetic_geometry``
+     - ``FluxSurfaceGeometry`` and all geometry schemes
+     - :doc:`geometry`
+   * - ``sfincs_jax.species``
+     - Charges, masses, profiles, deflection frequencies
+     - :doc:`physics_reference`
+   * - ``sfincs_jax.phase_space``
+     - Legendre coupling, Landreman--Ernst speed grid, ``Nxi_for_x`` ramp
+     - :doc:`numerics`
+   * - ``sfincs_jax.drift_kinetic``
+     - ``KineticOperator`` — the consolidated v3 drift-kinetic operator
+     - :doc:`physics_reference`, :doc:`system_equations`
+   * - ``sfincs_jax.collisions``
+     - Pitch-angle scattering and full Fokker--Planck (Rosenbluth) operators
+     - :doc:`physics_reference`
+   * - ``sfincs_jax.solve``
+     - Three-tier auto solver (block-tridiagonal, recycled Krylov, host direct)
+     - :doc:`numerics`
+   * - ``sfincs_jax.moments``
+     - Velocity-space moments, fluxes, ``FSABjHat``, transport matrix
+     - :doc:`outputs`, :doc:`physics_reference`
+   * - ``sfincs_jax.phi1``
+     - Nonlinear :math:`\Phi_1` / quasineutrality Newton solve
+     - :doc:`physics_reference`
+   * - ``sfincs_jax.er``
+     - Ambipolar radial-electric-field root solve (Brent + differentiable)
+     - :doc:`physics_reference`
+   * - ``sfincs_jax.writer`` / ``sfincs_jax.io``
+     - ``sfincsOutput.h5`` / ``.nc`` / ``.npz`` writer and reader
+     - :doc:`outputs`
+   * - ``sfincs_jax.diagnostics``
+     - Geometry-derived scalar diagnostics
+     - :doc:`outputs`
+   * - ``sfincs_jax.sensitivity``
+     - Implicit-differentiation observable derivatives (RHSMode 4/5 spine)
+     - :doc:`feature_matrix`
+   * - ``sfincs_jax.compare``
+     - ``compare-h5`` parity tooling against Fortran fixtures
+     - :doc:`parity`
+
+Namelist parsing and reader helpers
+------------------------------------
 
 .. automodule:: sfincs_jax.namelist
    :members:
 
-.. automodule:: sfincs_jax.compare
-   :members:
+Legacy pipeline modules
+-----------------------
 
-.. automodule:: sfincs_jax.discretization.v3
-   :members:
-
-.. automodule:: sfincs_jax.geometry
-   :members:
-
-.. automodule:: sfincs_jax.geometry.vmec_wout
-   :members:
-
-.. automodule:: sfincs_jax.geometry.vmec
-   :members:
-
-.. automodule:: sfincs_jax.geometry.jax_adapters
-   :members:
-
-.. automodule:: sfincs_jax.diagnostics
-   :members:
-
-.. automodule:: sfincs_jax.outputs.formats
-   :members:
-
-.. automodule:: sfincs_jax.grids
-   :members:
-
-.. automodule:: sfincs_jax.discretization.xgrid
-   :members:
-
-.. automodule:: sfincs_jax.operators.profile_collisionless
-   :members:
-
-.. automodule:: sfincs_jax.operators.profile_electric_field
-   :members:
-
-.. automodule:: sfincs_jax.operators.profile_exb
-   :members:
-
-.. automodule:: sfincs_jax.operators.profile_magnetic_drifts
-   :members:
-
-.. automodule:: sfincs_jax.physics.collisions
-   :members:
-
-.. automodule:: sfincs_jax.operators.profile_fblock
-   :members:
-
-.. automodule:: sfincs_jax.operators.profile_system
-   :members:
-
-.. automodule:: sfincs_jax.problems.transport_diagnostics
-   :members:
-
-Transport-matrix and profile residual helpers are documented through their
-maintained domain modules.
-
-.. automodule:: sfincs_jax.validation.artifacts
-   :members:
-
-.. automodule:: sfincs_jax.solvers.memory_model
-   :members:
-
-.. automodule:: sfincs_jax.problems.profile_solver_diagnostics
-   :members:
-
-.. automodule:: sfincs_jax.problems.transport_finalize
-   :members:
-
-.. automodule:: sfincs_jax.solvers.krylov
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioning
-   :members:
-
-.. automodule:: sfincs_jax.solvers.diagnostics
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioner_pas_xblock_ilu
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioner_schur_profile
-   :members:
-
-.. automodule:: sfincs_jax.problems.transport_linear_system
-   :members:
-
-.. automodule:: sfincs_jax.problems.transport_setup
-   :members:
-
-.. automodule:: sfincs_jax.solvers.krylov_dispatch
-   :members:
-
-Refactored solve-policy modules
--------------------------------
-
-These modules hold small, directly tested policy and dispatch decisions that used
-to live inside the large driver. They are included here because they are part of
-the maintainable public source structure for debugging, testing, and downstream
-research workflows.
-
-.. automodule:: sfincs_jax.problems.profile_policies
-   :members:
-
-.. automodule:: sfincs_jax.problems.profile_setup
-   :members:
-
-.. automodule:: sfincs_jax.problems.profile_preconditioner_build
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioner_domain_decomposition
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioner_pas_policy
-   :members:
-
-.. automodule:: sfincs_jax.problems.profile_residual
-   :members:
-
-.. automodule:: sfincs_jax.problems.transport_policies
-   :members:
-
-.. automodule:: sfincs_jax.problems.transport_solve
-   :members:
-
-.. automodule:: sfincs_jax.problems.transport_parallel_runtime
-   :members:
-
-.. automodule:: sfincs_jax.outputs.transport
-   :members:
-
-.. automodule:: sfincs_jax.validation.fortran
-   :members:
-
-.. automodule:: sfincs_jax.solvers.implicit
-   :members:
-
-.. automodule:: sfincs_jax.sensitivity
-   :members:
-
-.. automodule:: sfincs_jax.paths
-   :members:
+The retained legacy solver/operator/problem/geometry-subpackage internals are
+off the canonical solve path. They are catalogued, with their canonical
+replacements, in :doc:`source_map`.
