@@ -543,8 +543,9 @@ def build_coarse_preconditioner(
 
     Mirrors the Fortran ``preconditionerOptions`` defaults: collisions become
     self-species and x-diagonal (Fokker-Planck reduces to its PAS-like
-    diagonal), the Er L±2 xDot/xiDot terms are dropped, and (optionally, the
-    ``preconditioner_xi=1`` knob) the L±1 streaming coupling is dropped too.
+    diagonal), the Er L±2 xDot/xiDot terms and the tangential magnetic-drift
+    L±2 terms are dropped, and (optionally, the ``preconditioner_xi=1`` knob)
+    the L±1 streaming coupling is dropped too.
     The result is block-tridiagonal over L and uncoupled over (species, x), so
     one batched block-Thomas factorization inverts it exactly; the bordered
     constraint rows of the *full* operator are then eliminated exactly with
@@ -559,7 +560,9 @@ def build_coarse_preconditioner(
     n_tz = n_t * n_z
     batch = n_s * n_x
 
-    stripped = replace(op, fp=None, with_er_xidot=False, with_er_xdot=False)
+    stripped = replace(
+        op, fp=None, with_er_xidot=False, with_er_xdot=False, with_magnetic_drifts=False
+    )
     blocks = stripped.to_block_tridiagonal()  # (L, S, X, TZ, TZ)
     lower, diag, upper = (jnp.transpose(a, (1, 2, 0, 3, 4)) for a in blocks)  # (S,X,L,TZ,TZ)
 

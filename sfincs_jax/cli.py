@@ -429,8 +429,11 @@ def deck_requires_legacy_pipeline(nml) -> str | None:
             return "quasineutralityOption not in {1,2} is deferred to the legacy pipeline"
     if bool(phys.get("READEXTERNALPHI1", False)):
         return "readExternalPhi1 is deferred to the legacy pipeline"
-    if int(phys.get("MAGNETICDRIFTSCHEME", 0)) != 0:
-        return "magneticDriftScheme != 0 (tangential magnetic drifts) is deferred to the legacy pipeline"
+    if int(phys.get("MAGNETICDRIFTSCHEME", 0)) not in (0, 1):
+        return (
+            "magneticDriftScheme not in {0,1} (tangential magnetic-drift sub-scheme) is "
+            "deferred to the legacy pipeline"
+        )
     collision_operator = int(phys.get("COLLISIONOPERATOR", 0))
     if collision_operator not in (0, 1):
         return f"collisionOperator={collision_operator} is deferred to the legacy pipeline"

@@ -6,8 +6,9 @@ is the canonical stack of flat, physics-named root modules
 runs through `inputs -> drift_kinetic -> solve -> moments -> writer/console`,
 and the public API/CLI route every supported case through that chain by
 default. The remaining one-level domain packages are explicitly transitional:
-they are the interim owners of the deferred features (tangential magnetic
-drifts, constraint schemes 3/4, mapped speed grids,
+they are the interim owners of the deferred features (magneticDriftScheme 2-9 —
+the base tangential magnetic drift, scheme 1, is canonical in `drift_kinetic`;
+constraint schemes 3/4, mapped speed grids,
 export_f, non-stellarator-symmetric VMEC) plus a handful of workflow surfaces
 (`.npz` output, solver traces, scan-er, ambipolar, sensitivity/compare/plot
 utilities), and they shrink to zero as each vertical slice lands.

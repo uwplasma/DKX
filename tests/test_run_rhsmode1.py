@@ -11,8 +11,9 @@ Vertical slice #3 referee (plan_final.md "File-Level Execution Queues"):
   dataset the legacy ``outputs`` writer emits for RHSMode=1, equal to 1e-10
   (scaled), with the known-missing set enumerated explicitly: the legacy
   JAX-only ``linearSolver*`` metadata and — where the deck requests it — the
-  export_f data family, which the canonical operator defers (as it does
-  Phi1 and tangential magnetic drifts, whose decks it refuses outright);
+  export_f data family, which the canonical operator defers (unlike Phi1 and
+  the tangential magnetic drifts, which are now canonical — see
+  ``test_run_profile_magnetic_drifts_match_legacy`` below);
 - stdout must contain the diagnostics.F90 species-results block rendered by
   the golden-pinned ``console.species_results_lines`` helpers
   (format byte-parity is pinned in ``tests/test_inputs_console.py``), with
@@ -324,6 +325,52 @@ def test_run_profile_rejects_transport_modes() -> None:
 
     with pytest.raises(NotImplementedError, match="RHSMode"):
         run_profile(REF / "monoenergetic_PAS_tiny_scheme1.input.namelist", emit=None)
+
+
+# ---------------------------------------------------------------------------
+# End-to-end parity for the tangential magnetic drifts (magneticDriftScheme=1)
+# ---------------------------------------------------------------------------
+
+
+def test_run_profile_magnetic_drifts_match_legacy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Canonical run_profile with tangential magnetic drifts matches the legacy pipeline.
+
+    The ``magneticDriftScheme=1`` Boozer (geometryScheme 11) deck now routes
+    through the canonical stack.  Because the drift couples L±2 the operator is
+    not block-tridiagonal, so :func:`sfincs_jax.solve.solve` routes it to tier-2
+    GCROT (falling back to the exact tier-3 direct solve on this tiny
+    collisionless fixture).  Its fluxes must equal the retained legacy pipeline,
+    whose magnetic-drift assembly is validated element-wise against Fortran v3 in
+    ``tests/test_magnetic_drifts_parity.py``.
+    """
+    from sfincs_jax.cli import deck_requires_legacy_pipeline
+    from sfincs_jax.io import write_sfincs_jax_output_h5
+    from sfincs_jax.namelist import read_sfincs_input
+    from sfincs_jax.run import run_profile
+
+    monkeypatch.setenv("SFINCS_JAX_EQUILIBRIA_DIRS", str(REF))
+    deck = REF / "magdrift_1species_tiny.input.namelist"
+
+    # The deck routes canonically now (no longer deferred to the legacy pipeline).
+    assert deck_requires_legacy_pipeline(read_sfincs_input(deck)) is None
+
+    run = run_profile(deck, out_path=tmp_path / "magdrift.canonical.h5", emit=None)
+    legacy_path = tmp_path / "magdrift.legacy.h5"
+    write_sfincs_jax_output_h5(
+        input_namelist=deck,
+        output_path=legacy_path,
+        compute_solution=True,
+        overwrite=True,
+        verbose=False,
+    )
+    canonical = _read_h5(run.output_path)
+    legacy = _read_h5(legacy_path)
+
+    for key in ("particleFlux_vm_psiHat", "heatFlux_vm_psiHat", "FSABFlow", "FSABjHat"):
+        assert key in canonical and key in legacy, f"missing flux dataset {key!r}"
+        _assert_scaled_close(canonical[key], legacy[key], tol=1e-9, label=key)
 
 
 # ---------------------------------------------------------------------------
