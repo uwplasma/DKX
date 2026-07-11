@@ -26,9 +26,17 @@ from sfincs_jax.geometry import (
 from sfincs_jax.geometry.boozer import gpsipsi_from_bc_file
 from sfincs_jax.geometry.vmec import vmec_geometry_from_wout_file
 from sfincs_jax.geometry.vmec_wout import gpsipsi_from_wout_file
-from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry
+from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry, read_vmec_wout
 
 _W7X_SC1_BC = Path("/Users/rogerio/local/sfincs/equilibria/w7x-sc1.bc")
+_NONSTELSYM_WOUT = Path(__file__).parent / "ref" / "wout_up_down_asymmetric_tokamak.nc"
+
+# Stellarator-asymmetric (lasym=T) complementary-parity tables read by
+# ``read_vmec_wout``; ``None`` for stellarator-symmetric wout files.
+_COMPLEMENTARY_TABLES = (
+    "bmns", "gmns", "bsubumns", "bsubvmns", "bsubsmnc",
+    "bsupumns", "bsupvmns", "rmns", "zmnc", "lmnc",
+)  # fmt: skip
 
 # Tiny grid matrix (24 GB laptop budget): includes an axisymmetric Nzeta=1
 # column and odd/even mixes that exercise the Nyquist bookkeeping.
@@ -174,6 +182,65 @@ def test_vmec_matches_legacy() -> None:
         path=wout, theta=np.asarray(theta), zeta=np.asarray(zeta), psi_n_wish=0.25, vmec_radial_option=1
     )
     np.testing.assert_allclose(np.asarray(new.gpsipsi), gp_old, rtol=1.0e-15, atol=1.0e-15)
+
+
+def test_read_vmec_wout_loads_complementary_tables_when_lasym() -> None:
+    """A lasym=T wout exposes every complementary-parity table with matching shapes."""
+    assert _NONSTELSYM_WOUT.exists(), f"Missing lasym wout fixture: {_NONSTELSYM_WOUT}"
+    w = read_vmec_wout(_NONSTELSYM_WOUT)
+    assert w.lasym is True
+    for name in _COMPLEMENTARY_TABLES:
+        arr = getattr(w, name)
+        assert arr is not None, f"complementary table {name} not loaded"
+        assert arr.ndim == 2, name
+    # Nyquist tables share the bmnc layout; shape tables share the rmnc layout.
+    assert w.bmns.shape == w.bmnc.shape
+    assert w.gmns.shape == w.gmnc.shape
+    assert w.bsubsmnc.shape == w.bsubsmns.shape
+    assert w.rmns.shape == w.rmnc.shape
+    assert w.zmnc.shape == w.zmns.shape
+
+
+def test_read_vmec_wout_stellarator_symmetric_returns_none(tmp_path: Path) -> None:
+    """A stellarator-symmetric wout leaves the complementary tables ``None`` (path unchanged)."""
+    from scipy.io import netcdf_file
+
+    path = tmp_path / "wout_synthetic_symmetric.nc"
+    ns, mnmax, mnmax_nyq = 5, 2, 3
+    with netcdf_file(path, "w") as f:
+        f.createDimension("radius", ns)
+        f.createDimension("mnmax", mnmax)
+        f.createDimension("mnmax_nyq", mnmax_nyq)
+        f.createVariable("nfp", "i", ())[...] = 5
+        f.createVariable("ns", "i", ())[...] = ns
+        f.createVariable("mpol", "i", ())[...] = 2
+        f.createVariable("ntor", "i", ())[...] = 1
+        f.createVariable("mnmax", "i", ())[...] = mnmax
+        f.createVariable("mnmax_nyq", "i", ())[...] = mnmax_nyq
+        f.createVariable("lasym__logical__", "i", ())[...] = 0
+        f.createVariable("Aminor_p", "d", ())[...] = 0.5
+        f.createVariable("phi", "d", ("radius",))[...] = np.linspace(0.0, 2.0 * np.pi, ns)
+        f.createVariable("xm", "i", ("mnmax",))[...] = np.asarray([0, 1], dtype=np.int32)
+        f.createVariable("xn", "i", ("mnmax",))[...] = np.asarray([0, 5], dtype=np.int32)
+        f.createVariable("xm_nyq", "i", ("mnmax_nyq",))[...] = np.asarray([0, 1, 2], dtype=np.int32)
+        f.createVariable("xn_nyq", "i", ("mnmax_nyq",))[...] = np.asarray([0, 5, 10], dtype=np.int32)
+        nyq = np.arange(ns * mnmax_nyq, dtype=np.float64).reshape(ns, mnmax_nyq) + 1.0
+        full = np.arange(ns * mnmax, dtype=np.float64).reshape(ns, mnmax) + 1.0
+        for name in ("bmnc", "gmnc", "bsubumnc", "bsubvmnc", "bsubsmns", "bsupumnc", "bsupvmnc"):
+            f.createVariable(name, "d", ("radius", "mnmax_nyq"))[...] = nyq
+        f.createVariable("rmnc", "d", ("radius", "mnmax"))[...] = full
+        f.createVariable("zmns", "d", ("radius", "mnmax"))[...] = full + 100.0
+        f.createVariable("lmns", "d", ("radius", "mnmax"))[...] = full
+        f.createVariable("iotas", "d", ("radius",))[...] = np.linspace(0.4, 0.6, ns)
+        f.createVariable("presf", "d", ("radius",))[...] = np.linspace(1.0, 0.0, ns)
+
+    w = read_vmec_wout(path)
+    assert w.lasym is False
+    for name in _COMPLEMENTARY_TABLES:
+        assert getattr(w, name) is None, f"{name} should be None for a stell-sym wout"
+    # The symmetric-parity tables are still populated.
+    assert w.bmnc is not None
+    assert w.rmnc is not None
 
 
 # ---------------------------------------------------------------------------

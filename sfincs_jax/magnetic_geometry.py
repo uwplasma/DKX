@@ -1134,13 +1134,32 @@ class VmecWout:
     lmns: np.ndarray  # (mnmax, ns) half mesh
     iotas: np.ndarray  # (ns,) half mesh
     presf: np.ndarray  # (ns,) full mesh
+    # Stellarator-asymmetric (lasym=T) complementary-parity tables.  ``None`` for
+    # stellarator-symmetric equilibria, so the stell-sym build is unaffected.  The
+    # parity of each is flipped relative to its symmetric counterpart above: the
+    # cosine tables gain sine partners (bmns/gmns/bsub{u,v}mns/bsup{u,v}mns/rmns),
+    # and the sine tables gain cosine partners (bsubsmnc, zmnc).
+    bmns: np.ndarray | None = None  # (mnmax_nyq, ns) half mesh
+    gmns: np.ndarray | None = None  # (mnmax_nyq, ns) half mesh
+    bsubumns: np.ndarray | None = None  # (mnmax_nyq, ns) half mesh
+    bsubvmns: np.ndarray | None = None  # (mnmax_nyq, ns) half mesh
+    bsubsmnc: np.ndarray | None = None  # (mnmax_nyq, ns) full mesh
+    bsupumns: np.ndarray | None = None  # (mnmax_nyq, ns) half mesh
+    bsupvmns: np.ndarray | None = None  # (mnmax_nyq, ns) half mesh
+    rmns: np.ndarray | None = None  # (mnmax, ns) full mesh
+    zmnc: np.ndarray | None = None  # (mnmax, ns) full mesh
+    lmnc: np.ndarray | None = None  # (mnmax, ns) half mesh
 
 
 def read_vmec_wout(path: str | Path) -> VmecWout:
-    """Read a VMEC ``wout_*.nc`` file (stellarator-symmetric equilibria).
+    """Read a VMEC ``wout_*.nc`` file.
 
     Pure function returning plain NumPy arrays; not differentiable.  The
-    returned tables feed :meth:`FluxSurfaceGeometry.from_vmec`.
+    returned tables feed :meth:`FluxSurfaceGeometry.from_vmec`.  For
+    stellarator-asymmetric equilibria (``lasym=T``) the complementary-parity
+    tables (``bmns``, ``gmns``, ``bsub{u,v}mns``, ``bsubsmnc``, ``bsup{u,v}mns``,
+    ``rmns``, ``zmnc``, ``lmnc``) are also loaded; they stay ``None`` for
+    stellarator-symmetric files so that path is unchanged.
     """
     from scipy.io import netcdf_file  # noqa: PLC0415 - keep scipy import lazy
 
@@ -1153,6 +1172,11 @@ def read_vmec_wout(path: str | Path) -> VmecWout:
             if name not in f.variables:
                 raise KeyError(f"Missing variable {name!r} in wout file.")
             return np.array(f.variables[name].data)
+
+        def opt_var(name: str) -> np.ndarray | None:
+            if name not in f.variables:
+                return None
+            return np.array(f.variables[name].data).astype(np.float64).T
 
         nfp = int(var("nfp"))
         ns = int(var("ns"))
@@ -1184,9 +1208,18 @@ def read_vmec_wout(path: str | Path) -> VmecWout:
             lmns=var("lmns").astype(np.float64).T,
             iotas=var("iotas").astype(np.float64),
             presf=var("presf").astype(np.float64),
+            # Complementary-parity tables (present only when lasym=T).
+            bmns=opt_var("bmns") if lasym else None,
+            gmns=opt_var("gmns") if lasym else None,
+            bsubumns=opt_var("bsubumns") if lasym else None,
+            bsubvmns=opt_var("bsubvmns") if lasym else None,
+            bsubsmnc=opt_var("bsubsmnc") if lasym else None,
+            bsupumns=opt_var("bsupumns") if lasym else None,
+            bsupvmns=opt_var("bsupvmns") if lasym else None,
+            rmns=opt_var("rmns") if lasym else None,
+            zmnc=opt_var("zmnc") if lasym else None,
+            lmnc=opt_var("lmnc") if lasym else None,
         )
-    if out.lasym:
-        raise NotImplementedError("VMEC lasym=true is not yet supported (bmns/gmns tables).")
     if out.xm[0] != 0 or out.xn[0] != 0 or out.xm_nyq[0] != 0 or out.xn_nyq[0] != 0:
         raise ValueError("Expected the first VMEC mode to be (0,0).")
     return out
@@ -1297,6 +1330,7 @@ def _vmec_included_modes(
     ripple_scale: float,
     helicity_n: int,
     helicity_l: int,
+    amplitude_table: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Nyquist-mode selection shared by ``from_vmec`` and the gpsipsi metric.
 
@@ -1304,6 +1338,11 @@ def _vmec_included_modes(
     tables and the per-mode rippleScale factors.  Mirrors v3's
     ``min_Bmn_to_load`` filter (applied after scaling) and the
     ``VMEC_Nyquist_option=1`` truncation to ``|m| < mpol``, ``|n| <= ntor``.
+
+    ``amplitude_table`` selects which ``|B|`` Fourier table drives the
+    amplitude filter: ``bmnc`` (default) for the stellarator-symmetric modes and
+    ``bmns`` for the stellarator-asymmetric modes.  The ``(0,0)`` reference
+    ``b00`` is always taken from ``bmnc`` (v3's ``geometry.F90``).
     """
     (j0, j1) = interp.index_half
     (wh0, wh1) = interp.weight_half
@@ -1320,7 +1359,8 @@ def _vmec_included_modes(
         helicity_l=int(helicity_l),
         ripple_scale=float(ripple_scale),
     )
-    b_mode = w.bmnc[:, j0] * wh0 + w.bmnc[:, j1] * wh1
+    table = w.bmnc if amplitude_table is None else amplitude_table
+    b_mode = table[:, j0] * wh0 + table[:, j1] * wh1
     include = np.abs((b_mode * scale_all) / b00) >= float(min_bmn_to_load)
 
     option = int(vmec_nyquist_option)
@@ -1391,6 +1431,21 @@ def _from_vmec(
         helicity_n=int(helicity_n),
         helicity_l=int(helicity_l),
     )
+    # Stellarator-asymmetric (lasym=T) modes carry a separate min_Bmn_to_load
+    # filter driven by the |B| sine table (v3 geometry.F90 antisymmetric block).
+    lasym = bool(w.lasym) and w.bmns is not None
+    idx_asym = None
+    if lasym:
+        idx_asym, _ = _vmec_included_modes(
+            w=w,
+            interp=interp,
+            vmec_nyquist_option=int(vmec_nyquist_option),
+            min_bmn_to_load=float(min_bmn_to_load),
+            ripple_scale=float(ripple_scale),
+            helicity_n=int(helicity_n),
+            helicity_l=int(helicity_l),
+            amplitude_table=w.bmns,
+        )
     xm = np.asarray(w.xm_nyq, dtype=np.float64)
     xn = np.asarray(w.xn_nyq, dtype=np.float64)
 
@@ -1470,6 +1525,56 @@ def _from_vmec(
         acc["db_sub_theta_dpsi"] += np.sum(d_bsubu_dpsi * cos_a, axis=0)
         acc["db_sub_zeta_dpsi"] += np.sum(d_bsubv_dpsi * cos_a, axis=0)
 
+    if lasym:
+        # Stellarator-asymmetric terms (v3 geometry.F90 antisymmetric block):
+        # the cosine tables above gain sine partners, and the sine-parity field
+        # BHat_sub_psi (bsubsmns) gains a cosine partner (bsubsmnc).  Angle,
+        # rippleScale, and mesh interpolation reuse the symmetric machinery.
+        for i0 in range(0, int(idx_asym.size), int(chunk)):
+            sel = idx_asym[i0 : min(int(idx_asym.size), i0 + int(chunk))]
+            m = xm[sel][:, None, None]
+            n_nyq = xn[sel][:, None, None]  # equals n * NPeriods
+            scale = scale_all[sel][:, None, None]
+
+            angle = m * theta1 - n_nyq * zeta1
+            cos_a = np.cos(angle)
+            sin_a = np.sin(angle)
+
+            b = half(w.bmns, sel)[:, None, None] * scale
+            jac = half(w.gmns, sel)[:, None, None] * scale / float(psi_a_hat)
+            bsupu = half(w.bsupumns, sel)[:, None, None] * scale
+            bsupv = half(w.bsupvmns, sel)[:, None, None] * scale
+            bsubu = half(w.bsubumns, sel)[:, None, None] * scale
+            bsubv = half(w.bsubvmns, sel)[:, None, None] * scale
+            bsubs = full(w.bsubsmnc, sel)[:, None, None] * scale / float(psi_a_hat)
+
+            d_b_dpsi = full(_finite_diff_full_from_half(w.bmns[sel, :], dpsi), np.arange(sel.size))[:, None, None] * scale
+            d_bsubu_dpsi = (
+                full(_finite_diff_full_from_half(w.bsubumns[sel, :], dpsi), np.arange(sel.size))[:, None, None] * scale
+            )
+            d_bsubv_dpsi = (
+                full(_finite_diff_full_from_half(w.bsubvmns[sel, :], dpsi), np.arange(sel.size))[:, None, None] * scale
+            )
+
+            acc["b_hat"] += np.sum(b * sin_a, axis=0)
+            acc["db_dtheta"] += np.sum(m * b * cos_a, axis=0)
+            acc["db_dzeta"] += np.sum(-n_nyq * b * cos_a, axis=0)
+            acc["d_hat"] += np.sum(jac * sin_a, axis=0)
+            acc["b_sup_theta"] += np.sum(bsupu * sin_a, axis=0)
+            acc["db_sup_theta_dzeta"] += np.sum(-n_nyq * bsupu * cos_a, axis=0)
+            acc["b_sup_zeta"] += np.sum(bsupv * sin_a, axis=0)
+            acc["db_sup_zeta_dtheta"] += np.sum(m * bsupv * cos_a, axis=0)
+            acc["b_sub_theta"] += np.sum(bsubu * sin_a, axis=0)
+            acc["db_sub_theta_dzeta"] += np.sum(-n_nyq * bsubu * cos_a, axis=0)
+            acc["b_sub_zeta"] += np.sum(bsubv * sin_a, axis=0)
+            acc["db_sub_zeta_dtheta"] += np.sum(m * bsubv * cos_a, axis=0)
+            acc["b_sub_psi"] += np.sum(bsubs * cos_a, axis=0)
+            acc["db_sub_psi_dtheta"] += np.sum(-m * bsubs * sin_a, axis=0)
+            acc["db_sub_psi_dzeta"] += np.sum(n_nyq * bsubs * sin_a, axis=0)
+            acc["db_dpsi"] += np.sum(d_b_dpsi * sin_a, axis=0)
+            acc["db_sub_theta_dpsi"] += np.sum(d_bsubu_dpsi * sin_a, axis=0)
+            acc["db_sub_zeta_dpsi"] += np.sum(d_bsubv_dpsi * sin_a, axis=0)
+
     d_hat = 1.0 / acc["d_hat"]  # accumulated the Jacobian; DHat is its inverse
     iota = float(w.iotas[i_half0] * w_half0 + w.iotas[i_half1] * w_half1)
 
@@ -1480,6 +1585,7 @@ def _from_vmec(
                 w=w,
                 interp=interp,
                 idx=idx,
+                idx_asym=idx_asym,
                 theta=theta_np,
                 zeta=zeta_np,
                 dpsi=dpsi,
@@ -1533,8 +1639,13 @@ def _gpsipsi_vmec(
     helicity_n: int,
     helicity_l: int,
     chunk: int,
+    idx_asym: np.ndarray | None = None,
 ) -> np.ndarray:
-    """``gpsiHatpsiHat`` for VMEC input, from the R/Z shape tables (v3 metric branch)."""
+    """``gpsiHatpsiHat`` for VMEC input, from the R/Z shape tables (v3 metric branch).
+
+    For stellarator-asymmetric equilibria, ``idx_asym`` supplies the antisymmetric
+    mode set whose ``rmns``/``zmnc`` partners are added to R/Z and their
+    derivatives (v3 ``geometry.F90`` antisymmetric block)."""
     (i_full0, i_full1) = interp.index_full
     (w_full0, w_full1) = interp.weight_full
     (i_half0, i_half1) = interp.index_half
@@ -1598,6 +1709,53 @@ def _gpsipsi_vmec(
         dz_dt += np.sum(m * z_coef * cos_a, axis=0)
         dz_dz += np.sum(-n_nyq * z_coef * cos_a, axis=0)
         dz_dp += np.sum(dz_dp_coef * sin_a, axis=0)
+
+    if idx_asym is not None and w.rmns is not None:
+        # Stellarator-asymmetric shape: R gains rmns*sin, Z gains zmnc*cos.
+        rmns = np.asarray(w.rmns, dtype=np.float64)
+        zmnc = np.asarray(w.zmnc, dtype=np.float64)
+        d_rmns_dpsi = np.zeros_like(rmns)
+        d_zmnc_dpsi = np.zeros_like(zmnc)
+        d_rmns_dpsi[:, 1:] = (rmns[:, 1:] - rmns[:, :-1]) / float(dpsi)
+        d_zmnc_dpsi[:, 1:] = (zmnc[:, 1:] - zmnc[:, :-1]) / float(dpsi)
+        for i0 in range(0, int(idx_asym.size), chunk):
+            sel_nyq = idx_asym[i0 : min(int(idx_asym.size), i0 + chunk)]
+            non_sel = np.array(
+                [mode_to_index.get((int(w.xm_nyq[k]), int(w.xn_nyq[k])), -1) for k in sel_nyq.tolist()], dtype=np.int32
+            )
+            non_sel = non_sel[non_sel >= 0]
+            if non_sel.size == 0:
+                continue
+            m = np.asarray(w.xm[non_sel], dtype=np.float64)[:, None, None]
+            n_nyq = np.asarray(w.xn[non_sel], dtype=np.float64)[:, None, None]
+            scale = _scale_factors(
+                m=np.asarray(w.xm[non_sel], dtype=np.int64),
+                n_over_nfp=np.round(np.asarray(w.xn[non_sel], dtype=np.float64) / float(w.nfp)).astype(np.int64),
+                helicity_n=int(helicity_n),
+                helicity_l=int(helicity_l),
+                ripple_scale=float(ripple_scale),
+            )[:, None, None]
+
+            angle = m * theta1 - n_nyq * zeta1
+            cos_a = np.cos(angle)
+            sin_a = np.sin(angle)
+
+            r_coef = (rmns[non_sel, i_full0] * w_full0 + rmns[non_sel, i_full1] * w_full1)[:, None, None] * scale
+            z_coef = (zmnc[non_sel, i_full0] * w_full0 + zmnc[non_sel, i_full1] * w_full1)[:, None, None] * scale
+            dr_dp_coef = (d_rmns_dpsi[non_sel, i_half0] * w_half0 + d_rmns_dpsi[non_sel, i_half1] * w_half1)[
+                :, None, None
+            ] * scale
+            dz_dp_coef = (d_zmnc_dpsi[non_sel, i_half0] * w_half0 + d_zmnc_dpsi[non_sel, i_half1] * w_half1)[
+                :, None, None
+            ] * scale
+
+            r += np.sum(r_coef * sin_a, axis=0)
+            dr_dt += np.sum(m * r_coef * cos_a, axis=0)
+            dr_dz += np.sum(-n_nyq * r_coef * cos_a, axis=0)
+            dr_dp += np.sum(dr_dp_coef * sin_a, axis=0)
+            dz_dt += np.sum(-m * z_coef * sin_a, axis=0)
+            dz_dz += np.sum(n_nyq * z_coef * sin_a, axis=0)
+            dz_dp += np.sum(dz_dp_coef * cos_a, axis=0)
 
     cosz = np.cos(zeta)[None, :]
     sinz = np.sin(zeta)[None, :]
