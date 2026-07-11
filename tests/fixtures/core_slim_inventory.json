@@ -98,6 +98,7 @@
         "exact_paths": [
           ".gitignore",
           ".readthedocs.yaml",
+          ".test_durations",
           "LICENSE",
           "README.md",
           "plan.md",
