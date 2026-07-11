@@ -583,69 +583,6 @@
       "next_step": "Remove solver-policy hooks that disappear with extracted research routes."
     },
     {
-      "path": "sfincs_jax/validation/suite.py",
-      "lines_at_audit": 4199,
-      "category": "core",
-      "action": "trim",
-      "extract_branch": "research/publication-audits",
-      "reduction_target_lines": 1800,
-      "public_imports": [
-        "sfincs_jax.validation.suite"
-      ],
-      "internal_callers": [],
-      "tests": [
-        "tests/test_scaled_example_suite_reference.py",
-        "tests/test_validation_policy_coverage.py"
-      ],
-      "docs_examples": [
-        "docs/fortran_examples.rst",
-        "docs/parity.rst",
-        "docs/performance.rst"
-      ],
-      "retention_reason": "Validation suite commands are useful release tooling, but long reduced/scaled campaign orchestration should not own core solve logic.",
-      "next_step": "Keep compact parser/report helpers and public reduced/scaled command shims; extract long campaign generation and duplicated runner plumbing.",
-      "review_status": "section_card_seeded",
-      "line_target": "<=1800",
-      "section_cards": [
-        {
-          "lines": "1-1103",
-          "disposition": "keep-core",
-          "owner_tags": [
-            "EVIDENCE",
-            "COMPAT"
-          ],
-          "reason": "case result schema, parsers, resolution helpers, and compact log/metric readers"
-        },
-        {
-          "lines": "1104-2693",
-          "disposition": "merge-core",
-          "owner_tags": [
-            "EVIDENCE",
-            "COMPAT"
-          ],
-          "reason": "single-case runner and Fortran/JAX comparison helpers should be shared by reduced and scaled commands"
-        },
-        {
-          "lines": "2694-3650",
-          "disposition": "extract-research",
-          "owner_tags": [
-            "EVIDENCE",
-            "PERF"
-          ],
-          "reason": "reduced/scaled campaign drivers are release tooling, not importable solver architecture"
-        },
-        {
-          "lines": "3651-4199",
-          "disposition": "merge-core",
-          "owner_tags": [
-            "API",
-            "EVIDENCE"
-          ],
-          "reason": "scaled-suite command and dispatcher should reduce to small public CLI wrappers"
-        }
-      ]
-    },
-    {
       "path": "sfincs_jax/validation/artifacts.py",
       "lines_at_audit": 3346,
       "category": "core",
@@ -719,7 +656,6 @@
         "tests/test_create_production_benchmark_inputs.py",
         "tests/test_generate_readme_fast_branch_audit.py",
         "tests/test_profile_write_output_trace.py",
-        "tests/test_scaled_example_suite_reference.py",
         "tests/test_source_tree_consolidation.py"
       ],
       "docs_examples": [
