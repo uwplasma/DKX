@@ -155,8 +155,7 @@
       "artifacts.py",
       "data_fetch.py",
       "fortran.py",
-      "release.py",
-      "suite.py"
+      "release.py"
     ],
     "workflows": [
       "mapped_xgrid.py",
