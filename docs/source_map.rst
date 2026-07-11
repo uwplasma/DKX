@@ -96,6 +96,9 @@ facades.
    * - ``er.py``
      - public physics API
      - Canonical ambipolar radial-electric-field slice: ``radial_current``, Brent ``find_ambipolar_er``, and the differentiable ``ambipolar_er``.
+   * - ``phi1.py``
+     - public physics API
+     - Canonical Phi1/quasineutrality slice: Newton ``solve_phi1`` (``solve.solve`` inner linear step) and differentiable ``phi1_state``.
    * - ``compare.py``
      - public validation API
      - SFINCS output comparison, strict numeric HDF5 parity, and benchmark-summary helpers used by examples, scripts, and validation tools.
@@ -171,6 +174,9 @@ documented compatibility facade, and passes the corresponding owner tests.
      - keep at root as canonical stack module
    * - ``er.py``
      - canonical ambipolar-Er owner
+     - keep at root as canonical stack module
+   * - ``phi1.py``
+     - canonical Phi1/quasineutrality owner
      - keep at root as canonical stack module
    * - ``solve.py``
      - canonical three-tier solver owner
