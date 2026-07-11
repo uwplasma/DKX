@@ -718,14 +718,6 @@ owners are:
   transport ``whichRHS`` defaults, assembles the RHS, and returns the RHS norm.
   The driver consumes these typed setup results before entering the numerical
   solve loop.
-- ``sfincs_jax/problems/profile_phi1_newton.py``:
-  nonlinear Phi1 Newton-Krylov solve orchestration for RHSMode=1 profile
-  response. This module owns the accepted-state history solve used by output
-  writing, the small Newton-Krylov parity fixture path, active-DOF compaction,
-  frozen-Jacobian mode selection, sparse-direct host rescue for non-autodiff
-  runs, KSP-history replay wiring, and line-search advancement. Historical
-  public names from this module are imported from the profile-response owner or
-  from this module directly.
 - ``sfincs_jax/problems/profile_preconditioner_build.py``:
   RHSMode=1/profile-response full and reduced preconditioner build
   orchestration. The solve owner passes solve-local builders and projection
@@ -922,13 +914,6 @@ owners are:
   parity tests, diagnostic comparison scripts, and pedagogical examples. Keeping
   ``read_petsc_vec`` and ``read_petsc_mat_aij`` beside the Fortran runner makes
   frozen-reference ownership explicit and avoids a separate tiny validation module.
-- ``sfincs_jax/problems/profile_phi1_newton.py``:
-  Phi1 Newton policy, bounded nonlinear linear-step orchestration, accepted-
-  iterate update logic, and solve orchestration for the Newton path, including
-  active-DOF mode selection, restart sizing, frozen-Jacobian cache policy,
-  line-search policy, reduced/full routing, sparse-direct entry, KSP-history
-  emission, retry-without-preconditioner, PETSc-like backtracking,
-  fixed-candidate ``best`` search, and finite-state fallback handling.
 - ``sfincs_jax/solvers/diagnostics.py``:
   solver-neutral diagnostics and observability support: user-facing duration
   formatting, coarse runtime hints, one-shot large RHSMode=1 progress messages,

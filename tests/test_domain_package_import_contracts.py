@@ -115,14 +115,6 @@ MOVED_ROOT_MODULE_OWNERS = {
         "PitchAngleScatteringV3Operator",
         "apply_pitch_angle_scattering_v3",
     ),
-    "sfincs_jax.problems.profile_phi1_newton": (
-        "build_phi1_newton_preconditioner",
-        "phi1_frozen_jacobian_policy",
-        "phi1_gmres_restart",
-        "phi1_line_search_policy",
-        "phi1_use_active_dof_mode",
-        "solve_phi1_newton_linear_step",
-    ),
     "sfincs_jax.solvers.preconditioning": (
         "project_constraint_scheme1_nullspace_solution",
         "project_constraint_scheme1_nullspace_solution_with_residual",
