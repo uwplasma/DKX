@@ -6,12 +6,13 @@ is the canonical stack of flat, physics-named root modules
 runs through `inputs -> drift_kinetic -> solve -> moments -> writer/console`,
 and the public API/CLI route every supported case through that chain by
 default. The remaining one-level domain packages are explicitly transitional:
-they are the interim owners of the deferred features (magneticDriftScheme 2-9 —
-the base tangential magnetic drift, scheme 1, is canonical in `drift_kinetic`;
-constraint schemes 3/4, mapped speed grids,
-export_f, non-stellarator-symmetric VMEC) plus a handful of workflow surfaces
-(`.npz` output, solver traces, scan-er, ambipolar, sensitivity/compare/plot
-utilities), and they shrink to zero as each vertical slice lands.
+they are the interim owners of the deferred features (magneticDriftScheme
+2-9 — scheme 1 is canonical in `drift_kinetic` — and xGridScheme 3/4/7/8 with
+`xDotDerivativeScheme != 0`) plus a handful of workflow surfaces (scan-er,
+ambipolar post-processing, sensitivity/compare/plot utilities), and they shrink
+to zero as each vertical slice lands. Constraint schemes 3/4, export_f, `.npz`
+output, solver traces, readExternalPhi1, geometryScheme 13, and
+non-stellarator-symmetric VMEC are all canonical.
 
 ## The Canonical Stack (the architecture)
 
@@ -32,10 +33,11 @@ utilities), and they shrink to zero as each vertical slice lands.
 | `api.py`, `cli.py`, `__main__.py` | Thin public surface over the canonical modules. |
 
 The CLI (`write-output` and the bare-run form) dispatches RHSMode 1/2/3 decks
-through `run.py` unless `cli.deck_requires_legacy_pipeline` reports a deferred
-feature (or a legacy-only CLI option such as `.npz` output, `--solver-trace`,
-`--geometry-only`, `--no-fortran-layout`, `--no-overwrite` is requested), in
-which case it prints the reason and falls back to the retained legacy owner
+through `run.py` unless `cli.deck_requires_legacy_pipeline` reports one of the
+two remaining deferred features (magneticDriftScheme 2-9; xGridScheme outside
+{1,2,5,6} or `xDotDerivativeScheme != 0`) or a legacy-only CLI option
+(`--geometry-only`, `--no-fortran-layout`, `--no-overwrite`), in which case it
+prints the reason and falls back to the retained legacy owner
 (`io.write_sfincs_jax_output_h5`).
 
 ## Other Root Modules

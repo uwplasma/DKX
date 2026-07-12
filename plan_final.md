@@ -1,6 +1,6 @@
 # SFINCS_JAX Core-Slim Final Plan
 
-Last updated: 2026-07-10. Active branch / PR: `refactor/v3-driver-architecture` / PR #8
+Last updated: 2026-07-11. Active branch: `main` (PR #8 merged; single-branch repo)
 
 This is the single active plan for the refactor branch. `plan.md` is the historical execution log. Do not create another competing plan. If any README, docs page, old
 branch note, issue, benchmark artifact, or checklist conflicts with this file, follow
@@ -232,8 +232,15 @@ sparse-direct research, multifrontal replacements, lower-memory preconditioner
 research, GPU/multi-GPU campaigns, publication audits, and long stellarator
 optimization campaigns. They may be referenced in `docs/research_lanes.rst`
 only; they must not remain as stable source, examples, tests, README claims, or
-default solver branches. Additionally deferred with the old stack as interim
-owner: Phi1/quasineutrality, tangential magnetic drifts, constraint schemes
-3/4, mapped speed grids, export_f, and non-stellarator-symmetric VMEC. The
-repository history rewrite and the PyPI release train are deferred to after
-review per the Ordered Finish Plan.
+default solver branches. Now canonical (Fortran-golden gated; their legacy
+owners are the next deletions): Phi1/quasineutrality (kinetic and collision
+coupling plus readExternalPhi1), tangential magnetic drifts (scheme 1),
+constraint schemes 3/4, export_f plus `.npz` output and solver traces,
+geometryScheme 13 (namelist Boozer spectrum), and non-stellarator-symmetric
+VMEC (lasym). Still deferred with the old stack as interim owner — the last
+gate before the legacy-stack deletion (decision: implement all, then trim):
+xGridScheme 3/4/7/8 with `xDotDerivativeScheme != 0`, and magneticDriftScheme
+2-9. Invalid-in-Fortran namelist values (quasineutralityOption > 2,
+collisionOperator > 1, constraintScheme > 4) become validation errors, not
+legacy fallbacks. The repository history rewrite and the PyPI release train are
+deferred to after review per the Ordered Finish Plan.
