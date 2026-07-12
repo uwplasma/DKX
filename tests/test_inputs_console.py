@@ -183,6 +183,35 @@ def test_rhsmode3_forcing_matches_validateinput() -> None:
         sfincs_input_from_raw(parse_sfincs_input_text("&general\n  RHSMode = 0\n/\n"))
 
 
+def test_out_of_range_option_values_are_validation_errors() -> None:
+    """RHSMode 4/5 and out-of-range option values raise ValueError at load, not legacy routes."""
+    for rhs_mode in (4, 5):
+        with pytest.raises(ValueError, match=r"jax\.grad"):
+            sfincs_input_from_raw(parse_sfincs_input_text(f"&general\n  RHSMode = {rhs_mode}\n/\n"))
+    with pytest.raises(ValueError, match="collisionOperator must be 0 .* or 1"):
+        sfincs_input_from_raw(
+            parse_sfincs_input_text("&physicsParameters\n  collisionOperator = 2\n/\n")
+        )
+    with pytest.raises(ValueError, match="constraintScheme must be -1"):
+        sfincs_input_from_raw(
+            parse_sfincs_input_text("&physicsParameters\n  constraintScheme = 5\n/\n")
+        )
+    with pytest.raises(ValueError, match="quasineutralityOption must be 1 .* or 2"):
+        sfincs_input_from_raw(
+            parse_sfincs_input_text(
+                "&physicsParameters\n  includePhi1 = .true.\n  quasineutralityOption = 3\n/\n"
+            )
+        )
+    # readExternalPhi1 bypasses quasineutrality entirely, so its option is inert then.
+    inp = sfincs_input_from_raw(
+        parse_sfincs_input_text(
+            "&physicsParameters\n  includePhi1 = .true.\n  readExternalPhi1 = .true.\n"
+            "  quasineutralityOption = 3\n/\n"
+        )
+    )
+    assert inp.physics.quasineutrality_option == 3
+
+
 def test_monoenergetic_example_deck_validates_with_overrides() -> None:
     deck = _require(_EXAMPLE_DECKS[1])
     inp = load_sfincs_input(deck)
