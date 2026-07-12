@@ -3,7 +3,12 @@ Fortran v3 And sfincs_jax Feature Matrix
 
 This page is the review anchor for functionality parity and intentional
 extensions. It is audited from the local SFINCS Fortran v3 source tree and the
-vendored version-3 manual mirror on 2026-06-25. It separates three questions that
+vendored version-3 manual mirror on 2026-06-25; the feature-completion series
+that followed (Phi1 collision coupling and ``readExternalPhi1``, tangential
+magnetic drifts 0-9, constraint schemes 3/4, ``export_f``, geometry scheme 13
+from the namelist, non-stellarator-symmetric VMEC, and speed-grid schemes
+``xGridScheme`` 1-8 with ``xDotDerivativeScheme`` -2..11) is summarised in the
+README functionality table and lands here at the next audit pass. It separates three questions that
 are easy to conflate during refactoring:
 
 - what the Fortran v3 code can do,
