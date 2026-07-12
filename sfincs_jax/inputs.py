@@ -490,6 +490,16 @@ def _validate(inp: SfincsInput) -> SfincsInput:
         raise ValueError("zetaDerivativeScheme must be 0, 1, or 2.")
     if not 1 <= other.x_grid_scheme <= 8:
         raise ValueError("xGridScheme must be between 1 and 8.")
+    if not -2 <= other.x_dot_derivative_scheme <= 11:
+        raise ValueError("xDotDerivativeScheme must be between -2 and 11.")
+    if (
+        other.x_dot_derivative_scheme > 0
+        and other.x_dot_derivative_scheme != 11
+        and other.x_grid_scheme not in (3, 4)
+    ):
+        raise ValueError(
+            "If xDotDerivativeScheme is >0 and not 11, then xGridScheme must be either 3 or 4."
+        )
     if not 1 <= other.x_potentials_grid_scheme <= 4:
         raise ValueError("xPotentialsGridScheme must be between 1 and 4.")
     if not 0 <= pre.preconditioner_species <= 1:

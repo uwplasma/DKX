@@ -82,7 +82,15 @@ for them until then):
   those decks);
 - ``collisionOperator`` other than 0 (Fokker-Planck) and 1 (pitch-angle
   scattering);
-- mapped x-grids (``xGridScheme >= 50``) and ``xDotDerivativeScheme != 0``.
+- ``collisionOperator=0`` with the uniform/Chebyshev speed grids
+  (``xGridScheme`` 3/4/7/8): the Fokker-Planck Rosenbluth-potential
+  interpolation matrices for those grids (``interpolationMatrix.F90`` /
+  ``ChebyshevInterpolationMatrix.F90``) are not ported.
+
+All ``xGridScheme`` values 1-8 and every valid ``xDotDerivativeScheme`` (-2..11
+except the Fortran-buggy -1, whose ``do i=i,Nx`` loop reads an undefined start)
+are canonical; see :func:`sfincs_jax.phase_space.make_grids` and
+:func:`sfincs_jax.phase_space.xdot_diff_matrices`.
 """
 
 from __future__ import annotations
@@ -328,6 +336,13 @@ class KineticOperator:
     # iterate (evaluateResidual.F90 readExternalPhi1 branch).
     external_phi1_hat: jnp.ndarray | None = None  # (T,Z) or None
 
+    # ---- ``xDotDerivativeScheme != 0``: upwinded d/dx pair for the E_r xDot
+    #      term (createGrids.F90 ``ddx_xDot_plus``/``ddx_xDot_minus``;
+    #      populateMatrix.F90 selects by the sign of the local xDotFactor).
+    #      ``None`` (scheme 0) keeps the centered ``ddx`` for both signs. ----
+    ddx_xdot_plus: jnp.ndarray | None = None  # (X,X) or None
+    ddx_xdot_minus: jnp.ndarray | None = None  # (X,X) or None
+
     # ---- tangential magnetic drifts (``magneticDriftScheme=1``;
     #      populateMatrix.F90 d/dtheta, d/dzeta, and non-standard d/dxi drift
     #      terms with ``force0RadialCurrentInEquilibrium=.true.``). All default to
@@ -422,6 +437,8 @@ class KineticOperator:
         "ddtheta_magdrift_minus",
         "ddzeta_magdrift_plus",
         "ddzeta_magdrift_minus",
+        "ddx_xdot_plus",
+        "ddx_xdot_minus",
     )
 
     def tree_flatten(self):
@@ -600,8 +617,11 @@ class KineticOperator:
     def _er_xdot(self, f: jnp.ndarray) -> jnp.ndarray:
         """Collisionless d/dx term associated with E_r (dense in x; L and L±2).
 
-        ``xDotDerivativeScheme=0`` only (centered ddx for both signs);
-        ``force0RadialCurrentInEquilibrium=.true.`` (v3 default) so xDotFactor2=0.
+        ``force0RadialCurrentInEquilibrium=.true.`` (v3 default) so
+        xDotFactor2=0.  ``xDotDerivativeScheme=0`` uses the centered ``ddx``
+        for both upwind directions; nonzero schemes select the
+        ``ddx_xdot_plus``/``ddx_xdot_minus`` pair by the sign of the local
+        xDotFactor, exactly as ``populateMatrix.F90`` does per (theta, zeta).
         """
         factor0 = -(self.alpha * self.delta * self.dphi_hat_dpsi_hat_kinetic) / 4.0
         xdot_factor = (
@@ -611,36 +631,94 @@ class KineticOperator:
             * (self.b_hat_sub_theta * self.db_hat_dzeta - self.b_hat_sub_zeta * self.db_hat_dtheta)
         )  # (T,Z)
 
-        x_ddx = self.x[:, None] * self.ddx  # (X,X)
+        if self.ddx_xdot_plus is None and not self.point_at_x0:
+            x_ddx = self.x[:, None] * self.ddx  # (X,X)
 
-        def x_apply(g: jnp.ndarray) -> jnp.ndarray:
+            def x_apply(g: jnp.ndarray) -> jnp.ndarray:
+                # g (S,X,L',T,Z) -> x d/dx along the X axis.
+                g_xlast = jnp.transpose(g, (0, 2, 3, 4, 1))
+                y = jnp.einsum("ij,...j->...i", x_ddx, g_xlast)
+                return jnp.transpose(y, (0, 4, 1, 2, 3))
+
+            ell = jnp.arange(self.n_xi, dtype=jnp.float64)
+            denom = (2.0 * ell + 3.0) * (2.0 * ell - 1.0)
+            diag_coef = 2.0 * (3.0 * ell * ell + 3.0 * ell - 2.0) / denom  # (L,)
+
+            out = x_apply(f) * (diag_coef[:, None, None] * xdot_factor[None, :, :])[None, None, :, :, :]
+
+            if self.n_xi >= 3:
+                l0 = ell[:-2]
+                sup = (l0 + 1.0) * (l0 + 2.0) / ((2.0 * l0 + 5.0) * (2.0 * l0 + 3.0))
+                y_sup = x_apply(f[:, :, 2:, :, :])
+                y_sup = jnp.pad(y_sup, ((0, 0), (0, 0), (0, 2), (0, 0), (0, 0)))
+                sup_coef = jnp.pad(sup, (0, 2))
+                out = out + y_sup * (sup_coef[:, None, None] * xdot_factor[None, :, :])[None, None, :, :, :]
+
+                l2 = ell[2:]
+                sub = l2 * (l2 - 1.0) / ((2.0 * l2 - 3.0) * (2.0 * l2 - 1.0))
+                y_sub = x_apply(f[:, :, :-2, :, :])
+                y_sub = jnp.pad(y_sub, ((0, 0), (0, 0), (2, 0), (0, 0), (0, 0)))
+                sub_coef = jnp.pad(sub, (2, 0))
+                out = out + y_sub * (sub_coef[:, None, None] * xdot_factor[None, :, :])[None, None, :, :, :]
+
+            return out * self._mask()[None, :, :, None, None]
+
+        # Upwinded and/or point-at-x0 path.
+        ddx_plus = self.ddx if self.ddx_xdot_plus is None else self.ddx_xdot_plus
+        h = self._er_xdot_l_coupled(f, ddx_plus)
+        if self.ddx_xdot_plus is not None:
+            h_minus = self._er_xdot_l_coupled(f, self.ddx_xdot_minus)
+            h = jnp.where((xdot_factor > 0.0)[None, None, None, :, :], h, h_minus)
+        out = h * xdot_factor[None, None, None, :, :]
+        return out * self._mask()[None, :, :, None, None]
+
+    def _er_xdot_l_coupled(self, f: jnp.ndarray, ddx_mat: jnp.ndarray) -> jnp.ndarray:
+        """L-coupled ``x d/dx`` combination of the xDot term for one upwind matrix.
+
+        The sum of the diagonal-in-L and L±2 pieces WITHOUT the (theta, zeta)
+        xDotFactor, which the caller applies after the upwind selection.  With
+        a grid point at x=0 the x=0 column is dropped for L>0 rows but kept
+        for L=0 rows (populateMatrix.F90 ``ixMinCol``).
+        """
+        x_ddx = self.x[:, None] * ddx_mat  # (X,X)
+        x_ddx_nox0 = x_ddx.at[:, 0].set(0.0) if self.point_at_x0 else x_ddx
+
+        def x_apply(g: jnp.ndarray, m: jnp.ndarray) -> jnp.ndarray:
             # g (S,X,L',T,Z) -> x d/dx along the X axis.
             g_xlast = jnp.transpose(g, (0, 2, 3, 4, 1))
-            y = jnp.einsum("ij,...j->...i", x_ddx, g_xlast)
+            y = jnp.einsum("ij,...j->...i", m, g_xlast)
             return jnp.transpose(y, (0, 4, 1, 2, 3))
 
         ell = jnp.arange(self.n_xi, dtype=jnp.float64)
         denom = (2.0 * ell + 3.0) * (2.0 * ell - 1.0)
         diag_coef = 2.0 * (3.0 * ell * ell + 3.0 * ell - 2.0) / denom  # (L,)
 
-        out = x_apply(f) * (diag_coef[:, None, None] * xdot_factor[None, :, :])[None, None, :, :, :]
+        y_diag = x_apply(f, x_ddx_nox0)
+        if self.point_at_x0:
+            # Rows with L=0 keep the x=0 column (ixMinCol=1 for L=0).
+            y_diag = y_diag.at[:, :, 0, :, :].set(x_apply(f[:, :, :1, :, :], x_ddx)[:, :, 0, :, :])
+        out = y_diag * diag_coef[None, None, :, None, None]
 
         if self.n_xi >= 3:
             l0 = ell[:-2]
             sup = (l0 + 1.0) * (l0 + 2.0) / ((2.0 * l0 + 5.0) * (2.0 * l0 + 3.0))
-            y_sup = x_apply(f[:, :, 2:, :, :])
+            y_sup = x_apply(f[:, :, 2:, :, :], x_ddx_nox0)
+            if self.point_at_x0:
+                y_sup = y_sup.at[:, :, 0, :, :].set(
+                    x_apply(f[:, :, 2:3, :, :], x_ddx)[:, :, 0, :, :]
+                )
             y_sup = jnp.pad(y_sup, ((0, 0), (0, 0), (0, 2), (0, 0), (0, 0)))
             sup_coef = jnp.pad(sup, (0, 2))
-            out = out + y_sup * (sup_coef[:, None, None] * xdot_factor[None, :, :])[None, None, :, :, :]
+            out = out + y_sup * sup_coef[None, None, :, None, None]
 
             l2 = ell[2:]
             sub = l2 * (l2 - 1.0) / ((2.0 * l2 - 3.0) * (2.0 * l2 - 1.0))
-            y_sub = x_apply(f[:, :, :-2, :, :])
+            y_sub = x_apply(f[:, :, :-2, :, :], x_ddx_nox0)
             y_sub = jnp.pad(y_sub, ((0, 0), (0, 0), (2, 0), (0, 0), (0, 0)))
             sub_coef = jnp.pad(sub, (2, 0))
-            out = out + y_sub * (sub_coef[:, None, None] * xdot_factor[None, :, :])[None, None, :, :, :]
+            out = out + y_sub * sub_coef[None, None, :, None, None]
 
-        return out * self._mask()[None, :, :, None, None]
+        return out
 
     def _magnetic_drifts(self, f: jnp.ndarray) -> jnp.ndarray:
         """Tangential (poloidal+toroidal) magnetic-drift streaming terms.
@@ -776,6 +854,17 @@ class KineticOperator:
             if ph is None:
                 ph = jnp.zeros((self.n_theta, self.n_zeta), dtype=jnp.float64)
             out = out + apply_fokker_planck_v3_phi1(self.fp_phi1, f, phi1_hat=ph)
+        if self.point_at_x0:
+            # populateMatrix.F90: with a grid point at x=0 every DKE term skips
+            # the ix=1 row (ixMin=2); that row instead carries the x=0 boundary
+            # conditions: f(x=0)=0 for L>0 (identity rows, up to the Nxi_for_x
+            # truncation) and the regularity condition df/dx(x=0)=0 (the first
+            # ddx row) for L=0.
+            mask0 = self._mask()[0]  # (L,)
+            bc = f[:, 0, :, :, :] * mask0[None, :, None, None]  # (S,L,T,Z)
+            bc0 = jnp.einsum("j,sjtz->stz", self.ddx[0, :], f[:, :, 0, :, :])
+            bc = bc.at[:, 0, :, :].set(bc0)
+            out = out.at[:, 0, :, :, :].set(bc)
         return out
 
     def _fs_average_factor(self) -> jnp.ndarray:
@@ -1381,6 +1470,11 @@ class KineticOperator:
                 "legendre_blocks requires DKES trajectories: the Er xiDot/xDot terms "
                 "couple L±2 and break the block-tridiagonal-in-L structure."
             )
+        # NOTE: point_at_x0 grids are accepted here because the blocks also
+        # serve as the tier-2 coarse preconditioner, where approximating the
+        # x=0 boundary rows (f=0 for L>0, the df/dx=0 regularity row for L=0)
+        # by the plain DKE blocks is fine.  The exact structured direct routes
+        # additionally refuse point_at_x0 in sfincs_jax.solve.
         if self.with_magnetic_drifts:
             raise NotImplementedError(
                 "legendre_blocks does not support tangential magnetic drifts: the "
@@ -1803,7 +1897,8 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     ``magneticDriftScheme`` 0/1 (scheme 1, the tangential magnetic drift, needs a
     geometryScheme in {5, 11, 12} that carries the radial B-field derivatives).
     Raises ``NotImplementedError`` for the deferred features listed in the module
-    docstring (magneticDriftScheme 2-9 and mapped x-grids).
+    docstring (magneticDriftScheme 2-9 and Fokker-Planck collisions on the
+    uniform/Chebyshev x grids).
     """
     general = nml.group("general")
     phys = nml.group("physicsParameters")
@@ -1870,11 +1965,17 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
         raise NotImplementedError(f"constraintScheme={constraint_scheme} is not supported.")
 
     x_grid_scheme = _get_int(other, "xGridScheme", 5)
-    if x_grid_scheme not in {1, 2, 5, 6}:
-        raise NotImplementedError(f"Only xGridScheme in {{1,2,5,6}} is supported (got {x_grid_scheme}).")
-    if _get_int(other, "xDotDerivativeScheme", 0) != 0:
-        raise NotImplementedError("Only xDotDerivativeScheme=0 is supported.")
-    point_at_x0 = x_grid_scheme in {2, 6}
+    if not 1 <= x_grid_scheme <= 8:
+        raise ValueError(f"xGridScheme must be between 1 and 8 (got {x_grid_scheme}).")
+    if collision_operator == 0 and x_grid_scheme in {3, 4, 7, 8}:
+        raise NotImplementedError(
+            f"collisionOperator=0 with xGridScheme={x_grid_scheme} is not supported: the "
+            "Fokker-Planck Rosenbluth-potential interpolation matrices for the uniform/"
+            "Chebyshev speed grids (interpolationMatrix.F90 / "
+            "ChebyshevInterpolationMatrix.F90) are not ported."
+        )
+    x_dot_derivative_scheme = _get_int(other, "xDotDerivativeScheme", 0)
+    point_at_x0 = x_grid_scheme in {2, 3, 4, 6, 7, 8}
 
     # ---- grids (phase_space) ----
     grids = make_grids(
@@ -1889,6 +1990,8 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
         magnetic_drift_derivative_scheme=_get_int(other, "magneticDriftDerivativeScheme", 3),
         x_grid_scheme=x_grid_scheme,
         x_grid_k=_get_float(other, "xGrid_k", 0.0),
+        x_max=_get_float(res, "xMax", 5.0),
+        x_dot_derivative_scheme=x_dot_derivative_scheme,
         n_xi_for_x_option=_get_int(other, "Nxi_for_x_option", 1),
         monoenergetic=(rhs_mode == 3),
     )
@@ -2130,6 +2233,8 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
         ),
         phi1_lin_state=None,
         external_phi1_hat=external_phi1_hat,
+        ddx_xdot_plus=grids.ddx_xdot_plus,
+        ddx_xdot_minus=grids.ddx_xdot_minus,
         with_magnetic_drifts=with_magnetic_drifts,
         **magnetic_drift_arrays,
     )

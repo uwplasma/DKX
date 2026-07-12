@@ -164,6 +164,8 @@ def _grids_from_input(inp: SfincsInput, raw: RawNamelist) -> Grids:
         magnetic_drift_derivative_scheme=other.magnetic_drift_derivative_scheme,
         x_grid_scheme=other.x_grid_scheme,
         x_grid_k=other.x_grid_k,
+        x_max=res.x_max,
+        x_dot_derivative_scheme=other.x_dot_derivative_scheme,
         n_xi_for_x_option=other.n_xi_for_x_option,
         monoenergetic=(inp.general.rhs_mode == 3),
     )

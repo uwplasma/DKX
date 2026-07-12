@@ -442,11 +442,6 @@ def deck_requires_legacy_pipeline(nml) -> str | None:
         constraint_scheme = 1 if collision_operator == 0 else 2
     if constraint_scheme not in (0, 1, 2, 3, 4):
         return f"constraintScheme={constraint_scheme} is deferred to the legacy pipeline"
-    x_grid_scheme = int(other.get("XGRIDSCHEME", 5))
-    if x_grid_scheme not in (1, 2, 5, 6):
-        return f"xGridScheme={x_grid_scheme} (mapped/other speed grids) is deferred to the legacy pipeline"
-    if int(other.get("XDOTDERIVATIVESCHEME", 0)) != 0:
-        return "xDotDerivativeScheme != 0 is deferred to the legacy pipeline"
     return None
 
 

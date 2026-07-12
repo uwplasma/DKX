@@ -42,6 +42,7 @@ from scipy.integrate import quad  # noqa: E402
 __all__ = [
     "Grids",
     "SpeedGrid",
+    "chebyshev_grid",
     "legendre_coupling_lower",
     "legendre_coupling_upper",
     "lorentz_eigenvalues",
@@ -52,7 +53,9 @@ __all__ = [
     "rosenbluth_potential_grid_size",
     "speed_grid_diff_matrices",
     "speed_weight",
+    "uniform_aperiodic_diff_matrices",
     "uniform_periodic_diff_matrices",
+    "xdot_diff_matrices",
 ]
 
 
@@ -288,6 +291,291 @@ def uniform_periodic_diff_matrices(
             ddx[i, (i - 3 * int(sign)) % n] = -sign / (30 * dx)
 
     return jnp.asarray(x), jnp.asarray(weights), jnp.asarray(ddx), jnp.asarray(d2dx2)
+
+
+#: Internal uniformDiffMatrices scheme numbers for aperiodic grids with a node
+#: at both x_min and x_max, as used by the speed (x) coordinate.
+_APERIODIC_SCHEMES = frozenset({12, 32, 42, 52, 62, 82, 92, 102, 112})
+
+
+def uniform_aperiodic_diff_matrices(
+    *,
+    n: int,
+    x_min: float,
+    x_max: float,
+    scheme: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Uniform aperiodic grid, trapezoid weights, and differentiation matrices.
+
+    Port of SFINCS v3 ``uniformDiffMatrices.F90`` restricted to the aperiodic
+    schemes used by ``createGrids.F90`` for the speed (x) coordinate:
+    xGridScheme 3/4 (scheme 12) and the upwinded ``xDotDerivativeScheme``
+    pairs. The grid includes both ``x_min`` and ``x_max`` and the trapezoid
+    quadrature weight is ``dx`` (halved at the two endpoints).
+
+    Args:
+      n: Number of grid points.
+      x_min: Left end of the interval (included in the grid).
+      x_max: Right end of the interval (included in the grid).
+      scheme: Differentiation scheme, one of:
+        ``12`` 5-point centered FD (4th order, one-sided rows at the ends);
+        ``32``/``42`` left/right 2-point upwind (top/bottom ddx row zero);
+        ``52``/``62`` left/right 3-point upwind (2nd order);
+        ``82``/``92`` left/right 4-point upwind (1 point on one side);
+        ``102``/``112`` left/right 5-point upwind (1 point on one side,
+        first derivative only).
+
+    Returns:
+      Tuple ``(x, weights, ddx, d2dx2)`` of float64 numpy arrays with shapes
+      ``(n,)``, ``(n,)``, ``(n, n)``, ``(n, n)``. For schemes 102/112 only
+      the first-derivative matrix is populated, matching the Fortran code.
+    """
+    if scheme not in _APERIODIC_SCHEMES:
+        raise ValueError(
+            f"Invalid or unsupported scheme: {scheme} (supported: {sorted(_APERIODIC_SCHEMES)})"
+        )
+    if x_min >= x_max:
+        raise ValueError(f"x_max must be > x_min, got x_min={x_min}, x_max={x_max}")
+    min_n = 3 if scheme in {32, 42, 52, 62} else 5
+    if n < min_n:
+        raise ValueError(f"n must be at least {min_n} for scheme {scheme}, got {n}")
+
+    dtype = np.float64
+    x = float(x_min) + (float(x_max) - float(x_min)) * (np.arange(n, dtype=dtype) / (n - 1))
+    dx = float(x[1] - x[0])
+    dx2 = dx * dx
+    weights = np.full((n,), dx, dtype=dtype)
+    weights[0] /= 2.0
+    weights[-1] /= 2.0
+
+    ddx = np.zeros((n, n), dtype=dtype)
+    d2dx2 = np.zeros((n, n), dtype=dtype)
+
+    if scheme == 12:
+        # 5-point centered stencil; one-sided 5-point rows at the two ends.
+        for i in range(2, n - 2):
+            ddx[i, i + 2] = -1.0 / (6 * 2 * dx)
+            ddx[i, i + 1] = 4.0 / (3 * 2 * dx)
+            ddx[i, i - 1] = -4.0 / (3 * 2 * dx)
+            ddx[i, i - 2] = 1.0 / (6 * 2 * dx)
+            d2dx2[i, i + 2] = -1.0 / (12 * dx2)
+            d2dx2[i, i + 1] = 4.0 / (3 * dx2)
+            d2dx2[i, i] = -5.0 / (2 * dx2)
+            d2dx2[i, i - 1] = 4.0 / (3 * dx2)
+            d2dx2[i, i - 2] = -1.0 / (12 * dx2)
+        ddx[0, 0] = -25.0 / (12 * dx)
+        ddx[0, 1] = 4.0 / dx
+        ddx[0, 2] = -3.0 / dx
+        ddx[0, 3] = 4.0 / (3 * dx)
+        ddx[0, 4] = -1.0 / (4 * dx)
+        ddx[1, 0] = -1.0 / (4 * dx)
+        ddx[1, 1] = -5.0 / (6 * dx)
+        ddx[1, 2] = 3.0 / (2 * dx)
+        ddx[1, 3] = -1.0 / (2 * dx)
+        ddx[1, 4] = 1.0 / (12 * dx)
+        ddx[-1, -1] = 25.0 / (12 * dx)
+        ddx[-1, -2] = -4.0 / dx
+        ddx[-1, -3] = 3.0 / dx
+        ddx[-1, -4] = -4.0 / (3 * dx)
+        ddx[-1, -5] = 1.0 / (4 * dx)
+        ddx[-2, -1] = 1.0 / (4 * dx)
+        ddx[-2, -2] = 5.0 / (6 * dx)
+        ddx[-2, -3] = -3.0 / (2 * dx)
+        ddx[-2, -4] = 1.0 / (2 * dx)
+        ddx[-2, -5] = -1.0 / (12 * dx)
+        d2dx2[0, 0] = 35.0 / (12 * dx2)
+        d2dx2[0, 1] = -26.0 / (3 * dx2)
+        d2dx2[0, 2] = 19.0 / (2 * dx2)
+        d2dx2[0, 3] = -14.0 / (3 * dx2)
+        d2dx2[0, 4] = 11.0 / (12 * dx2)
+        d2dx2[1, 0] = 11.0 / (12 * dx2)
+        d2dx2[1, 1] = -5.0 / (3 * dx2)
+        d2dx2[1, 2] = 1.0 / (2 * dx2)
+        d2dx2[1, 3] = 1.0 / (3 * dx2)
+        d2dx2[1, 4] = -1.0 / (12 * dx2)
+        d2dx2[-1, -1] = 35.0 / (12 * dx2)
+        d2dx2[-1, -2] = -26.0 / (3 * dx2)
+        d2dx2[-1, -3] = 19.0 / (2 * dx2)
+        d2dx2[-1, -4] = -14.0 / (3 * dx2)
+        d2dx2[-1, -5] = 11.0 / (12 * dx2)
+        d2dx2[-2, -1] = 11.0 / (12 * dx2)
+        d2dx2[-2, -2] = -5.0 / (3 * dx2)
+        d2dx2[-2, -3] = 1.0 / (2 * dx2)
+        d2dx2[-2, -4] = 1.0 / (3 * dx2)
+        d2dx2[-2, -5] = -1.0 / (12 * dx2)
+
+    elif scheme == 32:
+        # 2-point ddx / 3-point d2dx2, upwinding left; top ddx row zero.
+        for i in range(1, n):
+            ddx[i, i] = 1.0 / dx
+            ddx[i, i - 1] = -1.0 / dx
+        for i in range(2, n):
+            d2dx2[i, i] = 1.0 / dx2
+            d2dx2[i, i - 1] = -2.0 / dx2
+            d2dx2[i, i - 2] = 1.0 / dx2
+
+    elif scheme == 42:
+        # 2-point ddx / 3-point d2dx2, upwinding right; bottom ddx row zero.
+        for i in range(n - 1):
+            ddx[i, i] = -1.0 / dx
+            ddx[i, i + 1] = 1.0 / dx
+        for i in range(n - 2):
+            d2dx2[i, i] = 1.0 / dx2
+            d2dx2[i, i + 1] = -2.0 / dx2
+            d2dx2[i, i + 2] = 1.0 / dx2
+
+    elif scheme == 52:
+        # 3-point stencils, upwinding left; 2-point second ddx row.
+        for i in range(2, n):
+            ddx[i, i] = 1.5 / dx
+            ddx[i, i - 1] = -2.0 / dx
+            ddx[i, i - 2] = 1.0 / (2 * dx)
+            d2dx2[i, i] = 1.0 / dx2
+            d2dx2[i, i - 1] = -2.0 / dx2
+            d2dx2[i, i - 2] = 1.0 / dx2
+        ddx[1, 0] = -1.0 / dx
+        ddx[1, 1] = 1.0 / dx
+
+    elif scheme == 62:
+        # 3-point stencils, upwinding right; 2-point penultimate ddx row.
+        for i in range(n - 2):
+            ddx[i, i] = -1.5 / dx
+            ddx[i, i + 1] = 2.0 / dx
+            ddx[i, i + 2] = -1.0 / (2 * dx)
+            d2dx2[i, i] = 1.0 / dx2
+            d2dx2[i, i + 1] = -2.0 / dx2
+            d2dx2[i, i + 2] = 1.0 / dx2
+        ddx[-2, -2] = -1.0 / dx
+        ddx[-2, -1] = 1.0 / dx
+
+    elif scheme == 82:
+        # 4-point ddx (1 right + 2 left), upwinding left; top ddx row zero.
+        for i in range(2, n - 1):
+            ddx[i, i + 1] = 1.0 / (3 * dx)
+            ddx[i, i] = 1.0 / (2 * dx)
+            ddx[i, i - 1] = -1.0 / dx
+            ddx[i, i - 2] = 1.0 / (6 * dx)
+        for i in range(1, n - 1):
+            d2dx2[i, i + 1] = 1.0 / dx2
+            d2dx2[i, i] = -2.0 / dx2
+            d2dx2[i, i - 1] = 1.0 / dx2
+        ddx[1, 1] = 1.0 / dx
+        ddx[1, 0] = -1.0 / dx
+        ddx[-1, -1] = 1.5 / dx
+        ddx[-1, -2] = -2.0 / dx
+        ddx[-1, -3] = 1.0 / (2 * dx)
+
+    elif scheme == 92:
+        # 4-point ddx (1 left + 2 right), upwinding right; bottom ddx row zero.
+        for i in range(1, n - 2):
+            ddx[i, i - 1] = -1.0 / (3 * dx)
+            ddx[i, i] = -1.0 / (2 * dx)
+            ddx[i, i + 1] = 1.0 / dx
+            ddx[i, i + 2] = -1.0 / (6 * dx)
+        for i in range(1, n - 1):
+            d2dx2[i, i + 1] = 1.0 / dx2
+            d2dx2[i, i] = -2.0 / dx2
+            d2dx2[i, i - 1] = 1.0 / dx2
+        ddx[-2, -2] = -1.0 / dx
+        ddx[-2, -1] = 1.0 / dx
+        ddx[0, 0] = -1.5 / dx
+        ddx[0, 1] = 2.0 / dx
+        ddx[0, 2] = -1.0 / (2 * dx)
+
+    elif scheme == 102:
+        # 5-point ddx (1 right + 3 left), upwinding left; ddx only.
+        for i in range(3, n - 1):
+            ddx[i, i + 1] = 1.0 / (4 * dx)
+            ddx[i, i] = 5.0 / (6 * dx)
+            ddx[i, i - 1] = -3.0 / (2 * dx)
+            ddx[i, i - 2] = 1.0 / (2 * dx)
+            ddx[i, i - 3] = -1.0 / (12 * dx)
+        ddx[1, 1] = 1.0 / dx
+        ddx[1, 0] = -1.0 / dx
+        ddx[2, 3] = 1.0 / (3 * dx)
+        ddx[2, 2] = 1.0 / (2 * dx)
+        ddx[2, 1] = -1.0 / dx
+        ddx[2, 0] = 1.0 / (6 * dx)
+        ddx[-1, -1] = 5.0 / (6 * dx)
+        ddx[-1, -2] = -3.0 / (2 * dx)
+        ddx[-1, -3] = 1.0 / (2 * dx)
+        ddx[-1, -4] = -1.0 / (12 * dx)
+
+    elif scheme == 112:
+        # 5-point ddx (1 left + 3 right), upwinding right; ddx only.
+        for i in range(1, n - 3):
+            ddx[i, i - 1] = -1.0 / (4 * dx)
+            ddx[i, i] = -5.0 / (6 * dx)
+            ddx[i, i + 1] = 3.0 / (2 * dx)
+            ddx[i, i + 2] = -1.0 / (2 * dx)
+            ddx[i, i + 3] = 1.0 / (12 * dx)
+        ddx[-2, -2] = -1.0 / dx
+        ddx[-2, -1] = 1.0 / dx
+        ddx[0, 0] = -1.5 / dx
+        ddx[0, 1] = 2.0 / dx
+        ddx[0, 2] = -1.0 / (2 * dx)
+
+    return x, weights, ddx, d2dx2
+
+
+def chebyshev_grid(
+    *, n: int, x_min: float, x_max: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Chebyshev grid, Clenshaw-Curtis weights, and differentiation matrix.
+
+    Port of v3 ``ChebyshevGrid.F90`` (itself based on Trefethen's ``cheb.m``),
+    used by ``createGrids.F90`` for xGridScheme 7/8. The nodes run from
+    ``x_min`` to ``x_max`` inclusive, clustered at both ends.
+
+    Args:
+      n: Number of grid points (>= 2).
+      x_min: Minimum of the interval.
+      x_max: Maximum of the interval.
+
+    Returns:
+      Tuple ``(x, weights, ddx)`` of float64 numpy arrays with shapes
+      ``(n,)``, ``(n,)``, ``(n, n)``.
+    """
+    if n < 2:
+        raise ValueError(f"n must be at least 2, got {n}")
+    if x_max <= x_min:
+        raise ValueError(f"x_max must be > x_min, got x_min={x_min}, x_max={x_max}")
+    dtype = np.float64
+    pi = 3.1415926535897932384626433
+
+    n1 = n - 1
+    xc = np.cos(pi * np.arange(n, dtype=dtype) / n1)
+
+    c = np.ones((n,), dtype=dtype)
+    c[0] = 2.0
+    c[-1] = 2.0
+    c[1::2] *= -1.0
+
+    dxm = xc[:, None] - xc[None, :]
+    np.fill_diagonal(dxm, 1.0)
+    d = (c[:, None] / c[None, :]) / dxm
+    np.fill_diagonal(d, np.diag(d) - np.sum(d, axis=1))
+    d = -d * 2.0 / (float(x_max) - float(x_min))
+
+    x = (1.0 - xc) * (float(x_max) - float(x_min)) / 2.0 + float(x_min)
+
+    # Clenshaw-Curtis weights via the real inverse DFT of the cosine moments.
+    cw = np.zeros((n,), dtype=dtype)
+    cw[0] = 2.0
+    for i in range(2, n, 2):  # 1-based odd indices 3, 5, ...
+        cw[i] = 2.0 / (1.0 - i * i)
+    m = 2 * n - 2
+    cc = np.zeros((m,), dtype=dtype)
+    cc[:n] = cw
+    cc[n:] = cw[n - 2 : 0 : -1]
+    idx = np.arange(m, dtype=dtype)
+    f = (np.cos(2.0 * pi * np.outer(idx, idx) / m) @ cc) / m
+    weights = f[:n].copy()
+    weights[0] = f[0] / 2.0
+    weights[-1] = f[n - 1] / 2.0
+    weights *= float(x_max) - float(x_min)
+
+    return x, weights, d
 
 
 # ----------------------------------------------------------------------------
@@ -662,6 +950,138 @@ def speed_grid_diff_matrices(x: np.ndarray, *, k: float) -> tuple[np.ndarray, np
     return ddx, d2dx2
 
 
+def xdot_diff_matrices(
+    *,
+    x: np.ndarray,
+    ddx: np.ndarray,
+    k: float,
+    scheme: int,
+    x_max: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Upwinded ``(ddx_xDot_plus, ddx_xDot_minus)`` pair for the E_r xDot term.
+
+    Port of the ``select case (xDotDerivativeScheme)`` block of
+    ``createGrids.F90``: the d/dx matrices used by the collisionless d/dx term
+    associated with E_r (``includeXDotTerm``), upwinded by the sign of the
+    local ``xDotFactor``. Scheme 0 (both matrices equal to ``ddx``) is handled
+    by the caller; schemes 1-10 are only valid for xGridScheme 3/4 (uniform
+    speed grids, ``validateInput.F90``), while -2 and 11 work on any grid.
+    Scheme -1 is not ported: the Fortran loop ``do i=i,Nx`` reads an undefined
+    loop start, so its result is compiler-dependent garbage.
+
+    Args:
+      x: Speed-grid nodes, shape ``(n_x,)``.
+      ddx: The main d/dx collocation matrix on ``x``.
+      k: Weight exponent ``xGrid_k`` (used by the polynomial subsets of
+        scheme -2).
+      scheme: Namelist ``xDotDerivativeScheme`` (-2..11, excluding -1 and 0).
+      x_max: Namelist ``xMax`` (the uniform-grid schemes rebuild matrices on
+        ``n_x + 1`` points over ``[0, x_max]`` and truncate, exactly as
+        ``createGrids.F90`` does).
+
+    Returns:
+      Tuple ``(plus, minus)`` of float64 arrays with shape ``(n_x, n_x)``.
+    """
+    x = np.asarray(x, dtype=np.float64)
+    ddx = np.asarray(ddx, dtype=np.float64)
+    n = int(x.size)
+
+    def _uniform_pair(scheme_plus: int, scheme_minus: int) -> tuple[np.ndarray, np.ndarray]:
+        _, _, ddx_plus1, _ = uniform_aperiodic_diff_matrices(
+            n=n + 1, x_min=0.0, x_max=x_max, scheme=scheme_plus
+        )
+        _, _, ddx_minus1, _ = uniform_aperiodic_diff_matrices(
+            n=n + 1, x_min=0.0, x_max=x_max, scheme=scheme_minus
+        )
+        return ddx_plus1[:n, :n].copy(), ddx_minus1[:n, :n].copy()
+
+    def _shift_last_row(m: np.ndarray) -> None:
+        # createGrids.F90: ddx_xDot_minus(Nx,i) = ddx_xDot_minus(Nx-1,i-1).
+        m[n - 1, 1:] = m[n - 2, : n - 1]
+
+    def _exp_similarity(m: np.ndarray) -> np.ndarray:
+        # m -> expx2 m / expx2 with -2x added on the diagonal (d/dx acting on
+        # f/exp(-x^2), i.e. the derivative of the non-Maxwellian part).
+        expx2 = np.exp(-(x * x))
+        out = expx2[:, None] * m / expx2[None, :]
+        out[np.arange(n), np.arange(n)] -= 2.0 * x
+        return out
+
+    if scheme == -2:
+        plus = np.zeros((n, n), dtype=np.float64)
+        minus = np.zeros((n, n), dtype=np.float64)
+        ddx_sub, _ = speed_grid_diff_matrices(x[: n - 1], k=k)
+        plus[: n - 1, : n - 1] = ddx_sub
+        ddx_sub, _ = speed_grid_diff_matrices(x[1:], k=k)
+        minus[1:, 1:] = ddx_sub
+        return plus, minus
+
+    if scheme == -1:
+        raise NotImplementedError(
+            "xDotDerivativeScheme=-1 is not ported: the Fortran loop 'do i=i,Nx' in "
+            "createGrids.F90 reads an undefined loop start, so its result is "
+            "compiler-dependent."
+        )
+
+    if scheme == 1:
+        return _uniform_pair(32, 42)
+
+    if scheme in {2, 3}:
+        plus, minus = _uniform_pair(52, 62)
+        if scheme == 3:
+            _shift_last_row(minus)
+        return plus, minus
+
+    if scheme in {4, 5, 7}:
+        plus, minus = _uniform_pair(82, 92)
+        if scheme == 5:
+            plus[1, :] = ddx[1, :]
+        if scheme in {5, 7}:
+            _shift_last_row(minus)
+        if scheme == 7:
+            plus = _exp_similarity(plus)
+            minus = _exp_similarity(minus)
+        return plus, minus
+
+    if scheme == 6:
+        plus = _exp_similarity(ddx.copy())
+        return plus, plus.copy()
+
+    if scheme == 8:
+        plus, minus = _uniform_pair(102, 112)
+        # Two shifted bottom rows (5-point upwind stencil).
+        minus[n - 1, 2:] = minus[n - 3, : n - 2]
+        minus[n - 2, 2:] = minus[n - 3, 1 : n - 1]
+        return plus, minus
+
+    if scheme in {9, 10}:
+        _, _, ddx_sub, _ = uniform_aperiodic_diff_matrices(
+            n=n, x_min=0.0, x_max=float(x[-1]), scheme=12
+        )
+        if scheme == 9:
+            return ddx_sub, ddx.copy()
+        return ddx.copy(), ddx_sub
+
+    if scheme == 11:
+        # Tridiagonal FD matrix for the irregular (polynomial) grid
+        # (createGrids.F90, notes 20170118-02).
+        plus = np.zeros((n, n), dtype=np.float64)
+        plus[0, 0] = -1.0 / (x[1] - x[0])
+        plus[0, 1] = 1.0 / (x[1] - x[0])
+        plus[n - 1, n - 2] = -1.0 / (x[n - 1] - x[n - 2])
+        plus[n - 1, n - 1] = 1.0 / (x[n - 1] - x[n - 2])
+        for j in range(1, n - 1):
+            d32 = x[j + 1] - x[j]
+            d21 = x[j] - x[j - 1]
+            denominator = d21 * d32 * (d21 + d32)
+            plus[j, j - 1] = -d32 * d32 / denominator
+            plus[j, j] = (d32 * d32 - d21 * d21) / denominator
+            plus[j, j + 1] = d21 * d21 / denominator
+        return plus, plus.copy()
+
+    raise ValueError(f"Invalid xDotDerivativeScheme={scheme}")
+
+
 def polynomial_interpolation_matrix(
     *,
     xk: np.ndarray,
@@ -803,6 +1223,11 @@ class Grids:
       ddtheta_magdrift_minus: Upwinded d/dtheta for negative drifts.
       ddzeta_magdrift_plus: Upwinded d/dzeta for positive drifts.
       ddzeta_magdrift_minus: Upwinded d/dzeta for negative drifts.
+      ddx_xdot_plus: Upwinded d/dx for positive ``xDotFactor``
+        (``ddx_xDot_plus`` in v3); ``None`` when ``xDotDerivativeScheme=0``
+        (both directions then use the centered ``ddx``).
+      ddx_xdot_minus: Upwinded d/dx for negative ``xDotFactor``; ``None``
+        when ``xDotDerivativeScheme=0``.
       n_xi: Maximum number of Legendre pitch modes.
       n_l: Number of Legendre modes kept in the Rosenbluth potentials.
       n_xi_for_x: Active Legendre modes per speed point, ``(n_x,)`` int32.
@@ -837,6 +1262,9 @@ class Grids:
     n_zeta: int
     n_x: int
     n_periods: int
+
+    ddx_xdot_plus: jnp.ndarray | None = None
+    ddx_xdot_minus: jnp.ndarray | None = None
 
     @property
     def xi_coupling_lower(self) -> np.ndarray:
@@ -888,6 +1316,8 @@ def make_grids(
     magnetic_drift_derivative_scheme: int = 3,
     x_grid_scheme: int = 5,
     x_grid_k: float = 0.0,
+    x_max: float = 5.0,
+    x_dot_derivative_scheme: int = 0,
     n_xi_for_x_option: int = 1,
     monoenergetic: bool = False,
 ) -> Grids:
@@ -911,9 +1341,21 @@ def make_grids(
       magnetic_drift_derivative_scheme: Namelist
         ``magneticDriftDerivativeScheme`` (0 = centered; +/-1, +/-2, +/-3 =
         upwinded pairs of increasing order).
-      x_grid_scheme: Namelist ``xGridScheme``; 1/5 have no node at x=0
-        (5 is the v3 default), 2/6 pin a node at x=0.
+      x_grid_scheme: Namelist ``xGridScheme``; 1/5 are the Landreman-Ernst
+        polynomial grid with no node at x=0 (5 is the v3 default), 2/6 pin a
+        node at x=0 (Gauss-Radau), 3/4 are the uniform grid on
+        ``[0, x_max]`` with ``n_x + 1`` points and the last dropped (they
+        differ only in the interpolation scheme used by the Fokker-Planck
+        potentials), 7 is the Chebyshev grid on ``[0, x_max]`` with the last
+        of ``n_x + 1`` points dropped, and 8 is the ``n_x``-point Chebyshev
+        grid including ``x_max``.
       x_grid_k: Namelist ``xGrid_k`` weight exponent.
+      x_max: Namelist ``xMax``; the domain limit of the uniform/Chebyshev
+        grids (schemes 3/4/7/8; unused by 1/2/5/6).
+      x_dot_derivative_scheme: Namelist ``xDotDerivativeScheme``; 0 uses the
+        centered ``ddx`` for the E_r xDot term in both upwind directions,
+        nonzero values build the ``ddx_xdot_plus``/``ddx_xdot_minus`` pair
+        (see :func:`xdot_diff_matrices`).
       n_xi_for_x_option: Namelist ``Nxi_for_x_option`` ramp (0-3).
       monoenergetic: RHSMode=3 handling from ``createGrids.F90`` /
         ``validateInput.F90``: forces ``n_x=1``, ``n_xi_for_x_option=0``, a
@@ -986,15 +1428,8 @@ def make_grids(
         x_weights = jnp.asarray(np.full((n_x,), math.exp(1.0), dtype=np.float64))
         ddx = jnp.zeros((n_x, n_x), dtype=jnp.float64)
         d2dx2 = jnp.zeros((n_x, n_x), dtype=jnp.float64)
-    else:
-        if x_grid_scheme in {1, 5}:
-            include_x0 = False
-        elif x_grid_scheme in {2, 6}:
-            include_x0 = True
-        else:
-            raise NotImplementedError(
-                f"Only xGridScheme in {{1,2,5,6}} is implemented (got {x_grid_scheme})."
-            )
+    elif x_grid_scheme in {1, 2, 5, 6}:
+        include_x0 = x_grid_scheme in {2, 6}
         speed_grid = make_speed_grid(n_x=n_x, k=x_grid_k, include_point_at_x0=include_x0)
         x = jnp.asarray(speed_grid.x)
         x_weights = jnp.asarray(speed_grid.dx_weights(x_grid_k))
@@ -1003,6 +1438,65 @@ def make_grids(
         )
         ddx = jnp.asarray(ddx_np)
         d2dx2 = jnp.asarray(d2dx2_np)
+    elif x_grid_scheme in {3, 4}:
+        # Uniform grid on [0, x_max] with n_x+1 points; the last (f=0 there)
+        # is dropped. Schemes 3 and 4 differ only in xInterpolationScheme.
+        x_p1, w_p1, ddx_p1, d2dx2_p1 = uniform_aperiodic_diff_matrices(
+            n=n_x + 1, x_min=0.0, x_max=x_max, scheme=12
+        )
+        x_np = x_p1[:n_x].copy()
+        x_np[0] = 0.0
+        x = jnp.asarray(x_np)
+        x_weights = jnp.asarray(w_p1[:n_x])
+        ddx = jnp.asarray(ddx_p1[:n_x, :n_x])
+        d2dx2 = jnp.asarray(d2dx2_p1[:n_x, :n_x])
+    elif x_grid_scheme == 7:
+        # Chebyshev grid on [0, x_max] with n_x+1 points, last dropped;
+        # d2dx2 is the square of the full (n_x+1)-point ddx, then truncated.
+        x_p1, w_p1, ddx_p1 = chebyshev_grid(n=n_x + 1, x_min=0.0, x_max=x_max)
+        x_np = x_p1[:n_x].copy()
+        x_np[0] = 0.0
+        d2dx2_p1 = ddx_p1 @ ddx_p1
+        x = jnp.asarray(x_np)
+        x_weights = jnp.asarray(w_p1[:n_x])
+        ddx = jnp.asarray(ddx_p1[:n_x, :n_x])
+        d2dx2 = jnp.asarray(d2dx2_p1[:n_x, :n_x])
+    elif x_grid_scheme == 8:
+        # Chebyshev grid on [0, x_max] with n_x points including x_max.
+        x_np, w_np, ddx_np = chebyshev_grid(n=n_x, x_min=0.0, x_max=x_max)
+        x_np = x_np.copy()
+        x_np[0] = 0.0
+        x = jnp.asarray(x_np)
+        x_weights = jnp.asarray(w_np)
+        ddx = jnp.asarray(ddx_np)
+        d2dx2 = jnp.asarray(ddx_np @ ddx_np)
+    else:
+        raise ValueError(f"Invalid xGridScheme={x_grid_scheme} (must be 1-8).")
+
+    # --- upwinded d/dx pair for the E_r xDot term (createGrids.F90) ---
+    x_dot_derivative_scheme = int(x_dot_derivative_scheme)
+    if not -2 <= x_dot_derivative_scheme <= 11:
+        raise ValueError("xDotDerivativeScheme must be between -2 and 11.")
+    if (
+        x_dot_derivative_scheme > 0
+        and x_dot_derivative_scheme != 11
+        and x_grid_scheme not in {3, 4}
+    ):
+        raise ValueError(
+            "If xDotDerivativeScheme is >0 and not 11, then xGridScheme must be either 3 or 4."
+        )
+    ddx_xdot_plus = None
+    ddx_xdot_minus = None
+    if x_dot_derivative_scheme != 0 and not monoenergetic:
+        plus_np, minus_np = xdot_diff_matrices(
+            x=np.asarray(x, dtype=np.float64),
+            ddx=np.asarray(ddx, dtype=np.float64),
+            k=x_grid_k,
+            scheme=x_dot_derivative_scheme,
+            x_max=x_max,
+        )
+        ddx_xdot_plus = jnp.asarray(plus_np)
+        ddx_xdot_minus = jnp.asarray(minus_np)
 
     # --- pitch ramp ---
     n_xi_for_x = n_xi_for_x_ramp(
@@ -1031,4 +1525,6 @@ def make_grids(
         n_zeta=n_zeta,
         n_x=n_x,
         n_periods=n_periods,
+        ddx_xdot_plus=ddx_xdot_plus,
+        ddx_xdot_minus=ddx_xdot_minus,
     )

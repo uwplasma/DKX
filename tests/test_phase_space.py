@@ -383,3 +383,143 @@ def test_grids_container_exposes_legendre_machinery() -> None:
     assert_exact(grids.xi_coupling_upper, phase_space.legendre_coupling_upper(8))
     assert_exact(grids.xi_coupling_lower, phase_space.legendre_coupling_lower(8))
     assert_exact(grids.lorentz_eigenvalues, phase_space.lorentz_eigenvalues(8))
+
+
+# ---------------------------------------------------------------------------
+# Aperiodic uniform diff matrices (xGridScheme 3/4 and the xDot upwind pairs)
+# vs the old full uniformDiffMatrices.F90 port in sfincs_jax.grids
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("scheme", sorted(phase_space._APERIODIC_SCHEMES))
+@pytest.mark.parametrize("n", [5, 6, 9])
+def test_uniform_aperiodic_diff_matrices_match_old(scheme: int, n: int) -> None:
+    x_old, w_old, ddx_old, d2_old = uniform_diff_matrices(
+        n=n, x_min=0.0, x_max=5.0, scheme=scheme
+    )
+    x_new, w_new, ddx_new, d2_new = phase_space.uniform_aperiodic_diff_matrices(
+        n=n, x_min=0.0, x_max=5.0, scheme=scheme
+    )
+    assert_exact(x_new, x_old)
+    assert_exact(w_new, w_old)
+    assert_exact(ddx_new, ddx_old)
+    assert_exact(d2_new, d2_old)
+
+
+def test_uniform_aperiodic_diff_matrices_rejects_other_schemes() -> None:
+    for scheme in (0, 2, 3, 10, 13, 20, 30, 40, 50, 60, 80, 90, 100, 110, 122, 132):
+        with pytest.raises(ValueError):
+            phase_space.uniform_aperiodic_diff_matrices(n=7, x_min=0.0, x_max=1.0, scheme=scheme)
+
+
+# ---------------------------------------------------------------------------
+# Chebyshev grid (xGridScheme 7/8): spectral exactness on polynomials
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("n", [5, 6, 9])
+def test_chebyshev_grid_quadrature_and_derivative_exactness(n: int) -> None:
+    x, w, d = phase_space.chebyshev_grid(n=n, x_min=0.0, x_max=5.0)
+    assert x[0] == pytest.approx(0.0, abs=1e-15)
+    assert x[-1] == pytest.approx(5.0, abs=1e-13)
+    # Clenshaw-Curtis weights integrate polynomials of degree <= n-1 exactly.
+    for deg in range(n):
+        exact = 5.0 ** (deg + 1) / (deg + 1)
+        np.testing.assert_allclose(np.sum(w * x**deg), exact, rtol=1e-12)
+    # The differentiation matrix is exact on polynomials of degree <= n-1
+    # (up to rounding relative to the largest derivative values).
+    for deg in range(1, n):
+        np.testing.assert_allclose(d @ (x**deg), deg * x ** (deg - 1), rtol=1e-12, atol=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# xdot_diff_matrices (createGrids.F90 xDotDerivativeScheme block)
+# ---------------------------------------------------------------------------
+
+
+def test_xdot_diff_matrices_scheme_m2_uses_polynomial_subsets() -> None:
+    xg = make_x_grid(n=6, k=0.0, include_point_at_x0=False)
+    x = np.asarray(xg.x)
+    ddx, _ = phase_space.speed_grid_diff_matrices(x, k=0.0)
+    plus, minus = phase_space.xdot_diff_matrices(x=x, ddx=ddx, k=0.0, scheme=-2, x_max=5.0)
+    sub_lo, _ = phase_space.speed_grid_diff_matrices(x[:-1], k=0.0)
+    sub_hi, _ = phase_space.speed_grid_diff_matrices(x[1:], k=0.0)
+    assert_exact(plus[:-1, :-1], sub_lo)
+    assert_exact(minus[1:, 1:], sub_hi)
+    assert_exact(plus[-1, :], np.zeros(6))
+    assert_exact(minus[0, :], np.zeros(6))
+
+
+def test_xdot_diff_matrices_scheme_11_differentiates_linear_exactly() -> None:
+    xg = make_x_grid(n=6, k=0.0, include_point_at_x0=False)
+    x = np.asarray(xg.x)
+    ddx, _ = phase_space.speed_grid_diff_matrices(x, k=0.0)
+    plus, minus = phase_space.xdot_diff_matrices(x=x, ddx=ddx, k=0.0, scheme=11, x_max=5.0)
+    assert_exact(plus, minus)
+    np.testing.assert_allclose(plus @ np.ones_like(x), 0.0, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(plus @ x, np.ones_like(x), rtol=0, atol=1e-12)
+    # Interior rows are exact on quadratics (3-point irregular stencil).
+    np.testing.assert_allclose((plus @ (x * x))[1:-1], 2.0 * x[1:-1], rtol=0, atol=1e-12)
+
+
+def test_xdot_diff_matrices_scheme_m1_reports_fortran_bug() -> None:
+    x = np.linspace(0.0, 4.0, 5)
+    ddx = np.eye(5)
+    with pytest.raises(NotImplementedError, match="do i=i,Nx"):
+        phase_space.xdot_diff_matrices(x=x, ddx=ddx, k=0.0, scheme=-1, x_max=5.0)
+
+
+def test_make_grids_rejects_invalid_xdot_scheme_combinations() -> None:
+    with pytest.raises(ValueError, match="xDotDerivativeScheme"):
+        phase_space.make_grids(
+            n_theta=7, n_zeta=1, n_xi=4, n_x=5, n_l=2, n_periods=1,
+            x_dot_derivative_scheme=12,
+        )
+    with pytest.raises(ValueError, match="xGridScheme must be either 3 or 4"):
+        phase_space.make_grids(
+            n_theta=7, n_zeta=1, n_xi=4, n_x=5, n_l=2, n_periods=1,
+            x_grid_scheme=5, x_dot_derivative_scheme=2,
+        )
+
+
+def test_make_grids_uniform_and_chebyshev_x_grids() -> None:
+    # xGridScheme 3/4: uniform on [0, xMax] with n_x+1 points, last dropped.
+    g3 = phase_space.make_grids(
+        n_theta=7, n_zeta=1, n_xi=4, n_x=5, n_l=2, n_periods=1,
+        x_grid_scheme=3, x_max=5.0, n_xi_for_x_option=0,
+    )
+    assert_exact(g3.x, np.arange(5.0))
+    assert_exact(g3.x_weights, np.array([0.5, 1.0, 1.0, 1.0, 1.0]))
+    # ddx is exact on cubics away from the truncated boundary rows.
+    x3 = np.asarray(g3.x)
+    np.testing.assert_allclose(
+        (np.asarray(g3.ddx) @ x3**3)[:3], 3.0 * x3[:3] ** 2, rtol=0, atol=1e-11
+    )
+    # xGridScheme 7: Chebyshev with n_x+1 points, last dropped; scheme 8 keeps
+    # all n_x points (node at xMax).
+    g7 = phase_space.make_grids(
+        n_theta=7, n_zeta=1, n_xi=4, n_x=5, n_l=2, n_periods=1,
+        x_grid_scheme=7, x_max=5.0, n_xi_for_x_option=0,
+    )
+    x7_full, _, _ = phase_space.chebyshev_grid(n=6, x_min=0.0, x_max=5.0)
+    assert_exact(g7.x, x7_full[:5])
+    g8 = phase_space.make_grids(
+        n_theta=7, n_zeta=1, n_xi=4, n_x=5, n_l=2, n_periods=1,
+        x_grid_scheme=8, x_max=5.0, n_xi_for_x_option=0,
+    )
+    x8, w8, d8 = phase_space.chebyshev_grid(n=5, x_min=0.0, x_max=5.0)
+    assert_exact(g8.x, x8)
+    assert_exact(g8.x_weights, w8)
+    assert_exact(g8.d2dx2, d8 @ d8)
+
+
+def test_make_grids_xdot_pair_default_is_none() -> None:
+    g = phase_space.make_grids(n_theta=7, n_zeta=1, n_xi=4, n_x=5, n_l=2, n_periods=1)
+    assert g.ddx_xdot_plus is None
+    assert g.ddx_xdot_minus is None
+    g11 = phase_space.make_grids(
+        n_theta=7, n_zeta=1, n_xi=4, n_x=5, n_l=2, n_periods=1,
+        x_dot_derivative_scheme=11,
+    )
+    assert g11.ddx_xdot_plus is not None
+    assert_exact(g11.ddx_xdot_plus, g11.ddx_xdot_minus)
