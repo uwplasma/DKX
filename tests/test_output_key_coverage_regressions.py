@@ -4,7 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
+from sfincs_jax.api import write_output
+from sfincs_jax.io import read_sfincs_h5
 
 
 def _replace_line(text: str, old: str, new: str) -> str:
@@ -22,12 +23,9 @@ def test_phi1_output_writes_quasineutrality_option_without_adiabatic(tmp_path: P
     input_path.write_text(text, encoding="utf-8")
 
     out_path = tmp_path / "phi1_no_adiabatic.sfincsOutput.h5"
-    write_sfincs_jax_output_h5(
-        input_namelist=input_path,
-        output_path=out_path,
-        compute_solution=False,
-        compute_transport_matrix=False,
-    )
+    # Metadata regression only (the upstream test wrote with
+    # compute_solution=False): use the canonical no-solve geometry-only write.
+    write_output(input_path, out_path, geometry_only=True)
 
     out = read_sfincs_h5(out_path)
     assert "quasineutralityOption" in out
@@ -46,11 +44,7 @@ def test_monoenergetic_transport_write_output_exports_delta_f_and_full_f(tmp_pat
 
     out_path = tmp_path / "monoenergetic_export.sfincsOutput.h5"
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_LOW_MEMORY", "1")
-    write_sfincs_jax_output_h5(
-        input_namelist=input_path,
-        output_path=out_path,
-        compute_transport_matrix=True,
-    )
+    write_output(input_path, out_path)
 
     out = read_sfincs_h5(out_path)
     assert "delta_f" in out

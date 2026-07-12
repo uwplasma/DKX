@@ -1,6 +1,15 @@
 Parallelism
 ===========
 
+
+.. note::
+   Historical record. The multi-worker transport runtime and sharded legacy
+   operator paths described below (``sfincs_jax.problems.*``,
+   ``sfincs_jax.operators.*``) were deleted with the legacy pipeline; the
+   canonical stack exposes host-device parallelism through the
+   ``SFINCS_JAX_CORES``/``SFINCS_JAX_CPU_DEVICES`` environment knobs and the
+   ``solvax``-backed solve tiers. Measured baselines are retained for
+   reference.
 This page explains how parallelism works in `sfincs_jax`, how it relates to more
 traditional MPI-distributed neoclassical solves, and how to use it on a laptop
 (multi-core CPU) or on clusters (multi-CPU / multi-GPU).
@@ -1039,7 +1048,7 @@ not from single-case sharding. On office we reran:
 
 .. code-block:: bash
 
-   PYTHONPATH=. python examples/performance/benchmark_transport_parallel_scaling.py \
+   PYTHONPATH=. python examples/performance/benchmark_transport_parallel_scaling.py  # retired with the legacy pipeline \
      --backend gpu \
      --input examples/performance/transport_parallel_2min.input.namelist \
      --workers 1 2 \

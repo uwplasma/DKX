@@ -19,7 +19,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5  # noqa: E402
+from sfincs_jax.api import write_output  # noqa: E402
+from sfincs_jax.io import read_sfincs_h5  # noqa: E402
 
 
 def _select_input_path() -> Path:
@@ -39,7 +40,7 @@ def main() -> int:
     out_dir = Path(__file__).with_suffix("").parent / "output"
     out_path = out_dir / "sfincsOutput_upstream_quick2species_python.h5"
 
-    write_sfincs_jax_output_h5(input_namelist=input_path, output_path=out_path)
+    write_output(input_path, out_path)
     data = read_sfincs_h5(out_path)
 
     print(f"Wrote: {out_path}")

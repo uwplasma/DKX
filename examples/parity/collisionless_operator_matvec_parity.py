@@ -1,7 +1,8 @@
-"""Parity-check the collisionless operator (streaming + mirror) against Fortran PETSc binaries.
+"""Parity-check the matrix-free drift-kinetic matvec against Fortran PETSc binaries.
 
-This script mirrors `tests/test_collisionless_operator_parity.py`, but prints a short
-summary instead of asserting.
+Applies the canonical `KineticOperator` to a frozen Fortran v3 `stateVector`
+and compares against the sparse matvec of the frozen `whichMatrix_3` matrix
+(the full v3 solver matrix), printing a short summary instead of asserting.
 
 By default it uses the repository fixture in `tests/ref/quick_2species_FPCollisions_noEr.*`.
 """
@@ -14,16 +15,16 @@ import argparse
 import sys
 from pathlib import Path
 
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
+from scipy.sparse import csr_matrix
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.discretization.v3 import V3Indexing, geometry_from_namelist, grids_from_namelist
+from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_collisionless import CollisionlessV3Operator, apply_collisionless_v3
 from sfincs_jax.validation.fortran import read_petsc_mat_aij, read_petsc_vec
 
 
@@ -44,82 +45,21 @@ def main() -> int:
     vec_path = Path(args.vec) if args.vec else Path(str(prefix) + ".stateVector.petscbin")
 
     nml = read_sfincs_input(input_path)
-    grids = grids_from_namelist(nml)
-    geom = geometry_from_namelist(nml=nml, grids=grids)
-
-    species = nml.group("speciesParameters")
-    t_hats = np.asarray(species["THATS"], dtype=np.float64)
-    m_hats = np.asarray(species["MHATS"], dtype=np.float64)
-
-    op = CollisionlessV3Operator(
-        x=grids.x,
-        ddtheta=grids.ddtheta,
-        ddzeta=grids.ddzeta,
-        b_hat=geom.b_hat,
-        b_hat_sup_theta=geom.b_hat_sup_theta,
-        b_hat_sup_zeta=geom.b_hat_sup_zeta,
-        db_hat_dtheta=geom.db_hat_dtheta,
-        db_hat_dzeta=geom.db_hat_dzeta,
-        t_hats=jnp.asarray(t_hats),
-        m_hats=jnp.asarray(m_hats),
-        n_xi_for_x=grids.n_xi_for_x,
-    )
+    op = kinetic_operator_from_namelist(nml)
 
     a = read_petsc_mat_aij(mat_path)
-    x_full = read_petsc_vec(vec_path).values
+    x_ref = read_petsc_vec(vec_path).values
+    if x_ref.size != op.total_size:
+        raise SystemExit(f"State size mismatch: fixture {x_ref.size} vs operator {op.total_size}")
 
-    indexing = V3Indexing(
-        n_species=int(t_hats.size),
-        n_x=int(grids.x.shape[0]),
-        n_theta=int(grids.theta.shape[0]),
-        n_zeta=int(grids.zeta.shape[0]),
-        n_xi_max=int(grids.n_xi),
-        n_xi_for_x=np.asarray(grids.n_xi_for_x, dtype=int),
-    )
-    inv = indexing.build_inverse_f_map()
-    n_f = len(inv)
+    y_jax = np.asarray(op.apply(jnp.asarray(x_ref)))
+    y_ref = csr_matrix((a.data, a.col_ind, a.row_ptr), shape=a.shape).dot(x_ref)
 
-    f = np.zeros(
-        (
-            indexing.n_species,
-            indexing.n_x,
-            indexing.n_xi_max,
-            indexing.n_theta,
-            indexing.n_zeta,
-        ),
-        dtype=np.float64,
-    )
-    for g, (s, ix, ell, it, iz) in enumerate(inv):
-        f[s, ix, ell, it, iz] = x_full[g]
-
-    y_jax = np.asarray(apply_collisionless_v3(op, jnp.asarray(f)))
-
-    # Restrict A@x to columns with |ΔL|=1 within the distribution block.
-    y_ref = np.zeros((n_f,), dtype=np.float64)
-    for row in range(n_f):
-        s_r, ix_r, l_r, _, _ = inv[row]
-        start = int(a.row_ptr[row])
-        end = int(a.row_ptr[row + 1])
-        cols = a.col_ind[start:end]
-        vals = a.data[start:end]
-        acc = 0.0
-        for c, v in zip(cols.tolist(), vals.tolist()):
-            if c < 0 or c >= n_f:
-                continue
-            s_c, ix_c, l_c, _, _ = inv[c]
-            if s_c != s_r or ix_c != ix_r:
-                continue
-            if abs(l_c - l_r) != 1:
-                continue
-            acc += float(v) * float(x_full[c])
-        y_ref[row] = acc
-
-    y_jax_vec = np.zeros((n_f,), dtype=np.float64)
-    for g, (s, ix, ell, it, iz) in enumerate(inv):
-        y_jax_vec[g] = y_jax[s, ix, ell, it, iz]
-
-    max_abs = float(np.max(np.abs(y_jax_vec - y_ref)))
-    print(f"max |jax - fortran| = {max_abs:.3e}")
+    scale = max(1.0, float(np.max(np.abs(y_ref))))
+    max_abs = float(np.max(np.abs(y_jax - y_ref)))
+    print(f"n = {x_ref.size}")
+    print(f"max |jax - fortran|          = {max_abs:.3e}")
+    print(f"max |jax - fortran| / scale  = {max_abs / scale:.3e}")
     return 0
 
 

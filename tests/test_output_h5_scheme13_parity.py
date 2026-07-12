@@ -96,14 +96,6 @@ def test_output_scheme13_matches_fortran_fixture(tmp_path: Path) -> None:
     assert not bad_u, f"Mismatched uHat: {bad_u}"
 
 
-def test_scheme13_deck_routes_through_canonical_stack() -> None:
-    """The scheme-13 RHSMode=1 deck is owned by the canonical stack, not the legacy pipeline."""
-    from sfincs_jax.cli import deck_requires_legacy_pipeline
-    from sfincs_jax.inputs import read_sfincs_input
-
-    assert deck_requires_legacy_pipeline(read_sfincs_input(DECK)) is None
-
-
 def test_scheme13_from_namelist_matches_direct_from_fourier() -> None:
     """The namelist scheme-13 geometry equals a direct ``from_fourier`` build.
 
