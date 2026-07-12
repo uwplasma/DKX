@@ -103,12 +103,12 @@ CASES: dict[str, dict] = {
         ],
         "runner": "rhs1",
     },
-    "w7x_rhs2_pas": {
-        "base": _S4_2SP,
+    # RHSMode=2 is validated to a single species (inputs._validate, Fortran parity).
+    "rhs2_pas_scheme1": {
+        "base": _PAS1,
         "patches": [
             ("general", {"RHSMode": "2"}),
             ("resolutionParameters", {"Ntheta": "15", "Nzeta": "25", "Nxi": "32", "Nx": "6"}),
-            ("physicsParameters", {"collisionOperator": "1"}),
         ],
         "runner": "transport",
     },

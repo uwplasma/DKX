@@ -139,14 +139,21 @@ def _vm_moments(op: KineticOperator, x_stack: np.ndarray) -> dict[str, np.ndarra
 def test_tier1_memory_estimate_hand_computed() -> None:
     """The full-band byte formula must match a hand-computed value exactly.
 
-    ``bytes = 3 * n_xi * n_species * n_x * (n_theta * n_zeta)**2 * 8`` — here
-    n_theta=3, n_zeta=2 (m=6, m**2=36), n_xi=4, n_x=2, n_species=1:
-    3 * 4 * 1 * 2 * 36 * 8 = 6912 bytes; the peak estimate is 2.5x that.
+    ``bytes = 3 * sum_x(Nxi_for_x) * n_species * (n_theta * n_zeta)**2 * 8`` —
+    here n_theta=3, n_zeta=2 (m=6, m**2=36), n_xi=4, n_x=2, n_species=1 with
+    uniform Nxi_for_x: 3 * (4+4) * 1 * 36 * 8 = 6912 bytes; the peak estimate
+    is 2.5x that.  A ramped Nxi_for_x counts only the retained blocks.
     """
-    fake = SimpleNamespace(n_theta=3, n_zeta=2, n_xi=4, n_x=2, n_species=1)
+    fake = SimpleNamespace(
+        n_theta=3, n_zeta=2, n_xi=4, n_x=2, n_species=1, n_xi_for_x=np.array([4, 4])
+    )
     assert tier1_full_band_bytes(fake) == 3 * 4 * 1 * 2 * 36 * 8
     assert tier1_full_band_bytes(fake) == pytest.approx(6912.0)
     assert tier1_peak_memory_bytes(fake) == pytest.approx(2.5 * 6912.0)
+    ramped = SimpleNamespace(
+        n_theta=3, n_zeta=2, n_xi=4, n_x=2, n_species=1, n_xi_for_x=np.array([3, 4])
+    )
+    assert tier1_full_band_bytes(ramped) == 3 * (3 + 4) * 1 * 36 * 8
 
 
 def test_auto_policy_selects_full_vs_truncated_by_budget() -> None:
@@ -232,6 +239,86 @@ def test_gradient_through_truncated_route_matches_finite_differences() -> None:
     fd = float((loss(jnp.asarray(t0 + eps)) - loss(jnp.asarray(t0 - eps))) / (2.0 * eps))
     assert np.isfinite(g) and np.isfinite(fd) and abs(fd) > 0.0
     np.testing.assert_allclose(g, fd, rtol=1e-4)
+
+
+# ---------------------------------------------------------------------------
+# Ramped (non-uniform Nxi_for_x) PAS decks: per-subsystem truncated tier 1
+# ---------------------------------------------------------------------------
+
+
+def _ramped_pas_op() -> KineticOperator:
+    """The tiny PAS fixture rescaled so Nxi_for_x_option=1 gives a real ramp."""
+    text = (
+        _load_text("pas_1species_PAS_noEr_tiny_scheme1")
+        .replace("Nxi = 4", "Nxi = 16")
+        .replace("Nx = 3", "Nx = 5")
+        .replace("Nxi_for_x_option = 0", "Nxi_for_x_option = 1")
+    )
+    op = KineticOperator.from_namelist(parse_sfincs_input_text(text))
+    # The whole point: the production speed-dependent Legendre ramp.
+    assert int(np.min(np.asarray(op.n_xi_for_x))) < op.n_xi
+    return op
+
+
+def test_ramped_pas_routes_truncated_and_matches_pinned_referees() -> None:
+    """Auto must route ramped PAS decks to the per-subsystem truncated kernel.
+
+    The solution (lowest-3 Legendre blocks and the vm flux/flow moments) must
+    match both pinned referees — tier-2 GCROT and the dense pinned direct
+    solve — to 1e-10; blocks l >= 3 are zero-padded (which covers every
+    Nxi_for_x-truncated DOF, since keep <= min Nxi_for_x).
+    """
+    op = _ramped_pas_op()
+    rhs = op.rhs()
+
+    trunc = solve(op, rhs, method="auto")
+    assert trunc.method == "block_tridiagonal_truncated"
+    assert trunc.converged
+
+    gcrot = solve(op, rhs, method="gmres", tol=1e-12)
+    assert gcrot.converged
+    dense = sla.solve(materialize_dense(op, pin_masked_dofs=True), np.asarray(rhs))
+
+    n_s, n_x, n_xi, n_t, n_z = op.f_shape
+    n_tz = n_t * n_z
+    xt = np.asarray(trunc.x)
+    ft = xt[: op.f_size].reshape(n_s, n_x, n_xi, n_tz)
+    assert np.max(np.abs(ft[:, :, 3:])) == 0.0
+    for x_ref in (np.asarray(gcrot.x), dense):
+        f_ref = x_ref[: op.f_size].reshape(n_s, n_x, n_xi, n_tz)
+        dl = np.linalg.norm(ft[:, :, :3] - f_ref[:, :, :3]) / np.linalg.norm(f_ref[:, :, :3])
+        assert dl < 1e-10
+        # The sources of this drive are numerically zero; agree absolutely.
+        np.testing.assert_allclose(
+            xt[op.f_size :], x_ref[op.f_size :], atol=1e-12 * np.linalg.norm(f_ref)
+        )
+        m_t = _vm_moments(op, xt[None, :])
+        m_ref = _vm_moments(op, x_ref[None, :])
+        for key in ("particleFlux", "heatFlux", "FSABFlow"):
+            rel = np.abs(m_t[key] - m_ref[key]) / np.maximum(np.abs(m_ref[key]), 1e-300)
+            assert rel.max() < 1e-10, f"{key}: {rel.max():.3e}"
+
+    # The full-band factorization cannot carry the ramp and must refuse.
+    with pytest.raises(NotImplementedError, match="uniform Nxi_for_x"):
+        solve(op, rhs, method="block_tridiagonal")
+
+
+def test_gradient_through_ramped_truncated_route_matches_finite_differences() -> None:
+    op0 = _ramped_pas_op()
+
+    def loss(t_hat_scalar: jnp.ndarray) -> jnp.ndarray:
+        op = replace(op0, t_hat=jnp.reshape(t_hat_scalar, (1,)))
+        # Auto routes the ramp to the truncated kernel; grad flows straight
+        # through the per-subsystem block-Thomas sweeps.
+        result = solve(op, op.rhs(), method="auto", differentiable=True)
+        return jnp.sum(result.x**2)
+
+    t0 = float(op0.t_hat[0])
+    g = float(jax.grad(loss)(jnp.asarray(t0)))
+    eps = 1e-6
+    fd = float((loss(jnp.asarray(t0 + eps)) - loss(jnp.asarray(t0 - eps))) / (2.0 * eps))
+    assert np.isfinite(g) and np.isfinite(fd) and abs(fd) > 0.0
+    np.testing.assert_allclose(g, fd, rtol=1e-6)
 
 
 # ---------------------------------------------------------------------------

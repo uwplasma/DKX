@@ -277,16 +277,19 @@ def _convergence_guard(label: str) -> Callable[[jnp.ndarray, jnp.ndarray], None]
 
 
 def tier1_available(op: KineticOperator) -> tuple[bool, str]:
-    """Check whether the tier-1 structured direct path applies to ``op``.
+    """Check whether the tier-1 structured direct family applies to ``op``.
 
     The decision is driven by the operator's own block extraction: if
     :meth:`KineticOperator.legendre_blocks` refuses (Er L±2 terms,
     Fokker-Planck collisions), tier 1 is off.  On top of that the bordered
     constraint machinery must be diagonal over (species, x)
-    (``constraintScheme`` 0 or 2 without ``point_at_x0``) and every speed node
-    must retain the full Legendre resolution (uniform ``Nxi_for_x``), so the
-    per-(species, x) blocks are nonsingular after the rank-one border
-    absorption.
+    (``constraintScheme`` 0 or 2 without ``point_at_x0``).  Non-uniform
+    ``Nxi_for_x`` (the production speed-dependent Legendre ramp) is accepted:
+    every (species, x) subsystem is closed, so the truncated tier-1 kernel
+    solves it with its own ``n_blocks = Nxi_for_x[ix]`` — exactly the packed
+    Fortran system.  Only the full-band factorization
+    (:func:`build_tier1_solver`) additionally requires uniform ``Nxi_for_x``;
+    ramped decks always route through the truncated kernel.
     """
     try:
         op._check_block_extraction_supported()
@@ -299,9 +302,12 @@ def tier1_available(op: KineticOperator) -> tuple[bool, str]:
         )
     if op.constraint_scheme == 2 and op.point_at_x0:
         return False, "point_at_x0 x-grids give the x=0 constraint row a different form"
-    if int(np.min(np.asarray(op.n_xi_for_x))) < op.n_xi:
-        return False, "non-uniform Nxi_for_x leaves zero rows in the truncated-L blocks"
     return True, ""
+
+
+def _uniform_nxi_for_x(op: KineticOperator) -> bool:
+    """Whether every speed node retains the full Legendre resolution."""
+    return int(np.min(np.asarray(op.n_xi_for_x))) >= op.n_xi
 
 
 # =============================================================================
@@ -318,14 +324,17 @@ def tier1_full_band_bytes(op: KineticOperator) -> float:
     n_zeta`` (the dense theta*zeta angular block per Legendre mode, per
     (species, x) subsystem), in float64::
 
-        bytes = 3 * n_xi * n_species * n_x * (n_theta * n_zeta)**2 * 8
+        bytes = 3 * sum_x(Nxi_for_x) * n_species * (n_theta * n_zeta)**2 * 8
 
-    The leading ``3`` counts ``lower``, ``diag`` and ``upper``.  This is the
-    ~39 GB figure for the 744k-unknown HSX case (n_theta=25, n_zeta=51,
-    n_xi=100, n_x=5, n_species=2).
+    The leading ``3`` counts ``lower``, ``diag`` and ``upper``; a subsystem at
+    speed node ``ix`` carries only its own ``Nxi_for_x[ix]`` Legendre blocks
+    (``sum_x(Nxi_for_x) = n_xi * n_x`` for uniform ``Nxi_for_x``).  This is
+    the ~39 GB figure for the 744k-unknown uniform HSX case (n_theta=25,
+    n_zeta=51, n_xi=100, n_x=5, n_species=2).
     """
     m = float(op.n_theta * op.n_zeta)
-    return 3.0 * float(op.n_xi) * float(op.n_species) * float(op.n_x) * m * m * 8.0
+    n_blocks_total = float(np.sum(np.asarray(op.n_xi_for_x)))
+    return 3.0 * n_blocks_total * float(op.n_species) * m * m * 8.0
 
 
 def tier1_peak_memory_bytes(op: KineticOperator) -> float:
@@ -352,9 +361,11 @@ def _tier1_budget_bytes(budget_gb: float | None) -> tuple[float, float]:
 def _truncation_supported(op: KineticOperator, keep: int) -> tuple[bool, str]:
     """Structural check that the truncated tier-1 kernel applies to ``op``.
 
-    Assumes :func:`tier1_available` already passed (PAS/DKES family, uniform
-    Nxi_for_x, constraintScheme in {0, 2}, no point_at_x0).  Additionally every
-    closed (species, x) subsystem must retain at least ``keep`` Legendre blocks.
+    Assumes :func:`tier1_available` already passed (PAS/DKES family,
+    constraintScheme in {0, 2}, no point_at_x0).  Additionally every closed
+    (species, x) subsystem must retain at least ``keep`` Legendre blocks —
+    the only ``Nxi_for_x`` requirement: a non-uniform ramp is solved exactly
+    with ``n_blocks = Nxi_for_x[ix]`` per subsystem.
     """
     if op.constraint_scheme not in (0, 2):
         return False, f"constraintScheme={op.constraint_scheme} border couples Legendre modes"
@@ -468,6 +479,12 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
     ok, reason = tier1_available(op)
     if not ok:
         raise NotImplementedError(f"tier-1 structured direct path unavailable: {reason}")
+    if not _uniform_nxi_for_x(op):
+        raise NotImplementedError(
+            "tier-1 full-band factorization requires uniform Nxi_for_x (the ramped "
+            "bands carry singular zero rows on the truncated DOFs); ramped decks "
+            "route through the truncated kernel (method='block_tridiagonal_truncated')"
+        )
 
     n_s, n_x, n_xi, n_t, n_z = op.f_shape
     n_tz = n_t * n_z
@@ -892,6 +909,13 @@ def _solve_tier1_truncated(
     are zero-padded — valid because the drive and all requested output moments
     live on ``l < keep`` (see :func:`_rhs_confined_to_lowest_blocks`).
 
+    Non-uniform ``Nxi_for_x`` (the production speed-dependent Legendre ramp)
+    is exact too: each (species, x) subsystem is closed, so it is eliminated
+    with its own ``n_blocks = Nxi_for_x[ix]`` — precisely the packed Fortran
+    discretization (``indices.F90``), whose truncated DOFs the zero-padded
+    ``l >= keep`` tail already covers (``keep <= min Nxi_for_x`` is enforced
+    by :func:`_truncation_supported`).
+
     Differentiability: the whole solve is a pure-JAX composition of
     ``block_thomas_truncated_fn`` sweeps, so ``jax.grad`` differentiates
     straight through it (the block-Thomas scan is short and reverse-mode
@@ -927,7 +951,7 @@ def _solve_tier1_truncated(
     else:
         r_c_b = jnp.zeros((batch, n_rhs), dtype=jnp.float64)
 
-    def solve_one(inputs):
+    def solve_one(inputs, n_blocks: int):
         stream, mirror, pas_row, x_val, gamma, rhs_low, r_c = inputs
         block_fn = _truncated_block_fn(
             coef, n_xi, stream, mirror, pas_row, x_val, gamma, shift_border=(cs == 2)
@@ -935,7 +959,7 @@ def _solve_tier1_truncated(
         if cs == 2:
             z_col = jnp.zeros((keep, n_tz, 1), dtype=jnp.float64).at[0, :, 0].set(b0)
             rhs_stack = jnp.concatenate([rhs_low, z_col], axis=2)  # (keep, TZ, R+1)
-            sol = block_thomas_truncated_fn(block_fn, n_xi, rhs_stack, keep)
+            sol = block_thomas_truncated_fn(block_fn, n_blocks, rhs_stack, keep)
             y = sol[:, :, :n_rhs]  # (keep, TZ, R)
             z = sol[:, :, n_rhs]  # (keep, TZ)
             c_y0 = c0 @ y[0]  # (R,)
@@ -944,14 +968,37 @@ def _solve_tier1_truncated(
             s = gamma * r_c + shift  # (R,)
             f_low = y - shift[None, None, :] * z[:, :, None]  # (keep, TZ, R)
             return f_low, s
-        sol = block_thomas_truncated_fn(block_fn, n_xi, rhs_low, keep)  # (keep, TZ, R)
+        sol = block_thomas_truncated_fn(block_fn, n_blocks, rhs_low, keep)  # (keep, TZ, R)
         return sol, jnp.zeros((n_rhs,), dtype=jnp.float64)
 
     # lax.map processes one subsystem at a time (scan-based) so the peak stays
     # at a single subsystem's O(keep * m^2) working set, not B times it.
-    f_low_b, s_b = jax.lax.map(
-        solve_one, (stream_b, mirror_b, pas_b, x_b, gamma_b, rhs_low_b, r_c_b)
-    )
+    if _uniform_nxi_for_x(op):
+        f_low_b, s_b = jax.lax.map(
+            lambda t: solve_one(t, n_xi),
+            (stream_b, mirror_b, pas_b, x_b, gamma_b, rhs_low_b, r_c_b),
+        )
+    else:
+        # Ramped Nxi_for_x: each (species, x) subsystem is closed, so it is
+        # eliminated with its own static n_blocks = Nxi_for_x[ix] (the packed
+        # Fortran discretization) — group per speed node, map over species.
+        rhs_low_sx = rhs_low_b.reshape(n_s, n_x, keep, n_tz, n_rhs)
+        r_c_sx = r_c_b.reshape(n_s, n_x, n_rhs)
+        f_parts: list[jnp.ndarray] = []
+        s_parts: list[jnp.ndarray] = []
+        for ix, nb in enumerate(int(v) for v in np.asarray(op.n_xi_for_x)):
+            f_ix, s_ix = jax.lax.map(
+                lambda t, nb=nb: solve_one(t, nb),
+                (
+                    coef["stream"], coef["mirror"], coef["pas"][:, ix],
+                    jnp.broadcast_to(op.x[ix], (n_s,)), coef["gamma"][:, ix],
+                    rhs_low_sx[:, ix], r_c_sx[:, ix],
+                ),
+            )  # fmt: skip
+            f_parts.append(f_ix)
+            s_parts.append(s_ix)
+        f_low_b = jnp.stack(f_parts, axis=1).reshape(batch, keep, n_tz, n_rhs)
+        s_b = jnp.stack(s_parts, axis=1).reshape(batch, n_rhs)
     # Force the async truncated block-Thomas sweep to complete so the timing is
     # real compute, not JAX dispatch latency (a no-op under jit/grad tracing).
     f_low_b, s_b = jax.block_until_ready((f_low_b, s_b))
@@ -1165,7 +1212,8 @@ def _auto_route(
     bands = tier1_full_band_bytes(op)
     budget_bytes, budget_gb_val = _tier1_budget_bytes(budget_gb)
     peak_gb = peak / 2.0**30
-    if peak <= budget_bytes:
+    uniform = _uniform_nxi_for_x(op)
+    if uniform and peak <= budget_bytes:
         print(
             f"[sfincs_jax.solve] tier-1 route: full factorization; "
             f"peak estimate {peak_gb:.2f} GB <= budget {budget_gb_val:.1f} GB "
@@ -1180,19 +1228,29 @@ def _auto_route(
     # 1/2/3 guarantee (drives + moments on l <= 2).
     rhs_valid = rhs_ok if rhs_ok is not None else (int(op.rhs_mode) in (1, 2, 3))
     if sup_ok and rhs_valid:
+        because = (
+            "non-uniform Nxi_for_x (per-subsystem n_blocks = Nxi_for_x[ix]; "
+            "the full bands do not support the ramp)"
+            if not uniform
+            else f"peak estimate {peak_gb:.2f} GB > budget {budget_gb_val:.1f} GB "
+            f"(bands {bands / 2.0**30:.2f} GB x2.5)"
+        )
         print(
             f"[sfincs_jax.solve] tier-1 route: truncated block-Thomas "
-            f"(keep_lowest={keep}); peak estimate {peak_gb:.2f} GB > budget "
-            f"{budget_gb_val:.1f} GB (bands {bands / 2.0**30:.2f} GB x2.5), "
+            f"(keep_lowest={keep}); {because}, "
             f"solving the lowest {keep} Legendre blocks."
         )
         return "block_tridiagonal_truncated"
 
     why = sup_reason if not sup_ok else "RHS/output needs Legendre modes l >= keep"
+    blocker = (
+        "non-uniform Nxi_for_x rules out the full bands"
+        if not uniform
+        else f"full-band estimate {peak_gb:.2f} GB > budget {budget_gb_val:.1f} GB"
+    )
     print(
-        f"[sfincs_jax.solve] tier-1 route: full-band estimate {peak_gb:.2f} GB > "
-        f"budget {budget_gb_val:.1f} GB but truncation is invalid ({why}); "
-        "falling back to tier-2 GCROT."
+        f"[sfincs_jax.solve] tier-1 route: {blocker} but truncation is invalid "
+        f"({why}); falling back to tier-2 GCROT."
     )
     return "gmres"
 
@@ -1261,7 +1319,11 @@ def solve(
     nonsingular, agrees with ``A`` on the physical subspace, and forces
     ``x = rhs = 0`` on the truncated DOFs, so solutions, residuals, and
     implicit-function-theorem gradients all match the packed Fortran system.
-    Tier 1 requires uniform ``Nxi_for_x`` and is unaffected.
+    The truncated tier-1 kernel is consistent with the same pinning: it
+    eliminates each closed (species, x) subsystem with its own
+    ``n_blocks = Nxi_for_x[ix]`` (exactly the packed Fortran system) and
+    zero-pads everything above, so ramped PAS/DKES decks route through it;
+    only the full tier-1 factorization requires uniform ``Nxi_for_x``.
         use_preconditioner: tier-2 coarse-operator preconditioner on/off.
         drop_l_coupling_in_precond: the Fortran ``preconditioner_xi=1`` knob
             (drop the L±1 streaming coupling in the coarse operator).
@@ -1280,16 +1342,18 @@ def solve(
 
     Auto-policy tier-1 routing (``method="auto"``, :func:`tier1_available` true):
 
-    ===============================  ==============================================
-    condition                        route
-    ===============================  ==============================================
-    peak estimate <= budget          full ``"block_tridiagonal"`` (any output mode,
-                                     multi-RHS factor reuse)
-    estimate > budget, trunc valid   ``"block_tridiagonal_truncated"`` (lowest
-                                     ``keep`` blocks only, ~O(keep m^2) memory)
-    estimate > budget, trunc invalid ``"gcrot"`` tier 2, with a printed notice
-                                     (high-l output the truncation cannot supply)
-    ===============================  ==============================================
+    ================================  =============================================
+    condition                         route
+    ================================  =============================================
+    uniform, peak estimate <= budget  full ``"block_tridiagonal"`` (any output
+                                      mode, multi-RHS factor reuse)
+    ramped Nxi_for_x or estimate >    ``"block_tridiagonal_truncated"`` when the
+    budget                            truncation is valid (lowest ``keep`` blocks
+                                      only, ~O(keep m^2) memory; ramps solved with
+                                      per-subsystem ``n_blocks = Nxi_for_x[ix]``)
+    …and truncation invalid           ``"gcrot"`` tier 2, with a printed notice
+                                      (high-l output the truncation cannot supply)
+    ================================  =============================================
 
     "Truncation valid" means the operator admits the truncated kernel
     (:func:`_truncation_supported`) and the RHS support is confined to
