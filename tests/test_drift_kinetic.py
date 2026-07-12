@@ -373,13 +373,35 @@ def test_magnetic_drifts_are_canonical_and_reject_block_extraction() -> None:
         op_new.to_block_tridiagonal()
 
 
-def test_magnetic_drift_subschemes_still_deferred() -> None:
-    # Only scheme 1 is consolidated; schemes 2-9 remain deferred, and scheme 1
-    # requires a geometryScheme carrying the radial B-field derivatives.
+def test_magnetic_drift_subschemes_canonical_with_fortran_restrictions() -> None:
+    # All schemes 0-9 are canonical now.  Out-of-range values mirror
+    # validateInput.F90 ("magneticDriftScheme must be >= 0" / "<= 9") as
+    # ValueError, and the geometryScheme restrictions mirror the Fortran ones:
+    # drifts need the radial B-field derivatives (5/11/12 canonically), and
+    # scheme 4 is geometryScheme 11/12 only (validateInput.F90:507).
     text = (REF / "magdrift_1species_tiny.input.namelist").read_text()
-    nml2 = parse_sfincs_input_text(text.replace("magneticDriftScheme = 1", "magneticDriftScheme = 2"))
-    with pytest.raises(NotImplementedError, match="magneticDriftScheme"):
-        KineticOperator.from_namelist(nml2)
+    for bad in (-1, 10):
+        nml_bad = parse_sfincs_input_text(
+            text.replace("magneticDriftScheme = 1", f"magneticDriftScheme = {bad}")
+        )
+        with pytest.raises(ValueError, match="magneticDriftScheme"):
+            KineticOperator.from_namelist(nml_bad)
+    # Drift schemes with an analytic geometry (no radial derivatives) refuse:
+    nml_geo = parse_sfincs_input_text(
+        text.replace("magneticDriftScheme = 1", "magneticDriftScheme = 2").replace(
+            "geometryScheme = 11", "geometryScheme = 4"
+        )
+    )
+    with pytest.raises(NotImplementedError, match="magneticDriftScheme=2"):
+        KineticOperator.from_namelist(nml_geo)
+    # Scheme 4 with a VMEC geometry mirrors the Fortran geometryScheme 11/12 gate:
+    nml_s4 = parse_sfincs_input_text(
+        text.replace("magneticDriftScheme = 1", "magneticDriftScheme = 4").replace(
+            "geometryScheme = 11", "geometryScheme = 5"
+        )
+    )
+    with pytest.raises(ValueError, match="magneticDriftScheme 4"):
+        KineticOperator.from_namelist(nml_s4)
 
 
 # ---------------------------------------------------------------------------
