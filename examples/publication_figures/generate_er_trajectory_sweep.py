@@ -25,7 +25,7 @@ try:
 except Exception as exc:  # pragma: no cover
     raise SystemExit("This example requires matplotlib. Install with: pip install matplotlib") from exc
 
-from sfincs_jax.io import write_sfincs_jax_output_h5
+from sfincs_jax.api import write_output
 from sfincs_jax.namelist import read_sfincs_input
 
 
@@ -305,12 +305,7 @@ def _run_sweep(
                 rewrite_trajectory_input(base_text=base_text, er=float(er), model=model, fast=bool(fast))
             )
             output_path = run_dir / "sfincsOutput.h5"
-            write_sfincs_jax_output_h5(
-                input_namelist=input_namelist,
-                output_path=output_path,
-                compute_solution=True,
-                verbose=False,
-            )
+            write_output(input_namelist, output_path)
             records.append(
                 collect_sweep_record(
                     output_path=output_path,

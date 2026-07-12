@@ -489,12 +489,12 @@
       "This lane is closed for the tagged release as a post-release cross-code target because shared-model normalizations must be pinned before claiming overlap"
     ],
     "source_code": [
-      "sfincs_jax/problems/transport_solve.py",
-      "sfincs_jax/problems/transport_linear_system.py"
+      "sfincs_jax/run.py",
+      "sfincs_jax/solve.py"
     ],
     "tests": [
-      "tests/test_transport_matrix_rhsmode2_parity.py",
-      "tests/test_transport_matrix_rhsmode3_parity.py"
+      "tests/test_run_transport.py",
+      "tests/test_kinetic_operator_fortran_parity.py"
     ],
     "acceptance_gates": [
       "Separate exact shared-model comparisons from qualitative low-collisionality trend checks",
@@ -532,15 +532,15 @@
       "Scheme-4 Boozer harmonic sensitivity maps are generated as publication-ready figures; full VMEC-boundary optimization remains outside this bounded validation claim"
     ],
     "source_code": [
-      "sfincs_jax/solvers/implicit.py",
-      "sfincs_jax/geometry/__init__.py",
+      "sfincs_jax/solve.py",
+      "sfincs_jax/magnetic_geometry.py",
       "sfincs_jax/validation/artifacts.py",
       "examples/publication_figures/generate_autodiff_sensitivity_validation.py"
     ],
     "tests": [
       "tests/test_generate_autodiff_sensitivity_validation.py",
-      "tests/test_implicit_linear_solve_grad.py",
-      "tests/test_full_system_residual_jvp.py",
+      "tests/test_solve.py",
+      "tests/test_sensitivity.py",
       "tests/test_validation_artifacts.py"
     ],
     "acceptance_gates": [

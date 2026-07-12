@@ -25,9 +25,17 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from sfincs_jax.drift_kinetic import KineticOperator, kinetic_operator_from_namelist
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.fortran import read_petsc_vec
-from sfincs_jax.operators.profile_system import full_system_operator_from_namelist, residual_v3_full_system
+
+
+def _with_nu_n(op: KineticOperator, nu_n: jnp.ndarray) -> KineticOperator:
+    """Rebuild the PAS collision operator at a new `nu_n` (coef is linear in it)."""
+    pas = op.pas
+    scale = jnp.asarray(nu_n, dtype=jnp.float64) / pas.nu_n
+    pas2 = replace(pas, nu_n=jnp.asarray(nu_n, dtype=jnp.float64), coef=pas.coef * scale)
+    return replace(op, pas=pas2)
 
 
 def _default_input() -> Path:
@@ -48,23 +56,23 @@ def main() -> int:
     args = p.parse_args()
 
     nml = read_sfincs_input(Path(args.input))
-    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+    op = kinetic_operator_from_namelist(nml)
     x_ref = jnp.asarray(read_petsc_vec(Path(args.statevector)).values)
     rng = np.random.default_rng(int(args.seed))
     noise = float(args.noise)
     x0 = x_ref + jnp.asarray(noise * rng.normal(size=(x_ref.size,)).astype(np.float64))
 
-    if op.fblock.pas is None:
-        raise SystemExit("This example expects collisionOperator=1 (PAS), but op.fblock.pas is None.")
+    if op.pas is None:
+        raise SystemExit("This example expects collisionOperator=1 (PAS), but op.pas is None.")
+
+    rhs = op.rhs()
 
     def objective(nu_n: jnp.ndarray) -> jnp.ndarray:
-        pas2 = replace(op.fblock.pas, nu_n=jnp.asarray(nu_n, dtype=jnp.float64))
-        fblock2 = replace(op.fblock, pas=pas2)
-        op2 = replace(op, fblock=fblock2)
-        r = residual_v3_full_system(op2, x0)
+        op2 = _with_nu_n(op, nu_n)
+        r = op2.apply(x0) - rhs
         return 0.5 * jnp.vdot(r, r)
 
-    nu0 = jnp.asarray(op.fblock.pas.nu_n, dtype=jnp.float64)
+    nu0 = jnp.asarray(op.pas.nu_n, dtype=jnp.float64)
     g = jax.grad(objective)(nu0)
 
     eps = float(args.eps)

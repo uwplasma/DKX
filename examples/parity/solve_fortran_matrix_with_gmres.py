@@ -21,7 +21,6 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from sfincs_jax.validation.fortran import read_petsc_mat_aij, read_petsc_vec
-from sfincs_jax.solvers.krylov import gmres_solve
 
 
 def csr_matvec(
@@ -80,11 +79,14 @@ def main() -> int:
     x_ref_j = jnp.asarray(x_ref)
     b = A_mv(x_ref_j)
 
-    result = gmres_solve(matvec=A_mv, b=b, tol=args.tol, restart=args.restart, maxiter=args.maxiter)
-    x = np.asarray(result.x)
+    x_sol, _info = jax.scipy.sparse.linalg.gmres(
+        A_mv, b, tol=float(args.tol), atol=0.0, restart=int(args.restart), maxiter=int(args.maxiter)
+    )
+    x = np.asarray(x_sol)
+    residual_norm = float(np.linalg.norm(np.asarray(A_mv(x_sol)) - np.asarray(b)))
 
     err = float(np.max(np.abs(x - x_ref)))
-    print(f"n={n_rows}  residual_norm={float(result.residual_norm):.3e}  max|x-x_ref|={err:.3e}")
+    print(f"n={n_rows}  residual_norm={residual_norm:.3e}  max|x-x_ref|={err:.3e}")
     return 0
 
 

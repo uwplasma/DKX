@@ -1,10 +1,11 @@
-"""Apply the v3 collisionless operator (streaming + mirror) in JAX.
+"""Apply the v3 drift-kinetic operator matrix-free in JAX.
 
 This example shows:
-- Building the operator from a namelist-derived grid + geometry
+- Building the canonical `KineticOperator` from an `input.namelist`
 - Running a non-jitted and jitted matvec and confirming they match
 
-The operator is only a *subset* of v3 so far. See docs for the parity-first roadmap.
+The matvec includes every v3 term the deck selects (streaming, mirror,
+collisions, constraints) without forming a sparse matrix.
 """
 
 from __future__ import annotations
@@ -21,9 +22,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.operators.profile_collisionless import CollisionlessV3Operator, apply_collisionless_v3, apply_collisionless_v3_jit
-from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
+from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist  # noqa: E402
+from sfincs_jax.namelist import read_sfincs_input  # noqa: E402
 
 
 def _default_input() -> Path:
@@ -37,39 +37,18 @@ def main() -> int:
     args = p.parse_args()
 
     nml = read_sfincs_input(Path(args.input))
-    grids = grids_from_namelist(nml)
-    geom = geometry_from_namelist(nml=nml, grids=grids)
-
-    species = nml.group("speciesParameters")
-    t_hats = np.asarray(species["THATS"], dtype=np.float64)
-    m_hats = np.asarray(species["MHATS"], dtype=np.float64)
-
-    op = CollisionlessV3Operator(
-        x=grids.x,
-        ddtheta=grids.ddtheta,
-        ddzeta=grids.ddzeta,
-        b_hat=geom.b_hat,
-        b_hat_sup_theta=geom.b_hat_sup_theta,
-        b_hat_sup_zeta=geom.b_hat_sup_zeta,
-        db_hat_dtheta=geom.db_hat_dtheta,
-        db_hat_dzeta=geom.db_hat_dzeta,
-        t_hats=jnp.asarray(t_hats),
-        m_hats=jnp.asarray(m_hats),
-        n_xi_for_x=grids.n_xi_for_x,
-    )
+    op = kinetic_operator_from_namelist(nml)
 
     key = jax.random.key(args.seed)
-    f = jax.random.normal(
-        key,
-        shape=(t_hats.size, grids.x.size, grids.n_xi, grids.theta.size, grids.zeta.size),
-        dtype=jnp.float64,
-    )
+    v = jax.random.normal(key, shape=(op.total_size,), dtype=jnp.float64)
 
-    y = apply_collisionless_v3(op, f)
-    y_jit = apply_collisionless_v3_jit(op, f).block_until_ready()
+    y = op.apply(v)
+    apply_jit = jax.jit(lambda operator, x: operator.apply(x))
+    y_jit = apply_jit(op, v).block_until_ready()
     err = np.max(np.abs(np.asarray(y_jit) - np.asarray(y)))
 
-    print(f"out.shape = {tuple(y.shape)}")
+    print(f"state size = {op.total_size}")
+    print(f"out.shape  = {tuple(y.shape)}")
     print(f"max |jit - nojit| = {err:.3e}")
     return 0
 

@@ -5,89 +5,44 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import sfincs_jax.io as io
-from sfincs_jax.outputs import formats
-
-
-def test_io_legacy_output_format_aliases_point_to_new_owner() -> None:
-    """Keep existing ``sfincs_jax.io`` imports stable during the I/O split."""
-
-    assert io.read_sfincs_h5 is formats.read_sfincs_h5
-    assert io.write_sfincs_h5 is formats.write_sfincs_h5
-    assert io.read_sfincs_output_file is formats.read_sfincs_output_file
-    assert io.write_sfincs_output_file is formats.write_sfincs_output_file
-    assert io._fortran_h5_layout is formats.fortran_h5_layout
-    assert io._output_file_format is formats.output_file_format
-
-
-def test_output_format_scalar_helpers_match_sfincs_conventions() -> None:
-    """Shared output helpers should cover namelist scalars and v3 logicals."""
-
-    assert formats.get_namelist_float({"A": [2.5]}, "A", 0.0) == pytest.approx(2.5)
-    assert formats.get_namelist_float({"A": []}, "A", 1.25) == pytest.approx(1.25)
-    assert formats.get_namelist_int({"B": [4]}, "B", 0) == 4
-    assert formats.get_namelist_int({"B": []}, "B", 6) == 6
-    assert formats.get_namelist_int({}, "B", 6) == 6
-    assert formats.fortran_logical(True) == np.int32(1)
-    assert formats.fortran_logical(False) == np.int32(-1)
-
-
-def test_io_facade_forwards_writer_private_names_and_missing_attributes() -> None:
-    """Compatibility facade should route monkeypatches to the output writer owner."""
-
-    import sfincs_jax.outputs.writer as writer
-    from sfincs_jax.geometry import boozer
-
-    sentinel = object()
-    old_value = writer._should_precompile_v3_full_system
-    try:
-        io._should_precompile_v3_full_system = sentinel  # type: ignore[attr-defined]
-        assert writer._should_precompile_v3_full_system is sentinel
-        assert io._should_precompile_v3_full_system is sentinel
-    finally:
-        io._should_precompile_v3_full_system = old_value  # type: ignore[attr-defined]
-
-    assert io._evaluate_boozer_rzd_and_derivatives is boozer.evaluate_boozer_rzd_and_derivatives
-
-    with pytest.raises(AttributeError, match="has no attribute"):
-        _ = io.definitely_not_a_sfincs_jax_io_attribute
+from sfincs_jax import io
 
 
 def test_output_file_format_suffixes_and_invalid_suffix() -> None:
-    assert formats.output_file_format(Path("sfincsOutput.h5")) == "h5"
-    assert formats.output_file_format(Path("sfincsOutput.hdf5")) == "h5"
-    assert formats.output_file_format(Path("sfincsOutput")) == "h5"
-    assert formats.output_file_format(Path("sfincsOutput.nc")) == "netcdf"
-    assert formats.output_file_format(Path("sfincsOutput.netcdf")) == "netcdf"
-    assert formats.output_file_format(Path("sfincsOutput.npz")) == "npz"
+    assert io.output_file_format(Path("sfincsOutput.h5")) == "h5"
+    assert io.output_file_format(Path("sfincsOutput.hdf5")) == "h5"
+    assert io.output_file_format(Path("sfincsOutput")) == "h5"
+    assert io.output_file_format(Path("sfincsOutput.nc")) == "netcdf"
+    assert io.output_file_format(Path("sfincsOutput.netcdf")) == "netcdf"
+    assert io.output_file_format(Path("sfincsOutput.npz")) == "npz"
     with pytest.raises(ValueError, match="Unsupported sfincs_jax output suffix"):
-        formats.output_file_format(Path("sfincsOutput.txt"))
+        io.output_file_format(Path("sfincsOutput.txt"))
 
 
 def test_netcdf_safe_name_preserves_uniqueness() -> None:
     used: set[str] = set()
 
-    assert formats.netcdf_safe_name("matrix with spaces", used) == "matrix_with_spaces"
-    assert formats.netcdf_safe_name("matrix-with-spaces", used) == "matrix_with_spaces_2"
-    assert formats.netcdf_safe_name("123", used) == "v_123"
-    assert formats.netcdf_safe_name("!!!", used) == "dataset"
+    assert io.netcdf_safe_name("matrix with spaces", used) == "matrix_with_spaces"
+    assert io.netcdf_safe_name("matrix-with-spaces", used) == "matrix_with_spaces_2"
+    assert io.netcdf_safe_name("123", used) == "v_123"
+    assert io.netcdf_safe_name("!!!", used) == "dataset"
 
 
 def test_h5_roundtrip_decodes_nested_bytes_and_fortran_layout(tmp_path: Path) -> None:
     out = tmp_path / "mini.h5"
     arr = np.arange(24.0).reshape(2, 3, 4)
 
-    formats.write_sfincs_h5(
+    io.write_sfincs_h5(
         path=out,
         data={"cube": arr, "label": np.asarray(b"abc")},
         fortran_layout=True,
     )
-    loaded = formats.read_sfincs_h5(out)
+    loaded = io.read_sfincs_h5(out)
 
     np.testing.assert_allclose(loaded["cube"], np.transpose(arr, axes=(2, 1, 0)))
     assert loaded["label"] == "abc"
     with pytest.raises(FileExistsError):
-        formats.write_sfincs_h5(path=out, data={"x": np.asarray(1.0)}, overwrite=False)
+        io.write_sfincs_h5(path=out, data={"x": np.asarray(1.0)}, overwrite=False)
 
 
 @pytest.mark.parametrize("suffix", [".npz", ".nc"])
@@ -102,10 +57,83 @@ def test_output_file_roundtrip_preserves_names_strings_and_bools(tmp_path: Path,
         "input.namelist": "example = true",
     }
 
-    formats.write_sfincs_output_file(path=out, data=data, fortran_layout=False)
-    loaded = formats.read_sfincs_output_file(out)
+    io.write_sfincs_output_file(path=out, data=data, fortran_layout=False)
+    loaded = io.read_sfincs_output_file(out)
 
     np.testing.assert_allclose(loaded["scalar"], data["scalar"])
     np.testing.assert_allclose(loaded["matrix with spaces"], data["matrix with spaces"])
     assert bool(np.asarray(loaded["logical flag"])) is True
     assert str(loaded["input.namelist"]) == "example = true"
+
+
+def _trace():
+    from sfincs_jax.solver_trace import SolverTrace, SolverTraceCandidate
+
+    return SolverTrace(
+        backend="gpu",
+        rhs_mode=1,
+        selected_path="dense",
+        solve_method="direct",
+        preconditioner="none",
+        geometry_scheme=5,
+        collision_operator="full-fp",
+        total_size=4096,
+        active_size=3072,
+        device_count=1,
+        cold_jit=False,
+        residual_norm=4.0e-12,
+        residual_target=1.0e-9,
+        elapsed_s=3.4,
+        setup_s=0.9,
+        solve_s=2.5,
+        peak_rss_mb=875.0,
+        active_rss_mb=275.0,
+        device_peak_mb=350.0,
+        compiled_temp_mb=80.0,
+        estimated_dense_nbytes=4096 * 4096 * 8,
+        estimated_csr_nbytes=4_000_000,
+        estimated_gmres_basis_nbytes=4096 * 24 * 8,
+        matvec_count=24,
+        candidate_decisions=(
+            SolverTraceCandidate(
+                name="dense",
+                accepted=True,
+                residual_ratio=4.0e-3,
+                memory_metric="device_peak_mb",
+                device_peak_mb=350.0,
+                candidate_setup_s=0.9,
+                candidate_solve_s=2.5,
+            ),
+        ),
+        metadata={"case": "solver-trace-output-format"},
+    )
+
+
+@pytest.mark.parametrize("suffix", [".h5", ".nc", ".npz"])
+def test_write_sfincs_output_file_can_attach_solver_trace(tmp_path: Path, suffix: str) -> None:
+    import h5py
+
+    from sfincs_jax.solver_trace import SolverTrace, read_solver_trace_h5
+
+    out = tmp_path / f"sfincsOutput{suffix}"
+    trace = _trace()
+
+    io.write_sfincs_output_file(
+        path=out,
+        data={"scalar": np.asarray(1.0), "vector": np.asarray([1.0, 2.0])},
+        fortran_layout=False,
+        solver_trace=trace,
+    )
+
+    if suffix == ".h5":
+        with h5py.File(out, "r") as h5:
+            loaded = read_solver_trace_h5(h5)
+    elif suffix == ".nc":
+        netcdf4 = pytest.importorskip("netCDF4")
+        with netcdf4.Dataset(out, "r") as ds:
+            loaded = SolverTrace.from_json(ds.getncattr("sfincs_jax_solver_trace_json"))
+    else:
+        with np.load(out, allow_pickle=False) as npz:
+            loaded = SolverTrace.from_json(str(npz["sfincs_jax_solver_trace_json"].reshape(()).item()))
+
+    assert loaded == trace

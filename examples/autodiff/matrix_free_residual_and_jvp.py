@@ -6,9 +6,9 @@ This example demonstrates a key architectural milestone for a full SFINCS v3 por
 - Apply the Jacobian matrix-free using JVPs (or explicit matvecs for linear pieces).
 - Use `jax.grad`/`jax.jvp` to get sensitivities without assembling sparse matrices.
 
-Today the residual is linear in x because we only consider the distribution-function block.
-The same structure extends naturally to nonlinear residuals (e.g. when including Phi1 or
-additional constraints), while keeping the Jacobian application matrix-free.
+The residual here is linear in x (the base drift-kinetic system).  The same structure
+extends naturally to nonlinear residuals (the includePhi1 Newton solve reuses exactly
+this JVP machinery), while keeping the Jacobian application matrix-free.
 """
 
 from __future__ import annotations
@@ -27,10 +27,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_fblock import fblock_operator_from_namelist
-from sfincs_jax.operators.profile_fblock import matvec_v3_fblock_flat
-from sfincs_jax.operators.profile_system import V3FBlockLinearSystem
 
 
 def _default_input() -> Path:
@@ -45,24 +43,25 @@ def main() -> int:
     args = p.parse_args()
 
     nml = read_sfincs_input(Path(args.input))
-    op = fblock_operator_from_namelist(nml=nml, identity_shift=0.0)
+    op = kinetic_operator_from_namelist(nml)
 
     rng = np.random.default_rng(args.seed)
-    x0 = jnp.asarray(rng.normal(size=(op.flat_size,)).astype(np.float64))
-    v = jnp.asarray(rng.normal(size=(op.flat_size,)).astype(np.float64))
+    x0 = jnp.asarray(rng.normal(size=(op.total_size,)).astype(np.float64))
+    v = jnp.asarray(rng.normal(size=(op.total_size,)).astype(np.float64))
 
     # Choose b so that the "true" solution is x0 (just for demonstration).
-    b = matvec_v3_fblock_flat(op, x0)
+    b = op.apply(x0)
 
-    sys = V3FBlockLinearSystem(op=op, b_flat=b)
+    def residual(x: jnp.ndarray) -> jnp.ndarray:
+        return op.apply(x) - b
 
     # Residual and JVP:
-    r0, jv = sys.jvp(x0, v)
+    r0, jv = jax.jvp(residual, (x0,), (v,))
 
     # A small objective to demonstrate reverse-mode AD through the residual:
     #   phi(x) = 0.5 * ||r(x)||^2
     def phi(x):
-        r = sys.residual(x)
+        r = residual(x)
         return 0.5 * jnp.vdot(r, r)
 
     grad_phi = jax.grad(phi)(x0)
@@ -72,7 +71,7 @@ def main() -> int:
     fd = float((phi(x0 + eps * v) - phi(x0 - eps * v)) / (2 * eps))
     ad = float(jnp.vdot(grad_phi, v))
 
-    print(f"n={op.flat_size}")
+    print(f"n={op.total_size}")
     print(f"||r(x0)||_2 = {float(jnp.linalg.norm(r0)):.3e}  (should be ~0)")
     print(f"||J v||_2   = {float(jnp.linalg.norm(jv)):.3e}")
     print(f"directional derivative: finite-diff={fd:.6e}  autodiff={ad:.6e}  abs_err={abs(fd-ad):.3e}")

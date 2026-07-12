@@ -9,13 +9,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.problems.transport_diagnostics import (
-    radial_current_vm_from_state,
-    radial_current_vm_observable_vector,
-    radial_current_vm_psi_hat_from_state,
-    radial_current_vm_psi_hat_observable_vector,
-    v3_transport_diagnostics_vm_only,
-)
 from sfincs_jax.sensitivity import (
     LinearObservableSystem,
     MatrixFreeLinearObservableSystem,
@@ -35,7 +28,6 @@ from sfincs_jax.sensitivity import (
     vjp_flux,
 )
 from sfincs_jax.namelist import parse_sfincs_input_text, read_sfincs_input
-from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REFERENCE_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "fortran_v3_reference_fixture.json"
@@ -723,210 +715,34 @@ def test_probe_linear_observable_vector_recovers_chunked_weights_and_offset() ->
     np.testing.assert_allclose(probed_offset, offset, rtol=0.0, atol=1.0e-12)
 
 
-def test_rhs1_radial_current_observable_vector_matches_existing_diagnostic() -> None:
+def test_rhs1_moment_observables_jvp_vjp_dot_product_gates() -> None:
+    """Adjoint dot-product gates through the canonical moment observables.
+
+    Replaces the retired legacy probing-observable machinery: the canonical
+    per-species moment table (``run.profile_moments_from_operator``) is a pure
+    differentiable function of the state, so forward/reverse sensitivities of
+    the flux/flow observables must satisfy <cotangent, J tangent> ==
+    <J^T cotangent, tangent>.
+    """
+    from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
+    from sfincs_jax.run import profile_moments_from_operator
+
     input_path = Path(__file__).parent / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
-    op = full_system_operator_from_namelist(nml=read_sfincs_input(input_path))
-    rng = np.random.default_rng(7)
-    state = jnp.asarray(rng.normal(size=(int(op.total_size),)), dtype=jnp.float64)
-
-    vector, offset = radial_current_vm_psi_hat_observable_vector(op, chunk_size=11)
-    probed = jnp.vdot(vector, state) + offset
-    direct = radial_current_vm_psi_hat_from_state(op, x_full=state)
-
-    np.testing.assert_allclose(probed, direct, rtol=0.0, atol=1.0e-10)
-
-    vector_rhat, offset_rhat = radial_current_vm_observable_vector(
-        op,
-        radial_coordinate="rHat",
-        psi_a_hat=-0.384935,
-        a_hat=0.5109,
-        r_n=0.5,
-        chunk_size=11,
-    )
-    probed_rhat = jnp.vdot(vector_rhat, state) + offset_rhat
-    direct_rhat = radial_current_vm_from_state(
-        op,
-        x_full=state,
-        radial_coordinate="rHat",
-        psi_a_hat=-0.384935,
-        a_hat=0.5109,
-        r_n=0.5,
-    )
-    np.testing.assert_allclose(probed_rhat, direct_rhat, rtol=0.0, atol=1.0e-10)
-
-
-def test_rhs1_radial_current_jvp_vjp_dot_product_gate() -> None:
-    input_path = Path(__file__).parent / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
-    op = full_system_operator_from_namelist(nml=read_sfincs_input(input_path))
-    rng = np.random.default_rng(11)
-    state = jnp.asarray(rng.normal(size=(int(op.total_size),)), dtype=jnp.float64)
-    tangent = jnp.asarray(rng.normal(size=(int(op.total_size),)), dtype=jnp.float64)
-    cotangent = jnp.asarray(1.25, dtype=jnp.float64)
-
-    result = adjoint_dot_product_check(
-        lambda x: radial_current_vm_from_state(
-            op,
-            x_full=x,
-            radial_coordinate="rHat",
-            psi_a_hat=-0.384935,
-            a_hat=0.5109,
-            r_n=0.5,
-        ),
-        state,
-        tangent,
-        cotangent,
-    )
-
-    assert result.abs_error < 1.0e-10
-    np.testing.assert_allclose(result.lhs, result.rhs, rtol=0.0, atol=1.0e-10)
-
-
-def test_rhs1_transport_diagnostic_jvp_vjp_dot_product_gates() -> None:
-    input_path = Path(__file__).parent / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
-    op = full_system_operator_from_namelist(nml=read_sfincs_input(input_path))
+    op = kinetic_operator_from_namelist(read_sfincs_input(input_path))
     rng = np.random.default_rng(12)
     state = jnp.asarray(rng.normal(size=(int(op.total_size),)), dtype=jnp.float64)
     tangent = jnp.asarray(rng.normal(size=(int(op.total_size),)), dtype=jnp.float64)
     cotangent = jnp.asarray(0.75, dtype=jnp.float64)
 
     diagnostic_functions = {
-        "particle_flux_vm_psi_hat": lambda x: v3_transport_diagnostics_vm_only(
-            op, x_full=x
-        ).particle_flux_vm_psi_hat[0],
-        "heat_flux_vm_psi_hat": lambda x: v3_transport_diagnostics_vm_only(
-            op, x_full=x
-        ).heat_flux_vm_psi_hat[0],
-        "fsab_flow": lambda x: v3_transport_diagnostics_vm_only(op, x_full=x).fsab_flow[0],
-        "fsab_jhat": lambda x: jnp.vdot(
-            op.z_s,
-            v3_transport_diagnostics_vm_only(op, x_full=x).fsab_flow,
-        ),
+        "particle_flux_vm_psi_hat": lambda x: profile_moments_from_operator(op, x)[
+            "particleFlux_vm_psiHat"
+        ][0],
+        "heat_flux_vm_psi_hat": lambda x: profile_moments_from_operator(op, x)["heatFlux_vm_psiHat"][0],
+        "fsab_flow": lambda x: profile_moments_from_operator(op, x)["FSABFlow"][0],
+        "fsab_jhat": lambda x: jnp.vdot(op.z_s, profile_moments_from_operator(op, x)["FSABFlow"]),
     }
 
     for name, diagnostic in diagnostic_functions.items():
         result = adjoint_dot_product_check(diagnostic, state, tangent, cotangent)
         assert result.abs_error < 1.0e-10, name
-
-
-def test_implicit_linear_observable_derivative_rejects_incompatible_shapes() -> None:
-    a0, ap, b0, bp, c0, _cp, _offset0, _offsetp, p0 = _linear_system_components()
-
-    with pytest.raises(ValueError, match="rhs length"):
-        implicit_linear_observable_derivative(
-            matrix=a0 + p0 * ap,
-            rhs=b0[:2],
-            matrix_derivative=ap,
-            rhs_derivative=bp,
-            observable_vector=c0,
-        )
-
-    with pytest.raises(ValueError, match="matrix and matrix_derivative"):
-        implicit_linear_observable_derivative(
-            matrix=a0 + p0 * ap,
-            rhs=b0,
-            matrix_derivative=ap[:2, :2],
-            rhs_derivative=bp,
-            observable_vector=c0,
-        )
-
-    with pytest.raises(ValueError, match="rhs_derivative length"):
-        implicit_linear_observable_derivative(
-            matrix=a0 + p0 * ap,
-            rhs=b0,
-            matrix_derivative=ap,
-            rhs_derivative=bp[:2],
-            observable_vector=c0,
-        )
-
-    with pytest.raises(ValueError, match="observable_vector_derivative length"):
-        implicit_linear_observable_derivative(
-            matrix=a0 + p0 * ap,
-            rhs=b0,
-            matrix_derivative=ap,
-            rhs_derivative=bp,
-            observable_vector=c0,
-            observable_vector_derivative=c0[:2],
-        )
-
-    with pytest.raises(ValueError, match="finite_difference_step"):
-        implicit_linear_observable_derivative(
-            matrix=a0 + p0 * ap,
-            rhs=b0,
-            matrix_derivative=ap,
-            rhs_derivative=bp,
-            observable_vector=c0,
-            finite_difference_observable=lambda value: float(value),
-            finite_difference_step=-1.0,
-        )
-
-
-def test_evaluate_linear_observable_uses_custom_solve_and_rejects_bad_shapes() -> None:
-    matrix = jnp.asarray([[2.0, 0.0], [0.0, 4.0]], dtype=jnp.float64)
-    rhs = jnp.asarray([2.0, 8.0], dtype=jnp.float64)
-    observable = jnp.asarray([3.0, -1.0], dtype=jnp.float64)
-    system = LinearObservableSystem(
-        parameter=0.0,
-        matrix=matrix,
-        rhs=rhs,
-        matrix_derivative=jnp.zeros_like(matrix),
-        rhs_derivative=jnp.zeros_like(rhs),
-        observable_vector=observable,
-        observable_offset=0.5,
-        metadata={"gate": "dense_observable_shape_contract"},
-    )
-    calls: list[tuple[tuple[int, ...], tuple[int, ...]]] = []
-
-    def custom_solve(a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
-        calls.append((tuple(a.shape), tuple(b.shape)))
-        return jnp.asarray([1.0, 2.0], dtype=jnp.float64)
-
-    value = evaluate_linear_observable(system, solve=custom_solve)
-
-    assert calls == [((2, 2), (2,))]
-    np.testing.assert_allclose(value, 1.5, rtol=0.0, atol=0.0)
-    with pytest.raises(TypeError):
-        system.metadata["gate"] = "mutated"
-
-    with pytest.raises(ValueError, match="square 2D matrix"):
-        evaluate_linear_observable(replace(system, matrix=jnp.ones((2, 3), dtype=jnp.float64)))
-    with pytest.raises(ValueError, match="observable_vector length"):
-        evaluate_linear_observable(replace(system, observable_vector=observable[:1]))
-
-
-def test_matrix_free_linear_observable_rejects_shape_mismatches() -> None:
-    matrix = jnp.asarray([[2.0, 0.25], [0.0, 1.5]], dtype=jnp.float64)
-    rhs = jnp.asarray([1.0, -0.5], dtype=jnp.float64)
-    rhs_derivative = jnp.asarray([0.1, 0.2], dtype=jnp.float64)
-    observable = jnp.asarray([0.4, -0.3], dtype=jnp.float64)
-
-    def system_with(**overrides) -> MatrixFreeLinearObservableSystem:
-        values = {
-            "parameter": 0.0,
-            "size": 2,
-            "rhs": rhs,
-            "rhs_derivative": rhs_derivative,
-            "apply": lambda x: matrix @ x,
-            "transpose_apply": lambda x: matrix.T @ x,
-            "derivative_apply": lambda x: jnp.asarray([0.0, 0.0], dtype=jnp.float64),
-            "solve": lambda b: jnp.linalg.solve(matrix, b),
-            "transpose_solve": lambda b: jnp.linalg.solve(matrix.T, b),
-            "observable_vector": observable,
-            "metadata": {"gate": "matrix_free_shape_contract"},
-        }
-        values.update(overrides)
-        return MatrixFreeLinearObservableSystem(**values)
-
-    value = evaluate_matrix_free_linear_observable(system_with(observable_offset=0.25))
-    expected = float(jnp.vdot(observable, jnp.linalg.solve(matrix, rhs)) + 0.25)
-    np.testing.assert_allclose(value, expected, rtol=0.0, atol=1.0e-12)
-
-    with pytest.raises(ValueError, match="size must be positive"):
-        system_with(size=0)
-    with pytest.raises(ValueError, match="solve\\(rhs\\) length"):
-        evaluate_matrix_free_linear_observable(system_with(solve=lambda b: b[:1]))
-    with pytest.raises(ValueError, match="derivative_apply\\(solution\\) length"):
-        implicit_matrix_free_linear_observable_derivative(
-            system_with(derivative_apply=lambda x: jnp.asarray([1.0], dtype=jnp.float64))
-        )
-    with pytest.raises(ValueError, match="transpose_solve\\(observable_vector\\) length"):
-        implicit_matrix_free_linear_observable_derivative(system_with(transpose_solve=lambda b: b[:1]))

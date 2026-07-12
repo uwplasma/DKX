@@ -1,18 +1,9 @@
 """End-to-end tests for the canonical RHSMode=1 driver and writer.
 
-Vertical slice #3 referee (plan_final.md "File-Level Execution Queues"):
-
-- ``sfincs_jax.run.run_profile`` moment tables must equal the legacy
-  ``problems.transport_diagnostics.v3_rhsmode1_output_fields_vm_only`` values
-  on the same solved state to 1e-10 (scaled) for the tiny PAS scheme-1
-  axisymmetric fixture, the 2-species Fokker-Planck fixture, and a withEr
-  PAS/DKES case (the ``tests/test_drift_kinetic.py`` inline deck);
-- the ``sfincs_jax.writer.write_profile_output`` h5 file must contain every
-  dataset the legacy ``outputs`` writer emits for RHSMode=1, equal to 1e-10
-  (scaled), with the known-missing set enumerated explicitly: the legacy
-  JAX-only ``linearSolver*`` metadata.  Phi1, the tangential magnetic drifts,
-  and — where the deck requests it — the export_f data family are all now
-  canonical (see ``test_run_profile_magnetic_drifts_match_legacy`` below);
+- ``sfincs_jax.run.run_profile`` solved states must reproduce the frozen
+  Fortran v3 ``stateVector`` fixtures, and the written h5 file must match the
+  recorded Fortran ``sfincsOutput.h5`` golden where one exists (the tiny PAS
+  scheme-1 axisymmetric fixture);
 - stdout must contain the diagnostics.F90 species-results block rendered by
   the golden-pinned ``console.species_results_lines`` helpers
   (format byte-parity is pinned in ``tests/test_inputs_console.py``), with
@@ -39,61 +30,17 @@ FIXTURES = (
     WITH_ER_BASE,
 )
 
-# Datasets present in the legacy RHSMode=1 output file but not written by the
-# canonical writer.  ``linearSolver*`` is legacy-JAX solver metadata (not a
-# Fortran dataset).  The export_f data family (full_f/delta_f + export_f grids)
-# is now written by the canonical writer (sfincs_jax.writer._export_f_data), so
-# it is no longer in the known-missing set.  Phi1 and magnetic-drift families
-# never appear here because the canonical operator refuses those decks at
-# construction (tests/test_drift_kinetic.py).
-_LEGACY_SOLVER_METADATA = frozenset({
-    "linearSolverAcceptanceCriterion", "linearSolverAccepted", "linearSolverConverged",
-    "linearSolverMethod", "linearSolverRequestedMethod", "linearSolverResidualNorm",
-    "linearSolverResidualTarget", "linearSolverResidualTargetRatio",
-    "linearSolverTrueResidualConverged",
-})  # fmt: skip
-KNOWN_MISSING = {
-    "pas_1species_PAS_noEr_tiny_scheme1": _LEGACY_SOLVER_METADATA,
-    # The quick_2species deck sets export_full_f/export_delta_f = .true.; the
-    # canonical writer now emits the full_f/delta_f data family (parity ~1e-10).
-    "quick_2species_FPCollisions_noEr": _LEGACY_SOLVER_METADATA,
-    WITH_ER_BASE: _LEGACY_SOLVER_METADATA,
-}
-
 EXPECTED_SOLVE_METHOD = {
     "pas_1species_PAS_noEr_tiny_scheme1": "block_tridiagonal",
     "quick_2species_FPCollisions_noEr": "gcrot",
     WITH_ER_BASE: "block_tridiagonal",
 }
 
-# The legacy write path solves iteratively at the deck's solverTolerance while
-# tier 1 is direct: the moment-table and h5 referee needs a tight deck.
+# Tier 1 is a direct solve, but the frozen Fortran states carry the Fortran
+# Krylov tolerance: a tight deck keeps the state referee sharp.
 _WITH_ER_TOLERANCE_LINE = "  Nx = 3\n  solverTolerance = 1d-13\n"
 
-# Wall-clock content differs run to run; compare shape/dtype only.
-TIMING_KEYS = frozenset({"elapsed time (s)"})
-
-# Scaled comparison tolerance |a-b| <= tol * max(1, max|a|).
-DEFAULT_TOL = 1e-10
-
-# The legacy moments helper leaves NTV as a zero placeholder (the writer fills
-# it separately); the canonical table carries the real NTV, which the h5
-# comparison referees instead.
-_NTV_KEYS = frozenset({"NTV", "NTVBeforeSurfaceIntegral"})
-
 _CACHE: dict[str, dict] = {}
-
-
-@pytest.fixture(autouse=True)
-def _clear_legacy_solver_policy_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep the legacy write path independent of earlier solver-policy tests."""
-    for key in (
-        "SFINCS_JAX_RHSMODE1_PRECONDITIONER",
-        "SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_LEVELS",
-        "SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_STEPS",
-        "SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_DAMP",
-    ):
-        monkeypatch.delenv(key, raising=False)
 
 
 def _read_h5(path: Path) -> dict[str, np.ndarray]:
@@ -118,29 +65,19 @@ def _deck_path(base: str, tmp_dir: Path) -> Path:
 
 
 def _case(base: str, tmp_path_factory: pytest.TempPathFactory) -> dict:
-    """One canonical run + one legacy write per fixture, cached module-wide."""
+    """One canonical run per fixture, cached module-wide."""
     if base not in _CACHE:
-        from sfincs_jax.io import write_sfincs_jax_output_h5
         from sfincs_jax.run import run_profile
 
         tmp_dir = tmp_path_factory.mktemp(f"rhsmode1_{base}")
         deck = _deck_path(base, tmp_dir)
         lines: list[str] = []
         run = run_profile(deck, out_path=tmp_dir / f"{base}.canonical.h5", emit=lines.append)
-        legacy_path = tmp_dir / f"{base}.legacy.h5"
-        write_sfincs_jax_output_h5(
-            input_namelist=deck,
-            output_path=legacy_path,
-            compute_solution=True,
-            overwrite=True,
-            verbose=False,
-        )
         _CACHE[base] = {
             "deck": deck,
             "run": run,
             "lines": tuple(lines),
             "canonical": _read_h5(run.output_path),
-            "legacy": _read_h5(legacy_path),
         }
     return _CACHE[base]
 
@@ -157,34 +94,30 @@ def _assert_scaled_close(a: np.ndarray, b: np.ndarray, *, tol: float, label: str
 
 
 # ---------------------------------------------------------------------------
-# Moment-table equality vs the legacy diagnostics on the same solved state
+# Solved-state and physics anchors vs the frozen Fortran references
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("base", FIXTURES)
-def test_run_profile_moments_match_legacy_diagnostics(
+def test_run_profile_state_and_bootstrap_closure(
     base: str, tmp_path_factory: pytest.TempPathFactory
 ) -> None:
-    import jax.numpy as jnp
-
-    from sfincs_jax.namelist import read_sfincs_input
-    from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
-    from sfincs_jax.problems import transport_diagnostics as td
+    from sfincs_jax.validation.fortran import read_petsc_vec
 
     case = _case(base, tmp_path_factory)
     run = case["run"]
     assert run.solve_result.converged
     assert run.state_vector.shape == (run.operator.total_size,)
 
-    op_old = full_system_operator_from_namelist(
-        nml=read_sfincs_input(case["deck"]), identity_shift=0.0
-    )
-    old = td.v3_rhsmode1_output_fields_vm_only(op_old, x_full=jnp.asarray(run.state_vector))
-    assert set(old).issubset(set(run.moments))
-    for key in sorted(set(old) - _NTV_KEYS):
-        _assert_scaled_close(old[key], run.moments[key], tol=DEFAULT_TOL, label=key)
+    # Direct Fortran state referee where a frozen stateVector exists.
+    statevec = REF / f"{base}.stateVector.petscbin"
+    if statevec.exists():
+        x_ref = read_petsc_vec(statevec).values
+        scale = max(1.0, float(np.max(np.abs(x_ref))))
+        err = float(np.max(np.abs(np.asarray(run.state_vector) - x_ref)))
+        assert err <= 1e-8 * scale, f"state referee: max|diff|={err:g}"
 
-    # Bootstrap-current closure as a physics anchor (not just old-vs-new).
+    # Bootstrap-current closure as a physics anchor.
     z_s = np.asarray(run.operator.z_s, dtype=np.float64)
     np.testing.assert_allclose(
         float(run.moments["FSABjHat"]),
@@ -195,32 +128,21 @@ def test_run_profile_moments_match_legacy_diagnostics(
 
 
 # ---------------------------------------------------------------------------
-# h5 field-by-field equality vs the legacy writer file
+# h5 field-by-field equality vs the recorded Fortran golden
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("base", FIXTURES)
-def test_profile_h5_matches_legacy_writer(
-    base: str, tmp_path_factory: pytest.TempPathFactory
-) -> None:
+def test_profile_h5_matches_fortran_golden(tmp_path_factory: pytest.TempPathFactory) -> None:
+    from sfincs_jax.compare import compare_sfincs_outputs
+
+    base = "pas_1species_PAS_noEr_tiny_scheme1"
     case = _case(base, tmp_path_factory)
-    legacy, canonical = case["legacy"], case["canonical"]
-
-    missing = set(legacy) - set(canonical)
-    extra = set(canonical) - set(legacy)
-    assert missing == set(KNOWN_MISSING[base])
-    assert extra == set()
-
-    for key in sorted(set(legacy) & set(canonical)):
-        a, b = legacy[key], canonical[key]
-        if a.dtype.kind in "SOU" or b.dtype.kind in "SOU":
-            assert np.array_equal(a, b), f"{key}: string dataset mismatch"
-            continue
-        assert a.dtype == b.dtype, f"{key}: dtype {a.dtype} != {b.dtype}"
-        if key in TIMING_KEYS:
-            assert a.shape == b.shape
-            continue
-        _assert_scaled_close(a, b, tol=DEFAULT_TOL, label=key)
+    golden = REF / f"{base}.sfincsOutput.h5"
+    results = compare_sfincs_outputs(
+        a_path=golden, b_path=Path(str(case["run"].output_path)), rtol=1e-8, atol=1e-9
+    )
+    failures = [r for r in results if not r.ok]
+    assert not failures, f"canonical vs Fortran golden mismatches: {[f.key for f in failures]}"
 
 
 # ---------------------------------------------------------------------------
@@ -327,45 +249,32 @@ def test_run_profile_rejects_transport_modes() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_run_profile_magnetic_drifts_match_legacy(
+def test_run_profile_magnetic_drifts_end_to_end(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Canonical run_profile with tangential magnetic drifts matches the legacy pipeline.
+    """Canonical run_profile with tangential magnetic drifts runs end to end.
 
-    The ``magneticDriftScheme=1`` Boozer (geometryScheme 11) deck now routes
-    through the canonical stack.  Because the drift couples L±2 the operator is
-    not block-tridiagonal, so :func:`sfincs_jax.solve.solve` routes it to tier-2
+    The ``magneticDriftScheme=1`` Boozer (geometryScheme 11) deck routes through
+    the canonical stack.  Because the drift couples L±2 the operator is not
+    block-tridiagonal, so :func:`sfincs_jax.solve.solve` routes it to tier-2
     GCROT (falling back to the exact tier-3 direct solve on this tiny
-    collisionless fixture).  Its fluxes must equal the retained legacy pipeline,
-    whose magnetic-drift assembly is validated element-wise against Fortran v3 in
-    ``tests/test_magnetic_drifts_parity.py``.
+    collisionless fixture).  The drift assembly is validated element-wise
+    against Fortran v3 in ``tests/test_magnetic_drifts_parity.py`` and the
+    scheme 2-9 output families against Fortran goldens in
+    ``tests/test_output_h5_magdrift_schemes_parity.py``.
     """
-    from sfincs_jax.cli import deck_requires_legacy_pipeline
-    from sfincs_jax.io import write_sfincs_jax_output_h5
-    from sfincs_jax.namelist import read_sfincs_input
     from sfincs_jax.run import run_profile
 
     monkeypatch.setenv("SFINCS_JAX_EQUILIBRIA_DIRS", str(REF))
     deck = REF / "magdrift_1species_tiny.input.namelist"
 
-    # The deck routes canonically now (no longer deferred to the legacy pipeline).
-    assert deck_requires_legacy_pipeline(read_sfincs_input(deck)) is None
-
     run = run_profile(deck, out_path=tmp_path / "magdrift.canonical.h5", emit=None)
-    legacy_path = tmp_path / "magdrift.legacy.h5"
-    write_sfincs_jax_output_h5(
-        input_namelist=deck,
-        output_path=legacy_path,
-        compute_solution=True,
-        overwrite=True,
-        verbose=False,
-    )
+    assert run.solve_result.converged
     canonical = _read_h5(run.output_path)
-    legacy = _read_h5(legacy_path)
 
     for key in ("particleFlux_vm_psiHat", "heatFlux_vm_psiHat", "FSABFlow", "FSABjHat"):
-        assert key in canonical and key in legacy, f"missing flux dataset {key!r}"
-        _assert_scaled_close(canonical[key], legacy[key], tol=1e-9, label=key)
+        assert key in canonical, f"missing flux dataset {key!r}"
+        assert np.all(np.isfinite(np.asarray(canonical[key], dtype=np.float64))), key
 
 
 # ---------------------------------------------------------------------------

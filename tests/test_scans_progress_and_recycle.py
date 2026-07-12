@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -210,13 +209,13 @@ def test_run_er_scan_skip_existing_reuses_completed_output(tmp_path: Path, monke
     existing_output = existing_run_dir / "sfincsOutput.h5"
     existing_output.write_bytes(b"done")
 
-    def _unexpected_write(**_kwargs) -> None:
+    def _unexpected_write(*_args, **_kwargs) -> None:
         raise AssertionError("skip_existing should not write a completed point")
 
     def _unexpected_localize(**_kwargs) -> None:
         raise AssertionError("skip_existing should not localize a completed point")
 
-    monkeypatch.setattr(scans, "write_sfincs_jax_output_h5", _unexpected_write)
+    monkeypatch.setattr(scans, "run_from_namelist", _unexpected_write)
     monkeypatch.setattr(scans, "localize_equilibrium_file_in_place", _unexpected_localize)
     messages: list[str] = []
 
@@ -234,12 +233,12 @@ def test_run_er_scan_skip_existing_reuses_completed_output(tmp_path: Path, monke
     assert any("reused existing output" in message for message in messages)
 
 
-def test_run_er_scan_parallel_path_uses_executor_and_disables_recycle(
+def test_run_er_scan_parallel_path_uses_executor(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     template = _minimal_scan_input(tmp_path / "input.namelist")
-    writes: list[tuple[str, str | None, str | None]] = []
+    writes: list[str] = []
 
     class _FakeFuture:
         def __init__(self, result):
@@ -261,24 +260,15 @@ def test_run_er_scan_parallel_path_uses_executor_and_disables_recycle(
         def submit(self, fn, payload):
             return _FakeFuture(fn(payload))
 
-    def _fake_write(**kwargs) -> None:
-        out_path = Path(kwargs["output_path"])
+    def _fake_run(_namelist_path, *, out_path, **_kwargs) -> None:
+        out_path = Path(out_path)
         out_path.write_bytes(b"")
-        writes.append(
-            (
-                out_path.parent.name,
-                os.environ.get("SFINCS_JAX_STATE_IN"),
-                os.environ.get("SFINCS_JAX_STATE_OUT"),
-            )
-        )
+        writes.append(out_path.parent.name)
 
     monkeypatch.setattr(scans, "localize_equilibrium_file_in_place", lambda **_kwargs: None)
-    monkeypatch.setattr(scans, "write_sfincs_jax_output_h5", _fake_write)
+    monkeypatch.setattr(scans, "run_from_namelist", _fake_run)
     monkeypatch.setattr(scans.concurrent.futures, "ProcessPoolExecutor", _FakePool)
     monkeypatch.setattr(scans.concurrent.futures, "as_completed", lambda futures: list(futures))
-    monkeypatch.setenv("SFINCS_JAX_SCAN_RECYCLE", "1")
-    monkeypatch.setenv("SFINCS_JAX_STATE_IN", "stale-in")
-    monkeypatch.setenv("SFINCS_JAX_STATE_OUT", "stale-out")
     messages: list[tuple[int, str]] = []
 
     result = scans.run_er_scan(
@@ -291,42 +281,26 @@ def test_run_er_scan_parallel_path_uses_executor_and_disables_recycle(
 
     assert result.values == (1.0, 0.0)
     assert [path.name for path in result.run_dirs] == ["Er0", "Er1"]
-    assert [name for name, _state_in, _state_out in sorted(writes)] == ["Er0", "Er1"]
-    assert all(state_in is None and state_out is None for _name, state_in, state_out in writes)
-    assert os.environ["SFINCS_JAX_SCAN_RECYCLE"] == "0"
-    assert "SFINCS_JAX_STATE_IN" not in os.environ
-    assert "SFINCS_JAX_STATE_OUT" not in os.environ
+    assert sorted(writes) == ["Er0", "Er1"]
     assert any("jobs=2 (parallel)" in message for _level, message in messages)
-    assert any("scan recycle disabled for parallel execution" in message for _level, message in messages)
     assert sum("scan-er: progress" in message for _level, message in messages) == 2
 
 
-def test_run_er_scan_subset_and_serial_recycle_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_er_scan_subset_serial_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     template = _minimal_scan_input(tmp_path / "input.namelist")
-    writes: list[tuple[str, str | None, str | None, Path]] = []
+    writes: list[tuple[str, Path]] = []
 
     def _fake_localize(*, input_namelist: Path, overwrite: bool) -> None:
         assert input_namelist.exists()
         assert overwrite is False
 
-    def _fake_write(**kwargs) -> None:
-        out_path = Path(kwargs["output_path"])
+    def _fake_run(_namelist_path, *, out_path, solver_trace_path, **_kwargs) -> None:
+        out_path = Path(out_path)
         out_path.write_bytes(b"")
-        state_out = os.environ.get("SFINCS_JAX_STATE_OUT")
-        if state_out:
-            Path(state_out).write_bytes(b"state")
-        writes.append(
-            (
-                out_path.parent.name,
-                os.environ.get("SFINCS_JAX_STATE_IN"),
-                state_out,
-                Path(kwargs["solver_trace_path"]),
-            )
-        )
+        writes.append((out_path.parent.name, Path(solver_trace_path)))
 
     monkeypatch.setattr(scans, "localize_equilibrium_file_in_place", _fake_localize)
-    monkeypatch.setattr(scans, "write_sfincs_jax_output_h5", _fake_write)
-    monkeypatch.setenv("SFINCS_JAX_SCAN_RECYCLE", "1")
+    monkeypatch.setattr(scans, "run_from_namelist", _fake_run)
 
     result = scans.run_er_scan(
         input_namelist=template,
@@ -341,13 +315,9 @@ def test_run_er_scan_subset_and_serial_recycle_state(tmp_path: Path, monkeypatch
     assert result.values == (3.0, 1.0)
     assert [path.name for path in result.run_dirs] == ["Er3", "Er1"]
     assert writes[0][0] == "Er3"
-    assert writes[0][1] is None
-    assert writes[0][2] is not None and writes[0][2].endswith("Er3/sfincs_jax_state.npz")
-    assert writes[0][3].name == "sfincsOutput.solver_trace.json"
+    assert writes[0][1].name == "sfincsOutput.solver_trace.json"
     assert writes[1][0] == "Er1"
-    assert writes[1][1] is not None and writes[1][1].endswith("Er3/sfincs_jax_state.npz")
-    assert writes[1][2] is not None and writes[1][2].endswith("Er1/sfincs_jax_state.npz")
-    assert writes[1][3].parent.name == "Er1"
+    assert writes[1][1].parent.name == "Er1"
 
 
 def test_run_er_scan_rejects_invalid_subset_index(tmp_path: Path) -> None:

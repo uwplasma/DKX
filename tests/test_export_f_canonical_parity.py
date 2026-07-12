@@ -3,7 +3,7 @@
 The canonical writer (:mod:`sfincs_jax.writer`) now computes the ``full_f`` /
 ``delta_f`` distribution-function export on the ``export_f`` user grids from the
 solved state, so an ``export_full_f``/``export_delta_f`` deck no longer falls
-back to the legacy ``io.write_sfincs_jax_output_h5`` pipeline.
+back to any non-canonical pipeline.
 
 The fixture ``quick_2species_FPCollisions_noEr`` (2-species Fokker-Planck,
 geometryScheme=4) requests ``export_full_f``/``export_delta_f`` with
@@ -19,9 +19,8 @@ from pathlib import Path
 
 import numpy as np
 
-from sfincs_jax.cli import deck_requires_legacy_pipeline
-from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
-from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax.api import write_output
+from sfincs_jax.io import read_sfincs_h5
 from sfincs_jax.run import run_profile
 
 REF = Path(__file__).parent / "ref"
@@ -40,13 +39,6 @@ _EXPORT_F_META = (
     "export_full_f",
     "export_delta_f",
 )
-
-
-def test_export_f_deck_is_no_longer_a_legacy_fallback_trigger() -> None:
-    nml = read_sfincs_input(REF / "quick_2species_FPCollisions_noEr.input.namelist")
-    export_f = nml.group("export_f")
-    assert bool(export_f.get("EXPORT_FULL_F", False)) or bool(export_f.get("EXPORT_DELTA_F", False))
-    assert deck_requires_legacy_pipeline(nml) is None
 
 
 def test_canonical_export_f_matches_fortran_reference(tmp_path: Path) -> None:
@@ -81,21 +73,25 @@ def test_canonical_export_f_matches_fortran_reference(tmp_path: Path) -> None:
         assert int(np.asarray(out[key])) == int(np.asarray(ref[key])), key
 
 
-def test_canonical_export_f_matches_legacy_writer(tmp_path: Path) -> None:
+def test_public_write_output_facade_matches_run_profile(tmp_path: Path) -> None:
+    """``api.write_output`` routes the deck through the same canonical run.
+
+    ``run_profile`` is called here with its default tolerance (1e-10) while
+    ``write_output`` honors the deck's ``solverTolerance``, so the two solves
+    agree only to the looser solver tolerance, not machine precision.
+    """
     input_path = REF / "quick_2species_FPCollisions_noEr.input.namelist"
 
     canonical = tmp_path / "canonical.h5"
-    legacy = tmp_path / "legacy.h5"
+    facade = tmp_path / "facade.h5"
     run_profile(input_path, out_path=canonical, emit=None)
-    write_sfincs_jax_output_h5(
-        input_namelist=input_path, output_path=legacy, compute_solution=True, verbose=False
-    )
+    write_output(input_path, facade)
 
     a = read_sfincs_h5(canonical)
-    b = read_sfincs_h5(legacy)
+    b = read_sfincs_h5(facade)
     for key in _EXPORT_F_DATA + _EXPORT_F_GRIDS:
         av = np.asarray(a[key], dtype=np.float64)
         bv = np.asarray(b[key], dtype=np.float64)
         assert av.shape == bv.shape, key
         assert av.dtype == np.asarray(a[key]).dtype
-        np.testing.assert_allclose(av, bv, rtol=0.0, atol=1e-12, err_msg=key)
+        np.testing.assert_allclose(av, bv, rtol=0.0, atol=1e-8, err_msg=key)

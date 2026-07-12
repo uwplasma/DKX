@@ -1,13 +1,15 @@
-"""Referee tests: ``sfincs_jax.magnetic_geometry`` reproduces the geometry package.
+"""Tests for ``sfincs_jax.magnetic_geometry``.
 
-New == old (1e-15) for the analytic schemes, the VMEC wout path, and the
-Boozer ``.bc`` path, plus a differentiability gate for the ``from_fourier``
-(geometryScheme 13) constructor used by optimization.
+The analytic schemes are pinned against independent evaluations of the
+``geometry.F90`` formulas; the VMEC/Boozer file paths are pinned against the
+recorded Fortran output goldens (``tests/test_output_h5_scheme*_parity.py``
+and ``tests/test_geometry_scheme11_parity.py``).  Includes a
+differentiability gate for the ``from_fourier`` (geometryScheme 13)
+constructor used by optimization.
 """
 
 from __future__ import annotations
 
-import dataclasses
 import math
 from pathlib import Path
 
@@ -17,18 +19,8 @@ import pytest
 import jax
 import jax.numpy as jnp
 
-from sfincs_jax.geometry import (
-    boozer_geometry_from_bc_file,
-    boozer_geometry_scheme1,
-    boozer_geometry_scheme2,
-    boozer_geometry_scheme4,
-)
-from sfincs_jax.geometry.boozer import gpsipsi_from_bc_file
-from sfincs_jax.geometry.vmec import vmec_geometry_from_wout_file
-from sfincs_jax.geometry.vmec_wout import gpsipsi_from_wout_file
 from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry, read_vmec_wout
 
-_W7X_SC1_BC = Path("/Users/rogerio/local/sfincs/equilibria/w7x-sc1.bc")
 _NONSTELSYM_WOUT = Path(__file__).parent / "ref" / "wout_up_down_asymmetric_tokamak.nc"
 
 # Stellarator-asymmetric (lasym=T) complementary-parity tables read by
@@ -52,28 +44,6 @@ def _grid(n_theta: int, n_zeta: int, n_periods: int) -> tuple[jnp.ndarray, jnp.n
     return theta, zeta
 
 
-def _assert_geometry_matches(old, new: FluxSurfaceGeometry) -> None:
-    """Every field of the legacy container must match the new one to 1e-15."""
-    for f in dataclasses.fields(old):
-        a = np.asarray(getattr(old, f.name), dtype=np.float64)
-        b = np.asarray(getattr(new, f.name), dtype=np.float64)
-        np.testing.assert_allclose(b, a, rtol=1.0e-15, atol=1.0e-15, err_msg=f.name)
-
-
-def _wout_path() -> Path | None:
-    """Resolve the cached W7-X wout fixture; None when offline and uncached."""
-    from sfincs_jax.validation.data_fetch import resolve_external_equilibrium
-
-    name = "wout_w7x_standardConfig.nc"
-    p = resolve_external_equilibrium(name, fetch=False)
-    if p is not None:
-        return p
-    try:
-        return resolve_external_equilibrium(name, fetch=True)
-    except Exception:  # noqa: BLE001 - offline
-        return None
-
-
 # ---------------------------------------------------------------------------
 # Analytic schemes
 # ---------------------------------------------------------------------------
@@ -88,7 +58,7 @@ def _wout_path() -> Path | None:
         dict(helicity_n=0, helicity_antisymm_n=3, epsilon_antisymm=0.02),  # tokamak-like NPeriods=1
     ],
 )
-def test_scheme1_matches_legacy(n_theta: int, n_zeta: int, params: dict) -> None:
+def test_scheme1_matches_analytic_three_helicity_model(n_theta: int, n_zeta: int, params: dict) -> None:
     defaults = dict(
         epsilon_t=-0.07053,
         epsilon_h=0.05067,
@@ -103,26 +73,49 @@ def test_scheme1_matches_legacy(n_theta: int, n_zeta: int, params: dict) -> None
         helicity_antisymm_n=0,
     )
     defaults.update(params)
-    theta, zeta = _grid(n_theta, n_zeta, max(1, int(defaults["helicity_n"])))
-    old = boozer_geometry_scheme1(theta=theta, zeta=zeta, **defaults)
-    new = FluxSurfaceGeometry.from_scheme(1, theta=theta, zeta=zeta, **defaults)
-    _assert_geometry_matches(old, new)
+    n_periods = max(1, int(defaults["helicity_n"]))
+    theta, zeta = _grid(n_theta, n_zeta, n_periods)
+    geom = FluxSurfaceGeometry.from_scheme(1, theta=theta, zeta=zeta, **defaults)
 
-
-@pytest.mark.parametrize(("n_theta", "n_zeta"), _GRIDS)
-def test_scheme4_matches_legacy(n_theta: int, n_zeta: int) -> None:
-    theta, zeta = _grid(n_theta, n_zeta, 5)
-    old = boozer_geometry_scheme4(theta=theta, zeta=zeta)
-    new = FluxSurfaceGeometry.from_scheme(4, theta=theta, zeta=zeta)
-    _assert_geometry_matches(old, new)
-
-
-@pytest.mark.parametrize(("n_theta", "n_zeta"), _GRIDS)
-def test_scheme2_matches_legacy(n_theta: int, n_zeta: int) -> None:
-    theta, zeta = _grid(n_theta, n_zeta, 10)
-    old = boozer_geometry_scheme2(theta=theta, zeta=zeta)
-    new = FluxSurfaceGeometry.from_scheme(2, theta=theta, zeta=zeta)
-    _assert_geometry_matches(old, new)
+    # Independent evaluation of the geometry.F90 three-helicity model:
+    #   BHat = B0 (1 + eps_t cos(theta) + eps_h cos(l theta - n zeta)
+    #                + eps_a sin(la theta - na zeta)),
+    # with the helical n expressed in field-period units (NPeriods = helicity_n).
+    th = np.asarray(theta)[:, None]
+    ze = np.asarray(zeta)[None, :]
+    b0 = float(defaults["b0_over_bbar"])
+    hel_n = int(defaults["helicity_n"])
+    n2 = 0 if hel_n == 0 else 1
+    n3 = int(defaults["helicity_antisymm_n"]) if hel_n == 0 else int(defaults["helicity_antisymm_n"]) // hel_n
+    expected = b0 * (
+        1.0
+        + float(defaults["epsilon_t"]) * np.cos(th - 0.0 * ze)
+        + float(defaults["epsilon_h"]) * np.cos(int(defaults["helicity_l"]) * th - n_periods * n2 * ze)
+        + float(defaults["epsilon_antisymm"])
+        * np.sin(int(defaults["helicity_antisymm_l"]) * th - n_periods * n3 * ze)
+    )
+    np.testing.assert_allclose(np.asarray(geom.b_hat), expected, rtol=1.0e-14, atol=1.0e-14)
+    assert geom.n_periods == n_periods
+    assert float(geom.iota) == pytest.approx(float(defaults["iota"]), abs=0.0)
+    # DHat = BHat^2 / (GHat + iota IHat) for Boozer coordinates.
+    denom = float(defaults["g_hat"]) + float(defaults["iota"]) * float(defaults["i_hat"])
+    np.testing.assert_allclose(
+        np.asarray(geom.d_hat), expected**2 / denom, rtol=1.0e-13, atol=1.0e-14
+    )
+    # Analytic angular derivatives of the three-helicity model.
+    l_h = int(defaults["helicity_l"])
+    l_a = int(defaults["helicity_antisymm_l"])
+    d_expected_dtheta = b0 * (
+        -float(defaults["epsilon_t"]) * np.sin(th - 0.0 * ze)
+        - float(defaults["epsilon_h"]) * l_h * np.sin(l_h * th - n_periods * n2 * ze)
+        + float(defaults["epsilon_antisymm"]) * l_a * np.cos(l_a * th - n_periods * n3 * ze)
+    )
+    d_expected_dzeta = b0 * (
+        float(defaults["epsilon_h"]) * (n_periods * n2) * np.sin(l_h * th - n_periods * n2 * ze)
+        - float(defaults["epsilon_antisymm"]) * (n_periods * n3) * np.cos(l_a * th - n_periods * n3 * ze)
+    )
+    np.testing.assert_allclose(np.asarray(geom.db_hat_dtheta), d_expected_dtheta, rtol=1.0e-13, atol=1.0e-13)
+    np.testing.assert_allclose(np.asarray(geom.db_hat_dzeta), d_expected_dzeta, rtol=1.0e-13, atol=1.0e-13)
 
 
 def test_scheme3_matches_fortran_table() -> None:
@@ -163,25 +156,9 @@ def test_flux_surface_average_methods() -> None:
 
 
 # ---------------------------------------------------------------------------
-# VMEC wout path (geometryScheme 5)
+# VMEC wout path (geometryScheme 5) — end-to-end Fortran parity lives in
+# tests/test_output_h5_scheme5_parity.py and the nonstelsym scheme-5 golden.
 # ---------------------------------------------------------------------------
-
-
-def test_vmec_matches_legacy() -> None:
-    wout = _wout_path()
-    if wout is None:
-        pytest.skip("W7-X wout fixture not cached and release asset unreachable (offline).")
-    theta, zeta = _grid(9, 7, 5)
-    old = vmec_geometry_from_wout_file(path=wout, theta=theta, zeta=zeta, psi_n_wish=0.25, vmec_radial_option=1)
-    new = FluxSurfaceGeometry.from_vmec(
-        wout, theta=theta, zeta=zeta, psi_n_wish=0.25, vmec_radial_option=1, compute_gpsipsi=True
-    )
-    _assert_geometry_matches(old, new)
-
-    gp_old = gpsipsi_from_wout_file(
-        path=wout, theta=np.asarray(theta), zeta=np.asarray(zeta), psi_n_wish=0.25, vmec_radial_option=1
-    )
-    np.testing.assert_allclose(np.asarray(new.gpsipsi), gp_old, rtol=1.0e-15, atol=1.0e-15)
 
 
 def test_read_vmec_wout_loads_complementary_tables_when_lasym() -> None:
@@ -241,53 +218,6 @@ def test_read_vmec_wout_stellarator_symmetric_returns_none(tmp_path: Path) -> No
     # The symmetric-parity tables are still populated.
     assert w.bmnc is not None
     assert w.rmnc is not None
-
-
-# ---------------------------------------------------------------------------
-# Boozer .bc path (geometryScheme 11)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.skipif(not _W7X_SC1_BC.exists(), reason="w7x-sc1.bc not available on this machine")
-def test_boozer_bc_matches_legacy() -> None:
-    theta, zeta = _grid(9, 7, 5)
-    old = boozer_geometry_from_bc_file(
-        path=str(_W7X_SC1_BC), theta=theta, zeta=zeta, r_n_wish=0.5, vmecradial_option=1, geometry_scheme=11
-    )
-    new = FluxSurfaceGeometry.from_boozer(
-        _W7X_SC1_BC,
-        theta=theta,
-        zeta=zeta,
-        r_n_wish=0.5,
-        vmec_radial_option=1,
-        geometry_scheme=11,
-        compute_gpsipsi=True,
-    )
-    _assert_geometry_matches(old, new)
-
-    gp_old = gpsipsi_from_bc_file(
-        path=str(_W7X_SC1_BC),
-        theta=np.asarray(theta),
-        zeta=np.asarray(zeta),
-        d_hat=np.asarray(old.d_hat),
-        r_n_wish=0.5,
-        vmecradial_option=1,
-        geometry_scheme=11,
-    )
-    np.testing.assert_allclose(np.asarray(new.gpsipsi), gp_old, rtol=1.0e-15, atol=1.0e-15)
-
-
-@pytest.mark.skipif(not _W7X_SC1_BC.exists(), reason="w7x-sc1.bc not available on this machine")
-def test_boozer_bc_interpolated_radius_matches_legacy() -> None:
-    """Exercise the linear-in-s interpolation branch (VMECRadialOption != 1)."""
-    theta, zeta = _grid(7, 5, 5)
-    old = boozer_geometry_from_bc_file(
-        path=str(_W7X_SC1_BC), theta=theta, zeta=zeta, r_n_wish=0.43, vmecradial_option=0, geometry_scheme=11
-    )
-    new = FluxSurfaceGeometry.from_boozer(
-        _W7X_SC1_BC, theta=theta, zeta=zeta, r_n_wish=0.43, vmec_radial_option=0, geometry_scheme=11
-    )
-    _assert_geometry_matches(old, new)
 
 
 # ---------------------------------------------------------------------------

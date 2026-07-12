@@ -1,725 +1,109 @@
 Source-code map
 ===============
 
-This page links the main pieces of the mathematics to the source files that implement
-them. The goal is to shorten the path from an equation in the docs to the exact module
-that evaluates it.
+This page links the main pieces of the mathematics to the source files that
+implement them. The goal is to shorten the path from an equation in the docs
+to the exact module that evaluates it.
 
 High-level flow
 ---------------
 
 For a standard solve, the execution path is:
 
-1. parse namelist and resolve equilibrium inputs,
-2. build grids and geometry coefficients,
-3. construct the operator / residual objects,
-4. choose a solve path and preconditioner,
-5. run the linear or nonlinear iteration,
-6. postprocess diagnostics and write ``sfincsOutput.h5``.
+1. parse namelist and resolve equilibrium inputs (``inputs.py``,
+   ``namelist.py``, ``input_compat.py``, ``paths.py``),
+2. build grids and geometry coefficients (``phase_space.py``, ``xgrid.py``,
+   ``magnetic_geometry.py``),
+3. construct the drift-kinetic operator (``drift_kinetic.py`` with the
+   collision operators from ``collisions.py`` and species data from
+   ``species.py``),
+4. solve the linear (or Phi1 Newton) system (``solve.py``, ``phi1.py``),
+5. compute moments and diagnostics (``moments.py``),
+6. write ``sfincsOutput.h5``/``.nc``/``.npz`` plus the Fortran-parity console
+   flow (``writer.py``, ``console.py``, ``solver_trace.py``), orchestrated end
+   to end by ``run.py``.
 
-Core modules
-------------
+Package layout
+--------------
 
-``sfincs_jax/cli.py``
-^^^^^^^^^^^^^^^^^^^^^
+The package is a flat set of canonical, physics-named root modules, plus
+one level of domain folders below ``sfincs_jax/`` for orchestration-only
+code:
 
-Public command-line interface:
+- ``sfincs_jax/validation`` for frozen-reference loading, Fortran/PETSc
+  fixture readers, release-data manifests, validation artifacts, and the
+  release/benchmark command-line tooling.
+- ``sfincs_jax/workflows`` for scan orchestration (``scans.py``), optimization
+  support (``optimization.py``), and JAX-native geometry adapters for external
+  equilibrium producers (``geometry_adapters.py``).
 
-- ``sfincs_jax input.namelist`` default solve mode,
-- ``write-output``,
-- ``transport-matrix-v3``,
-- comparison and utility commands,
-- parallel runtime/bootstrap flags.
+Canonical root modules
+----------------------
 
-``sfincs_jax/io.py``
-^^^^^^^^^^^^^^^^^^^^
+Physics and numerics:
 
-Input/output orchestration:
+- ``constants.py``: v3 normalizations, radial-coordinate conversions.
+- ``species.py``: species pytrees, gradients, collisionality helpers.
+- ``phase_space.py``: theta/zeta/x grids, derivative matrices, Legendre pitch
+  machinery, ``Nxi_for_x`` ramps (``createGrids.F90``,
+  ``uniformDiffMatrices.F90``, ``polynomialDiffMatrices.F90``).
+- ``xgrid.py``: the Landreman–Ernst polynomial speed-grid kernel consumed by
+  the collision operators (``xGrid.F90``).
+- ``magnetic_geometry.py``: every supported geometry scheme, VMEC ``wout`` and
+  Boozer ``.bc`` readers, the differentiable Fourier constructor
+  (``geometry.F90``).
+- ``collisions.py``: pitch-angle scattering and full Fokker–Planck with
+  Rosenbluth potentials.
+- ``drift_kinetic.py``: the matrix-free ``KineticOperator`` — streaming,
+  mirror, ExB, Er xDot/xiDot, tangential magnetic drifts, collisions, sources,
+  constraints, RHS drives (``populateMatrix.F90``, ``evaluateResidual.F90``).
+- ``solve.py``: the three-tier solve policy (structured block elimination,
+  recycled Krylov with a coarse-operator preconditioner, host direct referee)
+  on the external ``solvax`` library; implicit differentiation.
+- ``phi1.py``: the Phi1/quasineutrality Newton solve.
+- ``moments.py``: velocity-space moments, flux families, transport matrices,
+  NTV, classical transport (``diagnostics.F90``,
+  ``classicalTransport.F90``).
+- ``er.py``: ambipolar radial-electric-field root solves.
 
-- reads namelists,
-- resolves equilibrium overrides (including ``wout_path``),
-- writes ``sfincsOutput.h5``,
-- materializes output diagnostics,
-- exposes the in-memory results API.
+Input/output and orchestration:
 
-``sfincs_jax/input_compat.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- ``inputs.py`` / ``namelist.py`` / ``input_compat.py``: typed namelist with
+  Fortran-cited defaults and validation, parsing, alias handling.
+- ``run.py``: end-to-end RHSMode 1/2/3 drivers and ``run_from_namelist``.
+- ``writer.py``: the canonical ``sfincsOutput`` writer (all formats,
+  geometry-only output, export_f, solver-trace sidecars).
+- ``console.py``: byte-parity Fortran stdout blocks.
+- ``io.py``: output-file reading plus generic dict serializers.
+- ``solver_trace.py``: the versioned solver-trace schema.
+- ``api.py``, ``cli.py``, ``__main__.py``: the thin public surface.
+- ``ambipolar.py``: scanplot-compatible ambipolar post-processing.
+- ``sensitivity.py``: JVP/VJP, adjoint, and implicit differentiation helpers.
+- ``compare.py``: HDF5 comparison and parity gates.
+- ``plotting.py``: output plotting for the CLI and examples.
+- ``paths.py`` / ``profiling.py``: path resolution and timing/memory probes.
 
-Compatibility and search-order logic for equilibrium files, input normalization, and
-user overrides. This is the module to inspect first when a case fails to find a VMEC or
-Boozer file.
+Fortran-to-module correspondence
+--------------------------------
 
-``sfincs_jax/jax_geometry_adapters.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+===============================  =====================================
+SFINCS v3 Fortran file           Canonical owner
+===============================  =====================================
+``globalVariables.F90``          ``constants.py``, ``species.py``
+``createGrids.F90``              ``phase_space.py``
+``xGrid.F90``                    ``xgrid.py``, ``phase_space.py``
+``geometry.F90``                 ``magnetic_geometry.py``
+``populateMatrix.F90``           ``drift_kinetic.py``, ``collisions.py``
+``evaluateResidual.F90``         ``drift_kinetic.py``
+``preconditioner.F90``           ``solve.py`` (coarse operator)
+``solver.F90``                   ``solve.py``
+``diagnostics.F90``              ``moments.py``, ``writer.py``
+``classicalTransport.F90``       ``moments.py``
+``readInput.F90``                ``inputs.py``, ``namelist.py``
+``writeHDF5Output.F90``          ``writer.py``, ``io.py``
+===============================  =====================================
 
-Optional structural adapters for JAX-native geometry producers such as ``vmec_jax``
-and ``booz_xform_jax``. These helpers do not make either package a required
-dependency; they normalize in-memory VMEC-like ``wout`` objects to the internal
-``VmecWout`` layout used by ``geometryScheme=5``. The module also owns the
-machine-readable VMEC/Boozer proxy workflow contract and the shared no-solve
-provenance gate used by the workflow status and autodiff examples.
-
-``sfincs_jax/grids.py`` and ``sfincs_jax/xgrid.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Velocity-space discretization:
-
-- collocation points in :math:`x`,
-- quadrature weights,
-- modal transforms used by the collision operator,
-- special handling for monoenergetic ``RHSMode=3``.
-
-``sfincs_jax/geometry.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Geometry loading and normalized coefficient generation:
-
-- analytic model fields,
-- VMEC-derived coefficients,
-- Boozer ``.bc`` evaluation,
-- surface metrics and scalar geometry diagnostics.
-
-``sfincs_jax/vmec_geometry.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-VMEC ``geometryScheme=5`` Fourier-sum evaluator. The public file path
-``vmec_geometry_from_wout_file(...)`` reads ``wout`` data and delegates to
-``vmec_geometry_from_wout(...)`` so optional in-memory producers can exercise the
-same formulas and parity tests without hidden file I/O.
-
-``sfincs_jax/collisionless.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Streaming and mirror-force contributions in the Legendre basis.
-
-``sfincs_jax/collisionless_exb.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The :math:`E\times B` terms in the kinetic operator, including angular advection and
-the radial-electric-field contributions to :math:`\dot \xi` and :math:`\dot x` where
-supported.
-
-``sfincs_jax/magnetic_drifts.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Magnetic-drift coefficient construction, angular advection terms, upwinding masks, and
-associated :math:`\partial_\xi` couplings.
-
-``sfincs_jax/collisions.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Collision models:
-
-- PAS,
-- full linearized Fokker-Planck,
-- field-particle terms,
-- Phi1-modified collision coefficients.
-
-``sfincs_jax/v3_system.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-System construction:
-
-- state-vector ordering,
-- operator block composition,
-- transport-RHS rewrites,
-- cached operator application,
-- system metadata used by the driver and diagnostics.
-
-``sfincs_jax/residual.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Residual and source-term helpers. This is where the thermodynamic drives and other RHS
-pieces are assembled before being fed to the solve stack.
-
-``sfincs_jax/v3_driver.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Top-level solve orchestration. This file controls:
-
-- solver selection,
-- preconditioner selection,
-- bounded rescue paths,
-- post-Krylov residual-equation corrections that reuse cached QI ``(U, A U)``
-  columns,
-- transport-worker parallelism,
-- sharded experimental paths,
-- output-field collection.
-
-When a solve behaves differently on CPU and GPU, this is usually the first file to
-inspect.
-
-On the active refactor branch, the main policy layers are being split out of the
-monolith into narrower modules while keeping ``v3_driver.py`` as the stable public seam
-for debugging and monkeypatch-based tests. The first extracted layers are:
-
-- ``sfincs_jax/rhs1_pas_policy.py``:
-  PAS applicability, PAS-TZ memory safety, PAS fallback routing, and PAS
-  adaptive-smoother eligibility.
-- ``sfincs_jax/rhs1_pas_matrixfree.py``:
-  bounded matrix-free PAS correction probes, streaming L2 norms, candidate
-  byte-budget preflights, and ``PasRuntimeChunkPlan`` metadata for keeping
-  PAS-heavy residual/correction reductions inside configured memory budgets
-  before a matvec is launched.
-- ``sfincs_jax/rhs1_solver_policy.py``:
-  typed RHSMode=1 solver-policy parsing for x-block probe-coarse, post-minres,
-  post-coarse, and post-residual-equation controls. This keeps environment
-  parsing and correction-policy defaults out of ``v3_driver.py`` while
-  preserving the existing opt-in behavior and fail-closed defaults.
-- ``sfincs_jax/rhs1_solver_diagnostics.py``:
-  typed RHSMode=1 x-block correction diagnostic records and historical solver
-  metadata key assembly. This keeps output-visible trace fields independently
-  testable while ``v3_driver.py`` continues to own the solve orchestration.
-- ``sfincs_jax/rhs1_active_dof.py``:
-  RHSMode=1 active-degree-of-freedom routing and reduced-index-map
-  construction for truncated pitch grids, x-block active-DOF opt-ins, and PAS
-  constraint-projection solves. This makes the active/full-system selection
-  policy independently testable before deeper residual/operator extraction.
-- ``sfincs_jax/rhs1_active_projection.py``:
-  reusable JAX primitives for full-to-reduced gathers, reduced-to-full
-  one-based scatters, and PAS ``l=0`` flux-surface-average projection. These
-  primitives are shared by RHSMode=1 sparse-PC, x-block active-DOF, and
-  PAS-projected reduced residual paths.
-- ``sfincs_jax/rhs1_residual.py``:
-  small residual target, ratio, convergence, and host-scalar norm helpers used
-  by RHSMode=1 sparse-PC and x-block diagnostics. This is the first step toward
-  making residual gates and solver metadata independent of the driver branch
-  that produced the candidate state.
-- ``sfincs_jax/rhs1_device_operator.py``:
-  bounded JAX-device CSR materialization, active-index slicing, sparse matvec
-  closures, and host-vs-device validation utilities for opt-in RHSMode=1
-  device-QI and operator-reuse experiments.
-- ``sfincs_jax/rhs1_qi_coarse.py``:
-  deterministic QI coarse-basis construction, rank/conditioning diagnostics,
-  Galerkin/action coarse solves, and synthetic residual-reduction probes used
-  by the true device-QI research lane.
-- ``sfincs_jax/rhs1_qi_galerkin_policy.py``:
-  fail-closed Galerkin candidate parsing and true-residual selection. The
-  production driver only keeps an experimental QI coarse candidate when this
-  policy records a finite material residual reduction.
-- ``sfincs_jax/rhs1_qi_two_level.py``:
-  reusable local-smoother plus coarse-correction primitive,
-  ``S_local^{-1} r + Q A_c^{-1} Q^T (r - A S_local^{-1} r)``, used as a
-  directly tested architecture prototype before any hard-seed promotion.
-- ``sfincs_jax/rhs1_qi_device_smoother.py``:
-  device-local QI smoother primitives, including CSR-backed Jacobi,
-  matrix-free residual-minimizing steps, and fail-closed seed probes for the
-  differentiable/device QI lane.
-- ``sfincs_jax/rhs1_qi_block_schur.py``:
-  standalone JAX-compatible QI block-Schur/angular/radial coarse-preconditioner
-  primitive. It builds deterministic global, radial, angular, and block-Schur
-  basis directions, applies a local-plus-coarse action, and exposes a
-  fail-closed true-residual probe for future device-QI expansion.
-- ``sfincs_jax/rhs1_qi_deflation.py``:
-  residual-deflated, device-compatible QI preconditioner primitive. It builds a
-  bounded preconditioned-residual Krylov basis, optionally merges
-  physics-informed block-Schur directions, applies a local-plus-deflated
-  least-squares action, and fail-closes on true-residual probes. It also
-  provides the seed-only cycle-minres helper used by QI hard-seed evidence:
-  repeated fixed-basis residual corrections are combined by a small
-  ``min ||A Z c - r||`` solve before Krylov starts. The production driver
-  exposes it through the opt-in
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER`` hook.
-- ``sfincs_jax/rhs1_qi_device_preconditioner.py``:
-  production-shaped device-QI field-split state. It builds a device Jacobi local
-  smoother when device CSR is available, or a matrix-free coarse-only
-  seed-correction path when full CSR is rejected. It can enrich the matrix-free
-  basis with residual-generated Krylov vectors ``orth([Q, r, A r, ...])``,
-  rank-gates the result, assembles ``A_c`` and ``A Q`` by JAX matvec probes,
-  applies a pure-JAX correction, and exposes fail-closed true-residual probe
-  metadata. The probe can optionally run a small bounded sequence of corrections
-  controlled by
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES``; every cycle
-  recomputes the true residual and stops on non-finite or non-improving
-  candidates. With
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_minres``,
-  the matrix-free path also gets a bounded residual-polynomial local smoother.
-  It applies a fixed number of pure-JAX sweeps selected by
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS``
-  and scales each residual direction by a small
-  ``min ||r - alpha A r||`` step before the coarse correction sees the remaining
-  residual. This keeps the action device-compatible and avoids full CSR
-  materialization.
-  With
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres``,
-  the matrix-free path builds residual pieces on x/species blocks from the QI
-  block layout and solves a small projected problem
-  ``min_c ||r - A D c||_2``. This is the first block/angular/radial local action:
-  each block direction keeps all angular content inside the block while the
-  small least-squares solve chooses the coupled correction coefficients. The
-  block-projection implementation is covered by a transpose-safety regression,
-  so this differentiable probe path has a finite ``vjp`` rather than relying on
-  a forward-only JAX action. That closes the transpose-safety infrastructure
-  blocker for this projected path; it does not close the residual/output or
-  runtime-performance blockers for true device-QI.
-  With
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_GROUPING=block_x_species``,
-  that projected space is augmented with radial-x and species aggregate
-  residual directions, which gives the local action a bounded global-coupling
-  handle without materializing the full sparse operator.
-  With
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=residual_minimizing``,
-  the probe line-searches each correction direction by minimizing
-  ``||r - alpha A d||_2`` before applying the same fail-closed residual gate.
-  With
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_ENRICHMENT``,
-  setup appends residuals left by the current coarse correction as additional
-  rank-gated GCRO-style seed vectors.
-  With
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1``,
-  setup builds a bounded Arnoldi-like residual Krylov coarse space
-  ``orth([Q, r, A r, A^2 r, ...])`` from the current true residual and reuses
-  the final ``A Q`` action in the small coarse least-squares solve. The depth is
-  controlled by
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH``.
-  This is a stronger operator-reuse coarse construction, not additional
-  smoother tuning. The 2026-05-20 installed depth-64 plus multilevel hard-seed
-  artifact is the current best checked GPU evidence for this route, but it
-  remains below the production gate and is not a closed true device-QI claim.
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV=1``
-  passes the reusable ``(U, A U)`` QI coarse basis directly into JAX FGMRES so
-  each cycle can either project the current residual over the stored operator
-  action before Arnoldi starts or, in the default ``combined`` mode, solve the
-  restart least-squares problem over ``[A U, A Z]`` and update through
-  ``[U, Z]``. This is the current real operator-reuse hook for the device-QI
-  lane: it avoids dense global assembly and differs from seed-only correction
-  because the basis is active inside the Krylov residual equation. The runner
-  preset ``recycled-augmented-device-qi`` applies the same hook with a larger
-  fixed device-cycle budget and ``outer_k=32``. The checked GPU0 artifact
-  improves the hard-seed residual to ``7.336295e-6`` in ``158.6 s`` but remains
-  fail-closed because it does not satisfy the production write tolerance.
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION=1``
-  enables the deeper multilevel coarse-residual path. Setup builds separate
-  per-level bases from the same QI block layout, caches each ``A Q_l`` action,
-  and applies a staged residual equation ``min ||r_l - A Q_l c_l||`` before the
-  optional global coarse polish. The level rank, order
-  (``coarse_to_fine`` or ``fine_to_coarse``), and global-polish toggle are
-  controlled by
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_MAX_LEVEL_RANK``,
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_ORDER``,
-  and
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_INCLUDE_GLOBAL``.
-  The runner preset ``coarse-residual-device-qi`` records these controls for
-  bounded hard-seed evidence. This is a coarse-grid residual-equation attempt,
-  not a smoother/restart/projection tuning path.
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_ENRICHMENT=1``
-  adds the current hard-seed residual itself to the reusable coarse equation by
-  restricting it to QI blocks and aggregates. With
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_USE_ADJOINT=1``,
-  setup also adds adjoint-normal block snapshots ``A^T r_block`` through JAX
-  VJP. These directions are setup-time only: the installed preconditioner still
-  caches ``A Q`` and applies a forward ``min ||r - A Q c||`` solve. The runner
-  preset ``residual-snapshot-device-qi`` is the checked evidence path; its first
-  CPU hard-seed artifact improves the final residual to ``2.103015e-5`` but is
-  still nonconverged, so it is not a production default.
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION=1``
-  promotes those residual snapshots into a staged residual-equation cascade.
-  Setup solves per-stage ``min ||r_l - A Q_l c||`` problems, caches the
-  accepted ``A Q_l`` actions, and the installed preconditioner remains pure JAX.
-  The runner preset ``residual-snapshot-equation-device-qi`` records this path.
-  Its first scale-0.60 CPU hard-seed artifact accepts
-  ``3.021487e-5 -> 2.819970e-5`` but ends at ``2.320763e-5`` in ``260 s``,
-  worse than the plain residual-snapshot path, so no production default or GPU
-  claim is made from it.
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION=1``
-  enables a deeper staged block-Schur residual equation. Setup builds
-  QI-block and aggregate source probes, solves small setup-time
-  ``min ||r_l - A D_g c||`` problems, rank-gates each accepted correction, and
-  then reuses cached ``A Q_l`` actions in the installed preconditioner. It now
-  also tests a coupled block/aggregate source space and keeps the lower
-  measured setup residual between the coupled and sequential constructions. The
-  runner preset ``block-schur-device-qi`` records this fail-closed path. Its
-  first scale-0.60 CPU hard-seed artifact is negative evidence: it accepts
-  ``3.021487e-5 -> 2.840342e-5`` and ends at ``2.275188e-5`` in ``267 s``,
-  worse than the residual-snapshot path, so no production default or GPU claim
-  is made from it.
-  The GPU0 best-of artifact improves the final residual to ``1.992464e-5`` in
-  ``292 s`` but still fails the production write gate. The adaptive local
-  smoother token ``adaptive_residual_equation`` maps to a multilevel
-  ``block_hierarchy`` grouping, preserving global, aggregate, and block residual
-  source spaces in the matrix-free projected residual smoother. Its first GPU0
-  artifact ends at ``2.307995e-5`` in ``288 s``, so it is retained as an
-  opt-in negative-evidence path rather than a default. The composite
-  ``composite-closure-device-qi`` runner preset combines residual snapshots,
-  residual-Galerkin/operator-image stages, and block-Schur residual equations;
-  its GPU1 artifact accepts ``3.021487e-5 -> 2.575099e-5`` but ends worse at
-  ``2.305955e-5``, so it remains negative evidence.
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION=1``
-  enables a global moment closure over profile, current, and reduced-tail
-  constraint moments. Setup builds a rank-gated Galerkin Schur closure and
-  installs only cached ``A Q`` actions. The checked scale-0.60 CPU artifact
-  accepts ``3.021487e-5 -> 2.840364e-5`` and ends at ``2.420524e-5`` in
-  ``256 s`` before refusing nonconverged output, so it remains fail-closed
-  research evidence.
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION=1``
-  enables a residual-derived Galerkin coarse equation. Its coarse variables are
-  built from the actual remaining residual and block residuals, then cached as
-  ``A Q`` for device-compatible apply. The checked scale-0.60 CPU artifact
-  accepts ``3.021487e-5 -> 2.766710e-5`` with rank ``16`` from ``21``
-  candidates and ends at ``2.632208e-5`` in ``244 s`` before refusing
-  nonconverged output. This is stronger than static moments but weaker than the
-  residual-snapshot path, so it is not promoted.
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_ENRICHMENT=1``
-  adds a distinct adjoint-normal coarse space ``orth([A^T r, (A^T A)A^T r,
-  ...])``. This targets non-normal left-error modes that residual-Krylov can
-  miss. The transpose is setup-only through JAX VJP, controlled by
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_DEPTH``
-  and
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_TRANSPOSE``;
-  apply-time still reuses cached ``A Q`` and remains forward-operator-only.
-  The scale-0.60 CPU hard-seed depth-2 artifact worsened the final residual, so
-  this remains an explicit diagnostic/negative-evidence path rather than a
-  recommended production path.
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS=1``
-  prepends bootstrap-current-like pitch moments, species/radial current
-  moments, and reduced-tail constraint moments to the multilevel coarse basis.
-  This is a structural coarse-space probe for flow/current/nullspace error, not
-  a smoother knob. The 2026-05-20 GPU hard-seed artifact increased the rank from
-  ``13`` to ``15`` but worsened the final residual and runtime, so it remains an
-  opt-in negative-evidence path rather than the recommended preset.
-  With
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_ACTION_ENRICHMENT=1``,
-  setup can also enrich the correction space with rank-gated operator images
-  ``{Q, A Q, A^2 Q, ...}``, controlled by
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_ACTION_DEPTH``.
-  That path is retained as an opt-in diagnostic because it is CUDA-safe but did
-  not improve the scale-0.60 GPU hard seed.
-  The driver exposes it behind the explicit
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER`` opt-in and records
-  accepted/rejected metadata without changing public defaults; the matrix-free
-  fallback is separately gated by
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE``.
-  Seed-only use is allowed when ``precondition_side=none``; Krylov installation
-  is blocked in that mode. When matrix-free QI-device Krylov use is explicitly
-  requested, the driver disables the automatic non-autodiff host fallback so the
-  true device path can be tested. Explicit user-forced host fallback still wins.
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_WITH_BASE``
-  is an opt-in diagnostic that applies the pre-existing x-block/device
-  preconditioner first and then applies QI to the residual left by that base
-  step. The scale-0.60 GPU hard seed showed this composition is slower and less
-  accurate than the installed multilevel route, so it is intentionally not part
-  of the recommended preset.
-  The current installed hard-seed summaries are still failed/nonconverged
-  blocker evidence with no HDF5 or solver trace output, so this routing change
-  is not a validated true device-QI claim.
-  Closure-state summary: the implemented QI lanes now include
-  residual-deflated seed correction, device coarse reuse, augmented FGMRES
-  operator reuse, augmented-seed Krylov coarse-space recycling, multilevel
-  residual equations, block-Schur residual equations, global moment closure,
-  residual-Galerkin closure, phase-space coarse reuse, and
-  residual-region/bounce-region coarse reuse. They are opt-in research/evidence
-  lanes, not public true-device-QI defaults. The practical non-autodiff
-  host/x-block route is a separate large-QI fallback and must not be described
-  as differentiable/device-QI closure. The negative evidence set includes the
-  checked smoother/restart variants, assembled CSR reuse, phase-space and
-  residual-bounce coarse probes, composite closure, global moment,
-  residual-Galerkin, block-Schur, current/nullspace moment enrichments, and
-  current augmented-seed and active-pattern hard-seed probe plumbing; each
-  either failed to improve the best hard-seed result or remained far above the
-  write gate. The aggregate
-  manifest records failed/nonconverged artifacts as requested-only classes for
-  promotion gating and preserves observed fail-closed machinery in separate
-  metadata fields. Promotion still requires a hard-seed artifact with converged
-  HDF5 output, solver trace metadata, accepted-converged status,
-  residual/write-gate satisfaction, no host fallback, CPU/GPU consistency,
-  promotion-eligible manifest classification, and then wider
-  production-resolution seed/backend coverage. The active-pattern chunked
-  coarse primitive is now wired through the device preconditioner, driver,
-  runner, manifest, and tests, but the office GPU hard-seed artifact is
-  promotion-negative. The next promotion attempt therefore needs a deeper
-  coupled Schur/residual equation over accepted bounce/residual regions rather
-  than another local smoother, restart, or basis-only knob.
-- ``sfincs_jax/rhs1_qi_multilevel_coarse.py``:
-  standalone multilevel angular-radial-pitch-current coarse prototype for the next true
-  device-QI architecture. It constructs deterministic radial aggregate levels,
-  angular harmonic directions, radial polynomial directions, pitch/xi moment
-  directions, current/flow pitch moments that tolerate variable active xi
-  counts, reduced-tail constraint moments, and radial-angular/radial-pitch product modes from
-  ``RHS1QICoarseBlockLayout`` metadata,
-  rank-gates the combined prolongation space, assembles ``A Q`` by JAX matvec
-  probes, and applies a pure-JAX local-plus-coarse action-least-squares
-  correction. The module is intentionally independent of ``v3_driver.py`` so it
-  can be tested as architecture before promotion. Current tests cover
-  deterministic hierarchy metadata, synthetic low-frequency angular-radial
-  residual reduction, synthetic pitch-coupled residual reduction, synthetic
-  current/tail residual reduction, fail-closed rejection without the needed
-  coarse family, nested per-level residual-equation recovery of modes discarded
-  by a flat coarse-rank gate, and JIT/gradient compatibility.
-  It is not a production default until real scale-0.60 CPU/GPU hard-seed
-  artifacts pass the promotion gates.
-- ``sfincs_jax/rhs1_qi_global_moment_closure.py``:
-  standalone global-moment closure primitive used to test current/profile/tail
-  moment Schur closures independently from the production driver. It builds a
-  compact moment basis, caches ``A Q`` and ``Q^T A Q``, and fails closed unless
-  the measured setup residual improves.
-- ``sfincs_jax/rhs1_qi_residual_galerkin.py``:
-  standalone residual-derived Galerkin primitive. It builds staged coarse
-  variables from the current operator residual and block residuals, caches
-  ``A Q``, supports action least-squares or Galerkin solves, and fails closed on
-  non-improving setup residuals.
-- ``sfincs_jax/rhs1_qi_phase_space_coarse.py``:
-  standalone deterministic phase-space coarse-space builder for the true
-  device-QI research lane. It derives trapped/passing-like pitch bands,
-  boundary bands, even/odd pitch-parity directions, and optional radial/species
-  aggregates from ``RHS1QICoarseBlockLayout`` metadata, rank-gates them, and
-  plugs into the existing setup-time residual-equation path. The controls
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION*``
-  are opt-in and fail-closed; they are used only by explicit research probes
-  such as ``phase-space-coarse-reuse-device-qi`` until scale-0.60 GPU hard-seed
-  artifacts write HDF5 output, solver traces, and accepted-converged residual
-  metadata.
-- ``sfincs_jax/rhs1_qi_residual_region_coarse.py``:
-  standalone residual-region / bounce-region coarse-space builder for hard
-  RHSMode=1 QI seeds. It uses the setup residual to select energetic block,
-  trapped/boundary/passing, radial, and species regions from
-  ``RHS1QICoarseBlockLayout`` metadata, rank-gates residual-restricted columns,
-  and plugs into the existing cached ``Q`` / ``A Q`` residual-equation path.
-  The runner preset ``residual-bounce-region-device-qi`` emits explicit
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE*``
-  controls, records them in manifests, and classifies solver-trace or
-  failure-progress metadata. It remains opt-in and fail-closed, not a
-  production claim, until scale-0.60 CPU/GPU hard-seed artifacts write
-  converged HDF5 output and solver traces under the same promotion gates.
-- ``sfincs_jax/rhs1_qi_active_pattern_coarse.py``:
-  standalone residual active-pattern coarse-space builder for hard RHSMode=1
-  QI seeds. It selects high-energy pitch, angular, radial, and species residual
-  chunks from ``RHS1QICoarseBlockLayout`` metadata, rank-gates them, and now
-  plugs into the same device-compatible cached ``Q`` / ``A Q``
-  residual-equation path as the other true device-QI research probes. The
-  runner preset ``active-pattern-device-qi`` emits
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE*``
-  controls and keeps the lane fail-closed until bounded CPU/GPU hard-seed
-  artifacts write converged output and solver traces.
-- ``sfincs_jax/rhs1_qi_coupled_residual.py``:
-  standalone coupled residual-equation primitive for the next true device-QI
-  architecture. It takes accepted coarse bases from the existing
-  block-Schur/multilevel/moment/residual families, re-orthonormalizes them into
-  one joint coarse space, probes ``A Q`` once, and solves one action
-  least-squares or Galerkin residual equation. This is intentionally different
-  from smoother/restart tuning and from the previous staged residual cascade:
-  the joint solve can update earlier coarse coefficients after later Schur or
-  multilevel variables are included, matching the field-split/Schur and
-  Petrov-Galerkin ideas used in PETSc-style block preconditioners. The primitive
-  is wired into ``RHS1QIDevicePreconditionerConfig`` as
-  ``coupled_residual_equation`` and is fail-closed unless setup residual
-  decreases.
-- ``sfincs_jax/v3_driver.py`` and ``scripts/run_qi_seed_robustness.py``:
-  expose the coupled residual equation through
-  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION*``
-  controls, progress logs, solver-trace keys, and the
-  ``coupled-residual-device-qi`` hard-seed probe preset. The runner classifies
-  this as a joint coupled-equation route rather than as another staged
-  block-Schur or active-pattern variant. The optional
-  ``*_INSTALL_IN_KRYLOV_ON_REJECT`` control installs a validated coupled stage
-  as a Krylov preconditioner without changing ``x0`` when the one-shot seed
-  probe is rejected, matching field-split preconditioner semantics. The runner
-  also keeps coupled residual-equation and install-in-Krylov progress lines as
-  sticky compact-log events, so failed GPU artifacts still preserve the actual
-  preconditioner path while remaining fail-closed.
-- ``sfincs_jax/rhs1_qi_promotion.py``:
-  pure promotion gates for QI hard-seed and production-ladder evidence. It
-  requires complete seed/backend coverage, convergence, output and trace
-  provenance, residual/observable bounds, and no host fallback before a true
-  device-QI claim can be promoted.
-- ``sfincs_jax/rhs1_preconditioner_dispatch.py``:
-  shared RHSMode=1 preconditioner-kind dispatch.
-- ``sfincs_jax/rhs1_preconditioner_auto_policy.py``:
-  RHSMode=1 preconditioner environment alias normalization plus bounded
-  automatic preconditioner policy predicates for PAS, DKES, tokamak, GPU sparse
-  fallback, weak-default PAS promotion, PAS-family refinement, FP/DKES routing,
-  large-FP near-zero-Er overrides, and sharded line-overrides.
-- ``sfincs_jax/rhs1_schur_policy.py``:
-  RHSMode=1 Schur base-preconditioner alias normalization and automatic
-  geometry/PAS/DKES routing policy.
-- ``sfincs_jax/rhs1_stage2_policy.py``:
-  stage-2 trigger and skip rules.
-- ``sfincs_jax/rhs1_strong_policy.py``, ``sfincs_jax/rhs1_strong_control.py``,
-  ``sfincs_jax/rhs1_strong_auto_kind.py``:
-  strong-preconditioner request mapping, enable/disable control, and automatic
-  strong-kind selection.
-- ``sfincs_jax/rhs1_strong_fallback.py``:
-  bounded strong-preconditioner retry/fallback metadata and stage decision
-  helpers used to keep residual rescue paths observable without embedding the
-  branch logic directly in ``v3_driver.py``.
-- ``sfincs_jax/rhs1_sparse_rescue_policy.py`` and
-  ``sfincs_jax/rhs1_sparse_polish_policy.py``:
-  sparse-rescue ordering, skip logic, and sparse-polish env parsing.
-- ``sfincs_jax/rhs1_sparse_exact_policy.py``:
-  sparse exact-LU request policy, sparse-over-dense preference, and stage-2
-  skip decisions for moderate RHSMode=1 full-FP systems.
-- ``sfincs_jax/rhs1_handoff.py``:
-  accepted-candidate handoff and Krylov replay-state updates. This is the
-  source-mapped seam for the repeated RHSMode=1 driver pattern: compare a
-  rescue/refinement candidate against the incumbent residual, apply optional
-  measured solver-candidate gates, preserve the accepted residual vector, and
-  update the KSP replay metadata only after a strict finite residual
-  improvement.
-- ``sfincs_jax/rhs1_acceptance_policy.py``:
-  large-PAS fast-accept gates and host x-block factor-probe safety checks.
-- ``sfincs_jax/rhs1_constraint0_policy.py``:
-  RHSMode=1 constraint-scheme-0 sparse-first, PETSc-compatible sparse routing, and
-  dense-fallback opt-in policy.
-- ``sfincs_jax/rhs1_host_policy.py``:
-  RHSMode=1 host dense fallback, host sparse-direct, sparse-preconditioned
-  GMRES rescue, factor-dtype, and explicit sparse-helper policy.
-- ``sfincs_jax/rhs1_large_cpu_policy.py``:
-  large explicit full-FP CPU sparse rescue, x-block seed, exact-LU promotion,
-  host x-block assembly, and species-x-block rescue policy.
-- ``sfincs_jax/rhs1_post_xblock_policy.py``:
-  post-x-block polish, targeted FP polish, skip-global-sparse-after-xblock, and
-  bounded SciPy-rescue absolute-floor policy for large explicit full-FP CPU
-  systems.
-- ``sfincs_jax/rhs1_xblock_policy.py``:
-  pure x-block sparse-PC routing, Krylov-side selection, local factorization
-  tuning, lower-fill acceptance gates, and non-autodiff device-host fallback
-  metadata for large RHSMode=1 QI/full-FP solves.
-- ``sfincs_jax/rhs1_xblock_sparse_host_policy.py``:
-  host sparse x-block rescue policy and metadata normalization for the
-  non-autodiff large-system fallback path.
-- ``sfincs_jax/solve_mode_policy.py``:
-  shared implicit/differentiable solve-mode environment resolution.
-- ``sfincs_jax/solver_path_policy.py``:
-  pure solver/preconditioner path policy for JIT admission, RHSMode=1 rescue
-  slack, DKES GMRES budget defaults, sparse-PC defaults, preconditioner dtype,
-  and backend resource-exhaustion classification.
-- ``sfincs_jax/solver_selection_policy.py``:
-  measured candidate acceptance gates used by automatic solver/preconditioner
-  promotions, including residual/parity checks and paired runtime/memory
-  comparisons against an incumbent path.
-- ``sfincs_jax/transport_policy.py``:
-  pure transport backend, sparse-direct, host-GMRES, dtype, and recycle policy.
-- ``sfincs_jax/transport_preconditioner_dispatch.py``:
-  shared transport preconditioner-kind normalization, auto-selection, DD/sparse-JAX
-  env parsing, and reduced/full preconditioner builder dispatch.
-- ``sfincs_jax/transport_solve_policy.py``:
-  shared active-DOF transport policy, active-index map construction, and dense
-  fallback / dense-preconditioner policy used before the transport preconditioner and
-  solve handoff layers.
-- ``sfincs_jax/transport_handoff_policy.py``:
-  shared transport retry residual metrics, better-candidate comparisons, and RHSMode=3
-  polish threshold/restart/maxiter policy used by the reduced and full transport solve
-  branches.
-- ``sfincs_jax/transport_residual_quality.py``:
-  fast transport worker residual-abort threshold parsing and failure-message
-  formatting for absolute and RHS-normalized diagnostics.
-- ``sfincs_jax/transport_dense_lu.py``:
-  cached dense-LU solver and preconditioner construction used by bounded transport
-  dense fallback and dense-preconditioner paths.
-- ``sfincs_jax/transport_host_gmres.py``:
-  host SciPy GMRES first-attempt/rescue solve helper for explicit transport paths,
-  including PETSc-like preconditioned-residual acceptance for the relevant
-  near-singular transport systems.
-- ``sfincs_jax/transport_parallel_policy.py``:
-  pure transport process-parallel backend selection, worker-count validation,
-  benchmark scaling audits, process-pool cache keys, GPU-worker environment
-  isolation, and multiprocessing fallback policy.
-- ``sfincs_jax/transport_parallel_runtime.py``:
-  transport parallel RHS partitioning, GPU worker subprocess launch, and parent-side
-  merge of per-worker state/residual/elapsed-time results.
-- ``sfincs_jax/transport_parallel_pool.py``:
-  persistent transport process-pool caching, rebuild, and shutdown behavior used by the
-  CPU process-parallel transport lane.
-- ``sfincs_jax/transport_parallel_execution.py``:
-  top-level transport process-parallel execution control, including run/no-run gating,
-  per-worker payload construction, backend-specific execution, retry, and sequential
-  fallback.
-- ``sfincs_jax/transport_parallel_sharding.py``:
-  pure single-case sharded-solve planning metadata. It caps requested device
-  counts, records per-device workload balance, estimates whether setup and
-  Krylov communication can be amortized, marks single-case sharding as
-  experimental/non-release by default, and prevents malformed sharded payloads
-  from becoming release scaling claims.
-- ``sfincs_jax/validation_artifacts.py``:
-  lightweight loaders and physics metrics for checked-in publication artifacts. This
-  module is independent of the heavy solver path, so documentation and CI can verify
-  collisionality, high-collisionality trend, trajectory-sweep, and dashboard artifacts
-  plus frozen CPU/GPU Fortran-suite benchmark summaries without rerunning large scans
-  or example-suite audits. It also owns the fail-closed schema validator for the
-  Fortran-v3 vs SFINCS-JAX runtime/memory benchmark summary consumed by README/docs
-  plots.
-- ``sfincs_jax/phi1_newton_policy.py``:
-  bounded nonlinear/Newton policy for Phi1 solves, including active-DOF mode
-  selection, restart sizing, frozen-Jacobian cache policy, and line-search policy.
-- ``sfincs_jax/phi1_newton_linear.py``:
-  bounded nonlinear linear-step orchestration for Phi1 solves, including reduced/full
-  routing, sparse-direct entry, KSP-history emission, and retry-without-preconditioner.
-- ``sfincs_jax/phi1_line_search.py``:
-  accepted-iterate update logic for the Newton path, including PETSc-like backtracking,
-  fixed-candidate ``best`` search, and finite-state fallback handling.
-- ``sfincs_jax/solver_progress.py``:
-  user-facing duration formatting, coarse runtime hints, one-shot large RHSMode=1
-  progress messages, and transport whichRHS ETA text. This module is intentionally
-  lightweight so CLI progress can stay informative without importing heavy solver
-  dependencies. It is solver-neutral: it improves observability without affecting
-  numerical decisions.
-- ``sfincs_jax/profiling.py``:
-  opt-in coarse solver/output profiling behind ``SFINCS_JAX_PROFILE``. It owns
-  phase-level timing, RSS high-water sampling, optional JAX device-memory polling,
-  and the ``profile_entries`` payload written into solver traces and output metadata.
-- ``sfincs_jax/solver_progress_policy.py``:
-  the pure formatting and RHSMode=1 progress-threshold policy re-exported by
-  ``solver_progress.py`` so CLI observability decisions remain unit-testable.
-- ``sfincs_jax/benchmark_artifact_policy.py``:
-  fast schema, provenance, and release-blocking classification policy for checked-in
-  benchmark JSON artifacts.
-- ``sfincs_jax/memory_model.py``:
-  conservative dense/CSR/Krylov/preconditioner memory estimates used by solver
-  restart caps, benchmark manifests, and measured solver-candidate gates. This is
-  the preflight layer that keeps future memory-saving defaults testable before
-  expensive operators or preconditioners are materialized.
-- ``sfincs_jax/rhs1_host_policy.py``:
-  tested admission gates for RHSMode=1 host dense, sparse-host, constrained-PAS
-  sparse-PC, CPU 3D full-FP sparse-PC, and GPU tokamak full-FP no-Er/Er
-  sparse-PC auto lanes. These helpers keep solver path promotion rules explicit
-  and unit-testable without assembling a kinetic operator.
-
-``sfincs_jax/solver.py`` and ``sfincs_jax/implicit_solve.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Linear-algebra infrastructure:
-
-- Krylov wrappers,
-- host-direct and sparse rescues,
-- differentiable linear solves,
-- JAX-native linear solve utilities,
-- augmented FGMRES hooks that reuse a checked coarse basis and stored operator
-  action ``(U, A U)`` without assembling a dense global operator.
-
-``sfincs_jax/transport_matrix.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-RHSMode=2/3 postprocessing and transport-matrix assembly.
-
-``sfincs_jax/diagnostics.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Moment integrals, flux-surface-averaged outputs, classical transport diagnostics, and
-other quantities that end up in ``sfincsOutput.h5``.
-
-Where the main equations live
------------------------------
-
-The conceptual mapping is:
-
-- drift-kinetic model:
-  :doc:`physics_models`, :doc:`system_equations`, :doc:`physics_reference`
-- discretization:
-  :doc:`method`, :doc:`numerics`
-- geometry coefficients:
-  :doc:`geometry`
-- solve stack:
-  ``sfincs_jax/v3_driver.py`` + ``sfincs_jax/solver.py``
-- outputs and diagnostics:
-  :doc:`outputs`, ``sfincs_jax/io.py``, ``sfincs_jax/diagnostics.py``
-
-Tests that protect each layer
------------------------------
-
-The repository intentionally tests the code at several levels:
-
-- unit tests for geometry, collision, and solve heuristics,
-- parity/regression tests against frozen reference outputs,
-- end-to-end output-writing tests,
-- benchmark smoke tests for parallel and performance tooling.
-
-See :doc:`testing` for the validation strategy and the most relevant test files.
+The retired legacy pipeline (the transitional ``problems``, ``operators``,
+``solvers``, ``outputs``, ``discretization``, ``geometry``, and ``physics``
+packages) was deleted once every physics family became canonical; its parity
+coverage lives on as Fortran-golden referees under ``tests/``.

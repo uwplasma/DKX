@@ -25,11 +25,8 @@ from sfincs_jax.input_compat import (
     render_input_with_equilibrium_override,
     with_equilibrium_override,
 )
-from sfincs_jax.io import sfincs_jax_output_dict
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.discretization.v3 import grids_from_namelist
-from sfincs_jax.operators.profile_fblock import _dphi_hat_dpsi_hat_from_er
-from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
+from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
 
 
 def test_shared_config_lookup_handles_namelists_and_nested_mappings() -> None:
@@ -289,7 +286,8 @@ def test_er_conversion_supports_psin_selected_surface(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     nml = read_sfincs_input(input_path)
-    assert np.isclose(_dphi_hat_dpsi_hat_from_er(nml=nml, er=-3.0), 6.0)
+    op = kinetic_operator_from_namelist(nml)
+    assert np.isclose(float(op.dphi_hat_dpsi_hat_kinetic), 6.0)
 
 
 def test_effective_use_iterative_linear_solver_supports_legacy_alias() -> None:
@@ -300,24 +298,39 @@ def test_effective_use_iterative_linear_solver_supports_legacy_alias() -> None:
     assert effective_use_iterative_linear_solver(other_params=nml.group("otherNumericalParameters"), default=0) == 1
 
 
-def test_sfincs_output_dict_uses_legacy_gradient_coordinate_inference() -> None:
+def test_gradient_coordinate_inference_on_inductive_deck() -> None:
     input_path = (
         Path(__file__).resolve().parent / "ref" / "multispecies_inductiveE_noEr.input.namelist"
     )
     nml = read_sfincs_input(input_path)
-    grids = grids_from_namelist(nml)
-    data = sfincs_jax_output_dict(nml=nml, grids=grids)
-    assert int(np.asarray(data["inputRadialCoordinateForGradients"]).reshape(-1)[0]) == 1
+    assert (
+        infer_input_radial_coordinate_for_gradients(
+            geom_params=nml.group("geometryParameters"),
+            species_params=nml.group("speciesParameters"),
+            phys_params=nml.group("physicsParameters"),
+            default=4,
+        )
+        == 1
+    )
 
 
-def test_sfincs_output_dict_uses_legacy_normradius_wish_for_bc_geometry() -> None:
+def test_normradius_wish_alias_resolves_bc_geometry_surface() -> None:
+    from sfincs_jax.magnetic_geometry import selected_r_n_from_bc
+
     input_path = (
         Path(__file__).resolve().parent / "ref" / "multispecies_HSX_FPCollisions_DKESTrajectories.input.namelist"
     )
     nml = read_sfincs_input(input_path)
-    grids = grids_from_namelist(nml)
-    data = sfincs_jax_output_dict(nml=nml, grids=grids)
-    assert np.isclose(float(np.asarray(data["rN"]).reshape(-1)[0]), 0.22703830459418076)
+    geom_params = nml.group("geometryParameters")
+    # The legacy ``normradius_wish`` alias feeds the surface selection.
+    r_n_wish = effective_r_n_wish(geom_params=geom_params)
+    assert np.isclose(float(r_n_wish), 0.22)
+    bc_path = _resolve_equilibrium_file_from_namelist(nml=nml)
+    assert bc_path is not None
+    r_n = selected_r_n_from_bc(
+        path=bc_path, geometry_scheme=11, r_n_wish=float(r_n_wish), vmec_radial_option=1
+    )
+    assert np.isclose(float(r_n), 0.22703830459418076)
 
 
 def test_localize_equilibrium_file_in_place_patches_legacy_boozer_key(tmp_path: Path) -> None:
@@ -401,7 +414,11 @@ def test_resolve_equilibrium_prefers_vmec_netcdf_sibling(tmp_path: Path) -> None
     assert resolved == nc.resolve()
 
 
-def test_sfincs_output_dict_preserves_legacy_er_coordinate_and_value() -> None:
+def test_er_coordinate_and_split_gradient_coordinates_scheme5_example() -> None:
+    from sfincs_jax.drift_kinetic import _geometry_and_radial
+    from sfincs_jax.inputs import load_sfincs_input
+    from sfincs_jax.run import _grids_from_input
+
     input_path = (
         Path(__file__).resolve().parents[1]
         / "examples"
@@ -409,17 +426,21 @@ def test_sfincs_output_dict_preserves_legacy_er_coordinate_and_value() -> None:
         / "geometryScheme5_3species_loRes"
         / "input.namelist"
     )
-    nml = read_sfincs_input(input_path)
-    grids = grids_from_namelist(nml)
-    data = sfincs_jax_output_dict(nml=nml, grids=grids)
-    psi_a_hat = float(np.asarray(data["psiAHat"]).reshape(-1)[0])
-    a_hat = float(np.asarray(data["aHat"]).reshape(-1)[0])
-    r_n = float(np.asarray(data["rN"]).reshape(-1)[0])
-    er = float(np.asarray(data["Er"]).reshape(-1)[0])
-    ddrhat2ddpsihat = a_hat / (2.0 * psi_a_hat * r_n)
-    assert int(np.asarray(data["inputRadialCoordinateForGradients"]).reshape(-1)[0]) == 4
+    inp = load_sfincs_input(input_path)
+    raw = inp.raw
+    grids = _grids_from_input(inp, raw)
+    _geom, radial = _geometry_and_radial(nml=raw, grids=grids)
+    op = kinetic_operator_from_namelist(raw)
+
+    er = float(raw.group("physicsParameters").get("ER", 0.0))
     assert np.isclose(er, -8.5897)
-    assert np.isclose(float(np.asarray(data["dPhiHatdpsiHat"]).reshape(-1)[0]), ddrhat2ddpsihat * (-er))
+    ddrhat2ddpsihat = float(radial.a_hat) / (2.0 * float(radial.psi_a_hat) * float(radial.r_n))
+    assert np.isclose(float(op.dphi_hat_dpsi_hat), ddrhat2ddpsihat * 8.5897)
+    assert np.isclose(float(op.dphi_hat_dpsi_hat_kinetic), ddrhat2ddpsihat * (-er))
+    assert np.allclose(
+        np.asarray(op.dn_hat_dpsi_hat),
+        ddrhat2ddpsihat * np.asarray([-15.0, -15.5, -0.025]),
+    )
 
 
 def test_dphi_hat_dpsi_hat_from_er_supports_geometry_scheme1_with_er() -> None:
@@ -431,39 +452,16 @@ def test_dphi_hat_dpsi_hat_from_er_supports_geometry_scheme1_with_er() -> None:
         / "input.namelist"
     )
     nml = read_sfincs_input(input_path)
-    er = float(nml.group("physicsParameters").get("Er", nml.group("physicsParameters").get("ER", 0.0)))
-    dphi = _dphi_hat_dpsi_hat_from_er(nml=nml, er=er)
+    op = kinetic_operator_from_namelist(nml)
+    dphi = float(op.dphi_hat_dpsi_hat_kinetic)
     assert np.isfinite(dphi)
     assert dphi != 0.0
 
 
-def test_full_system_operator_uses_split_legacy_gradient_coordinates() -> None:
-    input_path = (
-        Path(__file__).resolve().parents[1]
-        / "examples"
-        / "sfincs_examples"
-        / "geometryScheme5_3species_loRes"
-        / "input.namelist"
-    )
-    nml = read_sfincs_input(input_path)
-    op = full_system_operator_from_namelist(nml=nml)
-    grids = grids_from_namelist(nml)
-    data = sfincs_jax_output_dict(nml=nml, grids=grids)
-    psi_a_hat = float(np.asarray(data["psiAHat"]).reshape(-1)[0])
-    a_hat = float(np.asarray(data["aHat"]).reshape(-1)[0])
-    r_n = float(np.asarray(data["rN"]).reshape(-1)[0])
-    ddrhat2ddpsihat = a_hat / (2.0 * psi_a_hat * r_n)
-    assert np.isclose(float(op.dphi_hat_dpsi_hat), ddrhat2ddpsihat * 8.5897)
-    assert np.allclose(
-        np.asarray(op.dn_hat_dpsi_hat),
-        ddrhat2ddpsihat * np.asarray([-15.0, -15.5, -0.025]),
-    )
-
-
-def test_full_system_operator_prefers_v3_default_gradients_for_mixed_phi1_fixture() -> None:
+def test_operator_prefers_v3_default_gradients_for_mixed_phi1_fixture() -> None:
     input_path = Path(__file__).resolve().parent / "ref" / "pas_1species_PAS_noEr_tiny_withPhi1_inKinetic_linear.input.namelist"
     nml = read_sfincs_input(input_path)
-    op = full_system_operator_from_namelist(nml=nml)
+    op = kinetic_operator_from_namelist(nml)
     psi_a_hat = -0.384935
     a_hat = 0.5109
     r_n = 0.5

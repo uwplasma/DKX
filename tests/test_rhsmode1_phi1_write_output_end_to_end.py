@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
+from sfincs_jax.api import write_output
+from sfincs_jax.io import read_sfincs_h5
 
 
 def _is_numeric_dataset(x) -> bool:
@@ -68,11 +69,7 @@ def test_write_output_rhsmode1_phi1_fixtures_match_fortran_end_to_end(base: str,
     ref_path = here / "ref" / f"{base}.sfincsOutput.h5"
     out_path = tmp_path / f"{base}.sfincsOutput_jax.h5"
 
-    write_sfincs_jax_output_h5(
-        input_namelist=input_path,
-        output_path=out_path,
-        compute_solution=True,
-    )
+    write_output(input_path, out_path)
 
     out = read_sfincs_h5(out_path)
     ref = read_sfincs_h5(ref_path)
@@ -87,6 +84,11 @@ def test_write_output_rhsmode1_phi1_fixtures_match_fortran_end_to_end(base: str,
     for k in sorted(ref.keys()):
         if k == "input.namelist":
             continue
+        if k == "elapsed time (s)":
+            # Wall-clock provenance: the retired legacy writer froze this to
+            # zeros; the canonical writer records the real solve time, which
+            # legitimately differs from the Fortran fixture (asserted below).
+            continue
         if not _is_numeric_dataset(ref[k]):
             continue
         np.testing.assert_allclose(
@@ -95,6 +97,12 @@ def test_write_output_rhsmode1_phi1_fixtures_match_fortran_end_to_end(base: str,
             rtol=0.0,
             atol=atol,
         )
+
+    # Timings are expected to differ between Fortran and JAX runs, but we
+    # still write them for provenance.
+    assert "elapsed time (s)" in out
+    assert np.asarray(out["elapsed time (s)"]).shape == np.asarray(ref["elapsed time (s)"]).shape
+    assert np.all(np.asarray(out["elapsed time (s)"], dtype=np.float64) >= 0.0)
 
 
 def test_write_output_default_qn_phi1_path_regression(tmp_path: Path) -> None:
@@ -110,12 +118,7 @@ def test_write_output_default_qn_phi1_path_regression(tmp_path: Path) -> None:
     input_path.write_text(text)
     out_path = tmp_path / "default_qn_phi1.sfincsOutput_jax.h5"
 
-    write_sfincs_jax_output_h5(
-        input_namelist=input_path,
-        output_path=out_path,
-        compute_solution=True,
-        verbose=False,
-    )
+    write_output(input_path, out_path)
 
     out = read_sfincs_h5(out_path)
     assert int(np.asarray(out["NIterations"]).ravel()[-1]) >= 1

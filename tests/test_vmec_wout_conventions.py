@@ -6,15 +6,32 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.geometry import vmec_wout as vmec_wout_module
-from sfincs_jax.geometry.vmec_wout import (
+import numpy as _np
+
+from sfincs_jax.magnetic_geometry import (
+    FluxSurfaceGeometry,
     VmecWout,
-    _set_scale_factor,
-    gpsipsi_from_wout_file,
+    _scale_factors,
     psi_a_hat_from_wout,
     read_vmec_wout,
-    vmec_interpolation,
+    vmec_radial_interpolation,
 )
+
+
+def vmec_interpolation(*, w: VmecWout, psi_n_wish: float, vmec_radial_option: int):
+    return vmec_radial_interpolation(w=w, psi_n_wish=psi_n_wish, vmec_radial_option=vmec_radial_option)
+
+
+def _set_scale_factor(*, n: int, m: int, helicity_n: int, helicity_l: int, ripple_scale: float) -> float:
+    """Scalar view of the canonical vectorized ``_scale_factors`` helper."""
+    out = _scale_factors(
+        m=_np.asarray([m], dtype=_np.float64),
+        n_over_nfp=_np.asarray([n], dtype=_np.float64),
+        helicity_n=helicity_n,
+        helicity_l=helicity_l,
+        ripple_scale=ripple_scale,
+    )
+    return float(out[0])
 
 
 def _minimal_wout(*, ns: int = 5) -> VmecWout:
@@ -173,9 +190,7 @@ def test_vmec_ripple_scale_factor_matches_helicity_selection_rules() -> None:
     assert _set_scale_factor(n=0, m=1, helicity_n=2, helicity_l=1, ripple_scale=0.3) == pytest.approx(0.3)
 
 
-def test_gpsipsi_from_wout_file_reconstructs_finite_metric_and_fail_closed(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_gpsipsi_from_vmec_reconstructs_finite_metric_and_fail_closed() -> None:
     ns = 5
     base = _minimal_wout(ns=ns)
     w = replace(
@@ -199,12 +214,10 @@ def test_gpsipsi_from_wout_file_reconstructs_finite_metric_and_fail_closed(
             dtype=np.float64,
         ),
     )
-    monkeypatch.setattr(vmec_wout_module, "read_vmec_wout", lambda _path: w)
-
     theta = np.asarray([0.0, np.pi / 2.0, np.pi], dtype=np.float64)
     zeta = np.asarray([0.0, np.pi], dtype=np.float64)
-    metric = gpsipsi_from_wout_file(
-        path="unused.nc",
+    geom = FluxSurfaceGeometry.from_vmec(
+        w,
         theta=theta,
         zeta=zeta,
         psi_n_wish=0.5,
@@ -212,15 +225,17 @@ def test_gpsipsi_from_wout_file_reconstructs_finite_metric_and_fail_closed(
         min_bmn_to_load=0.02,
         ripple_scale=0.5,
         vmec_nyquist_option=1,
+        compute_gpsipsi=True,
     )
+    metric = np.asarray(geom.gpsipsi)
 
     assert metric.shape == (3, 2)
     assert np.all(np.isfinite(metric))
     assert np.all(metric > 0.0)
 
     with pytest.raises(ValueError, match="VMEC_Nyquist_option"):
-        gpsipsi_from_wout_file(
-            path="unused.nc",
+        FluxSurfaceGeometry.from_vmec(
+            w,
             theta=theta,
             zeta=zeta,
             psi_n_wish=0.5,
@@ -229,8 +244,8 @@ def test_gpsipsi_from_wout_file_reconstructs_finite_metric_and_fail_closed(
         )
 
     with pytest.raises(ValueError, match="No VMEC modes"):
-        gpsipsi_from_wout_file(
-            path="unused.nc",
+        FluxSurfaceGeometry.from_vmec(
+            w,
             theta=theta,
             zeta=zeta,
             psi_n_wish=0.5,
@@ -239,24 +254,22 @@ def test_gpsipsi_from_wout_file_reconstructs_finite_metric_and_fail_closed(
         )
 
     zero_b00 = replace(w, bmnc=np.zeros_like(w.bmnc))
-    monkeypatch.setattr(vmec_wout_module, "read_vmec_wout", lambda _path: zero_b00)
     with pytest.raises(ValueError, match=r"bmnc\(0,0\)"):
-        gpsipsi_from_wout_file(
-            path="unused.nc",
+        FluxSurfaceGeometry.from_vmec(
+            zero_b00,
             theta=theta,
             zeta=zeta,
             psi_n_wish=0.5,
             vmec_radial_option=0,
+            min_bmn_to_load=0.02,
         )
 
 
-def test_read_vmec_wout_transposes_radius_mode_tables_and_uses_nc_sibling(tmp_path: Path) -> None:
+def test_read_vmec_wout_transposes_radius_mode_tables(tmp_path: Path) -> None:
     nc_path = tmp_path / "wout_synthetic.nc"
-    txt_path = tmp_path / "wout_synthetic.txt"
-    txt_path.write_text("ASCII placeholder", encoding="utf-8")
     _write_minimal_wout_file(nc_path)
 
-    wout = read_vmec_wout(txt_path)
+    wout = read_vmec_wout(nc_path)
 
     assert wout.path == nc_path.resolve()
     assert wout.nfp == 5
@@ -278,14 +291,9 @@ def test_read_vmec_wout_transposes_radius_mode_tables_and_uses_nc_sibling(tmp_pa
     np.testing.assert_allclose(wout.lmns, expected_lmns)
 
 
-def test_read_vmec_wout_rejects_missing_ascii_fallback_and_required_variables(tmp_path: Path) -> None:
+def test_read_vmec_wout_rejects_missing_file_and_required_variables(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         read_vmec_wout(tmp_path / "does_not_exist.nc")
-
-    txt_path = tmp_path / "wout_ascii_only.txt"
-    txt_path.write_text("ASCII placeholder", encoding="utf-8")
-    with pytest.raises(NotImplementedError, match="ASCII"):
-        read_vmec_wout(txt_path)
 
     missing_var = tmp_path / "wout_missing_var.nc"
     _write_minimal_wout_file(missing_var, omit="presf")
@@ -294,23 +302,20 @@ def test_read_vmec_wout_rejects_missing_ascii_fallback_and_required_variables(tm
 
 
 @pytest.mark.parametrize(
-    ("kwargs", "error", "message"),
+    "kwargs",
     [
-        ({"lasym": 1}, NotImplementedError, "lasym=true"),
-        ({"xm0": 1}, ValueError, r"first \(xm,xn\) mode"),
-        ({"xn0": 5}, ValueError, r"first \(xm,xn\) mode"),
-        ({"xm_nyq0": 1}, ValueError, r"first \(xm_nyq,xn_nyq\) mode"),
-        ({"xn_nyq0": 5}, ValueError, r"first \(xm_nyq,xn_nyq\) mode"),
+        {"xm0": 1},
+        {"xn0": 5},
+        {"xm_nyq0": 1},
+        {"xn_nyq0": 5},
     ],
 )
-def test_read_vmec_wout_rejects_unsupported_or_invalid_mode_metadata(
+def test_read_vmec_wout_rejects_invalid_first_mode_metadata(
     tmp_path: Path,
     kwargs: dict[str, int],
-    error: type[Exception],
-    message: str,
 ) -> None:
     path = tmp_path / "wout_bad_metadata.nc"
     _write_minimal_wout_file(path, **kwargs)
 
-    with pytest.raises(error, match=message):
+    with pytest.raises(ValueError, match=r"first VMEC mode to be \(0,0\)"):
         read_vmec_wout(path)
