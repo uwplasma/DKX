@@ -169,3 +169,46 @@ remains in solvax for well-conditioned consumers. The real GPU levers here are (
 better operator conditioning / preconditioning so fp32 becomes viable, and (b)
 accepting that the per-subsystem Schur L-scan is inherently serial — GPU parallelism is
 across the (species, x, Er, surface) subsystems (already vmapped), not within the scan.
+
+## Production profiling battery 2026-07-11 (tools/benchmarks/profile_production.py)
+
+CPU = the development MacBook (idle), main @ 95e34659, per-case fresh subprocess.
+
+| case | DOFs | method | solve cold / warm | peak RSS |
+| --- | --- | --- | --- | --- |
+| hsx_pas_dkes_mid (Nxi_for_x ramp) | 336,610 | gcrot (tier-2) | 32.5 s / 15.4 s | **10.8 GB** |
+| w7x_fp_2species | 78,628 | gcrot, 115 iters | 17.5 s / 7.6 s | 4.1 GB |
+| mono_rhs3_scheme1 | — | block_tridiagonal | 4.8 s e2e | 2.0 GB |
+| phi1_newton (4.5k, at the 6000 cap) | 4,548 | unpreconditioned GCROT | **232 s cold** (12,360 inner iters, 3 Newton) / 0.04 s warm | 1.4 GB |
+| grad_pas_scheme1 (value_and_grad) | 39,318 | tier-1 differentiable | 5.3 s / 2.1 s | 4.3 GB |
+| ambipolar_er_2species | — | Brent root | 31.2 s | 3.9 GB |
+
+Findings and actions:
+
+1. **Ramped decks bypassed tier-1 (fixed same day).** The production-default
+   `Nxi_for_x` ramp hit a blanket refusal in `tier1_available`, routing PAS
+   production decks to tier-2 GCROT (10.8 GB / 15.4 s warm above). Promoting the
+   per-(species,x) truncated kernel (`n_blocks = Nxi_for_x[ix]`, the
+   tier1_hsx_head_to_head machinery) into `solve(method="auto")` gives, same
+   case: **block_tridiagonal_truncated, peak 885 MB (12.2x less), solve
+   4.1 s cold / 3.5 s warm (8.0x / 4.4x faster), e2e 34.9 -> 23.5 s.** AD-vs-FD
+   gradient through the ramped route agrees at rtol 1e-6.
+2. **Phi1 Newton is the top remaining runtime target.** The inner solve is
+   unpreconditioned full-restart GCROT capped at total_size <= 6000; at 4.5k
+   DOFs it takes 232 s (12,360 inner iterations for 3 Newton steps). Fix
+   design: absorb the Phi1(T*Z)+lambda rows into the tier-1 bordered Schur
+   (solvax.BorderedOperator) for PAS decks -> exact direct inner solve, cap
+   removed; FP+Phi1 uses GCROT preconditioned by the Phi1-stripped coarse
+   operator.
+3. **e2e is now operator-build-bound** on the HSX case (7.8 s build vs 3.5 s
+   warm solve): geometry + collision-matrix assembly is the next profile
+   target after the Phi1 work.
+4. **GPU battery invalidated by a stale install**: the office `sfincs-gpu` env
+   had an old wheel shadowing the repo (no `sfincs_jax.phi1`/`er`), so all GPU
+   numbers ran old code (fixed with an editable install; re-run pending). Under
+   the OLD tier-2 route the ramped HSX cases also **OOM'd on the 16 GB A4000**
+   (1.4 GiB / 12.1 GiB allocations failed) — the ramp-aware tier-1 (885 MB on
+   CPU) is expected to make both HSX cases fit on GPU. One suggestive old-code
+   number: the 39k-DOF gradient case ran slower on GPU (6.8 s warm) than CPU
+   (2.1 s) — small cases do not amortize GPU dispatch; the serial L-scan
+   ceiling note above stands.
