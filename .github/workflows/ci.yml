@@ -181,7 +181,7 @@ jobs:
           python -m pytest -q \
             tests/test_data_fetch.py::test_external_data_manifest_lists_release_fixtures \
             tests/test_data_fetch.py::test_unknown_external_equilibrium_does_not_fetch \
-            tests/test_write_output_return_results.py::test_write_output_wout_path_override_resolves_missing_scheme5_input
+            tests/test_cli_solve_mode.py::test_normalize_default_argv_keeps_wout_path_override
           python examples/getting_started/write_sfincs_output_vmec.py --out "${RUNNER_TEMP}/sfincsOutput_vmec_release_data.h5"
           test -s "${RUNNER_TEMP}/sfincsOutput_vmec_release_data.h5"
 
