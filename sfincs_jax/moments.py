@@ -1021,10 +1021,16 @@ def transport_matrix_from_flux_arrays(
     g_hat = jnp.asarray(g_hat, dtype=jnp.float64)
     i_hat = jnp.asarray(i_hat, dtype=jnp.float64)
     b0_over_bbar = jnp.asarray(b0_over_bbar, dtype=jnp.float64)
-    if (jnp.abs(g_hat) < 1e-30) | (jnp.abs(b0_over_bbar) < 1e-30):
-        b0_over_bbar, g_hat, i_hat = _effective_flux_functions(
-            surface, g_hat=g_hat, i_hat=i_hat, b0_over_bbar=b0_over_bbar
-        )
+    # Placeholder substitution as a trace-safe select (jit-compatible); the
+    # values are bit-identical to the former Python branch: substitution is
+    # applied only when GHat or B0OverBBar carry the ~0 VMEC placeholders.
+    placeholder = (jnp.abs(g_hat) < 1e-30) | (jnp.abs(b0_over_bbar) < 1e-30)
+    b0_eff, g_eff, i_eff = _effective_flux_functions(
+        surface, g_hat=g_hat, i_hat=i_hat, b0_over_bbar=b0_over_bbar
+    )
+    g_hat = jnp.where(placeholder, g_eff, g_hat)
+    i_hat = jnp.where(placeholder, i_eff, i_hat)
+    b0_over_bbar = jnp.where(placeholder, b0_eff, b0_over_bbar)
     g_plus = g_hat + iota * i_hat
 
     pf = jnp.asarray(particle_flux_vm_psi_hat[0, :], dtype=jnp.float64)

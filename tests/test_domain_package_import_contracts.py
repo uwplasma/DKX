@@ -65,9 +65,11 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "profiling.py": "stable support utility",
     "run.py": "public API",
     "sensitivity.py": "public differentiation API",
+    "shaing_callen.py": "stable physics kernel",
     "solve.py": "stable solver kernel",
     "solver_trace.py": "stable support utility",
     "species.py": "stable physics kernel",
+    "variational.py": "stable physics kernel",
     "writer.py": "public API",
     "xgrid.py": "stable discretization kernel",
 }

@@ -1235,6 +1235,7 @@ def write_transport_output(
     transport_matrix: np.ndarray,
     elapsed_times: np.ndarray | None = None,
     solver_diagnostics: Dict[str, np.ndarray] | None = None,
+    variational_diagnostics: Dict[str, np.ndarray] | None = None,
     overwrite: bool = True,
     fortran_layout: bool = True,
 ) -> Path:
@@ -1258,6 +1259,10 @@ def write_transport_output(
         solver_diagnostics: optional per-``whichRHS`` residual debug datasets
             (``transportResidualNorms`` etc.), stored as plain extra datasets
             when the ``SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS`` opt-in is active.
+        variational_diagnostics: optional RHSMode=3 variational D11 bound
+            datasets (``transportCoeffD11UpperBound`` / ``...LowerBound`` /
+            ``...BoundGap``; :mod:`sfincs_jax.variational`).  JAX-only keys
+            with no Fortran counterpart.
         elapsed_times: per-``whichRHS`` wall-clock seconds (``elapsed time (s)``).
 
     Returns:
@@ -1295,6 +1300,10 @@ def write_transport_output(
 
     if solver_diagnostics:
         for key, value in solver_diagnostics.items():
+            iteration[str(key)] = np.asarray(value, dtype=np.float64)
+
+    if variational_diagnostics:
+        for key, value in variational_diagnostics.items():
             iteration[str(key)] = np.asarray(value, dtype=np.float64)
 
     text = inp.raw.source_text if (inp.raw is not None and inp.raw.source_text is not None) else ""

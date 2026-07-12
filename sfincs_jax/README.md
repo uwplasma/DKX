@@ -32,6 +32,8 @@ packages remain: `validation/` and `workflows/`.
 | `phi1.py` | Phi1/quasineutrality slice: the nonlinear Newton solve `solve_phi1` (each step linearizes `KineticOperator.residual_phi1` and calls `solve.solve` as the inner linear solve, warm-started), its accepted-iterate history variant `solve_phi1_history` (the writer's per-iteration output), and the differentiable `phi1_state` (`solvax.implicit.root_solve`). Covers `includePhi1InKineticEquation` and `includePhi1InCollisionOperator` (the poloidally varying Fokker-Planck collision operator) with `quasineutralityOption` 1/2. |
 | `writer.py` | Canonical `sfincsOutput.h5`/`.nc`/`.npz` writer for RHSMode 1/2/3 (emits `Phi1Hat` for Phi1 runs) and the geometry-only output. |
 | `solver_trace.py` | Versioned solver-trace schema with JSON/HDF5 (de)serialization. |
+| `variational.py` | Entropy-production variational functionals bounding the monoenergetic transport coefficient from above and below (convergence certificates for the RHSMode=3 output). |
+| `shaing_callen.py` | The collisionless (Shaing-Callen / Boozer-Gardner) bootstrap-coefficient limit evaluated from the flux-surface geometry; anchors the low-collisionality physics tests. |
 | `api.py`, `cli.py`, `__main__.py` | Thin public surface over the canonical modules. |
 
 The CLI (`write-output` and the bare-run form) dispatches every RHSMode 1/2/3

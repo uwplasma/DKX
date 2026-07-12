@@ -91,7 +91,17 @@ def test_write_output_compute_transport_matrix_matches_fortran_fixture(base: str
     # radial-surface snapping and floating-point roundoff; keep a tight but forgiving atol.
     atol_full = 1e-6 if base == "monoenergetic_PAS_tiny_scheme12" else 5e-8
     rtol_full = 1e-12
-    assert set(out.keys()) == set(ref.keys())
+    # The variational entropy-production bounds (sfincs_jax.variational) are
+    # JAX-only RHSMode=3 diagnostics with no Fortran counterpart — the same
+    # documented allowance the RHSMode-1 tests grant the linearSolver*
+    # metadata.  They are emitted for monoenergetic runs only, so the key-set
+    # check treats them as an allowance, not a requirement.
+    jax_only = {
+        "transportCoeffD11UpperBound",
+        "transportCoeffD11LowerBound",
+        "transportCoeffD11BoundGap",
+    }
+    assert set(out.keys()) - jax_only == set(ref.keys())
     for k in sorted(ref.keys()):
         if k in {"input.namelist", "elapsed time (s)"}:
             continue

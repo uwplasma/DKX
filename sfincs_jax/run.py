@@ -48,6 +48,7 @@ from sfincs_jax.moments import (
 )
 from sfincs_jax.phase_space import Grids, make_grids
 from sfincs_jax.solve import SolveResult, solve
+from sfincs_jax.variational import d11_bounds_supported, monoenergetic_d11_bounds
 from sfincs_jax.writer import (
     _effective_flux_functions,
     _geometry_extras,
@@ -86,6 +87,9 @@ class TransportRun:
         moments: RHSMode=2/3 diagnostic table keyed by sfincsOutput.h5 names
             (:func:`sfincs_jax.moments.transport_moments_table` orders).
         output_path: written output file, or ``None``.
+        d11_bounds: RHSMode=3 variational D11 bounds
+            (:func:`sfincs_jax.variational.monoenergetic_d11_bounds`) keyed by
+            the JAX-only output names, or ``None`` when not applicable.
     """
 
     input: SfincsInput
@@ -95,6 +99,7 @@ class TransportRun:
     solve_result: SolveResult
     moments: Dict[str, np.ndarray]
     output_path: Path | None
+    d11_bounds: Dict[str, np.ndarray] | None = None
 
 
 @dataclass(frozen=True)
@@ -323,6 +328,21 @@ def run_transport_matrix(
 
     _emit_lines(emit, console.transport_matrix_lines(transport_matrix))
 
+    d11_bounds: Dict[str, np.ndarray] | None = None
+    if rhs_mode == 3 and d11_bounds_supported(op):
+        # Variational entropy-production bounds bracketing transportMatrix[0][0]
+        # (JAX-only diagnostic; see sfincs_jax.variational).
+        bounds = monoenergetic_d11_bounds(
+            op, jnp.asarray(state_vectors[0]),
+            g_hat=float(geom.g_hat), i_hat=float(geom.i_hat),
+            iota=float(geom.iota), b0_over_bbar=float(geom.b0_over_bbar),
+        )  # fmt: skip
+        d11_bounds = {
+            "transportCoeffD11UpperBound": np.asarray(bounds.upper, dtype=np.float64),
+            "transportCoeffD11LowerBound": np.asarray(bounds.lower, dtype=np.float64),
+            "transportCoeffD11BoundGap": np.asarray(bounds.gap, dtype=np.float64),
+        }
+
     output_path: Path | None = None
     if out_path is not None:
         elapsed = np.full((n_rhs,), solve_seconds / n_rhs, dtype=np.float64)
@@ -350,6 +370,7 @@ def run_transport_matrix(
             path=out_path, inp=inp, op=op, grids=grids, geom=geom, radial=radial,
             state_vectors=state_vectors, transport_matrix=transport_matrix,
             elapsed_times=elapsed, solver_diagnostics=solver_diagnostics,
+            variational_diagnostics=d11_bounds,
             overwrite=overwrite, fortran_layout=fortran_layout,
         )  # fmt: skip
 
@@ -371,6 +392,7 @@ def run_transport_matrix(
         solve_result=result,
         moments=moments_table,
         output_path=output_path,
+        d11_bounds=d11_bounds,
     )
 
 
