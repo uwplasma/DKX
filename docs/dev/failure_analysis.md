@@ -224,8 +224,8 @@ tier-1 active) and the full production HSX case on both backends:
 | sfincs_jax CPU (dev MacBook) | 41.4 s e2e (25.0 s warm solve) | 1.35 GB |
 | sfincs_jax GPU (A4000) | 59.6 s e2e (26.2 s warm solve) | 2.3 GB |
 
-Both backends route block_tridiagonal_truncated; the case previously OOM'd the
-16 GB GPU under tier-2. Mid-size HSX warm solve is at CPU/GPU parity (3.5 s vs
+Both backends route block_tridiagonal_truncated; under the tier-2 route the
+same case OOM'd the 16 GB GPU. Mid-size HSX warm solve is at CPU/GPU parity (3.5 s vs
 3.3 s). Every iterative/small path (FP gcrot 115 iters, Phi1 Newton,
 value_and_grad, ambipolar Brent, monoenergetic one-shot) runs 2-5x SLOWER on
 the GPU — dispatch-bound serial iterations, consistent with the serial L-scan
