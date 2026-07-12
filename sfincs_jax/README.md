@@ -34,6 +34,7 @@ packages remain: `validation/` and `workflows/`.
 | `solver_trace.py` | Versioned solver-trace schema with JSON/HDF5 (de)serialization. |
 | `variational.py` | Entropy-production variational functionals bounding the monoenergetic transport coefficient from above and below (convergence certificates for the RHSMode=3 output). |
 | `shaing_callen.py` | The collisionless (Shaing-Callen / Boozer-Gardner) bootstrap-coefficient limit evaluated from the flux-surface geometry; anchors the low-collisionality physics tests. |
+| `monoenergetic.py` | Monoenergetic-database mode: (nuPrime, EStar) scans of the RHSMode=3 coefficients in the benchmark normalization (Beidler et al., Nucl. Fusion 51, 076001 (2011)), the Maxwellian energy convolution to per-species thermal transport matrices, and the compact `.npz` database format (`save_database`/`load_database`); differentiable end to end with the `from_fourier` geometry path. |
 | `api.py`, `cli.py`, `__main__.py` | Thin public surface over the canonical modules. |
 
 The CLI (`write-output` and the bare-run form) dispatches every RHSMode 1/2/3

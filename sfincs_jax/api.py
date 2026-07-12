@@ -298,6 +298,49 @@ def run_ambipolar_brent(
     )
 
 
+def run_monoenergetic_database(
+    request: SolveInputs | str | Path,
+    nu_prime_grid: Sequence[float],
+    e_star_grid: Sequence[float] = (0.0,),
+    *,
+    output_path: str | Path | None = None,
+    solve_method: str = "auto",
+    tol: float = 1.0e-10,
+    emit: Any = None,
+) -> Any:
+    """Scan (nuPrime, EStar) monoenergetic coefficients (stable public facade).
+
+    Routes to :func:`sfincs_jax.monoenergetic.monoenergetic_database` (the
+    canonical RHSMode=3 database scan) and optionally writes the compact
+    ``.npz`` database via :func:`sfincs_jax.monoenergetic.save_database`.
+    The heavy stack is imported lazily so ``sfincs_jax.api`` stays cheap to
+    import.
+
+    Returns:
+        The :class:`sfincs_jax.monoenergetic.MonoenergeticDatabase`.
+    """
+
+    input_path, _wout_path, resolved_output, _backend, _requires_autodiff, _options = (
+        _solve_request_paths(request, output_path)
+    )
+    if input_path is None:
+        raise ValueError("run_monoenergetic_database requires an input namelist path.")
+
+    from .monoenergetic import monoenergetic_database, save_database  # noqa: PLC0415
+
+    database = monoenergetic_database(
+        input_path,
+        nu_prime_grid,
+        e_star_grid,
+        solve_method=str(solve_method),
+        tol=float(tol),
+        emit=emit,
+    )
+    if resolved_output is not None:
+        save_database(resolved_output, database)
+    return database
+
+
 __all__ = [
     "BenchmarkReport",
     "GeometryState",
@@ -310,5 +353,6 @@ __all__ = [
     "TransportResult",
     "read_output",
     "run_ambipolar_brent",
+    "run_monoenergetic_database",
     "write_output",
 ]

@@ -57,6 +57,7 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "io.py": "public API",
     "magnetic_geometry.py": "stable geometry kernel",
     "moments.py": "stable physics kernel",
+    "monoenergetic.py": "public workflow API",
     "namelist.py": "public input API",
     "paths.py": "stable support utility",
     "phase_space.py": "stable discretization kernel",

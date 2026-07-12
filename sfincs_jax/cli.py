@@ -504,6 +504,48 @@ def _cmd_transport_matrix_v3(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_monoenergetic_database(args: argparse.Namespace) -> int:
+    """Scan (nuPrime, EStar) and write the monoenergetic-coefficient database."""
+    t0 = _now()
+    from .monoenergetic import monoenergetic_database, save_database  # noqa: PLC0415
+
+    input_path = Path(args.input)
+    nu_values = [float(v) for v in args.nu_prime]
+    er_values = [float(v) for v in args.e_star]
+    _emit("################################################################", level=0, args=args)
+    _emit(" sfincs_jax monoenergetic-database", level=0, args=args)
+    _emit(f" input={input_path.resolve()}", level=0, args=args)
+    _emit(f" nuPrime grid ({len(nu_values)}): {nu_values}", level=0, args=args)
+    _emit(f" EStar grid ({len(er_values)}): {er_values}", level=0, args=args)
+    quiet = bool(getattr(args, "quiet", False))
+    db = monoenergetic_database(
+        input_path,
+        nu_values,
+        er_values,
+        solve_method=str(args.solve_method),
+        tol=float(args.tol),
+        emit=None if quiet else (lambda line: _emit(line, level=0, args=args)),
+    )
+    out = save_database(Path(args.out), db)
+    _emit(f" wrote database -> {out.resolve()}", level=0, args=args)
+    header = f" {'nuPrime':>12} {'EStar':>12} {'nu_star':>12} {'D11*':>13} {'D31*':>13} {'D13*':>13} {'D33*':>13}"
+    _emit(header, level=0, args=args)
+    nu_star = np.asarray(db.nu_star)
+    for i, nu in enumerate(np.asarray(db.nu_prime)):
+        for j, er in enumerate(np.asarray(db.e_star)):
+            _emit(
+                f" {nu:12.5e} {er:12.5e} {nu_star[i]:12.5e}"
+                f" {float(np.asarray(db.d11_star)[i, j]):13.6e}"
+                f" {float(np.asarray(db.d31_star)[i, j]):13.6e}"
+                f" {float(np.asarray(db.d13_star)[i, j]):13.6e}"
+                f" {float(np.asarray(db.d33_star)[i, j]):13.6e}",
+                level=0,
+                args=args,
+            )
+    _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
+    return 0
+
+
 def _cmd_dump_h5(args: argparse.Namespace) -> int:
     from .io import read_sfincs_h5  # noqa: PLC0415
 
@@ -830,6 +872,7 @@ def _normalize_default_argv(argv: list[str]) -> list[str]:
         "run-fortran",
         "write-output",
         "transport-matrix-v3",
+        "monoenergetic-database",
         "dump-h5",
         "plot-output",
         "compare-h5",
@@ -1204,6 +1247,27 @@ def main(argv: list[str] | None = None) -> int:
     )
     _add_equilibrium_override_args(p_tm)
     p_tm.set_defaults(func=_cmd_transport_matrix_v3)
+
+    p_mono = sub.add_parser(
+        "monoenergetic-database",
+        help="Scan (nuPrime, EStar) monoenergetic transport coefficients and write a .npz database.",
+    )
+    _add_common_cli_args(p_mono)
+    p_mono.add_argument("--input", required=True, help="Path to input.namelist (geometry/resolution deck)")
+    p_mono.add_argument(
+        "--nu-prime", required=True, nargs="+", help="nuPrime scan values (nonzero)", metavar="NU"
+    )
+    p_mono.add_argument(
+        "--e-star", nargs="+", default=["0.0"], help="EStar scan values (default: 0.0)", metavar="ESTAR"
+    )
+    p_mono.add_argument("--out", default="monoenergeticDatabase.npz", help="Output .npz database path")
+    p_mono.add_argument("--tol", default="1e-10", help="Relative residual tolerance per whichRHS column")
+    p_mono.add_argument(
+        "--solve-method",
+        default="auto",
+        help="Advanced solver override (sfincs_jax.solve tiers). Default 'auto' is recommended.",
+    )
+    p_mono.set_defaults(func=_cmd_monoenergetic_database)
 
     p_dump = sub.add_parser("dump-h5", help="Dump SFINCS HDF5 output to JSON (small files only).")
     _add_common_cli_args(p_dump)
