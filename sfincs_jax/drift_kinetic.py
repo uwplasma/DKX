@@ -1,7 +1,7 @@
 """The v3 drift-kinetic operator as a single consolidated ``KineticOperator``.
 
 This module is the Phase-3.2 consolidation target for the drift-kinetic-equation
-(DKE) physics that today lives across ``sfincs_jax/operators/profile_*.py``
+(DKE) physics that previously lived across the retired ``operators`` package
 (collisionless streaming/mirror, ExB, radial-electric-field xDot/xiDot terms,
 collision wiring, constraint/source bordering, and the RHS drives).  It becomes
 ``sfincs_jax/dke.py`` at the v2 purge.

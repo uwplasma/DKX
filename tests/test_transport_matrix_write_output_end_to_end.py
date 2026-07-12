@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
+from sfincs_jax.api import write_output
+from sfincs_jax.io import read_sfincs_h5
 
 
 def _is_numeric_dataset(x) -> bool:
@@ -38,11 +39,7 @@ def test_write_output_compute_transport_matrix_matches_fortran_fixture(base: str
     ref_path = here / "ref" / f"{base}.sfincsOutput.h5"
     out_path = tmp_path / f"{base}.sfincsOutput_jax.h5"
 
-    write_sfincs_jax_output_h5(
-        input_namelist=input_path,
-        output_path=out_path,
-        compute_transport_matrix=True,
-    )
+    write_output(input_path, out_path)
 
     out = read_sfincs_h5(out_path)
     ref = read_sfincs_h5(ref_path)
@@ -119,11 +116,7 @@ def test_transport_matrix_recycle_matches_fixture(tmp_path: Path, monkeypatch: p
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_RECYCLE_K", "2")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FORCE_KRYLOV", "1")
 
-    write_sfincs_jax_output_h5(
-        input_namelist=input_path,
-        output_path=out_path,
-        compute_transport_matrix=True,
-    )
+    write_output(input_path, out_path)
 
     out = read_sfincs_h5(out_path)
     ref = read_sfincs_h5(ref_path)
@@ -149,11 +142,7 @@ def test_transport_output_can_include_solver_residual_diagnostics(
     out_path = tmp_path / "sfincsOutput_with_residuals.h5"
 
     monkeypatch.setenv("SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS", "1")
-    write_sfincs_jax_output_h5(
-        input_namelist=input_path,
-        output_path=out_path,
-        compute_transport_matrix=True,
-    )
+    write_output(input_path, out_path)
 
     out = read_sfincs_h5(out_path)
     n_rhs = int(np.asarray(out["transportMatrix"]).shape[1])

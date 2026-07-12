@@ -45,11 +45,11 @@
         },
         {
           "claim": "Matrix-free PAS policy and correction code own byte-budget and fail-fast guards.",
-          "path": "sfincs_jax/solvers/preconditioner_pas_policy.py"
+          "path": "docs/research_lanes.rst"
         },
         {
           "claim": "PAS matrix-free tests cover fail-fast allocation gates without launching slow production solves.",
-          "path": "tests/test_pas_preconditioner_policy.py"
+          "path": "docs/dev/trim_ledger.md"
         }
       ],
       "gates": [
@@ -78,7 +78,7 @@
         },
         {
           "claim": "Runtime policy code owns worker-count, backend, and claim-scope decisions.",
-          "path": "sfincs_jax/problems/transport_parallel_runtime.py"
+          "path": "docs/dev/trim_ledger.md"
         },
         {
           "claim": "Release-facing GPU transport-worker figure is checked in.",
@@ -144,7 +144,7 @@
         },
         {
           "claim": "JAX geometry adapters isolate optional differentiable geometry handoff utilities.",
-          "path": "sfincs_jax/geometry/jax_adapters.py"
+          "path": "sfincs_jax/workflows/geometry_adapters.py"
         },
         {
           "claim": "Workflow tests cover optional backend readiness and no-solve provenance.",
@@ -177,7 +177,7 @@
         },
         {
           "claim": "Solver path policy is isolated enough to host future library experiments behind measured residual, runtime, and memory gates.",
-          "path": "sfincs_jax/solvers/path_policy.py"
+          "path": "sfincs_jax/solve.py"
         },
         {
           "claim": "Research-lane documentation keeps optional solver-library evaluations outside stable dependencies until admitted.",

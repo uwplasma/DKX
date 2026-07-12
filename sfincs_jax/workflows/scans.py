@@ -15,7 +15,8 @@ import time
 
 import numpy as np
 
-from ..io import localize_equilibrium_file_in_place, write_sfincs_jax_output_h5
+from ..io import localize_equilibrium_file_in_place
+from ..run import run_from_namelist
 from ..namelist import Namelist, read_sfincs_input
 
 
@@ -203,9 +204,8 @@ def run_er_scan(
     outputs: list[Path] = []
     scan_t0 = time.perf_counter()
     solved_elapsed_s: list[float] = []
-    scan_recycle_env = os.environ.get("SFINCS_JAX_SCAN_RECYCLE", "").strip().lower()
-    scan_recycle_enabled = scan_recycle_env in {"1", "true", "yes", "on"}
-    prev_run_dir: Path | None = None
+    del compute_solution, differentiable  # Canonical runs always solve; solve_method picks the path.
+
     def _run_one(v: float, i: int) -> tuple[Path, Path, float, bool]:
         point_t0 = time.perf_counter()
         run_dir = out_dir / f"{var}{v:.4g}"
@@ -223,43 +223,29 @@ def run_er_scan(
         w_input.write_text(txt2)
         localize_equilibrium_file_in_place(input_namelist=w_input, overwrite=False)
 
-        if scan_recycle_enabled:
-            state_out = run_dir / "sfincs_jax_state.npz"
-            os.environ["SFINCS_JAX_STATE_OUT"] = str(state_out)
-            if prev_run_dir is None:
-                os.environ.pop("SFINCS_JAX_STATE_IN", None)
-            else:
-                prev_state = prev_run_dir / "sfincs_jax_state.npz"
-                if prev_state.exists():
-                    os.environ["SFINCS_JAX_STATE_IN"] = str(prev_state)
-                else:
-                    os.environ.pop("SFINCS_JAX_STATE_IN", None)
-
-        write_sfincs_jax_output_h5(
-            input_namelist=w_input,
-            output_path=out_path,
+        nml_point = read_sfincs_input(w_input)
+        rhs_mode = int(nml_point.group("general").get("RHSMODE", 1))
+        if bool(compute_transport_matrix) and rhs_mode == 1:
+            raise ValueError(
+                "scan-er: --compute-transport-matrix requires an RHSMode=2/3 deck; "
+                f"{w_input} has RHSMode=1."
+            )
+        emit_line = None if emit is None else (lambda line: emit(2, line))
+        run_from_namelist(
+            w_input,
+            out_path=out_path,
             overwrite=True,
-            compute_transport_matrix=bool(compute_transport_matrix),
-            compute_solution=bool(compute_solution),
-            emit=emit,
-            solver_trace_path=run_dir / "sfincsOutput.solver_trace.json",
             solve_method=str(solve_method),
-            differentiable=differentiable,
+            solver_trace_path=run_dir / "sfincsOutput.solver_trace.json",
+            emit=emit_line,
         )
         return run_dir, out_path, float(time.perf_counter() - point_t0), False
 
     def _run_one_parallel(payload: tuple[float, int]) -> tuple[Path, Path, float, bool]:
-        # Disable scan recycling across processes.
-        os.environ["SFINCS_JAX_SCAN_RECYCLE"] = "0"
-        os.environ.pop("SFINCS_JAX_STATE_IN", None)
-        os.environ.pop("SFINCS_JAX_STATE_OUT", None)
         v, i = payload
         return _run_one(v, i)
 
     if jobs_val > 1 and len(vals) > 1:
-        scan_recycle_enabled = False
-        if emit is not None:
-            emit(1, "scan-er: scan recycle disabled for parallel execution")
         with concurrent.futures.ProcessPoolExecutor(max_workers=jobs_val) as pool:
             payloads = [(v, i) for i, v in enumerate(vals, start=1)]
             futures = [pool.submit(_run_one_parallel, payload) for payload in payloads]
@@ -290,7 +276,6 @@ def run_er_scan(
             run_dir, out_path, point_elapsed_s, skipped_existing = _run_one(v, i)
             run_dirs.append(run_dir)
             outputs.append(out_path)
-            prev_run_dir = run_dir
             completed += 1
             if not skipped_existing:
                 solved_elapsed_s.append(float(point_elapsed_s))

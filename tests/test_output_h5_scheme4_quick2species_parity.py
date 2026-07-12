@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 
 from sfincs_jax.compare import compare_sfincs_outputs
-from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
+from sfincs_jax.api import write_output
+from sfincs_jax.io import read_sfincs_h5
 
 
 def test_output_scheme4_quick2species_matches_fortran_fixture(tmp_path: Path) -> None:
@@ -23,7 +24,7 @@ def test_output_scheme4_quick2species_matches_fortran_fixture(tmp_path: Path) ->
     assert fortran_path.exists(), f"Missing Fortran fixture: {fortran_path}"
 
     out_path = tmp_path / "sfincsOutput.h5"
-    write_sfincs_jax_output_h5(input_namelist=input_path, output_path=out_path)
+    write_output(input_path, out_path)
 
     # Compare embedded input file text exactly.
     a = read_sfincs_h5(out_path)

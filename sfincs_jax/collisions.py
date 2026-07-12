@@ -18,7 +18,7 @@ from jax.scipy.special import erf  # noqa: E402
 from scipy import special as sp_special  # noqa: E402
 from scipy.integrate import quad  # noqa: E402
 
-from sfincs_jax.discretization.xgrid import XGrid, make_x_grid  # noqa: E402
+from sfincs_jax.xgrid import XGrid, make_x_grid  # noqa: E402
 
 
 _V3_PI = 3.14159265358979

@@ -98,12 +98,3 @@ def test_magdrift_scheme_matches_fortran_fixture(
     transport = compare_sfincs_outputs(a_path=out, b_path=golden, keys=_TRANSPORT_KEYS, rtol=0, atol=1e-8)
     bad_t = [(r.key, r.max_abs) for r in transport if not r.ok]
     assert not bad_t, f"Mismatched transport keys: {bad_t}"
-
-
-@pytest.mark.parametrize("scheme", SCHEMES)
-def test_magdrift_scheme_deck_routes_through_canonical_stack(scheme: int) -> None:
-    """The drift decks are owned by the canonical stack, not the legacy pipeline."""
-    from sfincs_jax.cli import deck_requires_legacy_pipeline
-    from sfincs_jax.inputs import read_sfincs_input
-
-    assert deck_requires_legacy_pipeline(read_sfincs_input(_deck(scheme))) is None

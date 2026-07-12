@@ -99,12 +99,3 @@ def test_constraintscheme34_matches_fortran_fixture(cs: str, tmp_path: Path) -> 
     uhat = compare_sfincs_outputs(a_path=out, b_path=golden, keys=["uHat"], rtol=0, atol=1e-8)
     bad_u = [(r.key, r.max_abs) for r in uhat if not r.ok]
     assert not bad_u, f"Mismatched uHat: {bad_u}"
-
-
-@pytest.mark.parametrize("cs", SCHEMES)
-def test_constraintscheme34_deck_routes_through_canonical_stack(cs: str) -> None:
-    """The cs3/cs4 RHSMode=1 decks are owned by the canonical stack, not the legacy pipeline."""
-    from sfincs_jax.cli import deck_requires_legacy_pipeline
-    from sfincs_jax.inputs import read_sfincs_input
-
-    assert deck_requires_legacy_pipeline(read_sfincs_input(_deck(cs))) is None

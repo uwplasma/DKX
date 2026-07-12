@@ -6,15 +6,15 @@ lambda row, and the Phi1-in-kinetic-equation coupling for
 ``quasineutralityOption`` 1/2) and its nonlinear Newton solve in
 :mod:`sfincs_jax.phi1`.
 
-Parity oracle: ``operators.profile_system`` (the legacy ``V3FullSystemOperator``
-residual/matvec) and the Fortran reference state vector.  This test conserves
-the Fortran-parity assertion of the retired
-``tests/test_full_system_newton_krylov.py`` (same fixture, atol 5e-8).
+Parity oracles: the frozen Fortran reference fixtures (residual/stateVector
+petscbin + whichMatrix_3 Jacobians for the linear decks, sfincsOutput.h5
+goldens for the output families).  This conserves the Fortran-parity assertion
+of the retired ``tests/test_full_system_newton_krylov.py`` (same fixture,
+atol 5e-8).
 
-Section 6 conserves the ``includePhi1InCollisionOperator`` physics of the
-retired legacy owner (the poloidally varying Fokker-Planck collision operator):
-canonical residual/operator/Jacobian parity vs the legacy assembly and a Fortran
-state-vector end-to-end check on the collision-Phi1 fixture.
+Section 6 covers the ``includePhi1InCollisionOperator`` physics (the poloidally
+varying Fokker-Planck collision operator): canonical residual parity vs the
+frozen Fortran residual and a Fortran state-vector end-to-end check.
 """
 
 from __future__ import annotations
@@ -31,12 +31,6 @@ import pytest
 from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
 from sfincs_jax.moments import rhsmode1_moments
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_system import (
-    apply_v3_full_system_operator,
-    full_system_operator_from_namelist,
-    residual_v3_full_system,
-    rhs_v3_full_system,
-)
 from sfincs_jax.phi1 import operator_from_input, phi1_state, solve_phi1
 from sfincs_jax.validation.fortran import read_petsc_vec
 from sfincs_jax.writer import operator_containers
@@ -49,10 +43,6 @@ _INPUT = _REF / f"{_FIXTURE}.input.namelist"
 _STATEVEC = _REF / f"{_FIXTURE}.stateVector.petscbin"
 
 
-def _legacy_op():
-    return full_system_operator_from_namelist(nml=read_sfincs_input(_INPUT))
-
-
 def _canonical_op():
     return kinetic_operator_from_namelist(read_sfincs_input(_INPUT))
 
@@ -62,55 +52,61 @@ def _fortran_state() -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# 1. Operator / residual element-wise parity vs the legacy assembly (atol 1e-12)
+# 1. Operator / residual element-wise parity vs the frozen Fortran fixtures
 # ---------------------------------------------------------------------------
 
 
-def test_operator_layout_matches_legacy() -> None:
-    op, leg = _canonical_op(), _legacy_op()
+def test_operator_layout_is_phi1() -> None:
+    op = _canonical_op()
     assert op.include_phi1 and op.include_phi1_in_kinetic
-    assert op.quasineutrality_option == int(leg.quasineutrality_option)
-    assert int(op.total_size) == int(leg.total_size)
-    assert int(op.f_size) == int(leg.f_size)
-    assert int(op.phi1_size) == int(leg.phi1_size)
-    assert int(op.extra_size) == int(leg.extra_size)
+    assert op.phi1_size == op.n_theta * op.n_zeta + 1
+    assert op.total_size == op.f_size + op.phi1_size + op.extra_size
 
 
-def test_residual_elementwise_parity_vs_legacy() -> None:
-    op, leg = _canonical_op(), _legacy_op()
-    rng = np.random.default_rng(0)
-    for seed in range(3):
-        x = jnp.asarray(rng.standard_normal(op.total_size))
-        r_can = np.asarray(op.residual_phi1(x))
-        r_leg = np.asarray(residual_v3_full_system(leg, x))
-        np.testing.assert_allclose(r_can, r_leg, rtol=0.0, atol=1e-12)
+def test_residual_matches_fortran_at_reference_state() -> None:
+    """residual_phi1 at the recorded Newton state equals the frozen Fortran residual."""
+    op = _canonical_op()
+    x0 = jnp.asarray(_fortran_state())
+    r_ref = np.asarray(read_petsc_vec(_REF / f"{_FIXTURE}.residual.petscbin").values)
+    r = np.asarray(op.residual_phi1(x0))
+    np.testing.assert_allclose(r, r_ref, rtol=0.0, atol=1e-12)
 
 
-def test_operator_and_rhs_elementwise_parity_vs_legacy() -> None:
-    op, leg = _canonical_op(), _legacy_op()
-    # rhs at the built (Phi1=0) linearization point.
+@pytest.mark.parametrize(
+    "stem",
+    (
+        "pas_1species_PAS_noEr_tiny_scheme5_withPhi1_linear",
+        "pas_1species_PAS_noEr_tiny_withPhi1_linear",
+    ),
+)
+def test_jacobian_matvec_matches_fortran_whichmatrix3_linear_decks(stem: str) -> None:
+    """The Phi1 Jacobian JVP equals the frozen Fortran whichMatrix=3 on linear decks."""
+    from scipy.sparse import csr_matrix
+
+    from sfincs_jax.validation.fortran import read_petsc_mat_aij
+
+    op = kinetic_operator_from_namelist(read_sfincs_input(_REF / f"{stem}.input.namelist"))
+    x0 = jnp.asarray(read_petsc_vec(_REF / f"{stem}.stateVector.petscbin").values)
+    a = read_petsc_mat_aij(_REF / f"{stem}.whichMatrix_3.petscbin")
+    mat = csr_matrix((a.data, a.col_ind, a.row_ptr), shape=a.shape)
+    op_lin = replace(op, phi1_lin_state=x0)
+    rng = np.random.default_rng(2)
+    v = rng.standard_normal(op.total_size)
     np.testing.assert_allclose(
-        np.asarray(op.rhs_phi1()), np.asarray(rhs_v3_full_system(leg)), rtol=0.0, atol=1e-12
+        np.asarray(op_lin.apply(jnp.asarray(v))), mat.dot(v), rtol=0.0, atol=1e-11
     )
-    # Nonlinear operator action A(x) (include_jacobian_terms=False) at a random state.
-    rng = np.random.default_rng(1)
-    x = jnp.asarray(rng.standard_normal(op.total_size))
-    phi1 = x[op.f_size : op.f_size + op.n_theta * op.n_zeta].reshape((op.n_theta, op.n_zeta))
-    a_can = np.asarray(replace(op, phi1_hat_base=phi1)._apply_phi1_operator(x))
-    a_leg = np.asarray(apply_v3_full_system_operator(replace(leg, phi1_hat_base=phi1), x, include_jacobian_terms=False))
-    np.testing.assert_allclose(a_can, a_leg, rtol=0.0, atol=1e-12)
 
 
-def test_jacobian_matvec_parity_vs_legacy_linearize() -> None:
-    """``apply`` (the JVP used by solve.solve) matches the oracle's jax.linearize."""
-    op, leg = _canonical_op(), _legacy_op()
+def test_jacobian_matvec_matches_autodiff_linearize() -> None:
+    """``apply`` (the hand-built JVP used by solve.solve) matches jax.linearize."""
+    op = _canonical_op()
     x0 = jnp.asarray(_fortran_state())
     op_lin = replace(op, phi1_lin_state=x0)
     rng = np.random.default_rng(2)
     v = jnp.asarray(rng.standard_normal(op.total_size))
     jvp_can = np.asarray(op_lin.apply(v))
-    _, jvp_leg = jax.linearize(lambda xx: residual_v3_full_system(leg, xx), x0)
-    np.testing.assert_allclose(jvp_can, np.asarray(jvp_leg(v)), rtol=0.0, atol=1e-11)
+    _, jvp_ad = jax.linearize(op.residual_phi1, x0)
+    np.testing.assert_allclose(jvp_can, np.asarray(jvp_ad(v)), rtol=0.0, atol=1e-11)
 
 
 # ---------------------------------------------------------------------------
@@ -198,71 +194,28 @@ def test_run_profile_routes_phi1_to_canonical() -> None:
     np.testing.assert_allclose(run.state_vector, _fortran_state(), rtol=0.0, atol=5e-8)
 
 
-# The canonical writer now emits every Phi1-dependent physics field the legacy
-# writer produces: the electric-drift (vE/vE0) and total-drift (vd/vd1) flux
-# families with their psiN/rHat/rN variants, the heat withoutPhi1 flux, the
-# dPhi1Hat gradients, the lambda multiplier, the Phi1 scalar metadata
-# (quasineutralityOption, readExternalPhi1, adiabatic{Z,NHat,THat,MHat}), and the
-# Newton metadata (didNonlinearCalculationConverge, linearSolver{Method,
-# RequestedMethod,ResidualNorm}).  The only residual fields are the legacy
-# inner-linear-solver ACCEPTANCE diagnostics emitted solely on the legacy dense
-# solve path (scheme5 deck): they describe the legacy GMRES/dense acceptance test
-# (target = solverTol*||rhs||, ratio = ||r||/target, accepted/criterion flags),
-# which has no analogue in the canonical Newton-Krylov solve.  The canonical
-# solve reports only nonlinear convergence + the converged residual norm (both
-# emitted); linearSolverResidualTargetRatio in particular cannot match (it is
-# the legacy dense solve's ||r||/target).
-_KNOWN_MISSING_PHI1_H5 = frozenset(
-    {"linearSolverAccepted", "linearSolverAcceptanceCriterion", "linearSolverConverged",
-     "linearSolverResidualTarget", "linearSolverResidualTargetRatio",
-     "linearSolverTrueResidualConverged"}
-)  # fmt: skip
-
-
-def test_h5_phi1_fields_vs_legacy_writer(tmp_path: Path) -> None:
-    from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
+def test_h5_phi1_fields_vs_fortran_golden(tmp_path: Path) -> None:
+    from sfincs_jax.compare import compare_sfincs_outputs
+    from sfincs_jax.io import read_sfincs_h5
     from sfincs_jax.run import run_profile
 
-    leg_path = tmp_path / "legacy.h5"
-    write_sfincs_jax_output_h5(input_namelist=_INPUT, output_path=leg_path, compute_solution=True, verbose=False)
-    leg = read_sfincs_h5(leg_path)
+    fortran_path = _REF / f"{_FIXTURE}.sfincsOutput.h5"
+    fort = read_sfincs_h5(fortran_path)
 
     can_path = tmp_path / "canon.h5"
     run_profile(_INPUT, tol=1e-9, out_path=can_path, emit=None)
     can = read_sfincs_h5(can_path)
 
-    # Phi1Hat is emitted and matches the legacy converged (last-iteration) field.
+    # Phi1Hat is emitted and matches the Fortran converged (last-iteration) field.
     assert "Phi1Hat" in can
     np.testing.assert_allclose(
-        np.asarray(can["Phi1Hat"])[..., -1], np.asarray(leg["Phi1Hat"])[..., -1], rtol=0.0, atol=5e-8
+        np.asarray(can["Phi1Hat"])[..., -1], np.asarray(fort["Phi1Hat"])[..., -1], rtol=0.0, atol=5e-8
     )
 
-    # Every legacy field the canonical writer omits is a documented known-missing.
-    missing = set(leg.keys()) - set(can.keys()) - {"Phi1Hat"}
-    unexpected = missing - _KNOWN_MISSING_PHI1_H5
-    assert not unexpected, f"canonical writer unexpectedly omits Phi1 fields: {sorted(unexpected)}"
-
-    # Metadata whose value legitimately differs: the canonical Newton records
-    # the converged state (NIterations=1); the legacy in-process writer stored
-    # every accepted Newton iterate (here 3), and wall-clock timings differ.
-    skip_value = {"NIterations", "elapsed time (s)"}
-
-    # Shared numeric fields with matching shape agree (base/geometry/scalars and
-    # the last-iteration slice of the RHSMode=1 moments).
-    for key in sorted(set(leg.keys()) & set(can.keys())):
-        if key in skip_value:
-            continue
-        lv, cv = leg[key], can[key]
-        if isinstance(lv, (str, bytes)) or isinstance(cv, (str, bytes)):
-            continue
-        lv = np.asarray(lv, dtype=np.float64)
-        cv = np.asarray(cv, dtype=np.float64)
-        if lv.shape == cv.shape:
-            np.testing.assert_allclose(cv, lv, rtol=0.0, atol=5e-8, err_msg=f"field {key}")
-        elif lv.ndim == cv.ndim and lv.shape[:-1] == cv.shape[:-1] and cv.shape[-1] == 1:
-            # Iteration axis: canonical stores the converged state (NIterations=1),
-            # legacy stored the whole Newton history; compare the converged slice.
-            np.testing.assert_allclose(cv[..., 0], lv[..., -1], rtol=0.0, atol=5e-8, err_msg=f"field {key}")
+    # Full physics-field parity via the release comparator against the golden.
+    results = compare_sfincs_outputs(a_path=fortran_path, b_path=can_path, rtol=1e-8, atol=5e-8)
+    failures = [r for r in results if not r.ok]
+    assert not failures, f"canonical vs Fortran golden mismatches: {[f.key for f in failures]}"
 
 
 # Per-deck parity budgets for the Phi1-derived output families.  Each new family
@@ -296,49 +249,48 @@ _STATE_FAMILY_KEYS = ("dPhi1Hatdtheta", "dPhi1Hatdzeta", "lambda")
 
 
 def _converged_slice_pair(cv: object, lv: object) -> tuple[np.ndarray, np.ndarray]:
-    """(canonical converged, legacy last-iteration) numeric slices for one field."""
+    """(canonical, Fortran) converged-iterate slices for one per-iteration field.
+
+    Every compared family carries a trailing ``NIterations`` axis; the value
+    budgets below are calibrated for the CONVERGED state, so compare the last
+    iterate on both sides (mid-Newton iterates are solver-trajectory detail,
+    pinned separately at 5e-8 by the write-output end-to-end test).
+    """
     cva = np.asarray(cv, dtype=np.float64)
     lva = np.asarray(lv, dtype=np.float64)
-    if cva.shape == lva.shape:
-        return cva, lva
-    assert cva.ndim == lva.ndim and cva.shape[:-1] == lva.shape[:-1] and cva.shape[-1] == 1
-    return cva[..., 0], lva[..., -1]
+    assert cva.ndim == lva.ndim and cva.shape[:-1] == lva.shape[:-1]
+    return cva[..., -1], lva[..., -1]
 
 
 @pytest.mark.parametrize("stem", sorted(_PHI1_H5_DECKS))
-def test_h5_phi1_new_families_vs_legacy_writer(stem: str, tmp_path: Path) -> None:
-    """Value parity of the newly-emitted Phi1 families vs legacy, all three decks.
+def test_h5_phi1_new_families_vs_fortran_golden(stem: str, tmp_path: Path) -> None:
+    """Value parity of the Phi1-derived output families vs the Fortran goldens.
 
     Covers the electric-drift (vE/vE0) and total-drift (vd/vd1) flux families and
     their psiN/rHat/rN variants, the heat withoutPhi1 flux, the vE/vE0
     BeforeSurfaceIntegral fields, the dPhi1Hat gradients, the lambda multiplier,
     the Phi1 scalar metadata, and the Newton metadata.
     """
-    from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
+    from sfincs_jax.io import read_sfincs_h5
     from sfincs_jax.run import run_profile
 
     deck = _REF / f"{stem}.input.namelist"
     tol = _PHI1_H5_DECKS[stem]
 
-    leg_path = tmp_path / "legacy.h5"
-    write_sfincs_jax_output_h5(input_namelist=deck, output_path=leg_path, compute_solution=True, verbose=False)
-    leg = read_sfincs_h5(leg_path)
+    fort = read_sfincs_h5(_REF / f"{stem}.sfincsOutput.h5")
     can_path = tmp_path / "canon.h5"
     run_profile(deck, tol=1e-9, out_path=can_path, emit=None)
     can = read_sfincs_h5(can_path)
-
-    # The only legacy fields the canonical writer omits are documented.
-    missing = set(leg.keys()) - set(can.keys()) - {"Phi1Hat"}
-    assert missing <= _KNOWN_MISSING_PHI1_H5, f"unexpected missing: {sorted(missing - _KNOWN_MISSING_PHI1_H5)}"
 
     # Electric-/total-drift flux families + heat withoutPhi1 (O(1e-8) budget).
     seen_scale = 0.0
     for key in _FLUX_FAMILY_KEYS:
         assert key in can, f"{key} not emitted"
-        assert key in leg, f"{key} absent from legacy for {stem}"
-        cvs, lvs = _converged_slice_pair(can[key], leg[key])
-        np.testing.assert_allclose(cvs, lvs, rtol=0.0, atol=tol["flux"], err_msg=f"{stem}:{key}")
-        seen_scale = max(seen_scale, float(np.max(np.abs(lvs))))
+        if key not in fort:
+            continue
+        cvs, fvs = _converged_slice_pair(can[key], fort[key])
+        np.testing.assert_allclose(cvs, fvs, rtol=0.0, atol=tol["flux"], err_msg=f"{stem}:{key}")
+        seen_scale = max(seen_scale, float(np.max(np.abs(fvs))))
     # Guard against a trivial all-zero pass: the particle/heat vE/vd fluxes are non-zero.
     assert seen_scale > 1e-12, f"{stem}: flux families are unexpectedly ~0 (scale={seen_scale:.2e})"
 
@@ -346,28 +298,28 @@ def test_h5_phi1_new_families_vs_legacy_writer(stem: str, tmp_path: Path) -> Non
     # (dPhi1Hat is the spectral theta/zeta derivative of the converged Phi1Hat).
     for key in _STATE_FAMILY_KEYS:
         assert key in can, f"{key} not emitted"
-        assert key in leg, f"{key} absent from legacy for {stem}"
-        cvs, lvs = _converged_slice_pair(can[key], leg[key])
-        np.testing.assert_allclose(cvs, lvs, rtol=0.0, atol=tol["state"], err_msg=f"{stem}:{key}")
+        if key not in fort:
+            continue
+        cvs, fvs = _converged_slice_pair(can[key], fort[key])
+        np.testing.assert_allclose(cvs, fvs, rtol=0.0, atol=tol["state"], err_msg=f"{stem}:{key}")
 
-    # linearSolverResidualNorm is a converged-solve residual (legacy stores the
-    # inner linear residual, canonical the Newton residual): both are ~0, well
-    # below any physical scale.  Assert convergence, not tight value parity.
-    assert "linearSolverResidualNorm" in can and "linearSolverResidualNorm" in leg
+    # Canonical Newton metadata: converged, with a small recorded residual.
+    assert "linearSolverResidualNorm" in can
     assert float(np.asarray(can["linearSolverResidualNorm"])) < 1e-6
-    assert float(np.asarray(leg["linearSolverResidualNorm"])) < 1e-6
-
-    # Phi1 scalar metadata: exact integer/logical parity.
-    assert int(np.asarray(can["quasineutralityOption"])) == int(np.asarray(leg["quasineutralityOption"]))
-    assert int(np.asarray(can["readExternalPhi1"])) == int(np.asarray(leg["readExternalPhi1"]))
     assert int(np.asarray(can["didNonlinearCalculationConverge"])) == 1
+
+    # Phi1 scalar metadata: exact integer/logical parity with the Fortran golden.
+    assert int(np.asarray(can["quasineutralityOption"])) == int(np.asarray(fort["quasineutralityOption"]))
+    assert int(np.asarray(can["readExternalPhi1"])) == int(np.asarray(fort["readExternalPhi1"]))
     for key in ("adiabaticZ", "adiabaticNHat", "adiabaticTHat", "adiabaticMHat"):
+        if key not in fort:
+            continue
         np.testing.assert_allclose(
-            float(np.asarray(can[key])), float(np.asarray(leg[key])), rtol=0.0, atol=1e-12, err_msg=f"{stem}:{key}"
+            float(np.asarray(can[key])), float(np.asarray(fort[key])), rtol=0.0, atol=1e-12, err_msg=f"{stem}:{key}"
         )
     # Method-name metadata is present (string value is a solver label, not physics).
     for key in ("linearSolverMethod", "linearSolverRequestedMethod"):
-        assert key in can and key in leg
+        assert key in can
 
 
 # ---------------------------------------------------------------------------
@@ -390,10 +342,6 @@ def _coll_canonical_op():
     return kinetic_operator_from_namelist(read_sfincs_input(_COLL_INPUT))
 
 
-def _coll_legacy_op():
-    return full_system_operator_from_namelist(nml=read_sfincs_input(_COLL_INPUT))
-
-
 def _coll_fortran_state() -> np.ndarray:
     return np.asarray(read_petsc_vec(_COLL_STATEVEC).values, dtype=np.float64)
 
@@ -404,40 +352,23 @@ def test_collision_phi1_operator_is_canonical() -> None:
     assert op.fp_phi1 is not None and op.fp is None
 
 
-def test_collision_phi1_residual_elementwise_parity_vs_legacy() -> None:
-    op, leg = _coll_canonical_op(), _coll_legacy_op()
-    rng = np.random.default_rng(0)
-    for _ in range(3):
-        x = jnp.asarray(rng.standard_normal(op.total_size))
-        r_can = np.asarray(op.residual_phi1(x))
-        r_leg = np.asarray(residual_v3_full_system(leg, x))
-        np.testing.assert_allclose(r_can, r_leg, rtol=0.0, atol=1e-12)
+def test_collision_phi1_residual_matches_fortran_at_reference_state() -> None:
+    """residual_phi1 at the recorded Newton state equals the frozen Fortran residual."""
+    op = _coll_canonical_op()
+    x0 = jnp.asarray(_coll_fortran_state())
+    r_ref = np.asarray(read_petsc_vec(_REF / f"{_COLL_FIXTURE}.residual.petscbin").values)
+    np.testing.assert_allclose(np.asarray(op.residual_phi1(x0)), r_ref, rtol=0.0, atol=1e-12)
 
 
-def test_collision_phi1_operator_and_rhs_elementwise_parity_vs_legacy() -> None:
-    op, leg = _coll_canonical_op(), _coll_legacy_op()
-    np.testing.assert_allclose(
-        np.asarray(op.rhs_phi1()), np.asarray(rhs_v3_full_system(leg)), rtol=0.0, atol=1e-12
-    )
-    rng = np.random.default_rng(1)
-    x = jnp.asarray(rng.standard_normal(op.total_size))
-    phi1 = x[op.f_size : op.f_size + op.n_theta * op.n_zeta].reshape((op.n_theta, op.n_zeta))
-    a_can = np.asarray(replace(op, phi1_hat_base=phi1)._apply_phi1_operator(x))
-    a_leg = np.asarray(
-        apply_v3_full_system_operator(replace(leg, phi1_hat_base=phi1), x, include_jacobian_terms=False)
-    )
-    np.testing.assert_allclose(a_can, a_leg, rtol=0.0, atol=1e-12)
-
-
-def test_collision_phi1_jacobian_matvec_parity_vs_legacy_linearize() -> None:
-    op, leg = _coll_canonical_op(), _coll_legacy_op()
+def test_collision_phi1_jacobian_matvec_matches_autodiff_linearize() -> None:
+    op = _coll_canonical_op()
     x0 = jnp.asarray(_coll_fortran_state())
     op_lin = replace(op, phi1_lin_state=x0)
     rng = np.random.default_rng(2)
     v = jnp.asarray(rng.standard_normal(op.total_size))
     jvp_can = np.asarray(op_lin.apply(v))
-    _, jvp_leg = jax.linearize(lambda xx: residual_v3_full_system(leg, xx), x0)
-    np.testing.assert_allclose(jvp_can, np.asarray(jvp_leg(v)), rtol=0.0, atol=1e-11)
+    _, jvp_ad = jax.linearize(op.residual_phi1, x0)
+    np.testing.assert_allclose(jvp_can, np.asarray(jvp_ad(v)), rtol=0.0, atol=1e-11)
 
 
 def test_collision_phi1_solve_matches_fortran_reference() -> None:
@@ -455,20 +386,6 @@ def test_collision_phi1_run_profile_routes_to_canonical() -> None:
     assert run.solve_result.method == "phi1_newton_krylov"
     assert run.solve_result.converged
     np.testing.assert_allclose(run.state_vector, _coll_fortran_state(), rtol=0.0, atol=5e-8)
-
-
-def test_collision_phi1_cli_predicate_routes_to_canonical() -> None:
-    """The CLI dispatch predicate no longer defers includePhi1InCollisionOperator.
-
-    The canonical writer emits the vE/vd flux families for Phi1 runs, so the
-    ``write-output`` CLI routes the collision-Phi1 deck through the canonical
-    stack (``deck_requires_legacy_pipeline`` returns ``None``) rather than the
-    legacy outputs writer.
-    """
-    from sfincs_jax.cli import deck_requires_legacy_pipeline
-    from sfincs_jax.inputs import read_sfincs_input
-
-    assert deck_requires_legacy_pipeline(read_sfincs_input(_COLL_INPUT)) is None
 
 
 # ---------------------------------------------------------------------------
@@ -526,14 +443,6 @@ def test_read_external_phi1_state_matches_fortran(tmp_path: Path) -> None:
     assert worst < 5e-8, f"worst state |canonical-Fortran| = {worst:.3e}"
 
 
-def test_read_external_phi1_not_deferred() -> None:
-    """The CLI routes the readExternalPhi1 deck through the canonical stack."""
-    from sfincs_jax.cli import deck_requires_legacy_pipeline
-    from sfincs_jax.inputs import read_sfincs_input as read_input_typed
-
-    assert deck_requires_legacy_pipeline(read_input_typed(_REXT_DECK)) is None
-
-
 def test_read_external_phi1_run_profile_is_linear(tmp_path: Path) -> None:
     """run_profile solves readExternalPhi1 with a single LINEAR solve (no Newton)."""
     from sfincs_jax.run import run_profile
@@ -580,8 +489,14 @@ def test_read_external_phi1_output_matches_fortran(tmp_path: Path) -> None:
     can = read_sfincs_h5(can_path)
     gold = read_sfincs_h5(_REXT_GOLDEN)
 
-    assert set(gold) == set(can), (
-        f"golden-only={sorted(set(gold) - set(can))}, canonical-only={sorted(set(can) - set(gold))}"
+    jax_only_metadata = {
+        "linearSolverMethod",
+        "linearSolverRequestedMethod",
+        "linearSolverResidualNorm",
+    }
+    assert set(gold) <= set(can), f"golden-only={sorted(set(gold) - set(can))}"
+    assert set(can) - set(gold) <= jax_only_metadata, (
+        f"canonical-only={sorted(set(can) - set(gold) - jax_only_metadata)}"
     )
 
     skip_value = {"elapsed time (s)"}  # wall-clock, not a physics field

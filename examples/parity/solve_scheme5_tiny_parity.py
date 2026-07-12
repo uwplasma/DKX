@@ -1,10 +1,10 @@
 """End-to-end linear solve parity for VMEC `geometryScheme=5` (tiny PAS case).
 
-This script exercises the full matrix-free v3 linear solve stack for a VMEC equilibrium:
+This script exercises the full canonical v3 linear solve stack for a VMEC equilibrium:
 
-- Builds the v3 grids and `geometryScheme=5` VMEC geometry from `wout_*.nc`.
-- Builds the full-system operator (F-block + constraint rows/cols).
-- Assembles the v3 RHS and solves `A x = rhs` using matrix-free GMRES.
+- Builds the canonical `KineticOperator` (grids + `geometryScheme=5` VMEC geometry
+  from `wout_*.nc` + constraint rows/cols) from the namelist.
+- Assembles the v3 RHS and solves `A x = rhs` with `sfincs_jax.solve.solve`.
 - Compares the resulting solution vector to a frozen Fortran v3 `stateVector` fixture.
 
 This is a key milestone toward full upstream v3 example-suite parity: not just geometry/output
@@ -25,7 +25,8 @@ if str(_REPO_ROOT) not in sys.path:
 
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.fortran import read_petsc_vec
-from sfincs_jax.problems.profile_solve import solve_v3_full_system_linear_gmres
+from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
+from sfincs_jax.solve import solve
 
 
 def _default_input() -> Path:
@@ -41,26 +42,20 @@ def main() -> int:
     p.add_argument("--input", default=str(_default_input()))
     p.add_argument("--statevector", default=str(_default_statevector()))
     p.add_argument("--tol", type=float, default=1e-12)
-    p.add_argument("--restart", type=int, default=80)
-    p.add_argument("--maxiter", type=int, default=300)
+    p.add_argument("--method", default="auto", help="sfincs_jax.solve.solve method")
     args = p.parse_args()
 
     nml = read_sfincs_input(Path(args.input))
     ref = read_petsc_vec(Path(args.statevector)).values
 
-    sol = solve_v3_full_system_linear_gmres(
-        nml=nml,
-        tol=float(args.tol),
-        restart=int(args.restart),
-        maxiter=int(args.maxiter),
-        solve_method="batched",
-    )
-    x = np.asarray(sol.x)
+    op = kinetic_operator_from_namelist(nml)
+    result = solve(op, op.rhs(), method=str(args.method), tol=float(args.tol))
+    x = np.asarray(result.x).reshape(-1)
 
     err = x - ref
     rel = float(np.linalg.norm(err) / np.linalg.norm(ref))
     print(f"n={ref.size}")
-    print(f"GMRES residual norm: {float(sol.residual_norm):.3e}")
+    print(f"solve method: {result.method}  converged={bool(result.converged)}")
     print(f"||x - x_ref|| / ||x_ref|| = {rel:.3e}")
     return 0
 

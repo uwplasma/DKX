@@ -162,7 +162,7 @@ Legacy example-suite snapshot
 -----------------------------
 
 Everything in the remainder of this page describes the retained **legacy
-pipeline** (``sfincs_jax.io.write_sfincs_jax_output_h5``, the full CLI solver
+pipeline** (the full CLI ``write-output`` solver
 ladder, and its env-var tuning), which keeps ownership of the cases the
 canonical stack defers. It stays tested, but it is not the canonical
 ``inputs -> drift_kinetic -> solve -> moments`` path documented above.
@@ -535,7 +535,7 @@ JAX-native performance patterns used in `sfincs_jax`
   batched linear solve, reducing repeated operator assembly and retracing overhead.
 - **Vectorized RHSMode=1 diagnostics**: vm-only moment/flux accumulation and output shaping are
   stacked/batched in JAX for non-``Phi1`` runs, reducing Python-loop overhead during
-  ``write_sfincs_jax_output_h5(..., compute_solution=True)``.
+  ``sfincs_jax.api.write_output(...)``.
 - **Fast weighted reductions in diagnostics**: transport/rhsmode1 weighted sums use
   fused ``einsum`` kernels by default (with an opt-in strict-order fallback), reducing
   diagnostic accumulation overhead in both RHSMode=1 and RHSMode=2/3 paths.
@@ -642,7 +642,7 @@ JAX-native performance patterns used in `sfincs_jax`
 Explicit sparse host/device split helper
 ----------------------------------------
 
-The reusable helper module ``sfincs_jax.solvers.explicit_sparse`` keeps the explicit sparse
+The retired helper module (deleted with the legacy pipeline) kept the explicit sparse
 policy separate from the solver driver. It is intended for the performance-first
 CLI path and for future integration of sparse host-side rescues, not for the
 default differentiable reference path.
@@ -668,7 +668,7 @@ and for CSR,
    \text{csr bytes} \approx \text{nnz} \cdot (\text{data itemsize} + \text{index itemsize})
    + (N_{\text{rows}} + 1) \cdot \text{index itemsize}.
 
-Implementation: ``sfincs_jax.solvers.explicit_sparse``.
+Implementation: retired with the legacy pipeline (historical record).
 
 Public entry points:
 

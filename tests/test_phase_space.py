@@ -4,7 +4,7 @@ The referee for the Phase 3.1a consolidation is exact (1e-15 / bitwise)
 agreement with the modules being replaced:
 
 * ``sfincs_jax.grids.uniform_diff_matrices``
-* ``sfincs_jax.discretization.xgrid`` (``make_x_grid``,
+* ``sfincs_jax.xgrid`` (``make_x_grid``,
   ``make_x_polynomial_diff_matrices``)
 * ``sfincs_jax.discretization.v3.grids_from_namelist``
 * ``sfincs_jax.collisions.polynomial_interpolation_matrix_np``
@@ -21,9 +21,7 @@ import numpy as np
 import pytest
 
 from sfincs_jax import phase_space
-from sfincs_jax.discretization.v3 import grids_from_namelist
-from sfincs_jax.discretization.xgrid import make_x_grid, make_x_polynomial_diff_matrices
-from sfincs_jax.grids import uniform_diff_matrices
+from sfincs_jax.xgrid import make_x_grid, make_x_polynomial_diff_matrices
 from sfincs_jax.namelist import parse_sfincs_input_text
 from sfincs_jax.collisions import polynomial_interpolation_matrix_np
 
@@ -37,22 +35,6 @@ def assert_exact(new, old) -> None:
 # ---------------------------------------------------------------------------
 # Uniform periodic diff matrices vs old sfincs_jax.grids.uniform_diff_matrices
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("scheme", sorted(phase_space._PERIODIC_SCHEMES))
-@pytest.mark.parametrize("n", [5, 6, 9, 16])
-@pytest.mark.parametrize("x_max", [2 * math.pi, 2 * math.pi / 5, 1.0])
-def test_uniform_periodic_diff_matrices_match_old(scheme: int, n: int, x_max: float) -> None:
-    x_old, w_old, ddx_old, d2_old = uniform_diff_matrices(
-        n=n, x_min=0.0, x_max=x_max, scheme=scheme
-    )
-    x_new, w_new, ddx_new, d2_new = phase_space.uniform_periodic_diff_matrices(
-        n=n, x_min=0.0, x_max=x_max, scheme=scheme
-    )
-    assert_exact(x_new, x_old)
-    assert_exact(w_new, w_old)
-    assert_exact(ddx_new, ddx_old)
-    assert_exact(d2_new, d2_old)
 
 
 def test_uniform_periodic_diff_matrices_rejects_dropped_schemes() -> None:
@@ -278,104 +260,6 @@ _GRIDS_FIELDS = (
 )
 
 
-@pytest.mark.parametrize(
-    (
-        "n_theta",
-        "n_zeta",
-        "n_x",
-        "n_xi",
-        "theta_scheme",
-        "zeta_scheme",
-        "drift_scheme",
-        "x_grid_scheme",
-        "n_xi_for_x_option",
-    ),
-    [
-        (7, 9, 4, 8, 2, 2, 3, 5, 1),  # v3 defaults, small
-        (8, 6, 5, 12, 2, 2, 3, 5, 0),  # even Ntheta/Nzeta exercise force-odd
-        (9, 7, 5, 12, 0, 0, 0, 5, 2),  # spectral, centered drifts
-        (7, 7, 4, 10, 1, 1, 1, 6, 3),  # 2nd-order FD, scheme-1 upwinding, x0 point
-        (7, 7, 4, 10, 2, 2, -2, 2, 1),  # negative drift scheme, xGridScheme 2
-        (7, 1, 4, 8, 2, 2, 3, 5, 1),  # axisymmetric Nzeta = 1
-    ],
-)
-def test_make_grids_matches_v3_grids_from_namelist(
-    n_theta: int,
-    n_zeta: int,
-    n_x: int,
-    n_xi: int,
-    theta_scheme: int,
-    zeta_scheme: int,
-    drift_scheme: int,
-    x_grid_scheme: int,
-    n_xi_for_x_option: int,
-) -> None:
-    n_l = 4
-    nml = _v3_namelist(
-        n_theta=n_theta,
-        n_zeta=n_zeta,
-        n_x=n_x,
-        n_xi=n_xi,
-        n_l=n_l,
-        theta_scheme=theta_scheme,
-        zeta_scheme=zeta_scheme,
-        drift_scheme=drift_scheme,
-        x_grid_scheme=x_grid_scheme,
-        n_xi_for_x_option=n_xi_for_x_option,
-    )
-    old = grids_from_namelist(nml)
-    new = phase_space.make_grids(
-        n_theta=n_theta,
-        n_zeta=n_zeta,
-        n_xi=n_xi,
-        n_x=n_x,
-        n_l=n_l,
-        n_periods=5,  # geometryScheme=4
-        theta_derivative_scheme=theta_scheme,
-        zeta_derivative_scheme=zeta_scheme,
-        magnetic_drift_derivative_scheme=drift_scheme,
-        x_grid_scheme=x_grid_scheme,
-        n_xi_for_x_option=n_xi_for_x_option,
-    )
-    for field in _GRIDS_FIELDS:
-        assert_exact(getattr(new, field), getattr(old, field))
-    assert new.n_xi == old.n_xi
-    assert new.n_l == old.n_l
-    assert new.n_theta == int(np.asarray(old.theta).size)
-    assert new.n_zeta == int(np.asarray(old.zeta).size)
-
-
-def test_make_grids_monoenergetic_matches_v3_rhsmode3() -> None:
-    nml = _v3_namelist(
-        n_theta=7,
-        n_zeta=9,
-        n_x=4,
-        n_xi=8,
-        n_l=4,
-        theta_scheme=2,
-        zeta_scheme=2,
-        drift_scheme=3,
-        x_grid_scheme=5,
-        n_xi_for_x_option=1,
-        rhs_mode=3,
-    )
-    old = grids_from_namelist(nml)
-    new = phase_space.make_grids(
-        n_theta=7,
-        n_zeta=9,
-        n_xi=8,
-        n_x=4,
-        n_l=4,
-        n_periods=5,
-        monoenergetic=True,
-    )
-    for field in _GRIDS_FIELDS:
-        assert_exact(getattr(new, field), getattr(old, field))
-    assert new.n_x == 1
-    assert float(np.asarray(new.x)[0]) == 1.0
-    assert float(np.asarray(new.x_weights)[0]) == math.exp(1.0)
-
-
 def test_grids_container_exposes_legendre_machinery() -> None:
     grids = phase_space.make_grids(
         n_theta=7, n_zeta=7, n_xi=8, n_x=4, n_l=4, n_periods=5
@@ -389,21 +273,6 @@ def test_grids_container_exposes_legendre_machinery() -> None:
 # Aperiodic uniform diff matrices (xGridScheme 3/4 and the xDot upwind pairs)
 # vs the old full uniformDiffMatrices.F90 port in sfincs_jax.grids
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("scheme", sorted(phase_space._APERIODIC_SCHEMES))
-@pytest.mark.parametrize("n", [5, 6, 9])
-def test_uniform_aperiodic_diff_matrices_match_old(scheme: int, n: int) -> None:
-    x_old, w_old, ddx_old, d2_old = uniform_diff_matrices(
-        n=n, x_min=0.0, x_max=5.0, scheme=scheme
-    )
-    x_new, w_new, ddx_new, d2_new = phase_space.uniform_aperiodic_diff_matrices(
-        n=n, x_min=0.0, x_max=5.0, scheme=scheme
-    )
-    assert_exact(x_new, x_old)
-    assert_exact(w_new, w_old)
-    assert_exact(ddx_new, ddx_old)
-    assert_exact(d2_new, d2_old)
 
 
 def test_uniform_aperiodic_diff_matrices_rejects_other_schemes() -> None:

@@ -75,7 +75,6 @@ problem structure.
 
 Examples:
 
-- ``examples/performance/benchmark_transport_parallel_scaling.py``
 - ``examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py``
 
 Plotting and postprocessing

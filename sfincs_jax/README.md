@@ -4,118 +4,70 @@ This directory contains the importable `sfincs_jax` package. The architecture
 is the canonical stack of flat, physics-named root modules
 (`plan_final.md`, "Source Structure Rules"): one input file plus one geometry
 runs through `inputs -> drift_kinetic -> solve -> moments -> writer/console`,
-and the public API/CLI route every supported case through that chain by
-default. The remaining one-level domain packages are explicitly transitional:
-they are the interim owners of the deferred features (magneticDriftScheme
-2-9 — scheme 1 is canonical in `drift_kinetic` — and xGridScheme 3/4/7/8 with
-`xDotDerivativeScheme != 0`) plus a handful of workflow surfaces (scan-er,
-ambipolar post-processing, sensitivity/compare/plot utilities), and they shrink
-to zero as each vertical slice lands. Constraint schemes 3/4, export_f, `.npz`
-output, solver traces, readExternalPhi1, geometryScheme 13, and
-non-stellarator-symmetric VMEC are all canonical.
+and the public API/CLI route every supported case through that chain. The
+legacy pipeline (the transitional `problems/`, `operators/`, `solvers/`,
+`outputs/`, `discretization/`, `geometry/`, and `physics/` packages that were
+explicitly transitional interim owners while the vertical slices landed) was
+deleted once every SFINCS v3 physics family became canonical: RHSMode 1/2/3,
+PAS and full Fokker-Planck collisions, geometry schemes 1-5/11/12/13 (with
+lasym), Phi1 (kinetic/collision/readExternalPhi1), constraint schemes -1..4,
+export_f, `.npz`/NetCDF output, solver traces, xGridScheme 1-8 with
+`xDotDerivativeScheme` -2..11, and magneticDriftScheme 0-9. Only two one-level
+packages remain: `validation/` and `workflows/`.
 
 ## The Canonical Stack (the architecture)
 
 | Canonical owner | Purpose |
 | --- | --- |
 | `constants.py`, `species.py` | Normalizations, radial-coordinate Jacobians, species pytrees, collisionality. |
-| `phase_space.py` | Theta/zeta grids and derivative matrices, Legendre pitch machinery, speed grid, Nxi-for-x ramps. |
+| `phase_space.py`, `xgrid.py` | Theta/zeta grids and derivative matrices, Legendre pitch machinery, speed grids (`xgrid.py` is the polynomial x-grid kernel the collision operators consume), Nxi-for-x ramps. |
 | `magnetic_geometry.py` | All supported geometry schemes, VMEC/Boozer readers, differentiable Fourier path. |
 | `collisions.py` | Pitch-angle scattering and full Fokker-Planck with Rosenbluth terms. |
 | `drift_kinetic.py` | The `KineticOperator`: term assembly, matrix-free apply, analytic Legendre blocks, RHS drives, bordered constraints. |
 | `solve.py` | Three-tier policy (structured block elimination, preconditioned recycled Krylov, host direct referee) on the optional `solvax` library; implicit differentiation. |
 | `moments.py` | Velocity-space moments, flux families, transport matrices, NTV, classical transport, keyed by sfincsOutput.h5 names. |
 | `inputs.py`, `console.py` | Typed namelist with Fortran-cited defaults/validation; byte-parity Fortran stdout blocks. |
-| `run.py` | End-to-end RHSMode 1/2/3 drivers (`run_profile`, `run_transport_matrix`). |
+| `run.py` | End-to-end RHSMode 1/2/3 drivers (`run_profile`, `run_transport_matrix`, `run_geometry`) plus the namelist-level dispatch `run_from_namelist`. |
 | `er.py` | Ambipolar radial-electric-field slice: `radial_current`, Fortran-parity Brent `find_ambipolar_er` (bracket expansion + root classification, warm starts/recycling), and the differentiable `ambipolar_er` (`solvax.implicit.root_solve`). |
 | `phi1.py` | Phi1/quasineutrality slice: the nonlinear Newton solve `solve_phi1` (each step linearizes `KineticOperator.residual_phi1` and calls `solve.solve` as the inner linear solve, warm-started), its accepted-iterate history variant `solve_phi1_history` (the writer's per-iteration output), and the differentiable `phi1_state` (`solvax.implicit.root_solve`). Covers `includePhi1InKineticEquation` and `includePhi1InCollisionOperator` (the poloidally varying Fokker-Planck collision operator) with `quasineutralityOption` 1/2. |
-| `writer.py` | Canonical `sfincsOutput.h5`/`.nc` writer for RHSMode 1/2/3 (emits `Phi1Hat` for Phi1 runs). |
+| `writer.py` | Canonical `sfincsOutput.h5`/`.nc`/`.npz` writer for RHSMode 1/2/3 (emits `Phi1Hat` for Phi1 runs) and the geometry-only output. |
+| `solver_trace.py` | Versioned solver-trace schema with JSON/HDF5 (de)serialization. |
 | `api.py`, `cli.py`, `__main__.py` | Thin public surface over the canonical modules. |
 
-The CLI (`write-output` and the bare-run form) dispatches RHSMode 1/2/3 decks
-through `run.py` unless `cli.deck_requires_legacy_pipeline` reports one of the
-two remaining deferred features (magneticDriftScheme 2-9; xGridScheme outside
-{1,2,5,6} or `xDotDerivativeScheme != 0`) or a legacy-only CLI option
-(`--geometry-only`, `--no-fortran-layout`, `--no-overwrite`), in which case it
-prints the reason and falls back to the retained legacy owner
-(`io.write_sfincs_jax_output_h5`).
+The CLI (`write-output` and the bare-run form) dispatches every RHSMode 1/2/3
+deck through `run.py`; out-of-range option values are namelist validation
+errors raised by `inputs.load_sfincs_input`. There is no legacy fallback.
 
 ## Other Root Modules
 
 | Module | Role |
 | --- | --- |
-| `__init__.py` | Public package exports, JAX precision/cache setup, compatibility aliases. |
+| `__init__.py` | Public package exports, JAX precision/cache setup. |
 | `ambipolar.py` | Scanplot-compatible ambipolar post-processing (`solve_ambipolar_from_scan_dir`, `radial_current_from_output`) over precomputed scan directories; in-process ambipolar solves live in `er.py`. |
 | `sensitivity.py` | JVP/VJP, adjoint, and implicit differentiation helpers. |
 | `plotting.py` | Output plotting used by the CLI and examples. |
 | `compare.py` | HDF5 comparison, frozen-reference parity, benchmark-table utilities. |
-| `io.py`, `namelist.py`, `input_compat.py`, `paths.py` | File formats, SFINCS-style namelist parsing, input aliases, data/cache paths. `io.py` is the retained legacy write entry. |
-| `diagnostics.py`, `grids.py`, `profiling.py` | Stable diagnostics, v3 grid helpers, timers, memory probes. |
+| `io.py`, `namelist.py`, `input_compat.py`, `paths.py` | Output-file reading and generic dict serializers, SFINCS-style namelist parsing, input aliases, data/cache paths. |
+| `profiling.py` | Timers and memory probes. |
 
-## Transitional Domain Packages
+## Remaining Domain Packages
 
-These packages are the legacy stack. They exist only until the deferred
-features are consolidated into the canonical root modules; every slice that
-promotes a case family deletes its superseded owners in the same series
-(`plan_final.md`, "Repository-Wide Line Sweep"). Do not add new implementation
-here unless it serves a deferred feature.
-
-- `discretization/`: v3 grids, stencils, mapped-x-grid coordinate maps.
-- `geometry/`: Boozer/VMEC readers and JAX geometry adapters used by the
-  legacy stack and workflows.
-- `operators/`: the legacy matrix-free profile-response operator
-  (`profile_system.py`, `profile_fblock.py`, term modules, layouts).
-- `physics/`: legacy classical-transport formula owner.
-- `problems/`: legacy RHSMode-1 (`profile_*.py`) and RHSMode-2/3
-  (`transport_*.py`) solve orchestration. (The ambipolar Brent owner
-  `problems/ambipolar.py` was deleted; `er.py` replaces it.)
-- `solvers/`: legacy Krylov wrappers, dispatch, and the retained
-  `preconditioner_*.py` family the legacy auto policy can still select.
-- `outputs/`: legacy HDF5/NetCDF/NPZ schemas, writer logic, export_f mapping,
-  and post-solve diagnostics.
 - `validation/`: frozen-reference loading, Fortran/PETSc fixture readers,
-  release-data manifest/fetching, evidence gates.
-- `workflows/`: scans, optimization support, and mapped-x-grid workflows.
+  release-data manifest/fetching, evidence gates, release orchestration.
+- `workflows/`: scan-er orchestration (`scans.py`), optimization support
+  (`optimization.py`), and the JAX-native geometry adapters for external
+  producers (`geometry_adapters.py`).
 
-The deleted sparse-direct/CSR-assembly solver families
-(`operators/profile_full_system.py`, `solvers/explicit_sparse.py`, the
-`profile_sparse_*` and `preconditioner_xblock_*_sparse` modules, and their
-policy plumbing) must not be reintroduced; the retained legacy auto route is
-the matrix-free Krylov policy with the dense/pas/collision preconditioner
-families plus the SciPy rescue, and the canonical `solve.py` tiers own the
-supported surface.
-
-## Main Legacy Implementation Owners
-
-- `operators/profile_system.py`: legacy RHSMode-1 full-system operator, RHS
-  assembly, matrix-free residual/JVP wrappers, constraint-source kernels.
-- `operators/profile_layout.py`: RHSMode-1 layout family.
-- `operators/profile_fblock.py`: kinetic distribution-function block assembly.
-- `problems/profile_solve.py`: legacy RHSMode-1 solve orchestration (the
-  deferred-deck fallback).
-- `problems/profile_policies.py`: legacy RHSMode-1 automatic solver policy.
-- `problems/transport_solve.py`, `problems/transport_linear_system.py`,
-  `problems/transport_parallel_runtime.py`: legacy RHSMode-2/3 orchestration,
-  retained for `.npz`/solver-trace/export_f options and mapped-x-grid
-  workflows.
-- `solvers/krylov.py`: GMRES/FGMRES/BiCGStab/TFQMR wrappers, residual
-  histories, distributed GMRES contracts.
-- `solvers/preconditioning.py`: shared preconditioner caches and RHSMode-1
-  preconditioner dispatch.
-- `solvers/preconditioner_full_fp_kinetic.py`,
-  `solvers/preconditioner_pas_*.py`, `solvers/preconditioner_schur_profile.py`,
-  `solvers/preconditioner_xblock_{block_jacobi,radial}.py`,
-  `solvers/preconditioner_domain_decomposition.py`,
-  `solvers/preconditioner_transport_matrix.py`: the preconditioner kinds the
-  legacy auto policy can select.
-- `outputs/writer.py`, `outputs/formats.py`, `outputs/rhsmode1.py`,
-  `outputs/transport.py`: legacy output writing and diagnostics.
-- `validation/artifacts.py`: validation artifact manifests and evidence gates.
+The deleted legacy stack (the `problems/`, `operators/`, `solvers/`,
+`outputs/`, `discretization/`, `geometry/`, and `physics/` packages, the
+sparse-direct/CSR-assembly solver families, and the root `grids.py` /
+`diagnostics.py` helpers) must not be reintroduced; the canonical `solve.py`
+tiers and the flat root modules own the entire supported surface.
 
 ## Design Rules
 
 - New stable code goes into a flat, physics-named canonical root module; the
-  domain packages only shrink.
+  remaining domain packages hold validation and workflow orchestration only.
 - Keep package depth shallow: one folder below `sfincs_jax/`, no nested
   packages.
 - Stable file names describe physics or numerics — no version suffixes or
@@ -128,10 +80,8 @@ supported surface.
 
 ## Stability And Compatibility
 
-The canonical root modules are the stable import surface. Legacy domain
-modules are transitional: they may change or disappear as slices land, with
-their public behavior preserved through the canonical replacements and the
-parity gates. Compatibility aliases may remain in `__init__.py` only while a
+The canonical root modules are the stable import surface.
+Compatibility aliases may remain in `workflows/__init__.py` only while a
 documented workflow needs them.
 
 ## Generated Files Policy

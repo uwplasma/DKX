@@ -154,15 +154,15 @@ def test_run_sweep_respects_custom_stem_and_title(tmp_path: Path, monkeypatch) -
         "/\n"
     )
 
-    def fake_write(*, input_namelist, output_path, compute_solution, verbose):
-        del input_namelist, compute_solution, verbose
+    def fake_write(input_namelist, output_path, **kwargs):
+        del input_namelist, kwargs
         with h5py.File(output_path, "w") as h5:
             h5["particleFlux_vm_psiHat"] = np.asarray([1.0])
             h5["heatFlux_vm_psiHat"] = np.asarray([2.0])
             h5["FSABFlow"] = np.asarray([3.0])
             h5["FSABjHat"] = np.asarray(4.0)
 
-    monkeypatch.setattr(mod, "write_sfincs_jax_output_h5", fake_write)
+    monkeypatch.setattr(mod, "write_output", fake_write)
     mod._run_sweep(
         input_path=base_input,
         work_dir=tmp_path / "work",

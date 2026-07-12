@@ -14,7 +14,8 @@ if str(_REPO_ROOT) not in sys.path:
 
 from sfincs_jax.compare import compare_sfincs_outputs  # noqa: E402
 from sfincs_jax.validation.fortran import run_sfincs_fortran  # noqa: E402
-from sfincs_jax.io import localize_equilibrium_file_in_place, write_sfincs_jax_output_h5  # noqa: E402
+from sfincs_jax.api import write_output  # noqa: E402
+from sfincs_jax.io import localize_equilibrium_file_in_place  # noqa: E402
 from sfincs_jax.namelist import read_sfincs_input  # noqa: E402
 
 
@@ -113,12 +114,7 @@ def main() -> int:
             if args.write_output:
                 jax_out = workdir / "sfincsOutput_jax.h5"
                 if not args.dry_run:
-                    write_sfincs_jax_output_h5(
-                        input_namelist=w_input,
-                        output_path=jax_out,
-                        overwrite=True,
-                        compute_transport_matrix=bool(args.compute_transport_matrix and rhs_mode in {2, 3}),
-                    )
+                    write_output(w_input, jax_out, overwrite=True)
 
             f_out = None
             if args.compare_fortran:

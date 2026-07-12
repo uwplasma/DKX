@@ -40,7 +40,8 @@ try:
 except Exception as exc:  # noqa: BLE001
     raise SystemExit("This example requires matplotlib. Install with: pip install matplotlib") from exc
 
-from sfincs_jax.io import localize_equilibrium_file_in_place, write_sfincs_jax_output_h5
+from sfincs_jax.api import write_output
+from sfincs_jax.io import localize_equilibrium_file_in_place
 
 
 def _l11_from_h5(path: Path) -> float:
@@ -96,12 +97,7 @@ def _run_jax_once(*, input_template: Path, workdir: Path, warmup: bool) -> tuple
 
     out_path = run_dir / "sfincsOutput.h5"
     t0 = time.perf_counter()
-    write_sfincs_jax_output_h5(
-        input_namelist=input_path,
-        output_path=out_path,
-        overwrite=True,
-        compute_transport_matrix=True,
-    )
+    write_output(input_path, out_path, overwrite=True)
     dt = time.perf_counter() - t0
     l11 = _l11_from_h5(out_path)
     return dt, l11

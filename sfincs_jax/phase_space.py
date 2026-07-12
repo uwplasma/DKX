@@ -21,8 +21,10 @@ expansion; the mode-coupling coefficients ``l/(2l-1)`` and ``(l+1)/(2l+3)`` and
 the Lorentz pitch-angle-scattering eigenvalues ``l(l+1)`` used throughout
 ``populateMatrix.F90`` are provided here as the single source of truth.
 
-This canonical module replaces ``sfincs_jax/grids.py``, ``sfincs_jax/discretization/xgrid.py``, and the grid
-construction half of ``sfincs_jax/discretization/v3.py`` at the purge.
+This canonical module replaced the retired ``sfincs_jax/grids.py`` and the
+grid-construction half of the retired ``discretization`` package; the
+polynomial x-grid kernel the collision operators consume lives in
+:mod:`sfincs_jax.xgrid`.
 """
 
 from __future__ import annotations
@@ -1200,8 +1202,8 @@ def rosenbluth_potential_grid_size(
 class Grids:
     """All grids, weights, and differentiation matrices for one solve.
 
-    Field-compatible with the transitional ``discretization.v3.V3Grids``
-    container (a frozen dataclass, kept for drop-in replacement at the purge)
+    Field-compatible with the retired ``discretization.v3.V3Grids``
+    container (a frozen dataclass)
     plus the integer resolution parameters. Mirrors the outputs of
     ``createGrids.F90``.
 

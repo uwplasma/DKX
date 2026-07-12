@@ -335,28 +335,17 @@ Open lane board
   ladders should not launch until the GPU hard-seed gate writes output through a
   true device route.
 
-Mapped x-grid PAS transport evidence
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Mapped x-grid PAS transport evidence (retired lane)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Current scripts and source anchors:
-
-- ``sfincs_jax/discretization/adaptive_maps.py``
-- ``sfincs_jax/workflows/mapped_xgrid.py``
-- opt-in ``xGridScheme = 50`` construction in ``sfincs_jax/discretization/v3.py``
-
-Current bounded artifacts:
+The mapped x-grid research owners and their tests were deleted with the
+legacy pipeline (see :doc:`adaptive_speed_grid`). The bounded artifacts are
+retained as a historical record:
 
 - ``docs/_static/mapped_xgrid_transport_evidence_rhsmode2_tiny.json``
 - ``docs/_static/mapped_xgrid_transport_evidence_rhsmode2_tiny.csv``
 - ``docs/_static/mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.json``
 - ``docs/_static/mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.csv``
-
-Current tests:
-
-- ``tests/test_adaptive_maps.py``
-- ``tests/test_mapped_xgrid_objectives.py``
-- ``tests/test_mapped_xgrid_v3.py``
-- ``tests/test_mapped_xgrid_transport_evidence.py``
 
 Scope and status:
 

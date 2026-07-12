@@ -49,7 +49,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.io import write_sfincs_jax_output_h5  # noqa: E402
+from sfincs_jax.api import write_output  # noqa: E402
 
 
 ELEMENTARY_CHARGE = 1.602177e-19
@@ -603,15 +603,13 @@ def _run_or_read_sfincs_jax(
             tolerance=args.solver_tolerance,
         )
         t0 = time.perf_counter()
-        write_sfincs_jax_output_h5(
-            input_namelist=input_path,
-            output_path=output_path,
+        write_output(
+            input_path,
+            output_path,
             wout_path=wout_path,
             overwrite=True,
-            compute_solution=True,
             solve_method=args.solve_method,
-            differentiable=False,
-            verbose=_verbose_sfincs_enabled(args),
+            emit=print if _verbose_sfincs_enabled(args) else None,
         )
         elapsed = time.perf_counter() - t0
     else:

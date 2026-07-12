@@ -14,8 +14,8 @@ import pytest
 import jax
 import jax.numpy as jnp
 
-import sfincs_jax.geometry.jax_adapters as jga
-from sfincs_jax.geometry.jax_adapters import (
+import sfincs_jax.workflows.geometry_adapters as jga
+from sfincs_jax.workflows.geometry_adapters import (
     boozer_bhat_from_spectrum,
     boozer_spectrum_geometry_proxy_objective,
     boozer_spectrum_proxy_transport_objective,
@@ -28,8 +28,7 @@ from sfincs_jax.geometry.jax_adapters import (
     vmec_boozer_kinetic_transport_scalar_contract,
     vmec_wout_from_wout_like,
 )
-from sfincs_jax.geometry.vmec import vmec_geometry_from_wout
-from sfincs_jax.geometry.vmec_wout import read_vmec_wout
+from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry, read_vmec_wout
 
 
 def _wout_like(*, radius_mode_order: bool = True) -> SimpleNamespace:
@@ -773,9 +772,9 @@ def test_vmec_jax_woutdata_adapter_matches_file_reader_on_optional_fixture() -> 
 
     theta = np.linspace(0.0, 2.0 * np.pi, 6, endpoint=False)
     zeta = np.linspace(0.0, 2.0 * np.pi / sfincs_file.nfp, 5, endpoint=False)
-    geom_file = vmec_geometry_from_wout(w=sfincs_file, theta=theta, zeta=zeta, psi_n_wish=0.25)
-    geom_vmec_jax = vmec_geometry_from_wout(
-        w=sfincs_from_vmec_jax,
+    geom_file = FluxSurfaceGeometry.from_vmec(sfincs_file, theta=theta, zeta=zeta, psi_n_wish=0.25)
+    geom_vmec_jax = FluxSurfaceGeometry.from_vmec(
+        sfincs_from_vmec_jax,
         theta=theta,
         zeta=zeta,
         psi_n_wish=0.25,

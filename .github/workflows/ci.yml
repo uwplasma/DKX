@@ -187,7 +187,7 @@ jobs:
 
   # NOTE: the former `optional-ecosystem-gates` job was removed. Its only
   # sfincs-specific probe depended on the deleted structured-CSR internals
-  # (sfincs_jax.operators.profile_full_system), and the remaining lineax/
+  # (the retired structured-CSR operator internals), and the remaining lineax/
   # equinox/interpax checks were third-party library smoke tests with no
   # sfincs_jax coverage. The real structured backend (solvax) is exercised by
   # the coverage shards, which install the `structured` extra.

@@ -69,6 +69,10 @@ def _tracked_public_text_files() -> list[Path]:
             continue
         if EXCLUDED_PARTS.intersection(rel.parts):
             continue
+        # Deleted-but-uncommitted files still appear in `git ls-files`;
+        # check only what exists in the working tree.
+        if not (REPO_ROOT / rel).exists():
+            continue
         paths.append(REPO_ROOT / rel)
     return sorted(paths)
 

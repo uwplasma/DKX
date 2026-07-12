@@ -25,8 +25,9 @@ Differentiability: :meth:`FluxSurfaceGeometry.from_scheme` and
 :meth:`FluxSurfaceGeometry.from_fourier` are pure JAX and safe to ``jit`` /
 ``grad`` (``from_fourier`` is the geometry entry point for optimization
 loops).  File readers (``read_vmec_wout``, ``read_boozer_bc``) are plain-NumPy
-pure functions kept separate from geometry construction; they move to ``io/``
-at the purge, when this file replaces ``sfincs_jax/geometry/``.
+pure functions kept separate from geometry construction.  This file is the
+single geometry owner (it replaced the retired ``sfincs_jax/geometry/``
+package).
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 
 The canonical writer (:mod:`sfincs_jax.writer`) now emits ``.npz`` archives
 directly, so ``sfincs_jax write-output --out *.npz`` no longer falls back to the
-legacy ``io.write_sfincs_jax_output_h5`` pipeline.  These tests pin two
+retired legacy pipeline.  These tests pin two
 properties on a tiny RHSMode=1 case and a tiny RHSMode=3 case:
 
 * the canonical ``.npz`` datasets equal the Fortran reference ``sfincsOutput.h5``
@@ -19,7 +19,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.io import read_sfincs_h5, read_sfincs_output_file, write_sfincs_jax_output_h5
+from sfincs_jax.api import write_output
+from sfincs_jax.io import read_sfincs_h5, read_sfincs_output_file
 from sfincs_jax.run import run_profile, run_transport_matrix
 
 REF = Path(__file__).parent / "ref"
@@ -75,13 +76,7 @@ def test_canonical_npz_matches_fortran_reference_and_legacy_npz(
         run = run_transport_matrix(input_path, out_path=canonical, emit=None)
     assert Path(run.output_path).suffix == ".npz"
 
-    write_sfincs_jax_output_h5(
-        input_namelist=input_path,
-        output_path=legacy,
-        compute_solution=(rhs_mode == 1),
-        compute_transport_matrix=(rhs_mode in (2, 3)),
-        verbose=False,
-    )
+    write_output(input_path, legacy)
 
     out = read_sfincs_output_file(canonical)
     leg = read_sfincs_output_file(legacy)

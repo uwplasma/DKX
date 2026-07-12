@@ -24,7 +24,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from sfincs_jax.validation.fortran import run_sfincs_fortran  # noqa: E402
 from sfincs_jax.namelist import read_sfincs_input  # noqa: E402
-from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist  # noqa: E402
+from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist  # noqa: E402
 
 
 def main() -> int:
@@ -51,8 +51,7 @@ def main() -> int:
         out_path = Path(args.sfincs_output)
 
     nml = read_sfincs_input(input_path)
-    grids = grids_from_namelist(nml)
-    geom = geometry_from_namelist(nml=nml, grids=grids)
+    op = kinetic_operator_from_namelist(nml)
 
     with h5py.File(out_path, "r") as f:
         bhat_f = f["BHat"][...]
@@ -60,9 +59,9 @@ def main() -> int:
         dbze_f = f["dBHatdzeta"][...]
 
     # Fortran HDF5 output uses (Nzeta, Ntheta); sfincs_jax uses (Ntheta, Nzeta).
-    bhat = np.asarray(geom.b_hat).T
-    dbth = np.asarray(geom.db_hat_dtheta).T
-    dbze = np.asarray(geom.db_hat_dzeta).T
+    bhat = np.asarray(op.b_hat).T
+    dbth = np.asarray(op.db_hat_dtheta).T
+    dbze = np.asarray(op.db_hat_dzeta).T
 
     print("max |BHat - Fortran|:", float(np.max(np.abs(bhat - bhat_f))))
     print("max |dBHatdtheta - Fortran|:", float(np.max(np.abs(dbth - dbth_f))))

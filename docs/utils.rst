@@ -23,8 +23,9 @@ paths explicitly when a gradient calculation is required:
    sfincs_jax write-output --input input.namelist --out sfincsOutput.h5
    sfincs_jax postprocess-upstream --case-dir . --util sfincsPlot -- --save-prefix /tmp/sfincsPlot
 
-For differentiable Python workflows, call ``write_sfincs_jax_output_h5`` with
-``differentiable=True`` before post-processing the resulting HDF5 file.
+For differentiable Python workflows, use the pure canonical APIs
+(:func:`sfincs_jax.solve.solve` with ``differentiable=True``) before
+post-processing the resulting HDF5 file.
 
 .. note::
    The export‑f grid uses the **full internal grids**. ``sfincsPlotF``

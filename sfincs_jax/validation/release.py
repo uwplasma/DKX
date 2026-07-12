@@ -26,7 +26,7 @@ import h5py
 import jax
 from jax import profiler as jax_profiler
 
-from sfincs_jax.io import localize_equilibrium_file_in_place, write_sfincs_jax_output_h5
+from sfincs_jax.io import localize_equilibrium_file_in_place
 from sfincs_jax.validation.artifacts import check_research_lane_completion_file
 
 
@@ -1911,17 +1911,35 @@ def _run_write_output(
     solver_trace_path: Path | None = None,
     differentiable: bool = False,
 ) -> None:
-    write_sfincs_jax_output_h5(
-        input_namelist=input_path,
-        output_path=output_path,
-        compute_solution=bool(compute_solution),
-        compute_transport_matrix=bool(compute_transport_matrix),
-        equilibrium_file=equilibrium_file,
-        wout_path=wout_path,
+    """Run one canonical write-output pass (the profiled workload).
+
+    ``compute_solution``/``compute_transport_matrix``/``differentiable`` are
+    accepted for wrapper-CLI compatibility: on the canonical stack the deck's
+    RHSMode selects the run kind and :func:`sfincs_jax.solve.solve` selects
+    the solve path, so these flags no longer alter the workload.
+    """
+    del compute_solution, compute_transport_matrix, differentiable
+    from sfincs_jax.run import run_from_namelist  # noqa: PLC0415
+
+    if equilibrium_file or wout_path:
+        from sfincs_jax.input_compat import with_equilibrium_override  # noqa: PLC0415
+        from sfincs_jax.namelist import read_sfincs_input  # noqa: PLC0415
+
+        nml = with_equilibrium_override(
+            nml=read_sfincs_input(input_path),
+            equilibrium_file=equilibrium_file,
+            wout_path=wout_path,
+        )
+        if nml.source_text is None:
+            raise SystemExit("equilibrium overrides require a readable input.namelist source text.")
+        # ``_prepare_input`` already gave us a private temporary copy; patch it.
+        input_path.write_text(nml.source_text)
+    run_from_namelist(
+        input_path,
+        out_path=output_path,
         overwrite=True,
-        verbose=True,
         solver_trace_path=solver_trace_path,
-        differentiable=bool(differentiable),
+        emit=print,
     )
 
 
@@ -1997,7 +2015,7 @@ def write_output_trace_main(argv: list[str] | None = None) -> int:
         "--solver-trace",
         type=Path,
         default=None,
-        help="Optional JSON solver-trace sidecar written by write_sfincs_jax_output_h5.",
+        help="Optional JSON solver-trace sidecar written by the canonical run.",
     )
     parser.add_argument(
         "--differentiable",

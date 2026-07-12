@@ -76,7 +76,7 @@ For an interactive terminal version of this map, run
 | 4 | Choose geometry, validation, and performance workflows | `tutorials/04_geometry_validation_and_performance.ipynb` |
 | 5 | Understand grids, geometry, and one operator action | `getting_started/build_grids_and_geometry.py`, `getting_started/apply_collisionless_operator.py` |
 | 6 | Compare outputs with frozen SFINCS Fortran v3 references | `parity/output_parity_vs_fortran_fixture.py` |
-| 7 | Profile CPU/GPU, JIT, output formats, and transport-worker parallelism | `performance/benchmark_output_formats.py`, `performance/benchmark_transport_parallel_scaling.py` |
+| 7 | Profile CPU/GPU, JIT, and output formats | `performance/benchmark_output_formats.py` |
 
 ### Choose By Task
 
@@ -88,8 +88,8 @@ For an interactive terminal version of this map, run
 | differentiate a solve or residual | `tutorials/02_transport_and_autodiff.ipynb` | `autodiff/implicit_diff_through_gmres_solve_scheme5.py` |
 | compute bootstrap current and compare Redl | `tutorials/03_bootstrap_redl_and_optimization.ipynb` | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` |
 | add neoclassical objectives to optimization | `optimization/qa_nfp2_sfincs_jax_objectives.py` | `optimization/QA_optimization_bootstrap_current.py` |
-| choose geometry, validate outputs, and benchmark CPU/GPU | `tutorials/04_geometry_validation_and_performance.ipynb` | `getting_started/write_sfincs_output_vmec.py`, `performance/benchmark_transport_parallel_scaling.py` |
-| check CPU/GPU performance or output formats | `performance/benchmark_output_formats.py` | `performance/benchmark_transport_parallel_scaling.py` |
+| choose geometry, validate outputs, and benchmark CPU/GPU | `tutorials/04_geometry_validation_and_performance.ipynb` | `getting_started/write_sfincs_output_vmec.py`, `performance/benchmark_output_formats.py` |
+| check CPU/GPU performance or output formats | `performance/benchmark_output_formats.py` | `performance/benchmark_transport_l11_vs_fortran.py` |
 | validate against frozen SFINCS Fortran v3 data | `parity/output_parity_vs_fortran_fixture.py` | `publication_figures/` and `sfincs_examples/` |
 
 ### Application Recipes
@@ -109,7 +109,7 @@ script or notebook that adds the technical detail needed for research workflows.
 | Differentiable residual or flux | `autodiff/autodiff_gradient_nu_n_residual.py` | `autodiff/implicit_diff_through_gmres_solve_scheme5.py` |
 | VMEC/Boozer/JAX workflow | `autodiff/vmec_jax_to_boozer_sfincs_pipeline.py` | `tutorials/04_geometry_validation_and_performance.ipynb` |
 | QA/QI optimization objective | `optimization/qa_nfp2_sfincs_jax_objectives.py` | `optimization/QA_optimization_bootstrap_current.py` |
-| CPU/GPU timing and output I/O | `performance/benchmark_output_formats.py` | `performance/benchmark_transport_parallel_scaling.py` |
+| CPU/GPU timing and output I/O | `performance/benchmark_output_formats.py` | `performance/benchmark_transport_l11_vs_fortran.py` |
 | Frozen Fortran-v3 parity check | `parity/output_parity_vs_fortran_fixture.py` | `sfincs_examples/` for the retained upstream-style decks |
 
 ### Canonical Workflow Catalog
@@ -129,7 +129,7 @@ heavier workflow when you need release-quality evidence.
 | Bootstrap current and Redl | `tutorials/03_bootstrap_redl_and_optimization.ipynb` | Compare kinetic bootstrap current with a Redl-formula workflow. | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` |
 | Optimization objectives | `optimization/qa_nfp2_sfincs_jax_objectives.py` | Add neoclassical objectives to a QA optimization workflow. | `optimization/QA_optimization_bootstrap_current.py` |
 | Frozen Fortran-v3 parity | `parity/output_parity_vs_fortran_fixture.py` | Compare output fields against checked frozen references. | `sfincs_examples/` for retained upstream-style decks |
-| CPU/GPU performance | `performance/benchmark_output_formats.py` | Time output formats and inspect memory behavior. | `performance/benchmark_transport_parallel_scaling.py` |
+| CPU/GPU performance | `performance/benchmark_output_formats.py` | Time output formats and inspect memory behavior. | `performance/benchmark_transport_l11_vs_fortran.py` |
 
 ### Top-Level Folder Categories
 
@@ -231,7 +231,6 @@ Common entry points:
 - Transport matrices (RHSMode 2/3): `examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py`
 - Differentiate a residual norm w.r.t. `nu_n`: `examples/autodiff/autodiff_gradient_nu_n_residual.py`
 - Implicit differentiation through BiCGStab: `examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py --solver bicgstab`
-- Transport-worker benchmark: `examples/performance/benchmark_transport_parallel_scaling.py --workers 1 2 4`
 - Output writer/readback benchmark: `examples/performance/benchmark_output_formats.py --repeats 5`
 
 ### Validation And Benchmark Sweeps

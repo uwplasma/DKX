@@ -23,7 +23,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from ..ambipolar import radial_current_from_output
-from ..geometry.jax_adapters import boozer_bhat_from_spectrum
+from .geometry_adapters import boozer_bhat_from_spectrum
 from ..io import localize_equilibrium_file_in_place, read_sfincs_h5
 from ..namelist import read_sfincs_input
 from ..validation.fortran import run_sfincs_fortran

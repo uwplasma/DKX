@@ -182,41 +182,70 @@ def write_output(
     request: SolveInputs | str | Path,
     output_path: str | Path | None = None,
     **kwargs: Any,
-) -> Path | tuple[Path, dict[str, Any]]:
+) -> Path:
     """Run ``sfincs_jax`` from Python and write an output file.
 
     ``request`` may be a :class:`SolveInputs` object or an input namelist path.
-    The implementation imports the heavy output stack lazily so importing
-    ``sfincs_jax.api`` stays cheap for docs, CLI validation, and downstream
-    workflow planning.
+    Routes to :func:`sfincs_jax.run.run_from_namelist` (the canonical RHSMode
+    dispatch behind ``sfincs_jax write-output``).  The implementation imports
+    the heavy run stack lazily so importing ``sfincs_jax.api`` stays cheap for
+    docs, CLI validation, and downstream workflow planning.
     """
 
-    input_path, wout_path, resolved_output, _backend, requires_autodiff, options = _solve_request_paths(
+    input_path, wout_path, resolved_output, _backend, _requires_autodiff, options = _solve_request_paths(
         request,
         output_path,
     )
     if resolved_output is None:
         raise ValueError("output_path is required when SolveInputs.output_path is not set.")
-    if wout_path is not None:
-        kwargs.setdefault("wout_path", wout_path)
-    if requires_autodiff:
-        kwargs.setdefault("differentiable", True)
     for key, value in options.items():
         kwargs.setdefault(str(key), value)
+    wout_path = kwargs.pop("wout_path", wout_path)
 
-    from .io import write_sfincs_jax_output_h5  # noqa: PLC0415
+    import contextlib  # noqa: PLC0415
+    import tempfile  # noqa: PLC0415
 
-    return write_sfincs_jax_output_h5(
-        input_namelist=input_path,
-        output_path=resolved_output,
-        **kwargs,
-    )
+    from .run import run_from_namelist  # noqa: PLC0415
+
+    @contextlib.contextmanager
+    def _namelist_with_override():
+        if wout_path is None:
+            yield Path(input_path)
+            return
+        from .input_compat import with_equilibrium_override  # noqa: PLC0415
+        from .namelist import read_sfincs_input  # noqa: PLC0415
+
+        nml = with_equilibrium_override(nml=read_sfincs_input(Path(input_path)), wout_path=wout_path)
+        if nml.source_text is None:
+            raise ValueError("wout_path overrides require a readable input.namelist source text.")
+        tmp = tempfile.NamedTemporaryFile(
+            "w",
+            dir=str(Path(input_path).resolve().parent),
+            prefix=f".{Path(input_path).stem}.override.",
+            suffix=".namelist",
+            delete=False,
+            encoding="utf-8",
+        )
+        try:
+            tmp.write(nml.source_text)
+            tmp.close()
+            yield Path(tmp.name)
+        finally:
+            Path(tmp.name).unlink(missing_ok=True)
+
+    with _namelist_with_override() as namelist_path:
+        run = run_from_namelist(
+            namelist_path,
+            out_path=resolved_output,
+            **kwargs,
+        )
+    return Path(run.output_path)
 
 
 def read_output(path: str | Path) -> dict[str, Any]:
     """Read an HDF5, NetCDF, or NPZ ``sfincs_jax`` output file."""
 
-    from .outputs import read_sfincs_output_file  # noqa: PLC0415
+    from .io import read_sfincs_output_file  # noqa: PLC0415
 
     return read_sfincs_output_file(Path(path))
 

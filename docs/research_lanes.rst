@@ -69,11 +69,11 @@ improve runtime or peak memory, so no default promotion is justified.
 
 Relevant implementation:
 
-- ``sfincs_jax/solvers/preconditioner_pas_matrix_free.py`` contains guarded
+- The retired ``preconditioner_pas_matrix_free`` owner (deleted with the legacy pipeline) contained guarded
   matrix-free correction helpers, candidate-size preflights, and
   ``PasRuntimeChunkPlan`` for deriving bounded reduction chunks from configured
   byte budgets.
-- ``sfincs_jax/solvers/preconditioner_pas_policy.py`` contains PAS
+- The retired PAS policy owner (deleted with the legacy pipeline) contained PAS
   applicability and memory gates.
 - Historical PAS fallback promotion/rejection scripts are preserved on the
   research branch. In the stable core, dry-run evidence is explicitly
@@ -123,12 +123,12 @@ Relevant implementation:
 - ``examples/performance/benchmark_sharded_solve_scaling.py`` and
   ``examples/performance/benchmark_sharded_matvec_scaling.py`` generate
   bounded single-case scaling evidence.
-- ``sfincs_jax/problems/transport_parallel_runtime.py`` prevents cold or
+- The retired transport parallel runtime (preserved on the research branch) prevented cold or
   malformed scaling payloads from becoming release claims, records pure
   single-case sharded-solve plans, caps requested devices to available work,
   reports workload balance, estimates setup/communication amortization, and
   fail-closes release scaling claims for experimental single-case sharding.
-- ``sfincs_jax/operators/profile_system.py`` contains the sharded matrix-free operator path.
+- The retired legacy operator owner (preserved on the research branch) contained the sharded matrix-free operator path.
 - ``docs/_static/transport_sharded_solve_gpu_1v2_failclosed_2026_05_17.json``
   is the current negative 1-vs-2 GPU evidence artifact.
 

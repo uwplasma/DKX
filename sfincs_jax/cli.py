@@ -373,22 +373,6 @@ def _cmd_run_fortran(args: argparse.Namespace) -> int:
     return 0
 
 
-def deck_requires_legacy_pipeline(nml) -> str | None:
-    """Always ``None``: the canonical stack owns every supported deck.
-
-    No physics family, output option, or namelist value routes to the retained
-    legacy ``problems``/``outputs`` pipeline anymore.  Out-of-range option
-    values (RHSMode outside 1-3, collisionOperator outside 0/1,
-    constraintScheme outside -1..4, quasineutralityOption outside 1/2) are
-    namelist validation errors raised by
-    :func:`sfincs_jax.inputs.load_sfincs_input`, not legacy routes.  The
-    function is kept only because retained tests assert it returns ``None``;
-    it is deleted together with the legacy stack.
-    """
-    del nml
-    return None
-
-
 def _cmd_write_output(args: argparse.Namespace) -> int:
     t0 = _now()
     from .writer import output_format_from_suffix  # noqa: PLC0415

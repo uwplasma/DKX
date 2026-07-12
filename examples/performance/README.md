@@ -14,25 +14,15 @@ production-floor scripts when you need release evidence.
 
 ## Scaling And Parallelism
 
-- `benchmark_transport_parallel_scaling.py`: benchmark transport-worker scaling
-  on CPU or GPU (`--backend cpu|gpu`). The multi-GPU transport-worker path uses
-  `--backend gpu` on `transport_parallel_2min.input.namelist`.
+Host-device parallelism is configured through the `SFINCS_JAX_CORES` /
+`SFINCS_JAX_CPU_DEVICES` environment knobs documented in `docs/parallelism.rst`;
+the retired legacy transport-worker and structured-solve benchmark scripts were
+deleted with the legacy pipeline.
 
 Single-case sharded RHSMode=1 and one-GPU-per-case throughput campaign drivers
 are research-lane material, not stable examples. They are preserved outside the
 stable core until they have production-grid accuracy, runtime, memory, and
 documentation gates.
-
-## Solver Benchmarks
-
-- `benchmark_structured_solve.py`: bounded factor-once/repeated-RHS
-  block-tridiagonal benchmark. It supports deterministic synthetic systems and
-  `--case sfincs-pas-block`, which extracts a local PAS block from a SFINCS
-  fixture.
-
-Optional solver-library adoption studies are research-lane material until they
-are promoted through accuracy, runtime, memory, differentiability, and
-dependency-policy gates.
 
 ## Generated Output Data
 

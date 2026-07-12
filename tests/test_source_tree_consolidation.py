@@ -32,8 +32,7 @@ ACTIVE_PLAN_REQUIRED_SECTIONS = (
 PACKAGE_README_REQUIRED_SECTIONS = (
     "## The Canonical Stack (the architecture)",
     "## Other Root Modules",
-    "## Transitional Domain Packages",
-    "## Main Legacy Implementation Owners",
+    "## Remaining Domain Packages",
     "## Design Rules",
     "## Stability And Compatibility",
     "## Generated Files Policy",
@@ -77,14 +76,13 @@ INVENTORY_DECISIONS = {
     "extract-pr",
 }
 REQUIRED_CORE_SLIM_SOURCE_OWNERS = {
-    "sfincs_jax/problems/profile_policies.py",
-    "sfincs_jax/problems/profile_solve.py",
-    "sfincs_jax/problems/transport_linear_system.py",
-    "sfincs_jax/problems/transport_parallel_runtime.py",
-    "sfincs_jax/problems/profile_dense.py",
-    "sfincs_jax/solvers/krylov.py",
-    "sfincs_jax/outputs/rhsmode1.py",
+    "sfincs_jax/drift_kinetic.py",
+    "sfincs_jax/solve.py",
+    "sfincs_jax/writer.py",
+    "sfincs_jax/magnetic_geometry.py",
+    "sfincs_jax/moments.py",
     "sfincs_jax/validation/artifacts.py",
+    "sfincs_jax/validation/release.py",
 }
 REQUIRED_CORE_SLIM_NONPACKAGE_OWNERS = {
     "examples",
@@ -377,14 +375,12 @@ def test_package_readme_describes_current_source_layout() -> None:
         assert f"`{package}/`" in text
     for module in expected["target_root_modules"]:
         assert f"`{module}`" in text or f"`{module.removesuffix('.py')}`" in text
-    legacy_owner_phrases = (
-        "`operators/profile_system.py`: legacy RHSMode-1 full-system operator",
-        "`problems/profile_solve.py`: legacy RHSMode-1 solve orchestration",
-        "`solvers/preconditioning.py`: shared preconditioner caches",
-        "`validation/artifacts.py`: validation artifact manifests",
+    canonical_phrases = (
+        "`drift_kinetic.py` | The `KineticOperator`",
+        "frozen-reference loading, Fortran/PETSc fixture readers",
         "must not be reintroduced",
     )
-    for phrase in legacy_owner_phrases:
+    for phrase in canonical_phrases:
         assert phrase in text
 
 
@@ -394,7 +390,7 @@ def test_package_readme_explains_public_surface_and_implementation_boundaries() 
     text = PACKAGE_README.read_text(encoding="utf-8")
     expected_phrases = (
         "canonical stack of flat, physics-named root modules",
-        "interim owners of the deferred features",
+        "transitional interim owners while the vertical slices landed",
         "one folder below `sfincs_jax/`, no nested",
         "canonical root modules are the stable import surface",
         "Compatibility aliases may remain",
@@ -405,23 +401,12 @@ def test_package_readme_explains_public_surface_and_implementation_boundaries() 
         assert phrase in text
 
 
-def test_output_writer_stays_below_review_size_budget() -> None:
+def test_canonical_writer_stays_below_review_size_budget() -> None:
     """Keep output-write orchestration from drifting back into a monolith."""
 
-    writer_path = PACKAGE_ROOT / "outputs" / "writer.py"
+    writer_path = PACKAGE_ROOT / "writer.py"
     source = writer_path.read_text(encoding="utf-8")
-    line_count = len(source.splitlines())
-    assert line_count <= 2300
-
-    tree = ast.parse(source, filename=str(writer_path))
-    functions = {
-        node.name: node
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef)
-    }
-    writer_fn = functions["write_sfincs_jax_output_h5"]
-    assert writer_fn.end_lineno is not None
-    assert writer_fn.end_lineno - writer_fn.lineno + 1 <= 1500
+    assert len(source.splitlines()) <= 2300
 
 
 def test_package_tree_has_no_tracked_generated_or_large_runtime_outputs() -> None:
@@ -598,96 +583,10 @@ def test_package_sources_do_not_repeat_top_level_defs() -> None:
     assert offenders == []
 
 
-def test_profile_solve_does_not_reexport_low_level_helper_namespaces() -> None:
-    """Keep RHSMode-1 orchestration from becoming a private-helper namespace."""
-
-    text = (PACKAGE_ROOT / "problems" / "profile_solve.py").read_text(encoding="utf-8")
-    forbidden_fragments = (
-        "_dd_core_patch_ranges",
-        "_rhs1_dd_auto_block_size",
-        "_rhs1_dd_coarse_block_size",
-        "_rhs1_dd_coarse_block_sizes",
-        "_rhs1_dd_coarse_level_count",
-        "block_diagonal_only as _block_diag_only",
-        "diagonal_only as _diag_only",
-    )
-
-    for fragment in forbidden_fragments:
-        assert fragment not in text
-
-
-def test_policy_tests_import_policy_owners_not_profile_solve() -> None:
-    """Policy-only tests should not widen the solve-orchestration API."""
-
-    policy_test_paths = (
-        REPO_ROOT / "tests" / "test_profile_solve_policy_helpers.py",
-        REPO_ROOT / "tests" / "test_profile_solve_policy_coverage.py",
-    )
-
-    for path in policy_test_paths:
-        assert "profile_solve" not in path.read_text(encoding="utf-8"), path
-
-
 def test_sparse_helper_tests_are_deleted_with_their_owners() -> None:
     """The sparse-helper suites were deleted together with the sparse families."""
 
     assert not (REPO_ROOT / "tests" / "test_profile_sparse_helper_coverage.py").exists()
-
-
-def test_transport_solve_does_not_import_profile_solve_globals() -> None:
-    """Transport orchestration should depend on transport owners explicitly."""
-
-    text = (PACKAGE_ROOT / "problems" / "transport_solve.py").read_text(
-        encoding="utf-8"
-    )
-    forbidden_fragments = (
-        "_PROFILE_SOLVE",
-        'import_module("sfincs_jax.problems.profile_solve")',
-        "vars(_PROFILE_SOLVE)",
-        "globals()[_name]",
-    )
-
-    for fragment in forbidden_fragments:
-        assert fragment not in text
-
-
-def test_schur_heuristic_tests_use_canonical_policy_and_preconditioner_owners() -> None:
-    """Schur/PAS unit tests should not widen profile_solve's private API."""
-
-    text = (REPO_ROOT / "tests" / "test_schur_precond_heuristic.py").read_text(
-        encoding="utf-8"
-    )
-
-    assert "profile_solve._" not in text
-    for owner in (
-        "sfincs_jax.problems.profile_policies",
-        "sfincs_jax.problems.profile_preconditioner_build",
-        "sfincs_jax.solvers.path_policy",
-        "sfincs_jax.solvers.preconditioning",
-    ):
-        assert owner in text
-
-
-def test_pas_policy_tests_use_pas_policy_owner_not_profile_solve() -> None:
-    """PAS applicability and memory tests belong to the PAS policy owner."""
-
-    text = (REPO_ROOT / "tests" / "test_pas_preconditioner_policy.py").read_text(
-        encoding="utf-8"
-    )
-
-    assert "profile_solve" not in text
-    assert "sfincs_jax.solvers.preconditioner_pas_policy" in text
-
-
-def test_distributed_gmres_axis_tests_use_krylov_dispatch_owner() -> None:
-    """Distributed-GMRES axis tests belong to the Krylov dispatch owner."""
-
-    text = (REPO_ROOT / "tests" / "test_distributed_gmres_axis.py").read_text(
-        encoding="utf-8"
-    )
-
-    assert "profile_solve" not in text
-    assert "sfincs_jax.solvers.krylov_dispatch" in text
 
 
 def test_sparse_assembly_tests_are_deleted_with_their_owners() -> None:
@@ -702,41 +601,6 @@ def test_device_operator_tests_are_deleted_with_their_owners() -> None:
     assert not (REPO_ROOT / "tests" / "test_rhs1_device_operator.py").exists()
 
 
-def test_transport_helper_tests_do_not_use_profile_solve_aliases() -> None:
-    """RHSMode=2/3 helper tests should import transport owners directly."""
-
-    forbidden_attrs = (
-        "_transport_active_dof_indices",
-        "_build_rhsmode23",
-        "_try_build_rhsmode23",
-    )
-    offenders: list[tuple[str, str]] = []
-    for path in sorted((REPO_ROOT / "tests").glob("test_*.py")):
-        if path.name == "test_profile_solve_module_wrappers.py":
-            continue
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        profile_solve_aliases: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    if alias.name == "sfincs_jax.problems.profile_solve":
-                        profile_solve_aliases.add(alias.asname or "profile_solve")
-            elif isinstance(node, ast.ImportFrom):
-                if node.module == "sfincs_jax.problems" and any(
-                    alias.name == "profile_solve" for alias in node.names
-                ):
-                    for alias in node.names:
-                        if alias.name == "profile_solve":
-                            profile_solve_aliases.add(alias.asname or alias.name)
-            elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-                if node.value.id in profile_solve_aliases and any(
-                    node.attr.startswith(attr) for attr in forbidden_attrs
-                ):
-                    offenders.append((path.relative_to(REPO_ROOT).as_posix(), node.attr))
-
-    assert offenders == []
-
-
 def test_structured_csr_docs_tests_are_deleted_with_their_owners() -> None:
     """The structured-CSR documentation contract died with the CSR lanes."""
 
@@ -747,24 +611,6 @@ def test_rhs1_dispatch_coverage_tests_are_deleted_with_their_owners() -> None:
     """The RHSMode-1 sparse dispatch suites were deleted with the sparse families."""
 
     assert not (REPO_ROOT / "tests" / "test_profile_rhs1_dispatch_coverage.py").exists()
-
-
-def test_profile_solve_private_test_usage_is_limited_to_wrapper_contracts() -> None:
-    """Only explicit wrapper-contract tests may touch profile_solve private seams."""
-
-    allowed = {
-        "tests/test_profile_solve_module_wrappers.py",
-        "tests/test_source_tree_consolidation.py",
-    }
-    offenders = []
-    for path in sorted((REPO_ROOT / "tests").glob("test_*.py")):
-        rel = path.relative_to(REPO_ROOT).as_posix()
-        if rel in allowed:
-            continue
-        if "profile_solve._" in path.read_text(encoding="utf-8"):
-            offenders.append(rel)
-
-    assert offenders == []
 
 
 def test_test_filenames_do_not_reintroduce_deleted_v3_driver_label() -> None:
@@ -862,15 +708,6 @@ def test_deleted_h5_parity_validation_facade_is_absent() -> None:
     assert hasattr(module, "H5DatasetParity")
 
 
-def test_deleted_solver_selection_policy_facade_is_absent() -> None:
-    """Measured candidate gates live with solver path-policy helpers."""
-
-    assert not (PACKAGE_ROOT / "solvers" / "selection_policy.py").exists()
-    module = importlib.import_module("sfincs_jax.solvers.path_policy")
-    assert hasattr(module, "SolverCandidateMetrics")
-    assert hasattr(module, "solver_candidate_gate")
-
-
 def test_deleted_qi_promotion_policy_solver_facade_is_absent() -> None:
     """QI promotion evidence is extracted from the stable core."""
 
@@ -878,71 +715,23 @@ def test_deleted_qi_promotion_policy_solver_facade_is_absent() -> None:
     assert not (PACKAGE_ROOT / "validation" / "qi_device.py").exists()
 
 
-def test_deleted_full_fp_species_preconditioner_facade_is_absent() -> None:
-    """Full-FP species block preconditioners belong to the kinetic owner."""
-
-    assert not (PACKAGE_ROOT / "solvers" / "preconditioner_full_fp_species.py").exists()
-    module = importlib.import_module("sfincs_jax.solvers.preconditioner_full_fp_kinetic")
-    assert hasattr(module, "build_rhs1_species_block_preconditioner")
-    assert hasattr(module, "build_rhs1_species_xblock_preconditioner")
-
-
-def test_deleted_profile_linear_systems_facade_is_absent() -> None:
-    """Matrix-free residual wrappers belong to the profile-system owner."""
-
-    assert not (PACKAGE_ROOT / "operators" / "profile_linear_systems.py").exists()
-    module = importlib.import_module("sfincs_jax.operators.profile_system")
-    assert hasattr(module, "V3FBlockLinearSystem")
-    assert hasattr(module, "V3FullLinearSystem")
-
-
-def test_deleted_profile_sources_facade_is_absent() -> None:
-    """Constraint-source kernels belong to the profile-system owner."""
-
-    assert not (PACKAGE_ROOT / "operators" / "profile_sources.py").exists()
-    module = importlib.import_module("sfincs_jax.operators.profile_system")
-    assert hasattr(module, "constraint_scheme1_inject_source")
-    assert hasattr(module, "constraint_scheme2_source_from_f")
-
-
-def test_deleted_profile_compressed_layout_facade_is_absent() -> None:
-    """Compressed RHSMode=1 pitch layouts belong to the profile-layout owner."""
-
-    assert not (PACKAGE_ROOT / "operators" / "profile_compressed_layout.py").exists()
-    module = importlib.import_module("sfincs_jax.operators.profile_layout")
-    assert hasattr(module, "RHS1CompressedPitchLayout")
-    assert hasattr(module, "build_rhs1_compressed_pitch_layout")
-
-
-def test_deleted_transport_parallel_worker_wrapper_is_absent() -> None:
-    """Transport subprocess worker CLI belongs to the parallel runtime owner."""
-
-    assert not (PACKAGE_ROOT / "problems" / "transport_parallel_worker.py").exists()
-    module = importlib.import_module("sfincs_jax.problems.transport_parallel_runtime")
-    assert hasattr(module, "main")
-    assert hasattr(module, "transport_parallel_result_to_npz_arrays")
-
-
-def test_canonical_flat_domain_modules_are_importable() -> None:
-    """Canonical owners replace the deleted compatibility import paths."""
+def test_canonical_root_modules_are_importable() -> None:
+    """The canonical flat root modules replace the deleted legacy packages."""
 
     canonical_modules = (
-        "sfincs_jax.operators.profile_collisionless",
-        "sfincs_jax.operators.profile_fblock",
-        "sfincs_jax.operators.profile_layout",
-        "sfincs_jax.operators.profile_system",
-        "sfincs_jax.problems.profile_solve",
-        "sfincs_jax.problems.profile_policies",
-        "sfincs_jax.problems.profile_residual",
-        "sfincs_jax.problems.profile_dense",
-        "sfincs_jax.problems.transport_diagnostics",
-        "sfincs_jax.problems.transport_finalize",
-        "sfincs_jax.problems.transport_linear_system",
-        "sfincs_jax.problems.transport_policies",
-        "sfincs_jax.problems.transport_parallel_runtime",
-        "sfincs_jax.solvers.preconditioner_pas_xblock_ilu",
-        "sfincs_jax.solvers.preconditioner_full_fp_kinetic",
-        "sfincs_jax.solvers.preconditioner_schur_profile",
+        "sfincs_jax.drift_kinetic",
+        "sfincs_jax.solve",
+        "sfincs_jax.run",
+        "sfincs_jax.writer",
+        "sfincs_jax.phase_space",
+        "sfincs_jax.magnetic_geometry",
+        "sfincs_jax.moments",
+        "sfincs_jax.collisions",
+        "sfincs_jax.species",
+        "sfincs_jax.phi1",
+        "sfincs_jax.er",
+        "sfincs_jax.solver_trace",
+        "sfincs_jax.xgrid",
     )
     for module_name in canonical_modules:
         module = importlib.import_module(module_name)

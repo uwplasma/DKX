@@ -19,6 +19,7 @@ modules are imported.
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -36,6 +37,7 @@ from sfincs_jax.drift_kinetic import (
 )
 from sfincs_jax.inputs import RawNamelist, SfincsInput, load_sfincs_input
 from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry
+from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.moments import (
     classical_fluxes,
     ntv_kernel,
@@ -258,7 +260,7 @@ def run_transport_matrix(
         fortran_layout: store the Fortran column-major dataset layout in
             ``out_path`` (default); ``False`` stores Python-native layout.
         solver_trace_path: optional JSON sidecar path; when set, a versioned
-            :class:`sfincs_jax.solvers.diagnostics.SolverTrace` is written from
+            :class:`sfincs_jax.solver_trace.SolverTrace` is written from
             the shared multi-RHS :class:`sfincs_jax.solve.SolveResult`.
         emit: per-line stdout sink for the Fortran-parity print blocks
             (``print`` reproduces the v3 console flow); ``None`` silences it.
@@ -324,10 +326,31 @@ def run_transport_matrix(
     output_path: Path | None = None
     if out_path is not None:
         elapsed = np.full((n_rhs,), solve_seconds / n_rhs, dtype=np.float64)
+        solver_diagnostics: Dict[str, np.ndarray] | None = None
+        if os.environ.get("SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS", "").strip().lower() in {
+            "1", "true", "yes", "on",
+        }:
+            # Per-whichRHS residual diagnostics (the retired transport writer's
+            # opt-in debug datasets, pinned by the write-output end-to-end test).
+            residuals = np.atleast_1d(
+                np.asarray(result.residual_norms, dtype=np.float64)
+            ).reshape((n_rhs,))
+            rhs_norms = np.linalg.norm(np.asarray(rhs, dtype=np.float64), axis=0).reshape((n_rhs,))
+            rel = np.full((n_rhs,), np.nan, dtype=np.float64)
+            valid = np.isfinite(residuals) & np.isfinite(rhs_norms) & (rhs_norms > 0.0)
+            rel[valid] = residuals[valid] / rhs_norms[valid]
+            solver_diagnostics = {
+                "transportResidualNorms": residuals,
+                "transportRhsNorms": rhs_norms,
+                "transportRelativeResidualNorms": rel,
+                "transportMaxResidualNorm": np.asarray(np.max(np.abs(residuals)), dtype=np.float64),
+                "transportMaxRelativeResidualNorm": np.asarray(np.max(np.abs(rel)), dtype=np.float64),
+            }
         output_path = write_transport_output(
             path=out_path, inp=inp, op=op, grids=grids, geom=geom, radial=radial,
             state_vectors=state_vectors, transport_matrix=transport_matrix,
-            elapsed_times=elapsed, overwrite=overwrite, fortran_layout=fortran_layout,
+            elapsed_times=elapsed, solver_diagnostics=solver_diagnostics,
+            overwrite=overwrite, fortran_layout=fortran_layout,
         )  # fmt: skip
 
     if solver_trace_path is not None:
@@ -476,7 +499,7 @@ def run_profile(
         fortran_layout: store the Fortran column-major dataset layout in
             ``out_path`` (default); ``False`` stores Python-native layout.
         solver_trace_path: optional JSON sidecar path; when set, a versioned
-            :class:`sfincs_jax.solvers.diagnostics.SolverTrace` is written from
+            :class:`sfincs_jax.solver_trace.SolverTrace` is written from
             the single-RHS :class:`sfincs_jax.solve.SolveResult`.
         emit: per-line stdout sink for the Fortran-parity print blocks
             (``print`` reproduces the v3 console flow); ``None`` silences it.
@@ -510,9 +533,28 @@ def run_profile(
         # Newton solve in sfincs_jax.phi1 wraps solve() as its inner linear step.
         import jax.numpy as jnp  # noqa: PLC0415
 
-        from sfincs_jax.phi1 import solve_phi1  # noqa: PLC0415
+        from sfincs_jax.phi1 import solve_phi1_history  # noqa: PLC0415
 
-        phi1_result = solve_phi1(op, tol=tol, emit=emit)
+        # v3 SNES parity tolerances (the retired writer's defaults): the
+        # Newton and inner-Krylov tolerances control how many Newton iterates
+        # are ACCEPTED, and the sfincsOutput NIterations axis stores one entry
+        # per accepted iterate.  1e-12/1e-12 reproduces the Fortran fixtures'
+        # per-iteration axis; both stay env-overridable as before.
+        def _env_tol(name: str, default: float) -> float:
+            raw_val = os.environ.get(name, "").strip()
+            if not raw_val:
+                return default
+            try:
+                return float(raw_val)
+            except ValueError:
+                return default
+
+        newton_tol = _env_tol("SFINCS_JAX_PHI1_NEWTON_TOL", 1.0e-12)
+        gmres_tol = _env_tol("SFINCS_JAX_PHI1_GMRES_TOL", 1.0e-12)
+        phi1_result, phi1_history = solve_phi1_history(
+            op, tol=newton_tol, gmres_tol=gmres_tol, emit=emit
+        )
+        state_history = [np.asarray(x, dtype=np.float64).reshape((-1,)) for x in phi1_history]
         state_vector = np.asarray(phi1_result.x, dtype=np.float64).reshape((-1,))
         op = phi1_result.operator  # carries phi1_lin_state = solved state
         result = SolveResult(
@@ -528,6 +570,7 @@ def run_profile(
         rhs = op.rhs()
         result = solve(op, rhs, method=solve_method, tol=tol)
         state_vector = np.asarray(result.x, dtype=np.float64).reshape((-1,))
+        state_history = None
     solve_seconds = time.perf_counter() - t0
     _emit_lines(emit, [console.main_solve_done_line(seconds=solve_seconds)])
     if not result.converged:
@@ -563,10 +606,11 @@ def run_profile(
         residual_norm = float(np.max(residual_norms)) if residual_norms.size else None
         output_path = write_profile_output(
             path=out_path, inp=inp, op=op, grids=grids, geom=geom, radial=radial,
-            state_vector=state_vector, elapsed_seconds=solve_seconds,
+            state_vector=state_vector, state_history=state_history,
+            elapsed_seconds=solve_seconds,
             converged=bool(result.converged) if op.include_phi1 else None,
             solver_method=result.method, solver_requested_method=result.method,
-            residual_norm=residual_norm if op.include_phi1 else None,
+            residual_norm=residual_norm,
             overwrite=overwrite, fortran_layout=fortran_layout,
         )  # fmt: skip
 
@@ -667,3 +711,85 @@ def run_geometry(
 
     _emit_lines(emit, [console.goodbye_line()])
     return GeometryRun(input=inp, operator=op, output_path=output_path)
+
+
+# ---------------------------------------------------------------------------
+# Namelist-level dispatch: one entry point for "solve this deck and write out"
+# ---------------------------------------------------------------------------
+
+
+def run_from_namelist(
+    namelist_path: str | Path,
+    *,
+    out_path: str | Path,
+    solve_method: str = "auto",
+    tol: float | None = None,
+    overwrite: bool = True,
+    fortran_layout: bool = True,
+    solver_trace_path: str | Path | None = None,
+    emit: Callable[[str], None] | None = None,
+    geometry_only: bool = False,
+) -> GeometryRun | ProfileRun | TransportRun:
+    """Run a deck end to end and write its output file, dispatching on RHSMode.
+
+    This is the Python equivalent of the ``sfincs_jax write-output`` CLI flow:
+    ``geometry_only`` routes to :func:`run_geometry`, RHSMode=1 to
+    :func:`run_profile`, and RHSMode=2/3 to :func:`run_transport_matrix`.
+
+    Args:
+        namelist_path: SFINCS ``input.namelist`` file (validated on load).
+        out_path: output file; the suffix selects ``.h5``/``.nc``/``.npz``.
+        solve_method: :func:`sfincs_jax.solve.solve` method for the solve runs.
+        tol: relative residual tolerance; ``None`` reads the deck's
+            ``solverTolerance`` (default ``1e-10``), matching the CLI.
+        overwrite: when ``False``, raise :class:`FileExistsError` if
+            ``out_path`` already exists.
+        fortran_layout: store the Fortran column-major dataset layout
+            (default); ``False`` stores Python-native layout.
+        solver_trace_path: optional JSON sidecar path for a versioned
+            :class:`sfincs_jax.solver_trace.SolverTrace`.
+        emit: per-line stdout sink for the Fortran-parity print blocks;
+            ``None`` (default) silences them.
+
+    Returns:
+        The underlying :class:`GeometryRun`, :class:`ProfileRun`, or
+        :class:`TransportRun` (all carry ``output_path``).
+    """
+    namelist_path = Path(namelist_path)
+    if geometry_only:
+        return run_geometry(
+            namelist_path,
+            out_path=out_path,
+            overwrite=overwrite,
+            fortran_layout=fortran_layout,
+            solver_trace_path=solver_trace_path,
+            emit=emit,
+        )
+    nml = read_sfincs_input(namelist_path)
+    rhs_mode = int(nml.group("general").get("RHSMODE", 1))
+    if tol is None:
+        try:
+            tol = float(nml.group("resolutionParameters").get("SOLVERTOLERANCE", 1e-10))
+        except (TypeError, ValueError):
+            tol = 1e-10
+    if rhs_mode == 1:
+        return run_profile(
+            namelist_path,
+            solve_method=solve_method,
+            tol=tol,
+            out_path=out_path,
+            overwrite=overwrite,
+            fortran_layout=fortran_layout,
+            solver_trace_path=solver_trace_path,
+            emit=emit,
+        )
+    return run_transport_matrix(
+        namelist_path,
+        solve_method=solve_method,
+        tol=tol,
+        out_path=out_path,
+        overwrite=overwrite,
+        fortran_layout=fortran_layout,
+        solver_trace_path=solver_trace_path,
+        emit=emit,
+    )

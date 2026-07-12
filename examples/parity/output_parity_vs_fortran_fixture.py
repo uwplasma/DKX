@@ -24,7 +24,8 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from sfincs_jax.compare import compare_sfincs_outputs
-from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
+from sfincs_jax.api import write_output
+from sfincs_jax.io import read_sfincs_h5
 
 
 def main() -> int:
@@ -34,7 +35,7 @@ def main() -> int:
     out_path = out_dir / "sfincsOutput_jax.h5"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    write_sfincs_jax_output_h5(input_namelist=input_path, output_path=out_path)
+    write_output(input_path, out_path)
 
     keys = [
         "Nspecies",

@@ -49,3 +49,25 @@ implement the remaining two physics features, then delete the gated bulk.
 4. inputs/phase_space/magnetic_geometry vs discretization/v3 grids/geometry-from-namelist
 
 Combined removable ceiling ~81,700 lines -> ~30k canonical end-state.
+
+## Final: the big trim (executed)
+
+The gated bulk is DELETED. Measured at the trim commit:
+
+- Package: 98,435 -> ~31k lines (`find sfincs_jax -name "*.py" | xargs cat | wc -l`).
+- Deleted packages: problems/ (32,079), solvers/ (16,742), operators/ (7,689),
+  outputs/ (6,728), geometry/ (3,053), discretization/ (2,002), physics/ (135),
+  plus root grids.py (587), root diagnostics.py (206), and
+  workflows/mapped_xgrid.py.
+- Promotions (live pieces kept): solvers/diagnostics.py -> solver_trace.py
+  (trimmed to the trace schema), discretization/xgrid.py -> xgrid.py,
+  geometry/jax_adapters.py -> workflows/geometry_adapters.py, outputs/formats
+  read side + generic dict serializers -> io.py.
+- Re-points: api.write_output / workflows.scans / validation.release ->
+  run.run_from_namelist (the canonical RHSMode dispatch); examples moved to
+  api.write_output / canonical drift_kinetic/solve/magnetic_geometry APIs.
+- Tests: ~154 legacy-importing files -> deleted (solver policies,
+  preconditioners, legacy writer/layout internals, parallel runtime) or
+  converted to Fortran-golden referees; the consolidated
+  tests/test_kinetic_operator_fortran_parity.py pins matvec/residual/RHS/
+  transport-matrix assembly against the frozen petscbin/h5 references.

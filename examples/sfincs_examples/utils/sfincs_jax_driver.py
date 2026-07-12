@@ -20,7 +20,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from sfincs_jax.io import localize_equilibrium_file_in_place, write_sfincs_jax_output_h5  # noqa: E402
+from sfincs_jax.api import write_output  # noqa: E402
+from sfincs_jax.io import localize_equilibrium_file_in_place  # noqa: E402
 from sfincs_jax.namelist import read_sfincs_input  # noqa: E402
 
 
@@ -60,14 +61,11 @@ def run_sfincs_jax(
             flush=True,
         )
     t0 = time.perf_counter()
-    out = write_sfincs_jax_output_h5(
-        input_namelist=input_namelist,
-        output_path=output_path,
-        compute_transport_matrix=bool(compute_transport_matrix),
-        compute_solution=bool(compute_solution),
+    out = write_output(
+        input_namelist,
+        output_path,
         overwrite=overwrite,
-        verbose=verbose,
-        differentiable=bool(differentiable),
+        emit=print if verbose else None,
     )
     if verbose:
         print(

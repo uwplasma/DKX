@@ -1385,11 +1385,27 @@ def solve(
     if method == "auto":
         chosen = _auto_route(op, rhs2d, tier1_memory_budget_gb, tier1_keep_lowest)
 
-    if chosen == "block_tridiagonal":
-        result = _solve_tier1(op, rhs2d, tol=tol, atol=atol, differentiable=differentiable)
-    elif chosen == "block_tridiagonal_truncated":
-        keep = min(tier1_keep_lowest, op.n_xi)
-        result = _solve_tier1_truncated(op, rhs2d, keep=keep, tol=tol, atol=atol)
+    if chosen in ("block_tridiagonal", "block_tridiagonal_truncated"):
+        if chosen == "block_tridiagonal":
+            result = _solve_tier1(op, rhs2d, tol=tol, atol=atol, differentiable=differentiable)
+        else:
+            keep = min(tier1_keep_lowest, op.n_xi)
+            result = _solve_tier1_truncated(op, rhs2d, keep=keep, tol=tol, atol=atol)
+        if method == "auto" and not result.converged and not differentiable:
+            # Structured elimination has no pivoting across blocks: on
+            # near-singular systems (e.g. a nu_n=0 collisionless deck, whose
+            # bordered constraint leaves the operator with condition numbers
+            # ~1e18) its residual can miss the tolerance even though the
+            # system is consistent.  Mirror the tier-2 -> tier-3 pattern and
+            # fall through to the preconditioned Krylov tier.
+            print(
+                "[sfincs_jax.solve] tier-1 structured solve missed the "
+                f"tolerance (residuals={np.asarray(result.residual_norms)}); "
+                "falling back to the tier-2 Krylov solve."
+            )
+            chosen = "gmres"
+    if chosen in ("block_tridiagonal", "block_tridiagonal_truncated"):
+        pass  # tier-1 result stands.
     elif chosen == "gmres":
         result = _solve_tier2(
             op,

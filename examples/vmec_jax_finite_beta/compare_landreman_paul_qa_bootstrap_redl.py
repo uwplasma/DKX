@@ -50,8 +50,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5  # noqa: E402
-from sfincs_jax.geometry.vmec_wout import read_vmec_wout  # noqa: E402
+from sfincs_jax.api import write_output  # noqa: E402
+from sfincs_jax.io import read_sfincs_h5  # noqa: E402
+from sfincs_jax.magnetic_geometry import read_vmec_wout  # noqa: E402
 
 
 ELEMENTARY_CHARGE = 1.602176634e-19
@@ -434,13 +435,11 @@ def _run_or_read_sfincs(
         if should_run:
             print(f"Running SFINCS-JAX r_N={float(r_n):.4g} -> {output_path}", flush=True)
             t0 = time.perf_counter()
-            write_sfincs_jax_output_h5(
-                input_namelist=input_path,
-                output_path=output_path,
-                compute_solution=True,
+            write_output(
+                input_path,
+                output_path,
                 overwrite=True,
-                verbose=True,
-                differentiable=False,
+                emit=print,
             )
             elapsed_s = float(time.perf_counter() - t0)
         else:

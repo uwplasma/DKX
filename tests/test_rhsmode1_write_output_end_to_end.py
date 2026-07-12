@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
+from sfincs_jax.api import write_output
+from sfincs_jax.io import read_sfincs_h5
 
 
 @pytest.fixture(autouse=True)
@@ -81,11 +82,7 @@ def test_write_output_rhsmode1_solution_fields_match_fortran_fixture(base: str, 
     ref_path = here / "ref" / f"{base}.sfincsOutput.h5"
     out_path = tmp_path / f"{base}.sfincsOutput_jax.h5"
 
-    write_sfincs_jax_output_h5(
-        input_namelist=input_path,
-        output_path=out_path,
-        compute_solution=True,
-    )
+    write_output(input_path, out_path)
 
     out = read_sfincs_h5(out_path)
     ref = read_sfincs_h5(ref_path)
@@ -110,6 +107,11 @@ def test_write_output_rhsmode1_solution_fields_match_fortran_fixture(base: str, 
 
     for k in sorted(ref.keys()):
         if k == "input.namelist":
+            continue
+        if k == "elapsed time (s)":
+            # Wall-clock provenance: the retired legacy writer froze this to
+            # zeros; the canonical writer records the real solve time, which
+            # legitimately differs from the Fortran fixture (asserted below).
             continue
         if not _is_numeric_dataset(ref[k]):
             continue

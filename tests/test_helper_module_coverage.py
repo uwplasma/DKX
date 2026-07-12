@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import json
 import runpy
 import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -18,14 +16,11 @@ from sfincs_jax.ambipolar import (
     _scanplot2_outputs_for_run,
     radial_current_from_output,
 )
-from sfincs_jax.diagnostics import b0_over_bbar, fsab_hat2, g_hat_i_hat, u_hat, u_hat_np, vprime_hat
 from sfincs_jax.validation.fortran import default_fortran_exe, run_sfincs_fortran
-from sfincs_jax.discretization.v3 import V3Indexing
 from sfincs_jax.namelist import Namelist
 from sfincs_jax.paths import _strip_quotes, resolve_existing_path
 from sfincs_jax.profiling import SimpleProfiler, _device_mem_mb, _rss_mb, maybe_profiler
 from sfincs_jax.workflows.scans import _er_scan_var_name, _patch_scalar_in_group, linspace_including_endpoints, run_er_scan
-from sfincs_jax.problems.transport_parallel_runtime import main as transport_worker_main
 from sfincs_jax.profiling import Timer, make_emit
 
 
@@ -129,64 +124,7 @@ def test_scanplot2_helpers_cover_single_and_multi_species(tmp_path: Path) -> Non
         )
 
 
-def test_diagnostics_flux_surface_averages_for_constant_geometry() -> None:
-    grids = SimpleNamespace(
-        theta_weights=np.asarray([1.0, 2.0]),
-        zeta_weights=np.asarray([3.0, 4.0]),
-        theta=np.linspace(0.0, 2.0 * np.pi, 4, endpoint=False),
-        zeta=np.linspace(0.0, 2.0 * np.pi, 4, endpoint=False),
-    )
-    geom = SimpleNamespace(
-        d_hat=jnp.full((2, 2), 2.0),
-        b_hat=jnp.full((2, 2), 5.0),
-        b_hat_sub_zeta=jnp.full((2, 2), 7.0),
-        b_hat_sub_theta=jnp.full((2, 2), 11.0),
-        iota=0.7,
-        g_hat=1.2,
-        i_hat=-0.5,
-        n_periods=1,
-    )
-    weight_sum = np.sum(np.asarray(grids.theta_weights)[:, None] * np.asarray(grids.zeta_weights)[None, :])
-    assert float(vprime_hat(grids=grids, geom=geom)) == pytest.approx(weight_sum / 2.0)
-    assert float(fsab_hat2(grids=grids, geom=geom)) == pytest.approx(25.0)
-    assert float(b0_over_bbar(grids=grids, geom=geom)) == pytest.approx(5.0)
-    g_hat, i_hat = g_hat_i_hat(grids=grids, geom=geom)
-    assert float(g_hat) == pytest.approx(7.0 * weight_sum / (4.0 * np.pi * np.pi))
-    assert float(i_hat) == pytest.approx(11.0 * weight_sum / (4.0 * np.pi * np.pi))
-
-
-def test_u_hat_is_zero_for_constant_bhat() -> None:
-    grids = SimpleNamespace(
-        theta=np.linspace(0.0, 2.0 * np.pi, 8, endpoint=False),
-        zeta=np.linspace(0.0, 2.0 * np.pi, 6, endpoint=False),
-    )
-    geom = SimpleNamespace(
-        b_hat=np.full((8, 6), 3.0),
-        iota=0.4,
-        g_hat=1.3,
-        i_hat=-0.7,
-        n_periods=2,
-    )
-    np.testing.assert_allclose(np.asarray(u_hat(grids=grids, geom=geom)), 0.0, atol=1e-12)
-    np.testing.assert_allclose(u_hat_np(grids=grids, geom=geom), 0.0, atol=1e-12)
-
-
-def test_indexing_and_paths_helpers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    indexing = V3Indexing(
-        n_species=2,
-        n_x=2,
-        n_theta=3,
-        n_zeta=4,
-        n_xi_max=5,
-        n_xi_for_x=np.asarray([2, 1]),
-    )
-    assert indexing.dke_size == 36
-    np.testing.assert_array_equal(indexing.first_index_for_x, np.asarray([0, 2]))
-    assert indexing.f_index(i_species=1, i_x=1, i_xi=0, i_theta=2, i_zeta=3) == 71
-    inv = indexing.build_inverse_f_map()
-    assert len(inv) == 72
-    assert inv[35] == (0, 1, 0, 2, 3)
-
+def test_paths_helpers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     target = tmp_path / "equilibria" / "wout.nc"
     target.parent.mkdir()
     target.write_text("ok")
@@ -365,19 +303,20 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
         assert overwrite is False
         assert input_namelist.exists()
 
-    def _fake_write(**kwargs):
+    def _fake_write(namelist_path, *, out_path, solver_trace_path, solve_method, **kwargs):
+        del kwargs
         calls.append(
             (
-                Path(kwargs["input_namelist"]),
-                Path(kwargs["output_path"]),
-                Path(kwargs["solver_trace_path"]),
-                str(kwargs["solve_method"]),
+                Path(namelist_path),
+                Path(out_path),
+                Path(solver_trace_path),
+                str(solve_method),
             )
         )
-        Path(kwargs["output_path"]).write_bytes(b"")
+        Path(out_path).write_bytes(b"")
 
     monkeypatch.setattr("sfincs_jax.workflows.scans.localize_equilibrium_file_in_place", _fake_localize)
-    monkeypatch.setattr("sfincs_jax.workflows.scans.write_sfincs_jax_output_h5", _fake_write)
+    monkeypatch.setattr("sfincs_jax.workflows.scans.run_from_namelist", _fake_write)
     emits: list[tuple[int, str]] = []
 
     result = run_er_scan(
@@ -435,36 +374,3 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
     assert any("scan-er: progress 3/3" in msg for _, msg in emits)
 
 
-def test_transport_parallel_worker_writes_npz(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    payload_path = tmp_path / "payload.json"
-    output_path = tmp_path / "worker.npz"
-    input_path = tmp_path / "input.namelist"
-    input_path.write_text("&general\n/\n")
-    payload = {
-        "input_path": str(input_path),
-        "which_rhs_values": [3, 1],
-        "tol": 1e-9,
-    }
-    payload_path.write_text(json.dumps(payload))
-
-    monkeypatch.setattr("sfincs_jax.problems.transport_parallel_runtime._read_worker_input", lambda _p: object())
-    monkeypatch.setattr(
-        "sfincs_jax.problems.transport_parallel_runtime._solve_worker_transport",
-        lambda **_kwargs: SimpleNamespace(
-            state_vectors_by_rhs={1: np.asarray([1.0, 2.0]), 3: np.asarray([3.0, 4.0])},
-            residual_norms_by_rhs={1: np.float64(0.25), 3: np.float64(0.75)},
-            elapsed_time_s=np.asarray([10.0, 20.0, 30.0]),
-        ),
-    )
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["transport_parallel_worker", "--payload", str(payload_path), "--output", str(output_path)],
-    )
-
-    assert transport_worker_main() == 0
-    data = np.load(output_path)
-    np.testing.assert_array_equal(data["which_rhs_values"], np.asarray([3, 1], dtype=np.int32))
-    np.testing.assert_allclose(data["state_vectors"], np.asarray([[3.0, 4.0], [1.0, 2.0]]))
-    np.testing.assert_allclose(data["residual_norms"], np.asarray([0.75, 0.25]))
-    np.testing.assert_allclose(data["elapsed_time_s"], np.asarray([30.0, 10.0]))

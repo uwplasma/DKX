@@ -9,10 +9,8 @@
     "compare.py",
     "console.py",
     "constants.py",
-    "diagnostics.py",
     "drift_kinetic.py",
     "er.py",
-    "grids.py",
     "input_compat.py",
     "inputs.py",
     "io.py",
@@ -27,8 +25,10 @@
     "run.py",
     "sensitivity.py",
     "solve.py",
+    "solver_trace.py",
     "species.py",
-    "writer.py"
+    "writer.py",
+    "xgrid.py"
   ],
   "target_root_modules": [
     "__init__.py",
@@ -40,10 +40,8 @@
     "compare.py",
     "console.py",
     "constants.py",
-    "diagnostics.py",
     "drift_kinetic.py",
     "er.py",
-    "grids.py",
     "input_compat.py",
     "inputs.py",
     "io.py",
@@ -58,99 +56,20 @@
     "run.py",
     "sensitivity.py",
     "solve.py",
+    "solver_trace.py",
     "species.py",
-    "writer.py"
+    "writer.py",
+    "xgrid.py"
   ],
   "allowed_root_packages": [
-    "discretization",
-    "geometry",
-    "operators",
-    "outputs",
-    "physics",
-    "problems",
-    "solvers",
     "validation",
     "workflows"
   ],
   "target_root_packages": [
-    "discretization",
-    "geometry",
-    "operators",
-    "outputs",
-    "physics",
-    "problems",
-    "solvers",
     "validation",
     "workflows"
   ],
   "allowed_domain_modules": {
-    "discretization": [
-      "adaptive_maps.py",
-      "periodic_stencil.py",
-      "structured_velocity.py",
-      "v3.py",
-      "xgrid.py"
-    ],
-    "geometry": [
-      "boozer.py",
-      "jax_adapters.py",
-      "vmec.py",
-      "vmec_wout.py"
-    ],
-    "operators": [
-      "profile_collisionless.py",
-      "profile_electric_field.py",
-      "profile_exb.py",
-      "profile_fblock.py",
-      "profile_layout.py",
-      "profile_magnetic_drifts.py",
-      "profile_system.py"
-    ],
-    "outputs": [
-      "formats.py",
-      "rhsmode1.py",
-      "transport.py",
-      "writer.py"
-    ],
-    "physics": [
-      "classical_transport.py"
-    ],
-    "problems": [
-      "profile_dense.py",
-      "profile_diagnostics.py",
-      "profile_policies.py",
-      "profile_preconditioner_build.py",
-      "profile_residual.py",
-      "profile_setup.py",
-      "profile_solve.py",
-      "profile_solver_diagnostics.py",
-      "transport_diagnostics.py",
-      "transport_finalize.py",
-      "transport_linear_system.py",
-      "transport_parallel_runtime.py",
-      "transport_policies.py",
-      "transport_setup.py",
-      "transport_solve.py"
-    ],
-    "solvers": [
-      "diagnostics.py",
-      "implicit.py",
-      "krylov.py",
-      "krylov_dispatch.py",
-      "memory_model.py",
-      "path_policy.py",
-      "preconditioner_domain_decomposition.py",
-      "preconditioner_full_fp_kinetic.py",
-      "preconditioner_pas_angular.py",
-      "preconditioner_pas_composite.py",
-      "preconditioner_pas_policy.py",
-      "preconditioner_pas_xblock_ilu.py",
-      "preconditioner_schur_profile.py",
-      "preconditioner_transport_matrix.py",
-      "preconditioner_xblock_block_jacobi.py",
-      "preconditioner_xblock_radial.py",
-      "preconditioning.py"
-    ],
     "validation": [
       "artifacts.py",
       "data_fetch.py",
@@ -158,7 +77,7 @@
       "release.py"
     ],
     "workflows": [
-      "mapped_xgrid.py",
+      "geometry_adapters.py",
       "optimization.py",
       "scans.py"
     ]

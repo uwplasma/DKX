@@ -29,7 +29,7 @@ machine-readable assertion that the workflow is still a proxy-gradient lane:
 ``kinetic_solve_executed`` is false, the differentiated object is the
 Boozer-spectrum transport-like scalar, and full VMEC-boundary-to-SFINCS kinetic
 gradients remain deferred.  Both workflow examples use the same shared
-``sfincs_jax.geometry.jax_adapters`` gate, so the skip-safe status path and the
+``sfincs_jax.workflows.geometry_adapters`` gate, so the skip-safe status path and the
 file-backed proxy-gradient summary enforce the same scalar-contract boundary.
 
 The same payload carries ``kinetic_transport_scalar_contract`` and a
@@ -131,7 +131,7 @@ Differentiated in this lane:
 
 - scaled VMEC-like magnetic spectral arrays,
 - the ``booz_xform_jax`` transform,
-- ``sfincs_jax.geometry.jax_adapters.boozer_spectrum_proxy_transport_objective``.
+- ``sfincs_jax.workflows.geometry_adapters.boozer_spectrum_proxy_transport_objective``.
 
 Setup or provenance only, not differentiated:
 

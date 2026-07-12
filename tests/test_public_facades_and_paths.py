@@ -4,8 +4,6 @@ from pathlib import Path
 
 import pytest
 
-import sfincs_jax.io as io_module
-from sfincs_jax.outputs import writer as output_writer
 from sfincs_jax.paths import resolve_existing_path
 from sfincs_jax.validation import data_fetch
 
@@ -81,25 +79,3 @@ def test_resolve_existing_path_failure_preserves_attempted_paths(
     assert "Unable to resolve existing path" in message
     assert "wout_absent.nc" in message
     assert str(missing) in message
-
-
-def test_io_facade_delegates_legacy_private_getattr_and_setattr(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Compatibility imports should keep working while implementations move."""
-
-    original = output_writer._should_precompile_v3_full_system
-    assert io_module._should_precompile_v3_full_system is original
-
-    def replacement(*_args, **_kwargs) -> bool:
-        return False
-
-    monkeypatch.setattr(io_module, "_should_precompile_v3_full_system", replacement)
-
-    assert io_module._should_precompile_v3_full_system is replacement
-    assert output_writer._should_precompile_v3_full_system is replacement
-
-
-def test_io_facade_unknown_private_name_raises_attribute_error() -> None:
-    with pytest.raises(AttributeError, match="has no attribute"):
-        getattr(io_module, "_definitely_not_a_real_compat_name")

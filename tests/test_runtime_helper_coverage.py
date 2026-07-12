@@ -1,21 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
-from types import SimpleNamespace
-
 import numpy as np
 import pytest
 
 import sfincs_jax
 from sfincs_jax.compare import _as_numpy, _center_fsa, _merge_tolerance_floor
-from sfincs_jax.solvers.diagnostics import (
-    _op_signature,
-    operator_shape_signature,
-    operator_shape_signature_dict,
-    read_krylov_state_signature,
-    load_krylov_state,
-    save_krylov_state,
-)
 
 
 def test_initialize_distributed_runtime_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -51,56 +40,6 @@ def test_initialize_distributed_runtime_from_env(monkeypatch: pytest.MonkeyPatch
         "num_processes": 2,
         "process_id": 1,
     }
-
-
-def test_solver_state_round_trip_and_signature_guard(tmp_path: Path) -> None:
-    op = SimpleNamespace(
-        rhs_mode=1,
-        total_size=5,
-        n_species=2,
-        n_x=3,
-        n_xi=4,
-        n_theta=5,
-        n_zeta=6,
-        constraint_scheme=1,
-        include_phi1=True,
-        include_phi1_in_kinetic=False,
-        quasineutrality_option=2,
-    )
-    path = tmp_path / "state.npz"
-    x_full = np.asarray([1.0, 2.0, 3.0])
-    x_by_rhs = {3: np.asarray([4.0, 5.0]), 1: np.asarray([6.0, 7.0])}
-    x_history = [np.asarray([1.0, 1.0]), np.asarray([2.0, 2.0])]
-
-    sig = _op_signature(op)
-    assert sig.tolist() == [1, 5, 2, 3, 4, 5, 6, 1, 1, 0, 2]
-    assert operator_shape_signature(op) == tuple(sig.tolist())
-    assert operator_shape_signature_dict(op) == {
-        "rhs_mode": 1,
-        "total_size": 5,
-        "n_species": 2,
-        "n_x": 3,
-        "n_xi": 4,
-        "n_theta": 5,
-        "n_zeta": 6,
-        "constraint_scheme": 1,
-        "include_phi1": 1,
-        "include_phi1_in_kinetic": 0,
-        "quasineutrality_option": 2,
-    }
-
-    save_krylov_state(path=path, op=op, x_full=x_full, x_by_rhs=x_by_rhs, x_history=x_history)
-    assert read_krylov_state_signature(path) == tuple(sig.tolist())
-    loaded = load_krylov_state(path=path, op=op)
-    assert loaded is not None
-    np.testing.assert_allclose(loaded["x_full"], x_full)
-    assert sorted(loaded["x_by_rhs"]) == [1, 3]
-    np.testing.assert_allclose(loaded["x_by_rhs"][1], np.asarray([6.0, 7.0]))
-    assert len(loaded["x_history"]) == 2
-
-    mismatched = SimpleNamespace(**{**op.__dict__, "n_theta": 99})
-    assert load_krylov_state(path=path, op=mismatched) is None
-    assert load_krylov_state(path=tmp_path / "missing.npz", op=op) is None
 
 
 def test_compare_helper_functions() -> None:

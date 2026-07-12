@@ -1,11 +1,9 @@
-"""Referee tests for Phase 3.1c: constants.py / species.py == old code paths.
+"""Tests for ``constants.py`` / ``species.py``: v3 defaults and conversions.
 
-New modules must reproduce the existing scattered implementations to 1e-15:
-- ``collisions.py`` (nuDHat deflection frequency),
-- ``outputs/transport.py`` (radial-coordinate conversion factors),
-- ``operators/profile_system.py`` (namelist -> species arrays + psiHat gradients),
-- ``operators/profile_fblock.py`` / ``outputs/writer.py`` (Fortran defaults),
-- ``input_compat.py`` (gradient-coordinate inference).
+Pins the ``globalVariables.F90`` defaults, the ``radialCoordinates.F90``
+derivative-conversion formulas (evaluated independently inline), the nuDHat
+deflection frequency, namelist -> species parsing, and the
+gradient-coordinate inference of ``input_compat.py``.
 """
 
 from __future__ import annotations
@@ -22,9 +20,21 @@ from sfincs_jax.input_compat import (
     scheme4_radial_constants,
 )
 from sfincs_jax.namelist import parse_sfincs_input_text, read_sfincs_input
-from sfincs_jax.operators.profile_fblock import _V3_DEFAULT_DELTA, _V3_DEFAULT_NU_N
-from sfincs_jax.outputs.transport import conversion_factors_to_from_dpsi_hat
 from sfincs_jax.collisions import _V3_PI, _V3_SQRTPI, nu_d_hat_pitch_angle_scattering_v3
+
+
+def conversion_factors_to_from_dpsi_hat(*, psi_a_hat: float, a_hat: float, r_n: float) -> dict[str, float]:
+    """Independent inline evaluation of v3 ``radialCoordinates.setInputRadialCoordinate``."""
+    psi_n = float(r_n) * float(r_n)
+    root = float(np.sqrt(psi_n))
+    return {
+        "ddpsiN2ddpsiHat": 1.0 / float(psi_a_hat),
+        "ddrHat2ddpsiHat": float(a_hat) / (2.0 * float(psi_a_hat) * root),
+        "ddrN2ddpsiHat": 1.0 / (2.0 * float(psi_a_hat) * root),
+        "ddpsiHat2ddpsiN": float(psi_a_hat),
+        "ddpsiHat2ddrHat": (2.0 * float(psi_a_hat) * root) / float(a_hat),
+        "ddpsiHat2ddrN": (2.0 * float(psi_a_hat) * root),
+    }
 
 FORTRAN_EXAMPLE = (
     Path(__file__).resolve().parent / "ref" / "quick_2species_FPCollisions_noEr.input.namelist"
@@ -56,9 +66,9 @@ def _species_set(case: dict, dn=None, dt=None) -> species.SpeciesSet:
 
 
 def test_defaults_match_fortran_globalvariables() -> None:
-    # globalVariables.F90 lines 133-135 (via operators/profile_fblock.py literals).
-    assert constants.DEFAULT_DELTA == _V3_DEFAULT_DELTA == 4.5694e-3
-    assert constants.DEFAULT_NU_N == _V3_DEFAULT_NU_N == 8.330e-3
+    # globalVariables.F90 lines 133-135.
+    assert constants.DEFAULT_DELTA == 4.5694e-3
+    assert constants.DEFAULT_NU_N == 8.330e-3
     assert constants.DEFAULT_ALPHA == 1.0
     # globalVariables.F90 lines 16-17 (via collisions.py literals).
     assert constants.PI_V3 == _V3_PI
@@ -200,11 +210,11 @@ def test_namelist_species_match_old_writer_path(species_block: str) -> None:
 
 
 def test_fortran_example_namelist_matches_full_system_operator() -> None:
-    """Parity vs the heaviest old path: operators/profile_system full-system build."""
-    from sfincs_jax.operators.profile_system import full_system_operator_from_namelist
+    """Parity vs the canonical operator's own namelist parsing."""
+    from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
 
     nml = read_sfincs_input(FORTRAN_EXAMPLE)
-    op = full_system_operator_from_namelist(nml=nml)
+    op = kinetic_operator_from_namelist(nml)
 
     psi_a_hat, a_hat = scheme4_radial_constants()
     radial = constants.RadialCoordinates(psi_a_hat=psi_a_hat, a_hat=a_hat, r_n=0.5)

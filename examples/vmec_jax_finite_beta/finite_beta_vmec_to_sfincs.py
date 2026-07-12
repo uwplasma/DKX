@@ -58,7 +58,8 @@ except Exception as exc:  # pragma: no cover - dependency error path
     raise SystemExit("This example requires matplotlib. Install sfincs_jax normally first.") from exc
 
 from sfincs_jax.ambipolar import radial_current_from_output  # noqa: E402
-from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5  # noqa: E402
+from sfincs_jax.api import write_output  # noqa: E402
+from sfincs_jax.io import read_sfincs_h5  # noqa: E402
 
 
 DEFAULT_INPUT = Path(__file__).with_name("input.nfp2_QA_finite_beta")
@@ -501,13 +502,11 @@ def _run_or_load_sfincs_record(
     else:
         t0 = time.perf_counter()
         print(f"{label} r_N={r_n:g}, Er={er:g}: running sfincs_jax", flush=True)
-        write_sfincs_jax_output_h5(
-            input_namelist=input_path,
-            output_path=output_h5,
-            compute_solution=True,
+        write_output(
+            input_path,
+            output_h5,
             overwrite=True,
-            verbose=bool(verbose),
-            differentiable=False,
+            emit=print if verbose else None,
         )
         print(f"{label} r_N={r_n:g}, Er={er:g}: done in {time.perf_counter() - t0:.2f} s", flush=True)
     return _record_from_output(r_n=r_n, er=er, output_h5=output_h5)

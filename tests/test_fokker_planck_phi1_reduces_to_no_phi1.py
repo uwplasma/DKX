@@ -9,13 +9,14 @@ from sfincs_jax.collisions import (
     make_fokker_planck_v3_operator,
     make_fokker_planck_v3_phi1_operator,
 )
-from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.discretization.v3 import grids_from_namelist
+from sfincs_jax.inputs import load_sfincs_input
+from sfincs_jax.run import _grids_from_input
 
 
 def test_phi1_in_collisions_reduces_to_no_phi1_when_phi1_zero() -> None:
-    nml = read_sfincs_input("tests/ref/quick_2species_FPCollisions_noEr.input.namelist")
-    grids = grids_from_namelist(nml)
+    inp = load_sfincs_input("tests/ref/quick_2species_FPCollisions_noEr.input.namelist")
+    nml = inp.raw
+    grids = _grids_from_input(inp, nml)
     species = nml.group("speciesParameters")
     phys = nml.group("physicsParameters")
     other = nml.group("otherNumericalParameters")

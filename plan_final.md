@@ -29,11 +29,12 @@ bootstrap current, transport coefficients, plotting, and optimization.
   Each was admitted with equivalence tests against the old implementation
   (1e-13..1e-15) and, where applicable, Fortran golden data
   (`reference-data-v2` release) and tiny-grid PETSc matrix dumps.
-- The canonical stack currently covers PAS + full-FP collisions, DKES and full
-  trajectories, RHSMode 1/2/3, constraint schemes 0/1/2, geometry schemes
-  1/2/3/4/5/11/12/13. It does not yet cover Phi1/quasineutrality, tangential
-  magnetic drifts, constraint schemes 3/4, mapped speed grids, or export_f —
-  the old stack remains the owner for those until each vertical slice lands.
+- The canonical stack covers every SFINCS v3 physics family: PAS + full-FP
+  collisions, DKES and full trajectories, RHSMode 1/2/3, constraint schemes
+  -1..4, geometry schemes 1/2/3/4/5/11/12/13 (with lasym),
+  Phi1/quasineutrality (kinetic, collision, readExternalPhi1), tangential
+  magnetic drifts 0-9, xGridScheme 1-8 with xDotDerivativeScheme -2..11, and
+  export_f/.npz/solver traces. The legacy pipeline was deleted (the big trim).
 - The external solver library `solvax` (github.com/uwplasma/SOLVAX) owns the
   reusable numerics: block-tridiagonal Schur elimination (full, factor/solve
   split, truncated-storage, transposed factor reuse, callback block assembly),
@@ -42,9 +43,11 @@ bootstrap current, transport coefficients, plotting, and optimization.
   host SuperLU bridge (98% coverage, docs on Read the Docs). `sfincs_jax`
   treats it as an optional dependency until it is published on PyPI; imports
   are lazy/guarded and CI installs it from git.
-- Package size must still fall: the canonical stack is additive until the old
-  owners are deleted slice by slice. Moving lines into more files without a
-  same-series deletion is a failed tranche. The measured Fortran baselines
+- The Repository-Wide Line Sweep executed: the legacy `problems/`,
+  `operators/`, `solvers/`, `outputs/`, `discretization/`, `geometry/`, and
+  `physics/` packages were deleted with their tests migrated to
+  Fortran-golden referees (package ~98k -> ~31k lines). The measured Fortran
+  baselines
   (strong-scaling table, production-size memory limits, the ill-conditioned
   scheme-1 monoenergetic off-diagonal) live in `docs/dev/failure_analysis.md`
   pending promotion into `docs/` performance pages.
@@ -115,32 +118,32 @@ numerics — no `v3_`, version suffixes (`_v2`), `probe`, `campaign`, `rescue`,
 
 ## Repository-Wide Line Sweep
 
-Inventory-driven deletion continues, but deletions are now organized by
-vertical slice rather than by file family: when a case family (for example
-RHSMode 3 PAS/DKES) is fully served by the canonical stack — CLI, API, output
-files, prints, parity evidence — the old pipeline files for that family are
-deleted in the same series, their tests replaced by the canonical tests, and
-`tests/fixtures/source_tree_expected.json` plus `sfincs_jax/README.md` updated
-in the same commit. The package line count must decrease at every slice
-milestone; the target remains <=50 files / <=50k lines first, then the
-canonical end-state of roughly 15-20 root modules plus small `io`-adjacent
-helpers (<=30k lines including docstrings).
+EXECUTED. Every vertical slice landed and the legacy pipeline was deleted in
+one final trim: the `problems/`, `operators/`, `solvers/`, `outputs/`,
+`discretization/`, `geometry/`, and `physics/` packages, root `grids.py` and
+`diagnostics.py`, and `workflows/mapped_xgrid.py` are gone; the live pieces
+were promoted (`solver_trace.py`, `xgrid.py`, `workflows/geometry_adapters.py`,
+the read side of `io.py`). Legacy-oracle tests were replaced by Fortran-golden
+referees (petscbin matvec/residual/state and sfincsOutput.h5 comparisons).
+`tests/fixtures/source_tree_expected.json` and `sfincs_jax/README.md` describe
+the canonical-only tree. The package now measures ~31k lines (from ~98k),
+inside the canonical end-state target of roughly 15-20 root modules plus small
+`io`-adjacent helpers (<=35k lines including docstrings).
 
 ## File-Level Execution Queues
 
-1. RHSMode 3 slice (PAS/DKES; exact block structure): route CLI + API through
-   the canonical stack end to end; delete the old transport-matrix pipeline
-   for the supported subset.
-2. RHSMode 2 slice (same operators, three drives).
-3. RHSMode 1 PAS slice, then RHSMode 1 FP (tier-2 coarse-preconditioned
-   Krylov), each with writer/console parity and old-owner deletion.
-4. Ambipolar `er.py` on the canonical stack (Brent parity + differentiable
-   root), replacing `ambipolar.py`.
-5. Phi1/quasineutrality slice in `drift_kinetic.py` + `phi1.py` (Newton over
-   the linear kernel with preconditioner reuse), unlocking the withPhi1
-   examples; then tangential magnetic drifts.
-6. Writer consolidation (`writer.py` from `outputs/` and `moments.py`), then
-   export_f or its explicit deferral.
+All queued slices are DONE and their legacy owners deleted:
+
+1. RHSMode 3 slice (PAS/DKES) — canonical end to end.
+2. RHSMode 2 slice (same operators, three drives) — canonical.
+3. RHSMode 1 PAS and FP slices — canonical with writer/console parity.
+4. Ambipolar `er.py` (Brent parity + differentiable root) — canonical.
+5. Phi1/quasineutrality + tangential magnetic drifts — canonical.
+6. Writer consolidation + export_f — canonical (`writer.py`).
+
+Remaining file-level work happens through the Ordered Finish Plan lanes
+(behavior-suite consolidation, examples curation, docs rebuild), not through
+legacy deletions.
 
 ## Ordered Finish Plan
 
@@ -232,15 +235,9 @@ sparse-direct research, multifrontal replacements, lower-memory preconditioner
 research, GPU/multi-GPU campaigns, publication audits, and long stellarator
 optimization campaigns. They may be referenced in `docs/research_lanes.rst`
 only; they must not remain as stable source, examples, tests, README claims, or
-default solver branches. Now canonical (Fortran-golden gated; their legacy
-owners are the next deletions): Phi1/quasineutrality (kinetic and collision
-coupling plus readExternalPhi1), tangential magnetic drifts (scheme 1),
-constraint schemes 3/4, export_f plus `.npz` output and solver traces,
-geometryScheme 13 (namelist Boozer spectrum), and non-stellarator-symmetric
-VMEC (lasym). Still deferred with the old stack as interim owner — the last
-gate before the legacy-stack deletion (decision: implement all, then trim):
-xGridScheme 3/4/7/8 with `xDotDerivativeScheme != 0`, and magneticDriftScheme
-2-9. Invalid-in-Fortran namelist values (quasineutralityOption > 2,
-collisionOperator > 1, constraintScheme > 4) become validation errors, not
+default solver branches. Every SFINCS v3 physics family is canonical and
+Fortran-golden gated; the legacy stack is deleted and must not return.
+Invalid-in-Fortran namelist values (quasineutralityOption > 2,
+collisionOperator > 1, constraintScheme > 4) are validation errors, not
 legacy fallbacks. The repository history rewrite and the PyPI release train are
 deferred to after review per the Ordered Finish Plan.

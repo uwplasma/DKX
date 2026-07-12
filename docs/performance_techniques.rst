@@ -1,6 +1,15 @@
 Performance techniques (full detail)
 ====================================
 
+.. note::
+   Historical record. Much of this page documents techniques measured on the
+   retired legacy pipeline (the transitional ``problems``/``operators``/
+   ``solvers``/``outputs`` packages), which was deleted once every physics
+   family became canonical. The supported solve surface is the three-tier
+   policy in ``sfincs_jax.solve`` on the external ``solvax`` library; module
+   paths named below that begin with those package names no longer exist in
+   the tree.
+
 This page documents the supported performance mechanisms in `sfincs_jax`,
 including the mathematical model context, implementation strategy, tuning knobs, and
 how each change differs from (or complements) the original Fortran v3 solver.
@@ -143,9 +152,9 @@ a bounded block-tridiagonal proxy.
 - Structured block solver:
   ``sfincs_jax.discretization.structured_velocity.factor_block_tridiagonal``.
 - Benchmark harness:
-  ``examples/performance/benchmark_structured_solve.py``.
+  the retired ``benchmark_structured_solve`` example (deleted with the legacy pipeline).
 - Focused tests:
-  ``tests/test_benchmark_structured_solve.py``.
+  its retired test (deleted with the legacy pipeline).
 
 The harness compares a dense repeated solve with a reusable block-tridiagonal
 factorization on deterministic synthetic systems. It reports residuals, maximum
@@ -265,7 +274,7 @@ so repeated cases that share the same equilibrium file reuse the computed data.
 - The RHSMode=1 output-writing path also reuses the already-built ``grids``,
   ``geom``, and full-system operator instead of rebuilding them again during the
   solve stage. This removes a full operator-construction pass from
-  ``write_sfincs_jax_output_h5(...)`` on staged HSX/geometry11 reruns.
+  ``sfincs_jax.api.write_output(...)`` on staged HSX/geometry11 reruns.
 - Disable with ``SFINCS_JAX_GEOMETRY_CACHE=0`` / ``SFINCS_JAX_OUTPUT_CACHE=0`` or
   skip disk persistence with ``SFINCS_JAX_GEOMETRY_CACHE_PERSIST=0`` /
   ``SFINCS_JAX_OUTPUT_CACHE_PERSIST=0``.

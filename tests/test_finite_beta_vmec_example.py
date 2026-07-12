@@ -299,9 +299,9 @@ def test_qs_paper_redl_comparison_forwards_verbose_to_sfincs_writer(tmp_path, mo
     )
     seen: dict[str, object] = {}
 
-    def fake_writer(**kwargs):
-        seen["verbose"] = kwargs["verbose"]
-        output_path = Path(kwargs["output_path"])
+    def fake_writer(_input_path, output_path, **kwargs):
+        seen["verbose"] = kwargs.get("emit") is print
+        output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with h5py.File(output_path, "w") as h5:
             h5["FSABjHat"] = np.asarray([-1.0])
@@ -309,7 +309,7 @@ def test_qs_paper_redl_comparison_forwards_verbose_to_sfincs_writer(tmp_path, mo
             h5["psiN"] = np.asarray([0.25])
             h5["NIterations"] = np.asarray([1])
 
-    monkeypatch.setattr(mod, "write_sfincs_jax_output_h5", fake_writer)
+    monkeypatch.setattr(mod, "write_output", fake_writer)
     args = mod._build_parser().parse_args(["--verbose-sfincs", "--force", "--out-dir", str(tmp_path)])
 
     row = mod._run_or_read_sfincs_jax(

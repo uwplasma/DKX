@@ -420,24 +420,13 @@ source input, and collision-operator labeling. That keeps future release reruns 
 with the manifest's provenance and acceptance-gate expectations instead of relying on
 plots alone.
 
-Mapped x-grid and QI integration smoke gates
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Mapped x-grid and QI integration smoke gates (retired)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The mapped speed-grid work is intentionally split between cheap primitive tests and
-bounded solve-facing evidence. The primitive and objective tests are:
-
-- ``tests/test_adaptive_maps.py``
-- ``tests/test_mapped_xgrid_objectives.py``
-- ``tests/test_mapped_xgrid_v3.py``
-- ``tests/test_mapped_xgrid_transport_evidence.py``
-
-The checked reviewer artifacts are bounded PAS RHSMode=2 comparisons, not default
-production claims:
-
-- ``docs/_static/mapped_xgrid_transport_evidence_rhsmode2_tiny.json``
-- ``docs/_static/mapped_xgrid_transport_evidence_rhsmode2_tiny.csv``
-- ``docs/_static/mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.json``
-- ``docs/_static/mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.csv``
+The mapped speed-grid research owners and their tests were deleted with the
+legacy pipeline (see :doc:`adaptive_speed_grid`). The bounded PAS RHSMode=2
+comparison artifacts under ``docs/_static/`` are retained as a historical
+record only.
 
 The reduced PAS tokamak artifact compares mapped ``Nx=7`` candidates against an
 ``Nx=13`` reference with active-DOF reduction. It is useful evidence that the

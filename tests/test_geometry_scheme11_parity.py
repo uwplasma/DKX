@@ -5,8 +5,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.discretization.v3 import geometry_from_namelist, grids_from_namelist
+from sfincs_jax.drift_kinetic import _geometry_and_radial
+from sfincs_jax.inputs import load_sfincs_input
+from sfincs_jax.run import _grids_from_input
 
 
 def test_geometry_scheme11_matches_fortran_fixture() -> None:
@@ -24,9 +25,10 @@ def test_geometry_scheme11_matches_fortran_fixture() -> None:
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv("SFINCS_JAX_EQUILIBRIA_DIRS", eq_dir)
 
-        nml = read_sfincs_input(input_path)
-        grids = grids_from_namelist(nml)
-        geom = geometry_from_namelist(nml=nml, grids=grids)
+        inp = load_sfincs_input(input_path)
+        raw = inp.raw
+        grids = _grids_from_input(inp, raw)
+        geom, _radial = _geometry_and_radial(nml=raw, grids=grids)
 
     mapping = {
         "BHat": np.asarray(geom.b_hat),

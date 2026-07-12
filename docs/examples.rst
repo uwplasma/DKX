@@ -236,7 +236,7 @@ convergence, or profiling detail.
      - ``examples/optimization/QA_optimization_bootstrap_current.py``
    * - CPU/GPU timing and output I/O
      - ``examples/performance/benchmark_output_formats.py``
-     - ``examples/performance/benchmark_transport_parallel_scaling.py``
+     - ``examples/performance/benchmark_transport_l11_vs_fortran.py``
    * - Frozen Fortran-v3 parity check
      - ``examples/parity/output_parity_vs_fortran_fixture.py``
      - ``examples/sfincs_examples/`` for retained upstream-style decks
@@ -772,41 +772,11 @@ VMEC-boundary-to-SFINCS transport differentiation.
 Parallel and scaling examples
 -----------------------------
 
-For transport-matrix throughput on CPUs:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_transport_parallel_scaling.py \
-     --input examples/performance/transport_parallel_2min.input.namelist \
-     --workers 1 2 4
-
-For transport-matrix throughput on a 2-GPU node:
-
-.. code-block:: bash
-
-   PYTHONPATH=. python examples/performance/benchmark_transport_parallel_scaling.py \
-     --backend gpu \
-     --input examples/performance/transport_parallel_2min.input.namelist \
-     --workers 1 2
-
-Single-case sharded RHSMode=1 scaling remains a research lane rather than a
-stable example. Use transport-worker scaling for supported parallel throughput:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_transport_parallel_scaling.py \
-     --backend cpu \
-     --input examples/performance/transport_parallel_2min.input.namelist \
-     --workers 1 2 4
-
-For transport-worker throughput on a 2-GPU node:
-
-.. code-block:: bash
-
-   PYTHONPATH=. python examples/performance/benchmark_transport_parallel_scaling.py \
-     --backend gpu \
-     --input examples/performance/transport_parallel_2min.input.namelist \
-     --workers 1 2
+The legacy transport-worker scaling benchmark was deleted with the legacy
+pipeline. Host-device parallelism for canonical runs is configured through
+the ``SFINCS_JAX_CORES``/``SFINCS_JAX_CPU_DEVICES`` environment knobs
+(:doc:`parallelism`); single-case sharded RHSMode=1 scaling remains a research
+lane rather than a stable example.
 
 .. note::
 

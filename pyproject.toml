@@ -55,10 +55,3 @@ markers = [
   "slow: heavy end-to-end example/optimization tests; excluded from the fast coverage shards via -m 'not slow' (still run in the full local suite).",
 ]
 
-[tool.ruff.lint.per-file-ignores]
-# The large profile and transport solve owners still retain dynamic globals and
-# optional solver imports that are exercised through policy tests. Keep the rest
-# of the package strict while these owners are simplified in the retained-owner
-# audit.
-"sfincs_jax/problems/profile_solve.py" = ["E402", "E731", "E741", "F401", "F811", "F821", "F841"]
-"sfincs_jax/problems/transport_solve.py" = ["E402", "E731", "E741", "F401", "F811", "F821", "F841"]

@@ -25,10 +25,11 @@ Building v3 grids and geometry
 
 .. code-block:: python
 
-   from sfincs_jax.discretization.v3 import grids_from_namelist, geometry_from_namelist
+   from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
 
-   grids = grids_from_namelist(nml)
-   geom = geometry_from_namelist(nml=nml, grids=grids)
+   op = kinetic_operator_from_namelist(nml)
+   print(op.n_theta, op.n_zeta, op.n_x)   # grid sizes
+   print(op.b_hat.shape)                  # (Ntheta, Nzeta) geometry arrays
 
 Supported geometry examples
 ---------------------------
@@ -744,7 +745,7 @@ performance without changing the input file:
   - ``SFINCS_JAX_COORDINATOR_ADDRESS``: host:port (or host) of the coordinator.
   - ``SFINCS_JAX_COORDINATOR_PORT``: port for the coordinator (default: 1234).
 
-- ``SFINCS_JAX_GEOMETRY_CACHE``: enable/disable the geometry cache in ``geometry_from_namelist``
+- ``SFINCS_JAX_GEOMETRY_CACHE``: enable/disable the geometry cache
   (default: enabled).
 - ``SFINCS_JAX_GEOMETRY_CACHE_PERSIST``: control persistent on‑disk geometry caching
   (default: enabled).
@@ -1084,71 +1085,47 @@ environment variables or forcing a preconditioner.
 .. code-block:: python
 
    from pathlib import Path
-   from sfincs_jax.io import write_sfincs_jax_output_h5
+   from sfincs_jax.api import write_output
 
-   write_sfincs_jax_output_h5(
-       input_namelist=Path("input.namelist"),
-       output_path=Path("sfincsOutput.h5"),
-   )
+   write_output(Path("input.namelist"), Path("sfincsOutput.h5"))
 
 .. code-block:: python
 
-   write_sfincs_jax_output_h5(
-       input_namelist=Path("input.namelist"),
-       output_path=Path("sfincsOutput.h5"),
+   write_output(
+       Path("input.namelist"),
+       Path("sfincsOutput.h5"),
        solver_trace_path=Path("solver_trace.json"),
    )
 
 .. code-block:: python
 
-   write_sfincs_jax_output_h5(
-       input_namelist=Path("input.namelist"),
-       output_path=Path("sfincsOutput.nc"),
-   )
+   write_output(Path("input.namelist"), Path("sfincsOutput.nc"))
 
-   write_sfincs_jax_output_h5(
-       input_namelist=Path("input.namelist"),
-       output_path=Path("sfincsOutput.npz"),
-   )
+   write_output(Path("input.namelist"), Path("sfincsOutput.npz"))
 
 .. code-block:: python
 
-   write_sfincs_jax_output_h5(
-       input_namelist=Path("input.namelist"),
-       output_path=Path("sfincsOutput.h5"),
-       equilibrium_file=Path("/path/to/equilibrium.bc"),
-   )
-
-.. code-block:: python
-
-   write_sfincs_jax_output_h5(
-       input_namelist=Path("input.namelist"),
-       output_path=Path("sfincsOutput.h5"),
+   write_output(
+       Path("input.namelist"),
+       Path("sfincsOutput.h5"),
        wout_path=Path("/path/to/wout.nc"),
    )
 
-The CLI ``write-output`` command uses ``solve_method="auto"`` and
-``differentiable=False`` by default. That is the recommended production path.
-For Python workflows, keep the same behavior unless you explicitly need
-end-to-end differentiation:
+The CLI ``write-output`` command uses ``solve_method="auto"`` by default. That
+is the recommended production path. ``write_output`` routes the deck through
+the canonical RHSMode dispatch (:func:`sfincs_jax.run.run_from_namelist`);
+for end-to-end differentiation use the pure APIs
+(:func:`sfincs_jax.solve.solve` with ``differentiable=True`` or
+:func:`sfincs_jax.er.ambipolar_er`).
+
+Inspect results immediately:
 
 .. code-block:: python
 
-   write_sfincs_jax_output_h5(
-       input_namelist=Path("input.namelist"),
-       output_path=Path("sfincsOutput.h5"),
-       differentiable=True,
-   )
+   from sfincs_jax.io import read_sfincs_h5
 
-Inspect results immediately (without reading H5 back from disk):
-
-.. code-block:: python
-
-   out_path, results = write_sfincs_jax_output_h5(
-       input_namelist=Path("input.namelist"),
-       output_path=Path("sfincsOutput.h5"),
-       return_results=True,
-   )
+   out_path = write_output(Path("input.namelist"), Path("sfincsOutput.h5"))
+   results = read_sfincs_h5(out_path)
    print(out_path)
    print(results["Ntheta"])
 
@@ -1156,26 +1133,15 @@ When an equilibrium override is used, the embedded ``input.namelist`` dataset or
 variable in the output file is patched to reflect the effective file path so downstream
 diagnostics and bug reports see the actual run configuration.
 
-Silence stdout (useful for batch runs):
+Console output is silent by default from Python; pass ``emit=print`` to see the
+Fortran-parity console flow.
+
+For transport-matrix runs (``RHSMode=2`` or ``RHSMode=3``) the deck's RHSMode
+selects the ``whichRHS`` loop automatically and ``transportMatrix`` is written:
 
 .. code-block:: python
 
-   write_sfincs_jax_output_h5(
-       input_namelist=Path("input.namelist"),
-       output_path=Path("sfincsOutput.h5"),
-       verbose=False,
-   )
-
-For transport-matrix runs (``RHSMode=2`` or ``RHSMode=3``), you can also request the
-``whichRHS`` loop and write ``transportMatrix``:
-
-.. code-block:: python
-
-   write_sfincs_jax_output_h5(
-       input_namelist=Path("input.namelist"),
-       output_path=Path("sfincsOutput.h5"),
-       compute_transport_matrix=True,
-   )
+   write_output(Path("input.namelist"), Path("sfincsOutput.h5"))
 
 Running an ``Er`` scan (transport-matrix mode)
 ----------------------------------------------

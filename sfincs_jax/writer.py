@@ -736,9 +736,9 @@ def _rhsmode1_iteration_fields(
         out["sources"] = np.asarray(d["sources"], dtype=np.float64)[:, :, None]
 
     # Phi1Hat(theta,zeta): stored (Nzeta, Ntheta, NIterations) as in
-    # writeHDF5Output.F90.  The canonical Newton solve records the converged
-    # state (NIterations=1); the legacy in-process writer stored every accepted
-    # Newton iterate.  For Phi1 runs the electric-drift (vE/vE0) and total-drift
+    # writeHDF5Output.F90 (one entry per accepted Newton iterate; this helper
+    # builds one iterate, ``write_profile_output`` stacks the history).
+    # For Phi1 runs the electric-drift (vE/vE0) and total-drift
     # (vd/vd1) flux families, the heat withoutPhi1 flux, the dPhi1Hat gradients,
     # and the lambda multiplier are emitted here from the canonical moments
     # (diagnostics.F90 parity); the Phi1 scalar/solver metadata is added by
@@ -1234,6 +1234,7 @@ def write_transport_output(
     state_vectors: np.ndarray,
     transport_matrix: np.ndarray,
     elapsed_times: np.ndarray | None = None,
+    solver_diagnostics: Dict[str, np.ndarray] | None = None,
     overwrite: bool = True,
     fortran_layout: bool = True,
 ) -> Path:
@@ -1254,6 +1255,9 @@ def write_transport_output(
         radial: radial-coordinate conversion factors for the selected surface.
         state_vectors: solved states, shape ``(n_rhs, total_size)``.
         transport_matrix: the RHSMode=2 (3x3) or RHSMode=3 (2x2) matrix.
+        solver_diagnostics: optional per-``whichRHS`` residual debug datasets
+            (``transportResidualNorms`` etc.), stored as plain extra datasets
+            when the ``SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS`` opt-in is active.
         elapsed_times: per-``whichRHS`` wall-clock seconds (``elapsed time (s)``).
 
     Returns:
@@ -1289,6 +1293,10 @@ def write_transport_output(
             state_vectors=[state_vectors[k] for k in range(n_rhs)], cfg=export_cfg,
         )  # fmt: skip
 
+    if solver_diagnostics:
+        for key, value in solver_diagnostics.items():
+            iteration[str(key)] = np.asarray(value, dtype=np.float64)
+
     text = inp.raw.source_text if (inp.raw is not None and inp.raw.source_text is not None) else ""
     path.parent.mkdir(parents=True, exist_ok=True)
     _write_output_by_suffix(path, base, iteration, text, fortran_layout=fortran_layout)
@@ -1304,6 +1312,7 @@ def write_profile_output(
     geom: FluxSurfaceGeometry,
     radial: RadialCoordinates,
     state_vector: np.ndarray,
+    state_history: "list[np.ndarray] | None" = None,
     elapsed_seconds: float = 0.0,
     converged: bool | None = None,
     solver_method: str | None = None,
@@ -1330,7 +1339,13 @@ def write_profile_output(
         geom: full flux-surface geometry (radial-derivative fields included).
         radial: radial-coordinate conversion factors for the selected surface.
         state_vector: the solved state, shape ``(total_size,)``.
-        elapsed_seconds: wall-clock seconds for ``elapsed time (s)``.
+        state_history: accepted Newton-iterate states for Phi1 runs (each
+            ``(total_size,)``, last one equal to ``state_vector``); every
+            per-iteration dataset is then stored with ``NIterations ==
+            len(state_history)`` trailing entries, matching the Fortran
+            per-accepted-iterate output.  ``None`` stores ``NIterations=1``.
+        elapsed_seconds: wall-clock seconds for ``elapsed time (s)``
+            (recorded on the final iterate).
         converged: Phi1-run Newton convergence flag; when provided (Phi1 runs)
             emits ``didNonlinearCalculationConverge`` (writeHDF5Output.F90).
         solver_method / solver_requested_method: linear-solver method names
@@ -1352,28 +1367,49 @@ def write_profile_output(
     if path.exists() and not overwrite:
         raise FileExistsError(str(path.resolve()))
     state_vector = np.asarray(state_vector, dtype=np.float64).reshape((-1,))
+    if state_history is None:
+        history = [state_vector]
+    else:
+        history = [np.asarray(x, dtype=np.float64).reshape((-1,)) for x in state_history]
+        if not history:
+            history = [state_vector]
+    n_iterations = len(history)
 
     gpsipsi, diotadpsi_hat = _geometry_extras(inp=inp, grids=grids, geom=geom, radial=radial)
     base = _base_fields(
         inp=inp, op=op, grids=grids, geom=geom, radial=radial,
-        gpsipsi=gpsipsi, diotadpsi_hat=diotadpsi_hat, n_rhs=1,
+        gpsipsi=gpsipsi, diotadpsi_hat=diotadpsi_hat, n_rhs=n_iterations,
     )  # fmt: skip
-    if bool(op.include_phi1):
-        _add_phi1_solver_metadata(
-            base, converged=converged, solver_method=solver_method,
-            solver_requested_method=solver_requested_method, residual_norm=residual_norm,
+    # linearSolver* metadata is emitted for every RHSMode=1 run (the retired
+    # legacy writer's contract, pinned by the write-output end-to-end tests);
+    # didNonlinearCalculationConverge only when a Newton (Phi1) solve ran.
+    _add_phi1_solver_metadata(
+        base, converged=converged, solver_method=solver_method,
+        solver_requested_method=solver_requested_method, residual_norm=residual_norm,
+    )  # fmt: skip
+    per_iterate = [
+        _rhsmode1_iteration_fields(
+            inp=inp, op=op, geom=geom, radial=radial, gpsipsi=gpsipsi,
+            u_hat=base["uHat"], g_eff=float(base["GHat"]), i_eff=float(base["IHat"]),
+            nu_n_eff=float(base["nu_n"]), state_vector=x,
+            elapsed_seconds=elapsed_seconds if k == n_iterations - 1 else 0.0,
         )  # fmt: skip
-    iteration = _rhsmode1_iteration_fields(
-        inp=inp, op=op, geom=geom, radial=radial, gpsipsi=gpsipsi,
-        u_hat=base["uHat"], g_eff=float(base["GHat"]), i_eff=float(base["IHat"]),
-        nu_n_eff=float(base["nu_n"]), state_vector=state_vector,
-        elapsed_seconds=elapsed_seconds,
-    )  # fmt: skip
+        for k, x in enumerate(history)
+    ]
+    if n_iterations == 1:
+        iteration = per_iterate[0]
+    else:
+        # Every per-iteration dataset carries a trailing NIterations axis of
+        # length 1 per accepted state; stack the accepted iterates along it.
+        iteration = {
+            key: np.concatenate([fields[key] for fields in per_iterate], axis=-1)
+            for key in per_iterate[0]
+        }
 
     export_cfg = _export_f_config(raw=inp.raw, grids=grids, geom=geom) if inp.raw is not None else None
     if export_cfg is not None:
         _add_export_f_datasets(
-            base, iteration, op=op, state_vectors=[state_vector], cfg=export_cfg
+            base, iteration, op=op, state_vectors=history, cfg=export_cfg
         )
 
     text = inp.raw.source_text if (inp.raw is not None and inp.raw.source_text is not None) else ""
@@ -1439,7 +1475,7 @@ def write_run_solver_trace(
 ) -> Path:
     """Write a versioned solver-trace JSON sidecar from a canonical run.
 
-    Emits the same :class:`sfincs_jax.solvers.diagnostics.SolverTrace` schema
+    Emits the same :class:`sfincs_jax.solver_trace.SolverTrace` schema
     the legacy ``--solver-trace`` path produces, populated from the canonical
     :class:`sfincs_jax.solve.SolveResult` (method, residual norms, convergence,
     per-phase timings).  Solver-implementation fields (``solve_method``,
@@ -1447,9 +1483,9 @@ def write_run_solver_trace(
     GMRES pipeline; the parity-relevant fields (backend, ``rhs_mode``,
     ``selected_path``, ``geometry_scheme``, sizes, residual norm vs target,
     convergence) match.  Imported lazily so the canonical writer keeps no
-    module-load dependency on the retained ``solvers`` package.
+    module-load dependency on the trace schema module.
     """
-    from sfincs_jax.solvers.diagnostics import SolverTrace, write_solver_trace_json  # noqa: PLC0415
+    from sfincs_jax.solver_trace import SolverTrace, write_solver_trace_json  # noqa: PLC0415
 
     try:
         import jax  # noqa: PLC0415
@@ -1514,7 +1550,7 @@ def write_geometry_solver_trace(
     Mirrors :func:`write_run_solver_trace` with ``selected_path="geometry_only"``
     and the solve-dependent fields (method, residuals, convergence) left unset.
     """
-    from sfincs_jax.solvers.diagnostics import SolverTrace, write_solver_trace_json  # noqa: PLC0415
+    from sfincs_jax.solver_trace import SolverTrace, write_solver_trace_json  # noqa: PLC0415
 
     try:
         import jax  # noqa: PLC0415

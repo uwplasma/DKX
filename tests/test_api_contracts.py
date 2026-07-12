@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError, is_dataclass
 import importlib
 from pathlib import Path
+from types import SimpleNamespace
 
 import jax.distributed as jax_distributed
 import pytest
@@ -219,18 +220,16 @@ def test_distributed_runtime_env_bootstrap_fails_closed(monkeypatch: pytest.Monk
 def test_public_write_output_facade_routes_solve_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 
-    def fake_write_sfincs_jax_output_h5(**kwargs):
-        calls.append(kwargs)
-        return Path(kwargs["output_path"])
+    def fake_run_from_namelist(namelist_path, **kwargs):
+        calls.append({"namelist_path": Path(namelist_path), **kwargs})
+        return SimpleNamespace(output_path=Path(kwargs["out_path"]))
 
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", fake_write_sfincs_jax_output_h5)
+    monkeypatch.setattr("sfincs_jax.run.run_from_namelist", fake_run_from_namelist)
 
     request = SolveInputs(
         input_path="input.namelist",
-        wout_path="wout.nc",
         output_path="sfincsOutput.h5",
-        requires_autodiff=True,
-        options={"compute_solution": True, "solve_method": "auto"},
+        options={"solve_method": "auto"},
     )
 
     result = write_output(request)
@@ -238,21 +237,18 @@ def test_public_write_output_facade_routes_solve_inputs(monkeypatch: pytest.Monk
     assert result == Path("sfincsOutput.h5")
     assert calls == [
         {
-            "input_namelist": Path("input.namelist"),
-            "output_path": Path("sfincsOutput.h5"),
-            "wout_path": Path("wout.nc"),
-            "differentiable": True,
-            "compute_solution": True,
+            "namelist_path": Path("input.namelist"),
+            "out_path": Path("sfincsOutput.h5"),
             "solve_method": "auto",
         }
     ]
 
 
 def test_public_write_output_requires_input_and_output_paths(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_write_sfincs_jax_output_h5(**_kwargs):
-        raise AssertionError("writer should not be called for invalid API requests")
+    def fake_run_from_namelist(*_args, **_kwargs):
+        raise AssertionError("runner should not be called for invalid API requests")
 
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", fake_write_sfincs_jax_output_h5)
+    monkeypatch.setattr("sfincs_jax.run.run_from_namelist", fake_run_from_namelist)
 
     with pytest.raises(ValueError, match="input_path is required"):
         write_output(SolveInputs(output_path="sfincsOutput.h5"))
@@ -264,24 +260,21 @@ def test_public_write_output_requires_input_and_output_paths(monkeypatch: pytest
 def test_public_write_output_explicit_kwargs_override_options(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 
-    def fake_write_sfincs_jax_output_h5(**kwargs):
-        calls.append(kwargs)
-        return Path(kwargs["output_path"])
+    def fake_run_from_namelist(namelist_path, **kwargs):
+        calls.append({"namelist_path": Path(namelist_path), **kwargs})
+        return SimpleNamespace(output_path=Path(kwargs["out_path"]))
 
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", fake_write_sfincs_jax_output_h5)
+    monkeypatch.setattr("sfincs_jax.run.run_from_namelist", fake_run_from_namelist)
 
     request = SolveInputs(
         input_path="input.namelist",
         output_path="sfincsOutput.h5",
-        requires_autodiff=True,
-        options={"solve_method": "auto", "compute_solution": True, "differentiable": False},
+        options={"solve_method": "auto"},
     )
-    result = write_output(request, solve_method="structured_csr")
+    result = write_output(request, solve_method="block_tridiagonal")
 
     assert result == Path("sfincsOutput.h5")
-    assert calls[0]["solve_method"] == "structured_csr"
-    assert calls[0]["compute_solution"] is True
-    assert calls[0]["differentiable"] is True
+    assert calls[0]["solve_method"] == "block_tridiagonal"
 
 
 def test_public_read_output_facade_routes_output_reader(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -291,7 +284,7 @@ def test_public_read_output_facade_routes_output_reader(monkeypatch: pytest.Monk
         calls.append(path)
         return {"ok": True}
 
-    monkeypatch.setattr("sfincs_jax.outputs.read_sfincs_output_file", fake_read_sfincs_output_file)
+    monkeypatch.setattr("sfincs_jax.io.read_sfincs_output_file", fake_read_sfincs_output_file)
 
     assert read_output("sfincsOutput.npz") == {"ok": True}
     assert calls == [Path("sfincsOutput.npz")]

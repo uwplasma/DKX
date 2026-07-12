@@ -19,7 +19,8 @@ repo_root = Path(__file__).resolve().parents[2]
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
-from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
+from sfincs_jax.api import write_output
+from sfincs_jax.io import read_sfincs_h5
 
 
 def main() -> int:
@@ -29,7 +30,7 @@ def main() -> int:
     out_dir = Path(__file__).with_suffix("").parent / "output"
     out_dir.mkdir(parents=True, exist_ok=True)
     jax_path = out_dir / "sfincsOutput_jax.h5"
-    write_sfincs_jax_output_h5(input_namelist=input_path, output_path=jax_path)
+    write_output(input_path, jax_path)
 
     a = read_sfincs_h5(jax_path)
     b = read_sfincs_h5(fortran_path)

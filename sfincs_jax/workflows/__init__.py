@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys as _sys
 
-from . import mapped_xgrid as mapped_xgrid
+from . import geometry_adapters as geometry_adapters
 from . import optimization as optimization
 
 # Historical optimization_* modules are compatibility aliases to the durable
@@ -20,7 +20,4 @@ for _name in (
 ):
     _sys.modules[f"{__name__}.{_name}"] = optimization
 
-for _name in ("mapped_xgrid_objectives", "mapped_xgrid_transport_evidence"):
-    _sys.modules[f"{__name__}.{_name}"] = mapped_xgrid
-
-__all__ = ("mapped_xgrid", "optimization")
+__all__ = ("geometry_adapters", "optimization")

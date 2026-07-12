@@ -30,7 +30,7 @@ combination for 3/4, the Sugama ``gradpsidotgradB_overgpsipsi`` curvature for
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 
@@ -40,10 +40,49 @@ import numpy as np
 import pytest
 from scipy.sparse import csr_matrix
 
-from sfincs_jax.discretization.v3 import V3Indexing
 from sfincs_jax.drift_kinetic import KineticOperator
+
+
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.fortran import read_petsc_mat_aij
+
+
+@dataclass(frozen=True)
+class V3Indexing:
+    """Fortran-v3-compatible active degree-of-freedom indexing (indices.F90).
+
+    Test-local copy of the retired ``discretization.v3.V3Indexing`` helper:
+    it maps packed Fortran dof indices to ``(s, x, L, theta, zeta)`` tuples
+    for the element-wise matrix comparisons below.
+    """
+
+    n_species: int
+    n_x: int
+    n_theta: int
+    n_zeta: int
+    n_xi_max: int
+    n_xi_for_x: np.ndarray
+
+    def __post_init__(self) -> None:
+        n_xi_for_x = np.asarray(self.n_xi_for_x, dtype=int)
+        object.__setattr__(self, "n_xi_for_x", n_xi_for_x)
+
+    @property
+    def dke_size(self) -> int:
+        return int(np.sum(self.n_xi_for_x) * self.n_theta * self.n_zeta)
+
+    def build_inverse_f_map(self) -> list[tuple[int, int, int, int, int]]:
+        """Return ``global_index -> (species, x, xi, theta, zeta)`` for the f block."""
+        out: list[tuple[int, int, int, int, int]] = []
+        for i_species in range(self.n_species):
+            for i_x in range(self.n_x):
+                for i_xi in range(int(self.n_xi_for_x[i_x])):
+                    for i_theta in range(self.n_theta):
+                        for i_zeta in range(self.n_zeta):
+                            out.append((i_species, i_x, i_xi, i_theta, i_zeta))
+        if len(out) != self.n_species * self.dke_size:
+            raise AssertionError("Internal error building inverse map.")
+        return out
 
 _REF = Path(__file__).parent / "ref"
 _INPUT = _REF / "magdrift_1species_tiny.input.namelist"

@@ -10,7 +10,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from sfincs_jax.io import read_sfincs_output_file, write_sfincs_jax_output_h5
+from sfincs_jax.api import write_output
+from sfincs_jax.io import read_sfincs_output_file
 from sfincs_jax.plotting import plot_sfincs_output_summary
 
 
@@ -32,12 +33,7 @@ def main(argv: list[str] | None = None) -> None:
 
     for suffix in (".h5", ".nc", ".npz"):
         out_path = out_dir / f"sfincsOutput_getting_started{suffix}"
-        write_sfincs_jax_output_h5(
-            input_namelist=input_path,
-            output_path=out_path,
-            compute_solution=False,
-            verbose=False,
-        )
+        write_output(input_path, out_path)
         data = read_sfincs_output_file(out_path)
         print(f"wrote {out_path} with {len(data)} datasets")
 

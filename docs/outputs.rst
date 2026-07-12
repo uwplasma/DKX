@@ -103,41 +103,31 @@ Python
 .. code-block:: python
 
    from pathlib import Path
-   from sfincs_jax.io import write_sfincs_jax_output_h5
+   from sfincs_jax.api import write_output
 
-   write_sfincs_jax_output_h5(
-       input_namelist=Path("input.namelist"),
-       output_path=Path("sfincsOutput.h5"),
-   )
+   write_output(Path("input.namelist"), Path("sfincsOutput.h5"))
 
 .. code-block:: python
 
    # The suffix chooses the writer; the solve and diagnostics are unchanged.
-   write_sfincs_jax_output_h5(
-       input_namelist=Path("input.namelist"),
-       output_path=Path("sfincsOutput.nc"),
-   )
+   write_output(Path("input.namelist"), Path("sfincsOutput.nc"))
 
-   write_sfincs_jax_output_h5(
-       input_namelist=Path("input.namelist"),
-       output_path=Path("sfincsOutput.npz"),
-   )
+   write_output(Path("input.namelist"), Path("sfincsOutput.npz"))
 
 .. code-block:: python
 
-   write_sfincs_jax_output_h5(
-       input_namelist=Path("input.namelist"),
-       output_path=Path("sfincsOutput.h5"),
+   write_output(
+       Path("input.namelist"),
+       Path("sfincsOutput.h5"),
        wout_path=Path("/path/to/wout.nc"),
    )
 
 .. code-block:: python
 
-   out_path, results = write_sfincs_jax_output_h5(
-       input_namelist=Path("input.namelist"),
-       output_path=Path("sfincsOutput.h5"),
-       return_results=True,
-   )
+   from sfincs_jax.io import read_sfincs_h5
+
+   out_path = write_output(Path("input.namelist"), Path("sfincsOutput.h5"))
+   results = read_sfincs_h5(out_path)
    print(out_path)
    print(results["Ntheta"])
 

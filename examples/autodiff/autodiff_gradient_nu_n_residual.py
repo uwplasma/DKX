@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Autodiff demo: gradient of a parity objective w.r.t. the collision frequency `nu_n`.
 
@@ -13,15 +11,25 @@ It demonstrates a key `sfincs_jax` capability for "design/optimization-style" wo
 differentiate a physics objective through the (matrix-free) residual evaluation.
 """
 
+from __future__ import annotations
+
 from dataclasses import replace
 from pathlib import Path
 
 import jax
 import jax.numpy as jnp
 
+from sfincs_jax.drift_kinetic import KineticOperator, kinetic_operator_from_namelist
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.fortran import read_petsc_vec
-from sfincs_jax.operators.profile_system import full_system_operator_from_namelist, residual_v3_full_system
+
+
+def _with_nu_n(op: KineticOperator, nu_n: jnp.ndarray) -> KineticOperator:
+    """Rebuild the PAS collision operator at a new `nu_n` (coef is linear in it)."""
+    pas = op.pas
+    scale = jnp.asarray(nu_n, dtype=jnp.float64) / pas.nu_n
+    pas2 = replace(pas, nu_n=jnp.asarray(nu_n, dtype=jnp.float64), coef=pas.coef * scale)
+    return replace(op, pas=pas2)
 
 
 def main() -> None:
@@ -31,18 +39,18 @@ def main() -> None:
     r_path = repo_root / "tests" / "ref" / "pas_1species_PAS_noEr_tiny_scheme5.residual.petscbin"
 
     nml = read_sfincs_input(input_path)
-    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    if op.fblock.pas is None:
+    op = kinetic_operator_from_namelist(nml)
+    if op.pas is None:
         raise RuntimeError("Expected collisionOperator=1 (PAS) fixture.")
 
     x_ref = jnp.asarray(read_petsc_vec(x_path).values)
     r_ref = jnp.asarray(read_petsc_vec(r_path).values)
-    nu0 = jnp.asarray(op.fblock.pas.nu_n, dtype=jnp.float64)
+    nu0 = jnp.asarray(op.pas.nu_n, dtype=jnp.float64)
+    rhs = op.rhs()
 
     def loss(nu_n: jnp.ndarray) -> jnp.ndarray:
-        pas2 = replace(op.fblock.pas, nu_n=jnp.asarray(nu_n, dtype=jnp.float64))
-        op2 = replace(op, fblock=replace(op.fblock, pas=pas2))
-        r = residual_v3_full_system(op2, x_ref)
+        op2 = _with_nu_n(op, nu_n)
+        r = op2.apply(x_ref) - rhs
         d = r - r_ref
         return 0.5 * jnp.vdot(d, d)
 

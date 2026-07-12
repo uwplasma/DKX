@@ -418,7 +418,9 @@ def test_examples_do_not_track_large_files() -> None:
     oversized = [
         path.relative_to(REPO_ROOT).as_posix()
         for path in _tracked_example_files()
-        if path.stat().st_size > MAX_TRACKED_EXAMPLE_BYTES
+        # Deleted-but-uncommitted files still appear in `git ls-files`;
+        # size-check only what exists in the working tree.
+        if path.exists() and path.stat().st_size > MAX_TRACKED_EXAMPLE_BYTES
     ]
 
     assert oversized == []

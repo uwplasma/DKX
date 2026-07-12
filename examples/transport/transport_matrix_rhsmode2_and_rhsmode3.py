@@ -25,8 +25,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.problems.transport_solve import solve_v3_transport_matrix_linear_gmres
+from sfincs_jax.run import run_transport_matrix
 
 
 def _write_text(path: Path, text: str) -> Path:
@@ -151,8 +150,7 @@ def main() -> None:
     )
 
     for label, path in (("RHSMode=2", input_rhsmode2), ("RHSMode=3", input_rhsmode3)):
-        nml = read_sfincs_input(path)
-        result = solve_v3_transport_matrix_linear_gmres(nml=nml, tol=1e-10, restart=80, maxiter=400)
+        result = run_transport_matrix(path, tol=1e-10, emit=None)
         tm = np.asarray(result.transport_matrix)
         print(f"\n{label} transportMatrix (mathematical row/col order):\n{tm}\n")
 
