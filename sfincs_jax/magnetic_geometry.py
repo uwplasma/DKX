@@ -114,6 +114,18 @@ class FluxSurfaceGeometry:
     # |grad psiHat|^2 metric (Sugama drifts); populated on request only:
     gpsipsi: jnp.ndarray | None = field(default=None)
 
+    # Radial flux-function derivatives (geometry.F90 ``pPrimeHat``/``diotadpsiHat``;
+    # zero for the analytic schemes, from nearby surfaces for .bc/VMEC input).
+    # ``pPrimeHat`` drives magneticDriftScheme 6, ``diotadpsiHat`` the shear terms
+    # of magneticDriftScheme 4/8:
+    p_prime_hat: float | jnp.ndarray = field(default=0.0)
+    diota_dpsi_hat: float | jnp.ndarray = field(default=0.0)
+
+    # Sugama normal-curvature factor ``(grad psiHat . grad BHat)/gpsiHatpsiHat``
+    # (geometry.F90 ``gradpsidotgradB_overgpsipsi``; magneticDriftScheme 5/6);
+    # populated on request only:
+    grad_psi_dot_grad_b_over_gpsipsi: jnp.ndarray | None = field(default=None)
+
     # ---- flux-surface averages (geometry.F90::computeBIntegrals) ----
 
     def vprime_hat(self, *, theta_weights: jnp.ndarray, zeta_weights: jnp.ndarray) -> jnp.ndarray:
@@ -168,6 +180,9 @@ def _geometry_from_boozer_bhat(
         "db_hat_sup_zeta_dpsi_hat": zeros,
         "db_hat_sup_zeta_dtheta": zeros,
         "gpsipsi": None,
+        "p_prime_hat": 0.0,
+        "diota_dpsi_hat": 0.0,
+        "grad_psi_dot_grad_b_over_gpsipsi": None,
     }
     fields.update(radial_fields)
     return FluxSurfaceGeometry(
@@ -840,6 +855,7 @@ def _from_boozer(
     vmec_radial_option: int = 1,
     geometry_scheme: int = 11,
     compute_gpsipsi: bool = False,
+    compute_grad_psi_dot_grad_b: bool = False,
 ) -> FluxSurfaceGeometry:
     """Boozer geometry from a ``.bc`` equilibrium file (geometryScheme 11/12).
 
@@ -941,18 +957,25 @@ def _from_boozer(
     )
 
     gpsipsi = None
-    if compute_gpsipsi:
-        gpsipsi = jnp.asarray(
-            _gpsipsi_boozer(
-                header=header,
-                surf_old=surf_old,
-                surf_new=surf_new,
-                theta=theta_np,
-                zeta=zeta_np,
-                d_hat=d_hat,
-                radial_weight=radial_weight,
-            )
+    grad_psi_dot_grad_b = None
+    if compute_gpsipsi or compute_grad_psi_dot_grad_b:
+        gpsipsi_np, grad_psi_dot_grad_b_np = _boozer_psi_metrics(
+            header=header,
+            surf_old=surf_old,
+            surf_new=surf_new,
+            theta=theta_np,
+            zeta=zeta_np,
+            b_hat=b_hat,
+            d_hat=d_hat,
+            iota=float(iota),
+            p_prime_hat=float(p_prime_hat),
+            radial_weight=radial_weight,
+            curvature=compute_grad_psi_dot_grad_b,
         )
+        if compute_gpsipsi:
+            gpsipsi = jnp.asarray(gpsipsi_np)
+        if compute_grad_psi_dot_grad_b:
+            grad_psi_dot_grad_b = jnp.asarray(grad_psi_dot_grad_b_np)
 
     return _geometry_from_boozer_bhat(
         n_periods=int(header.n_periods),
@@ -974,6 +997,9 @@ def _from_boozer(
         db_hat_sup_zeta_dpsi_hat=jnp.asarray(d_bsup_zeta_dpsi),
         db_hat_sup_zeta_dtheta=jnp.asarray(d_bsup_zeta_dtheta),
         gpsipsi=gpsipsi,
+        p_prime_hat=float(p_prime_hat),
+        diota_dpsi_hat=float(diotadpsi_hat),
+        grad_psi_dot_grad_b_over_gpsipsi=grad_psi_dot_grad_b,
     )
 
 
@@ -989,8 +1015,12 @@ def _boozer_rzd_series(
 ) -> tuple[np.ndarray, ...]:
     """Evaluate R, Z, and the cylindrical-angle difference Dz with derivatives.
 
-    Used only for the ``gpsipsi`` metric.  Returns
-    ``(R, dR/dtheta, dR/dzeta, dZ/dtheta, dZ/dzeta, Dz, dDz/dtheta, dDz/dzeta)``.
+    Used by the ``gpsipsi`` metric and the Sugama normal-curvature factor
+    (geometry.F90 ``gradpsidotgradB_overgpsipsi``).  Returns the 17-tuple
+    ``(R, dR/dtheta, dR/dzeta, dZ/dtheta, dZ/dzeta, Dz, dDz/dtheta, dDz/dzeta,
+    d2R/dtheta2, d2R/dthetadzeta, d2R/dzeta2,
+    d2Z/dtheta2, d2Z/dthetadzeta, d2Z/dzeta2,
+    d2Dz/dtheta2, d2Dz/dthetadzeta, d2Dz/dzeta2)``.
     """
     theta1 = theta[None, :, None]
     zeta1 = zeta[None, None, :]
@@ -1014,6 +1044,15 @@ def _boozer_rzd_series(
     dz_field = np.zeros_like(r)
     ddz_dt = np.zeros_like(r)
     ddz_dz = np.zeros_like(r)
+    d2r_dt2 = np.zeros_like(r)
+    d2r_dtz = np.zeros_like(r)
+    d2r_dz2 = np.zeros_like(r)
+    d2z_dt2 = np.zeros_like(r)
+    d2z_dtz = np.zeros_like(r)
+    d2z_dz2 = np.zeros_like(r)
+    d2dz_dt2 = np.zeros_like(r)
+    d2dz_dtz = np.zeros_like(r)
+    d2dz_dz2 = np.zeros_like(r)
 
     for i0 in range(0, int(m.shape[0]), chunk):
         i1 = min(int(m.shape[0]), i0 + chunk)
@@ -1029,32 +1068,60 @@ def _boozer_rzd_series(
         dzeta_factor = float(n_periods) * nc
 
         # R has cosine parity where B does; Z and Dz have the opposite parity.
-        r = r + np.sum(rc * np.where(pc, cos_a, sin_a), axis=0)
+        basis_r = np.where(pc, cos_a, sin_a)
+        r = r + np.sum(rc * basis_r, axis=0)
         dr_dt = dr_dt + np.sum(rc * np.where(pc, -mc * sin_a, mc * cos_a), axis=0)
         dr_dz = dr_dz + np.sum(rc * np.where(pc, dzeta_factor * sin_a, -dzeta_factor * cos_a), axis=0)
+        # Second derivatives of A*cos/sin(m theta - Nn zeta) are the original
+        # basis times -m^2 (theta^2), +m*Nn (theta zeta), -Nn^2 (zeta^2).
+        d2r_dt2 = d2r_dt2 + np.sum(-mc * mc * rc * basis_r, axis=0)
+        d2r_dtz = d2r_dtz + np.sum(mc * dzeta_factor * rc * basis_r, axis=0)
+        d2r_dz2 = d2r_dz2 + np.sum(-dzeta_factor * dzeta_factor * rc * basis_r, axis=0)
 
         basis_z = np.where(pc, sin_a, cos_a)
         dtheta_basis_z = np.where(pc, mc * cos_a, -mc * sin_a)
         dzeta_basis_z = np.where(pc, -dzeta_factor * cos_a, dzeta_factor * sin_a)
         z_dt = z_dt + np.sum(zc * dtheta_basis_z, axis=0)
         z_dz = z_dz + np.sum(zc * dzeta_basis_z, axis=0)
+        d2z_dt2 = d2z_dt2 + np.sum(-mc * mc * zc * basis_z, axis=0)
+        d2z_dtz = d2z_dtz + np.sum(mc * dzeta_factor * zc * basis_z, axis=0)
+        d2z_dz2 = d2z_dz2 + np.sum(-dzeta_factor * dzeta_factor * zc * basis_z, axis=0)
         dz_field = dz_field + np.sum(dzc * basis_z, axis=0)
         ddz_dt = ddz_dt + np.sum(dzc * dtheta_basis_z, axis=0)
         ddz_dz = ddz_dz + np.sum(dzc * dzeta_basis_z, axis=0)
-    return r, dr_dt, dr_dz, z_dt, z_dz, dz_field, ddz_dt, ddz_dz
+        d2dz_dt2 = d2dz_dt2 + np.sum(-mc * mc * dzc * basis_z, axis=0)
+        d2dz_dtz = d2dz_dtz + np.sum(mc * dzeta_factor * dzc * basis_z, axis=0)
+        d2dz_dz2 = d2dz_dz2 + np.sum(-dzeta_factor * dzeta_factor * dzc * basis_z, axis=0)
+    return (
+        r, dr_dt, dr_dz, z_dt, z_dz, dz_field, ddz_dt, ddz_dz,
+        d2r_dt2, d2r_dtz, d2r_dz2,
+        d2z_dt2, d2z_dtz, d2z_dz2,
+        d2dz_dt2, d2dz_dtz, d2dz_dz2,
+    )  # fmt: skip
 
 
-def _gpsipsi_boozer(
+def _boozer_psi_metrics(
     *,
     header: BoozerBcHeader,
     surf_old: BoozerBcSurface,
     surf_new: BoozerBcSurface,
     theta: np.ndarray,
     zeta: np.ndarray,
+    b_hat: np.ndarray,
     d_hat: np.ndarray,
+    iota: float,
+    p_prime_hat: float,
     radial_weight: float,
-) -> np.ndarray:
-    """``gpsiHatpsiHat = |grad psiHat|^2`` from the .bc shape harmonics (v3 metric branch)."""
+    curvature: bool = False,
+) -> tuple[np.ndarray, np.ndarray | None]:
+    """``(gpsiHatpsiHat, gradpsidotgradB_overgpsipsi)`` from the .bc shape harmonics.
+
+    The first element is ``|grad psiHat|^2`` (v3 metric branch); the second is the
+    Sugama normal-curvature factor of geometry.F90 (the ``magneticDriftScheme`` 5/6
+    drive), or ``None`` unless ``curvature`` is requested.  ``iota`` must be the
+    final (sign-switched) rotational transform and ``d_hat`` the final Jacobian
+    factor ``BHat^2/(GHat + iota IHat)``, exactly as geometry.F90 uses them.
+    """
     dz_scale = float(2.0 * math.pi / float(header.n_periods)) * (-1.0)
     old = _boozer_rzd_series(
         theta=theta,
@@ -1072,9 +1139,12 @@ def _gpsipsi_boozer(
         n_signed=-np.asarray(surf_new.n, dtype=np.int32),
         dz_scale=dz_scale,
     )
-    r, dr_dt, dr_dz, dz_dt, dz_dz, dz_field, ddz_dt, ddz_dz = (
-        o * radial_weight + h * (1.0 - radial_weight) for o, h in zip(old, new)
-    )
+    (
+        r, dr_dt, dr_dz, dz_dt, dz_dz, dz_field, ddz_dt, ddz_dz,
+        d2r_dt2, d2r_dtz, d2r_dz2,
+        d2z_dt2, d2z_dtz, d2z_dz2,
+        d2dz_dt2, d2dz_dtz, d2dz_dz2,
+    ) = (o * radial_weight + h * (1.0 - radial_weight) for o, h in zip(old, new))  # fmt: skip
 
     geomang = dz_field - zeta[None, :]
     cosg = np.cos(geomang)
@@ -1091,7 +1161,62 @@ def _gpsipsi_boozer(
     gradpsi_x = d_hat * (dy_dt * dz_dz - dz_dt * dy_dz)
     gradpsi_y = d_hat * (dz_dt * dx_dz - dx_dt * dz_dz)
     gradpsi_z = d_hat * (dx_dt * dy_dz - dy_dt * dx_dz)
-    return gradpsi_x * gradpsi_x + gradpsi_y * gradpsi_y + gradpsi_z * gradpsi_z
+    gpsipsi = gradpsi_x * gradpsi_x + gradpsi_y * gradpsi_y + gradpsi_z * gradpsi_z
+    if not curvature:
+        return gpsipsi, None
+
+    # Second derivatives of X = R cos(geomang), Y = R sin(geomang)
+    # (geometry.F90 normal-curvature block, d2Xdtheta2 ... d2Ydzeta2):
+    d2x_dt2 = (
+        d2r_dt2 * cosg
+        - 2.0 * dr_dt * dgeomang_dtheta * sing
+        - r * d2dz_dt2 * sing
+        - r * dgeomang_dtheta * dgeomang_dtheta * cosg
+    )
+    d2x_dtz = (
+        d2r_dtz * cosg
+        - (dr_dt * dgeomang_dzeta + dr_dz * dgeomang_dtheta) * sing
+        - r * d2dz_dtz * sing
+        - r * dgeomang_dtheta * dgeomang_dzeta * cosg
+    )
+    d2x_dz2 = (
+        d2r_dz2 * cosg
+        - 2.0 * dr_dz * dgeomang_dzeta * sing
+        - r * d2dz_dz2 * sing
+        - r * dgeomang_dzeta * dgeomang_dzeta * cosg
+    )
+    d2y_dt2 = (
+        d2r_dt2 * sing
+        + 2.0 * dr_dt * dgeomang_dtheta * cosg
+        + r * d2dz_dt2 * cosg
+        - r * dgeomang_dtheta * dgeomang_dtheta * sing
+    )
+    d2y_dtz = (
+        d2r_dtz * sing
+        + (dr_dt * dgeomang_dzeta + dr_dz * dgeomang_dtheta) * cosg
+        + r * d2dz_dtz * cosg
+        - r * dgeomang_dtheta * dgeomang_dzeta * sing
+    )
+    d2y_dz2 = (
+        d2r_dz2 * sing
+        + 2.0 * dr_dz * dgeomang_dzeta * cosg
+        + r * d2dz_dz2 * cosg
+        - r * dgeomang_dzeta * dgeomang_dzeta * sing
+    )
+
+    # C = (d2/dzeta2 + 2 iota d2/dthetadzeta + iota^2 d2/dtheta2) * DHat^2 per
+    # Cartesian component (the field-line-following second derivative):
+    iota_f = float(iota)
+    d_hat2 = d_hat * d_hat
+    cx = (d2x_dz2 + 2.0 * iota_f * d2x_dtz + iota_f * iota_f * d2x_dt2) * d_hat2
+    cy = (d2y_dz2 + 2.0 * iota_f * d2y_dtz + iota_f * iota_f * d2y_dt2) * d_hat2
+    cz = (d2z_dz2 + 2.0 * iota_f * d2z_dtz + iota_f * iota_f * d2z_dt2) * d_hat2
+
+    b_hat = np.asarray(b_hat, dtype=np.float64)
+    grad_psi_dot_grad_b = (cx * gradpsi_x + cy * gradpsi_y + cz * gradpsi_z) / (
+        b_hat * gpsipsi
+    ) - float(p_prime_hat) / b_hat
+    return gpsipsi, grad_psi_dot_grad_b
 
 
 # =============================================================================
@@ -1391,6 +1516,7 @@ def _from_vmec(
     helicity_l: int = 0,
     chunk: int = 256,
     compute_gpsipsi: bool = False,
+    compute_grad_psi_dot_grad_b: bool = False,
 ) -> FluxSurfaceGeometry:
     """VMEC geometry (``geometryScheme = 5``), from a wout path or preloaded arrays.
 
@@ -1578,23 +1704,49 @@ def _from_vmec(
     d_hat = 1.0 / acc["d_hat"]  # accumulated the Jacobian; DHat is its inverse
     iota = float(w.iotas[i_half0] * w_half0 + w.iotas[i_half1] * w_half1)
 
+    # Radial flux-function derivatives (geometry.F90 computeBHat_VMEC):
+    # diotadpsiHat from the bracketing half-mesh iotas, pPrimeHat = mu0 dp/dpsiHat
+    # from the full-mesh pressure finite difference indexed on the half mesh.
+    psi_n_half_of = np.concatenate(([0.0], interp.psi_n_half))  # dummy 0 as in the file tables
+    dpsi_n_half = float(psi_n_half_of[i_half1] - psi_n_half_of[i_half0])
+    diotadpsi_hat = 0.0
+    if dpsi_n_half != 0.0:
+        diotadpsi_hat = float(w.iotas[i_half1] - w.iotas[i_half0]) / dpsi_n_half / float(psi_a_hat)
+    presf = np.asarray(w.presf, dtype=np.float64)
+    dp_dpsi_hat = np.zeros_like(presf)
+    dp_dpsi_hat[1:] = (presf[1:] - presf[:-1]) / float(dpsi)
+    p_prime_hat = float(_MU0 * (dp_dpsi_hat[i_half0] * w_half0 + dp_dpsi_hat[i_half1] * w_half1))
+
     gpsipsi = None
-    if compute_gpsipsi:
-        gpsipsi = jnp.asarray(
-            _gpsipsi_vmec(
-                w=w,
-                interp=interp,
-                idx=idx,
-                idx_asym=idx_asym,
-                theta=theta_np,
-                zeta=zeta_np,
-                dpsi=dpsi,
-                ripple_scale=float(ripple_scale),
-                helicity_n=int(helicity_n),
-                helicity_l=int(helicity_l),
-                chunk=int(chunk),
-            )
+    grad_psi_dot_grad_b = None
+    if compute_gpsipsi or compute_grad_psi_dot_grad_b:
+        gpsipsi_np, (g_tt, g_tz, g_zz, g_pt, g_pz) = _gpsipsi_vmec(
+            w=w,
+            interp=interp,
+            idx=idx,
+            idx_asym=idx_asym,
+            theta=theta_np,
+            zeta=zeta_np,
+            dpsi=dpsi,
+            ripple_scale=float(ripple_scale),
+            helicity_n=int(helicity_n),
+            helicity_l=int(helicity_l),
+            chunk=int(chunk),
         )
+        if compute_gpsipsi:
+            gpsipsi = jnp.asarray(gpsipsi_np)
+        if compute_grad_psi_dot_grad_b:
+            # geometry.F90 computeBHat_VMEC: gradpsidotgradB_overgpsipsi from the
+            # covariant metric and the BHat derivatives.
+            metric_denom = g_tt * g_zz - g_tz * g_tz
+            grad_psi_dot_grad_b = jnp.asarray(
+                acc["db_dpsi"]
+                + (
+                    (g_tz * g_pz - g_pt * g_zz) * acc["db_dtheta"]
+                    + (g_pt * g_tz - g_tt * g_pz) * acc["db_dzeta"]
+                )
+                / metric_denom
+            )
 
     zeros = np.zeros(shape, dtype=np.float64)
     return FluxSurfaceGeometry(
@@ -1624,6 +1776,9 @@ def _from_vmec(
         db_hat_sup_zeta_dpsi_hat=jnp.asarray(zeros),
         db_hat_sup_zeta_dtheta=jnp.asarray(acc["db_sup_zeta_dtheta"]),
         gpsipsi=gpsipsi,
+        p_prime_hat=p_prime_hat,
+        diota_dpsi_hat=diotadpsi_hat,
+        grad_psi_dot_grad_b_over_gpsipsi=grad_psi_dot_grad_b,
     )
 
 
@@ -1640,8 +1795,12 @@ def _gpsipsi_vmec(
     helicity_l: int,
     chunk: int,
     idx_asym: np.ndarray | None = None,
-) -> np.ndarray:
+) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
     """``gpsiHatpsiHat`` for VMEC input, from the R/Z shape tables (v3 metric branch).
+
+    Returns ``(gpsipsi, (g_tt, g_tz, g_zz, g_pt, g_pz))`` — the metric components
+    are what geometry.F90 combines with the ``BHat`` derivatives to form the
+    Sugama normal-curvature factor ``gradpsidotgradB_overgpsipsi``.
 
     For stellarator-asymmetric equilibria, ``idx_asym`` supplies the antisymmetric
     mode set whose ``rmns``/``zmnc`` partners are added to R/Z and their
@@ -1774,7 +1933,8 @@ def _gpsipsi_vmec(
     g_pp = dx_dp * dx_dp + dy_dp * dy_dp + dz_dp * dz_dp
 
     denom = g_tt * g_zz - g_tz * g_tz
-    return 1.0 / (g_pp + (g_pt * (g_tz * g_pz - g_pt * g_zz) + g_pz * (g_pt * g_tz - g_tt * g_pz)) / denom)
+    gpsipsi = 1.0 / (g_pp + (g_pt * (g_tz * g_pz - g_pt * g_zz) + g_pz * (g_pt * g_tz - g_tt * g_pz)) / denom)
+    return gpsipsi, (g_tt, g_tz, g_zz, g_pt, g_pz)
 
 
 # Bind constructors (defined as module-level functions to keep the dataclass

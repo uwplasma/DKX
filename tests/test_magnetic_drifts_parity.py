@@ -1,13 +1,13 @@
-"""Element-wise parity of the canonical tangential magnetic-drift term vs Fortran v3.
+"""Element-wise parity of the canonical tangential magnetic-drift terms vs Fortran v3.
 
-The tangential (poloidal+toroidal) magnetic drifts (``magneticDriftScheme=1``)
+The tangential (poloidal+toroidal) magnetic drifts (``magneticDriftScheme`` 1-9)
 are consolidated into :class:`sfincs_jax.drift_kinetic.KineticOperator`
-(``KineticOperator._magnetic_drifts``).  These tests isolate that term from the
-canonical operator — the difference of ``apply_f`` with and without the drifts —
-and compare it, element by element, against the frozen Fortran ``whichMatrix=1``
-PETSc matrix for a tiny Boozer (geometryScheme 11) fixture.
+(``KineticOperator._magnetic_drifts``).  These tests compare the canonical
+operator, element by element, against frozen Fortran ``whichMatrix=1`` PETSc
+matrices for tiny Boozer (geometryScheme 11, W7-X standard) fixtures.
 
-Because ``Er=0`` and the collision frequency is zero in this fixture, the only
+Scheme 1 (the original collisionless ``magdrift_1species_tiny`` fixture with
+``Er=0`` and zero collision frequency) is validated term-by-term: the only
 matrix entries coupling Legendre modes ``L`` to ``L±2`` come from the magnetic
 drift, and the only ``ΔL=0`` f-block entries do too, so the filtered slices below
 are unambiguously the magnetic-drift contribution:
@@ -16,6 +16,16 @@ are unambiguously the magnetic-drift contribution:
 - ``|ΔL|=2`` off-diagonal in zeta   -> the d/dzeta drift term,
 - ``|ΔL|=2`` diagonal in (theta,zeta) -> the diagonal parts of d/dtheta, d/dzeta
   and the non-standard d/dxi drift term.
+
+Schemes 2-9 (the ``magdrift_1species_tiny_scheme<N>`` fixtures, identical decks
+except ``magneticDriftScheme`` and a nonzero PAS collisionality so the paired
+end-to-end goldens are well-conditioned) are validated on the FULL f-block:
+every (row, col) entry of the canonical ``apply_f`` — streaming + mirror + PAS +
+magnetic drifts — must equal the Fortran matrix, which pins the per-scheme
+``geometricFactor1/2/3`` variants (BDotCurlB for scheme 2, the field-line
+combination for 3/4, the Sugama ``gradpsidotgradB_overgpsipsi`` curvature for
+5/6, the dropped d/dxi term for 7, and the ``diotadpsiHat`` shear terms for
+4/8) element-wise against populateMatrix.F90.
 """
 
 from __future__ import annotations
@@ -140,3 +150,49 @@ def test_magnetic_drift_diag_theta_zeta_offdiag2_matches_fortran() -> None:
 def test_magnetic_drift_diagonal_in_l_matches_fortran() -> None:
     """Parity for the ΔL=0 magnetic-drift entries (diagonal-in-L drift coefficients)."""
     _assert_slice(_pair_masks()["diag_l"], atol=3e-12)
+
+
+# ---------------------------------------------------------------------------
+# magneticDriftScheme 2-9: full f-block parity vs Fortran whichMatrix_1
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("scheme", (2, 3, 4, 5, 6, 7, 8, 9))
+def test_magnetic_drift_scheme_full_fblock_matches_fortran(scheme: int) -> None:
+    """Every f-block entry of the canonical operator equals the Fortran matrix.
+
+    The fixtures carry PAS collisions (``nu_n = 8.4774e-3``), so this compares
+    the complete kinetic operator — streaming, mirror, collisions, and the
+    scheme-specific magnetic-drift terms — element-wise at rounding level.
+    """
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("SFINCS_JAX_EQUILIBRIA_DIRS", str(_REF))
+        nml = read_sfincs_input(_REF / f"magdrift_1species_tiny_scheme{scheme}.input.namelist")
+        op = KineticOperator.from_namelist(nml)
+    assert op.with_magnetic_drifts and op.magnetic_drift_scheme == scheme
+
+    eye = jnp.eye(op.f_size, dtype=jnp.float64)
+    flat = lambda v: op.apply_f(v.reshape(op.f_shape)).reshape(-1)  # noqa: E731
+    m = np.asarray(jax.vmap(flat)(eye)).T  # columns = apply(e_j); rectangular layout
+
+    a = read_petsc_mat_aij(_REF / f"magdrift_1species_tiny_scheme{scheme}.whichMatrix_1.petscbin")
+    a = csr_matrix((a.data, a.col_ind, a.row_ptr), shape=a.shape).toarray()
+
+    indexing = V3Indexing(
+        n_species=op.n_species,
+        n_x=op.n_x,
+        n_theta=op.n_theta,
+        n_zeta=op.n_zeta,
+        n_xi_max=op.n_xi,
+        n_xi_for_x=np.asarray(op.n_xi_for_x, dtype=int),
+    )
+    inv = indexing.build_inverse_f_map()
+    comps = np.asarray(inv, dtype=int).T  # (5, n_f): s, ix, L, itheta, izeta
+    s, ix, ell, it, iz = comps
+    rect = (((s * op.n_x + ix) * op.n_xi + ell) * op.n_theta + it) * op.n_zeta + iz
+    n_f = rect.shape[0]
+
+    a_f = a[:n_f, :n_f]  # Fortran packed order
+    m_packed = m[np.ix_(rect, rect)]  # canonical, mapped to packed order
+    assert np.max(np.abs(a_f)) > 1.0, "expected O(1) f-block entries"
+    np.testing.assert_allclose(m_packed, a_f, rtol=0.0, atol=3e-12)

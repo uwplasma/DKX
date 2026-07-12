@@ -72,14 +72,11 @@ Three consumers, one source of truth (plan §2.2):
    ``whichRHS`` gradient/E_parallel overwrites used by RHSMode 2 and 3
    transport-matrix loops.
 
-Deferred (raise ``NotImplementedError`` in :meth:`from_namelist`, tracked for a
-follow-up pass; the old ``operators/profile_*`` code paths remain authoritative
-for them until then):
+Every ``magneticDriftScheme`` 0-9 is canonical (the tangential magnetic drifts
+couple L, L±2 so :meth:`to_block_tridiagonal` refuses drift decks and tier-2
+GCROT owns them).  With that, the last deferred physics family is consolidated;
+the remaining refusals below are numerical-surface gaps, not physics:
 
-- ``magneticDriftScheme`` 2-9 (only scheme 1, the ``force0RadialCurrentInEquilibrium``
-  poloidal+toroidal tangential magnetic drift, is consolidated here; scheme 1
-  couples L, L±2 so :meth:`to_block_tridiagonal` refuses it and tier-2 GCROT owns
-  those decks);
 - ``collisionOperator`` other than 0 (Fokker-Planck) and 1 (pitch-angle
   scattering);
 - ``collisionOperator=0`` with the uniform/Chebyshev speed grids
@@ -235,7 +232,7 @@ class KineticOperator:
     streaming             L±1        ``x_j (l±-coupling) v_|| b·∇``; diagonal in x
     mirror                L±1        ``-x_j (b·∇B)/(2B)``; diagonal in x
     ExB (d/dtheta,dzeta)  diag       present iff the kinetic dPhiHat/dpsiHat ≠ 0
-    magnetic drift        L, L±2     ``magneticDriftScheme=1``; d/dtheta, d/dzeta
+    magnetic drift        L, L±2     ``magneticDriftScheme`` 1-9; d/dtheta, d/dzeta
                                      (upwinded) + non-standard d/dxi; per-species
     Er xiDot              L, L±2     ``includeElectricFieldTermInXiDot``
     Er xDot               L, L±2     ``includeXDotTerm``; dense in x (x ddx)
@@ -343,15 +340,22 @@ class KineticOperator:
     ddx_xdot_plus: jnp.ndarray | None = None  # (X,X) or None
     ddx_xdot_minus: jnp.ndarray | None = None  # (X,X) or None
 
-    # ---- tangential magnetic drifts (``magneticDriftScheme=1``;
+    # ---- tangential magnetic drifts (``magneticDriftScheme`` 1-9;
     #      populateMatrix.F90 d/dtheta, d/dzeta, and non-standard d/dxi drift
-    #      terms with ``force0RadialCurrentInEquilibrium=.true.``). All default to
-    #      the no-drift configuration so the base operators are unchanged.  The
-    #      d/dtheta and d/dzeta terms couple L, L±2 through the upwinded
-    #      ``ddtheta/ddzeta_magneticDrift_plus/minus`` stencils; the geometry
-    #      arrays are the radial (psi) B-field derivatives that only the Boozer/
-    #      VMEC geometries (schemes 5/11/12) populate. ----
+    #      terms with ``force0RadialCurrentInEquilibrium=.true.``, the hardcoded
+    #      v3 value). All default to the no-drift configuration so the base
+    #      operators are unchanged.  The d/dtheta and d/dzeta terms couple L,
+    #      L±2 through the upwinded ``ddtheta/ddzeta_magneticDrift_plus/minus``
+    #      stencils; the geometry arrays are the radial (psi) B-field
+    #      derivatives that only the Boozer/VMEC geometries (schemes 5/11/12)
+    #      populate.  ``magnetic_drift_scheme`` selects the geometricFactor1/2/3
+    #      variant (see :meth:`_magnetic_drifts`); the flux-function scalars
+    #      ``iota``/``g_hat``/``diota_dpsi_hat``/``p_prime_hat`` feed the
+    #      scheme 3/4/8 shear terms and scheme 6 pressure term, and
+    #      ``grad_psi_dot_grad_b_over_gpsipsi`` is the Sugama normal-curvature
+    #      factor of schemes 5/6. ----
     with_magnetic_drifts: bool = False
+    magnetic_drift_scheme: int = 0
     b_hat_sub_psi: jnp.ndarray | None = None  # (T,Z)
     db_hat_dpsi_hat: jnp.ndarray | None = None  # (T,Z)
     db_hat_sub_psi_dtheta: jnp.ndarray | None = None  # (T,Z)
@@ -362,6 +366,11 @@ class KineticOperator:
     ddtheta_magdrift_minus: jnp.ndarray | None = None  # (T,T)
     ddzeta_magdrift_plus: jnp.ndarray | None = None  # (Z,Z) upwinded d/dzeta
     ddzeta_magdrift_minus: jnp.ndarray | None = None  # (Z,Z)
+    iota: jnp.ndarray | None = None  # scalar (schemes 3/4/8)
+    g_hat: jnp.ndarray | None = None  # scalar GHat (scheme 8 shear term)
+    diota_dpsi_hat: jnp.ndarray | None = None  # scalar (schemes 4/8)
+    p_prime_hat: jnp.ndarray | None = None  # scalar (scheme 6)
+    grad_psi_dot_grad_b_over_gpsipsi: jnp.ndarray | None = None  # (T,Z) (schemes 5/6)
 
     # ------------------------------------------------------------------
     # pytree protocol
@@ -385,6 +394,7 @@ class KineticOperator:
         "include_phi1_in_kinetic",
         "with_adiabatic",
         "with_magnetic_drifts",
+        "magnetic_drift_scheme",
     )
     _CHILD_FIELDS = (
         "x",
@@ -437,6 +447,11 @@ class KineticOperator:
         "ddtheta_magdrift_minus",
         "ddzeta_magdrift_plus",
         "ddzeta_magdrift_minus",
+        "iota",
+        "g_hat",
+        "diota_dpsi_hat",
+        "p_prime_hat",
+        "grad_psi_dot_grad_b_over_gpsipsi",
         "ddx_xdot_plus",
         "ddx_xdot_minus",
     )
@@ -720,25 +735,166 @@ class KineticOperator:
 
         return out
 
+    def _drift_geometric_factors(
+        self,
+    ) -> tuple[
+        jnp.ndarray | None,
+        jnp.ndarray | None,
+        jnp.ndarray | None,
+        jnp.ndarray | None,
+        jnp.ndarray | None,
+        jnp.ndarray | None,
+        jnp.ndarray | None,
+    ]:
+        """``(gf1_t, gf2_t, gf3_t, gf1_z, gf2_z, gf3_z, xi_temp)`` per scheme.
+
+        Direct transcription of the three ``select case (magneticDriftScheme)``
+        blocks of populateMatrix.F90 (d/dtheta, d/dzeta, d/dxi) with the
+        hardcoded v3 ``force0RadialCurrentInEquilibrium=.true.``.  ``None``
+        marks a term that scheme drops entirely (schemes 3/4 have no d/dtheta
+        drift; schemes 3/4/7 have no d/dxi drift; ``gf3`` is scheme-2 only).
+
+        What distinguishes the scheme-1 family:
+
+        * scheme 2 = scheme 1 plus the ``geometricFactor3`` terms built from
+          ``BDotCurlB`` (geometry.F90),
+        * scheme 7 = scheme 1 without the non-standard d/dxi drift term,
+        * scheme 8 = scheme 1 with the magnetic-shear correction
+          ``-diotadpsiHat GHat BHat^theta/(DHat iota^3)`` inside the d/dzeta
+          ``geometricFactor2``,
+        * scheme 9 = scheme 1 exactly: its intended d/dtheta shear term indexes
+          ``BHat_sup_theta(itheta,izetaRow)`` where both variables are the -1
+          sentinels of that block (populateMatrix.F90:574), an out-of-bounds
+          read observed to contribute exactly 0 in the reference build (the
+          scheme-9 golden matrix is bit-identical to scheme 1's), so the
+          faithful port adds nothing.
+
+        Schemes 3/4 fold the poloidal drift into the d/dzeta term via the
+        field-line-following combination ``d/dzeta + (1/iota) d/dtheta``
+        (scheme 4 adds the ``-diotadpsiHat BHat_sub_zeta/iota^2`` shear piece);
+        schemes 5/6 are the Sugama forms built from
+        ``gradpsidotgradB_overgpsipsi`` (scheme 5 regularized, scheme 6 the
+        unregularized ``2 pPrimeHat/BHat`` pressure form).
+        """
+        scheme = int(self.magnetic_drift_scheme)
+        b = self.b_hat
+        gpg = self.grad_psi_dot_grad_b_over_gpsipsi
+
+        # ---- d/dtheta block (populateMatrix.F90 case (…) at the drift-theta term) ----
+        if scheme in (1, 2, 7, 8, 9):
+            gf1_t = self.b_hat_sub_zeta * self.db_hat_dpsi_hat - self.b_hat_sub_psi * self.db_hat_dzeta
+            gf2_t = 2.0 * b * (self.db_hat_sub_psi_dzeta - self.db_hat_sub_zeta_dpsi_hat)
+        elif scheme in (3, 4):
+            gf1_t = None
+            gf2_t = None
+        elif scheme == 5:
+            gf1_t = self.b_hat_sub_zeta * gpg
+            gf2_t = -2.0 * gf1_t
+        elif scheme == 6:
+            gf1_t = self.b_hat_sub_zeta * gpg
+            gf2_t = self.b_hat_sub_zeta * 2.0 * self.p_prime_hat / b  # unregularized
+        else:
+            raise ValueError(f"Invalid magneticDriftScheme={scheme} in d/dtheta term")
+
+        # ---- d/dzeta block ----
+        if scheme in (1, 2, 7, 9):
+            gf1_z = self.b_hat_sub_psi * self.db_hat_dtheta - self.b_hat_sub_theta * self.db_hat_dpsi_hat
+            gf2_z = 2.0 * b * (self.db_hat_sub_theta_dpsi_hat - self.db_hat_sub_psi_dtheta)
+        elif scheme in (3, 4):
+            iota = self.iota
+            gf1_z = (
+                self.b_hat_sub_psi * (self.db_hat_dtheta + self.db_hat_dzeta / iota)
+                - (self.b_hat_sub_theta + self.b_hat_sub_zeta / iota) * self.db_hat_dpsi_hat
+            )
+            shear = (
+                -self.diota_dpsi_hat / (iota * iota) * self.b_hat_sub_zeta if scheme == 4 else 0.0
+            )
+            gf2_z = 2.0 * b * (
+                self.db_hat_sub_theta_dpsi_hat
+                + self.db_hat_sub_zeta_dpsi_hat / iota
+                + shear
+                - (self.db_hat_sub_psi_dtheta + self.db_hat_sub_psi_dzeta / iota)
+            )
+        elif scheme == 5:
+            gf1_z = -self.b_hat_sub_theta * gpg
+            gf2_z = -2.0 * gf1_z
+        elif scheme == 6:
+            gf1_z = -self.b_hat_sub_theta * gpg
+            gf2_z = -self.b_hat_sub_theta * 2.0 * self.p_prime_hat / b  # unregularized
+        elif scheme == 8:
+            iota = self.iota
+            gf1_z = self.b_hat_sub_psi * self.db_hat_dtheta - self.b_hat_sub_theta * self.db_hat_dpsi_hat
+            gf2_z = 2.0 * b * (
+                self.db_hat_sub_theta_dpsi_hat
+                - self.db_hat_sub_psi_dtheta
+                - self.diota_dpsi_hat
+                * self.g_hat
+                * self.b_hat_sup_theta
+                / (self.d_hat * iota * iota * iota)
+            )
+        else:
+            raise ValueError(f"Invalid magneticDriftScheme={scheme} in d/dzeta term")
+
+        # ---- geometricFactor3 (scheme 2 only): BDotCurlB terms.  geometry.F90
+        #      computes BDotCurlB with force0RadialCurrentInEquilibrium=.true.,
+        #      i.e. without the BHat_sub_psi curl piece. ----
+        if scheme == 2:
+            b_dot_curl_b = self.d_hat * (
+                self.b_hat_sub_theta * (self.db_hat_sub_psi_dzeta - self.db_hat_sub_zeta_dpsi_hat)
+                + self.b_hat_sub_zeta * (self.db_hat_sub_theta_dpsi_hat - self.db_hat_sub_psi_dtheta)
+            )
+            gf3_t = b_dot_curl_b * self.b_hat_sup_theta / (b * self.d_hat)
+            gf3_z = b_dot_curl_b * self.b_hat_sup_zeta / (b * self.d_hat)
+        else:
+            gf3_t = None
+            gf3_z = None
+
+        # ---- non-standard d/dxi block ----
+        if scheme in (1, 2, 8, 9):
+            xi_temp = (
+                self.db_hat_sub_psi_dzeta - self.db_hat_sub_zeta_dpsi_hat
+            ) * self.db_hat_dtheta + (
+                self.db_hat_sub_theta_dpsi_hat - self.db_hat_sub_psi_dtheta
+            ) * self.db_hat_dzeta
+        elif scheme in (3, 4, 7):
+            xi_temp = None
+        elif scheme in (5, 6):
+            xi_temp = (
+                -(
+                    self.b_hat_sub_zeta * self.db_hat_dtheta
+                    - self.b_hat_sub_theta * self.db_hat_dzeta
+                )
+                / b
+                * gpg
+            )
+        else:
+            raise ValueError(f"Invalid magneticDriftScheme={scheme} in d/dxi term")
+
+        return gf1_t, gf2_t, gf3_t, gf1_z, gf2_z, gf3_z, xi_temp
+
     def _magnetic_drifts(self, f: jnp.ndarray) -> jnp.ndarray:
         """Tangential (poloidal+toroidal) magnetic-drift streaming terms.
 
         The three ``populateMatrix.F90`` magnetic-drift blocks for
-        ``magneticDriftScheme=1`` with ``force0RadialCurrentInEquilibrium=.true.``
-        (so ``geometricFactor3=0``):
+        ``magneticDriftScheme`` 1-9 with the hardcoded v3
+        ``force0RadialCurrentInEquilibrium=.true.``:
 
-        * the d/dtheta drift term (``geometricFactor1/2`` built from
-          ``BHat_sub_zeta dBHat/dpsiHat`` etc.),
+        * the d/dtheta drift term,
         * the d/dzeta drift term, and
-        * the non-standard d/dxi drift term.
+        * the non-standard d/dxi drift term,
+
+        with the per-scheme ``geometricFactor1/2/3`` variants supplied by
+        :meth:`_drift_geometric_factors`.
 
         The d/dtheta and d/dzeta terms couple Legendre rows L to L (the
-        ``2(3L^2+3L-2)`` / ``(2L^2+2L-1)`` diagonal coefficients) and to L±2
-        (the ``(L+2)(L+1)/…`` / ``(L-1)L/…`` couplings); the d/dxi term couples L
-        to L and L±2 (the ``(L+1)L/…`` diagonal and ``(L+3)(L+2)(L+1)/…`` /
-        ``-L(L-1)(L-2)/…`` couplings).  Because of the L±2 coupling the operator
-        is not block-tridiagonal in L, so :meth:`to_block_tridiagonal` refuses it
-        and tier-2 GCROT owns these decks.
+        ``2(3L^2+3L-2)`` / ``(2L^2+2L-1)`` / ``-2L(L+1)`` diagonal coefficients
+        of geometricFactor1/2/3) and to L±2 (the ``(L+2)(L+1)/…`` /
+        ``(L-1)L/…`` couplings of ``gf1 + gf2 - 3 gf3``); the d/dxi term
+        couples L to L and L±2 (the ``(L+1)L/…`` diagonal and
+        ``(L+3)(L+2)(L+1)/…`` / ``-L(L-1)(L-2)/…`` couplings).  Because of the
+        L±2 coupling the operator is not block-tridiagonal in L, so
+        :meth:`to_block_tridiagonal` refuses it and tier-2 GCROT owns these
+        decks.
 
         Per-species ``THat``/``Z`` enter via ``factor = Delta THat DHat x^2 /
         (2 Z BHat^3)`` and the upwind selector ``sign(geometricFactor1 DHat(1,1)
@@ -762,10 +918,10 @@ class KineticOperator:
 
         ell = jnp.arange(self.n_xi, dtype=jnp.float64)
         denom0 = (2.0 * ell + 3.0) * (2.0 * ell - 1.0)
-        # d/dtheta, d/dzeta diagonal-in-L coefficients for (geometricFactor1,
-        # geometricFactor2); geometricFactor3 = 0.
+        # d/dtheta, d/dzeta diagonal-in-L coefficients for geometricFactor1/2/3.
         c1 = 2.0 * (3.0 * ell * ell + 3.0 * ell - 2.0) / denom0
         c2 = (2.0 * ell * ell + 2.0 * ell - 1.0) / denom0
+        c3 = -2.0 * ell * (ell + 1.0) / denom0
         # L±2 couplings shared by the d/dtheta and d/dzeta terms.
         off_plus = (ell + 2.0) * (ell + 1.0) / ((2.0 * ell + 5.0) * (2.0 * ell + 3.0))
         off_minus = jnp.where(ell > 1, (ell - 1.0) * ell / ((2.0 * ell - 3.0) * (2.0 * ell - 1.0)), 0.0)
@@ -777,48 +933,57 @@ class KineticOperator:
             term_minus = jnp.pad(term_minus, ((0, 0), (0, 0), (2, 0), (0, 0), (0, 0)))
             return term_plus + term_minus
 
+        gf1_t, gf2_t, gf3_t, gf1_z, gf2_z, gf3_z, xi_temp = self._drift_geometric_factors()
+        out = jnp.zeros_like(f)
+
         # ---- d/dtheta magnetic-drift term ----
-        gf1_t = self.b_hat_sub_zeta * self.db_hat_dpsi_hat - self.b_hat_sub_psi * self.db_hat_dzeta  # (T,Z)
-        gf2_t = 2.0 * b * (self.db_hat_sub_psi_dzeta - self.db_hat_sub_zeta_dpsi_hat)  # (T,Z)
-        gf12_t = gf1_t + gf2_t
-        dtheta_plus = jnp.einsum("ij,sxljz->sxliz", self.ddtheta_magdrift_plus, fm)
-        dtheta_minus = jnp.einsum("ij,sxljz->sxliz", self.ddtheta_magdrift_minus, fm)
-        use_plus_t = (gf1_t[None, :, :] * dhat11 / self.z_s[:, None, None]) > 0  # (S,T,Z)
-        dtheta_f = jnp.where(use_plus_t[:, None, None, :, :], dtheta_plus, dtheta_minus)
-        diag_t = c1[:, None, None] * gf1_t[None, :, :] + c2[:, None, None] * gf2_t[None, :, :]  # (L,T,Z)
-        theta = diag_t[None, None, :, :, :] * dtheta_f + gf12_t[None, None, None, :, :] * _lpm2(
-            dtheta_f, off_plus, off_minus
-        )
+        if gf1_t is not None:
+            gf3t = gf3_t if gf3_t is not None else jnp.zeros_like(gf1_t)
+            gf123_t = gf1_t + gf2_t - 3.0 * gf3t
+            dtheta_plus = jnp.einsum("ij,sxljz->sxliz", self.ddtheta_magdrift_plus, fm)
+            dtheta_minus = jnp.einsum("ij,sxljz->sxliz", self.ddtheta_magdrift_minus, fm)
+            use_plus_t = (gf1_t[None, :, :] * dhat11 / self.z_s[:, None, None]) > 0  # (S,T,Z)
+            dtheta_f = jnp.where(use_plus_t[:, None, None, :, :], dtheta_plus, dtheta_minus)
+            diag_t = (
+                c1[:, None, None] * gf1_t[None, :, :]
+                + c2[:, None, None] * gf2_t[None, :, :]
+                + c3[:, None, None] * gf3t[None, :, :]
+            )  # (L,T,Z)
+            theta = diag_t[None, None, :, :, :] * dtheta_f + gf123_t[None, None, None, :, :] * _lpm2(
+                dtheta_f, off_plus, off_minus
+            )
+            out = out + base_s[:, None, None, :, :] * x2[None, :, None, None, None] * theta
 
         # ---- d/dzeta magnetic-drift term ----
-        gf1_z = self.b_hat_sub_psi * self.db_hat_dtheta - self.b_hat_sub_theta * self.db_hat_dpsi_hat  # (T,Z)
-        gf2_z = 2.0 * b * (self.db_hat_sub_theta_dpsi_hat - self.db_hat_sub_psi_dtheta)  # (T,Z)
-        gf12_z = gf1_z + gf2_z
-        dzeta_plus = jnp.einsum("ij,sxltj->sxlti", self.ddzeta_magdrift_plus, fm)
-        dzeta_minus = jnp.einsum("ij,sxltj->sxlti", self.ddzeta_magdrift_minus, fm)
-        use_plus_z = (gf1_z[None, :, :] * dhat11 / self.z_s[:, None, None]) > 0  # (S,T,Z)
-        dzeta_f = jnp.where(use_plus_z[:, None, None, :, :], dzeta_plus, dzeta_minus)
-        diag_z = c1[:, None, None] * gf1_z[None, :, :] + c2[:, None, None] * gf2_z[None, :, :]  # (L,T,Z)
-        zeta = diag_z[None, None, :, :, :] * dzeta_f + gf12_z[None, None, None, :, :] * _lpm2(
-            dzeta_f, off_plus, off_minus
-        )
-
-        out = base_s[:, None, None, :, :] * x2[None, :, None, None, None] * (theta + zeta)
+        if gf1_z is not None:
+            gf3z = gf3_z if gf3_z is not None else jnp.zeros_like(gf1_z)
+            gf123_z = gf1_z + gf2_z - 3.0 * gf3z
+            dzeta_plus = jnp.einsum("ij,sxltj->sxlti", self.ddzeta_magdrift_plus, fm)
+            dzeta_minus = jnp.einsum("ij,sxltj->sxlti", self.ddzeta_magdrift_minus, fm)
+            use_plus_z = (gf1_z[None, :, :] * dhat11 / self.z_s[:, None, None]) > 0  # (S,T,Z)
+            dzeta_f = jnp.where(use_plus_z[:, None, None, :, :], dzeta_plus, dzeta_minus)
+            diag_z = (
+                c1[:, None, None] * gf1_z[None, :, :]
+                + c2[:, None, None] * gf2_z[None, :, :]
+                + c3[:, None, None] * gf3z[None, :, :]
+            )  # (L,T,Z)
+            zeta = diag_z[None, None, :, :, :] * dzeta_f + gf123_z[None, None, None, :, :] * _lpm2(
+                dzeta_f, off_plus, off_minus
+            )
+            out = out + base_s[:, None, None, :, :] * x2[None, :, None, None, None] * zeta
 
         # ---- non-standard d/dxi magnetic-drift term ----
-        temp = (
-            self.db_hat_sub_psi_dzeta - self.db_hat_sub_zeta_dpsi_hat
-        ) * self.db_hat_dtheta + (
-            self.db_hat_sub_theta_dpsi_hat - self.db_hat_sub_psi_dtheta
-        ) * self.db_hat_dzeta  # (T,Z)
-        xidot_diag = jnp.where(ell > 0, (ell + 1.0) * ell / ((2.0 * ell - 1.0) * (2.0 * ell + 3.0)), 0.0)
-        xidot_plus = (ell + 3.0) * (ell + 2.0) * (ell + 1.0) / ((2.0 * ell + 5.0) * (2.0 * ell + 3.0))
-        xidot_minus = jnp.where(
-            ell > 1, -ell * (ell - 1.0) * (ell - 2.0) / ((2.0 * ell - 3.0) * (2.0 * ell - 1.0)), 0.0
-        )
-        xidot_parts = xidot_diag[None, None, :, None, None] * fm + _lpm2(fm, xidot_plus, xidot_minus)
-        # xiDot factor = -Delta THat DHat x^2 / (2 Z BHat^3) * temp = -base_s * temp * x^2.
-        out = out - (base_s * temp[None, :, :])[:, None, None, :, :] * x2[None, :, None, None, None] * xidot_parts
+        if xi_temp is not None:
+            xidot_diag = jnp.where(ell > 0, (ell + 1.0) * ell / ((2.0 * ell - 1.0) * (2.0 * ell + 3.0)), 0.0)
+            xidot_plus = (ell + 3.0) * (ell + 2.0) * (ell + 1.0) / ((2.0 * ell + 5.0) * (2.0 * ell + 3.0))
+            xidot_minus = jnp.where(
+                ell > 1, -ell * (ell - 1.0) * (ell - 2.0) / ((2.0 * ell - 3.0) * (2.0 * ell - 1.0)), 0.0
+            )
+            xidot_parts = xidot_diag[None, None, :, None, None] * fm + _lpm2(fm, xidot_plus, xidot_minus)
+            # xiDot factor = -Delta THat DHat x^2 / (2 Z BHat^3) * temp = -base_s * temp * x^2.
+            out = out - (base_s * xi_temp[None, :, :])[:, None, None, :, :] * x2[
+                None, :, None, None, None
+            ] * xidot_parts
 
         return out * mask[None, :, :, None, None]
 
@@ -1478,7 +1643,7 @@ class KineticOperator:
         if self.with_magnetic_drifts:
             raise NotImplementedError(
                 "legendre_blocks does not support tangential magnetic drifts: the "
-                "magneticDriftScheme=1 d/dtheta, d/dzeta, and d/dxi terms couple L±2 "
+                "magneticDriftScheme d/dtheta, d/dzeta, and d/dxi terms couple L±2 "
                 "and break the block-tridiagonal-in-L structure (tier-2 GCROT owns "
                 "these decks)."
             )
@@ -1632,9 +1797,14 @@ def _flux_surface_averages_effective(
 
 
 def _geometry_and_radial(
-    *, nml: Any, grids: Grids
+    *, nml: Any, grids: Grids, compute_grad_psi_dot_grad_b: bool = False
 ) -> tuple[FluxSurfaceGeometry, RadialCoordinates]:
-    """Geometry + radial-coordinate conversions for the supported geometrySchemes."""
+    """Geometry + radial-coordinate conversions for the supported geometrySchemes.
+
+    ``compute_grad_psi_dot_grad_b`` requests the Sugama normal-curvature factor
+    ``gradpsidotgradB_overgpsipsi`` (magneticDriftScheme 5/6), available for the
+    file-based geometries (5/11/12) only.
+    """
     geom_params = nml.group("geometryParameters")
     phys = nml.group("physicsParameters")
     scheme = _get_int(geom_params, "geometryScheme", -1)
@@ -1710,6 +1880,7 @@ def _geometry_and_radial(
             r_n_wish=r_n_wish,
             vmec_radial_option=vmec_radial_option,
             geometry_scheme=scheme,
+            compute_grad_psi_dot_grad_b=compute_grad_psi_dot_grad_b,
         )
         return geom, RadialCoordinates(psi_a_hat=float(header.psi_a_hat), a_hat=float(header.a_hat), r_n=r_n)
 
@@ -1737,6 +1908,7 @@ def _geometry_and_radial(
             ripple_scale=_get_float(geom_params, "RIPPLESCALE", 1.0),
             helicity_n=_get_int(geom_params, "HELICITY_N", 0),
             helicity_l=_get_int(geom_params, "HELICITY_L", 0),
+            compute_grad_psi_dot_grad_b=compute_grad_psi_dot_grad_b,
         )
         return geom, RadialCoordinates(psi_a_hat=psi_a_hat, a_hat=a_hat, r_n=r_n)
 
@@ -1894,11 +2066,11 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
 
     Supports ``geometryScheme`` in {1, 2, 3, 4, 5, 11, 12, 13} (analytic schemes
     1/2/3/4, file-based 5/11/12, and the namelist Boozer |B| spectrum 13) and
-    ``magneticDriftScheme`` 0/1 (scheme 1, the tangential magnetic drift, needs a
-    geometryScheme in {5, 11, 12} that carries the radial B-field derivatives).
-    Raises ``NotImplementedError`` for the deferred features listed in the module
-    docstring (magneticDriftScheme 2-9 and Fokker-Planck collisions on the
-    uniform/Chebyshev x grids).
+    every ``magneticDriftScheme`` 0-9 (the tangential magnetic drifts need a
+    geometryScheme in {5, 11, 12} that carries the radial B-field derivatives;
+    scheme 4 is geometryScheme 11/12 only, as in validateInput.F90).  Raises
+    ``NotImplementedError`` for the deferred features listed in the module
+    docstring (Fokker-Planck collisions on the uniform/Chebyshev x grids).
     """
     general = nml.group("general")
     phys = nml.group("physicsParameters")
@@ -1937,22 +2109,27 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     adiabatic_t_hat = _get_float(species_params, "adiabaticTHat", 1.0)
 
     magnetic_drift_scheme = _get_int(phys, "magneticDriftScheme", 0)
-    if magnetic_drift_scheme not in {0, 1}:
-        raise NotImplementedError(
-            f"magneticDriftScheme={magnetic_drift_scheme} is not supported (only 0 (off) "
-            "and 1 (poloidal+toroidal tangential magnetic drift, "
-            "force0RadialCurrentInEquilibrium=.true.) are consolidated; schemes 2-9 "
-            "remain deferred to the operators/profile_* path)."
-        )
-    with_magnetic_drifts = magnetic_drift_scheme == 1
+    if not 0 <= magnetic_drift_scheme <= 9:
+        # validateInput.F90: "magneticDriftScheme must be >= 0" / "<= 9".
+        raise ValueError(f"magneticDriftScheme must be between 0 and 9 (got {magnetic_drift_scheme}).")
+    with_magnetic_drifts = magnetic_drift_scheme > 0
     if with_magnetic_drifts:
         md_geometry_scheme = _get_int(geom_params, "geometryScheme", -1)
         if md_geometry_scheme not in {5, 11, 12}:
             raise NotImplementedError(
-                "magneticDriftScheme=1 requires a geometryScheme carrying the radial (psi) "
-                "B-field derivatives; only 5 (VMEC), 11, and 12 (Boozer .bc) are consolidated "
-                f"(Fortran validateInput allows 5/6/7/11/12), got {md_geometry_scheme}."
+                f"magneticDriftScheme={magnetic_drift_scheme} requires a geometryScheme carrying "
+                "the radial (psi) B-field derivatives; only 5 (VMEC), 11, and 12 (Boozer .bc) are "
+                f"consolidated (Fortran validateInput allows 5/6/7/11/12), got {md_geometry_scheme}."
             )
+        if magnetic_drift_scheme == 4 and md_geometry_scheme not in {11, 12}:
+            # validateInput.F90: "magneticDriftScheme 4 has only been implemented
+            # for geometryScheme 11 and 12."
+            raise ValueError(
+                "magneticDriftScheme 4 has only been implemented for geometryScheme 11 and 12 "
+                f"(got geometryScheme={md_geometry_scheme})."
+            )
+        # validateInput.F90 allows geometryScheme 5/6/11/12 for schemes 5 and 6;
+        # the {5, 11, 12} gate above already enforces the consolidated subset.
     collision_operator = _get_int(phys, "collisionOperator", 0)
     if collision_operator not in {0, 1}:
         raise NotImplementedError(f"collisionOperator={collision_operator} is not supported.")
@@ -2000,7 +2177,11 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     external_phi1_hat = _load_external_phi1(nml=nml, phys=phys, grids=grids) if read_external_phi1 else None
 
     # ---- geometry + radial conversions (magnetic_geometry / constants) ----
-    geom, radial = _geometry_and_radial(nml=nml, grids=grids)
+    geom, radial = _geometry_and_radial(
+        nml=nml,
+        grids=grids,
+        compute_grad_psi_dot_grad_b=magnetic_drift_scheme in {5, 6},
+    )
     fsab_hat2 = float(geom.fsab_hat2(theta_weights=grids.theta_weights, zeta_weights=grids.zeta_weights))
 
     # ---- species (species) ----
@@ -2155,9 +2336,11 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
                 f"EParallelHatSpec must have {n_species} entries, got {e_parallel_hat_spec.shape}"
             )
 
-    # Tangential magnetic-drift geometry + upwinded stencils (magneticDriftScheme=1).
+    # Tangential magnetic-drift geometry + upwinded stencils (magneticDriftScheme 1-9).
     # The radial (psi) B-field derivatives come straight from the Boozer/VMEC
     # geometry; the plus/minus stencils implement magneticDriftDerivativeScheme.
+    # The flux-function scalars feed the scheme 3/4/8 shear terms and the scheme 6
+    # pressure term; the Sugama normal-curvature factor feeds schemes 5/6.
     if with_magnetic_drifts:
         magnetic_drift_arrays: dict[str, Any] = {
             "b_hat_sub_psi": geom.b_hat_sub_psi,
@@ -2170,6 +2353,11 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
             "ddtheta_magdrift_minus": grids.ddtheta_magdrift_minus,
             "ddzeta_magdrift_plus": grids.ddzeta_magdrift_plus,
             "ddzeta_magdrift_minus": grids.ddzeta_magdrift_minus,
+            "iota": jnp.asarray(geom.iota, dtype=jnp.float64),
+            "g_hat": jnp.asarray(g_eff, dtype=jnp.float64),
+            "diota_dpsi_hat": jnp.asarray(geom.diota_dpsi_hat, dtype=jnp.float64),
+            "p_prime_hat": jnp.asarray(geom.p_prime_hat, dtype=jnp.float64),
+            "grad_psi_dot_grad_b_over_gpsipsi": geom.grad_psi_dot_grad_b_over_gpsipsi,
         }
     else:
         magnetic_drift_arrays = {}
@@ -2236,6 +2424,7 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
         ddx_xdot_plus=grids.ddx_xdot_plus,
         ddx_xdot_minus=grids.ddx_xdot_minus,
         with_magnetic_drifts=with_magnetic_drifts,
+        magnetic_drift_scheme=magnetic_drift_scheme if with_magnetic_drifts else 0,
         **magnetic_drift_arrays,
     )
 

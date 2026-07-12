@@ -429,11 +429,8 @@ def deck_requires_legacy_pipeline(nml) -> str | None:
             phys.get("QUASINEUTRALITYOPTION", 1)
         ) not in (1, 2):
             return "quasineutralityOption not in {1,2} is deferred to the legacy pipeline"
-    if int(phys.get("MAGNETICDRIFTSCHEME", 0)) not in (0, 1):
-        return (
-            "magneticDriftScheme not in {0,1} (tangential magnetic-drift sub-scheme) is "
-            "deferred to the legacy pipeline"
-        )
+    # magneticDriftScheme 0-9 is fully canonical (out-of-range values stay a
+    # ValueError raised by kinetic_operator_from_namelist, not a legacy reason).
     collision_operator = int(phys.get("COLLISIONOPERATOR", 0))
     if collision_operator not in (0, 1):
         return f"collisionOperator={collision_operator} is deferred to the legacy pipeline"
