@@ -130,25 +130,39 @@ upstream's expected value because that element is tolerance-unstable in the
 Fortran build itself; the `sfincs_jax` direct solve reproduces the expected
 value to 4.2e-6 by construction.
 
-## Functionality
+## Functionality: sfincs_jax vs SFINCS Fortran v3
 
-| Capability | Status |
-| --- | --- |
-| RHSMode 1 (fluxes/flows), 2 and 3 (transport matrices) | Supported, Fortran-parity pinned |
-| Collisions: pitch-angle scattering, full Fokker-Planck (Rosenbluth) | Supported |
-| Trajectory models: full and DKES; radial electric field | Supported |
-| Constraint schemes 0 / 1 / 2 | Supported |
-| Geometry schemes 1, 2, 3, 4 (analytic), 5 (VMEC), 11/12 (Boozer file) from the namelist; scheme 13 (namelist Boozer spectrum) via the differentiable `from_fourier` API only | Supported |
-| Solver tiers: structured direct, recycled Krylov (GCROT), host direct referee | Supported (`solve_method="auto"`) |
-| Autodiff: `jax.grad`/JVP through geometry, profiles, and the linear solve | Supported (implicit differentiation) |
-| `Phi1`/quasineutrality, tangential magnetic drifts | Deferred (served by the retained legacy pipeline) |
-| Constraint schemes 3 / 4, mapped speed grids, `export_f` | Deferred (served by the retained legacy pipeline) |
-| Non-stellarator-symmetric VMEC | Deferred |
+Every SFINCS Fortran v3 physics family is supported, each admitted with
+Fortran-parity evidence (golden outputs, tiny-grid PETSc matrix dumps) pinned
+in CI:
 
-Deferred physics is explicitly out of the canonical stack until each vertical
-slice lands with parity evidence; the legacy pipeline
-(`sfincs_jax.io.write_sfincs_jax_output_h5` and the full CLI) keeps ownership
-of those cases and remains tested. See
+| Capability | sfincs_jax | SFINCS Fortran v3 |
+| --- | :---: | :---: |
+| RHSMode 1 (fluxes, flows, bootstrap current) | ✅ | ✅ |
+| RHSMode 2 / 3 (thermal and monoenergetic transport matrices) | ✅ | ✅ |
+| Pitch-angle scattering + full Fokker-Planck (Rosenbluth) collisions | ✅ | ✅ |
+| Full and DKES trajectory models; radial electric field | ✅ | ✅ |
+| Constraint schemes −1…4 | ✅ | ✅ |
+| Geometry: analytic 1–4, VMEC 5, Boozer `.bc` 11/12, namelist spectrum 13 | ✅ | ✅ |
+| Non-stellarator-symmetric VMEC (`lasym`) | ✅ | ✅ |
+| `Phi1`/quasineutrality (kinetic + collision coupling, `readExternalPhi1`) | ✅ | ✅ |
+| Tangential magnetic drifts (`magneticDriftScheme` 0–9) | ✅ | ✅ |
+| Speed grids `xGridScheme` 1–8; `xDotDerivativeScheme` −2…11 | ✅ | ✅ |
+| `export_f`, HDF5/NetCDF output, Fortran-format stdout | ✅ | ✅ |
+| Ambipolar radial-electric-field root solve | ✅ | ✅ |
+| Exact gradients of any output w.r.t. any input (`jax.grad`, implicit differentiation) | ✅ | ❌ (fixed adjoint pairs via RHSMode 4/5) |
+| Differentiable ambipolar root and `Phi1` state (implicit function theorem) | ✅ | ❌ |
+| GPU execution | ✅ | ❌ |
+| Variational upper/lower bounds on transport coefficients (convergence certificates) | ✅ | ❌ |
+| `.npz` output, versioned solver traces, geometry-only output | ✅ | ❌ |
+| Warm starts + Krylov recycling across scans and optimizer iterations | ✅ | ❌ |
+| Automatic memory-based solver-tier selection | ✅ | ❌ |
+| MPI multi-node execution | ❌ (single-node multicore + GPU) | ✅ |
+
+In development on the research roadmap: momentum-conserving flow corrections,
+a monoenergetic (collisionality, electric field) database mode with energy
+convolution, batched GPU scans, an extended-collisionality model operator, and
+a differentiable bounce-averaged fast model. See
 [docs/feature_matrix.rst](docs/feature_matrix.rst) for the detailed matrix.
 
 ## Optimization showcase
@@ -199,14 +213,19 @@ issues), [docs/inputs.rst](docs/inputs.rst) / [docs/outputs.rst](docs/outputs.rs
 
 ## Known issues
 
-- `Nxi_for_x` ramps embed truncated degrees of freedom as exact zero rows
-  (the Fortran code packs them out of its matrix). The differentiable solver
-  pins those rows — equivalent to the packed Fortran system; gradients match
-  finite differences to 4.4e-8 on the regression deck — and raises at
-  execution time if a forward or adjoint solve fails to converge.
+- `Nxi_for_x` ramps embed the truncated degrees of freedom as identity-pinned
+  rows in the matrix-free operator (the Fortran code packs them out of its
+  matrix). The direct tier solves each (species, x) subsystem with its own
+  packed Legendre count — the exact Fortran discretization — and the
+  differentiable path pins the truncated rows; gradients through the ramped
+  route match finite differences to 1e-6 relative in the regression tests,
+  and every solve raises at execution time if a forward or adjoint solve
+  fails to converge.
 - The scheme-1 monoenergetic `transportMatrix[0,1]` element is ill-conditioned
   in the upstream configuration itself (tolerance-unstable in the Fortran
-  build); parity for it is pinned to upstream's expected value.
+  build); parity for it is pinned to upstream's expected value. Near-singular
+  structured eliminations (for example a collisionless `nu_n = 0` deck) fall
+  back automatically from the direct tier to the preconditioned Krylov tier.
 
 ## Testing
 
