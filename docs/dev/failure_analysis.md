@@ -212,3 +212,22 @@ Findings and actions:
    number: the 39k-DOF gradient case ran slower on GPU (6.8 s warm) than CPU
    (2.1 s) — small cases do not amortize GPU dispatch; the serial L-scan
    ceiling note above stands.
+
+## Post-fix GPU + 744k head-to-head (same day, main @ 33c88f7d)
+
+GPU battery re-run (office A4000 16 GB, editable install fixed, ramp-aware
+tier-1 active) and the full production HSX case on both backends:
+
+| hsx_pas_dkes_prod (Ntheta=25 Nzeta=51 Nxi=100 Nx=5; 744,610 packed DOFs) | runtime | peak RSS |
+| --- | --- | --- |
+| Fortran v3 (PETSc+MUMPS, dev MacBook, earlier baseline) | > 2.6 h, unfinished | 3.6-5.7 GB |
+| sfincs_jax CPU (dev MacBook) | 41.4 s e2e (25.0 s warm solve) | 1.35 GB |
+| sfincs_jax GPU (A4000) | 59.6 s e2e (26.2 s warm solve) | 2.3 GB |
+
+Both backends route block_tridiagonal_truncated; the case previously OOM'd the
+16 GB GPU under tier-2. Mid-size HSX warm solve is at CPU/GPU parity (3.5 s vs
+3.3 s). Every iterative/small path (FP gcrot 115 iters, Phi1 Newton,
+value_and_grad, ambipolar Brent, monoenergetic one-shot) runs 2-5x SLOWER on
+the GPU — dispatch-bound serial iterations, consistent with the serial L-scan
+ceiling note. Conclusion: the direct truncated tier is the GPU-viable path;
+GPU wins need batched work (multi-Er/multi-surface vmaps), not single solves.
