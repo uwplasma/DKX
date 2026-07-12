@@ -12,13 +12,8 @@ import pytest
 from sfincs_jax import cli
 from sfincs_jax.input_compat import effective_equilibrium_file
 from sfincs_jax.namelist import parse_sfincs_input_text
-from sfincs_jax.io import (
-    _select_rhsmode1_linear_solve_method,
-    _select_phi1_newton_linear_solve_method,
-    _select_phi1_use_frozen_linearization,
-    read_sfincs_h5,
-    write_sfincs_jax_output_h5,
-)
+from sfincs_jax.api import write_output
+from sfincs_jax.io import read_sfincs_h5
 
 
 class _FakeNamelist:
@@ -49,12 +44,8 @@ def test_cmd_write_output_routes_solver_trace_through_canonical(monkeypatch, tmp
         out.write_bytes(b"")
         return SimpleNamespace(output_path=out)
 
-    def _fail_legacy(**_kwargs):  # pragma: no cover - canonical deck must not use the legacy writer
-        raise AssertionError("a canonical RHSMode=1 --solver-trace deck must not enter the legacy writer")
-
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
     monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fail_legacy)
 
     args = Namespace(
         input=str(tmp_path / "input.namelist"),
@@ -87,12 +78,8 @@ def test_cmd_write_output_accepts_extension_selected_formats(monkeypatch, tmp_pa
         out.write_bytes(b"")
         return SimpleNamespace(output_path=out)
 
-    def _fail_legacy(**_kwargs):  # pragma: no cover - geometry-only must not use the legacy writer
-        raise AssertionError("--geometry-only must not enter the legacy writer")
-
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
     monkeypatch.setattr("sfincs_jax.run.run_geometry", _fake_run_geometry)
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fail_legacy)
 
     args = Namespace(
         input=str(tmp_path / "input.namelist"),
@@ -130,15 +117,8 @@ def test_cmd_solve_v3_routes_canonical_run_profile(monkeypatch, tmp_path: Path) 
             output_path=None,
         )
 
-    def _fail_legacy(**_kwargs):  # pragma: no cover - must not be called for a canonical deck
-        raise AssertionError("solve-v3 must not enter the legacy problems/ pipeline for a canonical deck")
-
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
     monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
-    monkeypatch.setattr(
-        "sfincs_jax.problems.profile_solve.solve_v3_full_system_linear_gmres",
-        _fail_legacy,
-    )
 
     out_state = tmp_path / "state.npy"
     args = Namespace(
@@ -276,231 +256,11 @@ def test_write_output_full_system_regression(tmp_path: Path, monkeypatch) -> Non
     monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "0")
 
     out_path = tmp_path / "sfincsOutput.h5"
-    write_sfincs_jax_output_h5(
-        input_namelist=input_path,
-        output_path=out_path,
-    )
+    write_output(input_path, out_path)
 
     data = read_sfincs_h5(out_path)
     assert int(np.asarray(data["RHSMode"]).item()) == 1
     assert "classicalParticleFluxNoPhi1_psiHat" in data
-
-
-def test_phi1_newton_auto_method_uses_dense_on_cpu() -> None:
-    msgs: list[str] = []
-
-    method = _select_phi1_newton_linear_solve_method(
-        active_total_size=1090,
-        dense_cutoff=5000,
-        default_method="incremental",
-        fast_explicit=False,
-        dense_auto_ok=True,
-        dense_auto_backend="cpu",
-        env_override="",
-        emit=lambda _lvl, msg: msgs.append(str(msg)),
-    )
-
-    assert method == "dense"
-    assert any("using dense Newton step" in msg for msg in msgs)
-
-
-def test_rhsmode1_solve_method_env_accepts_lgmres() -> None:
-    msgs: list[str] = []
-
-    method = _select_rhsmode1_linear_solve_method(
-        default_method="incremental",
-        env_override="lgmres",
-        emit=lambda _lvl, msg: msgs.append(str(msg)),
-    )
-
-    assert method == "lgmres"
-    assert any("solve method forced by env -> lgmres" in msg for msg in msgs)
-
-
-def test_rhsmode1_solve_method_env_accepts_sparse_host() -> None:
-    msgs: list[str] = []
-
-    method = _select_rhsmode1_linear_solve_method(
-        default_method="incremental",
-        env_override="sparse_host",
-        emit=lambda _lvl, msg: msgs.append(str(msg)),
-    )
-
-    assert method == "sparse_host"
-    assert any("solve method forced by env -> sparse_host" in msg for msg in msgs)
-
-
-def test_rhsmode1_solve_method_env_accepts_sparse_pc_gmres() -> None:
-    msgs: list[str] = []
-
-    method = _select_rhsmode1_linear_solve_method(
-        default_method="incremental",
-        env_override="sparse_pc_gmres",
-        emit=lambda _lvl, msg: msgs.append(str(msg)),
-    )
-
-    assert method == "sparse_pc_gmres"
-    assert any("solve method forced by env -> sparse_pc_gmres" in msg for msg in msgs)
-
-
-def test_rhsmode1_solve_method_env_accepts_xblock_sparse_pc_gmres() -> None:
-    msgs: list[str] = []
-
-    method = _select_rhsmode1_linear_solve_method(
-        default_method="incremental",
-        env_override="xblock_sparse_pc_gmres",
-        emit=lambda _lvl, msg: msgs.append(str(msg)),
-    )
-
-    assert method == "xblock_sparse_pc_gmres"
-    assert any("solve method forced by env -> xblock_sparse_pc_gmres" in msg for msg in msgs)
-
-
-def test_rhsmode1_solve_method_env_accepts_structured_full_csr() -> None:
-    msgs: list[str] = []
-
-    method = _select_rhsmode1_linear_solve_method(
-        default_method="incremental",
-        env_override="structured_full_csr",
-        emit=lambda _lvl, msg: msgs.append(str(msg)),
-    )
-
-    assert method == "structured_full_csr"
-    assert any("solve method forced by env -> structured_full_csr" in msg for msg in msgs)
-
-
-def test_rhsmode1_solve_method_env_accepts_host_structured_csr() -> None:
-    msgs: list[str] = []
-
-    method = _select_rhsmode1_linear_solve_method(
-        default_method="incremental",
-        env_override="host_structured_csr",
-        emit=lambda _lvl, msg: msgs.append(str(msg)),
-    )
-
-    assert method == "host_structured_csr"
-    assert any("solve method forced by env -> host_structured_csr" in msg for msg in msgs)
-
-
-def test_rhsmode1_solve_method_env_accepts_sparse_lsmr() -> None:
-    msgs: list[str] = []
-
-    method = _select_rhsmode1_linear_solve_method(
-        default_method="incremental",
-        env_override="sparse_lsmr",
-        emit=lambda _lvl, msg: msgs.append(str(msg)),
-    )
-
-    assert method == "sparse_lsmr"
-    assert any("solve method forced by env -> sparse_lsmr" in msg for msg in msgs)
-
-
-def test_rhsmode1_solve_method_env_ignores_unknown_override() -> None:
-    msgs: list[str] = []
-
-    method = _select_rhsmode1_linear_solve_method(
-        default_method="incremental",
-        env_override="not_a_method",
-        emit=lambda _lvl, msg: msgs.append(str(msg)),
-    )
-
-    assert method == "incremental"
-    assert msgs == []
-
-
-def test_phi1_newton_auto_method_skips_dense_on_gpu() -> None:
-    msgs: list[str] = []
-
-    method = _select_phi1_newton_linear_solve_method(
-        active_total_size=1090,
-        dense_cutoff=5000,
-        default_method="incremental",
-        fast_explicit=False,
-        dense_auto_ok=False,
-        dense_auto_backend="gpu",
-        env_override="",
-        emit=lambda _lvl, msg: msgs.append(str(msg)),
-    )
-
-    assert method == "incremental"
-    assert any("skipping dense auto mode on backend=gpu" in msg for msg in msgs)
-
-
-def test_phi1_newton_fast_explicit_prefers_sparse_direct_on_large_cpu() -> None:
-    msgs: list[str] = []
-
-    method = _select_phi1_newton_linear_solve_method(
-        active_total_size=68000,
-        dense_cutoff=5000,
-        default_method="batched",
-        fast_explicit=True,
-        dense_auto_ok=True,
-        dense_auto_backend="cpu",
-        env_override="",
-        emit=lambda _lvl, msg: msgs.append(str(msg)),
-    )
-
-    assert method == "sparse_direct"
-    assert any("host sparse-direct Newton step" in msg for msg in msgs)
-
-
-def test_phi1_newton_fast_explicit_prefers_sparse_direct_on_large_gpu() -> None:
-    msgs: list[str] = []
-
-    method = _select_phi1_newton_linear_solve_method(
-        active_total_size=12753,
-        dense_cutoff=5000,
-        default_method="incremental",
-        fast_explicit=True,
-        dense_auto_ok=False,
-        dense_auto_backend="gpu",
-        env_override="",
-        emit=lambda _lvl, msg: msgs.append(str(msg)),
-    )
-
-    assert method == "sparse_direct"
-    assert any("backend=gpu" in msg for msg in msgs)
-
-
-def test_phi1_newton_fast_explicit_prefers_sparse_direct_on_moderate_cpu() -> None:
-    method = _select_phi1_newton_linear_solve_method(
-        active_total_size=5703,
-        dense_cutoff=5000,
-        default_method="incremental",
-        fast_explicit=True,
-        dense_auto_ok=True,
-        dense_auto_backend="cpu",
-        env_override="",
-        emit=None,
-    )
-
-    assert method == "sparse_direct"
-
-
-def test_phi1_frozen_linearization_policy_keeps_sparse_direct_full_newton() -> None:
-    assert not _select_phi1_use_frozen_linearization(
-        fast_explicit=True,
-        solve_method="sparse_direct",
-        env_value="",
-    )
-    assert _select_phi1_use_frozen_linearization(
-        fast_explicit=True,
-        solve_method="incremental",
-        env_value="",
-    )
-
-
-def test_phi1_frozen_linearization_policy_respects_env_overrides() -> None:
-    assert _select_phi1_use_frozen_linearization(
-        fast_explicit=True,
-        solve_method="sparse_direct",
-        env_value="1",
-    )
-    assert not _select_phi1_use_frozen_linearization(
-        fast_explicit=True,
-        solve_method="incremental",
-        env_value="0",
-    )
 
 
 def test_apply_runtime_env_defaults_disables_preallocation_by_default(monkeypatch) -> None:
@@ -858,12 +618,8 @@ def test_main_bare_input_uses_public_auto_contract(monkeypatch, tmp_path: Path) 
         nml.source_text = "&general\n/\n&geometryParameters\n/\n"
         return nml
 
-    def _fail_legacy(**_kwargs):  # pragma: no cover - bare runs must not use the legacy writer
-        raise AssertionError("a bare-input run must not enter the legacy writer")
-
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", _fake_namelist_with_source)
     monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fail_legacy)
 
     rc = cli.main(
         [
@@ -909,12 +665,8 @@ def test_main_write_output_forwards_solver_trace_sidecar(monkeypatch, tmp_path: 
         out.write_bytes(b"")
         return SimpleNamespace(output_path=out)
 
-    def _fail_legacy(**_kwargs):  # pragma: no cover - canonical deck must not use the legacy writer
-        raise AssertionError("a canonical RHSMode=1 --solver-trace deck must not enter the legacy writer")
-
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
     monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fail_legacy)
 
     trace_path = tmp_path / "solver_trace.json"
     rc = cli.main(
@@ -946,12 +698,8 @@ def test_main_write_output_removed_solve_methods_error_cleanly(
     def _canonical_refuses(*_args, **_kwargs):
         raise NotImplementedError(f"solve_method={method} was removed from the canonical stack")
 
-    def _fail_legacy(**_kwargs):  # pragma: no cover - no legacy fallback remains
-        raise AssertionError("removed solve methods must not fall back to the legacy writer")
-
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
     monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fail_legacy)
 
     rc = cli.main(
         [
@@ -1037,15 +785,11 @@ def test_main_scan_er_forwards_structured_csr_solve_method(monkeypatch, tmp_path
 
 
 def test_main_write_output_reports_runtime_errors_without_traceback(monkeypatch, tmp_path: Path, capsys) -> None:
-    def _fake_write_output_h5(**_kwargs):
-        raise RuntimeError("host sparse factorization failed")
-
     def _fake_run_profile(*_args, **_kwargs):
         raise RuntimeError("host sparse factorization failed")
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
     monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
 
     rc = cli.main(
         [
@@ -1385,6 +1129,7 @@ def test_write_output_no_fortran_layout_covers_solution_datasets(tmp_path: Path)
     run = run_profile(_TINY_DECK, out_path=fortran_out, emit=None)
     grids = _grids_from_input(run.input, run.input.raw)
     geom, radial = _geometry_and_radial(nml=run.input.raw, grids=grids)
+    residual_norms = np.atleast_1d(np.asarray(run.solve_result.residual_norms, dtype=np.float64))
     write_profile_output(
         path=native_out,
         inp=run.input,
@@ -1393,6 +1138,8 @@ def test_write_output_no_fortran_layout_covers_solution_datasets(tmp_path: Path)
         geom=geom,
         radial=radial,
         state_vector=run.state_vector,
+        solver_method=run.solve_result.method,
+        residual_norm=float(np.max(residual_norms)) if residual_norms.size else None,
         fortran_layout=False,
     )
 
@@ -1406,32 +1153,18 @@ def test_write_output_no_fortran_layout_covers_solution_datasets(tmp_path: Path)
         np.testing.assert_array_equal(n_arr, np.transpose(f_arr, tuple(reversed(range(f_arr.ndim)))))
 
 
-def test_write_output_geometry_only_matches_legacy_writer(tmp_path: Path) -> None:
-    """Canonical --geometry-only reproduces the legacy geometry-only key set and values."""
+def test_write_output_geometry_only_emits_base_and_geometry_fields(tmp_path: Path) -> None:
+    """Canonical --geometry-only writes the state-independent base/geometry key set."""
     from sfincs_jax.run import run_geometry
 
     canonical_out = tmp_path / "canonical.h5"
-    legacy_out = tmp_path / "legacy.h5"
     run = run_geometry(_TINY_DECK, out_path=canonical_out, emit=None)
     assert run.output_path == canonical_out.resolve()
-    write_sfincs_jax_output_h5(
-        input_namelist=_TINY_DECK,
-        output_path=legacy_out,
-        compute_solution=False,
-        compute_transport_matrix=False,
-        verbose=False,
-    )
 
     canonical = _h5_datasets(canonical_out)
-    legacy = _h5_datasets(legacy_out)
-    assert set(canonical) == set(legacy)
     assert int(np.asarray(canonical["NIterations"]).reshape(())) == 0
-    for key, l_val in legacy.items():
-        c_val = canonical[key]
-        if isinstance(l_val, bytes) or (hasattr(l_val, "dtype") and l_val.dtype.kind in "OSU"):
-            assert c_val == l_val
-            continue
-        l_arr = np.asarray(l_val, dtype=np.float64)
-        c_arr = np.asarray(c_val, dtype=np.float64)
-        assert c_arr.shape == l_arr.shape
-        np.testing.assert_allclose(c_arr, l_arr, rtol=0.0, atol=1e-12)
+    for key in ("BHat", "DHat", "theta", "zeta", "x", "GHat", "IHat", "iota", "psiAHat", "input.namelist"):
+        assert key in canonical, key
+    # No solve ran: the solution/moment datasets must be absent.
+    for key in ("particleFlux_vm_psiHat", "FSABFlow", "transportMatrix"):
+        assert key not in canonical, key

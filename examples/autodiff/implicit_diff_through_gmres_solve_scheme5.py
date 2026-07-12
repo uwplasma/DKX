@@ -17,8 +17,8 @@ We treat `nu_n` (normalized collisionality) as a differentiable scalar and compu
 
 Requirements: none beyond the base `sfincs_jax` install.
 
-You can switch between GMRES and BiCGStab with `--solver` (BiCGStab is lower-memory and
-is the default for RHSMode=1 solves in `sfincs_jax`).
+`--method` selects the `sfincs_jax.solve.solve` tier (`auto` routes this PAS deck
+to the structured direct tier; `gmres` forces the recycled-Krylov tier).
 """
 
 from __future__ import annotations
@@ -35,13 +35,17 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.solvers.implicit import gmres_custom_linear_solve, linear_custom_solve
+from sfincs_jax.drift_kinetic import KineticOperator, kinetic_operator_from_namelist
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.operators.profile_system import (
-    apply_v3_full_system_operator,
-    full_system_operator_from_namelist,
-    rhs_v3_full_system,
-)
+from sfincs_jax.solve import solve
+
+
+def _with_nu_n(op: KineticOperator, nu_n: jnp.ndarray) -> KineticOperator:
+    """Rebuild the PAS collision operator at a new `nu_n` (coef is linear in it)."""
+    pas = op.pas
+    scale = jnp.asarray(nu_n, dtype=jnp.float64) / pas.nu_n
+    pas2 = replace(pas, nu_n=jnp.asarray(nu_n, dtype=jnp.float64), coef=pas.coef * scale)
+    return replace(op, pas=pas2)
 
 
 def _default_input() -> Path:
@@ -51,38 +55,23 @@ def _default_input() -> Path:
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--input", default=str(_default_input()))
-    p.add_argument("--solver", choices=("gmres", "bicgstab"), default="gmres")
+    p.add_argument("--method", choices=("auto", "block_tridiagonal", "gmres"), default="auto")
     p.add_argument("--eps", type=float, default=1e-5, help="finite-difference step for a quick check")
     args = p.parse_args()
 
     nml = read_sfincs_input(Path(args.input))
-    op0 = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+    op0 = kinetic_operator_from_namelist(nml)
 
-    if op0.fblock.pas is None:
-        raise SystemExit("This example expects collisionOperator=1 (PAS), but op.fblock.pas is None.")
+    if op0.pas is None:
+        raise SystemExit("This example expects collisionOperator=1 (PAS), but op.pas is None.")
 
-    nu0 = jnp.asarray(op0.fblock.pas.nu_n, dtype=jnp.float64)
+    nu0 = jnp.asarray(op0.pas.nu_n, dtype=jnp.float64)
 
     def objective(nu_n: jnp.ndarray) -> jnp.ndarray:
-        pas2 = replace(op0.fblock.pas, nu_n=jnp.asarray(nu_n, dtype=jnp.float64))
-        op = replace(op0, fblock=replace(op0.fblock, pas=pas2))
-
-        b = rhs_v3_full_system(op)
-
-        def mv(x: jnp.ndarray) -> jnp.ndarray:
-            return apply_v3_full_system_operator(op, x)
-
-        if args.solver == "bicgstab":
-            x = linear_custom_solve(
-                matvec=mv,
-                b=b,
-                tol=1e-12,
-                maxiter=400,
-                solver="bicgstab",
-            ).x
-        else:
-            x = gmres_custom_linear_solve(matvec=mv, b=b, tol=1e-12, restart=80, maxiter=400).x
-        return 0.5 * jnp.vdot(x, x)
+        op = _with_nu_n(op0, nu_n)
+        b = op.rhs()
+        x = solve(op, b, method=str(args.method), tol=1e-12, differentiable=True).x
+        return 0.5 * jnp.vdot(jnp.reshape(x, (-1,)), jnp.reshape(x, (-1,)))
 
     g = jax.grad(objective)(nu0)
 

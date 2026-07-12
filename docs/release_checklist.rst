@@ -82,22 +82,9 @@ QI/device-QI promotion evidence is preserved on the
 ``research/qi-device-hard-seed`` branch and is not part of the stable release
 checklist.
 
-For mapped-grid or solver-path integration branches, also run the bounded
-integration checks before promoting any of those lanes into release-facing
-metadata:
-
-.. code-block:: bash
-
-   pytest -q \
-     tests/test_adaptive_maps.py \
-     tests/test_mapped_xgrid_objectives.py \
-     tests/test_mapped_xgrid_v3.py \
-     tests/test_mapped_xgrid_transport_evidence.py \
-     tests/test_solver_path_policy.py
-
-Those tests are not a substitute for full-suite parity or production-resolution
-benchmark evidence. They only prove that the opt-in mapped grid and
-solver-path policy seams are wired and reproducible on bounded inputs.
+The mapped-grid and solver-path integration lanes were retired with the
+legacy pipeline; their bounded integration checks no longer exist. Any
+revival goes through the research-lane gates in :doc:`research_lanes`.
 
 QI/device-QI seed-robustness artifacts are not part of the stable checkout.
 Only claim production QI robustness after promotion artifacts are restored from
@@ -185,11 +172,6 @@ full-suite solves:
    python tools/benchmarks/readme_figures.py
 
    python examples/publication_figures/generate_w7x_high_nu_performance.py
-
-   python examples/performance/benchmark_transport_parallel_scaling.py \
-     --from-json examples/performance/output/transport_parallel_scaling_gpu.json \
-     --out-dir docs/_static/figures/parallel \
-     --figure-name transport_parallel_scaling_gpu.png
 
    # Historical PAS fallback campaign scripts live on the research branch.
    # Stable releases should rely on checked solver-policy artifacts unless a

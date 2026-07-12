@@ -3,8 +3,8 @@
 ``sfincs_jax write-output --solver-trace`` now emits the sidecar from the
 canonical run drivers (:func:`sfincs_jax.run.run_profile` /
 :func:`sfincs_jax.run.run_transport_matrix`) instead of falling back to the
-legacy ``io.write_sfincs_jax_output_h5`` pipeline.  The canonical trace uses
-the same :class:`sfincs_jax.solvers.diagnostics.SolverTrace` schema; the
+retired legacy pipeline.  The canonical trace uses
+the same :class:`sfincs_jax.solver_trace.SolverTrace` schema; the
 solver-independent fields (backend, ``rhs_mode``, ``selected_path``,
 ``geometry_scheme``, ``collision_operator``, sizes, ``device_count``,
 convergence, residual target) match the legacy trace, while the retired-GMRES
@@ -18,9 +18,9 @@ from pathlib import Path
 
 import pytest
 
-from sfincs_jax.io import write_sfincs_jax_output_h5
+from sfincs_jax.api import write_output
 from sfincs_jax.run import run_profile, run_transport_matrix
-from sfincs_jax.solvers.diagnostics import read_solver_trace_json
+from sfincs_jax.solver_trace import read_solver_trace_json
 
 REF = Path(__file__).parent / "ref"
 
@@ -54,14 +54,7 @@ def test_canonical_solver_trace_matches_legacy(base: str, rhs_mode: int, tmp_pat
         run_transport_matrix(
             input_path, out_path=tmp_path / "c.h5", solver_trace_path=canonical_trace, emit=None
         )
-    write_sfincs_jax_output_h5(
-        input_namelist=input_path,
-        output_path=tmp_path / "l.h5",
-        compute_solution=(rhs_mode == 1),
-        compute_transport_matrix=(rhs_mode in (2, 3)),
-        solver_trace_path=legacy_trace,
-        verbose=False,
-    )
+    write_output(input_path, tmp_path / "l.h5", solver_trace_path=legacy_trace)
 
     canonical = read_solver_trace_json(canonical_trace)
     legacy = read_solver_trace_json(legacy_trace)

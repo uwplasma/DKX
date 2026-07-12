@@ -1,17 +1,11 @@
 """End-to-end tests for the canonical RHSMode=2/3 driver and writer.
 
-Vertical slice #1 referee (plan_final.md "File-Level Execution Queues"):
-
-- ``sfincs_jax.run.run_transport_matrix`` transport matrices must equal the
-  legacy ``problems.transport_solve.solve_v3_transport_matrix_linear_gmres``
-  result to 1e-10 (scaled) on the tiny monoenergetic scheme1/scheme11 and
-  RHSMode=2 scheme2 fixtures;
-- the ``sfincs_jax.writer`` h5 file must contain every dataset the legacy
-  ``outputs`` writer emits for these modes, equal to 1e-10 (scaled), with the
-  known-missing set enumerated explicitly (currently empty);
+- ``sfincs_jax.run.run_transport_matrix`` transport matrices must match the
+  recorded Fortran v3 ``sfincsOutput.h5`` goldens on the tiny monoenergetic
+  scheme1/scheme11 and RHSMode=2 scheme2 fixtures;
 - stdout must contain the exact golden Fortran banner/grid/Goodbye lines;
-- importing ``sfincs_jax.run`` must not import the legacy
-  ``problems``/``operators``/``outputs`` packages.
+- importing ``sfincs_jax.run`` must never (re)introduce a legacy
+  ``problems``/``operators``/``outputs`` package.
 """
 
 from __future__ import annotations
@@ -31,25 +25,6 @@ FIXTURES = (
     "transportMatrix_PAS_tiny_rhsMode2_scheme2",
 )
 
-# Datasets present in the legacy RHSMode=2/3 output file but not written by the
-# canonical writer.  The canonical writer currently covers the full legacy
-# field set for these modes; keep this explicit so a future regression is loud.
-KNOWN_MISSING: frozenset[str] = frozenset()
-
-# Wall-clock content differs run to run; compare shape/dtype only.
-TIMING_KEYS = frozenset({"elapsed time (s)"})
-
-# Scaled comparison tolerance |a-b| <= tol * max(1, max|a|).
-DEFAULT_TOL = 1e-10
-KEY_TOLERANCES = {
-    # flow / totalDensity where totalDensity crosses zero in the unphysical
-    # tiny scheme1 monoenergetic fixture: the quotient amplifies the ~1e-13
-    # relative state difference between the legacy dense solve and the
-    # canonical tier-1 structured solve.
-    "velocityUsingTotalDensity": 1e-8,
-}
-
-
 def _read_h5(path: Path) -> dict[str, np.ndarray]:
     import h5py
 
@@ -57,30 +32,6 @@ def _read_h5(path: Path) -> dict[str, np.ndarray]:
     with h5py.File(path, "r") as f:
         f.visititems(lambda name, obj: out.__setitem__(name, obj[...]))
     return out
-
-
-def _legacy_h5(base: str, tmp_path: Path) -> dict[str, np.ndarray]:
-    from sfincs_jax.io import write_sfincs_jax_output_h5
-
-    path = tmp_path / f"{base}.legacy.h5"
-    write_sfincs_jax_output_h5(
-        input_namelist=REF / f"{base}.input.namelist",
-        output_path=path,
-        compute_transport_matrix=True,
-        overwrite=True,
-        verbose=False,
-    )
-    return _read_h5(path)
-
-
-def _legacy_transport_matrix(base: str) -> np.ndarray:
-    from sfincs_jax.namelist import read_sfincs_input
-    from sfincs_jax.problems.transport_solve import solve_v3_transport_matrix_linear_gmres
-
-    result = solve_v3_transport_matrix_linear_gmres(
-        nml=read_sfincs_input(REF / f"{base}.input.namelist")
-    )
-    return np.asarray(result.transport_matrix, dtype=np.float64)
 
 
 def _assert_scaled_close(a: np.ndarray, b: np.ndarray, *, tol: float, label: str) -> None:
@@ -95,12 +46,12 @@ def _assert_scaled_close(a: np.ndarray, b: np.ndarray, *, tol: float, label: str
 
 
 # ---------------------------------------------------------------------------
-# Transport-matrix and h5 equality vs the legacy stack
+# Transport-matrix parity vs the recorded Fortran v3 outputs
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("base", FIXTURES)
-def test_run_transport_matrix_matches_legacy_stack(base: str, tmp_path: Path) -> None:
+def test_run_transport_matrix_matches_fortran_golden(base: str, tmp_path: Path) -> None:
     from sfincs_jax.run import run_transport_matrix
 
     run = run_transport_matrix(
@@ -109,47 +60,28 @@ def test_run_transport_matrix_matches_legacy_stack(base: str, tmp_path: Path) ->
         emit=None,
     )
 
-    # 1) Transport matrix parity vs the legacy whichRHS solve.
-    tm_legacy = _legacy_transport_matrix(base)
-    _assert_scaled_close(tm_legacy, run.transport_matrix, tol=DEFAULT_TOL, label="transportMatrix")
     n = 3 if base.startswith("transportMatrix") else 2
     assert run.transport_matrix.shape == (n, n)
     assert run.state_vectors.shape == (n, run.operator.total_size)
     assert run.solve_result.converged
 
-    # 1b) Direct Fortran referee, independent of the legacy pipeline: the
-    # canonical transport matrix must match the recorded v3 sfincsOutput.h5.
-    # Unlike tests/test_transport_matrix_rhsmode{2,3}_parity.py (which insert
-    # the frozen Fortran state vectors, atol 2e-10..5e-10), this re-solves the
-    # systems, so the comparison is limited by the finite PETSc KSP tolerance
-    # of the recorded solutions; the ill-conditioned tiny scheme1/scheme2
-    # fixtures sit at ~1e-9 relative.  Fortran stores the matrix column-major,
-    # so the h5 dataset reads back transposed vs mathematical row/column order.
+    # Direct Fortran referee: the canonical transport matrix must match the
+    # recorded v3 sfincsOutput.h5.  This re-solves the systems, so the
+    # comparison is limited by the finite PETSc KSP tolerance of the recorded
+    # solutions; the ill-conditioned tiny scheme1/scheme2 fixtures sit at
+    # ~1e-9 relative.  Fortran stores the matrix column-major, so the h5
+    # dataset reads back transposed vs mathematical row/column order.
     import h5py
 
     with h5py.File(REF / f"{base}.sfincsOutput.h5", "r") as f:
         tm_fortran = np.asarray(f["transportMatrix"][...], dtype=np.float64)
     np.testing.assert_allclose(run.transport_matrix.T, tm_fortran, rtol=2e-8, atol=1e-13)
 
-    # 2) Every dataset of the legacy writer's file, at the same tolerance.
-    legacy = _legacy_h5(base, tmp_path)
+    # The written canonical file must carry the same matrix (Fortran layout).
     canonical = _read_h5(run.output_path)
-
-    missing = set(legacy) - set(canonical)
-    extra = set(canonical) - set(legacy)
-    assert missing == set(KNOWN_MISSING)
-    assert extra == set()
-
-    for key in sorted(set(legacy) & set(canonical)):
-        a, b = legacy[key], canonical[key]
-        if a.dtype.kind in "SOU" or b.dtype.kind in "SOU":
-            assert np.array_equal(a, b), f"{key}: string dataset mismatch"
-            continue
-        assert a.dtype == b.dtype, f"{key}: dtype {a.dtype} != {b.dtype}"
-        if key in TIMING_KEYS:
-            assert a.shape == b.shape
-            continue
-        _assert_scaled_close(a, b, tol=KEY_TOLERANCES.get(key, DEFAULT_TOL), label=key)
+    _assert_scaled_close(
+        canonical["transportMatrix"], tm_fortran, tol=1e-7, label="written transportMatrix"
+    )
 
 
 def test_writer_netcdf_mirrors_h5(tmp_path: Path) -> None:

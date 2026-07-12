@@ -95,15 +95,3 @@ def test_xgrid_scheme_matches_fortran_fixture(
     )
     bad_t = [(r.key, r.max_abs) for r in transport if not r.ok]
     assert not bad_t, f"Mismatched transport keys for {tag}: {bad_t}"
-
-
-@pytest.mark.parametrize(("tag", "x_grid_scheme", "x_dot_scheme"), CASES)
-def test_xgrid_scheme_decks_route_through_canonical_stack(
-    tag: str, x_grid_scheme: int, x_dot_scheme: int
-) -> None:
-    """No xGridScheme/xDotDerivativeScheme deck defers to the legacy pipeline."""
-    from sfincs_jax.cli import deck_requires_legacy_pipeline
-    from sfincs_jax.inputs import read_sfincs_input
-
-    deck, _ = _paths(tag)
-    assert deck_requires_legacy_pipeline(read_sfincs_input(deck)) is None

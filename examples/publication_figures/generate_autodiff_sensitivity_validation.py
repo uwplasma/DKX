@@ -26,8 +26,10 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.geometry import boozer_geometry_scheme4
-from sfincs_jax.solvers.implicit import linear_custom_solve
+from solvax.implicit import linear_solve as solvax_linear_solve
+
+from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
+from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.validation.artifacts import (
     PAUL_2019_ADJOINT_URL,
@@ -35,11 +37,23 @@ from sfincs_jax.validation.artifacts import (
     build_autodiff_sensitivity_validation_summary,
     load_autodiff_sensitivity_summary,
 )
-from sfincs_jax.operators.profile_system import (
-    apply_v3_full_system_operator,
-    full_system_operator_from_namelist,
-    rhs_v3_full_system,
-)
+
+
+class _SolveOut:
+    """Implicit-diff Krylov solve wrapper: `.x` and the primal `.residual_norm`."""
+
+    def __init__(self, matvec, b, *, solver: str, tol: float, restart: int = 50, maxiter: int = 300):
+        if solver == "bicgstab":
+            def _krylov(mv, bb):
+                return jax.scipy.sparse.linalg.bicgstab(mv, bb, tol=tol, atol=0.0, maxiter=maxiter)[0]
+        else:
+            def _krylov(mv, bb):
+                return jax.scipy.sparse.linalg.gmres(
+                    mv, bb, tol=tol, atol=0.0, restart=restart, maxiter=maxiter
+                )[0]
+
+        self.x = solvax_linear_solve(matvec, b, _krylov)
+        self.residual_norm = jnp.linalg.norm(matvec(self.x) - b)
 
 
 DEFAULT_ARTIFACT_DIR = _REPO_ROOT / "examples" / "publication_figures" / "artifacts"
@@ -118,7 +132,7 @@ def _dense_problem_check(*, solver: str) -> dict[str, object]:
         def mv(x: jnp.ndarray) -> jnp.ndarray:
             return a @ x
 
-        return linear_custom_solve(matvec=mv, b=b, tol=1e-12, maxiter=100, solver=solver, solver_jit=False)
+        return _SolveOut(mv, b, solver=solver, tol=1e-12, maxiter=100)
 
     def objective(p: jnp.ndarray) -> jnp.ndarray:
         x = solve_at(p).x
@@ -133,14 +147,7 @@ def _dense_problem_check(*, solver: str) -> dict[str, object]:
     result = solve_at(p0)
 
     a = a0 + p0 * jnp.eye(4, dtype=jnp.float64)
-    adjoint = linear_custom_solve(
-        matvec=lambda y: a.T @ y,
-        b=result.x,
-        tol=1e-12,
-        maxiter=100,
-        solver=solver,
-        solver_jit=False,
-    )
+    adjoint = _SolveOut(lambda y: a.T @ y, result.x, solver=solver, tol=1e-12, maxiter=100)
     adjoint_residual = float(jnp.linalg.norm(a.T @ adjoint.x - result.x))
     return {
         "name": f"dense_4x4_{solver}",
@@ -162,26 +169,17 @@ def _dense_problem_check(*, solver: str) -> dict[str, object]:
 
 def _sfincs_shift_checks(*, input_path: Path, shift: float, fd_eps: list[float]) -> tuple[dict[str, object], list[dict[str, object]]]:
     nml = read_sfincs_input(input_path)
-    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
-    b = rhs_v3_full_system(op)
+    op = kinetic_operator_from_namelist(nml)
+    b = op.rhs()
     p0 = jnp.asarray(float(shift), dtype=jnp.float64)
 
     def solve_at(p: jnp.ndarray):
         p = jnp.asarray(p, dtype=jnp.float64)
 
         def mv(x: jnp.ndarray) -> jnp.ndarray:
-            return apply_v3_full_system_operator(op, x) + p * x
+            return op.apply(x) + p * x
 
-        return linear_custom_solve(
-            matvec=mv,
-            b=b,
-            tol=1e-11,
-            restart=50,
-            maxiter=300,
-            solver="gmres",
-            size_hint=op.total_size,
-            solver_jit=False,
-        )
+        return _SolveOut(mv, b, solver="gmres", tol=1e-11, restart=50, maxiter=300)
 
     def objective(p: jnp.ndarray) -> jnp.ndarray:
         x = solve_at(p).x
@@ -209,23 +207,14 @@ def _sfincs_shift_checks(*, input_path: Path, shift: float, fd_eps: list[float])
     result = solve_at(p0)
 
     def mv0(x: jnp.ndarray) -> jnp.ndarray:
-        return apply_v3_full_system_operator(op, x) + p0 * x
+        return op.apply(x) + p0 * x
 
     zeros = jnp.zeros_like(result.x)
 
     def mv0_t(y: jnp.ndarray) -> jnp.ndarray:
         return jax.linear_transpose(mv0, zeros)(y)[0]
 
-    adjoint = linear_custom_solve(
-        matvec=mv0_t,
-        b=result.x,
-        tol=1e-11,
-        restart=50,
-        maxiter=300,
-        solver="gmres",
-        size_hint=op.total_size,
-        solver_jit=False,
-    )
+    adjoint = _SolveOut(mv0_t, result.x, solver="gmres", tol=1e-11, restart=50, maxiter=300)
     adjoint_residual = float(jnp.linalg.norm(mv0_t(adjoint.x) - result.x))
     check = {
         "name": "sfincs_full_system_shift_gmres",
@@ -253,9 +242,18 @@ def _geometry_sensitivity(*, n_theta: int, n_zeta: int) -> dict[str, object]:
     zeta = jnp.linspace(0.0, 2 * jnp.pi / 5, int(n_zeta), endpoint=False, dtype=jnp.float64)
     amps0 = jnp.asarray([0.04645, -0.04351, -0.01902], dtype=jnp.float64)
     harmonic_labels = ["(m=0,n=1)", "(m=1,n=1)", "(m=1,n=0)"]
+    # W7-X standard (geometryScheme=4) modes and flux functions.
+    b0_over_bbar = 3.089
+    m_modes = jnp.asarray([0.0, 0.0, 1.0, 1.0], dtype=jnp.float64)
+    n_modes = jnp.asarray([0.0, 1.0, 1.0, 0.0], dtype=jnp.float64)
 
     def b_field(amps: jnp.ndarray) -> jnp.ndarray:
-        return boozer_geometry_scheme4(theta=theta, zeta=zeta, harmonics_amp0=amps).b_hat
+        bmnc = jnp.concatenate([jnp.asarray([b0_over_bbar]), amps * b0_over_bbar])
+        geom = FluxSurfaceGeometry.from_fourier(
+            theta=theta, zeta=zeta, bmnc=bmnc, m=m_modes, n=n_modes,
+            n_periods=5, iota=0.8700, g_hat=-17.885, i_hat=0.0,
+        )  # fmt: skip
+        return geom.b_hat
 
     def objective(amps: jnp.ndarray) -> jnp.ndarray:
         b_hat = b_field(amps)

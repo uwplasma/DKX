@@ -355,7 +355,7 @@ Without editing the namelist, override the equilibrium source through:
 
 - CLI: ``--equilibrium-file ...`` or ``--wout-path ...``
 - Python: ``equilibrium_file=...`` or ``wout_path=...`` in
-  :func:`sfincs_jax.io.write_sfincs_jax_output_h5`
+  :func:`sfincs_jax.api.write_output`
 
 When an override is used, the embedded ``input.namelist`` dataset written to
 ``sfincsOutput.h5`` reflects the effective configuration.

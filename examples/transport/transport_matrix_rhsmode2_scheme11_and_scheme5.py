@@ -20,7 +20,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from sfincs_jax.compare import compare_sfincs_outputs
-from sfincs_jax.io import write_sfincs_jax_output_h5
+from sfincs_jax.api import write_output
 
 
 def _run_case(base: str, *, out_dir: Path) -> None:
@@ -28,12 +28,7 @@ def _run_case(base: str, *, out_dir: Path) -> None:
     ref_path = _REPO_ROOT / "tests" / "ref" / f"{base}.sfincsOutput.h5"
     out_path = out_dir / f"{base}.sfincsOutput_jax.h5"
 
-    write_sfincs_jax_output_h5(
-        input_namelist=input_path,
-        output_path=out_path,
-        compute_transport_matrix=True,
-        overwrite=True,
-    )
+    write_output(input_path, out_path, overwrite=True)
 
     # Print a short parity summary for key arrays.
     results = compare_sfincs_outputs(a_path=ref_path, b_path=out_path, rtol=1e-12, atol=5e-8)
