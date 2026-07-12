@@ -6,9 +6,15 @@ only 3 live files out of legacy — to be MOVED into flat modules, not deleted:
 physics/collisions.py (1137), discretization/xgrid.py (272),
 validation/data_fetch.py (194).
 
-Legacy stays reachable through exactly TWO doors:
-- `cli solve-v3` (direct legacy RHSMode-1 entry) — CLOSE by routing to run.run_profile
-- `io.write_sfincs_jax_output_h5` (write fallback for deferred decks)
+Legacy stays reachable through exactly ONE door (2026-07-11): the
+`io.write_sfincs_jax_output_h5` write fallback (`cli solve-v3` now routes
+canonical). After the 2026-07-11 slice series (Phi1 collision coupling,
+export_f/.npz/solver-trace, vE/vd writer families, geometryScheme 13,
+constraintScheme 3/4, readExternalPhi1, non-stell-sym VMEC) the fallback
+triggers ONLY on: magneticDriftScheme 2-9, xGridScheme outside {1,2,5,6},
+`xDotDerivativeScheme != 0`, and three legacy-only CLI options
+(`--geometry-only`, `--no-fortran-layout`, `--no-overwrite`). Decision:
+implement the remaining two physics features, then delete the gated bulk.
 
 ## Near-term (no physics gate)
 - validation/suite.py(4199): retire to the reference-data-v2 gate — CLEAN (0
