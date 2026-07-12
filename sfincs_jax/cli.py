@@ -306,78 +306,52 @@ def _cmd_solve_v3(args: argparse.Namespace) -> int:
 
     out_state = Path(args.out_state)
 
-    # Default path: the canonical stack (sfincs_jax.run) for RHSMode 1/2/3, so a
-    # supported deck no longer opens a non-deferred door into problems/. The
-    # legacy problems/ solver stays the owner only for the explicitly deferred
-    # features (deck_requires_legacy_pipeline mirrors write-output's routing).
-    legacy_reason = deck_requires_legacy_pipeline(nml)
-    if legacy_reason is None:
-        quiet = bool(getattr(args, "quiet", False))
-        emit_line = None if quiet else (lambda line: _emit(line, level=0, args=args))
-        try:
-            with _canonical_namelist_path(nml=nml, input_path=Path(args.input), args=args) as namelist_path:
-                if rhs_mode == 1:
-                    from .run import run_profile  # noqa: PLC0415
+    # The canonical stack (sfincs_jax.run) owns every supported deck.  Invalid
+    # namelist values (RHSMode outside 1-3, out-of-range option values) surface
+    # as load-time validation errors.
+    quiet = bool(getattr(args, "quiet", False))
+    emit_line = None if quiet else (lambda line: _emit(line, level=0, args=args))
+    try:
+        with _canonical_namelist_path(nml=nml, input_path=Path(args.input), args=args) as namelist_path:
+            if rhs_mode == 1:
+                from .run import run_profile  # noqa: PLC0415
 
-                    run = run_profile(
-                        namelist_path,
-                        solve_method=str(args.solve_method),
-                        tol=float(args.tol),
-                        emit=emit_line,
+                run = run_profile(
+                    namelist_path,
+                    solve_method=str(args.solve_method),
+                    tol=float(args.tol),
+                    emit=emit_line,
+                )
+                state = np.asarray(run.state_vector)
+                residual = float(np.atleast_1d(np.asarray(run.solve_result.residual_norms, dtype=np.float64))[0])
+            else:
+                from .run import run_transport_matrix  # noqa: PLC0415
+
+                run = run_transport_matrix(
+                    namelist_path,
+                    solve_method=str(args.solve_method),
+                    tol=float(args.tol),
+                    emit=emit_line,
+                )
+                state_vectors = np.asarray(run.state_vectors)
+                residual_norms = np.atleast_1d(np.asarray(run.solve_result.residual_norms, dtype=np.float64))
+                col = (int(args.which_rhs) - 1) if args.which_rhs is not None else 0
+                if not (0 <= col < state_vectors.shape[0]):
+                    raise ValueError(
+                        f"whichRHS={args.which_rhs} is out of range for the "
+                        f"{state_vectors.shape[0]} transport-matrix RHS columns"
                     )
-                    state = np.asarray(run.state_vector)
-                    residual = float(np.atleast_1d(np.asarray(run.solve_result.residual_norms, dtype=np.float64))[0])
-                else:
-                    from .run import run_transport_matrix  # noqa: PLC0415
-
-                    run = run_transport_matrix(
-                        namelist_path,
-                        solve_method=str(args.solve_method),
-                        tol=float(args.tol),
-                        emit=emit_line,
-                    )
-                    state_vectors = np.asarray(run.state_vectors)
-                    residual_norms = np.atleast_1d(np.asarray(run.solve_result.residual_norms, dtype=np.float64))
-                    col = (int(args.which_rhs) - 1) if args.which_rhs is not None else 0
-                    if not (0 <= col < state_vectors.shape[0]):
-                        raise ValueError(
-                            f"whichRHS={args.which_rhs} is out of range for the "
-                            f"{state_vectors.shape[0]} transport-matrix RHS columns"
-                        )
-                    state = state_vectors[col]
-                    residual = float(residual_norms[col])
-        except NotImplementedError as exc:
-            # Defensive fallback: features the canonical stack refuses that the
-            # predicate cannot see from the deck alone (for example a
-            # non-stellarator-symmetric VMEC equilibrium) run on the legacy owner.
-            legacy_reason = str(exc)
-        else:
-            out_state.parent.mkdir(parents=True, exist_ok=True)
-            np.save(out_state, state)
-            _emit(f" wrote stateVector -> {out_state.resolve()}", level=0, args=args)
-            _emit(f" residual_norm={residual:.6e}", level=0, args=args)
-            _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
-            return 0
-
-    # Legacy fallback: deferred-feature decks keep the retained problems/ owner.
-    _emit(f" legacy pipeline: {legacy_reason}", level=0, args=args)
-    from .problems.profile_solve import solve_v3_full_system_linear_gmres  # noqa: PLC0415
-
-    result = solve_v3_full_system_linear_gmres(
-        nml=nml,
-        which_rhs=int(args.which_rhs) if args.which_rhs is not None else None,
-        tol=float(args.tol),
-        atol=float(args.atol),
-        restart=int(args.restart),
-        maxiter=int(args.maxiter) if args.maxiter is not None else None,
-        solve_method=str(args.solve_method),
-        differentiable=False,
-        emit=lambda level, msg: _emit(msg, level=level, args=args),
-    )
+                state = state_vectors[col]
+                residual = float(residual_norms[col])
+    except (NotImplementedError, ValueError, RuntimeError) as exc:
+        if os.environ.get("SFINCS_JAX_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}:
+            raise
+        print(f"sfincs_jax solve-v3 failed: {exc}", file=sys.stderr, flush=True)
+        return 2
     out_state.parent.mkdir(parents=True, exist_ok=True)
-    np.save(out_state, np.asarray(result.x))
+    np.save(out_state, state)
     _emit(f" wrote stateVector -> {out_state.resolve()}", level=0, args=args)
-    _emit(f" residual_norm={float(result.residual_norm):.6e}", level=0, args=args)
+    _emit(f" residual_norm={residual:.6e}", level=0, args=args)
     _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
     return 0
 
@@ -400,55 +374,32 @@ def _cmd_run_fortran(args: argparse.Namespace) -> int:
 
 
 def deck_requires_legacy_pipeline(nml) -> str | None:
-    """Reason an RHSMode=1 deck must run on the retained legacy pipeline, or ``None``.
+    """Always ``None``: the canonical stack owns every supported deck.
 
-    The canonical stack (:func:`sfincs_jax.run.run_profile`) owns the supported
-    RHSMode=1 surface: PAS/Fokker-Planck collisions, DKES or full trajectories,
-    constraint schemes 0/1/2/3/4, geometry schemes 1-5/11-13.  The legacy
-    ``problems``/``outputs`` pipeline remains the interim owner for the
-    explicitly deferred features (plan_final.md "Explicit Deferred Items");
-    this predicate mirrors the refusal list of
-    :func:`sfincs_jax.drift_kinetic.kinetic_operator_from_namelist` so the CLI
-    can route decks without building the operator twice.
+    No physics family, output option, or namelist value routes to the retained
+    legacy ``problems``/``outputs`` pipeline anymore.  Out-of-range option
+    values (RHSMode outside 1-3, collisionOperator outside 0/1,
+    constraintScheme outside -1..4, quasineutralityOption outside 1/2) are
+    namelist validation errors raised by
+    :func:`sfincs_jax.inputs.load_sfincs_input`, not legacy routes.  The
+    function is kept only because retained tests assert it returns ``None``;
+    it is deleted together with the legacy stack.
     """
-    general = nml.group("general")
-    phys = nml.group("physicsParameters")
-    other = nml.group("otherNumericalParameters")
-
-    rhs_mode = int(general.get("RHSMODE", 1))
-    if rhs_mode not in (1, 2, 3):
-        return f"RHSMode={rhs_mode} is not covered by the canonical stack"
-    if bool(phys.get("INCLUDEPHI1", False)):
-        # includePhi1 with the kinetic coupling, the collision coupling
-        # (includePhi1InCollisionOperator), and quasineutralityOption 1/2 is
-        # canonical (run_profile -> sfincs_jax.phi1, which emits the vE/vd
-        # electric-/total-drift flux families) and readExternalPhi1 (the fixed
-        # external Phi1 field, a linear f-only solve) are canonical.  quasineutrality
-        # is bypassed entirely when readExternalPhi1, so its option is irrelevant then.
-        if not bool(phys.get("READEXTERNALPHI1", False)) and int(
-            phys.get("QUASINEUTRALITYOPTION", 1)
-        ) not in (1, 2):
-            return "quasineutralityOption not in {1,2} is deferred to the legacy pipeline"
-    # magneticDriftScheme 0-9 is fully canonical (out-of-range values stay a
-    # ValueError raised by kinetic_operator_from_namelist, not a legacy reason).
-    collision_operator = int(phys.get("COLLISIONOPERATOR", 0))
-    if collision_operator not in (0, 1):
-        return f"collisionOperator={collision_operator} is deferred to the legacy pipeline"
-    constraint_scheme = int(phys.get("CONSTRAINTSCHEME", other.get("CONSTRAINTSCHEME", -1)))
-    if constraint_scheme < 0:
-        constraint_scheme = 1 if collision_operator == 0 else 2
-    if constraint_scheme not in (0, 1, 2, 3, 4):
-        return f"constraintScheme={constraint_scheme} is deferred to the legacy pipeline"
+    del nml
     return None
 
 
 def _cmd_write_output(args: argparse.Namespace) -> int:
     t0 = _now()
-    from .io import _output_file_format, write_sfincs_jax_output_h5  # noqa: PLC0415
+    from .writer import output_format_from_suffix  # noqa: PLC0415
 
     nml = _nml_with_cli_equilibrium_override(read_sfincs_input(Path(args.input)), args)
     rhs_mode = int(nml.group("general").get("RHSMODE", 1))
-    output_format = _output_file_format(Path(args.out))
+    try:
+        output_format = output_format_from_suffix(Path(args.out))
+    except ValueError as exc:
+        print(f"sfincs_jax write-output failed: {exc}", file=sys.stderr, flush=True)
+        return 2
     _emit("################################################################", level=0, args=args)
     _emit(" sfincs_jax write-output", level=0, args=args)
     _emit(f" input={Path(args.input).resolve()}", level=0, args=args)
@@ -457,107 +408,68 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
     _emit_runtime_info(args=args)
     _emit_parallel_runtime_info(args=args)
 
-    # Default to upstream v3 behavior: full solve/write appropriate to RHSMode.
+    # Default to upstream v3 behavior: full solve/write appropriate to RHSMode
+    # (--geometry-only skips the solve), all on the canonical stack
+    # (sfincs_jax.run).  Invalid namelist values (RHSMode outside 1-3,
+    # out-of-range option values) surface as load-time validation errors.
     geometry_only = bool(getattr(args, "geometry_only", False))
-    compute_solution = (not geometry_only) and (bool(getattr(args, "compute_solution", False)) or rhs_mode == 1)
-    compute_transport_matrix = (not geometry_only) and (bool(args.compute_transport_matrix) or rhs_mode in (2, 3))
-
-    # Default path: the canonical stack (sfincs_jax.run) for RHSMode=1/2/3. The
-    # canonical writer now covers .npz output, --solver-trace sidecars, and the
-    # export_f data family, so the legacy outputs writer remains the owner only
-    # for the deferred-physics decks (deck_requires_legacy_pipeline) and the
-    # output options the canonical writer does not cover yet (non-Fortran
-    # layout, --no-overwrite, --geometry-only).
-    legacy_reason: str | None = None
-    if output_format not in {"h5", "netcdf", "npz"}:
-        legacy_reason = f"output format {output_format!r} is written by the legacy pipeline"
-    elif not bool(args.fortran_layout):
-        legacy_reason = "--no-fortran-layout output is written by the legacy pipeline"
-    elif not bool(args.overwrite):
-        legacy_reason = "--no-overwrite is handled by the legacy pipeline"
-    elif geometry_only:
-        legacy_reason = "--geometry-only output is written by the legacy pipeline"
-    else:
-        legacy_reason = deck_requires_legacy_pipeline(nml)
-    use_canonical = legacy_reason is None and (
-        (rhs_mode in (2, 3) and compute_transport_matrix) or (rhs_mode == 1 and compute_solution)
-    )
-    if use_canonical:
-        res_group = nml.group("resolutionParameters")
-        try:
-            solver_tol = float(res_group.get("SOLVERTOLERANCE", 1e-10))
-        except (TypeError, ValueError):
-            solver_tol = 1e-10
-        quiet = bool(getattr(args, "quiet", False))
-        emit_line = None if quiet else (lambda line: _emit(line, level=0, args=args))
-        solver_trace_path = Path(args.solver_trace) if getattr(args, "solver_trace", None) else None
-        try:
-            with _canonical_namelist_path(nml=nml, input_path=Path(args.input), args=args) as namelist_path:
-                if rhs_mode == 1:
-                    from .run import run_profile  # noqa: PLC0415
-
-                    run = run_profile(
-                        namelist_path,
-                        solve_method=str(getattr(args, "solve_method", "auto")),
-                        tol=solver_tol,
-                        out_path=Path(args.out),
-                        solver_trace_path=solver_trace_path,
-                        emit=emit_line,
-                    )
-                else:
-                    from .run import run_transport_matrix  # noqa: PLC0415
-
-                    run = run_transport_matrix(
-                        namelist_path,
-                        solve_method=str(getattr(args, "solve_method", "auto")),
-                        tol=solver_tol,
-                        out_path=Path(args.out),
-                        solver_trace_path=solver_trace_path,
-                        emit=emit_line,
-                    )
-        except NotImplementedError as exc:
-            # Defensive fallback: features the canonical stack refuses that the
-            # predicate cannot see from the deck alone (for example a
-            # non-stellarator-symmetric VMEC equilibrium) run on the legacy owner.
-            legacy_reason = str(exc)
-            use_canonical = False
-        except RuntimeError as exc:
-            if os.environ.get("SFINCS_JAX_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}:
-                raise
-            print(f"sfincs_jax write-output failed: {exc}", file=sys.stderr, flush=True)
-            return 2
-        if use_canonical:
-            _emit(f" wrote output -> {run.output_path}", level=0, args=args)
-            if solver_trace_path is not None:
-                _emit(f" wrote solver trace -> {solver_trace_path.resolve()}", level=0, args=args)
-            _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
-            return 0
-
-    if legacy_reason is not None:
-        _emit(f" legacy pipeline: {legacy_reason}", level=0, args=args)
-
+    res_group = nml.group("resolutionParameters")
     try:
-        out_path = write_sfincs_jax_output_h5(
-            input_namelist=Path(args.input),
-            output_path=Path(args.out),
-            equilibrium_file=getattr(args, "equilibrium_file", None),
-            wout_path=getattr(args, "wout_path", None),
-            fortran_layout=bool(args.fortran_layout),
-            overwrite=bool(args.overwrite),
-            compute_transport_matrix=bool(compute_transport_matrix),
-            compute_solution=bool(compute_solution),
-            differentiable=False,
-            solver_trace_path=Path(args.solver_trace) if getattr(args, "solver_trace", None) else None,
-            solve_method=str(getattr(args, "solve_method", "auto")),
-            emit=lambda level, msg: _emit(msg, level=level, args=args),
-            verbose=not bool(getattr(args, "quiet", False)),
-        )
-    except RuntimeError as exc:
+        solver_tol = float(res_group.get("SOLVERTOLERANCE", 1e-10))
+    except (TypeError, ValueError):
+        solver_tol = 1e-10
+    quiet = bool(getattr(args, "quiet", False))
+    emit_line = None if quiet else (lambda line: _emit(line, level=0, args=args))
+    solver_trace_path = Path(args.solver_trace) if getattr(args, "solver_trace", None) else None
+    overwrite = bool(args.overwrite)
+    fortran_layout = bool(args.fortran_layout)
+    try:
+        with _canonical_namelist_path(nml=nml, input_path=Path(args.input), args=args) as namelist_path:
+            if geometry_only:
+                from .run import run_geometry  # noqa: PLC0415
+
+                run = run_geometry(
+                    namelist_path,
+                    out_path=Path(args.out),
+                    overwrite=overwrite,
+                    fortran_layout=fortran_layout,
+                    solver_trace_path=solver_trace_path,
+                    emit=emit_line,
+                )
+            elif rhs_mode == 1:
+                from .run import run_profile  # noqa: PLC0415
+
+                run = run_profile(
+                    namelist_path,
+                    solve_method=str(getattr(args, "solve_method", "auto")),
+                    tol=solver_tol,
+                    out_path=Path(args.out),
+                    overwrite=overwrite,
+                    fortran_layout=fortran_layout,
+                    solver_trace_path=solver_trace_path,
+                    emit=emit_line,
+                )
+            else:
+                from .run import run_transport_matrix  # noqa: PLC0415
+
+                run = run_transport_matrix(
+                    namelist_path,
+                    solve_method=str(getattr(args, "solve_method", "auto")),
+                    tol=solver_tol,
+                    out_path=Path(args.out),
+                    overwrite=overwrite,
+                    fortran_layout=fortran_layout,
+                    solver_trace_path=solver_trace_path,
+                    emit=emit_line,
+                )
+    except (NotImplementedError, ValueError, FileExistsError, RuntimeError) as exc:
         if os.environ.get("SFINCS_JAX_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}:
             raise
         print(f"sfincs_jax write-output failed: {exc}", file=sys.stderr, flush=True)
         return 2
-    _emit(f" wrote output -> {out_path}", level=0, args=args)
+    _emit(f" wrote output -> {run.output_path}", level=0, args=args)
+    if solver_trace_path is not None:
+        _emit(f" wrote solver trace -> {solver_trace_path.resolve()}", level=0, args=args)
     _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
     return 0
 

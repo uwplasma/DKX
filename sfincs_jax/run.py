@@ -51,15 +51,19 @@ from sfincs_jax.writer import (
     _geometry_extras,
     _u_hat,
     operator_containers,
+    write_geometry_output,
+    write_geometry_solver_trace,
     write_profile_output,
     write_run_solver_trace,
     write_transport_output,
 )
 
 __all__ = [
+    "GeometryRun",
     "ProfileRun",
     "TransportRun",
     "profile_moments_from_operator",
+    "run_geometry",
     "run_profile",
     "run_transport_matrix",
 ]
@@ -234,6 +238,8 @@ def run_transport_matrix(
     solve_method: str = "auto",
     tol: float = 1e-10,
     out_path: str | Path | None = None,
+    overwrite: bool = True,
+    fortran_layout: bool = True,
     solver_trace_path: str | Path | None = None,
     emit: Callable[[str], None] | None = print,
 ) -> TransportRun:
@@ -247,6 +253,10 @@ def run_transport_matrix(
         tol: relative residual tolerance per whichRHS column.
         out_path: optional ``sfincsOutput`` file (``.h5``, ``.nc``, or ``.npz``)
             written by :func:`sfincs_jax.writer.write_transport_output`.
+        overwrite: when ``False``, raise :class:`FileExistsError` if
+            ``out_path`` already exists.
+        fortran_layout: store the Fortran column-major dataset layout in
+            ``out_path`` (default); ``False`` stores Python-native layout.
         solver_trace_path: optional JSON sidecar path; when set, a versioned
             :class:`sfincs_jax.solvers.diagnostics.SolverTrace` is written from
             the shared multi-RHS :class:`sfincs_jax.solve.SolveResult`.
@@ -317,7 +327,7 @@ def run_transport_matrix(
         output_path = write_transport_output(
             path=out_path, inp=inp, op=op, grids=grids, geom=geom, radial=radial,
             state_vectors=state_vectors, transport_matrix=transport_matrix,
-            elapsed_times=elapsed,
+            elapsed_times=elapsed, overwrite=overwrite, fortran_layout=fortran_layout,
         )  # fmt: skip
 
     if solver_trace_path is not None:
@@ -444,6 +454,8 @@ def run_profile(
     solve_method: str = "auto",
     tol: float = 1e-10,
     out_path: str | Path | None = None,
+    overwrite: bool = True,
+    fortran_layout: bool = True,
     solver_trace_path: str | Path | None = None,
     emit: Callable[[str], None] | None = print,
 ) -> ProfileRun:
@@ -459,6 +471,10 @@ def run_profile(
         tol: relative residual tolerance for the single-RHS solve.
         out_path: optional ``sfincsOutput`` file (``.h5``, ``.nc``, or ``.npz``)
             written by :func:`sfincs_jax.writer.write_profile_output`.
+        overwrite: when ``False``, raise :class:`FileExistsError` if
+            ``out_path`` already exists.
+        fortran_layout: store the Fortran column-major dataset layout in
+            ``out_path`` (default); ``False`` stores Python-native layout.
         solver_trace_path: optional JSON sidecar path; when set, a versioned
             :class:`sfincs_jax.solvers.diagnostics.SolverTrace` is written from
             the single-RHS :class:`sfincs_jax.solve.SolveResult`.
@@ -551,6 +567,7 @@ def run_profile(
             converged=bool(result.converged) if op.include_phi1 else None,
             solver_method=result.method, solver_requested_method=result.method,
             residual_norm=residual_norm if op.include_phi1 else None,
+            overwrite=overwrite, fortran_layout=fortran_layout,
         )  # fmt: skip
 
     if solver_trace_path is not None:
@@ -574,3 +591,79 @@ def run_profile(
         moments=moments,
         output_path=output_path,
     )
+
+
+# ---------------------------------------------------------------------------
+# Geometry-only: write the base/geometry output datasets without solving
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class GeometryRun:
+    """Result of one ``--geometry-only`` canonical-stack write (no solve)."""
+
+    input: SfincsInput
+    operator: KineticOperator
+    output_path: Path
+
+
+def run_geometry(
+    namelist_path: str | Path,
+    *,
+    out_path: str | Path,
+    overwrite: bool = True,
+    fortran_layout: bool = True,
+    solver_trace_path: str | Path | None = None,
+    emit: Callable[[str], None] | None = print,
+) -> GeometryRun:
+    """Write the geometry-only ``sfincsOutput`` file for a deck without solving.
+
+    Builds the canonical operator, grids, and flux-surface geometry exactly as
+    :func:`run_profile`/:func:`run_transport_matrix` would, then emits the
+    state-independent base/geometry datasets (``NIterations=0``) via
+    :func:`sfincs_jax.writer.write_geometry_output`.
+
+    Args:
+        namelist_path: SFINCS ``input.namelist`` file (validated on load).
+        out_path: output file; the suffix selects ``.h5``/``.nc``/``.npz``.
+        overwrite: when ``False``, raise :class:`FileExistsError` if
+            ``out_path`` already exists.
+        fortran_layout: store the Fortran column-major dataset layout
+            (default); ``False`` stores Python-native layout.
+        solver_trace_path: optional JSON sidecar path; when set, a
+            ``selected_path="geometry_only"`` trace is written (no solve ran).
+        emit: per-line stdout sink for the startup print block; ``None``
+            silences it.
+
+    Returns:
+        A :class:`GeometryRun` with the resolved output path.
+    """
+    t0 = time.perf_counter()
+    namelist_path = Path(namelist_path)
+    inp = load_sfincs_input(namelist_path)
+    raw = inp.raw if inp.general.rhs_mode == 1 else _raw_with_validated_overrides(inp)
+    if raw is None:
+        raise ValueError("run_geometry requires an input parsed from a namelist file.")
+
+    op = kinetic_operator_from_namelist(raw)
+    grids = _grids_from_input(inp, raw)
+    geom: FluxSurfaceGeometry
+    radial: RadialCoordinates
+    geom, radial = _geometry_and_radial(nml=raw, grids=grids)
+
+    _emit_lines(emit, _startup_lines(inp=inp, op=op, grids=grids, input_name=namelist_path.name))
+
+    output_path = write_geometry_output(
+        path=out_path, inp=inp, op=op, grids=grids, geom=geom, radial=radial,
+        overwrite=overwrite, fortran_layout=fortran_layout,
+    )  # fmt: skip
+
+    if solver_trace_path is not None:
+        write_geometry_solver_trace(
+            path=solver_trace_path, inp=inp, op=op,
+            elapsed_seconds=time.perf_counter() - t0,
+            input_namelist=namelist_path, output_path=out_path,
+        )  # fmt: skip
+
+    _emit_lines(emit, [console.goodbye_line()])
+    return GeometryRun(input=inp, operator=op, output_path=output_path)

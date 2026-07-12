@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from sfincs_jax import cli
 from sfincs_jax.input_compat import effective_equilibrium_file
@@ -75,17 +76,23 @@ def test_cmd_write_output_routes_solver_trace_through_canonical(monkeypatch, tmp
 
 
 def test_cmd_write_output_accepts_extension_selected_formats(monkeypatch, tmp_path: Path) -> None:
+    """--geometry-only routes through the canonical run_geometry; --out suffix selects the format."""
     captured: dict[str, object] = {}
 
-    def _fake_write_output_h5(**kwargs):
+    def _fake_run_geometry(namelist_path, **kwargs):
+        captured["namelist_path"] = Path(namelist_path)
         captured.update(kwargs)
-        out = Path(kwargs["output_path"])
+        out = Path(kwargs["out_path"])
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"")
-        return out
+        return SimpleNamespace(output_path=out)
+
+    def _fail_legacy(**_kwargs):  # pragma: no cover - geometry-only must not use the legacy writer
+        raise AssertionError("--geometry-only must not enter the legacy writer")
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+    monkeypatch.setattr("sfincs_jax.run.run_geometry", _fake_run_geometry)
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fail_legacy)
 
     args = Namespace(
         input=str(tmp_path / "input.namelist"),
@@ -101,7 +108,9 @@ def test_cmd_write_output_accepts_extension_selected_formats(monkeypatch, tmp_pa
         verbose=0,
     )
     assert cli._cmd_write_output(args) == 0
-    assert Path(captured["output_path"]).suffix == ".nc"
+    assert Path(captured["out_path"]).suffix == ".nc"
+    assert captured["overwrite"] is True
+    assert captured["fortran_layout"] is True
 
 
 def test_default_plot_output_path_uses_pdf() -> None:
@@ -190,23 +199,13 @@ def test_cmd_solve_v3_transport_mode_selects_which_rhs_column(monkeypatch, tmp_p
     np.testing.assert_array_equal(np.load(out_state), np.asarray([2.0, 2.0]))
 
 
-def test_cmd_solve_v3_deferred_deck_uses_legacy_pipeline(monkeypatch, tmp_path: Path) -> None:
-    """A deferred-feature deck still falls back to the retained legacy problems/ owner."""
-    captured: dict[str, object] = {}
-
-    def _fake_solve(**kwargs):
-        captured.update(kwargs)
-        return SimpleNamespace(x=np.zeros((2,), dtype=np.float64), residual_norm=np.float64(0.0))
-
-    # RHSMode=4 is not covered by the canonical stack (deck_requires_legacy_pipeline).
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=4))
-    monkeypatch.setattr(
-        "sfincs_jax.problems.profile_solve.solve_v3_full_system_linear_gmres",
-        _fake_solve,
-    )
+def test_cmd_solve_v3_rhsmode4_is_a_validation_error(tmp_path: Path, capsys) -> None:
+    """RHSMode=4 (the retired Fortran adjoint mode) is a clean namelist validation error."""
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text("&general\n  RHSMode = 4\n/\n", encoding="utf-8")
 
     args = Namespace(
-        input=str(tmp_path / "input.namelist"),
+        input=str(input_path),
         out_state=str(tmp_path / "state.npy"),
         equilibrium_file=None,
         wout_path=None,
@@ -219,9 +218,11 @@ def test_cmd_solve_v3_deferred_deck_uses_legacy_pipeline(monkeypatch, tmp_path: 
         quiet=True,
         verbose=0,
     )
-    assert cli._cmd_solve_v3(args) == 0
-    assert captured["differentiable"] is False
-    assert (tmp_path / "state.npy").exists()
+    assert cli._cmd_solve_v3(args) == 2
+    err = capsys.readouterr().err
+    assert "sfincs_jax solve-v3 failed: RHSMode must be 1, 2, or 3 (got 4)" in err
+    assert "jax.grad" in err
+    assert not (tmp_path / "state.npy").exists()
 
 
 def test_cmd_transport_matrix_v3_uses_canonical_run(monkeypatch, tmp_path: Path) -> None:
@@ -841,29 +842,28 @@ def test_main_accepts_quiet_after_subcommand(monkeypatch, tmp_path: Path) -> Non
 
 
 def test_main_bare_input_uses_public_auto_contract(monkeypatch, tmp_path: Path) -> None:
+    """Bare-input runs route through the canonical run_profile with the auto contract."""
     captured: dict[str, object] = {}
 
-    def _fake_write_output_h5(**kwargs):
+    def _fake_run_profile(namelist_path, **kwargs):
+        captured["namelist_text"] = Path(namelist_path).read_text(encoding="utf-8")
         captured.update(kwargs)
-        out = Path(kwargs["output_path"])
+        out = Path(kwargs["out_path"])
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"")
-        return out
+        return SimpleNamespace(output_path=out)
 
     def _fake_namelist_with_source(_path):
         nml = _FakeNamelist(rhs_mode=1)
-        nml.source_text = "&general\n/\n"
+        nml.source_text = "&general\n/\n&geometryParameters\n/\n"
         return nml
 
-    # The canonical stack materializes the --wout-path override and would solve;
-    # here we exercise the documented legacy fallback (NotImplementedError) so the
-    # public auto contract forwarded to the writer stays covered.
-    def _canonical_refuses(*_args, **_kwargs):
-        raise NotImplementedError("canonical stack deferred to legacy writer")
+    def _fail_legacy(**_kwargs):  # pragma: no cover - bare runs must not use the legacy writer
+        raise AssertionError("a bare-input run must not enter the legacy writer")
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", _fake_namelist_with_source)
-    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fail_legacy)
 
     rc = cli.main(
         [
@@ -878,10 +878,11 @@ def test_main_bare_input_uses_public_auto_contract(monkeypatch, tmp_path: Path) 
 
     assert rc == 0
     assert captured["solve_method"] == "auto"
-    assert captured["differentiable"] is False
-    assert captured["compute_solution"] is True
-    assert captured["compute_transport_matrix"] is False
-    assert captured["wout_path"] == str(tmp_path / "wout.nc")
+    assert captured["overwrite"] is True
+    assert captured["fortran_layout"] is True
+    assert captured["out_path"] == Path(tmp_path / "sfincsOutput.h5")
+    # The --wout-path override is materialized into the namelist run_profile reads.
+    assert str(tmp_path / "wout.nc") in str(captured["namelist_text"])
 
 
 def test_write_output_help_presents_solver_override_as_advanced(capsys) -> None:
@@ -933,22 +934,24 @@ def test_main_write_output_forwards_solver_trace_sidecar(monkeypatch, tmp_path: 
     assert captured["solver_trace_path"] == trace_path
 
 
-def test_main_write_output_forwards_sparse_host_solve_method(monkeypatch, tmp_path: Path) -> None:
-    captured: dict[str, object] = {}
-
-    def _fake_write_output_h5(**kwargs):
-        captured.update(kwargs)
-        out = Path(kwargs["output_path"])
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_bytes(b"")
-        return out
+@pytest.mark.parametrize(
+    "method",
+    ["sparse_host", "sparse_pc_gmres", "xblock_sparse_pc_gmres", "sparse_lsmr", "petsc_compat"],
+)
+def test_main_write_output_removed_solve_methods_error_cleanly(
+    monkeypatch, tmp_path: Path, capsys, method: str
+) -> None:
+    """Solve methods removed from the canonical stack error cleanly (no legacy fallback remains)."""
 
     def _canonical_refuses(*_args, **_kwargs):
-        raise NotImplementedError("solve_method=sparse_host was removed from the canonical stack")
+        raise NotImplementedError(f"solve_method={method} was removed from the canonical stack")
+
+    def _fail_legacy(**_kwargs):  # pragma: no cover - no legacy fallback remains
+        raise AssertionError("removed solve methods must not fall back to the legacy writer")
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
     monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fail_legacy)
 
     rc = cli.main(
         [
@@ -958,115 +961,15 @@ def test_main_write_output_forwards_sparse_host_solve_method(monkeypatch, tmp_pa
             "--out",
             str(tmp_path / "sfincsOutput.h5"),
             "--solve-method",
-            "sparse_host",
+            method,
             "--quiet",
         ]
     )
 
-    assert rc == 0
-    assert captured["solve_method"] == "sparse_host"
-
-
-def test_main_write_output_forwards_sparse_pc_gmres_solve_method(monkeypatch, tmp_path: Path) -> None:
-    captured: dict[str, object] = {}
-
-    def _fake_write_output_h5(**kwargs):
-        captured.update(kwargs)
-        out = Path(kwargs["output_path"])
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_bytes(b"")
-        return out
-
-    def _canonical_refuses(*_args, **_kwargs):
-        raise NotImplementedError("solve_method=sparse_pc_gmres was removed from the canonical stack")
-
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
-
-    rc = cli.main(
-        [
-            "write-output",
-            "--input",
-            str(tmp_path / "input.namelist"),
-            "--out",
-            str(tmp_path / "sfincsOutput.h5"),
-            "--solve-method",
-            "sparse_pc_gmres",
-            "--quiet",
-        ]
-    )
-
-    assert rc == 0
-    assert captured["solve_method"] == "sparse_pc_gmres"
-
-
-def test_main_write_output_forwards_xblock_sparse_pc_gmres_solve_method(monkeypatch, tmp_path: Path) -> None:
-    captured: dict[str, object] = {}
-
-    def _fake_write_output_h5(**kwargs):
-        captured.update(kwargs)
-        out = Path(kwargs["output_path"])
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_bytes(b"")
-        return out
-
-    def _canonical_refuses(*_args, **_kwargs):
-        raise NotImplementedError("solve_method=xblock_sparse_pc_gmres was removed from the canonical stack")
-
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
-
-    rc = cli.main(
-        [
-            "write-output",
-            "--input",
-            str(tmp_path / "input.namelist"),
-            "--out",
-            str(tmp_path / "sfincsOutput.h5"),
-            "--solve-method",
-            "xblock_sparse_pc_gmres",
-            "--quiet",
-        ]
-    )
-
-    assert rc == 0
-    assert captured["solve_method"] == "xblock_sparse_pc_gmres"
-
-
-def test_main_write_output_forwards_sparse_lsmr_solve_method(monkeypatch, tmp_path: Path) -> None:
-    captured: dict[str, object] = {}
-
-    def _fake_write_output_h5(**kwargs):
-        captured.update(kwargs)
-        out = Path(kwargs["output_path"])
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_bytes(b"")
-        return out
-
-    def _canonical_refuses(*_args, **_kwargs):
-        raise NotImplementedError("solve_method=sparse_lsmr was removed from the canonical stack")
-
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
-
-    rc = cli.main(
-        [
-            "write-output",
-            "--input",
-            str(tmp_path / "input.namelist"),
-            "--out",
-            str(tmp_path / "sfincsOutput.h5"),
-            "--solve-method",
-            "sparse_lsmr",
-            "--quiet",
-        ]
-    )
-
-    assert rc == 0
-    assert captured["solve_method"] == "sparse_lsmr"
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert f"sfincs_jax write-output failed: solve_method={method} was removed" in err
+    assert "Traceback" not in err
 
 
 def test_main_write_output_forwards_sparse_host_safe_solve_method(monkeypatch, tmp_path: Path) -> None:
@@ -1100,40 +1003,6 @@ def test_main_write_output_forwards_sparse_host_safe_solve_method(monkeypatch, t
 
     assert rc == 0
     assert captured["solve_method"] == "sparse_host_safe"
-
-
-def test_main_write_output_forwards_petsc_compat_solve_method(monkeypatch, tmp_path: Path) -> None:
-    captured: dict[str, object] = {}
-
-    def _fake_write_output_h5(**kwargs):
-        captured.update(kwargs)
-        out = Path(kwargs["output_path"])
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_bytes(b"")
-        return out
-
-    def _canonical_refuses(*_args, **_kwargs):
-        raise NotImplementedError("solve_method=petsc_compat was removed from the canonical stack")
-
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
-
-    rc = cli.main(
-        [
-            "write-output",
-            "--input",
-            str(tmp_path / "input.namelist"),
-            "--out",
-            str(tmp_path / "sfincsOutput.h5"),
-            "--solve-method",
-            "petsc_compat",
-            "--quiet",
-        ]
-    )
-
-    assert rc == 0
-    assert captured["solve_method"] == "petsc_compat"
 
 
 def test_main_scan_er_forwards_structured_csr_solve_method(monkeypatch, tmp_path: Path) -> None:
@@ -1198,15 +1067,15 @@ def test_main_write_output_reports_runtime_errors_without_traceback(monkeypatch,
 def test_main_preserves_shard_axis_before_subcommand(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_write_output_h5(**kwargs):
+    def _fake_run_geometry(namelist_path, **kwargs):
         captured["shard_axis"] = os.environ.get("SFINCS_JAX_MATVEC_SHARD_AXIS")
-        out = Path(kwargs["output_path"])
+        out = Path(kwargs["out_path"])
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"")
-        return out
+        return SimpleNamespace(output_path=out)
 
     monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+    monkeypatch.setattr("sfincs_jax.run.run_geometry", _fake_run_geometry)
     monkeypatch.setenv("SFINCS_JAX_CORES", "4")
     monkeypatch.setenv("SFINCS_JAX_CPU_DEVICES", "4")
 
@@ -1414,3 +1283,155 @@ def test_postprocess_upstream_cli_strips_separator_and_forwards_flags(monkeypatc
     assert captured["args"] == ["pdf"]
     assert captured["utils_dir"] == Path(tmp_path / "utils")
     assert captured["noninteractive"] is True
+
+
+# ---------------------------------------------------------------------------
+# Canonical --no-overwrite / --no-fortran-layout / --geometry-only coverage
+# (the CLI output options previously routed to the legacy outputs writer).
+# ---------------------------------------------------------------------------
+
+_TINY_DECK = Path(__file__).parent / "ref" / "pas_1species_PAS_noEr_tiny_scheme1.input.namelist"
+
+
+def _h5_datasets(path: Path) -> dict[str, object]:
+    import h5py
+
+    with h5py.File(path, "r") as f:
+        return {key: f[key][()] for key in f.keys()}
+
+
+def test_write_output_no_overwrite_errors_when_file_exists(tmp_path: Path, capsys) -> None:
+    """--no-overwrite refuses to clobber an existing output (canonical FileExistsError guard)."""
+    out = tmp_path / "sfincsOutput.h5"
+    assert cli.main(
+        ["write-output", "--input", str(_TINY_DECK), "--out", str(out), "--geometry-only", "--quiet"]
+    ) == 0
+    assert out.exists()
+    capsys.readouterr()
+
+    rc = cli.main(
+        [
+            "write-output",
+            "--input",
+            str(_TINY_DECK),
+            "--out",
+            str(out),
+            "--geometry-only",
+            "--no-overwrite",
+            "--quiet",
+        ]
+    )
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "sfincs_jax write-output failed" in err
+    assert str(out.resolve()) in err
+    assert "Traceback" not in err
+
+    # The library-level guard is the same FileExistsError the legacy writer raised.
+    from sfincs_jax.run import run_geometry
+
+    with pytest.raises(FileExistsError):
+        run_geometry(_TINY_DECK, out_path=out, overwrite=False, emit=None)
+
+
+def test_write_output_no_fortran_layout_reverses_axes(tmp_path: Path) -> None:
+    """--no-fortran-layout stores every dataset as the reversed-axes view of the Fortran layout."""
+    fortran_out = tmp_path / "fortran.h5"
+    native_out = tmp_path / "native.h5"
+    assert cli.main(
+        ["write-output", "--input", str(_TINY_DECK), "--out", str(fortran_out), "--geometry-only", "--quiet"]
+    ) == 0
+    assert cli.main(
+        [
+            "write-output",
+            "--input",
+            str(_TINY_DECK),
+            "--out",
+            str(native_out),
+            "--geometry-only",
+            "--no-fortran-layout",
+            "--quiet",
+        ]
+    ) == 0
+
+    fortran = _h5_datasets(fortran_out)
+    native = _h5_datasets(native_out)
+    assert set(fortran) == set(native)
+    multi_dim = 0
+    for key, f_val in fortran.items():
+        n_val = native[key]
+        if isinstance(f_val, bytes) or (hasattr(f_val, "dtype") and f_val.dtype.kind in "OSU"):
+            assert n_val == f_val
+            continue
+        f_arr = np.asarray(f_val)
+        n_arr = np.asarray(n_val)
+        if f_arr.ndim >= 2:
+            multi_dim += 1
+            assert n_arr.shape == tuple(reversed(f_arr.shape))
+            np.testing.assert_array_equal(n_arr, np.transpose(f_arr, tuple(reversed(range(f_arr.ndim)))))
+        else:
+            np.testing.assert_array_equal(n_arr, f_arr)
+    assert multi_dim > 0  # e.g. BHat (Nzeta, Ntheta) in the Fortran view
+
+
+def test_write_output_no_fortran_layout_covers_solution_datasets(tmp_path: Path) -> None:
+    """fortran_layout=False also reverses the per-iteration solution datasets (one solve)."""
+    from sfincs_jax.drift_kinetic import _geometry_and_radial
+    from sfincs_jax.run import _grids_from_input, run_profile
+    from sfincs_jax.writer import write_profile_output
+
+    fortran_out = tmp_path / "fortran.h5"
+    native_out = tmp_path / "native.h5"
+    run = run_profile(_TINY_DECK, out_path=fortran_out, emit=None)
+    grids = _grids_from_input(run.input, run.input.raw)
+    geom, radial = _geometry_and_radial(nml=run.input.raw, grids=grids)
+    write_profile_output(
+        path=native_out,
+        inp=run.input,
+        op=run.operator,
+        grids=grids,
+        geom=geom,
+        radial=radial,
+        state_vector=run.state_vector,
+        fortran_layout=False,
+    )
+
+    fortran = _h5_datasets(fortran_out)
+    native = _h5_datasets(native_out)
+    assert set(fortran) == set(native)
+    for key in ("particleFlux_vm_psiHat", "FSABFlow", "sources"):
+        f_arr = np.asarray(fortran[key])
+        n_arr = np.asarray(native[key])
+        assert f_arr.ndim >= 2
+        np.testing.assert_array_equal(n_arr, np.transpose(f_arr, tuple(reversed(range(f_arr.ndim)))))
+
+
+def test_write_output_geometry_only_matches_legacy_writer(tmp_path: Path) -> None:
+    """Canonical --geometry-only reproduces the legacy geometry-only key set and values."""
+    from sfincs_jax.run import run_geometry
+
+    canonical_out = tmp_path / "canonical.h5"
+    legacy_out = tmp_path / "legacy.h5"
+    run = run_geometry(_TINY_DECK, out_path=canonical_out, emit=None)
+    assert run.output_path == canonical_out.resolve()
+    write_sfincs_jax_output_h5(
+        input_namelist=_TINY_DECK,
+        output_path=legacy_out,
+        compute_solution=False,
+        compute_transport_matrix=False,
+        verbose=False,
+    )
+
+    canonical = _h5_datasets(canonical_out)
+    legacy = _h5_datasets(legacy_out)
+    assert set(canonical) == set(legacy)
+    assert int(np.asarray(canonical["NIterations"]).reshape(())) == 0
+    for key, l_val in legacy.items():
+        c_val = canonical[key]
+        if isinstance(l_val, bytes) or (hasattr(l_val, "dtype") and l_val.dtype.kind in "OSU"):
+            assert c_val == l_val
+            continue
+        l_arr = np.asarray(l_val, dtype=np.float64)
+        c_arr = np.asarray(c_val, dtype=np.float64)
+        assert c_arr.shape == l_arr.shape
+        np.testing.assert_allclose(c_arr, l_arr, rtol=0.0, atol=1e-12)

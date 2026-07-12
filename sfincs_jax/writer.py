@@ -65,6 +65,9 @@ from sfincs_jax.phase_space import Grids
 
 __all__ = [
     "operator_containers",
+    "output_format_from_suffix",
+    "write_geometry_output",
+    "write_geometry_solver_trace",
     "write_profile_output",
     "write_run_solver_trace",
     "write_transport_output",
@@ -767,18 +770,51 @@ def _rhsmode1_iteration_fields(
     return out
 
 
-def _write_h5(path: Path, base: Dict[str, np.ndarray], iteration: Dict[str, np.ndarray], text: str) -> None:
+def _stored_layouts(
+    base: Dict[str, np.ndarray], iteration: Dict[str, np.ndarray], *, fortran_layout: bool
+) -> tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
+    """On-disk views of the ``base``/``iteration`` dicts for the selected layout.
+
+    ``base`` values are Python-native (row-major logical) and the ``iteration``
+    builders emit the Fortran on-disk convention directly, so the Fortran layout
+    reverse-transposes ``base`` only.  ``fortran_layout=False`` stores every
+    dataset Python-native (the legacy ``fortran_h5_layout`` transpose skipped),
+    which reverse-transposes ``iteration`` instead: ``_reversed_axes`` is an
+    involution, so each non-Fortran dataset is exactly the reversed-axes view of
+    its Fortran counterpart.
+    """
+    if fortran_layout:
+        return {k: _reversed_axes(v) for k, v in base.items()}, iteration
+    return base, {k: _reversed_axes(v) for k, v in iteration.items()}
+
+
+def _write_h5(
+    path: Path,
+    base: Dict[str, np.ndarray],
+    iteration: Dict[str, np.ndarray],
+    text: str,
+    *,
+    fortran_layout: bool = True,
+) -> None:
     import h5py  # noqa: PLC0415
 
+    base, iteration = _stored_layouts(base, iteration, fortran_layout=fortran_layout)
     with h5py.File(path, "w") as f:
         for key, value in base.items():
-            f.create_dataset(key, data=_reversed_axes(value))
+            f.create_dataset(key, data=value)
         for key, value in iteration.items():
             f.create_dataset(key, data=value)
         f.create_dataset("input.namelist", data=text)
 
 
-def _write_npz(path: Path, base: Dict[str, np.ndarray], iteration: Dict[str, np.ndarray], text: str) -> None:
+def _write_npz(
+    path: Path,
+    base: Dict[str, np.ndarray],
+    iteration: Dict[str, np.ndarray],
+    text: str,
+    *,
+    fortran_layout: bool = True,
+) -> None:
     """Write an uncompressed ``.npz`` archive with the SFINCS Fortran readback layout.
 
     Mirrors :func:`_write_h5`: ``base`` grid/geometry/normalization fields are
@@ -788,13 +824,9 @@ def _write_npz(path: Path, base: Dict[str, np.ndarray], iteration: Dict[str, np.
     replacement for the legacy ``outputs.formats.write_sfincs_npz`` path so
     ``--out *.npz`` no longer needs the legacy writer.
     """
+    base, iteration = _stored_layouts(base, iteration, fortran_layout=fortran_layout)
     payload: Dict[str, np.ndarray] = {}
-    for key, value in base.items():
-        arr = _reversed_axes(np.asarray(value))
-        if arr.ndim > 0 and arr.dtype.kind != "O":
-            arr = np.ascontiguousarray(arr)
-        payload[key] = arr
-    for key, value in iteration.items():
+    for key, value in {**base, **iteration}.items():
         arr = np.asarray(value)
         if arr.ndim > 0 and arr.dtype.kind != "O":
             arr = np.ascontiguousarray(arr)
@@ -803,9 +835,17 @@ def _write_npz(path: Path, base: Dict[str, np.ndarray], iteration: Dict[str, np.
     np.savez(path, **payload)
 
 
-def _write_netcdf(path: Path, base: Dict[str, np.ndarray], iteration: Dict[str, np.ndarray], text: str) -> None:
+def _write_netcdf(
+    path: Path,
+    base: Dict[str, np.ndarray],
+    iteration: Dict[str, np.ndarray],
+    text: str,
+    *,
+    fortran_layout: bool = True,
+) -> None:
     from netCDF4 import Dataset  # noqa: PLC0415
 
+    base, iteration = _stored_layouts(base, iteration, fortran_layout=fortran_layout)
     with Dataset(path, "w") as f:
         f.setncattr("input_namelist", text)
         dims: Dict[int, str] = {}
@@ -820,7 +860,7 @@ def _write_netcdf(path: Path, base: Dict[str, np.ndarray], iteration: Dict[str, 
                 names.append(dims[size])
             return tuple(names)
 
-        for key, value in {**{k: _reversed_axes(v) for k, v in base.items()}, **iteration}.items():
+        for key, value in {**base, **iteration}.items():
             safe_key = key.replace("/", "_").replace(" ", "_")
             if isinstance(value, str) or (isinstance(value, np.ndarray) and value.dtype.kind in {"U", "S"}):
                 f.setncattr(safe_key, str(value))
@@ -832,17 +872,36 @@ def _write_netcdf(path: Path, base: Dict[str, np.ndarray], iteration: Dict[str, 
                 var[:] = value
 
 
+def output_format_from_suffix(path: str | Path) -> str:
+    """The on-disk output format (``h5``/``netcdf``/``npz``) selected by a filename suffix."""
+    suffix = Path(path).suffix.lower()
+    if suffix in {".h5", ".hdf5", ""}:
+        return "h5"
+    if suffix in {".nc", ".netcdf", ".cdf"}:
+        return "netcdf"
+    if suffix == ".npz":
+        return "npz"
+    raise ValueError(
+        f"Unsupported sfincs_jax output suffix {suffix!r}. Use .h5/.hdf5, .nc/.netcdf, or .npz."
+    )
+
+
 def _write_output_by_suffix(
-    path: Path, base: Dict[str, np.ndarray], iteration: Dict[str, np.ndarray], text: str
+    path: Path,
+    base: Dict[str, np.ndarray],
+    iteration: Dict[str, np.ndarray],
+    text: str,
+    *,
+    fortran_layout: bool = True,
 ) -> None:
     """Dispatch to the h5/netcdf/npz writer selected by ``path``'s suffix."""
-    suffix = path.suffix.lower()
-    if suffix in {".nc", ".netcdf"}:
-        _write_netcdf(path, base, iteration, text)
-    elif suffix == ".npz":
-        _write_npz(path, base, iteration, text)
+    output_format = output_format_from_suffix(path)
+    if output_format == "netcdf":
+        _write_netcdf(path, base, iteration, text, fortran_layout=fortran_layout)
+    elif output_format == "npz":
+        _write_npz(path, base, iteration, text, fortran_layout=fortran_layout)
     else:
-        _write_h5(path, base, iteration, text)
+        _write_h5(path, base, iteration, text, fortran_layout=fortran_layout)
 
 
 # ---------------------------------------------------------------------------
@@ -1175,12 +1234,19 @@ def write_transport_output(
     state_vectors: np.ndarray,
     transport_matrix: np.ndarray,
     elapsed_times: np.ndarray | None = None,
+    overwrite: bool = True,
+    fortran_layout: bool = True,
 ) -> Path:
     """Write the RHSMode=2/3 ``sfincsOutput`` file from canonical-stack objects.
 
     Args:
         path: output file; ``.h5``/``.hdf5`` (or no suffix) writes HDF5 and
             ``.nc``/``.netcdf`` writes NetCDF4.
+        overwrite: when ``False``, raise :class:`FileExistsError` if ``path``
+            already exists (the legacy ``--no-overwrite`` guard).
+        fortran_layout: store the SFINCS v3 Fortran column-major dataset layout
+            (default); ``False`` stores every dataset Python-native
+            (reversed-axes relative to the Fortran view).
         inp: the validated typed input (``inputs.load_sfincs_input``).
         op: the canonical operator the states were solved with.
         grids: phase-space grids (theta/zeta nodes are not stored on ``op``).
@@ -1196,6 +1262,8 @@ def write_transport_output(
     path = Path(path)
     if inp.general.rhs_mode not in (2, 3):
         raise NotImplementedError("write_transport_output supports RHSMode 2 and 3 only.")
+    if path.exists() and not overwrite:
+        raise FileExistsError(str(path.resolve()))
     state_vectors = np.asarray(state_vectors, dtype=np.float64)
     n_rhs = int(state_vectors.shape[0])
     if elapsed_times is None:
@@ -1223,7 +1291,7 @@ def write_transport_output(
 
     text = inp.raw.source_text if (inp.raw is not None and inp.raw.source_text is not None) else ""
     path.parent.mkdir(parents=True, exist_ok=True)
-    _write_output_by_suffix(path, base, iteration, text)
+    _write_output_by_suffix(path, base, iteration, text, fortran_layout=fortran_layout)
     return path.resolve()
 
 
@@ -1241,6 +1309,8 @@ def write_profile_output(
     solver_method: str | None = None,
     solver_requested_method: str | None = None,
     residual_norm: float | None = None,
+    overwrite: bool = True,
+    fortran_layout: bool = True,
 ) -> Path:
     """Write the RHSMode=1 ``sfincsOutput`` file from canonical-stack objects.
 
@@ -1267,6 +1337,11 @@ def write_profile_output(
             emitted as ``linearSolverMethod`` / ``linearSolverRequestedMethod``.
         residual_norm: converged residual norm emitted as
             ``linearSolverResidualNorm``.
+        overwrite: when ``False``, raise :class:`FileExistsError` if ``path``
+            already exists (the legacy ``--no-overwrite`` guard).
+        fortran_layout: store the SFINCS v3 Fortran column-major dataset layout
+            (default); ``False`` stores every dataset Python-native
+            (reversed-axes relative to the Fortran view).
 
     Returns:
         The resolved output path.
@@ -1274,6 +1349,8 @@ def write_profile_output(
     path = Path(path)
     if inp.general.rhs_mode != 1:
         raise NotImplementedError("write_profile_output supports RHSMode=1 only.")
+    if path.exists() and not overwrite:
+        raise FileExistsError(str(path.resolve()))
     state_vector = np.asarray(state_vector, dtype=np.float64).reshape((-1,))
 
     gpsipsi, diotadpsi_hat = _geometry_extras(inp=inp, grids=grids, geom=geom, radial=radial)
@@ -1301,7 +1378,39 @@ def write_profile_output(
 
     text = inp.raw.source_text if (inp.raw is not None and inp.raw.source_text is not None) else ""
     path.parent.mkdir(parents=True, exist_ok=True)
-    _write_output_by_suffix(path, base, iteration, text)
+    _write_output_by_suffix(path, base, iteration, text, fortran_layout=fortran_layout)
+    return path.resolve()
+
+
+def write_geometry_output(
+    *,
+    path: str | Path,
+    inp: SfincsInput,
+    op: KineticOperator,
+    grids: Grids,
+    geom: FluxSurfaceGeometry,
+    radial: RadialCoordinates,
+    overwrite: bool = True,
+    fortran_layout: bool = True,
+) -> Path:
+    """Write the geometry-only ``sfincsOutput`` file (no solve) from canonical objects.
+
+    Emits :func:`_base_fields` (sizes, grids, options, geometry, normalization,
+    and the state-independent classical ``NoPhi1`` fluxes) with ``NIterations=0``
+    and no solution/iteration datasets — the same key set and values the legacy
+    ``--geometry-only`` output produces.
+    """
+    path = Path(path)
+    if path.exists() and not overwrite:
+        raise FileExistsError(str(path.resolve()))
+    gpsipsi, diotadpsi_hat = _geometry_extras(inp=inp, grids=grids, geom=geom, radial=radial)
+    base = _base_fields(
+        inp=inp, op=op, grids=grids, geom=geom, radial=radial,
+        gpsipsi=gpsipsi, diotadpsi_hat=diotadpsi_hat, n_rhs=0,
+    )  # fmt: skip
+    text = inp.raw.source_text if (inp.raw is not None and inp.raw.source_text is not None) else ""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_output_by_suffix(path, base, {}, text, fortran_layout=fortran_layout)
     return path.resolve()
 
 
@@ -1383,6 +1492,56 @@ def write_run_solver_trace(
             "compute_transport_matrix": bool(compute_transport_matrix),
             "differentiable": False,
             "converged": converged,
+        },
+    )
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_solver_trace_json(path, trace)
+    return path.resolve()
+
+
+def write_geometry_solver_trace(
+    *,
+    path: str | Path,
+    inp: SfincsInput,
+    op: KineticOperator,
+    elapsed_seconds: float,
+    input_namelist: str | Path | None = None,
+    output_path: str | Path | None = None,
+) -> Path:
+    """Write the ``--geometry-only`` solver-trace JSON sidecar (no solve ran).
+
+    Mirrors :func:`write_run_solver_trace` with ``selected_path="geometry_only"``
+    and the solve-dependent fields (method, residuals, convergence) left unset.
+    """
+    from sfincs_jax.solvers.diagnostics import SolverTrace, write_solver_trace_json  # noqa: PLC0415
+
+    try:
+        import jax  # noqa: PLC0415
+
+        backend = str(jax.default_backend())
+        device_count = len(jax.devices())
+    except Exception:  # noqa: BLE001
+        backend = "unknown"
+        device_count = None
+
+    trace = SolverTrace(
+        backend=backend,
+        rhs_mode=int(inp.general.rhs_mode),
+        selected_path="geometry_only",
+        geometry_scheme=int(inp.geometry.geometry_scheme),
+        collision_operator=str(int(inp.physics.collision_operator)),
+        total_size=int(op.total_size),
+        active_size=_active_size(op),
+        device_count=device_count,
+        elapsed_s=float(elapsed_seconds),
+        metadata={
+            "input_namelist": str(Path(input_namelist).resolve()) if input_namelist else "",
+            "output_path": str(Path(output_path).resolve()) if output_path is not None else "",
+            "output_format": (output_format_from_suffix(output_path) if output_path is not None else ""),
+            "compute_solution": False,
+            "compute_transport_matrix": False,
+            "differentiable": False,
         },
     )
     path = Path(path)

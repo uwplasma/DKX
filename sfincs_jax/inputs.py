@@ -464,8 +464,29 @@ def _validate(inp: SfincsInput) -> SfincsInput:
     # --- Option ranges (validateInput.F90) ---
     if gen.rhs_mode < 1:
         raise ValueError("RHSMode must be at least 1.")
-    if gen.rhs_mode > 5:
-        raise ValueError("RHSMode must be no more than 5.")
+    if gen.rhs_mode > 3:
+        raise ValueError(
+            f"RHSMode must be 1, 2, or 3 (got {gen.rhs_mode}). The Fortran adjoint modes "
+            "(RHSMode=4/5) are replaced by jax.grad differentiation of the sfincs_jax outputs."
+        )
+    if phys.collision_operator not in (0, 1):
+        raise ValueError(
+            "collisionOperator must be 0 (full Fokker-Planck) or 1 (pitch-angle scattering); "
+            f"got {phys.collision_operator}."
+        )
+    if phys.constraint_scheme not in (-1, 0, 1, 2, 3, 4):
+        raise ValueError(
+            f"constraintScheme must be -1 (auto), 0, 1, 2, 3, or 4; got {phys.constraint_scheme}."
+        )
+    if (
+        phys.include_phi1
+        and not phys.read_external_phi1
+        and phys.quasineutrality_option not in (1, 2)
+    ):
+        raise ValueError(
+            "quasineutralityOption must be 1 (full quasineutrality) or 2 (EUTERPE); "
+            f"got {phys.quasineutrality_option}."
+        )
     if gen.rhs_mode == 2 and phys.include_phi1:
         raise ValueError("RHSMode = 2 is incompatible with includePhi1 = .true..")
     if gen.rhs_mode == 2 and spec.n_species > 1:
