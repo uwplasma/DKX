@@ -168,10 +168,12 @@ def test_readme_canonical_benchmark_claims_match_recorded_measurements() -> None
     assert "744,610 unknowns" in readme
     assert "744,610 unknowns" in figures_source
 
-    # Honest scoping: one measured case, deferred physics named explicitly.
+    # Honest scoping: one measured case; the functionality comparison table
+    # names every Fortran v3 physics family it claims (all supported, so the
+    # check asserts presence in the table, not deferral).
     assert "one measured 744k-unknown HSX PAS case" in readme
-    for deferral in ("Phi1", "tangential magnetic drifts", "export_f"):
-        assert deferral in readme, deferral
+    for family in ("Phi1", "Tangential magnetic drifts", "export_f", "lasym"):
+        assert family in readme, family
 
     # The README figures exist, are referenced, and stay within budget.
     figure_root = REPO_ROOT / "docs" / "_static" / "figures" / "readme"
