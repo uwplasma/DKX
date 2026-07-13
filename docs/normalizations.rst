@@ -125,5 +125,5 @@ electric field are supplied as ``nuPrime`` and ``EStar`` instead of ``nu_n`` and
 with :math:`\hat B_0` the :math:`(0,0)` Fourier mode of :math:`\hat B`. In this
 mode the speed grid collapses to a single node at :math:`x=1`, and ``nuPrime`` /
 ``EStar`` are written to ``sfincsOutput.h5`` alongside the :math:`2\times2`
-``transportMatrix``. For the full upstream unit derivations see the vendored
-LaTeX sources linked from :doc:`upstream_docs`.
+``transportMatrix``. For the full upstream unit derivations see the SFINCS technical
+notes cited from :doc:`upstream_docs`.
