@@ -91,11 +91,23 @@ Run from the repo root:
    python examples/getting_started/build_grids_and_geometry.py
 
 For a guided classroom-style path, open the notebooks in
-``examples/tutorials``:
+``examples/tutorials`` in order — a getting-started -> transport -> ambipolar
+-> optimization arc:
 
+- ``00_start_here.ipynb``: pick a learning path, verify first-run assets, and map
+  physics goals to example folders.
 - ``01_cli_outputs_and_plots.ipynb``: CLI, output formats, and diagnostics panels.
-- ``02_transport_and_autodiff.ipynb``: RHSMode=2/3 transport matrices and JAX differentiation.
-- ``03_bootstrap_redl_and_optimization.ipynb``: bootstrap-current/Redl comparisons and optimization objectives.
+- ``02_transport_and_autodiff.ipynb``: RHSMode=2/3 transport matrices and JAX
+  differentiation (deeper: :doc:`differentiability`).
+- ``03_bootstrap_redl_and_optimization.ipynb``: bootstrap-current/Redl comparisons
+  and optimization objectives (deeper: :doc:`optimization`).
+- ``04_geometry_validation_and_performance.ipynb``: analytic/Boozer/VMEC geometry,
+  validation and parity, and CPU/GPU performance pointers (deeper:
+  :doc:`performance`).
+
+For the reduced-model tools that build on these workflows — the
+monoenergetic-database mode, the variational :math:`D_{11}` bounds, and the
+Shaing-Callen collisionless limit — see :doc:`capabilities`.
 
 The checked catalog ``examples/workflow_catalog.json`` mirrors the tables on
 this page. It records the supported topic folders, first-pass entry points,
