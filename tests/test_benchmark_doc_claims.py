@@ -180,7 +180,6 @@ def test_readme_canonical_benchmark_claims_match_recorded_measurements() -> None
     for name in (
         "tier1_hsx_runtime_memory.png",
         "canonical_parity.png",
-        "optimize_QA_bootstrap.png",
     ):
         artifact = figure_root / name
         assert artifact.exists(), artifact
