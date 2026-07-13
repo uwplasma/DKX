@@ -1684,8 +1684,12 @@ class KineticOperator:
         d_theta_tz = jnp.kron(self.ddtheta, eye_z)  # (TZ,TZ)
         d_zeta_tz = jnp.kron(eye_t, self.ddzeta)  # (TZ,TZ)
 
-        mask = np.asarray(self._mask())  # (X,L)
-        row_mask = jnp.asarray(mask[:, ell])  # (X,)
+        # Keep the mask a jnp array (no host materialization) so the block
+        # extraction stays traceable when the operator leaves are tracers
+        # (jit-over-leaves / vmap).  ``ell`` is a static Python int, so the
+        # column slices below are static-index selects on a traced (X,L) array.
+        mask = self._mask()  # (X,L)
+        row_mask = mask[:, ell]  # (X,)
 
         sqrt_t_over_m = jnp.sqrt(self.t_hat / self.m_hat)  # (S,)
         v_theta = (self.b_hat_sup_theta / self.b_hat).reshape((-1,))  # (TZ,)
@@ -1709,18 +1713,18 @@ class KineticOperator:
 
         # ---- lower: row ell receives column ell-1 ----
         if ell >= 1:
-            coef_stream = float(np.asarray(self.xi_coupling_lower)[ell])
+            coef_stream = self.xi_coupling_lower[ell]  # traced 0-d scalar (static ell)
             coef_mirror = -coef_stream * (ell - 1.0)
-            col_mask = jnp.asarray(mask[:, ell - 1])
+            col_mask = mask[:, ell - 1]
             lower = _shaped(coef_stream * stream_tz + coef_mirror * mirror_tz, self.x, col_mask)
         else:
             lower = jnp.zeros((self.n_species, self.n_x, n_tz, n_tz), dtype=jnp.float64)
 
         # ---- upper: row ell receives column ell+1 ----
         if ell + 1 < self.n_xi:
-            coef_stream = float(np.asarray(self.xi_coupling_upper)[ell])
+            coef_stream = self.xi_coupling_upper[ell]  # traced 0-d scalar (static ell)
             coef_mirror = coef_stream * (ell + 2.0)
-            col_mask = jnp.asarray(mask[:, ell + 1])
+            col_mask = mask[:, ell + 1]
             upper = _shaped(coef_stream * stream_tz + coef_mirror * mirror_tz, self.x, col_mask)
         else:
             upper = jnp.zeros((self.n_species, self.n_x, n_tz, n_tz), dtype=jnp.float64)
