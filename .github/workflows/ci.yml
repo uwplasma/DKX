@@ -108,6 +108,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e "."
+      - name: Materialize reference goldens
+        run: |
+          python tests/_golden_cache.py
       - name: Fetch external equilibrium data
         run: |
           python -m sfincs_jax.validation.data_fetch --quiet
