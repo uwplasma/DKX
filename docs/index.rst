@@ -64,19 +64,19 @@ for 1-rank SFINCS Fortran v3 and ``229.5 s`` / ``2.86 GB`` at its measured
 ``8e-14``, state vectors to ``1e-11``, and transport matrices to
 ``6e-13 .. 9e-9`` against Fortran golden data.
 
-The retained legacy pipeline keeps its own audited 39-case CPU/GPU example
-suite; those rows are a reference-runtime-window comparison of the legacy
-solver stack, not of the canonical tier-1/tier-2 solvers:
+A broader example-suite benchmark complements that single case: it runs the
+full 39-case CPU/GPU example suite against SFINCS Fortran v3 and plots every
+row whose Fortran reference runtime clears a ``10 s`` reference-runtime-window,
+so process-launch and JIT-amortization noise does not dominate the bars.
 
 .. figure:: _static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png
-   :alt: Runtime and active-memory comparison for SFINCS Fortran v3 and the legacy sfincs_jax pipeline.
+   :alt: Runtime and active-memory comparison for SFINCS Fortran v3 and sfincs_jax across the example suite.
    :align: center
    :width: 90%
 
-   Legacy-pipeline example-suite benchmark for rows whose SFINCS Fortran v3
-   reference runtime is at least ``10 s``. Fortran memory is process maximum
-   RSS; JAX memory uses profiler RSS deltas over the fixed runtime baseline.
-   Reproduce with
+   Example-suite benchmark for rows whose SFINCS Fortran v3 reference runtime is
+   at least ``10 s``. Fortran memory is process maximum RSS; JAX memory uses
+   profiler RSS deltas over the fixed runtime baseline. Reproduce with
    ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``.
 
 What this documentation covers
@@ -84,7 +84,8 @@ What this documentation covers
 
 - getting started: :doc:`installation`, :doc:`usage`, :doc:`examples`
 - physics and numerics: :doc:`physics_models`, :doc:`system_equations`,
-  :doc:`geometry`, :doc:`method`, :doc:`numerics`
+  :doc:`geometry`, :doc:`method`, :doc:`numerics`, :doc:`differentiability`,
+  :doc:`capabilities`
 - references: :doc:`inputs`, :doc:`outputs`, :doc:`normalizations`,
   :doc:`source_map`, :doc:`api`
 - evidence: :doc:`performance`, :doc:`parity`, :doc:`feature_matrix`,
@@ -108,6 +109,8 @@ What this documentation covers
    vmec_jax_workflow
    method
    numerics
+   differentiability
+   capabilities
    source_map
    feature_matrix
    theory_from_upstream

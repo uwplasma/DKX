@@ -6,9 +6,10 @@ Usage
    For RHSMode=1/2/3 cases the recommended entry points are the canonical
    drivers (``sfincs_jax.run.run_profile`` and the transport-matrix runners)
    shown in the quickstart on :doc:`index` and in :doc:`examples`. This page
-   documents the full API surface, including the retained legacy pipeline
-   modules that keep ownership of the deferred cases (``Phi1``, tangential
-   magnetic drifts, constraint schemes 3/4, mapped speed grids, ``export_f``).
+   documents the full CLI and Python surface — the matrix-free operator, the
+   three-tier solve, the output writers, ``Er`` scans, and the ambipolar and
+   transport-matrix runners — including the advanced controls that most scripts
+   do not need.
 
 Parsing an input file
 ---------------------
@@ -152,19 +153,14 @@ Only force a solver when reproducing a benchmark, debugging a path choice, or
 running an expert study where the output ``linearSolver*`` diagnostics and
 ``--solver-trace`` sidecar will be inspected.
 
-Supported RHSMode=1 overrides on the retained legacy pipeline are
-``incremental``, ``dense``, and ``petsc_compat``; the transport-matrix
-overrides are ``bicgstab``, ``batched``, ``incremental``, and ``dense``. The
-former explicit sparse-direct/CSR-assembly lanes (``sparse_host``,
-``sparse_pc_gmres``, ``xblock_sparse_pc_gmres``, ``fortran_reduced_pc_gmres``,
-``structured_full_csr``, ``sparse_lsmr``, and their aliases) were deleted with
-the legacy sparse solver families: the canonical three-tier ``auto`` policy in
-``sfincs_jax.solve`` owns the supported surface, and the retained legacy
-fallback uses its matrix-free Krylov policy with the dense/PAS/collision
-preconditioner families plus the SciPy rescue. Requesting a removed method
-raises ``NotImplementedError`` naming the removal. These names are
-intentionally advanced API: scripts intended for general users should omit
-them and rely on ``auto``.
+The ``sfincs_jax.solve`` policy accepts an explicit ``method`` (CLI
+``--solve-method``): ``auto`` (the default), ``block_tridiagonal`` and
+``block_tridiagonal_truncated`` (the tier-1 structured direct solves),
+``gmres`` (the tier-2 recycled Krylov solve), and ``direct`` (the tier-3 host
+sparse-direct referee). The three-tier ``auto`` policy owns the supported
+surface and routes each deck to the cheapest adequate tier (:doc:`numerics`);
+an unrecognized method name raises an error. These names are intentionally
+advanced API: scripts for general users should omit them and rely on ``auto``.
 
 Parallel CLI controls
 ---------------------

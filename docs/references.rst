@@ -50,13 +50,22 @@ SFINCS model, collision operator, and speed grid
 - M. Landreman and E. J. Paul,
   `Magnetic Fields with Precise Quasisymmetry for Plasma Confinement <https://doi.org/10.1103/PhysRevLett.128.035001>`_.
 
-Block-tridiagonal Legendre solver
----------------------------------
+Block-tridiagonal Legendre solver and variational bounds
+--------------------------------------------------------
 
 The tier-1 structured solve (:doc:`numerics`) eliminates the Legendre chain of
 the monoenergetic drift-kinetic equation with a block-tridiagonal factorization
-and a truncated-storage back-substitution:
+and a truncated-storage back-substitution; the variational transport-coefficient
+bounds (:doc:`capabilities`) bracket the monoenergetic :math:`D_{11}` from the
+same discrete operator:
 
+- S. P. Hirshman, K. C. Shaing, W. I. van Rij, C. O. Beasley Jr., and E. C. Crume Jr.,
+  `Plasma transport coefficients for nonsymmetric toroidal confinement systems <https://doi.org/10.1063/1.865495>`_,
+  Phys. Fluids **29**, 2951 (1986). Establishes the block-tridiagonal structure of
+  the Legendre-mode monoenergetic drift-kinetic equation and the variational
+  principle whose upper and lower bounds on the transport coefficients converge
+  toward the true value from opposite sides as the Legendre resolution grows —
+  the basis for :mod:`sfincs_jax.variational`.
 - F. J. Escoto,
   `Fast and accurate calculation of the bootstrap current and radial neoclassical transport in low collisionality stellarator plasmas <https://arxiv.org/abs/2510.27513>`_,
   PhD thesis (2025). Derives the tridiagonal structure of the Legendre-mode
@@ -82,8 +91,6 @@ Experimental and cross-code validation anchors
   `Investigation of the ion-root solution in Wendelstein 7-X <https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2020ionroot.pdf>`_.
 - C. D. Beidler et al.,
   `Demonstration of reduced neoclassical energy transport in Wendelstein 7-X <https://www.nature.com/articles/s41586-021-03687-w>`_.
-- J. L. Velasco et al.,
-  `KNOSOS: A fast orbit-averaging neoclassical code for stellarator optimization studies <https://arxiv.org/abs/1908.11615>`_.
 
 Bundled technical notes and manuals
 -----------------------------------
