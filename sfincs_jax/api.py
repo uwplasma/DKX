@@ -445,9 +445,8 @@ def bounce_averaged_transport(
         r_eff, grad_psi_avg: the ``<|grad psi|>`` normalization of
             ``epsilon_eff`` (large-aspect-ratio ``B_0 r_eff`` or an explicit
             average); the ``|grad psi|``-free ``gamma_c`` core needs neither.
-        n_field_periods, points_per_period, n_pitch, n_quad, max_wells,
-            n_field_lines, m_keep, n_keep: quadrature/bandwidth controls (see
-            the owning module).
+        n_field_periods, points_per_period, n_pitch, n_quad, max_wells, n_field_lines, m_keep, n_keep:
+            quadrature/bandwidth controls (see the owning module).
 
     Returns:
         A :class:`sfincs_jax.bounce_averaged.BounceAveragedTransport`
