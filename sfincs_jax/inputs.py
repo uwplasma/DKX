@@ -308,7 +308,7 @@ class PhysicsParams:
     d_phi_hat_d_r_hat: float = _f(0.0, "dPhiHatdrHat")  # gV:138
     d_phi_hat_d_r_n: float = _f(0.0, "dPhiHatdrN")  # gV:138
     er: float = _f(0.0, "Er")  # gV:138
-    collision_operator: int = _f(0, "collisionOperator")  # gV:140 (0 = full FP, 1 = PAS)
+    collision_operator: int = _f(0, "collisionOperator")  # gV:140 (0 = full FP, 1 = PAS, 3 = improved Sugama)
     constraint_scheme: int = _f(-1, "constraintScheme")  # gV:214 (-1 = auto: 1 for FP, 2 for PAS)
     include_x_dot_term: bool = _f(True, "includeXDotTerm")  # gV:144
     include_electric_field_term_in_xi_dot: bool = _f(True, "includeElectricFieldTermInXiDot")  # gV:145
@@ -469,9 +469,10 @@ def _validate(inp: SfincsInput) -> SfincsInput:
             f"RHSMode must be 1, 2, or 3 (got {gen.rhs_mode}). The Fortran adjoint modes "
             "(RHSMode=4/5) are replaced by jax.grad differentiation of the sfincs_jax outputs."
         )
-    if phys.collision_operator not in (0, 1):
+    if phys.collision_operator not in (0, 1, 3):
         raise ValueError(
-            "collisionOperator must be 0 (full Fokker-Planck) or 1 (pitch-angle scattering); "
+            "collisionOperator must be 0 (full Fokker-Planck) or 1 (pitch-angle scattering), "
+            "or 3 (improved Sugama momentum/energy-conserving model operator); "
             f"got {phys.collision_operator}."
         )
     if phys.constraint_scheme not in (-1, 0, 1, 2, 3, 4):
