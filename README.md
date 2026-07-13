@@ -161,37 +161,14 @@ in CI:
 
 Beyond the Fortran-v3 feature set, several JAX-only research capabilities have
 landed: momentum-conserving flow corrections (`sfincs_jax.momentum_correction`),
-a monoenergetic (collisionality, electric field) database mode with energy
-convolution (`sfincs_jax.monoenergetic`), batched multi-`Er`/multi-surface GPU
-scans (`sfincs_jax.batch`), and the variational transport-coefficient bounds
-above. Still in development on the research roadmap: an extended-collisionality
-(improved Sugama) model operator and a differentiable bounce-averaged fast
-model. See [docs/feature_matrix.rst](docs/feature_matrix.rst) for the matrix.
-
-## Optimization showcase
-
-[`examples/optimize_QA_bootstrap.py`](examples/optimize_QA_bootstrap.py) compares two
-*precise* quasi-axisymmetric (QA) stellarator boundaries: one shaped for QA alone, one
-whose bootstrap current is lowered while its QA is held fixed. Stage A shapes a circular
-torus into a precise QA equilibrium with `vmec_jax.optimize.least_squares` (implicit
-Jacobian): a `max_mode` 1->2 continuation drives the two-term quasisymmetry ratio
-residual down ~4 orders of magnitude at aspect ratio 6.00 and mean iota 0.42. That
-precise-QA boundary is config 1 (QS ratio residual 1.1e-4, `<j.B>/sqrt(<B^2>)` 6.4e-3).
-Stage B holds that residual under a hard one-sided cap while lowering the bootstrap
-current -- `<j.B>` from the `sfincs_jax` kinetic solve -- so config 2 is precise QA too.
-One `jax.value_and_grad` differentiates the whole chain: boundary coefficients ->
-`vmec_jax` fixed-boundary equilibrium (implicit-adjoint VJP) -> differentiable Boozer
-transform (`booz_xform_jax`) -> `sfincs_jax` kinetic solve (tier-2 GCROT with implicit
-differentiation, warm-started and recycled) -> `FSABjHat`. QA makes the guiding-centre
-drifts tokamak-like and the bootstrap current large, so at held QA the reduction is a
-genuine, modest Pareto gain, not a free lunch: `<j.B>/sqrt(<B^2>)` drops to 5.7e-3
-(1.12x lower) with the QS ratio residual held at 1.1e-4 vs 2.6e-4 (both sub-3e-4
-precise QA), aspect ratio ~6 and mean iota above 0.41, in roughly thirteen minutes on a
-laptop CPU (mostly one-time XLA compilation). The end-to-end gradient is
-finite-difference verified (kinetic segment ~3e-6; full chain ~5e-3, limited by the
-host solver's termination noise, not by autodiff).
-
-![Precise QA vs precise QA held + bootstrap: bootstrap current and two-term QS residual for both configs, plus a 3D render of |B| on the bootstrap-optimized boundary](docs/_static/figures/readme/optimize_QA_bootstrap.png)
+an extended-collisionality improved Sugama collision operator
+(`collisionOperator=3`, momentum- and energy-conserving into the
+Pfirsch-Schlüter regime), a monoenergetic (collisionality, electric field)
+database mode with energy convolution (`sfincs_jax.monoenergetic`), batched
+multi-`Er`/multi-surface GPU scans (`sfincs_jax.batch`), a differentiable
+bounce-averaged 1/ν effective-ripple surrogate (`sfincs_jax.bounce_averaged`),
+and the variational transport-coefficient bounds above. See
+[docs/feature_matrix.rst](docs/feature_matrix.rst) for the matrix.
 
 ## Examples
 
@@ -204,7 +181,7 @@ progress, a plot, and output files written and read back:
 - [`transport_coefficients.py`](examples/transport_coefficients.py) — monoenergetic transport matrices and a collisionality scan.
 - [`ambipolar_er_scan.py`](examples/ambipolar_er_scan.py) — scan `Er`, bracket and solve the ambipolar root.
 - [`gradients_tour.py`](examples/gradients_tour.py) — `jax.grad` through the solve, verified against finite differences.
-- [`optimize_QA_bootstrap.py`](examples/optimize_QA_bootstrap.py) — the flagship optimization above.
+- [`optimize_QA_bootstrap.py`](examples/optimize_QA_bootstrap.py) — differentiable two-stage QA shaping and bootstrap-current reduction through the `vmec_jax` → `sfincs_jax` chain (needs the optional companions).
 
 The wider `examples/` tree (tutorial notebooks, parity/benchmark drivers,
 upstream SFINCS decks) is mapped in [`examples/README.md`](examples/README.md).
