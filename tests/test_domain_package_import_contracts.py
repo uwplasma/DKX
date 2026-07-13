@@ -45,6 +45,7 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "__main__.py": "public entry point",
     "ambipolar.py": "public workflow API",
     "api.py": "public API",
+    "batch.py": "public workflow API",
     "cli.py": "public entry point",
     "collisions.py": "stable physics kernel",
     "compare.py": "public validation API",
