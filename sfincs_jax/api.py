@@ -341,6 +341,76 @@ def run_monoenergetic_database(
     return database
 
 
+def momentum_corrected_bootstrap(
+    database: Any,
+    *,
+    z_s: Any,
+    m_hats: Any,
+    n_hats: Any,
+    t_hats: Any,
+    nu_n: Any,
+    dn_hat_dpsi_hat: Any,
+    dt_hat_dpsi_hat: Any,
+    dphi_hat_dpsi_hat: Any = 0.0,
+    e_par_b: Any = 0.0,
+    uncorrected_flows: Any = None,
+    x: Any = None,
+    x_weights: Any = None,
+    n_x: int = 64,
+    x_max: float = 5.0,
+) -> Any:
+    """Momentum-corrected bootstrap current (stable public facade).
+
+    Routes to :func:`sfincs_jax.momentum_correction.momentum_corrected_bootstrap`,
+    the Sugama-Nishimura moment-method parallel-momentum correction on the
+    monoenergetic transport coefficients (H. Sugama and S. Nishimura, Phys.
+    Plasmas 9, 4637 (2002); 15, 042502 (2008); H. Maassberg, C. D. Beidler,
+    and Y. Turkin, Phys. Plasmas 16, 072504 (2009)).  The heavy JAX stack is
+    imported lazily so ``sfincs_jax.api`` stays cheap to import.
+
+    Args:
+        database: a
+            :class:`sfincs_jax.monoenergetic.MonoenergeticDatabase` (from
+            :func:`run_monoenergetic_database`).
+        z_s, m_hats, n_hats, t_hats: species parameters, shape ``(S,)``.
+        nu_n: deck normalized collisionality.
+        dn_hat_dpsi_hat, dt_hat_dpsi_hat: radial gradients ``dn/dpsiHat``,
+            ``dT/dpsiHat`` per species (shape ``(S,)``).
+        dphi_hat_dpsi_hat, e_par_b: radial-electric-field and inductive
+            parallel-field drives (default 0).
+        uncorrected_flows: optional ``(S,)`` override for the uncorrected
+            parallel-flow moments (e.g. from a kinetic solve).
+        x, x_weights, n_x, x_max: speed quadrature controls.
+
+    Returns:
+        A :class:`sfincs_jax.momentum_correction.MomentumCorrectionResult`
+        (``.corrected_bootstrap``, ``.uncorrected_bootstrap``,
+        ``.delta_bootstrap``, ``.corrected_flows``, ...).
+    """
+
+    from .momentum_correction import (  # noqa: PLC0415
+        momentum_corrected_bootstrap as _momentum_corrected_bootstrap,
+    )
+
+    return _momentum_corrected_bootstrap(
+        database,
+        z_s=z_s,
+        m_hats=m_hats,
+        n_hats=n_hats,
+        t_hats=t_hats,
+        nu_n=nu_n,
+        dn_hat_dpsi_hat=dn_hat_dpsi_hat,
+        dt_hat_dpsi_hat=dt_hat_dpsi_hat,
+        dphi_hat_dpsi_hat=dphi_hat_dpsi_hat,
+        e_par_b=e_par_b,
+        uncorrected_flows=uncorrected_flows,
+        x=x,
+        x_weights=x_weights,
+        n_x=n_x,
+        x_max=x_max,
+    )
+
+
 __all__ = [
     "BenchmarkReport",
     "GeometryState",
@@ -351,6 +421,7 @@ __all__ = [
     "SolveInputs",
     "SolverResult",
     "TransportResult",
+    "momentum_corrected_bootstrap",
     "read_output",
     "run_ambipolar_brent",
     "run_monoenergetic_database",
