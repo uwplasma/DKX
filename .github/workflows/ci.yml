@@ -13,7 +13,7 @@ concurrency:
 jobs:
   coverage:
     runs-on: ubuntu-22.04
-    timeout-minutes: 15  # headroom over the balanced ~8m shard time (see .test_durations)
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
