@@ -8,9 +8,9 @@ reference implementation.
 
 .. note::
 
-   The suite evidence on this page audits the retained **legacy pipeline**.
-   The canonical-stack head-to-head runtime/memory evidence and its parity
-   referees live in :doc:`performance`.
+   This page reports the broad **example-suite audit** across the vendored
+   SFINCS v3 examples. The single-case head-to-head runtime/memory evidence and
+   its parity referees live in :doc:`performance`.
 
 The release-facing comparison is the full vendored
 example-suite audit, with production-floor tokamak reruns merged into the frozen
