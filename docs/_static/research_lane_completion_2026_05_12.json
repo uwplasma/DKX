@@ -41,7 +41,7 @@
       "evidence": [
         {
           "claim": "Performance documentation preserves supported PAS memory/runtime routes and separates them from rejected experimental routes.",
-          "path": "docs/performance_techniques.rst"
+          "path": "docs/performance.rst"
         },
         {
           "claim": "Matrix-free PAS policy and correction code own byte-budget and fail-fast guards.",
@@ -173,7 +173,7 @@
       "evidence": [
         {
           "claim": "Performance documentation records keep/reject gates for optional JAX-ecosystem solver candidates.",
-          "path": "docs/performance_techniques.rst"
+          "path": "docs/performance.rst"
         },
         {
           "claim": "Solver path policy is isolated enough to host future library experiments behind measured residual, runtime, and memory gates.",

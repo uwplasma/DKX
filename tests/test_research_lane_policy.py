@@ -38,7 +38,7 @@ def _valid_payload() -> dict[str, object]:
                 "target_percent": 95,
                 "evidence": [
                     {
-                        "path": "docs/performance_techniques.rst",
+                        "path": "docs/performance.rst",
                         "claim": "Documents the production PAS memory strategy.",
                     }
                 ],
@@ -109,7 +109,7 @@ def test_research_lane_policy_reports_lane_schema_errors() -> None:
             "before_percent": 50,
             "current_percent": 80,
             "target_percent": 100,
-            "evidence": [{"path": "docs/performance_techniques.rst", "claim": "ok"}],
+            "evidence": [{"path": "docs/performance.rst", "claim": "ok"}],
             "gates": ["valid gate"],
         },
     ]
