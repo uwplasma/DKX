@@ -411,6 +411,64 @@ def momentum_corrected_bootstrap(
     )
 
 
+def bounce_averaged_transport(
+    geometry: Any,
+    *,
+    r_eff: float | None = None,
+    grad_psi_avg: float | None = None,
+    n_field_periods: int = 160,
+    points_per_period: int = 48,
+    n_pitch: int = 128,
+    n_quad: int = 14,
+    max_wells: int = 224,
+    n_field_lines: int = 1,
+    m_keep: int | None = None,
+    n_keep: int | None = None,
+) -> Any:
+    """Bounce-averaged ``1/nu`` effective-ripple transport (stable public facade).
+
+    Routes to :func:`sfincs_jax.bounce_averaged.bounce_averaged_transport`: the
+    differentiable, radially-local, bounce-averaged surrogate for the dominant
+    low-collisionality (``1/nu``-regime) neoclassical radial transport of a flux
+    surface -- the effective ripple ``epsilon_eff`` and the trapped-particle
+    bounce integrals of the radial magnetic drift -- computed from the ``|B|``
+    Boozer spectrum of ``geometry`` (J. L. Velasco et al., J. Comput. Phys. 418,
+    109512 (2020); Nucl. Fusion 61, 116059 (2021); spectrally-accurate
+    differentiable bounce points as in arXiv:2412.01724).  Pure JAX, jit/vmap
+    safe, and differentiable in the Boozer amplitudes when ``geometry`` is built
+    with :meth:`FluxSurfaceGeometry.from_fourier`.  The heavy JAX stack is
+    imported lazily so ``sfincs_jax.api`` stays cheap to import.
+
+    Args:
+        geometry: a
+            :class:`sfincs_jax.magnetic_geometry.FluxSurfaceGeometry`.
+        r_eff, grad_psi_avg: the ``<|grad psi|>`` normalization of
+            ``epsilon_eff`` (large-aspect-ratio ``B_0 r_eff`` or an explicit
+            average); the ``|grad psi|``-free ``gamma_c`` core needs neither.
+        n_field_periods, points_per_period, n_pitch, n_quad, max_wells, n_field_lines, m_keep, n_keep:
+            quadrature/bandwidth controls (see the owning module).
+
+    Returns:
+        A :class:`sfincs_jax.bounce_averaged.BounceAveragedTransport`
+        (``.epsilon_eff``, ``.epsilon_eff_32``, ``.gamma_c``, ...).
+    """
+    from .bounce_averaged import bounce_averaged_transport as _bounce_averaged_transport  # noqa: PLC0415
+
+    return _bounce_averaged_transport(
+        geometry,
+        r_eff=r_eff,
+        grad_psi_avg=grad_psi_avg,
+        n_field_periods=n_field_periods,
+        points_per_period=points_per_period,
+        n_pitch=n_pitch,
+        n_quad=n_quad,
+        max_wells=max_wells,
+        n_field_lines=n_field_lines,
+        m_keep=m_keep,
+        n_keep=n_keep,
+    )
+
+
 def batched_er_scan(
     request: "SolveInputs | str | Path | Any",
     er_values: Any,
@@ -534,6 +592,7 @@ __all__ = [
     "TransportResult",
     "batched_er_scan",
     "batched_surface_scan",
+    "bounce_averaged_transport",
     "momentum_corrected_bootstrap",
     "read_output",
     "run_ambipolar_brent",
